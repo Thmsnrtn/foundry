@@ -2634,6 +2634,65 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
     schedule: '0 5 * * *', // Daily at 5 UTC
     description: 'Drop rows past the per-table retention horizon',
   },
+  // A CREDENTIAL THAT DIES QUIETLY IS THE WORST KIND.
+  //
+  // An access token expires, an account closes, someone revokes Foundry's
+  // access at the provider — and without this the first sign would be numbers
+  // that stopped moving, which reads as a business going quiet rather than a
+  // connection going dark. Renewing what is near expiry and probing the rest
+  // turns that into a sentence the owner reads on the company page BEFORE he is
+  // shown anything derived from what the sense last said.
+  //
+  // Hourly, because a token that expires in an hour cannot be caught daily.
+  sense_credential_tick: {
+    fn: async () => {
+      const { renewCredentials, probeCredential } = await import(
+        '../services/senses/credentials.js');
+      const outcome = await renewCredentials();
+      for (const broken of outcome.broke) {
+        logger.error(
+          `a sense went blind: ${broken.provider} for ${broken.productId} — ${broken.why}`,
+          { jobName: 'sense_credential_tick', productId: broken.productId });
+      }
+
+      // AND THE ONES THAT DID NOT NEED RENEWING. A credential with no expiry is
+      // exactly the kind that can be revoked elsewhere without anything here
+      // noticing, so it is asked rather than assumed to be alive.
+      const live = await query(
+        `SELECT s.id, s.product_id, s.provider FROM company_senses s
+           JOIN sense_credentials c ON c.company_sense_id = s.id AND c.revoked_at IS NULL
+          WHERE s.disconnected_at IS NULL AND c.expires_at IS NULL
+          ORDER BY s.rowid`, []);
+      let dark = 0;
+      for (const row of live.rows as unknown as Array<Record<string, unknown>>) {
+        const senseId = String(row.id);
+        try {
+          const result = await probeCredential(senseId);
+          if (result && !result.ok) {
+            dark += 1;
+            const { noteSenseObserved } = await import('../services/senses/index.js');
+            await noteSenseObserved(String(row.product_id), String(row.provider),
+              result.detail);
+          }
+        } catch (err) {
+          logger.error(
+            `probing a sense failed for ${String(row.product_id)}: `
+            + `${err instanceof Error ? err.message : String(err)}`,
+            { jobName: 'sense_credential_tick' });
+        }
+      }
+      logger.info(
+        `sense_credential_tick: renewed=${String(outcome.renewed)} `
+        + `nothing_to_do=${String(outcome.nothingToDo)} failed=${String(outcome.failed)} `
+        + `gone_dark=${String(dark)}`,
+        { jobName: 'sense_credential_tick' });
+    },
+    schedule: '25 * * * *', // Hourly, off the hour so it does not collide
+    description:
+      'Renew sense credentials near expiry and probe the ones that do not expire, so a '
+      + 'connection that has gone dark is said out loud before anything derived from it '
+      + 'is shown (hourly)',
+  },
   // THE REFERENCE WORLD, ONE DAY AT A TIME.
   //
   // A reference company arrives with ninety days of history and no observations

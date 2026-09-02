@@ -71,6 +71,14 @@ const classifications = new Map(Object.entries({
   'src/services/scp/actions/executor.ts|dynamic_webhook_post': ['governed', 'approved custom webhook — kill-switch checked before dispatch, SSRF guard and durable receipt'],
   'src/services/billing/stripe.ts|stripe_sdk_mutation': ['control_path', 'Foundry SaaS billing credential owner'],
   'src/services/integrations/stripe-sync.ts|stripe_sdk_mutation': ['control_path', 'Stripe OAuth credential exchange'],
+  // THE SENSE'S OWN CREDENTIAL, and nothing else. Three calls: exchanging a
+  // code the OWNER just authorised, deauthorising when he disconnects, and
+  // asking whether the key is still alive. None carries company data outward,
+  // none changes anything in the world except Foundry's own access, and the
+  // scope requested is read-only and comes from a constitutional table that
+  // cannot be widened at runtime (migration 231). Same class as the OAuth
+  // exchanges above it, for the same reason.
+  'src/services/senses/providers/stripe.ts|dynamic_webhook_post': ['control_path', 'sense credential lifecycle — owner-authorised exchange, revocation and liveness probe, read-only scope'],
 }));
 
 const findings = [];

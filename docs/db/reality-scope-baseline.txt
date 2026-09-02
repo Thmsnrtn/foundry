@@ -29,5 +29,6 @@ src/services/portfolio/manager.ts 1
 src/services/privacy/consent.ts 2
 src/services/scp/network.ts 1
 src/services/scp/scheduler.ts 3
+src/services/senses/credentials.ts 1
 src/services/team/members.ts 2
 src/services/triggers/behavioral.ts 3

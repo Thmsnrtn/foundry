@@ -217,12 +217,39 @@ export async function establishReferenceCompany(input: {
     });
   }
 
+  // THROUGH THE CREDENTIAL LIFECYCLE, NOT AROUND IT.
+  //
+  // The reference world needs no secret and is given one anyway: the owner
+  // asked for the complete lifecycle to be controlled-proven before a real key
+  // is requested, and a reference company that side-stepped authorisation would
+  // leave the steps that actually go wrong — a replayed callback, a scope
+  // granted narrower than asked, a renewal mistaken for an outage — untravelled.
+  //
+  // The redirect round trip cannot happen inside a POST handler, so the code is
+  // minted and exchanged here exactly as the callback would. The round trip
+  // itself is proven by the route.
   const { connectSense } = await import('../senses/index.js');
+  const { issueReferenceCode } = await import('../senses/providers/reference.js');
+  const { senseProvider } = await import('../senses/providers/contract.js');
+  const { encryptCredentialPayload } = await import('../encryption.js');
+  const adapter = await senseProvider('reference_world');
+
   for (const senseKey of ['revenue', 'customers', 'product_usage', 'support']) {
-    await connectSense({
+    const connected = await connectSense({
       productId, companyName: scenario.companyName,
       senseKey, provider: 'reference_world', mode: 'reference',
     });
+    if (!connected || !adapter) continue;
+    const code = issueReferenceCode(`${productId}:${senseKey}`, ['reference:read']);
+    const granted = await adapter.exchange({ code, redirectUri: 'internal' });
+    await query(
+      `INSERT INTO sense_credentials
+         (id, company_sense_id, product_id, provider, granted_scopes_json,
+          secret_json, expires_at)
+       VALUES (?,?,?,'reference_world',?,?,?)`,
+      [nanoid(), connected.id, productId, JSON.stringify(granted.grantedScopes),
+        encryptCredentialPayload(JSON.stringify(granted.secret)),
+        granted.expiresAt?.toISOString() ?? null]);
   }
   return { productId, ingestToken, scenario };
 }

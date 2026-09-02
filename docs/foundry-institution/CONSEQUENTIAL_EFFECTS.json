@@ -175,6 +175,13 @@
       "detector": "templated_post",
       "status": "control_path",
       "capability": "Whisper transcription — reserves against the AI ceilings before dispatch, settles at a conservative bound, releases only on a definitive refusal"
+    },
+    {
+      "file": "src/services/senses/providers/stripe.ts",
+      "line": 63,
+      "detector": "dynamic_webhook_post",
+      "status": "control_path",
+      "capability": "sense credential lifecycle — owner-authorised exchange, revocation and liveness probe, read-only scope"
     }
   ]
 }

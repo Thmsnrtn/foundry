@@ -467,6 +467,54 @@ answer, and rejection is the valuable half.
 says top-level mounts may only shrink, and increasing capability should not
 produce more navigation.
 
+## The life of a credential
+
+Built 2026-09-02. Migration 226 gave Foundry senses — what it is trying to
+learn, from whom, and constitutionally what learning it never grants. What it
+could not do was hold the key. Migration 231 models the whole life of one:
+asked for, granted, stored, renewed, failing, revoked, gone.
+
+**Minimum scope is a property, not a promise.** `sense_provider_scopes` is the
+exact list each (provider, sense, mode) may request, immutable at runtime, and
+the authorize URL is built from it and nothing else. There is no parameter
+through which a caller could ask for more. **Every scope in it is read-only** —
+that is where "a sense is not a hand" stops being a sentence in a document and
+becomes what the owner is actually asked to grant.
+
+**An authorisation is a row before it is a credential.** The owner leaves for
+the provider and comes back with a code; between those moments the request is
+remembered — which company, which sense, which scopes, the disclosure he was
+shown, and a state nobody could guess. It expires on its own and is **consumed
+exactly once**, marked spent *before* the exchange, so a replayed callback
+cannot bind a second credential.
+
+**A grant narrower than what was asked is refused, not accepted.** A credential
+that cannot answer the question it was obtained for would surface as an empty
+page a week later. The owner is told which permission is missing instead.
+
+**A local delete is not a revocation.** The provider is asked first, whether it
+confirmed is recorded, and when it did not the owner is told exactly what to go
+and do himself. Foundry forgets the credential either way — keeping a secret it
+has been told to drop, because the provider was unreachable, is the opposite
+mistake.
+
+**A credential that dies quietly is the worst kind.** An hourly routine renews
+what is near expiry and *probes* what does not expire, because a key revoked
+elsewhere would otherwise first appear as numbers that stopped moving — which
+reads as a business going quiet rather than a connection going dark. A failure
+writes where the owner reads, and the situation engine turns it into `blind`,
+which outranks anything a reading could say.
+
+**And it was controlled-proven before a real key was asked for.** The reference
+world is made to travel every step — authorize, exchange, refresh, expire, fail,
+probe, revoke — with no network and no secret. A reference provider that skipped
+authorisation "because it needs none" would have left exactly the steps that go
+wrong untravelled.
+
+**A provider Foundry cannot yet ask says so.** A declared source with no adapter
+is named, and the owner is told nothing is missing on his side. A button that
+leads to a provider error page is worse than a button that is not there.
+
 ## Three things called Foundry
 
 **Named by the owner on 2026-09-02, before Foundry-on-Foundry development

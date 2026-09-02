@@ -1446,6 +1446,13 @@ interface CompanyView {
     provider: string; providerName: string; shortName: string; mode: string;
     lastObservedAt: string | null; lastError: string | null;
   }>;
+  /** What Foundry actually holds, so the disclosure can be checked rather than trusted. */
+  keys: Array<{
+    senseId: string; provider: string; grantedScopes: string[];
+    renewedAt: string | null; failures: number;
+  }>;
+  /** Disconnections the provider never confirmed — his to finish, not Foundry's. */
+  unconfirmed: Array<{ provider: string; when: string }>;
   /** What he turned off, offered back — disconnecting is as reversible as lifting. */
   stoppedSeeing: Array<{
     senseKey: string; cannotSee: string; provider: string; providerName: string;
@@ -1557,6 +1564,9 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
   const live = await senseSystem.connectedSenses(productId);
   const blind = await senseSystem.whatItCannotSee(productId);
   const stoppedSeeing = await senseSystem.whatItStoppedSeeing(productId);
+  const credentials = await import('../../services/senses/credentials.js');
+  const keys = await credentials.credentialHealthFor(productId);
+  const unconfirmed = await credentials.unconfirmedRevocations(productId);
 
   // DELIBERATELY NOT LISTING THE SENSES HERE. They have their own section
   // directly above, and saying "I can see revenue, from Stripe" in both places
@@ -1589,6 +1599,13 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
       providerName: senseSystem.providerName(sense.provider),
       shortName: sense.cannotSee, mode: sense.mode,
       lastObservedAt: sense.lastObservedAt, lastError: sense.lastError,
+    })),
+    keys: keys.map((k) => ({
+      senseId: k.senseId, provider: senseSystem.providerName(k.provider),
+      grantedScopes: k.grantedScopes, renewedAt: k.renewedAt, failures: k.failures,
+    })),
+    unconfirmed: unconfirmed.map((u) => ({
+      provider: senseSystem.providerName(u.provider), when: u.when,
     })),
     stoppedSeeing: stoppedSeeing.map((lost) => ({
       senseKey: lost.senseKey, cannotSee: lost.cannotSee, provider: lost.provider,
@@ -1808,8 +1825,14 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     : 'Nothing has reported yet. Until something does, this is a channel and not an answer, '
       + 'and I will say so rather than showing you a number I do not have.'}</p>
     </div>` : ''}
-    ${done === 'blind' ? html`<div class="done"><p><strong>Disconnected.</strong> I can no
-      longer see that. What I already learned stays; nothing new will arrive.</p></div>` : ''}
+    ${done === 'blind' ? html`<div class="done">
+      <p><strong>Disconnected.</strong> I can no longer see that. What I already learned
+        stays; nothing new will arrive.</p>
+      ${String(c.req.query('unconfirmed') ?? '') === '1'
+    ? html`<p class="gap">I have forgotten the authorisation, but the provider did not
+        confirm it is dead. If you want to be certain, revoke Foundry's access in the
+        provider directly.</p>` : ''}
+    </div>` : ''}
     ${done === 'approved' ? html`<div class="done"><p><strong>Approved.</strong> I can do that
       one thing. The boundary stays exactly as it was — I will ask again next time.</p></div>` : ''}
     ${done === 'refused' ? html`<div class="done"><p><strong>Not doing it.</strong> Nothing
@@ -1931,6 +1954,12 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     : 'It has not reported yet.'}</li>`).join(''))}</ul>
       <p class="quiet">None of this lets me act. I cannot
         ${view.senses.map((sense) => sense.neverGrants).join('; ')}.</p>
+      ${view.keys.length ? html`<p class="quiet">What I actually hold:
+        ${raw(view.keys.map((k) => `${k.provider} — ${k.grantedScopes.join(', ')}`
+    + `${k.renewedAt ? `, renewed ${k.renewedAt}` : ''}`
+    + `${k.failures > 0 ? `, <span class="gap">${String(k.failures)} recent failures</span>` : ''}`)
+    .join('; '))}. That is the permission the provider actually granted, not the one I
+        asked for — if they ever differ, this is where you would see it.</p>` : ''}
       ${raw(view.senses.map((sense) =>
     `<form method="POST" action="/foundry/companies/${view.id}/senses/${sense.id}/disconnect">
       <button class="btn" type="submit">Stop seeing ${sense.shortName}</button>
@@ -1946,6 +1975,10 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
   ? `Connecting ${[...new Set(gap.offers.map((o) => o.providerName))].join(' or ')} would show me ${gap.wouldLearn}.
      <a href="/foundry/companies/${view.id}/see/${gap.senseKey}">Look at that</a>`
   : `Nothing I can connect would tell me this.`}</p>`).join(''))}
+      ${view.unconfirmed.length ? raw(view.unconfirmed.map((u) =>
+    `<p class="gap">You disconnected ${u.provider} on ${u.when}, and it never confirmed.
+      I have forgotten the authorisation; if you want to be certain it is dead, revoke
+      Foundry&rsquo;s access in ${u.provider} directly.</p>`).join('')) : ''}
       ${view.stoppedSeeing.length ? raw(view.stoppedSeeing.map((lost) =>
     `<p class="quiet">You turned off ${lost.providerName} on ${lost.disconnectedAt}
       &mdash; ${lost.reason}. <a href="/foundry/companies/${view.id}/see/${lost.senseKey}">Turn it
@@ -2190,43 +2223,56 @@ foundryShellRoutes.get('/foundry/companies/:id/see/:sense',
           it. That is always a separate question, and I would have to earn it and then ask.</p>
       </div>
 
+      ${raw(await Promise.all(gap.offers.map(async (offer) => {
+    const { requiredScopes } = await import('../../services/senses/credentials.js');
+    const { senseProvider } = await import('../../services/senses/providers/contract.js');
+    const scopes = await requiredScopes(offer.provider, gap.key, offer.mode);
+    const canAsk = (await senseProvider(offer.provider)) !== null;
+    return `<div class="noticed">
+      <h4>${senses.providerName(offer.provider)}${offer.mode === 'sandbox' ? ' — test mode' : ''}</h4>
+      <p>Reads ${offer.reads}.</p>
+      ${scopes.length ? `<p class="quiet"><strong>What I would ask for:</strong>
+        ${scopes.map((sc) => `${sc.scope} — ${sc.because}`).join('; ')}. That is the whole
+        request; I cannot ask for more than this.</p>` : ''}
+      <p class="quiet">${offer.handsOver}.</p>
+      ${offer.mode === 'sandbox'
+    ? '<p class="quiet">Test mode runs everything the real connection runs against numbers '
+      + 'that are not the world&rsquo;s. I will never count what I learn here as proof '
+      + 'about a real business.</p>' : ''}
+      ${canAsk
+    ? `<form method="POST" action="/foundry/companies/${productId}/see/${gap.key}">
+        <input type="hidden" name="provider" value="${offer.provider}" />
+        <input type="hidden" name="mode" value="${offer.mode}" />
+        <button class="btn go" type="submit">Let me see ${gap.cannotSee}</button>
+      </form>`
+    : `<p class="quiet">I know ${senses.providerName(offer.provider)} could tell me this,
+        and I cannot ask it for permission yet. Nothing is missing on your side.</p>`}
+    </div>`;
+  })).then((blocks) => blocks.join('')))}
+
       ${gap.offers.length === 0 ? html`<div class="know">
         <h3>Nothing I can connect</h3>
         <p class="lede">There is no source I know of that would tell me this. I am saying so
           rather than leaving the gap unexplained.</p>
-      </div>` : raw(gap.offers.map((offer) => `<div class="noticed">
-        <h4>${senses.providerName(offer.provider)}${offer.mode === 'sandbox' ? ' — test mode' : ''}</h4>
-        <p>Reads ${offer.reads}.</p>
-        <p class="quiet">${offer.handsOver}.</p>
-        ${offer.mode === 'sandbox'
-    ? '<p class="quiet">Test mode runs everything the real connection runs against numbers '
-      + 'that are not the world&rsquo;s. I will never count what I learn here as proof '
-      + 'about a real business.</p>' : ''}
-        <form method="POST" action="/foundry/companies/${productId}/see/${gap.key}">
-          <input type="hidden" name="provider" value="${offer.provider}" />
-          <input type="hidden" name="mode" value="${offer.mode}" />
-          <button class="btn go" type="submit">Let me see ${gap.cannotSee}</button>
-        </form>
-      </div>`).join(''))}
+      </div>` : ''}
 
       <a class="btn" href="/foundry/companies/${productId}">Not now</a>`;
     return c.html(page(`See ${gap.cannotSee}`, body, 'companies'));
   });
 
 /**
- * CONNECT IT — AND SAY WHAT ACTUALLY CHANGED.
+ * ASK THE PROVIDER, ON HIS BEHALF.
  *
- * "Integration connected" is a fact about software. What the owner needs to
- * know is that Foundry's understanding changed: which numbers it can now read,
- * and what it still cannot see. The provider, sense and mode are all re-derived
- * from the constitutional vocabulary here; the form carries a choice, never a
- * disclosure.
+ * He tapped "let me see revenue". What that costs is an authorisation: a state
+ * nobody could guess, the minimum scopes the constitutional table declares, the
+ * disclosure he was shown stored as what he agreed to, and a redirect. All of
+ * it is server-derived — the form carries a choice between offers and nothing
+ * else, because the one thing a permission request must never take from a
+ * request is what it is requesting.
  *
- * WHAT THIS DOES NOT DO: hold a credential. A real provider still needs its own
- * authorization, and this route refuses to pretend otherwise — a sense
- * connected without one is recorded as connected and reports nothing, which the
- * company page then says out loud. That is the honest state, and it is exactly
- * the state a real credential later replaces.
+ * WHEN IT CANNOT BE ASKED FOR, he is told so plainly and nothing is half-done.
+ * A button that leads to a provider error page is worse than a button that is
+ * not there.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 foundryShellRoutes.post('/foundry/companies/:id/see/:sense',
@@ -2240,17 +2286,116 @@ foundryShellRoutes.post('/foundry/companies/:id/see/:sense',
     const name = String((owned.rows[0] as Record<string, unknown>).name);
 
     const form = await c.req.parseBody();
-    const senses = await import('../../services/senses/index.js');
     const mode = String(form.mode ?? '');
     if (mode !== 'real' && mode !== 'sandbox' && mode !== 'reference') {
       return c.redirect(`/foundry/companies/${productId}`);
     }
-    const connected = await senses.connectSense({
-      productId, companyName: name, senseKey: c.req.param('sense'),
-      provider: String(form.provider ?? ''), mode,
+
+    const { beginAuthorization } = await import('../../services/senses/credentials.js');
+    const started = await beginAuthorization({
+      productId, founderId: String(founder.id), companyName: name,
+      senseKey: c.req.param('sense'), provider: String(form.provider ?? ''), mode,
+      redirectUri: senseCallbackUri(c),
     });
-    if (!connected) return c.redirect(`/foundry/companies/${productId}`);
-    return c.redirect(`/foundry/companies/${productId}?done=seeing&sense=${c.req.param('sense')}`);
+    if ('failed' in started) {
+      return c.html(page('Not yet', html`
+        <h1>I cannot ask for that yet</h1>
+        <p class="lede">${started.ownerWords}.</p>
+        <p class="quiet">Nothing has changed, and nothing is half-connected.</p>
+        <a class="btn" href="/foundry/companies/${productId}">Back to ${name}</a>`,
+      'companies'));
+    }
+    return c.redirect(started.authorizeUrl);
+  });
+
+/**
+ * THE REDIRECT URI, DERIVED FROM THE REQUEST AND NOWHERE ELSE.
+ *
+ * A provider sends the owner back here, and an attacker who could choose this
+ * value could send him — and the code — somewhere else. It is built from the
+ * host this request actually arrived on, never from a parameter.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function senseCallbackUri(c: any): string {
+  const url = new URL(String(c.req.url));
+  return `${url.origin}/foundry/senses/callback`;
+}
+
+/**
+ * THE REFERENCE WORLD, PLAYING THE PROVIDER'S PART.
+ *
+ * It needs no secret and is made to issue one anyway, because the owner asked
+ * for the credential lifecycle to be controlled-proven before a real key is
+ * requested — and a lifecycle is only proven if something travels all of it.
+ * This route is the far end of the round trip: it receives the authorisation,
+ * mints a code only this process could have made, and sends him back. No
+ * network, no key, and every step the real path takes.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.get('/foundry/senses/reference-authorize',
+  requireInstitutionOwner(), async (c: any) => {
+    const state = String(c.req.query('state') ?? '');
+    const redirect = String(c.req.query('redirect_uri') ?? '');
+    const scopes = String(c.req.query('scope') ?? '').split(' ').filter(Boolean);
+    if (!state || !redirect) return c.notFound();
+    const { issueReferenceCode } = await import(
+      '../../services/senses/providers/reference.js');
+    const code = issueReferenceCode(state, scopes);
+    return c.redirect(`${redirect}?code=${encodeURIComponent(code)}`
+      + `&state=${encodeURIComponent(state)}`);
+  });
+
+/**
+ * HE CAME BACK — AND WHAT HE IS TOLD IS THAT FOUNDRY'S UNDERSTANDING CHANGED.
+ *
+ * Not "integration connected", which is a fact about software. What became
+ * visible, what is still invisible, and what this still does not permit. Every
+ * failure on the way here has its own sentence, because a connection that
+ * half-worked is the state most likely to leave him believing something is
+ * watched when it is not.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.get('/foundry/senses/callback',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+
+    // A PROVIDER MAY REFUSE, and it says so in the query rather than in a code.
+    const providerError = String(c.req.query('error_description')
+      ?? c.req.query('error') ?? '');
+    const state = String(c.req.query('state') ?? '');
+    const code = String(c.req.query('code') ?? '');
+
+    if (providerError || !code) {
+      return c.html(page('Not connected', html`
+        <h1>That did not connect</h1>
+        <p class="lede">${providerError
+    ? `The provider said: ${providerError.slice(0, 200)}.`
+    : 'The provider did not send back an authorisation.'}</p>
+        <p class="quiet">Nothing changed here. I still cannot see it, and I have not
+          stored anything.</p>
+        <a class="btn" href="/foundry/companies">Back to your companies</a>`, 'companies'));
+    }
+
+    const { completeAuthorization } = await import('../../services/senses/credentials.js');
+    const result = await completeAuthorization({
+      state, code, founderId: String(founder.id), redirectUri: senseCallbackUri(c),
+    });
+
+    if (!result.connected) {
+      return c.html(page('Not connected', html`
+        <h1>That did not connect</h1>
+        <p class="lede">${result.ownerWords}</p>
+        <p class="quiet">Nothing changed here. ${result.recoverable
+    ? 'Trying again is safe.'
+    : 'Trying again will not help on its own.'}</p>
+        <a class="btn" href="${result.productId
+    ? `/foundry/companies/${result.productId}` : '/foundry/companies'}">Back</a>`,
+      'companies'));
+    }
+
+    return c.redirect(
+      `/foundry/companies/${result.productId}?done=seeing&sense=${result.senseKey}`);
   });
 
 /** Stop seeing it. The reason is Foundry's; he does not owe one. */
@@ -2265,9 +2410,18 @@ foundryShellRoutes.post('/foundry/companies/:id/senses/:senseId/disconnect',
         WHERE s.id = ? AND p.owner_id = ? AND s.disconnected_at IS NULL`,
       [c.req.param('senseId'), String(founder.id)]);
     if (!owned.rows.length) return c.notFound();
+    // THE PROVIDER IS TOLD FIRST, and whether it confirmed is what he is
+    // shown. A local delete with a live token at the other end is not a
+    // revocation, and reporting it as one would be the most dangerous thing
+    // this surface could say.
+    const { revokeCredential } = await import('../../services/senses/credentials.js');
+    const revocation = await revokeCredential({
+      senseId: c.req.param('senseId'), reason: 'the owner disconnected it',
+    });
     const { disconnectSense } = await import('../../services/senses/index.js');
     await disconnectSense(c.req.param('senseId'), 'the owner disconnected it');
-    return c.redirect(`/foundry/companies/${productId}?done=blind`);
+    return c.redirect(`/foundry/companies/${productId}?done=blind`
+      + (revocation && !revocation.confirmedByProvider ? '&unconfirmed=1' : ''));
   });
 
 // ─── what the owner said ────────────────────────────────────────────────────

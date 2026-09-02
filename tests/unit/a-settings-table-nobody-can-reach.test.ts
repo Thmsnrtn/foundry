@@ -74,7 +74,10 @@ describe('the table is gone', () => {
     // upsert. Ninety, then eighty-nine, then eighty-eight. `reference_world_tick`
     // — which advances every reference company by one day through the public
     // metrics intake — makes eighty-nine again, deliberately.
-    expect(Object.keys(JOB_REGISTRY).length, 'eighty-eight before, eighty-nine now').toBe(89);
+    // And `sense_credential_tick` — which renews and probes the keys behind the
+    // senses, so a connection that has gone dark is said out loud before
+    // anything derived from it is shown — makes ninety.
+    expect(Object.keys(JOB_REGISTRY).length, 'eighty-nine before, ninety now').toBe(90);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

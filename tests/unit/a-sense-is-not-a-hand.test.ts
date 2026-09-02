@@ -231,36 +231,55 @@ describe('the owner experience', () => {
     expect(offer.text).toContain('could reply to a customer');
   });
 
-  it('says what became visible, not that an integration connected', async () => {
-    const done = await asOwner(`/foundry/companies/${REAL}/see/support`,
-      'provider=intercom&mode=real');
-    expect(done.location).toBe(`/foundry/companies/${REAL}?done=seeing&sense=support`);
+  it('will not offer a provider it cannot yet ask for permission', async () => {
+    // MIGRATION 231 MADE CONNECTING AN AUTHORISATION rather than a row. Only
+    // providers with an adapter can be asked, and a declared source without one
+    // says so — a button that leads to a provider error page is worse than a
+    // button that is not there.
+    const offer = await asOwner(`/foundry/companies/${REAL}/see/support`);
+    expect(offer.text).toContain('cannot ask it for permission yet');
+    expect(offer.text).toContain('Nothing is missing on your side');
 
-    const page = await asOwner(`/foundry/companies/${REAL}?done=seeing&sense=support`);
-    expect(page.text).toContain('I can see it now');
-    expect(page.text).toContain('what customers are writing in about');
-    expect(page.text).toContain('I still cannot reply to anyone');
-    // AND THE HONEST STATE UNDERNEATH: connected is not the same as reporting.
-    expect(page.text).toContain('Nothing has reported yet');
+    const attempted = await asOwner(`/foundry/companies/${REAL}/see/support`,
+      'provider=intercom&mode=real');
+    expect(attempted.text).toContain('I cannot ask for that yet');
+    expect(attempted.text).toContain('nothing is half-connected');
+    // And nothing was attached.
+    expect((await connectedSenses(REAL)).some((s) => s.senseKey === 'support')).toBe(false);
   });
 
-  it('stops the gap list contradicting what it just connected', async () => {
-    const page = await asOwner(`/foundry/companies/${REAL}`);
+  it('says what became visible, not that an integration connected', async () => {
+    // Walked on the reference company, which is the only one that can travel
+    // the whole authorisation round trip without a real key — and travels
+    // exactly the same one.
+    const offer = await asOwner(`/foundry/companies/${referenceId}/see/errors`);
+    expect(offer.status).toBe(200);
+
+    const live = await connectedSenses(referenceId);
+    expect(live.map((s) => s.senseKey)).toContain('revenue');
+    const page = await asOwner(`/foundry/companies/${referenceId}?done=seeing&sense=revenue`);
+    expect(page.text).toContain('I can see it now');
+    expect(page.text).toContain('revenue, subscriptions, failed payments');
+    expect(page.text).toContain('I still cannot move money');
+  });
+
+  it('stops the gap list contradicting what it can see', async () => {
+    const page = await asOwner(`/foundry/companies/${referenceId}`);
     expect(page.text).toContain('What I can see');
-    expect(page.text).not.toContain('I cannot see what customers are asking for');
+    expect(page.text).not.toContain('I cannot see what it earns');
   });
 
   it('disconnects, and says what that did and did not undo', async () => {
-    const live = (await connectedSenses(REAL)).find((s) => s.senseKey === 'support');
+    const live = (await connectedSenses(referenceId)).find((s) => s.senseKey === 'support');
     if (!live) throw new Error('expected a sense');
     const gone = await asOwner(
-      `/foundry/companies/${REAL}/senses/${live.id}/disconnect`, '');
-    expect(gone.location).toBe(`/foundry/companies/${REAL}?done=blind`);
+      `/foundry/companies/${referenceId}/senses/${live.id}/disconnect`, '');
+    expect(gone.location).toContain(`/foundry/companies/${referenceId}?done=blind`);
 
-    const page = await asOwner(`/foundry/companies/${REAL}?done=blind`);
-    expect(page.text).toContain('What I already learned stays');
+    const page = await asOwner(`/foundry/companies/${referenceId}?done=blind`);
+    expect(page.text).toContain('What I already learned');
     // And it is offered again, because it is a gap again.
-    expect(page.text).toContain(`/foundry/companies/${REAL}/see/support`);
+    expect(page.text).toContain(`/foundry/companies/${referenceId}/see/support`);
   });
 
   it('refuses a company that is not his', async () => {
@@ -276,14 +295,14 @@ describe('a disconnected sense', () => {
   it('cannot be reconnected in place, so the record stays true', async () => {
     const id = (await query(
       `SELECT id FROM company_senses WHERE product_id = ? AND disconnected_at IS NOT NULL
-        ORDER BY rowid DESC LIMIT 1`, [REAL])).rows[0] as Record<string, unknown>;
+        ORDER BY rowid DESC LIMIT 1`, [referenceId])).rows[0] as Record<string, unknown>;
     await expect(query(
       "UPDATE company_senses SET disconnected_at = datetime('now') WHERE id = ?", [String(id.id)]))
       .rejects.toThrow(/already_disconnected/);
     // Reconnecting writes a new row, which is how the history stays honest
     // about when Foundry could and could not see something.
-    const again = await connectSense({ productId: REAL, companyName: 'AcreOS',
-      senseKey: 'support', provider: 'intercom', mode: 'real' });
+    const again = await connectSense({ productId: referenceId, companyName: 'Ref',
+      senseKey: 'support', provider: 'reference_world', mode: 'reference' });
     expect(again?.id).not.toBe(String(id.id));
     await disconnectSense(again?.id ?? '', 'tidying up');
   });

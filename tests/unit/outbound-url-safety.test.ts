@@ -92,6 +92,12 @@ const FOUNDRY_CHOSEN: Record<string, string> = {
   'src/services/ai/client.ts': 'OPENROUTER_BASE_URL, an operator env var, with a constant path',
   'src/services/scp/briefing/voice-reply.ts': 'the same operator-set transcription base URL',
   'src/services/integration/github-gateway.ts': 'GITHUB_API constant; the repo slug in the path is checked by repoSlug',
+  // THE SENSE'S CREDENTIAL, and the three constants it talks to. Every URL in
+  // that module is a literal — Stripe's OAuth token, deauthorize and balance
+  // endpoints. Nothing founder-supplied reaches a host or a path: the account
+  // id travels in a header, and the only other input is an authorisation code
+  // sent as a form field.
+  'src/services/senses/providers/stripe.ts': 'three compiled-in Stripe endpoints; no founder value reaches the host or the path',
   'src/services/integration/stripe-gateway.ts': 'STRIPE_API constant; the object id in the path is checked by pathSegment',
   'src/services/notifications/push.ts': 'the APNs host is chosen by NODE_ENV; the device token in the path is checked by pathSegment',
   // Newly visible for the same reason the MCP client was: `fullUrl` and
