@@ -28,15 +28,21 @@ import { query } from '../../db/client.js';
 import { OBSERVABLE_FIELD_LABELS } from '../institution/external-shadowing.js';
 
 /** The quantities worth putting in front of an owner, in the order they read. */
-const SHOWN: Array<{ column: string; label: string; kind: 'money' | 'rate' | 'count' }> = [
-  { column: 'mrr_cents', label: 'monthly revenue', kind: 'money' },
-  { column: 'new_mrr_cents', label: OBSERVABLE_FIELD_LABELS.new_mrr_cents ?? 'new revenue', kind: 'money' },
-  { column: 'churned_mrr_cents', label: OBSERVABLE_FIELD_LABELS.churned_mrr_cents ?? 'revenue lost', kind: 'money' },
-  { column: 'active_users', label: OBSERVABLE_FIELD_LABELS.active_users ?? 'people using it', kind: 'count' },
-  { column: 'signups_7d', label: OBSERVABLE_FIELD_LABELS.signups_7d ?? 'new signups', kind: 'count' },
-  { column: 'day_30_retention', label: OBSERVABLE_FIELD_LABELS.day_30_retention ?? 'retention', kind: 'rate' },
-  { column: 'churn_rate', label: OBSERVABLE_FIELD_LABELS.churn_rate ?? 'how many leave', kind: 'rate' },
-  { column: 'support_volume_7d', label: OBSERVABLE_FIELD_LABELS.support_volume_7d ?? 'support', kind: 'count' },
+// WHICH WAY IS GOOD is stated per quantity, because a chart that colours every
+// rise green would call rising churn good news. 'neutral' is for the ones
+// where more is neither: support volume rising is load, not failure.
+type Meaning = 'up_is_good' | 'down_is_good' | 'neutral';
+const SHOWN: Array<{
+  column: string; label: string; kind: 'money' | 'rate' | 'count'; meaning: Meaning;
+}> = [
+  { column: 'mrr_cents', label: 'monthly revenue', kind: 'money', meaning: 'up_is_good' },
+  { column: 'new_mrr_cents', label: OBSERVABLE_FIELD_LABELS.new_mrr_cents ?? 'new revenue', kind: 'money', meaning: 'up_is_good' },
+  { column: 'churned_mrr_cents', label: OBSERVABLE_FIELD_LABELS.churned_mrr_cents ?? 'revenue lost', kind: 'money', meaning: 'down_is_good' },
+  { column: 'active_users', label: OBSERVABLE_FIELD_LABELS.active_users ?? 'people using it', kind: 'count', meaning: 'up_is_good' },
+  { column: 'signups_7d', label: OBSERVABLE_FIELD_LABELS.signups_7d ?? 'new signups', kind: 'count', meaning: 'up_is_good' },
+  { column: 'day_30_retention', label: OBSERVABLE_FIELD_LABELS.day_30_retention ?? 'retention', kind: 'rate', meaning: 'up_is_good' },
+  { column: 'churn_rate', label: OBSERVABLE_FIELD_LABELS.churn_rate ?? 'how many leave', kind: 'rate', meaning: 'down_is_good' },
+  { column: 'support_volume_7d', label: OBSERVABLE_FIELD_LABELS.support_volume_7d ?? 'support', kind: 'count', meaning: 'neutral' },
 ];
 
 export interface CompanyNumber {
@@ -47,6 +53,12 @@ export interface CompanyNumber {
   direction: 'rose' | 'fell' | 'held' | null;
   /** A whole sentence, because a chart legend is not an explanation. */
   sentence: string;
+  /** Short, for a tile: "up about 8% on a month ago" or "no comparison yet". */
+  movement: string;
+  /** Which way is good, so a tile colours honestly. */
+  meaning: 'up_is_good' | 'down_is_good' | 'neutral';
+  /** The last readings, oldest first, for a trend. Empty when fewer than three. */
+  series: number[];
 }
 
 export interface CompanyNumbers {
@@ -127,6 +139,13 @@ export async function whatTheNumbersSay(productId: string): Promise<CompanyNumbe
       ORDER BY snapshot_date DESC LIMIT 1`,
     [productId, String(latest.snapshot_date)])).rows[0] as Record<string, unknown> | undefined;
 
+  // THE LAST READINGS, for the trend beside each number. Bounded, oldest
+  // first, and never more than the company actually reported.
+  const history = ((await query(
+    `SELECT ${columns.join(', ')} FROM metric_snapshots
+      WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 30`, [productId]))
+    .rows as unknown as Array<Record<string, unknown>>).reverse();
+
   const numbers: CompanyNumber[] = [];
   for (const spec of SHOWN) {
     const raw = latest[spec.column];
@@ -136,10 +155,14 @@ export async function whatTheNumbersSay(productId: string): Promise<CompanyNumbe
 
     const before = prior?.[spec.column];
     const now = formatted(spec.kind, current);
+    const series = history.map((h) => Number(h[spec.column]))
+      .filter((v) => Number.isFinite(v));
     if (before == null || !Number.isFinite(Number(before))) {
       numbers.push({
         label: spec.label, now, direction: null,
         sentence: `${spec.label} is ${now}. I have nothing from a month ago to compare it against.`,
+        movement: 'no comparison yet', meaning: spec.meaning,
+        series: series.length >= 3 ? series : [],
       });
       continue;
     }
@@ -147,6 +170,8 @@ export async function whatTheNumbersSay(productId: string): Promise<CompanyNumbe
     numbers.push({
       label: spec.label, now, direction: moved.direction,
       sentence: `${spec.label} is ${now}, ${moved.phrase}.`,
+      movement: moved.phrase, meaning: spec.meaning,
+      series: series.length >= 3 ? series : [],
     });
   }
 

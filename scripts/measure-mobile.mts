@@ -40,6 +40,11 @@ import { runMigrations } from '../src/db/migrate.js';
 import { query } from '../src/db/client.js';
 
 const WIDTHS = [375, 390, 393, 414, 430];
+// TWO CANVASES, NEITHER A VERSION OF THE OTHER. The desktop widths are measured
+// with a mouse-and-keyboard context, at 100% text only (a desktop user zooms
+// the browser, which is a different mechanism and reflows the same way), and
+// the screenshots go beside the phone ones so the two can be compared.
+const DESKTOP_WIDTHS = [1024, 1280, 1440];
 const OWNER = 'mm_owner';
 const COMPANY = 'mm_company';
 let REFERENCE_COMPANY = '';
@@ -167,7 +172,9 @@ async function main(): Promise<void> {
   ];
 
   const dir = 'docs/design/mobile';
+  const desk = 'docs/design/desktop';
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  if (!existsSync(desk)) mkdirSync(desk, { recursive: true });
 
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
   const failures: string[] = [];
@@ -176,11 +183,14 @@ async function main(): Promise<void> {
   // ACCESSIBILITY IS PART OF THE MEASUREMENT, not a later pass. A layout that
   // holds at 17px and breaks at 34px is a layout that breaks for anyone who has
   // turned text up, which on a phone is a great many people.
-  for (const { width, scale } of WIDTHS.flatMap((width) =>
-    [{ width, scale: 1 }, { width, scale: 2 }])) {
-    const context = await browser.newContext({
-      viewport: { width, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true,
-    });
+  const runs = [
+    ...WIDTHS.flatMap((width) => [{ width, scale: 1, desktop: false }, { width, scale: 2, desktop: false }]),
+    ...DESKTOP_WIDTHS.map((width) => ({ width, scale: 1, desktop: true })),
+  ];
+  for (const { width, scale, desktop } of runs) {
+    const context = await browser.newContext(desktop
+      ? { viewport: { width, height: 900 }, deviceScaleFactor: 2 }
+      : { viewport: { width, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
     const page = await context.newPage();
     if (scale !== 1) {
       await page.addInitScript(`document.addEventListener('DOMContentLoaded',function(){
@@ -231,7 +241,7 @@ async function main(): Promise<void> {
       }));
       const overflow = m.scrollWidth - m.innerWidth;
       const verdict = status === 200 && overflow <= 0 ? 'ok' : 'OVERFLOW';
-      rows.push(`${String(width).padStart(4)} ${scale === 1 ? ' 100%' : ' 200%'}  ${String(status)}  `
+      rows.push(`${String(width).padStart(4)} ${desktop ? ' desk' : scale === 1 ? ' 100%' : ' 200%'}  ${String(status)}  `
         + `scrollWidth ${String(m.scrollWidth).padStart(4)} vs ${String(m.innerWidth).padStart(4)}  `
         + `${verdict.padEnd(9)} ${path}`);
       if (verdict !== 'ok') {
@@ -249,8 +259,17 @@ async function main(): Promise<void> {
           await page.screenshot({ path: `${dir}/reference-company-390.png`, fullPage: true });
         }
       }
-      if (path === '/foundry' && scale === 1 && width !== 390) {
+      if (path === '/foundry' && scale === 1 && width !== 390 && !desktop) {
         await page.screenshot({ path: `${dir}/foundry-${String(width)}.png`, fullPage: true });
+      }
+      // THE DESKTOP, AT ONE WIDTH, FOR THE THREE PAGES HE LIVES IN - so the two
+      // canvases can be put side by side and neither read as a stretched or
+      // shrunken version of the other.
+      if (desktop && width === 1280) {
+        const name = path === '/foundry' ? 'foundry'
+          : path === '/foundry/companies' ? 'portfolio'
+            : path === `/foundry/companies/${REFERENCE_COMPANY}` ? 'reference-company' : '';
+        if (name) await page.screenshot({ path: `${desk}/${name}-1280.png`, fullPage: true });
       }
     }
     await context.close();
@@ -265,8 +284,8 @@ async function main(): Promise<void> {
     console.log('\nHORIZONTAL OVERFLOW:\n' + failures.map((f) => '  ' + f).join('\n'));
     process.exit(1);
   }
-  console.log(`\nNo horizontal overflow at ${WIDTHS.join(', ')} px, at 100% and 200% text. `
-    + `Screenshots in ${dir}/.`);
+  console.log(`\nNo horizontal overflow at ${WIDTHS.join(', ')} px, at 100% and 200% text, `
+    + `nor at ${DESKTOP_WIDTHS.join(', ')} px on a desktop. Screenshots in ${dir}/ and ${desk}/.`);
   process.exit(0);
 }
 

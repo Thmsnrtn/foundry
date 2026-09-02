@@ -432,14 +432,18 @@ describe('the owner walks it', () => {
     if ('refused' in ref) throw new Error(ref.refused);
 
     const home = await asOwner('/foundry');
-    expect(home.text).toContain('Who has it');
-    expect(home.text).toContain('Strongest reason it fails');
-    expect(home.text).toContain('What is still unknown');
-    expect(home.text).toContain('What I checked it against');
+    // THE CARD IN ITS MATURE SHAPE: who has it and the problem in one line,
+    // then the labelled facts a decision needs - why it might, what it does to
+    // the portfolio, how it could fail, what was checked, what is unknown.
+    expect(home.text).toContain('Why it might');
+    expect(home.text).toContain('Could fail because');
+    expect(home.text).toContain('>Unknown<');
+    expect(home.text).toContain('>Checked<');
+    expect(home.text).toContain('I recommend');
     // AND WHY IT CANNOT EARN A COMPANY YET, on the card rather than a footnote.
     expect(home.text).toContain('cannot earn a company yet');
     // Invented, said before anything about it.
-    expect(home.text).toContain('This came from a');
+    expect(home.text).toContain('Invented, to show you how I judge');
     // No score anywhere.
     expect(home.text).not.toMatch(/score|rating|\b\d+\/10\b/i);
   });

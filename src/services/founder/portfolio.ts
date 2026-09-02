@@ -234,3 +234,111 @@ export async function whereTheNextDollarGoes(founderId: string): Promise<Capital
           + 'wrong about a small amount than right about a large one.',
   };
 }
+
+export interface Glance {
+  /** Monthly revenue across real companies Foundry can see, in cents, or null. */
+  cashFlowCents: number | null;
+  /** How many of the real companies report revenue at all. */
+  seen: number; companies: number;
+  /** The one concentration sentence, or null when nothing is shared. */
+  concentration: string | null;
+  /** How many times his companies needed him in the last thirty days. */
+  interruptions: number;
+}
+
+/**
+ * THE PORTFOLIO IN THREE FACTS, for the first screen.
+ *
+ * Cash flow is the sum of what can actually be seen, and says how many
+ * companies it covers - a total that quietly omitted the ones Foundry is blind
+ * to would be the number he trusts most and the one least entitled to it.
+ * The third fact is not a "health" or "resilience" grade: it is the largest
+ * thing his businesses share, named, which is what a grade would be hiding.
+ */
+export async function glanceFor(founderId: string): Promise<Glance> {
+  const rows = (await query(
+    `SELECT p.id,
+            (SELECT m.mrr_cents FROM metric_snapshots m
+              WHERE m.product_id = p.id AND m.mrr_cents IS NOT NULL
+              ORDER BY m.snapshot_date DESC LIMIT 1) AS mrr_cents
+       FROM products p
+      WHERE p.owner_id = ? AND p.status = 'active' AND p.deleted_at IS NULL
+        AND ${realCompany('p')}`, [founderId]))
+    .rows as unknown as Array<Record<string, unknown>>;
+  const seen = rows.filter((r) => r.mrr_cents != null);
+  const { concentrationsFor } = await import('./resilience.js');
+  const top = (await concentrationsFor(founderId, 'real'))[0];
+  const { burdenFor } = await import('./burden.js');
+  const interruptions = (await burdenFor(founderId))
+    .reduce((n, b) => n + b.interruptions, 0);
+  return {
+    cashFlowCents: seen.length === 0 ? null
+      : seen.reduce((n, r) => n + Number(r.mrr_cents), 0),
+    seen: seen.length, companies: rows.length,
+    concentration: top === undefined ? null
+      : `${String(top.carriedBy.length)} of ${String(rows.length)} share ${top.value}`,
+    interruptions,
+  };
+}
+
+export interface Layer {
+  name: 'anchors' | 'tributaries' | 'frontier';
+  title: string; what: string;
+  companies: Array<{ productId: string; name: string; mrrCents: number | null; posture: string }>;
+  cashFlowCents: number;
+}
+
+/**
+ * THE RIVER IN ITS LAYERS: a few anchors, many tributaries, an experimental
+ * frontier. Membership is stated arithmetic - an anchor is a real company
+ * earning at least a thousand dollars a month, a tributary is any other real
+ * company that earns, and the frontier is what is being looked at rather than
+ * owned - so he can argue with the line rather than wonder where it is.
+ */
+export const ANCHOR_CENTS = 100_000;
+
+export async function layersFor(founderId: string): Promise<{
+  layers: Layer[]; frontier: { looking: number; awaiting: number; buried: number };
+}> {
+  const rows = (await query(
+    `SELECT p.id, p.name, p.posture,
+            (SELECT m.mrr_cents FROM metric_snapshots m
+              WHERE m.product_id = p.id AND m.mrr_cents IS NOT NULL
+              ORDER BY m.snapshot_date DESC LIMIT 1) AS mrr_cents
+       FROM products p
+      WHERE p.owner_id = ? AND p.status = 'active' AND p.deleted_at IS NULL
+        AND ${realCompany('p')}
+      ORDER BY mrr_cents DESC NULLS LAST, p.created_at`, [founderId]))
+    .rows as unknown as Array<Record<string, unknown>>;
+  const each = rows.map((r) => ({
+    productId: String(r.id), name: String(r.name),
+    mrrCents: r.mrr_cents == null ? null : Number(r.mrr_cents), posture: String(r.posture),
+  }));
+  const anchors = each.filter((c) => (c.mrrCents ?? 0) >= ANCHOR_CENTS);
+  const tributaries = each.filter((c) => (c.mrrCents ?? 0) < ANCHOR_CENTS);
+  const sum = (cs: typeof each): number => cs.reduce((n, c) => n + (c.mrrCents ?? 0), 0);
+
+  const frontier = (await query(
+    `SELECT
+       (SELECT COUNT(*) FROM venture_opportunities o
+          WHERE o.founder_id = ? AND o.verdict IS NULL AND o.evidence_mode = 'real') AS looking,
+       (SELECT COUNT(*) FROM venture_experiments e
+          WHERE e.founder_id = ? AND e.decision IS NULL AND e.evidence_mode = 'real') AS awaiting,
+       (SELECT COUNT(*) FROM venture_opportunities o
+          WHERE o.founder_id = ? AND o.verdict = 'rejected' AND o.evidence_mode = 'real') AS buried`,
+    [founderId, founderId, founderId])).rows[0] as Record<string, unknown>;
+
+  return {
+    layers: [
+      { name: 'anchors', title: 'Anchors', what: 'the few that carry the river',
+        companies: anchors, cashFlowCents: sum(anchors) },
+      { name: 'tributaries', title: 'Tributaries',
+        what: 'small, steady, and not asked to become anchors',
+        companies: tributaries, cashFlowCents: sum(tributaries) },
+    ],
+    frontier: {
+      looking: Number(frontier.looking), awaiting: Number(frontier.awaiting),
+      buried: Number(frontier.buried),
+    },
+  };
+}

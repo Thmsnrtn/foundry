@@ -117,6 +117,14 @@ interface OwnerState {
       /** The legal picture, one paragraph, and each exposure in a line. */
       legalProfile: string;
       exposures: string[];
+      /** How it would earn and reach people, as declared: form, price, channel. */
+      earns: string | null;
+      /** The burden it would carry, as declared, or null when nobody has said. */
+      burden: string | null;
+      /** The maximum he could lose on the cheapest test, or null when no test waits. */
+      downside: string | null;
+      /** Foundry's one-line recommendation, from the rules already applied. */
+      recommendation: string;
       /** Claims about the world and how each stands on its evidence. */
       standing: string[];
       /** Open questions, each with the cheapest thing that would settle it. */
@@ -417,6 +425,18 @@ async function readOwnerState(
           against: c.against,
           serves: c.serves,
           legalProfile: c.legal.profile,
+          earns: c.declared.earns, burden: c.declared.burden,
+          downside: c.awaiting[0] ? (c.awaiting[0].costCents === 0 ? 'nothing'
+            : `$${(c.awaiting[0].costCents / 100).toFixed(2)}`) : null,
+          // THE RECOMMENDATION IS THE RULES, SAID ONCE. Nothing here is a new
+          // judgement: it is the verdicts the card already carries, ordered.
+          recommendation: !c.survivesGuidance ? `Not this one: ${c.failsBecause ?? ''}.`
+            : c.buriedBefore ? 'Not this one: you have buried something like it before.'
+              : c.fit?.makesItWorse ? 'Keep looking: this would make the portfolio more fragile, not less.'
+                : c.inTheWay.length === 0 ? 'Take it forward. Nothing is left standing in the way.'
+                  : c.awaiting.length > 0
+                    ? `Run the test. It costs ${c.awaiting[0]?.costCents === 0 ? 'nothing' : `$${((c.awaiting[0]?.costCents ?? 0) / 100).toFixed(2)}`} and settles the thing that matters most.`
+                    : `Not yet: ${c.inTheWay[0] ?? ''}.`,
           exposures: c.legal.surfaces.map((sf) =>
             `${sf.whatItIs} (${sf.severity}${sf.needsProfessional ? ', needs somebody qualified' : ''}`
             + `${sf.stale ? ', over six months old' : ''}) — ${sf.whatItCreates}`
@@ -528,20 +548,23 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>${title}</title>
 <style>
-  /* One family, one scale, one accent. Colour carries meaning or it is absent. */
+  /* Two families and one scale: a serif for the sentences that matter, the
+     system sans for everything else. Colour carries meaning or it is absent:
+     --good and --alert are the only two hues, and they mean direction. */
   :root{
-    --bg:#F2F3F0; --card:#FFFFFF; --line:#E0E4DC;
+    --bg:#F3F4F1; --card:#FFFFFF; --card-2:#F8F9F6; --line:#E2E6DE;
     --ink:#151C18; --ink-2:#5A645C; --ink-3:#8B948C;
-    --accent:#256454; --accent-ink:#FFFFFF;
-    --alert:#96601A;
+    --accent:#256454; --accent-ink:#FFFFFF; --accent-soft:#DDEBE4;
+    --good:#2E7D5B; --alert:#96601A; --alert-soft:#F6EBDD;
     --s1:6px; --s2:12px; --s3:18px; --s4:28px; --s5:44px;
-    --r:16px;
+    --r:18px; --r2:12px;
+    --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
   }
   @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-    --bg:#0E1512; --card:#171F1B; --line:#25302A;
-    --ink:#E8EDE8; --ink-2:#A6B0A8; --ink-3:#7A847C;
-    --accent:#74BFA9; --accent-ink:#0C1512;
-    --alert:#D6A75E;
+    --bg:#0D1310; --card:#151C18; --card-2:#1A231E; --line:#243029;
+    --ink:#EAEFEA; --ink-2:#A8B2AA; --ink-3:#7C877E;
+    --accent:#8FD1B8; --accent-ink:#0C1512; --accent-soft:#1E2E27;
+    --good:#7FCBA8; --alert:#D9A85E; --alert-soft:#2C2416;
   }}
   *,*::before,*::after{box-sizing:border-box}
   html,body{max-width:100%;overflow-x:hidden}
@@ -550,8 +573,76 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
     font:400 17px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
     -webkit-text-size-adjust:100%;-webkit-font-smoothing:antialiased;
   }
-  .wrap{max-width:34rem;margin:0 auto;padding:var(--s4) var(--s3) 8.5rem}
-  h1{font-size:1.55rem;line-height:1.2;font-weight:600;letter-spacing:-.015em;margin:0 0 var(--s2)}
+  .wrap{max-width:34rem;margin:0 auto;padding:var(--s3) var(--s3) 10.5rem}
+  h1{font-family:var(--serif);font-size:2rem;line-height:1.15;font-weight:500;
+    letter-spacing:-.01em;margin:0 0 var(--s2)}
+  .brand{display:flex;align-items:center;gap:10px;margin:0 0 var(--s4);color:var(--ink-2);
+    font-size:.95rem}
+  .brand b{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;
+    border-radius:50%;background:var(--card);border:1px solid var(--line);
+    font-family:var(--serif);font-weight:500;color:var(--ink);font-size:1.05rem}
+
+  /* THE GLANCE. Three facts in a row on a phone, each one a number and the
+     sentence that keeps it honest. Never more than three. */
+  .glance{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s2);margin:0 0 var(--s4)}
+  .tile{background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
+    padding:var(--s2) var(--s2) 10px;min-width:0}
+  .tile .k{font-size:.78rem;color:var(--ink-3);margin:0 0 4px;line-height:1.25}
+  .tile .v{font-family:var(--serif);font-size:1.35rem;line-height:1.1;font-weight:500;
+    margin:0 0 4px;overflow-wrap:anywhere}
+  .tile .d{font-size:.78rem;color:var(--ink-2);margin:0;line-height:1.3}
+  .tile .d.up{color:var(--good)} .tile .d.down{color:var(--alert)}
+  .tile .spark{display:block;width:100%;height:28px;margin-top:6px}
+
+  /* THE NUMBERS. Two across on a phone, each with its trend. */
+  .numbers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s2);margin:0 0 var(--s2)}
+  .numbers .tile .v{font-size:1.5rem}
+
+  /* THE RIVER. One row per layer: name, what it is, what it carries. */
+  .layer{display:flex;align-items:center;gap:var(--s2);background:var(--card);
+    border:1px solid var(--line);border-radius:var(--r2);padding:var(--s2) var(--s3);
+    margin:0 0 var(--s2);text-decoration:none;color:inherit}
+  .layer .t{flex:1 1 auto;min-width:0}
+  .layer .t b{display:block;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--ink-3);font-weight:700}
+  .layer .t span{font-size:.93rem;color:var(--ink-2)}
+  .layer .n{font-family:var(--serif);font-size:1.3rem;color:var(--ink);flex:0 0 auto}
+  .bar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--line);margin:var(--s2) 0 var(--s1)}
+  .bar i{display:block;height:100%}
+  .legend{display:flex;flex-wrap:wrap;gap:6px var(--s3);font-size:.85rem;color:var(--ink-2);margin:0}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:baseline}
+
+  /* THE DECISION. A labelled row grid, then the buttons. */
+  .facts{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s2) var(--s3);
+    padding:var(--s3);border-top:1px solid var(--line);font-size:.95rem}
+  .facts b{color:var(--ink-3);font-weight:500;font-size:.85rem;padding-top:2px}
+  .facts span{min-width:0;overflow-wrap:anywhere;color:var(--ink)}
+  .facts span.quiet{color:var(--ink-2)}
+  .pill{display:inline-block;font-size:.78rem;padding:3px 9px;border-radius:999px;
+    background:var(--card-2);border:1px solid var(--line);color:var(--ink-2);margin-left:6px}
+  .pill.warn{background:var(--alert-soft);color:var(--alert);border-color:transparent}
+  .pill.ok{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+  .hero{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+    padding:var(--s3);margin:0 0 var(--s3)}
+  .hero h2{font-family:var(--serif);font-size:1.45rem;line-height:1.2;font-weight:500;margin:0 0 var(--s1)}
+  .hero p{margin:0;color:var(--ink-2)}
+  .hero.alert{border-color:var(--alert)}
+  .quiet{color:var(--ink-2);font-size:.93rem}
+  .more{border:0;border-top:1px solid var(--line);margin-top:var(--s4)}
+  .more>summary{padding-left:0;padding-right:0;color:var(--ink-3)}
+  .more .inner{padding:0}
+  /* FOLDED, NOT HIDDEN. Each section is one line that says what is in it,
+     and opens in place. The page is understood at a glance and explored when
+     wanted, which is the difference between a company and a report. */
+  details.fold{border-top:1px solid var(--line);margin:0}
+  .fold>summary{padding:var(--s2) 0;min-height:48px;gap:var(--s3)}
+  .fold>summary h3{margin:0;flex:0 0 auto}
+  .fold .gist{flex:1 1 auto;min-width:0;text-align:right;color:var(--ink-2);font-size:.93rem;
+    overflow-wrap:anywhere}
+  .fold[open]>summary{padding-bottom:var(--s2)}
+  .fold>ul,.fold>p,.fold>div,.fold>form{margin-bottom:var(--s3)}
+
+
   p{margin:0 0 var(--s2);overflow-wrap:anywhere}
   .lede{color:var(--ink-2);font-size:1.06rem;margin-bottom:var(--s4)}
 
@@ -560,7 +651,7 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
     margin:0 0 var(--s4);overflow:hidden}
   .one.alert{border-color:var(--alert)}
   .one-in{padding:var(--s3)}
-  .one h2{font-size:1.2rem;line-height:1.3;font-weight:600;margin:0 0 var(--s1);letter-spacing:-.01em}
+  .one h2{font-family:var(--serif);font-size:1.45rem;line-height:1.2;font-weight:500;margin:0 0 var(--s1)}
   .act{font-size:.7rem;letter-spacing:.13em;text-transform:uppercase;font-weight:700;
     color:var(--ink-3);margin:0 0 var(--s1)}
   .one .lead{font-size:1.02rem;margin:0 0 var(--s2)}
@@ -633,11 +724,20 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
   .sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
     clip:rect(0,0,0,0);white-space:nowrap;border:0}
 
-  nav.places{display:flex;gap:var(--s3);margin:0 0 var(--s4);border-bottom:1px solid var(--line)}
-  nav.places a{text-decoration:none;color:var(--ink-3);font-size:.98rem;padding:0 0 var(--s2);
-    border-bottom:2px solid transparent;margin-bottom:-1px}
-  nav.places a.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
-  nav.places a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  /* THREE PLACES, UNDER THE THUMB. The tab bar is the whole navigation: what
+     matters, what he owns, what he has told me. Everything else is reached
+     from inside one of those, never from a fourth tab. */
+  nav.places{position:fixed;left:0;right:0;bottom:0;z-index:2;background:var(--bg);
+    border-top:1px solid var(--line);padding:6px 0 calc(6px + env(safe-area-inset-bottom))}
+  nav.places div{max-width:34rem;margin:0 auto;display:flex}
+  nav.places a{flex:1 1 0;min-width:0;text-decoration:none;color:var(--ink-3);font-size:.72rem;
+    display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;min-height:44px}
+  nav.places a svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.6;
+    stroke-linecap:round;stroke-linejoin:round}
+  nav.places a.on{color:var(--accent)}
+  nav.places a:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:8px}
+  .ask{bottom:calc(58px + env(safe-area-inset-bottom));border-top:0;
+    background:linear-gradient(to top,var(--bg) 70%,transparent)}
   .item{display:block;text-decoration:none;color:inherit;background:var(--card);
     border:1px solid var(--line);border-radius:var(--r);padding:var(--s3);margin:0 0 var(--s2)}
   .item:hover,.item:focus-visible{border-color:var(--ink-3);outline:none}
@@ -661,27 +761,58 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
   .noticed p{margin:0 0 var(--s2);color:var(--ink-2);font-size:.97rem}
   .noticed form{margin:0 0 var(--s2)}
   .noticed form:last-child{margin:0}
+  .pair{display:flex;gap:var(--s2);margin-top:var(--s1)}
+  .pair form{flex:0 1 auto;min-width:0;margin:0}
+  .pair form:first-child{flex:1 1 auto}
+  .pair .btn{white-space:nowrap}
   form.inline{display:flex;flex-wrap:wrap;gap:var(--s2);margin:0 0 var(--s3)}
   form.inline input[type=text]{flex:1 1 12rem;min-width:0;font:inherit;font-size:16px;
     padding:13px 15px;min-height:48px;border:1px solid var(--line);border-radius:12px;
     background:var(--card);color:var(--ink)}
   form.inline input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
   form.inline button{flex:0 0 auto}
+  form.inline .btn{width:auto}
   footer{margin-top:var(--s5);padding-top:var(--s3);border-top:1px solid var(--line)}
   footer a{color:var(--ink-3);font-size:.85rem;text-decoration:none}
   footer a:hover,footer a:focus-visible{text-decoration:underline}
+
+  /* TWO CANVASES, NEITHER A VERSION OF THE OTHER. Under 900px the places sit
+     under the thumb and the ask bar is fixed above them. From 900px the places
+     become a rail on the left, the ask box sits at the top of the column where
+     the eye starts, the column widens, and sections that were a single scroll
+     flow into two columns. Nothing is hidden on either; what changes is where
+     the hand and the eye are. */
+  @media (min-width:900px){
+    body{font-size:16px}
+    .wrap{max-width:68rem;margin:0 0 0 15rem;padding:var(--s4) var(--s5) var(--s5)}
+    h1{font-size:2.4rem}
+    nav.places{top:0;bottom:0;right:auto;width:15rem;border-top:0;border-right:1px solid var(--line);
+      padding:var(--s4) var(--s3);background:var(--card-2)}
+    nav.places div{flex-direction:column;gap:4px;max-width:none;margin:0}
+    nav.places a{flex:0 0 auto;flex-direction:row;justify-content:flex-start;gap:10px;
+      font-size:.98rem;padding:10px 12px;border-radius:10px;min-height:44px}
+    nav.places a.on{background:var(--accent-soft)}
+    nav.places div::before{content:"Private Foundry";display:block;font-family:var(--serif);
+      font-size:1.1rem;color:var(--ink);margin:4px 12px var(--s4)}
+    .brand{display:none}
+    .ask{position:static;background:none;padding:0;margin:0 0 var(--s4);order:-1}
+    .ask-in{max-width:none;margin:0}
+    main.wrap{display:flex;flex-direction:column}
+    .glance{grid-template-columns:repeat(3,minmax(0,1fr));max-width:44rem}
+    .numbers{grid-template-columns:repeat(4,minmax(0,1fr))}
+    .cols{column-count:2;column-gap:var(--s4)}
+    .cols>*{break-inside:avoid;-webkit-column-break-inside:avoid}
+    .one,.hero{max-width:44rem}
+    .layer{max-width:44rem}
+  }
+  @media (min-width:1280px){.wrap{max-width:76rem}}
 </style>
 </head>
 <body>
 <main class="wrap">
-<nav class="places">
-  <a href="/foundry"${active === 'foundry' ? ' class="on" aria-current="page"' : ''}>Foundry</a>
-  <a href="/foundry/companies"${active === 'companies' ? ' class="on" aria-current="page"' : ''}>Companies</a>
-  <a href="/foundry/controls"${active === 'controls' ? ' class="on" aria-current="page"' : ''}>Controls</a>
-</nav>
+<div class="brand"><b>F</b> Private Foundry</div>
 ${body}
 <footer><a href="/letter">Advanced — inspect the system</a></footer>
-</main>
 <form class="ask" method="GET" action="/foundry">
   <div class="ask-in">
     <label for="q" class="sr">Ask Foundry anything</label>
@@ -689,6 +820,15 @@ ${body}
     <button type="submit">Ask</button>
   </div>
 </form>
+</main>
+<nav class="places" aria-label="Places"><div>
+  <a href="/foundry"${active === 'foundry' ? ' class="on" aria-current="page"' : ''}>
+    <svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/></svg>Foundry</a>
+  <a href="/foundry/companies"${active === 'companies' ? ' class="on" aria-current="page"' : ''}>
+    <svg viewBox="0 0 24 24"><path d="M3 17c3-4 6 0 9-3s6 1 9-3"/><path d="M3 12c3-4 6 0 9-3s6 1 9-3"/></svg>Portfolio</a>
+  <a href="/foundry/controls"${active === 'controls' ? ' class="on" aria-current="page"' : ''}>
+    <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="var(--bg)"/><circle cx="15" cy="12" r="2" fill="var(--bg)"/><circle cx="8" cy="17" r="2" fill="var(--bg)"/></svg>Controls</a>
+</div></nav>
 <script>
   // The time of day belongs to the reader, not the server: this said "good
   // morning" at eleven at night, because the machine runs in UTC.
@@ -1515,9 +1655,33 @@ foundryShellRoutes.get('/foundry', async (c) => {
         ? 'Something needs looking at.'
         : 'One thing needs you.';
 
+  // THE GLANCE. Three facts, only when there is something real to glance at:
+  // what the real companies earn (and how many that covers), whether anything
+  // needed him this month, and the largest thing his businesses share. Not a
+  // health grade and not a resilience score - the named thing a grade would
+  // be hiding.
+  const { glanceFor } = await import('../../services/founder/portfolio.js');
+  const glance = await glanceFor(s.ownerId);
+  const money = (cents: number): string => cents >= 100_000
+    ? `$${(cents / 100_000).toFixed(1)}k` : `$${Math.round(cents / 100).toLocaleString('en-US')}`;
+
   const body = html`
     <h1><span id="greet">Hello</span>${s.firstName ? `, ${s.firstName}` : ''}.</h1>
     ${orientation ? html`<p class="lede">${orientation}</p>` : ''}
+    ${glance.cashFlowCents !== null || glance.interruptions > 0 || glance.concentration
+    ? html`<div class="glance">
+      <div class="tile"><p class="k">Monthly cash flow</p>
+        <p class="v">${glance.cashFlowCents === null ? '—' : money(glance.cashFlowCents)}</p>
+        <p class="d">${glance.cashFlowCents === null ? 'nothing reports revenue yet'
+    : `across ${String(glance.seen)} of ${String(glance.companies)} I can see`}</p></div>
+      <div class="tile"><p class="k">Needed you</p>
+        <p class="v">${String(glance.interruptions)}</p>
+        <p class="d">${glance.interruptions === 0 ? 'not once this month' : 'times this month'}</p></div>
+      <div class="tile"><p class="k">Most shared</p>
+        <p class="v">${glance.concentration ? glance.concentration.split(' share ')[0] : 'nothing'}</p>
+        <p class="d">${glance.concentration ? `share ${glance.concentration.split(' share ')[1]}`
+    : 'no two depend on the same thing'}</p></div>
+    </div>` : ''}
 
     ${done === 'looking' ? html`<div class="done"><p><strong>I am looking.</strong>
       I will bring you very few, and telling you none of them are worth it is a real
@@ -1535,6 +1699,9 @@ foundryShellRoutes.get('/foundry', async (c) => {
     ${done === 'advanced' ? html`<div class="done"><p><strong>Taken forward.</strong>
       Nothing was left standing in the way. Making it a company is still yours to
       do — I have not made one.</p></div>` : ''}
+    ${done === 'rejected' ? html`<div class="done"><p><strong>Buried.</strong>
+      I will remember it, and why, and not bring you the same thing again unless
+      something changes.</p></div>` : ''}
     ${done === 'stillintheway' ? html`<div class="done"><p><strong>Not yet.</strong>
       Something is still in the way — it is on the candidate.</p></div>` : ''}
     ${done === 'alreadylooking' ? html`<div class="done"><p><strong>Already looking.</strong>
@@ -1566,57 +1733,49 @@ foundryShellRoutes.get('/foundry', async (c) => {
       ${s.search.decided.length ? html`<div class="quiet">
         <p><strong>Already decided about</strong></p>
         <ul>${raw(s.search.decided.map((d) => `<li>${d}</li>`).join(''))}</ul></div>` : ''}
-      ${raw(s.search.candidates.map((cand) => `<div class="noticed">
-        <h4>${cand.headline}</h4>
-        ${cand.reference ? '<p class="quiet"><strong>Invented.</strong> This came from a '
-    + 'search I ran against a market that does not exist, so that the way I judge '
-    + 'candidates could be exercised. It is not a real opportunity.</p>' : ''}
-        <p><strong>Who has it</strong> — ${cand.whoHasIt}</p>
-        <p><strong>The problem</strong> — ${cand.theProblem}</p>
-        <p><strong>Why it might matter</strong> — ${cand.whyItMight}</p>
-        <p><strong>Strongest reason it fails</strong> — ${cand.killThesis}</p>
-        <p class="quiet"><strong>What is still unknown</strong> —
-          ${cand.unknowns.join('; ')}.</p>
-        <p class="quiet"><strong>What I checked it against</strong> —
-          ${cand.sources.length ? cand.sources.join('; ') : 'nothing'}.</p>
-        ${cand.standing.length ? `<p class="quiet"><strong>How the evidence stands</strong> — `
-    + `${cand.standing.join(' ')}</p>` : ''}
-        ${cand.unanswered.length ? `<p class="quiet"><strong>Cheapest way to settle it`
-    + `</strong> — ${cand.unanswered.join('; ')}.</p>` : ''}
-        ${cand.fit ? `<p class="${cand.worseForThePortfolio ? 'gap' : 'quiet'}">`
-    + `<strong>What adding it would do</strong> — ${cand.fit}</p>` : ''}
-        ${cand.serves.length
-    ? `<p class="quiet"><strong>What it would give the portfolio</strong> — ${cand.serves.join('; ')}.</p>` : ''}
-        <p class="quiet"><strong>Legal and risk</strong> — ${cand.legalProfile}</p>
-        ${cand.exposures.length ? `<ul class="quiet">${cand.exposures.map((e) => `<li>${e}</li>`).join('')}</ul>` : ''}
-        ${cand.buriedBefore
-    ? `<p class="gap"><strong>You have buried something like this before</strong> — ${cand.buriedBefore}.</p>` : ''}
-        ${cand.against.length
-    ? `<p class="quiet">Not quite what you asked for: ${cand.against.join('; ')}.</p>` : ''}
-        ${cand.failsBecause
-    ? `<p class="gap">I would not bring this to you: ${cand.failsBecause}.</p>` : ''}
-        ${cand.blockedBy
-    ? `<p class="gap">This cannot earn a company yet — ${cand.blockedBy}.</p>` : ''}
-        ${cand.awaiting.map((e) => `<div class="said">
-          <p><strong>I would like to try this.</strong> ${e.whatWeDo}. It would
-            cost ${e.cost}.</p>
-          <p>What I expect: ${e.whatWeExpect}.</p>
-          <p>What would mean I was wrong: ${e.wouldDisprove}.</p>
-          <form method="POST" action="/foundry/venture/experiment">
+      ${raw(s.search.candidates.map((cand) => `<div class="one">
+        <div class="one-in">
+          <p class="act">${cand.reference ? 'Invented, to show you how I judge' : 'Opportunity'}</p>
+          <h2>${cand.headline}</h2>
+          <p class="lead">${cand.whoHasIt} &mdash; ${cand.theProblem}.</p>
+        </div>
+        <div class="facts">
+          <b>Why it might</b><span>${cand.whyItMight}</span>
+          <b>For the portfolio</b><span>${cand.fit ?? 'I cannot say yet'}${cand.serves.length ? ` It would give you ${cand.serves.join('; ')}.` : ''}</span>
+          ${cand.earns ? `<b>How it earns</b><span>${cand.earns}</span>` : ''}
+          ${cand.burden ? `<b>Its burden</b><span>${cand.burden}</span>` : ''}
+          <b>Legal and risk</b><span>${cand.legalProfile}</span>
+          <b>Could fail because</b><span>${cand.killThesis}</span>
+          <b>Checked</b><span class="quiet">${cand.standing.length ? cand.standing.join(' ') : (cand.sources.length ? cand.sources.join('; ') : 'nothing')}</span>
+          <b>Unknown</b><span class="quiet">${cand.unanswered.length ? cand.unanswered.join('; ') : (cand.unknowns.join('; ') || 'nothing I can name')}</span>
+          ${cand.awaiting[0] ? `<b>Cheapest test</b><span>${cand.awaiting[0].whatWeDo}. I expect ${cand.awaiting[0].whatWeExpect}; I would be wrong if ${cand.awaiting[0].wouldDisprove}.</span>
+          <b>Most you could lose</b><span>${cand.downside}</span>` : ''}
+          ${cand.against.length ? `<b>Not quite</b><span class="quiet">${cand.against.join('; ')}</span>` : ''}
+          ${cand.buriedBefore ? `<b>Seen before</b><span class="gap">${cand.buriedBefore}</span>` : ''}
+          ${cand.failsBecause ? `<b>Against what you said</b><span class="gap">${cand.failsBecause}</span>` : ''}
+          ${cand.blockedBy ? `<b>Not yet</b><span class="gap">This cannot earn a company yet — ${cand.blockedBy}.</span>` : ''}
+          ${cand.inTheWay.length ? `<b>Before a company</b><span class="quiet">${cand.inTheWay.join('; ')}</span>` : ''}
+          <b>I recommend</b><span>${cand.recommendation}</span>
+        </div>
+        <div class="do">
+          ${cand.awaiting.map((e) => `<form method="POST" action="/foundry/venture/experiment">
             <input type="hidden" name="experimentId" value="${e.id}" />
-            <button type="submit" name="decision" value="approved">Go ahead</button>
-            <button type="submit" name="decision" value="declined" class="quiet">Not this one</button>
+            <input type="hidden" name="decision" value="approved" />
+            <button class="btn go" type="submit">Go ahead &mdash; ${e.cost}</button>
+          </form>`).join('')}
+          ${!cand.inTheWay.length ? `<form method="POST" action="/foundry/venture/advance">
+            <input type="hidden" name="opportunityId" value="${cand.id}" />
+            <button class="btn go" type="submit">Take it forward</button>
+          </form>` : ''}
+          <form method="POST" action="/foundry/venture/confirm">
+            <input type="hidden" name="said" value="Keep looking" />
+            <button class="btn" type="submit">Keep looking</button>
           </form>
-        </div>`).join('')}
-        ${cand.inTheWay.length
-    ? `<p class="quiet"><strong>Before this could be a company</strong> — `
-      + `${cand.inTheWay.join('; ')}.</p>`
-    : `<div class="said"><p><strong>Nothing is standing in the way of this any
-        more.</strong> Making it a company is yours to do.</p>
-        <form method="POST" action="/foundry/venture/advance">
-          <input type="hidden" name="opportunityId" value="${cand.id}" />
-          <button type="submit">Take it forward</button>
-        </form></div>`}
+          <form method="POST" action="/foundry/venture/reject">
+            <input type="hidden" name="opportunityId" value="${cand.id}" />
+            <button class="btn" type="submit">Reject</button>
+          </form>
+        </div>
       </div>`).join(''))}
     </div>` : ''}
 
@@ -1966,9 +2125,70 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
   const { burdenFor, POSTURE_IN_PLAIN_WORDS } = await import('../../services/founder/burden.js');
   const burdens = new Map((await burdenFor(String(founder.id))).map((b) => [b.productId, b]));
 
+  // THE RIVER, IN ITS LAYERS. Anchors and tributaries by stated arithmetic,
+  // the frontier by what is being looked at; cash flow by how it is earned,
+  // from what each company declared about itself. No valuations: Foundry
+  // cannot see what a business is worth, and a number it cannot see is a
+  // number it does not show.
+  const { glanceFor, layersFor } = await import('../../services/founder/portfolio.js');
+  const glance = await glanceFor(String(founder.id));
+  const river = await layersFor(String(founder.id));
+  const money = (cents: number): string => cents >= 100_000
+    ? `$${(cents / 100_000).toFixed(1)}k` : `$${Math.round(cents / 100).toLocaleString('en-US')}`;
+  const byForm = ((await query(
+    `SELECT e.value, SUM(COALESCE((SELECT m.mrr_cents FROM metric_snapshots m
+        WHERE m.product_id = p.id AND m.mrr_cents IS NOT NULL
+        ORDER BY m.snapshot_date DESC LIMIT 1), 0)) AS cents
+       FROM portfolio_exposures e JOIN products p ON p.id = e.subject_id
+      WHERE e.founder_id = ? AND e.subject_kind = 'company' AND e.dimension = 'revenue_model'
+        AND e.retired_at IS NULL AND e.evidence_mode = 'real' AND p.reality = 'real'
+        AND p.status = 'active' AND p.deleted_at IS NULL
+      GROUP BY e.value ORDER BY cents DESC`, [String(founder.id)]))
+    .rows as unknown as Array<Record<string, unknown>>)
+    .map((r) => ({ form: String(r.value), cents: Number(r.cents) }))
+    .filter((r) => r.cents > 0);
+  const formTotal = byForm.reduce((n, r) => n + r.cents, 0);
+  const swatches = ['var(--accent)', 'var(--good)', 'var(--alert)', 'var(--ink-3)', 'var(--line)'];
+  const frontierLine = (river.frontier.looking === 0 && river.frontier.awaiting === 0
+    ? 'nothing being looked at'
+    : `${String(river.frontier.looking)} being looked at`
+      + (river.frontier.awaiting > 0 ? `, ${String(river.frontier.awaiting)} waiting on you` : ''))
+    + (river.frontier.buried > 0 ? `, ${String(river.frontier.buried)} buried` : '');
+
   const body = html`
-    <h1>Your companies</h1>
+    <h1>Portfolio</h1>
     <p class="${portfolio.anythingNeedsHim ? 'lede alarm' : 'lede'}">${portfolio.headline}</p>
+    ${glance.companies > 0 && glance.cashFlowCents === null && glance.interruptions === 0
+    && !glance.concentration ? html`<p class="quiet">Nothing reports revenue to me yet, so
+      there is nothing to total. The river below is its shape, not its size.</p>` : ''}
+    ${glance.cashFlowCents !== null || glance.interruptions > 0 || glance.concentration
+    ? html`<div class="glance">
+      <div class="tile"><p class="k">Monthly cash flow</p>
+        <p class="v">${glance.cashFlowCents === null ? '—' : money(glance.cashFlowCents)}</p>
+        <p class="d">${glance.cashFlowCents === null ? 'nothing reports revenue yet'
+    : `${String(glance.seen)} of ${String(glance.companies)} report it`}</p></div>
+      <div class="tile"><p class="k">Needed you</p>
+        <p class="v">${String(glance.interruptions)}</p>
+        <p class="d">${glance.interruptions === 0 ? 'not once this month' : 'times this month'}</p></div>
+      <div class="tile"><p class="k">Most shared</p>
+        <p class="v">${glance.concentration ? glance.concentration.split(' share ')[0] : 'nothing'}</p>
+        <p class="d">${glance.concentration ? `share ${glance.concentration.split(' share ')[1]}`
+    : 'no two depend on the same thing'}</p></div>
+    </div>
+    ${raw(river.layers.map((l) => `<div class="layer"><div class="t"><b>${l.title}</b>
+      <span>${l.companies.length === 0 ? 'none yet' : l.companies.map((c) => c.name).join(', ')} — ${l.what}</span></div>
+      <div class="n">${l.cashFlowCents > 0 ? money(l.cashFlowCents) : '—'}</div></div>`).join(''))}
+    <div class="layer"><div class="t"><b>Frontier</b>
+      <span>${frontierLine}</span></div>
+      <div class="n">${String(river.frontier.looking)}</div></div>
+    ${byForm.length > 0 ? html`<div class="know" style="margin-top:var(--s3)">
+      <h3>Cash flow by how it is earned</h3>
+      <div class="bar">${raw(byForm.map((r, i) =>
+    `<i style="width:${((r.cents / formTotal) * 100).toFixed(1)}%;background:${swatches[i % swatches.length]}"></i>`).join(''))}</div>
+      <p class="legend">${raw(byForm.map((r, i) =>
+    `<span><i style="background:${swatches[i % swatches.length]}"></i>${r.form} ${Math.round((r.cents / formTotal) * 100)}%</span>`).join(''))}</p>
+      <p class="quiet">From what each company says about how it earns. A company that has not said is not here.</p>
+    </div>` : ''}` : ''}
     ${raw(portfolio.companies.map((c) => {
     const b = burdens.get(c.productId);
     return line(c) + (b ? `<p class="${b.verdict === 'earning its keep' || b.verdict === 'too early to say' ? 'quiet' : 'gap'}"
@@ -2088,16 +2308,27 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     ? view.senses.find((sense) => sense.senseKey === String(c.req.query('sense') ?? '')) ?? null
     : null;
 
+  const { sparkline } = await import('../../lib/sparkline.js');
+  const tiles = view.numbers.numbers.map((n) => {
+    const spark = sparkline(n.series, { meaning: n.meaning });
+    const cls = n.direction === null || n.direction === 'held' || n.meaning === 'neutral' ? ''
+      : (n.direction === 'rose') === (n.meaning === 'up_is_good') ? ' up' : ' down';
+    return `<div class="tile"><p class="k">${n.label}</p><p class="v">${n.now}</p>`
+      + `<p class="d${cls}">${n.movement}</p>${spark.svg}</div>`;
+  }).join('');
+
   const body = html`
     <h1>${view.name}</h1>
     ${view.reference ? html`<div class="know" style="border-color:var(--warn,#b45309)">
       <h3>This company does not exist</h3>
       <p>I made it up, so you could watch me work before handing me anything real.
         It is ${view.reference.situation}.</p>
+      <details class="fold"><summary><span class="gist" style="text-align:left">What is invented, and what is not</span></summary>
       ${view.reference.premise ? html`<p class="quiet">${view.reference.premise}</p>` : ''}
       <p class="quiet">The arithmetic below is real. The numbers it runs on are invented, and
         they can never become a fact I tell you about a real company. I cannot send anything
         for it, spend anything on it, or count it as a track record.</p>
+      </details>
     </div>` : ''}
     ${done === 'added' ? html`<div class="done"><p><strong>Added.</strong> I know it exists and
       that it is yours. I cannot see anything about it yet.</p></div>` : ''}
@@ -2146,13 +2377,14 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     ${done === 'declined' ? html`<div class="done"><p><strong>Left alone.</strong> I will not
       raise it again. Say so and I will look at it once more.</p></div>` : ''}
 
-    <p class="${view.situation.demandsAttention ? 'lede alarm' : 'lede'}">
-      ${view.situation.headline}</p>
-    ${view.situation.demandsAttention ? html`<p class="quiet">${
+    <div class="hero${view.situation.demandsAttention ? ' alert' : ''}">
+      <h2>${view.situation.headline}</h2>
+      ${view.situation.demandsAttention ? html`<p>${
   view.situation.because.join('; ')}${view.spell && view.spell.days > 0
     ? `. This has been true for ${String(view.spell.days)} `
       + `${view.spell.days === 1 ? 'day' : 'days'}`
     : ''}. That is what the numbers did — whether it is a problem is yours to say.</p>` : ''}
+    </div>
 
     ${view.advice.length ? html`<div class="know">
       <h3>${view.advice.length === 1 ? 'What I would do' : 'What I would do about it'}</h3>
@@ -2160,12 +2392,14 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
         <p><strong>${a.summary}</strong></p>
         <p class="quiet">${a.why}.</p>
         <p class="quiet"><strong>What I would need:</strong> ${a.wouldNeed}.</p>
+        <div class="pair">
         <form method="POST" action="/foundry/advice/${a.id}/accept">
           <button class="btn go" type="submit">Do that</button>
         </form>
         <form method="POST" action="/foundry/advice/${a.id}/decline">
           <button class="btn" type="submit">Not that</button>
         </form>
+        </div>
       </div>`).join(''))}
       <p class="quiet">Agreeing does not start anything on its own. Where I need a
         permission I will ask for it separately, and say exactly what I intend to do.</p>
@@ -2193,16 +2427,13 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
 
     ${view.asks.length ? html`<div class="know">
       <h3>${view.asks.length === 1 ? 'Something I noticed' : 'Things I noticed'}</h3>
-      <p class="quiet">Each of these is a movement, not a diagnosis. I am asking whether it is
-        worth me looking after — I am not saying anything is wrong, and I do not know why it
-        moved.</p>
-      <p class="quiet">Saying yes means I watch it and tell you what I see. It does not let me
-        change anything, spend anything, or contact anyone — those are separate questions I
-        would have to earn and then ask.</p>
+      <p class="quiet">Each is a movement, not a diagnosis. Yes means I watch it and tell you
+        what I see; it does not let me change, spend or contact anything.</p>
       ${raw(view.asks.map((a) => `<div class="noticed">
         <h4>Is this worth me looking after?</h4>
         <p><strong>${a.proposal}</strong></p>
         <p>${a.rationale}</p>
+        <div class="pair">
         <form method="POST" action="/letter/responsibility-candidates/${a.id}/promote">
           <input type="hidden" name="return_to" value="company" />
           <button class="btn go" type="submit">Yes — look after this</button>
@@ -2211,6 +2442,7 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
           <input type="hidden" name="return_to" value="company" />
           <button class="btn" type="submit">No</button>
         </form>
+        </div>
       </div>`).join(''))}
     </div>` : ''}
 
@@ -2218,22 +2450,20 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
       <h3>Where the numbers are</h3>
       ${view.numbers.absence
     ? html`<p class="lede">${view.numbers.absence}</p>`
-    : html`<ul>${raw(view.numbers.numbers.map((n) =>
-      `<li><strong>${n.now}</strong> — ${n.sentence}</li>`).join(''))}</ul>
-      <p class="quiet">As of ${String(view.numbers.asOf)}. Movement is against the nearest
-        reading to a month before that. I am telling you where things are and which way they
-        are going; whether that is good is yours to say.</p>`}
+    : html`<div class="numbers">${raw(tiles)}</div>
+      <p class="quiet">As of ${String(view.numbers.asOf)}, against the nearest reading to a
+        month before. Colour is direction, and only where a direction is good or bad; whether
+        any of it is good enough is yours to say.</p>`}
     </div>
 
-    <div class="know">
-      <h3>What I know</h3>
+    <div class="cols">
+    <details class="know fold"><summary><h3>What I know</h3><span class="gist">${view.knows.length === 0 ? 'almost nothing' : count(view.knows.length, 'thing')}</span></summary>
       ${view.knows.length === 0
     ? html`<p class="lede">Almost nothing. You have told me it exists; that is all.</p>`
     : html`<ul>${raw(view.knows.map((k) => `<li>${k}</li>`).join(''))}</ul>`}
-    </div>
+    </details>
 
-    ${view.senses.length ? html`<div class="know">
-      <h3>What I can see</h3>
+    ${view.senses.length ? html`<details class="know fold"><summary><h3>What I can see</h3><span class="gist">${count(view.senses.length, 'thing')}, from ${[...new Set(view.senses.map((x) => x.providerName))].join(' and ')}</span></summary>
       <ul>${raw(view.senses.map((sense) =>
     `<li><strong>${sense.wouldLearn}</strong> — from ${sense.providerName}${
   sense.mode === 'sandbox' ? ', in test mode, so none of it is the world'
@@ -2254,10 +2484,9 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     `<form method="POST" action="/foundry/companies/${view.id}/senses/${sense.id}/disconnect">
       <button class="btn" type="submit">Stop seeing ${sense.shortName}</button>
     </form>`).join(''))}
-    </div>` : ''}
+    </details>` : ''}
 
-    <div class="know">
-      <h3>What I cannot see</h3>
+    <details class="know fold"><summary><h3>What I cannot see</h3><span class="gist">${view.blind.length === 0 ? 'nothing I know how to look at' : count(view.blind.length, 'thing')}</span></summary>
       ${view.blind.length === 0
     ? html`<p class="lede">Nothing I know how to look at is missing.</p>`
     : raw(view.blind.map((gap) => `<p><span class="gap">I cannot see ${gap.cannotSee}.</span>
@@ -2275,17 +2504,15 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
       back on</a>.</p>`).join('')) : ''}
       <p class="quiet">Letting me read something never lets me change it. That is always a
         separate question.</p>
-    </div>
+    </details>
 
-    ${view.responsibilities.length ? html`<div class="know">
-      <h3>What I look after</h3>
+    ${view.responsibilities.length ? html`<details class="know fold"><summary><h3>What I look after</h3><span class="gist">${count(view.responsibilities.length, 'responsibility', 'responsibilities')}</span></summary>
       <ul>${raw(view.responsibilities.map((r) =>
     `<li>${CHECK_IN_PLAIN_WORDS['schema-snapshot-freshness']?.name === r.title ? r.title : r.title}
        — ${LADDER_IN_PLAIN_WORDS[r.state] ?? r.state}</li>`).join(''))}</ul>
-    </div>` : ''}
+    </details>` : ''}
 
-    <div class="know">
-      <h3>What matters here</h3>
+    <details class="know fold"><summary><h3>What matters here</h3><span class="gist">${view.said ? view.said.statement : 'you have not told me'}</span></summary>
       ${view.said
     ? html`<p>${view.said.statement}</p>
         <p class="quiet">${view.said.steers
@@ -2313,10 +2540,9 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
       ${view.formerly ? html`<p class="quiet">Before ${view.formerly.retiredAt} it was:
         &ldquo;${view.formerly.statement}&rdquo; — replaced because
         ${view.formerly.retiredReason}.</p>` : ''}
-    </div>
+    </details>
 
-    ${view.boundaries.length ? html`<div class="know">
-      <h3>What you told me not to do</h3>
+    ${view.boundaries.length ? html`<details class="know fold"><summary><h3>What you told me not to do</h3><span class="gist">${count(view.boundaries.length, 'thing')}</span></summary>
       ${raw(view.boundaries.map((b) => `<div class="noticed">
         <p><strong>${b.statement}</strong></p>
         <p class="quiet">${b.mode === 'ask_first'
@@ -2330,18 +2556,16 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
           <button class="btn" type="submit">Lift this</button>
         </form>
       </div>`).join(''))}
-    </div>` : ''}
+    </details>` : ''}
 
-    ${view.past.length ? html`<div class="know">
-      <h3>What it has been</h3>
+    ${view.past.length ? html`<details class="know fold"><summary><h3>What it has been</h3><span class="gist">${count(view.past.length, 'earlier situation')}</span></summary>
       <ul>${raw(view.past.map((p) =>
     `<li>${p.situation.replaceAll('_', ' ')} for ${String(p.days)} `
     + `${p.days === 1 ? 'day' : 'days'}, until ${p.endedAt} — then it became `
     + `${p.becameWhat.replaceAll('_', ' ')}.</li>`).join(''))}</ul>
-    </div>` : ''}
+    </details>` : ''}
 
-    ${view.decisions.length ? html`<div class="know">
-      <h3>What you decided</h3>
+    ${view.decisions.length ? html`<details class="know fold"><summary><h3>What you decided</h3><span class="gist">${view.posture.now !== 'grow' ? view.posture.inPlainWords : count(view.decisions.length, 'decision')}</span></summary>
       ${view.posture.now !== 'grow' || view.posture.changes.length ? html`<p class="quiet">
         You have me <strong>${view.posture.inPlainWords}</strong>.
         ${raw(view.posture.changes.map((ch) =>
@@ -2352,10 +2576,9 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     : d.outcome === 'refused' ? 'you said no, and nothing happened'
       : `you took the approval back${d.note ? ` — ${d.note}` : ''}, before I used it`
 } on ${d.at}.</li>`).join(''))}</ul>
-    </div>` : ''}
+    </details>` : ''}
 
-    ${view.lifted.length ? html`<div class="know">
-      <h3>What you lifted</h3>
+    ${view.lifted.length ? html`<details class="know fold"><summary><h3>What you lifted</h3><span class="gist">${count(view.lifted.length, 'boundary', 'boundaries')}</span></summary>
       <p class="quiet">Changing your mind runs both ways. These are no longer in force.</p>
       ${raw(view.lifted.map((b) => `<div class="noticed">
         <p>${b.statement}</p>
@@ -2365,15 +2588,15 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
           <button class="btn" type="submit">Hold me to this again</button>
         </form>
       </div>`).join(''))}
-    </div>` : ''}
+    </details>` : ''}
 
-    <div class="know">
-      <h3>Money</h3>
+    <details class="know fold"><summary><h3>Money</h3><span class="gist">${view.reference ? 'none, ever' : `$${view.spent30d.toFixed(2)} of $${String(view.budgetMonthly)}`}</span></summary>
       ${view.reference
     ? html`<p class="lede">None, and none ever. I am refused at every place money is spent
         for a company that does not exist, so it cannot draw on what the real ones share.</p>`
     : html`<ul><li>$${view.spent30d.toFixed(2)} spent of
         $${String(view.budgetMonthly)} a month.</li></ul>`}
+    </details>
     </div>`;
 
   return c.html(page(view.name, body, 'companies'));
@@ -2647,6 +2870,31 @@ foundryShellRoutes.post('/foundry/venture/advance',
     const done = await advance({
       opportunityId, by: `founder:${String(founder.id)}` });
     return c.redirect(`/foundry?done=${done.advanced ? 'advanced' : 'stillintheway'}`);
+  });
+
+/**
+ * REJECT, WHICH IS THE VALUABLE HALF. His reason is optional - he does not owe
+ * one for declining to pursue something - but the record keeps that it was
+ * his, and the graveyard's second question can be answered later.
+ */
+foundryShellRoutes.post('/foundry/venture/reject',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const form = await c.req.parseBody();
+    const opportunityId = String(form.opportunityId ?? '').trim();
+    if (!opportunityId) return c.redirect('/foundry');
+    const owned = await query(
+      'SELECT id FROM venture_opportunities WHERE id = ? AND founder_id = ?',
+      [opportunityId, String(founder.id)]);
+    if (!owned.rows.length) return c.notFound();
+    const { rejectCandidate } = await import('../../services/venture/mandate.js');
+    await rejectCandidate({
+      opportunityId, by: `founder:${String(founder.id)}`,
+      why: String(form.why ?? '').trim() || 'the owner declined it',
+      revisitIf: String(form.revisitIf ?? '').trim() || null,
+    });
+    return c.redirect('/foundry?done=rejected');
   });
 
 // ─── being asked ────────────────────────────────────────────────────────────

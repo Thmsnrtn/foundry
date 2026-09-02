@@ -91,7 +91,9 @@ export async function burdenFor(founderId: string): Promise<Burden[]> {
       productId, name: String(c.name),
       form: c.form == null ? null : String(c.form), posture: String(c.posture),
       mrrCents, aiCostCents, interruptions, askedFor, verdict,
-      sentence: `${String(c.name)} ${money}, ${cost}, and ${him} this month`
+      sentence: (mrrCents === null
+        ? `${String(c.name)} - I cannot see what it earns; it ${cost} and ${him} this month`
+        : `${String(c.name)} ${money}, ${cost}, and ${him} this month`)
         + (verdict === 'earning its keep' ? '.' : ` - ${verdict}.`),
     });
   }

@@ -179,7 +179,7 @@ describe('the loop the owner actually walks', () => {
     expect(page.body).toContain('Is this worth me looking after?');
     expect(page.body).toContain('keep the support queue answered');
     // RECOGNITION IS NOT AUTHORITY, and the page has to say so where he decides.
-    expect(page.body).toContain('It does not let me\n        change anything');
+    expect(page.body).toContain('it does not let me change, spend or contact anything');
     // And the caveat is said once, above all of them, rather than under each.
     expect(page.body).toContain('a movement, not a diagnosis');
     expect(page.body.split('movement, not a diagnosis')).toHaveLength(2);

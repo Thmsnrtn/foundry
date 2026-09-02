@@ -708,6 +708,8 @@ export interface PresentedCandidate {
   serves: string[];
   /** What liability it creates, as the owner reads it. */
   legal: LegalPicture;
+  /** How it would earn and what it would ask of him, from its declared exposures. */
+  declared: { earns: string | null; burden: string | null };
   reference: boolean;
 }
 
@@ -773,6 +775,7 @@ export async function candidatesFor(mandateId: string): Promise<PresentedCandida
       buriedBefore: await seenBefore(founderId, String(r.headline)),
       serves: fit.serves,
       legal: await legalPictureOf({ founderId, opportunityId: String(r.id), world }),
+      declared: await declaredAbout(String(r.id)),
       reference: String(r.evidence_mode) === 'reference',
     });
   }
@@ -879,6 +882,38 @@ export async function seenBefore(
     }
   }
   return null;
+}
+
+/**
+ * HOW IT WOULD EARN, AND WHAT IT WOULD ASK OF HIM - from what was declared on
+ * the exposure axes, never from a guess dressed as a sentence. Each phrase
+ * says whether it was told or worked out, because "almost no support" is a
+ * different fact when a person said it than when Foundry inferred it.
+ */
+async function declaredAbout(opportunityId: string): Promise<{
+  earns: string | null; burden: string | null;
+}> {
+  const rows = ((await query(
+    `SELECT dimension, value, how_known FROM portfolio_exposures
+      WHERE subject_kind = 'opportunity' AND subject_id = ? AND retired_at IS NULL`,
+    [opportunityId])).rows as unknown as Array<Record<string, unknown>>)
+    .map((r) => ({ d: String(r.dimension), v: String(r.value), k: String(r.how_known) }));
+  const get = (d: string): { v: string; k: string } | undefined => rows.find((r) => r.d === d);
+  const said = (x: { v: string; k: string } | undefined): string | null =>
+    x ? `${x.v}${x.k === 'inferred' ? ' (worked out)' : ''}` : null;
+  const parts = [
+    said(get('revenue_model')), said(get('pricing_model')),
+    get('acquisition_channel') ? `reached through ${said(get('acquisition_channel')) ?? ''}` : null,
+    get('customer_type') ? `sold to ${said(get('customer_type')) ?? ''}` : null,
+  ].filter((p): p is string => p !== null);
+  const burdenParts = [
+    get('support_burden') ? `support: ${said(get('support_burden')) ?? ''}` : null,
+    get('owner_attention') ? `your attention: ${said(get('owner_attention')) ?? ''}` : null,
+  ].filter((p): p is string => p !== null);
+  return {
+    earns: parts.length ? parts.join(', ') : null,
+    burden: burdenParts.length ? burdenParts.join('; ') : null,
+  };
 }
 
 /**

@@ -220,14 +220,16 @@ describe('places he can walk to', () => {
     const body = await get('/foundry');
     expect(body).toContain('/foundry/companies');
     expect(body).toContain('/foundry/controls');
-    expect(body).toContain('>Companies<');
-    expect(body).toContain('>Controls<');
+    // The second place is the portfolio: what he owns, as a river rather than
+    // a list. The tab carries an icon, so the word follows the glyph.
+    expect(body).toContain('Portfolio</a>');
+    expect(body).toContain('Controls</a>');
   });
 
   it('lists his companies and offers to add one', async () => {
     const body = await get('/foundry/companies');
     const said = body.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ');
-    expect(said).toContain('Your companies');
+    expect(said).toContain('Portfolio');
     expect(said).toContain('Foundry');
     // The prompt lives in a placeholder attribute, so it is read from the markup.
     expect(body).toContain('Add a company by name');
