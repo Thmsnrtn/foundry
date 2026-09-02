@@ -694,6 +694,32 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
     reason: 'candidates found for one person\'s search, including what was rejected',
     onAccountErasure: { op: 'delete' },
   },
+  // HOW HIS BUSINESSES MAKE MONEY IS A FACT ABOUT HIM. It describes companies
+  // and candidates alike, so it cannot be reached by walking products — which
+  // is exactly why the table carries a founder id of its own.
+  portfolio_exposures: {
+    reason: 'how one person\'s companies and candidates make money, and what they '
+      + 'therefore share',
+    onAccountErasure: { op: 'delete' },
+  },
+  // WHAT WAS LEARNED WHILE LOOKING FOR A BUSINESS FOR THIS PERSON. Claims and
+  // the observations under them go together: an observation surviving its claim
+  // would be a dated note about a market, still attached to the person who
+  // asked. Deleted rather than kept as anonymous market knowledge, because
+  // "anonymous" here would mean "knowledge somebody once paid attention to for
+  // a reason nobody records", which is not anonymity.
+  market_claims: {
+    reason: 'claims about the world formed while searching for one person\'s business',
+    onAccountErasure: { op: 'delete' },
+  },
+  market_observations: {
+    reason: 'what was seen, where and when, in the course of one person\'s search',
+    onAccountErasure: { op: 'delete' },
+  },
+  market_unknowns: {
+    reason: 'the open questions on one person\'s candidates',
+    onAccountErasure: { op: 'delete' },
+  },
   ai_output_feedback: {
     reason: 'the founder\'s ratings of outputs, across all their products',
     onAccountErasure: { op: 'delete' },
@@ -823,6 +849,8 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   governed_effect_kinds: 'the effect vocabulary',
   owner_boundary_subjects: 'the vocabulary of things a boundary can be about, constitutional and the same for every owner; the boundaries themselves are erased with their company',
   senses: 'the vocabulary of what Foundry can learn about any company and what that never grants; constitutional and the same for every owner',
+  exposure_dimensions: 'the axes a portfolio can be concentrated on and what each failure would cost; constitutional and the same for every owner, naming no company',
+  market_source_types: 'the kinds of source market evidence can come from and whether each is self-reported, observed or solicited; constitutional, naming nobody',
   sense_providers: 'which provider could supply which sense, and what the credential hands over; constitutional, naming no company',
   sense_provider_scopes: 'the exact minimum scopes each provider may be asked for, constitutional and the same for every owner; the credentials themselves are erased with their company',
   job_health: 'whether Foundry\'s own scheduled work is running; job names and error class names, no company in it',

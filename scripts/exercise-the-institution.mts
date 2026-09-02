@@ -194,6 +194,40 @@ async function main(): Promise<void> {
   say('  something he did not approve',
     somethingElse.blocked ? 'refused' : 'ALLOWED — a defect');
 
+  // WHETHER A PORTFOLIO SHOULD GET WIDER, ASKED THE WAY HE ASKED IT.
+  //
+  // The canonical owner request is "find another small digital income stream
+  // that would make my portfolio more resilient", and the institution passes
+  // only if it can decline. So the walk ends by asking it, out loud, against
+  // the rehearsal companies — which are deliberately concentrated.
+  console.log('\nWHETHER TO ADD ANOTHER');
+  const venture = await import('../src/services/venture/mandate.js');
+  const resilience = await import('../src/services/founder/resilience.js');
+  const heard = venture.readVentureSentence(
+    'Find another small digital income stream that would make my portfolio more resilient');
+  say('he says', '"Find another small digital income stream that would make my '
+    + 'portfolio more resilient"');
+  say('  heard as', heard.kind === 'mandate'
+    ? `a mandate to look, naming no shape${heard.shape === null ? '' : ` (${heard.shape})`}`
+    : `NOT A MANDATE — a defect (${heard.kind})`);
+
+  const view = await resilience.shouldAddAnother(OWNER, 'reference');
+  say('  its answer', view.recommend ? `yes — ${view.because}` : `no — ${view.because}`);
+  for (const con of view.concentrations) {
+    say('  what one failure could take out',
+      `${String(con.carriedBy.length)} share ${con.value} — ${con.ifItFails}`);
+  }
+
+  const opened = await venture.openMandate({
+    founderId: OWNER,
+    statement: 'Find another small digital income stream that would make my portfolio more resilient',
+    shape: null, evidenceMode: 'reference' });
+  if (!('refused' in opened)) {
+    for (const cand of await venture.candidatesFor(opened.id)) {
+      say(`  ${cand.headline.slice(0, 44)}`, cand.fit?.verdict ?? 'no view');
+    }
+  }
+
   console.log('\nWHERE THE CHAIN STOPS');
   const stops: string[] = [];
   if (channels.length === 0) stops.push('no observation channel is live, so Shadowing cannot begin');

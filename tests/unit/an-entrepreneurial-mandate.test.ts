@@ -116,14 +116,14 @@ describe('steering is absorbed, not acknowledged', () => {
     const steered = await currentMandate(OWNER);
     if (!steered) throw new Error('expected a mandate');
     // THE POINT OF THE WHOLE THING: it is applied to candidates, not filed.
-    const rejected = survivesGuidance({
+    const rejected = await survivesGuidance({
       headline: 'A scheduling tool for clinics',
       why: 'reached entirely through paid acquisition on search ads',
     }, steered.guidance);
     expect(rejected.survives).toBe(false);
     expect(rejected.because).toContain('you told me not to');
 
-    const kept = survivesGuidance({
+    const kept = await survivesGuidance({
       headline: 'A scheduling tool for clinics',
       why: 'reached through referrals from existing practice software',
     }, steered.guidance);
@@ -183,7 +183,12 @@ describe('what it can honestly report', () => {
     expect(progress?.looked).toBe(0);
     expect(progress?.blocked).toContain('cannot see what is happening outside');
     expect(progress?.blocked).toContain('not going to describe opportunities from');
-    expect(progress?.wouldNeed).toContain('rather say so than hand you a');
+    // AND WHAT IT IS MISSING IS THE LOOKING, NOT THE DISCIPLINE. The research
+    // machinery is built and rehearsed; naming the kinds of source that would
+    // each unblock it is a truer answer than "I need a provider", because a
+    // market was never one provider.
+    expect(progress?.wouldNeed).toContain('somewhere to actually look');
+    expect(progress?.wouldNeed).toContain('missing is the looking, not the discipline');
   });
 
   it('models that gap as a sense, so it unblocks itself when one exists', async () => {
@@ -273,7 +278,7 @@ describe('the reference world exercises the discipline', () => {
       evidenceMode: 'reference' });
     if ('refused' in ref) throw new Error(ref.refused);
     const progress = await mandateProgress(OWNER);
-    expect(progress?.looked).toBe(3);
+    expect(progress?.looked).toBe(4);
   });
 
   it('kills the one its own thesis destroys, and keeps why', async () => {
@@ -304,7 +309,7 @@ describe('the reference world exercises the discipline', () => {
         WHERE mandate_id = ? AND headline LIKE '%arbitrage%'`, [open.id]))
       .rows[0] as Record<string, unknown>;
 
-    const verdict = survivesGuidance({
+    const verdict = await survivesGuidance({
       headline: String(candidate.headline), why: String(candidate.why_it_might),
     }, steered?.guidance ?? []);
     expect(verdict.survives).toBe(false);

@@ -66,6 +66,16 @@ export interface ReferenceScenario {
   metrics: ScenarioMetric[];
   /** Quantities this company tracks that Foundry has never heard of. */
   declares?: ScenarioDeclaredChannel[];
+  /**
+   * HOW THIS COMPANY MAKES MONEY, on the axes the portfolio is measured on.
+   *
+   * The reference portfolio is deliberately concentrated, because that is the
+   * owner's own example: several subscription businesses, all billed through
+   * the same rails, all reached through search, all sold to the same kind of
+   * buyer. It is not six income streams. An institution that could not see
+   * that in its own rehearsal world would not see it in his.
+   */
+  exposures?: Array<[string, string]>;
 }
 
 // THE FIRST SCENARIO, AND WHY IT IS THIS ONE.
@@ -97,6 +107,14 @@ const FALLING: ReferenceScenario = {
     { field: 'activation_rate', start: 0.44, dailyDrift: -0.0015, noise: 0.03, precision: 'rate' },
     { field: 'churn_rate', start: 0.031, dailyDrift: 0.0090, noise: 0.06, precision: 'rate' },
   ],
+  exposures: [
+    ['revenue_model', 'subscription'],
+    ['customer_type', 'small businesses'],
+    ['pricing_model', 'per-seat monthly'],
+    ['acquisition_channel', 'google search'],
+    ['provider_dependency', 'stripe'],
+    ['support_burden', 'human support inbox'],
+  ],
 };
 
 // THE CONTROL. A business going nowhere in particular.
@@ -123,6 +141,14 @@ const STEADY: ReferenceScenario = {
     { field: 'day_30_retention', start: 0.71, dailyDrift: 0.0002, noise: 0.02, precision: 'rate' },
     { field: 'churn_rate', start: 0.018, dailyDrift: -0.0003, noise: 0.07, precision: 'rate' },
   ],
+  exposures: [
+    ['revenue_model', 'subscription'],
+    ['customer_type', 'small businesses'],
+    ['pricing_model', 'per-seat monthly'],
+    ['acquisition_channel', 'google search'],
+    ['provider_dependency', 'stripe'],
+    ['support_burden', 'human support inbox'],
+  ],
 };
 
 // GROWTH THAT IS NOT CONVERTING.
@@ -148,6 +174,14 @@ const NOT_CONVERTING: ReferenceScenario = {
     { field: 'day_30_retention', start: 0.66, dailyDrift: -0.0008, noise: 0.02, precision: 'rate' },
     { field: 'churn_rate', start: 0.021, dailyDrift: 0.0004, noise: 0.05, precision: 'rate' },
   ],
+  exposures: [
+    ['revenue_model', 'subscription'],
+    ['customer_type', 'small businesses'],
+    ['pricing_model', 'flat monthly'],
+    ['acquisition_channel', 'google search'],
+    ['provider_dependency', 'stripe'],
+    ['ai_dependency', 'one model provider'],
+  ],
 };
 
 // CUSTOMERS LEAVING FASTER THAN THEY WERE, with revenue holding up because new
@@ -168,6 +202,13 @@ const CHURNING: ReferenceScenario = {
     { field: 'day_30_retention', start: 0.68, dailyDrift: -0.0030, noise: 0.02, precision: 'rate' },
     { field: 'active_users', start: 1_240, dailyDrift: -0.0004, noise: 0.012, precision: 'integer' },
     { field: 'signups_7d', start: 55, dailyDrift: 0.0020, noise: 0.12, precision: 'integer' },
+  ],
+  exposures: [
+    ['revenue_model', 'subscription'],
+    ['customer_type', 'consumers'],
+    ['pricing_model', 'flat monthly'],
+    ['acquisition_channel', 'app store'],
+    ['provider_dependency', 'stripe'],
   ],
 };
 
@@ -194,6 +235,14 @@ const PAYMENTS_FAILING: ReferenceScenario = {
     { field: 'active_users', start: 890, dailyDrift: -0.0003, noise: 0.012, precision: 'integer' },
     { field: 'signups_7d', start: 33, dailyDrift: 0.0004, noise: 0.13, precision: 'integer' },
     { field: 'churn_rate', start: 0.022, dailyDrift: 0.0040, noise: 0.05, precision: 'rate' },
+  ],
+  exposures: [
+    ['revenue_model', 'subscription'],
+    ['customer_type', 'small businesses'],
+    ['pricing_model', 'per-seat monthly'],
+    ['acquisition_channel', 'partner referral'],
+    ['provider_dependency', 'stripe'],
+    ['support_burden', 'human support inbox'],
   ],
 };
 

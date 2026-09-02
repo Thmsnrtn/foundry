@@ -574,9 +574,34 @@ the same tap.
 
 ## The venture origination acceptance test
 
-**Stated by the owner on 2026-09-02 and preserved verbatim in intent as a
-primary acceptance test for the mature Private Foundry.** This is not a feature
-list. It is the interaction that decides whether the venture institution exists.
+**Stated by the owner on 2026-09-02, and evolved by him the same day.** This is
+not a feature list. It is the interaction that decides whether the venture
+institution exists.
+
+### The canonical test
+
+> **"Find another small digital income stream that would make my portfolio more
+> resilient."**
+
+**Private Foundry is not a micro-SaaS factory.** It is the entrepreneurial
+institution for creating and operating a **diversified portfolio of small
+digital cash-flow engines**. The right answer to that sentence may be a SaaS, a
+completely different digital economic instrument, or **nothing at all** — and
+the institution passes only when it can give all three.
+
+Possible economic forms include micro-SaaS, APIs, plugins and extensions, data
+products, monitoring and alert products, intelligence subscriptions,
+transactional utilities, calculators and generators, directories,
+lead-generation assets, digital assets and templates, licensing products,
+white-label utilities, niche marketplaces, referral and affiliate assets,
+job and opportunity feeds — **and forms nobody has named yet.**
+
+**These are examples, never a taxonomy.** A closed list would become the search
+space, and the institution would reason from *"we know how to build SaaS"*
+toward another SaaS. It reasons instead from **owner objective + portfolio
+state + market evidence + economics** toward the appropriate form.
+
+### The concrete test, which remains
 
 > **"I'd like you to add a new micro-SaaS venture to my portfolio."**
 
@@ -607,15 +632,81 @@ other.
 **The standard:** it should feel almost as simple as collaborating with Claude,
 while the full governed venture institution operates underneath.
 
+### Portfolio resilience is part of selection
+
+A candidate is not attractive because it might make money in isolation. What
+matters is **what adding it does to the portfolio he already owns.**
+
+Six SaaS products all reached through Google search, all billed through Stripe,
+all built on the same model provider, all sold to the same segment, **are not
+six independent income streams.** They are one income stream with six failure
+points in common, and an institution that counted them as six would be helping
+him concentrate while telling him he was diversifying.
+
+So Foundry reasons about concentration and correlation across dimensions such as
+revenue model, customer type, industry, pricing model, acquisition channel,
+platform dependency, provider dependency, AI dependency, technical stack where
+economically relevant, geography and regulatory exposure, capital intensity,
+support burden, operational burden, owner-attention burden, time to revenue, and
+retention characteristics.
+
+**Not mathematical theatre.** No score, no risk number, no false precision — the
+questions are *"if this succeeds, does the portfolio get stronger?"* and *"what
+single failure could damage several of these at once?"*, and they are answered by
+naming the shared exposure and how many carry it.
+
+It must therefore be able to say **"another conventional SaaS would increase a
+concentration you already have"** and **"I do not recommend adding another
+venture right now."**
+
+### The river of nickels
+
+One of Private Foundry's economic advantages is that **it may lower the minimum
+viable size of a business worth owning.** A $300–$800/month digital business
+normally cannot justify the organisational overhead of operating it. If the
+institution absorbs most of support, monitoring, billing, maintenance,
+analytics, development, customer communication, infrastructure, experimentation,
+research and routine decision machinery, then a small, durable, low-cost stream
+becomes worth retaining.
+
+**This is not a licence to maximise the number of tiny businesses.** Operational
+burden and portfolio complexity remain real costs. The intended shape is a few
+**anchor businesses** with meaningful durable cash flow, many small
+**tributaries** each independently worthwhile and low-burden, and an
+**experimental frontier** where many are investigated, few tested, fewer
+created.
+
+Optimise portfolio resilience, cash-flow quality, low correlation, owner
+leverage and expected economic value. **Never product count.**
+
 ### What this test already implies about honesty
 
-**Research is a SENSE Foundry does not have.** It cannot see the market. An
-opportunity produced from a model's recollection, with no source that could be
-checked, is invented evidence — the precise thing the reality boundary exists to
-prevent. So the machinery of origination can be built and proven now; the
-research that feeds it waits on a sense, and until then Foundry says "I cannot
-see what is happening outside your companies" rather than producing plausible
-opportunities.
+**The model may reason over evidence. The model's recollection is not
+evidence.** An opportunity produced from what a model remembers, with no source
+that could be checked, is invented evidence wearing a research report's clothes
+— the precise thing the reality boundary exists to prevent.
+
+**But market understanding is not one provider.** Unlike Stripe, which is a
+single coherent source of truth about one company, market knowledge accumulates
+from many partial, dated, disagreeing sources: public web research, vendor and
+competitor sites, pricing pages, reviews, communities, directories,
+marketplaces, app stores, public datasets, search evidence, job postings, news,
+APIs, customer conversations, surveys, landing-page tests, ads and experiments.
+So it is a **sense family**, and there is no single magical market-truth feed.
+
+Every market observation preserves its source, when it was seen, what it
+supports, what it contradicts, the kind of source it is, whether it is direct or
+inferred, and which world it came from. **Claims emerge from accumulated
+evidence, disagreement, falsification and explicit unknowns** — never from a
+confident paragraph.
+
+**And "no provider exists yet" may never become the reason the research
+institution is unbuilt.** The reference world controlled-proves research
+mandates, questions, evidence collection, provenance, claim formation,
+contradiction, unknown tracking, kill theses, candidate comparison,
+portfolio-fit reasoning, prediction, experiment proposal, rejection and
+advancement. Real sources then replace reference evidence through governed
+research senses, one at a time.
 
 **Rejection is the valuable half.** Opportunity generation is cheap. The
 institution should investigate many and advance very few, and *"none of these,

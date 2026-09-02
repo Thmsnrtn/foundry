@@ -1,9 +1,19 @@
 // =============================================================================
 // FOUNDRY — an entrepreneurial mandate
 //
-// "I'd like you to add a new micro-SaaS venture to my portfolio."
+// "Find another small digital income stream that would make my portfolio more
+// resilient." And its special case: "I'd like you to add a new micro-SaaS
+// venture to my portfolio."
 //
-// THE FAILURE THIS EXISTS TO PREVENT is hearing that as "build me a SaaS". It
+// THE CANONICAL REQUEST IS THE FIRST ONE, and the difference matters. A
+// micro-SaaS is one economic form among many — transactional, data, API,
+// marketplace-distributed, licensing, a productised service. Hearing the
+// general request as the specific one would quietly turn this into a SaaS
+// factory, which is the wrong institution: what is being assembled is a
+// portfolio of small digital cash-flow engines, and the form each one takes is
+// an outcome of the search rather than an input to it.
+//
+// THE FAILURE THIS EXISTS TO PREVENT is hearing either as "build me a SaaS". It
 // is a standing instruction to go and LOOK — under constraints, with a budget,
 // accreting guidance over weeks, stoppable — and the software, if it ever
 // exists, is the last thing that happens rather than the first.
@@ -23,6 +33,8 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
+import type { PortfolioFit } from '../founder/resilience.js';
+import type { OpenUnknown, Standing } from './market-evidence.js';
 
 export type GuidanceKind =
   | 'avoid' | 'prefer' | 'industry' | 'budget' | 'harder' | 'deeper'
@@ -33,6 +45,17 @@ export interface MandateProposal {
 }
 export interface GuidanceProposal {
   kind: 'guidance'; statement: string; guidance: GuidanceKind; subject: string | null;
+  /**
+   * The exposure axis this steering is about, when it is about one.
+   *
+   * This is what makes "something less dependent on Google" mean something.
+   * Without it the sentence could only be matched against a candidate's prose,
+   * which would reject a candidate that mentioned Google in passing and accept
+   * one whose entire distribution was search. With it, the steering is applied
+   * to what the candidate DECLARED about how it makes money, in the same
+   * sixteen-axis vocabulary the portfolio is measured on.
+   */
+  dimension: string | null;
 }
 export interface StopProposal { kind: 'stop_mandate'; statement: string }
 export interface NotVenture { kind: 'not_venture'; statement: string }
@@ -40,7 +63,16 @@ export interface NotVenture { kind: 'not_venture'; statement: string }
 export type VentureReading =
   | MandateProposal | GuidanceProposal | StopProposal | NotVenture;
 
-/** The shapes he might name. Absence is a real mandate: "find me a business". */
+/**
+ * The shapes he might name, and NOT the space the search may look in.
+ *
+ * This list recognises words the owner used. It does not constrain what may be
+ * found, and nothing downstream filters by it — an unnamed shape is a mandate
+ * to look anywhere, and a named one is a preference on the record. The owner
+ * was explicit that economic forms are examples rather than a closed taxonomy:
+ * the moment this became the search space, the institution would only ever
+ * discover the six things somebody once thought to type here.
+ */
 const SHAPES: Array<[string, string[]]> = [
   ['micro_saas', ['micro-saas', 'micro saas', 'microsaas', 'small saas', 'tiny saas']],
   ['saas', ['saas', 'software business', 'subscription business']],
@@ -48,13 +80,30 @@ const SHAPES: Array<[string, string[]]> = [
   ['newsletter', ['newsletter', 'media business']],
   ['agency', ['agency', 'services business', 'consultancy']],
   ['ecommerce', ['ecommerce', 'e-commerce', 'physical product', 'shop']],
+  ['transactional', ['take a cut', 'per transaction', 'transaction fee']],
+  ['data', ['data business', 'dataset', 'data product']],
+  ['api', ['api business', 'api product', 'developer tool']],
+  ['licensing', ['licensing', 'license it', 'white label', 'white-label']],
+  ['productised_service', ['productised service', 'productized service', 'done-for-you']],
 ];
 
 const ASKING = [
   'add a new', 'add another', 'start a new', 'start another', 'find me a',
-  'find me another', 'new venture', 'another venture', 'new business',
-  'another business', 'originate', 'a new company', 'another company',
+  'find me another', 'find a ', 'find another', 'look for a ', 'look for another',
+  'new venture', 'another venture', 'new business', 'another business',
+  'originate', 'a new company', 'another company',
 ];
+
+/**
+ * What he might be asking for one of.
+ *
+ * "Income stream" is here as a first-class noun, not a synonym for venture: the
+ * canonical request names a stream of money rather than a company, and an
+ * institution that only recognised "business" would have heard the general
+ * mandate as no mandate at all.
+ */
+const A_THING_THAT_EARNS =
+  /\b(venture|business|compan|saas|product|opportunit|income stream|revenue stream|cash[- ]?flow|earner)/;
 
 /**
  * READ ONE SENTENCE ABOUT VENTURES.
@@ -78,8 +127,7 @@ export function readVentureSentence(raw: string): VentureReading {
   const guidance = readGuidance(t, statement);
   if (guidance) return guidance;
 
-  if (ASKING.some((p) => t.includes(p))
-    && /\b(venture|business|company|saas|product|opportunit)/.test(t)) {
+  if (ASKING.some((p) => t.includes(p)) && A_THING_THAT_EARNS.test(t)) {
     const shape = SHAPES.find(([, phrases]) => phrases.some((p) => t.includes(p)));
     return { kind: 'mandate', statement, shape: shape ? shape[0] : null };
   }
@@ -87,25 +135,68 @@ export function readVentureSentence(raw: string): VentureReading {
 }
 
 function readGuidance(t: string, statement: string): GuidanceProposal | null {
-  const say = (guidance: GuidanceKind, subject: string | null = null): GuidanceProposal =>
-    ({ kind: 'guidance', statement, guidance, subject });
+  const say = (
+    guidance: GuidanceKind, subject: string | null = null, dimension: string | null = null,
+  ): GuidanceProposal => ({ kind: 'guidance', statement, guidance, subject, dimension });
 
   if (/\b(don'?t|do not|no|avoid|without)\b.*\b(paid acquisition|paid ads|ads|advertising|paid marketing)\b/.test(t)) {
-    return say('avoid', 'paid acquisition');
+    return say('avoid', 'paid acquisition', 'acquisition_channel');
   }
   if (/\b(don'?t|do not|avoid|no)\b.*\b(venture capital|investors|raising|fundraising)\b/.test(t)) {
-    return say('avoid', 'outside investment');
+    return say('avoid', 'outside investment', 'capital_intensity');
   }
-  if (/higher[- ]ticket|bigger deals|larger contracts|more expensive|higher price/.test(t)) {
-    return say('prefer', 'higher ticket');
+
+  // "I DON'T WANT ANOTHER SUBSCRIPTION BUSINESS."
+  //
+  // Negation has to be adjacent and explicit, because the un-negated words are
+  // most of a mandate: "add another subscription business" is a search, and
+  // reading it as its own refusal would be the worst possible mishearing.
+  if (/\b(don'?t want|do not want|no more|not another|rather not|sick of|tired of|avoid)\b[^.]{0,40}\b(subscription|recurring|another saas|more saas)\b/.test(t)) {
+    return say('avoid', 'subscription', 'revenue_model');
   }
-  if (/lower[- ]ticket|cheaper|smaller|self[- ]serve/.test(t)) return say('prefer', 'lower ticket');
+
+  // "SOMETHING LESS DEPENDENT ON GOOGLE."
+  //
+  // The thing named is kept as he said it. Which axis it lands on is a
+  // judgement — a platform, a provider and a channel are different failures —
+  // and the honest default is the platform, because that is what "dependent on"
+  // usually means about a named company.
+  const dependence = /\b(less|not so|not too|not|reduce(?:s|d)? (?:my |our )?)\s*(?:dependent|reliant|dependence|reliance)\s*(?:on|upon)\s+([a-z0-9][a-z0-9 .'-]{1,40}?)\s*(?:$|[,.]|\band\b|\bfor\b)/.exec(t);
+  if (dependence?.[2]) {
+    const named = dependence[2].trim().replace(/\bthe\b\s*/g, '');
+    const axis = /stripe|payment|billing|provider|aws|host/.test(named) ? 'provider_dependency'
+      : /model|openai|anthropic|llm|\bai\b/.test(named) ? 'ai_dependency'
+        : 'platform_dependency';
+    return say('avoid', named, axis);
+  }
+
+  // "SELL TO BUSINESSES RATHER THAN CONSUMERS."
+  const toBusinesses = /\b(businesses|companies|b2b)\b[^.]{0,20}\b(rather than|instead of|not)\b[^.]{0,20}\b(consumers|people|individuals|b2c)\b/.test(t)
+    || /\bsell(ing)? to (businesses|companies)\b/.test(t);
+  const toConsumers = /\b(consumers|individuals|b2c)\b[^.]{0,20}\b(rather than|instead of|not)\b[^.]{0,20}\b(businesses|companies|b2b)\b/.test(t)
+    || /\bsell(ing)? to (consumers|individuals)\b/.test(t);
+  if (toBusinesses) return say('prefer', 'businesses', 'customer_type');
+  if (toConsumers) return say('prefer', 'consumers', 'customer_type');
+
+  // "ALMOST NO SUPPORT BURDEN."
+  if (/\b(almost no|little to no|hardly any|minimal|low|no)\b[^.]{0,20}\bsupport\b/.test(t)
+    || /\bdoesn'?t need (looking after|babysitting|support)\b/.test(t)) {
+    return say('prefer', 'almost no support burden', 'support_burden');
+  }
+
+  // "HIGHER PRICE, FEWER CUSTOMERS."
+  if (/higher[- ]ticket|bigger deals|larger contracts|more expensive|higher price|fewer customers/.test(t)) {
+    return say('prefer', 'higher ticket', 'pricing_model');
+  }
+  if (/lower[- ]ticket|smaller deals|smaller contracts|cheaper|self[- ]serve|volume/.test(t)) {
+    return say('prefer', 'lower ticket', 'pricing_model');
+  }
   if (/\btarget\b.*\binstead\b|\bfocus on\b.*\bindustry\b|\blook (at|in)\b.*\binstead\b/.test(t)) {
     // The industry is his words minus the instruction, kept whole rather than
     // parsed into a taxonomy Foundry would then have to maintain.
     const named = statement.replace(/^.*?\b(target|focus on|look at|look in)\b/i, '')
       .replace(/\binstead\b\.?/i, '').trim();
-    return say('industry', named || null);
+    return say('industry', named || null, 'industry');
   }
   if (/spend (no more than|up to|at most)|budget of|no more than \$?\d/.test(t)) {
     const amount = /(\d+(?:\.\d{1,2})?)/.exec(t);
@@ -120,10 +211,35 @@ function readGuidance(t: string, statement: string): GuidanceProposal | null {
   if (/\bi like (this|that) one\b|\bthat one\b.*\b(interesting|promising)\b|\bgo with (this|that)\b/.test(t)) {
     return say('favour');
   }
-  if (/show me another|something else|a different one|next option|other options/.test(t)) {
+  if (/show me another|something else|a different one|next option|other options|none of these|keep looking/.test(t)) {
     return say('another');
   }
   return null;
+}
+
+/**
+ * DOES THIS EXPOSURE ANSWER TO THAT WORD?
+ *
+ * Kept small on purpose. A generous synonym table would let the institution
+ * decide that "search" and "Google" are the same thing on his behalf, and be
+ * wrong in the one case where he meant something specific. Substring in either
+ * direction covers most of it; the handful of aliases below are the ones where
+ * two words are genuinely the same fact, and adding to the list should feel
+ * like a decision rather than a convenience.
+ */
+const ALIASES: Array<string[]> = [
+  ['businesses', 'business', 'b2b', 'small businesses', 'companies'],
+  ['consumers', 'consumer', 'b2c', 'individuals', 'people'],
+  ['subscription', 'recurring', 'saas'],
+];
+
+export function exposureAnswersTo(word: string, value: string): boolean {
+  const a = word.trim().toLowerCase();
+  const b = value.trim().toLowerCase();
+  if (a === b || b.includes(a) || a.includes(b)) return true;
+  return ALIASES.some((group) =>
+    group.some((w) => a === w || a.includes(w))
+    && group.some((w) => b === w || b.includes(w)));
 }
 
 // ─── the mandate ─────────────────────────────────────────────────────────────
@@ -131,7 +247,10 @@ function readGuidance(t: string, statement: string): GuidanceProposal | null {
 export interface Mandate {
   id: string; statement: string; shape: string | null; state: string;
   evidenceMode: 'real' | 'reference'; openedAt: string;
-  guidance: Array<{ id: string; statement: string; kind: GuidanceKind; subject: string | null }>;
+  guidance: Array<{
+    id: string; statement: string; kind: GuidanceKind;
+    subject: string | null; dimension: string | null;
+  }>;
 }
 
 export async function openMandate(input: {
@@ -176,12 +295,13 @@ export async function currentMandate(founderId: string): Promise<Mandate | null>
     .rows[0] as Record<string, unknown> | undefined;
   if (!row) return null;
   const guidance = ((await query(
-    `SELECT id, statement, kind, subject FROM venture_guidance
+    `SELECT id, statement, kind, subject, dimension FROM venture_guidance
       WHERE mandate_id = ? AND superseded_by IS NULL ORDER BY rowid`, [String(row.id)]))
     .rows as unknown as Array<Record<string, unknown>>).map((g) => ({
     id: String(g.id), statement: String(g.statement),
     kind: String(g.kind) as GuidanceKind,
     subject: g.subject == null ? null : String(g.subject),
+    dimension: g.dimension == null ? null : String(g.dimension),
   }));
   return {
     id: String(row.id), statement: String(row.statement),
@@ -200,7 +320,8 @@ export async function currentMandate(founderId: string): Promise<Mandate | null>
  * remembers being redirected and one that only knows where it currently points.
  */
 export async function absorbGuidance(input: {
-  mandateId: string; statement: string; kind: GuidanceKind; subject: string | null;
+  mandateId: string; statement: string; kind: GuidanceKind;
+  subject: string | null; dimension?: string | null;
 }): Promise<string> {
   // Resolved from the mandate rather than taken from a caller: a guidance row
   // naming a different person would erase with the wrong account, or not at all.
@@ -213,20 +334,30 @@ export async function absorbGuidance(input: {
   // so pointing the old guidance at an id that does not exist yet fails — which
   // it did, on the first sentence that replaced an earlier one. The order is
   // not stylistic: the successor has to exist before anything can name it.
+  const dimension = input.dimension ?? null;
   await query(
-    `INSERT INTO venture_guidance (id, mandate_id, founder_id, statement, kind, subject)
-     VALUES (?,?,?,?,?,?)`,
+    `INSERT INTO venture_guidance
+       (id, mandate_id, founder_id, statement, kind, subject, dimension)
+     VALUES (?,?,?,?,?,?,?)`,
     [id, input.mandateId, String(owner.founder_id), input.statement.trim(),
-      input.kind, input.subject]);
+      input.kind, input.subject, dimension]);
 
   // The kinds that REPLACE rather than accumulate. Two industries is a wider
   // search; two budgets is no budget.
+  //
+  // BUT ONLY ON THE SAME AXIS. "Higher ticket" and "almost no support burden"
+  // are both preferences and they are not in conflict — superseding by kind
+  // alone would have silently thrown one of them away, so the second thing he
+  // asked for would quietly cancel the first. Two opinions about PRICING are a
+  // change of mind; a preference naming no axis at all is treated the same way
+  // it always was, because there is nothing finer to tell them apart by.
   const replaces: GuidanceKind[] = ['industry', 'budget', 'prefer'];
   if (replaces.includes(input.kind)) {
     await query(
       `UPDATE venture_guidance SET superseded_by = ?
-        WHERE mandate_id = ? AND kind = ? AND superseded_by IS NULL AND id <> ?`,
-      [id, input.mandateId, input.kind, id]);
+        WHERE mandate_id = ? AND kind = ? AND superseded_by IS NULL AND id <> ?
+          AND dimension IS ?`,
+      [id, input.mandateId, input.kind, id, dimension]);
   }
   return id;
 }
@@ -287,10 +418,28 @@ export async function mandateProgress(founderId: string): Promise<MandateProgres
       : 'I cannot see what is happening outside your companies, so I have '
         + 'nowhere to look. I am not going to describe opportunities from '
         + 'memory — that would read like research and be nothing of the kind.',
-    wouldNeed: canSeeMarket ? null
-      : 'a way to actually look at the market. Nothing I can connect today '
-        + 'would give me one, and I would rather say so than hand you a '
-        + 'plausible list.',
+    // WHAT WOULD ACTUALLY UNBLOCK IT, NAMED.
+    //
+    // "I need a market provider" is the answer of an institution waiting for
+    // one thing to be switched on. A market is not one provider, and the
+    // machinery here is already built for many partial disagreeing sources —
+    // so the honest sentence names the KINDS of thing that would each let it
+    // start, and says the rest is ready. Read from the constitutional list, so
+    // the day a source type is added this sentence says so by itself.
+    wouldNeed: canSeeMarket ? null : await (async () => {
+      const kinds = ((await query(
+        `SELECT what_it_is FROM market_source_types
+          WHERE stance = 'observed' AND source_type <> 'reference_world'
+          ORDER BY sort_order LIMIT 4`, []))
+        .rows as unknown as Array<Record<string, unknown>>)
+        .map((r) => String(r.what_it_is));
+      return `somewhere to actually look — ${kinds.join('; ')} — any one of `
+        + 'which would let me start. What I would do with it is already built '
+        + 'and rehearsed: I would date and attribute everything I saw, keep '
+        + 'what contradicted a claim alongside what supported it, and tell you '
+        + 'what remained unknown. What is missing is the looking, not the '
+        + 'discipline.';
+    })(),
   };
 }
 
@@ -301,21 +450,58 @@ export async function mandateProgress(founderId: string): Promise<MandateProgres
  * when someone remembers. A mandate that collected guidance and filtered
  * nothing would be the failure the owner named: treating it as chat.
  */
-export function survivesGuidance(
-  candidate: { headline: string; why: string },
+export async function survivesGuidance(
+  candidate: { id?: string; headline: string; why: string },
   guidance: Mandate['guidance'],
-): { survives: boolean; because: string | null } {
+): Promise<{ survives: boolean; because: string | null; against: string[] }> {
   const text = `${candidate.headline} ${candidate.why}`.toLowerCase();
+
+  // WHAT THE CANDIDATE SAID ABOUT ITSELF, on the axes the steering names. This
+  // is the difference between filtering on evidence and filtering on prose.
+  const declared = candidate.id
+    ? ((await query(
+      `SELECT dimension, value FROM portfolio_exposures
+        WHERE subject_kind = 'opportunity' AND subject_id = ? AND retired_at IS NULL`,
+      [candidate.id])).rows as unknown as Array<Record<string, unknown>>)
+      .map((r) => ({ dimension: String(r.dimension), value: String(r.value) }))
+    : [];
+
+  const against: string[] = [];
   for (const g of guidance) {
-    if (g.kind !== 'avoid' || !g.subject) continue;
-    if (text.includes(g.subject.toLowerCase())) {
-      return {
-        survives: false,
-        because: `it depends on ${g.subject}, and you told me not to`,
-      };
+    if (g.kind === 'avoid' && g.subject) {
+      const named = declared.find((e) =>
+        e.dimension === g.dimension && exposureAnswersTo(g.subject ?? '', e.value));
+      if (named) {
+        return {
+          survives: false, against,
+          because: `it makes its money through ${named.value}, and you told me `
+            + `you did not want that`,
+        };
+      }
+      // NO DECLARED EXPOSURE IS NOT A PASS. A candidate that has said nothing
+      // about how it makes money cannot demonstrate it avoids anything, so the
+      // prose is still read — the weaker test, used where the better one has
+      // nothing to work with.
+      if (declared.every((e) => e.dimension !== g.dimension)
+        && text.includes(g.subject.toLowerCase())) {
+        return {
+          survives: false, against,
+          because: `it depends on ${g.subject}, and you told me not to`,
+        };
+      }
+    }
+    // A PREFERENCE IS NOT A PROHIBITION, and collapsing the two would be the
+    // easy mistake. "Sell to businesses" does not make a consumer candidate
+    // illegitimate; it makes it something he should be told does not match
+    // what he asked for, and then decide about himself.
+    if (g.kind === 'prefer' && g.subject && g.dimension) {
+      const on = declared.find((e) => e.dimension === g.dimension);
+      if (on && !exposureAnswersTo(g.subject, on.value)) {
+        against.push(`you asked for ${g.subject}; this is ${on.value}`);
+      }
     }
   }
-  return { survives: true, because: null };
+  return { survives: true, because: null, against };
 }
 
 /** How hard a candidate has to be attacked before it may advance. */
@@ -345,6 +531,22 @@ export interface PresentedCandidate {
   /** Non-null when this cannot be advanced, saying which unknown stops it. */
   blockedBy: string | null;
   survivesGuidance: boolean; failsBecause: string | null;
+  /** Preferences of his this does not meet. Not disqualifying; his to weigh. */
+  against: string[];
+  /**
+   * WHAT ADDING IT WOULD DO TO WHAT HE ALREADY OWNS.
+   *
+   * On every candidate, not only when he asks about resilience. The owner's
+   * evolution of the mandate was that this is part of SELECTION — a candidate
+   * that would deepen a concentration is worse for him than one that would not,
+   * whatever its own merits, and an institution that reported the merits and
+   * left the portfolio effect for later would be helping him concentrate.
+   */
+  fit: PortfolioFit | null;
+  /** Claims about the world, and how each currently stands on its evidence. */
+  standing: Standing[];
+  /** What is still not known, with the cheapest thing that would settle it. */
+  unanswered: OpenUnknown[];
   reference: boolean;
 }
 
@@ -355,27 +557,42 @@ const DISQUALIFYING = [
 
 export async function candidatesFor(mandateId: string): Promise<PresentedCandidate[]> {
   const mandate = (await query(
-    'SELECT founder_id FROM venture_mandates WHERE id = ?', [mandateId]))
+    `SELECT founder_id, evidence_mode FROM venture_mandates WHERE id = ?`, [mandateId]))
     .rows[0] as Record<string, unknown> | undefined;
   if (!mandate) return [];
-  const open = await currentMandate(String(mandate.founder_id));
+  const founderId = String(mandate.founder_id);
+  const world = String(mandate.evidence_mode) === 'reference' ? 'reference' : 'real';
+  const open = await currentMandate(founderId);
   const guidance = open?.guidance ?? [];
+  const { portfolioFitOf } = await import('../founder/resilience.js');
+  const { standingOf, openUnknowns } = await import('./market-evidence.js');
 
-  return ((await query(
+  const rows = ((await query(
     `SELECT id, headline, who_has_it, the_problem, why_it_might, kill_thesis,
             unknowns_json, sources_json, evidence_mode
        FROM venture_opportunities
       WHERE mandate_id = ? AND verdict IS NULL
       ORDER BY rowid`, [mandateId]))
-    .rows as unknown as Array<Record<string, unknown>>).map((r) => {
+    .rows as unknown as Array<Record<string, unknown>>);
+
+  const presented: PresentedCandidate[] = [];
+  for (const r of rows) {
     const unknowns = JSON.parse(String(r.unknowns_json)) as string[];
     const sources = JSON.parse(String(r.sources_json)) as string[];
     const blocking = unknowns.find((u) =>
       DISQUALIFYING.some((phrase) => u.toLowerCase().includes(phrase)));
-    const verdict = survivesGuidance({
-      headline: String(r.headline), why: String(r.why_it_might),
+    const verdict = await survivesGuidance({
+      id: String(r.id), headline: String(r.headline), why: String(r.why_it_might),
     }, guidance);
-    return {
+    const claims = ((await query(
+      'SELECT id FROM market_claims WHERE opportunity_id = ?', [String(r.id)]))
+      .rows as unknown as Array<Record<string, unknown>>).map((c) => String(c.id));
+    const standing: Standing[] = [];
+    for (const claimId of claims) {
+      const how = await standingOf(claimId);
+      if (how) standing.push(how);
+    }
+    presented.push({
       id: String(r.id), headline: String(r.headline),
       whoHasIt: String(r.who_has_it), theProblem: String(r.the_problem),
       whyItMight: String(r.why_it_might), killThesis: String(r.kill_thesis),
@@ -383,9 +600,16 @@ export async function candidatesFor(mandateId: string): Promise<PresentedCandida
       blockedBy: blocking ?? (sources.length === 0
         ? 'nothing about it has been checked against anything' : null),
       survivesGuidance: verdict.survives, failsBecause: verdict.because,
+      against: verdict.against,
+      fit: await portfolioFitOf({
+        founderId, opportunityId: String(r.id), world,
+      }),
+      standing,
+      unanswered: await openUnknowns(String(r.id)),
       reference: String(r.evidence_mode) === 'reference',
-    };
-  });
+    });
+  }
+  return presented;
 }
 
 /**

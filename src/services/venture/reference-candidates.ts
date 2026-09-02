@@ -10,12 +10,26 @@
 // else — exercising machinery that has no real input yet, through the
 // production path, marked so that nothing it produces can walk out.
 //
-// WHAT THESE ARE. Three declared candidates that exist to put the CANDIDATE
+// WHAT THESE ARE. Four declared candidates that exist to put the CANDIDATE
 // DISCIPLINE under load, not to be good ideas:
 //
-//   one that survives — it has sources, a stated way to die, and honest unknowns
+//   one that survives on its own merits and is still wrong for THIS portfolio —
+//     a perfectly reasonable subscription business that would deepen every
+//     concentration he already has, which is the owner's own example of six
+//     income streams that are one
 //   one that its own kill thesis destroys — the discipline working as intended
 //   one that fails the owner's guidance — steering doing something, visibly
+//   one that is differently correlated — the answer to "another conventional
+//     SaaS would increase a concentration you already have", which has to be a
+//     sentence the institution can follow with something rather than a
+//     sophisticated way of saying no
+//
+// AND THEY CARRY EVIDENCE, not just prose. Each one forms claims about the
+// world, files dated observations for and AGAINST them, and raises the unknowns
+// that would actually decide it. That machinery is what the owner asked to have
+// controlled-proven before any real research source exists: collection,
+// provenance, contradiction, unknowns, and a candidate that cannot advance
+// because something blocking is unanswered.
 //
 // They are as fictional as the reference companies and refused a real mandate
 // by the same trigger. What is real is what happens to them: the unknowns that
@@ -26,9 +40,23 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 
+interface DeclaredClaim {
+  claim: string;
+  saw: Array<{
+    sourceType: string; source: string; saw: string;
+    bearing: 'supports' | 'contradicts'; directness: 'direct' | 'inferred';
+    daysAgo: number;
+  }>;
+}
+
 interface DeclaredCandidate {
   headline: string; whoHasIt: string; theProblem: string; whyItMight: string;
   killThesis: string; unknowns: string[]; sources: string[];
+  /** How it would make money, on the axes the portfolio is measured on. */
+  exposures: Array<[string, string]>;
+  claims?: DeclaredClaim[];
+  /** Questions that decide it, and the cheapest thing that would answer each. */
+  asks?: Array<{ question: string; blocking: boolean; cheapestTest: string | null }>;
 }
 
 const CANDIDATES: DeclaredCandidate[] = [
@@ -47,6 +75,41 @@ const CANDIDATES: DeclaredCandidate[] = [
       'whether the incumbent is already building it',
     ],
     sources: ['reference-world:declared-candidate'],
+    // A PERFECTLY REASONABLE BUSINESS THAT IS WRONG FOR THIS PORTFOLIO.
+    // Every one of these is something the reference companies already carry.
+    // Nothing here is new ground, which is the point: on its own merits it
+    // survives, and adding it would make the portfolio more fragile rather
+    // than less.
+    exposures: [
+      ['revenue_model', 'subscription'],
+      ['customer_type', 'small businesses'],
+      ['pricing_model', 'per-seat monthly'],
+      ['acquisition_channel', 'google search'],
+      ['provider_dependency', 'stripe'],
+      ['support_burden', 'human support inbox'],
+    ],
+    claims: [{
+      claim: 'Independent veterinary practices will pay separately for handover '
+        + 'software rather than wait for their practice management vendor',
+      saw: [
+        { sourceType: 'community', source: 'reference-world:practice-forum-thread',
+          saw: 'eleven practice managers describing handover as the thing that '
+            + 'goes wrong most often', bearing: 'supports', directness: 'inferred',
+          daysAgo: 40 },
+        { sourceType: 'job_posting', source: 'reference-world:incumbent-careers-page',
+          saw: 'the largest practice management vendor hiring for a handover and '
+            + 'shift-notes team', bearing: 'contradicts', directness: 'direct',
+          daysAgo: 12 },
+      ],
+    }],
+    asks: [
+      { question: 'whether anyone would pay for it separately from their existing system',
+        blocking: true,
+        cheapestTest: 'take a price to twenty practice managers and count who asks '
+          + 'how to buy it' },
+      { question: 'whether the incumbent is already building it', blocking: false,
+        cheapestTest: 'read their release notes for the last year' },
+    ],
   },
   {
     headline: 'A dashboard that unifies every tool a small agency uses',
@@ -63,6 +126,26 @@ const CANDIDATES: DeclaredCandidate[] = [
       'why the previous attempts died',
     ],
     sources: ['reference-world:declared-candidate'],
+    exposures: [
+      ['revenue_model', 'subscription'],
+      ['customer_type', 'small businesses'],
+      ['pricing_model', 'flat monthly'],
+      ['acquisition_channel', 'community'],
+      ['provider_dependency', 'stripe'],
+    ],
+    claims: [{
+      claim: 'Small agencies will change the tools they work in for a unified view',
+      saw: [
+        { sourceType: 'review', source: 'reference-world:review-site',
+          saw: 'four dead products in this category with the same complaint in '
+            + 'their final reviews: nobody moved off the tools they had',
+          bearing: 'contradicts', directness: 'direct', daysAgo: 70 },
+      ],
+    }],
+    asks: [
+      { question: 'why the previous attempts died', blocking: true,
+        cheapestTest: 'find two founders of the dead ones and ask them' },
+    ],
   },
   {
     headline: 'A paid-search arbitrage play for local trades',
@@ -74,6 +157,69 @@ const CANDIDATES: DeclaredCandidate[] = [
       + 'is a bet on arbitrage that closes',
     unknowns: ['whether the arbitrage still exists at all'],
     sources: ['reference-world:declared-candidate'],
+    exposures: [
+      ['revenue_model', 'lead generation'],
+      ['customer_type', 'sole traders'],
+      ['acquisition_channel', 'paid acquisition'],
+      ['pricing_model', 'per lead'],
+    ],
+  },
+  // THE ANSWER, RATHER THAN A BETTER-ARGUED NO.
+  //
+  // "Another conventional SaaS would deepen a concentration you already have"
+  // is only a useful sentence if the institution can follow it with something.
+  // This candidate exists to be that something: it earns in a different way,
+  // is reached through a different channel, is paid for differently, and wants
+  // almost nothing from him week to week. Its merits are unremarkable on
+  // purpose — what makes it interesting is that it fails for different reasons
+  // than everything he owns.
+  {
+    headline: 'A maintained dataset of licence and registration deadlines, sold per download',
+    whoHasIt: 'developers and small firms building compliance reminders into '
+      + 'their own products',
+    theProblem: 'the information is public, scattered across dozens of registers, '
+      + 'and out of date within a quarter',
+    whyItMight: 'gathering it once and keeping it current is dull work that '
+      + 'nobody wants to repeat, and the people who need it are already looking '
+      + 'for a file to buy rather than a service to adopt',
+    killThesis: 'one register publishes a clean feed and the gathering stops '
+      + 'being worth paying for',
+    unknowns: [
+      'how much of it can be kept current without a person doing it',
+      'whether buyers come back, or buy once and never again',
+    ],
+    sources: ['reference-world:declared-candidate'],
+    exposures: [
+      ['revenue_model', 'one-off purchase'],
+      ['customer_type', 'developers'],
+      ['pricing_model', 'per download'],
+      ['acquisition_channel', 'data marketplace listing'],
+      ['provider_dependency', 'marketplace payouts'],
+      ['support_burden', 'almost none'],
+    ],
+    claims: [{
+      claim: 'People are already paying for maintained versions of public data '
+        + 'they could gather themselves',
+      saw: [
+        { sourceType: 'marketplace', source: 'reference-world:data-marketplace',
+          saw: 'nine comparable datasets listed, three with visible sales counts '
+            + 'above four hundred', bearing: 'supports', directness: 'direct',
+          daysAgo: 20 },
+        { sourceType: 'community', source: 'reference-world:developer-forum',
+          saw: 'repeated questions asking where to buy exactly this rather than '
+            + 'how to scrape it', bearing: 'supports', directness: 'inferred',
+          daysAgo: 30 },
+        { sourceType: 'pricing_page', source: 'reference-world:comparable-vendor',
+          saw: 'a comparable dataset priced at a one-off fee with paid quarterly '
+            + 'refreshes', bearing: 'supports', directness: 'direct', daysAgo: 25 },
+      ],
+    }],
+    asks: [
+      { question: 'whether buyers come back, or buy once and never again',
+        blocking: false,
+        cheapestTest: 'list one small dataset and watch what the first fifty '
+          + 'buyers do next quarter' },
+    ],
   },
 ];
 
@@ -97,16 +243,55 @@ export async function exerciseReferenceMandate(mandateId: string): Promise<numbe
     .rows[0] as Record<string, unknown>;
   if (Number(already.n) > 0) return 0;
 
+  const founderId = String(mandate.founder_id);
+  const { noteExposure } = await import('../founder/resilience.js');
+  const { formClaim, observe, raiseUnknown } = await import('./market-evidence.js');
+
   for (const candidate of CANDIDATES) {
+    const opportunityId = nanoid();
     await query(
       `INSERT INTO venture_opportunities
          (id, mandate_id, founder_id, headline, who_has_it, the_problem,
           why_it_might, kill_thesis, unknowns_json, sources_json, evidence_mode)
        VALUES (?,?,?,?,?,?,?,?,?,?, 'reference')`,
-      [nanoid(), mandateId, String(mandate.founder_id),
+      [opportunityId, mandateId, founderId,
         candidate.headline, candidate.whoHasIt,
         candidate.theProblem, candidate.whyItMight, candidate.killThesis,
         JSON.stringify(candidate.unknowns), JSON.stringify(candidate.sources)]);
+
+    // How it would earn, said in the same vocabulary his companies are
+    // described in — which is what lets "what would adding this do" be
+    // answered at all.
+    for (const [dimension, value] of candidate.exposures) {
+      await noteExposure({
+        founderId, subjectKind: 'opportunity', subjectId: opportunityId,
+        dimension, value, howKnown: 'inferred', evidenceMode: 'reference',
+      });
+    }
+
+    for (const declared of candidate.claims ?? []) {
+      const claimId = await formClaim({
+        founderId, claim: declared.claim, opportunityId, evidenceMode: 'reference',
+      });
+      for (const seen of declared.saw) {
+        // Dated backwards from now, because staleness is one of the things the
+        // standing of a claim is supposed to notice, and observations that all
+        // arrived this second could never demonstrate it.
+        const observedAt = new Date(Date.now() - seen.daysAgo * 86_400_000);
+        await observe({
+          founderId, claimId, sourceType: seen.sourceType, source: seen.source,
+          saw: seen.saw, bearing: seen.bearing, directness: seen.directness,
+          observedAt, evidenceMode: 'reference',
+        });
+      }
+    }
+
+    for (const ask of candidate.asks ?? []) {
+      await raiseUnknown({
+        founderId, opportunityId, question: ask.question,
+        blocking: ask.blocking, cheapestTest: ask.cheapestTest,
+      });
+    }
   }
   return CANDIDATES.length;
 }

@@ -89,10 +89,23 @@ interface OwnerState {
   search: {
     statement: string; guidance: string[]; looked: number; rejected: number;
     open: number; blocked: string | null; wouldNeed: string | null;
+    /** Whether adding anything is the right move, asked before any candidate. */
+    another: {
+      recommend: boolean; because: string; concentrations: string[];
+    };
     candidates: Array<{
       headline: string; whoHasIt: string; theProblem: string; whyItMight: string;
       killThesis: string; unknowns: string[]; sources: string[];
-      blockedBy: string | null; failsBecause: string | null; reference: boolean;
+      blockedBy: string | null; failsBecause: string | null;
+      /** What adding it would do to what he already owns. */
+      fit: string | null; worseForThePortfolio: boolean;
+      /** Preferences of his it does not meet. His to weigh, not disqualifying. */
+      against: string[];
+      /** Claims about the world and how each stands on its evidence. */
+      standing: string[];
+      /** Open questions, each with the cheapest thing that would settle it. */
+      unanswered: string[];
+      reference: boolean;
     }>;
   } | null;
   /**
@@ -331,11 +344,41 @@ async function readOwnerState(
         guidance: progress.mandate.guidance.map((g) => g.statement),
         looked: progress.looked, rejected: progress.rejected, open: progress.open,
         blocked: progress.blocked, wouldNeed: progress.wouldNeed,
+        // WHETHER TO ADD ONE AT ALL, ASKED BEFORE ANY CANDIDATE IS SHOWN.
+        //
+        // A list of opportunities implies the answer is yes. Putting the prior
+        // question first is what makes "I do not recommend adding another
+        // venture right now" a thing this surface can actually say, rather
+        // than a sentence buried under three cards arguing the opposite.
+        another: await (async () => {
+          const { shouldAddAnother } = await import('../../services/founder/resilience.js');
+          const view = await shouldAddAnother(founderId,
+            progress.mandate.evidenceMode === 'reference' ? 'reference' : 'real');
+          return {
+            recommend: view.recommend, because: view.because,
+            concentrations: view.concentrations.map((con) =>
+              `${String(con.carriedBy.length)} of your businesses share `
+              + `${con.value} — if that goes wrong, ${con.ifItFails}`
+              // SAID PLAINLY WHERE IT IS TRUE. Some of this he told me and
+              // some of it I worked out, and rendering the two identically
+              // would turn a guess into a fact on the way to a decision about
+              // starting a business.
+              + (con.guessed ? ' (partly worked out rather than told to me)' : '')),
+          };
+        })(),
         candidates: candidates.map((c) => ({
           headline: c.headline, whoHasIt: c.whoHasIt, theProblem: c.theProblem,
           whyItMight: c.whyItMight, killThesis: c.killThesis,
           unknowns: c.unknowns, sources: c.sources, blockedBy: c.blockedBy,
           failsBecause: c.survivesGuidance ? null : c.failsBecause,
+          // What adding it would do to what he already owns, on every card.
+          fit: c.fit === null ? null : c.fit.verdict,
+          worseForThePortfolio: c.fit?.makesItWorse ?? false,
+          against: c.against,
+          standing: c.standing.map((how) => `${how.claim} — ${how.howItStands}`),
+          unanswered: c.unanswered.map((u) => u.cheapestTest === null
+            ? `${u.question} (nothing cheap would settle it)`
+            : `${u.question} — ${u.cheapestTest}`),
           reference: c.reference,
         })),
       };
@@ -1436,6 +1479,13 @@ foundryShellRoutes.get('/foundry', async (c) => {
         <p class="quiet">What I would need: ${s.search.wouldNeed}</p>`
     : html`<p class="quiet">${s.search.looked} looked at,
         ${s.search.rejected} rejected, ${s.search.open} still open.</p>`}
+      ${!s.search.another.recommend ? html`<p class="gap"><strong>I do not
+        recommend adding another venture right now.</strong>
+        ${s.search.another.because}</p>` : ''}
+      ${s.search.another.concentrations.length ? html`<div class="quiet">
+        <p><strong>What a single thing going wrong could take out</strong></p>
+        <ul>${raw(s.search.another.concentrations.map((con) =>
+    `<li>${con}</li>`).join(''))}</ul></div>` : ''}
       ${raw(s.search.candidates.map((cand) => `<div class="noticed">
         <h4>${cand.headline}</h4>
         ${cand.reference ? '<p class="quiet"><strong>Invented.</strong> This came from a '
@@ -1449,6 +1499,14 @@ foundryShellRoutes.get('/foundry', async (c) => {
           ${cand.unknowns.join('; ')}.</p>
         <p class="quiet"><strong>What I checked it against</strong> —
           ${cand.sources.length ? cand.sources.join('; ') : 'nothing'}.</p>
+        ${cand.standing.length ? `<p class="quiet"><strong>How the evidence stands</strong> — `
+    + `${cand.standing.join(' ')}</p>` : ''}
+        ${cand.unanswered.length ? `<p class="quiet"><strong>Cheapest way to settle it`
+    + `</strong> — ${cand.unanswered.join('; ')}.</p>` : ''}
+        ${cand.fit ? `<p class="${cand.worseForThePortfolio ? 'gap' : 'quiet'}">`
+    + `<strong>What adding it would do</strong> — ${cand.fit}</p>` : ''}
+        ${cand.against.length
+    ? `<p class="quiet">Not quite what you asked for: ${cand.against.join('; ')}.</p>` : ''}
         ${cand.failsBecause
     ? `<p class="gap">I would not bring this to you: ${cand.failsBecause}.</p>` : ''}
         ${cand.blockedBy
@@ -2400,6 +2458,7 @@ foundryShellRoutes.post('/foundry/venture/confirm',
       await venture.absorbGuidance({
         mandateId: open.id, statement: said,
         kind: reading.guidance, subject: reading.subject,
+        dimension: reading.dimension,
       });
       return c.redirect('/foundry?done=steeredsearch');
     }

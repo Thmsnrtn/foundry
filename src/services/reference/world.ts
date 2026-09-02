@@ -176,6 +176,27 @@ export async function establishReferenceCompany(input: {
 
   await seedReferenceHistory(productId, scenario);
 
+  // HOW IT MAKES MONEY, ON THE AXES THE PORTFOLIO IS MEASURED ON.
+  //
+  // Written at establishment rather than inferred later, because the reference
+  // portfolio exists to be concentrated: four subscription businesses billed
+  // through the same rails are the owner's own example of what is not four
+  // income streams, and the institution has to be able to see that here before
+  // it can be trusted to see it in his.
+  //
+  // `evidence_mode: 'reference'` is not a formality - the guard on the table
+  // refuses a reference company's exposure filed as real, so none of this can
+  // ever count toward a concentration in a portfolio he actually owns.
+  if (scenario.exposures?.length) {
+    const { noteExposure } = await import('../founder/resilience.js');
+    for (const [dimension, value] of scenario.exposures) {
+      await noteExposure({
+        founderId: input.ownerId, subjectKind: 'company', subjectId: productId,
+        dimension, value, howKnown: 'owner_said', evidenceMode: 'reference',
+      });
+    }
+  }
+
   // THE REFERENCE WORLD IS A PROVIDER, AND IT CONNECTS LIKE ONE.
   //
   // It could have been given readings without ever appearing in the sense
