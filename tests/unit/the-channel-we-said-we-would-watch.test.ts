@@ -188,7 +188,11 @@ describe('the callers state their channel rather than implying it', () => {
     // which is the whole point of this rule. Nothing is implied.
     const external = readFileSync('src/services/institution/external-shadowing.ts', 'utf8');
     expect(external).toMatch(/observationSourceKind: reality === 'reference'/);
-    expect(external).toMatch(/'reference_metric_ingest' : 'external_metric_ingest'/);
+    // THREE CHANNELS SINCE MIGRATION 227 — the world's, a provider's test
+    // mode, and the reference world's — and the caller still names all of
+    // them as literals, chosen from state it cannot set. Nothing is implied.
+    expect(external).toMatch(/'reference_metric_ingest'/);
+    expect(external).toMatch(/'sandbox_metric_ingest' : 'external_metric_ingest'/);
     expect(readFileSync('src/services/institution/development-shadowing.ts', 'utf8'))
       .toMatch(/observationSourceKind: 'development_verification'/);
   });

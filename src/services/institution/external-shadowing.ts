@@ -125,6 +125,7 @@ export async function getDarkenedWatches(productId: string): Promise<Array<{
         -- in the middle, and matching on the prefix alone would catch a channel
         -- whose key is a prefix of another's.
         AND (x.expected_event_type LIKE 'external_metric:' || c.channel_key || ':%'
+          OR x.expected_event_type LIKE 'sandbox_metric:' || c.channel_key || ':%'
           OR x.expected_event_type LIKE 'reference_metric:' || c.channel_key || ':%')
       WHERE x.product_id=? AND c.revoked_at IS NOT NULL
         AND r.state='shadowing' AND r.disposition='active'
@@ -236,8 +237,8 @@ export async function beginExternalMetricShadowing(input: {
     expectationClaimId, observationSourceSignalId: channelSignalId,
     // The same source this function's own observation query filters on, and the
     // same one migrations 127 and 223 key their independence guards on.
-    observationSourceKind: reality === 'reference'
-      ? 'reference_metric_ingest' : 'external_metric_ingest',
+    observationSourceKind: reality === 'reference' ? 'reference_metric_ingest'
+      : reality === 'sandbox' ? 'sandbox_metric_ingest' : 'external_metric_ingest',
     validUntil: input.validUntil,
   });
   return getResponsibility(input.productId, input.responsibilityId);
@@ -276,7 +277,8 @@ export function observationFieldLabel(
  * identical code path; the write side chooses the prefix from a column the
  * company cannot edit.
  */
-export const METRIC_EXPECTATION_PREFIXES = ['external_metric:', 'reference_metric:'] as const;
+export const METRIC_EXPECTATION_PREFIXES =
+  ['external_metric:', 'sandbox_metric:', 'reference_metric:'] as const;
 
 export function metricExpectation(column = 'x.expected_event_type'): string {
   return `(${METRIC_EXPECTATION_PREFIXES.map((p) => `${column} LIKE '${p}%'`).join(' OR ')})`;

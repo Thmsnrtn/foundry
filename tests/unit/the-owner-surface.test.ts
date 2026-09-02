@@ -239,8 +239,13 @@ describe('places he can walk to', () => {
     const said = await reads(`/foundry/companies/${COMPANY}`);
     expect(said).toContain('What I know');
     expect(said).toContain('What I cannot see');
-    expect(said).toContain('I cannot see any money');
-    expect(said).toContain('Connecting it would show me');
+    // MIGRATION 226 MADE THIS SENSE-DERIVED. The list used to be three
+    // hardcoded sentences asserted unconditionally — which is how a company
+    // reporting revenue came to be told, four inches below the figure, that
+    // Foundry could not see any money. It is now what is actually missing, and
+    // each gap names who could fix it.
+    expect(said).toContain('I cannot see what it earns');
+    expect(said).toContain('would show me revenue, subscriptions, failed payments');
     // The distinction that governs every connection.
     expect(said).toContain('Letting me read something never lets me change it');
   });

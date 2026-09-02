@@ -175,6 +175,55 @@ export async function establishReferenceCompany(input: {
     [productId, scenario.situation, scenario.purpose]);
 
   await seedReferenceHistory(productId, scenario);
+
+  // THE REFERENCE WORLD IS A PROVIDER, AND IT CONNECTS LIKE ONE.
+  //
+  // It could have been given readings without ever appearing in the sense
+  // system — it writes through the public intake, which asks nobody's
+  // permission. That would have made the reference company the one company
+  // whose data arrives from nowhere, and the company page would have had to
+  // special-case it: "senses" for real companies, "just numbers" for this one.
+  // Connecting it through the same contract is what makes replacing a
+  // controlled source with a real one a row rather than a rebuild.
+  // QUANTITIES ONLY THIS COMPANY KNOWS IT HAS. Declared as the company's own
+  // assertion, through the ordinary path, so the institution reasons about a
+  // named quantity it has never heard of — which is what stops the company
+  // product quietly becoming a SaaS dashboard.
+  if (scenario.declares?.length) {
+    const { registerObservationChannel } = await import(
+      '../institution/company-observation.js');
+    for (const channel of scenario.declares) {
+      await registerObservationChannel({
+        productId, founderId: input.ownerId,
+        channelKey: channel.channelKey, label: channel.label, unit: channel.unit,
+      });
+    }
+    // AND ITS PAST, for the same reason the metrics have one: the first reading
+    // on a channel is a baseline, not a movement, so a company arriving with no
+    // history would need two live days before it could say anything at all.
+    // Seeded through the ordinary recorder, which files a first reading as a
+    // baseline rather than inventing a direction from one point.
+    const { recordCompanyObservations } = await import(
+      '../institution/company-observation.js');
+    await recordCompanyObservations({
+      productId, origin: `reference_world:${scenario.key}`,
+      readings: scenario.declares.map((channel) => ({
+        channelKey: channel.channelKey,
+        observedValue: referenceLevel(scenario.key, {
+          field: 'active_users', start: channel.start, dailyDrift: channel.dailyDrift,
+          noise: channel.noise, precision: 'integer',
+        }, HISTORY_DAYS - 1),
+      })),
+    });
+  }
+
+  const { connectSense } = await import('../senses/index.js');
+  for (const senseKey of ['revenue', 'customers', 'product_usage', 'support']) {
+    await connectSense({
+      productId, companyName: scenario.companyName,
+      senseKey, provider: 'reference_world', mode: 'reference',
+    });
+  }
   return { productId, ingestToken, scenario };
 }
 
@@ -256,5 +305,30 @@ export async function advanceReferenceWorld(productId: string): Promise<{
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(posted),
   });
+  // Freshness is a fact, not an inference. The company page says when each
+  // sense last spoke, and a sense that has gone quiet is one of the failure
+  // states the owner asked to be designed rather than discovered.
+  const { noteSenseObserved } = await import('../senses/index.js');
+  await noteSenseObserved(productId, 'reference_world',
+    response.status === 200 ? null : `the intake refused it (${String(response.status)})`);
+
+  // AND THE COMPANY'S OWN QUANTITIES, through the path a company's own quantity
+  // travels — `recordCompanyObservations`, not the metrics intake, because the
+  // intake accepts only the built-in vocabulary and a declared channel is
+  // deliberately outside it.
+  if (scenario.declares?.length) {
+    const { recordCompanyObservations } = await import(
+      '../institution/company-observation.js');
+    await recordCompanyObservations({
+      productId, origin: `reference_world:${scenario.key}`,
+      readings: scenario.declares.map((channel) => ({
+        channelKey: channel.channelKey,
+        observedValue: referenceLevel(scenario.key, {
+          field: 'active_users', start: channel.start, dailyDrift: channel.dailyDrift,
+          noise: channel.noise, precision: 'integer',
+        }, day),
+      })),
+    });
+  }
   return { day, posted, status: response.status };
 }

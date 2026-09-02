@@ -142,8 +142,16 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
   }
 
   // 1. Kill-switch
+  //
+  // THE FINGERPRINT IS COMPUTED HERE AND NOWHERE ELSE. An "ask me first"
+  // boundary binds the owner's approval to the exact act, and the whole value
+  // of that is lost if the thing being checked is a value the caller supplied.
+  // The gateway holds the params it is about to hand a handler; hashing them
+  // here means the approval is spent against what will actually happen.
+  const { fingerprint } = await import('../institution/standing-intent.js');
   const ks = await checkKillSwitch(req.productId, req.tool, policy.actor, {
     deliverableWhilePaused: policy.deliverableWhilePaused === true,
+    paramsFingerprint: fingerprint(req.params),
   });
   if (ks.blocked) {
     await recordGatewayInvocation({

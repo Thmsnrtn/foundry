@@ -40,6 +40,20 @@ export interface ScenarioMetric {
   precision: 'integer' | 'rate';
 }
 
+/**
+ * A QUANTITY ONLY THIS COMPANY KNOWS IT HAS.
+ *
+ * Migration 135 lets a company declare something it tracks that Foundry has
+ * never heard of, and the institution reasons about the direction without
+ * knowing what the thing is. A reference world that only ever produced the
+ * twelve built-in SaaS metrics would never exercise that, and the company
+ * product would quietly become a SaaS dashboard.
+ */
+export interface ScenarioDeclaredChannel {
+  channelKey: string; label: string; unit: string;
+  start: number; dailyDrift: number; noise: number;
+}
+
 export interface ReferenceScenario {
   key: string;
   companyName: string;
@@ -50,6 +64,8 @@ export interface ReferenceScenario {
   /** What a person reading the company page should understand it to be. */
   premise: string;
   metrics: ScenarioMetric[];
+  /** Quantities this company tracks that Foundry has never heard of. */
+  declares?: ScenarioDeclaredChannel[];
 }
 
 // THE FIRST SCENARIO, AND WHY IT IS THIS ONE.
@@ -109,7 +125,80 @@ const STEADY: ReferenceScenario = {
   ],
 };
 
-export const REFERENCE_SCENARIOS: ReferenceScenario[] = [FALLING, STEADY];
+// GROWTH THAT IS NOT CONVERTING.
+//
+// The hardest of these to see and the most expensive to miss: every number the
+// marketing side watches is green, and none of it is turning into money. On a
+// page that shows signups and revenue as two tiles it looks like a good month.
+const NOT_CONVERTING: ReferenceScenario = {
+  key: 'growth_that_is_not_converting',
+  companyName: 'Weatherby Reference Co',
+  situation: 'a business getting more attention and no more revenue',
+  purpose: 'exercise the institution against a problem that looks like success',
+  premise:
+    'Signups and traffic are climbing steadily. Revenue is flat. Every individual '
+    + 'chart looks fine, and the business is not getting better.',
+  metrics: [
+    { field: 'mrr_cents', start: 1_960_000, dailyDrift: 0.0002, noise: 0.008, precision: 'integer' },
+    { field: 'new_mrr_cents', start: 214_000, dailyDrift: 0.0003, noise: 0.05, precision: 'integer' },
+    { field: 'churned_mrr_cents', start: 39_000, dailyDrift: 0.0004, noise: 0.08, precision: 'integer' },
+    { field: 'signups_7d', start: 38, dailyDrift: 0.0165, noise: 0.10, precision: 'integer' },
+    { field: 'active_users', start: 720, dailyDrift: 0.0090, noise: 0.01, precision: 'integer' },
+    { field: 'activation_rate', start: 0.41, dailyDrift: -0.0060, noise: 0.03, precision: 'rate' },
+    { field: 'day_30_retention', start: 0.66, dailyDrift: -0.0008, noise: 0.02, precision: 'rate' },
+    { field: 'churn_rate', start: 0.021, dailyDrift: 0.0004, noise: 0.05, precision: 'rate' },
+  ],
+};
+
+// CUSTOMERS LEAVING FASTER THAN THEY WERE, with revenue holding up because new
+// business is covering it. The leak is real and the headline number hides it.
+const CHURNING: ReferenceScenario = {
+  key: 'customers_leaving_faster',
+  companyName: 'Loxley Reference Co',
+  situation: 'a business losing customers faster than it was, while revenue holds',
+  purpose: 'exercise the institution against a leak that the headline number hides',
+  premise:
+    'New business is covering the losses, so revenue looks fine. Underneath it, '
+    + 'more customers leave every month than the month before.',
+  metrics: [
+    { field: 'mrr_cents', start: 3_050_000, dailyDrift: -0.0002, noise: 0.010, precision: 'integer' },
+    { field: 'new_mrr_cents', start: 340_000, dailyDrift: 0.0030, noise: 0.05, precision: 'integer' },
+    { field: 'churned_mrr_cents', start: 61_000, dailyDrift: 0.0140, noise: 0.06, precision: 'integer' },
+    { field: 'churn_rate', start: 0.019, dailyDrift: 0.0150, noise: 0.05, precision: 'rate' },
+    { field: 'day_30_retention', start: 0.68, dailyDrift: -0.0030, noise: 0.02, precision: 'rate' },
+    { field: 'active_users', start: 1_240, dailyDrift: -0.0004, noise: 0.012, precision: 'integer' },
+    { field: 'signups_7d', start: 55, dailyDrift: 0.0020, noise: 0.12, precision: 'integer' },
+  ],
+};
+
+// MONEY ALREADY EARNED, WALKING OUT. A declared quantity rather than a built-in
+// one, deliberately: the institution should be able to take a company's own
+// word for what it tracks and reason about the direction without knowing what
+// the thing IS. That is what stops this being a SaaS dashboard.
+const PAYMENTS_FAILING: ReferenceScenario = {
+  key: 'payments_quietly_failing',
+  companyName: 'Marlow Reference Co',
+  situation: 'a business whose payments are failing more often every week',
+  purpose: 'exercise the institution against a quantity only the company knows it has',
+  premise:
+    'Cards are being declined more often than they were. Nothing about the product '
+    + 'is wrong. It is revenue already earned, leaving for a reason that is fixable.',
+  declares: [
+    { channelKey: 'failed_payments_7d', label: 'payments that failed this week',
+      unit: 'payments', start: 9, dailyDrift: 0.0180, noise: 0.14 },
+  ],
+  metrics: [
+    { field: 'mrr_cents', start: 2_240_000, dailyDrift: -0.0010, noise: 0.010, precision: 'integer' },
+    { field: 'new_mrr_cents', start: 232_000, dailyDrift: -0.0004, noise: 0.05, precision: 'integer' },
+    { field: 'churned_mrr_cents', start: 47_000, dailyDrift: 0.0060, noise: 0.07, precision: 'integer' },
+    { field: 'active_users', start: 890, dailyDrift: -0.0003, noise: 0.012, precision: 'integer' },
+    { field: 'signups_7d', start: 33, dailyDrift: 0.0004, noise: 0.13, precision: 'integer' },
+    { field: 'churn_rate', start: 0.022, dailyDrift: 0.0040, noise: 0.05, precision: 'rate' },
+  ],
+};
+
+export const REFERENCE_SCENARIOS: ReferenceScenario[] =
+  [FALLING, STEADY, NOT_CONVERTING, CHURNING, PAYMENTS_FAILING];
 
 export function referenceScenario(key: string): ReferenceScenario | null {
   return REFERENCE_SCENARIOS.find((s) => s.key === key) ?? null;

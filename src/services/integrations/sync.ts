@@ -287,6 +287,15 @@ async function runIntegrationSync(integration: IntegrationRow): Promise<void> {
         { productId: integration.product_id });
     }
 
+    // THE SENSE SPOKE. Freshness is what the owner reads to know whether an
+    // answer is current, and a sense that has gone quiet with nobody
+    // disconnecting it is a failure state he asked to be designed rather than
+    // discovered — so the moment it last reported is recorded as a fact.
+    try {
+      const { noteSenseObserved } = await import('../senses/index.js');
+      await noteSenseObserved(integration.product_id, integration.provider ?? '', null);
+    } catch { /* a sense that is not modelled yet has nothing to note */ }
+
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
     await markSyncFailed(logId, integration, errorMessage);
@@ -294,6 +303,16 @@ async function runIntegrationSync(integration: IntegrationRow): Promise<void> {
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** A failure is a fact about the sense too, and the owner reads it there. */
+async function noteSenseFailed(
+  productId: string, provider: string, message: string,
+): Promise<void> {
+  try {
+    const { noteSenseObserved } = await import('../senses/index.js');
+    await noteSenseObserved(productId, provider, message);
+  } catch { /* nothing modelled to note it on */ }
+}
 
 async function markSyncFailed(
   logId: string,
@@ -314,6 +333,7 @@ async function markSyncFailed(
       WHERE id = ?`,
     [errorMessage, integration.id],
   );
+  await noteSenseFailed(integration.product_id, integration.provider ?? '', errorMessage);
 
   const after = (await query(
     'SELECT COALESCE(error_count, 0) AS n FROM integrations WHERE id = ?',

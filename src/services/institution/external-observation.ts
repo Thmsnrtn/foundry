@@ -56,12 +56,22 @@ export function isObservableField(value: string): value is ObservableField {
 // rather than two: a rehearsal that travels a different path rehearses nothing.
 // =============================================================================
 
-export type CompanyReality = 'real' | 'reference';
+export type CompanyReality = 'real' | 'sandbox' | 'reference';
 
-/** Every metric observation, of whichever world. Safe to union: see above. */
+/**
+ * Every metric observation, of whichever world. Safe to union: see above.
+ *
+ * THREE CHANNELS NOW (migration 227). A real company's provider running in test
+ * mode writes `sandbox_metric_ingest` — the whole production path, none of the
+ * world — and reads that ask "what has this company observed" must include it,
+ * while every read that asks "what has the world confirmed" must not. That
+ * second question is answered by naming `external_metric_ingest` directly, and
+ * every such query already did.
+ */
 export function metricObservation(alias = ''): string {
   const c = alias ? `${alias}.` : '';
-  return `${c}source IN ('external_metric_ingest', 'reference_metric_ingest')`;
+  return `${c}source IN ('external_metric_ingest', 'sandbox_metric_ingest', `
+    + `'reference_metric_ingest')`;
 }
 
 /**
@@ -71,23 +81,24 @@ export function metricObservation(alias = ''): string {
  * default — a caller passing an unknown id gets refused by the foreign key at
  * the insert, which is a better error than one invented here.
  */
-export async function observationChannel(productId: string): Promise<{
-  reality: CompanyReality; source: string;
-}> {
-  const row = (await query('SELECT reality FROM products WHERE id = ?', [productId]))
-    .rows[0] as Record<string, unknown> | undefined;
-  const reality: CompanyReality = String(row?.reality ?? 'real') === 'reference'
-    ? 'reference' : 'real';
-  return {
-    reality,
-    source: reality === 'reference' ? 'reference_metric_ingest' : 'external_metric_ingest',
-  };
+export async function observationChannel(
+  productId: string, opts?: { provider?: string; senseKey?: string },
+): Promise<{ reality: CompanyReality; source: string }> {
+  // Delegated to the sense system, which knows what this codebase used to have
+  // to infer: a real company reading a provider's TEST mode is neither the
+  // world nor the reference world, and calling it either would be wrong in a
+  // way no downstream query could detect.
+  const { channelFor } = await import('../senses/index.js');
+  const channel = await channelFor(productId, opts);
+  return { reality: channel.mode, source: channel.source };
 }
 
 export function externalObservationEventType(
   field: string, direction: ObservedDirection, reality: CompanyReality = 'real',
 ): string {
-  return `${reality === 'reference' ? 'reference' : 'external'}_metric:${field}:${direction}`;
+  const prefix = reality === 'reference' ? 'reference_metric:'
+    : reality === 'sandbox' ? 'sandbox_metric:' : 'external_metric:';
+  return `${prefix}${field}:${direction}`;
 }
 
 function directionOf(previous: number, observed: number): ObservedDirection {
@@ -109,9 +120,11 @@ function directionOf(previous: number, observed: number): ObservedDirection {
 export async function recordExternalMetricObservations(input: {
   productId: string; origin: string;
   readings: Array<{ field: string; observedValue: number }>;
+  /** Which connection supplied this, when one did. Decides the channel. */
+  provider?: string;
 }): Promise<Array<{ id: string; field: string; direction: ObservedDirection }>> {
   const recorded: Array<{ id: string; field: string; direction: ObservedDirection }> = [];
-  const channel = await observationChannel(input.productId);
+  const channel = await observationChannel(input.productId, { provider: input.provider });
   for (const reading of input.readings) {
     if (!isObservableField(reading.field) || !Number.isFinite(reading.observedValue)) continue;
 
@@ -221,6 +234,11 @@ export async function recordProviderSyncObservations(input: {
 
   return recordExternalMetricObservations({
     productId: input.productId, origin: `provider_sync:${input.provider}`, readings,
+    // WHICH PROVIDER, so the channel is the one this connection actually is.
+    // A company with Stripe in test mode and PostHog live has readings of two
+    // different provenances, and asking per-provider is the only way to get
+    // both right.
+    provider: input.provider,
   });
 }
 

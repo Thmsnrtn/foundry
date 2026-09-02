@@ -25,6 +25,7 @@
 // owner set: he should be able to predict the resulting state before tapping.
 // =============================================================================
 
+import { createHash } from 'node:crypto';
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 
@@ -84,6 +85,25 @@ const PROHIBITIONS = [
   'without my', 'without me', 'unless i',
 ];
 
+/**
+ * AND WHAT MAKES IT "ASK ME FIRST" RATHER THAN "NEVER".
+ *
+ * These two are genuinely different instructions and the owner said the second
+ * one: "do not change pricing WITHOUT ASKING" is not "do not change pricing".
+ * Migration 225 could only honour the first because there was no way to be
+ * asked; migration 228 built one, so the distinction his sentence already made
+ * is now the distinction the institution makes.
+ *
+ * Absence of these markers means NEVER, which is the safe direction: a
+ * misheard boundary that refuses too much is visible the first time it bites
+ * and he lifts it in one tap. One that refuses too little is invisible.
+ */
+const ASK_MARKERS = [
+  'without asking', 'without my say', 'without my approval', 'without my permission',
+  'without me', 'without checking', 'unless i say', 'unless i approve', 'ask me first',
+  'ask first', 'check with me', 'run it by me', 'without telling me',
+];
+
 /** What an objective points at, and which of the company's numbers that is. */
 const FOCUS_CONCERNS: Record<string, { phrases: string[]; channels: string[] }> = {
   revenue: {
@@ -114,9 +134,12 @@ const FOCUS_CONCERNS: Record<string, { phrases: string[]; channels: string[] }> 
 
 // ─── interpretation ──────────────────────────────────────────────────────────
 
+export type BoundaryMode = 'never' | 'ask_first';
+
 export interface BoundaryProposal {
   kind: 'boundary';
   subject: string;
+  mode: BoundaryMode;
   /** His words, verbatim. Never rewritten. */
   statement: string;
 }
@@ -158,7 +181,11 @@ export function interpret(raw: string): IntentProposal {
       .flatMap(([subject, phrases]) => phrases.map((phrase) => ({ subject, phrase })))
       .sort((a, b) => b.phrase.length - a.phrase.length);
     const hit = candidates.find((c) => text.includes(c.phrase));
-    if (hit) return { kind: 'boundary', subject: hit.subject, statement };
+    if (hit) {
+      const mode: BoundaryMode = ASK_MARKERS.some((m) => text.includes(m))
+        ? 'ask_first' : 'never';
+      return { kind: 'boundary', subject: hit.subject, mode, statement };
+    }
     return {
       kind: 'unclear', statement,
       because: 'I understood that as something you want me not to do, but not what',
@@ -222,7 +249,7 @@ export async function everySubject(): Promise<SubjectFacts[]> {
  * boundary, not two, and the words that survive are the ones he used first.
  */
 export async function setBoundary(input: {
-  productId: string | null; subject: string; statement: string;
+  productId: string | null; subject: string; statement: string; mode?: BoundaryMode;
 }): Promise<string> {
   const live = (await query(
     `SELECT id FROM owner_boundaries
@@ -233,8 +260,8 @@ export async function setBoundary(input: {
 
   const id = nanoid();
   await query(
-    'INSERT INTO owner_boundaries (id, product_id, subject, statement) VALUES (?,?,?,?)',
-    [id, input.productId, input.subject, input.statement.trim()]);
+    'INSERT INTO owner_boundaries (id, product_id, subject, statement, mode) VALUES (?,?,?,?,?)',
+    [id, input.productId, input.subject, input.statement.trim(), input.mode ?? 'never']);
   return id;
 }
 
@@ -268,14 +295,14 @@ export async function setObjective(input: {
 // ─── reading ─────────────────────────────────────────────────────────────────
 
 export interface LiveBoundary {
-  id: string; subject: string; statement: string;
+  id: string; subject: string; statement: string; mode: BoundaryMode;
   ownerWords: string; door: string | null; everywhere: boolean; setAt: string;
 }
 
 /** Every boundary in force for this company — its own, and the global ones. */
 export async function boundariesFor(productId: string): Promise<LiveBoundary[]> {
   return ((await query(
-    `SELECT b.id, b.subject, b.statement, b.set_at, b.product_id,
+    `SELECT b.id, b.subject, b.statement, b.set_at, b.product_id, b.mode,
             s.owner_words, s.door
        FROM owner_boundaries b
        JOIN owner_boundary_subjects s ON s.subject = b.subject
@@ -283,6 +310,7 @@ export async function boundariesFor(productId: string): Promise<LiveBoundary[]> 
       ORDER BY s.sort_order, b.rowid`, [productId]))
     .rows as unknown as Array<Record<string, unknown>>).map((r) => ({
     id: String(r.id), subject: String(r.subject), statement: String(r.statement),
+    mode: String(r.mode) as BoundaryMode,
     ownerWords: String(r.owner_words), door: r.door == null ? null : String(r.door),
     everywhere: r.product_id == null, setAt: String(r.set_at),
   }));
@@ -332,9 +360,11 @@ const REACHES_A_PERSON = new Set(['send_email', 'post_slack', 'post_webhook', 's
  */
 export async function boundaryStandingInTheWay(input: {
   productId: string; door: 'outbound' | 'spend'; tool?: string;
+  /** What exactly is about to be done. Server-computed; see `fingerprint`. */
+  paramsFingerprint?: string;
 }): Promise<{ statement: string; refusal: string } | null> {
   const rows = (await query(
-    `SELECT b.subject, b.statement, s.refusal
+    `SELECT b.subject, b.statement, b.mode, s.refusal
        FROM owner_boundaries b
        JOIN owner_boundary_subjects s ON s.subject = b.subject
       WHERE b.lifted_at IS NULL AND s.door = ?
@@ -348,9 +378,161 @@ export async function boundaryStandingInTheWay(input: {
     // one. Everything else at that door is unbound by this subject.
     if (subject === 'contact_people'
       && !(input.tool != null && REACHES_A_PERSON.has(input.tool))) continue;
+
+    if (String(row.mode) === 'ask_first') {
+      // HE ASKED TO BE ASKED, SO THE QUESTION IS WHETHER HE ANSWERED — about
+      // THIS act, not about this kind of act. Spending the approval here rather
+      // than after the handler is deliberate: between an approval spent on an
+      // effect that failed and one still standing after an effect that may have
+      // reached the world, a governance control fails toward asking again.
+      const spent = await spendApprovalFor({
+        productId: input.productId, actionType: input.tool ?? null,
+        paramsFingerprint: input.paramsFingerprint ?? null,
+      });
+      if (spent) continue;
+      return {
+        statement: String(row.statement),
+        refusal: `${String(row.refusal)} without asking you first, and you have not `
+          + 'approved this',
+      };
+    }
     return { statement: String(row.statement), refusal: String(row.refusal) };
   }
   return null;
+}
+
+// ─── asking, and being answered ──────────────────────────────────────────────
+
+/**
+ * EXACTLY WHAT WILL BE DONE, REDUCED TO ONE STRING.
+ *
+ * The attack this exists for is not a forged approval — it is a real one, used
+ * for something else: propose a reasonable message to one customer, obtain a
+ * yes, then send a different message to everyone. So the approval is bound to
+ * the parameters, both ends compute this the same way from server-held values,
+ * and a single changed character is a different act.
+ *
+ * Keys are sorted, because two objects that mean the same thing must hash the
+ * same, and JSON.stringify preserves insertion order.
+ */
+export function fingerprint(params: unknown): string {
+  const canonical = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonical);
+    if (value !== null && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+        .sort(([a], [b]) => (a < b ? -1 : 1)).map(([k, v]) => [k, canonical(v)]));
+    }
+    return value;
+  };
+  return createHash('sha256').update(JSON.stringify(canonical(params) ?? null))
+    .digest('hex').slice(0, 32);
+}
+
+export interface ProposedAct {
+  id: string; productId: string; subject: string; actionType: string | null;
+  summary: string; why: string; expectedEffect: string; risk: string;
+  consequence: 'low' | 'medium' | 'high';
+  proposedAt: string; expiresAt: string;
+  decision: 'approved' | 'refused' | null;
+}
+
+/**
+ * Foundry asks. It cannot answer.
+ *
+ * Refused outright when nothing standing asked to be consulted about this: a
+ * proposal the owner never requested is an interruption manufactured out of
+ * nothing, and his attention is the scarcest thing this institution spends.
+ */
+export async function proposeAct(input: {
+  productId: string; subject: string; actionType: string | null;
+  params: unknown; summary: string; why: string; expectedEffect: string; risk: string;
+  consequence: 'low' | 'medium' | 'high';
+  proposedBy: string; validForHours?: number;
+}): Promise<string> {
+  const id = nanoid();
+  await query(
+    `INSERT INTO proposed_acts
+       (id, product_id, subject, action_type, params_fingerprint, summary, why,
+        expected_effect, risk, consequence, proposed_by, expires_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?, datetime('now', ?))`,
+    [id, input.productId, input.subject, input.actionType,
+      fingerprint(input.params), input.summary.trim(), input.why.trim(),
+      input.expectedEffect.trim(), input.risk.trim(), input.consequence,
+      input.proposedBy, `+${String(input.validForHours ?? 72)} hours`]);
+  return id;
+}
+
+export async function openProposals(productId: string): Promise<ProposedAct[]> {
+  return ((await query(
+    `SELECT id, product_id, subject, action_type, summary, why, expected_effect, risk,
+            consequence, proposed_at, expires_at, decision
+       FROM proposed_acts
+      WHERE product_id = ? AND decision IS NULL AND revoked_at IS NULL
+        AND datetime(expires_at) > datetime('now')
+      ORDER BY proposed_at, rowid`, [productId]))
+    .rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+    id: String(r.id), productId: String(r.product_id), subject: String(r.subject),
+    actionType: r.action_type == null ? null : String(r.action_type),
+    summary: String(r.summary), why: String(r.why),
+    expectedEffect: String(r.expected_effect), risk: String(r.risk),
+    consequence: String(r.consequence) as ProposedAct['consequence'],
+    proposedAt: String(r.proposed_at), expiresAt: String(r.expires_at),
+    decision: r.decision == null ? null : String(r.decision) as 'approved' | 'refused',
+  }));
+}
+
+/**
+ * The owner answers. `decidedBy` is a principal reference the ROUTE builds from
+ * the authenticated session — never from the request — and the database checks
+ * it against the company's actual owner regardless.
+ */
+export async function decideProposedAct(input: {
+  id: string; decision: 'approved' | 'refused'; decidedBy: string;
+}): Promise<void> {
+  await query(
+    `UPDATE proposed_acts
+        SET decision = ?, decided_by = ?, decided_at = datetime('now')
+      WHERE id = ? AND decision IS NULL`,
+    [input.decision, input.decidedBy, input.id]);
+}
+
+export async function revokeApproval(id: string, reason: string): Promise<void> {
+  await query(
+    `UPDATE proposed_acts SET revoked_at = datetime('now'), revoke_reason = ?
+      WHERE id = ? AND consumed_at IS NULL`, [reason, id]);
+}
+
+/**
+ * Spend one approval for exactly this act, if there is one.
+ *
+ * Returns false rather than throwing when there is nothing to spend — that is
+ * the ordinary case, and it is the caller's job to turn it into the refusal
+ * with the owner's own words in it.
+ */
+export async function spendApprovalFor(input: {
+  productId: string; actionType: string | null; paramsFingerprint: string | null;
+}): Promise<boolean> {
+  if (input.paramsFingerprint == null) return false;
+  const row = (await query(
+    `SELECT id FROM proposed_acts
+      WHERE product_id = ? AND decision = 'approved'
+        AND consumed_at IS NULL AND revoked_at IS NULL
+        AND datetime(expires_at) > datetime('now')
+        AND params_fingerprint = ?
+        AND action_type IS ?
+      ORDER BY decided_at, rowid LIMIT 1`,
+    [input.productId, input.paramsFingerprint, input.actionType]))
+    .rows[0] as Record<string, unknown> | undefined;
+  if (!row) return false;
+  // `consumed_by` is AUDIT PROVENANCE and is deliberately not on the owner's
+  // page: which internal door spent an approval is the right question for
+  // someone reconstructing what happened months later, and noise on the screen
+  // where he is deciding what to do about his business today. It is baselined
+  // as write-only on purpose, with this comment as the reason the gate asks for.
+  await query(
+    `UPDATE proposed_acts SET consumed_at = datetime('now'), consumed_by = 'outbound_door'
+      WHERE id = ? AND consumed_at IS NULL`, [String(row.id)]);
+  return true;
 }
 
 // ─── what he changed his mind about ──────────────────────────────────────────
@@ -408,4 +590,40 @@ export async function formerObjectiveFor(productId: string): Promise<FormerObjec
     statement: String(row.statement), retiredAt: String(row.retired_at).slice(0, 10),
     retiredReason: String(row.retired_reason ?? ''),
   };
+}
+
+/**
+ * WHAT HE DECIDED, AND WHAT HE TOOK BACK.
+ *
+ * "Auditable afterward" was one of the properties the owner named, and an audit
+ * nobody can read is a claim rather than a property. This is the readable half:
+ * the acts he approved, the ones he refused, and the approvals he revoked
+ * before they were used — each with the reason recorded at the time.
+ *
+ * Bounded to the recent ones, because this is a record he glances at rather
+ * than a ledger he audits. The full history is in the table and nothing deletes
+ * from it.
+ */
+export interface DecidedAct {
+  id: string; summary: string; outcome: 'approved' | 'refused' | 'revoked';
+  at: string; note: string | null; used: boolean;
+}
+
+export async function recentDecisions(
+  productId: string, limit = 5,
+): Promise<DecidedAct[]> {
+  return ((await query(
+    `SELECT id, summary, decision, decided_at, revoked_at, revoke_reason, consumed_at
+       FROM proposed_acts
+      WHERE product_id = ? AND (decision IS NOT NULL OR revoked_at IS NOT NULL)
+      ORDER BY coalesce(revoked_at, decided_at) DESC, rowid DESC
+      LIMIT ?`, [productId, limit]))
+    .rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+    id: String(r.id), summary: String(r.summary),
+    outcome: r.revoked_at != null ? 'revoked'
+      : String(r.decision) === 'approved' ? 'approved' : 'refused',
+    at: String(r.revoked_at ?? r.decided_at).slice(0, 10),
+    note: r.revoke_reason == null ? null : String(r.revoke_reason),
+    used: r.consumed_at != null,
+  }));
 }

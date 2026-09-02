@@ -495,6 +495,9 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
   .know ul{margin:0;padding-left:1.1rem;color:var(--ink-2);font-size:.97rem}
   .know li{margin:0 0 var(--s1)}
   .gap{color:var(--alert)}
+  /* A revenue collapse should not be the same weight as twelve healthy metrics.
+     One class, used once per page, on the single sentence that says so. */
+  .alarm{color:var(--alert);font-weight:600}
   /* Deliberately not named ask: that class is the fixed bar at the bottom of
      every page, and reusing it would pin every question to the floor. */
   .noticed{border:1px solid var(--line);border-radius:var(--r);padding:var(--s3);
@@ -1322,15 +1325,44 @@ interface CompanyView {
   reference: { situation: string; premise: string } | null;
   /** What Foundry has noticed and is asking about. Recognition, and nothing more. */
   asks: Array<{ id: string; proposal: string; rationale: string }>;
+  /** The one sentence at the top: what situation this company is in. */
+  situation: { situation: string; headline: string; because: string[]; demandsAttention: boolean };
+  /** What he decided about acts, and what he took back. Auditable, and read. */
+  decisions: Array<{
+    id: string; summary: string; outcome: string; at: string;
+    note: string | null; used: boolean;
+  }>;
+  /** Acts it has proposed and cannot take until he answers. */
+  proposals: Array<{
+    id: string; summary: string; why: string; expectedEffect: string;
+    risk: string; consequence: string; expiresAt: string;
+  }>;
   /** What he said this company is for, in his words. */
   said: { statement: string; steers: boolean } | null;
   /** What he told Foundry not to do. Enforced, and liftable in one tap. */
   boundaries: Array<{
-    id: string; statement: string; ownerWords: string;
+    id: string; statement: string; ownerWords: string; mode: string;
     everywhere: boolean; enforcedNow: boolean;
   }>;
   /** What he lifted, offered back — because changing your mind runs both ways. */
   lifted: Array<{ statement: string; liftedAt: string; liftedReason: string }>;
+  /** What Foundry can see here, from where, and how fresh. */
+  senses: Array<{
+    id: string; senseKey: string; wouldLearn: string; neverGrants: string;
+    provider: string; providerName: string; shortName: string; mode: string;
+    lastObservedAt: string | null; lastError: string | null;
+  }>;
+  /** What he turned off, offered back — disconnecting is as reversible as lifting. */
+  stoppedSeeing: Array<{
+    senseKey: string; cannotSee: string; provider: string; providerName: string;
+    mode: string; disconnectedAt: string; reason: string;
+  }>;
+  /** What it cannot see, and who could fix it. Replaces the hardcoded gap list. */
+  blind: Array<{
+    senseKey: string; cannotSee: string; wouldLearn: string; neverGrants: string;
+    offers: Array<{ provider: string; providerName: string; mode: string;
+      reads: string; handsOver: string }>;
+  }>;
   /** What this company was for before, and when that changed. */
   formerly: { statement: string; retiredAt: string; retiredReason: string } | null;
 }
@@ -1385,6 +1417,10 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
   const objective = await intent.objectiveFor(productId);
   const liveBoundaries = await intent.boundariesFor(productId);
   const lifted = await intent.liftedBoundariesFor(productId);
+  const proposals = await intent.openProposals(productId);
+  const decisions = await intent.recentDecisions(productId);
+  const { whatSituation } = await import('../../services/founder/what-situation.js');
+  const situation = await whatSituation(productId);
   const formerly = await intent.formerObjectiveFor(productId);
 
   const { getSelfCheckStanding } = await import(
@@ -1404,40 +1440,31 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
       + `and ${checks.every((ch) => ch.result === 'passed') ? 'all of it still matches'
         : 'some of it has gone out of step'}.`);
   }
-  if (row.github_repo_url) knows.push('I can read its code.');
-  else {
-    gaps.push({
-      missing: 'I cannot see its code',
-      unlocks: 'what it is built from, and what changes in it',
-      connect: '/agents/integrations',
-    });
-  }
-
-  // A GAP LIST THAT CONTRADICTS THE NUMBERS ABOVE IT IS WORSE THAN NO GAP LIST.
+  // WHAT IT CAN SEE, AND WHAT IT CANNOT, FROM THE SENSE SYSTEM.
   //
-  // These three were unconditional, so a company reporting $31.4k of monthly
-  // revenue was told, four inches below the figure, that Foundry cannot see any
-  // money. Whether it can see something is a question about what has arrived,
-  // and the readings are right there to ask.
-  const shown = new Map(numbers.numbers.map((n) => [n.label, n.now]));
-  const seesMoney = shown.has('monthly revenue') || shown.has('new revenue');
-  const seesCustomers = shown.has('people using it') || shown.has('new signups')
-    || numbers.numbers.some((n) => n.label.includes('leave') || n.label.includes('after a month'));
+  // This list used to be three hardcoded sentences — code, money, customers —
+  // asserted unconditionally, which is how a company reporting $31.4k of
+  // revenue came to be told four inches below the figure that Foundry cannot
+  // see any money. It is now derived from what is actually connected, which
+  // means it can never disagree with the numbers above it, and every gap
+  // carries the one thing that makes it actionable: who could fix it, and what
+  // fixing it would NOT allow.
+  const senseSystem = await import('../../services/senses/index.js');
+  const live = await senseSystem.connectedSenses(productId);
+  const blind = await senseSystem.whatItCannotSee(productId);
+  const stoppedSeeing = await senseSystem.whatItStoppedSeeing(productId);
 
-  if (seesMoney) knows.push('I can see what it earns, and which way that is moving.');
-  else {
+  // DELIBERATELY NOT LISTING THE SENSES HERE. They have their own section
+  // directly above, and saying "I can see revenue, from Stripe" in both places
+  // made the page longer without making it say more — the exact shape the
+  // owner's "ruthlessly remove" rule is about. What belongs here is what
+  // Foundry UNDERSTANDS, which is a different question from what it is
+  // plugged into.
+  for (const gap of blind) {
     gaps.push({
-      missing: 'I cannot see any money',
-      unlocks: 'revenue, what customers pay, and what is failing to collect',
-      connect: '/agents/integrations',
-    });
-  }
-  if (seesCustomers) knows.push('I can see how many people are using it, and how many leave.');
-  else {
-    gaps.push({
-      missing: 'I cannot see any customers',
-      unlocks: 'who is using it, who is stuck, and who is leaving',
-      connect: '/agents/integrations',
+      missing: `I cannot see ${gap.cannotSee}`,
+      unlocks: gap.wouldLearn,
+      connect: gap.offers.length ? `/foundry/companies/${productId}/see/${gap.key}` : null,
     });
   }
 
@@ -1446,13 +1473,37 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
     established: row.created_at == null ? null : String(row.created_at).slice(0, 10),
     said: objective ? { statement: objective.statement, steers: objective.channels.length > 0 } : null,
     boundaries: liveBoundaries.map((b) => ({
-      id: b.id, statement: b.statement, ownerWords: b.ownerWords,
+      id: b.id, statement: b.statement, ownerWords: b.ownerWords, mode: b.mode,
       everywhere: b.everywhere, enforcedNow: b.door != null,
     })),
     lifted: lifted.map((b) => ({
       statement: b.statement, liftedAt: b.liftedAt, liftedReason: b.liftedReason,
     })),
-    formerly,
+    senses: live.map((sense) => ({
+      id: sense.id, senseKey: sense.senseKey, wouldLearn: sense.wouldLearn,
+      neverGrants: sense.neverGrants, provider: sense.provider,
+      providerName: senseSystem.providerName(sense.provider),
+      shortName: sense.cannotSee, mode: sense.mode,
+      lastObservedAt: sense.lastObservedAt, lastError: sense.lastError,
+    })),
+    stoppedSeeing: stoppedSeeing.map((lost) => ({
+      senseKey: lost.senseKey, cannotSee: lost.cannotSee, provider: lost.provider,
+      providerName: senseSystem.providerName(lost.provider),
+      mode: lost.mode, disconnectedAt: lost.disconnectedAt, reason: lost.reason,
+    })),
+    blind: blind.map((gap) => ({
+      senseKey: gap.key, cannotSee: gap.cannotSee, wouldLearn: gap.wouldLearn,
+      neverGrants: gap.neverGrants,
+      offers: gap.offers.map((o) => ({
+        provider: o.provider, providerName: senseSystem.providerName(o.provider),
+        mode: o.mode, reads: o.reads, handsOver: o.handsOver,
+      })),
+    })),
+    formerly, situation, decisions,
+    proposals: proposals.map((p) => ({
+      id: p.id, summary: p.summary, why: p.why, expectedEffect: p.expectedEffect,
+      risk: p.risk, consequence: p.consequence, expiresAt: p.expiresAt.slice(0, 10),
+    })),
     budgetMonthly: Number(row.operating_budget_monthly_usd ?? 0),
     spent30d: Number(row.ai_cost_trailing_30d_usd ?? 0),
     knows, gaps,
@@ -1598,6 +1649,11 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
   // A company of someone else's and one that does not exist answer the same.
   if (!view) return c.notFound();
   const done = String(c.req.query('done') ?? '');
+  // Named from the query only to decide WHICH connection to describe; every
+  // word describing it comes from the connection itself.
+  const justConnected = done === 'seeing'
+    ? view.senses.find((sense) => sense.senseKey === String(c.req.query('sense') ?? '')) ?? null
+    : null;
 
   const body = html`
     <h1>${view.name}</h1>
@@ -1618,10 +1674,50 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
       every time until you lift it, and tell whatever asked that you said so.</p></div>` : ''}
     ${done === 'lifted' ? html`<div class="done"><p><strong>Lifted.</strong> I am no longer
       refusing that. Nothing has happened as a result — it only means I may again.</p></div>` : ''}
+    ${done === 'seeing' && justConnected ? html`<div class="done">
+      <p><strong>I can see it now.</strong> ${justConnected.wouldLearn}, from
+        ${justConnected.providerName}. I still cannot ${justConnected.neverGrants}.</p>
+      <p class="quiet">${justConnected.lastObservedAt
+    ? `Last reported ${justConnected.lastObservedAt.slice(0, 10)}.`
+    : 'Nothing has reported yet. Until something does, this is a channel and not an answer, '
+      + 'and I will say so rather than showing you a number I do not have.'}</p>
+    </div>` : ''}
+    ${done === 'blind' ? html`<div class="done"><p><strong>Disconnected.</strong> I can no
+      longer see that. What I already learned stays; nothing new will arrive.</p></div>` : ''}
+    ${done === 'approved' ? html`<div class="done"><p><strong>Approved.</strong> I can do that
+      one thing. The boundary stays exactly as it was — I will ask again next time.</p></div>` : ''}
+    ${done === 'refused' ? html`<div class="done"><p><strong>Not doing it.</strong> Nothing
+      happened. I will not raise that same act again.</p></div>` : ''}
     ${done === 'recognised' ? html`<div class="done"><p><strong>Taken on.</strong> I will watch
       it and tell you what I see. I still cannot change anything.</p></div>` : ''}
     ${done === 'declined' ? html`<div class="done"><p><strong>Left alone.</strong> I will not
       raise it again. Say so and I will look at it once more.</p></div>` : ''}
+
+    <p class="${view.situation.demandsAttention ? 'lede alarm' : 'lede'}">
+      ${view.situation.headline}</p>
+    ${view.situation.demandsAttention ? html`<p class="quiet">${
+  view.situation.because.join('; ')}. That is what the numbers did — whether it is a problem,
+      and what to do about it, is yours.</p>` : ''}
+
+    ${view.proposals.length ? html`<div class="know">
+      <h3>${view.proposals.length === 1 ? 'I need you to decide this' : 'I need you to decide these'}</h3>
+      <p class="quiet">You told me not to do this without asking. I cannot do any of it until
+        you say yes to that exact thing, and a yes covers only the one act described.</p>
+      ${raw(view.proposals.map((p) => `<div class="noticed">
+        <h4>${p.summary}</h4>
+        <p><strong>Why</strong> — ${p.why}</p>
+        <p><strong>What I expect</strong> — ${p.expectedEffect}</p>
+        <p><strong>What could go wrong</strong> — ${p.risk}</p>
+        <p class="quiet">If you do nothing, I do not do it, and this expires
+          ${p.expiresAt}.</p>
+        <form method="POST" action="/foundry/proposals/${p.id}/approve">
+          <button class="btn go" type="submit">Approve this one thing</button>
+        </form>
+        <form method="POST" action="/foundry/proposals/${p.id}/refuse">
+          <button class="btn" type="submit">Do not do it</button>
+        </form>
+      </div>`).join(''))}
+    </div>` : ''}
 
     ${view.asks.length ? html`<div class="know">
       <h3>${view.asks.length === 1 ? 'Something I noticed' : 'Things I noticed'}</h3>
@@ -1664,11 +1760,37 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     : html`<ul>${raw(view.knows.map((k) => `<li>${k}</li>`).join(''))}</ul>`}
     </div>
 
+    ${view.senses.length ? html`<div class="know">
+      <h3>What I can see</h3>
+      <ul>${raw(view.senses.map((sense) =>
+    `<li><strong>${sense.wouldLearn}</strong> — from ${sense.providerName}${
+  sense.mode === 'sandbox' ? ', in test mode, so none of it is the world'
+    : sense.mode === 'reference' ? ', so none of it is real' : ''}. ${sense.lastError
+  ? `<span class="gap">Something is wrong with it: ${sense.lastError}.</span> What I show you may be out of date.`
+  : sense.lastObservedAt
+    ? `Last reported ${sense.lastObservedAt.slice(0, 10)}.`
+    : 'It has not reported yet.'}</li>`).join(''))}</ul>
+      <p class="quiet">None of this lets me act. I cannot
+        ${view.senses.map((sense) => sense.neverGrants).join('; ')}.</p>
+      ${raw(view.senses.map((sense) =>
+    `<form method="POST" action="/foundry/companies/${view.id}/senses/${sense.id}/disconnect">
+      <button class="btn" type="submit">Stop seeing ${sense.shortName}</button>
+    </form>`).join(''))}
+    </div>` : ''}
+
     <div class="know">
       <h3>What I cannot see</h3>
-      <ul>${raw(view.gaps.map((g) =>
-    `<li><span class="gap">${g.missing}.</span> Connecting it would show me ${g.unlocks}.</li>`)
-    .join(''))}</ul>
+      ${view.blind.length === 0
+    ? html`<p class="lede">Nothing I know how to look at is missing.</p>`
+    : raw(view.blind.map((gap) => `<p><span class="gap">I cannot see ${gap.cannotSee}.</span>
+        ${gap.offers.length
+  ? `Connecting ${[...new Set(gap.offers.map((o) => o.providerName))].join(' or ')} would show me ${gap.wouldLearn}.
+     <a href="/foundry/companies/${view.id}/see/${gap.senseKey}">Look at that</a>`
+  : `Nothing I can connect would tell me this.`}</p>`).join(''))}
+      ${view.stoppedSeeing.length ? raw(view.stoppedSeeing.map((lost) =>
+    `<p class="quiet">You turned off ${lost.providerName} on ${lost.disconnectedAt}
+      &mdash; ${lost.reason}. <a href="/foundry/companies/${view.id}/see/${lost.senseKey}">Turn it
+      back on</a>.</p>`).join('')) : ''}
       <p class="quiet">Letting me read something never lets me change it. That is always a
         separate question.</p>
     </div>
@@ -1708,7 +1830,10 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
       <h3>What you told me not to do</h3>
       ${raw(view.boundaries.map((b) => `<div class="noticed">
         <p><strong>${b.statement}</strong></p>
-        <p class="quiet">I will not ${b.ownerWords}${b.everywhere ? ', for any company' : ''}.
+        <p class="quiet">${b.mode === 'ask_first'
+    ? `I will not ${b.ownerWords}${b.everywhere ? ', for any company' : ''} without asking you
+       first and being told yes to that exact thing.`
+    : `I will not ${b.ownerWords}${b.everywhere ? ', for any company' : ''}.`}
           ${b.enforcedNow
     ? 'Refused at the point I would act, not by me remembering.'
     : 'I have no way to do that today in any case.'}</p>
@@ -1716,6 +1841,16 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
           <button class="btn" type="submit">Lift this</button>
         </form>
       </div>`).join(''))}
+    </div>` : ''}
+
+    ${view.decisions.length ? html`<div class="know">
+      <h3>What you decided</h3>
+      <ul>${raw(view.decisions.map((d) =>
+    `<li><strong>${d.summary}</strong> — ${
+  d.outcome === 'approved' ? (d.used ? 'you approved it and I did it' : 'you approved it; I have not done it yet')
+    : d.outcome === 'refused' ? 'you said no, and nothing happened'
+      : `you took the approval back${d.note ? ` — ${d.note}` : ''}, before I used it`
+} on ${d.at}.</li>`).join(''))}</ul>
     </div>` : ''}
 
     ${view.lifted.length ? html`<div class="know">
@@ -1742,6 +1877,181 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
 
   return c.html(page(view.name, body, 'companies'));
 });
+
+// ─── being asked ────────────────────────────────────────────────────────────
+
+/**
+ * THE OTHER HALF OF "ASK ME FIRST".
+ *
+ * A boundary that only ever refuses is a boundary the owner eventually lifts
+ * out of frustration, which is the worst outcome: he removes a control because
+ * the institution had no way to work inside it. So when he has said "not
+ * without asking", Foundry proposes — in full, in advance — and this is where
+ * he answers.
+ *
+ * The decision is bound to HIM (the database checks `founder:<owner>` against
+ * the company), to THIS act (the parameters are fingerprinted), and it is spent
+ * once. Approving one message does not open the door for the next one.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/proposals/:proposalId/:decision',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const decision = c.req.param('decision');
+    if (decision !== 'approve' && decision !== 'refuse') return c.notFound();
+
+    // The company is resolved from the proposal and the authenticated owner. A
+    // proposal for anyone else's company is refused without revealing it exists.
+    const owned = await query(
+      `SELECT a.id, a.product_id FROM proposed_acts a
+         JOIN products p ON p.id = a.product_id
+        WHERE a.id = ? AND p.owner_id = ? AND a.decision IS NULL`,
+      [c.req.param('proposalId'), String(founder.id)]);
+    if (!owned.rows.length) return c.notFound();
+    const productId = String((owned.rows[0] as Record<string, unknown>).product_id);
+
+    const { decideProposedAct } = await import('../../services/institution/standing-intent.js');
+    const { principalRef } = await import('../../services/outbound/acting-principal.js');
+    await decideProposedAct({
+      id: c.req.param('proposalId'),
+      decision: decision === 'approve' ? 'approved' : 'refused',
+      // BUILT FROM THE SESSION, NEVER FROM THE REQUEST. The database checks it
+      // against the company's actual owner regardless, which is the belt to
+      // this brace.
+      decidedBy: principalRef('founder', String(founder.id)),
+    });
+    return c.redirect(
+      `/foundry/companies/${productId}?done=${decision === 'approve' ? 'approved' : 'refused'}`);
+  });
+
+// ─── letting Foundry see something ──────────────────────────────────────────
+
+/**
+ * THE SEAM THAT HAD TO DISAPPEAR.
+ *
+ * The company page said "I cannot see its code" and linked to
+ * `/agents/integrations` — a technical surface about providers, scopes and
+ * credentials, arrived at from a sentence about understanding. The owner cannot
+ * answer "which integrations do you want". He can answer "may I see your
+ * revenue".
+ *
+ * So a connection starts from what Foundry CANNOT KNOW, and every offer states
+ * both halves of the rule that governs this institution: what it would let
+ * Foundry understand, and what it would never let Foundry do. The second half
+ * is not reassurance written into a template — it is constitutional, immutable,
+ * and stored verbatim on the connection so that a later change to the wording
+ * cannot retroactively alter what he agreed to.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.get('/foundry/companies/:id/see/:sense',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const productId = c.req.param('id');
+    const owned = await query('SELECT id, name FROM products WHERE id = ? AND owner_id = ?',
+      [productId, String(founder.id)]);
+    if (!owned.rows.length) return c.notFound();
+    const name = String((owned.rows[0] as Record<string, unknown>).name);
+
+    const senses = await import('../../services/senses/index.js');
+    const gap = (await senses.whatItCannotSee(productId))
+      .find((g) => g.key === c.req.param('sense'));
+    if (!gap) return c.redirect(`/foundry/companies/${productId}`);
+
+    const body = html`
+      <h1>Let me see ${gap.cannotSee}?</h1>
+      <p class="lede">Right now I cannot, so anything I told you about it would be invented.</p>
+
+      <div class="know">
+        <h3>What I would understand</h3>
+        <p>${gap.wouldLearn}, for ${name}.</p>
+      </div>
+      <div class="know">
+        <h3>What it would still not let me do</h3>
+        <p><strong>${gap.neverGrants}.</strong> Seeing something is not permission to change
+          it. That is always a separate question, and I would have to earn it and then ask.</p>
+      </div>
+
+      ${gap.offers.length === 0 ? html`<div class="know">
+        <h3>Nothing I can connect</h3>
+        <p class="lede">There is no source I know of that would tell me this. I am saying so
+          rather than leaving the gap unexplained.</p>
+      </div>` : raw(gap.offers.map((offer) => `<div class="noticed">
+        <h4>${senses.providerName(offer.provider)}${offer.mode === 'sandbox' ? ' — test mode' : ''}</h4>
+        <p>Reads ${offer.reads}.</p>
+        <p class="quiet">${offer.handsOver}.</p>
+        ${offer.mode === 'sandbox'
+    ? '<p class="quiet">Test mode runs everything the real connection runs against numbers '
+      + 'that are not the world&rsquo;s. I will never count what I learn here as proof '
+      + 'about a real business.</p>' : ''}
+        <form method="POST" action="/foundry/companies/${productId}/see/${gap.key}">
+          <input type="hidden" name="provider" value="${offer.provider}" />
+          <input type="hidden" name="mode" value="${offer.mode}" />
+          <button class="btn go" type="submit">Let me see ${gap.cannotSee}</button>
+        </form>
+      </div>`).join(''))}
+
+      <a class="btn" href="/foundry/companies/${productId}">Not now</a>`;
+    return c.html(page(`See ${gap.cannotSee}`, body, 'companies'));
+  });
+
+/**
+ * CONNECT IT — AND SAY WHAT ACTUALLY CHANGED.
+ *
+ * "Integration connected" is a fact about software. What the owner needs to
+ * know is that Foundry's understanding changed: which numbers it can now read,
+ * and what it still cannot see. The provider, sense and mode are all re-derived
+ * from the constitutional vocabulary here; the form carries a choice, never a
+ * disclosure.
+ *
+ * WHAT THIS DOES NOT DO: hold a credential. A real provider still needs its own
+ * authorization, and this route refuses to pretend otherwise — a sense
+ * connected without one is recorded as connected and reports nothing, which the
+ * company page then says out loud. That is the honest state, and it is exactly
+ * the state a real credential later replaces.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/companies/:id/see/:sense',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const productId = c.req.param('id');
+    const owned = await query('SELECT id, name FROM products WHERE id = ? AND owner_id = ?',
+      [productId, String(founder.id)]);
+    if (!owned.rows.length) return c.notFound();
+    const name = String((owned.rows[0] as Record<string, unknown>).name);
+
+    const form = await c.req.parseBody();
+    const senses = await import('../../services/senses/index.js');
+    const mode = String(form.mode ?? '');
+    if (mode !== 'real' && mode !== 'sandbox' && mode !== 'reference') {
+      return c.redirect(`/foundry/companies/${productId}`);
+    }
+    const connected = await senses.connectSense({
+      productId, companyName: name, senseKey: c.req.param('sense'),
+      provider: String(form.provider ?? ''), mode,
+    });
+    if (!connected) return c.redirect(`/foundry/companies/${productId}`);
+    return c.redirect(`/foundry/companies/${productId}?done=seeing&sense=${c.req.param('sense')}`);
+  });
+
+/** Stop seeing it. The reason is Foundry's; he does not owe one. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/companies/:id/senses/:senseId/disconnect',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const productId = c.req.param('id');
+    const owned = await query(
+      `SELECT s.id FROM company_senses s JOIN products p ON p.id = s.product_id
+        WHERE s.id = ? AND p.owner_id = ? AND s.disconnected_at IS NULL`,
+      [c.req.param('senseId'), String(founder.id)]);
+    if (!owned.rows.length) return c.notFound();
+    const { disconnectSense } = await import('../../services/senses/index.js');
+    await disconnectSense(c.req.param('senseId'), 'the owner disconnected it');
+    return c.redirect(`/foundry/companies/${productId}?done=blind`);
+  });
 
 // ─── what the owner said ────────────────────────────────────────────────────
 
@@ -1810,8 +2120,13 @@ foundryShellRoutes.post('/foundry/companies/:id/said',
       <p class="lede">You said: <strong>${said}</strong></p>
       <div class="know">
         <h3>What I will do</h3>
-        <p>I will not ${facts?.ownerWords ?? proposal.subject} for ${name}. Every time,
-          without exception, until you lift it.</p>
+        ${proposal.mode === 'ask_first'
+    ? html`<p>I will not ${facts?.ownerWords ?? proposal.subject} for ${name} without asking
+        you first. When I think it should happen I will tell you exactly what I intend to do,
+        why, what I expect, and what could go wrong — and I will not be able to do it until
+        you approve that particular thing.</p>`
+    : html`<p>I will not ${facts?.ownerWords ?? proposal.subject} for ${name}. Every time,
+        without exception, until you lift it.</p>`}
         ${facts?.door == null
     ? html`<p class="quiet">I have no way to do that today, so this is already true.
         I am recording it anyway, so that if I ever can, I will not.</p>`
@@ -1821,6 +2136,9 @@ foundryShellRoutes.post('/foundry/companies/:id/said',
           <li><strong>Cost</strong> — nothing.</li>
           <li><strong>How long</strong> — until you lift it.</li>
           <li><strong>Undo</strong> — one tap, on this company's page.</li>
+          ${proposal.mode === 'ask_first'
+    ? html`<li><strong>An approval covers one act</strong> — exactly the one I described,
+        and it is spent once. It does not open the door for the next one.</li>` : ''}
         </ul>
       </div>
       <form method="POST" action="/foundry/companies/${productId}/said/confirm">
@@ -1891,7 +2209,9 @@ foundryShellRoutes.post('/foundry/companies/:id/said/confirm',
     const asObjective = String(form.as ?? '') === 'objective';
 
     if (proposal.kind === 'boundary' && !asObjective) {
-      await intent.setBoundary({ productId, subject: proposal.subject, statement: said });
+      await intent.setBoundary({
+        productId, subject: proposal.subject, statement: said, mode: proposal.mode,
+      });
       return c.redirect(`/foundry/companies/${productId}?done=bound`);
     }
     if (proposal.kind === 'unclear') return c.redirect(`/foundry/companies/${productId}`);

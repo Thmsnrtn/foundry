@@ -190,7 +190,8 @@ export async function recordCompanyObservations(input: {
     const prior = await query(
       `SELECT json_extract(payload_json,'$.observed_value') AS value FROM signal_events
         WHERE product_id=? AND source IN (
-            'external_metric_ingest','reference_metric_ingest','company_observation_baseline')
+            'external_metric_ingest','sandbox_metric_ingest','reference_metric_ingest',
+            'company_observation_baseline')
           AND json_extract(payload_json,'$.field')=?
         ORDER BY created_at DESC, rowid DESC LIMIT 1`,
       [input.productId, channelKey],

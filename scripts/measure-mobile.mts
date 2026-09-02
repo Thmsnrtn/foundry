@@ -92,8 +92,20 @@ async function seed(): Promise<void> {
   // the owner can put into the layout, and therefore the thing most likely to
   // overflow a phone.
   const intent = await import('../src/services/institution/standing-intent.js');
-  await intent.setBoundary({ productId: COMPANY, subject: 'contact_people',
+  await intent.setBoundary({ productId: COMPANY, subject: 'contact_people', mode: 'ask_first',
     statement: 'Do not contact anyone at all until I say otherwise, not even to say hello' });
+  // A PROPOSAL IS THE WIDEST BLOCK ON THE PAGE — four labelled paragraphs and
+  // two buttons — and it is the single most consequential thing the owner
+  // reads, so it is measured rather than assumed.
+  await intent.proposeAct({
+    productId: COMPANY, subject: 'contact_people', actionType: 'send_email',
+    params: { to: 'jane@example.com' },
+    summary: 'Email Jane Ashworth about the payment that failed on Tuesday',
+    why: 'her card was declined and nothing has told her, so the subscription will lapse',
+    expectedEffect: 'she updates the card within a day or two and nothing is interrupted',
+    risk: 'if the decline was her bank rather than her card this is an unnecessary message',
+    consequence: 'low', proposedBy: 'agent:support',
+  });
   await intent.setBoundary({ productId: null, subject: 'set_prices',
     statement: 'Never change what any of my companies charge without asking me first' });
   await intent.setObjective({ productId: COMPANY,

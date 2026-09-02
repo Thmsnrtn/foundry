@@ -805,6 +805,8 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   failure_patterns: 'a library of known failure shapes, written by the institution',
   governed_effect_kinds: 'the effect vocabulary',
   owner_boundary_subjects: 'the vocabulary of things a boundary can be about, constitutional and the same for every owner; the boundaries themselves are erased with their company',
+  senses: 'the vocabulary of what Foundry can learn about any company and what that never grants; constitutional and the same for every owner',
+  sense_providers: 'which provider could supply which sense, and what the credential hands over; constitutional, naming no company',
   job_health: 'whether Foundry\'s own scheduled work is running; job names and error class names, no company in it',
   intelligence_benchmarks: 'benchmarks over a cohort, naming no member',
   job_locks: 'scheduler leases',

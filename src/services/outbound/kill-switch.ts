@@ -57,7 +57,7 @@ export async function checkKillSwitch(
   /** Server-owned capability facts. Supplied by the gateway from the REGISTERED
    * policy for the tool — never from the request, which is why this parameter
    * has no route to a caller. */
-  capability?: { deliverableWhilePaused?: boolean },
+  capability?: { deliverableWhilePaused?: boolean; paramsFingerprint?: string },
 ): Promise<KillSwitchResult> {
   const productResult = await query(
     `SELECT status, scp_status, entitlement_paused_at, erasure_scheduled_at, disabled_tools,
@@ -103,7 +103,13 @@ export async function checkKillSwitch(
   // 'boundary:contact_people' would be true and useless; what he needs to see,
   // months later, is the sentence he typed.
   const { boundaryStandingInTheWay } = await import('../institution/standing-intent.js');
-  const said = await boundaryStandingInTheWay({ productId, door: 'outbound', tool });
+  const said = await boundaryStandingInTheWay({
+    productId, door: 'outbound', tool,
+    // Server-computed by the gateway from the params it is about to use. A
+    // caller has no route to this value, which is what makes an "ask me first"
+    // approval bind to the act rather than to the kind of act.
+    paramsFingerprint: capability?.paramsFingerprint,
+  });
   if (said) {
     return { blocked: true, reason: `${said.refusal} — you said: "${said.statement}"` };
   }

@@ -112,6 +112,31 @@ necessary for truth. A synthetic company may exercise every pathway and may
 never produce owner truth, commercial proof, real outcome evidence, or grounds
 for real-world authority.
 
+### Two kinds of reality, tracked separately
+
+**Corrected by the owner on 2026-09-02, against sloppy vocabulary of mine.** A
+checkpoint here said "everything remains reality-unproven; no real company is
+enrolled". That was imprecise in a way that matters, because Foundry itself *is*
+a real owner-controlled company, established in `system_identities`, and the
+Foundry-on-Foundry work is genuine evidence about a genuine company.
+
+Two distinct forms of evidence, never collapsed:
+
+| | |
+|---|---|
+| **SELF-OPERATION REALITY** | Foundry operating Foundry: a real company, real repository state, real checks, real self-observation, real owner authority. |
+| **EXTERNAL-BUSINESS REALITY** | An external operating business enrolled, with real provider data and real customers, where the institution's actions have consequences for someone other than its owner. |
+
+A capability can be self-operation-proven and external-business-unproven. That
+is where most of this institution stands, and saying it in those words is the
+difference between an accurate status and a dismissive one.
+
+**And the source of a reading is now part of the answer.** Migration 227 gives
+observations three channels — the world's, a provider's *test mode*, and the
+reference world's — so "has this been proven against external reality?" is a
+question SQL answers rather than a qualification someone remembers to add.
+Sandbox evidence runs the entire production path and is never the world.
+
 ## The reference world
 
 The resolution of that deadlock, built on 2026-09-01. A **reference company** is
@@ -258,6 +283,106 @@ will not answer.
 it.** Reference-world questions never compete for the first screen. Nothing is
 at stake in one, so nothing about it *needs* him — which is the only question
 that screen answers. They wait where he goes to look.
+
+## Senses are not hands
+
+Built 2026-09-02, making the owner's permanent rule structural rather than
+stated: reading a repository never grants permission to modify it; seeing
+revenue never grants permission to move money.
+
+A connection used to be an `integrations` row — a credential and a cadence —
+which says nothing about what Foundry is trying to learn or what connecting it
+does *not* allow. So the owner was asked to "connect an integration", a question
+about software, when the question he can actually answer is "may I see your
+revenue".
+
+**Three tables, three kinds of fact.** `senses` is what Foundry can try to learn
+about any company and, in the load-bearing column, what learning it *never*
+grants. `sense_providers` is who could supply it and — separately, because it is
+a different and less comfortable fact — what the credential would technically
+permit if misused. `company_senses` is what is actually connected, how fresh it
+is, and whether it is healthy. The first two are **constitutional and
+immutable**: a list of what a connection may not do that code can widen at
+runtime is one a compromised path can widen, and the owner would have agreed to
+a sentence that later meant something else.
+
+**The disclosure is stored on the connection**, assembled server-side from the
+constitutional vocabulary, so a later change to the wording cannot retroactively
+alter what he agreed to.
+
+**Three source modes, and business logic never forks on them.** `real`,
+`sandbox` (a provider's test mode — the whole path, none of the world), and
+`reference`. The mode decides exactly one thing: which observation channel a
+reading is written to. Nothing that reasons about a company ever asks. That is
+what makes replacing a controlled source with a real one a row rather than a
+rebuild — and it is why the reference world is connected *as a provider*,
+through the same contract Stripe will use.
+
+**A gap nothing can fill is still named.** "I cannot see what it costs to run,
+and nothing I can connect would tell me" is true and useful; hiding it would
+make the list look complete.
+
+## Ask me first
+
+Migration 225 shipped boundaries with one mode and said why: "without asking"
+could not be honestly enforced, because nothing reaching the outbound door
+carried proof that the owner decided *this particular act*. The owner's answer
+was that the finding exposed a missing primitive, not a reason to accept hard
+refusal as the mature model. Migration 228 is that primitive.
+
+A **proposed act** is Foundry saying, in advance and in full — what, why, what
+it expects, what could go wrong — and being unable to do it until the owner says
+yes to *that*. Each property the owner specified is enforced rather than
+promised:
+
+- **Bound to the owner.** `decided_by` must be `founder:<the product's owner>`.
+  Not "a founder": the one who owns this company, resolved by the database
+  through the product rather than by a route remembering to check.
+- **Bound to the act.** The parameters are fingerprinted, computed server-side
+  at both ends. The attack this is really about is not a forged approval — it is
+  a real one used for something else: propose a reasonable message to one
+  customer, obtain a yes, send a different message to everyone.
+- **Non-forgeable.** A proposal cannot arrive already decided, and the proposer
+  cannot be the decider.
+- **Spent once**, revocable until used, expiring on its own.
+- **Auditable**, and read: nothing is deleted, no decision can be rewritten, and
+  what he decided and took back is on the page.
+
+**A proposal nobody asked for is refused.** Without a standing "ask me first",
+Foundry does not need permission and must not manufacture decisions for him to
+make. His attention is the scarcest thing this institution spends.
+
+**Consumption happens at the check, not after success.** Between an approval
+spent on an effect that failed and one still standing after an effect that may
+have reached the world, a governance control fails toward asking again.
+
+## What situation a company is in
+
+The owner's rule for the company page: *a revenue collapse should dominate
+twelve healthy metrics; a quiet healthy company should look quiet.* A page that
+renders every dataset in a fixed order cannot do that — it treats a company
+falling apart and a company doing nothing as the same layout with different
+numbers in it.
+
+So the page asks one question first, and eight situations are controlled-proven
+against the reference world rather than described: healthy, revenue falling,
+growth that is not converting, customers leaving faster, payments failing, a
+sense that broke, two sources disagreeing, and a company nothing reports on yet.
+
+**Two single days is not a trend.** This was found the hard way: the
+deliberately-quiet reference company was diagnosed as "growth that is not
+converting" because one day's noise on signups happened to be 15% above
+another's. Real companies are noisier than the reference world, so the false
+alarm would have been worse in reality than in rehearsal — and an institution
+that raises one teaches its owner to stop reading it. Comparisons average a week
+at each end.
+
+**Two sources disagreeing is its own answer, not an average.** Averaging
+contradictory numbers produces a third nobody reported and hides the fact he
+needs: that neither can be relied on until it is resolved.
+
+**A new company is not a broken one.** One needs a connection; the other needs
+looking at. A page that called both "healthy" would be wrong about both.
 
 ## Deployment modes
 
