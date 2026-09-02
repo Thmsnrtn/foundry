@@ -217,9 +217,23 @@ export async function companyMayIncurCost(productId: string): Promise<string | n
     // otherwise perfectly entitled to spend still may not when he has said so.
     // The reason is his own sentence, because this string becomes the message
     // on a NotEntitledError he will eventually read.
-    const { boundaryStandingInTheWay } = await import('../institution/standing-intent.js');
-    const said = await boundaryStandingInTheWay({ productId, door: 'spend' });
-    if (said) return `something you said — "${said.statement}"`;
+    const intent = await import('../institution/standing-intent.js');
+    const allowance = await intent.allowanceFor(productId);
+    const said = await intent.boundaryStandingInTheWay({ productId, door: 'spend' });
+    if (said) {
+      // AN ALLOWANCE CARVES AN EXCEPTION TO A SPEND BOUNDARY, which is what
+      // "don't spend anything — except up to $25 testing this" means when a
+      // person says it. Exhausted, the boundary is simply back.
+      if (!allowance || allowance.remainingCents <= 0) {
+        return `something you said — "${said.statement}"`;
+      }
+    }
+    // AND IT IS A CEILING EVEN WHEN NOTHING IS FORBIDDEN. He set a number; the
+    // number is the answer, and the message says what is left rather than
+    // making him work it out.
+    if (allowance && allowance.remainingCents <= 0) {
+      return `the $${(allowance.amountCents / 100).toFixed(2)} you allowed is spent`;
+    }
     if (Number(row.operating) === 1) return null;
     if (String(row.s) !== 'active') return `archived (${String(row.s)})`;
     if (row.erasing != null) return 'scheduled for deletion';

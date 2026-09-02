@@ -8,8 +8,8 @@ import { Hono } from 'hono';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import {
-  boundariesFor, boundaryStandingInTheWay, interpret, liftBoundary,
-  objectiveFor, setBoundary, setObjective,
+  allowanceFor, boundariesFor, boundaryStandingInTheWay, interpret, liftBoundary,
+  objectiveFor, setAllowance, setBoundary, setObjective,
 } from '../../src/services/institution/standing-intent.js';
 
 // =============================================================================
@@ -30,12 +30,16 @@ import {
 const OWNER = 'os_owner';
 const A = 'os_a';
 const B = 'os_b';
+const ALLOW = 'os_allow';
+const EXCEPT = 'os_except';
+const PREF = 'os_pref';
 
 beforeAll(async () => {
   await runMigrations();
   await query('INSERT INTO founders (id,clerk_user_id,email,name) VALUES (?,?,?,?)',
     [OWNER, 'clerk_os', 'owner@example.com', 'Owner']);
-  for (const [id, name] of [[A, 'Alpha'], [B, 'Beta']] as const) {
+  for (const [id, name] of [[A, 'Alpha'], [B, 'Beta'],
+    [ALLOW, 'Allowance Co'], [EXCEPT, 'Exception Co'], [PREF, 'Preference Co']] as const) {
     await query("INSERT INTO products (id,name,owner_id,status) VALUES (?,?,?,'active')",
       [id, name, OWNER]);
   }
@@ -396,5 +400,129 @@ describe('the owner surface', () => {
     const refused = await asOwner('/foundry/companies/os_theirs/said',
       'said=' + encodeURIComponent("Don't contact anyone"));
     expect(refused.status).toBe(404);
+  });
+});
+
+describe('the rest of what he can say', () => {
+  const asOwner = async (path: string, body?: string): Promise<{
+    status: number; text: string; location: string | null;
+  }> => {
+    const { foundryShellRoutes } = await import('../../src/routes/dashboard/foundry-shell.js');
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('founder' as never,
+        { id: OWNER, email: 'owner@example.com', name: 'Owner' } as never);
+      c.set('csrfToken' as never, 'test' as never);
+      await next();
+    });
+    app.route('/', foundryShellRoutes as never);
+    const res = await app.request(path, body == null ? undefined : {
+      method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body,
+    });
+    return { status: res.status, text: await res.text(), location: res.headers.get('location') };
+  };
+
+  it('hears the eight kinds as the eight things they are', () => {
+    const kinds = [
+      ['Get the first ten paying customers', 'objective'],
+      ['Retention matters more than acquisition', 'objective'],
+      ["Don't contact anyone", 'boundary'],
+      ['Never change pricing without asking me', 'boundary'],
+      ['Spend no more than $25 testing this', 'allowance'],
+      ['I would rather grow organically than buy ads', 'preference'],
+      ['Stop working on that', 'stop'],
+    ] as const;
+    for (const [said, kind] of kinds) expect(interpret(said).kind, said).toBe(kind);
+    // And the two boundary kinds are distinguished.
+    const asked = interpret('Never change pricing without asking me');
+    if (asked.kind === 'boundary') expect(asked.mode).toBe('ask_first');
+  });
+
+  it('reads a budget as a ceiling, in cents so nothing rounds', () => {
+    const read = interpret('Spend up to $12.50 testing this idea');
+    expect(read.kind).toBe('allowance');
+    if (read.kind === 'allowance') {
+      expect(read.amountCents).toBe(1250);
+      // His sentence is the purpose. Categorising it would be Foundry deciding
+      // what he meant the money was for.
+      expect(read.purpose).toContain('testing this idea');
+    }
+  });
+
+  it('does not read "spend nothing" as a budget', () => {
+    // A refusal and a ceiling are opposite instructions and both mention money.
+    const read = interpret('Do not spend anything');
+    expect(read.kind).toBe('boundary');
+  });
+
+  it('enforces the ceiling at the money door, and says what is left', async () => {
+    const { companyMayIncurCost } = await import('../../src/services/ai/client.js');
+    expect(await companyMayIncurCost(ALLOW)).toBeNull();
+
+    await asOwner(`/foundry/companies/${ALLOW}/said/confirm`,
+      'said=' + encodeURIComponent('Spend up to $5 testing this'));
+    const live = await allowanceFor(ALLOW);
+    expect(live?.amountCents).toBe(500);
+    expect(await companyMayIncurCost(ALLOW)).toBeNull();
+
+    // Spend it, through the ledger the ceilings already use rather than a
+    // second counter kept beside it.
+    await query(
+      `INSERT INTO ai_daily_spend (scope, scope_id, date, spent_cents, updated_at)
+       VALUES ('product', ?, date('now'), 500, datetime('now'))`, [ALLOW]);
+    expect(await allowanceFor(ALLOW)).toMatchObject({ remainingCents: 0 });
+    expect(await companyMayIncurCost(ALLOW)).toBe('the $5.00 you allowed is spent');
+  });
+
+  it('lets an allowance carve an exception to a spend boundary', async () => {
+    // "Don't spend anything — except up to $25 testing this" is what a person
+    // means when they say both, and it has to work in that order.
+    const { companyMayIncurCost } = await import('../../src/services/ai/client.js');
+    await setBoundary({ productId: EXCEPT, subject: 'spend_money',
+      statement: 'Do not spend anything on this' });
+    expect(await companyMayIncurCost(EXCEPT)).toContain('Do not spend anything on this');
+
+    await setAllowance({ productId: EXCEPT, statement: 'except up to $9 testing this',
+      amountCents: 900, purpose: 'testing this' });
+    expect(await companyMayIncurCost(EXCEPT)).toBeNull();
+
+    // Exhausted, the boundary is simply back.
+    await query(
+      `INSERT INTO ai_daily_spend (scope, scope_id, date, spent_cents, updated_at)
+       VALUES ('product', ?, date('now'), 900, datetime('now'))`, [EXCEPT]);
+    expect(await companyMayIncurCost(EXCEPT)).toContain('Do not spend anything on this');
+  });
+
+  it('says plainly that a preference refuses nothing', async () => {
+    const shown = await asOwner(`/foundry/companies/${PREF}/said`,
+      'said=' + encodeURIComponent('I would rather grow organically than buy ads'));
+    expect(shown.text).toContain('I will not refuse anything because of this');
+    expect(shown.text).toContain('difference between a preference and a boundary');
+
+    await asOwner(`/foundry/companies/${PREF}/said/confirm`,
+      'said=' + encodeURIComponent('I would rather grow organically than buy ads'));
+    const page = await asOwner(`/foundry/companies/${PREF}`);
+    expect(page.text).toContain('grow organically');
+    expect(page.text).toContain('I refuse');
+  });
+
+  it('shows what it would stop before stopping it', async () => {
+    await setObjective({ productId: PREF, statement: 'Ship the mobile app', channels: [] });
+    const shown = await asOwner(`/foundry/companies/${PREF}/said`,
+      'said=' + encodeURIComponent('Stop working on that'));
+    // A stop aimed at the wrong thing is worse than no stop.
+    expect(shown.text).toContain('Ship the mobile app');
+    expect(shown.text).toContain('Nothing else changes');
+
+    const done = await asOwner(`/foundry/companies/${PREF}/said/confirm`,
+      'said=' + encodeURIComponent('Stop working on that'));
+    expect(done.location).toBe(`/foundry/companies/${PREF}?done=stopped`);
+    expect(await objectiveFor(PREF)).toBeNull();
+  });
+
+  it('says there was nothing to stop rather than reporting a silent success', async () => {
+    const shown = await asOwner(`/foundry/companies/${PREF}/said`,
+      'said=' + encodeURIComponent('Stop working on that'));
+    expect(shown.text).toContain('There is nothing to stop');
   });
 });

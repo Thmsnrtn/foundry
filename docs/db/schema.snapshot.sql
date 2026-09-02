@@ -139,6 +139,7 @@
                     CHECK (premise_type IN ('metric', 'qualitative')),
                     CHECK (status IN ('holding', 'falsified', 'unverifiable', 'revisited')),
                     CHECK (status IN ('on_track','at_risk','off_track','completed')),
+                   WHERE a.product_id = NEW.product_id AND a.withdrawn_at IS NULL);
                   WHERE id=NEW.product_id AND reality='real');
                   WHERE id=NEW.product_id AND reality='reference');
                   json_each('["src/db/migrations/","docs/foundry-institution/","scripts/",'
@@ -241,11 +242,14 @@
        OR NEW.params_fingerprint IS NOT OLD.params_fingerprint
        OR NEW.product_id IS NOT OLD.product_id
        OR NEW.product_id IS NOT OLD.product_id
+       OR NEW.product_id IS NOT OLD.product_id
        OR NEW.proposed_at IS NOT OLD.proposed_at
        OR NEW.proposed_by IS NOT OLD.proposed_by
        OR NEW.risk IS NOT OLD.risk
        OR NEW.set_at IS NOT OLD.set_at;
        OR NEW.set_at IS NOT OLD.set_at;
+       OR NEW.set_at IS NOT OLD.set_at;
+       OR NEW.statement IS NOT OLD.statement
        OR NEW.statement IS NOT OLD.statement
        OR NEW.subject IS NOT OLD.subject
        OR NEW.summary IS NOT OLD.summary
@@ -409,6 +413,8 @@
      WHERE e.id=NEW.evidence_signal_id AND e.product_id=NEW.product_id);
      WHERE p.id = OLD.product_id AND p.erasure_scheduled_at IS NULL
      WHERE p.id = OLD.product_id AND p.erasure_scheduled_at IS NULL
+     WHERE p.id = OLD.product_id AND p.erasure_scheduled_at IS NULL);
+     WHERE p.id = OLD.product_id AND p.erasure_scheduled_at IS NULL);
      WHERE p.id = OLD.product_id AND p.erasure_scheduled_at IS NULL);
      WHERE p.id = OLD.product_id AND p.erasure_scheduled_at IS NULL);
      WHERE p.id = OLD.product_id AND p.erasure_scheduled_at IS NULL);
@@ -704,6 +710,8 @@
     SELECT 1 FROM products p
     SELECT 1 FROM products p
     SELECT 1 FROM products p
+    SELECT 1 FROM products p
+    SELECT 1 FROM products p
     SELECT 1 FROM products p WHERE p.id=NEW.product_id AND p.owner_id=NEW.owner_id);
     SELECT 1 FROM products p WHERE p.id=NEW.product_id);
     SELECT 1 FROM reconstruction_claims c
@@ -760,11 +768,14 @@
     VALUES('global', '__global__', NEW.date, 0, NEW.reserved_cents, NEW.updated_at)
     WHERE COALESCE(k.key,'') NOT IN (
     WHERE COALESCE(k.key,'') NOT IN (
+    WHERE EXISTS (SELECT 1 FROM owner_allowances a
+    WHERE NEW.amount_cents IS NOT OLD.amount_cents
     WHERE NEW.authority_ref='autonomy_consent:' || a.id
     WHERE NEW.decided_at IS NOT NULL OR NEW.decision IS NOT NULL
     WHERE NEW.decision IS NOT NULL AND NEW.decided_by IS NEW.proposed_by;
     WHERE NEW.decision IS NOT NULL AND OLD.decision IS NULL
     WHERE NEW.disconnected_at IS NOT NULL
+    WHERE NEW.dropped_at IS NOT NULL;
     WHERE NEW.epistemic_status!='unknown' AND NEW.value_json IS NULL;
     WHERE NEW.epistemic_status!='unknown' AND json_array_length(NEW.evidence_refs_json)=0;
     WHERE NEW.epistemic_status='conflicting' AND json_array_length(NEW.evidence_refs_json)<2;
@@ -785,15 +796,20 @@
     WHERE NEW.revoked_at IS NOT NULL AND OLD.consumed_at IS NOT NULL;
     WHERE NEW.sense_key IS NOT OLD.sense_key OR NEW.provider IS NOT OLD.provider
     WHERE NEW.statement IS NOT OLD.statement
+    WHERE NEW.statement IS NOT OLD.statement OR NEW.product_id IS NOT OLD.product_id;
     WHERE NEW.subject IS NOT OLD.subject
+    WHERE NEW.withdrawn_at IS NOT NULL AND trim(coalesce(NEW.withdraw_reason,'')) = '';
+    WHERE NEW.withdrawn_at IS NOT NULL;
     WHERE NOT EXISTS (
     WHERE NOT EXISTS (
     WHERE NOT EXISTS (
     WHERE NOT EXISTS (
     WHERE OLD.decision IS NOT NULL AND NEW.decision IS NOT OLD.decision;
     WHERE OLD.disconnected_at IS NOT NULL;
+    WHERE OLD.dropped_at IS NOT NULL;
     WHERE OLD.lifted_at IS NOT NULL;
     WHERE OLD.retired_at IS NOT NULL;
+    WHERE OLD.withdrawn_at IS NOT NULL;
     WHERE a.id=NEW.authority_consent_id
     WHERE c.id=NEW.channel_id AND c.product_id=NEW.product_id
     WHERE c.id=json_extract(NEW.payload_json,'$.channel_id')
@@ -831,7 +847,9 @@
     WHERE scope = 'product' AND scope_id = NEW.product_id AND date = NEW.date), 0) + NEW.reserved_cents > NEW.product_cap_cents
     WHERE substr(g.value,1,length(r.value))=r.value OR substr(r.value,1,length(g.value))=g.value
     WHERE trim(NEW.disclosure) = '';
+    WHERE trim(NEW.purpose) = '' OR trim(NEW.statement) = '';
     WHERE trim(NEW.scenario) = '' OR trim(NEW.purpose) = '';
+    WHERE trim(NEW.statement) = '';
     WHERE trim(NEW.statement) = '';
     WHERE trim(NEW.statement) = '';
     WHERE trim(g.value)='' OR instr(g.value,'..')>0 OR substr(g.value,1,1)='/'
@@ -1071,6 +1089,7 @@
   -- Negative and missing amounts. An absent amount is not zero spend; it is an
   -- No high-consequence development authority exists at this evidence level.
   -- Nullable: null means nothing has scored this company, which is different
+  -- ONE LIVE ALLOWANCE PER COMPANY. Two ceilings is no ceiling: something
   -- Only a real institutional judgment of this product may be dispositioned.
   -- Only lifting may be edited. The subject and the words he used are what the
   -- Only the hash. The secret is shown once, at issuance, and never again.
@@ -1108,6 +1127,7 @@
   -- The (provider, sense, mode) triple has to be one the vocabulary declares.
   -- The From this company's third-party mail goes out as. The provider refuses
   -- The KEY only. The value is deliberately not copied here: this table exists
+  -- The amount he granted is what he granted. Raising it in place would leave a
   -- The assertion answers an UNANSWERED question of this company. It cannot
   -- The boundary this exists because of. A proposal is only meaningful against
   -- The canonical evidence that the founder issued this, and to whom.
@@ -1153,6 +1173,7 @@
   -- Web Push
   -- What a founder is actually agreeing to when they grant this scope.
   -- What is said at the moment of refusal, to whatever asked.
+  -- What it is for, in his words. Not a category: "testing this idea".
   -- What that credential could technically do beyond reading, said plainly, or
   -- What the owner is told the credential is scoped to.
   -- What the owner reads. All four required: a proposal that cannot say what it
@@ -1262,6 +1283,7 @@
   -- readings, applied one level up at the source: without it, a reference
   -- reality a reading described. Mirrors OBSERVABLE_FIELDS; a test asserts the
   -- record is for.
+  -- record saying a larger ceiling was in force during a period when it was not.
   -- recorded cannot disagree.
   -- reference is exactly this consent, and a consent that is currently valid,
   -- refused, and so is a broad prefix that would contain part of the ring.
@@ -1318,6 +1340,7 @@
   -- which is inside the constitutional ring, so an integration cannot introduce
   -- which needs none — and that absence is itself informative.
   -- working", and the two must not look the same on a settings page.
+  -- would have to decide which applies, and that decision is his.
   -- would like. Widening it is a migration and a review, exactly as adding a
   -- wrote it, and neither the founder nor the institution could tell which
   -- { company_name, problem, solution, target_customer, revenue_model,
@@ -1390,8 +1413,10 @@
   ON outcome_trees(product_id, status);
   ON outcome_trees(product_id, weekly_refresh_run_id);
   ON outreach_suppressions(product_id, email);
+  ON owner_allowances(product_id) WHERE withdrawn_at IS NULL;
   ON owner_boundaries(subject, product_id) WHERE lifted_at IS NULL;
   ON owner_objectives(product_id) WHERE retired_at IS NULL;
+  ON owner_preferences(product_id) WHERE dropped_at IS NULL;
   ON phase_beta_proposals(blocked_during_freeze_id);
   ON phase_beta_proposals(product_id, status);
   ON product_telemetry_events(contributor_hash, step);
@@ -1615,6 +1640,13 @@
   SELECT RAISE(ABORT,'outbound_action:approved_in_the_future');
   SELECT RAISE(ABORT,'outbound_action:approved_in_the_future');
   SELECT RAISE(ABORT,'outbound_action:born_approved')
+  SELECT RAISE(ABORT,'owner_allowance:already_one')
+  SELECT RAISE(ABORT,'owner_allowance:already_withdrawn')
+  SELECT RAISE(ABORT,'owner_allowance:cannot_arrive_withdrawn')
+  SELECT RAISE(ABORT,'owner_allowance:immutable')
+  SELECT RAISE(ABORT,'owner_allowance:immutable') WHERE EXISTS (
+  SELECT RAISE(ABORT,'owner_allowance:incomplete')
+  SELECT RAISE(ABORT,'owner_allowance:withdraw_needs_reason')
   SELECT RAISE(ABORT,'owner_boundary:already_lifted')
   SELECT RAISE(ABORT,'owner_boundary:cannot_arrive_lifted')
   SELECT RAISE(ABORT,'owner_boundary:immutable')
@@ -1627,6 +1659,11 @@
   SELECT RAISE(ABORT,'owner_objective:immutable')
   SELECT RAISE(ABORT,'owner_objective:immutable') WHERE EXISTS (
   SELECT RAISE(ABORT,'owner_objective:statement_required')
+  SELECT RAISE(ABORT,'owner_preference:already_dropped')
+  SELECT RAISE(ABORT,'owner_preference:cannot_arrive_dropped')
+  SELECT RAISE(ABORT,'owner_preference:immutable')
+  SELECT RAISE(ABORT,'owner_preference:immutable') WHERE EXISTS (
+  SELECT RAISE(ABORT,'owner_preference:statement_required')
   SELECT RAISE(ABORT,'proposed_act:already_decided')
   SELECT RAISE(ABORT,'proposed_act:cannot_arrive_decided')
   SELECT RAISE(ABORT,'proposed_act:expiry_required')
@@ -1919,6 +1956,7 @@
   alignment_drop INTEGER NOT NULL DEFAULT 0,
   alignment_score INTEGER NOT NULL,   -- 0-100
   allowed_classes TEXT NOT NULL,                  -- JSON array: ['general','customer']
+  amount_cents   INTEGER NOT NULL CHECK (amount_cents > 0),
   amount_usd REAL NOT NULL,
   amount_usd REAL NOT NULL,
   anonymize_customer_data INTEGER NOT NULL DEFAULT 0,
@@ -2548,6 +2586,7 @@
   door          TEXT CHECK (door IN ('outbound', 'spend')),
   draft_content TEXT NOT NULL,
   draft_id TEXT,                            -- action_drafts.id once approved/rejected
+  dropped_at  TEXT
   duration_minutes INTEGER,
   duration_seconds    INTEGER,
   duration_seconds INTEGER,
@@ -2874,11 +2913,13 @@
   id              TEXT PRIMARY KEY,
   id             TEXT PRIMARY KEY,
   id             TEXT PRIMARY KEY,
+  id             TEXT PRIMARY KEY,
   id            TEXT PRIMARY KEY,
   id            TEXT PRIMARY KEY,
   id            TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
+  id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
@@ -3660,6 +3701,7 @@
   product_id       TEXT NOT NULL,
   product_id      TEXT NOT NULL REFERENCES products(id),
   product_id      TEXT NOT NULL,
+  product_id     TEXT NOT NULL REFERENCES products(id),
   product_id     TEXT NOT NULL,
   product_id     TEXT REFERENCES products(id),
   product_id    TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -3671,6 +3713,7 @@
   product_id   TEXT NOT NULL,
   product_id   TEXT PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
   product_id  TEXT NOT NULL DEFAULT '',
+  product_id  TEXT NOT NULL REFERENCES products(id),
   product_id  TEXT NOT NULL,
   product_id  TEXT NOT NULL,
   product_id  TEXT NOT NULL,
@@ -3882,6 +3925,7 @@
   provider TEXT PRIMARY KEY
   provider TEXT,
   published BOOLEAN DEFAULT FALSE
+  purpose        TEXT NOT NULL,
   purpose       TEXT NOT NULL,
   purposes_json TEXT NOT NULL,
   quality_score INTEGER,  -- 1-5, filled in retrospectively or inferred from outcomes
@@ -4095,6 +4139,8 @@
   session_id TEXT,
   set_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   set_at         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  set_at         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  set_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   set_by                TEXT NOT NULL DEFAULT 'default',   -- founder id | 'earned' | 'undo_demotion' | 'anomaly' | 'panic'
   severity TEXT CHECK(severity IN ('watch', 'elevated', 'critical')),
   severity TEXT DEFAULT 'info',
@@ -4187,6 +4233,8 @@
   stated_by TEXT REFERENCES founders(id),
   statement       TEXT NOT NULL,
   statement      TEXT NOT NULL,
+  statement      TEXT NOT NULL,
+  statement   TEXT NOT NULL,
   statement TEXT NOT NULL,
   status                  TEXT NOT NULL DEFAULT 'active'
   status                TEXT NOT NULL DEFAULT 'planned'
@@ -4407,6 +4455,7 @@
   unit               TEXT,
   unit            TEXT,                    -- e.g. '%', '$', 'count', 'days'
   unit TEXT,                                 -- 'count' | 'usd' | 'pct' | 'days' | other
+  until          TEXT,
   updated_at              TEXT NOT NULL DEFAULT (datetime('now'))
   updated_at            DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -4539,6 +4588,8 @@
   wisdom_network_consent_date TEXT,
   wisdom_network_opted_in INTEGER NOT NULL DEFAULT 1,
   wisdom_patterns_used INTEGER DEFAULT 0,
+  withdraw_reason TEXT
+  withdrawn_at   TEXT,
   word_count INTEGER DEFAULT 0,
   working_hours TEXT, -- "9am-5pm ET" or "async, check in mornings"
   workspace_name TEXT,
@@ -4559,6 +4610,7 @@
  id TEXT PRIMARY KEY, judgment_id TEXT NOT NULL REFERENCES strategic_decisions_log(id), product_id TEXT NOT NULL,
  state TEXT NOT NULL CHECK(state IN ('not_yet_observable','insufficient_evidence','partially_observed','supported','contradicted','mixed','conflicting')),
 )
+);
 );
 );
 );
@@ -4812,6 +4864,7 @@
 , sector_profile TEXT DEFAULT 'b2b_saas', growth_stage TEXT DEFAULT 'pre_launch', growth_stage_updated_at TEXT, growth_stage_overridden INTEGER DEFAULT 0, share_token TEXT, ingest_token TEXT, deleted_at DATETIME, build_platform TEXT DEFAULT 'custom_code', company_lifecycle_state TEXT DEFAULT 'setup'
 , superseded_by_candidate_id TEXT REFERENCES responsibility_candidates(id));
 , unmeasured TEXT, measured_components INTEGER);
+, until TEXT);
 AFTER INSERT ON ai_spend_reservations
 AFTER INSERT ON responsibility_candidate_decisions WHEN NEW.decision!='promoted'
 AFTER INSERT ON responsibility_candidate_decisions WHEN NEW.decision='promoted'
@@ -4820,9 +4873,11 @@ AFTER INSERT ON responsibility_transitions
 AFTER UPDATE OF status ON ai_spend_reservations
 BEFORE DELETE ON governed_effect_kinds
 BEFORE DELETE ON institutional_judgment_dispositions
+BEFORE DELETE ON owner_allowances
 BEFORE DELETE ON owner_boundaries
 BEFORE DELETE ON owner_boundary_subjects
 BEFORE DELETE ON owner_objectives
+BEFORE DELETE ON owner_preferences
 BEFORE DELETE ON proposed_acts
 BEFORE DELETE ON reference_companies
 BEFORE DELETE ON system_identities
@@ -4855,9 +4910,11 @@ BEFORE INSERT ON outbound_actions
 BEFORE INSERT ON outbound_actions
 BEFORE INSERT ON outbound_actions WHEN NEW.inbound_message_id IS NOT NULL
 BEFORE INSERT ON outbound_actions WHEN NEW.responsibility_id IS NOT NULL
+BEFORE INSERT ON owner_allowances
 BEFORE INSERT ON owner_boundaries
 BEFORE INSERT ON owner_boundary_subjects
 BEFORE INSERT ON owner_objectives
+BEFORE INSERT ON owner_preferences
 BEFORE INSERT ON products
 BEFORE INSERT ON proposed_acts
 BEFORE INSERT ON reconstruction_claims
@@ -4921,12 +4978,20 @@ BEFORE UPDATE ON governed_effect_kinds
 BEFORE UPDATE ON ingest_credentials
 BEFORE UPDATE ON institutional_judgment_dispositions
 BEFORE UPDATE ON job_health
+BEFORE UPDATE ON owner_allowances
 BEFORE UPDATE ON owner_boundaries
 BEFORE UPDATE ON owner_boundary_subjects
 BEFORE UPDATE ON owner_objectives
+BEFORE UPDATE ON owner_preferences
 BEFORE UPDATE ON products
 BEFORE UPDATE ON proposed_acts
 BEFORE UPDATE ON system_identities
+BEGIN
+BEGIN
+BEGIN
+BEGIN
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5257,7 +5322,9 @@ CREATE INDEX idx_outcome_trees_parent
 CREATE INDEX idx_outcome_trees_product
 CREATE INDEX idx_outcome_trees_run
 CREATE INDEX idx_outreach_suppressions
+CREATE INDEX idx_owner_allowances_live
 CREATE INDEX idx_owner_boundaries_live
+CREATE INDEX idx_owner_preferences_live
 CREATE INDEX idx_pattern_matches_product ON pattern_matches(product_id, first_detected_at DESC);
 CREATE INDEX idx_patterns_market ON decision_patterns(market_category);
 CREATE INDEX idx_patterns_risk ON decision_patterns(risk_state_at_decision);
@@ -5544,9 +5611,11 @@ CREATE TABLE outbound_actions (
 CREATE TABLE outbound_rate_limits (
 CREATE TABLE outcome_trees (
 CREATE TABLE outreach_suppressions (
+CREATE TABLE owner_allowances (
 CREATE TABLE owner_boundaries (
 CREATE TABLE owner_boundary_subjects (
 CREATE TABLE owner_objectives (
+CREATE TABLE owner_preferences (
 CREATE TABLE pattern_matches (
 CREATE TABLE phase_beta_proposals (
 CREATE TABLE playbook_trigger_log (
@@ -5684,6 +5753,9 @@ CREATE TRIGGER judgment_conflict_identity_immutable
 CREATE TRIGGER outbound_action_approval_not_in_the_future_insert
 CREATE TRIGGER outbound_action_approval_not_in_the_future_update
 CREATE TRIGGER outbound_action_birth_guard
+CREATE TRIGGER owner_allowance_guard
+CREATE TRIGGER owner_allowance_no_delete
+CREATE TRIGGER owner_allowance_withdraw_is_one_way
 CREATE TRIGGER owner_boundary_lift_is_one_way
 CREATE TRIGGER owner_boundary_needs_words
 CREATE TRIGGER owner_boundary_no_delete
@@ -5693,6 +5765,9 @@ CREATE TRIGGER owner_boundary_subjects_constitutional_update
 CREATE TRIGGER owner_objective_needs_words
 CREATE TRIGGER owner_objective_no_delete
 CREATE TRIGGER owner_objective_retire_is_one_way
+CREATE TRIGGER owner_preference_drop_is_one_way
+CREATE TRIGGER owner_preference_guard
+CREATE TRIGGER owner_preference_no_delete
 CREATE TRIGGER products_reality_immutable
 CREATE TRIGGER products_status_is_lifecycle_only_insert
 CREATE TRIGGER products_status_is_lifecycle_only_update
@@ -5784,6 +5859,12 @@ CREATE UNIQUE INDEX idx_scratchpad_product_date ON agent_scratchpad(product_id, 
 CREATE UNIQUE INDEX idx_support_channels_one_feed_per_provider
 CREATE UNIQUE INDEX idx_voice_fp_active_unique
 CREATE UNIQUE INDEX idx_wiki_entries_unique
+END;
+END;
+END;
+END;
+END;
+END;
 END;
 END;
 END;

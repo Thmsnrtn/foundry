@@ -1339,6 +1339,12 @@ interface CompanyView {
   }>;
   /** What he said this company is for, in his words. */
   said: { statement: string; steers: boolean } | null;
+  /** A ceiling he set, and what is left of it. */
+  allowance: { id: string; statement: string; amount: string; left: string } | null;
+  /** How he would rather things were done. Consulted, never enforced. */
+  preferences: Array<{ id: string; statement: string }>;
+  /** What the ceiling used to be, so a change of mind about money is legible. */
+  formerAllowance: { amount: string; withdrawnAt: string; reason: string } | null;
   /** What he told Foundry not to do. Enforced, and liftable in one tap. */
   boundaries: Array<{
     id: string; statement: string; ownerWords: string; mode: string;
@@ -1418,6 +1424,9 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
   const liveBoundaries = await intent.boundariesFor(productId);
   const lifted = await intent.liftedBoundariesFor(productId);
   const proposals = await intent.openProposals(productId);
+  const allowance = await intent.allowanceFor(productId);
+  const preferences = await intent.preferencesFor(productId);
+  const formerAllowance = await intent.formerAllowanceFor(productId);
   const decisions = await intent.recentDecisions(productId);
   const { whatSituation } = await import('../../services/founder/what-situation.js');
   const situation = await whatSituation(productId);
@@ -1500,6 +1509,16 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
       })),
     })),
     formerly, situation, decisions,
+    allowance: allowance ? {
+      id: allowance.id, statement: allowance.statement,
+      amount: (allowance.amountCents / 100).toFixed(2),
+      left: (allowance.remainingCents / 100).toFixed(2),
+    } : null,
+    preferences: preferences.map((p) => ({ id: p.id, statement: p.statement })),
+    formerAllowance: formerAllowance ? {
+      amount: (formerAllowance.amountCents / 100).toFixed(2),
+      withdrawnAt: formerAllowance.withdrawnAt, reason: formerAllowance.reason,
+    } : null,
     proposals: proposals.map((p) => ({
       id: p.id, summary: p.summary, why: p.why, expectedEffect: p.expectedEffect,
       risk: p.risk, consequence: p.consequence, expiresAt: p.expiresAt.slice(0, 10),
@@ -1688,6 +1707,15 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
       one thing. The boundary stays exactly as it was — I will ask again next time.</p></div>` : ''}
     ${done === 'refused' ? html`<div class="done"><p><strong>Not doing it.</strong> Nothing
       happened. I will not raise that same act again.</p></div>` : ''}
+    ${done === 'allowed' && view.allowance ? html`<div class="done"><p><strong>Allowed.</strong>
+      Up to $${view.allowance.amount} for this company. I will stop and tell you when it
+      runs out.</p></div>` : ''}
+    ${done === 'preferred' ? html`<div class="done"><p><strong>Noted.</strong> I will lean
+      that way. I will not refuse anything because of it.</p></div>` : ''}
+    ${done === 'stopped' ? html`<div class="done"><p><strong>Stopped.</strong> I am no longer
+      weighing that. Nothing else has changed.</p></div>` : ''}
+    ${done === 'nothing' ? html`<div class="done"><p><strong>There was nothing to stop.</strong>
+      You had not told me what this company is for.</p></div>` : ''}
     ${done === 'recognised' ? html`<div class="done"><p><strong>Taken on.</strong> I will watch
       it and tell you what I see. I still cannot change anything.</p></div>` : ''}
     ${done === 'declined' ? html`<div class="done"><p><strong>Left alone.</strong> I will not
@@ -1821,6 +1849,13 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
       <p class="quiet">Tell me what this company is for, or tell me not to do something and
         I will refuse it every time until you say otherwise. I will say what I understood
         before anything takes effect.</p>
+      ${view.allowance ? html`<p><strong>Up to $${view.allowance.amount}</strong> —
+        $${view.allowance.left} of it left. ${view.allowance.statement}</p>` : ''}
+      ${view.preferences.length ? html`<ul>${raw(view.preferences.map((p) =>
+    `<li>${p.statement} <span class="quiet">— a preference. I lean that way; I refuse
+      nothing because of it.</span></li>`).join(''))}</ul>` : ''}
+      ${view.formerAllowance ? html`<p class="quiet">Before ${view.formerAllowance.withdrawnAt}
+        it was $${view.formerAllowance.amount} — ${view.formerAllowance.reason}.</p>` : ''}
       ${view.formerly ? html`<p class="quiet">Before ${view.formerly.retiredAt} it was:
         &ldquo;${view.formerly.statement}&rdquo; — replaced because
         ${view.formerly.retiredReason}.</p>` : ''}
@@ -2152,6 +2187,76 @@ foundryShellRoutes.post('/foundry/companies/:id/said',
       </form>`, 'companies'));
   }
 
+  if (proposal.kind === 'stop') {
+    // AN ACT ON STATE, NOT NEW STATE. He should see what Foundry understood
+    // "that" to be before it stops it, because a stop aimed at the wrong thing
+    // is worse than no stop.
+    const live = await intent.objectiveFor(productId);
+    return c.html(page('What you said', html`
+      <h1>${live ? 'Stop this?' : 'There is nothing to stop'}</h1>
+      <p class="lede">You said: <strong>${said}</strong></p>
+      ${live
+    ? html`<div class="know">
+        <h3>What I would stop</h3>
+        <p><strong>${live.statement}</strong></p>
+        <p class="quiet">I will stop weighing that when I decide what is worth your attention
+          here. Nothing else changes: what I can see, what I look after, and what you have
+          told me not to do all stay exactly as they are.</p>
+      </div>
+      <form method="POST" action="/foundry/companies/${productId}/said/confirm">
+        <input type="hidden" name="said" value="${said}" />
+        <button class="btn go" type="submit">Yes — stop that</button>
+      </form>`
+    : html`<p>You have not told me what ${name} is for, so there is nothing for me to
+        stop doing. If you meant something else, tell me and I will say what I understood.</p>`}
+      <a class="btn" href="/foundry/companies/${productId}">Back to ${name}</a>`, 'companies'));
+  }
+
+  if (proposal.kind === 'allowance') {
+    const pounds = (proposal.amountCents / 100).toFixed(2);
+    return c.html(page('What you said', html`
+      <h1>Allow up to $${pounds}?</h1>
+      <p class="lede">You said: <strong>${said}</strong></p>
+      <div class="know">
+        <h3>What I will do</h3>
+        <p>I will spend up to <strong>$${pounds}</strong> on ${name}, and refuse to spend
+          anything beyond it until you say otherwise.</p>
+        <p class="quiet">This is a ceiling, not a plan. It does not mean I will spend it, and
+          it does not let me do anything I could not already do — it only bounds what I may
+          spend doing it.</p>
+        <ul>
+          <li><strong>What counts</strong> — everything I spend for this company, from when
+            you set it.</li>
+          <li><strong>When it runs out</strong> — I stop, and tell you.</li>
+          <li><strong>Undo</strong> — one tap, on this company's page.</li>
+        </ul>
+      </div>
+      <form method="POST" action="/foundry/companies/${productId}/said/confirm">
+        <input type="hidden" name="said" value="${said}" />
+        <button class="btn go" type="submit">Yes — up to $${pounds}</button>
+      </form>
+      <a class="btn" href="/foundry/companies/${productId}">No</a>`, 'companies'));
+  }
+
+  if (proposal.kind === 'preference') {
+    return c.html(page('What you said', html`
+      <h1>Noted as a preference</h1>
+      <p class="lede">You said: <strong>${said}</strong></p>
+      <div class="know">
+        <h3>What I will do</h3>
+        <p>I will lean that way when I have a choice between things that are otherwise
+          equally good for ${name}.</p>
+        <p class="quiet"><strong>I will not refuse anything because of this.</strong> That is
+          the difference between a preference and a boundary — if you want me to be unable to
+          do something, tell me not to do it and I will refuse it every time.</p>
+      </div>
+      <form method="POST" action="/foundry/companies/${productId}/said/confirm">
+        <input type="hidden" name="said" value="${said}" />
+        <button class="btn go" type="submit">Yes — lean that way</button>
+      </form>
+      <a class="btn" href="/foundry/companies/${productId}">No</a>`, 'companies'));
+  }
+
   return c.html(page('What you said', html`
     <h1>Understood</h1>
     <p class="lede">You said: <strong>${said}</strong></p>
@@ -2215,6 +2320,22 @@ foundryShellRoutes.post('/foundry/companies/:id/said/confirm',
       return c.redirect(`/foundry/companies/${productId}?done=bound`);
     }
     if (proposal.kind === 'unclear') return c.redirect(`/foundry/companies/${productId}`);
+
+    if (proposal.kind === 'stop') {
+      const stopped = await intent.stopWhatIsLive(productId);
+      return c.redirect(`/foundry/companies/${productId}?done=${stopped ? 'stopped' : 'nothing'}`);
+    }
+    if (proposal.kind === 'allowance') {
+      await intent.setAllowance({
+        productId, statement: said,
+        amountCents: proposal.amountCents, purpose: proposal.purpose,
+      });
+      return c.redirect(`/foundry/companies/${productId}?done=allowed`);
+    }
+    if (proposal.kind === 'preference') {
+      await intent.setPreference({ productId, statement: said });
+      return c.redirect(`/foundry/companies/${productId}?done=preferred`);
+    }
 
     await intent.setObjective({
       productId, statement: said,

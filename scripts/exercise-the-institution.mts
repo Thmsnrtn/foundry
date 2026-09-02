@@ -111,6 +111,89 @@ async function main(): Promise<void> {
   const numbers = await whatTheNumbersSay(P);
   for (const n of numbers.numbers) say('', n.sentence);
 
+  console.log('\nWHAT IT CAN AND CANNOT SEE');
+  const senseSystem = await import('../src/services/senses/index.js');
+  for (const sense of await senseSystem.connectedSenses(P)) {
+    say(`  ${sense.wouldLearn}`,
+      `${senseSystem.providerName(sense.provider)} (${sense.mode})`
+      + `${sense.lastObservedAt ? ', reporting' : ', silent'}`);
+  }
+  for (const gap of await senseSystem.whatItCannotSee(P)) {
+    say(`  cannot see ${gap.cannotSee}`,
+      gap.offers.length
+        ? `${[...new Set(gap.offers.map((o) => senseSystem.providerName(o.provider)))].join(' or ')} could`
+        : 'nothing could');
+  }
+
+  console.log('\nWHAT SITUATION IT IS IN');
+  const { whatSituation } = await import('../src/services/founder/what-situation.js');
+  const situation = await whatSituation(P);
+  say(situation.situation, situation.headline);
+  for (const reason of situation.because) say('', reason);
+
+  // THE ASSEMBLED INSTITUTION, END TO END. Each step is the production path,
+  // and the point of running them in one place is that a chain nobody walks
+  // whole is a chain with a break somewhere nobody has stood.
+  //
+  // ON A REAL COMPANY, DELIBERATELY. The reference company is refused at the
+  // outbound door for a stronger reason than any boundary — it does not exist,
+  // so nothing it does may reach a person — and walking the ask-first chain
+  // there would prove the wrong thing. That refusal is shown first, because it
+  // is the guarantee everything else rests on.
+  console.log('\nTHE WHOLE CHAIN, WALKED');
+  const intent = await import('../src/services/institution/standing-intent.js');
+  const { checkKillSwitch: door } = await import('../src/services/outbound/kill-switch.js');
+  const refusedForBeingUnreal = await door(P, 'send_email');
+  say('the reference company tries to email',
+    refusedForBeingUnreal.blocked ? refusedForBeingUnreal.reason : 'ALLOWED — a defect');
+
+  const REAL = 'ex_real';
+  await query("INSERT INTO products (id,name,owner_id,status) VALUES (?,'AcreOS',?,'active')",
+    [REAL, OWNER]);
+  say('a real company', 'AcreOS');
+
+  const heSaid = 'Do not contact anyone without asking me first';
+  const read = intent.interpret(heSaid);
+  say('he says', `"${heSaid}"`);
+  say('  understood as',
+    read.kind === 'boundary' ? `a boundary — ${read.subject}, ${read.mode}` : read.kind);
+  if (read.kind === 'boundary') {
+    await intent.setBoundary({ productId: REAL, subject: read.subject, mode: read.mode,
+      statement: heSaid });
+  }
+
+  const checkKillSwitch = door;
+  const act = { to: 'a-customer@example.com', subject: 'your payment failed' };
+  const before = await checkKillSwitch(REAL, 'send_email', null,
+    { paramsFingerprint: intent.fingerprint(act) });
+  say('  Foundry tries to email', before.blocked ? `refused — ${before.reason}` : 'allowed');
+
+  const proposalId = await intent.proposeAct({
+    productId: REAL, subject: 'contact_people', actionType: 'send_email', params: act,
+    summary: 'Email one customer about a payment that failed',
+    why: 'their card was declined and nothing has told them',
+    expectedEffect: 'they update it and the subscription continues',
+    risk: 'if the decline was their bank this is an unnecessary message',
+    consequence: 'low', proposedBy: 'agent:support',
+  });
+  say('  Foundry proposes it', 'and still cannot act');
+  const stillBlocked = await checkKillSwitch(REAL, 'send_email', null,
+    { paramsFingerprint: intent.fingerprint(act) });
+  say('  tries again', stillBlocked.blocked ? 'refused' : 'ALLOWED — that would be a defect');
+
+  await intent.decideProposedAct({
+    id: proposalId, decision: 'approved', decidedBy: `founder:${OWNER}` });
+  const after = await checkKillSwitch(REAL, 'send_email', null,
+    { paramsFingerprint: intent.fingerprint(act) });
+  say('  he approves that one act', after.blocked ? 'STILL REFUSED — a defect' : 'allowed, once');
+  const spentAlready = await checkKillSwitch(REAL, 'send_email', null,
+    { paramsFingerprint: intent.fingerprint(act) });
+  say('  and again', spentAlready.blocked ? 'refused — the approval was spent' : 'ALLOWED — a defect');
+  const somethingElse = await checkKillSwitch(REAL, 'send_email', null,
+    { paramsFingerprint: intent.fingerprint({ ...act, to: 'everyone@example.com' }) });
+  say('  something he did not approve',
+    somethingElse.blocked ? 'refused' : 'ALLOWED — a defect');
+
   console.log('\nWHERE THE CHAIN STOPS');
   const stops: string[] = [];
   if (channels.length === 0) stops.push('no observation channel is live, so Shadowing cannot begin');

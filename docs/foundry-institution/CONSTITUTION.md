@@ -384,6 +384,38 @@ needs: that neither can be relied on until it is resolved.
 **A new company is not a broken one.** One needs a connection; the other needs
 looking at. A page that called both "healthy" would be wrong about both.
 
+## The grammar of what the owner can say
+
+The owner named eight kinds of thing an owner statement can be, and was explicit
+that they must not be forced into one persistence model. Each has the shape its
+meaning actually has:
+
+| He says | It is | Enforced? |
+|---|---|---|
+| "Get the first ten paying customers" | an **objective** | no — it changes what is worth his attention |
+| "Retention matters more than acquisition" | an **objective**, expressed as a comparison | no |
+| "Focus on this for the next week" | an objective with a **horizon** | no; it ends on its own |
+| "Do not contact anyone" | a **boundary**, mode `never` | yes, at the door |
+| "Never change pricing without asking me" | a **boundary**, mode `ask_first` | yes, and workable — see *Ask me first* |
+| "Spend no more than $25 testing this" | an **allowance** | yes; it permits up to an amount and is spent |
+| "I'd rather grow organically than buy ads" | a **preference** | **no, and it says so** |
+| "Stop working on that" | an **act**, not state | it retires what is live and names it |
+
+**A preference is not a weak boundary.** "I would rather grow organically" is
+not "do not buy ads". Storing it as a boundary would mean Foundry silently
+refusing something he did not forbid; storing it as an objective would mean it
+competing with what the company is actually for. It is a tiebreak, and the
+surface says plainly that nothing will be refused because of it.
+
+**An allowance carves an exception to a spend boundary**, which is what a person
+means by "don't spend anything — except up to $25 testing this". Exhausted, the
+boundary is simply back. Spend is counted from the ledger the ceilings already
+use, never a second running total kept beside it.
+
+**Stop shows what it would stop before stopping it**, because a stop aimed at
+the wrong thing is worse than no stop — and says there was nothing to stop
+rather than reporting a silent success.
+
 ## Deployment modes
 
 Foundry is deployed commercially to other companies and privately under owner

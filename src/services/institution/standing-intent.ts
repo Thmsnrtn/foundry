@@ -157,7 +157,30 @@ export interface Unclear {
   because: string;
 }
 
-export type IntentProposal = BoundaryProposal | ObjectiveProposal | Unclear;
+export interface AllowanceProposal {
+  kind: 'allowance'; statement: string; amountCents: number; purpose: string;
+}
+export interface PreferenceProposal { kind: 'preference'; statement: string }
+export interface StopProposal { kind: 'stop'; statement: string }
+
+export type IntentProposal =
+  | BoundaryProposal | ObjectiveProposal | AllowanceProposal
+  | PreferenceProposal | StopProposal | Unclear;
+
+/** "spend up to $25", "no more than 20 dollars". Cents, so nothing rounds. */
+function amountIn(text: string): number | null {
+  const match = /(?:\$|usd\s*)?(\d+(?:\.\d{1,2})?)\s*(?:dollars?|usd|bucks?)?/.exec(text);
+  if (!match) return null;
+  const cents = Math.round(Number(match[1]) * 100);
+  return Number.isFinite(cents) && cents > 0 ? cents : null;
+}
+
+const SPENDING = ['spend', 'budget', 'put', 'invest', 'use up to', 'costing'];
+const CAPPING = ['up to', 'no more than', 'at most', 'maximum', 'max ', 'limit', 'cap'];
+const PREFERRING = ['i would rather', "i'd rather", 'i prefer', 'prefer to', 'rather than',
+  'ideally', 'if possible', 'i would prefer'];
+const STOPPING = ['stop working on', 'stop doing', 'drop that', 'forget that',
+  'leave that', 'stop that', 'never mind that', 'stop focusing'];
 
 /**
  * Read one sentence from the owner.
@@ -172,6 +195,26 @@ export function interpret(raw: string): IntentProposal {
   if (!statement) {
     return { kind: 'unclear', statement, because: 'you did not say anything' };
   }
+
+  // ORDER MATTERS AND IS NOT ARBITRARY. "Stop working on that" contains a
+  // prohibition marker and is not a boundary — it is an act on something that
+  // already exists. "Spend no more than $25" contains one too and is a grant,
+  // not a refusal. Both are checked before the prohibition branch so that the
+  // narrower reading wins over the broader one.
+  if (STOPPING.some((p) => text.includes(p))) return { kind: 'stop', statement };
+
+  const amount = amountIn(text);
+  if (amount !== null && SPENDING.some((p) => text.includes(p))
+    && CAPPING.some((p) => text.includes(p))) {
+    return {
+      kind: 'allowance', statement, amountCents: amount,
+      // His own sentence is the purpose. Categorising it would be Foundry
+      // deciding what he meant the money was for.
+      purpose: statement,
+    };
+  }
+
+  if (PREFERRING.some((p) => text.includes(p))) return { kind: 'preference', statement };
 
   const prohibited = PROHIBITIONS.some((p) => text.includes(p));
   if (prohibited) {
@@ -626,4 +669,118 @@ export async function recentDecisions(
     note: r.revoke_reason == null ? null : String(r.revoke_reason),
     used: r.consumed_at != null,
   }));
+}
+
+// ─── the rest of what he can say ─────────────────────────────────────────────
+
+export interface LiveAllowance {
+  id: string; statement: string; amountCents: number; spentCents: number;
+  remainingCents: number; setAt: string;
+}
+
+/**
+ * WHAT HE HAS ALLOWED, AND WHAT IS LEFT OF IT.
+ *
+ * Spend is counted from `ai_daily_spend` since the day the allowance was set —
+ * the ledger the ceilings already use — rather than kept as a second running
+ * total here. Two counters for one quantity is the shape this codebase keeps
+ * finding broken, with the weaker one live.
+ */
+export async function allowanceFor(productId: string): Promise<LiveAllowance | null> {
+  const row = (await query(
+    `SELECT id, statement, amount_cents, set_at FROM owner_allowances
+      WHERE product_id = ? AND withdrawn_at IS NULL
+        AND (until IS NULL OR datetime(until) > datetime('now'))`, [productId]))
+    .rows[0] as Record<string, unknown> | undefined;
+  if (!row) return null;
+  const spent = Number(((await query(
+    `SELECT COALESCE(SUM(spent_cents), 0) AS c FROM ai_daily_spend
+      WHERE scope = 'product' AND scope_id = ? AND date >= date(?)`,
+    [productId, String(row.set_at)])).rows[0] as Record<string, unknown>).c);
+  const amount = Number(row.amount_cents);
+  return {
+    id: String(row.id), statement: String(row.statement), amountCents: amount,
+    spentCents: spent, remainingCents: Math.max(0, amount - spent),
+    setAt: String(row.set_at).slice(0, 10),
+  };
+}
+
+export async function setAllowance(input: {
+  productId: string; statement: string; amountCents: number; purpose: string;
+}): Promise<string> {
+  // Replacing rather than refusing: saying a new number is how a person changes
+  // a budget, and making him withdraw the old one first would be machinery.
+  await query(
+    `UPDATE owner_allowances SET withdrawn_at = datetime('now'),
+            withdraw_reason = 'the owner set a different amount'
+      WHERE product_id = ? AND withdrawn_at IS NULL`, [input.productId]);
+  const id = nanoid();
+  await query(
+    `INSERT INTO owner_allowances (id, product_id, purpose, statement, amount_cents)
+     VALUES (?,?,?,?,?)`,
+    [id, input.productId, input.purpose.trim(), input.statement.trim(), input.amountCents]);
+  return id;
+}
+
+export async function withdrawAllowance(id: string, reason: string): Promise<void> {
+  await query(
+    `UPDATE owner_allowances SET withdrawn_at = datetime('now'), withdraw_reason = ?
+      WHERE id = ? AND withdrawn_at IS NULL`, [reason, id]);
+}
+
+export interface LivePreference { id: string; statement: string; setAt: string }
+
+export async function preferencesFor(productId: string): Promise<LivePreference[]> {
+  return ((await query(
+    `SELECT id, statement, set_at FROM owner_preferences
+      WHERE product_id = ? AND dropped_at IS NULL ORDER BY rowid`, [productId]))
+    .rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+    id: String(r.id), statement: String(r.statement), setAt: String(r.set_at).slice(0, 10),
+  }));
+}
+
+export async function setPreference(input: {
+  productId: string; statement: string;
+}): Promise<string> {
+  const id = nanoid();
+  await query('INSERT INTO owner_preferences (id, product_id, statement) VALUES (?,?,?)',
+    [id, input.productId, input.statement.trim()]);
+  return id;
+}
+
+/**
+ * STOP. An act on state, not new state.
+ *
+ * Retires whatever direction is live and says which — because "stop working on
+ * that" is only meaningful if he can see what Foundry understood "that" to be.
+ * Returns null when there was nothing to stop, which is the honest answer and
+ * not a silent success.
+ */
+export async function stopWhatIsLive(productId: string): Promise<string | null> {
+  const live = await objectiveFor(productId);
+  if (!live) return null;
+  await query(
+    `UPDATE owner_objectives SET retired_at = datetime('now'),
+            retired_reason = 'the owner said to stop'
+      WHERE id = ?`, [live.id]);
+  return live.statement;
+}
+
+/** What the ceiling used to be, and why it changed. */
+export interface FormerAllowance {
+  statement: string; amountCents: number; withdrawnAt: string; reason: string;
+}
+
+export async function formerAllowanceFor(productId: string): Promise<FormerAllowance | null> {
+  const row = (await query(
+    `SELECT statement, amount_cents, withdrawn_at, withdraw_reason FROM owner_allowances
+      WHERE product_id = ? AND withdrawn_at IS NOT NULL
+      ORDER BY withdrawn_at DESC, rowid DESC LIMIT 1`, [productId]))
+    .rows[0] as Record<string, unknown> | undefined;
+  if (!row) return null;
+  return {
+    statement: String(row.statement), amountCents: Number(row.amount_cents),
+    withdrawnAt: String(row.withdrawn_at).slice(0, 10),
+    reason: String(row.withdraw_reason),
+  };
 }
