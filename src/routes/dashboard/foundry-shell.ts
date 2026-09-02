@@ -33,9 +33,10 @@ import { Hono } from 'hono';
 import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import { query, realCompany, referenceCompany } from '../../db/client.js';
-import { selectedProductId } from './_shared.js';
+import { selectedProductId } from '../../services/founder/selected-company.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
 import type { CompanyNumbers } from '../../services/founder/what-the-numbers-say.js';
+import { LAYER_IN_PLAIN_WORDS, layerOf } from '../../lib/repository-layers.js';
 
 export const foundryShellRoutes = new Hono();
 
@@ -104,7 +105,9 @@ interface OwnerState {
   permissions: Array<{ id: string; what: string; until: string; path: string | null }>;
   declined: Array<{ id: string; title: string }>;
   grantable: Array<{ responsibilityId: string; title: string; check: string;
-    path: string; verification: string[]; matched: number; wrong: number }>;
+    path: string; verification: string[]; matched: number; wrong: number;
+    /** WHICH OF THE THREE THINGS CALLED FOUNDRY this change would touch. */
+    layer: string; layerPlainly: string }>;
   budgetMonthly: number;
   spent30d: number;
   connectedSenses: string[];
@@ -232,10 +235,20 @@ async function readOwnerState(
         GROUP BY c.classification`, [g.responsibilityId, productId]))
       .rows as unknown as Array<Record<string, unknown>>;
     const of = (k: string) => Number(seen.find((r) => String(r.classification) === k)?.n ?? 0);
+    // WHAT HE IS ACTUALLY AGREEING TO CHANGE.
+    //
+    // "Foundry" means three things — his institution, the source that
+    // constitutes it, and a commercial product that does not exist — and a
+    // permission to change a file says nothing about which. Before he grants
+    // anything, the path is classified and stated in words, so "improve my
+    // experience" and "change the shared institution any future Foundry would
+    // be built from" can never be the same tap.
+    const layer = layerOf(scope.path) ?? 'kernel';
     grantable.push({
       responsibilityId: g.responsibilityId, title: g.title, check: g.check,
       path: scope.path, verification: scope.verification,
       matched: of('matched'), wrong: of('deviated'),
+      layer, layerPlainly: LAYER_IN_PLAIN_WORDS[layer],
     });
   }
 
@@ -299,7 +312,8 @@ async function readOwnerState(
  */
 type Attention =
   | { kind: 'authorise'; responsibilityId: string; check: string; path: string;
-      verification: string[]; matched: number; wrong: number }
+      verification: string[]; matched: number; wrong: number;
+      layer: string; layerPlainly: string }
   | { kind: 'recognise'; candidateId: string; check: string | null; proposal: string }
   | { kind: 'recognise_company'; candidateId: string; productId: string;
       companyName: string; proposal: string; rationale: string }
@@ -322,6 +336,7 @@ function whatNeedsHim(s: OwnerState): Attention {
       kind: 'authorise', responsibilityId: grant.responsibilityId, check: grant.check,
       path: grant.path, verification: grant.verification,
       matched: grant.matched, wrong: grant.wrong,
+      layer: grant.layer, layerPlainly: grant.layerPlainly,
     };
   }
   const candidate = s.pendingCandidates[0];
@@ -694,8 +709,8 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
         action: '/autopilot/development/grant',
         fields: { responsibility_id: a.responsibilityId },
       },
-      technical: `${a.path} · change class generated_artifact · verified by `
-        + `${a.verification.join(', ')} · responsibility ${a.responsibilityId}`,
+      technical: `${a.path} · layer ${a.layer} · change class generated_artifact `
+        + `· verified by ${a.verification.join(', ')} · responsibility ${a.responsibilityId}`,
     });
   }
 

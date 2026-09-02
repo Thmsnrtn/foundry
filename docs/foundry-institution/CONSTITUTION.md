@@ -416,6 +416,63 @@ use, never a second running total kept beside it.
 the wrong thing is worse than no stop — and says there was nothing to stop
 rather than reporting a silent success.
 
+## Three things called Foundry
+
+**Named by the owner on 2026-09-02, before Foundry-on-Foundry development
+proceeds.** "Foundry" refers ambiguously to three things that are not the same:
+
+1. **Private Foundry** — his permanent, single-owner institution. A running
+   deployment, with his companies in it.
+2. **The Foundry repository** — the source code that constitutes that
+   institution, and the shared capability any Foundry would need.
+3. **Commercial Foundry** — a product that does not exist, may never exist, and
+   would be originated by Private Foundry as a **separate portfolio company with
+   its own deployment** if it ever earns existence.
+
+Private Foundry connecting to the Foundry repository means **it is observing
+and, under separate authority, developing the source that constitutes itself
+and its shared institutional kernel.** It does not mean it is developing
+Commercial Foundry.
+
+### The layers, and the direction of dependency
+
+`src/lib/repository-layers.ts` classifies every source path; the direction is
+enforced by `scripts/check-layer-boundary.mjs`.
+
+| Layer | What it is |
+|---|---|
+| **substrate** | A database, a logger, a clock. Below everything; knows nothing about institutions, owners or customers. |
+| **kernel** | The **shared institutional kernel**: authority, responsibility, evidence, effects, senses, provenance, spend governance, and the machinery of understanding and operating a company. What a future Commercial Foundry would consume. |
+| **private** | The **Private Foundry product** — the experience built for this owner, for a deployment with one principal and no commercial relationship in it. Deliberately small. |
+| **commercial** | The surface a commercial Foundry would *start from*: access metering, tiers, trials, the marketing site, the older multi-tenant dashboard. **Preserved, not developed.** |
+| **composition** | What assembles a deployment out of the above. |
+
+**THE ONE RULE THAT CARRIES THE WEIGHT: nothing may depend on `private`.** It is
+never baselined and never will be. If nothing is built on the owner's
+experience, then whatever a future Commercial Foundry consumes structurally
+cannot be "whatever Private Foundry happens to look like" — it can only be the
+kernel, deliberately.
+
+**Why a classification and not a reorganisation.** Moving seventy directories
+would produce the same information plus a month of merge pain, and the owner's
+instruction was explicit: do not duplicate the kernel merely to create
+separation. What was needed is a direction of dependency that cannot be violated
+silently.
+
+**Inherited entanglement is measured, not hidden.** The shared institution still
+imports commercial billing in four places — the signup path minting a Stripe
+customer, the old dashboard's trial banner, the settings billing section. Those
+are recorded in a baseline that may only shrink. `instance-posture` already
+neutralises them at runtime for a private deployment; the ratchet is how they
+stop growing.
+
+**And the owner is told which layer he is authorising.** Before granting
+permission to change any file, the path is classified and stated in plain words:
+*your own experience of Foundry, and nothing else* versus *the shared
+institution — what any future Foundry would be built from*. "Improve my
+experience" and "change what a commercial product would inherit" can never be
+the same tap.
+
 ## Deployment modes
 
 Foundry is deployed commercially to other companies and privately under owner
