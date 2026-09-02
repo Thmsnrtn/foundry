@@ -416,6 +416,57 @@ use, never a second running total kept beside it.
 the wrong thing is worse than no stop — and says there was nothing to stop
 rather than reporting a silent success.
 
+## From a situation to a portfolio
+
+Built 2026-09-02, joining links that existed only in isolation. The chain the
+owner named — situation → diagnosis → responsibility discovery → recommendation
+→ bounded operation → outcome → learning → cross-company comparison → portfolio
+— could not close, because the first link forgot.
+
+**A diagnosis has to persist before anything can follow it.** `whatSituation()`
+was recomputed on every page load and stored nowhere, so nothing could ask how
+long, what changed, or whether anything happened afterwards. Migration 230
+records a **spell** — it began here, it ended there, it became this — written
+only when the answer CHANGES, so duration is arithmetic rather than narrative.
+
+**And the provenance travels with it.** A situation diagnosed from the reference
+world's readings, or a provider's test mode, is on the row as such. A portfolio
+roll-up that mixed those with real ones would be the exact corruption migrations
+222, 223 and 227 exist to prevent.
+
+**A recommendation is not an act, and cannot become one.** Foundry says what it
+would do and — the honest half — what it would *need*, which for most of them is
+a sense it lacks. Agreeing records agreement and starts nothing. Where an act is
+needed it goes through `proposed_acts` with its owner-bound, act-bound,
+spent-once approval. Collapsing the two would let "good idea" mean "go ahead",
+which is the one confusion an institution operating someone's businesses must
+never introduce.
+
+**Learning is what followed, and says so.** An institution that reported "this
+worked" from six observations with no control would be manufacturing the one
+thing it cannot observe. It reports raised, accepted, and whether the situation
+ended — with the caveat attached to the number rather than in a footnote — and
+counts only real companies, because a track record built from a company that
+does not exist is a synthetic track record.
+
+**Cross-company comparison works because situations are business-independent.**
+Comparing a bakery to a SaaS on their metrics is meaningless; comparing them on
+*what situation they are in and for how long* works regardless of what they do.
+The ordering is a **declared severity plus days**, never a score: a weighted
+number would invent precision nobody measured and make the ordering impossible
+to argue with.
+
+**Capital allocation is refused, deliberately.** Foundry cannot see what each
+company could do with money or what the owner is trying to build, so it orders
+the candidates, says what each would need it for, names what it does not know,
+and leaves the decision to him. *"Not yet — something is in trouble, and money
+spent while something is broken usually buys more of the problem"* is a real
+answer, and rejection is the valuable half.
+
+**The Companies place became the portfolio.** No new door: the Attention Law
+says top-level mounts may only shrink, and increasing capability should not
+produce more navigation.
+
 ## Three things called Foundry
 
 **Named by the owner on 2026-09-02, before Foundry-on-Foundry development

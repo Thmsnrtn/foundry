@@ -113,9 +113,22 @@ export const LAYER_OF: Record<string, Layer> = {
 
   // ── the private owner product ──────────────────────────────────────────
   //
-  // Small on purpose. Most of what makes Private Foundry valuable is kernel —
-  // the institution, not the interface — and a private product that grew to
-  // include the institution would be the tangle this file exists to prevent.
+  // SURFACES, NOT CAPABILITIES — and the boundary taught me the difference
+  // rather than the other way round.
+  //
+  // `what-situation.ts` and `what-the-numbers-say.ts` were classified here
+  // first, because they read a company in words written for this owner. Then
+  // `situation-chain.ts` — remembering a diagnosis so that duration, outcome
+  // and learning become possible — needed to call one, and the gate refused it.
+  // Correctly: a kernel that imports the owner's experience is the exact tangle
+  // the rule exists to prevent, and the refusal forced the question of what
+  // those files actually ARE.
+  //
+  // They are capabilities. Diagnosing what situation a company is in, and
+  // saying what its numbers did, is something any Foundry would want; only the
+  // three-place shell that renders them is this owner's. The line is SURFACES
+  // versus CAPABILITIES, and it stays small because most of what makes Private
+  // Foundry valuable is the institution, not the interface.
   'src/routes/dashboard/foundry-shell.ts': 'private',
   // THE DOOR THE SHELL LIVES BEHIND, and therefore part of the same product.
   // The Attention Law forbids a new top-level mount, so the shell is mounted
@@ -123,8 +136,6 @@ export const LAYER_OF: Record<string, Layer> = {
   // private surface as well as the owner surface the shell is absorbing. A
   // commercial Foundry would not inherit it; it would build its own.
   'src/routes/dashboard/letter.ts': 'private',
-  'src/services/founder/what-the-numbers-say.ts': 'private',
-  'src/services/founder/what-situation.ts': 'private',
 
   // ── dormant commercial ─────────────────────────────────────────────────
   //

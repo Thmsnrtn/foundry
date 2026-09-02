@@ -91,6 +91,12 @@ async function seed(): Promise<void> {
   // and the lift buttons carry his own sentence — the longest arbitrary string
   // the owner can put into the layout, and therefore the thing most likely to
   // overflow a phone.
+  // THE SITUATION, REMEMBERED, so the company page renders its duration, its
+  // history and what Foundry would do about it — the widest new blocks.
+  const chain = await import('../src/services/founder/situation-chain.js');
+  await chain.recordSituation(reference.productId);
+  await chain.recommendFor(reference.productId);
+
   const intent = await import('../src/services/institution/standing-intent.js');
   await intent.setBoundary({ productId: COMPANY, subject: 'contact_people', mode: 'ask_first',
     statement: 'Do not contact anyone at all until I say otherwise, not even to say hello' });

@@ -5,4 +5,3 @@ src/routes/dashboard/settings.ts -> src/services/billing/stripe.ts
 src/routes/dashboard/settings.ts -> src/services/billing/stripe.ts
 src/services/founder/intelligence.ts -> src/jobs/index.ts
 src/types/index.ts -> src/services/scp/types.ts
-src/views/layout.ts -> src/services/billing/trial.ts

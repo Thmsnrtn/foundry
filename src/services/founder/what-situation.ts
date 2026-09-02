@@ -163,9 +163,23 @@ export async function whatSituation(productId: string): Promise<CompanySituation
     };
   }
 
-  const prior = (await query(window("?, '-37 day'", "?, '-30 day'"),
-    [productId, newestDate, newestDate])).rows[0] as Record<string, unknown> | undefined;
-  if (prior?.snapshot_date == null) {
+  // A WEEK ENDING AT THE NEAREST READING AT LEAST A MONTH BACK — not a fixed
+  // slot thirty to thirty-seven days ago.
+  //
+  // The fixed slot was wrong for any company that does not report daily: a
+  // business with readings forty days apart has nothing inside it, and the
+  // honest-looking answer "I have nothing to compare against" was false, because
+  // there was a reading right there. Real companies report weekly, irregularly,
+  // or in bursts, and the comparison has to survive that.
+  const anchor = (await query(
+    `SELECT MAX(snapshot_date) AS d FROM metric_snapshots
+      WHERE product_id = ? AND snapshot_date <= date(?, '-30 day')`,
+    [productId, newestDate])).rows[0] as Record<string, unknown> | undefined;
+  const priorDate = anchor?.d == null ? null : String(anchor.d);
+  const prior = priorDate === null ? undefined
+    : (await query(window("?, '-7 day'", '?'), [productId, priorDate, priorDate]))
+      .rows[0] as Record<string, unknown> | undefined;
+  if (priorDate === null || prior?.snapshot_date == null) {
     return {
       situation: 'unknown', demandsAttention: false,
       headline: 'I have this month\'s numbers but nothing to compare them against yet.',

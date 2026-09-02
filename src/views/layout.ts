@@ -7,7 +7,7 @@ import { isFounder } from '../services/founder/intelligence.js';
 import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import type { NextAction, AppNotification, MilestoneEvent, NavBadges } from '../types/index.js';
-import type { TrialStatus } from '../services/billing/trial.js';
+import type { TrialStatus } from '../types/trial.js';
 
 /** Hono's html`` returns this union type when templates contain interpolated expressions */
 export type HtmlContent = HtmlEscapedString | Promise<HtmlEscapedString>;

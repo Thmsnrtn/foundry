@@ -6,15 +6,13 @@
 
 export const TRIAL_DAYS = parseInt(process.env.TRIAL_PERIOD_DAYS ?? '14', 10);
 
-export type TrialState = 'none' | 'trialing' | 'expired';
-
-export interface TrialStatus {
-  state: TrialState;
-  /** Whole days remaining (>=0) while trialing; 0 otherwise. */
-  daysRemaining: number;
-  /** True when the founder is inside an active trial window. */
-  onTrial: boolean;
-}
+// THE SHAPE LIVES IN `src/types/trial.ts`, and only the shape moved. Deriving
+// this status, charging for it and expiring it are billing and are right here.
+// The layout needed the three fields and nothing else, and taking them from
+// commercial code made the shared layout formally dependent on the dormant
+// commercial half of the repository.
+import type { TrialState, TrialStatus } from '../../types/trial.js';
+export type { TrialState, TrialStatus };
 
 /**
  * Derive trial status from a founder's trial_ends_at and tier.

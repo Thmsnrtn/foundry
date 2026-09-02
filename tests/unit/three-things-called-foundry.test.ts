@@ -42,6 +42,12 @@ describe('the classification', () => {
     // it are not.
     expect(layerOf('src/routes/dashboard/foundry-shell.ts')).toBe('private');
     expect(layerOf('src/routes/dashboard/agents-okr.ts')).toBe('commercial');
+    // SURFACES, NOT CAPABILITIES. Diagnosing a company's situation is something
+    // any Foundry would want; only the shell that renders it is this owner's.
+    // The gate taught this by refusing a kernel service that needed the
+    // diagnosis, which is the boundary doing exactly what it is for.
+    expect(layerOf('src/services/founder/what-situation.ts')).toBe('kernel');
+    expect(layerOf('src/services/founder/situation-chain.ts')).toBe('kernel');
     expect(layerOf('src/services/institution/responsibility.ts')).toBe('kernel');
     expect(layerOf('src/services/billing/trial.ts')).toBe('commercial');
     expect(layerOf('src/db/client.ts')).toBe('substrate');
@@ -67,6 +73,8 @@ describe('the classification', () => {
     const priv = Object.entries(LAYER_OF).filter(([, l]) => l === 'private');
     expect(priv.length).toBeGreaterThan(0);
     expect(priv.length).toBeLessThan(12);
+    // Every one of them is a surface the owner opens, not a capability.
+    for (const [path] of priv) expect(path).toContain('routes/');
   });
 });
 

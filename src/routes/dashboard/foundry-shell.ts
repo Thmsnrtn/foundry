@@ -171,19 +171,23 @@ async function questionsElsewhere(
 }
 
 async function readOwnerState(
-  productId: string, founderName: string, founderId: string,
+  productId: string | null, founderName: string, founderId: string,
 ): Promise<OwnerState> {
-  const product = (await query(
+  // Every self-maintenance read below is scoped to a company. With none, they
+  // are all honestly empty, and the institutional half of the page — what needs
+  // him across everything he owns — is unaffected.
+  const self = productId ?? '';
+  const product = productId === null ? undefined : (await query(
     `SELECT name, created_at, operating_budget_monthly_usd, ai_cost_trailing_30d_usd, github_repo_url
-       FROM products WHERE id = ?`, [productId])).rows[0] as Record<string, unknown> | undefined;
+       FROM products WHERE id = ?`, [self])).rows[0] as Record<string, unknown> | undefined;
 
   const { getSelfCheckStanding } = await import(
     '../../services/institution/development-observation.js');
   const { getPendingResponsibilityCandidates } = await import(
     '../../services/institution/responsibility-candidate.js');
 
-  const checks = await getSelfCheckStanding(productId);
-  const candidates = await getPendingResponsibilityCandidates(productId);
+  const checks = await getSelfCheckStanding(self);
+  const candidates = await getPendingResponsibilityCandidates(self);
 
   // A responsibility's own check, read from the evidence that created it, so one
   // name follows the thing from noticing through to permission.
@@ -193,7 +197,7 @@ async function readOwnerState(
        LEFT JOIN signal_events e ON ('signal_event:' || e.id) = r.discovery_evidence_ref
         AND e.product_id = r.product_id
       WHERE r.product_id = ? AND r.disposition = 'active'
-      ORDER BY r.created_at`, [productId])).rows as unknown as Array<Record<string, unknown>>;
+      ORDER BY r.created_at`, [self])).rows as unknown as Array<Record<string, unknown>>;
 
   const health = (await query(
     'SELECT COUNT(*) AS n FROM job_health WHERE last_success_at IS NOT NULL', []))
@@ -207,14 +211,14 @@ async function readOwnerState(
   const consents = (await query(
     `SELECT id, capability, expires_at, allowed_path_prefixes_json FROM autonomy_consents
       WHERE product_id = ? AND revoked_at IS NULL AND datetime(expires_at) > datetime('now')
-      ORDER BY expires_at`, [productId])).rows as unknown as Array<Record<string, unknown>>;
+      ORDER BY expires_at`, [self])).rows as unknown as Array<Record<string, unknown>>;
 
   // What he turned down, so refusal is reversible rather than a dead end. The
   // database always allowed reconsidering; nothing ever offered it.
   const declined = (await query(
     `SELECT id, proposed_responsibility FROM responsibility_candidates
       WHERE product_id = ? AND status = 'rejected' ORDER BY updated_at DESC LIMIT 5`,
-    [productId])).rows as unknown as Array<Record<string, unknown>>;
+    [self])).rows as unknown as Array<Record<string, unknown>>;
 
   // What Foundry could be permitted to do, and the evidence it would be
   // permitted on. Read here so the authority request lives where he already is
@@ -223,7 +227,7 @@ async function readOwnerState(
     '../../services/institution/development-authority.js');
   const { SELF_MAINTENANCE_SCOPES } = await import(
     '../../services/foundry/self-observation.js');
-  const offerable = await listGrantableDevelopmentResponsibilities(productId);
+  const offerable = await listGrantableDevelopmentResponsibilities(self);
   const grantable: OwnerState['grantable'] = [];
   for (const g of offerable) {
     const scope = SELF_MAINTENANCE_SCOPES[g.check];
@@ -263,7 +267,7 @@ async function readOwnerState(
   }
 
   return {
-    productId,
+    productId: self,
     ownerId: founderId,
     companyName: String(product?.name ?? 'this company'),
     firstName: founderName.split(' ')[0] || '',
@@ -931,6 +935,8 @@ const QUESTIONS: Record<string, string> = {
   allowed: 'What are you allowed to do?',
   today: 'What happened today?',
   needs: 'What needs me?',
+  portfolio: 'What do I own, and how is everything doing?',
+  capital: 'Where should the next dollar go?',
 };
 
 function matchQuestion(text: string): string {
@@ -945,6 +951,14 @@ function matchQuestion(text: string): string {
   if (/how is|how are|how'?s |doing|going|healthy|health of/.test(t)) return 'howdoing';
   // CONTEXT FIRST. He is looking at something; "what does this mean" is about
   // that, and he should never have to name it again to be understood.
+  // PORTFOLIO QUESTIONS FIRST, because "where should the next dollar go" also
+  // matches /money/ below and would be answered as a question about permissions.
+  if (/next (dollar|pound|\$|100|1000)|where should (i|we) (spend|invest|put)|allocate/.test(t)) {
+    return 'capital';
+  }
+  if (/what do i own|my companies|everything doing|how are things|across (all|my)|portfolio|deteriorat|which company/.test(t)) {
+    return 'portfolio';
+  }
   if (/what.*(this|that).*(mean|about)|explain (this|that)/.test(t)) return 'this';
   if (/if i (say )?(yes|agree|approve)|what happens if/.test(t)) return 'ifyes';
   if (/what can you change|can you change|are you allowed to change/.test(t)) return 'change';
@@ -1061,6 +1075,52 @@ async function answerAboutCompany(
     : html`<p class="quiet">You have not told me what ${about.name} is for, so I have no way
         to judge which of these matters most.</p>`}
     <a class="btn" href="/foundry/companies/${about.id}">Open ${about.name}</a>
+  </div>`;
+}
+
+/**
+ * THE QUESTIONS THAT ARE ABOUT ALL OF IT.
+ *
+ * Structure where structure helps: "what do I own" is a comparison and reads as
+ * a list. "Where should the next dollar go" is a judgement, and the honest
+ * answer is an ordering plus what Foundry cannot see — never a number.
+ */
+async function answerAboutEverything(
+  key: string, founderId: string,
+): Promise<HtmlEscapedString> {
+  const { portfolioFor, whereTheNextDollarGoes } = await import(
+    '../../services/founder/portfolio.js');
+
+  if (key === 'capital') {
+    const view = await whereTheNextDollarGoes(founderId);
+    return html`<div class="said">
+      <p><strong>${view.recommendation}</strong></p>
+      ${view.candidates.length ? html`<ul>${raw(view.candidates.map((c) =>
+    `<li><a href="/foundry/companies/${c.productId}">${c.name}</a> — ${c.forWhat}.</li>`)
+    .join(''))}</ul>` : ''}
+      <p class="quiet">What I do not know: ${view.whatIDoNotKnow.join('; ')}.</p>
+      <p class="quiet">That is an ordering, not an allocation. The decision is yours, and
+        I would rather say what I cannot see than put a number on it.</p>
+    </div>`;
+  }
+
+  const portfolio = await portfolioFor(founderId);
+  return html`<div class="said">
+    <p><strong>${portfolio.headline}</strong></p>
+    ${portfolio.companies.length === 0
+    ? html`<p>Nothing yet.</p>`
+    : html`<ul>${raw(portfolio.companies.map((c) =>
+      `<li><a href="/foundry/companies/${c.productId}">${c.name}</a> — ${c.headline}`
+      + `${c.days > 0 && c.situation !== 'steady'
+        ? ` For ${String(c.days)} ${c.days === 1 ? 'day' : 'days'}.` : ''}`
+      + `${c.needsHim ? ` <strong>${c.needsHim}.</strong>` : ''}</li>`).join(''))}</ul>`}
+    ${portfolio.reference.length ? html`<p class="quiet">You also have
+      ${String(portfolio.reference.length)} invented
+      ${portfolio.reference.length === 1 ? 'company' : 'companies'} I made up so you could
+      watch me work. ${portfolio.reference.length === 1 ? 'It is' : 'They are'} not counted
+      above and nothing about ${portfolio.reference.length === 1 ? 'it' : 'them'} is a fact
+      about a real business.</p>` : ''}
+    <a class="btn" href="/foundry/companies">Open your companies</a>
   </div>`;
 }
 
@@ -1254,8 +1314,13 @@ async function context(c: any): Promise<OwnerState | null> {
   // it is right there and wrong the moment a second company exists, which is
   // why it is second.
   const founderId = String(founder.id);
+  // NULL IS A RENDERABLE ANSWER. Neither resolving means Foundry has not been
+  // established as a company here and he owns more than one, so there is no
+  // unambiguous self to describe — but the screen is the INSTITUTION'S, not one
+  // company's, and it still has to answer "does anything need me" about the
+  // rest of what he owns. Returning null redirected him to onboarding, which is
+  // the same disappearing act the `selectedProductId` dependency used to cause.
   const productId = await foundryProductId(founderId) ?? await selectedProductId(c, founderId);
-  if (!productId) return null;
   return readOwnerState(productId, String(founder.name ?? founder.email ?? ''), founderId);
 }
 
@@ -1307,7 +1372,10 @@ foundryShellRoutes.get('/foundry', async (c) => {
     ${theOneThing(attention)}
 
     ${key ? html`<p class="asked">${typed || QUESTIONS[key] || asked}</p>
-      ${about ? answerAboutCompany(about) : answerTo(key, s, attention)}` : ''}
+      ${about ? answerAboutCompany(about)
+    : key === 'portfolio' || key === 'capital'
+      ? answerAboutEverything(key, s.ownerId)
+      : answerTo(key, s, attention)}` : ''}
 
     ${!key ? html`<div class="maybe">
       ${raw((attention !== null && attention.kind !== 'stopped' && attention.kind !== 'drifted'
@@ -1342,6 +1410,11 @@ interface CompanyView {
   asks: Array<{ id: string; proposal: string; rationale: string }>;
   /** The one sentence at the top: what situation this company is in. */
   situation: { situation: string; headline: string; because: string[]; demandsAttention: boolean };
+  /** Since when, and what it was before. A diagnosis without duration is half of one. */
+  spell: { days: number; beganAt: string } | null;
+  past: Array<{ situation: string; becameWhat: string; days: number; endedAt: string }>;
+  /** What Foundry would do about it, and what it would need. */
+  advice: Array<{ id: string; summary: string; why: string; wouldNeed: string }>;
   /** What he decided about acts, and what he took back. Auditable, and read. */
   decisions: Array<{
     id: string; summary: string; outcome: string; at: string;
@@ -1445,6 +1518,13 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
   const decisions = await intent.recentDecisions(productId);
   const { whatSituation } = await import('../../services/founder/what-situation.js');
   const situation = await whatSituation(productId);
+  // RECORDED HERE TOO, not only in the tick. He may open a company the moment
+  // he creates it, and a page that showed a situation the institution had not
+  // recorded would be showing him something it cannot later refer back to.
+  const chain = await import('../../services/founder/situation-chain.js');
+  const spell = await chain.recordSituation(productId);
+  const advice = await chain.recommendFor(productId);
+  const past = await chain.spellHistory(productId);
   const formerly = await intent.formerObjectiveFor(productId);
 
   const { getSelfCheckStanding } = await import(
@@ -1524,6 +1604,13 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
       })),
     })),
     formerly, situation, decisions,
+    spell: { days: spell.days, beganAt: spell.beganAt },
+    past: past.map((p) => ({
+      situation: p.situation, becameWhat: p.becameWhat, days: p.days, endedAt: p.endedAt,
+    })),
+    advice: advice.map((a) => ({
+      id: a.id, summary: a.summary, why: a.why, wouldNeed: a.wouldNeed,
+    })),
     allowance: allowance ? {
       id: allowance.id, statement: allowance.statement,
       amount: (allowance.amountCents / 100).toFixed(2),
@@ -1553,58 +1640,63 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
   const founder = c.get('founder') as { id?: string } | undefined;
   if (!founder?.id) return c.redirect('/onboarding');
 
-  // YOUR companies means yours. A reference company appearing in this list
-  // would put a company he does not own, and that does not exist, under a
-  // heading that says both — and would make the count wrong everywhere the
-  // count is read. It appears below, under its own heading, saying what it is.
-  const rows = (await query(
-    `SELECT id, name, created_at FROM products
-      WHERE owner_id = ? AND status = 'active' AND deleted_at IS NULL
-        AND ${realCompany()}
-      ORDER BY created_at`, [String(founder.id)])).rows as unknown as Array<Record<string, unknown>>;
-
-  const references = (await query(
-    `SELECT p.id, p.name, r.scenario FROM products p
-       JOIN reference_companies r ON r.product_id = p.id
-      WHERE p.owner_id = ? AND p.status = 'active' AND ${referenceCompany('p')}
-      ORDER BY p.created_at`, [String(founder.id)]))
-    .rows as unknown as Array<Record<string, unknown>>;
+  // THE COMPANIES PLACE IS THE PORTFOLIO. It was a list of names and dates,
+  // which answers "what do I own" and none of the questions that follow it:
+  // how is everything doing, which one is deteriorating, does anything need me.
+  //
+  // AND NO NEW DOOR FOR IT. The Attention Law says top-level mounts may only
+  // shrink, and the owner's rule is that increasing capability should not
+  // produce more navigation. A portfolio is what this place always was.
+  const { portfolioFor } = await import('../../services/founder/portfolio.js');
+  const portfolio = await portfolioFor(String(founder.id));
 
   const { REFERENCE_SCENARIOS } = await import('../../services/reference/scenarios.js');
-  const unstarted = REFERENCE_SCENARIOS.filter((sc) =>
-    !references.some((r) => String(r.scenario) === sc.situation));
+  const started = new Set(portfolio.reference.map((r) => r.name));
+  const unstarted = REFERENCE_SCENARIOS.filter((sc) => !started.has(sc.companyName));
+
+  const line = (c: typeof portfolio.companies[number]): string =>
+    `<a class="item" href="/foundry/companies/${c.productId}">
+      <h3>${c.name}${c.needsHim ? ` <span class="gap">— ${c.needsHim}</span>` : ''}</h3>
+      <p>${c.headline}${c.days > 0 && c.situation !== 'steady'
+  ? ` <span class="quiet">For ${String(c.days)} ${c.days === 1 ? 'day' : 'days'}.</span>` : ''}</p>
+      <p class="quiet">${c.canSee === 0 ? 'I cannot see anything about it.'
+  : `I can see ${String(c.canSee)} ${c.canSee === 1 ? 'thing' : 'things'} about it`
+    + `${c.cannotSee > 0 ? `, and ${String(c.cannotSee)} I cannot` : ''}.`}</p>
+    </a>`;
 
   const body = html`
     <h1>Your companies</h1>
-    ${rows.length === 0 ? html`<p class="lede">You have not given me any yet.</p>` : ''}
-    ${raw(rows.map((r) => `<a class="item" href="/foundry/companies/${String(r.id)}">
-      <h3>${String(r.name)}</h3>
-      <p>Since ${String(r.created_at ?? '').slice(0, 10)}</p></a>`).join(''))}
+    <p class="${portfolio.anythingNeedsHim ? 'lede alarm' : 'lede'}">${portfolio.headline}</p>
+    ${raw(portfolio.companies.map(line).join(''))}
 
     <form class="inline" method="POST" action="/foundry/companies" style="margin-top:var(--s4)">
       <input type="text" name="name" required maxlength="60" placeholder="Add a company by name"
         aria-label="Company name" />
-      <button class="btn go" type="submit" style="width:auto">Add</button>
+      <button class="btn go" type="submit">Add</button>
     </form>
     <p class="quiet">Adding one tells me it exists and that you own it. It does not connect
       anything or let me do anything — those are separate, and I will ask.</p>
+
+    ${portfolio.companies.length > 1 ? html`<div class="know" style="margin-top:var(--s4)">
+      <h3>Where the next dollar goes</h3>
+      <p class="quiet">Ask me that and I will put them in an order and tell you what I
+        cannot see. The allocation is yours.</p>
+      <a class="btn" href="/foundry?q=${encodeURIComponent('Where should the next dollar go?')}">Ask</a>
+    </div>` : ''}
 
     <div class="know" style="margin-top:var(--s5)">
       <h3>Companies I made up</h3>
       <p class="quiet">You should not have to hand me a real business to find out what I do
         with one. These are invented. I run them exactly as I would run yours — same
         numbers, same judgement, same ladder — and nothing I learn from them can ever be
-        told to you as fact about a real company, or let me act in the world.</p>
-      ${raw(references.map((r) => `<a class="item" href="/foundry/companies/${String(r.id)}">
-        <h3>${String(r.name)}</h3>
-        <p>${String(r.scenario)}</p></a>`).join(''))}
+        told to you as fact about a real company, counted in the totals above, or let me
+        act in the world.</p>
+      ${raw(portfolio.reference.map(line).join(''))}
       ${raw(unstarted.map((sc) => `<form method="POST" action="/foundry/reference"
           style="margin-top:var(--s3)">
           <input type="hidden" name="scenario" value="${sc.key}" />
           <button class="btn" type="submit">Show me ${sc.situation}</button>
         </form>`).join(''))}
-      ${unstarted.length === 0 && references.length === 0
-    ? html`<p class="lede">None.</p>` : ''}
     </div>`;
 
   return c.html(page('Companies', body, 'companies'));
@@ -1727,6 +1819,11 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
       runs out.</p></div>` : ''}
     ${done === 'preferred' ? html`<div class="done"><p><strong>Noted.</strong> I will lean
       that way. I will not refuse anything because of it.</p></div>` : ''}
+    ${done === 'agreed' ? html`<div class="done"><p><strong>Agreed.</strong> Nothing has
+      started. Where I need a permission for it I will ask, and say exactly what I intend to
+      do before anything happens.</p></div>` : ''}
+    ${done === 'notthat' ? html`<div class="done"><p><strong>Not that.</strong> I will not
+      raise it again for this situation.</p></div>` : ''}
     ${done === 'stopped' ? html`<div class="done"><p><strong>Stopped.</strong> I am no longer
       weighing that. Nothing else has changed.</p></div>` : ''}
     ${done === 'nothing' ? html`<div class="done"><p><strong>There was nothing to stop.</strong>
@@ -1739,8 +1836,27 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     <p class="${view.situation.demandsAttention ? 'lede alarm' : 'lede'}">
       ${view.situation.headline}</p>
     ${view.situation.demandsAttention ? html`<p class="quiet">${
-  view.situation.because.join('; ')}. That is what the numbers did — whether it is a problem,
-      and what to do about it, is yours.</p>` : ''}
+  view.situation.because.join('; ')}${view.spell && view.spell.days > 0
+    ? `. This has been true for ${String(view.spell.days)} `
+      + `${view.spell.days === 1 ? 'day' : 'days'}`
+    : ''}. That is what the numbers did — whether it is a problem is yours to say.</p>` : ''}
+
+    ${view.advice.length ? html`<div class="know">
+      <h3>${view.advice.length === 1 ? 'What I would do' : 'What I would do about it'}</h3>
+      ${raw(view.advice.map((a) => `<div class="noticed">
+        <p><strong>${a.summary}</strong></p>
+        <p class="quiet">${a.why}.</p>
+        <p class="quiet"><strong>What I would need:</strong> ${a.wouldNeed}.</p>
+        <form method="POST" action="/foundry/advice/${a.id}/accept">
+          <button class="btn go" type="submit">Do that</button>
+        </form>
+        <form method="POST" action="/foundry/advice/${a.id}/decline">
+          <button class="btn" type="submit">Not that</button>
+        </form>
+      </div>`).join(''))}
+      <p class="quiet">Agreeing does not start anything on its own. Where I need a
+        permission I will ask for it separately, and say exactly what I intend to do.</p>
+    </div>` : ''}
 
     ${view.proposals.length ? html`<div class="know">
       <h3>${view.proposals.length === 1 ? 'I need you to decide this' : 'I need you to decide these'}</h3>
@@ -1893,6 +2009,14 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
       </div>`).join(''))}
     </div>` : ''}
 
+    ${view.past.length ? html`<div class="know">
+      <h3>What it has been</h3>
+      <ul>${raw(view.past.map((p) =>
+    `<li>${p.situation.replaceAll('_', ' ')} for ${String(p.days)} `
+    + `${p.days === 1 ? 'day' : 'days'}, until ${p.endedAt} — then it became `
+    + `${p.becameWhat.replaceAll('_', ' ')}.</li>`).join(''))}</ul>
+    </div>` : ''}
+
     ${view.decisions.length ? html`<div class="know">
       <h3>What you decided</h3>
       <ul>${raw(view.decisions.map((d) =>
@@ -1927,6 +2051,49 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
 
   return c.html(page(view.name, body, 'companies'));
 });
+
+// ─── agreeing, or not, with what Foundry would do ───────────────────────────
+
+/**
+ * AGREEING IS NOT AUTHORISING, and the route is separate from the act path for
+ * exactly that reason.
+ *
+ * A recommendation is a sentence. Saying "do that" records that he agrees with
+ * it; it starts nothing, because most of these need something Foundry does not
+ * have and the ones that do not are reads it may already perform. Where an act
+ * IS needed, it goes through `proposed_acts` with its owner-bound, act-bound,
+ * spent-once approval — and he sees exactly what is intended before it happens.
+ *
+ * Collapsing the two would make "good idea" mean "go ahead", which is the one
+ * confusion an institution operating someone's businesses must never introduce.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/advice/:adviceId/:decision',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const decision = c.req.param('decision');
+    if (decision !== 'accept' && decision !== 'decline') return c.notFound();
+
+    const owned = await query(
+      `SELECT r.id, r.product_id FROM situation_recommendations r
+         JOIN products p ON p.id = r.product_id
+        WHERE r.id = ? AND p.owner_id = ? AND r.decision IS NULL`,
+      [c.req.param('adviceId'), String(founder.id)]);
+    if (!owned.rows.length) return c.notFound();
+    const productId = String((owned.rows[0] as Record<string, unknown>).product_id);
+
+    const { decideRecommendation } = await import(
+      '../../services/founder/situation-chain.js');
+    const { principalRef } = await import('../../services/outbound/acting-principal.js');
+    await decideRecommendation({
+      id: c.req.param('adviceId'),
+      decision: decision === 'accept' ? 'accepted' : 'declined',
+      decidedBy: principalRef('founder', String(founder.id)),
+    });
+    return c.redirect(
+      `/foundry/companies/${productId}?done=${decision === 'accept' ? 'agreed' : 'notthat'}`);
+  });
 
 // ─── being asked ────────────────────────────────────────────────────────────
 

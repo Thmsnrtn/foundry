@@ -2760,9 +2760,30 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       const { noticeWhatTheNumbersAreDoing } = await import(
         '../services/institution/noticing.js'
       );
+      // AND THE SITUATION, REMEMBERED. A diagnosis recomputed on every page
+      // load and stored nowhere cannot be followed by anything — not duration,
+      // not "what changed", not "we said something, did it help". Recorded here
+      // because it must happen whether or not he opens the page: a situation
+      // that only exists while someone is looking is not a record.
+      const { recordSituation, recommendFor } = await import(
+        '../services/founder/situation-chain.js');
+      let situationsRecorded = 0;
       let noticedCount = 0;
       for (const row of products.rows as unknown as Array<Record<string, unknown>>) {
         const productId = String(row.id);
+        try {
+          const before = await import('../services/founder/situation-chain.js')
+            .then((m) => m.currentSpell(productId));
+          const spell = await recordSituation(productId);
+          if (!before || before.id !== spell.id) situationsRecorded += 1;
+          await recommendFor(productId);
+        } catch (err) {
+          noteFailure(productId, err);
+          logger.error(
+            `situation recording failed for ${productId}: `
+            + `${err instanceof Error ? err.message : String(err)}`,
+            { jobName: 'institutional_judgment_tick', productId });
+        }
         try {
           noticedCount += (await noticeWhatTheNumbersAreDoing(productId)).length;
         } catch (err) {
@@ -2890,7 +2911,9 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
 
       if (raised > 0 || observed > 0 || understood > 0 || compared > 0 || selfObserved) {
         logger.info(
-          `institutional_judgment_tick: raised=${raised} observed=${observed} noticed=${String(noticedCount)} understood=${understood} compared=${compared} self_observed=${selfObserved}`,
+          `institutional_judgment_tick: raised=${raised} observed=${observed} `
+          + `situations=${String(situationsRecorded)} noticed=${String(noticedCount)} `
+          + `understood=${understood} compared=${compared} self_observed=${selfObserved}`,
           { jobName: 'institutional_judgment_tick' },
         );
       }
