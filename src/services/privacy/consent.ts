@@ -720,6 +720,15 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
     reason: 'the open questions on one person\'s candidates',
     onAccountErasure: { op: 'delete' },
   },
+  // WHAT WAS TRIED, WHAT WAS PREDICTED, AND WHETHER IT WAS A SURPRISE. Kept
+  // with the person because there is no company here — that is the point of the
+  // stage — and deleted rather than kept as anonymous learning, because a
+  // prediction and its result are a record of somebody's judgement.
+  venture_experiments: {
+    reason: 'tests designed against one person\'s candidates, with what was '
+      + 'predicted before each one ran',
+    onAccountErasure: { op: 'delete' },
+  },
   ai_output_feedback: {
     reason: 'the founder\'s ratings of outputs, across all their products',
     onAccountErasure: { op: 'delete' },

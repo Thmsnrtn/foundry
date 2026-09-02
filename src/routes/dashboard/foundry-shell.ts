@@ -93,7 +93,10 @@ interface OwnerState {
     another: {
       recommend: boolean; because: string; concentrations: string[];
     };
+    /** What has already been turned down or taken forward, with the reason. */
+    decided: string[];
     candidates: Array<{
+      id: string;
       headline: string; whoHasIt: string; theProblem: string; whyItMight: string;
       killThesis: string; unknowns: string[]; sources: string[];
       blockedBy: string | null; failsBecause: string | null;
@@ -105,6 +108,13 @@ interface OwnerState {
       standing: string[];
       /** Open questions, each with the cheapest thing that would settle it. */
       unanswered: string[];
+      /** What would have to be true before this could become a company. */
+      inTheWay: string[];
+      /** A test waiting on him, with the prediction he would be approving. */
+      awaiting: Array<{
+        id: string; whatWeDo: string; whatWeExpect: string;
+        wouldDisprove: string; cost: string;
+      }>;
       reference: boolean;
     }>;
   } | null;
@@ -366,7 +376,17 @@ async function readOwnerState(
               + (con.guessed ? ' (partly worked out rather than told to me)' : '')),
           };
         })(),
+        // WHAT HE HAS ALREADY TURNED DOWN, AND WHY. Kept on the page rather
+        // than in the record only: the reason a candidate died is the most
+        // reusable thing a search produces.
+        decided: await (async () => {
+          const { whatWasDecided } = await import('../../services/venture/mandate.js');
+          return (await whatWasDecided(progress.mandate.id)).map((d) =>
+            `${d.headline} — ${d.verdict === 'advanced' ? 'taken forward' : 'not taken'}`
+            + `${d.why ? `, ${d.why}` : ''}`);
+        })(),
         candidates: candidates.map((c) => ({
+          id: c.id,
           headline: c.headline, whoHasIt: c.whoHasIt, theProblem: c.theProblem,
           whyItMight: c.whyItMight, killThesis: c.killThesis,
           unknowns: c.unknowns, sources: c.sources, blockedBy: c.blockedBy,
@@ -379,6 +399,13 @@ async function readOwnerState(
           unanswered: c.unanswered.map((u) => u.cheapestTest === null
             ? `${u.question} (nothing cheap would settle it)`
             : `${u.question} — ${u.cheapestTest}`),
+          inTheWay: c.inTheWay,
+          awaiting: c.awaiting.map((e) => ({
+            id: e.id, whatWeDo: e.whatWeDo, whatWeExpect: e.whatWeExpect,
+            wouldDisprove: e.wouldDisprove,
+            cost: e.costCents === 0 ? 'nothing'
+              : `$${(e.costCents / 100).toFixed(2)}`,
+          })),
           reference: c.reference,
         })),
       };
@@ -1466,6 +1493,17 @@ foundryShellRoutes.get('/foundry', async (c) => {
       Every candidate from here is tested against it.</p></div>` : ''}
     ${done === 'searchstopped' ? html`<div class="done"><p><strong>Stopped looking.</strong>
       What I found stays on the record, including what I rejected and why.</p></div>` : ''}
+    ${done === 'trying' ? html`<div class="done"><p><strong>Going ahead with that.</strong>
+      What I said I expect is now fixed and cannot be edited, so the result can
+      disagree with me.</p></div>` : ''}
+    ${done === 'nottrying' ? html`<div class="done"><p><strong>Left it.</strong>
+      The question stays open, and it stays in the way of that one becoming a
+      company.</p></div>` : ''}
+    ${done === 'advanced' ? html`<div class="done"><p><strong>Taken forward.</strong>
+      Nothing was left standing in the way. Making it a company is still yours to
+      do — I have not made one.</p></div>` : ''}
+    ${done === 'stillintheway' ? html`<div class="done"><p><strong>Not yet.</strong>
+      Something is still in the way — it is on the candidate.</p></div>` : ''}
     ${done === 'alreadylooking' ? html`<div class="done"><p><strong>Already looking.</strong>
       Stop that search first, or steer it instead — two at once would compete for the same
       attention.</p></div>` : ''}
@@ -1486,6 +1524,9 @@ foundryShellRoutes.get('/foundry', async (c) => {
         <p><strong>What a single thing going wrong could take out</strong></p>
         <ul>${raw(s.search.another.concentrations.map((con) =>
     `<li>${con}</li>`).join(''))}</ul></div>` : ''}
+      ${s.search.decided.length ? html`<div class="quiet">
+        <p><strong>Already decided about</strong></p>
+        <ul>${raw(s.search.decided.map((d) => `<li>${d}</li>`).join(''))}</ul></div>` : ''}
       ${raw(s.search.candidates.map((cand) => `<div class="noticed">
         <h4>${cand.headline}</h4>
         ${cand.reference ? '<p class="quiet"><strong>Invented.</strong> This came from a '
@@ -1511,6 +1552,26 @@ foundryShellRoutes.get('/foundry', async (c) => {
     ? `<p class="gap">I would not bring this to you: ${cand.failsBecause}.</p>` : ''}
         ${cand.blockedBy
     ? `<p class="gap">This cannot earn a company yet — ${cand.blockedBy}.</p>` : ''}
+        ${cand.awaiting.map((e) => `<div class="said">
+          <p><strong>I would like to try this.</strong> ${e.whatWeDo}. It would
+            cost ${e.cost}.</p>
+          <p>What I expect: ${e.whatWeExpect}.</p>
+          <p>What would mean I was wrong: ${e.wouldDisprove}.</p>
+          <form method="POST" action="/foundry/venture/experiment">
+            <input type="hidden" name="experimentId" value="${e.id}" />
+            <button type="submit" name="decision" value="approved">Go ahead</button>
+            <button type="submit" name="decision" value="declined" class="quiet">Not this one</button>
+          </form>
+        </div>`).join('')}
+        ${cand.inTheWay.length
+    ? `<p class="quiet"><strong>Before this could be a company</strong> — `
+      + `${cand.inTheWay.join('; ')}.</p>`
+    : `<div class="said"><p><strong>Nothing is standing in the way of this any
+        more.</strong> Making it a company is yours to do.</p>
+        <form method="POST" action="/foundry/venture/advance">
+          <input type="hidden" name="opportunityId" value="${cand.id}" />
+          <button type="submit">Take it forward</button>
+        </form></div>`}
       </div>`).join(''))}
     </div>` : ''}
 
@@ -2470,6 +2531,52 @@ foundryShellRoutes.post('/foundry/venture/confirm',
       return c.redirect('/foundry?done=looking');
     }
     return c.redirect('/foundry');
+  });
+
+/**
+ * THE TEST HE APPROVES, AND THE PREDICTION HE IS APPROVING WITH IT.
+ *
+ * An experiment costs money or contacts people or both, and there is no company
+ * here yet to have granted an allowance — so the decision is his, one at a
+ * time, before anything happens. The database seals the prediction the moment
+ * he decides, which is what makes his approval mean something: he agreed to a
+ * specific test with a specific way of being wrong, and neither can be edited
+ * afterwards.
+ */
+foundryShellRoutes.post('/foundry/venture/experiment',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const form = await c.req.parseBody();
+    const experimentId = String(form.experimentId ?? '').trim();
+    const decision = String(form.decision ?? '');
+    if (!experimentId || (decision !== 'approved' && decision !== 'declined')) {
+      return c.redirect('/foundry');
+    }
+    const { decideExperiment } = await import('../../services/venture/validation.js');
+    await decideExperiment({
+      experimentId, decision, by: `founder:${String(founder.id)}` });
+    return c.redirect(`/foundry?done=${decision === 'approved' ? 'trying' : 'nottrying'}`);
+  });
+
+/**
+ * TAKING ONE FORWARD, WHICH IS HIS ACT AND NOT FOUNDRY'S.
+ *
+ * The check runs again here rather than trusting the page he clicked from: what
+ * stood in the way may have changed since it was rendered, and an advancement
+ * granted by a stale screen is an advancement nobody actually established.
+ */
+foundryShellRoutes.post('/foundry/venture/advance',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const form = await c.req.parseBody();
+    const opportunityId = String(form.opportunityId ?? '').trim();
+    if (!opportunityId) return c.redirect('/foundry');
+    const { advance } = await import('../../services/venture/validation.js');
+    const done = await advance({
+      opportunityId, by: `founder:${String(founder.id)}` });
+    return c.redirect(`/foundry?done=${done.advanced ? 'advanced' : 'stillintheway'}`);
   });
 
 // ─── being asked ────────────────────────────────────────────────────────────

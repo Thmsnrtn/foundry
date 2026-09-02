@@ -35,6 +35,7 @@ import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import type { PortfolioFit } from '../founder/resilience.js';
 import type { OpenUnknown, Standing } from './market-evidence.js';
+import type { Experiment } from './validation.js';
 
 export type GuidanceKind =
   | 'avoid' | 'prefer' | 'industry' | 'budget' | 'harder' | 'deeper'
@@ -547,6 +548,15 @@ export interface PresentedCandidate {
   standing: Standing[];
   /** What is still not known, with the cheapest thing that would settle it. */
   unanswered: OpenUnknown[];
+  /**
+   * WHAT WOULD HAVE TO BE TRUE BEFORE IT COULD BECOME A COMPANY.
+   *
+   * Not a readiness score. A list of sentences he could act on, and an empty
+   * list is the only thing that means ready.
+   */
+  inTheWay: string[];
+  /** Tests waiting on him, each with the prediction he would be approving. */
+  awaiting: Experiment[];
   reference: boolean;
 }
 
@@ -566,6 +576,7 @@ export async function candidatesFor(mandateId: string): Promise<PresentedCandida
   const guidance = open?.guidance ?? [];
   const { portfolioFitOf } = await import('../founder/resilience.js');
   const { standingOf, openUnknowns } = await import('./market-evidence.js');
+  const { awaitingHim, whatStandsInTheWay } = await import('./validation.js');
 
   const rows = ((await query(
     `SELECT id, headline, who_has_it, the_problem, why_it_might, kill_thesis,
@@ -606,10 +617,39 @@ export async function candidatesFor(mandateId: string): Promise<PresentedCandida
       }),
       standing,
       unanswered: await openUnknowns(String(r.id)),
+      inTheWay: await whatStandsInTheWay(String(r.id)),
+      awaiting: await awaitingHim(String(r.id)),
       reference: String(r.evidence_mode) === 'reference',
     });
   }
   return presented;
+}
+
+/**
+ * WHAT WAS LOOKED AT AND NOT TAKEN, WITH THE REASON.
+ *
+ * The constitution calls rejection the valuable half, and until this existed
+ * the reason a candidate was turned down was written and never read again —
+ * which would have made the record a filing cabinet rather than something the
+ * next search starts from. A candidate that was rejected because its own kill
+ * thesis landed is a thing worth seeing before somebody proposes it again.
+ */
+export interface Decided {
+  headline: string; verdict: 'rejected' | 'advanced'; why: string; when: string;
+}
+
+export async function whatWasDecided(mandateId: string): Promise<Decided[]> {
+  return ((await query(
+    `SELECT headline, verdict, verdict_why, decided_at
+       FROM venture_opportunities
+      WHERE mandate_id = ? AND verdict IS NOT NULL
+      ORDER BY decided_at DESC, rowid DESC`, [mandateId]))
+    .rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+    headline: String(r.headline),
+    verdict: String(r.verdict) as 'rejected' | 'advanced',
+    why: String(r.verdict_why ?? ''),
+    when: String(r.decided_at ?? '').slice(0, 10),
+  }));
 }
 
 /**

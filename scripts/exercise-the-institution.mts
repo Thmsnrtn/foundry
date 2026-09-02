@@ -228,6 +228,64 @@ async function main(): Promise<void> {
     }
   }
 
+  // AND THE STEP THAT MAKES RESEARCH CHANGE ANYBODY'S MIND: a prediction made
+  // before the answer arrives, sealed when he approves it, and a result that
+  // is allowed to disagree with it.
+  console.log('\nSAYING WHAT IT EXPECTS, BEFORE IT LOOKS');
+  const validation = await import('../src/services/venture/validation.js');
+  const evidence = await import('../src/services/venture/market-evidence.js');
+  if (!('refused' in opened)) {
+    const subject = (await venture.candidatesFor(opened.id))
+      .find((cand) => cand.headline.includes('veterinary'));
+    if (subject) {
+      const blocking = subject.unanswered.find((u) => u.blocking);
+      say('what stands in the way', subject.inTheWay.join('; ') || 'nothing');
+      if (blocking) {
+        const experimentId = await validation.designExperiment({
+          founderId: OWNER, opportunityId: subject.id, unknownId: blocking.id,
+          // Attached to the claim it bears on, so the result enters evidence
+          // through the ordinary door rather than sitting beside it.
+          claimId: subject.standing[0]?.claimId ?? null,
+          whatWeDo: blocking.cheapestTest ?? 'ask the people who have the problem',
+          whatWeExpect: 'at least three of twenty ask how to buy it',
+          wouldDisprove: 'fewer than three ask, or they all want it free',
+          costCents: 1_500, evidenceMode: 'reference' });
+        say('  it proposes', 'take a price to twenty practice managers, $15.00');
+        const tooDear = await validation.overWhatHeSaid({
+          mandateId: opened.id, costCents: 1_500 });
+        say('  against what he said', tooDear ?? 'within anything he has said');
+
+        const early = await validation.recordResult({
+          experimentId, whatHappened: 'anything', asPredicted: true })
+          .then(() => 'RAN WITHOUT HIM — a defect')
+          .catch(() => 'refused — he has not decided');
+        say('  it tries to run first', early);
+
+        await validation.decideExperiment({
+          experimentId, decision: 'approved', by: `founder:${OWNER}` });
+        const sealed = await query(
+          "UPDATE venture_experiments SET what_we_expect = 'whatever happens' WHERE id = ?",
+          [experimentId]).then(() => 'EDITED — a defect')
+          .catch(() => 'refused — the prediction is sealed');
+        say('  he approves it', 'and the prediction can no longer be changed');
+        say('  it tries to revise what it expected', sealed);
+
+        await validation.recordResult({
+          experimentId, whatHappened: 'one asked, and only about the free tier',
+          asPredicted: false });
+        say('  the result', 'one asked, and only about the free tier — a surprise');
+        for (const how of subject.standing) {
+          const now = await evidence.standingOf(how.claimId);
+          say('  what that did to the claim', now?.howItStands ?? 'nothing');
+        }
+        const stillBlocked = await validation.advance({
+          opportunityId: subject.id, by: `founder:${OWNER}` });
+        say('  can it become a company', stillBlocked.advanced
+          ? 'ADVANCED — a defect' : `no — ${stillBlocked.because}`);
+      }
+    }
+  }
+
   console.log('\nWHERE THE CHAIN STOPS');
   const stops: string[] = [];
   if (channels.length === 0) stops.push('no observation channel is live, so Shadowing cannot begin');

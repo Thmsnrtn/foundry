@@ -40,6 +40,16 @@ export interface Standing {
   /** Derived, in words. Never a number, and never the word "confident". */
   howItStands: string;
   settled: 'held' | 'failed' | null;
+  /**
+   * WHO SETTLED IT AND WHEN, shown wherever the settlement is.
+   *
+   * A claim that reads "this held" with nobody's name on it is an assertion
+   * from the institution. Reality settled it, somebody decided that it had, and
+   * both facts belong next to the verdict — the same standard applied to every
+   * other consequential decision here.
+   */
+  settledBy: string | null;
+  settledOn: string | null;
 }
 
 /**
@@ -52,7 +62,8 @@ export interface Standing {
  */
 export async function standingOf(claimId: string): Promise<Standing | null> {
   const claim = (await query(
-    'SELECT id, claim, settled_as FROM market_claims WHERE id = ?', [claimId]))
+    `SELECT id, claim, settled_as, settled_at, settled_by
+       FROM market_claims WHERE id = ?`, [claimId]))
     .rows[0] as Record<string, unknown> | undefined;
   if (!claim) return null;
 
@@ -69,37 +80,54 @@ export async function standingOf(claimId: string): Promise<Standing | null> {
   const direct = supporting.filter((r) => String(r.directness) === 'direct').length;
   const stale = supporting.filter((r) => Number(r.age) > STALE_DAYS).length;
   const kinds = [...new Set(supporting.map((r) => String(r.source_type)))];
-  // A vendor saying its own price is authoritative about price and worthless
-  // about whether anyone pays it. Counting stances separately is what stops six
-  // pricing pages reading as six independent confirmations.
   const stances = new Set(supporting.map((r) => String(r.stance)));
 
-  const howItStands = rows.length === 0
-    ? 'Nothing has been seen about this yet.'
-    : against.length > 0
-      ? `${String(supporting.length)} ${supporting.length === 1 ? 'thing supports' : 'things support'} `
-        + `this and ${String(against.length)} ${against.length === 1 ? 'contradicts' : 'contradict'} `
-        + 'it. I am not going to average that into a verdict - it means the question '
-        + 'is open, and what would settle it is worth more than another agreeing source.'
-      : direct === 0
-        ? `Everything supporting this was worked out rather than seen. Nothing has `
-          + 'directly said it.'
-        : stances.size === 1 && stances.has('self_reported')
-          ? `${String(supporting.length)} sources support this and all of them are `
-            + 'companies talking about themselves. That is good evidence about what '
-            + 'they charge and no evidence at all about what anyone pays.'
-          : stale === supporting.length && supporting.length > 0
-            ? `${String(supporting.length)} sources support this and all of them are `
-              + 'more than six months old. That is evidence about last year.'
-            : `${String(direct)} of ${String(supporting.length)} supporting observations `
-              + `say it directly, across ${String(kinds.length)} `
-              + `${kinds.length === 1 ? 'kind' : 'kinds'} of source. Nothing contradicts it yet.`;
+  // SETTLEMENT OUTRANKS ACCUMULATION, and says who and when. Once something
+  // actually happened, describing the balance of evidence would be reporting
+  // the argument after the result came in.
+  const howItStands = ((): string => {
+    if (claim.settled_as != null) {
+      return `${String(claim.settled_as) === 'held' ? 'This held' : 'This did not hold'}`
+        + ` - settled by ${String(claim.settled_by ?? 'nobody recorded')} on `
+        + `${String(claim.settled_at ?? '').slice(0, 10)}.`;
+    }
+    if (rows.length === 0) return 'Nothing has been seen about this yet.';
+    if (against.length > 0) {
+      return `${String(supporting.length)} `
+        + `${supporting.length === 1 ? 'thing supports' : 'things support'} this and `
+        + `${String(against.length)} `
+        + `${against.length === 1 ? 'contradicts' : 'contradict'} it. I am not going `
+        + 'to average that into a verdict - it means the question is open, and what '
+        + 'would settle it is worth more than another agreeing source.';
+    }
+    if (direct === 0) {
+      return 'Everything supporting this was worked out rather than seen. Nothing '
+        + 'has directly said it.';
+    }
+    // A vendor saying its own price is authoritative about price and worthless
+    // about whether anyone pays it. Counting stances separately is what stops
+    // six pricing pages reading as six independent confirmations.
+    if (stances.size === 1 && stances.has('self_reported')) {
+      return `${String(supporting.length)} sources support this and all of them are `
+        + 'companies talking about themselves. That is good evidence about what '
+        + 'they charge and no evidence at all about what anyone pays.';
+    }
+    if (stale === supporting.length && supporting.length > 0) {
+      return `${String(supporting.length)} sources support this and all of them are `
+        + 'more than six months old. That is evidence about last year.';
+    }
+    return `${String(direct)} of ${String(supporting.length)} supporting observations `
+      + `say it directly, across ${String(kinds.length)} `
+      + `${kinds.length === 1 ? 'kind' : 'kinds'} of source. Nothing contradicts it yet.`;
+  })();
 
   return {
     claimId: String(claim.id), claim: String(claim.claim),
     supports: supporting.length, contradicts: against.length,
     direct, stale, kindsOfSource: kinds, howItStands,
     settled: claim.settled_as == null ? null : String(claim.settled_as) as 'held' | 'failed',
+    settledBy: claim.settled_by == null ? null : String(claim.settled_by),
+    settledOn: claim.settled_at == null ? null : String(claim.settled_at).slice(0, 10),
   };
 }
 
@@ -138,6 +166,27 @@ export async function observe(input: {
       input.saw.trim(), input.bearing, input.directness,
       input.observedAt.toISOString(), input.evidenceMode]);
   return id;
+}
+
+/**
+ * REALITY SETTLES A CLAIM. EVIDENCE ACCUMULATING DOES NOT.
+ *
+ * Five supporting observations and no contradiction is a well-supported claim,
+ * and it is still not a settled one — the difference is whether anything
+ * actually happened. So this is deliberately separate from `standingOf`, which
+ * can only ever describe what has been seen, and it takes a witness: a claim
+ * that settled itself would be the institution marking its own paper.
+ *
+ * Once, and one way. A claim that could be re-settled would let a later
+ * disappointment be edited into an earlier success.
+ */
+export async function settleClaim(input: {
+  claimId: string; as: 'held' | 'failed'; by: string;
+}): Promise<void> {
+  await query(
+    `UPDATE market_claims
+        SET settled_as = ?, settled_at = datetime('now'), settled_by = ?
+      WHERE id = ?`, [input.as, input.by, input.claimId]);
 }
 
 export interface OpenUnknown {
