@@ -870,6 +870,7 @@
     WHERE NEW.answered_at IS NOT NULL;
     WHERE NEW.authority_ref='autonomy_consent:' || a.id
     WHERE NEW.became_product IS NOT NULL AND OLD.evidence_mode = 'reference'
+    WHERE NEW.changed_by NOT LIKE 'founder:%';
     WHERE NEW.claim IS NOT OLD.claim OR NEW.founder_id IS NOT OLD.founder_id
     WHERE NEW.closed_at IS NOT NULL AND trim(coalesce(NEW.closed_reason,'')) = '';
     WHERE NEW.closed_at IS NOT NULL OR NEW.became_product IS NOT NULL
@@ -898,6 +899,7 @@
     WHERE NEW.founder_id IS NOT OLD.founder_id
     WHERE NEW.founder_id IS NOT OLD.founder_id
     WHERE NEW.founder_id IS NOT OLD.founder_id
+    WHERE NEW.from_posture = NEW.to_posture;
     WHERE NEW.kind IS NOT OLD.kind OR NEW.summary IS NOT OLD.summary
     WHERE NEW.lifted_at IS NOT NULL AND trim(coalesce(NEW.lifted_reason,'')) = '';
     WHERE NEW.lifted_at IS NOT NULL;
@@ -1006,6 +1008,7 @@
     WHERE trim(NEW.kind) = '' OR trim(NEW.summary) = ''
     WHERE trim(NEW.named) = '' OR trim(NEW.never_grants) = '';
     WHERE trim(NEW.purpose) = '' OR trim(NEW.statement) = '';
+    WHERE trim(NEW.said) = '' OR trim(NEW.changed_by) = '';
     WHERE trim(NEW.scenario) = '' OR trim(NEW.purpose) = '';
     WHERE trim(NEW.secret_json) = ''
     WHERE trim(NEW.situation) = '' OR trim(NEW.headline) = '';
@@ -1263,6 +1266,7 @@
   -- HOW THIS IS KNOWN. An exposure the owner stated is a different thing from
   -- Health composite (0-100)
   -- His decision, before anything happens.
+  -- His sentence, kept whole.
   -- His words, verbatim. What he actually asked for.
   -- How it reads on the card where he decides. Completes "I will not ...".
   -- Identity is verified against real ownership. A caller-supplied founder
@@ -1295,6 +1299,7 @@
   -- Nullable: null means nothing has scored this company, which is different
   -- ONCE HE HAS DECIDED, THE PREDICTION IS SEALED. He approved a specific test
   -- ONE LIVE ALLOWANCE PER COMPANY. Two ceilings is no ceiling: something
+  -- ONLY THE OWNER SETS A POSTURE. Foundry recommends; it does not decide where
   -- Only a real institutional judgment of this product may be dispositioned.
   -- Only lifting may be edited. The subject and the words he used are what the
   -- Only the hash. The secret is shown once, at issuance, and never again.
@@ -1526,6 +1531,7 @@
   -- guards in this schema.
   -- has already ended is advice about the past.
   -- here too.
+  -- his money and attention go, and it never decides to sell or retire.
   -- holding a belief for. Correcting a fact that was never stated is stating
   -- honours it; this is a list of intakes that exist, not of intakes anyone
   -- independence guards match on.
@@ -1684,7 +1690,8 @@
   CHECK (last_refusal_reason IS NULL OR last_refusal_reason IN (
   CHECK (last_refusal_reason IS NULL OR last_refusal_reason IN (
   CHECK (mode IN ('never', 'ask_first')));
-  CHECK (reality IN ('real', 'reference')));
+  CHECK (posture IN ('grow','hold','harvest','reposition','sell','retire')), form TEXT);
+  CHECK (reality IN ('real', 'reference')), posture TEXT NOT NULL DEFAULT 'grow'
   CHECK(company_lifecycle_state IN ('setup', 'learning', 'operating', 'optimizing', 'scaling')), scp_status TEXT DEFAULT 'provisioning'
   CHECK(disposition IN ('active','deliberately_not_done')), disposition_reason TEXT, disposition_evidence_ref TEXT, disposition_at DATETIME, capability TEXT NOT NULL DEFAULT 'general', discovery_evidence_ref TEXT, due_at DATETIME, due_stated_by TEXT);
   CHECK(scp_status IN ('provisioning', 'active', 'paused', 'archived')), operating_budget_monthly_usd REAL DEFAULT 50.0, ai_cost_trailing_30d_usd REAL DEFAULT 0.0, attributed_revenue_trailing_30d_usd REAL DEFAULT 0.0, total_evolution_cycles INTEGER DEFAULT 0, golden_suite_size INTEGER DEFAULT 0, evolution_enabled INTEGER DEFAULT 1, disabled_tools TEXT, cadence_mode TEXT, entitlement_paused_at TEXT, erasure_scheduled_at DATETIME, website_url TEXT, health_score INTEGER, reality TEXT NOT NULL DEFAULT 'real'
@@ -2038,6 +2045,9 @@
   SELECT RAISE(ABORT,'portfolio_exposure:evidence_mode_mismatch')
   SELECT RAISE(ABORT,'portfolio_exposure:immutable')
   SELECT RAISE(ABORT,'portfolio_exposure:incomplete')
+  SELECT RAISE(ABORT,'posture_change:incomplete')
+  SELECT RAISE(ABORT,'posture_change:no_change')
+  SELECT RAISE(ABORT,'posture_change:owner_only')
   SELECT RAISE(ABORT,'proposed_act:already_decided')
   SELECT RAISE(ABORT,'proposed_act:cannot_arrive_decided')
   SELECT RAISE(ABORT,'proposed_act:expiry_required')
@@ -2540,7 +2550,9 @@
   change_id             TEXT NOT NULL,
   change_type TEXT NOT NULL CHECK(change_type IN (
   change_type TEXT NOT NULL,
+  changed_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   changed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  changed_by  TEXT NOT NULL,
   changed_by TEXT DEFAULT 'evolution_engine',
   channel TEXT DEFAULT 'web',
   channel TEXT NOT NULL CHECK (channel IN ('letter', 'log')),
@@ -3254,6 +3266,7 @@
   founder_id    TEXT NOT NULL REFERENCES founders(id),
   founder_id    TEXT NOT NULL REFERENCES founders(id),
   founder_id   TEXT NOT NULL REFERENCES founders(id),
+  founder_id  TEXT NOT NULL REFERENCES founders(id),
   founder_id  TEXT NOT NULL,
   founder_id  TEXT NOT NULL,
   founder_id TEXT NOT NULL REFERENCES founders(id) ON DELETE CASCADE,
@@ -3307,6 +3320,7 @@
   from_mode           TEXT NOT NULL,
   from_name    TEXT,
   from_node_id TEXT NOT NULL REFERENCES memory_nodes(id),
+  from_posture TEXT NOT NULL,
   from_state TEXT NOT NULL,
   frozen_at TEXT,
   full_briefing TEXT NOT NULL,         -- Complete briefing markdown
@@ -3428,6 +3442,7 @@
   id           TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
   id           TEXT PRIMARY KEY,
+  id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
   id          TEXT PRIMARY KEY,
@@ -4249,6 +4264,7 @@
   product_id   TEXT PRIMARY KEY REFERENCES products(id) ON DELETE CASCADE,
   product_id  TEXT NOT NULL DEFAULT '',
   product_id  TEXT NOT NULL REFERENCES products(id),
+  product_id  TEXT NOT NULL REFERENCES products(id),
   product_id  TEXT NOT NULL,
   product_id  TEXT NOT NULL,
   product_id  TEXT NOT NULL,
@@ -4628,6 +4644,7 @@
   rule_id TEXT NOT NULL REFERENCES lifecycle_rules(id),
   run_type TEXT CHECK(run_type IN ('initial', 'post_remediation', 'periodic')),
   runway_months REAL,
+  said        TEXT NOT NULL,
   sample_allocation REAL DEFAULT 0.5,    -- % to treatment
   sample_count     INTEGER NOT NULL,
   sample_count     INTEGER,
@@ -4983,6 +5000,7 @@
   to_agent TEXT NOT NULL,              -- Agent name or 'broadcast'
   to_mode             TEXT NOT NULL,
   to_node_id TEXT NOT NULL REFERENCES memory_nodes(id),
+  to_posture  TEXT NOT NULL,
   to_state TEXT NOT NULL,
   token TEXT UNIQUE NOT NULL,
   tokens_in INTEGER,
@@ -5448,6 +5466,7 @@
 );
 );
 );
+);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , analysis_failed_at DATETIME, analysis_failure_reason TEXT
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
@@ -5553,6 +5572,7 @@ BEFORE INSERT ON owner_boundary_subjects
 BEFORE INSERT ON owner_objectives
 BEFORE INSERT ON owner_preferences
 BEFORE INSERT ON portfolio_exposures
+BEFORE INSERT ON posture_changes
 BEFORE INSERT ON products
 BEFORE INSERT ON proposed_acts
 BEFORE INSERT ON reconstruction_claims
@@ -5639,6 +5659,7 @@ BEFORE UPDATE ON owner_boundary_subjects
 BEFORE UPDATE ON owner_objectives
 BEFORE UPDATE ON owner_preferences
 BEFORE UPDATE ON portfolio_exposures
+BEFORE UPDATE ON posture_changes
 BEFORE UPDATE ON products
 BEFORE UPDATE ON proposed_acts
 BEFORE UPDATE ON research_sources
@@ -5651,6 +5672,7 @@ BEFORE UPDATE ON venture_experiments
 BEFORE UPDATE ON venture_guidance
 BEFORE UPDATE ON venture_mandates
 BEFORE UPDATE ON venture_opportunities
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5812,6 +5834,7 @@ BEGIN SELECT RAISE(ABORT,'market_observation:immutable'); END;
 BEGIN SELECT RAISE(ABORT,'market_source_type:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'market_source_type:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'market_source_type:constitutional'); END;
+BEGIN SELECT RAISE(ABORT,'posture_change:immutable'); END;
 BEGIN SELECT RAISE(ABORT,'sense:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'sense:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'sense:constitutional'); END;
@@ -6049,6 +6072,7 @@ CREATE INDEX idx_portfolio_exposures_live
 CREATE INDEX idx_portfolio_members ON portfolio_memberships(portfolio_id, status);
 CREATE INDEX idx_portfolio_snapshots ON portfolio_snapshots(portfolio_id, snapshot_date);
 CREATE INDEX idx_portfolios_api ON portfolios(api_key);
+CREATE INDEX idx_posture_changes_product ON posture_changes(product_id, changed_at);
 CREATE INDEX idx_prediction_accuracy_product ON prediction_accuracy(product_id, measured_at DESC);
 CREATE INDEX idx_predictions_pending ON agent_predictions(measure_by_date, outcome) WHERE outcome IS NULL;
 CREATE INDEX idx_predictions_product ON predictions(product_id, status);
@@ -6350,6 +6374,7 @@ CREATE TABLE portfolio_exposures (
 CREATE TABLE portfolio_memberships (
 CREATE TABLE portfolio_snapshots (
 CREATE TABLE portfolios (
+CREATE TABLE posture_changes (
 CREATE TABLE prediction_accuracy (
 CREATE TABLE predictions (
 CREATE TABLE priority_actions (
@@ -6526,6 +6551,8 @@ CREATE TRIGGER owner_preference_guard
 CREATE TRIGGER owner_preference_no_delete
 CREATE TRIGGER portfolio_exposure_guard
 CREATE TRIGGER portfolio_exposure_retire_is_one_way
+CREATE TRIGGER posture_change_guard
+CREATE TRIGGER posture_change_immutable
 CREATE TRIGGER products_reality_immutable
 CREATE TRIGGER products_status_is_lifecycle_only_insert
 CREATE TRIGGER products_status_is_lifecycle_only_update
@@ -6645,6 +6672,7 @@ CREATE UNIQUE INDEX idx_support_channels_one_feed_per_provider
 CREATE UNIQUE INDEX idx_venture_mandate_one_open
 CREATE UNIQUE INDEX idx_voice_fp_active_unique
 CREATE UNIQUE INDEX idx_wiki_entries_unique
+END;
 END;
 END;
 END;

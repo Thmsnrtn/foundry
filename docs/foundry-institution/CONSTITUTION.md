@@ -284,6 +284,24 @@ it.** Reference-world questions never compete for the first screen. Nothing is
 at stake in one, so nothing about it *needs* him — which is the only question
 that screen answers. They wait where he goes to look.
 
+## Two canvases, neither a version of the other
+
+**Stated by the owner on 2026-09-02.** The product is used from a phone and
+from a desk, and it has to be equally suited to both. Not desktop shrunk to a
+phone, and not a phone stretched across a monitor.
+
+What changes between them is where the hand and the eye are, never what is
+there. Under 900px the three places sit under the thumb and the ask bar is
+fixed above them; from 900px the places become a rail on the left, the ask box
+sits at the top of the column where reading begins, the column widens, and
+sections that were one long scroll flow into two. Nothing is hidden on either
+canvas, and nothing appears on one that the other cannot reach.
+
+**Both are release gates.** The visual gate measures five phone widths at 100%
+and 200% text and three desktop widths, fails on any horizontal overflow, and
+keeps screenshots of the same pages side by side so the two can be compared by
+eye rather than assumed.
+
 ## Senses are not hands
 
 Built 2026-09-02, making the owner's permanent rule structural rather than

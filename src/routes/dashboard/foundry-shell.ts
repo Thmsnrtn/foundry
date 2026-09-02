@@ -1015,6 +1015,10 @@ function whatJustHappened(done: string, s: OwnerState,
   if (done === 'reopened') {
     return html`<div class="done"><p><strong>Back on the table.</strong></p></div>`;
   }
+  if (done === 'posture') {
+    return html`<div class="done"><p><strong>Changed.</strong> What I recommend for this
+      company, and where I would send money, follow from that now.</p></div>`;
+  }
   return html``;
 }
 
@@ -1731,6 +1735,8 @@ interface CompanyView {
   }>;
   /** What this company was for before, and when that changed. */
   formerly: { statement: string; retiredAt: string; retiredReason: string } | null;
+  /** What he is having Foundry do with it, and every time that changed. */
+  posture: { now: string; inPlainWords: string; changes: Array<{ from: string; to: string; said: string; when: string }> };
 }
 
 async function readCompany(productId: string, founderId: string): Promise<CompanyView | null> {
@@ -1847,6 +1853,12 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
     });
   }
 
+  const { postureHistory, POSTURE_IN_PLAIN_WORDS: POSTURE_WORDS } = await import(
+    '../../services/founder/burden.js');
+  const postureNow = String(((await query('SELECT posture FROM products WHERE id = ?', [productId]))
+    .rows[0] as Record<string, unknown> | undefined)?.posture ?? 'grow');
+  const postureChanges = await postureHistory(productId);
+
   return {
     id: String(row.id), name: String(row.name),
     established: row.created_at == null ? null : String(row.created_at).slice(0, 10),
@@ -1886,6 +1898,7 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
       })),
     })),
     formerly, situation, decisions,
+    posture: { now: postureNow, inPlainWords: POSTURE_WORDS[postureNow as keyof typeof POSTURE_WORDS] ?? postureNow, changes: postureChanges },
     spell: { days: spell.days, beganAt: spell.beganAt },
     past: past.map((p) => ({
       situation: p.situation, becameWhat: p.becameWhat, days: p.days, endedAt: p.endedAt,
@@ -1946,10 +1959,22 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
     + `${c.cannotSee > 0 ? `, and ${String(c.cannotSee)} I cannot` : ''}.`}</p>
     </a>`;
 
+  // WHAT EACH ONE EARNS AGAINST WHAT IT COSTS TO OWN, INCLUDING HIM. Headline
+  // revenue is not the measure; a business that needs him four times a week is
+  // worth less to him than one that needs nobody, and this is where the page
+  // says so - in a sentence with a stated rule behind it, not a score.
+  const { burdenFor, POSTURE_IN_PLAIN_WORDS } = await import('../../services/founder/burden.js');
+  const burdens = new Map((await burdenFor(String(founder.id))).map((b) => [b.productId, b]));
+
   const body = html`
     <h1>Your companies</h1>
     <p class="${portfolio.anythingNeedsHim ? 'lede alarm' : 'lede'}">${portfolio.headline}</p>
-    ${raw(portfolio.companies.map(line).join(''))}
+    ${raw(portfolio.companies.map((c) => {
+    const b = burdens.get(c.productId);
+    return line(c) + (b ? `<p class="${b.verdict === 'earning its keep' || b.verdict === 'too early to say' ? 'quiet' : 'gap'}"
+      style="margin:-8px 0 var(--s3)">${b.sentence}${b.posture !== 'grow'
+      ? ` You have me ${POSTURE_IN_PLAIN_WORDS[b.posture as keyof typeof POSTURE_IN_PLAIN_WORDS] ?? b.posture}.` : ''}</p>` : '');
+  }).join(''))}
 
     <form class="inline" method="POST" action="/foundry/companies" style="margin-top:var(--s4)">
       <input type="text" name="name" required maxlength="60" placeholder="Add a company by name"
@@ -2317,6 +2342,10 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
 
     ${view.decisions.length ? html`<div class="know">
       <h3>What you decided</h3>
+      ${view.posture.now !== 'grow' || view.posture.changes.length ? html`<p class="quiet">
+        You have me <strong>${view.posture.inPlainWords}</strong>.
+        ${raw(view.posture.changes.map((ch) =>
+    `Since ${ch.when}, when you said &ldquo;${ch.said}&rdquo; (it was ${ch.from} before).`).join(' '))}</p>` : ''}
       <ul>${raw(view.decisions.map((d) =>
     `<li><strong>${d.summary}</strong> — ${
   d.outcome === 'approved' ? (d.used ? 'you approved it and I did it' : 'you approved it; I have not done it yet')
@@ -2954,6 +2983,35 @@ foundryShellRoutes.post('/foundry/companies/:id/said',
   const intent = await import('../../services/institution/standing-intent.js');
   const proposal = intent.interpret(said);
 
+  // "LEAVE IT ALONE." "HARVEST IT." "SHUT IT DOWN." Posture is read before
+  // anything else because "leave that alone" also contains a stopping phrase,
+  // and hearing it as "stop what is live" would do the opposite of what he
+  // meant. Nothing binds until he confirms, same as every other sentence here.
+  const { readPosture, POSTURE_IN_PLAIN_WORDS } = await import('../../services/founder/burden.js');
+  const posture = proposal.kind === 'preference' || proposal.kind === 'allowance'
+    || proposal.kind === 'boundary' ? null : readPosture(said);
+  if (posture !== null) {
+    return c.html(page('What you said', html`
+      <h1>Change what I am doing with ${name}?</h1>
+      <p class="lede">You said: <strong>${said}</strong></p>
+      <div class="know">
+        <h3>What that means</h3>
+        <p>From now on I would be <strong>${POSTURE_IN_PLAIN_WORDS[posture]}</strong>.
+          ${posture === 'retire' || posture === 'sell'
+    ? 'I will not shut anything down or contact any buyer on my own: this changes what I '
+      + 'recommend and where money goes, and the act itself stays yours.'
+    : posture === 'harvest' || posture === 'hold'
+      ? 'I will stop recommending growth spending here and stop bringing you growth questions about it.'
+      : 'I will start bringing you the things that would make it bigger.'}</p>
+      </div>
+      <form method="POST" action="/foundry/companies/${productId}/said/confirm">
+        <input type="hidden" name="said" value="${said}" />
+        <input type="hidden" name="as" value="posture" />
+        <button type="submit">Yes, do that</button>
+        <a class="btn quiet" href="/foundry/companies/${productId}">No</a>
+      </form>`, 'companies'));
+  }
+
   if (proposal.kind === 'unclear') {
     // TAUGHT IN ONE INTERACTION, RATHER THAN IN A GLOSSARY. He sees what it can
     // hold at the moment he needed it, which is the only moment it is useful.
@@ -3140,6 +3198,14 @@ foundryShellRoutes.post('/foundry/companies/:id/said/confirm',
     // He read a boundary and chose to keep it as a note instead. His sentence
     // is kept verbatim either way; only what it binds differs.
     const asObjective = String(form.as ?? '') === 'objective';
+
+    if (String(form.as ?? '') === 'posture') {
+      const { readPosture, setPosture } = await import('../../services/founder/burden.js');
+      const to = readPosture(said);
+      if (to === null) return c.redirect(`/foundry/companies/${productId}`);
+      await setPosture({ productId, founderId: String(founder.id), to, said });
+      return c.redirect(`/foundry/companies/${productId}?done=posture`);
+    }
 
     if (proposal.kind === 'boundary' && !asObjective) {
       await intent.setBoundary({

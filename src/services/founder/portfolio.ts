@@ -189,9 +189,18 @@ export interface CapitalView {
 
 export async function whereTheNextDollarGoes(founderId: string): Promise<CapitalView> {
   const { companies } = await portfolioFor(founderId);
+  // A COMPANY HE IS HOLDING OR HARVESTING DOES NOT GET GROWTH MONEY. That is
+  // what the posture means; an allocator that ignored it would be overruling
+  // him with his own cash.
+  const postures = new Map(((await query(
+    `SELECT p.id, p.posture FROM products p
+      WHERE p.owner_id = ? AND ${realCompany('p')}`, [founderId]))
+    .rows as unknown as Array<Record<string, unknown>>)
+    .map((r) => [String(r.id), String(r.posture)]));
   const spendable = companies.filter((c) =>
-    c.situation === 'growth_not_converting' || c.situation === 'revenue_falling'
-    || c.situation === 'churning' || c.situation === 'growing');
+    (postures.get(c.productId) === 'grow' || postures.get(c.productId) === 'reposition')
+    && (c.situation === 'growth_not_converting' || c.situation === 'revenue_falling'
+    || c.situation === 'churning' || c.situation === 'growing'));
 
   const forWhat: Record<string, string> = {
     growing: 'more of whatever is already working',

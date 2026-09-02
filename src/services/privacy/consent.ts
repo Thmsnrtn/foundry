@@ -729,6 +729,11 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
   // founder rather than through a product.
   // WHAT LIABILITY HIS THINGS CREATE is a fact about him, reached through
   // companies and candidates alike, so it carries his id and goes with him.
+  posture_changes: {
+    reason: 'every time the owner changed what Foundry was doing with a company, in '
+      + 'their own words',
+    onAccountErasure: { op: 'delete' },
+  },
   legal_surfaces: {
     reason: 'what legal exposure one person\'s companies and candidates create, and '
       + 'what is known about each',

@@ -265,8 +265,82 @@ const PAYMENTS_FAILING: ReferenceScenario = {
   ],
 };
 
+
+// A TRIBUTARY. Four hundred dollars a month, eighteen dollars of cost, stable
+// customers, and nobody's attention. Not a business that failed to scale: the
+// river-of-nickels thesis in one row, and the scenario in which the right
+// recommendation is to do nothing for years. An institution that finds
+// something to improve here every week is one the owner stops reading.
+const TRIBUTARY: ReferenceScenario = {
+  key: 'a_tributary_that_needs_nobody',
+  companyName: 'Fennel Reference Co',
+  situation: 'a tiny asset earning steadily with almost no cost and no attention',
+  purpose: 'exercise the institution against something it should leave alone',
+  premise:
+    'A paid dataset, refreshed quarterly, sold per download. Forty buyers a month, '
+    + 'the same forty as last month. It costs eighteen dollars to keep alive. The '
+    + 'right answer is to leave it alone, and the test is whether the institution '
+    + 'can say so.',
+  metrics: [
+    { field: 'mrr_cents', start: 40_000, dailyDrift: 0.0002, noise: 0.006, precision: 'integer' },
+    { field: 'new_mrr_cents', start: 4_000, dailyDrift: 0.0001, noise: 0.05, precision: 'integer' },
+    { field: 'churned_mrr_cents', start: 3_800, dailyDrift: 0.0001, noise: 0.05, precision: 'integer' },
+    { field: 'active_users', start: 40, dailyDrift: 0.0002, noise: 0.01, precision: 'integer' },
+    { field: 'support_volume_7d', start: 0, dailyDrift: 0, noise: 0, precision: 'integer' },
+    { field: 'churn_rate', start: 0.01, dailyDrift: 0, noise: 0.03, precision: 'rate' },
+  ],
+  exposures: [
+    ['revenue_model', 'one-off purchase'],
+    ['customer_type', 'developers'],
+    ['pricing_model', 'per download'],
+    ['acquisition_channel', 'data marketplace listing'],
+    ['provider_dependency', 'marketplace payouts'],
+    ['support_burden', 'almost none'],
+    ['owner_attention', 'almost none'],
+  ],
+  surfaces: [['licensing', 'minor', 'public register data, redistributed as derived deadlines']],
+};
+
+// AN ANCHOR THAT EATS HIM. The most revenue in the portfolio and the most of
+// the owner's week: support is climbing, every month brings a decision, and
+// the headline number says it is the best thing he owns. The test is whether
+// the institution can say that the second-best thing he owns is worth more to
+// him.
+const HUNGRY_ANCHOR: ReferenceScenario = {
+  key: 'an_anchor_that_needs_him',
+  companyName: 'Tallow Reference Co',
+  situation: 'the largest business in the portfolio, and the one that needs the owner most',
+  purpose: 'exercise owner-adjusted cash flow against a headline number that flatters it',
+  premise:
+    'Three thousand a month, growing, and a support queue that doubles every '
+    + 'quarter with questions only the owner can answer. Revenue says anchor. '
+    + 'The rest says it is the most expensive thing he owns.',
+  metrics: [
+    { field: 'mrr_cents', start: 300_000, dailyDrift: 0.0015, noise: 0.010, precision: 'integer' },
+    { field: 'new_mrr_cents', start: 34_000, dailyDrift: 0.0020, noise: 0.06, precision: 'integer' },
+    { field: 'churned_mrr_cents', start: 12_000, dailyDrift: 0.0010, noise: 0.08, precision: 'integer' },
+    { field: 'active_users', start: 610, dailyDrift: 0.0012, noise: 0.012, precision: 'integer' },
+    { field: 'signups_7d', start: 29, dailyDrift: 0.0015, noise: 0.13, precision: 'integer' },
+    { field: 'support_volume_7d', start: 48, dailyDrift: 0.0110, noise: 0.14, precision: 'integer' },
+    { field: 'churn_rate', start: 0.024, dailyDrift: 0.0006, noise: 0.05, precision: 'rate' },
+  ],
+  exposures: [
+    ['revenue_model', 'subscription'],
+    ['customer_type', 'small businesses'],
+    ['pricing_model', 'per-seat monthly'],
+    ['acquisition_channel', 'google search'],
+    ['provider_dependency', 'stripe'],
+    ['support_burden', 'human support inbox'],
+    ['owner_attention', 'the owner answers the hard tickets'],
+  ],
+  surfaces: [
+    ['privacy_data', 'material', 'customer accounts with names, emails and billing history'],
+    ['contractual', 'material', 'an uptime promise in the enterprise plan'],
+  ],
+};
+
 export const REFERENCE_SCENARIOS: ReferenceScenario[] =
-  [FALLING, STEADY, NOT_CONVERTING, CHURNING, PAYMENTS_FAILING];
+  [FALLING, STEADY, NOT_CONVERTING, CHURNING, PAYMENTS_FAILING, TRIBUTARY, HUNGRY_ANCHOR];
 
 export function referenceScenario(key: string): ReferenceScenario | null {
   return REFERENCE_SCENARIOS.find((s) => s.key === key) ?? null;
