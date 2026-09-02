@@ -261,6 +261,7 @@
        OR NEW.evidence_mode IS NOT OLD.evidence_mode;
        OR NEW.evidence_mode IS NOT OLD.evidence_mode;
        OR NEW.evidence_mode IS NOT OLD.evidence_mode;
+       OR NEW.evidence_mode IS NOT OLD.evidence_mode;
        OR NEW.expected_effect IS NOT OLD.expected_effect
        OR NEW.expires_at IS NOT OLD.expires_at;
        OR NEW.founder_id IS NOT OLD.founder_id
@@ -269,6 +270,8 @@
        OR NEW.kill_thesis IS NOT OLD.kill_thesis
        OR NEW.mode IS NOT OLD.mode
        OR NEW.mode IS NOT OLD.mode OR NEW.product_id IS NOT OLD.product_id
+       OR NEW.named IS NOT OLD.named
+       OR NEW.never_grants IS NOT OLD.never_grants
        OR NEW.obtained_at IS NOT OLD.obtained_at;
        OR NEW.opened_at IS NOT OLD.opened_at;
        OR NEW.params_fingerprint IS NOT OLD.params_fingerprint
@@ -288,6 +291,7 @@
        OR NEW.set_at IS NOT OLD.set_at;
        OR NEW.set_at IS NOT OLD.set_at;
        OR NEW.situation IS NOT OLD.situation
+       OR NEW.source_type IS NOT OLD.source_type
        OR NEW.state <> 'searching';
        OR NEW.statement IS NOT OLD.statement
        OR NEW.statement IS NOT OLD.statement
@@ -873,6 +877,7 @@
     WHERE NEW.decision IS NOT NULL OR NEW.decided_at IS NOT NULL;
     WHERE NEW.decision IS NOT NULL;
     WHERE NEW.disconnected_at IS NOT NULL
+    WHERE NEW.disconnected_at IS NOT NULL;
     WHERE NEW.dropped_at IS NOT NULL;
     WHERE NEW.ended_at IS NOT NULL AND trim(coalesce(NEW.ended_as,'')) = '';
     WHERE NEW.ended_at IS NOT NULL;
@@ -883,6 +888,7 @@
     WHERE NEW.epistemic_status='unknown' AND NEW.value_json IS NOT NULL;
     WHERE NEW.evidence_ref='shadow_comparison:' || c.id
     WHERE NEW.expires_at IS NULL OR datetime(NEW.expires_at) <= datetime(NEW.proposed_at);
+    WHERE NEW.founder_id IS NOT OLD.founder_id
     WHERE NEW.founder_id IS NOT OLD.founder_id
     WHERE NEW.founder_id IS NOT OLD.founder_id
     WHERE NEW.kind IS NOT OLD.kind OR NEW.summary IS NOT OLD.summary
@@ -911,6 +917,7 @@
     WHERE NEW.settled_as IS NOT NULL AND trim(coalesce(NEW.settled_by,'')) = '';
     WHERE NEW.settled_as IS NOT NULL;
     WHERE NEW.source_type = 'reference_world' AND NEW.evidence_mode <> 'reference';
+    WHERE NEW.source_type = 'reference_world' AND NEW.evidence_mode <> 'reference';
     WHERE NEW.statement IS NOT OLD.statement
     WHERE NEW.statement IS NOT OLD.statement OR NEW.kind IS NOT OLD.kind
     WHERE NEW.statement IS NOT OLD.statement OR NEW.product_id IS NOT OLD.product_id;
@@ -932,6 +939,7 @@
     WHERE OLD.decision IS NOT NULL AND NEW.decision IS NOT OLD.decision;
     WHERE OLD.decision IS NOT NULL AND NEW.decision IS NOT OLD.decision;
     WHERE OLD.decision IS NOT NULL;
+    WHERE OLD.disconnected_at IS NOT NULL;
     WHERE OLD.disconnected_at IS NOT NULL;
     WHERE OLD.dropped_at IS NOT NULL;
     WHERE OLD.ended_at IS NOT NULL;
@@ -984,6 +992,7 @@
     WHERE trim(NEW.disclosure) = '';
     WHERE trim(NEW.headline) = '' OR trim(NEW.who_has_it) = ''
     WHERE trim(NEW.kind) = '' OR trim(NEW.summary) = ''
+    WHERE trim(NEW.named) = '' OR trim(NEW.never_grants) = '';
     WHERE trim(NEW.purpose) = '' OR trim(NEW.statement) = '';
     WHERE trim(NEW.scenario) = '' OR trim(NEW.purpose) = '';
     WHERE trim(NEW.secret_json) = ''
@@ -1180,6 +1189,7 @@
   -- Actual outcomes (filled in after outcome_measured_at)
   -- Against an open spell only. Recommending something about a situation that
   -- An external sender may not tell Foundry what its message means. Which
+  -- An invented source may only ever produce invented evidence. The same
   -- And deny dominates: the constitutional ring is refused here too, so a
   -- And it must be the mandate's own owner: a guidance row naming a different
   -- Authority without required verification would let "I changed it" stand in
@@ -1322,6 +1332,7 @@
   -- The check is deny-dominant and bidirectional: a prefix inside the ring is
   -- The claim its result would bear on, when it bears on one.
   -- The closed vocabulary. A purpose exists here only when a route actually
+  -- The concrete thing behind the type: a named service, a dataset, a person
   -- The consequence class a consent must have been granted at to use this. Not
   -- The constitutional ring. Ordinary development authority may not reach the
   -- The credential's row, when there is one. NULL for the reference world,
@@ -1346,6 +1357,7 @@
   -- The message must be this company's, and the responsibility on the plan must
   -- The observation is only ever as real as the claim it is attached to.
   -- The observer may not see, cite, or echo the expectation it will be
+  -- The person, not a company. Carried directly so erasure finds it.
   -- The plan must carry a real proposal, authored for that same message.
   -- The question it exists to answer. An experiment attached to no unknown is
   -- The responsibility is this company's, and the person correcting owns it.
@@ -1370,6 +1382,7 @@
   -- What Foundry would need in order to do it — a sense it lacks, an authority
   -- What a founder is actually agreeing to when they grant this scope.
   -- What actually happened, in the words of whoever saw it.
+  -- What having it never permits. Immutable from the moment it is connected.
   -- What he was shown before he left. Stored so consent is provable against the
   -- What is being claimed, in one sentence a person could argue with.
   -- What is said at the moment of refusal, to whatever asked.
@@ -1518,6 +1531,7 @@
   -- neither can reach the other.
   -- no real business of his uses.
   -- nobody could go and look at is not an observation.
+  -- not a source.
   -- not be asked company-wide and a company-wide one may not be pinned to a
   -- not left to whichever service happens to mint it.
   -- not recent, and conflating the two would make evidence ordering a lie.
@@ -1526,6 +1540,7 @@
   -- on the writer having got it right.
   -- one Foundry inferred from a reading, and the difference has to survive into
   -- one question the record exists to answer unanswered.
+  -- one-way rule migration 236 applies to observations, applied at the door
   -- opportunity favoured. NULL when the kind carries all the meaning.
   -- opportunity with no sources may never be advanced.
   -- or maturity is refused whole — every one of those is resolved server-side
@@ -1595,6 +1610,7 @@
   -- the sentence he is shown — otherwise a guess becomes a fact by being
   -- the two attribution axes can never disagree about the same row.
   -- the wording does not rewrite what he was told at the time.
+  -- they would come through.
   -- thing here.
   -- thing worked, and this is exactly where that would be easiest to fudge.
   -- through the product, so an approval by anyone else — including another
@@ -1615,6 +1631,7 @@
   -- whether the new value happens to differ.
   -- which is inside the constitutional ring, so an integration cannot introduce
   -- which needs none — and that absence is itself informative.
+  -- who agreed to be asked. Never empty — a source nobody could go back to is
   -- with a specific expectation; a prediction that could be edited afterwards
   -- words he actually saw rather than the words the page says today.
   -- working", and the two must not look the same on a settings page.
@@ -1720,6 +1737,8 @@
   ON reconstruction_claims(product_id,subject,predicate,created_at DESC);
   ON referral_conversions(referral_link_id, created_at DESC);
   ON rejection_streaks(founder_id, product_id, COALESCE(agent_name, '*'));
+  ON research_sources(founder_id) WHERE disconnected_at IS NULL;
+  ON research_sources(founder_id, source_type, named)
   ON responsibility_candidate_decisions(candidate_id) WHERE decision='promoted';
   ON responsibility_candidates(product_id,status,created_at);
   ON responsibility_transitions(responsibility_id, created_at);
@@ -2021,6 +2040,11 @@
   SELECT RAISE(ABORT,'reply_proposal:founder_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'reply_proposal:message_invalid') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'reply_proposal:payload_invalid') WHERE
+  SELECT RAISE(ABORT,'research_source:already_disconnected')
+  SELECT RAISE(ABORT,'research_source:cannot_arrive_disconnected')
+  SELECT RAISE(ABORT,'research_source:immutable')
+  SELECT RAISE(ABORT,'research_source:incomplete')
+  SELECT RAISE(ABORT,'research_source:invented_source_is_not_real')
   SELECT RAISE(ABORT,'responsibility_authority:consequence_required') WHERE
   SELECT RAISE(ABORT,'responsibility_authority:expiry_required') WHERE
   SELECT RAISE(ABORT,'responsibility_authority:invalid_binding') WHERE NEW.to_mode!='act' OR NOT EXISTS (
@@ -2187,6 +2211,7 @@
   WHERE conflict_identity IS NOT NULL;
   WHERE decision = 'approved' AND consumed_at IS NULL AND revoked_at IS NULL;
   WHERE decision_acted_at IS NULL;
+  WHERE disconnected_at IS NULL;
   WHERE discovery_evidence_ref IS NOT NULL;
   WHERE due_at IS NOT NULL;
   WHERE fed_by IS NOT NULL AND revoked_at IS NULL;
@@ -2594,6 +2619,7 @@
   conflict_points_json TEXT NOT NULL DEFAULT '[]',   -- things agents disagree on
   conflicts_json TEXT, -- JSON array of identified conflicts
   connected_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  connected_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   consecutive_failures INTEGER NOT NULL DEFAULT 0,
   consecutive_failures INTEGER NOT NULL DEFAULT 0,
   consecutive_failures INTEGER NOT NULL DEFAULT 0,
@@ -2969,6 +2995,7 @@
   disclosure_version  TEXT NOT NULL,          -- which disclosure text they accepted
   disconnect_reason TEXT
   disconnected_at   TEXT,
+  disconnected_at TEXT
   discovered_at TEXT DEFAULT (datetime('now'))
   disintermediation_risk REAL,
   dismissed_at TEXT,
@@ -3067,6 +3094,7 @@
   evidence_decision_ids TEXT,
   evidence_json TEXT,                    -- {action_id, customer_id, conversion_event}
   evidence_links TEXT, -- JSON: array of URLs or file paths
+  evidence_mode  TEXT NOT NULL CHECK (evidence_mode IN ('real','reference')),
   evidence_mode  TEXT NOT NULL CHECK (evidence_mode IN ('real','reference')),
   evidence_mode  TEXT NOT NULL CHECK (evidence_mode IN ('real','reference')),
   evidence_mode  TEXT NOT NULL CHECK (evidence_mode IN ('real','reference')),
@@ -3177,6 +3205,7 @@
   founder_id          TEXT NOT NULL REFERENCES founders(id),
   founder_id          TEXT NOT NULL,
   founder_id       TEXT NOT NULL,
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
   founder_id     TEXT NOT NULL REFERENCES founders(id),
   founder_id     TEXT NOT NULL REFERENCES founders(id),
   founder_id     TEXT NOT NULL REFERENCES founders(id),
@@ -3340,6 +3369,7 @@
   id              TEXT PRIMARY KEY,
   id              TEXT PRIMARY KEY,
   id              TEXT PRIMARY KEY,
+  id             TEXT PRIMARY KEY,
   id             TEXT PRIMARY KEY,
   id             TEXT PRIMARY KEY,
   id             TEXT PRIMARY KEY,
@@ -3852,11 +3882,13 @@
   name TEXT,
   name TEXT,
   name TEXT,
+  named          TEXT NOT NULL,
   narrative TEXT,                      -- AI-generated 3-sentence assessment
   negative_outcomes INTEGER NOT NULL DEFAULT 0,
   net_revenue REAL,
   network_opt_in INTEGER NOT NULL DEFAULT 0,
   neutralizing_action TEXT NOT NULL,
+  never_grants   TEXT NOT NULL,
   never_grants   TEXT NOT NULL,
   new_config TEXT NOT NULL,            -- JSON: snapshot of config after change
   new_customers INTEGER,
@@ -4700,6 +4732,7 @@
   source_patterns INTEGER DEFAULT 0,    -- how many judgment patterns
   source_session_id TEXT,                     -- links to agent_sessions
   source_type    TEXT NOT NULL REFERENCES market_source_types(source_type),
+  source_type    TEXT NOT NULL REFERENCES market_source_types(source_type),
   source_type  TEXT PRIMARY KEY,
   source_type TEXT NOT NULL,                  -- 'decision' | 'evolution' | 'cron_addition' | 'integration' | 'agent_provision'
   source_type TEXT, -- 'strategic_decision' | 'briefing' | 'okr' | 'experiment' | 'manual'
@@ -5360,6 +5393,7 @@
 );
 );
 );
+);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , analysis_failed_at DATETIME, analysis_failure_reason TEXT
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
@@ -5465,6 +5499,7 @@ BEFORE INSERT ON products
 BEFORE INSERT ON proposed_acts
 BEFORE INSERT ON reconstruction_claims
 BEFORE INSERT ON reference_companies
+BEFORE INSERT ON research_sources
 BEFORE INSERT ON responsibility_candidate_decisions WHEN NEW.decision!='promoted'
 BEFORE INSERT ON responsibility_candidate_decisions WHEN NEW.decision='promoted'
 BEFORE INSERT ON responsibility_dispositions
@@ -5546,6 +5581,7 @@ BEFORE UPDATE ON owner_preferences
 BEFORE UPDATE ON portfolio_exposures
 BEFORE UPDATE ON products
 BEFORE UPDATE ON proposed_acts
+BEFORE UPDATE ON research_sources
 BEFORE UPDATE ON sense_authorizations
 BEFORE UPDATE ON sense_credentials
 BEFORE UPDATE ON sense_provider_scopes
@@ -5555,6 +5591,8 @@ BEFORE UPDATE ON venture_experiments
 BEFORE UPDATE ON venture_guidance
 BEFORE UPDATE ON venture_mandates
 BEFORE UPDATE ON venture_opportunities
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -5983,6 +6021,7 @@ CREATE INDEX idx_reg_profile_product ON regulatory_profile(product_id);
 CREATE INDEX idx_remediation_prs_audit ON remediation_prs(audit_score_id);
 CREATE INDEX idx_remediation_prs_product ON remediation_prs(product_id);
 CREATE INDEX idx_remediation_prs_status ON remediation_prs(status);
+CREATE INDEX idx_research_sources_live
 CREATE INDEX idx_responsibilities_due
 CREATE INDEX idx_responsibilities_product_state
 CREATE INDEX idx_responsibility_authority ON autonomy_consents(product_id,responsibility_id,capability,revoked_at,expires_at);
@@ -6267,6 +6306,7 @@ CREATE TABLE regulatory_changes (
 CREATE TABLE regulatory_profile (
 CREATE TABLE rejection_streaks (
 CREATE TABLE remediation_prs (
+CREATE TABLE research_sources (
 CREATE TABLE responsibility_candidate_decisions (
 CREATE TABLE responsibility_candidates (
 CREATE TABLE responsibility_dispositions (
@@ -6423,6 +6463,8 @@ CREATE TRIGGER reconstruction_claim_guard
 CREATE TRIGGER reference_companies_guard
 CREATE TRIGGER reference_companies_immutable
 CREATE TRIGGER reference_shadow_observation_independence_guard
+CREATE TRIGGER research_source_disconnect_is_one_way
+CREATE TRIGGER research_source_guard
 CREATE TRIGGER responsibility_assisting_entry_guard
 CREATE TRIGGER responsibility_authority_guard
 CREATE TRIGGER responsibility_authority_revocation_is_permanent
@@ -6520,6 +6562,7 @@ CREATE UNIQUE INDEX idx_push_subscriptions_apns
 CREATE UNIQUE INDEX idx_push_subscriptions_founder_token
 CREATE UNIQUE INDEX idx_recommendation_once_per_spell
 CREATE UNIQUE INDEX idx_rejection_streak_unique
+CREATE UNIQUE INDEX idx_research_source_one_live
 CREATE UNIQUE INDEX idx_responsibility_discovery_evidence
 CREATE UNIQUE INDEX idx_roi_monthly_product ON roi_monthly_summaries(product_id, month);
 CREATE UNIQUE INDEX idx_scratchpad_product_date ON agent_scratchpad(product_id, scratchpad_date);
@@ -6528,6 +6571,8 @@ CREATE UNIQUE INDEX idx_support_channels_one_feed_per_provider
 CREATE UNIQUE INDEX idx_venture_mandate_one_open
 CREATE UNIQUE INDEX idx_voice_fp_active_unique
 CREATE UNIQUE INDEX idx_wiki_entries_unique
+END;
+END;
 END;
 END;
 END;

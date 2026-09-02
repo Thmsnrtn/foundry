@@ -365,6 +365,55 @@ describe('what is still not known', () => {
   });
 });
 
+describe('a market is not about a company', () => {
+  it('asks the person what they can look through, not a business', async () => {
+    const { waysOfLooking } = await import('../../src/services/venture/research-sources.js');
+    // The rehearsal search sees through a stated set of ways of looking. The
+    // earlier version asked company_senses, which could only ever have answered
+    // about one company — and a market belongs to nobody's business.
+    const ways = await waysOfLooking(OWNER, 'reference');
+    expect(ways.length).toBeGreaterThan(0);
+    expect(ways.map((w) => w.sourceType)).toContain('community');
+    // A real search still has nothing, which is the honest state.
+    expect(await waysOfLooking(OWNER, 'real')).toHaveLength(0);
+  });
+
+  it('names what is still dark rather than counting sources', async () => {
+    const { whatIsStillDark } = await import('../../src/services/venture/research-sources.js');
+    const dark = await whatIsStillDark(OWNER, 'reference');
+    // Nobody in the rehearsal world has been asked anything, which is the most
+    // common real hole. Saying that beats "5 of 17 sources connected".
+    expect(dark.join(' ')).toContain('nobody has been asked anything directly');
+    expect(dark.join(' ')).not.toMatch(/\d+ of \d+/);
+  });
+
+  it('will not let an invented source stand as a real way of looking', async () => {
+    const { connectResearchSource } = await import('../../src/services/venture/research-sources.js');
+    await expect(query(
+      `INSERT INTO research_sources
+         (id, founder_id, source_type, named, never_grants, evidence_mode)
+       VALUES ('rs_forged', ?, 'reference_world', 'the rehearsal world',
+               'anything', 'real')`, [OWNER]))
+      .rejects.toThrow(/invented_source_is_not_real/);
+    // And a source with nothing said about what it never grants is refused,
+    // because a default would be written once and read never.
+    await expect(connectResearchSource({
+      founderId: OWNER, sourceType: 'review', named: 'a review site',
+      neverGrants: '  ', evidenceMode: 'real' })).resolves.toBeNull();
+  });
+
+  it('says a reference search can see, instead of contradicting itself', async () => {
+    const { mandateProgress } = await import('../../src/services/venture/mandate.js');
+    const progress = await mandateProgress(OWNER);
+    // The page used to report "I cannot see the market" directly above four
+    // candidates. Both halves were true of different things and the pairing
+    // read as incoherence.
+    expect(progress?.blocked).toBeNull();
+    expect(progress?.seeingThrough.join(' ')).toContain('invented forum');
+    expect(progress?.stillDark.length).toBeGreaterThan(0);
+  });
+});
+
 describe('where a concentration starts', () => {
   it('says so at the second business, not once the pattern is established', async () => {
     // The assembled-institution walk found this: against a portfolio of one

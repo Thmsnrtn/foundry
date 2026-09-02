@@ -211,6 +211,7 @@ async function main(): Promise<void> {
     ? `a mandate to look, naming no shape${heard.shape === null ? '' : ` (${heard.shape})`}`
     : `NOT A MANDATE — a defect (${heard.kind})`);
 
+  const research = await import('../src/services/venture/research-sources.js');
   const view = await resilience.shouldAddAnother(OWNER, 'reference');
   say('  its answer', view.recommend ? `yes — ${view.because}` : `no — ${view.because}`);
   for (const con of view.concentrations) {
@@ -223,6 +224,12 @@ async function main(): Promise<void> {
     statement: 'Find another small digital income stream that would make my portfolio more resilient',
     shape: null, evidenceMode: 'reference' });
   if (!('refused' in opened)) {
+    for (const way of await research.waysOfLooking(OWNER, 'reference')) {
+      say('  looking through', `${way.named} — ${way.whatItIs}`);
+    }
+    for (const dark of await research.whatIsStillDark(OWNER, 'reference')) {
+      say('  still cannot see', dark);
+    }
     for (const cand of await venture.candidatesFor(opened.id)) {
       say(`  ${cand.headline.slice(0, 44)}`, cand.fit?.verdict ?? 'no view');
     }

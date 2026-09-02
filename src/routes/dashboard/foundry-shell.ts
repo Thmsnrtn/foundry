@@ -89,6 +89,10 @@ interface OwnerState {
   search: {
     statement: string; guidance: string[]; looked: number; rejected: number;
     open: number; blocked: string | null; wouldNeed: string | null;
+    /** The ways of looking it currently has, named. */
+    seeingThrough: string[];
+    /** What it still cannot answer even with those. */
+    stillDark: string[];
     /** Whether adding anything is the right move, asked before any candidate. */
     another: {
       recommend: boolean; because: string; concentrations: string[];
@@ -354,6 +358,7 @@ async function readOwnerState(
         guidance: progress.mandate.guidance.map((g) => g.statement),
         looked: progress.looked, rejected: progress.rejected, open: progress.open,
         blocked: progress.blocked, wouldNeed: progress.wouldNeed,
+        seeingThrough: progress.seeingThrough, stillDark: progress.stillDark,
         // WHETHER TO ADD ONE AT ALL, ASKED BEFORE ANY CANDIDATE IS SHOWN.
         //
         // A list of opportunities implies the answer is yes. Putting the prior
@@ -1516,7 +1521,11 @@ foundryShellRoutes.get('/foundry', async (c) => {
         ${s.search.blocked}</p>
         <p class="quiet">What I would need: ${s.search.wouldNeed}</p>`
     : html`<p class="quiet">${s.search.looked} looked at,
-        ${s.search.rejected} rejected, ${s.search.open} still open.</p>`}
+        ${s.search.rejected} rejected, ${s.search.open} still open.</p>
+      <p class="quiet"><strong>What I am looking through</strong> —
+        ${s.search.seeingThrough.join('; ')}.</p>
+      ${s.search.stillDark.length ? html`<p class="gap"><strong>And what I still
+        cannot see</strong> — ${s.search.stillDark.join('; ')}.</p>` : ''}`}
       ${!s.search.another.recommend ? html`<p class="gap"><strong>I do not
         recommend adding another venture right now.</strong>
         ${s.search.another.because}</p>` : ''}

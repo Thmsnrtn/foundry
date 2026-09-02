@@ -381,6 +381,10 @@ export interface MandateProgress {
   blocked: string | null;
   /** What it would take to unblock it, in owner language. */
   wouldNeed: string | null;
+  /** What it can see through, named. */
+  seeingThrough: string[];
+  /** What it still cannot answer, even with those. */
+  stillDark: string[];
 }
 
 /**
@@ -402,23 +406,33 @@ export async function mandateProgress(founderId: string): Promise<MandateProgres
        FROM venture_opportunities WHERE mandate_id = ?`, [mandate.id]))
     .rows[0] as Record<string, unknown>;
 
-  // The market sense, asked for rather than assumed absent — so the day one
-  // exists this unblocks itself without anybody editing this function.
-  const seeing = (await query(
-    `SELECT COUNT(*) AS n FROM company_senses
-      WHERE sense_key = 'market' AND disconnected_at IS NULL`, []))
-    .rows[0] as Record<string, unknown>;
-  const canSeeMarket = Number(seeing.n) > 0;
+  // WHICH WAYS OF LOOKING ARE LIVE, asked of the person rather than of a
+  // company — a market belongs to nobody's business, and the earlier version of
+  // this asked `company_senses`, which could only ever have answered about one.
+  //
+  // Asked rather than assumed absent, so the day a real source is connected
+  // this unblocks itself without anybody editing this function. And asked in
+  // the mandate's own world: a rehearsal search sees through rehearsal sources,
+  // a real one needs something real.
+  const { waysOfLooking, whatIsStillDark } = await import('./research-sources.js');
+  const ways = await waysOfLooking(founderId, mandate.evidenceMode);
+  const canSeeMarket = ways.length > 0;
 
   return {
     mandate,
     looked: Number(counts.looked ?? 0),
     rejected: Number(counts.rejected ?? 0),
     open: Number(counts.open ?? 0),
+    // EVEN WITH SOURCES, WHAT IS STILL DARK IS SAID. Connecting one way of
+    // looking does not mean a market has been comprehended, and an institution
+    // that went quiet the moment it could see anything would be claiming
+    // exactly that.
     blocked: canSeeMarket ? null
       : 'I cannot see what is happening outside your companies, so I have '
         + 'nowhere to look. I am not going to describe opportunities from '
         + 'memory — that would read like research and be nothing of the kind.',
+    stillDark: canSeeMarket ? await whatIsStillDark(founderId, mandate.evidenceMode) : [],
+    seeingThrough: ways.map((w) => `${w.named} — ${w.whatItIs}`),
     // WHAT WOULD ACTUALLY UNBLOCK IT, NAMED.
     //
     // "I need a market provider" is the answer of an institution waiting for

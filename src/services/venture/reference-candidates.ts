@@ -244,6 +244,11 @@ export async function exerciseReferenceMandate(mandateId: string): Promise<numbe
   if (Number(already.n) > 0) return 0;
 
   const founderId = String(mandate.founder_id);
+  // THE REHEARSAL SEARCH CAN SEE, AND SAYS WHAT THROUGH. Without this the page
+  // reported "I cannot see the market" directly above four candidates — both
+  // halves true of different things, and the pairing read as incoherence.
+  const { openTheReferenceEyes } = await import('./research-sources.js');
+  await openTheReferenceEyes(founderId);
   const { noteExposure } = await import('../founder/resilience.js');
   const { formClaim, observe, raiseUnknown } = await import('./market-evidence.js');
 

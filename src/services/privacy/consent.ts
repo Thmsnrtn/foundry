@@ -724,6 +724,14 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
   // with the person because there is no company here — that is the point of the
   // stage — and deleted rather than kept as anonymous learning, because a
   // prediction and its result are a record of somebody's judgement.
+  // WAYS OF LOOKING THAT BELONG TO THE PERSON. A market belongs to nobody's
+  // company, so this is the one sense-shaped thing erasure reaches through the
+  // founder rather than through a product.
+  research_sources: {
+    reason: 'the ways one person can look outside their own companies, and what '
+      + 'each of them never permits',
+    onAccountErasure: { op: 'delete' },
+  },
   venture_experiments: {
     reason: 'tests designed against one person\'s candidates, with what was '
       + 'predicted before each one ran',
