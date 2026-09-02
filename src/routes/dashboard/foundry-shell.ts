@@ -99,6 +99,8 @@ interface OwnerState {
     };
     /** What has already been turned down or taken forward, with the reason. */
     decided: string[];
+    /** What the portfolio needs, derived from what it is concentrated on. */
+    needs: string[];
     candidates: Array<{
       id: string;
       headline: string; whoHasIt: string; theProblem: string; whyItMight: string;
@@ -108,6 +110,10 @@ interface OwnerState {
       fit: string | null; worseForThePortfolio: boolean;
       /** Preferences of his it does not meet. His to weigh, not disqualifying. */
       against: string[];
+      /** Which stated portfolio needs it would serve. */
+      serves: string[];
+      /** Something like it that was buried before, and why. */
+      buriedBefore: string | null;
       /** Claims about the world and how each stands on its evidence. */
       standing: string[];
       /** Open questions, each with the cheapest thing that would settle it. */
@@ -384,6 +390,12 @@ async function readOwnerState(
         // WHAT HE HAS ALREADY TURNED DOWN, AND WHY. Kept on the page rather
         // than in the record only: the reason a candidate died is the most
         // reusable thing a search produces.
+        needs: await (async () => {
+          const { portfolioNeeds } = await import('../../services/founder/resilience.js');
+          return (await portfolioNeeds(founderId,
+            progress.mandate.evidenceMode === 'reference' ? 'reference' : 'real'))
+            .map((n) => n.need);
+        })(),
         decided: await (async () => {
           const { whatWasDecided } = await import('../../services/venture/mandate.js');
           return (await whatWasDecided(progress.mandate.id)).map((d) =>
@@ -400,6 +412,10 @@ async function readOwnerState(
           fit: c.fit === null ? null : c.fit.verdict,
           worseForThePortfolio: c.fit?.makesItWorse ?? false,
           against: c.against,
+          serves: c.serves,
+          buriedBefore: c.buriedBefore === null ? null
+            : `${c.buriedBefore.headline} — ${c.buriedBefore.why}`
+              + (c.buriedBefore.revisitIf ? `. Worth another look if ${c.buriedBefore.revisitIf}` : ''),
           standing: c.standing.map((how) => `${how.claim} — ${how.howItStands}`),
           unanswered: c.unanswered.map((u) => u.cheapestTest === null
             ? `${u.question} (nothing cheap would settle it)`
@@ -1071,7 +1087,7 @@ function matchQuestion(text: string): string {
   // A VENTURE SENTENCE IS NOT A QUESTION. Asking Foundry to go and look, or
   // steering a search that is running, is an instruction — it goes to the
   // mandate, where it binds after he confirms, rather than being answered.
-  if (/venture|originate|new business|another business|new company|another company|a new saas|micro-?saas/.test(t)
+  if (/venture|originate|new business|another business|new company|another company|a new saas|micro-?saas|income stream|revenue stream|the river/.test(t)
     || /stop looking|show me another option|try harder to disprove|higher[- ]ticket|paid acquisition/.test(t)) {
     return 'venture';
   }
@@ -1533,6 +1549,8 @@ foundryShellRoutes.get('/foundry', async (c) => {
         <p><strong>What a single thing going wrong could take out</strong></p>
         <ul>${raw(s.search.another.concentrations.map((con) =>
     `<li>${con}</li>`).join(''))}</ul></div>` : ''}
+      ${s.search.needs.length ? html`<p class="quiet"><strong>What the portfolio
+        needs</strong> — ${s.search.needs.join('; ')}.</p>` : ''}
       ${s.search.decided.length ? html`<div class="quiet">
         <p><strong>Already decided about</strong></p>
         <ul>${raw(s.search.decided.map((d) => `<li>${d}</li>`).join(''))}</ul></div>` : ''}
@@ -1555,6 +1573,10 @@ foundryShellRoutes.get('/foundry', async (c) => {
     + `</strong> — ${cand.unanswered.join('; ')}.</p>` : ''}
         ${cand.fit ? `<p class="${cand.worseForThePortfolio ? 'gap' : 'quiet'}">`
     + `<strong>What adding it would do</strong> — ${cand.fit}</p>` : ''}
+        ${cand.serves.length
+    ? `<p class="quiet"><strong>What it would give the portfolio</strong> — ${cand.serves.join('; ')}.</p>` : ''}
+        ${cand.buriedBefore
+    ? `<p class="gap"><strong>You have buried something like this before</strong> — ${cand.buriedBefore}.</p>` : ''}
         ${cand.against.length
     ? `<p class="quiet">Not quite what you asked for: ${cand.against.join('; ')}.</p>` : ''}
         ${cand.failsBecause
@@ -2380,11 +2402,13 @@ foundryShellRoutes.post('/foundry/venture', requireInstitutionOwner(), async (c:
   const founder = c.get('founder') as { id?: string } | undefined;
   if (!founder?.id) return c.redirect('/onboarding');
   const form = await c.req.parseBody();
-  const said = String(form.said ?? '').trim().slice(0, 300);
+  const said = String(form.said ?? '').trim().slice(0, 800);
   if (!said) return c.redirect('/foundry');
 
   const venture = await import('../../services/venture/mandate.js');
-  const reading = venture.readVentureSentence(said);
+  const readings = venture.readVentureParagraph(said);
+  const reading = readings.find((r) => r.kind !== 'not_venture') ?? readings[0]
+    ?? venture.readVentureSentence(said);
 
   if (reading.kind === 'not_venture') {
     return c.html(page('What you said', html`
@@ -2417,7 +2441,13 @@ foundryShellRoutes.post('/foundry/venture', requireInstitutionOwner(), async (c:
           record, including what I rejected and why — so if you start again I am not
           beginning from nothing.</p>
       </div>
-      <form method="POST" action="/foundry/venture/confirm">
+      ${readings.length > 1 ? html`<div class="know"><h3>Each part of that, as I heard it</h3>
+      <ul>${raw(readings.map((r) => `<li>${r.statement} — ${
+    r.kind === 'mandate' ? 'go and look'
+      : r.kind === 'guidance' ? `hold the search to this (${r.guidance}${r.subject ? `: ${r.subject}` : ''})`
+        : r.kind === 'stop_mandate' ? 'stop' : 'not understood; I will leave this one out'}</li>`)
+    .join(''))}</ul></div>` : ''}
+    <form method="POST" action="/foundry/venture/confirm">
         <input type="hidden" name="said" value="${said}" />
         <button class="btn go" type="submit">Yes — stop looking</button>
       </form>` : html`<p>I am not looking for anything at the moment.</p>`}
@@ -2512,33 +2542,25 @@ foundryShellRoutes.post('/foundry/venture/confirm',
     const founder = c.get('founder') as { id?: string } | undefined;
     if (!founder?.id) return c.redirect('/onboarding');
     const form = await c.req.parseBody();
-    const said = String(form.said ?? '').trim().slice(0, 300);
+    const said = String(form.said ?? '').trim().slice(0, 800);
     if (!said) return c.redirect('/foundry');
 
     const venture = await import('../../services/venture/mandate.js');
-    const reading = venture.readVentureSentence(said);
-
-    if (reading.kind === 'stop_mandate') {
+    // THE WHOLE PARAGRAPH, EVERY SENTENCE OF IT LANDING. "Make the river
+    // stronger. Keep legal risk low. Do not spend more than $25." is one
+    // instruction with three parts, and an institution that heard the first
+    // and dropped the rest would be a chat window with a database behind it.
+    const readings = venture.readVentureParagraph(said);
+    if (readings.some((r) => r.kind === 'stop_mandate') && readings.length === 1) {
       const stopped = await venture.stopMandate(String(founder.id), 'the owner said to stop');
       return c.redirect(`/foundry?done=${stopped ? 'searchstopped' : 'nothing'}`);
     }
-    if (reading.kind === 'guidance') {
-      const open = await venture.currentMandate(String(founder.id));
-      if (!open) return c.redirect('/foundry');
-      await venture.absorbGuidance({
-        mandateId: open.id, statement: said,
-        kind: reading.guidance, subject: reading.subject,
-        dimension: reading.dimension,
-      });
-      return c.redirect('/foundry?done=steeredsearch');
-    }
-    if (reading.kind === 'mandate') {
-      const opened = await venture.openMandate({
-        founderId: String(founder.id), statement: said, shape: reading.shape,
-      });
-      if ('refused' in opened) return c.redirect('/foundry?done=alreadylooking');
-      return c.redirect('/foundry?done=looking');
-    }
+    const hadMandate = readings.some((r) => r.kind === 'mandate');
+    const result = await venture.absorbParagraph({
+      founderId: String(founder.id), readings });
+    if (hadMandate && !result.opened) return c.redirect('/foundry?done=alreadylooking');
+    if (result.opened) return c.redirect('/foundry?done=looking');
+    if (result.absorbed > 0) return c.redirect('/foundry?done=steeredsearch');
     return c.redirect('/foundry');
   });
 

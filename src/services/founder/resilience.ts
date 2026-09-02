@@ -80,7 +80,37 @@ export async function concentrationsFor(
     .sort((a, b) => b.carriedBy.length - a.carriedBy.length);
 }
 
+export interface PortfolioNeed {
+  dimension: string; value: string;
+  /** The sentence, in the owner's own shape: "less dependence on google search". */
+  need: string;
+  carriedBy: number;
+}
+
+/**
+ * WHAT THE PORTFOLIO NEEDS, derived rather than declared.
+ *
+ * The venture studio begins from portfolio need, not from ideas. A need here
+ * is the mirror of a concentration: three businesses on one channel is a need
+ * for something reached another way. Nothing is invented - if nothing is
+ * concentrated, the portfolio needs nothing in particular, and the search is
+ * told so rather than handed a list to look busy against.
+ */
+export async function portfolioNeeds(
+  founderId: string, world: World = 'real',
+): Promise<PortfolioNeed[]> {
+  const shared = await concentrationsFor(founderId, world);
+  return shared.map((con) => ({
+    dimension: con.dimension, value: con.value, carriedBy: con.carriedBy.length,
+    need: con.dimension === 'owner_attention' || con.dimension === 'support_burden'
+      ? `something that does not add to ${con.value}`
+      : `something not depending on ${con.value}`,
+  }));
+}
+
 export interface PortfolioFit {
+  /** The stated needs this would serve: an axis where it differs from a concentration. */
+  serves: string[];
   /** What adding this would deepen. */
   deepens: Concentration[];
   /** Exposures nothing else in the portfolio has. */
@@ -159,6 +189,14 @@ export async function portfolioFitOf(input: {
   // only warns once the pattern is established would have watched it form.
   const makesItWorse = its.length > 0 && newGround.length === 0;
 
+  // SERVING A NEED is having a different answer on an axis where the portfolio
+  // is concentrated - not merely being new, but being new where it matters.
+  const needs = await portfolioNeeds(input.founderId, world);
+  const serves = needs
+    .filter((n) => its.some((row) => String(row.dimension) === n.dimension
+      && String(row.value) !== n.value))
+    .map((n) => n.need);
+
   const verdict = its.length === 0
     ? 'I do not know enough about how this would make money to say what it would '
       + 'do to your portfolio.'
@@ -175,7 +213,7 @@ export async function portfolioFitOf(input: {
         : `It would deepen ${deepens.map((d) => d.value).join(', ') || 'nothing'} `
           + `and open ${newGround.map((n) => n.value).join(', ') || 'nothing'}.`;
 
-  return { deepens, newGround, verdict, makesItWorse };
+  return { serves, deepens, newGround, verdict, makesItWorse };
 }
 
 /**

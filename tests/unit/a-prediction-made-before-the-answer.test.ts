@@ -224,9 +224,11 @@ describe('becoming a company', () => {
     // the reason was written and never read again.
     const { whatWasDecided } = await import('../../src/services/venture/mandate.js');
     const decided = await whatWasDecided(mandateId);
-    expect(decided).toHaveLength(1);
-    expect(decided[0]?.verdict).toBe('advanced');
-    expect(decided[0]?.why).toContain('nothing was left standing in the way');
+    // Two decisions on the record: the one the discipline buried and the one
+    // he took forward. Both readable, both with the reason.
+    const taken = decided.find((d) => d.verdict === 'advanced');
+    expect(taken?.why).toContain('nothing was left standing in the way');
+    expect(decided.some((d) => d.verdict === 'rejected')).toBe(true);
   });
 
   it('never settles a claim twice', async () => {

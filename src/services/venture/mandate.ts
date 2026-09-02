@@ -47,6 +47,16 @@ export interface MandateProposal {
 export interface GuidanceProposal {
   kind: 'guidance'; statement: string; guidance: GuidanceKind; subject: string | null;
   /**
+   * STEERING THAT NAMES THE PORTFOLIO RATHER THAN A THING.
+   *
+   * "Avoid increasing our biggest existing dependencies" names nothing he could
+   * point at - it names whatever the portfolio is most concentrated on today.
+   * The sentence cannot be turned into rows without looking, so the reader
+   * says what has to be looked up and the absorber does the looking, writing
+   * one avoidance per concentration with the day's answer on the record.
+   */
+  resolve?: 'biggest_dependencies';
+  /**
    * The exposure axis this steering is about, when it is about one.
    *
    * This is what makes "something less dependent on Google" mean something.
@@ -128,6 +138,13 @@ export function readVentureSentence(raw: string): VentureReading {
   const guidance = readGuidance(t, statement);
   if (guidance) return guidance;
 
+  // "MAKE THE RIVER STRONGER." The owner's own shorthand for the whole
+  // institution's purpose, heard as the mandate it is: go and look for what
+  // would make the portfolio more resilient, naming no shape.
+  if (/\b(make|keep)\b[^.]{0,10}\b(the )?river\b[^.]{0,20}\b(strong|wider|deeper|resilient|better)/.test(t)
+    || /\bstrengthen the (river|portfolio)\b/.test(t)) {
+    return { kind: 'mandate', statement, shape: null };
+  }
   if (ASKING.some((p) => t.includes(p)) && A_THING_THAT_EARNS.test(t)) {
     const shape = SHAPES.find(([, phrases]) => phrases.some((p) => t.includes(p)));
     return { kind: 'mandate', statement, shape: shape ? shape[0] : null };
@@ -154,6 +171,32 @@ function readGuidance(t: string, statement: string): GuidanceProposal | null {
   // reading it as its own refusal would be the worst possible mishearing.
   if (/\b(don'?t want|do not want|no more|not another|rather not|sick of|tired of|avoid)\b[^.]{0,40}\b(subscription|recurring|another saas|more saas)\b/.test(t)) {
     return say('avoid', 'subscription', 'revenue_model');
+  }
+
+  // "AVOID INCREASING OUR BIGGEST EXISTING DEPENDENCIES."
+  if (/\b(avoid|don'?t|do not|without)\b[^.]{0,30}\b(increas|deepen|add to|grow)\w*[^.]{0,20}\b(biggest|largest|existing|current)\b[^.]{0,20}\b(dependenc|concentration|exposure)/.test(t)) {
+    return { ...say('avoid', null, null), resolve: 'biggest_dependencies' };
+  }
+
+  // "KEEP LEGAL RISK LOW." "REDUCE THE LEGAL EXPOSURE."
+  if (/\b(keep|low|lower|reduce|minimi[sz]e|less|avoid)\b[^.]{0,30}\b(legal|regulat|liabilit|compliance)/.test(t)
+    || /\b(legal|regulatory)\b[^.]{0,20}\b(risk|exposure)\b[^.]{0,20}\b(low|down|minimal)\b/.test(t)) {
+    return say('prefer', 'low legal exposure', 'legal_exposure');
+  }
+
+  // "KEEP OWNER BURDEN LOW." "SOMETHING THAT DOESN'T NEED ME."
+  if (/\b(owner|my)\b[^.]{0,10}\b(burden|attention|time|involvement)\b[^.]{0,20}\b(low|down|minimal|small)\b/.test(t)
+    || /\b(low|minimal|little)\b[^.]{0,10}\b(owner|my)\b[^.]{0,10}\b(burden|attention|involvement)\b/.test(t)
+    || /\b(doesn'?t|does not|won'?t) need (me|my attention)\b/.test(t)) {
+    return say('prefer', 'almost none of your attention', 'owner_attention');
+  }
+
+  // "BRING ME ONLY THINGS THAT DESERVE MY ATTENTION." Fewer, more serious
+  // survivors is what raising the bar means, so it is the same lever as "try
+  // harder to disprove it" rather than a new kind the search could not act on.
+  if (/\b(only|just)\b[^.]{0,30}\b(deserve|worth|serious|earn)\w*[^.]{0,20}\b(attention|time|looking)\b/.test(t)
+    || /\bonly (bring|show) me\b/.test(t)) {
+    return say('harder');
   }
 
   // "SOMETHING LESS DEPENDENT ON GOOGLE."
@@ -199,7 +242,7 @@ function readGuidance(t: string, statement: string): GuidanceProposal | null {
       .replace(/\binstead\b\.?/i, '').trim();
     return say('industry', named || null, 'industry');
   }
-  if (/spend (no more than|up to|at most)|budget of|no more than \$?\d/.test(t)) {
+  if (/spend (no more than|up to|at most)|(don'?t|do not|never) spend (more than|over|above)|budget of|no more than \$?\d/.test(t)) {
     const amount = /(\d+(?:\.\d{1,2})?)/.exec(t);
     return amount ? say('budget', amount[1]) : say('budget');
   }
@@ -241,6 +284,26 @@ export function exposureAnswersTo(word: string, value: string): boolean {
   return ALIASES.some((group) =>
     group.some((w) => a === w || a.includes(w))
     && group.some((w) => b === w || b.includes(w)));
+}
+
+/**
+ * A PARAGRAPH, NOT A SENTENCE.
+ *
+ * The mature owner request is several sentences at once - a mandate, then the
+ * constraints it runs under. Each is read on its own and every one of them
+ * must land as durable state, which is the whole difference between an
+ * institution and a chat window: "keep legal risk low" said in passing has to
+ * still be filtering candidates a month later.
+ *
+ * What it does not recognise is returned as such, per sentence, so he can see
+ * exactly which clause was not heard rather than being told the paragraph was.
+ */
+export function readVentureParagraph(raw: string): VentureReading[] {
+  return raw
+    .split(/(?<=[.;!?])\s+|\n+/)
+    .map((piece) => piece.trim())
+    .filter((piece) => piece.length > 0)
+    .map(readVentureSentence);
 }
 
 // ─── the mandate ─────────────────────────────────────────────────────────────
@@ -361,6 +424,73 @@ export async function absorbGuidance(input: {
       [id, input.mandateId, input.kind, id, dimension]);
   }
   return id;
+}
+
+/**
+ * ABSORB A WHOLE PARAGRAPH, resolving what names the portfolio.
+ *
+ * The mandate opens first if there is one, so the guidance has something to
+ * bind to; guidance that arrives with no search running is refused rather than
+ * filed nowhere. "Avoid our biggest dependencies" is resolved HERE, against the
+ * concentrations of the day, and written as one avoidance per concentration -
+ * so the record shows what the sentence meant when he said it, and a later
+ * reader does not have to guess what the portfolio looked like.
+ */
+export async function absorbParagraph(input: {
+  founderId: string; readings: VentureReading[]; evidenceMode?: 'real' | 'reference';
+}): Promise<{
+  opened: boolean; absorbed: number; refused: string[]; notHeard: string[];
+}> {
+  const refused: string[] = [];
+  const notHeard: string[] = [];
+  let opened = false;
+  let absorbed = 0;
+
+  const mandate = input.readings.find((r) => r.kind === 'mandate');
+  if (mandate && mandate.kind === 'mandate') {
+    const made = await openMandate({
+      founderId: input.founderId, statement: mandate.statement, shape: mandate.shape,
+      evidenceMode: input.evidenceMode ?? 'real',
+    });
+    if ('refused' in made) refused.push(made.refused);
+    else opened = true;
+  }
+
+  const open = await currentMandate(input.founderId);
+  for (const reading of input.readings) {
+    if (reading.kind === 'not_venture') { notHeard.push(reading.statement); continue; }
+    if (reading.kind === 'stop_mandate') {
+      if (await stopMandate(input.founderId, 'the owner said to stop')) absorbed += 1;
+      continue;
+    }
+    if (reading.kind !== 'guidance') continue;
+    if (!open) { refused.push(`"${reading.statement}" - there is no search to steer`); continue; }
+
+    if (reading.resolve === 'biggest_dependencies') {
+      const { concentrationsFor } = await import('../founder/resilience.js');
+      const biggest = (await concentrationsFor(input.founderId, open.evidenceMode)).slice(0, 3);
+      if (biggest.length === 0) {
+        refused.push(`"${reading.statement}" - nothing is concentrated yet, so there is `
+          + 'nothing to avoid deepening');
+        continue;
+      }
+      for (const con of biggest) {
+        await absorbGuidance({
+          mandateId: open.id, kind: 'avoid', subject: con.value, dimension: con.dimension,
+          statement: `${reading.statement} (${String(con.carriedBy.length)} of yours `
+            + `share ${con.value})`,
+        });
+        absorbed += 1;
+      }
+      continue;
+    }
+    await absorbGuidance({
+      mandateId: open.id, statement: reading.statement, kind: reading.guidance,
+      subject: reading.subject, dimension: reading.dimension,
+    });
+    absorbed += 1;
+  }
+  return { opened, absorbed, refused, notHeard };
 }
 
 export async function stopMandate(founderId: string, reason: string): Promise<boolean> {
@@ -571,6 +701,10 @@ export interface PresentedCandidate {
   inTheWay: string[];
   /** Tests waiting on him, each with the prediction he would be approving. */
   awaiting: Experiment[];
+  /** A buried candidate this resembles, so the same bad idea is not rediscovered. */
+  buriedBefore: { headline: string; why: string; revisitIf: string | null } | null;
+  /** Which of the portfolio's stated needs this would serve, if any. */
+  serves: string[];
   reference: boolean;
 }
 
@@ -609,6 +743,7 @@ export async function candidatesFor(mandateId: string): Promise<PresentedCandida
     const verdict = await survivesGuidance({
       id: String(r.id), headline: String(r.headline), why: String(r.why_it_might),
     }, guidance);
+    const fit = await portfolioFitOf({ founderId, opportunityId: String(r.id), world });
     const claims = ((await query(
       'SELECT id FROM market_claims WHERE opportunity_id = ?', [String(r.id)]))
       .rows as unknown as Array<Record<string, unknown>>).map((c) => String(c.id));
@@ -626,13 +761,13 @@ export async function candidatesFor(mandateId: string): Promise<PresentedCandida
         ? 'nothing about it has been checked against anything' : null),
       survivesGuidance: verdict.survives, failsBecause: verdict.because,
       against: verdict.against,
-      fit: await portfolioFitOf({
-        founderId, opportunityId: String(r.id), world,
-      }),
+      fit,
       standing,
       unanswered: await openUnknowns(String(r.id)),
       inTheWay: await whatStandsInTheWay(String(r.id)),
       awaiting: await awaitingHim(String(r.id)),
+      buriedBefore: await seenBefore(founderId, String(r.headline)),
+      serves: fit.serves,
       reference: String(r.evidence_mode) === 'reference',
     });
   }
@@ -664,6 +799,81 @@ export async function whatWasDecided(mandateId: string): Promise<Decided[]> {
     why: String(r.verdict_why ?? ''),
     when: String(r.decided_at ?? '').slice(0, 10),
   }));
+}
+
+/**
+ * REJECTION, WHICH IS THE VALUABLE HALF AND HAD NO WRITER.
+ *
+ * `verdict = 'rejected'` was counted, displayed and never once written by live
+ * code: the institution could describe a graveyard it had no way to fill. This
+ * is the door. It takes the reason and, deliberately, WHAT WOULD MAKE IT WORTH
+ * ANOTHER LOOK - without which a rejected thesis is indistinguishable from a
+ * bad one, and the search either re-discovers the same idea every quarter or
+ * never revisits one the world has since made good.
+ */
+export async function rejectCandidate(input: {
+  opportunityId: string; why: string; revisitIf: string | null; by: string;
+}): Promise<void> {
+  await query(
+    `UPDATE venture_opportunities
+        SET verdict = 'rejected', verdict_why = ?, revisit_if = ?,
+            decided_at = datetime('now')
+      WHERE id = ? AND verdict IS NULL`,
+    [`${input.by}: ${input.why.trim()}`, input.revisitIf?.trim() || null,
+      input.opportunityId]);
+}
+
+export interface Buried {
+  headline: string; why: string; revisitIf: string | null; when: string;
+  reference: boolean;
+}
+
+/** Everything this person has rejected, across every search, newest first. */
+export async function graveyardFor(founderId: string, limit = 20): Promise<Buried[]> {
+  return ((await query(
+    `SELECT headline, verdict_why, revisit_if, decided_at, evidence_mode
+       FROM venture_opportunities
+      WHERE founder_id = ? AND verdict = 'rejected'
+      ORDER BY decided_at DESC, rowid DESC LIMIT ?`, [founderId, limit]))
+    .rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+    headline: String(r.headline), why: String(r.verdict_why ?? ''),
+    revisitIf: r.revisit_if == null ? null : String(r.revisit_if),
+    when: String(r.decided_at ?? '').slice(0, 10),
+    reference: String(r.evidence_mode) === 'reference',
+  }));
+}
+
+const STOP_WORDS = new Set(['a', 'an', 'the', 'for', 'of', 'to', 'and', 'that',
+  'with', 'in', 'on', 'small', 'tool', 'app', 'platform', 'service', 'software']);
+
+function meaningfulWords(text: string): Set<string> {
+  return new Set(text.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/)
+    .filter((w) => w.length > 3 && !STOP_WORDS.has(w)));
+}
+
+/**
+ * HAVE WE BURIED THIS BEFORE?
+ *
+ * Word overlap, not embeddings, on purpose: the check has to be explicable in
+ * one line ("it shares 'veterinary', 'handover' and 'shift' with something you
+ * rejected in March") and cheap enough to run on every candidate. It will miss
+ * a paraphrase, and it will never claim a match it cannot show.
+ */
+export async function seenBefore(
+  founderId: string, headline: string,
+): Promise<{ headline: string; why: string; revisitIf: string | null; shares: string[] } | null> {
+  const words = meaningfulWords(headline);
+  if (words.size === 0) return null;
+  for (const buried of await graveyardFor(founderId, 200)) {
+    const theirs = meaningfulWords(buried.headline);
+    const shared = [...words].filter((w) => theirs.has(w));
+    // Half of what this one says, and at least three words of it.
+    if (shared.length >= 3 && shared.length * 2 >= words.size) {
+      return { headline: buried.headline, why: buried.why, revisitIf: buried.revisitIf,
+        shares: shared };
+    }
+  }
+  return null;
 }
 
 /**

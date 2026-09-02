@@ -254,6 +254,7 @@ export async function exerciseReferenceMandate(mandateId: string): Promise<numbe
 
   for (const candidate of CANDIDATES) {
     const opportunityId = nanoid();
+    const diesByItsOwnThesis = candidate.headline.includes('dashboard');
     await query(
       `INSERT INTO venture_opportunities
          (id, mandate_id, founder_id, headline, who_has_it, the_problem,
@@ -295,6 +296,22 @@ export async function exerciseReferenceMandate(mandateId: string): Promise<numbe
       await raiseUnknown({
         founderId, opportunityId, question: ask.question,
         blocking: ask.blocking, cheapestTest: ask.cheapestTest,
+      });
+    }
+
+    // THE DISCIPLINE BURIES ONE, WITH BOTH QUESTIONS ANSWERED. Rejection was
+    // counted and displayed and never once written by live code; the
+    // graveyard the institution described had no way to be filled. This is
+    // the reference world filling it the way a real search would: the kill
+    // thesis landed, here is why, and here is what would change the answer.
+    if (diesByItsOwnThesis) {
+      const { rejectCandidate } = await import('./mandate.js');
+      await rejectCandidate({
+        opportunityId, by: 'the candidate discipline',
+        why: 'its own kill thesis landed - four dead products in this category '
+          + 'with the same complaint in their final reviews',
+        revisitIf: 'a platform the agencies already live in opens an integration '
+          + 'that makes switching unnecessary',
       });
     }
   }

@@ -281,20 +281,36 @@ describe('the reference world exercises the discipline', () => {
     expect(progress?.looked).toBe(4);
   });
 
-  it('kills the one its own thesis destroys, and keeps why', async () => {
+  it('kills the one its own thesis destroys, and keeps both questions', async () => {
     const open = await currentMandate(OWNER);
     if (!open) throw new Error('expected a mandate');
     const doomed = (await query(
-      `SELECT id, kill_thesis FROM venture_opportunities
+      `SELECT id, kill_thesis, verdict, verdict_why, revisit_if FROM venture_opportunities
         WHERE mandate_id = ? AND headline LIKE '%unifies every tool%'`, [open.id]))
       .rows[0] as Record<string, unknown>;
     expect(String(doomed.kill_thesis)).toContain('dies every time');
 
-    await query(
-      `UPDATE venture_opportunities SET verdict = 'rejected',
-              verdict_why = 'its own kill thesis lands: this has been built and died before',
-              decided_at = datetime('now') WHERE id = ?`, [String(doomed.id)]);
+    // THE DISCIPLINE BURIED IT, without anybody clicking. Rejection used to be
+    // counted, displayed and never once written by live code.
+    expect(String(doomed.verdict)).toBe('rejected');
+    expect(String(doomed.verdict_why)).toContain('kill thesis landed');
+    // AND THE GRAVEYARD ANSWERS THE SECOND QUESTION: what would change this.
+    expect(String(doomed.revisit_if)).toContain('opens an integration');
     expect((await mandateProgress(OWNER))?.rejected).toBe(1);
+  });
+
+  it('recognises the same bad idea when it comes back', async () => {
+    const { seenBefore, graveyardFor } = await import('../../src/services/venture/mandate.js');
+    const buried = await graveyardFor(OWNER);
+    expect(buried.some((b) => b.headline.includes('unifies every tool'))).toBe(true);
+    // A paraphrase close enough to share half its meaningful words is caught,
+    // and the match can be shown in one line rather than asserted.
+    const again = await seenBefore(OWNER,
+      'A unified dashboard for every tool a small agency uses');
+    expect(again?.headline).toContain('unifies every tool');
+    expect(again?.shares.length).toBeGreaterThanOrEqual(3);
+    // And something genuinely different is not claimed as a match.
+    expect(await seenBefore(OWNER, 'Compliance deadline reminders for florists')).toBeNull();
   });
 
   it('rejects the one that fails what the owner said, by name', async () => {

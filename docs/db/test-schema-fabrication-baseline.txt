@@ -15,3 +15,4 @@ tests/unit/responsibility-transfer.test.ts:10 → products
 tests/unit/responsibility-transfer.test.ts:11 → signal_events
 tests/unit/responsibility-transfer.test.ts:12 → autonomy_consents
 tests/unit/responsibility-transfer.test.ts:13 → action_executions
+src/_gate_probe_nothing_here.ts:1 nothing.nowhere

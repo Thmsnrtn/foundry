@@ -203,13 +203,20 @@ async function main(): Promise<void> {
   console.log('\nWHETHER TO ADD ANOTHER');
   const venture = await import('../src/services/venture/mandate.js');
   const resilience = await import('../src/services/founder/resilience.js');
-  const heard = venture.readVentureSentence(
-    'Find another small digital income stream that would make my portfolio more resilient');
-  say('he says', '"Find another small digital income stream that would make my '
-    + 'portfolio more resilient"');
-  say('  heard as', heard.kind === 'mandate'
-    ? `a mandate to look, naming no shape${heard.shape === null ? '' : ` (${heard.shape})`}`
-    : `NOT A MANDATE — a defect (${heard.kind})`);
+  const PARAGRAPH = 'Make the river stronger. Find another small digital income '
+    + 'stream that would make my portfolio more resilient. Keep legal risk low. '
+    + 'Avoid increasing our biggest existing dependencies. Do not spend more than '
+    + '$25 validating anything. Bring me only things that deserve my attention.';
+  say('he says', `"${PARAGRAPH}"`);
+  for (const heard of venture.readVentureParagraph(PARAGRAPH)) {
+    say(`  "${heard.statement.slice(0, 40)}"`, heard.kind === 'mandate'
+      ? 'a mandate to look, naming no shape'
+      : heard.kind === 'guidance'
+        ? `${heard.guidance}${heard.subject ? `: ${heard.subject}` : ''}`
+          + `${heard.dimension ? ` on ${heard.dimension}` : ''}`
+          + `${heard.resolve ? ` (resolved against the portfolio)` : ''}`
+        : `NOT HEARD — ${heard.kind}`);
+  }
 
   const research = await import('../src/services/venture/research-sources.js');
   const view = await resilience.shouldAddAnother(OWNER, 'reference');
