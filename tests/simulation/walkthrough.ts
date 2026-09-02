@@ -50,6 +50,7 @@ let currentFounder: Founder = null;
 let currentProductId: string | null = null;
 
 const AUTHED_PREFIXES = ['/dashboard', '/decisions', '/fleet', '/settings', '/agents', '/integrations', '/founder-ops', '/onboarding', '/products'];
+const { PRINCIPAL_KEY } = await import('../../src/middleware/principal.js');
 const app = new (Hono as any)();
 // Auth stub: inject the persona's founder (mirrors authMiddleware's c.set) and,
 // like the real authMiddleware, redirect logged-out users away from authed
@@ -58,9 +59,21 @@ app.use('*', async (c: any, next: any) => {
   const path = new URL(c.req.url).pathname;
   if (currentFounder) {
     c.set('founder', currentFounder);
-    // Mirror what the real auth + tenant middleware put on context, so RBAC
-    // (requireRole) and product-scoped handlers resolve.
-    c.set('userId', currentFounder.id);
+    // THE PRINCIPAL, DECLARED — which is what the real `authMiddleware` does,
+    // and what this stub was missing.
+    //
+    // It previously set `userId` and `productId` too, "so RBAC resolves". It
+    // did the opposite. `principalOf` derives a principal from the older
+    // middlewares and REFUSES WHEN MORE THAN ONE SPOKE: a founder plus a
+    // userId+productId pair looks like a human session and an API key at once,
+    // so it returned null, `actingSubject` returned nothing, and every
+    // capability-guarded route answered 401 before its guard ever ran.
+    //
+    // The consequence was worse than a failing job. This walkthrough exists to
+    // drive fifteen personas through real mutations and prove there are no
+    // tenant leaks — and every guarded mutation was being turned away at the
+    // door, so it was reporting safety for routes it had never reached.
+    c.set(PRINCIPAL_KEY, { kind: 'human_session', founderId: currentFounder.id });
     if (currentProductId) c.set('productId', currentProductId);
   } else if (AUTHED_PREFIXES.some((p) => path === p || path.startsWith(p + '/'))) {
     return c.redirect('/auth/login');
@@ -330,8 +343,17 @@ async function main(): Promise<void> {
     await assertDb('P2 resolve-decision', rrow?.status === 'approved', `decision not approved after resolve (status=${rrow?.status})`);
 
     // Cross-tenant resolve attempt → must not change the decision.
+    //
+    // THE ATTACKER HAS A COMPANY OF THEIR OWN, and that is the point. With no
+    // company at all they were turned away by `requireCompanyCapability` with
+    // "no company selected" before the handler ran — a safe answer, but it
+    // proves only that the door is shut to nobody-in-particular. The dangerous
+    // caller is a legitimate founder with a legitimate company reaching for
+    // someone else's decision, and only this version reaches the handler's
+    // tenant scoping and proves THAT holds.
     const other = await seedFounder({ email: 'resolve-attacker@a.co', tier: 'growth' });
-    currentFounder = founderObj(other); currentProductId = null;
+    const otherProd = await seedProduct(other.id as string, { name: 'AttackerApp' });
+    currentFounder = founderObj(other); currentProductId = otherProd;
     await hit('P2 resolve-decision (cross-tenant)', 'POST', `/decisions/${did}/resolve`,
       { body: { chosen_option: 'hijack' }, json: true, expectStatus: [403, 404, 302] });
     const after = await query('SELECT chosen_option FROM decisions WHERE id = ?', [did]);
