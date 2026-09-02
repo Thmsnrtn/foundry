@@ -68,20 +68,28 @@ export async function beginAuthorization(input: {
   if (!offer) {
     return { failed: true, ownerWords: 'I do not know that source for this' };
   }
+  // SCOPES FIRST, AND THE ORDER IS THE GUARANTEE.
+  //
+  // GitHub has no read-only repository scope, so migration 232 left it with
+  // none it could honestly request. If that refusal came from the adapter being
+  // absent, it would disappear the day somebody wrote one — and the sense would
+  // start asking for push access to read code. The rule has to be about what
+  // can be granted, not about what happens to be implemented.
+  const scopes = await requiredScopes(input.provider, input.senseKey, input.mode);
+  if (scopes.length === 0) {
+    return {
+      failed: true,
+      ownerWords: `there is no permission ${input.provider} could give me that `
+        + 'would let me read this without also letting me change it, and I will '
+        + 'not ask for that one',
+    };
+  }
   const adapter = await senseProvider(input.provider);
   if (!adapter) {
     return {
       failed: true,
       ownerWords: `I know ${input.provider} could tell me this, but I cannot ask `
         + 'it for permission yet',
-    };
-  }
-  const scopes = await requiredScopes(input.provider, input.senseKey, input.mode);
-  if (scopes.length === 0) {
-    return {
-      failed: true,
-      ownerWords: 'nobody has declared what I would be asking permission for, '
-        + 'and I will not ask for an unbounded one',
     };
   }
 

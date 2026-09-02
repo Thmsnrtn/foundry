@@ -331,6 +331,42 @@ describe('giving it back', () => {
   });
 });
 
+describe('a provider that cannot be asked read-only', () => {
+  it('refuses GitHub rather than asking for push access to read code', async () => {
+    // FOUND WHILE WRITING THE ADAPTER, which is the right time to find it.
+    // GitHub's OAuth app scopes have no read-only option for repository
+    // contents: `repo` is full control and includes push. So a connection made
+    // to let Foundry UNDERSTAND software would hand over the ability to change
+    // it — under a disclosure that said the opposite, until migration 232.
+    const scopes = await requiredScopes('github', 'software', 'real');
+    expect(scopes, 'no scope GitHub could honestly grant').toEqual([]);
+
+    const REAL = 'cl_gh';
+    await query("INSERT INTO products (id,name,owner_id,status) VALUES (?,'Code Co',?,'active')",
+      [REAL, OWNER]);
+    const started = await beginAuthorization({
+      productId: REAL, founderId: OWNER, companyName: 'Code Co',
+      senseKey: 'software', provider: 'github', mode: 'real', redirectUri: REDIRECT,
+    });
+    expect('failed' in started).toBe(true);
+    if ('failed' in started) {
+      // The refusal is about what GitHub COULD grant, not about whether an
+      // adapter happens to exist — so writing one later cannot resurrect it.
+      expect(started.ownerWords)
+        .toContain('without also letting me change it');
+    }
+
+    // And the disclosure now says why, rather than claiming a read scope that
+    // does not exist.
+    const row = (await query(
+      `SELECT hands_over FROM sense_providers
+        WHERE provider = 'github' AND sense_key = 'software'`, []))
+      .rows[0] as Record<string, unknown>;
+    expect(String(row.hands_over)).toContain('GitHub has no read-only repository scope');
+    expect(String(row.hands_over)).toContain('GitHub App installation');
+  });
+});
+
 describe('a provider Foundry cannot ask yet', () => {
   it('says so instead of offering a button that would fail', async () => {
     // `plausible` is a declared source with no adapter written. The honest
