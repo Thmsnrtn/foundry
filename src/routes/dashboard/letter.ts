@@ -8,6 +8,7 @@ import { Hono } from 'hono';
 import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import { requireOwner } from '../../middleware/rbac.js';
+import { isPrivateOwnerInstance } from '../../lib/instance-posture.js';
 import { logger } from '../../services/logger.js';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { dashboardLayout } from '../../views/layout.js';
@@ -1267,6 +1268,18 @@ letterRoutes.get('/letter', async (c) => {
   const { companyMayBeChanged } = await import('../../api/middleware/entitlement.js');
   const operating = await companyMayBeChanged(ctx.productId);
   const stopped = operating.allowed || operating.axis === 'erasure' ? null : operating;
+  // COMMERCIAL FOUNDRY RESIDUE, SHOWN TO THE PRIVATE OWNER.
+  //
+  // A day-one onboarding card — "your AI team reports in each morning",
+  // "connect Stripe or your analytics", "log your first decision" — reachable
+  // from the private first screen's own footer. It is written for a founder
+  // signing up to a product, and the private owner is neither. Two of its three
+  // links lead into machinery he has no reason to meet.
+  //
+  // It does not disappear from the world; the commercial instance still needs
+  // it. It disappears from HIS product, which is the point: the stronger this
+  // becomes, the smaller it should feel.
+  const privateOwner = isPrivateOwnerInstance();
   const { getJudgmentRecord, getMaterialJudgments } = await import('../../services/institution/institutional-judgment-disposition.js');
   const materialJudgments = await getMaterialJudgments(ctx.productId);
   // How Foundry's judgments about this company have held up. Read back from the
@@ -1432,7 +1445,8 @@ letterRoutes.get('/letter', async (c) => {
       <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.3rem;">You can stop this until then — it does not have to be you who asked for it.</div>`}
       <a href="/privacy" class="btn btn-primary" style="margin-top:0.6rem;font-size:0.82rem;display:inline-block;">Stop the deletion</a>
     </div>` : ''}
-    ${letter.firstRun && !hasResponsibilitySummary && customerMessages.length === 0
+    ${!privateOwner
+      && letter.firstRun && !hasResponsibilitySummary && customerMessages.length === 0
       && supportChannels.length === 0 && !hasDevelopmentActivity && !hasSelfObservation
           && !hasPendingCandidate && !fleetHasItems && !hasRecordedPerson
       && !stopped && !deletion ? html`

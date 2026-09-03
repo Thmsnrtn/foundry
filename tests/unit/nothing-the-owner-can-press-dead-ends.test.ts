@@ -106,6 +106,38 @@ describe('the first screen, as he actually uses it', () => {
   });
 });
 
+describe('the surfaces beyond the first screen', () => {
+  it('does not send the private owner into commercial onboarding', async () => {
+    // The Advanced surface, reachable from his own footer, carried a day-one
+    // signup card written for somebody buying a product: "your AI team reports
+    // in each morning", a button to connect Stripe, a button to log a first
+    // decision. He is not a founder signing up, and two of those three links
+    // lead into machinery he has no reason to meet.
+    const body = await (await app.request('/letter')).text();
+    expect(body).not.toContain('let\'s get your first signal');
+    expect(body).not.toContain('/agents/integrations');
+    expect(body).not.toContain('href="/decisions"');
+  });
+
+  it('leaves nothing on the advanced surface leading nowhere', async () => {
+    const body = await (await app.request('/letter')).text();
+    const { forms, links } = whatHeCanPress(body);
+    const dead: string[] = [];
+    for (const href of links) {
+      const res = await app.request(href);
+      if (res.status === 404) dead.push(`GET ${href}`);
+    }
+    for (const { action, method } of forms) {
+      if (method !== 'POST') continue;
+      const res = await app.request(action, { method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ said: 'anything' }).toString() });
+      if (res.status === 404) dead.push(`POST ${action}`);
+    }
+    expect(dead, `dead ends on the advanced surface: ${dead.join(', ')}`).toEqual([]);
+  });
+});
+
 describe('the journey he could not complete', () => {
   it('carries him from an empty first screen to a real running search', async () => {
     // Exactly what he tried to do, through exactly what the screen offers, with
