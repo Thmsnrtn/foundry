@@ -133,14 +133,16 @@ export async function standingOf(claimId: string): Promise<Standing | null> {
 
 export async function formClaim(input: {
   founderId: string; claim: string; opportunityId?: string | null;
+  /** The seed this was formed to investigate, when it belongs to one. */
+  seedId?: string | null;
   evidenceMode: 'real' | 'reference';
 }): Promise<string> {
   const id = nanoid();
   await query(
-    `INSERT INTO market_claims (id, founder_id, claim, opportunity_id, evidence_mode)
-     VALUES (?,?,?,?,?)`,
+    `INSERT INTO market_claims (id, founder_id, claim, opportunity_id, seed_id, evidence_mode)
+     VALUES (?,?,?,?,?,?)`,
     [id, input.founderId, input.claim.trim(), input.opportunityId ?? null,
-      input.evidenceMode]);
+      input.seedId ?? null, input.evidenceMode]);
   return id;
 }
 

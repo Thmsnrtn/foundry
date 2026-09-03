@@ -93,6 +93,8 @@ interface OwnerState {
     seeingThrough: string[];
     /** What it still cannot answer even with those. */
     stillDark: string[];
+    /** How much is being looked into privately, as one line. Never a list. */
+    privately: string | null;
     /** Whether adding anything is the right move, asked before any candidate. */
     another: {
       recommend: boolean; because: string; concentrations: string[];
@@ -403,6 +405,21 @@ async function readOwnerState(
         looked: progress.looked, rejected: progress.rejected, open: progress.open,
         blocked: progress.blocked, wouldNeed: progress.wouldNeed,
         seeingThrough: progress.seeingThrough, stillDark: progress.stillDark,
+        // THE FRONTIER AS ONE LINE, NEVER AS A LIST.
+        //
+        // Seeds are institutional working memory, not an idea inbox. He asked
+        // to be brought only things that deserve his attention, so what is
+        // being looked into privately is a count and a sentence — the moment it
+        // became a list, it would be a hundred speculative opportunities he had
+        // to triage, which is the machinery this product exists to carry.
+        privately: await (async () => {
+          const { openSeeds } = await import('../../services/venture/seeds.js');
+          const seeds = await openSeeds(founderId, 200);
+          const real = seeds.filter((s) => !s.reference).length;
+          return real === 0 ? null
+            : `I am looking into ${String(real)} ${real === 1 ? 'thing' : 'things'} `
+              + 'privately. None has earned your attention yet, and most never will.';
+        })(),
         // WHETHER TO ADD ONE AT ALL, ASKED BEFORE ANY CANDIDATE IS SHOWN.
         //
         // A list of opportunities implies the answer is yes. Putting the prior
@@ -1887,6 +1904,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
         <p><strong>What a single thing going wrong could take out</strong></p>
         <ul>${raw(s.search.another.concentrations.map((con) =>
     `<li>${con}</li>`).join(''))}</ul></div>` : ''}
+      ${s.search.privately ? html`<p class="quiet">${s.search.privately}</p>` : ''}
       ${s.search.needs.length ? html`<p class="quiet"><strong>What the portfolio
         needs</strong> — ${s.search.needs.join('; ')}.</p>` : ''}
       ${s.search.decided.length ? html`<div class="quiet">

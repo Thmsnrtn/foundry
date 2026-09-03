@@ -708,6 +708,11 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
   // asked. Deleted rather than kept as anonymous market knowledge, because
   // "anonymous" here would mean "knowledge somebody once paid attention to for
   // a reason nobody records", which is not anonymity.
+  opportunity_seeds: {
+    reason: 'things one person\'s search thought might be worth investigating, and what '
+      + 'became of each',
+    onAccountErasure: { op: 'delete' },
+  },
   market_retrievals: {
     reason: 'what a source returned when it was asked something on one person\'s behalf, '
       + 'and what that instrument could and could not see at the time',
@@ -914,6 +919,7 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   owner_boundary_subjects: 'the vocabulary of things a boundary can be about, constitutional and the same for every owner; the boundaries themselves are erased with their company',
   senses: 'the vocabulary of what Foundry can learn about any company and what that never grants; constitutional and the same for every owner',
   workspace_substrates: 'the kinds of computer a workshop can run on and whether each is isolated from the institution; constitutional, naming nobody',
+  epistemic_stances: 'the genuinely different ways of knowing something, and why each cannot stand in for another; constitutional, naming nobody',
   reality_only_questions: 'the questions no amount of reading can settle — whether somebody will pay, switch, click or come back — and what each is settled by instead; constitutional, naming nobody',
   consequence_rungs: 'the ladder of consequence an act can have, constitutional and the same for every owner',
   capabilities: 'what the institution can conceivably do, as concepts; constitutional, naming nobody',
