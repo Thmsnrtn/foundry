@@ -128,9 +128,22 @@ describe('the real substrate', () => {
     await expect(flyMachinesWorkshop.create({
       purpose: 'venture_development', ceiling: 'prepare', network: 'none', budgetCents: 0, tooling: [] }))
       .rejects.toThrow(/declared, not available/);
+    // AND IT REFUSES THROUGH THE GOVERNED PATH TOO, for the same honest reason:
+    // no token, so no machine. The workspace row is refused rather than left
+    // behind pointing at a computer that was never made.
     await expect(createWorkshop({
       founderId: OWNER, purpose: 'venture_development', ceiling: 'prepare',
       substrate: 'fly_machines', createdBy: 'foundry', evidenceMode: 'reference' }))
-      .rejects.toThrow(/reference substrate is for reference work/);
+      .rejects.toThrow(/declared, not available/);
+  });
+
+  it('will not pretend the rehearsal substrate can do real work', async () => {
+    // The pairing that remains. A real task on the in-process computer would be
+    // reporting work that never happened; a rehearsal task on a REAL computer
+    // is how the lifecycle earns its reality, so that direction is allowed.
+    await expect(createWorkshop({
+      founderId: OWNER, purpose: 'self_development', ceiling: 'prepare',
+      substrate: 'reference_world', createdBy: 'foundry', evidenceMode: 'real' }))
+      .rejects.toThrow(/executes nothing/);
   });
 });

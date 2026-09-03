@@ -903,6 +903,7 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   governed_effect_kinds: 'the effect vocabulary',
   owner_boundary_subjects: 'the vocabulary of things a boundary can be about, constitutional and the same for every owner; the boundaries themselves are erased with their company',
   senses: 'the vocabulary of what Foundry can learn about any company and what that never grants; constitutional and the same for every owner',
+  workspace_substrates: 'the kinds of computer a workshop can run on and whether each is isolated from the institution; constitutional, naming nobody',
   consequence_rungs: 'the ladder of consequence an act can have, constitutional and the same for every owner',
   capabilities: 'what the institution can conceivably do, as concepts; constitutional, naming nobody',
   capability_providers: 'which implementations supply which capability and how far each is proven; institutional, naming no company',

@@ -14,7 +14,7 @@
 // behalf does so through the institution's own mediated call.
 // =============================================================================
 
-export type Substrate = 'reference_world' | 'fly_machines' | 'fly_sprites';
+export type Substrate = 'reference_world' | 'local_process' | 'fly_machines' | 'fly_sprites';
 
 export interface WorkshopSpec {
   purpose: string;

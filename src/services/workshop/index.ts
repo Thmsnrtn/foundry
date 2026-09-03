@@ -20,6 +20,7 @@ import { WorkshopError } from './contract.js';
 
 async function substrate(name: Substrate): Promise<WorkshopSubstrate> {
   if (name === 'reference_world') return (await import('./reference.js')).referenceWorkshop;
+  if (name === 'local_process') return (await import('./local-process.js')).localProcessWorkshop;
   if (name === 'fly_machines') return (await import('./fly-machines.js')).flyMachinesWorkshop;
   throw new WorkshopError(name, 'substrate', `no adapter for ${name}: it is declared, not available`);
 }
@@ -59,11 +60,17 @@ export async function createWorkshop(input: {
   evidenceMode: 'real' | 'reference';
 }): Promise<Workshop> {
   // THE REHEARSAL SUBSTRATE IS FOR REHEARSALS. A real task on the in-process
-  // computer would be pretending to have done work; a rehearsal on a real
-  // machine would be spending money to pretend.
-  if ((input.substrate === 'reference_world') !== (input.evidenceMode === 'reference')) {
+  // computer would be pretending to have done work.
+  //
+  // The other direction is deliberately NOT refused any more. A real computer
+  // doing rehearsal work is exactly how the workshop lifecycle earns its
+  // reality: files really written, commands really run, cost really incurred,
+  // teardown really removing it - on work that could not matter if it went
+  // wrong. Refusing that would have left the only proven substrate the one
+  // that executes nothing.
+  if (input.substrate === 'reference_world' && input.evidenceMode !== 'reference') {
     throw new WorkshopError(input.substrate, 'create',
-      'the reference substrate is for reference work, and real work needs a real computer');
+      'the rehearsal substrate executes nothing, so real work cannot happen in it');
   }
   const id = nanoid();
   await query(
@@ -200,9 +207,20 @@ export async function destroy(input: { workshopId: string; preserved: string }):
   const w = await read(input.workshopId);
   if (!w.externalRef) throw new Error('that workshop is gone');
   const done = await (await substrate(w.substrate)).destroy(w.externalRef);
-  await query("UPDATE workspaces SET destroyed_at = datetime('now'), preserved = ? WHERE id = ?",
-    [input.preserved.trim(), input.workshopId]);
-  await event(input.workshopId, 'destroyed', `kept: ${input.preserved.trim()}`, done.costCents);
+  // THE TEARDOWN'S OWN COST, CHARGED IN THE SAME BREATH AS THE DESTRUCTION.
+  // Recording the event afterwards tried to add the cost to a row the guard had
+  // just closed, so a real workshop could never account for what removing it
+  // took — the one substrate where teardown is not free is the one where it
+  // could not be recorded.
+  await query(
+    `UPDATE workspaces SET destroyed_at = datetime('now'), preserved = ?,
+            spent_cents = spent_cents + ? WHERE id = ?`,
+    [input.preserved.trim(), done.costCents, input.workshopId]);
+  await query(
+    `INSERT INTO workspace_events (id, workspace_id, founder_id, kind, detail, cost_cents)
+     VALUES (?,?,?,'destroyed',?,?)`,
+    [nanoid(), input.workshopId, await ownerOf(input.workshopId),
+      `kept: ${input.preserved.trim()}`, done.costCents]);
 }
 
 /** What happened in there, for the record and for the owner's letter. */

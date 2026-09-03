@@ -317,8 +317,24 @@ capability has a ceiling rung. Every tool at the outbound door is bound to a
 capability, and the door asks the rung what an act takes: nothing for a look
 or a draft; the boundary door for a public act; an allowance or an exact
 approval for money; an exact approval, every time, for a legal commitment or an
-irreversible act. **Those two rungs are never absorbed** into standing policy,
-and a tool bound to nothing may not act at all.
+irreversible act. **Those two rungs are never SILENTLY ABSORBED** into ordinary autonomous
+authority, and a tool bound to nothing may not act at all.
+
+**Corrected by the owner on 2026-09-03.** The first version of this said a
+legal commitment and an irreversible act were his one at a time *forever*. The
+behaviour was right and the word was wrong: it froze a 2026 implementation into
+permanent doctrine, and what it would have frozen is an owner-attention burden —
+a small, recurring, well-understood legal act arriving in his hands one at a
+time for years because a column once said it must. The invariant that actually
+matters is that the ordinary machinery by which Foundry earns room — an
+allowance, a lifted boundary, a recognised responsibility — may never reach
+them. A narrow delegation of a specific class could one day be appropriate, but
+only with all of: qualified review of the class, an explicit owner policy naming
+it, narrow scope, bounded economics, evidence each act is what it claims to be,
+and revocation. No such mechanism exists, so today every one of these is still
+his, one at a time — and `delegable_when` now records *why*, so a later
+institution can build that mechanism without first overturning a constitution
+that called it impossible.
 
 **Providers are implementations; capabilities are institutional concepts.**
 The fabric is seeded across research, computer work, development, data,
@@ -344,6 +360,23 @@ grants is refused and recorded; the workshop never holds a secret, because a
 grant names a capability and every consequential call is mediated through the
 same door. Legal and destructive rungs can never be a workshop's ceiling: those
 acts are proposed out of a workshop, never done inside one.
+
+**And where a workshop runs is enforced, not described.** A substrate either
+executes nothing (the rehearsal one), executes on Foundry's own host, or
+executes somewhere Foundry is not. A workspace whose purpose is to run code
+Foundry did not write may not use a substrate that executes on Foundry's own
+host — the database refuses it. That makes the owner's rule about generated
+venture work structural rather than a promise in a comment.
+
+**The lifecycle is now proven on a real computer.** A real directory, real
+child processes, real wall-clock cost, real teardown: create, grant, run,
+verify the output, checkpoint, restore, sleep, destroy. It runs on the
+institution's own host and is honest about it — an allow-list of programs with
+no route to a network or a credential, an environment built from nothing rather
+than filtered down, paths that cannot leave the directory, a timeout and an
+output cap. Fly Machines remain shaped to their documented API and declared;
+Sprites remain a candidate whose interface could not be verified from here, and
+nothing about them is guessed.
 
 ### Where the workshop will physically run
 

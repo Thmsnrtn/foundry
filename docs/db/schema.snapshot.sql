@@ -171,6 +171,7 @@
             c.epistemic_status IN ('known','inferred') AND (c.valid_until IS NULL OR datetime(c.valid_until)>datetime('now'))
            END
           ))
+          = 'same_host';
           AND (NEW.epistemic_status='unresolved' OR (
           AND a.id=json_extract(ref.value,'$.id') AND a.product_id=NEW.product_id
           AND c.id=json_extract(ref.value,'$.id') AND c.product_id=NEW.product_id
@@ -350,6 +351,7 @@
       AND (NEW.evidence_mode = 'reference') <> EXISTS (
       AND (NEW.evidence_mode = 'reference') <> EXISTS (
       AND (NEW.what_we_do IS NOT OLD.what_we_do
+      AND (SELECT isolation FROM workspace_substrates WHERE substrate = NEW.substrate)
       AND (c.valid_until IS NULL OR datetime(c.valid_until)>datetime('now'))
       AND (claim.valid_until IS NULL OR datetime(claim.valid_until)>datetime('now'))
       AND (trim(coalesce(NEW.what_happened,'')) = '' OR NEW.verdict IS NULL);
@@ -946,6 +948,7 @@
     WHERE NEW.product_id IS NOT OLD.product_id
     WHERE NEW.product_id IS NOT OLD.product_id
     WHERE NEW.product_id IS NOT OLD.product_id
+    WHERE NEW.purpose IN ('venture_development','dependency_upgrade','adversarial_test')
     WHERE NEW.question IS NOT OLD.question OR NEW.founder_id IS NOT OLD.founder_id;
     WHERE NEW.ran_at IS NOT NULL
     WHERE NEW.ran_at IS NOT NULL AND coalesce(NEW.decision,'') <> 'approved';
@@ -986,6 +989,7 @@
     WHERE NOT EXISTS (
     WHERE NOT EXISTS (
     WHERE NOT EXISTS (SELECT 1 FROM capability_providers
+    WHERE NOT EXISTS (SELECT 1 FROM workspace_substrates WHERE substrate = NEW.substrate);
     WHERE OLD.closed_at IS NOT NULL;
     WHERE OLD.consumed_at IS NOT NULL;
     WHERE OLD.decision IS NOT NULL
@@ -2270,6 +2274,8 @@
   SELECT RAISE(ABORT,'workspace:immutable')
   SELECT RAISE(ABORT,'workspace:incomplete')
   SELECT RAISE(ABORT,'workspace:over_budget')
+  SELECT RAISE(ABORT,'workspace:unknown_substrate')
+  SELECT RAISE(ABORT,'workspace:untrusted_code_needs_isolation')
   SELECT RAISE(ABORT,'workspace_event:cost_cannot_be_negative') WHERE NEW.cost_cents < 0;
   SELECT RAISE(ABORT,'workspace_event:incomplete') WHERE trim(NEW.detail) = '';
   SELECT RAISE(ABORT,'workspace_grant:above_the_ceiling')
@@ -3859,6 +3865,7 @@
   is_current BOOLEAN DEFAULT TRUE,
   is_pinned    INTEGER NOT NULL DEFAULT 0,    -- 1 = always included in agent context
   is_seasonal INTEGER DEFAULT 0,
+  isolation   TEXT NOT NULL CHECK (isolation IN ('executes_nothing','same_host','isolated')),
   item_key TEXT NOT NULL,
   item_kind   TEXT NOT NULL,             -- 'needs_you' | future kinds
   item_ref    TEXT NOT NULL,             -- e.g. decision id
@@ -4960,6 +4967,7 @@
   sort_order    INTEGER NOT NULL
   sort_order   INTEGER NOT NULL
   sort_order   INTEGER NOT NULL
+  sort_order  INTEGER NOT NULL
   source          TEXT NOT NULL CHECK (source IN ('agent_session','founder_manual')),
   source         TEXT NOT NULL,
   source TEXT NOT NULL CHECK(source IN (
@@ -5100,6 +5108,7 @@
   subject_kind  TEXT NOT NULL CHECK (subject_kind IN ('company','opportunity')),
   subscription_id TEXT REFERENCES push_subscriptions(id),
   substrate      TEXT NOT NULL,
+  substrate   TEXT PRIMARY KEY,
   success_count INTEGER DEFAULT 0,
   success_metric TEXT NOT NULL,          -- e.g., "trial_to_paid_conversion_rate"
   successful_sessions INTEGER NOT NULL DEFAULT 0,
@@ -5384,6 +5393,7 @@
   what_it_does   TEXT NOT NULL,
   what_it_is       TEXT NOT NULL,
   what_it_is   TEXT NOT NULL,
+  what_it_is  TEXT NOT NULL,
   what_it_means  TEXT NOT NULL,
   what_was_tried TEXT NOT NULL,
   what_we_are_not TEXT,
@@ -5684,6 +5694,7 @@
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
 , confidence_score REAL DEFAULT 0);
 , contributor_hash TEXT);
+, delegable_when TEXT NOT NULL DEFAULT '');
 , deleted_at DATETIME, platform_dependency_risk REAL, incumbent_response_probability REAL, moat_erosion_rate REAL);
 , dimension TEXT
 , direction TEXT);
@@ -5741,6 +5752,7 @@ BEFORE DELETE ON sense_credentials
 BEFORE DELETE ON sense_provider_scopes
 BEFORE DELETE ON situation_recommendations
 BEFORE DELETE ON system_identities
+BEFORE DELETE ON workspace_substrates
 BEFORE INSERT ON ai_spend_reservations
 BEFORE INSERT ON autonomy_consents
 BEFORE INSERT ON autonomy_consents WHEN NEW.responsibility_id IS NOT NULL
@@ -5835,6 +5847,8 @@ BEFORE INSERT ON venture_mandates
 BEFORE INSERT ON venture_opportunities
 BEFORE INSERT ON workspace_events
 BEFORE INSERT ON workspace_grants
+BEFORE INSERT ON workspace_substrates
+BEFORE INSERT ON workspaces
 BEFORE INSERT ON workspaces
 BEFORE UPDATE OF approved_at ON outbound_actions
 BEFORE UPDATE OF config_json ON integrations
@@ -5896,7 +5910,9 @@ BEFORE UPDATE ON venture_mandates
 BEFORE UPDATE ON venture_opportunities
 BEFORE UPDATE ON workspace_events
 BEFORE UPDATE ON workspace_grants
+BEFORE UPDATE ON workspace_substrates
 BEFORE UPDATE ON workspaces
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -6089,6 +6105,9 @@ BEGIN SELECT RAISE(ABORT,'sense_scope:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'sense_scope:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'sense_scope:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'workspace_event:immutable'); END;
+BEGIN SELECT RAISE(ABORT,'workspace_substrate:constitutional'); END;
+BEGIN SELECT RAISE(ABORT,'workspace_substrate:constitutional'); END;
+BEGIN SELECT RAISE(ABORT,'workspace_substrate:constitutional'); END;
 CREATE INDEX idx_accuracy_scores_product ON agent_accuracy_scores(product_id, agent_name);
 CREATE INDEX idx_acquirer_signals_product ON acquirer_signals(product_id, detected_at DESC);
 CREATE INDEX idx_action_drafts_decision ON action_drafts(decision_id);
@@ -6709,6 +6728,7 @@ CREATE TABLE weekly_plans (
 CREATE TABLE wisdom_patterns (
 CREATE TABLE workspace_events (
 CREATE TABLE workspace_grants (
+CREATE TABLE workspace_substrates (
 CREATE TABLE workspaces (
 CREATE TRIGGER ai_spend_reservation_apply
 CREATE TRIGGER ai_spend_reservation_finish
@@ -6904,6 +6924,10 @@ CREATE TRIGGER workspace_event_immutable
 CREATE TRIGGER workspace_grant_guard
 CREATE TRIGGER workspace_grant_revoke_is_one_way
 CREATE TRIGGER workspace_guard
+CREATE TRIGGER workspace_substrates_constitutional_delete
+CREATE TRIGGER workspace_substrates_constitutional_insert
+CREATE TRIGGER workspace_substrates_constitutional_update
+CREATE TRIGGER workspace_untrusted_code_needs_isolation
 CREATE UNIQUE INDEX idx_assisted_action_message
 CREATE UNIQUE INDEX idx_assisted_effect_identity ON outbound_actions(product_id,effect_id) WHERE effect_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_benchmark_percentiles_unique
@@ -6954,6 +6978,7 @@ CREATE UNIQUE INDEX idx_venture_mandate_one_open
 CREATE UNIQUE INDEX idx_voice_fp_active_unique
 CREATE UNIQUE INDEX idx_wiki_entries_unique
 CREATE UNIQUE INDEX idx_workspace_grant_live
+END;
 END;
 END;
 END;
