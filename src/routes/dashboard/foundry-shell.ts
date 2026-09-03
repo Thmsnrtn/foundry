@@ -184,6 +184,18 @@ interface OwnerState {
   companyName: string;
   firstName: string;
   routinesHealthy: number;
+  /**
+   * WHAT FOUNDRY IS ACTUALLY LOOKING AFTER.
+   *
+   * The first screen said "I am set up, and I have not learned anything about
+   * you yet" with two companies live in the portfolio, because it asked about
+   * routines and never about companies. He could spend an afternoon exploring
+   * and come back to a home screen that had not noticed.
+   *
+   * Invented companies are counted separately and never folded into the real
+   * ones — the whole point of them is that they are not his.
+   */
+  watching: { real: number; invented: number };
   routinesFailing: string[];
   checks: Array<{ check: string; result: string; detail: string; observedAt: string }>;
   responsibilities: Array<{ id: string; title: string; state: string; check: string | null }>;
@@ -370,6 +382,15 @@ async function readOwnerState(
     companyName: String(product?.name ?? 'this company'),
     firstName: founderName.split(' ')[0] || '',
     routinesHealthy: Number(health?.n ?? 0),
+    watching: await (async () => {
+      const counted = (await query(
+        `SELECT SUM(CASE WHEN ${realCompany('p')} THEN 1 ELSE 0 END) AS real,
+                SUM(CASE WHEN ${referenceCompany('p')} THEN 1 ELSE 0 END) AS invented
+           FROM products p
+          WHERE p.owner_id = ? AND p.status = 'active' AND p.deleted_at IS NULL`,
+        [founderId])).rows[0] as Record<string, unknown> | undefined;
+      return { real: Number(counted?.real ?? 0), invented: Number(counted?.invented ?? 0) };
+    })(),
     routinesFailing: failing.map((r) => String(r.job_name)),
     checks,
     responsibilities: responsibilities.map((r) => ({
@@ -1883,12 +1904,31 @@ foundryShellRoutes.get('/foundry', async (c) => {
 
   // ORIENTATION IS ONE SENTENCE. Not four green bullets: a routine count and a
   // spend of zero are true, measurable, and not why he opened this.
+  // IS EVERYTHING OKAY, ANSWERED AGAINST WHAT IS ACTUALLY THERE.
+  //
+  // This asked about routines and never about companies, so it told him it had
+  // learned nothing about him while two companies sat in his portfolio being
+  // watched. He could spend an afternoon exploring and come back to a home
+  // screen that had not noticed. Invented companies are said to be invented,
+  // every time, because the entire reason they exist is that they are not his.
+  const nothingYet = s.watching.real === 0 && s.watching.invented === 0
+    && s.routinesHealthy === 0 && s.checks.length === 0;
+  const settled = s.watching.real > 0
+    ? `Everything is fine. I am looking after ${String(s.watching.real)} `
+      + `${s.watching.real === 1 ? 'company' : 'companies'}`
+      + `${s.watching.invented > 0 ? `, and watching ${String(s.watching.invented)} `
+        + 'I made up' : ''}. Nothing needs you.`
+    : s.watching.invented > 0
+      ? `Everything is fine. I am watching ${String(s.watching.invented)} `
+        + `${s.watching.invented === 1 ? 'company' : 'companies'} I made up, and none of `
+        + 'yours yet. Nothing needs you.'
+      : 'Everything is fine. Nothing needs you.';
   const orientation = done && attention === null
     ? ''
     : attention === null
-      ? (s.routinesHealthy === 0 && s.checks.length === 0
+      ? (nothingYet
         ? 'I am set up, and I have not learned anything about you yet.'
-        : 'Everything is fine. Nothing needs you.')
+        : settled)
       : attention.kind === 'stopped' || attention.kind === 'drifted'
         ? 'Something needs looking at.'
         : 'One thing needs you.';
