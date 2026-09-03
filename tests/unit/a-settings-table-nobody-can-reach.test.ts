@@ -85,7 +85,10 @@ describe('the table is gone', () => {
     // checked result — makes ninety-two.
     // And `contested_evidence_tick` — which proposes the cheapest reality test
     // where reading has stopped helping — makes ninety-three.
-    expect(Object.keys(JOB_REGISTRY).length, 'ninety-two before, ninety-three now').toBe(93);
+    // And `venture_discovery_tick` — which turns what the portfolio needs into
+    // a search, sows a few seeds from what people wrote, and buries most of
+    // them — makes ninety-four.
+    expect(Object.keys(JOB_REGISTRY).length, 'ninety-three before, ninety-four now').toBe(94);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

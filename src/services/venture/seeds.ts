@@ -239,18 +239,39 @@ export async function bury(input: { seedId: string; because: string }): Promise<
  * curious, so this reads the chain rather than reconstructing it.
  */
 export async function whyWeStartedLooking(opportunityId: string): Promise<{
-  seed: string; origin: SeedOrigin; originSaid: string; observation: string | null;
+  /** What the portfolio needed, which is where the looking started. */
+  lookingFor: string | null;
+  /** The shape the owner named, or null meaning any economic form. */
+  shapeNamed: string | null;
+  /** What was actually searched for, so a barren search reads as barren. */
+  termsTried: string | null;
+  /** The constraints he said, held to throughout. */
+  heldTo: string | null;
+  seed: string; origin: SeedOrigin; originSaid: string;
+  /** Foundry's reading of the signal, which is inference and is labelled so. */
+  signalKind: string | null;
+  inference: string | null;
+  /** The sentence somebody actually wrote. Evidence, as distinct from the above. */
+  observation: string | null;
 } | null> {
   const row = (await query(
-    `SELECT s.seed, s.origin, s.origin_said, o.saw
+    `SELECT s.seed, s.origin, s.origin_said, s.signal_kind, s.inference, o.saw,
+            b.looking_for, b.shape_named, b.terms_tried, b.held_to
        FROM venture_opportunities v
        JOIN opportunity_seeds s ON s.id = v.from_seed_id
        LEFT JOIN market_observations o ON o.id = s.origin_observation_id
+       LEFT JOIN search_briefs b ON b.id = s.brief_id
       WHERE v.id = ?`, [opportunityId])).rows[0] as Record<string, unknown> | undefined;
   if (!row) return null;
   return {
+    lookingFor: row.looking_for == null ? null : String(row.looking_for),
+    shapeNamed: row.shape_named == null ? null : String(row.shape_named),
+    termsTried: row.terms_tried == null ? null : String(row.terms_tried),
+    heldTo: row.held_to == null ? null : String(row.held_to),
     seed: String(row.seed), origin: String(row.origin) as SeedOrigin,
     originSaid: String(row.origin_said),
+    signalKind: row.signal_kind == null ? null : String(row.signal_kind),
+    inference: row.inference == null ? null : String(row.inference),
     observation: row.saw == null ? null : String(row.saw),
   };
 }

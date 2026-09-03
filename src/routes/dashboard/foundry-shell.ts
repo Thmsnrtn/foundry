@@ -95,6 +95,8 @@ interface OwnerState {
     stillDark: string[];
     /** How much is being looked into privately, as one line. Never a list. */
     privately: string | null;
+    /** What this search is for and what it has tried, in one quiet line. */
+    brief: string | null;
     /** Whether adding anything is the right move, asked before any candidate. */
     another: {
       recommend: boolean; because: string; concentrations: string[];
@@ -405,6 +407,15 @@ async function readOwnerState(
         looked: progress.looked, rejected: progress.rejected, open: progress.open,
         blocked: progress.blocked, wouldNeed: progress.wouldNeed,
         seeingThrough: progress.seeingThrough, stillDark: progress.stillDark,
+        // WHAT THE SEARCH IS FOR, so a search that found nothing reads
+        // differently from one that was never pointed anywhere — and so the
+        // absence of a named shape stays visible as his choice.
+        brief: progress.brief === null ? null
+          : `Looking for ${progress.brief.lookingFor}`
+            + `${progress.brief.shapeNamed === null
+              ? ', in any form — you did not name one' : `, as ${progress.brief.shapeNamed}`}`
+            + `${progress.brief.termsTried === null ? ''
+              : `. Searched for: ${progress.brief.termsTried}`}.`,
         // THE FRONTIER AS ONE LINE, NEVER AS A LIST.
         //
         // Seeds are institutional working memory, not an idea inbox. He asked
@@ -1904,6 +1915,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
         <p><strong>What a single thing going wrong could take out</strong></p>
         <ul>${raw(s.search.another.concentrations.map((con) =>
     `<li>${con}</li>`).join(''))}</ul></div>` : ''}
+      ${s.search.brief ? html`<p class="quiet">${s.search.brief}</p>` : ''}
       ${s.search.privately ? html`<p class="quiet">${s.search.privately}</p>` : ''}
       ${s.search.needs.length ? html`<p class="quiet"><strong>What the portfolio
         needs</strong> — ${s.search.needs.join('; ')}.</p>` : ''}

@@ -515,6 +515,14 @@ export interface MandateProgress {
   wouldNeed: string | null;
   /** What it can see through, named. */
   seeingThrough: string[];
+  /**
+   * WHAT THIS SEARCH IS ACTUALLY FOR, and what it has tried.
+   *
+   * So a search that found nothing can be told from a search that was never
+   * pointed anywhere — and so the shape stays visible as the owner's choice
+   * rather than something the institution filled in.
+   */
+  brief: { lookingFor: string; shapeNamed: string | null; termsTried: string | null } | null;
   /** What it still cannot answer, even with those. */
   stillDark: string[];
 }
@@ -565,6 +573,17 @@ export async function mandateProgress(founderId: string): Promise<MandateProgres
         + 'memory — that would read like research and be nothing of the kind.',
     stillDark: canSeeMarket ? await whatIsStillDark(founderId, mandate.evidenceMode) : [],
     seeingThrough: ways.map((w) => `${w.named} — ${w.whatItIs}`),
+    brief: await (async () => {
+      const row = (await query(
+        `SELECT looking_for, shape_named, terms_tried FROM search_briefs
+          WHERE mandate_id = ? ORDER BY made_at DESC, rowid DESC LIMIT 1`, [mandate.id]))
+        .rows[0] as Record<string, unknown> | undefined;
+      return row === undefined ? null : {
+        lookingFor: String(row.looking_for),
+        shapeNamed: row.shape_named == null ? null : String(row.shape_named),
+        termsTried: row.terms_tried == null ? null : String(row.terms_tried),
+      };
+    })(),
     // WHAT WOULD ACTUALLY UNBLOCK IT, NAMED.
     //
     // "I need a market provider" is the answer of an institution waiting for

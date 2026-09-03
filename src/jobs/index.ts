@@ -2881,6 +2881,62 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   // leaves a sealed prediction waiting for him, and the experiment machinery
   // still refuses to run anything he has not approved. Nothing here spends,
   // publishes or contacts anybody.
+  // THE PASS THAT MAKES A REAL MANDATE PRODUCE ANYTHING.
+  //
+  // Everything downstream of a candidate was built and proven while nothing
+  // ever created one outside the rehearsal world. This is the front of the
+  // chain: what the portfolio needs becomes a brief, the brief becomes a search
+  // through real sources, and what people actually wrote becomes a small number
+  // of seeds — each quoting a sentence, each carrying Foundry's reading of it
+  // as a reading.
+  //
+  // AND IT KILLS MOST OF WHAT IT SOWS, in the same pass, using a genuinely
+  // different way of knowing than the one that sowed them. A permissive
+  // frontier is only defensible if the weeding is ruthless and cheap, and if
+  // seeds die of evidence rather than of taste.
+  //
+  // NOTHING REACHES THE OWNER FROM HERE. Seeds are institutional working
+  // memory; only candidates reach him, and promotion needs independent stances
+  // that this pass does not grant.
+  venture_discovery_tick: {
+    fn: async () => {
+      const { discover, weedOut } = await import('../services/venture/discovery.js');
+      const mandates = await query(
+        `SELECT id, founder_id, evidence_mode FROM venture_mandates
+          WHERE closed_at IS NULL ORDER BY opened_at`, []);
+      let sown = 0;
+      let buried = 0;
+      for (const row of mandates.rows as unknown as Array<Record<string, unknown>>) {
+        const founderId = String(row.founder_id);
+        const world = String(row.evidence_mode) === 'reference' ? 'reference' : 'real';
+        try {
+          const found = await discover({
+            founderId, mandateId: String(row.id), world });
+          sown += found.sown.length;
+          for (const passed of found.passedOver.slice(0, 3)) {
+            logger.info(`venture_discovery_tick passed over ${passed.what}: ${passed.because}`,
+              { jobName: 'venture_discovery_tick' });
+          }
+          // The ruthless half, immediately, so the frontier never accumulates.
+          const weeded = await weedOut({ founderId, world });
+          buried += weeded.buried.length;
+        } catch (err) {
+          logger.error(
+            `venture_discovery_tick failed for ${String(row.id)}: `
+            + `${err instanceof Error ? err.message : String(err)}`,
+            { jobName: 'venture_discovery_tick' });
+        }
+      }
+      logger.info(
+        `venture_discovery_tick: seeds sown=${String(sown)}, buried=${String(buried)}`,
+        { jobName: 'venture_discovery_tick' });
+    },
+    schedule: '0 6 * * *',
+    description:
+      'Turn what the portfolio needs into a search through real sources, sow a few seeds '
+      + 'from what people actually wrote, and bury most of them against a different way '
+      + 'of knowing (daily)',
+  },
   contested_evidence_tick: {
     fn: async () => {
       const { proposeWhatRealityWouldSettle } = await import(
