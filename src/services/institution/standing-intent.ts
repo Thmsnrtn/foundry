@@ -475,6 +475,19 @@ export interface ProposedAct {
   id: string; productId: string; subject: string; actionType: string | null;
   summary: string; why: string; expectedEffect: string; risk: string;
   consequence: 'low' | 'medium' | 'high';
+  /**
+   * WHAT KIND OF ACT THIS IS, AND WHAT UNDOING IT WOULD INVOLVE.
+   *
+   * Null on acts proposed before the ladder reached this table. The card says
+   * so rather than inventing a classification nobody made.
+   */
+  rung: string | null;
+  rungMeans: string | null;
+  puttingItBack: string | null;
+  /** Whether standing policy could ever cover this class of act. */
+  absorbable: boolean | null;
+  /** What it would cost in cents, or null where that is genuinely not known. */
+  costCents: number | null;
   proposedAt: string; expiresAt: string;
   decision: 'approved' | 'refused' | null;
 }
@@ -490,35 +503,53 @@ export async function proposeAct(input: {
   productId: string; subject: string; actionType: string | null;
   params: unknown; summary: string; why: string; expectedEffect: string; risk: string;
   consequence: 'low' | 'medium' | 'high';
+  /**
+   * Which rung of the consequence ladder this act sits on. Optional only
+   * because acts proposed before the ladder reached this table have none, and
+   * inventing one for them afterwards would assert a classification nobody
+   * made.
+   */
+  rung?: string;
+  /** What it would cost, in cents. Null means genuinely not known. */
+  costCents?: number | null;
   proposedBy: string; validForHours?: number;
 }): Promise<string> {
   const id = nanoid();
   await query(
     `INSERT INTO proposed_acts
        (id, product_id, subject, action_type, params_fingerprint, summary, why,
-        expected_effect, risk, consequence, proposed_by, expires_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?, datetime('now', ?))`,
+        expected_effect, risk, consequence, rung, cost_cents, proposed_by, expires_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, datetime('now', ?))`,
     [id, input.productId, input.subject, input.actionType,
       fingerprint(input.params), input.summary.trim(), input.why.trim(),
       input.expectedEffect.trim(), input.risk.trim(), input.consequence,
+      input.rung ?? null, input.costCents ?? null,
       input.proposedBy, `+${String(input.validForHours ?? 72)} hours`]);
   return id;
 }
 
 export async function openProposals(productId: string): Promise<ProposedAct[]> {
   return ((await query(
-    `SELECT id, product_id, subject, action_type, summary, why, expected_effect, risk,
-            consequence, proposed_at, expires_at, decision
-       FROM proposed_acts
-      WHERE product_id = ? AND decision IS NULL AND revoked_at IS NULL
-        AND datetime(expires_at) > datetime('now')
-      ORDER BY proposed_at, rowid`, [productId]))
+    `SELECT a.id, a.product_id, a.subject, a.action_type, a.summary, a.why,
+            a.expected_effect, a.risk, a.consequence, a.proposed_at, a.expires_at,
+            a.decision, a.rung, a.cost_cents,
+            r.what_it_means AS rung_means, r.putting_it_back, r.absorbable
+       FROM proposed_acts a
+       LEFT JOIN consequence_rungs r ON r.rung = a.rung
+      WHERE a.product_id = ? AND a.decision IS NULL AND a.revoked_at IS NULL
+        AND datetime(a.expires_at) > datetime('now')
+      ORDER BY a.proposed_at, a.rowid`, [productId]))
     .rows as unknown as Array<Record<string, unknown>>).map((r) => ({
     id: String(r.id), productId: String(r.product_id), subject: String(r.subject),
     actionType: r.action_type == null ? null : String(r.action_type),
     summary: String(r.summary), why: String(r.why),
     expectedEffect: String(r.expected_effect), risk: String(r.risk),
     consequence: String(r.consequence) as ProposedAct['consequence'],
+    rung: r.rung == null ? null : String(r.rung),
+    rungMeans: r.rung_means == null ? null : String(r.rung_means),
+    puttingItBack: r.putting_it_back == null ? null : String(r.putting_it_back),
+    absorbable: r.absorbable == null ? null : Number(r.absorbable) === 1,
+    costCents: r.cost_cents == null ? null : Number(r.cost_cents),
     proposedAt: String(r.proposed_at), expiresAt: String(r.expires_at),
     decision: r.decision == null ? null : String(r.decision) as 'approved' | 'refused',
   }));

@@ -2201,6 +2201,14 @@ interface CompanyView {
   proposals: Array<{
     id: string; summary: string; why: string; expectedEffect: string;
     risk: string; consequence: string; expiresAt: string;
+    /** The rung and what it means, or null where nobody classified this act. */
+    kindOfAct: string | null;
+    /** What undoing it would actually involve, in the rung's own words. */
+    puttingItBack: string | null;
+    /** True where no standing policy could ever cover this class of act. */
+    onlyEverYours: boolean;
+    /** What it costs, already in words, or null where that is not known. */
+    cost: string | null;
   }>;
   /** What he said this company is for, in his words. */
   said: { statement: string; steers: boolean } | null;
@@ -2427,6 +2435,18 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
     proposals: proposals.map((p) => ({
       id: p.id, summary: p.summary, why: p.why, expectedEffect: p.expectedEffect,
       risk: p.risk, consequence: p.consequence, expiresAt: p.expiresAt.slice(0, 10),
+      // WHAT KIND OF ACT, WHAT IT COSTS, AND WHAT UNDOING IT WOULD INVOLVE.
+      //
+      // The card carried a low/medium/high consequence it never rendered, and
+      // had no notion of cost or of putting anything back. Two of the three
+      // the institution already knew: the rung says in its own words what the
+      // act does, and whether any standing policy could ever cover the class.
+      kindOfAct: p.rungMeans === null ? null : `${p.rung ?? ''} — ${p.rungMeans}`,
+      puttingItBack: p.puttingItBack,
+      onlyEverYours: p.absorbable === false,
+      cost: p.costCents === null ? null
+        : p.costCents === 0 ? 'nothing'
+          : `$${(p.costCents / 100).toFixed(2)}`,
     })),
     budgetMonthly: Number(row.operating_budget_monthly_usd ?? 0),
     spent30d: Number(row.ai_cost_trailing_30d_usd ?? 0),
@@ -2773,6 +2793,14 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
         <p><strong>Why</strong> — ${p.why}</p>
         <p><strong>What I expect</strong> — ${p.expectedEffect}</p>
         <p><strong>What could go wrong</strong> — ${p.risk}</p>
+        ${p.kindOfAct === null ? '<p class="quiet">I have not classified what kind of act '
+  + 'this is, so treat it as though it cannot be undone.</p>'
+  : `<p><strong>What kind of act</strong> — ${p.kindOfAct}.</p>
+       <p><strong>Putting it back</strong> — ${p.puttingItBack ?? ''}.</p>`}
+        ${p.cost === null ? '<p class="quiet"><strong>What it costs</strong> — I do not know.</p>'
+  : `<p><strong>What it costs</strong> — ${p.cost}.</p>`}
+        ${p.onlyEverYours ? '<p class="gap">Nothing you could ever set up would let me do '
+  + 'this on my own. It is yours, one act at a time, permanently.</p>' : ''}
         <p class="quiet">If you do nothing, I do not do it, and this expires
           ${p.expiresAt}.</p>
         <form method="POST" action="/foundry/proposals/${p.id}/approve">

@@ -1034,6 +1034,7 @@
     WHERE NOT EXISTS (
     WHERE NOT EXISTS (
     WHERE NOT EXISTS (SELECT 1 FROM capability_providers
+    WHERE NOT EXISTS (SELECT 1 FROM consequence_rungs WHERE rung = NEW.rung);
     WHERE NOT EXISTS (SELECT 1 FROM workspace_substrates WHERE substrate = NEW.substrate);
     WHERE OLD.closed_at IS NOT NULL;
     WHERE OLD.consumed_at IS NOT NULL;
@@ -2330,6 +2331,7 @@
   SELECT RAISE(ABORT,'proposed_act:nothing_asked_for_this') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'proposed_act:proposer_cannot_approve')
   SELECT RAISE(ABORT,'proposed_act:revoked_after_use')
+  SELECT RAISE(ABORT,'proposed_act:unknown_rung')
   SELECT RAISE(ABORT,'real_company:reference_evidence_refused')
   SELECT RAISE(ABORT,'recommendation:already_decided')
   SELECT RAISE(ABORT,'recommendation:cannot_arrive_decided')
@@ -5957,7 +5959,6 @@
 );
 );
 );
-);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , analysis_failed_at DATETIME, analysis_failure_reason TEXT
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
@@ -5965,7 +5966,7 @@
 , business_model TEXT, revenue_streams TEXT, target_channels TEXT, tech_stack TEXT, team_context TEXT, competitive_landscape TEXT);
 , confidence_score REAL DEFAULT 0);
 , contributor_hash TEXT);
-, delegable_when TEXT NOT NULL DEFAULT '');
+, delegable_when TEXT NOT NULL DEFAULT '', putting_it_back TEXT NOT NULL DEFAULT '');
 , deleted_at DATETIME, platform_dependency_risk REAL, incumbent_response_probability REAL, moat_erosion_rate REAL);
 , dimension TEXT
 , direction TEXT);
@@ -5998,6 +5999,7 @@
 , revised_into TEXT REFERENCES market_claims(id), revised_because TEXT, revised_at TEXT, seed_id TEXT REFERENCES opportunity_seeds(id));
 , revisit_if TEXT, lighter_architecture TEXT, from_seed_id TEXT
 , root_cause_label TEXT, effect_label TEXT);
+, rung TEXT REFERENCES consequence_rungs(rung), cost_cents INTEGER);
 , scope TEXT NOT NULL DEFAULT 'responsibility');
 , sector_profile TEXT DEFAULT 'b2b_saas', growth_stage TEXT DEFAULT 'pre_launch', growth_stage_updated_at TEXT, growth_stage_overridden INTEGER DEFAULT 0, share_token TEXT, ingest_token TEXT, deleted_at DATETIME, build_platform TEXT DEFAULT 'custom_code', company_lifecycle_state TEXT DEFAULT 'setup'
 , superseded_by_candidate_id TEXT REFERENCES responsibility_candidates(id));
@@ -6382,6 +6384,7 @@ BEGIN
 BEGIN
 BEGIN
 BEGIN
+BEGIN
 BEGIN SELECT RAISE(ABORT,'boundary_subject:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'boundary_subject:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'boundary_subject:constitutional'); END;
@@ -6410,6 +6413,7 @@ BEGIN SELECT RAISE(ABORT,'market_source_type:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'market_source_type:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'market_source_type:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'posture_change:immutable'); END;
+BEGIN SELECT RAISE(ABORT,'proposed_act:negative_cost'); END;
 BEGIN SELECT RAISE(ABORT,'reality_only_question:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'reality_only_question:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'reality_only_question:constitutional'); END;
@@ -7203,9 +7207,11 @@ CREATE TRIGGER posture_change_immutable
 CREATE TRIGGER products_reality_immutable
 CREATE TRIGGER products_status_is_lifecycle_only_insert
 CREATE TRIGGER products_status_is_lifecycle_only_update
+CREATE TRIGGER proposed_act_cost_is_not_negative BEFORE INSERT ON proposed_acts
 CREATE TRIGGER proposed_act_decision_guard
 CREATE TRIGGER proposed_act_guard
 CREATE TRIGGER proposed_act_no_delete
+CREATE TRIGGER proposed_act_rung_must_exist BEFORE INSERT ON proposed_acts
 CREATE TRIGGER reality_only_questions_constitutional_delete
 CREATE TRIGGER reality_only_questions_constitutional_insert
 CREATE TRIGGER reality_only_questions_constitutional_update
@@ -7519,6 +7525,7 @@ END;
 END;
 END;
 END;
+END;
 FOR EACH ROW
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
@@ -7536,6 +7543,7 @@ WHEN NEW.approved_at IS NOT NULL
 WHEN NEW.approved_at IS NOT NULL
 WHEN NEW.cash_on_hand_cents < 0 OR NEW.monthly_burn_cents < 0
 WHEN NEW.cash_on_hand_cents < 0 OR NEW.monthly_burn_cents < 0
+WHEN NEW.cost_cents IS NOT NULL AND NEW.cost_cents < 0
 WHEN NEW.direction IS NOT NULL
 WHEN NEW.direction IS NOT NULL
 WHEN NEW.disposition IS NOT OLD.disposition
@@ -7548,6 +7556,7 @@ WHEN NEW.outcome_valence IS NOT NULL AND NEW.outcome_valence NOT IN (-1, 0, 1)
 WHEN NEW.processed_at IS NOT NULL AND NEW.analysis_failed_at IS NOT NULL
 WHEN NEW.reality IS NOT OLD.reality
 WHEN NEW.responsibility_id IS NOT NULL AND NEW.capability='development'
+WHEN NEW.rung IS NOT NULL
 WHEN NEW.source IN
 WHEN NEW.source IN ('external_metric_ingest','effect_outcome_report',
 WHEN NEW.source_observed_at IS NOT NULL
