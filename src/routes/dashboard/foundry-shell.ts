@@ -133,6 +133,9 @@ interface OwnerState {
       research: Array<{ judgment: string; contradicts: string[]; coverage: string[] }>;
       /** Open questions, each with the cheapest thing that would settle it. */
       unanswered: string[];
+      /** Whether reading more would change anything, in one sentence. */
+      lookNext: string;
+      readingIsDone: boolean;
       /** What would have to be true before this could become a company. */
       inTheWay: string[];
       /** A test waiting on him, with the prediction he would be approving. */
@@ -483,6 +486,8 @@ async function readOwnerState(
               + `${cv.notAlsoTried ? ` Not also tried: ${cv.notAlsoTried}.` : ''}`
               + ` What would help most: ${cv.wouldMostHelp}.`),
           })),
+          lookNext: c.lookNext.because,
+          readingIsDone: !c.lookNext.keepLooking && c.lookNext.onlyRealityCanSettle.length > 0,
           unanswered: c.unanswered.map((u) => u.cheapestTest === null
             ? `${u.question} (nothing cheap would settle it)`
             : `${u.question} — ${u.cheapestTest}`),

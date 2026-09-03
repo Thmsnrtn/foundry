@@ -35,7 +35,7 @@ import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import type { PortfolioFit } from '../founder/resilience.js';
 import type { HowItWasResearched, OpenUnknown, Standing } from './market-evidence.js';
-import type { Experiment } from './validation.js';
+import type { Experiment, WhereToLookNext } from './validation.js';
 import type { LegalPicture } from './legal-surface.js';
 import type { Need } from '../institution/capabilities.js';
 
@@ -702,6 +702,14 @@ export interface PresentedCandidate {
   /** What is still not known, with the cheapest thing that would settle it. */
   unanswered: OpenUnknown[];
   /**
+   * WHETHER READING MORE WOULD CHANGE ANYTHING.
+   *
+   * The discipline that stops research becoming performance: when every
+   * question in the way is about what people will actually do, another pile of
+   * evidence is worth less than a small experiment, and the card says so.
+   */
+  lookNext: WhereToLookNext;
+  /**
    * WHAT WOULD HAVE TO BE TRUE BEFORE IT COULD BECOME A COMPANY.
    *
    * Not a readiness score. A list of sentences he could act on, and an empty
@@ -739,7 +747,7 @@ export async function candidatesFor(mandateId: string): Promise<PresentedCandida
   const guidance = open?.guidance ?? [];
   const { portfolioFitOf } = await import('../founder/resilience.js');
   const { standingOf, openUnknowns, howItWasResearched } = await import('./market-evidence.js');
-  const { awaitingHim, whatStandsInTheWay } = await import('./validation.js');
+  const { awaitingHim, whatStandsInTheWay, whereToLookNext } = await import('./validation.js');
   const { legalPictureOf } = await import('./legal-surface.js');
   const { whatItWouldTake } = await import('../institution/capabilities.js');
 
@@ -784,6 +792,7 @@ export async function candidatesFor(mandateId: string): Promise<PresentedCandida
       fit,
       standing, research,
       unanswered: await openUnknowns(String(r.id)),
+      lookNext: await whereToLookNext(String(r.id)),
       inTheWay: await whatStandsInTheWay(String(r.id)),
       awaiting: await awaitingHim(String(r.id)),
       buriedBefore: await seenBefore(founderId, String(r.headline)),

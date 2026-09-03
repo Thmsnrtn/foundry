@@ -339,6 +339,7 @@
        OR trim(NEW.why) = '' OR trim(NEW.would_need) = '';
        OR trim(NEW.would_disprove) = '';
        WHERE c.provider_id = OLD.id AND c.to_maturity = NEW.maturity
+       WHERE o.claim_id = OLD.id AND o.bearing = 'contradicts');
        WHERE p.id = NEW.product_id AND NEW.decided_by = 'founder:' || p.owner_id);
       'activation_event','active_user_event','team_id','host','account_id',
       'activation_event','active_user_event','team_id','host','account_id',
@@ -459,6 +460,7 @@
       SELECT 1 FROM institutional_responsibilities r
       SELECT 1 FROM institutional_responsibilities r
       SELECT 1 FROM json_each('["src/db/migrations/","docs/foundry-institution/","scripts/",'
+      SELECT 1 FROM market_observations o
       SELECT 1 FROM products WHERE id = NEW.product_id AND reality = 'reference');
       SELECT 1 FROM products WHERE id = NEW.product_id AND reality = 'reference');
       SELECT 1 FROM products p
@@ -959,6 +961,10 @@
     WHERE NEW.retired_at IS NOT NULL;
     WHERE NEW.retired_at IS NOT NULL;
     WHERE NEW.retired_at IS NOT NULL;
+    WHERE NEW.revised_into = OLD.id;
+    WHERE NEW.revised_into IS NOT NULL AND NOT EXISTS (
+    WHERE NEW.revised_into IS NOT NULL AND OLD.settled_as IS NOT NULL;
+    WHERE NEW.revised_into IS NOT NULL AND trim(coalesce(NEW.revised_because,'')) = '';
     WHERE NEW.revoked_at IS NOT NULL AND OLD.consumed_at IS NOT NULL;
     WHERE NEW.revoked_at IS NOT NULL AND trim(coalesce(NEW.revoke_reason,'')) = '';
     WHERE NEW.revoked_at IS NOT NULL AND trim(coalesce(NEW.revoke_reason,'')) = '';
@@ -1008,6 +1014,7 @@
     WHERE OLD.ran_at IS NOT NULL AND NEW.ran_at IS NOT OLD.ran_at;
     WHERE OLD.retired_at IS NOT NULL;
     WHERE OLD.retired_at IS NOT NULL;
+    WHERE OLD.revised_into IS NOT NULL;
     WHERE OLD.revoked_at IS NOT NULL;
     WHERE OLD.verdict IS NOT NULL;
     WHERE OLD.withdrawn_at IS NOT NULL;
@@ -1225,6 +1232,7 @@
   -- 0 = fully autonomous
   -- 1 = notify + 24h override window
   -- 2 = require explicit approval before acting
+  -- A CLAIM IS NARROWED BECAUSE SOMETHING CONTRADICTED IT. Narrowing one that
   -- A COMPANY THAT DOES NOT EXIST MAY NOT HAVE A REAL SENSE, and a real company
   -- A COMPANY'S EXPOSURE IS ONLY EVER AS REAL AS THE COMPANY. Without this, a
   -- A DISCONNECTED SENSE IS FINISHED, and comparing the two timestamps to
@@ -1246,6 +1254,7 @@
   -- A new grant is a new authority identity. Reviving a revoked one is not a
   -- A proposal answers one real message of this company. There is no way to
   -- A selected alternative must be one Foundry actually represented at
+  -- A settled claim is finished. Reality answered it; there is nothing to narrow.
   -- A tool may say what it observed. It may not say who said it.
   -- A verified outcome requires BOTH independent verification and proof that
   -- AN EXPERIMENT AGAINST AN ANSWERED QUESTION IS BUSYWORK.
@@ -1662,6 +1671,7 @@
   -- not be asked company-wide and a company-wide one may not be pinned to a
   -- not left to whichever service happens to mint it.
   -- not recent, and conflating the two would make evidence ordering a lie.
+  -- nothing has argued with is not revision, it is changing the subject.
   -- nothing that could be mistaken for structure or a path.
   -- of adding an effect kind.
   -- on the writer having got it right.
@@ -2117,10 +2127,15 @@
   SELECT RAISE(ABORT,'legal_surface:immutable')
   SELECT RAISE(ABORT,'legal_surface:incomplete')
   SELECT RAISE(ABORT,'legal_surface:serious_needs_a_professional_or_a_reason')
+  SELECT RAISE(ABORT,'market_claim:already_revised')
   SELECT RAISE(ABORT,'market_claim:already_settled') WHERE OLD.settled_as IS NOT NULL;
   SELECT RAISE(ABORT,'market_claim:cannot_arrive_settled')
+  SELECT RAISE(ABORT,'market_claim:cannot_revise_into_itself')
   SELECT RAISE(ABORT,'market_claim:immutable')
   SELECT RAISE(ABORT,'market_claim:incomplete') WHERE trim(NEW.claim) = '';
+  SELECT RAISE(ABORT,'market_claim:nothing_contradicted_it')
+  SELECT RAISE(ABORT,'market_claim:revision_needs_a_reason')
+  SELECT RAISE(ABORT,'market_claim:settled_claims_are_not_revised')
   SELECT RAISE(ABORT,'market_claim:settlement_needs_a_witness')
   SELECT RAISE(ABORT,'market_observation:claim_mode_mismatch') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'market_observation:incomplete')
@@ -4217,6 +4232,7 @@
   onboarding_completed_at DATETIME,
   one_decision_to_make TEXT,
   one_sentence_status TEXT NOT NULL,
+  only_settled_by TEXT NOT NULL,
   opened_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   operating_principles TEXT,           -- JSON: string[]
   opportunity_id TEXT NOT NULL REFERENCES venture_opportunities(id),
@@ -4318,6 +4334,7 @@
   participant_emails TEXT, -- comma-separated
   participant_name TEXT,
   passing_threshold_override REAL,
+  pattern      TEXT PRIMARY KEY,
   pattern TEXT NOT NULL,       -- The synthesized wisdom statement
   pattern_description TEXT NOT NULL,
   pattern_description TEXT NOT NULL,
@@ -5007,6 +5024,7 @@
   sort_order    INTEGER NOT NULL
   sort_order   INTEGER NOT NULL
   sort_order   INTEGER NOT NULL
+  sort_order   INTEGER NOT NULL
   sort_order  INTEGER NOT NULL
   source            TEXT NOT NULL,
   source          TEXT NOT NULL CHECK (source IN ('agent_session','founder_manual')),
@@ -5433,6 +5451,7 @@
   weight_override REAL,
   what TEXT NOT NULL,
   what_happened  TEXT,
+  what_it_asks TEXT NOT NULL,
   what_it_creates    TEXT NOT NULL,
   what_it_does   TEXT NOT NULL,
   what_it_is       TEXT NOT NULL,
@@ -5768,6 +5787,7 @@
 , responsibility_id TEXT REFERENCES institutional_responsibilities(id), authority_consent_id TEXT REFERENCES autonomy_consents(id), authority_scope TEXT, effect_id TEXT, effect_certainty TEXT, provider_receipt_json TEXT, reconcile_after TEXT, outcome_status TEXT, outcome_evidence_ref TEXT, learned_claim_id TEXT REFERENCES reconstruction_claims(id), inbound_message_id TEXT REFERENCES inbound_customer_messages(id), reply_proposal_id TEXT REFERENCES signal_events(id));
 , responsibility_id TEXT REFERENCES institutional_responsibilities(id), capability TEXT);
 , retrieval_id TEXT REFERENCES market_retrievals(id), from_absence INTEGER NOT NULL DEFAULT 0);
+, revised_into TEXT REFERENCES market_claims(id), revised_because TEXT, revised_at TEXT);
 , revisit_if TEXT, lighter_architecture TEXT);
 , root_cause_label TEXT, effect_label TEXT);
 , scope TEXT NOT NULL DEFAULT 'responsibility');
@@ -5794,6 +5814,7 @@ BEFORE DELETE ON owner_boundary_subjects
 BEFORE DELETE ON owner_objectives
 BEFORE DELETE ON owner_preferences
 BEFORE DELETE ON proposed_acts
+BEFORE DELETE ON reality_only_questions
 BEFORE DELETE ON reference_companies
 BEFORE DELETE ON sense_credentials
 BEFORE DELETE ON sense_provider_scopes
@@ -5851,6 +5872,7 @@ BEFORE INSERT ON portfolio_exposures
 BEFORE INSERT ON posture_changes
 BEFORE INSERT ON products
 BEFORE INSERT ON proposed_acts
+BEFORE INSERT ON reality_only_questions
 BEFORE INSERT ON reconstruction_claims
 BEFORE INSERT ON reference_companies
 BEFORE INSERT ON research_sources
@@ -5910,6 +5932,7 @@ BEFORE UPDATE OF evidence_ref, authority_ref, outcome_ref
 BEFORE UPDATE OF maturity, maturity_since ON capability_providers
 BEFORE UPDATE OF outcome_valence ON decisions
 BEFORE UPDATE OF reality ON products
+BEFORE UPDATE OF revised_into ON market_claims
 BEFORE UPDATE OF revoked_at ON autonomy_consents
 BEFORE UPDATE OF source_observed_at ON inbound_customer_messages
 BEFORE UPDATE OF state ON institutional_responsibilities
@@ -5948,6 +5971,7 @@ BEFORE UPDATE ON portfolio_exposures
 BEFORE UPDATE ON posture_changes
 BEFORE UPDATE ON products
 BEFORE UPDATE ON proposed_acts
+BEFORE UPDATE ON reality_only_questions
 BEFORE UPDATE ON research_sources
 BEFORE UPDATE ON retrieval_items
 BEFORE UPDATE ON sense_authorizations
@@ -5963,6 +5987,7 @@ BEFORE UPDATE ON workspace_events
 BEFORE UPDATE ON workspace_grants
 BEFORE UPDATE ON workspace_substrates
 BEFORE UPDATE ON workspaces
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -6149,6 +6174,9 @@ BEGIN SELECT RAISE(ABORT,'market_source_type:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'market_source_type:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'market_source_type:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'posture_change:immutable'); END;
+BEGIN SELECT RAISE(ABORT,'reality_only_question:constitutional'); END;
+BEGIN SELECT RAISE(ABORT,'reality_only_question:constitutional'); END;
+BEGIN SELECT RAISE(ABORT,'reality_only_question:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'retrieval_item:immutable'); END;
 BEGIN SELECT RAISE(ABORT,'sense:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'sense:constitutional'); END;
@@ -6720,6 +6748,7 @@ CREATE TABLE proposed_acts (
 CREATE TABLE push_subscriptions (
 CREATE TABLE quieted_events (
 CREATE TABLE rate_limit_counters (
+CREATE TABLE reality_only_questions (
 CREATE TABLE recommendation_outcomes (
 CREATE TABLE reconstruction_claims (
 CREATE TABLE red_team_reviews (
@@ -6873,6 +6902,7 @@ CREATE TRIGGER judgment_conflict_identity_immutable
 CREATE TRIGGER legal_surface_guard
 CREATE TRIGGER legal_surface_retire_is_one_way
 CREATE TRIGGER market_claim_guard
+CREATE TRIGGER market_claim_revision_guard
 CREATE TRIGGER market_claim_settled_once
 CREATE TRIGGER market_observation_guard
 CREATE TRIGGER market_observation_immutable
@@ -6911,6 +6941,9 @@ CREATE TRIGGER products_status_is_lifecycle_only_update
 CREATE TRIGGER proposed_act_decision_guard
 CREATE TRIGGER proposed_act_guard
 CREATE TRIGGER proposed_act_no_delete
+CREATE TRIGGER reality_only_questions_constitutional_delete
+CREATE TRIGGER reality_only_questions_constitutional_insert
+CREATE TRIGGER reality_only_questions_constitutional_update
 CREATE TRIGGER reconstruction_claim_guard
 CREATE TRIGGER reference_companies_guard
 CREATE TRIGGER reference_companies_immutable
@@ -7040,6 +7073,7 @@ CREATE UNIQUE INDEX idx_venture_mandate_one_open
 CREATE UNIQUE INDEX idx_voice_fp_active_unique
 CREATE UNIQUE INDEX idx_wiki_entries_unique
 CREATE UNIQUE INDEX idx_workspace_grant_live
+END;
 END;
 END;
 END;

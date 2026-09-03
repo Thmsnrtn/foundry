@@ -197,6 +197,81 @@ export async function recordResult(input: {
   return { settled: e.claim_id == null ? null : String(e.claim_id) };
 }
 
+export interface WhereToLookNext {
+  /** True while reading more could still change the next decision. */
+  keepLooking: boolean;
+  /** The one sentence. */
+  because: string;
+  /** Questions no amount of reading will settle, with what would. */
+  onlyRealityCanSettle: Array<{ question: string; onlySettledBy: string }>;
+  /** Questions a source could still answer, and nobody has asked. */
+  stillWorthReading: string[];
+}
+
+/**
+ * WOULD MORE DESK RESEARCH CHANGE THE NEXT DECISION?
+ *
+ * The discipline that stops research becoming performance. Some questions no
+ * amount of reading will answer — whether somebody will pay, switch, click, or
+ * come back are answered by behaviour and by nothing else. When every question
+ * standing in the way is one of those, another pile of evidence is worth less
+ * than a five-dollar experiment, and saying so is the useful output.
+ *
+ * The list of what reading cannot settle is constitutional rather than
+ * inferred, because it is a claim about the world: those questions belong to
+ * behaviour, not to sources.
+ */
+export async function whereToLookNext(opportunityId: string): Promise<WhereToLookNext> {
+  const open = ((await query(
+    `SELECT question, blocking, cheapest_test FROM market_unknowns
+      WHERE opportunity_id = ? AND answered_at IS NULL
+      ORDER BY blocking DESC, rowid`, [opportunityId]))
+    .rows as unknown as Array<Record<string, unknown>>);
+
+  const patterns = ((await query(
+    'SELECT pattern, only_settled_by FROM reality_only_questions ORDER BY sort_order', []))
+    .rows as unknown as Array<Record<string, unknown>>)
+    .map((p) => ({ pattern: String(p.pattern), by: String(p.only_settled_by) }));
+
+  const onlyRealityCanSettle: Array<{ question: string; onlySettledBy: string }> = [];
+  const stillWorthReading: string[] = [];
+  let blockingCount = 0;
+  let blockingReadable = 0;
+
+  for (const row of open) {
+    const question = String(row.question);
+    const blocking = Number(row.blocking) === 1;
+    if (blocking) blockingCount += 1;
+    const hit = patterns.find((p) => question.toLowerCase().includes(p.pattern));
+    if (hit) {
+      onlyRealityCanSettle.push({ question, onlySettledBy: hit.by });
+    } else {
+      stillWorthReading.push(question);
+      if (blocking) blockingReadable += 1;
+    }
+  }
+
+  if (open.length === 0) {
+    return { keepLooking: false, onlyRealityCanSettle, stillWorthReading,
+      because: 'nothing is open — there is no question left for reading to answer' };
+  }
+  if (blockingCount > 0 && blockingReadable === 0) {
+    const first = onlyRealityCanSettle[0];
+    return {
+      keepLooking: false, onlyRealityCanSettle, stillWorthReading,
+      because: 'everything standing in the way is a question about what people will '
+        + `actually do. ${first ? `${first.question} is settled by ${first.onlySettledBy}` : ''}`
+        + ' — another pile of reading would not change the next decision.',
+    };
+  }
+  return {
+    keepLooking: true, onlyRealityCanSettle, stillWorthReading,
+    because: stillWorthReading.length === 1
+      ? `one question is still worth reading about: ${stillWorthReading[0] ?? ''}`
+      : `${String(stillWorthReading.length)} questions are still worth reading about`,
+  };
+}
+
 /**
  * WHAT WOULD HAVE TO BE TRUE BEFORE THIS COULD BECOME A COMPANY.
  *

@@ -340,6 +340,63 @@ export async function whatItLookedAt(retrievalId: string): Promise<WhatItLookedA
   }));
 }
 
+/**
+ * NARROWING A THESIS THAT CONTRADICTION HAS OUTGROWN.
+ *
+ * Neither averaging the disagreement nor abandoning the idea: the move a real
+ * founder makes when two good sources disagree is to believe something smaller
+ * that both fit. "Cron scheduling is solved" meets people still describing
+ * where it breaks and becomes "solved except across daylight saving" - which is
+ * a different business, and a better one to have found now.
+ *
+ * THE OLD CLAIM STAYS AND IS NOT MARKED FAILED. It was not wrong, it was too
+ * broad, and the record of having believed it is how the institution learns
+ * what kind of claim it tends to make too broadly. The database refuses to
+ * narrow a claim nothing has argued with, which would be changing the subject
+ * rather than revising a thesis.
+ */
+export async function reviseClaim(input: {
+  founderId: string; claimId: string; into: string; because: string;
+  opportunityId?: string | null;
+}): Promise<{ narrowerClaimId: string } | { refused: string }> {
+  const standing = await standingOf(input.claimId);
+  if (standing === null) return { refused: 'no such claim' };
+  if (standing.contradicts === 0) {
+    return {
+      refused: 'nothing has contradicted this, so narrowing it would be changing '
+        + 'the subject rather than revising a thesis',
+    };
+  }
+  const narrower = await formClaim({
+    founderId: input.founderId, claim: input.into,
+    opportunityId: input.opportunityId ?? null, evidenceMode: 'real',
+  });
+  try {
+    await query(
+      `UPDATE market_claims
+          SET revised_into = ?, revised_because = ?, revised_at = datetime('now')
+        WHERE id = ?`, [narrower, input.because.trim(), input.claimId]);
+  } catch (err) {
+    return { refused: String((err as Error).message) };
+  }
+  return { narrowerClaimId: narrower };
+}
+
+/** What a claim became, and why — so nobody reads the narrower one as the original. */
+export async function whatItBecame(claimId: string): Promise<{
+  claim: string; because: string; when: string;
+} | null> {
+  const row = (await query(
+    `SELECT n.claim, c.revised_because, c.revised_at
+       FROM market_claims c JOIN market_claims n ON n.id = c.revised_into
+      WHERE c.id = ?`, [claimId])).rows[0] as Record<string, unknown> | undefined;
+  if (!row) return null;
+  return {
+    claim: String(row.claim), because: String(row.revised_because),
+    when: String(row.revised_at).slice(0, 10),
+  };
+}
+
 export interface OpenUnknown {
   id: string; question: string; blocking: boolean; cheapestTest: string | null;
 }
