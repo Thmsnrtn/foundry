@@ -200,3 +200,25 @@ describe('the whole loop, run by the job', () => {
     expect(Number(changes.n)).toBe(2);
   });
 });
+
+describe('what it has proven, it can look through', () => {
+  it('offers only what has carried real work, never what is merely declared', async () => {
+    const { openTheEyesThatAreProven, waysOfLooking } = await import(
+      '../../src/services/venture/research-sources.js');
+    // Idempotent: the job above already opened what it proved, so calling again
+    // adds nothing. The state is what matters, not the delta.
+    expect(await openTheEyesThatAreProven(OWNER)).toEqual([]);
+
+    // Before this, the same institution read a registry every morning and told
+    // the owner it had nowhere to look — two true statements about different
+    // tables, making one piece of nonsense.
+    const ways = await waysOfLooking(OWNER, 'real');
+    expect(ways.map((w) => w.named)).toContain('npm_registry');
+    // The job proved the registry and nothing else: no dependency has gone
+    // quiet, so the community source has carried no real work and is not
+    // offered as something to look through.
+    expect(ways.map((w) => w.named)).not.toContain('hn_algolia');
+    // And looking is still not acting.
+    expect(ways[0]?.neverGrants).toContain('contact anyone I find');
+  });
+});

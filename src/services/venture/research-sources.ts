@@ -120,6 +120,47 @@ export async function disconnectResearchSource(id: string): Promise<void> {
 }
 
 /**
+ * WHAT THE INSTITUTION CAN ACTUALLY LOOK THROUGH, FROM WHAT IT HAS PROVEN.
+ *
+ * Taking stock found the institution denying what it demonstrably does: reading
+ * a public registry every morning while telling the owner it had nowhere to
+ * look. The capability fabric knew; the ways of looking a mandate consults were
+ * only ever connected by hand, and only for the rehearsal world.
+ *
+ * A provider that has been proven to supply a kind of knowing now becomes a way
+ * of looking on its own. NOTHING IS GRANTED BY THAT: these read public sources
+ * on the observe rung, with no credential and no cost, and a way of looking has
+ * never been a way of acting - which is why `never_grants` says so on every row
+ * this writes.
+ *
+ * DECLARED IS NOT ENOUGH. A provider that has merely been named cannot be
+ * looked through, because looking through it would fail and the mandate would
+ * report seeing something it cannot.
+ */
+export async function openTheEyesThatAreProven(founderId: string): Promise<string[]> {
+  const proven = ((await query(
+    `SELECT DISTINCT p.provider, p.supplies_source_type, c.what_it_does
+       FROM capability_providers p
+       JOIN capabilities c ON c.capability_key = p.capability_key
+      WHERE p.supplies_source_type IS NOT NULL
+        AND p.maturity IN ('available','controlled_proven','reality_proven','reliable')
+      ORDER BY p.sort_order, p.rowid`, []))
+    .rows as unknown as Array<Record<string, unknown>>);
+
+  const opened: string[] = [];
+  for (const row of proven) {
+    const made = await connectResearchSource({
+      founderId, sourceType: String(row.supplies_source_type),
+      named: String(row.provider),
+      neverGrants: 'contact anyone I find, spend anything, or commit you to anything',
+      evidenceMode: 'real',
+    });
+    if (made !== null) opened.push(String(row.provider));
+  }
+  return opened;
+}
+
+/**
  * THE SOURCES THE REFERENCE WORLD LOOKS THROUGH.
  *
  * Declared here rather than invented at the point of use, so a rehearsal search

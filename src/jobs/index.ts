@@ -2848,6 +2848,20 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
         logger.info('dependency_health_tick: read_package_registry is reality-proven',
           { jobName: 'dependency_health_tick' });
       }
+
+      // AND WHAT IT HAS PROVEN, IT CAN LOOK THROUGH. Without this the
+      // institution reads a registry every morning and still tells the owner it
+      // has nowhere to look — two true statements about different tables making
+      // one piece of nonsense.
+      {
+        const { openTheEyesThatAreProven } = await import(
+          '../services/venture/research-sources.js');
+        const opened = await openTheEyesThatAreProven(founderId);
+        if (opened.length > 0) {
+          logger.info(`dependency_health_tick: can now look through ${opened.join(', ')}`,
+            { jobName: 'dependency_health_tick' });
+        }
+      }
     },
     schedule: '45 5 * * *',
     description:
