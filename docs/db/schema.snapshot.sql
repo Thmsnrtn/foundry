@@ -1522,6 +1522,7 @@
   -- The observer may not see, cite, or echo the expectation it will be
   -- The person, not a company. Carried directly so erasure finds it.
   -- The plan must carry a real proposal, authored for that same message.
+  -- The point "what changed" is measured from. Never ahead of looked_at.
   -- The question it exists to answer. An experiment attached to no unknown is
   -- The question that would most cheaply settle whether this is nonsense.
   -- The real observation it came from, when it came from one.
@@ -1599,6 +1600,7 @@
   -- What would have to be true in the world for it to hold.
   -- What would need it, so the owner sees the reason and not a catalogue.
   -- When a send through this identity was last accepted by the provider.
+  -- When he was last here, by the rule above.
   -- Where every claim came from. Empty means nothing was checked, and an
   -- Where it was seen: a URL, a person, a dataset. Never empty — an observation
   -- Where it went. A seed that is still open has neither.
@@ -3664,6 +3666,7 @@
   founder_id TEXT NOT NULL,
   founder_id TEXT NOT NULL,
   founder_id TEXT NOT NULL,
+  founder_id TEXT PRIMARY KEY REFERENCES founders(id) ON DELETE CASCADE,
   founder_id TEXT PRIMARY KEY REFERENCES founders(id),
   founder_id TEXT PRIMARY KEY REFERENCES founders(id),
   founder_id TEXT PRIMARY KEY REFERENCES founders(id),
@@ -4211,6 +4214,7 @@
   locked_by TEXT NOT NULL,
   logged_at DATETIME DEFAULT CURRENT_TIMESTAMP
   login_frequency_score REAL DEFAULT 50.0,
+  looked_at  TEXT NOT NULL,
   looking_for    TEXT NOT NULL,
   lowlights TEXT,
   ltv REAL,
@@ -5190,6 +5194,7 @@
   significance TEXT CHECK(significance IN ('low', 'medium', 'high')),
   signup_count INTEGER NOT NULL DEFAULT 0,
   signups_7d INTEGER,
+  since      TEXT NOT NULL
   situation      TEXT NOT NULL,
   situation_id   TEXT NOT NULL REFERENCES company_situations(id),
   skipped_at DATETIME,
@@ -5959,6 +5964,7 @@
 );
 );
 );
+);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , analysis_failed_at DATETIME, analysis_failure_reason TEXT
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
@@ -6086,6 +6092,7 @@ BEFORE INSERT ON owner_boundaries
 BEFORE INSERT ON owner_boundary_subjects
 BEFORE INSERT ON owner_objectives
 BEFORE INSERT ON owner_preferences
+BEFORE INSERT ON owner_visits
 BEFORE INSERT ON portfolio_exposures
 BEFORE INSERT ON posture_changes
 BEFORE INSERT ON products
@@ -6191,6 +6198,7 @@ BEFORE UPDATE ON owner_boundaries
 BEFORE UPDATE ON owner_boundary_subjects
 BEFORE UPDATE ON owner_objectives
 BEFORE UPDATE ON owner_preferences
+BEFORE UPDATE ON owner_visits
 BEFORE UPDATE ON portfolio_exposures
 BEFORE UPDATE ON posture_changes
 BEFORE UPDATE ON products
@@ -6412,6 +6420,8 @@ BEGIN SELECT RAISE(ABORT,'market_retrieval:immutable'); END;
 BEGIN SELECT RAISE(ABORT,'market_source_type:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'market_source_type:constitutional'); END;
 BEGIN SELECT RAISE(ABORT,'market_source_type:constitutional'); END;
+BEGIN SELECT RAISE(ABORT,'owner_visit:since_after_looked_at'); END;
+BEGIN SELECT RAISE(ABORT,'owner_visit:since_after_looked_at'); END;
 BEGIN SELECT RAISE(ABORT,'posture_change:immutable'); END;
 BEGIN SELECT RAISE(ABORT,'proposed_act:negative_cost'); END;
 BEGIN SELECT RAISE(ABORT,'reality_only_question:constitutional'); END;
@@ -6980,6 +6990,7 @@ CREATE TABLE owner_boundaries (
 CREATE TABLE owner_boundary_subjects (
 CREATE TABLE owner_objectives (
 CREATE TABLE owner_preferences (
+CREATE TABLE owner_visits (
 CREATE TABLE pattern_matches (
 CREATE TABLE phase_beta_proposals (
 CREATE TABLE playbook_trigger_log (
@@ -7200,6 +7211,8 @@ CREATE TRIGGER owner_objective_retire_is_one_way
 CREATE TRIGGER owner_preference_drop_is_one_way
 CREATE TRIGGER owner_preference_guard
 CREATE TRIGGER owner_preference_no_delete
+CREATE TRIGGER owner_visit_since_does_not_move_forward_past_the_visit
+CREATE TRIGGER owner_visit_since_is_not_in_the_future
 CREATE TRIGGER portfolio_exposure_guard
 CREATE TRIGGER portfolio_exposure_retire_is_one_way
 CREATE TRIGGER posture_change_guard
@@ -7569,3 +7582,5 @@ WHEN NOT EXISTS (
 WHEN OLD.status IN ('reserved','ambiguous') AND NEW.status IN ('settled','released','expired')
 WHEN date(NEW.as_of_date) > date('now')
 WHEN date(NEW.as_of_date) > date('now')
+WHEN datetime(NEW.since) > datetime(NEW.looked_at)
+WHEN datetime(NEW.since) > datetime(NEW.looked_at)

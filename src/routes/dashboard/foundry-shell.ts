@@ -208,6 +208,14 @@ interface OwnerState {
   firstName: string;
   routinesHealthy: number;
   /**
+   * WHAT HAPPENED WHILE HE WAS AWAY.
+   *
+   * The fifth of the five questions the first screen is supposed to answer, and
+   * the one it has never been able to: nothing anywhere recorded that he had
+   * been here, so there was no "since" to measure anything against.
+   */
+  changed: { changes: Array<{ said: string }>; more: number };
+  /**
    * WHAT FOUNDRY IS ACTUALLY LOOKING AFTER.
    *
    * The first screen said "I am set up, and I have not learned anything about
@@ -405,6 +413,11 @@ async function readOwnerState(
     companyName: String(product?.name ?? 'this company'),
     firstName: founderName.split(' ')[0] || '',
     routinesHealthy: Number(health?.n ?? 0),
+    changed: await (async () => {
+      const { markVisit, whatChangedSince } = await import(
+        '../../services/founder/what-changed.js');
+      return whatChangedSince(founderId, await markVisit(founderId));
+    })(),
     watching: await (async () => {
       const counted = (await query(
         `SELECT SUM(CASE WHEN ${realCompany('p')} THEN 1 ELSE 0 END) AS real,
@@ -2016,6 +2029,12 @@ foundryShellRoutes.get('/foundry', async (c) => {
     ${done === 'alreadylooking' ? html`<div class="done"><p><strong>Already looking.</strong>
       Stop that search first, or steer it instead — two at once would compete for the same
       attention.</p></div>` : ''}
+    ${s.changed.changes.length > 0 ? html`<div class="know">
+      <h3>While you were away</h3>
+      <ul>${raw(s.changed.changes.map((ch) => `<li>${ch.said}</li>`).join(''))}</ul>
+      ${s.changed.more > 0 ? html`<p class="quiet">And ${String(s.changed.more)} other
+        ${s.changed.more === 1 ? 'thing' : 'things'}.</p>` : ''}
+    </div>` : ''}
     ${s.notLooking ? html`<div class="know">
       <h3>I am not looking for anything</h3>
       <p class="lede">Say what you want and I will start looking. One sentence &mdash;
