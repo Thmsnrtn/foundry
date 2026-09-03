@@ -135,6 +135,10 @@ describe('the journey he could not complete', () => {
     const after = await (await app.request('/foundry')).text();
     expect(after).not.toContain('I am not looking for anything');
     expect(after).toContain('What I am looking for');
+    // AND IT SAYS WHAT IT IS DOING. Three zeroes read like failure when the
+    // truth is that the morning has not come round yet, and claiming to have
+    // found nothing would report an outcome for work that never happened.
+    expect(after).toContain('I have not looked yet');
 
     const open = (await query(
       'SELECT statement FROM venture_mandates WHERE founder_id = ? AND closed_at IS NULL',

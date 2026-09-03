@@ -456,9 +456,24 @@ async function readOwnerState(
           const { openSeeds } = await import('../../services/venture/seeds.js');
           const seeds = await openSeeds(founderId, 200);
           const real = seeds.filter((s) => !s.reference).length;
-          return real === 0 ? null
-            : `I am looking into ${String(real)} ${real === 1 ? 'thing' : 'things'} `
+          if (real > 0) {
+            return `I am looking into ${String(real)} ${real === 1 ? 'thing' : 'things'} `
               + 'privately. None has earned your attention yet, and most never will.';
+          }
+          // NOTHING FOUND AND NEVER LOOKED ARE DIFFERENT STATES.
+          //
+          // The minute after he gives me a mandate, this said nothing at all,
+          // and the card fell back to "0 looked at, 0 rejected, 0 still open" —
+          // three zeroes that read like failure when the truth is that the
+          // morning has not come round yet. Saying "I have found nothing" when
+          // I have not yet looked would be worse: it reports an outcome for
+          // work that never happened.
+          const looked = (await query(
+            'SELECT COUNT(*) AS n FROM market_retrievals WHERE founder_id = ?',
+            [founderId])).rows[0] as Record<string, unknown>;
+          return Number(looked.n) === 0
+            ? 'I have not looked yet. I go looking each morning.'
+            : 'I have looked and found nothing worth pursuing yet.';
         })(),
         // WHETHER TO ADD ONE AT ALL, ASKED BEFORE ANY CANDIDATE IS SHOWN.
         //
