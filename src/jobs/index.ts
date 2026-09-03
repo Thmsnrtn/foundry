@@ -2898,6 +2898,44 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   // NOTHING REACHES THE OWNER FROM HERE. Seeds are institutional working
   // memory; only candidates reach him, and promotion needs independent stances
   // that this pass does not grant.
+  // WHAT CAN I ACTUALLY SEE?
+  //
+  // A defect this fixes, and it was mine: the only line that ever promoted the
+  // community source out of `declared` sat inside the branch that runs when one
+  // of Foundry's own dependencies has gone quiet. None had, so the eye never
+  // opened, so discovery refused every search with "nothing I can look through
+  // tells me what people say" — a capability blocked forever behind an
+  // unrelated coincidence.
+  //
+  // This asks each declared way of looking one dull question and checks the
+  // shape of the answer. It files no market observation, because the answer is
+  // about the instrument rather than about the world, and it promotes no
+  // further than `available` — reality proof is still earned by doing real work
+  // whose result is checked. It runs between dependency health and discovery so
+  // an eye opened this morning can be looked through this morning.
+  sense_check_tick: {
+    fn: async () => {
+      const { checkTheSenses } = await import('../services/institution/sense-check.js');
+      const checked = await checkTheSenses();
+      for (const one of checked) {
+        if (one.movedTo !== null) {
+          logger.info(
+            `sense_check_tick: ${one.provider} ${one.was} -> ${one.movedTo} — ${one.because}`,
+            { jobName: 'sense_check_tick' });
+        }
+      }
+      const answering = checked.filter((c) => c.answered).length;
+      logger.info(
+        `sense_check_tick: ${String(answering)} of ${String(checked.length)} ways of `
+        + 'looking answered',
+        { jobName: 'sense_check_tick' });
+    },
+    schedule: '50 5 * * *',
+    description:
+      'Ask every way of looking Foundry claims to have one dull question, so a sense that '
+      + 'works can be looked through and a sense that has stopped working stops being '
+      + 'claimed (daily)',
+  },
   venture_discovery_tick: {
     fn: async () => {
       const { discover, promoteWhatEarnedIt, weedOut } = await import(
