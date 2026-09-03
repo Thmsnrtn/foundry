@@ -96,8 +96,15 @@ describe('the door as the owner actually presses it', () => {
       body: new URLSearchParams({ said: THE_MANDATE }).toString(),
     });
     // NOT a 404. This is the assertion that would have caught what he hit.
-    expect(res.status).toBe(302);
-    expect(res.headers.get('location')).toBe('/foundry?done=looking');
+    expect(res.status).toBe(200);
+    const body = await res.text();
+    // He is told the search is running AND told which constraint could not be
+    // taken. With no companies yet, "avoid increasing our biggest existing
+    // dependencies" has nothing to attach to, and saying so is the point:
+    // silence about a refusal is worse than the refusal.
+    expect(body).toContain('I am looking');
+    expect(body).toContain('could not take');
+    expect(body).toContain('nothing is concentrated yet');
 
     const open = (await query(
       'SELECT statement FROM venture_mandates WHERE founder_id = ? AND closed_at IS NULL',

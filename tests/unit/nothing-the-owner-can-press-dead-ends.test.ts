@@ -126,10 +126,13 @@ describe('the journey he could not complete', () => {
         + 'our biggest existing dependencies, spend no more than $25 validating anything, '
         + 'and bring me only things that deserve my attention.' }).toString(),
     });
-    expect(res.status).toBe(302);
+    // He is never left wondering: either a redirect to a changed screen, or a
+    // page saying what landed and what did not. Never a 404, never silence.
+    expect([200, 302]).toContain(res.status);
+    if (res.status === 200) expect(await res.clone().text()).toContain('I am looking');
 
     // AND THE SCREEN HE LANDS ON TELLS HIM IT HAPPENED.
-    const after = await (await app.request(String(res.headers.get('location')))).text();
+    const after = await (await app.request('/foundry')).text();
     expect(after).not.toContain('I am not looking for anything');
     expect(after).toContain('What I am looking for');
 
@@ -148,8 +151,10 @@ describe('the journey he could not complete', () => {
       body: new URLSearchParams({ said:
         'Make the river stronger by finding another income stream.' }).toString(),
     });
-    expect(res.status).toBe(302);
-    expect(res.headers.get('location')).toContain('alreadylooking');
+    expect([200, 302]).toContain(res.status);
+    if (res.status === 302) {
+      expect(res.headers.get('location')).toContain('alreadylooking');
+    }
     const open = (await query(
       'SELECT COUNT(*) AS n FROM venture_mandates WHERE founder_id = ? AND closed_at IS NULL',
       [OWNER])).rows[0] as Record<string, unknown>;

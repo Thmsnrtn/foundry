@@ -36,6 +36,7 @@ import { query, realCompany, referenceCompany } from '../../db/client.js';
 import { selectedProductId } from '../../services/founder/selected-company.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
 import type { CompanyNumbers } from '../../services/founder/what-the-numbers-say.js';
+import type { VentureReading } from '../../services/venture/mandate.js';
 import { LAYER_IN_PLAIN_WORDS, layerOf } from '../../lib/repository-layers.js';
 
 export const foundryShellRoutes = new Hono();
@@ -2939,6 +2940,61 @@ foundryShellRoutes.post('/foundry/acquisitions/:id/decide',
  * weeks and he would not find out until it came back.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+/**
+ * WHAT IT COULD NOT TAKE, HE HEARS ABOUT.
+ *
+ * A DEFECT FOUND BY READING THE SCREEN HE ACTUALLY LANDS ON. He gave four
+ * constraints. Three were held; the fourth — "avoid increasing our biggest
+ * existing dependencies" — was refused for a good reason: nothing is
+ * concentrated yet, so there is nothing to avoid deepening. That reason was
+ * computed, returned, and thrown away by the handler, which redirected him to a
+ * screen saying the search had started. He would have believed all four were
+ * being held.
+ *
+ * Silence about a refusal is worse than the refusal. So when something did not
+ * land he sees what did, what did not, and why. When everything landed this
+ * stays quiet and simply gets on with it, because a confirmation screen for a
+ * submission with nothing to report is machinery.
+ *
+ * Shared by both entrances. Two handlers with the same responsibility drift,
+ * and one of them silently losing his constraints is how this started.
+ */
+async function absorbAndAnswer(
+  c: any, founderId: string, readings: VentureReading[],
+): Promise<Response> {
+  const venture = await import('../../services/venture/mandate.js');
+  const hadMandate = readings.some((r) => r.kind === 'mandate');
+  const result = await venture.absorbParagraph({ founderId, readings });
+
+  if (result.refused.length > 0 || result.notHeard.length > 0) {
+    const held = readings.filter((r) => r.kind === 'guidance').length - result.refused.length;
+    return c.html(page('What I understood', html`
+      <h1>${result.opened ? 'I am looking' : 'I heard you'}</h1>
+      ${result.opened ? html`<p class="lede">The search is running.</p>` : ''}
+      ${held > 0 ? html`<p>I am holding myself to ${String(held)} of the things you
+        said.</p>` : ''}
+      <div class="know">
+        <h3>What I could not take, and why</h3>
+        <ul>${raw(result.refused.map((r) => `<li>${r}</li>`).join(''))}
+          ${raw(result.notHeard.map((n) =>
+    `<li>&ldquo;${n}&rdquo; &mdash; I did not understand what to do with that</li>`).join(''))}</ul>
+        <p class="quiet">Nothing is lost by being refused. Say it another way, or say it
+          later when it applies.</p>
+      </div>
+      <form class="inline" method="POST" action="/foundry/ask">
+        <input type="text" name="said" maxlength="800"
+          placeholder="Say it another way" aria-label="Say it another way" />
+        <button class="btn" type="submit">Tell me</button>
+      </form>
+      <a class="btn go" href="/foundry">Back</a>`, 'foundry'));
+  }
+
+  if (hadMandate && !result.opened) return c.redirect('/foundry?done=alreadylooking');
+  if (result.opened) return c.redirect('/foundry?done=looking');
+  if (result.absorbed > 0) return c.redirect('/foundry?done=steeredsearch');
+  return c.redirect('/foundry');
+}
+
 // ONE DOOR.
 //
 // The owner opened the deployed product to give the institution its first real
@@ -2971,13 +3027,7 @@ foundryShellRoutes.post('/foundry/ask', requireInstitutionOwner(), async (c: any
       const stopped = await venture.stopMandate(String(founder.id), 'the owner said to stop');
       return c.redirect(`/foundry?done=${stopped ? 'searchstopped' : 'nothing'}`);
     }
-    const hadMandate = readings.some((r) => r.kind === 'mandate');
-    const result = await venture.absorbParagraph({
-      founderId: String(founder.id), readings });
-    if (hadMandate && !result.opened) return c.redirect('/foundry?done=alreadylooking');
-    if (result.opened) return c.redirect('/foundry?done=looking');
-    if (result.absorbed > 0) return c.redirect('/foundry?done=steeredsearch');
-    return c.redirect('/foundry');
+    return absorbAndAnswer(c, String(founder.id), readings);
   }
 
   // AND WHAT IT COULD NOT PLACE COMES BACK WITH HIS WORDS IN IT. Losing three
@@ -3162,13 +3212,7 @@ foundryShellRoutes.post('/foundry/venture/confirm',
       const stopped = await venture.stopMandate(String(founder.id), 'the owner said to stop');
       return c.redirect(`/foundry?done=${stopped ? 'searchstopped' : 'nothing'}`);
     }
-    const hadMandate = readings.some((r) => r.kind === 'mandate');
-    const result = await venture.absorbParagraph({
-      founderId: String(founder.id), readings });
-    if (hadMandate && !result.opened) return c.redirect('/foundry?done=alreadylooking');
-    if (result.opened) return c.redirect('/foundry?done=looking');
-    if (result.absorbed > 0) return c.redirect('/foundry?done=steeredsearch');
-    return c.redirect('/foundry');
+    return absorbAndAnswer(c, String(founder.id), readings);
   });
 
 /**
