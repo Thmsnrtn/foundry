@@ -155,16 +155,32 @@ export async function observe(input: {
   founderId: string; claimId: string; sourceType: string; source: string;
   saw: string; bearing: Bearing; directness: Directness;
   observedAt: Date; evidenceMode: 'real' | 'sandbox' | 'reference';
+  /**
+   * WHAT THE SOURCE RETURNED, at the moment this was judged out of it.
+   *
+   * Passed in at birth rather than attached later, and the immutability guard
+   * is why: an observation whose provenance could be edited afterwards is an
+   * observation whose provenance means nothing. The first version of the
+   * retrieval work tried to back-patch this column and the trigger refused it,
+   * which was the trigger being right.
+   */
+  retrievalId?: string | null;
+  /**
+   * True when this rests on nothing having been found. Absence is inferred from
+   * what a particular instrument could see, and must never read as presence.
+   */
+  fromAbsence?: boolean;
 }): Promise<string> {
   const id = nanoid();
   await query(
     `INSERT INTO market_observations
        (id, founder_id, claim_id, source_type, source, saw, bearing, directness,
-        observed_at, evidence_mode)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+        observed_at, evidence_mode, retrieval_id, from_absence)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
     [id, input.founderId, input.claimId, input.sourceType, input.source.trim(),
       input.saw.trim(), input.bearing, input.directness,
-      input.observedAt.toISOString(), input.evidenceMode]);
+      input.observedAt.toISOString(), input.evidenceMode,
+      input.retrievalId ?? null, input.fromAbsence === true ? 1 : 0]);
   return id;
 }
 
@@ -187,6 +203,141 @@ export async function settleClaim(input: {
     `UPDATE market_claims
         SET settled_as = ?, settled_at = datetime('now'), settled_by = ?
       WHERE id = ?`, [input.as, input.by, input.claimId]);
+}
+
+/**
+ * HOW A CLAIM WAS RESEARCHED, COLLAPSED INTO JUDGMENT.
+ *
+ * The owner does not meet sources, crawling, or tool calls. He meets one
+ * paragraph: how much was looked at, how many ways, what supports, what
+ * weakens, what is still the largest unknown. Everything under it stays
+ * inspectable for when he asks why — and that is the whole reason the
+ * retrieval trail exists rather than being an audit table nobody opens.
+ */
+export interface HowItWasResearched {
+  observations: number;
+  sourceKinds: number;
+  supports: number;
+  contradicts: number;
+  /** True when any of the support rests on nothing having been found. */
+  restsOnAbsence: boolean;
+  /** The one paragraph. */
+  judgment: string;
+  /** What weakens it, in the words that were actually written or listed. */
+  whatContradicts: string[];
+  /** How each look was made, so coverage can be judged rather than assumed. */
+  coverage: Array<{
+    sourceType: string; terms: string;
+    /** What the source claimed to have, what was examined, what was on-subject. */
+    had: number; examined: number; onSubject: number;
+    canSee: string; cannotSee: string;
+    notAlsoTried: string | null; wouldMostHelp: string;
+    lookedAt: string;
+    /** For "show me the evidence": everything it returned, believed or not. */
+    retrievalId: string;
+  }>;
+  /** The biggest thing nobody knows, and the cheapest way to find out. */
+  largestUnknown: { question: string; cheapestTest: string | null } | null;
+}
+
+export async function howItWasResearched(claimId: string): Promise<HowItWasResearched | null> {
+  const claim = (await query(
+    'SELECT id, claim, founder_id FROM market_claims WHERE id = ?', [claimId]))
+    .rows[0] as Record<string, unknown> | undefined;
+  if (!claim) return null;
+
+  const obs = (await query(
+    `SELECT bearing, source_type, saw, from_absence, retrieval_id
+       FROM market_observations WHERE claim_id = ? ORDER BY rowid`, [claimId]))
+    .rows as unknown as Array<Record<string, unknown>>;
+  const supports = obs.filter((o) => String(o.bearing) === 'supports');
+  const against = obs.filter((o) => String(o.bearing) === 'contradicts');
+  const kinds = new Set(obs.map((o) => String(o.source_type)));
+  const restsOnAbsence = supports.some((o) => Number(o.from_absence) === 1);
+
+  const retrievalIds = [...new Set(obs.map((o) => o.retrieval_id).filter((r) => r != null)
+    .map((r) => String(r)))];
+  const coverage: HowItWasResearched['coverage'] = [];
+  for (const id of retrievalIds) {
+    const r = (await query(
+      `SELECT source_type, terms, returned_count, examined_count, relevant_count,
+              can_see, cannot_see, not_also_tried, would_most_help, retrieved_at
+         FROM market_retrievals WHERE id = ?`, [id]))
+      .rows[0] as Record<string, unknown> | undefined;
+    if (!r) continue;
+    coverage.push({
+      sourceType: String(r.source_type), terms: String(r.terms),
+      had: Number(r.returned_count), examined: Number(r.examined_count),
+      onSubject: Number(r.relevant_count),
+      canSee: String(r.can_see), cannotSee: String(r.cannot_see),
+      notAlsoTried: r.not_also_tried == null ? null : String(r.not_also_tried),
+      wouldMostHelp: String(r.would_most_help),
+      lookedAt: String(r.retrieved_at).slice(0, 10),
+      retrievalId: id,
+    });
+  }
+
+  const unknown = (await query(
+    `SELECT question, cheapest_test FROM market_unknowns
+      WHERE (claim_id = ? OR founder_id = ?) AND answered_at IS NULL
+      ORDER BY blocking DESC, rowid LIMIT 1`, [claimId, String(claim.founder_id)]))
+    .rows[0] as Record<string, unknown> | undefined;
+
+  const judgment = obs.length === 0
+    ? 'I have not looked into this yet.'
+    : `I investigated this with ${String(obs.length)} real `
+      + `${obs.length === 1 ? 'observation' : 'observations'} across `
+      + `${String(kinds.size)} ${kinds.size === 1 ? 'kind' : 'kinds'} of source. `
+      + `${String(supports.length)} support it and ${String(against.length)} `
+      + `${against.length === 1 ? 'weakens' : 'weaken'} it.`
+      + (restsOnAbsence
+        ? ' Some of that support is nothing having turned up, which is weaker than '
+          + 'something having been seen.' : '')
+      + (unknown ? ` The largest unknown is ${String(unknown.question)}.` : '');
+
+  return {
+    observations: obs.length, sourceKinds: kinds.size,
+    supports: supports.length, contradicts: against.length, restsOnAbsence,
+    judgment, coverage,
+    whatContradicts: against.map((o) => String(o.saw)),
+    largestUnknown: unknown === undefined ? null : {
+      question: String(unknown.question),
+      cheapestTest: unknown.cheapest_test == null ? null : String(unknown.cheapest_test),
+    },
+  };
+}
+
+/**
+ * SHOW ME WHAT IT ACTUALLY LOOKED AT.
+ *
+ * The deepest layer, and the one that makes the relevance judgement arguable:
+ * everything a source returned, whether it was believed, when it was written,
+ * and the words that decided. A reader who disagrees with a call can see
+ * exactly which call it was.
+ */
+export interface WhatItLookedAt {
+  label: string;
+  url: string | null;
+  /** When the thing itself was written or published — not when we looked. */
+  writtenAt: string | null;
+  believed: boolean;
+  /** The words it shares with the search, which is what decided. */
+  sharedTerms: string[];
+  said: string | null;
+}
+
+export async function whatItLookedAt(retrievalId: string): Promise<WhatItLookedAt[]> {
+  return ((await query(
+    `SELECT label, url, dated_at, said, relevant, shared_terms
+       FROM retrieval_items WHERE retrieval_id = ? ORDER BY relevant DESC, rowid`,
+    [retrievalId])).rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+    label: String(r.label),
+    url: r.url == null ? null : String(r.url),
+    writtenAt: r.dated_at == null ? null : String(r.dated_at).slice(0, 10),
+    believed: Number(r.relevant) === 1,
+    sharedTerms: r.shared_terms == null ? [] : String(r.shared_terms).split(', '),
+    said: r.said == null ? null : String(r.said),
+  }));
 }
 
 export interface OpenUnknown {

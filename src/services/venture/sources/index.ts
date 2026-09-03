@@ -16,11 +16,59 @@
 // of what is still dark, and nobody can mistake "I looked" for "I know".
 // =============================================================================
 
+import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
 import { observe, raiseUnknown } from '../market-evidence.js';
 import {
+  CAN_SEE as COMMUNITY_CAN_SEE, CANNOT_SEE as COMMUNITY_CANNOT_SEE,
+  WOULD_MOST_HELP as COMMUNITY_WOULD_HELP, whatPeopleSaid,
+} from './community.js';
+import { relevanceOf } from './npm-registry.js';
+import {
   CANNOT_TELL_US, downloadsLastMonth, packageRecord, whatAlreadyExists,
 } from './npm-registry.js';
+
+/**
+ * WHAT THE SOURCE RETURNED, KEPT BEFORE ANYBODY JUDGED IT.
+ *
+ * The record that makes the three transitions inspectable: what came back, what
+ * was judged relevant and on what words, and only then what a claim may rest
+ * on. The rejected items are the important half - they are how somebody checks
+ * that the relevance judgement was reasonable rather than convenient.
+ */
+async function recordRetrieval(input: {
+  founderId: string; sourceType: string; source: string; terms: string;
+  returnedCount: number; canSee: string; cannotSee: string; wouldMostHelp: string;
+  notAlsoTried: string[] | null; evidenceMode: 'real' | 'sandbox' | 'reference';
+  items: Array<{
+    label: string; url: string | null; datedAt: string | null; said: string | null;
+    relevant: boolean; sharedTerms: string[];
+  }>;
+}): Promise<string> {
+  const id = nanoid();
+  await query(
+    `INSERT INTO market_retrievals
+       (id, founder_id, source_type, source, terms, returned_count, examined_count,
+        relevant_count, can_see, cannot_see, not_also_tried, would_most_help, evidence_mode)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [id, input.founderId, input.sourceType, input.source, input.terms,
+      input.returnedCount, input.items.length,
+      input.items.filter((i) => i.relevant).length,
+      input.canSee, input.cannotSee,
+      input.notAlsoTried === null || input.notAlsoTried.length === 0
+        ? null : input.notAlsoTried.join(', '),
+      input.wouldMostHelp, input.evidenceMode]);
+  for (const item of input.items) {
+    await query(
+      `INSERT INTO retrieval_items
+         (id, retrieval_id, founder_id, label, url, dated_at, said, relevant, shared_terms)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
+      [nanoid(), id, input.founderId, item.label, item.url, item.datedAt, item.said,
+        item.relevant ? 1 : 0,
+        item.sharedTerms.length === 0 ? null : item.sharedTerms.join(', ')]);
+  }
+  return id;
+}
 
 export type SubstituteExpectation = 'nothing_maintained_exists' | 'something_maintained_exists';
 
@@ -37,6 +85,14 @@ export interface SubstituteQuestion {
   supportsIf: SubstituteExpectation;
   /** The candidate this bears on, so its unknowns land somewhere. */
   opportunityId?: string | null;
+  /**
+   * WHAT THIS MIGHT HAVE BEEN CALLED INSTEAD, and was not searched for.
+   *
+   * Only meaningful on a negative finding, and there it is most of the answer:
+   * "nothing turned up" is worth very little without knowing which words were
+   * not tried. An empty list is a real answer - it says nobody thought of any.
+   */
+  alsoCouldBeCalled?: string[];
 }
 
 export interface SubstituteFinding {
@@ -53,6 +109,8 @@ export interface SubstituteFinding {
   sentence: string;
   /** The strongest few, named, so the claim can be checked rather than trusted. */
   named: Array<{ name: string; url: string; lastPublished: string | null; maintained: boolean }>;
+  /** What the source returned, kept whole, so the judgement can be inspected. */
+  retrievalId: string;
 }
 
 /**
@@ -88,8 +146,33 @@ export async function askWhatAlreadyExists(
       + `${maintained.slice(0, 3).map((m) => m.name).join(', ')}`
       + `${maintained.length > 3 ? ', among others' : ''}.`;
 
+  // THE RETRIEVAL FIRST, so every observation carries where it came from at
+  // birth. Provenance that could be attached afterwards would be provenance
+  // that could be changed afterwards.
+  const retrievalId = await recordRetrieval({
+    founderId: q.founderId, sourceType: 'directory', source: search.url,
+    terms: q.query, returnedCount: search.total,
+    canSee: 'published packages: that one exists, when it was last published, how '
+      + 'many versions it has, and what its publisher says it is for',
+    cannotSee: 'whether anybody pays, whether downloads are people or build machines, '
+      + 'whether an existing package is any good, and anything solving the problem '
+      + 'that is not a published package',
+    wouldMostHelp: maintained.length === 0
+      ? 'people talking about the problem — a keyword search over package names cannot '
+        + 'find a thing described in other words, and a discussion can'
+      : 'reviews or issues on the packages that do exist — existing is not the same '
+        + 'as good enough',
+    notAlsoTried: q.alsoCouldBeCalled ?? null, evidenceMode: 'real',
+    items: search.found.map((f) => ({
+      label: f.name, url: f.url, datedAt: f.lastPublished, said: f.description,
+      relevant: f.relevant, sharedTerms: f.shared,
+    })),
+  });
+  const fromAbsence = maintained.length === 0;
+
   // THE DIRECTORY LISTING: what the registry observed, filed as such.
   await observe({
+    retrievalId, fromAbsence,
     founderId: q.founderId, claimId: q.claimId, sourceType: 'directory',
     source: search.url, saw: sentence, bearing,
     // The count is worked out from what was listed, not stated by anybody.
@@ -100,6 +183,7 @@ export async function askWhatAlreadyExists(
   // description is the publisher talking about itself and is filed as that.
   for (const found of maintained.slice(0, 5)) {
     await observe({
+      retrievalId, fromAbsence: false,
       founderId: q.founderId, claimId: q.claimId, sourceType: 'vendor_site',
       source: found.url,
       saw: `${found.name}, last published ${found.lastPublished?.slice(0, 10) ?? 'unknown'}`
@@ -114,6 +198,7 @@ export async function askWhatAlreadyExists(
   return {
     maintained: maintained.length, looked: search.found.length,
     relevant: relevant.length, matchedWords: search.total, bearing, sentence,
+    retrievalId,
     named: maintained.slice(0, 5).map((m) => ({
       name: m.name, url: m.url, lastPublished: m.lastPublished, maintained: m.maintained,
     })),
@@ -179,6 +264,113 @@ export async function askWhetherMaintained(input: {
   });
   await raiseWhatItCannotSettle(input.founderId, input.opportunityId ?? null, input.claimId);
   return { sentence, bearing };
+}
+
+export interface PainQuestion {
+  founderId: string;
+  claimId: string;
+  terms: string;
+  /**
+   * Stated before looking. A claim that people find this painful is supported
+   * by people describing the pain, and contradicted by nobody mentioning it.
+   */
+  supportsIf: 'people_describe_the_pain' | 'nobody_mentions_it';
+  opportunityId?: string | null;
+  alsoCouldBeCalled?: string[];
+}
+
+export interface PainFinding {
+  /** People who wrote something actually about the subject. Not the raw count. */
+  said: number;
+  bearing: 'supports' | 'contradicts';
+  sentence: string;
+  /** A few of the actual words, so the finding is readable rather than counted. */
+  voices: Array<{ text: string; url: string; saidAt: string | null }>;
+  retrievalId: string;
+}
+
+/**
+ * WHAT DO PEOPLE ACTUALLY SAY ABOUT THIS?
+ *
+ * The second way of knowing, and it answers a question a registry structurally
+ * cannot: not what exists, but what hurts. The two disagreeing is the useful
+ * case - a well-served problem where people are still complaining is not a
+ * dead thesis, it is a narrower one.
+ *
+ * RECENCY IS PART OF THE FINDING. A complaint from 2014 about a tool that has
+ * been rewritten twice since is a fact about 2014. So how recent the talk is
+ * travels with the count, rather than being averaged into it.
+ */
+export async function askWhatPeopleSay(q: PainQuestion): Promise<PainFinding> {
+  const talk = await whatPeopleSaid(q.terms, 15);
+
+  // RETRIEVAL IS NOT RELEVANCE HERE EITHER, and an earlier comment in this file
+  // claimed otherwise — that an archive searching free text returns only things
+  // on the subject "by construction". Running it proved that false in one go:
+  // asked about cron expression parsers, it returned somebody describing a
+  // constructed language they had built with a sibling. Same lesson as the
+  // registry, a different instrument, and worth learning once.
+  const onSubject = talk.found.filter((s) => relevanceOf(q.terms, '', s.text).relevant);
+  const recent = onSubject.filter((s) => {
+    if (s.saidAt === null) return false;
+    const years = (Date.now() - new Date(s.saidAt).getTime()) / (365 * 86_400_000);
+    return Number.isFinite(years) && years <= 3;
+  });
+
+  const anyone = onSubject.length > 0;
+  const bearing: 'supports' | 'contradicts' =
+    anyone === (q.supportsIf === 'people_describe_the_pain') ? 'supports' : 'contradicts';
+
+  const sentence = !anyone
+    ? `Nobody in the archive has discussed "${q.terms}"`
+      + `${talk.found.length > 0
+        ? ` — ${String(talk.found.length)} things came back and none of them is about this`
+        : ''}. That is not silence about the problem — it is silence in one place `
+      + 'where technical people talk.'
+    : `${String(onSubject.length)} people have written about "${q.terms}", `
+      + `${recent.length === 0
+        ? 'none of them in the last three years, so this is talk about how things used to be'
+        : `${String(recent.length)} of them in the last three years`}.`;
+
+  const retrievalId = await recordRetrieval({
+    founderId: q.founderId, sourceType: 'community', source: talk.url,
+    terms: q.terms, returnedCount: talk.total,
+    canSee: COMMUNITY_CAN_SEE, cannotSee: COMMUNITY_CANNOT_SEE,
+    wouldMostHelp: COMMUNITY_WOULD_HELP,
+    notAlsoTried: q.alsoCouldBeCalled ?? null, evidenceMode: 'real',
+    items: talk.found.map((s) => ({
+      label: s.text.slice(0, 90), url: s.url, datedAt: s.saidAt,
+      said: s.text.slice(0, 500),
+      relevant: onSubject.includes(s),
+      sharedTerms: relevanceOf(q.terms, '', s.text).shared,
+    })),
+  });
+
+  await observe({
+    retrievalId, fromAbsence: !anyone,
+    founderId: q.founderId, claimId: q.claimId, sourceType: 'community',
+    source: talk.url, saw: sentence, bearing,
+    // A count of complaints is worked out from what was said, not stated.
+    directness: 'inferred', observedAt: talk.observedAt, evidenceMode: 'real',
+  });
+  // AND THE WORDS THEMSELVES, because "eleven people complained" is a number
+  // and "the timezones are what actually break" is a finding.
+  for (const voice of recent.slice(0, 4)) {
+    await observe({
+      retrievalId, fromAbsence: false,
+      founderId: q.founderId, claimId: q.claimId, sourceType: 'community',
+      source: voice.url, saw: voice.text.slice(0, 500), bearing,
+      directness: 'direct', observedAt: new Date(voice.saidAt ?? talk.observedAt),
+      evidenceMode: 'real',
+    });
+  }
+
+  await raiseWhatItCannotSettle(q.founderId, q.opportunityId ?? null, q.claimId);
+
+  return {
+    said: onSubject.length, bearing, sentence, retrievalId,
+    voices: recent.slice(0, 4).map((v) => ({ text: v.text, url: v.url, saidAt: v.saidAt })),
+  };
 }
 
 /**

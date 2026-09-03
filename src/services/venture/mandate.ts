@@ -34,7 +34,7 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import type { PortfolioFit } from '../founder/resilience.js';
-import type { OpenUnknown, Standing } from './market-evidence.js';
+import type { HowItWasResearched, OpenUnknown, Standing } from './market-evidence.js';
 import type { Experiment } from './validation.js';
 import type { LegalPicture } from './legal-surface.js';
 import type { Need } from '../institution/capabilities.js';
@@ -692,6 +692,13 @@ export interface PresentedCandidate {
   fit: PortfolioFit | null;
   /** Claims about the world, and how each currently stands on its evidence. */
   standing: Standing[];
+  /**
+   * HOW IT WAS RESEARCHED, COLLAPSED INTO JUDGMENT.
+   *
+   * What the owner meets: how much was looked at, how many ways, what weakens
+   * it, what is still unknown — never the sources, the crawling or the calls.
+   */
+  research: HowItWasResearched[];
   /** What is still not known, with the cheapest thing that would settle it. */
   unanswered: OpenUnknown[];
   /**
@@ -731,7 +738,7 @@ export async function candidatesFor(mandateId: string): Promise<PresentedCandida
   const open = await currentMandate(founderId);
   const guidance = open?.guidance ?? [];
   const { portfolioFitOf } = await import('../founder/resilience.js');
-  const { standingOf, openUnknowns } = await import('./market-evidence.js');
+  const { standingOf, openUnknowns, howItWasResearched } = await import('./market-evidence.js');
   const { awaitingHim, whatStandsInTheWay } = await import('./validation.js');
   const { legalPictureOf } = await import('./legal-surface.js');
   const { whatItWouldTake } = await import('../institution/capabilities.js');
@@ -758,9 +765,12 @@ export async function candidatesFor(mandateId: string): Promise<PresentedCandida
       'SELECT id FROM market_claims WHERE opportunity_id = ?', [String(r.id)]))
       .rows as unknown as Array<Record<string, unknown>>).map((c) => String(c.id));
     const standing: Standing[] = [];
+    const research: HowItWasResearched[] = [];
     for (const claimId of claims) {
       const how = await standingOf(claimId);
       if (how) standing.push(how);
+      const done = await howItWasResearched(claimId);
+      if (done && done.observations > 0) research.push(done);
     }
     presented.push({
       id: String(r.id), headline: String(r.headline),
@@ -772,7 +782,7 @@ export async function candidatesFor(mandateId: string): Promise<PresentedCandida
       survivesGuidance: verdict.survives, failsBecause: verdict.because,
       against: verdict.against,
       fit,
-      standing,
+      standing, research,
       unanswered: await openUnknowns(String(r.id)),
       inTheWay: await whatStandsInTheWay(String(r.id)),
       awaiting: await awaitingHim(String(r.id)),

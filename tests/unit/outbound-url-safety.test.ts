@@ -146,6 +146,10 @@ describe('posting to a URL somebody else chose', () => {
       // claimed the exemption above, and deliberately does not: it goes through
       // safeFetch like anything else pointed at the public internet, which also
       // re-screens every redirect the registry might answer with.
+      // The second way of knowing. Same posture as the registry: a compiled-in
+      // host it could have claimed an exemption for, going through the guarded
+      // path anyway.
+      'src/services/venture/sources/community.ts',
       'src/services/venture/sources/npm-registry.ts',
     ]);
   });

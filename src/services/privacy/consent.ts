@@ -708,6 +708,16 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
   // asked. Deleted rather than kept as anonymous market knowledge, because
   // "anonymous" here would mean "knowledge somebody once paid attention to for
   // a reason nobody records", which is not anonymity.
+  market_retrievals: {
+    reason: 'what a source returned when it was asked something on one person\'s behalf, '
+      + 'and what that instrument could and could not see at the time',
+    onAccountErasure: { op: 'delete' },
+  },
+  retrieval_items: {
+    reason: 'every individual thing a source returned on one person\'s behalf, kept '
+      + 'whether or not it was believed',
+    onAccountErasure: { op: 'delete' },
+  },
   market_claims: {
     reason: 'claims about the world formed while searching for one person\'s business',
     onAccountErasure: { op: 'delete' },

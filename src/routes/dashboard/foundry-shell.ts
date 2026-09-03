@@ -129,6 +129,8 @@ interface OwnerState {
       wouldTake: string[];
       /** Claims about the world and how each stands on its evidence. */
       standing: string[];
+      /** How it was researched, collapsed into judgment — never sources. */
+      research: Array<{ judgment: string; contradicts: string[]; coverage: string[] }>;
       /** Open questions, each with the cheapest thing that would settle it. */
       unanswered: string[];
       /** What would have to be true before this could become a company. */
@@ -468,6 +470,19 @@ async function readOwnerState(
             : `${c.buriedBefore.headline} — ${c.buriedBefore.why}`
               + (c.buriedBefore.revisitIf ? `. Worth another look if ${c.buriedBefore.revisitIf}` : ''),
           standing: c.standing.map((how) => `${how.claim} — ${how.howItStands}`),
+          research: c.research.map((r) => ({
+            judgment: r.judgment,
+            contradicts: r.whatContradicts,
+            // Coverage is the honest half of a negative finding: what was
+            // searched, how much of what came back was on the subject, what the
+            // instrument cannot see, and what was never tried.
+            coverage: r.coverage.map((cv) =>
+              `${cv.sourceType}: searched "${cv.terms}" on ${cv.lookedAt} — the source had `
+              + `${String(cv.had)}, ${String(cv.examined)} were examined, `
+              + `${String(cv.onSubject)} were about it. It cannot see ${cv.cannotSee}.`
+              + `${cv.notAlsoTried ? ` Not also tried: ${cv.notAlsoTried}.` : ''}`
+              + ` What would help most: ${cv.wouldMostHelp}.`),
+          })),
           unanswered: c.unanswered.map((u) => u.cheapestTest === null
             ? `${u.question} (nothing cheap would settle it)`
             : `${u.question} — ${u.cheapestTest}`),
