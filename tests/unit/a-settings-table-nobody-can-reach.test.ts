@@ -83,7 +83,9 @@ describe('the table is gone', () => {
     // asks the same registry whether every package Foundry runs on is still
     // maintained, and lets the capability earn its reality proof from the
     // checked result — makes ninety-two.
-    expect(Object.keys(JOB_REGISTRY).length, 'ninety-one before, ninety-two now').toBe(92);
+    // And `contested_evidence_tick` — which proposes the cheapest reality test
+    // where reading has stopped helping — makes ninety-three.
+    expect(Object.keys(JOB_REGISTRY).length, 'ninety-two before, ninety-three now').toBe(93);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

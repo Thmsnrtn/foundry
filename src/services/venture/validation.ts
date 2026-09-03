@@ -203,7 +203,15 @@ export interface WhereToLookNext {
   /** The one sentence. */
   because: string;
   /** Questions no amount of reading will settle, with what would. */
-  onlyRealityCanSettle: Array<{ question: string; onlySettledBy: string }>;
+  onlyRealityCanSettle: Array<{
+    question: string; onlySettledBy: string;
+    /** What a result supporting the claim would look like. */
+    looksLike: string;
+    /** And what would mean we were wrong. */
+    wouldBeWrongIf: string;
+    /** The cheapest thing that would settle it, if anybody has named one. */
+    cheapestTest: string | null;
+  }>;
   /** Questions a source could still answer, and nobody has asked. */
   stillWorthReading: string[];
 }
@@ -229,11 +237,15 @@ export async function whereToLookNext(opportunityId: string): Promise<WhereToLoo
     .rows as unknown as Array<Record<string, unknown>>);
 
   const patterns = ((await query(
-    'SELECT pattern, only_settled_by FROM reality_only_questions ORDER BY sort_order', []))
+    `SELECT pattern, only_settled_by, looks_like, would_be_wrong_if
+       FROM reality_only_questions ORDER BY sort_order`, []))
     .rows as unknown as Array<Record<string, unknown>>)
-    .map((p) => ({ pattern: String(p.pattern), by: String(p.only_settled_by) }));
+    .map((p) => ({
+      pattern: String(p.pattern), by: String(p.only_settled_by),
+      looksLike: String(p.looks_like), wrongIf: String(p.would_be_wrong_if),
+    }));
 
-  const onlyRealityCanSettle: Array<{ question: string; onlySettledBy: string }> = [];
+  const onlyRealityCanSettle: WhereToLookNext['onlyRealityCanSettle'] = [];
   const stillWorthReading: string[] = [];
   let blockingCount = 0;
   let blockingReadable = 0;
@@ -244,7 +256,11 @@ export async function whereToLookNext(opportunityId: string): Promise<WhereToLoo
     if (blocking) blockingCount += 1;
     const hit = patterns.find((p) => question.toLowerCase().includes(p.pattern));
     if (hit) {
-      onlyRealityCanSettle.push({ question, onlySettledBy: hit.by });
+      onlyRealityCanSettle.push({
+        question, onlySettledBy: hit.by, looksLike: hit.looksLike,
+        wouldBeWrongIf: hit.wrongIf,
+        cheapestTest: row.cheapest_test == null ? null : String(row.cheapest_test),
+      });
     } else {
       stillWorthReading.push(question);
       if (blocking) blockingReadable += 1;
@@ -270,6 +286,73 @@ export async function whereToLookNext(opportunityId: string): Promise<WhereToLoo
       ? `one question is still worth reading about: ${stillWorthReading[0] ?? ''}`
       : `${String(stillWorthReading.length)} questions are still worth reading about`,
   };
+}
+
+/**
+ * WHEN READING IS DONE, PROPOSE THE THING THAT WOULD SETTLE IT.
+ *
+ * The last step of the research chain, and the one that turns a good sentence
+ * into an action. When every question in the way is about what people will
+ * actually do, the institution stops reading and proposes the cheapest test
+ * itself rather than waiting to be asked.
+ *
+ * IT STILL MAY NOT PROPOSE ANYTHING IT CANNOT BE WRONG ABOUT. The prediction is
+ * not invented here: what a result looks like, and what would mean we were
+ * wrong, are properties of the KIND of question and are stated
+ * constitutionally. A question nobody could write those for is one an
+ * experiment could not settle either, and it is skipped with the reason.
+ *
+ * AND IT PROPOSES, IT DOES NOT RUN. Everything here stops at a proposal with a
+ * sealed prediction waiting for him — the experiment machinery already refuses
+ * to run anything he has not approved, and this changes nothing about that.
+ */
+export async function proposeWhatRealityWouldSettle(input: {
+  founderId: string; opportunityId: string; proposedBy?: string;
+}): Promise<{ proposed: string[]; skipped: Array<{ question: string; because: string }> }> {
+  const next = await whereToLookNext(input.opportunityId);
+  const proposed: string[] = [];
+  const skipped: Array<{ question: string; because: string }> = [];
+  // Reading is still cheaper than acting. Nothing to propose.
+  if (next.keepLooking) return { proposed, skipped };
+
+  const evidenceMode = String(((await query(
+    'SELECT evidence_mode FROM venture_opportunities WHERE id = ?', [input.opportunityId]))
+    .rows[0] as Record<string, unknown> | undefined)?.evidence_mode ?? 'real');
+
+  for (const question of next.onlyRealityCanSettle) {
+    if (question.cheapestTest === null) {
+      skipped.push({ question: question.question,
+        because: 'nobody has named anything cheap that would settle it, and proposing '
+          + 'a test without one would be proposing a cost with no shape' });
+      continue;
+    }
+    const unknown = (await query(
+      `SELECT id FROM market_unknowns
+        WHERE opportunity_id = ? AND question = ? AND answered_at IS NULL`,
+      [input.opportunityId, question.question])).rows[0] as Record<string, unknown> | undefined;
+    if (!unknown) continue;
+
+    // One open proposal per question. Asking twice for the same thing is how
+    // an owner learns to stop reading.
+    const already = (await query(
+      `SELECT id FROM venture_experiments
+        WHERE unknown_id = ? AND (decision IS NULL OR ran_at IS NULL)`,
+      [String(unknown.id)])).rows[0];
+    if (already) continue;
+
+    proposed.push(await designExperiment({
+      founderId: input.founderId, opportunityId: input.opportunityId,
+      unknownId: String(unknown.id),
+      whatWeDo: question.cheapestTest,
+      whatWeExpect: question.looksLike,
+      wouldDisprove: question.wouldBeWrongIf,
+      // The cost is his to set when he approves: the institution proposes what
+      // to do, never what to spend.
+      costCents: 0,
+      evidenceMode: evidenceMode === 'reference' ? 'reference' : 'real',
+    }));
+  }
+  return { proposed, skipped };
 }
 
 /**

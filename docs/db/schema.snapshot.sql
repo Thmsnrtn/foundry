@@ -5752,7 +5752,6 @@
 );
 );
 );
-);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , analysis_failed_at DATETIME, analysis_failure_reason TEXT
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
@@ -5770,6 +5769,7 @@
 , last_active_at DATETIME DEFAULT CURRENT_TIMESTAMP);
 , last_refused_at DATETIME, refusal_count INTEGER NOT NULL DEFAULT 0, last_refusal_reason TEXT
 , last_refused_at TEXT, refusal_count INTEGER NOT NULL DEFAULT 0, last_refusal_reason TEXT
+, looks_like TEXT NOT NULL DEFAULT '', would_be_wrong_if TEXT NOT NULL DEFAULT '');
 , mode TEXT NOT NULL DEFAULT 'never'
 , month TEXT, draft_text TEXT, key_metrics_json TEXT DEFAULT '{}', generated_at TEXT);
 , narrative_json TEXT DEFAULT '{}', metrics_snapshot_json TEXT DEFAULT '{}', raw_html TEXT);

@@ -2855,6 +2855,55 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       + 'maintained, and let the capability earn its reality proof from the checked result '
       + '(daily)',
   },
+  // WHEN THE EVIDENCE DISAGREES, DO SOMETHING ABOUT IT.
+  //
+  // The institution could hold a contradiction and could say when reading had
+  // stopped helping, and neither of those carried itself. A contested claim sat
+  // open forever; a candidate whose only remaining questions were about
+  // behaviour waited to be asked. This is the pass that closes both.
+  //
+  // IT PROPOSES AND NARROWS. IT DOES NOT DECIDE. Narrowing a thesis is a
+  // judgement the record keeps and the owner can read; proposing an experiment
+  // leaves a sealed prediction waiting for him, and the experiment machinery
+  // still refuses to run anything he has not approved. Nothing here spends,
+  // publishes or contacts anybody.
+  contested_evidence_tick: {
+    fn: async () => {
+      const { proposeWhatRealityWouldSettle } = await import(
+        '../services/venture/validation.js');
+      const open = await query(
+        `SELECT DISTINCT o.id, o.founder_id FROM venture_opportunities o
+          WHERE o.verdict IS NULL
+            AND EXISTS (SELECT 1 FROM market_unknowns u
+                         WHERE u.opportunity_id = o.id AND u.answered_at IS NULL
+                           AND u.blocking = 1)
+          ORDER BY o.rowid`, []);
+      let proposed = 0;
+      for (const row of open.rows as unknown as Array<Record<string, unknown>>) {
+        try {
+          const asked = await proposeWhatRealityWouldSettle({
+            founderId: String(row.founder_id), opportunityId: String(row.id) });
+          proposed += asked.proposed.length;
+          for (const skip of asked.skipped) {
+            logger.info(
+              `contested_evidence_tick left "${skip.question}" alone: ${skip.because}`,
+              { jobName: 'contested_evidence_tick' });
+          }
+        } catch (err) {
+          logger.error(
+            `contested_evidence_tick failed for ${String(row.id)}: `
+            + `${err instanceof Error ? err.message : String(err)}`,
+            { jobName: 'contested_evidence_tick' });
+        }
+      }
+      logger.info(`contested_evidence_tick: experiments proposed=${String(proposed)}`,
+        { jobName: 'contested_evidence_tick' });
+    },
+    schedule: '30 6 * * *',
+    description:
+      'Where reading has stopped helping and only behaviour could settle what is left, '
+      + 'propose the cheapest test with a prediction sealed before it runs (daily)',
+  },
   real_market_evidence_tick: {
     fn: async () => {
       const { waysOfLooking } = await import('../services/venture/research-sources.js');
