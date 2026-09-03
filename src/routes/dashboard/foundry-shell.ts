@@ -37,6 +37,7 @@ import { selectedProductId } from '../../services/founder/selected-company.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
 import type { CompanyNumbers } from '../../services/founder/what-the-numbers-say.js';
 import type { VentureReading } from '../../services/venture/mandate.js';
+import { OWNER_SURFACE_SCRIPT } from '../../lib/owner-surface-script.js';
 import { LAYER_IN_PLAIN_WORDS, layerOf } from '../../lib/repository-layers.js';
 
 export const foundryShellRoutes = new Hono();
@@ -1029,12 +1030,7 @@ ${body}
   <a href="/foundry/controls"${active === 'controls' ? ' class="on" aria-current="page"' : ''}>
     <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="var(--bg)"/><circle cx="15" cy="12" r="2" fill="var(--bg)"/><circle cx="8" cy="17" r="2" fill="var(--bg)"/></svg>Controls</a>
 </div></nav>
-<script>
-  // The time of day belongs to the reader, not the server: this said "good
-  // morning" at eleven at night, because the machine runs in UTC.
-  (function(){var e=document.getElementById('greet');if(!e)return;var h=new Date().getHours();
-    e.textContent=h<12?'Good morning':h<18?'Good afternoon':'Good evening';})();
-</script>
+<script>${raw(OWNER_SURFACE_SCRIPT)}</script>
 </body>
 </html>`;
 
@@ -2031,7 +2027,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
       attention.</p></div>` : ''}
     ${s.changed.changes.length > 0 ? html`<div class="know">
       <h3>While you were away</h3>
-      <ul>${raw(s.changed.changes.map((ch) => `<li>${ch.said}</li>`).join(''))}</ul>
+      <ul>${s.changed.changes.map((ch) => html`<li>${ch.said}</li>`)}</ul>
       ${s.changed.more > 0 ? html`<p class="quiet">And ${String(s.changed.more)} other
         ${s.changed.more === 1 ? 'thing' : 'things'}.</p>` : ''}
     </div>` : ''}
@@ -2084,7 +2080,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
         needs</strong> — ${s.search.needs.join('; ')}.</p>` : ''}
       ${s.search.decided.length ? html`<div class="quiet">
         <p><strong>Already decided about</strong></p>
-        <ul>${raw(s.search.decided.map((d) => `<li>${d}</li>`).join(''))}</ul></div>` : ''}
+        <ul>${s.search.decided.map((d) => html`<li>${d}</li>`)}</ul></div>` : ''}
       ${(() => {
     // WORK IN PROGRESS IS A COUNT, NOT A DOSSIER.
     //
@@ -2098,40 +2094,40 @@ foundryShellRoutes.get('/foundry', async (c) => {
       ${String(waiting)} ${waiting === 1 ? 'possibility' : 'possibilities'}.
       ${waiting === 1 ? 'It has' : 'None has'} earned your attention yet.</p>`;
   })()}
-      ${raw(s.search.candidates.filter((cand) => cand.earnedAttention).map((cand) => `<div class="one">
+      ${s.search.candidates.filter((cand) => cand.earnedAttention).map((cand) => html`<div class="one">
         <div class="one-in">
           <p class="act">${cand.reference ? 'Invented, to show you how I judge' : 'Opportunity'}</p>
           <h2>${cand.headline}</h2>
           <p class="lead">${cand.whoHasIt} &mdash; ${cand.theProblem}.</p>
         </div>
         <div class="facts">
-          ${cand.cameFrom ? `<b>Somebody wrote</b><span>&ldquo;${cand.cameFrom.said}&rdquo;</span>
+          ${cand.cameFrom ? html`<b>Somebody wrote</b><span>&ldquo;${cand.cameFrom.said}&rdquo;</span>
           <b>I read that as</b><span class="quiet">${cand.cameFrom.reading} I would have read it wrong if ${cand.cameFrom.misreadIf}</span>` : ''}
           <b>Why it might</b><span>${cand.whyItMight}</span>
           <b>For the portfolio</b><span>${cand.fit ?? 'I cannot say yet'}${cand.serves.length ? ` It would give you ${cand.serves.join('; ')}.` : ''}</span>
-          ${cand.earns ? `<b>How it earns</b><span>${cand.earns}</span>` : ''}
-          ${cand.burden ? `<b>Its burden</b><span>${cand.burden}</span>` : ''}
+          ${cand.earns ? html`<b>How it earns</b><span>${cand.earns}</span>` : ''}
+          ${cand.burden ? html`<b>Its burden</b><span>${cand.burden}</span>` : ''}
           <b>Legal and risk</b><span>${cand.legalProfile}</span>
-          ${cand.wouldTake.length ? `<b>What it would take</b><span class="quiet">${cand.wouldTake.join(' ')}</span>` : ''}
+          ${cand.wouldTake.length ? html`<b>What it would take</b><span class="quiet">${cand.wouldTake.join(' ')}</span>` : ''}
           <b>Could fail because</b><span>${cand.killThesis}</span>
           <b>Checked</b><span class="quiet">${cand.standing.length ? cand.standing.join(' ') : (cand.sources.length ? cand.sources.join('; ') : 'nothing')}</span>
           <b>Unknown</b><span class="quiet">${cand.unanswered.length ? cand.unanswered.join('; ') : (cand.unknowns.join('; ') || 'nothing I can name')}</span>
-          ${cand.awaiting[0] ? `<b>Cheapest test</b><span>${cand.awaiting[0].whatWeDo}. I expect ${cand.awaiting[0].whatWeExpect}; I would be wrong if ${cand.awaiting[0].wouldDisprove}.</span>
+          ${cand.awaiting[0] ? html`<b>Cheapest test</b><span>${cand.awaiting[0].whatWeDo}. I expect ${cand.awaiting[0].whatWeExpect}; I would be wrong if ${cand.awaiting[0].wouldDisprove}.</span>
           <b>Most you could lose</b><span>${cand.downside}</span>` : ''}
-          ${cand.against.length ? `<b>Not quite</b><span class="quiet">${cand.against.join('; ')}</span>` : ''}
-          ${cand.buriedBefore ? `<b>Seen before</b><span class="gap">${cand.buriedBefore}</span>` : ''}
-          ${cand.failsBecause ? `<b>Against what you said</b><span class="gap">${cand.failsBecause}</span>` : ''}
-          ${cand.blockedBy ? `<b>Not yet</b><span class="gap">This cannot earn a company yet — ${cand.blockedBy}.</span>` : ''}
-          ${cand.inTheWay.length ? `<b>Before a company</b><span class="quiet">${cand.inTheWay.join('; ')}</span>` : ''}
+          ${cand.against.length ? html`<b>Not quite</b><span class="quiet">${cand.against.join('; ')}</span>` : ''}
+          ${cand.buriedBefore ? html`<b>Seen before</b><span class="gap">${cand.buriedBefore}</span>` : ''}
+          ${cand.failsBecause ? html`<b>Against what you said</b><span class="gap">${cand.failsBecause}</span>` : ''}
+          ${cand.blockedBy ? html`<b>Not yet</b><span class="gap">This cannot earn a company yet — ${cand.blockedBy}.</span>` : ''}
+          ${cand.inTheWay.length ? html`<b>Before a company</b><span class="quiet">${cand.inTheWay.join('; ')}</span>` : ''}
           <b>I recommend</b><span>${cand.recommendation}</span>
         </div>
         <div class="do">
-          ${cand.awaiting.map((e) => `<form method="POST" action="/foundry/venture/experiment">
+          ${cand.awaiting.map((e) => html`<form method="POST" action="/foundry/venture/experiment">
             <input type="hidden" name="experimentId" value="${e.id}" />
             <input type="hidden" name="decision" value="approved" />
             <button class="btn go" type="submit">Go ahead &mdash; ${e.cost}</button>
-          </form>`).join('')}
-          ${!cand.inTheWay.length ? `<form method="POST" action="/foundry/venture/advance">
+          </form>`)}
+          ${!cand.inTheWay.length ? html`<form method="POST" action="/foundry/venture/advance">
             <input type="hidden" name="opportunityId" value="${cand.id}" />
             <button class="btn go" type="submit">Take it forward</button>
           </form>` : ''}
@@ -2144,7 +2140,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
             <button class="btn" type="submit">Reject</button>
           </form>
         </div>
-      </div>`).join(''))}
+      </div>`)}
     </div>` : ''}
 
     ${!s.search && s.pastSearches.length ? html`<div class="know">
