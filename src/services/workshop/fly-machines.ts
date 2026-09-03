@@ -28,6 +28,7 @@
 
 import type { RunResult, WorkshopSpec, WorkshopSubstrate } from './contract.js';
 import { WorkshopError } from './contract.js';
+import { safeFetch } from '../outbound/ssrf.js';
 
 const BASE = 'https://api.machines.dev/v1';
 
@@ -50,8 +51,18 @@ function app(): string {
   return a;
 }
 
+/**
+ * EVERY CALL OUT OF HERE IS SCREENED, INCLUDING THIS ONE.
+ *
+ * The URL is assembled from a constant base and a path we wrote, which is the
+ * argument for skipping the check and exactly the argument that has failed
+ * before elsewhere in this codebase: `BASE` is an environment-shaped constant,
+ * a machine id arrives from a provider response, and a redirect is chosen by
+ * whatever answers. `safeFetch` screens the target and re-screens every hop,
+ * which is the only form that survives a host that re-resolves.
+ */
 async function call<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await safeFetch(`${BASE}${path}`, {
     method,
     headers: { authorization: `Bearer ${token()}`, 'content-type': 'application/json' },
     body: body === undefined ? undefined : JSON.stringify(body),

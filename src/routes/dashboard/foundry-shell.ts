@@ -160,6 +160,18 @@ interface OwnerState {
   checks: Array<{ check: string; result: string; detail: string; observedAt: string }>;
   responsibilities: Array<{ id: string; title: string; state: string; check: string | null }>;
   pendingCandidates: Array<{ id: string; proposal: string; check: string | null }>;
+  /**
+   * WHAT FOUNDRY WOULD HAVE TO ACQUIRE TO CARRY SOMETHING IT CANNOT.
+   *
+   * A capability it does not have is not a stop and it is not a technical
+   * detail: it is one decision, with the route, what it costs, and — the part
+   * that matters — what having it would still never permit on its own.
+   */
+  acquisitions: Array<{
+    id: string; capabilityKey: string; whatItDoes: string; rung: string;
+    route: string; provider: string; costNote: string; because: string;
+    sentence: string;
+  }>;
   permissions: Array<{ id: string; what: string; until: string; path: string | null }>;
   declined: Array<{ id: string; title: string }>;
   grantable: Array<{ responsibilityId: string; title: string; check: string;
@@ -340,6 +352,14 @@ async function readOwnerState(
       id: candidate.id, proposal: candidate.proposedResponsibility,
       check: candidateChecks.get(candidate.id) ?? null,
     })),
+    acquisitions: await (async () => {
+      const { acquisitionsAwaiting } = await import('../../services/institution/acquisition.js');
+      return (await acquisitionsAwaiting(founderId)).map((a) => ({
+        id: a.id, capabilityKey: a.capabilityKey, whatItDoes: a.whatItDoes,
+        rung: a.rung, route: a.route, provider: a.provider, costNote: a.costNote,
+        because: a.because, sentence: a.sentence,
+      }));
+    })(),
     permissions: consents.map((consent) => {
       let path: string | null = null;
       try {
@@ -476,6 +496,8 @@ type Attention =
   | { kind: 'authorise'; responsibilityId: string; check: string; path: string;
       verification: string[]; matched: number; wrong: number;
       layer: string; layerPlainly: string }
+  | { kind: 'acquire'; acquisitionId: string; whatItDoes: string; rung: string;
+      provider: string; costNote: string; because: string; route: string }
   | { kind: 'recognise'; candidateId: string; check: string | null; proposal: string }
   | { kind: 'recognise_company'; candidateId: string; productId: string;
       companyName: string; proposal: string; rationale: string }
@@ -499,6 +521,17 @@ function whatNeedsHim(s: OwnerState): Attention {
       path: grant.path, verification: grant.verification,
       matched: grant.matched, wrong: grant.wrong,
       layer: grant.layer, layerPlainly: grant.layerPlainly,
+    };
+  }
+  // A CAPABILITY IT CANNOT DO IS ONE DECISION, not a technical footnote — and
+  // it outranks a recognition because acquiring may cost money where noticing
+  // never does.
+  const acquire = s.acquisitions[0];
+  if (acquire) {
+    return {
+      kind: 'acquire', acquisitionId: acquire.id, whatItDoes: acquire.whatItDoes,
+      rung: acquire.rung, provider: acquire.provider, costNote: acquire.costNote,
+      because: acquire.because, route: acquire.route,
     };
   }
   const candidate = s.pendingCandidates[0];
@@ -905,6 +938,19 @@ const decisionCard = (d: Decision): HtmlEscapedString | Promise<HtmlEscapedStrin
     </div></details>
   </section>`;
 
+/** The owner's own list of routes, in his words rather than the enum's. */
+const ROUTE_WORDS: Record<string, string> = {
+  reuse: 'reuse something the portfolio already has',
+  existing_api: 'connect a provider that already exists',
+  new_provider: 'bring in a new provider',
+  browser: 'do it through a governed browser, holding no credential',
+  adapter: 'write an adapter to a provider',
+  build: 'build it once and reuse it across the portfolio',
+  procure: 'pay for a service',
+  license: 'license it from somebody',
+  human: 'engage a qualified person',
+};
+
 // ─── the one thing, rendered ────────────────────────────────────────────────
 
 function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedString> {
@@ -928,6 +974,43 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
       <h2>${name}</h2>
       <p class="lead">This no longer matches. I have not changed anything — I only look.</p>
     </div></section>`;
+  }
+
+  if (a.kind === 'acquire') {
+    // WHAT IT WOULD STILL NOT PERMIT is the fact that keeps this honest. He is
+    // approving an ACQUISITION, not an act: the new capability goes through the
+    // same door, on the same rung, under the same boundaries as everything
+    // else. Saying so here is what stops "yes" meaning more than he meant.
+    const stillNot = a.rung === 'observe' || a.rung === 'prepare'
+      ? 'Nothing. It can only look, or make drafts nobody outside can see.'
+      : a.rung === 'public'
+        ? 'Anything you have told me not to do still stands. Every use goes '
+          + 'through the same door as every other message.'
+        : a.rung === 'financial'
+          ? 'It spends nothing on its own. Each use needs an allowance you set '
+            + 'or an approval you give.'
+          : 'Each single use still needs your approval, every time.';
+    return decisionCard({
+      act: 'Authority',
+      question: 'Should I get hold of this?',
+      title: a.whatItDoes,
+      meaning: [
+        `I would ${ROUTE_WORDS[a.route] ?? a.route} — ${a.provider}.`,
+        `I want it because ${a.because}.`,
+        'Saying yes gets me the ability. It does not let me use it for anything '
+        + 'in particular — that is still a separate question, every time.',
+      ],
+      facts: [
+        ['What it costs', a.costNote],
+        ['What it would still not let me do', stillNot],
+        ['If you say no', 'I leave it, and say so wherever the work needed it'],
+      ],
+      primary: { label: 'Yes — get it', action: `/foundry/acquisitions/${a.acquisitionId}/decide`,
+        fields: { decision: 'approved' } },
+      secondary: { label: 'Not this', action: `/foundry/acquisitions/${a.acquisitionId}/decide`,
+        fields: { decision: 'declined' } },
+      technical: `capability ${a.acquisitionId}`,
+    });
   }
 
   if (a.kind === 'recognise') {
@@ -1477,7 +1560,9 @@ function answerTo(key: string, s: OwnerState, a: Attention,
         ? `${a.proposal} at ${a.companyName}`
         : a.kind === 'authorise'
           ? CHECK_IN_PLAIN_WORDS[a.check]?.name ?? a.check
-          : CHECK_IN_PLAIN_WORDS[a.check]?.name ?? a.title;
+          : a.kind === 'acquire'
+            ? a.whatItDoes
+            : CHECK_IN_PLAIN_WORDS[a.check]?.name ?? a.title;
     if (key === 'change') {
       return a.kind === 'authorise'
         ? html`<div class="said">
@@ -1739,6 +1824,11 @@ foundryShellRoutes.get('/foundry', async (c) => {
       Every candidate from here is tested against it.</p></div>` : ''}
     ${done === 'searchstopped' ? html`<div class="done"><p><strong>Stopped looking.</strong>
       What I found stays on the record, including what I rejected and why.</p></div>` : ''}
+    ${done === 'acquiring' ? html`<div class="done"><p><strong>Getting it.</strong>
+      That gets me the ability and nothing else — using it for anything in particular
+      is still a separate question, every time.</p></div>` : ''}
+    ${done === 'notacquiring' ? html`<div class="done"><p><strong>Left it.</strong>
+      I will say so wherever the work needed it, rather than working around you.</p></div>` : ''}
     ${done === 'trying' ? html`<div class="done"><p><strong>Going ahead with that.</strong>
       What I said I expect is now fixed and cannot be edited, so the result can
       disagree with me.</p></div>` : ''}
@@ -2693,6 +2783,35 @@ foundryShellRoutes.post('/foundry/advice/:adviceId/:decision',
     });
     return c.redirect(
       `/foundry/companies/${productId}?done=${decision === 'accept' ? 'agreed' : 'notthat'}`);
+  });
+
+/**
+ * YES TO AN ACQUISITION, WHICH IS NOT YES TO AN ACT.
+ *
+ * Approving here makes a provider exist in the fabric, declared and then
+ * available on the evidence that it was wired. It grants nothing: the acquired
+ * capability reaches the world only through the same outbound door, on the same
+ * rung, under the same boundaries and allowances. The door does not know the
+ * provider is new, and that is the point.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/acquisitions/:id/decide',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const form = await c.req.parseBody();
+    const decision = String(form.decision ?? '');
+    if (decision !== 'approved' && decision !== 'declined') return c.redirect('/foundry');
+
+    const owned = await query(
+      'SELECT id FROM capability_acquisitions WHERE id = ? AND founder_id = ? AND decision IS NULL',
+      [c.req.param('id'), String(founder.id)]);
+    if (!owned.rows.length) return c.notFound();
+
+    const { decideAcquisition } = await import('../../services/institution/acquisition.js');
+    await decideAcquisition({
+      id: c.req.param('id'), decision, by: `founder:${String(founder.id)}` });
+    return c.redirect(`/foundry?done=${decision === 'approved' ? 'acquiring' : 'notacquiring'}`);
   });
 
 // ─── an entrepreneurial mandate ─────────────────────────────────────────────

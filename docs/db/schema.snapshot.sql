@@ -145,7 +145,9 @@
                     CHECK (premise_type IN ('metric', 'qualitative')),
                     CHECK (status IN ('holding', 'falsified', 'unverifiable', 'revisited')),
                     CHECK (status IN ('on_track','at_risk','off_track','completed')),
+                   'build','procure','license','human')),
                    'data_work','visual_qa','reference_scenario','dependency_upgrade')),
+                   'reuse','existing_api','new_provider','browser','adapter',
                    'venture_development','research','adversarial_test','self_development',
                    ('declared','available','controlled_proven','reality_proven',
                    ('opportunity','responsibility','proposed_act','experiment','company')),
@@ -302,6 +304,7 @@
        OR NEW.provider IS NOT OLD.provider
        OR NEW.provider IS NOT OLD.provider
        OR NEW.risk IS NOT OLD.risk
+       OR NEW.route IS NOT OLD.route OR NEW.provider IS NOT OLD.provider;
        OR NEW.scopes_json IS NOT OLD.scopes_json
        OR NEW.sense_key IS NOT OLD.sense_key
        OR NEW.set_at IS NOT OLD.set_at;
@@ -328,6 +331,7 @@
        OR json_valid(NEW.sources_json) = 0 OR json_type(NEW.sources_json) <> 'array';
        OR trim(NEW.disclosure) = ''
        OR trim(NEW.kill_thesis) = '';
+       OR trim(NEW.proposed_by) = '';
        OR trim(NEW.the_problem) = '' OR trim(NEW.why_it_might) = ''
        OR trim(NEW.why) = '' OR trim(NEW.would_need) = '';
        OR trim(NEW.would_disprove) = '';
@@ -342,6 +346,7 @@
       )
       )
       )
+      AND (NEW.decided_by IS NULL OR NEW.decided_by NOT LIKE 'founder:%');
       AND (NEW.evidence_mode = 'reference') <> EXISTS (
       AND (NEW.evidence_mode = 'reference') <> EXISTS (
       AND (NEW.what_we_do IS NOT OLD.what_we_do
@@ -883,6 +888,7 @@
     WHERE EXISTS (SELECT 1 FROM market_unknowns
     WHERE EXISTS (SELECT 1 FROM owner_allowances a
     WHERE EXISTS (SELECT 1 FROM workspaces WHERE id = NEW.workspace_id AND destroyed_at IS NOT NULL);
+    WHERE NEW.acquired_at IS NOT NULL AND coalesce(NEW.decision,'') <> 'approved';
     WHERE NEW.amount_cents IS NOT OLD.amount_cents
     WHERE NEW.answered_at IS NOT NULL AND trim(coalesce(NEW.answer,'')) = '';
     WHERE NEW.answered_at IS NOT NULL;
@@ -900,7 +906,9 @@
     WHERE NEW.decision IS NOT NULL AND NEW.decided_by IS NEW.proposed_by;
     WHERE NEW.decision IS NOT NULL AND NOT EXISTS (
     WHERE NEW.decision IS NOT NULL AND OLD.decision IS NULL
+    WHERE NEW.decision IS NOT NULL AND OLD.decision IS NULL
     WHERE NEW.decision IS NOT NULL AND trim(coalesce(NEW.decided_by,'')) = '';
+    WHERE NEW.decision IS NOT NULL OR NEW.acquired_at IS NOT NULL;
     WHERE NEW.decision IS NOT NULL OR NEW.decided_at IS NOT NULL;
     WHERE NEW.decision IS NOT NULL;
     WHERE NEW.destroyed_at IS NOT NULL AND NEW.preserved IS NULL;
@@ -920,6 +928,7 @@
     WHERE NEW.founder_id IS NOT OLD.founder_id
     WHERE NEW.founder_id IS NOT OLD.founder_id
     WHERE NEW.founder_id IS NOT OLD.founder_id
+    WHERE NEW.founder_id IS NOT OLD.founder_id OR NEW.capability_key IS NOT OLD.capability_key
     WHERE NEW.founder_id IS NOT OLD.founder_id OR NEW.purpose IS NOT OLD.purpose
     WHERE NEW.from_maturity = NEW.to_maturity;
     WHERE NEW.from_posture = NEW.to_posture;
@@ -982,6 +991,7 @@
     WHERE OLD.decision IS NOT NULL
     WHERE OLD.decision IS NOT NULL AND NEW.decision IS NOT OLD.decision;
     WHERE OLD.decision IS NOT NULL AND NEW.decision IS NOT OLD.decision;
+    WHERE OLD.decision IS NOT NULL AND NEW.decision IS NOT OLD.decision;
     WHERE OLD.decision IS NOT NULL;
     WHERE OLD.disconnected_at IS NOT NULL;
     WHERE OLD.disconnected_at IS NOT NULL;
@@ -1038,6 +1048,7 @@
     WHERE trim(NEW.headline) = '' OR trim(NEW.who_has_it) = ''
     WHERE trim(NEW.kind) = '' OR trim(NEW.summary) = ''
     WHERE trim(NEW.named) = '' OR trim(NEW.never_grants) = '';
+    WHERE trim(NEW.provider) = '' OR trim(NEW.cost_note) = '' OR trim(NEW.because) = ''
     WHERE trim(NEW.provider) = '' OR trim(NEW.cost_note) = '';
     WHERE trim(NEW.purpose) = '' OR trim(NEW.statement) = '';
     WHERE trim(NEW.said) = '' OR trim(NEW.changed_by) = '';
@@ -1335,9 +1346,11 @@
   -- Narrative
   -- Negative and missing amounts. An absent amount is not zero spend; it is an
   -- No high-consequence development authority exists at this evidence level.
+  -- Nothing is acquired that was not approved.
   -- Nullable: null means nothing has scored this company, which is different
   -- ONCE HE HAS DECIDED, THE PREDICTION IS SEALED. He approved a specific test
   -- ONE LIVE ALLOWANCE PER COMPANY. Two ceilings is no ceiling: something
+  -- ONLY THE OWNER DECIDES. Foundry proposes what it would take; it does not
   -- ONLY THE OWNER SETS A POSTURE. Foundry recommends; it does not decide where
   -- Only a real institutional judgment of this product may be dispositioned.
   -- Only lifting may be edited. The subject and the words he used are what the
@@ -1366,6 +1379,7 @@
   -- Sections (all JSON or Markdown)
   -- Session-derived identity is verified against the real product owner. A
   -- Set when reality settled it, which is not the same as evidence accumulating.
+  -- Set when the provider actually exists in the fabric - the acquisition's
   -- Severable. The room stays open for the people using it.
   -- Severable. The vote was genuinely cast and the record stays truthful about
   -- Severable. The webhook keeps delivering; it stops naming the person.
@@ -1415,6 +1429,7 @@
   -- The founder's own words for which system holds this.
   -- The four. No DEFAULT: absent means absent.
   -- The grounding must be this product's own current claims. A disposition
+  -- The implementation this would bring in, named.
   -- The implementation: a named service, a browser, a workspace, a person.
   -- The kernel's identifier for the quantity. Company-defined, never parsed.
   -- The key becomes part of an event type and is matched against stored
@@ -1428,6 +1443,7 @@
   -- The plan must carry a real proposal, authored for that same message.
   -- The question it exists to answer. An experiment attached to no unknown is
   -- The responsibility is this company's, and the person correcting owns it.
+  -- The route, from the owner's own list: reuse, existing API, new provider,
   -- The row and the column cannot disagree. A reference_companies row for a
   -- The rung the policy chose. 'log' is recorded too: an audit trail the
   -- The same generic operational vocabulary migration 126 established, mirrored
@@ -1476,6 +1492,7 @@
   -- What was proposed is what was approved. None of it may drift afterwards.
   -- What we expect to see. Written before, sealed at approval.
   -- What would actually be done, concretely enough to do.
+  -- What would need it, so the owner sees the reason and not a catalogue.
   -- When a send through this identity was last accepted by the provider.
   -- Where every claim came from. Empty means nothing was checked, and an
   -- Where it was seen: a URL, a person, a dataset. Never empty — an observation
@@ -1578,9 +1595,11 @@
   -- from a low score and must not be rendered as one.
   -- from the fact that a write returned without throwing.
   -- from the message and the responsibility that owns its channel.
+  -- governed browser work, an adapter, build, procure, license, a person.
   -- governed effect kind is.
   -- governing contract lives in the institution documents and services, and
   -- grant can invent.
+  -- grant itself a new way to reach the world.
   -- grant that somehow held a ring path could still never be planned against.
   -- guards in this schema.
   -- guards in this schema.
@@ -1633,6 +1652,7 @@
   -- or maturity is refused whole — every one of those is resolved server-side
   -- origin, and this one drives what a founder is told about survival.
   -- outcome for something that never happened is not an outcome; a plan that
+  -- outcome, not its approval.
   -- owner decides each act, and no policy may ever change that.
   -- parent is a table erasure walks past. Every other person-scoped table here
   -- people: `check-check-vocabularies` parses it to catch a literal nobody
@@ -1771,6 +1791,7 @@
   ON briefing_decision_links(founder_id, decision_acted_at)
   ON briefing_decision_links(product_id, created_at DESC);
   ON briefing_shares(founder_id, created_at DESC);
+  ON capability_acquisitions(founder_id) WHERE decision IS NULL;
   ON capability_needs(subject_kind, subject_id, capability_key);
   ON communication_budgets(product_id, customer_external_id, week_starting);
   ON company_observation_channels(product_id, revoked_at);
@@ -1942,6 +1963,12 @@
   SELECT RAISE(ABORT,'candidate_promotion:not_promotable') WHERE NOT EXISTS (
   SELECT RAISE(ABORT,'candidate_promotion:owner_invalid') WHERE
   SELECT RAISE(ABORT,'candidate_promotion:result_required') WHERE
+  SELECT RAISE(ABORT,'capability_acquisition:already_decided')
+  SELECT RAISE(ABORT,'capability_acquisition:cannot_arrive_decided')
+  SELECT RAISE(ABORT,'capability_acquisition:immutable')
+  SELECT RAISE(ABORT,'capability_acquisition:incomplete')
+  SELECT RAISE(ABORT,'capability_acquisition:not_approved')
+  SELECT RAISE(ABORT,'capability_acquisition:owner_only')
   SELECT RAISE(ABORT,'capability_maturity:incomplete')
   SELECT RAISE(ABORT,'capability_maturity:no_change')
   SELECT RAISE(ABORT,'capability_maturity:reality_proven_needs_real_evidence')
@@ -2374,6 +2401,7 @@
   accuracy_score REAL, -- 0.0-1.0: correct=1.0, partial=0.5, incorrect=0.0
   achieved_at TEXT,
   acknowledged INTEGER DEFAULT 0,
+  acquired_at    TEXT,
   acquirer_name TEXT NOT NULL,
   acquirer_type TEXT NOT NULL, -- 'strategic' | 'financial' | 'pe'
   acquisition_channel TEXT,
@@ -2568,6 +2596,7 @@
   base_prompt_hash TEXT NOT NULL, -- hash of the original system prompt
   bearing        TEXT NOT NULL CHECK (bearing IN ('supports','contradicts')),
   became_product TEXT REFERENCES products(id),
+  because        TEXT NOT NULL,
   because    TEXT NOT NULL,
   because_json   TEXT NOT NULL DEFAULT '[]',
   began_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -2625,6 +2654,7 @@
   cap INTEGER NOT NULL DEFAULT 3,                 -- per week
   capability          TEXT NOT NULL,          -- autopilot category
   capability_dependency TEXT,
+  capability_key TEXT NOT NULL REFERENCES capabilities(capability_key),
   capability_key TEXT NOT NULL REFERENCES capabilities(capability_key),
   capability_key TEXT NOT NULL REFERENCES capabilities(capability_key),
   capability_key TEXT NOT NULL REFERENCES capabilities(capability_key),
@@ -2824,6 +2854,7 @@
   cost_avoided_dollars REAL NOT NULL DEFAULT 0,
   cost_cents     INTEGER NOT NULL DEFAULT 0,
   cost_cents    INTEGER NOT NULL DEFAULT 0,
+  cost_note      TEXT NOT NULL,
   cost_note      TEXT NOT NULL,
   cost_trailing_30d_usd REAL DEFAULT 0.0
   cost_type TEXT NOT NULL CHECK(cost_type IN (
@@ -3051,15 +3082,18 @@
   decided_at          TEXT,
   decided_at     TEXT,
   decided_at     TEXT,
+  decided_at     TEXT,
   decided_at    TEXT
   decided_at DATETIME,
   decided_by          TEXT,
+  decided_by     TEXT,
   decided_by     TEXT,
   decided_by     TEXT,
   decided_by TEXT CHECK(decided_by IN ('founder', 'second_self')),
   decided_by_founder_id TEXT
   decision            TEXT CHECK (decision IN ('approved','refused')),
   decision       TEXT CHECK (decision IN ('accepted','declined'))
+  decision       TEXT CHECK (decision IN ('approved','declined')),
   decision       TEXT CHECK (decision IN ('approved','declined')),
   decision TEXT NOT NULL CHECK(decision IN ('promoted','rejected','superseded','reconsidered')),
   decision_acted_at TEXT,                   -- null until an action lands
@@ -3378,6 +3412,7 @@
   founder_id     TEXT NOT NULL REFERENCES founders(id),
   founder_id     TEXT NOT NULL REFERENCES founders(id),
   founder_id     TEXT NOT NULL REFERENCES founders(id),
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
   founder_id    TEXT NOT NULL REFERENCES founders(id),
   founder_id    TEXT NOT NULL REFERENCES founders(id),
   founder_id    TEXT NOT NULL REFERENCES founders(id),
@@ -3511,6 +3546,7 @@
   hour_reset_at DATETIME,
   hours REAL NOT NULL,
   how            TEXT NOT NULL CHECK (how IN ('api','browser','shell','workspace','human','internal')),
+  how            TEXT NOT NULL CHECK (how IN ('api','browser','shell','workspace','human','internal')),
   how_known     TEXT NOT NULL CHECK (how_known IN ('owner_said','observed','inferred')),
   hypothesis_id TEXT NOT NULL REFERENCES hypotheses(id),
   hypothesis_signals TEXT, -- JSON: {h1: data, h2: data, ...}
@@ -3543,6 +3579,7 @@
   id              TEXT PRIMARY KEY,
   id              TEXT PRIMARY KEY,
   id              TEXT PRIMARY KEY,
+  id             TEXT PRIMARY KEY,
   id             TEXT PRIMARY KEY,
   id             TEXT PRIMARY KEY,
   id             TEXT PRIMARY KEY,
@@ -4596,8 +4633,10 @@
   properties TEXT,
   proposed_at         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   proposed_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  proposed_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   proposed_at TEXT DEFAULT (datetime('now')),
   proposed_by         TEXT NOT NULL,
+  proposed_by    TEXT NOT NULL,
   proposed_by TEXT NOT NULL,
   proposed_by TEXT NOT NULL,                  -- agent name or 'founder' or 'system'
   proposed_change TEXT NOT NULL,              -- human-readable description
@@ -4608,11 +4647,13 @@
   provider          TEXT NOT NULL,
   provider       TEXT NOT NULL,
   provider       TEXT NOT NULL,
+  provider       TEXT NOT NULL,
   provider     TEXT NOT NULL CHECK(provider IN ('resend')),
   provider     TEXT NOT NULL,
   provider   TEXT NOT NULL,
   provider TEXT PRIMARY KEY
   provider TEXT,
+  provider_id    TEXT REFERENCES capability_providers(id)
   provider_id   TEXT NOT NULL REFERENCES capability_providers(id),
   published BOOLEAN DEFAULT FALSE
   purpose        TEXT NOT NULL CHECK (purpose IN (
@@ -4779,6 +4820,7 @@
   root_cause_entity_id TEXT,
   rotated_at     TEXT,
   round_type TEXT NOT NULL, -- 'seed' | 'series_a' | 'series_b'
+  route          TEXT NOT NULL CHECK (route IN (
   rule_id TEXT NOT NULL REFERENCES lifecycle_rules(id),
   run_type TEXT CHECK(run_type IN ('initial', 'post_remediation', 'periodic')),
   rung           TEXT NOT NULL REFERENCES consequence_rungs(rung),
@@ -5049,8 +5091,10 @@
   subject_id         TEXT NOT NULL,
   subject_id     TEXT NOT NULL,
   subject_id     TEXT,
+  subject_id     TEXT,
   subject_id    TEXT NOT NULL,
   subject_kind       TEXT NOT NULL CHECK (subject_kind IN ('company','opportunity')),
+  subject_kind   TEXT CHECK (subject_kind IN ('opportunity','company')),
   subject_kind   TEXT CHECK (subject_kind IN ('opportunity','company')),
   subject_kind   TEXT NOT NULL CHECK (subject_kind IN
   subject_kind  TEXT NOT NULL CHECK (subject_kind IN ('company','opportunity')),
@@ -5633,6 +5677,7 @@
 );
 );
 );
+);
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
 , analysis_failed_at DATETIME, analysis_failure_reason TEXT
 , approval_note TEXT, verify_criteria TEXT, verify_status TEXT, verify_after DATETIME, verified_at DATETIME, effect_certainty TEXT, provider_acknowledged_at DATETIME, reconcile_after DATETIME);
@@ -5699,6 +5744,7 @@ BEFORE DELETE ON system_identities
 BEFORE INSERT ON ai_spend_reservations
 BEFORE INSERT ON autonomy_consents
 BEFORE INSERT ON autonomy_consents WHEN NEW.responsibility_id IS NOT NULL
+BEFORE INSERT ON capability_acquisitions
 BEFORE INSERT ON capability_maturity_changes
 BEFORE INSERT ON capability_needs
 BEFORE INSERT ON capability_providers
@@ -5807,6 +5853,7 @@ BEFORE UPDATE OF state ON institutional_responsibilities
 BEFORE UPDATE OF status ON responsibility_candidates
 BEFORE UPDATE ON call_transcripts
 BEFORE UPDATE ON call_transcripts
+BEFORE UPDATE ON capability_acquisitions
 BEFORE UPDATE ON capability_maturity_changes
 BEFORE UPDATE ON company_financial_position
 BEFORE UPDATE ON company_financial_position
@@ -5850,6 +5897,8 @@ BEFORE UPDATE ON venture_opportunities
 BEFORE UPDATE ON workspace_events
 BEFORE UPDATE ON workspace_grants
 BEFORE UPDATE ON workspaces
+BEGIN
+BEGIN
 BEGIN
 BEGIN
 BEGIN
@@ -6101,6 +6150,7 @@ CREATE INDEX idx_board_packets_product ON board_packets(product_id, quarter DESC
 CREATE INDEX idx_briefing_share_code ON briefing_shares(share_code);
 CREATE INDEX idx_briefing_share_founder
 CREATE INDEX idx_cap_table_product ON cap_table_scenarios(product_id);
+CREATE INDEX idx_capability_acquisitions_open
 CREATE INDEX idx_capability_needs_open ON capability_needs(founder_id) WHERE met_at IS NULL;
 CREATE INDEX idx_causal_chains ON causal_chains(product_id);
 CREATE INDEX idx_cf_alignment_product ON cofounder_alignment_scores(product_id);
@@ -6431,6 +6481,7 @@ CREATE TABLE calendar_allocations (
 CREATE TABLE call_transcripts (
 CREATE TABLE cap_table_scenarios (
 CREATE TABLE capabilities (
+CREATE TABLE capability_acquisitions (
 CREATE TABLE capability_maturity_changes (
 CREATE TABLE capability_needs (
 CREATE TABLE capability_providers (
@@ -6667,6 +6718,8 @@ CREATE TRIGGER assisted_reply_plan_binding_guard
 CREATE TRIGGER capabilities_constitutional_delete BEFORE DELETE ON capabilities
 CREATE TRIGGER capabilities_constitutional_insert BEFORE INSERT ON capabilities
 CREATE TRIGGER capabilities_constitutional_update BEFORE UPDATE ON capabilities
+CREATE TRIGGER capability_acquisition_decided_once
+CREATE TRIGGER capability_acquisition_guard
 CREATE TRIGGER capability_maturity_change_applies
 CREATE TRIGGER capability_maturity_change_guard
 CREATE TRIGGER capability_maturity_change_immutable
@@ -6901,6 +6954,8 @@ CREATE UNIQUE INDEX idx_venture_mandate_one_open
 CREATE UNIQUE INDEX idx_voice_fp_active_unique
 CREATE UNIQUE INDEX idx_wiki_entries_unique
 CREATE UNIQUE INDEX idx_workspace_grant_live
+END;
+END;
 END;
 END;
 END;

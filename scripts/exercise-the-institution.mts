@@ -356,6 +356,51 @@ async function main(): Promise<void> {
   const spent = (await shop.read(ws.id)).spentCents;
   say('  destroyed', `kept what mattered; cost ${String(spent)}c; ${String((await shop.history(ws.id)).length)} events on the record`);
 
+  // AND WHEN IT CANNOT: the proposal, and the thing that keeps it honest -
+  // approving the acquisition grants no act, so the new tool meets the same
+  // door on the same rung the moment it exists.
+  console.log('\nWHEN IT CANNOT DO SOMETHING');
+  const acq = await import('../src/services/institution/acquisition.js');
+  if (!('refused' in opened)) {
+    const subject = (await venture.candidatesFor(opened.id))
+      .find((cand) => cand.headline.includes('dataset'));
+    if (subject) {
+      await acq.proposeWhatIsMissing({ founderId: OWNER, subjectKind: 'opportunity',
+        subjectId: subject.id, proposedBy: 'foundry' });
+    }
+  }
+  const waiting = await acq.acquisitionsAwaiting(OWNER);
+  say('what it would ask for', `${String(waiting.length)} acquisition(s)`);
+  for (const a of waiting.slice(0, 3)) say(`  ${a.capabilityKey}`, a.sentence);
+  // A FINANCIAL ONE, deliberately, because that is the rung where the
+  // consequence check itself is decisive. An observe-rung capability proceeds
+  // without a further decision and should - looking is not consequential. A
+  // public one is governed by his boundaries at the door before this check,
+  // which the chain above already walks. Money is the case where the rung is
+  // the thing standing in the way, so it is the honest demonstration that
+  // approving an acquisition bought the ability and nothing else.
+  const financialId = await acq.proposeAcquisition({
+    founderId: OWNER, capabilityKey: 'run_paid_experiment', route: 'new_provider',
+    provider: 'an ad platform', how: 'api', costNote: 'whatever the experiment costs',
+    because: 'buying a little attention is the cheapest way to learn whether anyone wants it',
+    proposedBy: 'foundry' });
+  const first = (await acq.acquisitionsAwaiting(OWNER)).find((a) => a.id === financialId);
+  if (first) {
+    await acq.decideAcquisition({ id: first.id, decision: 'approved', by: `founder:${OWNER}` });
+    const providerId = await acq.recordAcquired({
+      id: first.id, evidence: 'wired and exercised', witnessedBy: `founder:${OWNER}`,
+      tool: `${first.capabilityKey}_walk` });
+    say('  he approves it', `the provider exists, available and unproven (${providerId.slice(0, 6)})`);
+    const { consequenceAllows: allows } = await import('../src/services/institution/consequence.js');
+    const still = await allows({ productId: REAL, tool: `${first.capabilityKey}_walk`,
+      paramsFingerprint: intent.fingerprint({ anything: 1 }) });
+    say('  and may it act', still.allowed
+      ? 'ALLOWED WITHOUT A SEPARATE DECISION - a defect'
+      : `no - ${still.reason}`);
+    say('  what that proves', 'approving the acquisition got the ability and nothing else: '
+      + `every use of it still meets the ${first.rung} rung at the same door`);
+  }
+
   console.log('\nWHERE THE CHAIN STOPS');
   const stops: string[] = [];
   if (channels.length === 0) stops.push('no observation channel is live, so Shadowing cannot begin');

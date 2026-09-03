@@ -746,6 +746,10 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
     reason: 'what happened inside one person\'s workshops',
     onAccountErasure: { op: 'delete' },
   },
+  capability_acquisitions: {
+    reason: 'proposals to one person to acquire a capability, and what they decided',
+    onAccountErasure: { op: 'delete' },
+  },
   capability_needs: {
     reason: 'which capabilities one person\'s candidates, companies and proposals need',
     onAccountErasure: { op: 'delete' },

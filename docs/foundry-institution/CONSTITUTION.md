@@ -373,6 +373,34 @@ already uses Fly.
 today, including the one rule that matters — a step that reaches past its
 grants is refused — against something that actually tries.
 
+## Acquiring a capability is an act, and it has a door
+
+**Built 2026-09-03.** "I know what should happen but I cannot currently do it"
+is not a stop. It is a proposal: the capability, the route, the provider it
+would bring in, what that costs, why it is wanted — and, on the same card, the
+consequence rung the acquired capability would sit on, so the owner decides
+with the whole picture rather than approving a name.
+
+**Approval makes a provider available. It grants no act.** Acquiring a way to
+send mail is not permission to send one. The acquired capability reaches the
+world only through the same outbound door, on the same rung, under the same
+boundaries and allowances as everything that came before it — and the door does
+not know the provider is new, which is the point. The decision card says what
+approving would *still* not permit, in the owner's words, so "yes" cannot come
+to mean more than he meant.
+
+**Only the owner decides**, enforced by the database: a decision not bearing
+`founder:` is refused, nothing is acquired that was not approved, and one
+capability has at most one open proposal at a time — asking twice for the same
+thing is how an owner learns to stop reading.
+
+**What arrives is available, never proven.** A newly acquired provider enters
+the fabric declared, moves to available on the witnessed evidence that it was
+wired, and earns controlled-proven and reality-proven the same way everything
+else does. So the institution can say the honest sentence: *"I can technically
+run this, and the capability has not been proven in the world — I recommend a
+bounded test rather than depending on it."*
+
 ## Senses are not hands
 
 Built 2026-09-02, making the owner's permanent rule structural rather than
