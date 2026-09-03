@@ -105,6 +105,43 @@ export async function checkOwnDependencies(input: {
 }
 
 /**
+ * A QUIET PACKAGE IS NOT THE SAME AS A BROKEN ONE.
+ *
+ * The registry can say nobody has published to something in eighteen months. It
+ * cannot say whether that matters — a small, finished library nobody needs to
+ * touch looks identical to one that has been abandoned mid-problem. That
+ * distinction is the difference between a risk worth acting on and a false
+ * alarm, and only people talking about it can draw it.
+ *
+ * SO THIS ONLY RUNS WHEN REALITY PRODUCES THE NEED. If nothing Foundry depends
+ * on has gone quiet, there is nothing here to ask, and the community capability
+ * stays unproven — which is the honest state. Manufacturing a question so a
+ * capability could earn a proof would be staging exactly what the proof is
+ * supposed to rule out.
+ */
+export async function askAboutQuietDependencies(input: {
+  founderId: string; claimId: string; abandoned: string[];
+}): Promise<{ asked: number; sentences: string[] }> {
+  if (input.abandoned.length === 0) return { asked: 0, sentences: [] };
+  const { askWhatPeopleSay } = await import('../venture/sources/index.js');
+  const sentences: string[] = [];
+  let asked = 0;
+  for (const name of input.abandoned.slice(0, 3)) {
+    const said = await askWhatPeopleSay({
+      founderId: input.founderId, claimId: input.claimId,
+      terms: `${name} package`,
+      // A quiet package that people are still discussing is one where the
+      // silence is a warning; one nobody mentions is probably just finished.
+      supportsIf: 'nobody_mentions_it',
+      alsoCouldBeCalled: [name.replace(/[@/]/g, ' ').trim()],
+    });
+    asked += 1;
+    sentences.push(`${name}: ${said.sentence}`);
+  }
+  return { asked, sentences };
+}
+
+/**
  * THE PROOF, CHECKED RATHER THAN ASSUMED.
  *
  * A call that did not throw is not evidence that a capability works. This reads

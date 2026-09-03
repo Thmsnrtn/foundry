@@ -5,13 +5,14 @@
 // =============================================================================
 
 import { Hono } from 'hono';
-import { html } from 'hono/html';
+import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import { requireOwner } from '../../middleware/rbac.js';
 import { logger } from '../../services/logger.js';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { dashboardLayout } from '../../views/layout.js';
 import { getLayoutContext } from './_shared.js';
+import { query } from '../../db/client.js';
 import { composeLetter } from '../../services/letter/composer.js';
 import {
   getAllPolicies, setPolicy, panicStop, getShadowStats,
@@ -1061,6 +1062,58 @@ const permissionSection = (
       </div>`)}
   </div>`;
 
+/**
+ * WHAT FOUNDRY CAN DO, AND HOW FAR EACH HAS BEEN PROVEN.
+ *
+ * A proof nobody can observe is not a proof. The capability fabric earns its
+ * maturity from witnessed changes recorded by the institution's own jobs, and
+ * until now that record existed only in the database - so neither the owner nor
+ * anybody else could tell whether a capability had actually done its work in
+ * the world, which makes "reality-proven" a claim rather than a fact.
+ *
+ * IT BELONGS HERE AND NOWHERE ELSE. This is the advanced page, explicitly for
+ * inspecting machinery; the owner's three places stay free of it. And it shows
+ * only what has been PROVEN, with the evidence and the witness - not a
+ * catalogue of everything the institution could conceivably do, which is a
+ * provider list and is exactly what he asked not to be given.
+ */
+async function whatItCanDoNow(): Promise<HtmlEscapedString | ''> {
+  const rows = (await query(
+    `SELECT c.what_it_does, p.provider, p.maturity, p.maturity_since,
+            (SELECT m.evidence FROM capability_maturity_changes m
+              WHERE m.provider_id = p.id ORDER BY m.rowid DESC LIMIT 1) AS evidence,
+            (SELECT m.witnessed_by FROM capability_maturity_changes m
+              WHERE m.provider_id = p.id ORDER BY m.rowid DESC LIMIT 1) AS witnessed_by
+       FROM capability_providers p
+       JOIN capabilities c ON c.capability_key = p.capability_key
+      WHERE p.maturity IN ('controlled_proven','reality_proven','reliable','degraded')
+      ORDER BY CASE p.maturity WHEN 'reliable' THEN 0 WHEN 'reality_proven' THEN 1
+                               WHEN 'controlled_proven' THEN 2 ELSE 3 END,
+               p.maturity_since DESC`, []))
+    .rows as unknown as Array<Record<string, unknown>>;
+  if (rows.length === 0) return '';
+
+  const plainly: Record<string, string> = {
+    controlled_proven: 'proven in the rehearsal world',
+    reality_proven: 'has done this in the world, witnessed',
+    reliable: 'has done this in the world repeatedly',
+    degraded: 'working, but not well',
+  };
+
+  return html`<section style="margin-top:1.75rem;">
+    <h2 style="font-size:0.95rem;margin:0 0 0.5rem;">What I can do, and how I know</h2>
+    <p style="font-size:0.78rem;opacity:0.7;margin:0 0 0.6rem;">Only what has actually
+      been proven. A capability that has merely been wired up is not here.</p>
+    ${raw(rows.map((r) => `<div style="margin:0 0 0.6rem;font-size:0.8rem;">
+      <div><strong>${String(r.what_it_does)}</strong> — ${String(r.provider)}</div>
+      <div style="opacity:0.75;">${plainly[String(r.maturity)] ?? String(r.maturity)},
+        since ${String(r.maturity_since).slice(0, 10)}${r.witnessed_by
+  ? `, witnessed by ${String(r.witnessed_by)}` : ''}</div>
+      ${r.evidence ? `<div style="opacity:0.6;">${String(r.evidence)}</div>` : ''}
+    </div>`).join(''))}
+  </section>`;
+}
+
 letterRoutes.get('/letter', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
@@ -1513,6 +1566,7 @@ letterRoutes.get('/letter', async (c) => {
       ${responsibilitySection('Still open', responsibilitySummary.STILL_OPEN, ctx.productId, 'deliberately_not_done')}
       ${section('How trust moved', letter.trust)}
     `}
+    ${await whatItCanDoNow()}
     ${adviceStrip(fluency)}
   `;
   return c.html(dashboardLayout(ctx, content));

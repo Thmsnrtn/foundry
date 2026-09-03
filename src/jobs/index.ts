@@ -2783,6 +2783,39 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       logger.info(`dependency_health_tick: ${health.sentence}`,
         { jobName: 'dependency_health_tick' });
 
+      // A SECOND WAY OF KNOWING, BUT ONLY WHERE THERE IS SOMETHING TO KNOW.
+      // The registry can say a package has gone quiet; it cannot say whether
+      // that matters. If nothing has gone quiet there is no question, and the
+      // community capability stays unproven — which is honest, where inventing
+      // a question so it could earn a proof would not be.
+      if (health.abandoned.length > 0) {
+        try {
+          const { askAboutQuietDependencies } = await import(
+            '../services/institution/dependency-health.js');
+          const talk = await askAboutQuietDependencies({
+            founderId, claimId: health.claimId, abandoned: health.abandoned });
+          for (const line of talk.sentences) {
+            logger.info(`dependency_health_tick: ${line}`,
+              { jobName: 'dependency_health_tick' });
+          }
+          const community = (await capability('read_community_discussion'))?.providers
+            .find((p) => p.provider === 'hn_algolia');
+          if (community && talk.asked > 0 && community.maturity === 'declared') {
+            await recordMaturity({
+              providerId: community.id, to: 'available', evidenceMode: 'real',
+              witnessedBy: 'dependency_health_tick',
+              evidence: `reached the discussion archive and read what people said about `
+                + `${String(talk.asked)} quiet dependencies`,
+            });
+          }
+        } catch (err) {
+          logger.error(
+            `dependency_health_tick could not reach the discussion archive: `
+            + `${err instanceof Error ? err.message : String(err)}`,
+            { jobName: 'dependency_health_tick' });
+        }
+      }
+
       // The provider reached the world and answered in a shape we could use.
       const fabric = await capability('read_package_registry');
       const provider = fabric?.providers.find((p) => p.provider === 'npm_registry');

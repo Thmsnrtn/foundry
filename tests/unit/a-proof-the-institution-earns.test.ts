@@ -117,6 +117,45 @@ describe('the proof is about the result, never the call', () => {
   });
 });
 
+describe('a second way of knowing, only where there is something to know', () => {
+  it('asks nobody when nothing has gone quiet, and stays unproven', async () => {
+    const { askAboutQuietDependencies } = await import(
+      '../../src/services/institution/dependency-health.js');
+    const nothing = await askAboutQuietDependencies({
+      founderId: OWNER, claimId: 'irrelevant', abandoned: [] });
+    expect(nothing.asked).toBe(0);
+    // Manufacturing a question so a capability could earn a proof would be
+    // staging exactly what the proof exists to rule out.
+    const community = await capability('read_community_discussion');
+    expect(community?.providers[0]?.maturity).toBe('declared');
+  });
+
+  it('asks when something has, and the registry could not have told us', async () => {
+    const claimId = await formClaim({ founderId: OWNER, evidenceMode: 'real',
+      claim: 'The quiet packages Foundry depends on are fine' });
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(JSON.stringify({
+      nbHits: 1,
+      hits: [{ objectID: '9', created_at: '2026-02-01T00:00:00Z',
+        comment_text: 'That old-thing package has been broken since the node 20 '
+          + 'change and nobody has merged the fix. We forked it.' }],
+    }), { status: 200, headers: { 'content-type': 'application/json' } }));
+
+    const { askAboutQuietDependencies } = await import(
+      '../../src/services/institution/dependency-health.js');
+    const talk = await askAboutQuietDependencies({
+      founderId: OWNER, claimId, abandoned: ['old-thing'] });
+    vi.restoreAllMocks();
+
+    expect(talk.asked).toBe(1);
+    // The distinction a registry structurally cannot draw: quiet-and-finished
+    // versus quiet-and-broken.
+    const obs = (await query(
+      `SELECT saw FROM market_observations WHERE claim_id = ? AND source_type = 'community'`,
+      [claimId])).rows as unknown as Array<Record<string, unknown>>;
+    expect(obs.some((o) => String(o.saw).includes('broken since'))).toBe(true);
+  });
+});
+
 describe('the whole loop, run by the job', () => {
   it('moves the capability one rung at a time, each with what was seen', async () => {
     const before = await capability('read_package_registry');
