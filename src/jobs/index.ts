@@ -2731,6 +2731,97 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   // cannot answer — whether anybody pays, whether the downloads are people —
   // so a claim that has been researched carries the shape of what is still
   // dark rather than an air of completeness.
+  // WHAT FOUNDRY ITSELF IS BUILT ON, AND THE PROOF THAT EARNS ITSELF.
+  //
+  // Two things at once, and neither is a pretext for the other. The work is
+  // real: the packages Foundry runs on are a real provider dependency of a real
+  // company, and whether anybody is still maintaining them is a question a
+  // public registry can honestly answer. It would be worth doing if no
+  // capability needed proving.
+  //
+  // AND BECAUSE IT IS REAL WORK, IT CAN EARN A REAL PROOF. A capability becomes
+  // reality-proven when the institution performed its intended work and the
+  // result was checked - not when a development harness called a provider, and
+  // not when a call failed to throw. So the maturity moves only after reading
+  // back what the work left behind: real observations, seen directly, each
+  // naming an address somebody could go and visit. The check is about the
+  // result, never the call.
+  //
+  // ONE RUNG AT A TIME. Reaching the provider and getting a well-formed answer
+  // makes it AVAILABLE. Only a verified result makes it REALITY-PROVEN. Both
+  // are witnessed changes carrying what was actually seen.
+  dependency_health_tick: {
+    fn: async () => {
+      const owner = await query(
+        `SELECT id FROM founders ORDER BY created_at, rowid LIMIT 1`, []);
+      const founderId = owner.rows.length
+        ? String((owner.rows[0] as Record<string, unknown>).id) : null;
+      if (founderId === null) {
+        logger.info('dependency_health_tick: no owner yet', { jobName: 'dependency_health_tick' });
+        return;
+      }
+      const { checkOwnDependencies, verifyRealEvidenceLanded } = await import(
+        '../services/institution/dependency-health.js');
+      const { recordMaturity, capability } = await import(
+        '../services/institution/capabilities.js');
+
+      let health;
+      try {
+        health = await checkOwnDependencies({ founderId });
+      } catch (err) {
+        logger.error(
+          `dependency_health_tick could not reach the registry: `
+          + `${err instanceof Error ? err.message : String(err)}`,
+          { jobName: 'dependency_health_tick' });
+        return;
+      }
+      if (!health) {
+        logger.info('dependency_health_tick: nothing to check',
+          { jobName: 'dependency_health_tick' });
+        return;
+      }
+      logger.info(`dependency_health_tick: ${health.sentence}`,
+        { jobName: 'dependency_health_tick' });
+
+      // The provider reached the world and answered in a shape we could use.
+      const fabric = await capability('read_package_registry');
+      const provider = fabric?.providers.find((p) => p.provider === 'npm_registry');
+      if (!provider) return;
+      if (provider.maturity === 'declared') {
+        await recordMaturity({
+          providerId: provider.id, to: 'available', evidenceMode: 'real',
+          witnessedBy: 'dependency_health_tick',
+          evidence: `reached the registry and read ${String(health.checked)} package `
+            + 'records in a shape the institution could use',
+        });
+      }
+
+      // AND ONLY THEN, THE RESULT ITSELF, CHECKED.
+      const verified = await verifyRealEvidenceLanded(health.claimId);
+      if (!verified.ok) {
+        logger.error(`dependency_health_tick: the read left no usable evidence — `
+          + verified.because, { jobName: 'dependency_health_tick' });
+        return;
+      }
+      const now = (await capability('read_package_registry'))?.providers
+        .find((p) => p.provider === 'npm_registry');
+      if (now && now.maturity === 'available') {
+        await recordMaturity({
+          providerId: now.id, to: 'reality_proven', evidenceMode: 'real',
+          witnessedBy: 'dependency_health_tick',
+          evidence: `performed its intended work on a real claim about Foundry's own `
+            + `dependencies and the result was checked: ${verified.because}`,
+        });
+        logger.info('dependency_health_tick: read_package_registry is reality-proven',
+          { jobName: 'dependency_health_tick' });
+      }
+    },
+    schedule: '45 5 * * *',
+    description:
+      'Ask a real public registry whether every package Foundry runs on is still being '
+      + 'maintained, and let the capability earn its reality proof from the checked result '
+      + '(daily)',
+  },
   real_market_evidence_tick: {
     fn: async () => {
       const { waysOfLooking } = await import('../services/venture/research-sources.js');

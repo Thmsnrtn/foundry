@@ -77,7 +77,13 @@ describe('the table is gone', () => {
     // And `sense_credential_tick` — which renews and probes the keys behind the
     // senses, so a connection that has gone dark is said out loud before
     // anything derived from it is shown — makes ninety.
-    expect(Object.keys(JOB_REGISTRY).length, 'eighty-nine before, ninety now').toBe(90);
+    // `real_market_evidence_tick` — the first job that looks at the real world,
+    // asking a public registry what already exists for each unexamined real
+    // market claim — makes ninety-one. And `dependency_health_tick` — which
+    // asks the same registry whether every package Foundry runs on is still
+    // maintained, and lets the capability earn its reality proof from the
+    // checked result — makes ninety-two.
+    expect(Object.keys(JOB_REGISTRY).length, 'ninety-one before, ninety-two now').toBe(92);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {
