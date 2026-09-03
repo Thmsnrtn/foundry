@@ -335,6 +335,27 @@ async function main(): Promise<void> {
     paramsFingerprint: null });
   say('  a tool bound to no consequence', unbound.allowed ? 'ALLOWED - a defect' : 'refused - nothing says what it does');
 
+  // A WORKSHOP UNDER A CEILING. Somewhere to do the work, and the rule it
+  // lives under: no computer possesses more consequential authority than the
+  // task that created it. Proven against something that actually tries.
+  console.log('\nA WORKSHOP UNDER A CEILING');
+  const shop = await import('../src/services/workshop/index.js');
+  const ws = await shop.createWorkshop({
+    founderId: OWNER, purpose: 'venture_development', ceiling: 'prepare', budgetCents: 25,
+    substrate: 'reference_world', createdBy: 'foundry', evidenceMode: 'reference' });
+  say('created', `${ws.purpose} on ${ws.substrate}, ceiling ${ws.ceiling}, budget 25c`);
+  const within = await shop.grant({ workshopId: ws.id, capabilityKey: 'write_code_in_branch', grantedBy: 'foundry' });
+  say('  granted write_code_in_branch', within.granted ? 'within the ceiling' : `REFUSED - a defect: ${within.because}`);
+  const above = await shop.grant({ workshopId: ws.id, capabilityKey: 'send_email', grantedBy: `founder:${OWNER}` });
+  say('  the owner grants send_email', above.granted ? 'GRANTED - a defect' : `refused - ${above.because}`);
+  const sneak = await shop.run({ workshopId: ws.id, step: 'use:send_email write mail.txt hello' });
+  say('  the code inside tries to send anyway', sneak.ok ? 'RAN - a defect' : sneak.output);
+  const build = await shop.run({ workshopId: ws.id, step: 'use:write_code_in_branch write src/index.ts export {}' });
+  say('  it builds', build.ok ? build.output : `REFUSED - a defect: ${build.output}`);
+  await shop.destroy({ workshopId: ws.id, preserved: 'src/index.ts and the refusal on the record' });
+  const spent = (await shop.read(ws.id)).spentCents;
+  say('  destroyed', `kept what mattered; cost ${String(spent)}c; ${String((await shop.history(ws.id)).length)} events on the record`);
+
   console.log('\nWHERE THE CHAIN STOPS');
   const stops: string[] = [];
   if (channels.length === 0) stops.push('no observation channel is live, so Shadowing cannot begin');

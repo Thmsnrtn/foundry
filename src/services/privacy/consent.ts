@@ -731,6 +731,21 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
   // companies and candidates alike, so it carries his id and goes with him.
   // WHAT ONE PERSON'S WORK WOULD TAKE, attached to his candidates, companies and
   // proposals; his id is on it so it goes with him.
+  // WORKSHOPS ARE THIS PERSON'S COMPUTERS, and what happened in them is a
+  // record of his work. The grants and events carry his id directly so
+  // erasure does not have to walk through the workshop to find them.
+  workspaces: {
+    reason: 'isolated computers created for one person\'s work, and what each was allowed',
+    onAccountErasure: { op: 'delete' },
+  },
+  workspace_grants: {
+    reason: 'which capabilities one person\'s workshops were granted',
+    onAccountErasure: { op: 'delete' },
+  },
+  workspace_events: {
+    reason: 'what happened inside one person\'s workshops',
+    onAccountErasure: { op: 'delete' },
+  },
   capability_needs: {
     reason: 'which capabilities one person\'s candidates, companies and proposals need',
     onAccountErasure: { op: 'delete' },

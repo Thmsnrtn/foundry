@@ -124,11 +124,18 @@ function read(r: Record<string, unknown>): Experiment {
 
 export async function decideExperiment(input: {
   experimentId: string; decision: 'approved' | 'declined'; by: string;
-}): Promise<void> {
+}): Promise<{ workshop: string | null }> {
   await query(
     `UPDATE venture_experiments
         SET decision = ?, decided_at = datetime('now'), decided_by = ?
       WHERE id = ?`, [input.decision, input.by, input.experimentId]);
+  if (input.decision !== 'approved') return { workshop: null };
+  // AN APPROVED TEST GETS SOMEWHERE TO BE BUILT, under a ceiling that lets it
+  // make things and never lets it reach the world on its own. When no real
+  // computer is available the experiment stays approved and says so.
+  const { workshopFor } = await import('../workshop/index.js');
+  const made = await workshopFor(input.experimentId);
+  return { workshop: made.opened ? made.workshopId : null };
 }
 
 /**

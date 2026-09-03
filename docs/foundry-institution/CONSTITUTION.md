@@ -345,6 +345,34 @@ grant names a capability and every consequential call is mediated through the
 same door. Legal and destructive rungs can never be a workshop's ceiling: those
 acts are proposed out of a workshop, never done inside one.
 
+### Where the workshop will physically run
+
+**Evaluated 2026-09-03, against the requirements rather than the vendor.**
+What a workshop substrate has to offer: create for a purpose; run steps;
+checkpoint and restore; sleep when idle and wake; destroy, keeping what
+mattered; account per workshop; hold no secret; and reach the world only
+through the institution's door.
+
+**Fly Machines** — verified from its documentation: create with an image,
+guest size, `auto_destroy`, restart policy, environment and mounted volumes;
+start, stop, suspend, wait and delete by API; a stopped machine restarts on
+request; suspend preserves memory. Ephemeral root filesystem, persistence by
+volume. Not documented as a platform feature: egress allow-listing, which
+therefore has to be enforced inside the image by a proxy the workshop cannot
+bypass — which is the credential-mediation pattern anyway. The adapter exists,
+is shaped to those endpoints, refuses without a token, and is **declared, not
+available**, until a real machine has been created and destroyed under it.
+
+**Fly Sprites** — could not be evaluated from this environment: only the CLI
+installer was reachable, not the API or lifecycle documentation. They are
+recorded as a declared provider with no adapter, and stay that way until their
+documentation has been read. Sprites are not assumed correct because Foundry
+already uses Fly.
+
+**The reference substrate** runs in-process and proves the whole lifecycle
+today, including the one rule that matters — a step that reaches past its
+grants is refused — against something that actually tries.
+
 ## Senses are not hands
 
 Built 2026-09-02, making the owner's permanent rule structural rather than
