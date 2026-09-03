@@ -101,6 +101,15 @@ interface OwnerState {
    */
   notLooking: { canSeeThrough: string[] } | null;
   search: {
+    /**
+     * WHETHER THIS SEARCH IS ONE HE ASKED FOR OR ONE FOUNDRY MADE UP.
+     *
+     * A rehearsal search looks identical to a real one on this card, and an
+     * owner who could not tell them apart would read invented candidates as
+     * findings about a real market. That is the single thing the reference
+     * world exists to prevent, so the card says which it is.
+     */
+    invented: boolean;
     statement: string; guidance: string[]; looked: number; rejected: number;
     open: number; blocked: string | null; wouldNeed: string | null;
     /** The ways of looking it currently has, named. */
@@ -148,6 +157,20 @@ interface OwnerState {
       downside: string | null;
       /** Foundry's one-line recommendation, from the rules already applied. */
       recommendation: string;
+      /**
+       * WHETHER THIS ONE HAS EARNED HIS ATTENTION.
+       *
+       * Every candidate rendered its whole dossier on the first screen — who
+       * has the problem, how it earns, its burden, its legal surface, what it
+       * would take, its kill thesis, what is unknown. Three of those at once
+       * made the first screen a hundred and eleven lines deep, and not one of
+       * them was asking him for anything: all three said "not yet".
+       *
+       * A candidate has earned his attention when Foundry is actually asking
+       * him to act on it. Until then it is work in progress, and work in
+       * progress is a count, not a dossier.
+       */
+      earnedAttention: boolean;
       /** What carrying it would take, one line per capability. */
       wouldTake: string[];
       /** Claims about the world and how each stands on its evidence. */
@@ -452,6 +475,7 @@ async function readOwnerState(
       const { candidatesFor } = await import('../../services/venture/mandate.js');
       const candidates = await candidatesFor(progress.mandate.id);
       return {
+        invented: progress.mandate.evidenceMode === 'reference',
         statement: progress.mandate.statement,
         guidance: progress.mandate.guidance.map((g) => g.statement),
         looked: progress.looked, rejected: progress.rejected, open: progress.open,
@@ -551,6 +575,8 @@ async function readOwnerState(
             : `$${(c.awaiting[0].costCents / 100).toFixed(2)}`) : null,
           // THE RECOMMENDATION IS THE RULES, SAID ONCE. Nothing here is a new
           // judgement: it is the verdicts the card already carries, ordered.
+          earnedAttention: c.survivesGuidance && !c.buriedBefore && !c.fit?.makesItWorse
+            && (c.inTheWay.length === 0 || c.awaiting.length > 0),
           recommendation: !c.survivesGuidance ? `Not this one: ${c.failsBecause ?? ''}.`
             : c.buriedBefore ? 'Not this one: you have buried something like it before.'
               : c.fit?.makesItWorse ? 'Keep looking: this would make the portfolio more fragile, not less.'
@@ -2009,7 +2035,11 @@ foundryShellRoutes.get('/foundry', async (c) => {
         to look through yet.</p>`}
     </div>` : ''}
     ${s.search ? html`<div class="know">
-      <h3>What I am looking for</h3>
+      <h3>${s.search.invented ? 'A search I made up' : 'What I am looking for'}</h3>
+      ${s.search.invented ? html`<p class="quiet">You did not ask for this one. I invented
+        it so you could see what I do with a search before handing me a real one. Nothing
+        it finds is a fact about any real market, and none of it can ever be counted or
+        acted on.</p>` : ''}
       <p>${s.search.statement}</p>
       ${s.search.guidance.length ? html`<ul>${raw(s.search.guidance.map((g) =>
     `<li>${g}</li>`).join(''))}</ul>` : ''}
@@ -2036,7 +2066,20 @@ foundryShellRoutes.get('/foundry', async (c) => {
       ${s.search.decided.length ? html`<div class="quiet">
         <p><strong>Already decided about</strong></p>
         <ul>${raw(s.search.decided.map((d) => `<li>${d}</li>`).join(''))}</ul></div>` : ''}
-      ${raw(s.search.candidates.map((cand) => `<div class="one">
+      ${(() => {
+    // WORK IN PROGRESS IS A COUNT, NOT A DOSSIER.
+    //
+    // Every candidate rendered its whole dossier here, and three at once made
+    // this screen a hundred and eleven lines deep while not one of them was
+    // asking him for anything — all three said "not yet". The first screen is
+    // for what needs him. The rest is a sentence, and the sentence is the
+    // truthful one he asked for: none of them has earned his attention.
+    const waiting = s.search.candidates.filter((cd) => !cd.earnedAttention).length;
+    return waiting === 0 ? '' : html`<p class="quiet">I am working through
+      ${String(waiting)} ${waiting === 1 ? 'possibility' : 'possibilities'}.
+      ${waiting === 1 ? 'It has' : 'None has'} earned your attention yet.</p>`;
+  })()}
+      ${raw(s.search.candidates.filter((cand) => cand.earnedAttention).map((cand) => `<div class="one">
         <div class="one-in">
           <p class="act">${cand.reference ? 'Invented, to show you how I judge' : 'Opportunity'}</p>
           <h2>${cand.headline}</h2>
@@ -2438,6 +2481,10 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
   // number it does not show.
   const { glanceFor, layersFor } = await import('../../services/founder/portfolio.js');
   const glance = await glanceFor(String(founder.id));
+  // A rehearsal search is offered only when nothing is being searched for. One
+  // search at a time is the rule, and an invented one must never displace his.
+  const { currentMandate } = await import('../../services/venture/mandate.js');
+  const searching = await currentMandate(String(founder.id)) !== null;
   const river = await layersFor(String(founder.id));
   const money = (cents: number): string => cents >= 100_000
     ? `$${(cents / 100_000).toFixed(1)}k` : `$${Math.round(cents / 100).toLocaleString('en-US')}`;
@@ -2481,12 +2528,13 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
         <p class="d">${glance.concentration ? `share ${glance.concentration.split(' share ')[1]}`
     : 'no two depend on the same thing'}</p></div>
     </div>
-    ${raw(river.layers.map((l) => `<div class="layer"><div class="t"><b>${l.title}</b>
+    ${glance.companies > 0 ? html`${raw(river.layers.map((l) =>
+    `<div class="layer"><div class="t"><b>${l.title}</b>
       <span>${l.companies.length === 0 ? 'none yet' : l.companies.map((c) => c.name).join(', ')} — ${l.what}</span></div>
       <div class="n">${l.cashFlowCents > 0 ? money(l.cashFlowCents) : '—'}</div></div>`).join(''))}
     <div class="layer"><div class="t"><b>Frontier</b>
       <span>${frontierLine}</span></div>
-      <div class="n">${String(river.frontier.looking)}</div></div>
+      <div class="n">${String(river.frontier.looking)}</div></div>` : ''}
     ${byForm.length > 0 ? html`<div class="know" style="margin-top:var(--s3)">
       <h3>Cash flow by how it is earned</h3>
       <div class="bar">${raw(byForm.map((r, i) =>
@@ -2525,6 +2573,11 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
         told to you as fact about a real company, counted in the totals above, or let me
         act in the world.</p>
       ${raw(portfolio.reference.map(line).join(''))}
+      ${searching ? '' : html`<form method="POST" action="/foundry/reference/search"
+          style="margin-top:var(--s3)">
+          <button class="btn" type="submit">Show me what a search looks like, and what it
+            brings me</button>
+        </form>`}
       ${raw(unstarted.map((sc) => `<form method="POST" action="/foundry/reference"
           style="margin-top:var(--s3)">
           <input type="hidden" name="scenario" value="${sc.key}" />
@@ -3049,6 +3102,34 @@ async function absorbAndAnswer(
   if (result.absorbed > 0) return c.redirect('/foundry?done=steeredsearch');
   return c.redirect('/foundry');
 }
+
+// A SEARCH HE CAN WATCH BEFORE HE HAS A REAL ONE.
+//
+// The reference world had seven invented companies and no invented search, so
+// the opportunity card — the surface where an enormous amount of research is
+// supposed to collapse into one decision — was unreachable from the product.
+// It could only be seen by a real candidate surviving real evidence, which has
+// never happened and should not be rushed.
+//
+// This opens a rehearsal search, the same way the invented companies work: the
+// machinery is real, the market is not, and nothing it produces can be counted
+// or acted on. It refuses while any search is open, because one search at a
+// time is the rule and a rehearsal must never displace the real thing.
+foundryShellRoutes.post('/foundry/reference/search', requireInstitutionOwner(),
+  async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const { currentMandate, openMandate } = await import('../../services/venture/mandate.js');
+    if (await currentMandate(String(founder.id)) !== null) {
+      return c.redirect('/foundry?done=alreadylooking');
+    }
+    await openMandate({
+      founderId: String(founder.id), evidenceMode: 'reference', shape: null,
+      statement: 'Find another small digital income stream that would make the portfolio '
+        + 'more resilient, without deepening what it already depends on',
+    });
+    return c.redirect('/foundry');
+  });
 
 // ONE DOOR.
 //
