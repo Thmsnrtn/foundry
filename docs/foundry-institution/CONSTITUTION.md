@@ -302,6 +302,49 @@ and 200% text and three desktop widths, fails on any horizontal overflow, and
 keeps screenshots of the same pages side by side so the two can be compared by
 eye rather than assumed.
 
+## Ability does not imply authority
+
+**Stated by the owner on 2026-09-03.** Two questions that used to be one.
+CAPABILITY answers: can Foundry actually do this, with what provider or tool,
+at what cost and maturity? AUTHORITY answers: may Foundry do this here, under
+what scope, consequence, budget and owner policy? Kept apart so that
+capability can be broad and authority precise, instead of crippling what the
+institution can do in order to feel safe about what it may do.
+
+**Consequence determines governance, not interface.** Seven rungs — observe,
+prepare, reversible, public, financial, legal, destructive — and every
+capability has a ceiling rung. Every tool at the outbound door is bound to a
+capability, and the door asks the rung what an act takes: nothing for a look
+or a draft; the boundary door for a public act; an allowance or an exact
+approval for money; an exact approval, every time, for a legal commitment or an
+irreversible act. **Those two rungs are never absorbed** into standing policy,
+and a tool bound to nothing may not act at all.
+
+**Providers are implementations; capabilities are institutional concepts.**
+The fabric is seeded across research, computer work, development, data,
+design, testing, deployment, hosting, domains, commerce, communication,
+distribution, experimentation, monitoring, customer operations, procurement,
+legal sensing and qualified human expertise. A capability may have several
+providers and none. Maturity is earned and witnessed — declared, available,
+controlled-proven, reality-proven, reliable, degraded, unavailable — and a move
+to reality-proven takes real evidence with a name on it; the column cannot be
+set directly.
+
+**What a piece of work would take** is answered from the fabric in one
+sentence per need: I can carry this; I could, once proven; I cannot yet, and
+here is the route; or the act is yours each time, whatever supplies it. The
+owner never sees a provider catalogue. He sees which of those four sentences
+applies.
+
+**Computers are workshops, not authorities.** No execution environment may
+possess more consequential authority than the task that created it. A workshop
+is created with an immutable ceiling; every capability granted into it is
+checked against that ceiling by the database; a step that reaches past its
+grants is refused and recorded; the workshop never holds a secret, because a
+grant names a capability and every consequential call is mediated through the
+same door. Legal and destructive rungs can never be a workshop's ceiling: those
+acts are proposed out of a workshop, never done inside one.
+
 ## Senses are not hands
 
 Built 2026-09-02, making the owner's permanent rule structural rather than

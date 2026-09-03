@@ -64,6 +64,8 @@ interface DeclaredCandidate {
   }>;
   /** The lighter way of building it, or null when nobody has answered yet. */
   lighter?: string | null;
+  /** What carrying it would take, as capability keys with the reason. */
+  needs?: Array<[string, string]>;
 }
 
 const CANDIDATES: DeclaredCandidate[] = [
@@ -251,6 +253,16 @@ const CANDIDATES: DeclaredCandidate[] = [
         cheapestTest: 'list one small dataset and watch what the first fifty '
           + 'buyers do next quarter' },
     ],
+    // WHAT CARRYING IT WOULD TAKE, so the fabric answers on the card: met,
+    // acquirable, missing with a route, or the owner's. One of each, on
+    // purpose, so every sentence the fabric can say is exercised.
+    needs: [
+      ['read_public_dataset', 'to gather the registers'],
+      ['keep_dataset_fresh', 'to refresh the deadlines each quarter'],
+      ['list_on_marketplace', 'to sell it where buyers already look'],
+      ['license_data', 'two registers publish no reuse terms'],
+      ['send_email', 'to tell buyers when a refresh lands'],
+    ],
     surfaces: [
       { cls: 'licensing', severity: 'material', needs: false,
         creates: 'a dataset derived from public registers whose reuse terms differ',
@@ -347,6 +359,11 @@ export async function exerciseReferenceMandate(mandateId: string): Promise<numbe
     }
     if (candidate.lighter) {
       await answerLighter({ opportunityId, answer: candidate.lighter });
+    }
+    const { noteNeed } = await import('../institution/capabilities.js');
+    for (const [capabilityKey, why] of candidate.needs ?? []) {
+      await noteNeed({ founderId, subjectKind: 'opportunity', subjectId: opportunityId,
+        capabilityKey, why });
     }
 
     for (const ask of candidate.asks ?? []) {

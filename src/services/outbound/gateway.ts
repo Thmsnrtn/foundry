@@ -168,6 +168,25 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
 
   // 2. Server-owned tool policy. A caller cannot skip or downgrade controls by
   // omitting classification/budget facts or by declaring a safer surface.
+  // CONSEQUENCE DETERMINES GOVERNANCE. After the kill switch and the
+  // boundaries, the rung: a tool bound to a legal or destructive capability
+  // proceeds only on an exact-act approval, a financial one on an allowance or
+  // an approval, and a tool bound to nothing may not act at all - an effect
+  // whose consequence nobody has classified is not one the door lets through.
+  {
+    const { consequenceAllows } = await import('../institution/consequence.js');
+    const verdict = await consequenceAllows({
+      productId: req.productId, tool: req.tool, paramsFingerprint: fingerprint(req.params),
+    });
+    if (!verdict.allowed) {
+      await recordGatewayInvocation({
+        invocation_id: invocationId, product_id: req.productId, agent: policy.actor,
+        tool: req.tool, action: req.action, outcome: 'refused',
+        reason: `consequence: ${verdict.reason}`,
+      });
+      return { ok: false, invocation_id: invocationId, phase: 'policy', reason: verdict.reason };
+    }
+  }
   if (req.surface && req.surface !== policy.surface) {
     return refusePolicy(invocationId, req, `surface is fixed to '${policy.surface}'`);
   }

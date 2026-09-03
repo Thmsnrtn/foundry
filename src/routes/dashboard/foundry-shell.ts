@@ -125,6 +125,8 @@ interface OwnerState {
       downside: string | null;
       /** Foundry's one-line recommendation, from the rules already applied. */
       recommendation: string;
+      /** What carrying it would take, one line per capability. */
+      wouldTake: string[];
       /** Claims about the world and how each stands on its evidence. */
       standing: string[];
       /** Open questions, each with the cheapest thing that would settle it. */
@@ -426,6 +428,7 @@ async function readOwnerState(
           serves: c.serves,
           legalProfile: c.legal.profile,
           earns: c.declared.earns, burden: c.declared.burden,
+          wouldTake: c.wouldTake.map((n) => n.sentence),
           downside: c.awaiting[0] ? (c.awaiting[0].costCents === 0 ? 'nothing'
             : `$${(c.awaiting[0].costCents / 100).toFixed(2)}`) : null,
           // THE RECOMMENDATION IS THE RULES, SAID ONCE. Nothing here is a new
@@ -1745,6 +1748,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
           ${cand.earns ? `<b>How it earns</b><span>${cand.earns}</span>` : ''}
           ${cand.burden ? `<b>Its burden</b><span>${cand.burden}</span>` : ''}
           <b>Legal and risk</b><span>${cand.legalProfile}</span>
+          ${cand.wouldTake.length ? `<b>What it would take</b><span class="quiet">${cand.wouldTake.join(' ')}</span>` : ''}
           <b>Could fail because</b><span>${cand.killThesis}</span>
           <b>Checked</b><span class="quiet">${cand.standing.length ? cand.standing.join(' ') : (cand.sources.length ? cand.sources.join('; ') : 'nothing')}</span>
           <b>Unknown</b><span class="quiet">${cand.unanswered.length ? cand.unanswered.join('; ') : (cand.unknowns.join('; ') || 'nothing I can name')}</span>

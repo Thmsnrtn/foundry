@@ -311,6 +311,30 @@ async function main(): Promise<void> {
     }
   }
 
+  // WHAT IT WOULD TAKE, AND WHAT IS YOURS. The institution names the
+  // capabilities a piece of work needs and answers each from the fabric: I can
+  // carry it; I could, once proven; I cannot yet, and here is the route; or
+  // the act is yours each time whatever supplies it.
+  console.log('\nWHAT IT WOULD TAKE');
+  const fabric = await import('../src/services/institution/capabilities.js');
+  if (!('refused' in opened)) {
+    const subject = (await venture.candidatesFor(opened.id))
+      .find((cand) => cand.headline.includes('dataset'));
+    if (subject) {
+      for (const need of await fabric.whatItWouldTake({
+        subjectKind: 'opportunity', subjectId: subject.id })) {
+        say(`  ${need.standing.padEnd(10)} ${need.capability.key}`, need.sentence);
+      }
+    }
+  }
+  const { consequenceAllows } = await import('../src/services/institution/consequence.js');
+  const refund = await consequenceAllows({ productId: REAL, tool: 'stripe_create_refund',
+    paramsFingerprint: intent.fingerprint({ charge: 'ch_1' }) });
+  say('  a refund with no allowance', refund.allowed ? 'ALLOWED - a defect' : `refused - ${refund.reason}`);
+  const unbound = await consequenceAllows({ productId: REAL, tool: 'a_tool_nobody_classified',
+    paramsFingerprint: null });
+  say('  a tool bound to no consequence', unbound.allowed ? 'ALLOWED - a defect' : 'refused - nothing says what it does');
+
   console.log('\nWHERE THE CHAIN STOPS');
   const stops: string[] = [];
   if (channels.length === 0) stops.push('no observation channel is live, so Shadowing cannot begin');

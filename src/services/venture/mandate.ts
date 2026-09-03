@@ -37,6 +37,7 @@ import type { PortfolioFit } from '../founder/resilience.js';
 import type { OpenUnknown, Standing } from './market-evidence.js';
 import type { Experiment } from './validation.js';
 import type { LegalPicture } from './legal-surface.js';
+import type { Need } from '../institution/capabilities.js';
 
 export type GuidanceKind =
   | 'avoid' | 'prefer' | 'industry' | 'budget' | 'harder' | 'deeper'
@@ -710,6 +711,8 @@ export interface PresentedCandidate {
   legal: LegalPicture;
   /** How it would earn and what it would ask of him, from its declared exposures. */
   declared: { earns: string | null; burden: string | null };
+  /** What carrying it would take, one sentence per capability: met, acquirable, missing, or his. */
+  wouldTake: Need[];
   reference: boolean;
 }
 
@@ -731,6 +734,7 @@ export async function candidatesFor(mandateId: string): Promise<PresentedCandida
   const { standingOf, openUnknowns } = await import('./market-evidence.js');
   const { awaitingHim, whatStandsInTheWay } = await import('./validation.js');
   const { legalPictureOf } = await import('./legal-surface.js');
+  const { whatItWouldTake } = await import('../institution/capabilities.js');
 
   const rows = ((await query(
     `SELECT id, headline, who_has_it, the_problem, why_it_might, kill_thesis,
@@ -776,6 +780,7 @@ export async function candidatesFor(mandateId: string): Promise<PresentedCandida
       serves: fit.serves,
       legal: await legalPictureOf({ founderId, opportunityId: String(r.id), world }),
       declared: await declaredAbout(String(r.id)),
+      wouldTake: await whatItWouldTake({ subjectKind: 'opportunity', subjectId: String(r.id) }),
       reference: String(r.evidence_mode) === 'reference',
     });
   }

@@ -729,6 +729,12 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
   // founder rather than through a product.
   // WHAT LIABILITY HIS THINGS CREATE is a fact about him, reached through
   // companies and candidates alike, so it carries his id and goes with him.
+  // WHAT ONE PERSON'S WORK WOULD TAKE, attached to his candidates, companies and
+  // proposals; his id is on it so it goes with him.
+  capability_needs: {
+    reason: 'which capabilities one person\'s candidates, companies and proposals need',
+    onAccountErasure: { op: 'delete' },
+  },
   posture_changes: {
     reason: 'every time the owner changed what Foundry was doing with a company, in '
       + 'their own words',
@@ -878,6 +884,10 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   governed_effect_kinds: 'the effect vocabulary',
   owner_boundary_subjects: 'the vocabulary of things a boundary can be about, constitutional and the same for every owner; the boundaries themselves are erased with their company',
   senses: 'the vocabulary of what Foundry can learn about any company and what that never grants; constitutional and the same for every owner',
+  consequence_rungs: 'the ladder of consequence an act can have, constitutional and the same for every owner',
+  capabilities: 'what the institution can conceivably do, as concepts; constitutional, naming nobody',
+  capability_providers: 'which implementations supply which capability and how far each is proven; institutional, naming no company',
+  capability_maturity_changes: 'the witnessed record of how far each provider has been proven; institutional evidence, naming no owner data',
   exposure_classes: 'the kinds of liability a thing can create and the structural way of not creating each; constitutional, naming nobody',
   exposure_dimensions: 'the axes a portfolio can be concentrated on and what each failure would cost; constitutional and the same for every owner, naming no company',
   market_source_types: 'the kinds of source market evidence can come from and whether each is self-reported, observed or solicited; constitutional, naming nobody',
@@ -1269,6 +1279,7 @@ const PERSON_ACROSS_COMPANIES: Record<string, PersonInOthersCompany> = {
   oauth_states: { op: 'delete', columns: ['founder_id'], reason: 'in-flight authorisation for a person who is gone' },
   sense_authorizations: { op: 'delete', columns: ['founder_id'], reason: 'a half-finished request to let Foundry see something, for a person who is gone' },
   venture_mandates: { op: 'delete', columns: ['founder_id'], reason: 'a search for a business, run on behalf of a person who is gone' },
+  posture_changes: { op: 'delete', columns: ['founder_id'], reason: 'what this person decided to do with a company, in their own words' },
   briefing_shares: { op: 'delete', columns: ['founder_id'], reason: 'share links this person created' },
   briefing_decision_links: { op: 'delete', columns: ['founder_id'], reason: 'what they read before deciding' },
   portfolio_memberships: { op: 'delete', columns: ['founder_id'], reason: 'their own portfolio membership' },
