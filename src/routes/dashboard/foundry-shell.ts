@@ -86,6 +86,19 @@ interface OwnerState {
   /** Searches he called off, so starting again does not begin from nothing. */
   pastSearches: Array<{ statement: string; closedAt: string; why: string }>;
   /** A venture search, if one is running, and where it honestly is. */
+  /**
+   * WHEN THERE IS NO SEARCH AT ALL.
+   *
+   * A defect found in production rather than in a test: the whole search card
+   * is absent until a search exists, so an owner who has never started one is
+   * shown nothing about it — no sign that Foundry could look for another asset,
+   * no sign that it has working eyes ready, and no way to begin. The route to
+   * start one existed and nothing on any screen offered it.
+   *
+   * One sentence and one box. Not a panel of options: the act is his and it is
+   * a sentence, so the product should ask for a sentence.
+   */
+  notLooking: { canSeeThrough: string[] } | null;
   search: {
     statement: string; guidance: string[]; looked: number; rejected: number;
     open: number; blocked: string | null; wouldNeed: string | null;
@@ -399,6 +412,16 @@ async function readOwnerState(
     pastSearches: await (async () => {
       const { pastSearches } = await import('../../services/venture/mandate.js');
       return pastSearches(founderId);
+    })(),
+    notLooking: await (async () => {
+      const { mandateProgress } = await import('../../services/venture/mandate.js');
+      if (await mandateProgress(founderId) !== null) return null;
+      const { waysOfLooking } = await import('../../services/venture/research-sources.js');
+      const ways = await waysOfLooking(founderId, 'real');
+      // WHAT IT CAN ACTUALLY SEE THROUGH, said plainly. An offer to go looking
+      // from an institution with nothing to look through would be a promise it
+      // could not keep, and he should be able to tell the difference.
+      return { canSeeThrough: ways.map((w) => w.whatItIs) };
     })(),
     search: await (async () => {
       const { mandateProgress } = await import('../../services/venture/mandate.js');
@@ -1911,6 +1934,24 @@ foundryShellRoutes.get('/foundry', async (c) => {
     ${done === 'alreadylooking' ? html`<div class="done"><p><strong>Already looking.</strong>
       Stop that search first, or steer it instead — two at once would compete for the same
       attention.</p></div>` : ''}
+    ${s.notLooking ? html`<div class="know">
+      <h3>I am not looking for anything</h3>
+      <p class="lede">Say what you want and I will start looking. One sentence &mdash;
+        what you are after, and anything I should not do.</p>
+      <form class="inline" method="POST" action="/foundry/said">
+        <input type="text" name="said" required maxlength="300"
+          placeholder="Find another small income stream. Keep legal risk low."
+          aria-label="What to look for, and what not to do" />
+        <!-- SECONDARY, DELIBERATELY. The one primary action on this screen is
+             whatever actually needs him; an offer to go looking is an offer,
+             and two things styled as the decision is one thing too many. -->
+        <button class="btn" type="submit">Start looking</button>
+      </form>
+      ${s.notLooking.canSeeThrough.length ? html`<p class="quiet"><strong>What I would be
+        looking through</strong> &mdash; ${s.notLooking.canSeeThrough.join('; ')}.</p>`
+    : html`<p class="gap">I would be starting blind &mdash; I have nothing
+        to look through yet.</p>`}
+    </div>` : ''}
     ${s.search ? html`<div class="know">
       <h3>What I am looking for</h3>
       <p>${s.search.statement}</p>

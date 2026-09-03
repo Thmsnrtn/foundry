@@ -2930,7 +2930,12 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
         + 'looking answered',
         { jobName: 'sense_check_tick' });
     },
-    schedule: '50 5 * * *',
+    // BEFORE dependency health at 05:45, which is what opens the eyes for
+    // whatever is available by then. Running after it would mean a sense
+    // promoted this morning could not be looked through until tomorrow — a
+    // whole day of "I have nowhere to look" caused by nothing but the order of
+    // two jobs.
+    schedule: '40 5 * * *',
     description:
       'Ask every way of looking Foundry claims to have one dull question, so a sense that '
       + 'works can be looked through and a sense that has stopped working stops being '
