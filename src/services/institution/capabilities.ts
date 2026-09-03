@@ -77,12 +77,17 @@ export async function capability(key: string): Promise<Capability | null> {
       },
     });
   }
-  const usable = providers.filter((p) => p.maturity !== 'unavailable');
-  const best = usable.sort((a, b) => ORDER[b.maturity] - ORDER[a.maturity])[0] ?? null;
+  const best = bestOf(providers);
   return {
     key, family: String(c.family), whatItDoes: String(c.what_it_does),
     rung: String(c.rung), providers, best,
   };
+}
+
+/** The most proven provider that is not out of action, or none. */
+function bestOf(providers: Provider[]): Provider | null {
+  return [...providers].filter((p) => p.maturity !== 'unavailable')
+    .sort((a, b) => ORDER[b.maturity] - ORDER[a.maturity])[0] ?? null;
 }
 
 /** Every capability, grouped by family. Institutional machinery, not a page. */
@@ -164,10 +169,31 @@ export async function whatItWouldTake(input: {
     `SELECT capability_key, why FROM capability_needs
       WHERE subject_kind = ? AND subject_id = ? AND met_at IS NULL ORDER BY rowid`,
     [input.subjectKind, input.subjectId])).rows as unknown as Array<Record<string, unknown>>;
+
+  // A CAPABILITY IS NOT MET IF IT CANNOT RUN WHERE THIS SUBJECT'S WORK MUST RUN.
+  //
+  // Building a candidate is venture work — code Foundry did not write — and the
+  // database refuses to run that on Foundry's own host. So a provider supplied
+  // by a same-host substrate does not count for an opportunity, however wired
+  // up it is. Answering otherwise was a real inconsistency: the fabric offered
+  // `local_process` for building a candidate that the workshop rule would then
+  // refuse to create, which is the institution promising something it had
+  // already forbidden itself.
+  const sameHost = new Set(((await query(
+    `SELECT substrate FROM workspace_substrates WHERE isolation = 'same_host'`, []))
+    .rows as unknown as Array<Record<string, unknown>>).map((w) => String(w.substrate)));
+  const mustBeIsolated = input.subjectKind === 'opportunity';
+
   const out: Need[] = [];
   for (const r of rows) {
-    const c = await capability(String(r.capability_key));
-    if (!c) continue;
+    const whole = await capability(String(r.capability_key));
+    if (!whole) continue;
+    const usable = mustBeIsolated
+      ? whole.providers.filter((p) => !sameHost.has(p.provider))
+      : whole.providers;
+    const c: Capability = mustBeIsolated
+      ? { ...whole, providers: usable, best: bestOf(usable) }
+      : whole;
     const why = String(r.why);
     const best = c.best;
     const provenEnough = best !== null && ORDER[best.maturity] >= ORDER.controlled_proven;
@@ -201,8 +227,13 @@ function routesFor(c: Capability): string[] {
         'a person with the problem, asked with their consent');
       break;
     case 'computer': case 'development': case 'testing': case 'data': case 'design':
-      routes.push('an isolated workspace with the tools installed',
-        'build it as reusable portfolio infrastructure');
+      // Named first and named plainly, because for a candidate this is the
+      // whole answer: Foundry can do the work and has nowhere it is allowed to
+      // do it, and no amount of building will change that until a computer
+      // exists that Foundry is not on.
+      routes.push('a computer Foundry is not on — venture work may not run on '
+        + 'the institution\'s own host',
+        'build it as reusable portfolio infrastructure once there is somewhere to run it');
       break;
     case 'deployment': case 'hosting': case 'domains':
       routes.push('an adapter to the provider the portfolio already uses',

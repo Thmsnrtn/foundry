@@ -128,6 +128,13 @@ const CANDIDATES: DeclaredCandidate[] = [
         known: 'owner contact details are personal data wherever the practice is', unknown: null },
     ],
     lighter: 'keep it a structured checklist of what was handed over, never clinical guidance - the practice decides, the tool remembers',
+    needs: [
+      ['write_code_in_branch', 'somebody has to build it'],
+      ['run_tests', 'and know whether it works'],
+      ['deploy_production', 'it has to run somewhere practices can reach'],
+      ['accept_payment', 'they would be paying monthly'],
+      ['answer_support', 'a practice with a broken handover will write in'],
+    ],
   },
   {
     headline: 'A dashboard that unifies every tool a small agency uses',
@@ -196,6 +203,10 @@ const CANDIDATES: DeclaredCandidate[] = [
         known: null, unknown: 'whether an implied recommendation carries a duty' },
     ],
     lighter: 'sell the leads to one contractor per area on a flat fee, never on a per-lead claim of quality',
+    needs: [
+      ['run_paid_experiment', 'the whole thesis is buying attention cheaper than it sells'],
+      ['publish_page', 'the leads have to land somewhere'],
+    ],
   },
   // THE ANSWER, RATHER THAN A BETTER-ARGUED NO.
   //

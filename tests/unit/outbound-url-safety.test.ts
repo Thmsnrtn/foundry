@@ -141,6 +141,12 @@ describe('posting to a URL somebody else chose', () => {
       'src/services/integrations/posthog.ts',
       'src/services/outbound/ssrf.ts',
       'src/services/scp/actions/executor.ts',
+      // The first source that reads the real world. The host is compiled in and
+      // the package name is checked before it reaches a path — so it could have
+      // claimed the exemption above, and deliberately does not: it goes through
+      // safeFetch like anything else pointed at the public internet, which also
+      // re-screens every redirect the registry might answer with.
+      'src/services/venture/sources/npm-registry.ts',
     ]);
   });
 

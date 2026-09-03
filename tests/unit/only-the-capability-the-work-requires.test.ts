@@ -41,6 +41,36 @@ beforeAll(async () => {
     VALUES (?, 'Chain Co', ?, 'active', 'tok_chain')`, [CO, OWNER]);
 });
 
+describe('where the work must run is part of whether it can be carried', () => {
+  it('will not offer the institution\'s own host for building a candidate', async () => {
+    const opened = await (await import('../../src/services/venture/mandate.js')).openMandate({
+      founderId: OWNER, statement: 'find one', shape: null, evidenceMode: 'reference' });
+    if ('refused' in opened) throw new Error(opened.refused);
+    const candidates = await (await import('../../src/services/venture/mandate.js'))
+      .candidatesFor(opened.id);
+    const vet = candidates.find((c) => c.headline.includes('veterinary'));
+    const build = vet?.wouldTake.find((n) => n.capability.key === 'write_code_in_branch');
+
+    // The local-process workshop is wired and exercised — and it may never host
+    // code Foundry did not write. Offering it here would be the institution
+    // promising something it had already forbidden itself.
+    expect(build?.standing).toBe('missing');
+    expect(build?.routes[0]).toContain('a computer Foundry is not on');
+
+    // And the same capability IS met for the institution's own work, where the
+    // same host is exactly the right place to run it.
+    // A separate company, so the chain below still asserts EXACTLY what its own
+    // work declared — a shared fixture would make that assertion drift.
+    await query(`INSERT INTO products (id, name, owner_id, status, ingest_token)
+      VALUES ('chain_ours', 'Ours', ?, 'active', 'tok_ours')`, [OWNER]);
+    await noteNeed({ founderId: OWNER, subjectKind: 'company', subjectId: 'chain_ours',
+      capabilityKey: 'run_shell', why: 'to run our own checks' });
+    const ours = (await whatItWouldTake({ subjectKind: 'company', subjectId: 'chain_ours' }))
+      .find((n) => n.capability.key === 'run_shell');
+    expect(ours?.standing).toBe('acquirable');
+  });
+});
+
 describe('the chain', () => {
   it('starts with work that declares what it needs, some of it missing', async () => {
     for (const [key, why] of [

@@ -2493,6 +2493,12 @@ export async function actionVerifySweep(): Promise<void> {
 
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
+/** Words that make a claim a sentence rather than a search. */
+const STOP = new Set(['that', 'this', 'with', 'from', 'would', 'will', 'have', 'they',
+  'them', 'there', 'their', 'been', 'because', 'about', 'into', 'than', 'then', 'when',
+  'what', 'which', 'while', 'also', 'more', 'most', 'some', 'such', 'only', 'other',
+  'nobody', 'anybody', 'somebody', 'space', 'itself']);
+
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
   memory_premise_check: { fn: memoryPremiseCheck,   schedule: '0 7 * * *',       description: 'Re-check decision premises against live telemetry; flag expired beliefs (daily)' },
   red_team_sweep:       { fn: redTeamSweep,         schedule: '30 */2 * * *',    description: 'Adversarial pre-mortem for uncontested gate-3+ pending decisions (every 2h)' },
@@ -2707,6 +2713,76 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   // late. Advancing is idempotent per day: the intake upserts on
   // (product_id, snapshot_date) and the observation recorder derives its id
   // from the reading, so a re-run is the same day again, not a second one.
+  // THE FIRST JOB THAT LOOKS AT THE REAL WORLD.
+  //
+  // Every claim this institution has ever formed rested on invented evidence.
+  // This pass takes claims that have not been settled and have never been
+  // looked at, and asks a real public registry the one question it can answer
+  // honestly: does something for this already exist, is anybody maintaining
+  // it, and how used is it.
+  //
+  // IT RUNS ONLY WHERE A REAL WAY OF LOOKING WAS CONNECTED. A claim in the
+  // rehearsal world is left alone — putting real observations on invented
+  // claims would mix the two worlds in the one place the boundary matters
+  // most. And a claim it has already looked at is left alone too, because
+  // looking again on a schedule is how a source becomes noise.
+  //
+  // WHAT IT CANNOT SETTLE IT RAISES. Every use files the questions a registry
+  // cannot answer — whether anybody pays, whether the downloads are people —
+  // so a claim that has been researched carries the shape of what is still
+  // dark rather than an air of completeness.
+  real_market_evidence_tick: {
+    fn: async () => {
+      const { waysOfLooking } = await import('../services/venture/research-sources.js');
+      const { askWhatAlreadyExists } = await import('../services/venture/sources/index.js');
+      const founders = await query(
+        `SELECT DISTINCT c.founder_id FROM market_claims c
+          WHERE c.evidence_mode = 'real' AND c.settled_as IS NULL
+            AND NOT EXISTS (SELECT 1 FROM market_observations o WHERE o.claim_id = c.id)`, []);
+      let looked = 0;
+      for (const row of founders.rows as unknown as Array<Record<string, unknown>>) {
+        const founderId = String(row.founder_id);
+        const ways = await waysOfLooking(founderId, 'real');
+        if (!ways.some((w) => w.sourceType === 'directory')) continue;
+        const claims = await query(
+          `SELECT id, claim, opportunity_id FROM market_claims
+            WHERE founder_id = ? AND evidence_mode = 'real' AND settled_as IS NULL
+              AND NOT EXISTS (SELECT 1 FROM market_observations o WHERE o.claim_id = market_claims.id)
+            ORDER BY formed_at LIMIT 3`, [founderId]);
+        for (const c of claims.rows as unknown as Array<Record<string, unknown>>) {
+          // The claim's own words are the search. A claim nobody could search
+          // for is a claim nobody could check, which is worth knowing.
+          const words = String(c.claim).toLowerCase()
+            .replace(/[^a-z0-9 ]/g, ' ').split(/\s+/)
+            .filter((w) => w.length > 3 && !STOP.has(w)).slice(0, 6).join(' ');
+          if (words.length === 0) continue;
+          try {
+            await askWhatAlreadyExists({
+              founderId, claimId: String(c.id), query: words,
+              // The honest default: a claim formed about an opportunity space
+              // is usually a claim that the space is open. Finding maintained
+              // substitutes contradicts it, which is the result worth having.
+              supportsIf: 'nothing_maintained_exists',
+              opportunityId: c.opportunity_id == null ? null : String(c.opportunity_id),
+            });
+            looked += 1;
+          } catch (err) {
+            logger.error(
+              `real_market_evidence_tick failed for claim ${String(c.id)}: `
+              + `${err instanceof Error ? err.message : String(err)}`,
+              { jobName: 'real_market_evidence_tick' });
+          }
+        }
+      }
+      logger.info(`real_market_evidence_tick: claims looked at=${String(looked)}`,
+        { jobName: 'real_market_evidence_tick' });
+    },
+    schedule: '15 5 * * *',
+    description:
+      'Ask a real public package registry what already exists for each unexamined real market '
+      + 'claim, filing dated, attributed observations and the questions a registry cannot '
+      + 'settle (daily)',
+  },
   reference_world_tick: {
     fn: async () => {
       const { advanceReferenceWorld } = await import('../services/reference/world.js');
