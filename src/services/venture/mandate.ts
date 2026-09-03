@@ -300,11 +300,53 @@ export function exposureAnswersTo(word: string, value: string): boolean {
  * What it does not recognise is returned as such, per sentence, so he can see
  * exactly which clause was not heard rather than being told the paragraph was.
  */
+/**
+ * A CLAUSE OPENING A NEW INSTRUCTION.
+ *
+ * Not every comma starts one. "A small, finished library" is one noun phrase
+ * and splitting it would produce nonsense, so a fragment only counts as its own
+ * clause when it opens the way an instruction opens.
+ */
+const OPENS_A_CLAUSE =
+  /^(and\s+|but\s+|then\s+|also\s+|plus\s+)?(keep|avoid|do ?n'?t|do not|never|no more|spend|bring|show|give|prefer|favou?r|focus|stay|stick|make|find|look|only|without|nothing|less|lower|reduce|minimi[sz]e|stop|leave)\b/i;
+
+/**
+ * ONE SENTENCE CAN CARRY A MANDATE AND EVERY CONSTRAINT ON IT.
+ *
+ * THE FAILURE THIS FIXES REACHED THE OWNER. His first real mandate was one
+ * sentence — "Make the river stronger by finding another small digital income
+ * stream..., keep legal risk low, avoid increasing our biggest existing
+ * dependencies, spend no more than $25 validating anything, and bring me only
+ * things that deserve my attention." Splitting only on full stops left that as
+ * a single piece; guidance is read before mandate, deliberately and correctly,
+ * so "keep legal risk low" matched first and the whole thing was filed as
+ * steering for a search that did not exist. No search opened. The institution
+ * heard the smallest clause in the sentence and dropped the instruction.
+ *
+ * So a sentence is cut where a new instruction plainly begins, and nowhere
+ * else. A fragment that does not open like an instruction is put back on the
+ * one before it, which is what keeps ordinary prose intact.
+ */
+function intoClauses(sentence: string): string[] {
+  const parts = sentence.split(/,\s+|\s+and\s+(?=[a-z])/i)
+    .map((p) => p.trim()).filter((p) => p.length > 0);
+  const clauses: string[] = [];
+  for (const part of parts) {
+    if (clauses.length > 0 && !OPENS_A_CLAUSE.test(part)) {
+      clauses[clauses.length - 1] += `, ${part}`;
+    } else {
+      clauses.push(part);
+    }
+  }
+  return clauses;
+}
+
 export function readVentureParagraph(raw: string): VentureReading[] {
   return raw
     .split(/(?<=[.;!?])\s+|\n+/)
     .map((piece) => piece.trim())
     .filter((piece) => piece.length > 0)
+    .flatMap(intoClauses)
     .map(readVentureSentence);
 }
 

@@ -1938,7 +1938,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
       <h3>I am not looking for anything</h3>
       <p class="lede">Say what you want and I will start looking. One sentence &mdash;
         what you are after, and anything I should not do.</p>
-      <form class="inline" method="POST" action="/foundry/said">
+      <form class="inline" method="POST" action="/foundry/ask">
         <input type="text" name="said" required maxlength="300"
           placeholder="Find another small income stream. Keep legal risk low."
           aria-label="What to look for, and what not to do" />
@@ -2939,6 +2939,72 @@ foundryShellRoutes.post('/foundry/acquisitions/:id/decide',
  * weeks and he would not find out until it came back.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+// ONE DOOR.
+//
+// The owner opened the deployed product to give the institution its first real
+// mandate and got a 404. The form was mine and posted to a route that does not
+// exist — but the deeper failure was the shape: a form posting to
+// /foundry/venture requires him to know that a venture mandate is a thing, and
+// to have found the one screen that collects one.
+//
+// He says what he wants. Choosing which system receives it is Foundry's job.
+//
+// This adds no new capability. Every destination is a handler that already
+// existed; what is new is that nobody has to know which.
+foundryShellRoutes.post('/foundry/ask', requireInstitutionOwner(), async (c: any) => {
+  const founder = c.get('founder') as { id?: string } | undefined;
+  if (!founder?.id) return c.redirect('/onboarding');
+  const form = await c.req.parseBody();
+  const said = String(form.said ?? '').trim().slice(0, 800);
+
+  const { whichDoor } = await import('../../services/institution/the-door.js');
+  const { currentMandate } = await import('../../services/venture/mandate.js');
+  const door = whichDoor(said, { searching: await currentMandate(String(founder.id)) !== null });
+
+  // WHAT IT COULD PLACE, IT HANDS ON — by calling the handler that owns the
+  // responsibility, rather than by redirecting the browser to it. A redirect
+  // would turn one submission into two requests and lose the body on the way.
+  if (door.destination === 'venture') {
+    const venture = await import('../../services/venture/mandate.js');
+    const readings = venture.readVentureParagraph(said);
+    if (readings.some((r) => r.kind === 'stop_mandate') && readings.length === 1) {
+      const stopped = await venture.stopMandate(String(founder.id), 'the owner said to stop');
+      return c.redirect(`/foundry?done=${stopped ? 'searchstopped' : 'nothing'}`);
+    }
+    const hadMandate = readings.some((r) => r.kind === 'mandate');
+    const result = await venture.absorbParagraph({
+      founderId: String(founder.id), readings });
+    if (hadMandate && !result.opened) return c.redirect('/foundry?done=alreadylooking');
+    if (result.opened) return c.redirect('/foundry?done=looking');
+    if (result.absorbed > 0) return c.redirect('/foundry?done=steeredsearch');
+    return c.redirect('/foundry');
+  }
+
+  // AND WHAT IT COULD NOT PLACE COMES BACK WITH HIS WORDS IN IT. Losing three
+  // hundred words of mandate because nothing recognised them is a worse failure
+  // than the 404 was: the 404 at least did not pretend to have heard him.
+  return c.html(page('What you said', html`
+    <h1>${door.destination === 'question' ? 'Let me answer that' : 'I did not follow that'}</h1>
+    <p class="lede">You said: <strong>${door.said}</strong></p>
+    ${door.destination === 'question' ? html`<p>I understood ${door.understoodAs}. I cannot
+      answer questions in words yet — what I can show you is on your first screen, and it is
+      the truth rather than a summary of it.</p>`
+    : door.needs !== null ? html`<p>I understood ${door.understoodAs}, but I need
+      ${door.needs} before I can act on it. Say it on that company's page and it will
+      stick.</p>`
+    : html`<p>I understood you were telling me something, but not what to do about it.</p>`}
+    <div class="know">
+      <h3>Your words are not lost</h3>
+      <p class="quiet">Change anything you like and send it again.</p>
+      <form method="POST" action="/foundry/ask">
+        <textarea name="said" rows="4" maxlength="800"
+          aria-label="What you want">${door.said}</textarea>
+        <button class="btn go" type="submit">Send it again</button>
+      </form>
+    </div>
+    <a class="btn" href="/foundry">Back</a>`, 'foundry'));
+});
+
 foundryShellRoutes.post('/foundry/venture', requireInstitutionOwner(), async (c: any) => {
   const founder = c.get('founder') as { id?: string } | undefined;
   if (!founder?.id) return c.redirect('/onboarding');

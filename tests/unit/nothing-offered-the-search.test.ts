@@ -54,7 +54,7 @@ describe('an owner who has never started a search', () => {
     const body = await shell();
     expect(body).toContain('I am not looking for anything');
     // The act is a sentence, so the screen asks for a sentence.
-    expect(body).toContain('action="/foundry/said"');
+    expect(body).toContain('action="/foundry/ask"');
     expect(body).toContain('Start looking');
   });
 
