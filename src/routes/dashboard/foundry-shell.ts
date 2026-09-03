@@ -1220,6 +1220,8 @@ const QUESTIONS: Record<string, string> = {
   portfolio: 'What do I own, and how is everything doing?',
   capital: 'Where should the next dollar go?',
   venture: 'Find me a new business',
+  away: 'Can I disappear for a week?',
+  back: 'What happened while I was away?',
 };
 
 function matchQuestion(text: string): string {
@@ -1236,6 +1238,12 @@ function matchQuestion(text: string): string {
   // that, and he should never have to name it again to be understood.
   // PORTFOLIO QUESTIONS FIRST, because "where should the next dollar go" also
   // matches /money/ below and would be answered as a question about permissions.
+  if (/disappear|step away|go away|take a (week|holiday|break)|on holiday|vacation|leave for a week|a week off|unplug/.test(t)) {
+    return 'away';
+  }
+  if (/while i was (away|gone|out)|since i (left|went)|what did i miss|catch me up|been away/.test(t)) {
+    return 'back';
+  }
   if (/next (dollar|pound|\$|100|1000)|where should (i|we) (spend|invest|put)|allocate/.test(t)) {
     return 'capital';
   }
@@ -1381,6 +1389,44 @@ async function answerAboutEverything(
   const { portfolioFor, whereTheNextDollarGoes } = await import(
     '../../services/founder/portfolio.js');
 
+  if (key === 'away') {
+    return (async () => {
+      const { canIDisappear } = await import('../../services/founder/a-week-away.js');
+      const v = await canIDisappear(founderId);
+      const list = (title: string, items: string[]): string => items.length
+        ? `<p class="quiet"><strong>${title}</strong></p><ul>${items.map((i) => `<li>${i}</li>`).join('')}</ul>` : '';
+      return html`<div class="said">
+        <p><strong>${v.verdict}</strong></p>
+        ${raw(list('What I carry', v.carries))}
+        ${raw(list('What I cannot carry, so it will not be done', v.cannotCarry))}
+        ${raw(list('What I may and may not do', v.authority))}
+        ${raw(list('What might need you', v.mightNeedYou))}
+        ${raw(list('What will wait for you', v.willWait))}
+        ${v.blind.length ? html`<p class="gap">I cannot see ${v.blind.join(' or ')} at all, so
+          silence from ${v.blind.length === 1 ? 'it' : 'them'} would mean nothing.</p>` : ''}
+      </div>`;
+    })();
+  }
+  if (key === 'back') {
+    return (async () => {
+      const { whileYouWereAway } = await import('../../services/founder/a-week-away.js');
+      const l = await whileYouWereAway(founderId);
+      const list = (title: string, items: string[], empty: string): string =>
+        `<p class="quiet"><strong>${title}</strong>${items.length ? '' : ` — ${empty}`}</p>`
+        + (items.length ? `<ul>${items.map((i) => `<li>${i}</li>`).join('')}</ul>` : '');
+      return html`<div class="said">
+        <p>Since ${l.since}.</p>
+        ${raw(list('What happened', l.happened, 'nothing I could see changed'))}
+        ${raw(list('What I handled', l.handled, 'nothing moved on my side'))}
+        ${raw(list('What changed', l.changed, 'nothing you set changed'))}
+        ${raw(list('Money', l.money, 'nothing was spent'))}
+        ${raw(list('What reached the world', l.effects, 'nothing left the building'))}
+        ${raw(list('What came back from the world', l.outcomes, 'nothing was tested'))}
+        ${raw(list('What I learned', l.learned, 'nothing was buried or settled'))}
+        ${raw(list('What needs you now', l.needsYou, 'nothing'))}
+      </div>`;
+    })();
+  }
   if (key === 'capital') {
     const view = await whereTheNextDollarGoes(founderId);
     return html`<div class="said">
@@ -1805,7 +1851,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
         </form>
       </div>`
     : about ? answerAboutCompany(about)
-      : key === 'portfolio' || key === 'capital'
+      : key === 'portfolio' || key === 'capital' || key === 'away' || key === 'back'
         ? answerAboutEverything(key, s.ownerId)
         : answerTo(key, s, attention)}` : ''}
 
