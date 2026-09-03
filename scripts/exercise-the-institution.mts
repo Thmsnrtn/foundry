@@ -401,6 +401,45 @@ async function main(): Promise<void> {
       + `every use of it still meets the ${first.rung} rung at the same door`);
   }
 
+  // AND A REAL COMPUTER DOING REAL WORK, provisioned from what the work
+  // declared rather than from what somebody typed - then torn down.
+  console.log('\nA REAL COMPUTER');
+  const workshops = await import('../src/services/workshop/index.js');
+  const made = await workshops.createWorkshop({
+    founderId: OWNER, purpose: 'self_development', ceiling: 'prepare',
+    budgetCents: 500, substrate: 'local_process', createdBy: 'foundry',
+    evidenceMode: 'reference' });
+  say('a workshop', `${made.substrate}, ceiling ${made.ceiling}`);
+  // THE WORK DECLARES WHAT IT NEEDS, and the provisioning follows from that
+  // rather than from whoever set the workshop up. One of these is deliberately
+  // beyond the ceiling, so the walk shows what is withheld as well as given.
+  for (const [key, why] of [
+    ['write_code_in_branch', 'to make the change'],
+    ['run_tests', 'to know whether it works'],
+    ['send_email', 'to tell the customer afterwards'],
+  ] as Array<[string, string]>) {
+    await fabric.noteNeed({ founderId: OWNER, subjectKind: 'company', subjectId: REAL,
+      capabilityKey: key, why });
+  }
+  const provisioned = await workshops.provisionFor({
+    workshopId: made.id, subjectKind: 'company', subjectId: REAL, grantedBy: 'foundry' });
+  say('  granted', provisioned.granted.join(', ') || 'nothing the work declared');
+  for (const r of provisioned.refused.slice(0, 2)) say(`  withheld ${r.capabilityKey}`, r.because);
+  await workshops.run({ workshopId: made.id,
+    step: 'use:write_code_in_branch write proof.mjs export const two = 1 + 1;' });
+  const verified = await workshops.run({ workshopId: made.id,
+    step: 'use:run_tests node --input-type=module -e '
+      + '"import {two} from \'./proof.mjs\'; if (two!==2) process.exit(1); console.log(\'two\')"' });
+  say('  it ran', verified.ok ? `and printed: ${verified.output.trim()}` : `FAILED: ${verified.output}`);
+  const reached = await workshops.run({ workshopId: made.id, step: 'use:run_shell curl https://example.com' });
+  say('  it tries to reach the world', reached.ok ? 'ALLOWED - a defect' : 'refused - not something a workshop may run');
+  const spentSoFar = await workshops.read(made.id);
+  await workshops.destroy({ workshopId: made.id, preserved: 'proof.mjs, verified' });
+  const { workshopDirectoryExists } = await import('../src/services/workshop/local-process.js');
+  say('  torn down', workshopDirectoryExists(made.externalRef ?? '')
+    ? 'THE DIRECTORY IS STILL THERE - a defect'
+    : `gone, and it cost ${String(spentSoFar.spentCents)} cent(s)`);
+
   console.log('\nWHERE THE CHAIN STOPS');
   const stops: string[] = [];
   if (channels.length === 0) stops.push('no observation channel is live, so Shadowing cannot begin');

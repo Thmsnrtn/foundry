@@ -182,6 +182,13 @@
       "detector": "dynamic_webhook_post",
       "status": "control_path",
       "capability": "sense credential lifecycle — owner-authorised exchange, revocation and liveness probe, read-only scope"
+    },
+    {
+      "file": "src/services/workshop/local-process.ts",
+      "line": 25,
+      "detector": "process_spawn",
+      "status": "workshop",
+      "capability": "a workshop step — allow-listed program, no network, stripped environment, contained path, timed out"
     }
   ]
 }

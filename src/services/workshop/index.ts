@@ -223,6 +223,49 @@ export async function destroy(input: { workshopId: string; preserved: string }):
       `kept: ${input.preserved.trim()}`, done.costCents]);
 }
 
+/**
+ * ONLY WHAT THE WORK REQUIRES, AND NOT ONE THING MORE.
+ *
+ * Hand-granting is how least privilege quietly stops being least: whoever sets
+ * a workshop up adds what they think it might want, and nobody ever removes
+ * any of it. So the grants come from the DECLARED NEEDS of the thing being
+ * worked on - the same `capability_needs` rows the institution answers "what
+ * would this take" from - and nothing else is granted at all.
+ *
+ * AND WHAT IT COULD NOT GRANT IS REPORTED, NEVER SWALLOWED. A need above the
+ * ceiling is not a smaller workshop quietly proceeding without it; it is a
+ * sentence saying the work cannot be finished in here, which is either a
+ * different workshop or a proposal to the owner.
+ */
+export async function provisionFor(input: {
+  workshopId: string; subjectKind: 'opportunity' | 'company'; subjectId: string;
+  grantedBy: string;
+}): Promise<{ granted: string[]; refused: Array<{ capabilityKey: string; because: string }> }> {
+  const { whatItWouldTake } = await import('../institution/capabilities.js');
+  const needs = await whatItWouldTake({
+    subjectKind: input.subjectKind, subjectId: input.subjectId });
+
+  const granted: string[] = [];
+  const refused: Array<{ capabilityKey: string; because: string }> = [];
+  for (const need of needs) {
+    // A capability nothing can supply is not a grant problem. Granting it would
+    // put a name on a workshop that could not use it, and hide the real answer,
+    // which is that something has to be acquired first.
+    if (need.standing === 'missing') {
+      refused.push({ capabilityKey: need.capability.key,
+        because: 'nothing supplies this yet — it has to be acquired before any '
+          + 'workshop could use it' });
+      continue;
+    }
+    const made = await grant({
+      workshopId: input.workshopId, capabilityKey: need.capability.key,
+      grantedBy: input.grantedBy });
+    if (made.granted) granted.push(need.capability.key);
+    else refused.push({ capabilityKey: need.capability.key, because: made.because });
+  }
+  return { granted, refused };
+}
+
 /** What happened in there, for the record and for the owner's letter. */
 export async function history(workshopId: string): Promise<Array<{
   kind: string; detail: string; costCents: number; at: string;

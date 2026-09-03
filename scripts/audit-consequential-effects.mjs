@@ -22,6 +22,18 @@ const rules = [
   { id: 'dynamic_webhook_post', re: /fetch\(\s*(url|payload\.webhook_url|config\.url|webhook\.url)\s*,\s*\{[\s\S]{0,300}?method:\s*['"]POST['"]/g },
   { id: 'stripe_sdk_mutation', re: /stripe\.(customers\.create|subscriptions\.(?:create|update|cancel)|checkout\.sessions\.create|billingPortal\.sessions\.create|oauth\.token)\s*\(/g },
   { id: 'resend_sdk_send', re: /resend\.emails\.send\s*\(/g },
+  // RUNNING A PROGRAM ON THE HOST IS AN EFFECT CLASS OF ITS OWN, and until a
+  // workshop substrate existed there was nothing in this codebase that did it.
+  // A shell is an interface, not a lesser kind of consequence: a spawn can
+  // reach a network, a filesystem and a credential, so every one of them has to
+  // be named here and classified rather than arriving unnoticed with the next
+  // convenience.
+  // Matched at the IMPORT, not the call. A first attempt matched any `exec(`
+  // and swept up every `RegExp.prototype.exec` in the codebase — sixteen
+  // findings that run no program at all, which would have made the inventory
+  // useless by making it noisy. The fact worth inventorying is per file and it
+  // is this: THIS FILE CAN RUN PROGRAMS.
+  { id: 'process_spawn', re: /from\s+['"]node:child_process['"]|require\(\s*['"]child_process['"]/g },
 ];
 
 const classifications = new Map(Object.entries({
@@ -79,6 +91,14 @@ const classifications = new Map(Object.entries({
   // cannot be widened at runtime (migration 231). Same class as the OAuth
   // exchanges above it, for the same reason.
   'src/services/senses/providers/stripe.ts|dynamic_webhook_post': ['control_path', 'sense credential lifecycle — owner-authorised exchange, revocation and liveness probe, read-only scope'],
+  // The one substrate that runs programs. Governed by the workshop rather than
+  // the outbound door, and deliberately: nothing here reaches the world, so
+  // there is no kill switch to consult. What holds instead is narrower and
+  // enforced in the same file — an allow-list with no network program on it, an
+  // environment built from nothing rather than filtered, paths that cannot
+  // leave the workshop directory, a wall-clock timeout, and a database rule
+  // that refuses to put code Foundry did not write on Foundry's own host.
+  'src/services/workshop/local-process.ts|process_spawn': ['workshop', 'a workshop step — allow-listed program, no network, stripped environment, contained path, timed out'],
 }));
 
 const findings = [];
