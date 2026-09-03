@@ -2900,12 +2900,16 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   // that this pass does not grant.
   venture_discovery_tick: {
     fn: async () => {
-      const { discover, weedOut } = await import('../services/venture/discovery.js');
+      const { discover, promoteWhatEarnedIt, weedOut } = await import(
+        '../services/venture/discovery.js');
       const mandates = await query(
         `SELECT id, founder_id, evidence_mode FROM venture_mandates
           WHERE closed_at IS NULL ORDER BY opened_at`, []);
       let sown = 0;
       let buried = 0;
+      let promotedCount = 0;
+      let readCount = 0;
+      let declined = 0;
       for (const row of mandates.rows as unknown as Array<Record<string, unknown>>) {
         const founderId = String(row.founder_id);
         const world = String(row.evidence_mode) === 'reference' ? 'reference' : 'real';
@@ -2913,6 +2917,12 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
           const found = await discover({
             founderId, mandateId: String(row.id), world });
           sown += found.sown.length;
+          readCount += found.read;
+          // A READING DECLINED IS NOT A PASS THAT FAILED. Counted separately so
+          // "the reader found nothing worth sowing" can be told apart from "the
+          // reader was never reached", which look identical in a seed count.
+          declined += found.passedOver.filter(
+            (p) => p.because.includes('coherent economic problem')).length;
           for (const passed of found.passedOver.slice(0, 3)) {
             logger.info(`venture_discovery_tick passed over ${passed.what}: ${passed.because}`,
               { jobName: 'venture_discovery_tick' });
@@ -2920,6 +2930,28 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
           // The ruthless half, immediately, so the frontier never accumulates.
           const weeded = await weedOut({ founderId, world });
           buried += weeded.buried.length;
+          // ASKED, AND THE ANSWER COULD NOT SETTLE IT. Logged rather than
+          // silent: burying these used to be the defect, so the institution
+          // should be able to see how often a source turns out to be incapable
+          // of the question it was asked.
+          for (const quiet of weeded.saidNothing.slice(0, 3)) {
+            logger.info(
+              `venture_discovery_tick could not settle ${quiet.seed}: ${quiet.because}`,
+              { jobName: 'venture_discovery_tick' });
+          }
+          // And promote what has earned it on independent ways of knowing. The
+          // refusals matter more than the promotions and are logged either way.
+          const earned = await promoteWhatEarnedIt({ founderId, world });
+          promotedCount += earned.promoted.length;
+          for (const one of earned.promoted) {
+            logger.info(
+              `venture_discovery_tick promoted a seed to candidate: ${one.headline}`,
+              { jobName: 'venture_discovery_tick' });
+          }
+          for (const no of earned.refused.slice(0, 3)) {
+            logger.info(`venture_discovery_tick refused to promote ${no.seed}: ${no.because}`,
+              { jobName: 'venture_discovery_tick' });
+          }
         } catch (err) {
           logger.error(
             `venture_discovery_tick failed for ${String(row.id)}: `
@@ -2928,14 +2960,16 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
         }
       }
       logger.info(
-        `venture_discovery_tick: seeds sown=${String(sown)}, buried=${String(buried)}`,
+        `venture_discovery_tick: read=${String(readCount)}, declined=${String(declined)}, `
+        + `sown=${String(sown)}, buried=${String(buried)}, promoted=${String(promotedCount)}`,
         { jobName: 'venture_discovery_tick' });
     },
     schedule: '0 6 * * *',
     description:
-      'Turn what the portfolio needs into a search through real sources, sow a few seeds '
-      + 'from what people actually wrote, and bury most of them against a different way '
-      + 'of knowing (daily)',
+      'Turn what the portfolio needs into a search through real sources, read the '
+      + 'sentences worth reading, sow a few seeds as hypotheses in Foundry\'s own words, '
+      + 'bury the ones a capable source actually contradicts, and promote any that earn '
+      + 'independent ways of knowing (daily)',
   },
   contested_evidence_tick: {
     fn: async () => {

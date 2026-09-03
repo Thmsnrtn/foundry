@@ -118,6 +118,11 @@ interface OwnerState {
       serves: string[];
       /** Something like it that was buried before, and why. */
       buriedBefore: string | null;
+      /** WHAT SOMEBODY ACTUALLY WROTE, and separately what Foundry made of it.
+       * Never merged: the quote is the only evidence in the whole card that
+       * came from outside this institution, and a candidate that shows its
+       * reading without showing the sentence is asking to be trusted. */
+      cameFrom: { said: string; reading: string; misreadIf: string } | null;
       /** The legal picture, one paragraph, and each exposure in a line. */
       legalProfile: string;
       exposures: string[];
@@ -468,7 +473,7 @@ async function readOwnerState(
             `${d.headline} — ${d.verdict === 'advanced' ? 'taken forward' : 'not taken'}`
             + `${d.why ? `, ${d.why}` : ''}`);
         })(),
-        candidates: candidates.map((c) => ({
+        candidates: await Promise.all(candidates.map(async (c) => ({
           id: c.id,
           headline: c.headline, whoHasIt: c.whoHasIt, theProblem: c.theProblem,
           whyItMight: c.whyItMight, killThesis: c.killThesis,
@@ -500,6 +505,18 @@ async function readOwnerState(
           buriedBefore: c.buriedBefore === null ? null
             : `${c.buriedBefore.headline} — ${c.buriedBefore.why}`
               + (c.buriedBefore.revisitIf ? `. Worth another look if ${c.buriedBefore.revisitIf}` : ''),
+          cameFrom: await (async () => {
+            const { whyWeStartedLooking } = await import('../../services/venture/seeds.js');
+            const chain = await whyWeStartedLooking(c.id);
+            if (chain === null || chain.observation === null) return null;
+            const quote = chain.motivatedBy ?? chain.observation;
+            return {
+              said: quote.length > 220 ? `${quote.slice(0, 217)}...` : quote,
+              reading: chain.inference ?? chain.seed,
+              misreadIf: chain.misreadIf
+                ?? 'nothing was named that would show I read it wrong',
+            };
+          })(),
           standing: c.standing.map((how) => `${how.claim} — ${how.howItStands}`),
           research: c.research.map((r) => ({
             judgment: r.judgment,
@@ -527,7 +544,7 @@ async function readOwnerState(
               : `$${(e.costCents / 100).toFixed(2)}`,
           })),
           reference: c.reference,
-        })),
+        }))),
       };
     })(),
   };
@@ -1929,6 +1946,8 @@ foundryShellRoutes.get('/foundry', async (c) => {
           <p class="lead">${cand.whoHasIt} &mdash; ${cand.theProblem}.</p>
         </div>
         <div class="facts">
+          ${cand.cameFrom ? `<b>Somebody wrote</b><span>&ldquo;${cand.cameFrom.said}&rdquo;</span>
+          <b>I read that as</b><span class="quiet">${cand.cameFrom.reading} I would have read it wrong if ${cand.cameFrom.misreadIf}</span>` : ''}
           <b>Why it might</b><span>${cand.whyItMight}</span>
           <b>For the portfolio</b><span>${cand.fit ?? 'I cannot say yet'}${cand.serves.length ? ` It would give you ${cand.serves.join('; ')}.` : ''}</span>
           ${cand.earns ? `<b>How it earns</b><span>${cand.earns}</span>` : ''}

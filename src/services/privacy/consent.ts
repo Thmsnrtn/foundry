@@ -717,6 +717,19 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
       + 'became of each',
     onAccountErasure: { op: 'delete' },
   },
+  // FOUNDRY'S READING OF SOMETHING A STRANGER WROTE, on one person's behalf.
+  // It quotes the stranger by design — that is what makes the reading
+  // inspectable — so it goes when the person it was read for goes.
+  observation_interpretations: {
+    reason: 'what Foundry made of things it read while looking for a business for one '
+      + 'person, including the words it was reading and what would show it misread them',
+    onAccountErasure: { op: 'delete' },
+  },
+  seed_questionings: {
+    reason: 'what was asked of a source about one person\'s seed, and whether the answer '
+      + 'was even capable of settling it',
+    onAccountErasure: { op: 'delete' },
+  },
   market_retrievals: {
     reason: 'what a source returned when it was asked something on one person\'s behalf, '
       + 'and what that instrument could and could not see at the time',
@@ -925,6 +938,8 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   workspace_substrates: 'the kinds of computer a workshop can run on and whether each is isolated from the institution; constitutional, naming nobody',
   signal_kinds: 'the kinds of economic signal the world produces, how each reads, and what it must not be mistaken for; constitutional, naming nobody',
   epistemic_stances: 'the genuinely different ways of knowing something, and why each cannot stand in for another; constitutional, naming nobody',
+  hypothesis_kinds: 'what an entrepreneurial hypothesis can assert, and what would have to be true in the world for each to hold; constitutional, naming nobody',
+  stance_bearings: 'which ways of knowing can support or contradict which kind of hypothesis, and why; constitutional, naming nobody — a missing row means that source says nothing',
   reality_only_questions: 'the questions no amount of reading can settle — whether somebody will pay, switch, click or come back — and what each is settled by instead; constitutional, naming nobody',
   consequence_rungs: 'the ladder of consequence an act can have, constitutional and the same for every owner',
   capabilities: 'what the institution can conceivably do, as concepts; constitutional, naming nobody',

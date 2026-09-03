@@ -253,14 +253,25 @@ export async function whyWeStartedLooking(opportunityId: string): Promise<{
   inference: string | null;
   /** The sentence somebody actually wrote. Evidence, as distinct from the above. */
   observation: string | null;
+  /** THE WORDS FOUNDRY WAS READING when it formed that reading — a verbatim
+   * span of the observation, which the database checked. This is what makes
+   * the reading inspectable rather than merely asserted. */
+  motivatedBy: string | null;
+  /** What remained unclear, and what else the same words could have meant. */
+  ambiguity: string | null;
+  orItCouldBe: string | null;
+  /** What would show Foundry misread it, named before the evidence arrived. */
+  misreadIf: string | null;
 } | null> {
   const row = (await query(
     `SELECT s.seed, s.origin, s.origin_said, s.signal_kind, s.inference, o.saw,
-            b.looking_for, b.shape_named, b.terms_tried, b.held_to
+            b.looking_for, b.shape_named, b.terms_tried, b.held_to,
+            i.motivated_by, i.ambiguity, i.or_it_could_be, i.misread_if
        FROM venture_opportunities v
        JOIN opportunity_seeds s ON s.id = v.from_seed_id
        LEFT JOIN market_observations o ON o.id = s.origin_observation_id
        LEFT JOIN search_briefs b ON b.id = s.brief_id
+       LEFT JOIN observation_interpretations i ON i.id = s.interpretation_id
       WHERE v.id = ?`, [opportunityId])).rows[0] as Record<string, unknown> | undefined;
   if (!row) return null;
   return {
@@ -273,5 +284,9 @@ export async function whyWeStartedLooking(opportunityId: string): Promise<{
     signalKind: row.signal_kind == null ? null : String(row.signal_kind),
     inference: row.inference == null ? null : String(row.inference),
     observation: row.saw == null ? null : String(row.saw),
+    motivatedBy: row.motivated_by == null ? null : String(row.motivated_by),
+    ambiguity: row.ambiguity == null ? null : String(row.ambiguity),
+    orItCouldBe: row.or_it_could_be == null ? null : String(row.or_it_could_be),
+    misreadIf: row.misread_if == null ? null : String(row.misread_if),
   };
 }

@@ -440,6 +440,28 @@ async function main(): Promise<void> {
     ? 'THE DIRECTORY IS STILL THERE - a defect'
     : `gone, and it cost ${String(spentSoFar.spentCents)} cent(s)`);
 
+  // WHAT A SOURCE IS CAPABLE OF SETTLING.
+  //
+  // A defect shipped here: weeding buried a seed whenever the second source
+  // came back empty. A registry knows what already exists and knows nothing
+  // about whether the work hurts, so its silence cannot falsify a claim about
+  // pain — and where the claim is that a gap exists, an empty registry is
+  // evidence FOR it. This walks the same lookup the pass uses.
+  console.log('\nWHAT A SOURCE CAN AND CANNOT SETTLE');
+  const { whatItBears, whoCouldSettle, reachableStances } = await import(
+    '../src/services/venture/falsification.js');
+  for (const [about, came] of [['gap_exists', 'found'], ['gap_exists', 'empty'],
+    ['pain_exists', 'empty'], ['people_pay', 'empty']] as const) {
+    const bears = await whatItBears({ stance: 'substitute', about, found: came });
+    say(`  a registry that came back ${came}`, `${bears.bearing} on ${about} — ${bears.because}`);
+  }
+  say('  ways of knowing it can reach', (await reachableStances()).join(', ') || 'none');
+  const payment = await whoCouldSettle('people_pay');
+  say('  whether anybody would pay',
+    `${String(payment.couldSettle.length)} ways of knowing could settle it; it can reach `
+    + `${payment.canReach.join(', ') || 'none'}. Out of reach: `
+    + payment.outOfReach.map((o) => o.whatItSays).join('; '));
+
   console.log('\nWHERE THE CHAIN STOPS');
   const stops: string[] = [];
   if (channels.length === 0) stops.push('no observation channel is live, so Shadowing cannot begin');
@@ -453,6 +475,15 @@ async function main(): Promise<void> {
   }
   if (shadowable.length === 0 && responsibilities.length > 0) {
     stops.push('no responsibility is both understood and watchable');
+  }
+  // READING A SENTENCE IS A MODEL CALL, and a harness with no key cannot make
+  // one. Said out loud rather than passed over quietly, because "discovery
+  // sowed nothing" and "discovery could not read anything" look identical from
+  // the outside and mean completely different things.
+  if (!process.env.OPENROUTER_API_KEY && !process.env.ANTHROPIC_API_KEY) {
+    stops.push('nothing here can read a sentence — comprehension is a model call and '
+      + 'this environment has no key, so discovery would file real observations and '
+      + 'then decline every one of them');
   }
   if (stops.length === 0) console.log('  nothing — the ladder is reachable from here');
   for (const s of stops) console.log(`  • ${s}`);
