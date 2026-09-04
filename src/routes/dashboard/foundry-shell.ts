@@ -204,7 +204,7 @@ interface OwnerState {
        * Never merged: the quote is the only evidence in the whole card that
        * came from outside this institution, and a candidate that shows its
        * reading without showing the sentence is asking to be trusted. */
-      cameFrom: { said: string; reading: string; misreadIf: string } | null;
+      cameFrom: { said: string; reading: string; misreadIf: string | null } | null;
       /** The legal picture, one paragraph, and each exposure in a line. */
       legalProfile: string;
       exposures: string[];
@@ -679,8 +679,10 @@ async function readOwnerState(
             return {
               said: quote.length > 220 ? `${quote.slice(0, 217)}...` : quote,
               reading: chain.inference ?? chain.seed,
-              misreadIf: chain.misreadIf
-                ?? 'nothing was named that would show I read it wrong',
+              // NULL RATHER THAN A SENTENCE ABOUT ITS OWN ABSENCE. Filling
+              // this produced "I would have read it wrong if nothing was named
+              // that would show I read it wrong", which parses to nothing.
+              misreadIf: chain.misreadIf ?? null,
             };
           })(),
           standing: c.standing.map((how) => `${how.claim} — ${how.howItStands}`),
@@ -805,6 +807,31 @@ function whatNeedsHim(s: OwnerState): Attention {
 // Foundry may do are his world, not the institution's internals, and each is
 // worth being able to walk to.
 type Place = 'foundry' | 'companies' | 'controls';
+
+/**
+ * WHAT A SITUATION WAS, IN HIS WORDS RATHER THAN THE COLUMN'S.
+ *
+ * The history read "growth not converting for 12 days, until 2026-08-02 — then
+ * it became payments failing" — a database enum with its underscores taken out
+ * and handed to the owner. Every other vocabulary in this product is translated
+ * before it reaches him; this one was not.
+ */
+const SITUATION_IN_PLAIN_WORDS: Record<string, string> = {
+  blind: 'nothing I could see',
+  unknown: 'nothing I could tell',
+  conflicting: 'numbers that disagreed with each other',
+  payments_failing: 'payments failing',
+  revenue_falling: 'revenue falling',
+  growth_not_converting: 'more attention and no more revenue',
+  churning: 'customers leaving faster',
+  growing: 'growing',
+  steady: 'steady',
+};
+
+/** The same, for a value that may be anything the column allows. */
+function plainly(situation: string): string {
+  return SITUATION_IN_PLAIN_WORDS[situation] ?? situation.replaceAll('_', ' ');
+}
 
 const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString>,
   active: Place = 'foundry',
@@ -2236,7 +2263,9 @@ foundryShellRoutes.get('/foundry', async (c) => {
         </div>
         <dl class="facts">
           ${cand.cameFrom ? html`<dt>Somebody wrote</dt><dd>&ldquo;${cand.cameFrom.said}&rdquo;</dd>
-          <dt>I read that as</dt><dd class="quiet">${cand.cameFrom.reading} I would have read it wrong if ${cand.cameFrom.misreadIf}</dd>` : ''}
+          <dt>I read that as</dt><dd class="quiet">${cand.cameFrom.reading}${
+  cand.cameFrom.misreadIf === null ? ''
+    : html` I would have read it wrong if ${cand.cameFrom.misreadIf}.`}</dd>` : ''}
           <dt>Why it might</dt><dd>${cand.whyItMight}</dd>
           <dt>For the portfolio</dt><dd>${cand.fit ?? 'I cannot say yet'}${cand.serves.length ? ` It would give you ${cand.serves.join('; ')}.` : ''}</dd>
           ${cand.earns ? html`<dt>How it earns</dt><dd>${cand.earns}</dd>` : ''}
@@ -2590,7 +2619,10 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
       // had no notion of cost or of putting anything back. Two of the three
       // the institution already knew: the rung says in its own words what the
       // act does, and whether any standing policy could ever cover the class.
-      kindOfAct: p.rungMeans === null ? null : `${p.rung ?? ''} — ${p.rungMeans}`,
+      // THE MEANING, NOT THE ENUM. This read "public — publishes, messages or
+      // contacts someone outside": the column's own value, then the sentence
+      // that explains it, on a card asking him to authorise something.
+      kindOfAct: p.rungMeans,
       puttingItBack: p.puttingItBack,
       onlyEverYours: p.absorbable === false,
       cost: p.costCents === null ? null
@@ -2952,19 +2984,19 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
       <h2>${view.proposals.length === 1 ? 'I need you to decide this' : 'I need you to decide these'}</h2>
       <p class="quiet">You told me not to do this without asking. I cannot do any of it until
         you say yes to that exact thing, and a yes covers only the one act described.</p>
-      ${raw(view.proposals.map((p) => `<div class="noticed">
+      ${view.proposals.map((p) => html`<div class="noticed">
         <h4>${p.summary}</h4>
         <p><strong>Why</strong> — ${p.why}</p>
         <p><strong>What I expect</strong> — ${p.expectedEffect}</p>
         <p><strong>What could go wrong</strong> — ${p.risk}</p>
-        ${p.kindOfAct === null ? '<p class="quiet">I have not classified what kind of act '
-  + 'this is, so treat it as though it cannot be undone.</p>'
-  : `<p><strong>What kind of act</strong> — ${p.kindOfAct}.</p>
+        ${p.kindOfAct === null ? html`<p class="quiet">I have not classified what kind of act this is, so treat it as though it cannot be undone.</p>`
+    : html`<p><strong>What kind of act</strong> — it ${p.kindOfAct}.</p>
        <p><strong>Putting it back</strong> — ${p.puttingItBack ?? ''}.</p>`}
-        ${p.cost === null ? '<p class="quiet"><strong>What it costs</strong> — I do not know.</p>'
-  : `<p><strong>What it costs</strong> — ${p.cost}.</p>`}
-        ${p.onlyEverYours ? '<p class="gap">Nothing you could ever set up would let me do '
-  + 'this on my own. It is yours, one act at a time, permanently.</p>' : ''}
+        ${p.cost === null
+    ? html`<p class="quiet"><strong>What it costs</strong> — I do not know.</p>`
+    : html`<p><strong>What it costs</strong> — ${p.cost}.</p>`}
+        ${p.onlyEverYours ? html`<p class="gap">Nothing you could ever set up would let me
+          do this on my own. It is yours, one act at a time, permanently.</p>` : ''}
         <p class="quiet">If you do nothing, I do not do it, and this expires
           ${p.expiresAt}.</p>
         <form method="POST" action="/foundry/proposals/${p.id}/approve">
@@ -2973,7 +3005,7 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
         <form method="POST" action="/foundry/proposals/${p.id}/refuse">
           <button class="btn" type="submit">Do not do it</button>
         </form>
-      </div>`).join(''))}
+      </div>`)}
     </div>` : ''}
 
     ${view.asks.length ? html`<div class="know">
@@ -3120,10 +3152,9 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     </details>` : ''}
 
     ${view.past.length ? html`<details class="know fold"><summary><h3>What it has been</h3><span class="gist">${count(view.past.length, 'earlier situation')}</span></summary>
-      <ul>${raw(view.past.map((p) =>
-    `<li>${p.situation.replaceAll('_', ' ')} for ${String(p.days)} `
-    + `${p.days === 1 ? 'day' : 'days'}, until ${p.endedAt} — then it became `
-    + `${p.becameWhat.replaceAll('_', ' ')}.</li>`).join(''))}</ul>
+      <ul>${view.past.map((p) => html`<li>${plainly(p.situation)} for ${String(p.days)}
+        ${p.days === 1 ? 'day' : 'days'}, until ${p.endedAt} — then it became
+        ${plainly(p.becameWhat)}.</li>`)}</ul>
     </details>` : ''}
 
     ${view.decisions.length ? html`<details class="know fold"><summary><h3>What you decided</h3><span class="gist">${view.posture.now !== 'grow' ? view.posture.inPlainWords : count(view.decisions.length, 'decision')}</span></summary>
@@ -3141,14 +3172,19 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
 
     ${view.lifted.length ? html`<details class="know fold"><summary><h3>What you lifted</h3><span class="gist">${count(view.lifted.length, 'boundary', 'boundaries')}</span></summary>
       <p class="quiet">Changing your mind runs both ways. These are no longer in force.</p>
-      ${raw(view.lifted.map((b) => `<div class="noticed">
+      <!-- ESCAPED, AND THE ATTRIBUTE IS THE REASON. His own sentence was
+           interpolated into value="..." through raw(), so a boundary containing
+           a quotation mark — "don't email anyone" typed with a real quote — cut
+           the attribute short and the button silently re-bound him to a
+           different, shorter rule than the one on the screen above it. -->
+      ${view.lifted.map((b) => html`<div class="noticed">
         <p>${b.statement}</p>
         <p class="quiet">Lifted ${b.liftedAt} — ${b.liftedReason}.</p>
         <form method="POST" action="/foundry/companies/${view.id}/said/confirm">
           <input type="hidden" name="said" value="${b.statement}" />
           <button class="btn" type="submit">Hold me to this again</button>
         </form>
-      </div>`).join(''))}
+      </div>`)}
     </details>` : ''}
 
     <details class="know fold"><summary><h3>Money</h3><span class="gist">${view.reference ? 'none, ever' : `$${view.spent30d.toFixed(2)} of $${String(view.budgetMonthly)}`}</span></summary>
