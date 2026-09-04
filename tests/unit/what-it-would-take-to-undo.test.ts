@@ -123,3 +123,39 @@ describe('a request for authority', () => {
       .rejects.toThrow(/negative_cost/);
   });
 });
+
+// =============================================================================
+// AND TAKING BACK WHAT HE ALLOWED.
+//
+// Setting a spending allowance was reachable from the company page and removing
+// one was not: the function existed, was exported, and was called from nowhere.
+// The only way to take back an allowance was to set a different one, which is a
+// different act and not what he would mean. A ceiling he cannot lower is not a
+// ceiling he set — on the surface whose whole subject is what he has permitted.
+// =============================================================================
+
+describe('an allowance', () => {
+  it('can be taken back, and the page offers it', async () => {
+    const { setAllowance, allowanceFor } = await import(
+      '../../src/services/institution/standing-intent.js');
+    await setAllowance({ productId, statement: 'up to twenty-five dollars a month',
+      amountCents: 2500, purpose: 'validating things' });
+    const body = await (await app.request(`/foundry/companies/${productId}`)).text();
+    expect(body).toContain('Take that allowance back');
+
+    const id = (await allowanceFor(productId))?.id;
+    const res = await app.request(
+      `/foundry/companies/${productId}/allowance/${String(id)}/withdraw`,
+      { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: '' });
+    expect(res.status).toBe(302);
+    expect(await allowanceFor(productId)).toBeNull();
+  });
+
+  it('says so, and says what it means', async () => {
+    const body = await (await app.request(
+      `/foundry/companies/${productId}?done=allowancewithdrawn`)).text();
+    expect(body).toContain('Taken back');
+    expect(body).toContain('cannot spend anything');
+  });
+});

@@ -600,10 +600,13 @@ async function readOwnerState(
           // morning has not come round yet. Saying "I have found nothing" when
           // I have not yet looked would be worse: it reports an outcome for
           // work that never happened.
+          // WHETHER IT HAS EVER LOOKED IS A YES OR NO, not a total. This
+          // counted every retrieval the institution had ever made, on the first
+          // screen, to answer a question that one row settles.
           const looked = (await query(
-            'SELECT COUNT(*) AS n FROM market_retrievals WHERE founder_id = ?',
-            [founderId])).rows[0] as Record<string, unknown>;
-          return Number(looked.n) === 0
+            'SELECT 1 AS any FROM market_retrievals WHERE founder_id = ? LIMIT 1',
+            [founderId])).rows[0] as Record<string, unknown> | undefined;
+          return looked === undefined
             ? 'I have not looked yet. I go looking each morning.'
             : 'I have looked and found nothing worth pursuing yet.';
         })(),
@@ -886,10 +889,15 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
     --c1:#B7E4D0; --c2:#7FC3A8; --c3:#4A8570; --c4:#2A4C40;
   }}
   *,*::before,*::after{box-sizing:border-box}
+  /* REM AND BODY AGREE. The body was 17px while rem stayed 16px, so every size
+     expressed in rem — which is all of them — was 6% smaller than the scale it
+     was written against, and a .93rem "slightly smaller" was actually 15.8px
+     beside 17px body text. */
+  html{font-size:17px}
   html,body{max-width:100%;overflow-x:hidden}
   body{
     margin:0;background:var(--bg);color:var(--ink);
-    font:400 17px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    font:400 1rem/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
     -webkit-text-size-adjust:100%;-webkit-font-smoothing:antialiased;
   }
   /* ENOUGH ROOM FOR BOTH BARS AND THE HOME INDICATOR. The reserve was a flat
@@ -915,7 +923,6 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
     margin:0 0 4px;overflow-wrap:anywhere}
   .tile dd.d{font-size:.78rem;color:var(--ink-2);margin:0;line-height:1.3}
   .tile .d.up{color:var(--good)} .tile .d.down{color:var(--alert)}
-  .tile .spark{display:block;width:100%;height:28px;margin-top:6px}
 
   /* THE NUMBERS. Two across on a phone, each with its trend. */
   .numbers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s2);margin:0 0 var(--s2)}
@@ -963,9 +970,6 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
   .hero p{margin:0;color:var(--ink-2)}
   .hero.alert{border-color:var(--alert)}
   .quiet{color:var(--ink-2);font-size:.93rem}
-  .more{border:0;border-top:1px solid var(--line);margin-top:var(--s4)}
-  .more>summary{padding-left:0;padding-right:0;color:var(--ink-3)}
-  .more .inner{padding:0}
   /* FOLDED, NOT HIDDEN. Each section is one line that says what is in it,
      and opens in place. The page is understood at a glance and explored when
      wanted, which is the difference between a company and a report. */
@@ -1081,7 +1085,11 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
     background:linear-gradient(to top,var(--bg) 70%,transparent)}
   .item{display:block;text-decoration:none;color:inherit;background:var(--card);
     border:1px solid var(--line);border-radius:var(--r);padding:var(--s3);margin:0 0 var(--s2)}
-  .item:hover,.item:focus-visible{border-color:var(--ink-3);outline:none}
+  .item:hover{border-color:var(--ink-3)}
+  /* THE FOCUS RING WAS TURNED OFF. Keyboard focus had nothing to show for
+     itself on the only link that repeats down the whole portfolio. */
+  .item:focus-visible{border-color:var(--ink-3);outline:2px solid var(--accent);
+    outline-offset:2px}
   .item h3{margin:0 0 var(--s1);font-size:1.08rem;font-weight:600}
   .item p{margin:0;color:var(--ink-2);font-size:.93rem}
   .know{margin:0 0 var(--s4)}
@@ -1137,6 +1145,11 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
   @media (min-width:900px){
     body{font-size:max(16px,1rem)}
     .wrap{max-width:68rem;margin:0 0 0 15rem;padding:var(--s4) var(--s5) var(--s5)}
+    /* A LINE OF PROSE HAS A LENGTH. The cards were capped and the paragraphs
+       between them were not, so on a wide screen the sentences ran to a
+       hundred and forty characters — unreadable, and beside cards that stopped
+       at half that. */
+    .wrap>*{max-width:44rem}
     h1{font-size:2.4rem}
     nav.places{top:0;bottom:0;right:auto;width:15rem;border-top:0;border-right:1px solid var(--line);
       padding:var(--s4) var(--s3);background:var(--card-2)}
@@ -2334,13 +2347,9 @@ foundryShellRoutes.get('/foundry', async (c) => {
             <button class="${attention === null ? 'btn go' : 'btn'}" type="submit">Take it
               forward</button>
           </form>` : ''}
-          <form method="POST" action="/foundry/venture/confirm">
-            <input type="hidden" name="said" value="Keep looking" />
-            <button class="btn" type="submit">Keep looking</button>
-          </form>
           <form method="POST" action="/foundry/venture/reject">
             <input type="hidden" name="opportunityId" value="${cand.id}" />
-            <button class="btn" type="submit">Reject</button>
+            <button class="btn" type="submit">Bury this one</button>
           </form>
         </div>
       </div>`)}
@@ -2950,7 +2959,7 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
 
   const body = html`
     <h1>${view.name}</h1>
-    ${view.reference ? html`<div class="know" style="border-color:var(--warn,#b45309)">
+    ${view.reference ? html`<div class="know" style="border-color:var(--alert)">
       <h3>This company does not exist</h3>
       <p>I made it up, so you could watch me work before handing me anything real.
         It is ${view.reference.situation}.</p>
@@ -2992,6 +3001,8 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     ${done === 'allowed' && view.allowance ? html`<div class="done"><p><strong>Allowed.</strong>
       Up to $${view.allowance.amount} for this company. I will stop and tell you when it
       runs out.</p></div>` : ''}
+    ${done === 'allowancewithdrawn' ? html`<div class="done"><p><strong>Taken back.</strong>
+      I cannot spend anything for this company again until you say otherwise.</p></div>` : ''}
     ${done === 'preferred' ? html`<div class="done"><p><strong>Noted.</strong> I will lean
       that way. I will not refuse anything because of it.</p></div>` : ''}
     ${done === 'agreed' ? html`<div class="done"><p><strong>Agreed.</strong> Nothing has
@@ -3160,7 +3171,7 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
        — ${LADDER_IN_PLAIN_WORDS[r.state] ?? r.state}</li>`).join(''))}</ul>
     </details>` : ''}
 
-    <details class="know fold"><summary><h3>What matters here</h3><span class="gist">${view.said ? view.said.statement : 'you have not told me'}</span></summary>
+    <details class="know fold"><summary><h3>What matters here</h3><span class="gist">${view.said ? 'you have told me' : 'you have not told me'}</span></summary>
       ${view.said
     ? html`<p>${view.said.statement}</p>
         <p class="quiet">${view.said.steers
@@ -3180,7 +3191,15 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
         I will refuse it every time until you say otherwise. I will say what I understood
         before anything takes effect.</p>
       ${view.allowance ? html`<p><strong>Up to $${view.allowance.amount}</strong> —
-        $${view.allowance.left} of it left. ${view.allowance.statement}</p>` : ''}
+        $${view.allowance.left} of it left. ${view.allowance.statement}</p>
+      <!-- A CEILING HE COULD SET AND NEVER REMOVE. The function to withdraw one
+           existed, was exported, and was called from nowhere — so the only way
+           to take back a spending allowance was to set a different one, which
+           is not the same act and not what he would mean. -->
+      <form method="POST"
+        action="/foundry/companies/${view.id}/allowance/${view.allowance.id}/withdraw">
+        <button class="btn" type="submit">Take that allowance back</button>
+      </form>` : ''}
       ${view.preferences.length ? html`<ul>${raw(view.preferences.map((p) =>
     `<li>${p.statement} <span class="quiet">— a preference. I lean that way; I refuse
       nothing because of it.</span></li>`).join(''))}</ul>` : ''}
@@ -3410,6 +3429,28 @@ async function absorbAndAnswer(
 // machinery is real, the market is not, and nothing it produces can be counted
 // or acted on. It refuses while any search is open, because one search at a
 // time is the rule and a rehearsal must never displace the real thing.
+// TAKING BACK WHAT HE ALLOWED.
+//
+// Setting an allowance was reachable and removing one was not: the function
+// existed, exported, called from nowhere. A ceiling he cannot lower is not a
+// ceiling he set — it is one he is stuck with — and on a surface whose whole
+// subject is what he has permitted, that is the wrong way round.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/companies/:id/allowance/:allowanceId/withdraw',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const productId = c.req.param('id');
+    const owned = await query(
+      'SELECT id FROM products WHERE id = ? AND owner_id = ?',
+      [productId, String(founder.id)]);
+    if (!owned.rows.length) return c.notFound();
+
+    const { withdrawAllowance } = await import('../../services/institution/standing-intent.js');
+    await withdrawAllowance(String(c.req.param('allowanceId')), 'you took it back');
+    return c.redirect(`/foundry/companies/${productId}?done=allowancewithdrawn`);
+  });
+
 foundryShellRoutes.post('/foundry/reference/search', requireInstitutionOwner(),
   async (c: any) => {
     const founder = c.get('founder') as { id?: string } | undefined;

@@ -152,7 +152,7 @@ const judgmentSection = (
           <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem;">Your current direction: ${j.disposition.replaceAll('_', ' ')}${j.selectedAlternative ? html` — ${j.selectedAlternative}` : ''}. You can change it below.</div>` : ''}
         <form method="POST" action="/letter/judgments/${j.id}/disposition"
           style="display:flex;gap:0.4rem;margin-top:0.45rem;align-items:center;flex-wrap:wrap;">
-          <select name="direction" style="font-size:0.78rem;">
+          <select name="direction" aria-label="Which way this should go" style="font-size:0.78rem;">
             <option value="accepted">Go this way</option>
             ${j.alternatives.map((alt, i) => html`<option value="alternative:${i}">Instead: ${alt}</option>`)}
             <option value="deferred">Not yet — decide later</option>
@@ -217,7 +217,7 @@ const doNotContactSection = (
       style="display:flex;gap:0.4rem;margin-top:0.6rem;align-items:center;flex-wrap:wrap;">
       <input name="email" required type="email" maxlength="320" placeholder="Their email address"
         style="flex:1;min-width:220px;" />
-      <select name="reason" style="font-size:0.78rem;">
+      <select name="reason" aria-label="Why this should not be done" style="font-size:0.78rem;">
         <option value="they_asked">they asked me to stop</option>
         <option value="founder">I do not want them contacted</option>
         <option value="bounced">mail to them bounces</option>
@@ -271,7 +271,7 @@ const reportObligationSection = (options: Array<[string, string]>) => html`
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Tell me something the company has to handle</div>
     <form method="POST" action="/letter/company/report"
       style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
-      <select name="obligation_kind" style="font-size:0.78rem;">
+      <select name="obligation_kind" aria-label="What kind of obligation this is" style="font-size:0.78rem;">
         ${options.map(([value, label]) => html`<option value="${value}">${label}</option>`)}
       </select>
       <input name="what" required maxlength="200" placeholder="What is it, in your words?"
@@ -301,7 +301,7 @@ const outcomeSection = (
         <div style="font-size:0.9rem;color:var(--text-primary);">${item.title}</div>
         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">${item.preview}</div>
         <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;margin-top:0.45rem;">
-          <select name="verdict" style="font-size:0.78rem;">
+          <select name="verdict" aria-label="Your verdict" style="font-size:0.78rem;">
             <option value="achieved">Yes — it did what it was for</option>
             <option value="failed">No — it did not</option>
           </select>
@@ -864,10 +864,10 @@ const metricWatchSection = (
         style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
         <div style="font-size:0.9rem;color:var(--text-primary);width:100%;">${item.title}</div>
         <span style="font-size:0.78rem;color:var(--text-muted);">If this is being handled, I'd expect</span>
-        <select name="field" style="font-size:0.78rem;">
+        <select name="field" aria-label="Which measure this is about" style="font-size:0.78rem;">
           ${item.channels.map((ch) => html`<option value="${ch.field}">${ch.label}</option>`)}
         </select>
-        <select name="direction" style="font-size:0.78rem;">
+        <select name="direction" aria-label="Which way this should go" style="font-size:0.78rem;">
           <option value="fell">to go down</option>
           <option value="rose">to go up</option>
           <option value="held">to stay about the same</option>
@@ -939,10 +939,10 @@ const developmentWatchSection = (
         style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
         <div style="font-size:0.9rem;color:var(--text-primary);width:100%;">${item.title}</div>
         <span style="font-size:0.78rem;color:var(--text-muted);">If this is being handled, I'd expect</span>
-        <select name="check" style="font-size:0.78rem;">
+        <select name="check" aria-label="Which check this is about" style="font-size:0.78rem;">
           ${checks.map((c) => html`<option value="${c}">${c.replaceAll('-', ' ')}</option>`)}
         </select>
-        <select name="expected_result" style="font-size:0.78rem;">
+        <select name="expected_result" aria-label="What the check should report" style="font-size:0.78rem;">
           <option value="passed">to pass</option>
           <option value="failed">to fail</option>
         </select>
@@ -1004,7 +1004,7 @@ const tellMeSection = (
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Tell me something important</div>
     <form method="POST" action="/letter/facts/preview"
       style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
-      <select name="opportunity" style="font-size:0.78rem;max-width:100%;">
+      <select name="opportunity" aria-label="Which opportunity this is about" style="font-size:0.78rem;max-width:100%;">
         ${opportunities.map((o, i) => html`<option value="${i}">${o.question}</option>`)}
       </select>
       <input name="resource" maxlength="60" placeholder="Of what? (only if I asked)"
@@ -1052,7 +1052,7 @@ const permissionSection = (
           </form>` : html`
           <form method="POST" action="/letter/responsibilities/${item.responsibilityId}/permission/grant"
             style="display:flex;gap:0.4rem;margin-top:0.45rem;align-items:center;flex-wrap:wrap;">
-            <select name="days" style="font-size:0.78rem;">
+            <select name="days" aria-label="For how many days" style="font-size:0.78rem;">
               <option value="30">for the next month</option>
               <option value="7">for the next week</option>
               <option value="90">for the next three months</option>

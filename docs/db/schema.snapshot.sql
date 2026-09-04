@@ -4600,6 +4600,8 @@ CREATE INDEX idx_lifecycle_rules_product ON lifecycle_rules(product_id, enabled)
 CREATE INDEX idx_ma_readiness_product
   ON ma_readiness_scores(product_id, assessed_at DESC);
 CREATE INDEX idx_market_observations_claim ON market_observations(claim_id, bearing);
+CREATE INDEX idx_market_retrievals_founder
+  ON market_retrievals(founder_id, retrieved_at DESC);
 CREATE INDEX idx_market_unknowns_open
   ON market_unknowns(opportunity_id) WHERE answered_at IS NULL;
 CREATE INDEX idx_mcp_grants_lookup ON mcp_grants(product_id, server_name, revoked_at);
