@@ -23,6 +23,24 @@ export interface GatewayRequest {
   action: string;                             // human-readable description
   params: Record<string, unknown>;
   /**
+   * WHAT THIS ACT IS, where the capability alone does not say. A browser can
+   * read a page or accept somebody's terms through the same hand, so the act
+   * names itself and the higher rung governs. Omitted on a browser capability,
+   * the act is refused rather than read as the cheapest thing it could be.
+   */
+  browserAct?: string | null;
+  /**
+   * WHAT THIS WILL COST, in cents, required on the financial rung.
+   *
+   * A DECLARATION, NOT A QUOTE — and the difference matters. It closes the hole
+   * where "is anything left?" was the whole test, so an allowance with a cent
+   * remaining authorised a thousand-dollar act. It does not stop a caller
+   * understating a cost. Nothing can, until a real provider exists to quote
+   * against; when one does, the amount must come from its quote and this field
+   * becomes the thing checked against it.
+   */
+  estimatedCents?: number | null;
+  /**
    * The at-most-once identity of this effect. `null` means this caller has
    * decided not to dedup and accepts that a retry sends again.
    *
@@ -177,6 +195,8 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
     const { consequenceAllows } = await import('../institution/consequence.js');
     const verdict = await consequenceAllows({
       productId: req.productId, tool: req.tool, paramsFingerprint: fingerprint(req.params),
+      browserAct: req.browserAct ?? null,
+      estimatedCents: req.estimatedCents ?? null,
     });
     if (!verdict.allowed) {
       await recordGatewayInvocation({

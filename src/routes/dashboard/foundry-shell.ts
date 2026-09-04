@@ -33,6 +33,7 @@ import { Hono } from 'hono';
 import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import { query, realCompany, referenceCompany } from '../../db/client.js';
+import { money } from '../../services/founder/portfolio.js';
 import { selectedProductId } from '../../services/founder/selected-company.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
 import type { CompanyNumbers } from '../../services/founder/what-the-numbers-say.js';
@@ -160,6 +161,16 @@ interface OwnerState {
    * a sentence, so the product should ask for a sentence.
    */
   notLooking: { canSeeThrough: string[] } | null;
+  /**
+   * WHAT HIS OWN COMPANIES ARE ASKING OF HIM, ranked by what is at stake.
+   *
+   * The first screen never read `proposed_acts` at all: they were rendered in
+   * exactly one place, inside a company's own page. So a company asking for
+   * $400 was invisible until he happened to open it, while the institution's
+   * housekeeping held the front of the queue. Money his own asset wants is not
+   * a footnote to Foundry looking after itself.
+   */
+  asked: import('../../services/institution/standing-intent.js').AskedOfHim[];
   search: {
     /**
      * WHETHER THIS SEARCH IS ONE HE ASKED FOR OR ONE FOUNDRY MADE UP.
@@ -483,6 +494,11 @@ async function readOwnerState(
   return {
     productId: self,
     ownerId: founderId,
+    asked: await (async () => {
+      const { whatIsBeingAskedOf } = await import(
+        '../../services/institution/standing-intent.js');
+      return whatIsBeingAskedOf(founderId);
+    })(),
     companyName: String(product?.name ?? 'this company'),
     firstName: founderName.split(' ')[0] || '',
     routinesHealthy: Number(health?.n ?? 0),
@@ -758,6 +774,10 @@ async function readOwnerState(
  * the institution exists to absorb.
  */
 type Attention =
+  | { kind: 'spend'; actId: string; productId: string; companyName: string;
+      summary: string; why: string; rung: string | null; rungMeans: string | null;
+      puttingItBack: string | null; costCents: number | null; expiresAt: string;
+      absorbable: boolean | null }
   | { kind: 'authorise'; responsibilityId: string; check: string; path: string;
       verification: string[]; matched: number; wrong: number;
       layer: string; layerPlainly: string }
@@ -777,6 +797,23 @@ function whatNeedsHim(s: OwnerState): Attention {
   if (s.routinesFailing.length) return { kind: 'stopped', routines: s.routinesFailing };
   const drifted = s.checks.filter((c) => c.result === 'failed');
   if (drifted.length) return { kind: 'drifted', checks: drifted.map((d) => d.check) };
+  // A COMPANY OF HIS ASKING FOR SOMETHING OUTRANKS THE INSTITUTION'S OWN
+  // HOUSEKEEPING.
+  //
+  // This screen used to rank by KIND, which put a question about one of his
+  // actual businesses last, behind Foundry looking after itself — and read
+  // `proposed_acts` nowhere at all, so the question was not merely last, it was
+  // absent. An act is ranked by its rung first and its money second: what it
+  // commits him to matters more than what it costs.
+  const ask = s.asked[0];
+  if (ask) {
+    return {
+      kind: 'spend', actId: ask.id, productId: ask.productId,
+      companyName: ask.companyName, summary: ask.summary, why: ask.why,
+      rung: ask.rung, rungMeans: ask.rungMeans, puttingItBack: ask.puttingItBack,
+      costCents: ask.costCents, expiresAt: ask.expiresAt, absorbable: ask.absorbable,
+    };
+  }
   // AN EARNED PERMISSION REQUEST IS THE MOST CONSEQUENTIAL THING FOUNDRY EVER
   // PUTS TO HIM, so it comes before anything it is merely offering to notice.
   const grant = s.grantable.find((g) => !s.permissions.some((p) => p.what === 'development'));
@@ -1321,6 +1358,46 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
       <h2>${name}</h2>
       <p class="lead">This no longer matches. I have not changed anything — I only look.</p>
     </div></section>`;
+  }
+
+  if (a.kind === 'spend') {
+    // THROUGH THE SAME CARD AS EVERY OTHER DECISION, with the two facts the
+    // consequence ladder already stores and the first screen never showed: what
+    // rung this stands on, and what it would take to put it back.
+    const cost = a.costCents == null ? 'Not stated' : money(a.costCents);
+    return decisionCard({
+      act: 'Authority',
+      question: `${a.companyName} is asking for something.`,
+      title: a.summary,
+      meaning: [
+        a.why,
+        a.rungMeans == null
+          ? 'Nothing says what consequence this has, which is itself a reason to look.'
+          : `This ${a.rungMeans}.`,
+        a.absorbable === false
+          ? 'This is not something I can ever be given standing permission for. You '
+            + 'decide it each time, and that is deliberate.'
+          : 'If you have allowed money for this company, this comes out of it.',
+      ],
+      facts: [
+        ['Company', a.companyName],
+        ['Cost', cost],
+        ['Putting it back', a.puttingItBack ?? 'Not stated'],
+        ['If you do nothing', `It lapses on ${a.expiresAt.slice(0, 10)} and I will not act`],
+      ],
+      primary: {
+        label: 'Yes — go ahead',
+        action: `/foundry/proposals/${a.actId}/approve`,
+        fields: { return_to: 'foundry' },
+      },
+      secondary: {
+        label: 'No',
+        action: `/foundry/proposals/${a.actId}/refuse`,
+        fields: { return_to: 'foundry' },
+      },
+      technical: `${a.summary} · rung ${a.rung ?? 'unclassified'} · act ${a.actId}`
+        + ` · company ${a.productId}`,
+    });
   }
 
   if (a.kind === 'acquire') {
@@ -1908,7 +1985,9 @@ function answerTo(key: string, s: OwnerState, a: Attention,
       return html`<div class="said"><p>There is nothing waiting on you at the moment,
         so there is nothing to explain yet.</p></div>`;
     }
-    const named = a.kind === 'recognise'
+    const named = a.kind === 'spend'
+      ? `${a.summary} at ${a.companyName}`
+      : a.kind === 'recognise'
       ? (a.check ? CHECK_IN_PLAIN_WORDS[a.check]?.name ?? a.proposal : a.proposal)
       : a.kind === 'recognise_company'
         // A company's job has no self-check behind it to look up a friendlier
@@ -2182,7 +2261,6 @@ foundryShellRoutes.get('/foundry', async (c) => {
   // be hiding.
   const { glanceFor } = await import('../../services/founder/portfolio.js');
   const glance = await glanceFor(s.ownerId);
-  const { money } = await import('../../services/founder/portfolio.js');
 
   const body = html`
     <h1><span id="greet">Hello</span>${s.firstName ? `, ${s.firstName}` : ''}.</h1>
@@ -2764,7 +2842,6 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
   const { currentMandate } = await import('../../services/venture/mandate.js');
   const searching = await currentMandate(String(founder.id)) !== null;
   const river = await layersFor(String(founder.id));
-  const { money } = await import('../../services/founder/portfolio.js');
   const byForm = ((await query(
     `SELECT e.value, SUM(COALESCE((SELECT m.mrr_cents FROM metric_snapshots m
         WHERE m.product_id = p.id AND m.mrr_cents IS NOT NULL

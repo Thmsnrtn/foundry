@@ -10,6 +10,8 @@ ai_spend_reservations.global_cap_cents
 ai_spend_reservations.product_cap_cents
 ai_spend_reservations.reserved_cents
 anomalies.expected_value
+asset_money_spent.act_ref
+asset_money_spent.provider_ref
 autonomy_consents.from_mode
 board_packets.metrics_snapshot_json
 causal_chains.effect_entity_id

@@ -60,6 +60,14 @@ export interface ConsequenceVerdict {
  */
 export async function consequenceAllows(input: {
   productId: string; tool: string; paramsFingerprint: string | null;
+  /**
+   * What the act IS, for a capability whose consequence depends on it rather
+   * than on the tool. A browser is the case that matters: reading a page and
+   * accepting somebody's terms arrive through the same hand.
+   */
+  browserAct?: string | null;
+  /** What this act will cost, in cents. Required on the financial rung. */
+  estimatedCents?: number | null;
 }): Promise<ConsequenceVerdict> {
   const facts = await rungOfTool(input.tool);
   if (!facts) {
@@ -68,18 +76,56 @@ export async function consequenceAllows(input: {
       reason: `nothing says what consequence '${input.tool}' has, so it may not act`,
     };
   }
-  const { rung } = facts;
+
+  // CONSEQUENCE BELONGS TO THE ACT, NOT ONLY TO THE CAPABILITY.
+  //
+  // `act_in_a_browser` sits at `public` and was therefore waved through, and
+  // pressing a button on a site is how one accepts terms, creates an account in
+  // the institution's name, or authorises a payment. The constitution says a
+  // materially irreversible act may never be silently absorbed into ordinary
+  // autonomous authority; a browser at `public` absorbed all of them.
+  //
+  // The higher of the two rungs governs, and an act that will not say what it
+  // is gets refused rather than defaulting to the cheapest reading of itself —
+  // the same precedent as a tool bound to nothing.
+  const escalated = await rungOfBrowserAct(facts, input.browserAct ?? null);
+  if ('refused' in escalated) {
+    return { allowed: false, rung: facts.rung, reason: escalated.refused };
+  }
+  const { rung } = escalated;
+
   if (rung === 'observe' || rung === 'prepare' || rung === 'reversible' || rung === 'public') {
     return { allowed: true, rung, reason: `${facts.whatItDoes}: ${facts.whatItMeans}` };
   }
 
   const { spendApprovalFor, allowanceFor } = await import('./standing-intent.js');
   if (rung === 'financial') {
+    // AN ACT THAT SPENDS MONEY MUST SAY HOW MUCH.
+    //
+    // Without this, "is there anything left?" was the whole test, and an
+    // allowance with one cent remaining authorised a thousand-dollar act. The
+    // amount is the caller's declaration of its own cost, and an act that will
+    // not declare one cannot be metered, so it does not proceed.
+    const cost = input.estimatedCents ?? null;
+    if (cost === null || !Number.isFinite(cost) || cost < 0) {
+      return {
+        allowed: false, rung,
+        reason: `this ${facts.whatItMeans}, and nothing said what it would cost — `
+          + 'an act that spends money has to say how much before it may',
+      };
+    }
     // An allowance is standing money; it does not need to be spent here, only
-    // to exist and have something left. The budget door spends it.
+    // to exist and to cover this act. The budget door spends it.
     const allowance = await allowanceFor(input.productId);
-    if (allowance && allowance.remainingCents > 0) {
+    if (allowance && allowance.remainingCents >= cost) {
       return { allowed: true, rung, reason: `within what you allowed: ${allowance.statement}` };
+    }
+    if (allowance && cost > allowance.remainingCents) {
+      return {
+        allowed: false, rung,
+        reason: `that would cost $${(cost / 100).toFixed(2)} and $`
+          + `${(allowance.remainingCents / 100).toFixed(2)} is left of what you allowed`,
+      };
     }
     const approved = await spendApprovalFor({
       productId: input.productId, actionType: input.tool,
@@ -104,5 +150,41 @@ export async function consequenceAllows(input: {
     allowed: false, rung,
     reason: `this ${facts.whatItMeans}. That is yours to decide each time, and you have `
       + 'not approved this one',
+  };
+}
+
+
+/**
+ * THE HIGHER OF TWO RUNGS, WHEN THE ACT CARRIES ITS OWN CONSEQUENCE.
+ *
+ * Only capabilities listed in `browser_act_kinds`' world need this — today that
+ * is the browser. Everything else keeps the rung its capability declares, so
+ * this is a widening of one door rather than a new ladder.
+ */
+async function rungOfBrowserAct(
+  facts: RungFacts, browserAct: string | null,
+): Promise<{ rung: Rung } | { refused: string }> {
+  if (facts.capabilityKey !== 'act_in_a_browser') return { rung: facts.rung };
+  if (browserAct === null || browserAct.trim() === '') {
+    return {
+      refused: 'a browser can read a page or accept somebody\'s terms, and this act '
+        + 'did not say which, so it may not act',
+    };
+  }
+  const row = (await query(
+    `SELECT k.rung, k.what_it_is, r.sort_order AS act_order,
+            (SELECT sort_order FROM consequence_rungs WHERE rung = ?) AS cap_order
+       FROM browser_act_kinds k
+       JOIN consequence_rungs r ON r.rung = k.rung
+      WHERE k.kind = ?`, [facts.rung, browserAct.trim()]))
+    .rows[0] as Record<string, unknown> | undefined;
+  if (!row) {
+    return { refused: `nothing says what kind of act '${browserAct}' in a browser is, `
+      + 'so it may not act' };
+  }
+  return {
+    rung: Number(row.act_order) > Number(row.cap_order)
+      ? String(row.rung) as Rung
+      : facts.rung,
   };
 }

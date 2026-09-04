@@ -367,6 +367,21 @@ CREATE TABLE api_keys (
   last_used_at DATETIME,
   revoked_at DATETIME
 , product_id TEXT, role TEXT, scopes TEXT, created_by TEXT, expires_at TEXT);
+CREATE TABLE asset_money_spent (
+  id            TEXT PRIMARY KEY,
+  product_id    TEXT NOT NULL REFERENCES products(id),
+  capability    TEXT,
+  tool          TEXT NOT NULL,
+  -- What act this was, so a line in the meter can be walked back to a decision.
+  act_ref       TEXT,
+  amount_cents  INTEGER NOT NULL,
+  currency      TEXT NOT NULL DEFAULT 'usd',
+  -- reserved: committed before the wire. settled: the provider's own receipt.
+  -- reversed: it did not happen, or came back.
+  source        TEXT NOT NULL CHECK (source IN ('reserved','settled','reversed')),
+  provider_ref  TEXT,
+  recorded_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE audit_log (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL REFERENCES products(id),
@@ -532,6 +547,12 @@ CREATE TABLE briefing_shares (
   expires_at TEXT NOT NULL,                 -- defaults to 30 days from create
   view_count INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE browser_act_kinds (
+  kind        TEXT PRIMARY KEY,
+  what_it_is  TEXT NOT NULL,
+  rung        TEXT NOT NULL REFERENCES consequence_rungs(rung),
+  sort_order  INTEGER NOT NULL
 );
 CREATE TABLE business_model_profile (
   id TEXT PRIMARY KEY,
@@ -3117,7 +3138,7 @@ CREATE TABLE products (
   CHECK(company_lifecycle_state IN ('setup', 'learning', 'operating', 'optimizing', 'scaling')), scp_status TEXT DEFAULT 'provisioning'
   CHECK(scp_status IN ('provisioning', 'active', 'paused', 'archived')), operating_budget_monthly_usd REAL DEFAULT 50.0, ai_cost_trailing_30d_usd REAL DEFAULT 0.0, attributed_revenue_trailing_30d_usd REAL DEFAULT 0.0, total_evolution_cycles INTEGER DEFAULT 0, golden_suite_size INTEGER DEFAULT 0, evolution_enabled INTEGER DEFAULT 1, disabled_tools TEXT, cadence_mode TEXT, entitlement_paused_at TEXT, erasure_scheduled_at DATETIME, website_url TEXT, health_score INTEGER, reality TEXT NOT NULL DEFAULT 'real'
   CHECK (reality IN ('real', 'reference')), posture TEXT NOT NULL DEFAULT 'grow'
-  CHECK (posture IN ('grow','hold','harvest','reposition','sell','retire')), form TEXT);
+  CHECK (posture IN ('grow','hold','harvest','reposition','sell','retire')), form TEXT, from_opportunity_id TEXT REFERENCES venture_opportunities(id));
 CREATE TABLE proposed_acts (
   id                  TEXT PRIMARY KEY,
   product_id          TEXT NOT NULL REFERENCES products(id),
@@ -4366,6 +4387,7 @@ CREATE INDEX idx_alignment_product ON alignment_snapshots(product_id, snapshot_d
 CREATE INDEX idx_anomalies ON anomalies(product_id, status);
 CREATE INDEX idx_api_keys_founder ON api_keys(founder_id);
 CREATE INDEX idx_api_keys_hash ON api_keys(key_hash);
+CREATE INDEX idx_asset_money_spent_product ON asset_money_spent(product_id, recorded_at);
 CREATE UNIQUE INDEX idx_assisted_action_message
   ON outbound_actions(product_id, inbound_message_id)
   WHERE inbound_message_id IS NOT NULL AND status<>'cancelled';
@@ -4680,6 +4702,8 @@ CREATE INDEX idx_product_telemetry_step
   ON product_telemetry_events(step, created_at);
 CREATE INDEX idx_products_entitlement_paused
   ON products(entitlement_paused_at);
+CREATE INDEX idx_products_from_opportunity ON products(from_opportunity_id)
+  WHERE from_opportunity_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_products_ingest_token ON products(ingest_token);
 CREATE INDEX idx_products_market_category ON products(market_category);
 CREATE INDEX idx_products_owner ON products(owner_id);
@@ -4879,6 +4903,16 @@ BEGIN
     WHERE scope = 'founder' AND scope_id = NEW.founder_id AND date = NEW.date), 0) + NEW.reserved_cents > NEW.founder_cap_cents
     ;
 END;
+CREATE TRIGGER asset_money_is_append_only
+BEFORE UPDATE ON asset_money_spent
+BEGIN SELECT RAISE(ABORT,'asset_money:append_only'); END;
+CREATE TRIGGER asset_money_is_not_deleted
+BEFORE DELETE ON asset_money_spent
+BEGIN SELECT RAISE(ABORT,'asset_money:append_only'); END;
+CREATE TRIGGER asset_money_is_not_negative
+BEFORE INSERT ON asset_money_spent
+WHEN NEW.amount_cents < 0
+BEGIN SELECT RAISE(ABORT,'asset_money:negative'); END;
 CREATE TRIGGER assisted_action_plan_guard
 BEFORE INSERT ON outbound_actions WHEN NEW.responsibility_id IS NOT NULL
 BEGIN
@@ -4928,6 +4962,15 @@ BEGIN
       AND e.source='founder_reply_proposal'
       AND json_extract(e.payload_json,'$.message_id')=NEW.inbound_message_id);
 END;
+CREATE TRIGGER browser_act_kinds_constitutional_delete
+BEFORE DELETE ON browser_act_kinds
+BEGIN SELECT RAISE(ABORT,'browser_act_kind:constitutional'); END;
+CREATE TRIGGER browser_act_kinds_constitutional_insert
+BEFORE INSERT ON browser_act_kinds
+BEGIN SELECT RAISE(ABORT,'browser_act_kind:constitutional'); END;
+CREATE TRIGGER browser_act_kinds_constitutional_update
+BEFORE UPDATE ON browser_act_kinds
+BEGIN SELECT RAISE(ABORT,'browser_act_kind:constitutional'); END;
 CREATE TRIGGER capabilities_constitutional_delete BEFORE DELETE ON capabilities
 BEGIN SELECT RAISE(ABORT,'capability:constitutional'); END;
 CREATE TRIGGER capabilities_constitutional_insert BEFORE INSERT ON capabilities
@@ -6436,6 +6479,25 @@ END;
 CREATE TRIGGER posture_change_immutable
 BEFORE UPDATE ON posture_changes
 BEGIN SELECT RAISE(ABORT,'posture_change:immutable'); END;
+CREATE TRIGGER product_lineage_evidence_mode_insert
+BEFORE INSERT ON products
+WHEN NEW.from_opportunity_id IS NOT NULL
+     AND NEW.reality = 'real'
+     AND (SELECT evidence_mode FROM venture_opportunities
+           WHERE id = NEW.from_opportunity_id) <> 'real'
+BEGIN SELECT RAISE(ABORT,'product_lineage:evidence_mode_mismatch'); END;
+CREATE TRIGGER product_lineage_evidence_mode_update
+BEFORE UPDATE OF from_opportunity_id ON products
+WHEN NEW.from_opportunity_id IS NOT NULL
+     AND NEW.reality = 'real'
+     AND (SELECT evidence_mode FROM venture_opportunities
+           WHERE id = NEW.from_opportunity_id) <> 'real'
+BEGIN SELECT RAISE(ABORT,'product_lineage:evidence_mode_mismatch'); END;
+CREATE TRIGGER product_lineage_is_write_once
+BEFORE UPDATE OF from_opportunity_id ON products
+WHEN OLD.from_opportunity_id IS NOT NULL
+     AND NEW.from_opportunity_id IS NOT OLD.from_opportunity_id
+BEGIN SELECT RAISE(ABORT,'product_lineage:write_once'); END;
 CREATE TRIGGER products_reality_immutable
 BEFORE UPDATE OF reality ON products
 WHEN NEW.reality IS NOT OLD.reality

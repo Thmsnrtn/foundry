@@ -27,7 +27,7 @@
 
 import { createHash } from 'node:crypto';
 import { nanoid } from 'nanoid';
-import { query } from '../../db/client.js';
+import { query, realCompany } from '../../db/client.js';
 
 // ─── the vocabulary, in his words ────────────────────────────────────────────
 
@@ -593,6 +593,60 @@ export async function openProposals(productId: string): Promise<ProposedAct[]> {
   }));
 }
 
+export interface AskedOfHim extends ProposedAct {
+  /** Whose company is asking, so a question arrives attached to a thing he owns. */
+  companyName: string;
+}
+
+/**
+ * WHAT THE PORTFOLIO IS ASKING OF HIM, RANKED BY WHAT IS AT STAKE.
+ *
+ * `openProposals` is per-company, and the first screen never read it — so a
+ * company asking for $400 appeared nowhere until he happened to open that
+ * company's page, while the institution's own housekeeping had the front of the
+ * queue. The home screen ranked by KIND; this ranks by CONSEQUENCE.
+ *
+ * Order: the rung first, because what an act commits him to matters more than
+ * what it costs; then the money; then what expires soonest, so a question does
+ * not lapse merely because a cheaper one was asked first. An unanswered ask
+ * disappearing on its expiry is a separate defect and is not fixed here.
+ *
+ * Real companies only. A rehearsal may not ask him for anything.
+ */
+export async function whatIsBeingAskedOf(founderId: string): Promise<AskedOfHim[]> {
+  return ((await query(
+    `SELECT a.id, a.product_id, a.subject, a.action_type, a.summary, a.why,
+            a.expected_effect, a.risk, a.consequence, a.proposed_at, a.expires_at,
+            a.decision, a.rung, a.cost_cents,
+            r.what_it_means AS rung_means, r.putting_it_back, r.absorbable,
+            p.name AS company_name
+       FROM proposed_acts a
+       JOIN products p ON p.id = a.product_id
+       LEFT JOIN consequence_rungs r ON r.rung = a.rung
+      WHERE p.owner_id = ? AND ${realCompany('p')}
+        AND a.decision IS NULL AND a.revoked_at IS NULL
+        AND datetime(a.expires_at) > datetime('now')
+      ORDER BY COALESCE(r.sort_order, 0) DESC,
+               COALESCE(a.cost_cents, 0) DESC,
+               datetime(a.expires_at) ASC,
+               a.rowid`, [founderId]))
+    .rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+    id: String(r.id), productId: String(r.product_id), subject: String(r.subject),
+    actionType: r.action_type == null ? null : String(r.action_type),
+    summary: String(r.summary), why: String(r.why),
+    expectedEffect: String(r.expected_effect), risk: String(r.risk),
+    consequence: String(r.consequence) as ProposedAct['consequence'],
+    rung: r.rung == null ? null : String(r.rung),
+    rungMeans: r.rung_means == null ? null : String(r.rung_means),
+    puttingItBack: r.putting_it_back == null ? null : String(r.putting_it_back),
+    absorbable: r.absorbable == null ? null : Number(r.absorbable) === 1,
+    costCents: r.cost_cents == null ? null : Number(r.cost_cents),
+    proposedAt: String(r.proposed_at), expiresAt: String(r.expires_at),
+    decision: r.decision == null ? null : String(r.decision) as 'approved' | 'refused',
+    companyName: String(r.company_name),
+  }));
+}
+
 /**
  * The owner answers. `decidedBy` is a principal reference the ROUTE builds from
  * the authenticated session — never from the request — and the database checks
@@ -750,10 +804,20 @@ export interface LiveAllowance {
 /**
  * WHAT HE HAS ALLOWED, AND WHAT IS LEFT OF IT.
  *
- * Spend is counted from `ai_daily_spend` since the day the allowance was set —
- * the ledger the ceilings already use — rather than kept as a second running
- * total here. Two counters for one quantity is the shape this codebase keeps
- * finding broken, with the weaker one live.
+ * ONE METER, TWO SOURCES. Spend counted since the day the allowance was set,
+ * from both ledgers that can deplete it: `ai_daily_spend`, which is what the
+ * institution costs to think, and `asset_money_spent`, which is real money
+ * leaving for a domain, a service, or an experiment.
+ *
+ * This used to count tokens alone, which meant an allowance depleted when
+ * Foundry THOUGHT and never when it SPENT — and `consequenceAllows` authorises
+ * the entire financial rung against what is left of it. Harmless only while
+ * nothing but the model could spend; wrong the moment one provider connected.
+ * Two counters for one quantity is the shape this codebase keeps finding
+ * broken. This was subtler: one counter for two quantities, measuring the
+ * cheaper one.
+ *
+ * A reversal is a row, so it nets off here rather than being edited away.
  */
 export async function allowanceFor(productId: string): Promise<LiveAllowance | null> {
   const row = (await query(
@@ -762,16 +826,55 @@ export async function allowanceFor(productId: string): Promise<LiveAllowance | n
         AND (until IS NULL OR datetime(until) > datetime('now'))`, [productId]))
     .rows[0] as Record<string, unknown> | undefined;
   if (!row) return null;
-  const spent = Number(((await query(
+  const thinking = Number(((await query(
     `SELECT COALESCE(SUM(spent_cents), 0) AS c FROM ai_daily_spend
       WHERE scope = 'product' AND scope_id = ? AND date >= date(?)`,
     [productId, String(row.set_at)])).rows[0] as Record<string, unknown>).c);
+  const money = Number(((await query(
+    `SELECT COALESCE(SUM(CASE WHEN source = 'reversed' THEN -amount_cents
+                              ELSE amount_cents END), 0) AS c
+       FROM asset_money_spent
+      WHERE product_id = ? AND date(recorded_at) >= date(?)`,
+    [productId, String(row.set_at)])).rows[0] as Record<string, unknown>).c);
   const amount = Number(row.amount_cents);
+  const spent = thinking + Math.max(0, money);
   return {
     id: String(row.id), statement: String(row.statement), amountCents: amount,
     spentCents: spent, remainingCents: Math.max(0, amount - spent),
     setAt: String(row.set_at).slice(0, 10),
   };
+}
+
+/**
+ * REAL MONEY LEAVING, AS A ROW.
+ *
+ * Written on the same reserve/settle rhythm the outbound budget already uses.
+ * Nothing calls this yet, because no capability can spend — which is exactly
+ * when to build the meter, rather than after the first charge.
+ */
+// PROVENANCE, DELIBERATELY WRITE-ONLY FOR NOW. `act_ref` is the proposed act
+// this money came out of and `provider_ref` is the provider's own receipt id —
+// both recorded so a line in the meter can be walked back to a decision he made
+// and to what the other side says happened. Nothing reads them yet because
+// nothing spends yet; a ledger that cannot be reconciled against the provider
+// is not one an acquirer would ever accept, and adding the fields after the
+// first charge means the early lines never have them.
+export async function recordMoneySpent(input: {
+  productId: string; tool: string; amountCents: number;
+  capability?: string | null; actRef?: string | null;
+  source: 'reserved' | 'settled' | 'reversed';
+  providerRef?: string | null; currency?: string;
+}): Promise<string> {
+  const id = nanoid();
+  await query(
+    `INSERT INTO asset_money_spent
+       (id, product_id, capability, tool, act_ref, amount_cents, currency, source,
+        provider_ref)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+    [id, input.productId, input.capability ?? null, input.tool,
+      input.actRef ?? null, input.amountCents, input.currency ?? 'usd',
+      input.source, input.providerRef ?? null]);
+  return id;
 }
 
 export async function setAllowance(input: {

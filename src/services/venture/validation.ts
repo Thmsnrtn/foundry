@@ -19,7 +19,7 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
-import { observe } from './market-evidence.js';
+import { matchRealityOnly, observe, realityOnlyPatterns } from './market-evidence.js';
 
 export interface Experiment {
   id: string;
@@ -236,14 +236,7 @@ export async function whereToLookNext(opportunityId: string): Promise<WhereToLoo
       ORDER BY blocking DESC, rowid`, [opportunityId]))
     .rows as unknown as Array<Record<string, unknown>>);
 
-  const patterns = ((await query(
-    `SELECT pattern, only_settled_by, looks_like, would_be_wrong_if
-       FROM reality_only_questions ORDER BY sort_order`, []))
-    .rows as unknown as Array<Record<string, unknown>>)
-    .map((p) => ({
-      pattern: String(p.pattern), by: String(p.only_settled_by),
-      looksLike: String(p.looks_like), wrongIf: String(p.would_be_wrong_if),
-    }));
+  const patterns = await realityOnlyPatterns();
 
   const onlyRealityCanSettle: WhereToLookNext['onlyRealityCanSettle'] = [];
   const stillWorthReading: string[] = [];
@@ -254,11 +247,11 @@ export async function whereToLookNext(opportunityId: string): Promise<WhereToLoo
     const question = String(row.question);
     const blocking = Number(row.blocking) === 1;
     if (blocking) blockingCount += 1;
-    const hit = patterns.find((p) => question.toLowerCase().includes(p.pattern));
+    const hit = matchRealityOnly(question, patterns);
     if (hit) {
       onlyRealityCanSettle.push({
-        question, onlySettledBy: hit.by, looksLike: hit.looksLike,
-        wouldBeWrongIf: hit.wrongIf,
+        question, onlySettledBy: hit.onlySettledBy, looksLike: hit.looksLike,
+        wouldBeWrongIf: hit.wouldBeWrongIf,
         cheapestTest: row.cheapest_test == null ? null : String(row.cheapest_test),
       });
     } else {

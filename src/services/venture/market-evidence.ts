@@ -456,3 +456,48 @@ export async function cheapestWayForward(opportunityId: string): Promise<{
     without: blocking.filter((u) => u.cheapestTest === null).map((u) => u.question),
   };
 }
+
+export interface RealityOnly {
+  /** The constitutional pattern that matched. */
+  pattern: string;
+  /** What the question is really asking. */
+  whatItAsks: string;
+  /** The only thing that settles it. Becomes the unknown's cheapest test. */
+  onlySettledBy: string;
+  /** What a result supporting the claim would look like. */
+  looksLike: string;
+  /** And what would mean we were wrong. */
+  wouldBeWrongIf: string;
+}
+
+/**
+ * THE QUESTIONS READING CANNOT SETTLE.
+ *
+ * Constitutional, from `reality_only_questions` (migration 250/251) — a claim
+ * about the world rather than an inference, which is why nothing may write to
+ * that table at runtime.
+ */
+export async function realityOnlyPatterns(): Promise<RealityOnly[]> {
+  return ((await query(
+    `SELECT pattern, what_it_asks, only_settled_by, looks_like, would_be_wrong_if
+       FROM reality_only_questions ORDER BY sort_order`, []))
+    .rows as unknown as Array<Record<string, unknown>>).map((p) => ({
+    pattern: String(p.pattern), whatItAsks: String(p.what_it_asks),
+    onlySettledBy: String(p.only_settled_by), looksLike: String(p.looks_like),
+    wouldBeWrongIf: String(p.would_be_wrong_if),
+  }));
+}
+
+/**
+ * DOES THIS QUESTION BELONG TO BEHAVIOUR RATHER THAN TO SOURCES?
+ *
+ * One rule, in one place. Two matchers that drift are worse than none, because
+ * a question could then be blocking where it is asked and readable where it is
+ * answered, and a candidate would advance through the gap between them.
+ */
+export function matchRealityOnly(
+  question: string, patterns: RealityOnly[],
+): RealityOnly | null {
+  const q = question.toLowerCase();
+  return patterns.find((p) => q.includes(p.pattern)) ?? null;
+}

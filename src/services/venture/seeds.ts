@@ -18,7 +18,8 @@
 // =============================================================================
 
 import { nanoid } from 'nanoid';
-import { query } from '../../db/client.js';
+import { batch, query } from '../../db/client.js';
+import { matchRealityOnly, realityOnlyPatterns } from './market-evidence.js';
 
 export type SeedOrigin = 'signal' | 'portfolio_need' | 'pattern' | 'reasoned';
 
@@ -163,19 +164,54 @@ export async function promote(input: {
     };
   }
 
+  // THE UNKNOWNS HAVE TO BECOME ROWS, NOT A STRING.
+  //
+  // `unknowns_json` is a record for a reader. `market_unknowns` is what the
+  // institution can act on: what blocks advancement, what an experiment is
+  // proposed against, what gets settled. Writing only the former is why a real
+  // candidate could be promoted and then never move again — every question
+  // standing in its way existed as prose nothing could reach.
+  //
+  // Whether a question blocks is DERIVED, never asserted: a question only
+  // behaviour can settle is blocking by definition, and the constitutional
+  // `only_settled_by` becomes its cheapest test — which is the field an
+  // experiment cannot be proposed without.
+  const patterns = await realityOnlyPatterns();
   const opportunityId = nanoid();
-  await query(
-    `INSERT INTO venture_opportunities
-       (id, mandate_id, founder_id, headline, who_has_it, the_problem, why_it_might,
-        kill_thesis, unknowns_json, sources_json, evidence_mode, from_seed_id)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [opportunityId, String(seed.mandate_id), String(seed.founder_id),
-      input.headline.trim(), input.whoHasIt.trim(), input.theProblem.trim(),
-      input.whyItMight.trim(), input.killThesis.trim(),
-      JSON.stringify(input.unknowns), JSON.stringify(input.sources),
-      String(seed.evidence_mode), input.seedId]);
-  await query('UPDATE opportunity_seeds SET promoted_to = ? WHERE id = ?',
-    [opportunityId, input.seedId]);
+
+  // ALL OF IT, OR NONE OF IT.
+  //
+  // Written as one transaction because the dangerous partial failure is silent:
+  // a candidate whose opportunity row exists and whose BLOCKING questions did
+  // not finish being written is a candidate that advances past a gate which
+  // should have held it, and nothing downstream could tell that from a
+  // candidate legitimately free of blockers.
+  await batch([
+    { sql: `INSERT INTO venture_opportunities
+              (id, mandate_id, founder_id, headline, who_has_it, the_problem,
+               why_it_might, kill_thesis, unknowns_json, sources_json,
+               evidence_mode, from_seed_id)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+      args: [opportunityId, String(seed.mandate_id), String(seed.founder_id),
+        input.headline.trim(), input.whoHasIt.trim(), input.theProblem.trim(),
+        input.whyItMight.trim(), input.killThesis.trim(),
+        JSON.stringify(input.unknowns), JSON.stringify(input.sources),
+        String(seed.evidence_mode), input.seedId] },
+    ...input.unknowns.map((question) => {
+      const hit = matchRealityOnly(question, patterns);
+      return {
+        sql: `INSERT INTO market_unknowns
+                (id, founder_id, opportunity_id, claim_id, question, blocking,
+                 cheapest_test)
+              VALUES (?,?,?,NULL,?,?,?)`,
+        args: [nanoid(), String(seed.founder_id), opportunityId, question.trim(),
+          hit === null ? 0 : 1, hit === null ? null : hit.onlySettledBy],
+      };
+    }),
+    { sql: 'UPDATE opportunity_seeds SET promoted_to = ? WHERE id = ?',
+      args: [opportunityId, input.seedId] },
+  ]);
+
   return { opportunityId };
 }
 
@@ -289,4 +325,29 @@ export async function whyWeStartedLooking(opportunityId: string): Promise<{
     orItCouldBe: row.or_it_could_be == null ? null : String(row.or_it_could_be),
     misreadIf: row.misread_if == null ? null : String(row.misread_if),
   };
+}
+
+/**
+ * WHY DO I OWN THIS?
+ *
+ * The same chain, entered from the asset rather than the candidate. An asset is
+ * the only end of this chain he will ever look at from — by the time something
+ * is running, the candidate that produced it is a row nobody remembers the id
+ * of — and until `products.from_opportunity_id` existed there was no way in.
+ *
+ * Returns null for an asset with no recorded lineage, which is the honest
+ * answer for anything acquired rather than discovered, and for everything that
+ * existed before the link did. Silence, not a guess.
+ */
+export async function whyWeOwnThis(productId: string): Promise<
+  (Awaited<ReturnType<typeof whyWeStartedLooking>> & { opportunityId: string }) | null
+> {
+  const row = (await query(
+    'SELECT from_opportunity_id FROM products WHERE id = ?', [productId]))
+    .rows[0] as Record<string, unknown> | undefined;
+  if (!row || row.from_opportunity_id == null) return null;
+  const opportunityId = String(row.from_opportunity_id);
+  const chain = await whyWeStartedLooking(opportunityId);
+  if (chain === null) return null;
+  return { ...chain, opportunityId };
 }
