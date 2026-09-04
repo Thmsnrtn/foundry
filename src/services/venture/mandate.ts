@@ -35,6 +35,7 @@ import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import type { PortfolioFit } from '../founder/resilience.js';
 import type { HowItWasResearched, OpenUnknown, Standing } from './market-evidence.js';
+import { matchRealityOnly, realityOnlyPatterns } from './market-evidence.js';
 import type { Experiment, WhereToLookNext } from './validation.js';
 import type { LegalPicture } from './legal-surface.js';
 import type { Need } from '../institution/capabilities.js';
@@ -796,11 +797,24 @@ export interface PresentedCandidate {
 }
 
 /** The unknowns that are not "more work", but "we do not have a business". */
-const DISQUALIFYING = [
-  'would pay', 'will pay', 'anyone pays', 'ever paid', 'willing to pay',
-];
+// A THIRD COPY OF A RULE THAT NOW HAS ONE HOME.
+//
+// These were the payment patterns from `reality_only_questions`, written out
+// again — the third place the same rule lived, after the one that decides
+// whether a promoted unknown blocks and the one that decides whether more
+// reading would help. Three copies of a rule is three chances for a candidate
+// to be stopped by one and waved through by another.
+//
+// `ever paid` is kept because it is not in the constitutional table and this
+// is the only place that asked for it; everything else comes from the table.
+const NOT_IN_THE_TABLE = ['ever paid'];
 
 export async function candidatesFor(mandateId: string): Promise<PresentedCandidate[]> {
+  // Only the ones about money stop a candidate here: whether somebody would
+  // switch or click is a question for an experiment, not a bar to being
+  // presented at all.
+  const moneyPatterns = (await realityOnlyPatterns())
+    .filter((r) => r.whatItAsks.includes('money') || r.whatItAsks.includes('pay'));
   const mandate = (await query(
     `SELECT founder_id, evidence_mode FROM venture_mandates WHERE id = ?`, [mandateId]))
     .rows[0] as Record<string, unknown> | undefined;
@@ -828,7 +842,8 @@ export async function candidatesFor(mandateId: string): Promise<PresentedCandida
     const unknowns = JSON.parse(String(r.unknowns_json)) as string[];
     const sources = JSON.parse(String(r.sources_json)) as string[];
     const blocking = unknowns.find((u) =>
-      DISQUALIFYING.some((phrase) => u.toLowerCase().includes(phrase)));
+      matchRealityOnly(u, moneyPatterns) !== null
+      || NOT_IN_THE_TABLE.some((phrase) => u.toLowerCase().includes(phrase)));
     const verdict = await survivesGuidance({
       id: String(r.id), headline: String(r.headline), why: String(r.why_it_might),
     }, guidance);

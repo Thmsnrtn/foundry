@@ -98,8 +98,21 @@ describe('the river in its layers', () => {
     const tributaries = river.layers.find((l) => l.name === 'tributaries');
     expect(ANCHOR_CENTS).toBe(100_000);
     expect(anchors?.companies.map((c) => c.name)).toEqual(['Big Co']);
-    expect(tributaries?.companies.map((c) => c.name).sort()).toEqual(['Blind Co', 'Small Co']);
+    expect(tributaries?.companies.map((c) => c.name).sort()).toEqual(['Small Co']);
     expect(anchors?.cashFlowCents).toBe(260_000);
+  });
+
+  it('does not call a company a tributary when nothing has told it the number', () => {
+    // A COMPANY THAT REPORTS NOTHING IS NOT A SMALL COMPANY. Blind Co has no MRR
+    // reading at all, and the layers used to place it beside the ones earning
+    // under the anchor line — which asserts a number nobody observed, in the one
+    // view whose whole job is to say what the river is doing. It has its own
+    // layer, and that layer contributes nothing to any total.
+    return layersFor(OWNER).then((river) => {
+      const unseen = river.layers.find((l) => l.name === 'unseen');
+      expect(unseen?.companies.map((c) => c.name)).toEqual(['Blind Co']);
+      expect(unseen?.cashFlowCents).toBe(0);
+    });
   });
   it('counts the frontier from real searches only', async () => {
     const river = await layersFor(OWNER);

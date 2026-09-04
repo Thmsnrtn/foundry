@@ -8,7 +8,7 @@ import { Hono } from 'hono';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import {
-  absorbGuidance, currentMandate, mandateProgress, openMandate,
+  absorbGuidance, candidatesFor, currentMandate, mandateProgress, openMandate,
   readVentureSentence, scepticismLevel, stopMandate, survivesGuidance,
 } from '../../src/services/venture/mandate.js';
 
@@ -181,14 +181,22 @@ describe('what it can honestly report', () => {
     // is invented evidence wearing a research report's clothes.
     const progress = await mandateProgress(OWNER);
     expect(progress?.looked).toBe(0);
-    expect(progress?.blocked).toContain('cannot see what is happening outside');
-    expect(progress?.blocked).toContain('not going to describe opportunities from');
+    // The sentence was shortened deliberately — it sits on the first screen and
+    // ran to a hundred and twenty grey words describing Foundry's own rigour to
+    // the one person who never asked to be reassured about it. What it has to
+    // keep saying is both halves: that it cannot see, and that it will not
+    // invent instead.
+    expect(progress?.blocked).toContain('cannot see outside your companies yet');
+    expect(progress?.blocked).toContain('will not describe opportunities from memory');
     // AND WHAT IT IS MISSING IS THE LOOKING, NOT THE DISCIPLINE. The research
     // machinery is built and rehearsed; naming the kinds of source that would
     // each unblock it is a truer answer than "I need a provider", because a
     // market was never one provider.
     expect(progress?.wouldNeed).toContain('somewhere to actually look');
-    expect(progress?.wouldNeed).toContain('missing is the looking, not the discipline');
+    // Named as the KINDS OF SOURCE that would each unblock it, which is the
+    // truer answer than "I need a provider" — a market was never one provider.
+    expect(progress?.wouldNeed).toContain('what a customer said in public');
+    expect(progress?.wouldNeed).toContain('Any one would let me start');
   });
 
   it('models that gap as a sense, so it unblocks itself when one exists', async () => {
@@ -400,7 +408,7 @@ describe('the owner walks it', () => {
 
     const home = await asOwner('/foundry?done=looking');
     expect(home.text).toContain('What I am looking for');
-    expect(home.text).toContain('cannot see what is happening outside');
+    expect(home.text).toContain('cannot see outside your companies yet');
   });
 
   it('absorbs steering typed into the ask box', async () => {
@@ -440,8 +448,24 @@ describe('the owner walks it', () => {
     expect(home.text).toContain('>Unknown<');
     expect(home.text).toContain('>Checked<');
     expect(home.text).toContain('I recommend');
-    // AND WHY IT CANNOT EARN A COMPANY YET, on the card rather than a footnote.
-    expect(home.text).toContain('cannot earn a company yet');
+    // AND WHY IT CANNOT EARN A COMPANY YET.
+    //
+    // This asserted the sentence on the first screen, and the first screen
+    // deliberately stopped carrying it: every candidate used to render its whole
+    // dossier there, three at once made the page a hundred and eleven lines deep,
+    // and not one of them was asking him for anything. What has not earned his
+    // attention is now a count and a sentence.
+    //
+    // So the substance is checked where it lives — the candidate carries the
+    // unknown that stops it — and the page is checked for the newer truth: that
+    // the ones which are not ready are summarised rather than pitched.
+    const openRef = await currentMandate(OWNER);
+    if (!openRef) throw new Error('expected a mandate');
+    const cards = await candidatesFor(openRef.id);
+    const stopped = cards.filter((c) => c.blockedBy !== null);
+    expect(stopped.length).toBeGreaterThan(0);
+    expect(stopped.some((c) => /would pay/i.test(c.blockedBy ?? ''))).toBe(true);
+    expect(home.text).toMatch(/earned your attention yet|I am working through/);
     // Invented, said before anything about it.
     expect(home.text).toContain('Invented, to show you how I judge');
     // No score anywhere.

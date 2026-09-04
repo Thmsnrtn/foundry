@@ -111,14 +111,23 @@ jobs:
           # Under /foundry the session middleware answers 401 before routing, so
           # asking unauthenticated cannot tell a missing route from a live one —
           # every check above would have passed on the release that 404'd. The
-          # release now says which routes it registered, and the ones his
-          # screens post to are named here.
-          curl -s --max-time 15 https://foundry-intel.fly.dev/internal/routes > /tmp/routes.json
+          # release answers whether the routes his screens post to are in it.
+          #
+          # ASKED, NOT HARVESTED. This used to fetch the whole inventory and
+          # grep it, which published the owner's complete route map to anyone
+          # who asked — and grep made every check a substring match, so
+          # "POST /foundry/venture" was satisfied by "POST /foundry/venture/
+          # advance". Naming them as queries fixes both: nothing is listed, and
+          # each is matched exactly.
+          Q=""
           for want in "POST /foundry/ask" "POST /foundry/venture" "POST /foundry/companies" "GET /foundry" "POST /foundry/reference"; do
-            if grep -q "$want" /tmp/routes.json; then
-              echo "ok   $want is in this release"
-            else
-              echo "GONE $want is not in this release — a screen posts to it"; fail=1
-            fi
+            Q="$Q&want=$(printf '%s' "$want" | sed 's/ /%20/g')"
           done
+          curl -s --max-time 15 "https://foundry-intel.fly.dev/internal/routes?${Q#&}" > /tmp/routes.json
+          echo "asked: $(cat /tmp/routes.json)"
+          if grep -q '"missing":\[\]' /tmp/routes.json; then
+            echo "ok   every route his screens post to is in this release"
+          else
+            echo "GONE a screen posts to a route this release does not have"; fail=1
+          fi
           exit $fail

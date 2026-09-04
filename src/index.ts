@@ -299,13 +299,37 @@ app.route('/', healthRoutes);
 // actually registered under the owner's prefix. It lists paths, never handlers
 // or data, and every one of them is already visible to him in the HTML of his
 // own pages.
-app.get('/internal/routes', (c) => c.json({
-  foundry: app.routes
+// ASKED, NOT ENUMERATED.
+//
+// This returned the whole inventory to anyone. The reasoning was that every
+// path is already visible to him in the HTML of his own pages — true for HIM,
+// and he is the only one who can load those pages. To a stranger, who gets 401
+// from every one of them, the complete list of his routes was new information
+// and this was the only place to get it. A gate whose subject is exactly "what
+// a reader with no account can see" caught it.
+//
+// So it answers a question instead of publishing an answer: name the routes you
+// expect and it says which are missing. A stranger can confirm a guess and
+// cannot harvest a map, which is the difference that matters.
+//
+// The stronger version needs a secret the deploy workflow does not currently
+// hold: it has FLY_API_TOKEN only, so the check would have to run inside the
+// machine, where ECOSYSTEM_SERVICE_KEY is already in the environment. Worth
+// doing when the workflow is next opened; not worth guessing at blind.
+app.get('/internal/routes', (c) => {
+  const want = c.req.queries('want') ?? [];
+  const registered = new Set(app.routes
     .filter((r) => r.path === '/foundry' || r.path.startsWith('/foundry/'))
-    .map((r) => `${r.method} ${r.path}`)
-    .filter((v, i, all) => all.indexOf(v) === i)
-    .sort(),
-}));
+    .map((r) => `${r.method} ${r.path}`));
+  if (want.length === 0) {
+    return c.json({ asked: 0, missing: [],
+      hint: 'name routes with ?want=METHOD%20/path — this does not list them' });
+  }
+  return c.json({
+    asked: want.length,
+    missing: want.filter((w) => !registered.has(w)),
+  });
+});
 
 // All other internal routes require ecosystem service key
 app.use('/internal/*', async (c, next) => {

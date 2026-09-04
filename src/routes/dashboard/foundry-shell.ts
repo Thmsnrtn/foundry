@@ -2428,9 +2428,9 @@ foundryShellRoutes.get('/foundry', async (c) => {
           ${cand.awaiting[0] ? html`<dt>Cheapest test</dt><dd>${cand.awaiting[0].whatWeDo}. I expect ${cand.awaiting[0].whatWeExpect}; I would be wrong if ${cand.awaiting[0].wouldDisprove}.</dd>
           <dt>Most you could lose</dt><dd>${cand.downside}</dd>` : ''}
           ${cand.against.length ? html`<dt>Not quite</dt><dd class="quiet">${cand.against.join('; ')}</dd>` : ''}
-          ${cand.buriedBefore ? html`<b>Seen before</b><span class="gap">${cand.buriedBefore}</dd>` : ''}
-          ${cand.failsBecause ? html`<b>Against what you said</b><span class="gap">${cand.failsBecause}</dd>` : ''}
-          ${cand.blockedBy ? html`<b>Not yet</b><span class="gap">This cannot earn a company yet — ${cand.blockedBy}.</dd>` : ''}
+          ${cand.buriedBefore ? html`<dt>Seen before</dt><dd class="quiet">${cand.buriedBefore}</dd>` : ''}
+          ${cand.failsBecause ? html`<dt>Against what you said</dt><dd>${cand.failsBecause}</dd>` : ''}
+          ${cand.blockedBy ? html`<dt>Not yet</dt><dd>This cannot earn a company yet &mdash; ${cand.blockedBy}.</dd>` : ''}
           ${cand.inTheWay.length ? html`<dt>Before a company</dt><dd class="quiet">${cand.inTheWay.join('; ')}</dd>` : ''}
           <dt>I recommend</dt><dd>${cand.recommendation}</dd>
         </dl>

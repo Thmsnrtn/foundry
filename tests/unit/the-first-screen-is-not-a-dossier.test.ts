@@ -90,7 +90,11 @@ describe('what the first screen does with four candidates', () => {
     const body = await (await app.request('/foundry')).text();
     // Exactly one dossier, and it is the one recommending a decision. The
     // other three said "not yet" and are a sentence instead.
-    const shown = [...body.matchAll(/<b>I recommend<\/b><span>([^<]{0,120})/g)]
+    // The facts became a description list — <dt>/<dd> — when the dossier was
+    // given a real structure a screen reader can hear. This regex still looked
+    // for <b>/<span> and therefore found nothing, which reads identically to
+    // "no candidate is recommending anything" and is why it went unnoticed.
+    const shown = [...body.matchAll(/<dt>I recommend<\/dt><dd>([^<]{0,120})/g)]
       .map((m) => m[1] ?? '');
     expect(shown).toHaveLength(1);
     expect(shown[0]).toMatch(/Take it forward|Run the test/);

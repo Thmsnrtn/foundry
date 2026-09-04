@@ -46,6 +46,20 @@ const PUBLIC = [
   // that file.
   '/manifest.json',
   '/sw.js',
+  // The deploy has to be able to ask whether a route his screens post to is in
+  // the release, and it cannot do that under /foundry: the session middleware
+  // answers 401 before routing, so a missing route and a live one are
+  // indistinguishable — which is exactly how a form pointing at a route that
+  // did not exist once shipped.
+  //
+  // It ANSWERS rather than PUBLISHES. It used to return the whole inventory,
+  // and the reasoning was that every path is already visible to him in the HTML
+  // of his own pages — true for him, and he is the only one who can load them.
+  // To a stranger, who gets 401 from all of them, that list was the one place
+  // to get a map. This test is what caught it. Now it takes the routes you name
+  // and says which are missing, so a guess can be confirmed and nothing can be
+  // harvested.
+  '/internal/routes',
   '/auth/login',
   '/auth/logout',
   '/auth/signup',
