@@ -122,13 +122,27 @@ function read(r: Record<string, unknown>): Experiment {
   };
 }
 
+/**
+ * HOW LONG AN APPROVED TEST HAS BEFORE IT OWES AN ANSWER.
+ *
+ * Fourteen days, and it is a default rather than a judgment: nothing in the
+ * experiment states a horizon, and inventing a per-experiment one from its prose
+ * would be the model deciding how long it gets to be unaccountable. What the
+ * date is for is making an unrun experiment OVERDUE rather than invisible.
+ */
+const DAYS_BEFORE_IT_OWES_AN_ANSWER = 14;
+
 export async function decideExperiment(input: {
   experimentId: string; decision: 'approved' | 'declined'; by: string;
 }): Promise<{ workshop: string | null }> {
   await query(
     `UPDATE venture_experiments
-        SET decision = ?, decided_at = datetime('now'), decided_by = ?
-      WHERE id = ?`, [input.decision, input.by, input.experimentId]);
+        SET decision = ?, decided_at = datetime('now'), decided_by = ?,
+            due_at = CASE WHEN ? = 'approved'
+                          THEN datetime('now', ?) ELSE due_at END
+      WHERE id = ?`,
+    [input.decision, input.by, input.decision,
+      `+${String(DAYS_BEFORE_IT_OWES_AN_ANSWER)} days`, input.experimentId]);
   if (input.decision !== 'approved') return { workshop: null };
   // AN APPROVED TEST GETS SOMEWHERE TO BE BUILT, under a ceiling that lets it
   // make things and never lets it reach the world on its own. When no real
@@ -155,7 +169,7 @@ export async function recordResult(input: {
 }): Promise<{ settled: string | null }> {
   const e = (await query(
     `SELECT founder_id, unknown_id, claim_id, what_we_expect, would_disprove,
-            evidence_mode, decision
+            evidence_mode, decision, decided_at
        FROM venture_experiments WHERE id = ?`, [input.experimentId]))
     .rows[0] as Record<string, unknown> | undefined;
   if (!e) throw new Error('no such experiment');
@@ -193,6 +207,25 @@ export async function recordResult(input: {
     `UPDATE market_unknowns SET answered_at = datetime('now'), answer = ?
       WHERE id = ? AND answered_at IS NULL`,
     [input.whatHappened.trim(), String(e.unknown_id)]);
+
+  // AND THE GRADE, FILED HERE so it cannot drift from the verdict. Written in
+  // the same call that records the result, because a system where the outcome
+  // and the grade are two separate acts is one where the second gets skipped.
+  //
+  // Only the real world is graded. A rehearsal experiment is a rehearsal of
+  // grading too, and it may not move a hit rate the owner will later rely on.
+  if (String(e.evidence_mode) === 'real' && e.decided_at != null) {
+    const { resolvePrediction } = await import('../institution/calibration.js');
+    await resolvePrediction({
+      founderId: String(e.founder_id), kind: 'venture_experiment',
+      predictionId: input.experimentId,
+      resolvedBy: 'experiment_result',
+      evidenceRef: `venture_experiment:${input.experimentId}`,
+      verdict: input.asPredicted ? 'as_predicted' : 'surprised',
+      because: input.whatHappened.trim(),
+      predictedAt: String(e.decided_at),
+    });
+  }
 
   return { settled: e.claim_id == null ? null : String(e.claim_id) };
 }

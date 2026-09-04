@@ -2979,6 +2979,32 @@ CREATE TABLE prediction_accuracy (
   measured_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE prediction_kinds (
+  kind            TEXT PRIMARY KEY,
+  what_it_claims  TEXT NOT NULL,
+  sealed_in       TEXT NOT NULL,
+  -- What is allowed to settle it. Naming this stops a prediction being marked
+  -- correct by the same reasoning that produced it.
+  settled_by      TEXT NOT NULL,
+  sort_order      INTEGER NOT NULL
+);
+CREATE TABLE prediction_resolutions (
+  id             TEXT PRIMARY KEY,
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  kind           TEXT NOT NULL REFERENCES prediction_kinds(kind),
+  prediction_id  TEXT NOT NULL,
+  -- Who or what settled it. Never 'the model decided it had been right'.
+  resolved_by    TEXT NOT NULL CHECK (resolved_by IN
+                   ('owner','experiment_result','later_observation','business_outcome')),
+  -- The thing that settled it, so the grade can be disagreed with.
+  evidence_ref   TEXT NOT NULL,
+  verdict        TEXT NOT NULL CHECK (verdict IN ('as_predicted','partly','surprised')),
+  because        TEXT NOT NULL,
+  -- When the prediction was made, copied here so ordering can be checked
+  -- without a join into four different tables.
+  predicted_at   TEXT NOT NULL,
+  resolved_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE predictions (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL,
@@ -4089,7 +4115,7 @@ CREATE TABLE venture_experiments (
   -- What actually happened, in the words of whoever saw it.
   what_happened  TEXT,
   verdict        TEXT CHECK (verdict IN ('as_predicted','surprised'))
-);
+, due_at TEXT);
 CREATE TABLE venture_guidance (
   id           TEXT PRIMARY KEY,
   mandate_id   TEXT NOT NULL REFERENCES venture_mandates(id),
@@ -4689,6 +4715,10 @@ CREATE INDEX idx_portfolio_snapshots ON portfolio_snapshots(portfolio_id, snapsh
 CREATE INDEX idx_portfolios_api ON portfolios(api_key);
 CREATE INDEX idx_posture_changes_product ON posture_changes(product_id, changed_at);
 CREATE INDEX idx_prediction_accuracy_product ON prediction_accuracy(product_id, measured_at DESC);
+CREATE INDEX idx_prediction_resolutions_founder
+  ON prediction_resolutions(founder_id, kind, resolved_at);
+CREATE UNIQUE INDEX idx_prediction_resolved_once
+  ON prediction_resolutions(kind, prediction_id);
 CREATE INDEX idx_predictions_pending ON agent_predictions(measure_by_date, outcome) WHERE outcome IS NULL;
 CREATE INDEX idx_predictions_product ON predictions(product_id, status);
 CREATE INDEX idx_predictions_type ON predictions(prediction_type);
@@ -6483,6 +6513,26 @@ END;
 CREATE TRIGGER posture_change_immutable
 BEFORE UPDATE ON posture_changes
 BEGIN SELECT RAISE(ABORT,'posture_change:immutable'); END;
+CREATE TRIGGER prediction_kinds_constitutional_delete
+BEFORE DELETE ON prediction_kinds
+BEGIN SELECT RAISE(ABORT,'prediction_kind:constitutional'); END;
+CREATE TRIGGER prediction_kinds_constitutional_insert
+BEFORE INSERT ON prediction_kinds
+BEGIN SELECT RAISE(ABORT,'prediction_kind:constitutional'); END;
+CREATE TRIGGER prediction_kinds_constitutional_update
+BEFORE UPDATE ON prediction_kinds
+BEGIN SELECT RAISE(ABORT,'prediction_kind:constitutional'); END;
+CREATE TRIGGER prediction_resolution_is_final
+BEFORE UPDATE ON prediction_resolutions
+BEGIN SELECT RAISE(ABORT,'prediction_resolution:final'); END;
+CREATE TRIGGER prediction_resolution_must_come_after
+BEFORE INSERT ON prediction_resolutions
+BEGIN
+  SELECT RAISE(ABORT,'prediction_resolution:not_after_the_prediction')
+    WHERE datetime(NEW.resolved_at) <= datetime(NEW.predicted_at);
+  SELECT RAISE(ABORT,'prediction_resolution:needs_a_reason')
+    WHERE trim(NEW.because) = '' OR trim(NEW.evidence_ref) = '';
+END;
 CREATE TRIGGER product_lineage_evidence_mode_insert
 BEFORE INSERT ON products
 WHEN NEW.from_opportunity_id IS NOT NULL

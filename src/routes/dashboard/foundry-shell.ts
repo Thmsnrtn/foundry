@@ -171,6 +171,17 @@ interface OwnerState {
    * a footnote to Foundry looking after itself.
    */
   asked: import('../../services/institution/standing-intent.js').AskedOfHim[];
+  /**
+   * TESTS HE APPROVED THAT NOBODY HAS ACCOUNTED FOR.
+   *
+   * The institution sealed what it expected before each of these ran, and had
+   * no path by which the answer ever came back. An unaccounted commitment
+   * outranks a new one: taking on a second while the first is unresolved is
+   * exactly the pattern that fills a portfolio with things nobody examined.
+   */
+  owed: import('../../services/institution/calibration.js').AwaitingAnswer[];
+  /** How often this institution has been right before, when it has been graded. */
+  record: string;
   search: {
     /**
      * WHETHER THIS SEARCH IS ONE HE ASKED FOR OR ONE FOUNDRY MADE UP.
@@ -499,6 +510,16 @@ async function readOwnerState(
         '../../services/institution/standing-intent.js');
       return whatIsBeingAskedOf(founderId);
     })(),
+    owed: await (async () => {
+      const { awaitingAnswer } = await import(
+        '../../services/institution/calibration.js');
+      return awaitingAnswer(founderId);
+    })(),
+    record: await (async () => {
+      const { howOftenRight } = await import(
+        '../../services/institution/calibration.js');
+      return (await howOftenRight(founderId)).sentence;
+    })(),
     companyName: String(product?.name ?? 'this company'),
     firstName: founderName.split(' ')[0] || '',
     routinesHealthy: Number(health?.n ?? 0),
@@ -774,6 +795,8 @@ async function readOwnerState(
  * the institution exists to absorb.
  */
 type Attention =
+  | { kind: 'grade'; experimentId: string; about: string; expected: string;
+      wouldDisprove: string | null; dueAt: string | null; record: string }
   | { kind: 'spend'; actId: string; productId: string; companyName: string;
       summary: string; why: string; rung: string | null; rungMeans: string | null;
       puttingItBack: string | null; costCents: number | null; expiresAt: string;
@@ -797,6 +820,25 @@ function whatNeedsHim(s: OwnerState): Attention {
   if (s.routinesFailing.length) return { kind: 'stopped', routines: s.routinesFailing };
   const drifted = s.checks.filter((c) => c.result === 'failed');
   if (drifted.length) return { kind: 'drifted', checks: drifted.map((d) => d.check) };
+  // AN UNACCOUNTED COMMITMENT OUTRANKS A NEW ONE.
+  //
+  // He approved a test, the institution sealed what it expected, and it ran or
+  // did not. Asking him to approve a second thing while the first has no answer
+  // is how a portfolio fills up with things nobody ever examined — and it is
+  // also the only way this institution ever learns whether its judgment is
+  // worth anything.
+  //
+  // Only when it is DUE. A test with time left on it is not a question yet, and
+  // nagging about one is spending his attention on the calendar.
+  const owed = s.owed.find((o) => o.overdue);
+  if (owed) {
+    return {
+      kind: 'grade', experimentId: owed.predictionId, about: owed.about,
+      expected: owed.expected, wouldDisprove: owed.wouldDisprove,
+      dueAt: owed.dueAt, record: s.record,
+    };
+  }
+
   // A COMPANY OF HIS ASKING FOR SOMETHING OUTRANKS THE INSTITUTION'S OWN
   // HOUSEKEEPING.
   //
@@ -1358,6 +1400,40 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
       <h2>${name}</h2>
       <p class="lead">This no longer matches. I have not changed anything — I only look.</p>
     </div></section>`;
+  }
+
+  if (a.kind === 'grade') {
+    return decisionCard({
+      act: 'Recognition',
+      question: 'You approved this test. What happened?',
+      title: a.about,
+      meaning: [
+        `Before it ran I said: ${a.expected}`,
+        a.wouldDisprove === null
+          ? 'I did not name what would have meant I was wrong, which is itself worth knowing.'
+          : `And I said I would be wrong if: ${a.wouldDisprove}`,
+        'You are the reporter here, never me. I file what you say against what I '
+        + 'said, and a surprise counts against the claim it was testing.',
+      ],
+      facts: [
+        ['Due', a.dueAt === null ? 'Not set' : a.dueAt.slice(0, 10)],
+        ['My record', a.record],
+        ['Cost', 'Nothing'],
+        ['If you do nothing', 'I keep asking, because an unanswered test is the '
+          + 'one thing I cannot learn from'],
+      ],
+      primary: {
+        label: 'Yes — that is what happened',
+        action: `/foundry/venture/experiment/${a.experimentId}/result`,
+        fields: { as_predicted: 'yes', return_to: 'foundry' },
+      },
+      secondary: {
+        label: 'No — something else',
+        action: `/foundry/venture/experiment/${a.experimentId}/result`,
+        fields: { as_predicted: 'no', return_to: 'foundry' },
+      },
+      technical: `${a.expected} · experiment ${a.experimentId}`,
+    });
   }
 
   if (a.kind === 'spend') {
@@ -1985,7 +2061,9 @@ function answerTo(key: string, s: OwnerState, a: Attention,
       return html`<div class="said"><p>There is nothing waiting on you at the moment,
         so there is nothing to explain yet.</p></div>`;
     }
-    const named = a.kind === 'spend'
+    const named = a.kind === 'grade'
+      ? `what happened with ${a.about}`
+      : a.kind === 'spend'
       ? `${a.summary} at ${a.companyName}`
       : a.kind === 'recognise'
       ? (a.check ? CHECK_IN_PLAIN_WORDS[a.check]?.name ?? a.proposal : a.proposal)
@@ -3818,6 +3896,52 @@ foundryShellRoutes.post('/foundry/venture/experiment',
     await decideExperiment({
       experimentId, decision, by: `founder:${String(founder.id)}` });
     return c.redirect(`/foundry?done=${decision === 'approved' ? 'trying' : 'nottrying'}`);
+  });
+
+/**
+ * WHAT HAPPENED, WHICH ONLY HE CAN SAY.
+ *
+ * `recordResult` has existed and been correct for some time, and had no caller
+ * outside its tests — so the institution sealed a prediction before every
+ * experiment and had no path by which the answer ever came back.
+ *
+ * HE IS THE REPORTER, NEVER THE MODEL. The verdict is stored beside the sealed
+ * prediction so anybody can read both and disagree with the grading; an
+ * institution that scored its own predictions with no record of what it
+ * predicted would always have been right.
+ *
+ * The experiment is resolved from the authenticated owner rather than from the
+ * form, and one belonging to anybody else is refused without revealing that it
+ * exists.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/venture/experiment/:experimentId/result',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const form = await c.req.parseBody();
+    const experimentId = c.req.param('experimentId');
+
+    const owned = await query(
+      `SELECT id FROM venture_experiments
+        WHERE id = ? AND founder_id = ? AND decision = 'approved' AND ran_at IS NULL`,
+      [experimentId, String(founder.id)]);
+    if (!owned.rows.length) return c.notFound();
+
+    const asPredicted = String(form.as_predicted ?? '') === 'yes';
+    // HIS WORDS WHEN HE HAS THEM, and a truthful placeholder when he does not —
+    // never an invented account of what happened. A surprise with no detail is
+    // still a surprise, and pretending otherwise would put a sentence Foundry
+    // wrote into the evidence record as though somebody had observed it.
+    const said = String(form.what_happened ?? '').trim();
+    const whatHappened = said !== '' ? said
+      : asPredicted
+        ? 'The owner confirmed it went as predicted, without adding detail.'
+        : 'The owner said something else happened, without adding detail.';
+
+    const { recordResult } = await import('../../services/venture/validation.js');
+    await recordResult({ experimentId, whatHappened, asPredicted });
+    return c.redirect(`/foundry?done=${asPredicted ? 'aspredicted' : 'surprised'}`);
   });
 
 /**

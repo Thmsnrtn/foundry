@@ -5,6 +5,29 @@ underneath it: what is an objective, what is a bound, what gets priority when
 they compete, and what "more intelligent" has to mean if it is not to become a
 licence to build more machinery.
 
+## 0. What this document is NOT allowed to do
+
+An earlier version of this file made an institution smaller by describing it.
+Two failures worth naming, because both are easy to repeat:
+
+**It collapsed the institution into one of its mechanisms.** "Foundry's product
+is overhead absorption" is a true sentence about a mechanism and a false one
+about the job. The job is ENTREPRENEURIAL AND ECONOMIC STEWARDSHIP: deciding
+what should exist, what should not, what to create, what to buy, what deserves
+investment, what to leave alone, what to sell, what should die, and what
+capability the institution should acquire next. Overhead absorption is how it
+produces owner leverage while doing that.
+
+**It turned present postures into constitutional law.** "No capital for now" is
+a posture; the river should eventually fund its own experiments and acquisitions
+from portfolio cash flow under policy. "Under thirty minutes" is a mature
+owner-attention objective, not a filter that rejects economic activity requiring
+more than thirty minutes of WORK — the point is that Foundry carries the work.
+"All routes equally" was an instruction not to precommit the institution to a
+business or distribution form, not indecision to be resolved by arithmetic.
+
+Anything in this file that reads as eternal and is merely current must say so.
+
 ## 1. Six priorities, two kinds
 
 The stated priorities are: minimize legal risk, maximize ROI, increase MRR,
@@ -58,10 +81,17 @@ Made precise. For an asset:
 
 Three consequences follow, and they are the most useful things in this document.
 
-**(a) Foundry's real product is the reduction of `a`.** Not the assets. Every
+**(a) Reducing `a` is leverage on everything the institution owns.** Every
 capability that lowers recurring owner-minutes lowers the viability threshold
-for *every asset at once*, present and future. That is the compounding move, and
-it is why capability can rationally precede acquisition.
+for *every asset at once*, present and future — which is why capability can
+rationally precede acquisition.
+
+It is leverage, not the product. Three things compound simultaneously and the
+deeper loop is their interaction: THE PORTFOLIO (more durable cash-producing
+assets), INSTITUTIONAL KNOWLEDGE (what actually works in these markets, at these
+prices, for this owner), and THE CAPABILITY FABRIC (research, development,
+design, compute, distribution, support, experimentation). A capability that
+lowers `a` and teaches nothing is worth less than one that does both.
 
 **(b) It gives a hard test for any proposed capability.** *Does this reduce
 recurring owner-minutes for an asset that exists?* Almost nothing built so far
@@ -175,8 +205,20 @@ An addition that moves none of the three is machinery. It may still be correct
 engineering, and it is still machinery, and the honest thing is to say so and
 gate it behind an event rather than build it now.
 
-## 7. The one test that outranks this whole document
+## 7. The invariant that outranks this whole document
 
-Has one human being who is not the owner paid one dollar for anything?
+**Internal activity does not prove market value. The world must eventually
+answer.**
 
-If the answer requires a subsystem, the answer is no.
+An earlier version of this section said "has one human who is not the owner paid
+one dollar" — and payment is a critical milestone, not the definition of
+reality. The economic chain runs REAL OBSERVATION → INTEREST → BEHAVIOUR →
+ACTIVATION → USAGE → LEAD → CUSTOMER CONVERSATION → PURCHASE → REPEAT PURCHASE
+→ DURABLE CASH FLOW. The institution should care increasingly about the later
+stages, and genuine earlier behaviour is still the world answering.
+
+What the test is really guarding against is a system that mistakes its own
+output for evidence. So the honest form of it: for any claim the institution
+makes about value, name the external event that would have had to happen — and
+if nothing outside this repository has happened, nothing has been established,
+however much was produced.
