@@ -88,7 +88,7 @@ function formatted(kind: 'money' | 'rate' | 'count', value: number): string {
  * the sentence says "about", because two readings do not support a decimal
  * place of confidence.
  */
-function movement(previous: number, current: number): {
+function movement(previous: number, current: number, kind?: string): {
   direction: 'rose' | 'fell' | 'held'; phrase: string;
 } {
   if (previous === 0 || !Number.isFinite(previous)) {
@@ -96,6 +96,25 @@ function movement(previous: number, current: number): {
       ? { direction: 'held', phrase: 'unchanged' }
       : { direction: current > 0 ? 'rose' : 'fell', phrase: 'newly reported' };
   }
+
+  // A PERCENTAGE OF ALMOST NOTHING IS NOT A PERCENTAGE.
+  //
+  // Three signups where there was one is "up about 200%", and that sentence
+  // makes a business look like it is tripling. The absolute move is the honest
+  // description of a small base, and it is also the more useful one: he can see
+  // it went from one to three and decide for himself whether that is anything.
+  const small = kind === 'count' ? 10 : kind === 'money' ? 5000 : 0;
+  if (small > 0 && Math.abs(previous) < small) {
+    if (current === previous) return { direction: 'held', phrase: 'unchanged' };
+    const from = kind === 'money'
+      ? `$${(previous / 100).toFixed(0)} to $${(current / 100).toFixed(0)}`
+      : `${String(previous)} to ${String(current)}`;
+    return {
+      direction: current > previous ? 'rose' : 'fell',
+      phrase: `${from} since a month ago — too few to put a percentage on`,
+    };
+  }
+
   const change = (current - previous) / Math.abs(previous);
   const pct = Math.abs(change) * 100;
   if (pct < 1.5) return { direction: 'held', phrase: 'about the same as a month ago' };
@@ -133,11 +152,19 @@ export async function whatTheNumbersSay(productId: string): Promise<CompanyNumbe
   // A MONTH AGO MEANS THE NEAREST READING TO A MONTH AGO, not a reading dated
   // exactly then. Companies report on their own cadence, and a strict date
   // match silently produces "no comparison" for anyone reporting weekly.
+  //
+  // AND A MONTH AGO IS NOT FIVE HUNDRED DAYS AGO. The window had no far edge,
+  // so a company that reported twice — once last week and once two years ago —
+  // had every one of its numbers described as "up about 40% on a month ago".
+  // Outside the window there is no comparison, which the sentences already know
+  // how to say.
   const prior = (await query(
     `SELECT ${columns.join(', ')} FROM metric_snapshots
-      WHERE product_id = ? AND snapshot_date <= date(?, '-30 day')
+      WHERE product_id = ? AND snapshot_date <= date(?, '-21 day')
+        AND snapshot_date >= date(?, '-60 day')
       ORDER BY snapshot_date DESC LIMIT 1`,
-    [productId, String(latest.snapshot_date)])).rows[0] as Record<string, unknown> | undefined;
+    [productId, String(latest.snapshot_date), String(latest.snapshot_date)]))
+    .rows[0] as Record<string, unknown> | undefined;
 
   // THE LAST READINGS, for the trend beside each number. Bounded, oldest
   // first, and never more than the company actually reported.
@@ -166,7 +193,7 @@ export async function whatTheNumbersSay(productId: string): Promise<CompanyNumbe
       });
       continue;
     }
-    const moved = movement(Number(before), current);
+    const moved = movement(Number(before), current, spec.kind);
     numbers.push({
       label: spec.label, now, direction: moved.direction,
       sentence: `${spec.label} is ${now}, ${moved.phrase}.`,

@@ -308,7 +308,14 @@ interface OwnerState {
     path: string; verification: string[]; matched: number; wrong: number;
     /** WHICH OF THE THREE THINGS CALLED FOUNDRY this change would touch. */
     layer: string; layerPlainly: string }>;
-  budgetMonthly: number;
+  /**
+   * WHAT HE SET, OR NULL BECAUSE HE HAS NOT.
+   *
+   * This was rendered as "the limit you set", and nothing in the system has
+   * ever written to the column — it is a migration default of 50, attributed to
+   * him as his own decision on a page about what he has told Foundry it may do.
+   */
+  budgetMonthly: number | null;
   spent30d: number;
   connectedSenses: string[];
   establishedAt: string | null;
@@ -521,7 +528,8 @@ async function readOwnerState(
       const known = Object.values(CHECK_IN_PLAIN_WORDS).find((p) => proposal.includes('schema'));
       return { id: String(d.id), title: known?.name ?? proposal };
     }),
-    budgetMonthly: Number(product?.operating_budget_monthly_usd ?? 0),
+    budgetMonthly: product?.operating_budget_monthly_usd == null ? null
+      : Number(product.operating_budget_monthly_usd),
     spent30d: Number(product?.ai_cost_trailing_30d_usd ?? 0),
     connectedSenses: product?.github_repo_url ? ['its code'] : [],
     establishedAt: product?.created_at == null ? null : String(product.created_at).slice(0, 10),
@@ -1938,8 +1946,8 @@ function answerTo(key: string, s: OwnerState, a: Attention,
       ${s.connectedSenses.length === 0 ? html`<p>In practice I cannot use it: I have no way
         to reach the repository, so nothing I could change is reachable from here.</p>` : ''}`}
       <p>${s.spent30d === 0
-    ? html`I have spent nothing. Your limit is $${String(s.budgetMonthly)} a month.`
-    : html`I have spent $${s.spent30d.toFixed(2)} of your $${String(s.budgetMonthly)} this month.`}</p>
+    ? html`I have spent nothing.`
+    : html`I have spent $${s.spent30d.toFixed(2)} this month.`}</p>
     </div>`;
   }
 
@@ -2304,7 +2312,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
  */
 interface CompanyView {
   id: string; name: string; established: string | null;
-  budgetMonthly: number; spent30d: number;
+  budgetMonthly: number | null; spent30d: number;
   knows: string[]; gaps: Array<{ missing: string; unlocks: string; connect: string | null }>;
   responsibilities: Array<{ title: string; state: string }>;
   numbers: CompanyNumbers;
@@ -2575,7 +2583,8 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
         : p.costCents === 0 ? 'nothing'
           : `$${(p.costCents / 100).toFixed(2)}`,
     })),
-    budgetMonthly: Number(row.operating_budget_monthly_usd ?? 0),
+    budgetMonthly: row.operating_budget_monthly_usd == null ? null
+      : Number(row.operating_budget_monthly_usd),
     spent30d: Number(row.ai_cost_trailing_30d_usd ?? 0),
     knows, gaps,
     responsibilities: responsibilities.map((r) => ({
@@ -2638,6 +2647,7 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
   const byForm = ((await query(
     `SELECT e.value, SUM(COALESCE((SELECT m.mrr_cents FROM metric_snapshots m
         WHERE m.product_id = p.id AND m.mrr_cents IS NOT NULL
+                AND m.snapshot_date >= date('now','-45 day')
         ORDER BY m.snapshot_date DESC LIMIT 1), 0)) AS cents
        FROM portfolio_exposures e JOIN products p ON p.id = e.subject_id
       WHERE e.founder_id = ? AND e.subject_kind = 'company' AND e.dimension = 'revenue_model'
@@ -4265,7 +4275,11 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
       <h3>Money</h3>
       <ul>
         <li>$${s.spent30d.toFixed(2)} spent in the last 30 days.</li>
-        <li>$${String(s.budgetMonthly)} a month is the limit you set for ${s.companyName}.</li>
+        <li>${s.budgetMonthly === null
+    ? html`You have not set a monthly limit for ${s.companyName}. The daily ceilings
+      below are what actually stops me.`
+    : html`$${String(s.budgetMonthly)} a month is the limit you set for
+      ${s.companyName}.`}</li>
         <li>I stop thinking for a company at $2 a day, and for everything at $5 a day.</li>
       </ul>
       <p class="quiet">Watching costs nothing — comparing my own records uses no thinking.</p>

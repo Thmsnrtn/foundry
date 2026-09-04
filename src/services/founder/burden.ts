@@ -50,6 +50,7 @@ export async function burdenFor(founderId: string): Promise<Burden[]> {
             COALESCE(p.ai_cost_trailing_30d_usd, 0) AS ai_usd,
             (SELECT m.mrr_cents FROM metric_snapshots m
               WHERE m.product_id = p.id AND m.mrr_cents IS NOT NULL
+                AND m.snapshot_date >= date('now','-45 day')
               ORDER BY m.snapshot_date DESC LIMIT 1) AS mrr_cents
        FROM products p
       WHERE p.owner_id = ? AND p.status = 'active' AND p.deleted_at IS NULL
@@ -60,12 +61,20 @@ export async function burdenFor(founderId: string): Promise<Burden[]> {
   const out: Burden[] = [];
   for (const c of companies) {
     const productId = String(c.id);
+    // WHAT NEEDED HIM, NOT WHAT HE GOT ROUND TO.
+    //
+    // This counted rows by `decided_at`, which is the date he answered — so a
+    // question raised three weeks ago and still sitting there counted as zero
+    // interruptions, and the tile said "not once this month" on a screen that
+    // was at that moment asking him for something. Ignoring him made the burden
+    // look smaller. Demand is what the owner-adjusted measure is about, so it
+    // is counted from when it was raised.
     const asked = (await query(
       `SELECT 'a decision about ' || subject AS what FROM proposed_acts
-        WHERE product_id = ? AND decided_at >= datetime('now', ?)
+        WHERE product_id = ? AND proposed_at >= datetime('now', ?)
        UNION ALL
        SELECT 'advice about ' || kind FROM situation_recommendations
-        WHERE product_id = ? AND decided_at >= datetime('now', ?)`,
+        WHERE product_id = ? AND raised_at >= datetime('now', ?)`,
       [productId, `-${String(DAYS)} days`, productId, `-${String(DAYS)} days`]))
       .rows as unknown as Array<Record<string, unknown>>;
     const interruptions = asked.length;

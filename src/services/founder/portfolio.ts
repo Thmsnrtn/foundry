@@ -260,6 +260,7 @@ export async function glanceFor(founderId: string): Promise<Glance> {
     `SELECT p.id,
             (SELECT m.mrr_cents FROM metric_snapshots m
               WHERE m.product_id = p.id AND m.mrr_cents IS NOT NULL
+                AND m.snapshot_date >= date('now','-45 day')
               ORDER BY m.snapshot_date DESC LIMIT 1) AS mrr_cents
        FROM products p
       WHERE p.owner_id = ? AND p.status = 'active' AND p.deleted_at IS NULL
@@ -304,6 +305,7 @@ export async function layersFor(founderId: string): Promise<{
     `SELECT p.id, p.name, p.posture,
             (SELECT m.mrr_cents FROM metric_snapshots m
               WHERE m.product_id = p.id AND m.mrr_cents IS NOT NULL
+                AND m.snapshot_date >= date('now','-45 day')
               ORDER BY m.snapshot_date DESC LIMIT 1) AS mrr_cents
        FROM products p
       WHERE p.owner_id = ? AND p.status = 'active' AND p.deleted_at IS NULL
