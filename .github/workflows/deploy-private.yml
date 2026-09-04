@@ -43,8 +43,36 @@ on:
       - 'claude/private-foundry-continuation-51vz95'
 
 jobs:
+  # NOTHING DEPLOYS THAT HAS NOT PASSED THE CHAIN.
+  #
+  # This workflow used to verify that the schema snapshot existed and then ship.
+  # Every gate in this repository ran only when somebody remembered to run it,
+  # and seven test failures accumulated across three deployed commits because
+  # nobody did — including behaviour changes whose old tests were never updated,
+  # which is a red suite reporting a real disagreement into an empty room.
+  #
+  # A signal nobody reads is indistinguishable from silence. So the chain runs
+  # here, before the image is built, and a red one stops the deploy rather than
+  # being discovered afterwards.
+  verify:
+    name: The full chain, before anything ships
+    if: contains(github.event.head_commit.message, '[deploy-private]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      # The same command a person runs locally. Not a subset chosen here, which
+      # would be a second definition of "green" that could drift from the first.
+      - run: npm run check
+
   deploy:
     name: Build and deploy to foundry-intel
+    needs: verify
     if: contains(github.event.head_commit.message, '[deploy-private]')
     runs-on: ubuntu-latest
     timeout-minutes: 30
