@@ -41,6 +41,7 @@ import { decisionRoutes } from './routes/dashboard/decisions.js';
 import { fleetRoutes } from './routes/dashboard/fleet.js';
 import { letterRoutes } from './routes/dashboard/letter.js';
 import { noteAllStopped, noteScheduled } from './lib/scheduler-standing.js';
+import { isPrivateOwnerInstance } from './lib/instance-posture.js';
 import { ownerFailurePage } from './routes/dashboard/foundry-shell.js';
 import { isOwnerSurface } from './lib/owner-surface-script.js';
 import { lifecycleRoutes } from './routes/dashboard/lifecycle.js';
@@ -488,98 +489,122 @@ app.use('/benchmarks/*', csrfMiddleware);
 app.use('/audit-log/*', csrfMiddleware);
 
 // Dashboard routes
-app.route('/', dashboardRoutes);
+// ── The owner's instance ─────────────────────────────────────────────────────
+//
+// Everything Private Foundry needs, and nothing else.
 app.route('/', onboardingRoutes);
-app.route('/', productRoutes);
-app.route('/', auditRoutes);
-app.route('/', decisionRoutes);
-app.route('/', fleetRoutes);
 app.route('/', letterRoutes);
-app.route('/', lifecycleRoutes);
-app.route('/', digestRoutes);
-app.route('/', cohortRoutes);
-app.route('/', competitiveRoutes);
-app.route('/', betaRoutes);
-app.route('/', journeyRoutes);
-app.route('/', koldlyRoutes);
 app.route('/', settingsRoutes);
-app.route('/', revenueRoutes);
-app.route('/', portfolioRoutes);
-app.route('/', founderOpsRoutes);
-app.route('/', planRoutes);
-app.route('/', timelineRoutes);
-app.route('/', integrationsRoutes);
-app.route('/', teamRoutes);
-app.route('/', investorRoutes);
-// executionPlaybooks must register before playbookRoutes: /playbooks/:type
-// would otherwise capture /playbooks/execution and 404 it.
-app.route('/', executionPlaybooks);
-app.route('/', playbookRoutes);
-app.route('/', agentWisdomRoutes);
-app.route('/', agentBriefingRoutes);
-app.route('/', agentEvolveRoutes);
-app.route('/', agentConstitutionRoutes);
-app.route('/', agentRemediationRoutes);
-app.route('/', agentTemporalRoutes);
-// SCP v2/v3: New capability layers
-app.route('/', agentIntegrationRoutes);
-app.route('/', agentCustomerRoutes);
-app.route('/', agentMessageRoutes);
-app.route('/', agentStrategyRoutes);
-app.route('/', agentExperimentRoutes);
-// SCP v4-v7 dashboard pages. These modules define their FULL public paths
-// internally (e.g. agents-accuracy registers GET /agents/accuracy), so they
-// mount at '/' — a path prefix here would double the path and 404 every
-// sidebar link to them. The three exceptions (inbox/okr/decisions) were
-// normalized to the same full-path convention.
-app.route('/', agentsInbox);
-// wiki removed — replaced by company memory graph (/memory)
-app.route('/', agentsOkr);
-app.route('/', agentsDecisions);
-app.route('/', benchmarks);
-app.route('/', auditLog);
-// SCP v5: Gap-closing features
-app.route('/', agentsActions);
-app.route('/', agentsAccuracy);
-app.route('/', agentsTransparency);
-app.route('/', scenarios);
 app.route('/', privacySettings);
-app.route('/board', boardPacket);
-app.route('/', weeklyBrief);
-// SCP v6: Full evolved platform
-app.route('/', agentsDebate);
-app.route('/', agentIntelligence);
-app.route('/', memoryGraph);
-app.route('/', multimodalSignals);
-app.route('/', ambientRoutes);
-app.route('/', networkIntelligence);
-app.route('/', exitRoutes);
-app.route('/', transcriptWebhooks);
-app.route('/', voiceReplyWebhook);
-// SCP v7: ROI, founder intelligence, integration health, priority API (HTMX)
-app.route('/', roiDashboard);
-app.route('/', founderIntelligence);
-app.route('/', integrationHealth);
-app.route('/', priorityApi);
-// Agent roster + detail pages (/agents, /agents/:name, …). Mounted at
-// /agents and LAST among the /agents/* modules so its /:name pattern can
-// never shadow the specific pages (inbox, okr, actions, accuracy, …).
-app.route('/agents', agentRoutes);
-// API routes
-app.route('/', apiProductRoutes);
-app.route('/', apiMetricRoutes);
-app.route('/', apiAuditLogRoutes);
-app.route('/', apiUXRoutes);
-app.route('/', apiAskRoutes);
-app.route('/', feedbackRoutes);
-app.route('/', mobileRoutes);
-app.route('/', tier1ApiRoutes);
-app.route('/', tier2ApiRoutes);
-app.route('/', tier3ApiRoutes);
-app.route('/', tier4ApiRoutes);
-app.route('/', superchargeApiRoutes);
-app.route('/', platformApiRoutes);
-app.route('/', founderIntelRoutes);
+
+// ── Commercial Foundry ───────────────────────────────────────────────────────
+//
+// SEVENTY-TWO MOUNTS THE OWNER HAS NO USE FOR.
+//
+// This is the product Foundry was built to replace: agents, boards, playbooks,
+// fleet observatories, ambient layers, ROI dashboards. It was not dormant — its
+// navigation rendered on the advanced surface two taps from his first screen,
+// and every route was live.
+//
+// The owner may one day build Commercial Foundry using Private Foundry. Until
+// then it is not to bog down the private instance. It is preserved in full:
+// branch `archive/commercial-foundry`, and in git history forever.
+//
+// Not deleted, because the services underneath are shared and separating them
+// means deciding file by file which half of the system each belongs to — a
+// decision worth making when the commercial product is actually being built.
+// Unmounted is the honest state: the code exists, and his instance does not
+// serve it.
+if (!isPrivateOwnerInstance()) {
+  app.route('/', dashboardRoutes);
+  app.route('/', productRoutes);
+  app.route('/', auditRoutes);
+  app.route('/', decisionRoutes);
+  app.route('/', fleetRoutes);
+  app.route('/', lifecycleRoutes);
+  app.route('/', digestRoutes);
+  app.route('/', cohortRoutes);
+  app.route('/', competitiveRoutes);
+  app.route('/', betaRoutes);
+  app.route('/', journeyRoutes);
+  app.route('/', koldlyRoutes);
+  app.route('/', revenueRoutes);
+  app.route('/', portfolioRoutes);
+  app.route('/', founderOpsRoutes);
+  app.route('/', planRoutes);
+  app.route('/', timelineRoutes);
+  app.route('/', integrationsRoutes);
+  app.route('/', teamRoutes);
+  app.route('/', investorRoutes);
+  // executionPlaybooks must register before playbookRoutes: /playbooks/:type
+  // would otherwise capture /playbooks/execution and 404 it.
+  app.route('/', executionPlaybooks);
+  app.route('/', playbookRoutes);
+  app.route('/', agentWisdomRoutes);
+  app.route('/', agentBriefingRoutes);
+  app.route('/', agentEvolveRoutes);
+  app.route('/', agentConstitutionRoutes);
+  app.route('/', agentRemediationRoutes);
+  app.route('/', agentTemporalRoutes);
+  // SCP v2/v3: New capability layers
+  app.route('/', agentIntegrationRoutes);
+  app.route('/', agentCustomerRoutes);
+  app.route('/', agentMessageRoutes);
+  app.route('/', agentStrategyRoutes);
+  app.route('/', agentExperimentRoutes);
+  // SCP v4-v7 dashboard pages. These modules define their FULL public paths
+  // internally (e.g. agents-accuracy registers GET /agents/accuracy), so they
+  // mount at '/' — a path prefix here would double the path and 404 every
+  // sidebar link to them. The three exceptions (inbox/okr/decisions) were
+  // normalized to the same full-path convention.
+  app.route('/', agentsInbox);
+  // wiki removed — replaced by company memory graph (/memory)
+  app.route('/', agentsOkr);
+  app.route('/', agentsDecisions);
+  app.route('/', benchmarks);
+  app.route('/', auditLog);
+  // SCP v5: Gap-closing features
+  app.route('/', agentsActions);
+  app.route('/', agentsAccuracy);
+  app.route('/', agentsTransparency);
+  app.route('/', scenarios);
+  app.route('/board', boardPacket);
+  app.route('/', weeklyBrief);
+  // SCP v6: Full evolved platform
+  app.route('/', agentsDebate);
+  app.route('/', agentIntelligence);
+  app.route('/', memoryGraph);
+  app.route('/', multimodalSignals);
+  app.route('/', ambientRoutes);
+  app.route('/', networkIntelligence);
+  app.route('/', exitRoutes);
+  app.route('/', transcriptWebhooks);
+  app.route('/', voiceReplyWebhook);
+  // SCP v7: ROI, founder intelligence, integration health, priority API (HTMX)
+  app.route('/', roiDashboard);
+  app.route('/', founderIntelligence);
+  app.route('/', integrationHealth);
+  app.route('/', priorityApi);
+  // Agent roster + detail pages (/agents, /agents/:name, …). Mounted at
+  // /agents and LAST among the /agents/* modules so its /:name pattern can
+  // never shadow the specific pages (inbox, okr, actions, accuracy, …).
+  app.route('/agents', agentRoutes);
+  // API routes
+  app.route('/', apiProductRoutes);
+  app.route('/', apiMetricRoutes);
+  app.route('/', apiAuditLogRoutes);
+  app.route('/', apiUXRoutes);
+  app.route('/', apiAskRoutes);
+  app.route('/', feedbackRoutes);
+  app.route('/', mobileRoutes);
+  app.route('/', tier1ApiRoutes);
+  app.route('/', tier2ApiRoutes);
+  app.route('/', tier3ApiRoutes);
+  app.route('/', tier4ApiRoutes);
+  app.route('/', superchargeApiRoutes);
+  app.route('/', platformApiRoutes);
+  app.route('/', founderIntelRoutes);
+}
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 

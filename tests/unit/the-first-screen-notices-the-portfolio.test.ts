@@ -72,13 +72,32 @@ describe('what the first screen says it knows', () => {
     // reference world is for.
     const body = await firstScreen();
     expect(body).toContain('I made up');
-    expect(body).toContain('none of yours yet');
+    expect(body).toContain('none of your businesses yet');
   });
 
   it('never folds invented companies into the real count', async () => {
     await spawnInvented();
     const body = await firstScreen();
-    expect(body).toContain('2 companies I made up');
-    expect(body).not.toMatch(/looking after \d+ compan/);
+    expect(body).toContain('watching 2 I made up');
+    expect(body).not.toMatch(/looking after \d+ compan\w+ of yours/);
+  });
+
+  it('names Foundry as itself rather than as one of his businesses', async () => {
+    // The constitution is explicit that Foundry IS a real owner-controlled
+    // company, so it is not excluded from the portfolio. But "I am looking
+    // after 1 company" over an empty portfolio, when the one company is the
+    // thing saying it, is the institution counted as a tributary of its own
+    // river. Both true statements at once: it is looking after itself, and
+    // after none of his yet.
+    const { query } = await import('../../src/db/client.js');
+    await query('INSERT INTO products (id, owner_id, name, status) VALUES (?,?,?,?)',
+      ['foundry_self', OWNER, 'Foundry', 'active']);
+    await query(
+      `INSERT INTO system_identities (identity_key, product_id, established_reason)
+       VALUES ('foundry', 'foundry_self', 'the owner established the institution')`);
+    const body = await firstScreen();
+    expect(body).toContain('looking after myself');
+    expect(body).toContain('none of your businesses yet');
+    expect(body).not.toMatch(/looking after 1 compan\w+ of yours/);
   });
 });
