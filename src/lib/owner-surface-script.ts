@@ -34,7 +34,30 @@ import { createHash } from 'node:crypto';
 export const OWNER_SURFACE_SCRIPT =
   `\n  (function(){var e=document.getElementById('greet');if(!e)return;`
   + `var h=new Date().getHours();\n`
-  + `    e.textContent=h<12?'Good morning':h<18?'Good afternoon':'Good evening';})();\n`;
+  + `    e.textContent=h<12?'Good morning':h<18?'Good afternoon':'Good evening';})();\n`
+  // THE KEYBOARD SWALLOWED THE ENTRANCE.
+  //
+  // The composer is fixed to the bottom of the window. On iOS the software
+  // keyboard does not resize the window, so the bar he is typing into sits
+  // behind the keyboard — the one place on the surface he types a mandate,
+  // covered by the act of typing. visualViewport reports what is actually
+  // visible; the bar rides on top of it.
+  + `  (function(){var v=window.visualViewport;if(!v)return;`
+  + `var r=document.documentElement;\n`
+  + `    function s(){r.style.setProperty('--kb',`
+  + `Math.max(0,window.innerHeight-v.height-v.offsetTop)+'px');}\n`
+  + `    v.addEventListener('resize',s);v.addEventListener('scroll',s);s();})();\n`
+  // AND SOMETHING HAPPENS WHEN HE PRESSES THE BUTTON.
+  //
+  // Every page here is rendered by the server, so between the tap and the next
+  // screen there was nothing at all: no spinner, no disabled button, no change
+  // of any kind. On a slow connection that reads as a dead button, and the
+  // honest response to a dead button is to press it again. The delay keeps a
+  // fast submission from flickering.
+  + `  document.addEventListener('submit',function(e){`
+  + `var f=e.target;if(!f||f.dataset.busy)return;f.dataset.busy='1';\n`
+  + `    var b=f.querySelector('button[type=submit],button:not([type])');if(!b)return;\n`
+  + `    setTimeout(function(){b.disabled=true;b.textContent='Working…';},120);},true);\n`;
 
 /** Its CSP source expression. Recomputed from the constant, never hand-written. */
 export const OWNER_SURFACE_SCRIPT_HASH =

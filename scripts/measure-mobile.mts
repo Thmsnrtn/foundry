@@ -238,15 +238,51 @@ async function main(): Promise<void> {
           });
           return worst;
         })(),
+        // WHAT THE FIXED BARS COVER.
+        //
+        // This gate measured only horizontal overflow, so it never saw that the
+        // composer and the tab bar were each reserving the iPhone home
+        // indicator — the inset counted twice — and hiding the last lines of
+        // every page behind the bar the owner types into. Vertical clearance is
+        // as mechanical to check as width, and was simply never checked.
+        covered: (() => {
+          // Scrolled to the very bottom, which is the only place the question
+          // can be asked: can he read the last line of the page, or is it
+          // behind the bar he types into?
+          window.scrollTo(0, document.documentElement.scrollHeight);
+          // Only things actually pinned over the page. On desktop the composer
+          // returns to normal flow and the tab bar becomes a full-height
+          // sidebar, and neither covers anything.
+          const bars = [...document.querySelectorAll('.ask, nav.places')]
+            .filter((el) => window.getComputedStyle(el).position === 'fixed')
+            .map((el) => el.getBoundingClientRect().top)
+            .filter((t) => t > 0 && t < window.innerHeight);
+          if (bars.length === 0) return 0;
+          const barTop = Math.min(...bars);
+          // The composer lives inside .wrap and is itself fixed, so the last
+          // child is often the bar — measuring it against itself just reports
+          // its own height.
+          const wrap = document.querySelector('.wrap');
+          if (!wrap) return 0;
+          const flowing = [...wrap.children].filter((el) =>
+            window.getComputedStyle(el).position !== 'fixed');
+          const last = flowing[flowing.length - 1];
+          if (!last) return 0;
+          return Math.round(last.getBoundingClientRect().bottom - barTop);
+        })(),
       }));
       const overflow = m.scrollWidth - m.innerWidth;
-      const verdict = status === 200 && overflow <= 0 ? 'ok' : 'OVERFLOW';
+      const verdict = status === 200 && overflow <= 0 && m.covered <= 0 ? 'ok'
+        : status === 200 && overflow <= 0 ? 'COVERED' : 'OVERFLOW';
       rows.push(`${String(width).padStart(4)} ${desktop ? ' desk' : scale === 1 ? ' 100%' : ' 200%'}  ${String(status)}  `
         + `scrollWidth ${String(m.scrollWidth).padStart(4)} vs ${String(m.innerWidth).padStart(4)}  `
         + `${verdict.padEnd(9)} ${path}`);
-      if (verdict !== 'ok') {
+      if (verdict === 'OVERFLOW') {
         failures.push(`${path} at ${String(width)}px ${String(scale * 100)}% text: +${String(overflow)}px `
           + `(widest ${m.widest.tag} reaching ${String(m.widest.w)}px)`);
+      } else if (verdict === 'COVERED') {
+        failures.push(`${path} at ${String(width)}px ${String(scale * 100)}% text: `
+          + `${String(m.covered)}px of content sits underneath the fixed bars`);
       }
       if (scale === 1 && width === 390) {
         // The home page, and the reference company's — the two the owner

@@ -839,7 +839,11 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
     font:400 17px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
     -webkit-text-size-adjust:100%;-webkit-font-smoothing:antialiased;
   }
-  .wrap{max-width:34rem;margin:0 auto;padding:var(--s3) var(--s3) 10.5rem}
+  /* ENOUGH ROOM FOR BOTH BARS AND THE HOME INDICATOR. The reserve was a flat
+     10.5rem that did not know about the inset, so on a notched phone the last
+     lines of every page sat underneath the composer. */
+  .wrap{max-width:34rem;margin:0 auto;
+    padding:var(--s3) var(--s3) calc(11rem + env(safe-area-inset-bottom))}
   h1{font-family:var(--serif);font-size:2rem;line-height:1.15;font-weight:500;
     letter-spacing:-.01em;margin:0 0 var(--s2)}
   .brand{display:flex;align-items:center;gap:10px;margin:0 0 var(--s4);color:var(--ink-2);
@@ -985,9 +989,13 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
     display:inline-flex;align-items:center}
   .maybe a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
-  .ask{position:fixed;left:0;right:0;bottom:0;background:var(--bg);
+  .ask{position:fixed;left:0;right:0;bottom:var(--kb,0px);background:var(--bg);
     border-top:1px solid var(--line);
-    padding:var(--s2) var(--s3) calc(var(--s2) + env(safe-area-inset-bottom))}
+    /* THE INSET IS COUNTED ONCE. The tab bar below already reserves the home
+       indicator, and the composer sits on top of the tab bar — adding it again
+       here pushed the composer up by the height of the indicator a second time
+       and took that much off the bottom of every page. */
+    padding:var(--s2) var(--s3)}
   .ask-in{max-width:34rem;margin:0 auto;display:flex;gap:var(--s2)}
   .ask input{flex:1;min-width:0;font:inherit;font-size:max(16px,1rem);padding:13px 15px;min-height:48px;
     border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink)}
@@ -1010,7 +1018,7 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
     stroke-linecap:round;stroke-linejoin:round}
   nav.places a.on{color:var(--accent)}
   nav.places a:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:8px}
-  .ask{bottom:calc(58px + env(safe-area-inset-bottom));border-top:0;
+  .ask{bottom:calc(58px + env(safe-area-inset-bottom) + var(--kb,0px));border-top:0;
     background:linear-gradient(to top,var(--bg) 70%,transparent)}
   .item{display:block;text-decoration:none;color:inherit;background:var(--card);
     border:1px solid var(--line);border-radius:var(--r);padding:var(--s3);margin:0 0 var(--s2)}
@@ -1040,7 +1048,10 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
   .pair form:first-child{flex:1 1 auto}
   .pair .btn{white-space:nowrap}
   form.inline{display:flex;flex-wrap:wrap;gap:var(--s2);margin:0 0 var(--s3)}
-  form.inline input[type=text]{flex:1 1 12rem;min-width:0;font:inherit;font-size:max(16px,1rem);
+  /* THE TEXTAREA HAD NO RULE AT ALL, so it fell to the browser default —
+     below the 16px floor, which makes iOS zoom in on focus and never zoom back
+     out. It is the field he types a whole mandate into. */
+  form.inline input[type=text],textarea{flex:1 1 12rem;min-width:0;font:inherit;font-size:max(16px,1rem);
     padding:13px 15px;min-height:48px;border:1px solid var(--line);border-radius:12px;
     background:var(--card);color:var(--ink)}
   form.inline input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -1090,7 +1101,8 @@ ${body}
 <form class="ask" method="GET" action="/foundry">
   <div class="ask-in">
     <label for="q" class="sr">Ask Foundry anything</label>
-    <input id="q" name="q" placeholder="Ask Foundry anything…" autocomplete="off" />
+    <input id="q" name="q" type="search" enterkeyhint="search" autocorrect="on"
+      autocapitalize="sentences" spellcheck="true" placeholder="Ask Foundry anything…" />
     <button type="submit">Ask</button>
   </div>
 </form>
@@ -2122,7 +2134,8 @@ foundryShellRoutes.get('/foundry', async (c) => {
       <p class="lede">Name one and I will start paying attention to it. That is all it
         does &mdash; it does not connect anything or let me act.</p>
       <form class="inline" method="POST" action="/foundry/companies">
-        <input type="text" name="name" required maxlength="80"
+        <input type="text" name="name" required maxlength="80" enterkeyhint="done"
+          autocapitalize="words" autocorrect="off" spellcheck="false"
           placeholder="What is it called?" aria-label="The name of a company you own" />
         <button class="btn go" type="submit">Add it</button>
       </form>
@@ -2136,7 +2149,8 @@ foundryShellRoutes.get('/foundry', async (c) => {
       <form class="inline" method="POST" action="/foundry/ask">
         <input type="text" name="said" required maxlength="300"
           placeholder="Find another small income stream. Keep legal risk low."
-          aria-label="What to look for, and what not to do" />
+          aria-label="What to look for, and what not to do" enterkeyhint="send" autocapitalize="sentences"
+          autocorrect="on" spellcheck="true" />
         <!-- SECONDARY, DELIBERATELY. The one primary action on this screen is
              whatever actually needs him; an offer to go looking is an offer,
              and two things styled as the decision is one thing too many. -->
@@ -3033,7 +3047,8 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
       <form class="inline" method="POST" action="/foundry/companies/${view.id}/said">
         <input type="text" name="said" required maxlength="300"
           placeholder="${view.said ? 'Say something else' : 'What matters here — or what should I not do?'}"
-          aria-label="What matters for this company, or what Foundry should not do" />
+          aria-label="What matters for this company, or what Foundry should not do" enterkeyhint="send" autocapitalize="sentences"
+          autocorrect="on" spellcheck="true" />
         <button class="btn" type="submit">Tell me</button>
       </form>
       <p class="quiet">Tell me what this company is for, or tell me not to do something and
@@ -3241,7 +3256,8 @@ async function absorbAndAnswer(
       </div>
       <form class="inline" method="POST" action="/foundry/ask">
         <input type="text" name="said" maxlength="800"
-          placeholder="Say it another way" aria-label="Say it another way" />
+          placeholder="Say it another way" aria-label="Say it another way" enterkeyhint="send" autocapitalize="sentences"
+          autocorrect="on" spellcheck="true" />
         <button class="btn" type="submit">Tell me</button>
       </form>
       <a class="btn go" href="/foundry">Back</a>`, 'foundry'));
@@ -3344,7 +3360,7 @@ foundryShellRoutes.post('/foundry/ask', requireInstitutionOwner(), async (c: any
       <p class="quiet">Change anything you like and send it again.</p>
       <form method="POST" action="/foundry/ask">
         <textarea name="said" rows="4" maxlength="800"
-          aria-label="What you want">${door.said}</textarea>
+          aria-label="What you want" enterkeyhint="send" autocapitalize="sentences" spellcheck="true">${door.said}</textarea>
         <button class="btn go" type="submit">Send it again</button>
       </form>
     </div>
