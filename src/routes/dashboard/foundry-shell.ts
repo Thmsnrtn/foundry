@@ -2160,8 +2160,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
   // be hiding.
   const { glanceFor } = await import('../../services/founder/portfolio.js');
   const glance = await glanceFor(s.ownerId);
-  const money = (cents: number): string => cents >= 100_000
-    ? `$${(cents / 100_000).toFixed(1)}k` : `$${Math.round(cents / 100).toLocaleString('en-US')}`;
+  const { money } = await import('../../services/founder/portfolio.js');
 
   const body = html`
     <h1><span id="greet">Hello</span>${s.firstName ? `, ${s.firstName}` : ''}.</h1>
@@ -2743,8 +2742,7 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
   const { currentMandate } = await import('../../services/venture/mandate.js');
   const searching = await currentMandate(String(founder.id)) !== null;
   const river = await layersFor(String(founder.id));
-  const money = (cents: number): string => cents >= 100_000
-    ? `$${(cents / 100_000).toFixed(1)}k` : `$${Math.round(cents / 100).toLocaleString('en-US')}`;
+  const { money } = await import('../../services/founder/portfolio.js');
   const byForm = ((await query(
     `SELECT e.value, SUM(COALESCE((SELECT m.mrr_cents FROM metric_snapshots m
         WHERE m.product_id = p.id AND m.mrr_cents IS NOT NULL

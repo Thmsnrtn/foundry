@@ -25,6 +25,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
+import { money } from './portfolio.js';
 import { OBSERVABLE_FIELD_LABELS } from '../institution/external-shadowing.js';
 
 /** The quantities worth putting in front of an owner, in the order they read. */
@@ -69,12 +70,10 @@ export interface CompanyNumbers {
 }
 
 function formatted(kind: 'money' | 'rate' | 'count', value: number): string {
-  if (kind === 'money') {
-    const dollars = value / 100;
-    return dollars >= 1000
-      ? `$${(dollars / 1000).toFixed(1)}k`
-      : `$${dollars.toFixed(dollars < 100 ? 2 : 0)}`;
-  }
+  // ONE WAY TO WRITE DOWN MONEY, shared with the portfolio. This rounded
+  // differently above a hundred dollars, so the same figure appeared two ways
+  // on one screen.
+  if (kind === 'money') return money(value);
   if (kind === 'rate') return `${(value * 100).toFixed(1)}%`;
   return value.toLocaleString('en-US');
 }

@@ -83,3 +83,42 @@ jobs:
           echo "health never returned 200"; flyctl logs --app foundry-intel --no-tail | tail -40; exit 1
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      # WHAT THE OWNER WOULD MEET, ASKED OF THE RELEASE ITSELF.
+      #
+      # The owner opened the deployed product and got a 404 from the only button
+      # on the screen. The deploy had reported success, because success meant
+      # /internal/health answered 200 — a probe that cannot see a page, a link
+      # or a form. Every gate ran against the repository; nothing ever asked
+      # the running release a question.
+      #
+      # Unauthenticated, so this cannot check what a signed-in owner sees. What
+      # it can check is that the surface exists and answers as itself: his
+      # routes must not 404, and they must challenge rather than serve.
+      - name: Ask the release whether it is there
+        run: |
+          fail=0
+          for path in /foundry /foundry/companies /foundry/controls /foundry/ask; do
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15               "https://foundry-intel.fly.dev$path" || echo 000)
+            case "$code" in
+              401|403|302|303|200) echo "ok   $path -> $code" ;;
+              404) echo "GONE $path -> 404 — a route the owner uses is not in this release"; fail=1 ;;
+              *)   echo "BAD  $path -> $code"; fail=1 ;;
+            esac
+          done
+          # AND THE PART THAT WOULD ACTUALLY HAVE CAUGHT IT.
+          #
+          # Under /foundry the session middleware answers 401 before routing, so
+          # asking unauthenticated cannot tell a missing route from a live one —
+          # every check above would have passed on the release that 404'd. The
+          # release now says which routes it registered, and the ones his
+          # screens post to are named here.
+          curl -s --max-time 15 https://foundry-intel.fly.dev/internal/routes > /tmp/routes.json
+          for want in "POST /foundry/ask" "POST /foundry/venture" "POST /foundry/companies" "GET /foundry" "POST /foundry/reference"; do
+            if grep -q "$want" /tmp/routes.json; then
+              echo "ok   $want is in this release"
+            else
+              echo "GONE $want is not in this release — a screen posts to it"; fail=1
+            fi
+          done
+          exit $fail

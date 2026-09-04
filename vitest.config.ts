@@ -16,11 +16,17 @@ export default defineConfig({
     // therefore its own in-memory database. Enabling `fileParallelism` and
     // running the full suite twice also passed, 1313/1313 both times.
     //
-    // The setting stays as-is because an unexplained intermittent failure is on
-    // record (see IMPLEMENTATION_STATE), and changing test execution semantics
-    // while that is open would confound the next investigation — not because
-    // concurrency is known to break anything. Whoever closes that item can flip
-    // this with evidence.
+    // AND THE REAL CONSTRAINT HAS A NAME NOW. It is not only the open
+    // intermittent failure: `tests/unit/gates-fail-when-they-should.test.ts`
+    // proves each gate can fail by writing fixture files into the live `src/`
+    // tree and running the real gate scripts over it. Any test file that scans
+    // `src/` while those fixtures exist would see them. That file is also 69%
+    // of the suite's wall time — 255s of 370s — because it shells out to a
+    // gate script fifty-nine times.
+    //
+    // So flipping this needs the planting isolated first, not just evidence
+    // about the intermittent failure. Whoever does that gets most of the
+    // suite's runtime back.
     fileParallelism: false,
   },
   resolve: {

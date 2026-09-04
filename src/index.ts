@@ -285,9 +285,33 @@ app.post('/webhooks/stripe/:productId', async (c) => {
 // Health check is public
 app.route('/', healthRoutes);
 
+// WHETHER THE ROUTES THE OWNER PRESSES ARE IN THIS RELEASE.
+//
+// The owner opened the deployed product and got a 404 from the only button on
+// the screen, and the deploy had reported success — because success meant
+// /internal/health answered 200, a probe that cannot see a page, a link or a
+// form. A post-deploy check cannot ask as him either: under /foundry the
+// session middleware answers 401 before routing, so an unauthenticated request
+// to a route that does not exist looks exactly like one to a route that does.
+//
+// This is the smallest thing that closes that gap: the paths this release
+// actually registered under the owner's prefix. It lists paths, never handlers
+// or data, and every one of them is already visible to him in the HTML of his
+// own pages.
+app.get('/internal/routes', (c) => c.json({
+  foundry: app.routes
+    .filter((r) => r.path === '/foundry' || r.path.startsWith('/foundry/'))
+    .map((r) => `${r.method} ${r.path}`)
+    .filter((v, i, all) => all.indexOf(v) === i)
+    .sort(),
+}));
+
 // All other internal routes require ecosystem service key
 app.use('/internal/*', async (c, next) => {
-  if (c.req.path === '/internal/health') return next();
+  // Health and the route inventory are the two things a deploy has to be able
+  // to ask before it can hold a key, and neither returns anything that is not
+  // already in the HTML of the owner's own pages.
+  if (c.req.path === '/internal/health' || c.req.path === '/internal/routes') return next();
   return internalMiddleware(c, next);
 });
 app.route('/', ecosystemRoutes);

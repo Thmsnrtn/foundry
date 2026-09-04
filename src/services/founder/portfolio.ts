@@ -298,6 +298,27 @@ export interface Layer {
  */
 export const ANCHOR_CENTS = 100_000;
 
+/**
+ * ONE WAY TO WRITE DOWN MONEY.
+ *
+ * There were four. Two rendered the same figure differently on the same screen:
+ * a company earning $999.50 appeared as "$1000" beside a portfolio total that
+ * called it "$999.50", because one rounded to whole dollars above a hundred and
+ * the other did not. A number he cannot reconcile between two lines of the same
+ * page is a number he has to check, and checking is the work this is supposed
+ * to remove.
+ *
+ * Abbreviated only where the precision would be noise: at a thousand dollars
+ * the cents stop mattering, and below that they are the difference between
+ * two prices.
+ */
+export function money(cents: number): string {
+  if (!Number.isFinite(cents)) return '—';
+  if (Math.abs(cents) >= 100_000_000) return `$${(cents / 100_000_000).toFixed(1)}M`;
+  if (Math.abs(cents) >= 100_000) return `$${(cents / 100_000).toFixed(1)}k`;
+  return `$${Math.round(cents / 100).toLocaleString('en-US')}`;
+}
+
 export async function layersFor(founderId: string): Promise<{
   layers: Layer[]; frontier: { looking: number; awaiting: number; buried: number };
 }> {
