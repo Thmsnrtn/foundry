@@ -9,7 +9,22 @@ healthRoutes.get('/internal/health', async (c) => {
 
   // Database check
   try {
+    // A READ PROVES THE FILE IS THERE. IT DOES NOT PROVE THE INSTITUTION CAN
+    // RECORD ANYTHING.
+    //
+    // `SELECT 1` does not even touch a table: it succeeds against a database
+    // with no schema, a full disk, or a read-only volume. Every one of those is
+    // a total outage of an institution whose entire job is to write down what
+    // it learns, and the health check would have said ok through all three.
     await query('SELECT 1', []);
+    const migrated = (await query(
+      "SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'"))
+      .rows[0] as Record<string, unknown> | undefined;
+    if (Number(migrated?.n ?? 0) < 50) throw new Error('the schema is not applied');
+    // A real write, on a table that exists for this, immediately undone.
+    await query("CREATE TABLE IF NOT EXISTS health_write_probe (at TEXT NOT NULL)");
+    await query("INSERT INTO health_write_probe (at) VALUES (datetime('now'))");
+    await query('DELETE FROM health_write_probe');
     checks.database = 'ok';
   } catch {
     checks.database = 'error';
@@ -23,6 +38,16 @@ healthRoutes.get('/internal/health', async (c) => {
 
   // Clerk configured
   checks.clerk_configured = process.env.CLERK_SECRET_KEY ? 'ok' : 'error';
+
+  // WHETHER THE ROUTINES ARE ACTUALLY RUNNING.
+  //
+  // Ninety-six routines carry everything this institution does on its own, and
+  // nothing anywhere reported whether a single one of them was scheduled. The
+  // process could be answering requests perfectly with its whole inner life
+  // stopped, and every probe would have said ok.
+  const { schedulerStanding } = await import('../../lib/scheduler-standing.js');
+  const scheduler = schedulerStanding();
+  checks.scheduler = scheduler.running > 0 ? 'ok' : 'error';
 
   // WHICH DATABASE IS ACTUALLY IN USE, WHICH IS NOT THE SAME AS WHICH ONE WAS
   // CONFIGURED.

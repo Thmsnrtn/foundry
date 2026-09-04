@@ -40,6 +40,7 @@ import { auditRoutes } from './routes/dashboard/audit.js';
 import { decisionRoutes } from './routes/dashboard/decisions.js';
 import { fleetRoutes } from './routes/dashboard/fleet.js';
 import { letterRoutes } from './routes/dashboard/letter.js';
+import { noteAllStopped, noteScheduled } from './lib/scheduler-standing.js';
 import { ownerFailurePage } from './routes/dashboard/foundry-shell.js';
 import { isOwnerSurface } from './lib/owner-surface-script.js';
 import { lifecycleRoutes } from './routes/dashboard/lifecycle.js';
@@ -605,11 +606,21 @@ app.onError((err, c) => {
 
 // ─── Cron Scheduler ──────────────────────────────────────────────────────────
 
+/**
+ * EVERY ROUTINE THIS PROCESS STARTED, SO THE DRAIN CAN STOP THEM.
+ *
+ * The shutdown said the cron jobs would be garbage-collected, which is not what
+ * stops a running timer. Nothing kept the handles, so a routine that began
+ * during the four-second drain ran against a database the process was about to
+ * leave — and on a single-machine deployment that is the only database there is.
+ */
+const scheduledJobs: CronJob[] = [];
+
 function startScheduler(): void {
   logger.info('Starting job scheduler...');
   for (const [name, job] of Object.entries(JOB_REGISTRY)) {
     try {
-      new CronJob(job.schedule, async () => {
+      const handle = new CronJob(job.schedule, async () => {
         // Acquire distributed lock to prevent double-execution during rolling deploys
         if (!(await acquireJobLock(name))) {
           logger.info(`Job ${name} skipped (locked by another instance)`, { jobName: name });
@@ -633,6 +644,10 @@ function startScheduler(): void {
           await releaseJobLock(name);
         }
       }, null, true, 'UTC');
+      // KEPT, SO IT CAN BE STOPPED. Nothing held these handles, so the drain
+      // could not stop a routine even though it said it did.
+      scheduledJobs.push(handle);
+      noteScheduled();
       logger.info(`Scheduled ${name} — ${job.schedule}`, { jobName: name });
     } catch (err) {
       // THE ONE FAILURE THE HEALTH TABLE CANNOT INFER.
@@ -754,8 +769,15 @@ function gracefulShutdown(signal: string) {
   isShuttingDown = true;
   logger.info(`Received ${signal}, draining...`);
 
-  // Stop accepting new cron jobs
-  // The CronJob instances will be garbage-collected
+  // STOP THE JOBS, RATHER THAN SAYING SO.
+  //
+  // This comment claimed the cron jobs would be garbage-collected, which is not
+  // what stops a running timer — the handles were never kept, so nothing could
+  // stop them, and a job that began during the drain window ran against a
+  // database the process was about to leave.
+  for (const job of scheduledJobs) job.stop();
+  noteAllStopped();
+  logger.info(`Stopped ${String(scheduledJobs.length)} scheduled routines.`);
 
   // Give in-flight requests 4 seconds to complete (Fly.io kill_timeout is 5s)
   setTimeout(() => {

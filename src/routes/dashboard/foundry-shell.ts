@@ -39,6 +39,7 @@ import type { CompanyNumbers } from '../../services/founder/what-the-numbers-say
 import type { VentureReading } from '../../services/venture/mandate.js';
 import { OWNER_SURFACE_SCRIPT } from '../../lib/owner-surface-script.js';
 import { log as logger } from '../../lib/logger.js';
+import { reportError } from '../../lib/error-reporter.js';
 import { LAYER_IN_PLAIN_WORDS, layerOf } from '../../lib/repository-layers.js';
 
 export const foundryShellRoutes = new Hono();
@@ -472,6 +473,12 @@ async function readOwnerState(
       [evidence.id])).rows[0] as Record<string, unknown> | undefined;
     if (row?.c) candidateChecks.set(candidate.id, String(row.c));
   }
+
+  // READ ONCE. `mandateProgress` assembles the whole search — its guidance, its
+  // candidates, what it can and cannot see — and it ran twice on every render
+  // of the first screen, because two fields each asked for it independently.
+  const { mandateProgress } = await import('../../services/venture/mandate.js');
+  const searchNow = await mandateProgress(founderId);
 
   return {
     productId: self,
@@ -2043,9 +2050,20 @@ foundryShellRoutes.get('/foundry', async (c) => {
   let s: OwnerState | null;
   try {
     s = await context(c);
-  } catch {
+  } catch (err) {
     // A FAILURE IS STILL AN ANSWER. He should never meet a stack trace, and
     // never be left unsure whether something of his broke.
+    //
+    // AND SOMEBODY HAS TO KEEP IT. This threw the error away entirely — no log
+    // line, no report, no stack — so the one page that matters most could fail
+    // for a week and leave nothing behind to find out why. The owner sees the
+    // same calm sentence either way; the difference is whether it is
+    // diagnosable afterwards.
+    reportError(err, { source: 'owner_surface', meta: { path: c.req.path } });
+    logger.error('The first screen could not be assembled', {
+      error: err instanceof Error ? err.message : String(err),
+      stack: err instanceof Error ? err.stack : undefined,
+    });
     return c.html(page('Foundry', html`
       <h1>I can't reach my own records</h1>
       <p class="lede">Nothing of yours has changed and nothing is lost. Try again in a moment.</p>`),
