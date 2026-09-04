@@ -26,15 +26,43 @@
 
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'child_process';
 import {
-  existsSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync,
+  cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync,
+  symlinkSync, writeFileSync,
 } from 'fs';
 import { tmpdir } from 'os';
 import { join, resolve } from 'path';
 
-const ROOT = resolve(__dirname, '../..');
+const REPO = resolve(__dirname, '../..');
+
+/**
+ * THE FIXTURES GO IN A COPY, NOT IN THE LIVE TREE.
+ *
+ * This file proves each gate can fail by writing a defective file where the
+ * gate will find it and running the real script over it. It used to write into
+ * the repository being tested, which had two costs.
+ *
+ * The first was correctness: several gates scan `src/` and `tests/`, so any
+ * other test file reading the tree while a fixture existed would see it. That
+ * is why `fileParallelism` was off for the entire suite — one file's fixtures
+ * held every other file hostage.
+ *
+ * The second was time. Serial execution made this file 69% of the suite's wall
+ * clock, 255 seconds of 370, which made running the whole chain expensive
+ * enough that it got run AFTER a push rather than before. Seven failures
+ * accumulated across three deployed commits in that gap. A gate nobody can
+ * afford to run is a gate nobody runs.
+ *
+ * So ROOT becomes a sandbox: the four directories the gate scripts read, copied
+ * once (about 0.8s for 29MB), with `node_modules` symlinked so the scripts
+ * still resolve their own imports. The scripts derive their root from their own
+ * location, so running the copy makes the copy the subject. Nothing this file
+ * plants is visible to anything else, ever.
+ */
+let ROOT = REPO;
+let sandbox: string | null = null;
 const planted: string[] = [];
 
 /** THIS FILE MUST NOT LOOK LIKE THE THING IT PLANTS. Several gates scan
@@ -88,7 +116,29 @@ beforeAll(() => {
       else if (/^_gate_fixture_.*\.ts$/.test(entry.name)) rmSync(abs);
     }
   };
-  sweep(resolve(ROOT, 'src'));
+  // Still swept in the REAL tree, because this heals what an older run left
+  // there before the planting was moved out of it.
+  sweep(resolve(REPO, 'src'));
+
+  sandbox = mkdtempSync(join(tmpdir(), 'foundry-gates-'));
+  // Only what the gate scripts read: they resolve paths under ROOT and touch
+  // `src`, `docs` and `tests`, plus `scripts` for themselves.
+  for (const dir of ['src', 'docs', 'tests', 'scripts']) {
+    cpSync(resolve(REPO, dir), resolve(sandbox, dir), { recursive: true });
+  }
+  for (const file of ['package.json', 'tsconfig.json', 'vitest.config.ts']) {
+    if (existsSync(resolve(REPO, file))) {
+      cpSync(resolve(REPO, file), resolve(sandbox, file));
+    }
+  }
+  // Symlinked rather than copied: the scripts import typescript and friends,
+  // and a 300MB copy would cost more than the serial execution this replaces.
+  symlinkSync(resolve(REPO, 'node_modules'), resolve(sandbox, 'node_modules'));
+  ROOT = sandbox;
+});
+
+afterAll(() => {
+  if (sandbox !== null) rmSync(sandbox, { recursive: true, force: true });
 });
 
 describe('every gate refuses the defect it exists for', () => {
