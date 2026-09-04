@@ -7,6 +7,7 @@ import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 import { verifiedPrimaryEmail } from '../../middleware/auth.js';
 import { log } from '../../lib/logger.js';
+import { mayBeAdmitted } from '../../lib/instance-posture.js';
 import { createCustomer } from '../../services/billing/stripe.js';
 
 export const authRoutes = new Hono();
@@ -270,6 +271,20 @@ authRoutes.post('/auth/webhook', async (c) => {
       return c.json({ received: true, provisioned: false });
     }
     const name = `${payload.data.first_name ?? ''} ${payload.data.last_name ?? ''}`.trim() || null;
+
+    // A PRIVATE INSTANCE PROVISIONS ONE PERSON.
+    //
+    // This path creates a founder row, a Stripe customer and a welcome email
+    // for any verified address, and it asked nothing about who the address
+    // belongs to — the admission check lived only in the middleware's own
+    // provisioning branch, which this path bypasses by definition. On a
+    // commercial deployment `mayBeAdmitted` is true for everyone and nothing
+    // changes; on the owner's instance a stranger now leaves no trace at all,
+    // rather than a row that later has to be refused on every request.
+    if (!mayBeAdmitted(email)) {
+      log.info('clerk.user_created_not_admitted_on_private_instance', { userId });
+      return c.json({ received: true, provisioned: false });
+    }
 
     // Check if founder already exists
     const existing = await query('SELECT id FROM founders WHERE clerk_user_id = ?', [userId]);

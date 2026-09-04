@@ -226,6 +226,30 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     }
 
     const row = result.rows[0] as unknown as FounderRow;
+
+    // THE ADMISSION CHECK RAN ON THE WRONG PATH.
+    //
+    // `mayBeAdmitted` is the thing that makes this a single-principal
+    // institution, and it was called only where this middleware provisions a
+    // founder itself — the branch taken when no row exists. There is a second
+    // way a row comes into being: the signature-verified Clerk `user.created`
+    // webhook inserts one for any verified address, with no posture check. So a
+    // stranger who found the public sign-up page got a founder row, and on
+    // every request after that this middleware found their row and never asked
+    // the question at all.
+    //
+    // They could not reach his institution — `requireInstitutionOwner` asks the
+    // same question again on every /foundry route — but "the second gate held"
+    // is not a reason to leave the first one closed on only one path. Asked
+    // here, it is asked of every session however the row arrived.
+    if (!mayBeAdmitted(String(row.email ?? ''))) {
+      logger.warn('Refused a session: not the owner of this private instance',
+        { clerkUserId });
+      return isBrowserRequest(c.req.header('accept'))
+        ? c.redirect('/auth/login')
+        : c.json({ error: 'Unauthorized' }, 401);
+    }
+
     const founder: Founder = {
       id: row.id,
       clerk_user_id: row.clerk_user_id,

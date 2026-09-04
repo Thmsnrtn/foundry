@@ -1,5 +1,13 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
+// WHO THE PRINCIPAL IS, SAID OUT LOUD.
+//
+// These drove the owner's own pages without ever declaring that the session
+// belonged to the owner, and passed — because four of those pages carried no
+// ownership guard at all. The guard is now registered for the whole /foundry
+// prefix, so the fixture has to say what it always meant.
+process.env.FOUNDRY_INSTANCE_POSTURE = 'private_owner';
+process.env.FOUNDRY_OWNER_EMAIL = 'owner@example.com';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';

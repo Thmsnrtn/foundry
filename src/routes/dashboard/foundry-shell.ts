@@ -42,6 +42,21 @@ import { LAYER_IN_PLAIN_WORDS, layerOf } from '../../lib/repository-layers.js';
 
 export const foundryShellRoutes = new Hono();
 
+// THE GUARD BY CONSTRUCTION, NOT BY MEMORY.
+//
+// Twenty of twenty-four routes named `requireInstitutionOwner()` themselves and
+// four did not — /foundry, /foundry/companies, /foundry/companies/:id and
+// /foundry/controls, every one of them a page that renders his institution.
+// They were covered by the session middleware alone, and their handlers happen
+// to scope their reads to the requesting founder, so nothing leaked. But
+// "happens to" is the whole problem: the next route added here would have been
+// guarded only if somebody remembered.
+//
+// Registered once, ahead of every handler in this file, so being under /foundry
+// is what makes a route the owner's rather than an argument somebody passed.
+foundryShellRoutes.use('/foundry', requireInstitutionOwner());
+foundryShellRoutes.use('/foundry/*', requireInstitutionOwner());
+
 // ─── the owner's words ──────────────────────────────────────────────────────
 
 /**
@@ -2866,26 +2881,35 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     </details>
 
     ${view.senses.length ? html`<details class="know fold"><summary><h3>What I can see</h3><span class="gist">${count(view.senses.length, 'thing')}, from ${[...new Set(view.senses.map((x) => x.providerName))].join(' and ')}</span></summary>
-      <ul>${raw(view.senses.map((sense) =>
-    `<li><strong>${sense.wouldLearn}</strong> — from ${sense.providerName}${
-  sense.mode === 'sandbox' ? ', in test mode, so none of it is the world'
-    : sense.mode === 'reference' ? ', so none of it is real' : ''}. ${sense.lastError
-  ? `<span class="gap">Something is wrong with it: ${sense.lastError}.</span> What I show you may be out of date.`
-  : sense.lastObservedAt
-    ? `Last reported ${sense.lastObservedAt.slice(0, 10)}.`
-    : 'It has not reported yet.'}</li>`).join(''))}</ul>
+      <!-- ESCAPED, AND THE REASON IS NOT HYPOTHETICAL. sense.lastError is a
+           verbatim slice of a remote HTTP response body: the provider gateways
+           throw the status followed by 300 characters of the body, and that
+           message is stored on company_senses.last_error and shown here.
+           grantedScopes comes straight off a provider's token endpoint. Both
+           are text a third party chooses, and this block used to build a
+           string and hand it to raw(). -->
+      <ul>${view.senses.map((sense) => html`<li><strong>${sense.wouldLearn}</strong> —
+        from ${sense.providerName}${sense.mode === 'sandbox'
+    ? ', in test mode, so none of it is the world'
+    : sense.mode === 'reference' ? ', so none of it is real' : ''}.
+        ${sense.lastError
+    ? html`<span class="gap">Something is wrong with it: ${sense.lastError}.</span>
+          What I show you may be out of date.`
+    : sense.lastObservedAt
+      ? `Last reported ${sense.lastObservedAt.slice(0, 10)}.`
+      : 'It has not reported yet.'}</li>`)}</ul>
       <p class="quiet">None of this lets me act. I cannot
         ${view.senses.map((sense) => sense.neverGrants).join('; ')}.</p>
       ${view.keys.length ? html`<p class="quiet">What I actually hold:
-        ${raw(view.keys.map((k) => `${k.provider} — ${k.grantedScopes.join(', ')}`
-    + `${k.renewedAt ? `, renewed ${k.renewedAt}` : ''}`
-    + `${k.failures > 0 ? `, <span class="gap">${String(k.failures)} recent failures</span>` : ''}`)
-    .join('; '))}. That is the permission the provider actually granted, not the one I
+        ${view.keys.map((k) => html`${k.provider} — ${k.grantedScopes.join(', ')}${
+  k.renewedAt ? `, renewed ${k.renewedAt}` : ''}${k.failures > 0
+    ? html`, <span class="gap">${String(k.failures)} recent failures</span>` : ''}; `)}
+        That is the permission the provider actually granted, not the one I
         asked for — if they ever differ, this is where you would see it.</p>` : ''}
-      ${raw(view.senses.map((sense) =>
-    `<form method="POST" action="/foundry/companies/${view.id}/senses/${sense.id}/disconnect">
-      <button class="btn" type="submit">Stop seeing ${sense.shortName}</button>
-    </form>`).join(''))}
+      ${view.senses.map((sense) => html`<form method="POST"
+        action="/foundry/companies/${view.id}/senses/${sense.id}/disconnect">
+        <button class="btn" type="submit">Stop seeing ${sense.shortName}</button>
+      </form>`)}
     </details>` : ''}
 
     <details class="know fold"><summary><h3>What I cannot see</h3><span class="gist">${view.blind.length === 0 ? 'nothing I know how to look at' : count(view.blind.length, 'thing')}</span></summary>
@@ -3674,7 +3698,11 @@ foundryShellRoutes.get('/foundry/senses/reference-authorize',
     const state = String(c.req.query('state') ?? '');
     const redirect = String(c.req.query('redirect_uri') ?? '');
     const scopes = String(c.req.query('scope') ?? '').split(' ').filter(Boolean);
-    if (!state || !redirect) return c.notFound();
+    // ONLY EVER BACK HERE. This took the destination from the query string and
+    // appended a freshly minted authorisation code to it, so a link could send
+    // the code somewhere else. The route already knows the one legitimate
+    // destination — it computes it from the request origin on the way out.
+    if (!state || redirect !== senseCallbackUri(c)) return c.notFound();
     const { issueReferenceCode } = await import(
       '../../services/senses/providers/reference.js');
     const code = issueReferenceCode(state, scopes);

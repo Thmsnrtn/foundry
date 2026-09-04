@@ -119,6 +119,44 @@ describe('what a stranger wrote, on his screen', () => {
 // injected handler cannot execute even where an escape is missed later.
 // =============================================================================
 
+// =============================================================================
+// AND THE SECOND INSTANCE, FOUND BY REVIEW RATHER THAN BY LUCK.
+//
+// The company page shows what Foundry can see about a company, and says so when
+// a sense is broken: "Something is wrong with it: <the error>." That error is a
+// verbatim slice of a remote HTTP response body — the provider gateways throw
+// the status followed by three hundred characters of whatever came back, and it
+// is stored and rendered. The scopes beside it come straight off a provider's
+// token endpoint. Both are text a third party chooses, and both were built into
+// a string and handed to raw().
+//
+// Fixing one instance of a class is not the same as closing the class, which is
+// why the policy changed too — but this one still has to be escaped.
+// =============================================================================
+
+describe('what a provider sent back, on his company page', () => {
+  it('is shown as words, never as markup', async () => {
+    await query('INSERT INTO products (id, owner_id, name, status) VALUES (?,?,?,?)',
+      ['xss_co', OWNER, 'Tidewater', 'active']);
+    // A declared provider/sense/mode combination, read from the constitutional
+    // table rather than guessed — the database refuses anything else.
+    const declared = (await query(
+      'SELECT provider, sense_key, mode FROM sense_providers LIMIT 1'))
+      .rows[0] as Record<string, unknown>;
+    await query(
+      `INSERT INTO company_senses (id, product_id, sense_key, provider, mode, disclosure,
+         last_error)
+       VALUES ('xss_sense', 'xss_co', ?, ?, ?, 'test', ?)`,
+      [String(declared.sense_key), String(declared.provider), String(declared.mode),
+        `502 Bad Gateway ${PAYLOAD}`]);
+    const res = await app.request('/foundry/companies/xss_co');
+    const body = await res.text();
+    expect(res.status).toBe(200);
+    expect(body).not.toMatch(/<img src=x onerror/i);
+    expect(body).toContain('&lt;img');
+  });
+});
+
 describe('the policy over the surface that renders the internet', () => {
   it('permits exactly one script, by hash, and no inline anything', async () => {
     const { securityHeaders } = await import('../../src/middleware/security-headers.js');
