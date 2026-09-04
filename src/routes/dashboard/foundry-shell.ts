@@ -848,6 +848,17 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>${title}</title>
+<!-- ON THE HOME SCREEN, IT IS HIS PRODUCT. The owner's surface was the one
+     place not wired to the installable app: no manifest, no icon, no theme
+     colour — so adding it to a phone gave a browser chrome bar in the wrong
+     colour and a generic icon, while the manifest it would have used described
+     the commercial product and its dark palette. -->
+<link rel="manifest" href="/manifest.json" />
+<link rel="apple-touch-icon" href="/static/icon-192.png" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="Foundry" />
+<meta name="theme-color" content="#F3F4F1" media="(prefers-color-scheme: light)" />
+<meta name="theme-color" content="#0D1310" media="(prefers-color-scheme: dark)" />
 <style>
   /* Two families and one scale: a serif for the sentences that matter, the
      system sans for everything else. Colour carries meaning or it is absent:
@@ -1617,6 +1628,22 @@ function matchQuestion(text: string): string {
   if (/show me the numbers|the numbers|how much|revenue|mrr|metrics|customers|churn/.test(t)) {
     return 'numbers';
   }
+  // AN INSTRUCTION TO GO LOOKING IS READ BEFORE ANY QUESTION ABOUT WHAT HE
+  // OWNS. His mandate says "make my portfolio more resilient", so it contains
+  // the word the portfolio rule matches on — and reading it as a question would
+  // answer him instead of starting the search he asked for.
+  if (/venture|originate|new business|another business|new company|another company|a new saas|micro-?saas|income stream|revenue stream|the river/.test(t)
+    || /stop looking|show me another option|try harder to disprove|higher[- ]ticket|paid acquisition/.test(t)) {
+    return 'venture';
+  }
+  // THE PORTFOLIO QUESTION COMES FIRST, because "how are things?" is both the
+  // most obvious thing he could type and a phrase that matches the
+  // one-company rule below. It matched "how are", asked which company he meant,
+  // found none named, and answered "I don't know yet" — to the question the
+  // whole first screen exists to answer.
+  if (/what do i own|my companies|everything doing|how are things|across (all|my)|portfolio|deteriorat|which company/.test(t)) {
+    return 'portfolio';
+  }
   if (/how is|how are|how'?s |doing|going|healthy|health of/.test(t)) return 'howdoing';
   // CONTEXT FIRST. He is looking at something; "what does this mean" is about
   // that, and he should never have to name it again to be understood.
@@ -1634,13 +1661,6 @@ function matchQuestion(text: string): string {
   // A VENTURE SENTENCE IS NOT A QUESTION. Asking Foundry to go and look, or
   // steering a search that is running, is an instruction — it goes to the
   // mandate, where it binds after he confirms, rather than being answered.
-  if (/venture|originate|new business|another business|new company|another company|a new saas|micro-?saas|income stream|revenue stream|the river/.test(t)
-    || /stop looking|show me another option|try harder to disprove|higher[- ]ticket|paid acquisition/.test(t)) {
-    return 'venture';
-  }
-  if (/what do i own|my companies|everything doing|how are things|across (all|my)|portfolio|deteriorat|which company/.test(t)) {
-    return 'portfolio';
-  }
   if (/what.*(this|that).*(mean|about)|explain (this|that)/.test(t)) return 'this';
   if (/if i (say )?(yes|agree|approve)|what happens if/.test(t)) return 'ifyes';
   if (/what can you change|can you change|are you allowed to change/.test(t)) return 'change';
@@ -2834,6 +2854,24 @@ foundryShellRoutes.post('/foundry/companies', requireInstitutionOwner(), async (
   // fabricated stage, no agents, no competitors — the first version of this
   // product created a company as a side effect of a four-step audit funnel and
   // filled it with guesses.
+  // A DOUBLE TAP IS ONE COMPANY.
+  //
+  // This inserted unconditionally, so two submissions — which is what a phone
+  // on a slow connection produces, and what a page reload after a submit
+  // produces — gave him two identical companies, each with its own history and
+  // its own half of whatever Foundry later learned. Naming the same company
+  // twice is not a new company; it is the same sentence said twice.
+  // A company he already named is the company he meant. Only real ones are
+  // considered: naming a business of his own must never collide with one of the
+  // invented companies, whatever they happen to be called.
+  const already = (await query(
+    `SELECT id FROM products p
+      WHERE p.owner_id = ? AND lower(p.name) = lower(?) AND p.status = 'active'
+        AND p.deleted_at IS NULL AND ${realCompany('p')}
+      ORDER BY p.created_at LIMIT 1`,
+    [String(founder.id), name])).rows[0] as Record<string, unknown> | undefined;
+  if (already) return c.redirect(`/foundry/companies/${String(already.id)}?done=added`);
+
   const { nanoid } = await import('nanoid');
   const id = nanoid();
   await query(

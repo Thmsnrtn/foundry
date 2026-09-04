@@ -283,7 +283,7 @@ export async function glanceFor(founderId: string): Promise<Glance> {
 }
 
 export interface Layer {
-  name: 'anchors' | 'tributaries' | 'frontier';
+  name: 'anchors' | 'tributaries' | 'frontier' | 'unseen';
   title: string; what: string;
   companies: Array<{ productId: string; name: string; mrrCents: number | null; posture: string }>;
   cashFlowCents: number;
@@ -316,8 +316,16 @@ export async function layersFor(founderId: string): Promise<{
     productId: String(r.id), name: String(r.name),
     mrrCents: r.mrr_cents == null ? null : Number(r.mrr_cents), posture: String(r.posture),
   }));
-  const anchors = each.filter((c) => (c.mrrCents ?? 0) >= ANCHOR_CENTS);
-  const tributaries = each.filter((c) => (c.mrrCents ?? 0) < ANCHOR_CENTS);
+  // A COMPANY FOUNDRY CANNOT SEE IS NOT A SMALL COMPANY.
+  //
+  // These partitioned on `mrrCents ?? 0`, so "I cannot see what this earns"
+  // became zero and landed in Tributaries — a layer the page describes as
+  // small, steady, and not asked to become anchors. His largest business, on
+  // the day it stops reporting, is filed as a minor one. Not knowing is its own
+  // answer and gets its own place.
+  const anchors = each.filter((c) => c.mrrCents !== null && c.mrrCents >= ANCHOR_CENTS);
+  const tributaries = each.filter((c) => c.mrrCents !== null && c.mrrCents < ANCHOR_CENTS);
+  const unseen = each.filter((c) => c.mrrCents === null);
   const sum = (cs: typeof each): number => cs.reduce((n, c) => n + (c.mrrCents ?? 0), 0);
 
   const frontier = (await query(
@@ -337,6 +345,11 @@ export async function layersFor(founderId: string): Promise<{
       { name: 'tributaries', title: 'Tributaries',
         what: 'small, steady, and not asked to become anchors',
         companies: tributaries, cashFlowCents: sum(tributaries) },
+      ...(unseen.length > 0 ? [{
+        name: 'unseen' as const, title: 'Not reporting',
+        what: 'I cannot see what these earn, so I cannot place them',
+        companies: unseen, cashFlowCents: 0,
+      }] : []),
     ],
     frontier: {
       looking: Number(frontier.looking), awaiting: Number(frontier.awaiting),

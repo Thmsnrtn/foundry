@@ -75,6 +75,37 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request).catch(() => {
+        // THE OWNER'S SURFACE HAS ITS OWN OFFLINE PAGE.
+        //
+        // This worker registers at the root from the commercial layout, and the
+        // owner's footer links to a page that uses that layout — so visiting it
+        // once put this worker in charge of /foundry too. Losing signal on his
+        // own product then showed him the other product's dark stylesheet and
+        // its em-dash, in a typeface and palette that are not his.
+        const url = new URL(request.url);
+        if (url.pathname === '/foundry' || url.pathname.startsWith('/foundry/')) {
+          return new Response(
+            `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">`
+            + `<meta name="viewport" content="width=device-width,initial-scale=1">`
+            + `<title>Foundry</title><style>`
+            + `:root{color-scheme:light dark}`
+            + `body{margin:0;min-height:100vh;display:flex;align-items:center;`
+            + `justify-content:center;background:#F3F4F1;color:#151C18;`
+            + `font:400 17px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif}`
+            + `main{max-width:22rem;padding:24px;text-align:left}`
+            + `h1{font-family:"Iowan Old Style",Palatino,Georgia,serif;`
+            + `font-size:1.5rem;font-weight:500;margin:0 0 12px}`
+            + `p{color:#4C554E;margin:0}`
+            + `@media (prefers-color-scheme:dark){body{background:#0D1310;color:#EAEFEA}`
+            + `p{color:#A8B2AA}}`
+            + `</style></head><body><main>`
+            + `<h1>You are offline.</h1>`
+            + `<p>Nothing of yours has changed, and I have not acted on anything. `
+            + `This page will work again when you have a connection.</p>`
+            + `</main></body></html>`,
+            { headers: { 'Content-Type': 'text/html' } }
+          );
+        }
         // On network failure for navigation, serve a minimal offline indicator
         return new Response(
           `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Foundry — Offline</title><link rel="stylesheet" href="/static/styles.css"></head><body><div style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:1rem;"><div style="font-size:3rem;font-weight:800;color:var(--text-dim)">—</div><p style="color:var(--text-muted)">No connection. Foundry will resume when you're back online.</p></div></body></html>`,
