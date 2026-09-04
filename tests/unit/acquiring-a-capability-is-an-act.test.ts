@@ -107,7 +107,12 @@ describe('approval gets the ability and grants no act', () => {
     // exactly as it would for a provider that had been there for years.
     const verdict = await consequenceAllows({
       productId: CO, tool: 'run_paid_experiment_test',
-      paramsFingerprint: fingerprint({ budget: 500 }) });
+      paramsFingerprint: fingerprint({ budget: 500 }),
+      // WHAT IT WOULD COST, said before it may. An act that draws on his
+      // allowance is refused for not naming its own price before it is ever
+      // weighed against what is left — so the act declares it, and the refusal
+      // below is the one this test is actually about.
+      estimatedCents: 500 });
     expect(verdict.allowed).toBe(false);
     expect(verdict.rung).toBe('financial');
     expect(verdict.reason).toContain('neither allowed money');

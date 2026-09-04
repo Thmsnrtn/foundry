@@ -21,12 +21,21 @@ export type Rung = 'observe' | 'prepare' | 'reversible' | 'public' | 'financial'
 export interface RungFacts {
   rung: Rung; whatItMeans: string; absorbable: boolean;
   capabilityKey: string; whatItDoes: string;
+  /**
+   * Whether this spends HIS money rather than moving the company's. A refund
+   * and a domain purchase are both on the financial rung and only one of them
+   * comes out of the allowance he set.
+   */
+  drawsOnAllowance: boolean;
+  /** How this provider acts: 'browser' is a literal hand on a page. */
+  how: string;
 }
 
 /** Which rung a tool at the door stands on, or null when nothing binds it. */
 export async function rungOfTool(tool: string): Promise<RungFacts | null> {
   const row = (await query(
-    `SELECT c.capability_key, c.what_it_does, r.rung, r.what_it_means, r.absorbable
+    `SELECT c.capability_key, c.what_it_does, c.draws_on_allowance, p.how,
+            r.rung, r.what_it_means, r.absorbable
        FROM capability_providers p
        JOIN capabilities c ON c.capability_key = p.capability_key
        JOIN consequence_rungs r ON r.rung = c.rung
@@ -36,6 +45,8 @@ export async function rungOfTool(tool: string): Promise<RungFacts | null> {
     rung: String(row.rung) as Rung, whatItMeans: String(row.what_it_means),
     absorbable: Number(row.absorbable) === 1,
     capabilityKey: String(row.capability_key), whatItDoes: String(row.what_it_does),
+    drawsOnAllowance: Number(row.draws_on_allowance) === 1,
+    how: String(row.how),
   };
 }
 
@@ -100,27 +111,34 @@ export async function consequenceAllows(input: {
 
   const { spendApprovalFor, allowanceFor } = await import('./standing-intent.js');
   if (rung === 'financial') {
-    // AN ACT THAT SPENDS MONEY MUST SAY HOW MUCH.
+    // AN ACT THAT SPENDS HIS MONEY MUST SAY HOW MUCH — and only such an act.
     //
     // Without this, "is there anything left?" was the whole test, and an
-    // allowance with one cent remaining authorised a thousand-dollar act. The
-    // amount is the caller's declaration of its own cost, and an act that will
-    // not declare one cannot be metered, so it does not proceed.
+    // allowance with one cent remaining authorised a thousand-dollar act.
+    //
+    // The financial rung holds two different things, and requiring an amount of
+    // both was wrong: `commerce` capabilities move the COMPANY'S money with its
+    // customers and do not draw on the allowance he set, so a refund cannot be
+    // held up for failing to declare a cost against a budget it never touches.
+    // `draws_on_allowance` says which is which, on the capability, beside the
+    // rung it qualifies.
     const cost = input.estimatedCents ?? null;
-    if (cost === null || !Number.isFinite(cost) || cost < 0) {
+    if (facts.drawsOnAllowance && (cost === null || !Number.isFinite(cost) || cost < 0)) {
       return {
         allowed: false, rung,
         reason: `this ${facts.whatItMeans}, and nothing said what it would cost — `
-          + 'an act that spends money has to say how much before it may',
+          + 'an act that spends your money has to say how much before it may',
       };
     }
     // An allowance is standing money; it does not need to be spent here, only
     // to exist and to cover this act. The budget door spends it.
     const allowance = await allowanceFor(input.productId);
-    if (allowance && allowance.remainingCents >= cost) {
+    const covered = cost === null ? allowance !== null && allowance.remainingCents > 0
+      : allowance !== null && allowance.remainingCents >= cost;
+    if (allowance && covered) {
       return { allowed: true, rung, reason: `within what you allowed: ${allowance.statement}` };
     }
-    if (allowance && cost > allowance.remainingCents) {
+    if (allowance && cost !== null && cost > allowance.remainingCents) {
       return {
         allowed: false, rung,
         reason: `that would cost $${(cost / 100).toFixed(2)} and $`
@@ -164,7 +182,13 @@ export async function consequenceAllows(input: {
 async function rungOfBrowserAct(
   facts: RungFacts, browserAct: string | null,
 ): Promise<{ rung: Rung } | { refused: string }> {
-  if (facts.capabilityKey !== 'act_in_a_browser') return { rung: facts.rung };
+  // KEYED ON THE PROVIDER, NOT THE CAPABILITY. `cp_mcp` is bound to
+  // `act_in_a_browser` too — an MCP server can do anything, so the ceiling is
+  // right — but an MCP call is not a hand on a page and is separately licensed
+  // by a grant that is consumed once. Keying this on the capability made every
+  // MCP call declare a browser act kind, which is a rule about a different
+  // thing wearing the same name. `how = 'browser'` is the literal hand.
+  if (facts.how !== 'browser') return { rung: facts.rung };
   if (browserAct === null || browserAct.trim() === '') {
     return {
       refused: 'a browser can read a page or accept somebody\'s terms, and this act '

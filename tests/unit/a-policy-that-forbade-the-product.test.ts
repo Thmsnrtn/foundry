@@ -60,13 +60,54 @@ function scriptOrigins(): Map<string, string[]> {
 }
 
 describe('the content security policy', () => {
-  it('names every origin the pages load a script from', () => {
-    const scriptSrc = csp.split('\n').find((l) => l.includes('script-src')) ?? '';
+  // THERE ARE TWO POLICIES, AND THIS READ ONE OF THEM.
+  //
+  // `security-headers.ts` serves a STRICT `script-src` on the owner surface —
+  // 'self' plus one hash, no CDN — and a permissive one everywhere else, which
+  // is how the sign-in page loads Clerk. Taking the first line containing
+  // 'script-src' takes the strict branch, and then every origin in the whole
+  // tree reads as forbidden: it reported the auth pages as broken when they
+  // are served the other policy entirely.
+  //
+  // Ninth instance this campaign of an instrument reading the wrong line, and
+  // the second inside this very file. So both directives are read, and each
+  // origin is checked against the one that actually governs the page loading
+  // it.
+  const directives = csp.split('\n').filter((l) => l.includes('script-src'));
+
+  it('finds both policies, so reading one of them cannot pass this test', () => {
+    expect(directives.length).toBe(2);
+  });
+
+  it('names every origin the ordinary pages load a script from', () => {
+    const permissive = directives.find((l) => l.includes("'unsafe-inline'")) ?? '';
     const missing: string[] = [];
     for (const [origin, files] of scriptOrigins()) {
-      if (!scriptSrc.includes(origin)) missing.push(`${origin} (${files.join(', ')})`);
+      if (!permissive.includes(origin)) missing.push(`${origin} (${files.join(', ')})`);
     }
     expect(missing, 'an origin the product loads and the policy forbids').toEqual([]);
+  });
+
+  it('lets the owner surface load nothing from anywhere but itself', () => {
+    // The strict branch permits no origin at all, so the guarantee is not that
+    // its origins are listed — it is that there are none. Asserted over the
+    // files that render it rather than over the policy, because the policy
+    // saying 'self' proves nothing about what the page asks for.
+    const OWNER_FILES = [
+      'src/routes/dashboard/foundry-shell.ts',
+      'src/lib/owner-surface-script.ts',
+    ];
+    const external: string[] = [];
+    for (const file of OWNER_FILES) {
+      const src = stripComments(readFileSync(file, 'utf8'), { lineComments: true });
+      for (const re of [/import\(\s*["'](https:\/\/[^"'/]+)/g,
+        /<script[^>]*\bsrc=["'](https:\/\/[^"'/]+)/g]) {
+        for (const m of src.matchAll(re)) external.push(`${file} → ${m[1]}`);
+      }
+    }
+    expect(external, 'the owner surface may run no code it did not serve').toEqual([]);
+    const strict = directives.find((l) => !l.includes("'unsafe-inline'")) ?? '';
+    expect(strict).not.toContain('https://');
   });
 
   it('finds the origins at all, so an empty result cannot pass this test', () => {

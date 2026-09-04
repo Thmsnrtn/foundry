@@ -634,7 +634,7 @@ CREATE TABLE capabilities (
   -- The ceiling: the most consequential thing using this could ever be.
   rung           TEXT NOT NULL REFERENCES consequence_rungs(rung),
   sort_order     INTEGER NOT NULL
-);
+, draws_on_allowance INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE capability_acquisitions (
   id             TEXT PRIMARY KEY,
   founder_id     TEXT NOT NULL REFERENCES founders(id),
@@ -4908,7 +4908,11 @@ BEFORE UPDATE ON asset_money_spent
 BEGIN SELECT RAISE(ABORT,'asset_money:append_only'); END;
 CREATE TRIGGER asset_money_is_not_deleted
 BEFORE DELETE ON asset_money_spent
-BEGIN SELECT RAISE(ABORT,'asset_money:append_only'); END;
+BEGIN
+  SELECT RAISE(ABORT,'asset_money:append_only') WHERE EXISTS (
+    SELECT 1 FROM products p
+     WHERE p.id = OLD.product_id AND p.erasure_scheduled_at IS NULL);
+END;
 CREATE TRIGGER asset_money_is_not_negative
 BEFORE INSERT ON asset_money_spent
 WHEN NEW.amount_cents < 0

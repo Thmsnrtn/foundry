@@ -682,6 +682,10 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
   // So it is founder-scoped rather than product-scoped, and the two tables
   // hanging off it go the same way. Their `by` names the route back to the
   // person, because neither carries a founder id of its own.
+  owner_visits: {
+    reason: 'when he last looked, which exists only to tell him what changed since',
+    onAccountErasure: { op: 'delete' },
+  },
   venture_mandates: {
     reason: 'a search for a business, which belongs to the person who asked for it',
     onAccountErasure: { op: 'delete' },
@@ -942,6 +946,7 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   stance_bearings: 'which ways of knowing can support or contradict which kind of hypothesis, and why; constitutional, naming nobody — a missing row means that source says nothing',
   reality_only_questions: 'the questions no amount of reading can settle — whether somebody will pay, switch, click or come back — and what each is settled by instead; constitutional, naming nobody',
   consequence_rungs: 'the ladder of consequence an act can have, constitutional and the same for every owner',
+  browser_act_kinds: 'what a hand in a browser can be doing — reading a page, accepting somebody\'s terms — and which rung each stands on; constitutional, naming nobody',
   capabilities: 'what the institution can conceivably do, as concepts; constitutional, naming nobody',
   capability_providers: 'which implementations supply which capability and how far each is proven; institutional, naming no company',
   capability_maturity_changes: 'the witnessed record of how far each provider has been proven; institutional evidence, naming no owner data',

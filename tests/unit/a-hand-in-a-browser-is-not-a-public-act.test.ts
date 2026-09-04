@@ -95,7 +95,7 @@ describe('an act that spends money says how much, against a meter that counts it
     const v = await consequenceAllows({
       productId: PRODUCT, tool: 'test_register_domain', paramsFingerprint: null });
     expect(v.allowed).toBe(false);
-    expect(v.reason).toContain('an act that spends money has to say how much');
+    expect(v.reason).toContain('an act that spends your money has to say how much');
   });
 
   it('allows what the allowance covers', async () => {
@@ -136,5 +136,33 @@ describe('an act that spends money says how much, against a meter that counts it
     await recordMoneySpent({ productId: PRODUCT, tool: 'test_register_domain',
       amountCents: 4200, source: 'reversed' });
     expect((await allowanceFor(PRODUCT))?.remainingCents).toBe(5000);
+  });
+});
+
+describe('the financial rung holds two different things', () => {
+  it('does not hold up a refund for failing to price a budget it never touches', async () => {
+    // `commerce` moves the COMPANY'S money with its customers and does not draw
+    // on the allowance he set. Requiring an amount of it was the wrong scope,
+    // and the suite said so by refusing a refund.
+    await query(
+      `INSERT INTO capability_providers
+         (id, capability_key, provider, how, tool, cost_note, maturity, sort_order)
+       VALUES ('cp_test_refund','refund','test','api','test_refund','none','declared',99)`,
+      []);
+    const v = await consequenceAllows({
+      productId: PRODUCT, tool: 'test_refund', paramsFingerprint: null });
+    expect(v.allowed).toBe(true);
+    expect(v.rung).toBe('financial');
+  });
+
+  it('still refuses the one that spends his, until it says how much', async () => {
+    const spends = (await query(
+      `SELECT draws_on_allowance FROM capabilities WHERE capability_key = ?`,
+      ['register_domain'])).rows[0] as Record<string, unknown>;
+    expect(Number(spends.draws_on_allowance)).toBe(1);
+    const gives = (await query(
+      `SELECT draws_on_allowance FROM capabilities WHERE capability_key = ?`,
+      ['refund'])).rows[0] as Record<string, unknown>;
+    expect(Number(gives.draws_on_allowance)).toBe(0);
   });
 });
