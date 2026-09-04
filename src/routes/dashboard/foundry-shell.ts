@@ -865,16 +865,16 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
   .glance{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s2);margin:0 0 var(--s4)}
   .tile{background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
     padding:var(--s2) var(--s2) 10px;min-width:0}
-  .tile .k{font-size:.78rem;color:var(--ink-3);margin:0 0 4px;line-height:1.25}
-  .tile .v{font-family:var(--serif);font-size:1.35rem;line-height:1.1;font-weight:500;
+  .tile dt.k{font-size:.78rem;color:var(--ink-3);margin:0 0 4px;line-height:1.25}
+  .tile dd.v{font-family:var(--serif);font-size:1.35rem;line-height:1.1;font-weight:500;
     margin:0 0 4px;overflow-wrap:anywhere}
-  .tile .d{font-size:.78rem;color:var(--ink-2);margin:0;line-height:1.3}
+  .tile dd.d{font-size:.78rem;color:var(--ink-2);margin:0;line-height:1.3}
   .tile .d.up{color:var(--good)} .tile .d.down{color:var(--alert)}
   .tile .spark{display:block;width:100%;height:28px;margin-top:6px}
 
   /* THE NUMBERS. Two across on a phone, each with its trend. */
   .numbers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s2);margin:0 0 var(--s2)}
-  .numbers .tile .v{font-size:1.5rem}
+  .numbers .tile dd.v{font-size:1.5rem}
 
   /* THE RIVER. One row per layer: name, what it is, what it carries. */
   .layer{display:flex;align-items:center;gap:var(--s2);background:var(--card);
@@ -897,10 +897,16 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
     vertical-align:baseline;box-shadow:inset 0 0 0 1px rgba(0,0,0,.16)}
 
   /* THE DECISION. A labelled row grid, then the buttons. */
+  /* A DEFINITION LIST, because that is what it is. It was <b>/<span> pairs in
+     a grid: visually paired, and to a screen reader eighteen loose fragments in
+     a row with nothing saying which label belonged to which value — on the
+     densest and most consequential card in the product. */
   .facts{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s2) var(--s3);
+    margin:0;
     padding:var(--s3);border-top:1px solid var(--line);font-size:.95rem}
-  .facts b{color:var(--ink-3);font-weight:500;font-size:.85rem;padding-top:2px}
-  .facts span{min-width:0;overflow-wrap:anywhere;color:var(--ink)}
+  .facts dt{color:var(--ink-3);font-weight:500;font-size:.85rem;padding-top:2px}
+  .facts dd{margin:0;min-width:0;overflow-wrap:anywhere;color:var(--ink)}
+  .facts dd.quiet{color:var(--ink-2)}
   .facts span.quiet{color:var(--ink-2)}
   .pill{display:inline-block;font-size:.78rem;padding:3px 9px;border-radius:999px;
     background:var(--card-2);border:1px solid var(--line);color:var(--ink-2);margin-left:6px}
@@ -1034,7 +1040,15 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
   .item h3{margin:0 0 var(--s1);font-size:1.08rem;font-weight:600}
   .item p{margin:0;color:var(--ink-2);font-size:.93rem}
   .know{margin:0 0 var(--s4)}
-  .know h3{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);
+  /* The section headings on the top-level places are h2 — one level under the
+     page's h1 — and the company page's stay h3 under its own h2. Same size
+     either way: the outline is for the screen reader, not the eye. */
+  .pill{display:inline-block;font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;
+    font-weight:700;color:var(--ink-2);background:var(--card-2);border:1px solid var(--line);
+    border-radius:999px;padding:2px 8px;vertical-align:middle;margin-left:6px}
+  h2.section{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;
+    color:var(--ink-3);font-weight:700;margin:var(--s4) 0 var(--s2)}
+  .know h2,.know h3{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);
     font-weight:700;margin:0 0 var(--s2)}
   .know ul{margin:0;padding-left:1.1rem;color:var(--ink-2);font-size:.97rem}
   .know li{margin:0 0 var(--s1)}
@@ -2075,18 +2089,18 @@ foundryShellRoutes.get('/foundry', async (c) => {
     <h1><span id="greet">Hello</span>${s.firstName ? `, ${s.firstName}` : ''}.</h1>
     ${orientation ? html`<p class="lede">${orientation}</p>` : ''}
     ${glance.cashFlowCents !== null || glance.interruptions > 0 || glance.concentration
-    ? html`<div class="glance">
-      <div class="tile"><p class="k">Monthly cash flow</p>
-        <p class="v">${glance.cashFlowCents === null ? '—' : money(glance.cashFlowCents)}</p>
-        <p class="d">${glance.cashFlowCents === null ? 'nothing reports revenue yet'
-    : `across ${String(glance.seen)} of ${String(glance.companies)} I can see`}</p></div>
-      <div class="tile"><p class="k">Needed you</p>
-        <p class="v">${String(glance.interruptions)}</p>
-        <p class="d">${glance.interruptions === 0 ? 'not once this month' : 'times this month'}</p></div>
-      <div class="tile"><p class="k">Most shared</p>
-        <p class="v">${glance.concentration ? glance.concentration.split(' share ')[0] : 'nothing'}</p>
-        <p class="d">${glance.concentration ? `share ${glance.concentration.split(' share ')[1]}`
-    : 'no two depend on the same thing'}</p></div>
+    ? html`<dl class="glance">
+      <div class="tile"><dt class="k">Monthly cash flow</dt>
+        <dd class="v">${glance.cashFlowCents === null ? '—' : money(glance.cashFlowCents)}</dd>
+        <dd class="d">${glance.cashFlowCents === null ? 'nothing reports revenue yet'
+    : `across ${String(glance.seen)} of ${String(glance.companies)} I can see`}</dd></div>
+      <div class="tile"><dt class="k">Needed you</dt>
+        <dd class="v">${String(glance.interruptions)}</dd>
+        <dd class="d">${glance.interruptions === 0 ? 'not once this month' : 'times this month'}</dd></div>
+      <div class="tile"><dt class="k">Most shared</dt>
+        <dd class="v">${glance.concentration ? glance.concentration.split(' share ')[0] : 'nothing'}</dd>
+        <dd class="d">${glance.concentration ? `share ${glance.concentration.split(' share ')[1]}`
+    : 'no two depend on the same thing'}</dd></div>
     </div>` : ''}
 
     <!-- THE ONE THING HE CAME FOR, BEFORE ANYTHING HE DID NOT.
@@ -2126,7 +2140,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
       Stop that search first, or steer it instead — two at once would compete for the same
       attention.</p></div>` : ''}
     ${s.changed.changes.length > 0 ? html`<div class="know">
-      <h3>While you were away</h3>
+      <h2>While you were away</h2>
       <ul>${s.changed.changes.map((ch) => html`<li>${ch.said}</li>`)}</ul>
       ${s.changed.more > 0 ? html`<p class="quiet">And ${String(s.changed.more)} other
         ${s.changed.more === 1 ? 'thing' : 'things'}.</p>` : ''}
@@ -2138,7 +2152,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
          nothing is name something you own. -->
     ${s.notLooking && s.watching.real === 0 && s.watching.invented === 0
     ? html`<div class="know">
-      <h3>You have not told me about anything you own</h3>
+      <h2>You have not told me about anything you own</h2>
       <p class="lede">Name one and I will start paying attention to it. That is all it
         does &mdash; it does not connect anything or let me act.</p>
       <form class="inline" method="POST" action="/foundry/companies">
@@ -2151,7 +2165,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
         up on your <a href="/foundry/companies">Portfolio</a>.</p>
     </div>`
     : s.notLooking ? html`<div class="know">
-      <h3>I am not looking for anything</h3>
+      <h2>I am not looking for anything</h2>
       <p class="lede">Say what you want and I will start looking. One sentence &mdash;
         what you are after, and anything I should not do.</p>
       <form class="inline" method="POST" action="/foundry/ask">
@@ -2170,7 +2184,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
         to look through yet.</p>`}
     </div>` : ''}
     ${s.search ? html`<div class="know">
-      <h3>${s.search.invented ? 'A search I made up' : 'What I am looking for'}</h3>
+      <h2>${s.search.invented ? 'A search I made up' : 'What I am looking for'}</h2>
       ${s.search.invented ? html`<p class="quiet">You did not ask for this one. I invented
         it so you could see what I do with a search before handing me a real one. Nothing
         it finds is a fact about any real market, and none of it can ever be counted or
@@ -2220,27 +2234,27 @@ foundryShellRoutes.get('/foundry', async (c) => {
           <h2>${cand.headline}</h2>
           <p class="lead">${cand.whoHasIt} &mdash; ${cand.theProblem}.</p>
         </div>
-        <div class="facts">
-          ${cand.cameFrom ? html`<b>Somebody wrote</b><span>&ldquo;${cand.cameFrom.said}&rdquo;</span>
-          <b>I read that as</b><span class="quiet">${cand.cameFrom.reading} I would have read it wrong if ${cand.cameFrom.misreadIf}</span>` : ''}
-          <b>Why it might</b><span>${cand.whyItMight}</span>
-          <b>For the portfolio</b><span>${cand.fit ?? 'I cannot say yet'}${cand.serves.length ? ` It would give you ${cand.serves.join('; ')}.` : ''}</span>
-          ${cand.earns ? html`<b>How it earns</b><span>${cand.earns}</span>` : ''}
-          ${cand.burden ? html`<b>Its burden</b><span>${cand.burden}</span>` : ''}
-          <b>Legal and risk</b><span>${cand.legalProfile}</span>
-          ${cand.wouldTake.length ? html`<b>What it would take</b><span class="quiet">${cand.wouldTake.join(' ')}</span>` : ''}
-          <b>Could fail because</b><span>${cand.killThesis}</span>
-          <b>Checked</b><span class="quiet">${cand.standing.length ? cand.standing.join(' ') : (cand.sources.length ? cand.sources.join('; ') : 'nothing')}</span>
-          <b>Unknown</b><span class="quiet">${cand.unanswered.length ? cand.unanswered.join('; ') : (cand.unknowns.join('; ') || 'nothing I can name')}</span>
-          ${cand.awaiting[0] ? html`<b>Cheapest test</b><span>${cand.awaiting[0].whatWeDo}. I expect ${cand.awaiting[0].whatWeExpect}; I would be wrong if ${cand.awaiting[0].wouldDisprove}.</span>
-          <b>Most you could lose</b><span>${cand.downside}</span>` : ''}
-          ${cand.against.length ? html`<b>Not quite</b><span class="quiet">${cand.against.join('; ')}</span>` : ''}
-          ${cand.buriedBefore ? html`<b>Seen before</b><span class="gap">${cand.buriedBefore}</span>` : ''}
-          ${cand.failsBecause ? html`<b>Against what you said</b><span class="gap">${cand.failsBecause}</span>` : ''}
-          ${cand.blockedBy ? html`<b>Not yet</b><span class="gap">This cannot earn a company yet — ${cand.blockedBy}.</span>` : ''}
-          ${cand.inTheWay.length ? html`<b>Before a company</b><span class="quiet">${cand.inTheWay.join('; ')}</span>` : ''}
-          <b>I recommend</b><span>${cand.recommendation}</span>
-        </div>
+        <dl class="facts">
+          ${cand.cameFrom ? html`<dt>Somebody wrote</dt><dd>&ldquo;${cand.cameFrom.said}&rdquo;</dd>
+          <dt>I read that as</dt><dd class="quiet">${cand.cameFrom.reading} I would have read it wrong if ${cand.cameFrom.misreadIf}</dd>` : ''}
+          <dt>Why it might</dt><dd>${cand.whyItMight}</dd>
+          <dt>For the portfolio</dt><dd>${cand.fit ?? 'I cannot say yet'}${cand.serves.length ? ` It would give you ${cand.serves.join('; ')}.` : ''}</dd>
+          ${cand.earns ? html`<dt>How it earns</dt><dd>${cand.earns}</dd>` : ''}
+          ${cand.burden ? html`<dt>Its burden</dt><dd>${cand.burden}</dd>` : ''}
+          <dt>Legal and risk</dt><dd>${cand.legalProfile}</dd>
+          ${cand.wouldTake.length ? html`<dt>What it would take</dt><dd class="quiet">${cand.wouldTake.join(' ')}</dd>` : ''}
+          <dt>Could fail because</dt><dd>${cand.killThesis}</dd>
+          <dt>Checked</dt><dd class="quiet">${cand.standing.length ? cand.standing.join(' ') : (cand.sources.length ? cand.sources.join('; ') : 'nothing')}</dd>
+          <dt>Unknown</dt><dd class="quiet">${cand.unanswered.length ? cand.unanswered.join('; ') : (cand.unknowns.join('; ') || 'nothing I can name')}</dd>
+          ${cand.awaiting[0] ? html`<dt>Cheapest test</dt><dd>${cand.awaiting[0].whatWeDo}. I expect ${cand.awaiting[0].whatWeExpect}; I would be wrong if ${cand.awaiting[0].wouldDisprove}.</dd>
+          <dt>Most you could lose</dt><dd>${cand.downside}</dd>` : ''}
+          ${cand.against.length ? html`<dt>Not quite</dt><dd class="quiet">${cand.against.join('; ')}</dd>` : ''}
+          ${cand.buriedBefore ? html`<b>Seen before</b><span class="gap">${cand.buriedBefore}</dd>` : ''}
+          ${cand.failsBecause ? html`<b>Against what you said</b><span class="gap">${cand.failsBecause}</dd>` : ''}
+          ${cand.blockedBy ? html`<b>Not yet</b><span class="gap">This cannot earn a company yet — ${cand.blockedBy}.</dd>` : ''}
+          ${cand.inTheWay.length ? html`<dt>Before a company</dt><dd class="quiet">${cand.inTheWay.join('; ')}</dd>` : ''}
+          <dt>I recommend</dt><dd>${cand.recommendation}</dd>
+        </dl>
         <div class="do">
           ${cand.awaiting.map((e) => html`<form method="POST" action="/foundry/venture/experiment">
             <input type="hidden" name="experimentId" value="${e.id}" />
@@ -2266,7 +2280,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
     </div>` : ''}
 
     ${!s.search && s.pastSearches.length ? html`<div class="know">
-      <h3>What you have looked for before</h3>
+      <h2>What you have looked for before</h2>
       <ul>${raw(s.pastSearches.map((p) =>
     `<li>&ldquo;${p.statement}&rdquo; — stopped ${p.closedAt}${p.why ? `, ${p.why}` : ''}.</li>`)
     .join(''))}</ul>
@@ -2613,9 +2627,17 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
   const started = new Set(portfolio.reference.map((r) => r.name));
   const unstarted = REFERENCE_SCENARIOS.filter((sc) => !started.has(sc.companyName));
 
+  // AN INVENTED COMPANY SAYS SO ON ITS OWN CARD.
+  //
+  // The two lists were told apart only by the heading above them, so a card
+  // read on its own — which is how a screen reader reads it, and how a card
+  // linked to directly arrives — was indistinguishable from one of his. The
+  // whole point of these is that they are not his.
   const line = (c: typeof portfolio.companies[number]): string =>
-    `<a class="item" href="/foundry/companies/${c.productId}">
-      <h3>${c.name}${c.needsHim ? ` <span class="gap">— ${c.needsHim}</span>` : ''}</h3>
+    `<a class="item" href="/foundry/companies/${c.productId}"
+      aria-label="${c.name}${c.reference ? ', a company I made up' : ''}">
+      <h3>${c.name}${c.reference ? ' <span class="pill">Invented</span>' : ''}${
+  c.needsHim ? ` <span class="gap">— ${c.needsHim}</span>` : ''}</h3>
       <p>${c.headline}${c.days > 0 && c.situation !== 'steady'
   ? ` <span class="quiet">For ${String(c.days)} ${c.days === 1 ? 'day' : 'days'}.</span>` : ''}</p>
       <p class="quiet">${c.canSee === 0 ? 'I cannot see anything about it.'
@@ -2672,18 +2694,18 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
     && !glance.concentration ? html`<p class="quiet">Nothing reports revenue to me yet, so
       there is nothing to total. The river below is its shape, not its size.</p>` : ''}
     ${glance.cashFlowCents !== null || glance.interruptions > 0 || glance.concentration
-    ? html`<div class="glance">
-      <div class="tile"><p class="k">Monthly cash flow</p>
-        <p class="v">${glance.cashFlowCents === null ? '—' : money(glance.cashFlowCents)}</p>
-        <p class="d">${glance.cashFlowCents === null ? 'nothing reports revenue yet'
-    : `${String(glance.seen)} of ${String(glance.companies)} report it`}</p></div>
-      <div class="tile"><p class="k">Needed you</p>
-        <p class="v">${String(glance.interruptions)}</p>
-        <p class="d">${glance.interruptions === 0 ? 'not once this month' : 'times this month'}</p></div>
-      <div class="tile"><p class="k">Most shared</p>
-        <p class="v">${glance.concentration ? glance.concentration.split(' share ')[0] : 'nothing'}</p>
-        <p class="d">${glance.concentration ? `share ${glance.concentration.split(' share ')[1]}`
-    : 'no two depend on the same thing'}</p></div>
+    ? html`<dl class="glance">
+      <div class="tile"><dt class="k">Monthly cash flow</dt>
+        <dd class="v">${glance.cashFlowCents === null ? '—' : money(glance.cashFlowCents)}</dd>
+        <dd class="d">${glance.cashFlowCents === null ? 'nothing reports revenue yet'
+    : `${String(glance.seen)} of ${String(glance.companies)} report it`}</dd></div>
+      <div class="tile"><dt class="k">Needed you</dt>
+        <dd class="v">${String(glance.interruptions)}</dd>
+        <dd class="d">${glance.interruptions === 0 ? 'not once this month' : 'times this month'}</dd></div>
+      <div class="tile"><dt class="k">Most shared</dt>
+        <dd class="v">${glance.concentration ? glance.concentration.split(' share ')[0] : 'nothing'}</dd>
+        <dd class="d">${glance.concentration ? `share ${glance.concentration.split(' share ')[1]}`
+    : 'no two depend on the same thing'}</dd></div>
     </div>
     ${glance.companies > 0 ? html`${raw(river.layers.map((l) =>
     `<div class="layer"><div class="t"><b>${l.title}</b>
@@ -2693,13 +2715,18 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
       <span>${frontierLine}</span></div>
       <div class="n">${String(river.frontier.looking)}</div></div>` : ''}
     ${byForm.length > 0 ? html`<div class="know" style="margin-top:var(--s3)">
-      <h3>Cash flow by how it is earned</h3>
+      <h2>Cash flow by how it is earned</h2>
       <div class="bar">${raw(byForm.map((r, i) =>
     `<i style="width:${((r.cents / formTotal) * 100).toFixed(1)}%;background:${swatches[i % swatches.length]}"></i>`).join(''))}</div>
       <p class="legend">${raw(byForm.map((r, i) =>
     `<span><i style="background:${swatches[i % swatches.length]}"></i>${r.form} ${Math.round((r.cents / formTotal) * 100)}%</span>`).join(''))}</p>
       <p class="quiet">From what each company says about how it earns. A company that has not said is not here.</p>
     </div>` : ''}` : ''}
+    <!-- THE LIST HAS A NAME NOW. The company cards were h3 with no h2 above
+         them, so a screen reader heard the page jump a level straight into
+         them — and the page itself never said what the list was. -->
+    ${portfolio.companies.length > 0
+    ? html`<h2 class="section">What you own</h2>` : ''}
     ${raw(portfolio.companies.map((c) => {
     const b = burdens.get(c.productId);
     return line(c) + (b ? `<p class="${b.verdict === 'earning its keep' || b.verdict === 'too early to say' ? 'quiet' : 'gap'}"
@@ -2716,14 +2743,14 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
       anything or let me do anything — those are separate, and I will ask.</p>
 
     ${portfolio.companies.length > 1 ? html`<div class="know" style="margin-top:var(--s4)">
-      <h3>Where the next dollar goes</h3>
+      <h2>Where the next dollar goes</h2>
       <p class="quiet">Ask me that and I will put them in an order and tell you what I
         cannot see. The allocation is yours.</p>
       <a class="btn" href="/foundry?q=${encodeURIComponent('Where should the next dollar go?')}">Ask</a>
     </div>` : ''}
 
     <div class="know" style="margin-top:var(--s5)">
-      <h3>Companies I made up</h3>
+      <h2>Companies I made up</h2>
       <p class="quiet">You should not have to hand me a real business to find out what I do
         with one. These are invented. I run them exactly as I would run yours — same
         numbers, same judgement, same ladder — and nothing I learn from them can ever be
@@ -2829,7 +2856,7 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     const spark = sparkline(n.series, { meaning: n.meaning });
     const cls = n.direction === null || n.direction === 'held' || n.meaning === 'neutral' ? ''
       : (n.direction === 'rose') === (n.meaning === 'up_is_good') ? ' up' : ' down';
-    return `<div class="tile"><p class="k">${n.label}</p><p class="v">${n.now}</p>`
+    return `<div class="tile"><dt class="k">${n.label}</dt><dd class="v">${n.now}</dd>`
       + `<p class="d${cls}">${n.movement}</p>${spark.svg}</div>`;
   }).join('');
 
@@ -2903,7 +2930,7 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     </div>
 
     ${view.advice.length ? html`<div class="know">
-      <h3>${view.advice.length === 1 ? 'What I would do' : 'What I would do about it'}</h3>
+      <h2>${view.advice.length === 1 ? 'What I would do' : 'What I would do about it'}</h2>
       ${raw(view.advice.map((a) => `<div class="noticed">
         <p><strong>${a.summary}</strong></p>
         <p class="quiet">${a.why}.</p>
@@ -2922,7 +2949,7 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     </div>` : ''}
 
     ${view.proposals.length ? html`<div class="know">
-      <h3>${view.proposals.length === 1 ? 'I need you to decide this' : 'I need you to decide these'}</h3>
+      <h2>${view.proposals.length === 1 ? 'I need you to decide this' : 'I need you to decide these'}</h2>
       <p class="quiet">You told me not to do this without asking. I cannot do any of it until
         you say yes to that exact thing, and a yes covers only the one act described.</p>
       ${raw(view.proposals.map((p) => `<div class="noticed">
@@ -2950,7 +2977,7 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     </div>` : ''}
 
     ${view.asks.length ? html`<div class="know">
-      <h3>${view.asks.length === 1 ? 'Something I noticed' : 'Things I noticed'}</h3>
+      <h2>${view.asks.length === 1 ? 'Something I noticed' : 'Things I noticed'}</h2>
       <p class="quiet">Each is a movement, not a diagnosis. Yes means I watch it and tell you
         what I see; it does not let me change, spend or contact anything.</p>
       ${raw(view.asks.map((a) => `<div class="noticed">
@@ -2971,7 +2998,7 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     </div>` : ''}
 
     <div class="know">
-      <h3>Where the numbers are</h3>
+      <h2>Where the numbers are</h2>
       ${view.numbers.absence
     ? html`<p class="lede">${view.numbers.absence}</p>`
     : html`<div class="numbers">${raw(tiles)}</div>
@@ -3257,7 +3284,7 @@ async function absorbAndAnswer(
       ${held > 0 ? html`<p>I am holding myself to ${String(held)} of the things you
         said.</p>` : ''}
       <div class="know">
-        <h3>What I could not take, and why</h3>
+        <h2>What I could not take, and why</h2>
         <ul>${raw(result.refused.map((r) => `<li>${r}</li>`).join(''))}
           ${raw(result.notHeard.map((n) =>
     `<li>&ldquo;${n}&rdquo; &mdash; I did not understand what to do with that</li>`).join(''))}</ul>
@@ -3366,7 +3393,7 @@ foundryShellRoutes.post('/foundry/ask', requireInstitutionOwner(), async (c: any
       stick.</p>`
     : html`<p>I understood you were telling me something, but not what to do about it.</p>`}
     <div class="know">
-      <h3>Your words are not lost</h3>
+      <h2>Your words are not lost</h2>
       <p class="quiet">Change anything you like and send it again.</p>
       <form method="POST" action="/foundry/ask">
         <textarea name="said" rows="4" maxlength="800"
@@ -3396,7 +3423,7 @@ foundryShellRoutes.post('/foundry/venture', requireInstitutionOwner(), async (c:
       <p>I understood you were talking about finding a business, but not what you
         wanted me to do about it.</p>
       <div class="know">
-        <h3>What I can act on</h3>
+        <h2>What I can act on</h2>
         <ul>
           <li>Asking me to look — &ldquo;add a new micro-SaaS venture to my portfolio&rdquo;</li>
           <li>Steering the search — what to avoid, what to prefer, an industry, a budget</li>
@@ -3414,7 +3441,7 @@ foundryShellRoutes.post('/foundry/venture', requireInstitutionOwner(), async (c:
       <p class="lede">You said: <strong>${said}</strong></p>
       ${open
     ? html`<div class="know">
-        <h3>What I would stop</h3>
+        <h2>What I would stop</h2>
         <p><strong>${open.statement}</strong></p>
         <p class="quiet">I will stop looking. Everything I have already found stays on the
           record, including what I rejected and why — so if you start again I am not
@@ -3447,7 +3474,7 @@ foundryShellRoutes.post('/foundry/venture', requireInstitutionOwner(), async (c:
       <h1>Hold the search to this?</h1>
       <p class="lede">You said: <strong>${said}</strong></p>
       <div class="know">
-        <h3>What I will do</h3>
+        <h2>What I will do</h2>
         <p>${GUIDANCE_IN_PLAIN_WORDS(reading.guidance, reading.subject)}</p>
         <p class="quiet">This becomes part of the search itself, not a note beside it.
           Every candidate from here is tested against it, and I will tell you when one
@@ -3464,7 +3491,7 @@ foundryShellRoutes.post('/foundry/venture', requireInstitutionOwner(), async (c:
     <h1>Go and look?</h1>
     <p class="lede">You said: <strong>${said}</strong></p>
     <div class="know">
-      <h3>What I will do</h3>
+      <h2>What I will do</h2>
       <p>I will treat that as an instruction to go and find you
         ${reading.shape ? `a ${reading.shape.replaceAll('_', '-')} business` : 'a business'}
         — not an instruction to build one.</p>
@@ -3694,11 +3721,11 @@ foundryShellRoutes.get('/foundry/companies/:id/see/:sense',
       <p class="lede">Right now I cannot, so anything I told you about it would be invented.</p>
 
       <div class="know">
-        <h3>What I would understand</h3>
+        <h2>What I would understand</h2>
         <p>${gap.wouldLearn}, for ${name}.</p>
       </div>
       <div class="know">
-        <h3>What it would still not let me do</h3>
+        <h2>What it would still not let me do</h2>
         <p><strong>${gap.neverGrants}.</strong> Seeing something is not permission to change
           it. That is always a separate question, and I would have to earn it and then ask.</p>
       </div>
@@ -3731,7 +3758,7 @@ foundryShellRoutes.get('/foundry/companies/:id/see/:sense',
   })).then((blocks) => blocks.join('')))}
 
       ${gap.offers.length === 0 ? html`<div class="know">
-        <h3>Nothing I can connect</h3>
+        <h2>Nothing I can connect</h2>
         <p class="lede">There is no source I know of that would tell me this. I am saying so
           rather than leaving the gap unexplained.</p>
       </div>` : ''}
@@ -3958,7 +3985,7 @@ foundryShellRoutes.post('/foundry/companies/:id/said',
       <h1>Change what I am doing with ${name}?</h1>
       <p class="lede">You said: <strong>${said}</strong></p>
       <div class="know">
-        <h3>What that means</h3>
+        <h2>What that means</h2>
         <p>From now on I would be <strong>${POSTURE_IN_PLAIN_WORDS[posture]}</strong>.
           ${posture === 'retire' || posture === 'sell'
     ? 'I will not shut anything down or contact any buyer on my own: this changes what I '
@@ -3984,13 +4011,13 @@ foundryShellRoutes.post('/foundry/companies/:id/said',
       <p class="lede">You said: <strong>${said}</strong></p>
       <p>${proposal.because}.</p>
       <div class="know">
-        <h3>What I can hold you to</h3>
+        <h2>What I can hold you to</h2>
         <p class="quiet">Tell me not to do any of these and I will refuse, every time,
           until you say otherwise.</p>
         <ul>${raw(subjects.map((sub) => `<li>${sub.ownerWords}</li>`).join(''))}</ul>
       </div>
       <div class="know">
-        <h3>Or tell me what matters</h3>
+        <h2>Or tell me what matters</h2>
         <p class="quiet">Anything else you say about what this company is for, I will keep,
           and I will weigh it when deciding what is worth your attention.</p>
       </div>
@@ -4003,7 +4030,7 @@ foundryShellRoutes.post('/foundry/companies/:id/said',
       <h1>Hold you to this?</h1>
       <p class="lede">You said: <strong>${said}</strong></p>
       <div class="know">
-        <h3>What I will do</h3>
+        <h2>What I will do</h2>
         ${proposal.mode === 'ask_first'
     ? html`<p>I will not ${facts?.ownerWords ?? proposal.subject} for ${name} without asking
         you first. When I think it should happen I will tell you exactly what I intend to do,
@@ -4046,7 +4073,7 @@ foundryShellRoutes.post('/foundry/companies/:id/said',
       <p class="lede">You said: <strong>${said}</strong></p>
       ${live
     ? html`<div class="know">
-        <h3>What I would stop</h3>
+        <h2>What I would stop</h2>
         <p><strong>${live.statement}</strong></p>
         <p class="quiet">I will stop weighing that when I decide what is worth your attention
           here. Nothing else changes: what I can see, what I look after, and what you have
@@ -4067,7 +4094,7 @@ foundryShellRoutes.post('/foundry/companies/:id/said',
       <h1>Allow up to $${pounds}?</h1>
       <p class="lede">You said: <strong>${said}</strong></p>
       <div class="know">
-        <h3>What I will do</h3>
+        <h2>What I will do</h2>
         <p>I will spend up to <strong>$${pounds}</strong> on ${name}, and refuse to spend
           anything beyond it until you say otherwise.</p>
         <p class="quiet">This is a ceiling, not a plan. It does not mean I will spend it, and
@@ -4092,7 +4119,7 @@ foundryShellRoutes.post('/foundry/companies/:id/said',
       <h1>Noted as a preference</h1>
       <p class="lede">You said: <strong>${said}</strong></p>
       <div class="know">
-        <h3>What I will do</h3>
+        <h2>What I will do</h2>
         <p>I will lean that way when I have a choice between things that are otherwise
           equally good for ${name}.</p>
         <p class="quiet"><strong>I will not refuse anything because of this.</strong> That is
@@ -4110,7 +4137,7 @@ foundryShellRoutes.post('/foundry/companies/:id/said',
     <h1>Understood</h1>
     <p class="lede">You said: <strong>${said}</strong></p>
     <div class="know">
-      <h3>What I will do</h3>
+      <h2>What I will do</h2>
       <p>I will treat that as what ${name} is for right now.</p>
       ${proposal.channels.length
     ? html`<p class="quiet">I will weigh ${proposal.concerns.join(' and ')} more heavily when
@@ -4263,7 +4290,7 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
     ${standingPermission(s)}
 
     ${s.permissions.length === 0 ? html`<div class="know">
-      <h3>Permissions</h3>
+      <h2>Permissions</h2>
       <p><strong>None.</strong> I can look at things and tell you what I find. I cannot change
         anything, spend anything, or contact anyone.</p>
       <p class="quiet">Each of those would be something you allow separately, for a set time,
@@ -4272,7 +4299,7 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
     </div>` : ''}
 
     <div class="know">
-      <h3>Money</h3>
+      <h2>Money</h2>
       <ul>
         <li>$${s.spent30d.toFixed(2)} spent in the last 30 days.</li>
         <li>${s.budgetMonthly === null
@@ -4286,7 +4313,7 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
     </div>
 
     <div class="know">
-      <h3>Connected to</h3>
+      <h2>Connected to</h2>
       ${s.connectedSenses.length === 0
     ? html`<p><strong>Nothing.</strong> I have no way to see your code, your money or your
         customers.</p>`
@@ -4294,7 +4321,7 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
     </div>
 
     <div class="know">
-      <h3>Stopping me</h3>
+      <h2>Stopping me</h2>
       <p>One button halts every routine, every permission and every outgoing action at once.
         Nothing is lost — I stop acting on it.</p>
       <form method="POST" action="/autopilot/panic" style="margin-top:var(--s2)">
