@@ -92,6 +92,14 @@ kill_timeout = 5
 [mounts]
   source = "foundry_data"
   destination = "/data"
+  # THE DAILY COPY LIVES ON THIS VOLUME AND SO DOES WHAT IT COPIES.
+  #
+  # `keep_a_copy_of_everything` writes a consistent copy of the database into
+  # /data/backups each night, which survives a corruption, a bad migration and a
+  # mistaken delete. It does not survive losing the volume, because it is on it.
+  # Stated here rather than left to a default, so the one failure the daily copy
+  # cannot cover is covered by the platform.
+  snapshot_retention = 14
   # Stated so the volume is not left to flyctl's version-dependent behaviour on
   # first deploy. 1GB is the smallest billable size and far more than
   # institutional state needs: applying all 257 migrations produces a fully

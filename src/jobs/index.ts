@@ -2913,6 +2913,40 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   // further than `available` — reality proof is still earned by doing real work
   // whose result is checked. It runs between dependency health and discovery so
   // an eye opened this morning can be looked through this morning.
+  // THE WHOLE INSTITUTION IS ONE FILE.
+  //
+  // Every fact this place holds — what he owns, what he said, what it may and
+  // may not do, everything it has learned — lives in one SQLite file on one
+  // volume attached to one machine. Nothing anywhere copied it. Ninety-five
+  // routines ran every day and not one of them made the institution survivable.
+  // The written recovery plan described a hosted database this deployment does
+  // not use, which is worse than no plan: it reads like an answer.
+  //
+  // VACUUM INTO is SQLite's own consistent copy. It is safe against a live
+  // write-ahead log, needs no lock held by anything else, adds no dependency,
+  // and produces a single file that can simply be opened. It does not survive
+  // losing the volume — the volume's own snapshots are for that, and are set in
+  // fly.private.toml — but it survives the things that actually happen:
+  // corruption, a bad migration, a delete nobody meant.
+  keep_a_copy_of_everything: {
+    fn: async () => {
+      const { copyTheInstitution } = await import('../services/institution/keeping.js');
+      const kept = await copyTheInstitution();
+      if (kept.skipped !== null) {
+        logger.info(`keep_a_copy_of_everything: ${kept.skipped}`,
+          { jobName: 'keep_a_copy_of_everything' });
+        return;
+      }
+      logger.info(
+        `keep_a_copy_of_everything: wrote ${kept.wrote} (${String(kept.bytes)} bytes); `
+        + `${String(kept.kept)} copies kept, ${String(kept.removed)} aged out`,
+        { jobName: 'keep_a_copy_of_everything' });
+    },
+    schedule: '15 4 * * *',
+    description:
+      'Take a consistent copy of the whole database, so the institution survives a bad '
+      + 'migration, a corruption or a mistaken delete (daily)',
+  },
   sense_check_tick: {
     fn: async () => {
       const { checkTheSenses } = await import('../services/institution/sense-check.js');

@@ -40,6 +40,8 @@ import { auditRoutes } from './routes/dashboard/audit.js';
 import { decisionRoutes } from './routes/dashboard/decisions.js';
 import { fleetRoutes } from './routes/dashboard/fleet.js';
 import { letterRoutes } from './routes/dashboard/letter.js';
+import { ownerFailurePage } from './routes/dashboard/foundry-shell.js';
+import { isOwnerSurface } from './lib/owner-surface-script.js';
 import { lifecycleRoutes } from './routes/dashboard/lifecycle.js';
 import { digestRoutes } from './routes/dashboard/digest.js';
 import { cohortRoutes } from './routes/dashboard/cohorts.js';
@@ -558,6 +560,17 @@ app.route('/', founderIntelRoutes);
 
 app.notFound((c) => {
   if (wantsHtml(c.req.header('accept'), c.req.path)) {
+    // HE NEVER LANDS IN THE PRODUCT THIS ONE REPLACED.
+    //
+    // A mistyped path under /foundry rendered the public marketing shell: a
+    // logged-out header, a "Get Started" button pointing at sign-up, a command
+    // palette offering Fleet Observatory and Agent Debate. Eight kilobytes of a
+    // company he is not a customer of, shown to the only person who owns this.
+    if (isOwnerSurface(c.req.path)) {
+      return c.html(ownerFailurePage(
+        'There is nothing here',
+        'That address does not point at anything in your Foundry.'), 404);
+    }
     return c.html(
       errorPage(404, 'Page not found', "This page doesn't exist or has moved."),
       404,
@@ -569,8 +582,19 @@ app.notFound((c) => {
 // ─── Error Handler ───────────────────────────────────────────────────────────
 
 app.onError((err, c) => {
-  logger.error('Unhandled error', { error: String(err) });
+  // THE STACK IS THE ONLY THING THAT MAKES THIS DIAGNOSABLE LATER.
+  logger.error('Unhandled error', {
+    error: err instanceof Error ? err.message : String(err),
+    stack: err instanceof Error ? err.stack : undefined,
+    path: c.req.path,
+    method: c.req.method,
+  });
   if (wantsHtml(c.req.header('accept'), c.req.path)) {
+    if (isOwnerSurface(c.req.path)) {
+      return c.html(ownerFailurePage(
+        'I cannot reach my own records',
+        'Something went wrong on my side while I was putting this page together.'), 500);
+    }
     return c.html(
       errorPage(500, 'Something went wrong', 'An unexpected error occurred. The team has been notified.'),
       500,

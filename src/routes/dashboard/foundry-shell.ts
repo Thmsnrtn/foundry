@@ -38,9 +38,33 @@ import { requireInstitutionOwner } from '../../middleware/rbac.js';
 import type { CompanyNumbers } from '../../services/founder/what-the-numbers-say.js';
 import type { VentureReading } from '../../services/venture/mandate.js';
 import { OWNER_SURFACE_SCRIPT } from '../../lib/owner-surface-script.js';
+import { log as logger } from '../../lib/logger.js';
 import { LAYER_IN_PLAIN_WORDS, layerOf } from '../../lib/repository-layers.js';
 
 export const foundryShellRoutes = new Hono();
+
+/**
+ * WHEN SOMETHING BREAKS, HE STAYS IN HIS OWN PRODUCT.
+ *
+ * A 404 or an unhandled failure anywhere under /foundry rendered the public
+ * marketing shell: a logged-out header, a "Get Started" button pointing at
+ * sign-up, a command palette offering Fleet Observatory and Agent Debate, and
+ * the dark stylesheet of the product this one replaced. Eight kilobytes of a
+ * company he is not a customer of, shown to the only person who owns it.
+ *
+ * The same voice as everything else here, and one way back. It says what is and
+ * is not true of his records, because that is the question a failure raises.
+ */
+export function ownerFailurePage(
+  title: string, sentence: string,
+): HtmlEscapedString | Promise<HtmlEscapedString> {
+  return page('Foundry', html`
+    <h1>${title}</h1>
+    <p class="lede">${sentence}</p>
+    <p class="quiet">Nothing of yours has changed. I have not acted on anything, and I
+      have not lost anything — I could not show you a page.</p>
+    <a class="btn go" href="/foundry">Back to Foundry</a>`, 'foundry');
+}
 
 // THE GUARD BY CONSTRUCTION, NOT BY MEMORY.
 //
@@ -56,6 +80,25 @@ export const foundryShellRoutes = new Hono();
 // is what makes a route the owner's rather than an argument somebody passed.
 foundryShellRoutes.use('/foundry', requireInstitutionOwner());
 foundryShellRoutes.use('/foundry/*', requireInstitutionOwner());
+
+// AND A BOUNDARY AROUND ALL OF IT, FOR THE SAME REASON.
+//
+// Two of twenty-four handlers had a try/catch and both wrapped a single call.
+// A company page makes thirty-five database round-trips and guarded none of
+// them. Anything that threw left this file entirely and landed on the global
+// handler, which renders the marketing shell. Registered here, so the next
+// handler added is covered by being in this file rather than by being
+// remembered.
+foundryShellRoutes.onError((err, c) => {
+  logger.error('The owner surface could not render a page', {
+    error: err instanceof Error ? err.message : String(err),
+    stack: err instanceof Error ? err.stack : undefined,
+    path: c.req.path,
+  });
+  return c.html(ownerFailurePage(
+    'I cannot reach my own records',
+    'Something went wrong on my side while I was putting this page together.'), 500);
+});
 
 // ─── the owner's words ──────────────────────────────────────────────────────
 

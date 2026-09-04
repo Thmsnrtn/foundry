@@ -81,18 +81,38 @@ export async function recordSituation(productId: string): Promise<Spell> {
   const evidenceMode = reality === 'reference'
     ? 'reference' : (await channelFor(productId)).mode;
 
-  if (open) {
-    await query(
-      `UPDATE company_situations SET ended_at = datetime('now'), ended_as = ?
-        WHERE id = ?`, [read.situation, open.id]);
-  }
+  // TWO LOADS OF THE SAME PAGE ARE NOT A SERIAL PAIR.
+  //
+  // This function is called on every render of a company page, and it writes.
+  // The doc above says it is "idempotent by construction: an unchanged answer
+  // writes nothing", which is true one call at a time and says nothing about
+  // two in flight. A double-tapped link on a phone, or the page opened in two
+  // tabs, sends two — and the database is right to refuse the second, because
+  // migration 230 enforces one open spell per company.
+  //
+  // The refusal was reaching the owner as a failed page load of a screen that
+  // only reads. So the loser of the race now returns the winner's spell, which
+  // is the correct answer anyway: the situation it was about to record is the
+  // situation that got recorded, by the other request, a millisecond earlier.
+  // The database guarantee stays exactly where it is.
   const id = nanoid();
-  await query(
-    `INSERT INTO company_situations
-       (id, product_id, situation, headline, because_json, evidence_mode)
-     VALUES (?,?,?,?,?,?)`,
-    [id, productId, read.situation, read.headline,
-      JSON.stringify(read.because), evidenceMode]);
+  try {
+    if (open) {
+      await query(
+        `UPDATE company_situations SET ended_at = datetime('now'), ended_as = ?
+          WHERE id = ?`, [read.situation, open.id]);
+    }
+    await query(
+      `INSERT INTO company_situations
+         (id, product_id, situation, headline, because_json, evidence_mode)
+       VALUES (?,?,?,?,?,?)`,
+      [id, productId, read.situation, read.headline,
+        JSON.stringify(read.because), evidenceMode]);
+  } catch (err) {
+    const raced = await currentSpell(productId);
+    if (raced) return raced;
+    throw err;
+  }
   return {
     id, situation: read.situation, headline: read.headline, because: read.because,
     evidenceMode: evidenceMode as Spell['evidenceMode'],

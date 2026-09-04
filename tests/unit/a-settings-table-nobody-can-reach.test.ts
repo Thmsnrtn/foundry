@@ -88,7 +88,7 @@ describe('the table is gone', () => {
     // And `venture_discovery_tick` — which turns what the portfolio needs into
     // a search, sows a few seeds from what people wrote, and buries most of
     // them — makes ninety-four.
-    expect(Object.keys(JOB_REGISTRY).length, 'ninety-four before, ninety-five now').toBe(95);
+    expect(Object.keys(JOB_REGISTRY).length, 'ninety-five before, ninety-six now').toBe(96);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

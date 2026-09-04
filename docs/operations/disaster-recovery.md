@@ -1,5 +1,46 @@
 # Foundry -- Disaster Recovery Plan
 
+> ## THE PRIVATE INSTANCE DOES NOT WORK THE WAY THE REST OF THIS PAGE DESCRIBES
+>
+> Everything below was written for a deployment whose state lives in a hosted
+> Turso database. **The owner's instance does not use one.** `fly.private.toml`
+> sets `TURSO_DATABASE_URL = "file:/data/foundry.db"`: the whole institution is
+> a single SQLite file, on a single volume, attached to a single machine.
+>
+> A recovery plan describing infrastructure that is not there is worse than no
+> plan, because it reads like an answer and would be discovered to be fiction at
+> the only moment it mattered. What actually applies to the private instance:
+>
+> | Failure | What covers it |
+> |---|---|
+> | Corruption, a bad migration, a mistaken delete | `keep_a_copy_of_everything`, nightly at 04:15 UTC. `VACUUM INTO` writes a consistent copy to `/data/backups/foundry-<date>.db`; fourteen days are kept. |
+> | Losing the volume or the machine | Fly volume snapshots — `snapshot_retention = 14` on the `[mounts]` block in `fly.private.toml`. |
+> | Losing the region | Restore a volume snapshot into a new machine in another region and redeploy. Single-region by choice; a second machine would need a second volume and there is only one writer. |
+>
+> **To restore a nightly copy** (the common case):
+> ```bash
+> flyctl ssh console -a foundry-intel
+> ls -la /data/backups                       # what is actually there
+> cp /data/foundry.db /data/foundry.db.before-restore
+> cp /data/backups/foundry-YYYY-MM-DD.db /data/foundry.db
+> exit
+> flyctl machine restart -a foundry-intel    # migrations re-apply on boot
+> curl -s https://foundry-intel.fly.dev/internal/health
+> ```
+>
+> **To restore a volume snapshot** (volume lost):
+> ```bash
+> flyctl volumes snapshots list <volume-id> -a foundry-intel
+> flyctl volumes create foundry_data -a foundry-intel --snapshot-id <id> -r iad
+> flyctl deploy -c fly.private.toml
+> ```
+>
+> Neither has been rehearsed against the live instance. That is the honest state
+> and is the next thing worth proving.
+
+---
+
+
 ## Overview
 
 Foundry runs on Fly.io (compute), Turso (database), Clerk (auth), Stripe (billing), Anthropic (AI), and Resend (email). This document defines the recovery point objective (RPO), recovery time objective (RTO), and recovery steps for each failure scenario.
