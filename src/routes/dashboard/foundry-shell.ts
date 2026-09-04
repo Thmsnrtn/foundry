@@ -812,18 +812,25 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
      --good and --alert are the only two hues, and they mean direction. */
   :root{
     --bg:#F3F4F1; --card:#FFFFFF; --card-2:#F8F9F6; --line:#E2E6DE;
-    --ink:#151C18; --ink-2:#5A645C; --ink-3:#8B948C;
+    --ink:#151C18; --ink-2:#4C554E; --ink-3:#68716A;
     --accent:#256454; --accent-ink:#FFFFFF; --accent-soft:#DDEBE4;
     --good:#2E7D5B; --alert:#96601A; --alert-soft:#F6EBDD;
     --s1:6px; --s2:12px; --s3:18px; --s4:28px; --s5:44px;
     --r:18px; --r2:12px;
+    /* CATEGORIES ARE NOT MEANINGS. The revenue mix painted its series with
+       --accent, --good, --alert, --ink-3 and --line — so one series was the
+       colour of "this is good", another the colour of "look at this", and the
+       fifth was the bar's own empty track, rendering as a hole. These four are
+       one hue at four separations, none of which means anything. */
+    --c1:#123D33; --c2:#2F7D68; --c3:#7FB8A2; --c4:#CADED6;
     --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
   }
   @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
     --bg:#0D1310; --card:#151C18; --card-2:#1A231E; --line:#243029;
-    --ink:#EAEFEA; --ink-2:#A8B2AA; --ink-3:#7C877E;
+    --ink:#EAEFEA; --ink-2:#A8B2AA; --ink-3:#848F86;
     --accent:#8FD1B8; --accent-ink:#0C1512; --accent-soft:#1E2E27;
     --good:#7FCBA8; --alert:#D9A85E; --alert-soft:#2C2416;
+    --c1:#B7E4D0; --c2:#7FC3A8; --c3:#4A8570; --c4:#2A4C40;
   }}
   *,*::before,*::after{box-sizing:border-box}
   html,body{max-width:100%;overflow-x:hidden}
@@ -867,9 +874,15 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
   .layer .t span{font-size:.93rem;color:var(--ink-2)}
   .layer .n{font-family:var(--serif);font-size:1.3rem;color:var(--ink);flex:0 0 auto}
   .bar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--line);margin:var(--s2) 0 var(--s1)}
-  .bar i{display:block;height:100%}
+  /* A SEAM BETWEEN SEGMENTS. Four steps of one hue cannot reach the 3:1
+     separation that would make them distinguishable on their own, and a
+     multi-hue ramp would make each series look like it meant something.
+     A boundary settles it without colour carrying meaning it does not have. */
+  .bar i{display:block;height:100%;box-shadow:inset 1px 0 0 var(--card)}
+  .bar i:first-child{box-shadow:none}
   .legend{display:flex;flex-wrap:wrap;gap:6px var(--s3);font-size:.85rem;color:var(--ink-2);margin:0}
-  .legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;vertical-align:baseline}
+  .legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;
+    vertical-align:baseline;box-shadow:inset 0 0 0 1px rgba(0,0,0,.16)}
 
   /* THE DECISION. A labelled row grid, then the buttons. */
   .facts{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s2) var(--s3);
@@ -906,7 +919,9 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
   .lede{color:var(--ink-2);font-size:1.06rem;margin-bottom:var(--s4)}
 
   /* The one thing. There is never more than one of these on the page. */
-  .one{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
+  /* THE ONLY ACCENT BORDER ON THE PAGE. Everything else is --line, so the
+     thing that needs him is the thing the eye lands on. */
+  .one{background:var(--card);border:1px solid var(--accent);border-radius:var(--r);
     margin:0 0 var(--s4);overflow:hidden}
   .one.alert{border-color:var(--alert)}
   .one-in{padding:var(--s3)}
@@ -974,7 +989,7 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
     border-top:1px solid var(--line);
     padding:var(--s2) var(--s3) calc(var(--s2) + env(safe-area-inset-bottom))}
   .ask-in{max-width:34rem;margin:0 auto;display:flex;gap:var(--s2)}
-  .ask input{flex:1;min-width:0;font:inherit;font-size:16px;padding:13px 15px;min-height:48px;
+  .ask input{flex:1;min-width:0;font:inherit;font-size:max(16px,1rem);padding:13px 15px;min-height:48px;
     border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink)}
   .ask input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
   .ask button{font:inherit;font-size:1rem;font-weight:500;border:0;border-radius:12px;
@@ -1025,7 +1040,7 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
   .pair form:first-child{flex:1 1 auto}
   .pair .btn{white-space:nowrap}
   form.inline{display:flex;flex-wrap:wrap;gap:var(--s2);margin:0 0 var(--s3)}
-  form.inline input[type=text]{flex:1 1 12rem;min-width:0;font:inherit;font-size:16px;
+  form.inline input[type=text]{flex:1 1 12rem;min-width:0;font:inherit;font-size:max(16px,1rem);
     padding:13px 15px;min-height:48px;border:1px solid var(--line);border-radius:12px;
     background:var(--card);color:var(--ink)}
   form.inline input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
@@ -1042,7 +1057,7 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
      flow into two columns. Nothing is hidden on either; what changes is where
      the hand and the eye are. */
   @media (min-width:900px){
-    body{font-size:16px}
+    body{font-size:max(16px,1rem)}
     .wrap{max-width:68rem;margin:0 0 0 15rem;padding:var(--s4) var(--s5) var(--s5)}
     h1{font-size:2.4rem}
     nav.places{top:0;bottom:0;right:auto;width:15rem;border-top:0;border-right:1px solid var(--line);
@@ -1648,7 +1663,7 @@ async function answerAboutCompany(
     ? html`<p>And ${asking.length === 1 ? 'there is one thing' : `there are ${String(asking.length)} things`}
         I have asked you about:</p>
       <ul>${raw(asking.map((r) => `<li>${String(r.proposed_responsibility)}</li>`).join(''))}</ul>
-      <a class="btn go" href="/foundry/companies/${about.id}">Answer at ${about.name}</a>`
+      <a class="btn" href="/foundry/companies/${about.id}">Answer at ${about.name}</a>`
     : ''}
     </div>`;
   }
@@ -2054,6 +2069,13 @@ foundryShellRoutes.get('/foundry', async (c) => {
     : 'no two depend on the same thing'}</p></div>
     </div>` : ''}
 
+    <!-- THE ONE THING HE CAME FOR, BEFORE ANYTHING HE DID NOT.
+         This was rendered last: after what changed, after ninety lines of
+         search block that can carry a whole opportunity's case. The screen said
+         "One thing needs you" and then put everything else in front of it. -->
+    ${standingPermission(s)}
+    ${theOneThing(attention)}
+
     ${done === 'looking' ? html`<div class="done"><p><strong>I am looking.</strong>
       I will bring you very few, and telling you none of them are worth it is a real
       answer.</p></div>` : ''}
@@ -2089,7 +2111,25 @@ foundryShellRoutes.get('/foundry', async (c) => {
       ${s.changed.more > 0 ? html`<p class="quiet">And ${String(s.changed.more)} other
         ${s.changed.more === 1 ? 'thing' : 'things'}.</p>` : ''}
     </div>` : ''}
-    ${s.notLooking ? html`<div class="know">
+    <!-- NOTHING TO LOOK AFTER IS A DIFFERENT SCREEN FROM NOTHING TO LOOK FOR.
+         With no companies, this offered to go searching and then admitted in
+         the next line that it had nowhere to look — an offer it could not keep,
+         and the screen's only action. The first thing to do when you own
+         nothing is name something you own. -->
+    ${s.notLooking && s.watching.real === 0 && s.watching.invented === 0
+    ? html`<div class="know">
+      <h3>You have not told me about anything you own</h3>
+      <p class="lede">Name one and I will start paying attention to it. That is all it
+        does &mdash; it does not connect anything or let me act.</p>
+      <form class="inline" method="POST" action="/foundry/companies">
+        <input type="text" name="name" required maxlength="80"
+          placeholder="What is it called?" aria-label="The name of a company you own" />
+        <button class="btn go" type="submit">Add it</button>
+      </form>
+      <p class="quiet">Or see what I do with one first &mdash; there are companies I made
+        up on your <a href="/foundry/companies">Portfolio</a>.</p>
+    </div>`
+    : s.notLooking ? html`<div class="know">
       <h3>I am not looking for anything</h3>
       <p class="lede">Say what you want and I will start looking. One sentence &mdash;
         what you are after, and anything I should not do.</p>
@@ -2152,7 +2192,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
       ${String(waiting)} ${waiting === 1 ? 'possibility' : 'possibilities'}.
       ${waiting === 1 ? 'It has not' : 'None has'} earned your attention yet.</p>`;
   })()}
-      ${s.search.candidates.filter((cand) => cand.earnedAttention).map((cand) => html`<div class="one">
+      ${s.search.candidates.filter((cand) => cand.earnedAttention).map((cand) => html`<div class="noticed">
         <div class="one-in">
           <p class="act">${cand.reference ? 'Invented, to show you how I judge' : 'Opportunity'}</p>
           <h2>${cand.headline}</h2>
@@ -2183,11 +2223,13 @@ foundryShellRoutes.get('/foundry', async (c) => {
           ${cand.awaiting.map((e) => html`<form method="POST" action="/foundry/venture/experiment">
             <input type="hidden" name="experimentId" value="${e.id}" />
             <input type="hidden" name="decision" value="approved" />
-            <button class="btn go" type="submit">Go ahead &mdash; ${e.cost}</button>
+            <button class="${attention === null ? 'btn go' : 'btn'}" type="submit">Go ahead
+              &mdash; ${e.cost}</button>
           </form>`)}
           ${!cand.inTheWay.length ? html`<form method="POST" action="/foundry/venture/advance">
             <input type="hidden" name="opportunityId" value="${cand.id}" />
-            <button class="btn go" type="submit">Take it forward</button>
+            <button class="${attention === null ? 'btn go' : 'btn'}" type="submit">Take it
+              forward</button>
           </form>` : ''}
           <form method="POST" action="/foundry/venture/confirm">
             <input type="hidden" name="said" value="Keep looking" />
@@ -2211,8 +2253,6 @@ foundryShellRoutes.get('/foundry', async (c) => {
     </div>` : ''}
 
     ${done ? whatJustHappened(done, s) : ''}
-    ${standingPermission(s)}
-    ${theOneThing(attention)}
 
     ${key ? html`<p class="asked">${typed || QUESTIONS[key] || asked}</p>
       ${ventureSaid ? html`<div class="said">
@@ -2594,7 +2634,7 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
     .map((r) => ({ form: String(r.value), cents: Number(r.cents) }))
     .filter((r) => r.cents > 0);
   const formTotal = byForm.reduce((n, r) => n + r.cents, 0);
-  const swatches = ['var(--accent)', 'var(--good)', 'var(--alert)', 'var(--ink-3)', 'var(--line)'];
+  const swatches = ['var(--c1)', 'var(--c2)', 'var(--c3)', 'var(--c4)'];
   const frontierLine = (river.frontier.looking === 0 && river.frontier.awaiting === 0
     ? 'nothing being looked at'
     : `${String(river.frontier.looking)} being looked at`

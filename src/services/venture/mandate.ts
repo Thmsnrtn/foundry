@@ -610,9 +610,11 @@ export async function mandateProgress(founderId: string): Promise<MandateProgres
     // that went quiet the moment it could see anything would be claiming
     // exactly that.
     blocked: canSeeMarket ? null
-      : 'I cannot see what is happening outside your companies, so I have '
-        + 'nowhere to look. I am not going to describe opportunities from '
-        + 'memory — that would read like research and be nothing of the kind.',
+      // SHORTER, BECAUSE IT IS ON THE FIRST SCREEN. This ran to a hundred and
+      // twenty grey words, half of them describing Foundry's own rigour to the
+      // only person who never asked to be reassured about it.
+      : 'I cannot see outside your companies yet, so I have nowhere to look. '
+        + 'I will not describe opportunities from memory.',
     stillDark: canSeeMarket ? await whatIsStillDark(founderId, mandate.evidenceMode) : [],
     seeingThrough: ways.map((w) => `${w.named} — ${w.whatItIs}`),
     brief: await (async () => {
@@ -641,12 +643,13 @@ export async function mandateProgress(founderId: string): Promise<MandateProgres
           ORDER BY sort_order LIMIT 4`, []))
         .rows as unknown as Array<Record<string, unknown>>)
         .map((r) => String(r.what_it_is));
-      return `somewhere to actually look — ${kinds.join('; ')} — any one of `
-        + 'which would let me start. What I would do with it is already built '
-        + 'and rehearsed: I would date and attribute everything I saw, keep '
-        + 'what contradicted a claim alongside what supported it, and tell you '
-        + 'what remained unknown. What is missing is the looking, not the '
-        + 'discipline.';
+      // WHAT IS MISSING, NOT WHAT FOUNDRY WOULD BE GOOD AT. The second half of
+      // this was sixty words assuring him that the discipline was already
+      // built — an institution describing its own rigour to the only person who
+      // never asked to be reassured about it, on the screen that is supposed to
+      // be the calmest thing he owns.
+      return `somewhere to actually look — ${kinds.join('; ')}. Any one would `
+        + 'let me start.';
     })(),
   };
 }

@@ -142,6 +142,15 @@ describe('the journey he could not complete', () => {
   it('carries him from an empty first screen to a real running search', async () => {
     // Exactly what he tried to do, through exactly what the screen offers, with
     // nothing about routes assumed.
+    // NAME SOMETHING FIRST. With nothing at all, the screen asks him to name a
+    // company rather than offering to search for another one — an offer to go
+    // looking from an institution with nowhere to look is not an offer.
+    const cold = await (await app.request('/foundry')).text();
+    expect(cold).toContain('You have not told me about anything you own');
+    await app.request('/foundry/companies', { method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ name: 'Tidewater' }).toString() });
+
     const before = await (await app.request('/foundry')).text();
     expect(before).toContain('I am not looking for anything');
     const { forms } = whatHeCanPress(before);

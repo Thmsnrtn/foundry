@@ -50,7 +50,18 @@ beforeAll(async () => {
 });
 
 describe('an owner who has never started a search', () => {
-  it('is told there is none, and offered one', async () => {
+  it('is asked to name something he owns before being offered a search', async () => {
+    // With no companies at all, offering to go searching was an offer Foundry
+    // admitted in the next line it could not keep. The first thing to do when
+    // you own nothing is name something you own.
+    const body = await shell();
+    expect(body).toContain('You have not told me about anything you own');
+    expect(body).toContain('action="/foundry/companies"');
+  });
+
+  it('offers the search once there is a portfolio to strengthen', async () => {
+    await query('INSERT INTO products (id, owner_id, name, status) VALUES (?,?,?,?)',
+      ['offer_co', OWNER, 'Tidewater', 'active']);
     const body = await shell();
     expect(body).toContain('I am not looking for anything');
     // The act is a sentence, so the screen asks for a sentence.
