@@ -106,38 +106,6 @@ describe('the first screen, as he actually uses it', () => {
   });
 });
 
-describe('the surfaces beyond the first screen', () => {
-  it('does not send the private owner into commercial onboarding', async () => {
-    // The Advanced surface, reachable from his own footer, carried a day-one
-    // signup card written for somebody buying a product: "your AI team reports
-    // in each morning", a button to connect Stripe, a button to log a first
-    // decision. He is not a founder signing up, and two of those three links
-    // lead into machinery he has no reason to meet.
-    const body = await (await app.request('/letter')).text();
-    expect(body).not.toContain('let\'s get your first signal');
-    expect(body).not.toContain('/agents/integrations');
-    expect(body).not.toContain('href="/decisions"');
-  });
-
-  it('leaves nothing on the advanced surface leading nowhere', async () => {
-    const body = await (await app.request('/letter')).text();
-    const { forms, links } = whatHeCanPress(body);
-    const dead: string[] = [];
-    for (const href of links) {
-      const res = await app.request(href);
-      if (res.status === 404) dead.push(`GET ${href}`);
-    }
-    for (const { action, method } of forms) {
-      if (method !== 'POST') continue;
-      const res = await app.request(action, { method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: new URLSearchParams({ said: 'anything' }).toString() });
-      if (res.status === 404) dead.push(`POST ${action}`);
-    }
-    expect(dead, `dead ends on the advanced surface: ${dead.join(', ')}`).toEqual([]);
-  });
-});
-
 describe('the journey he could not complete', () => {
   it('carries him from an empty first screen to a real running search', async () => {
     // Exactly what he tried to do, through exactly what the screen offers, with
@@ -237,3 +205,62 @@ describe('the journey he could not complete', () => {
     expect(res.status).toBeLessThan(400);
   });
 });
+
+describe('the surfaces beyond the first screen', () => {
+  // A company, so the advanced surface renders at all. Without one it
+  // redirects, and every assertion here would have been made about an empty
+  // string — which is exactly how this section passed green while proving
+  // nothing.
+  beforeAll(async () => {
+    await app.request('/foundry/companies', { method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ name: 'Northgate' }).toString() });
+  });
+
+  it('does not send the private owner into commercial onboarding', async () => {
+    // The Advanced surface, reachable from his own footer, carried a day-one
+    // signup card written for somebody buying a product: "your AI team reports
+    // in each morning", a button to connect Stripe, a button to log a first
+    // decision. He is not a founder signing up, and two of those three links
+    // lead into machinery he has no reason to meet.
+    // ASSERT IT RENDERED BEFORE CRAWLING IT.
+    //
+    // This gate passed green while proving nothing: with no company the
+    // advanced surface returns a 302 with a zero-byte body, and every
+    // "does not contain" assertion is trivially true of an empty string. A
+    // gate that cannot fail is worse than no gate, because it is counted.
+    const res = await app.request('/letter');
+    expect(res.status, 'the advanced surface must render, not redirect').toBe(200);
+    const body = await res.text();
+    expect(body.length, 'and it must have something in it').toBeGreaterThan(500);
+    expect(body).not.toContain('let\'s get your first signal');
+    expect(body).not.toContain('/agents/integrations');
+    expect(body).not.toContain('href="/decisions"');
+  });
+
+  it('leaves nothing on the advanced surface leading nowhere', async () => {
+    const res = await app.request('/letter');
+    expect(res.status, 'it must render for the crawl to mean anything').toBe(200);
+    const body = await res.text();
+    const { forms, links } = whatHeCanPress(body);
+    // Only the surfaces this composition mounts. The advanced page links into
+    // routers the full application registers and this test does not, and
+    // reporting those as dead ends would be the test describing itself rather
+    // than the product.
+    const mine = (p: string): boolean => p.startsWith('/foundry') || p === '/letter';
+    const dead: string[] = [];
+    for (const href of links.filter(mine)) {
+      const res = await app.request(href);
+      if (res.status === 404) dead.push(`GET ${href}`);
+    }
+    for (const { action, method } of forms.filter((f) => mine(f.action))) {
+      if (method !== 'POST') continue;
+      const res = await app.request(action, { method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ said: 'anything' }).toString() });
+      if (res.status === 404) dead.push(`POST ${action}`);
+    }
+    expect(dead, `dead ends on the advanced surface: ${dead.join(', ')}`).toEqual([]);
+  });
+});
+

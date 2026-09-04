@@ -4,6 +4,7 @@
 // =============================================================================
 
 import { isFounder } from '../services/founder/intelligence.js';
+import { isPrivateOwnerInstance } from '../lib/instance-posture.js';
 import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import type { NextAction, AppNotification, MilestoneEvent, NavBadges } from '../types/index.js';
@@ -115,7 +116,13 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
 
   ${!chamberMode && showNav && nextAction ? nextActionBanner(nextAction) : ''}
 
-  ${!chamberMode && showNav && productId ? groupedSidebar(productId, activeNav, sidebarRiskClass, navBadges ?? null, canAccess ?? null, opts.founderEmail) : ''}
+  <!-- NOT ON THE OWNER'S INSTANCE. This is the twenty-five-item navigation of
+       the product Foundry was built to replace — Signal, Decide, Playbooks,
+       Ambient, Fleet Observatory, Agent Debate — and it was one tap from his
+       first screen's footer, on the page he goes to in order to inspect his own
+       system. The commercial deployment still has it. -->
+  ${!chamberMode && showNav && productId && !isPrivateOwnerInstance()
+    ? groupedSidebar(productId, activeNav, sidebarRiskClass, navBadges ?? null, canAccess ?? null, opts.founderEmail) : ''}
 
   <main id="main-content" class="${showNav && !chamberMode ? 'main-with-sidebar' : 'main-full'}">
     ${showNav && !chamberMode ? html`<div id="one-thing-banner"
@@ -129,9 +136,13 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
     ${content}
   </main>
 
-  ${!chamberMode && showNav && productId ? mobilBottomNav(activeNav, navBadges?.decisions_count ?? 0) : ''}
+  ${!chamberMode && showNav && productId && !isPrivateOwnerInstance()
+    ? mobilBottomNav(activeNav, navBadges?.decisions_count ?? 0) : ''}
 
-  <!-- Command Palette -->
+  <!-- Command Palette. Also the commercial product's navigation — it lists
+       Signal, Decide, Playbooks, Fleet Observatory and the rest — so it is not
+       offered on the owner's instance either. -->
+  ${isPrivateOwnerInstance() ? '' : html`
   <div id="cmd-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:9998;backdrop-filter:blur(4px)" onclick="closeCmdPalette()" aria-hidden="true"></div>
   <div id="cmd-palette" role="dialog" aria-label="Command palette" aria-modal="true" style="display:none;position:fixed;top:15vh;left:50%;transform:translateX(-50%);width:min(640px,90vw);background:#1e293b;border:1px solid rgba(255,255,255,0.12);border-radius:12px;z-index:9999;box-shadow:0 24px 64px rgba(0,0,0,0.5)">
     <div style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.08)">
@@ -193,7 +204,7 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
     function renderCmdResults(routes){var el=document.getElementById('cmd-results');if(!routes.length){el.innerHTML='<div style="padding:16px 20px;color:#64748b;font-size:14px">No results</div>';return;}var html='',sec='';routes.slice(0,12).forEach(function(r,i){if(r.section!==sec){sec=r.section;html+='<div style="padding:4px 16px 2px;font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.06em">'+sec+'</div>';}html+='<div class="cmd-item'+(i===cmdIdx?' cmd-selected':'')+'" data-href="'+r.href+'" onclick="location.href=\''+r.href+'\'" style="padding:8px 16px;cursor:pointer;font-size:14px;color:'+(i===cmdIdx?'#f1f5f9':'#cbd5e1')+';background:'+(i===cmdIdx?'rgba(255,255,255,0.07)':'transparent')+';transition:background 0.1s">'+r.label+'</div>';});el.innerHTML=html;}
     function handleCmdKey(e){var items=document.querySelectorAll('.cmd-item');if(e.key==='ArrowDown'){e.preventDefault();cmdIdx=Math.min(cmdIdx+1,items.length-1);}else if(e.key==='ArrowUp'){e.preventDefault();cmdIdx=Math.max(cmdIdx-1,0);}else if(e.key==='Enter'){if(items[cmdIdx])location.href=items[cmdIdx].dataset.href;closeCmdPalette();return;}else if(e.key==='Escape'){closeCmdPalette();return;}items.forEach(function(el,i){el.style.background=i===cmdIdx?'rgba(255,255,255,0.07)':'transparent';el.style.color=i===cmdIdx?'#f1f5f9':'#cbd5e1';});}
     document.addEventListener('keydown',function(e){if((e.metaKey||e.ctrlKey)&&e.key==='k'){e.preventDefault();openCmdPalette();}if(e.key==='Escape'&&document.getElementById('cmd-palette').style.display!=='none'){closeCmdPalette();}});
-  </script>
+  </script>`}
   <script>
     // Register service worker
     if ('serviceWorker' in navigator) {

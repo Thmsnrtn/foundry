@@ -35,7 +35,19 @@ mkdir -p "$(dirname "$SNAPSHOT")"
   echo "-- DO NOT EDIT BY HAND. Re-run the script after adding a migration."
   echo "-- =========================================================================="
   echo ""
-  sqlite3 "$TMPDB" .schema | sort
+  # STATEMENT-ATOMIC, AND DETERMINISTIC WITHOUT SHREDDING ANYTHING.
+  #
+  # This was `.schema | sort`, which sorts the LINES of the dump. Every
+  # multi-line CREATE TABLE and every trigger body was scattered across the
+  # file in alphabetical order, so the committed snapshot — the thing a drift
+  # check compares against and a human reads to understand the schema — was not
+  # valid SQL and could not be applied to anything. Ordering by type and name
+  # gives the same stable diff with each statement kept whole — ordered by what
+  # depends on what, so the file can simply be applied to an empty database.
+  sqlite3 "$TMPDB" "SELECT sql || ';' FROM sqlite_master
+     WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'
+     ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'view' THEN 1
+                        WHEN 'index' THEN 2 WHEN 'trigger' THEN 3 ELSE 4 END, name;"
 } > "$SNAPSHOT"
 
 echo "Wrote $SNAPSHOT"

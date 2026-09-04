@@ -124,26 +124,49 @@ export async function runMigrations(): Promise<void> {
     // BEGIN..END bodies (see splitSqlStatements).
     const statements = splitSqlStatements(sql);
 
-    for (const stmt of statements) {
-      try {
-        await db.execute({ sql: stmt, args: [] });
-      } catch (err: unknown) {
-        const msg = (err as Error)?.message ?? '';
-        // SQLite: "duplicate column name" — column was added by a prior migration.
-        // Turso/libSQL may surface this as "already exists".
-        if (msg.includes('duplicate column') || msg.includes('already exists')) {
-          continue;
+    // ALL OF A MIGRATION, OR NONE OF IT.
+    //
+    // The statements ran one at a time with no transaction, and the row saying
+    // the file had been applied was written only after the last one. So a
+    // failure in the middle left the schema half-changed AND unrecorded: the
+    // next boot would replay the same file from the top, hit the parts that had
+    // already succeeded, and — because "already exists" is deliberately
+    // tolerated here — walk straight past them into whatever came after the
+    // failure. The institution's whole state is one file on one volume, and
+    // this is the one code path that rewrites its shape.
+    //
+    // The marker is written inside the transaction, so applied and recorded are
+    // the same fact rather than two that can disagree.
+    await db.execute({ sql: 'BEGIN', args: [] });
+    try {
+      for (const stmt of statements) {
+        try {
+          await db.execute({ sql: stmt, args: [] });
+        } catch (err: unknown) {
+          const msg = (err as Error)?.message ?? '';
+          // SQLite: "duplicate column name" — column was added by a prior migration.
+          // Turso/libSQL may surface this as "already exists".
+          if (msg.includes('duplicate column') || msg.includes('already exists')) {
+            continue;
+          }
+          // Any other error is fatal
+          console.error(`[MIGRATE] Error in ${file}:\n  ${stmt}\n  ${msg}`);
+          throw err;
         }
-        // Any other error is fatal
-        console.error(`[MIGRATE] Error in ${file}:\n  ${stmt}\n  ${msg}`);
-        throw err;
       }
-    }
 
-    await db.execute({
-      sql: 'INSERT INTO schema_migrations (filename) VALUES (?)',
-      args: [file],
-    });
+      await db.execute({
+        sql: 'INSERT INTO schema_migrations (filename) VALUES (?)',
+        args: [file],
+      });
+      await db.execute({ sql: 'COMMIT', args: [] });
+    } catch (err) {
+      await db.execute({ sql: 'ROLLBACK', args: [] }).catch(() => {
+        // A rollback that fails has nothing left to protect; the original
+        // failure is the one worth reporting.
+      });
+      throw err;
+    }
 
     console.log(`[MIGRATE] ✓ ${file}`);
     ran++;
