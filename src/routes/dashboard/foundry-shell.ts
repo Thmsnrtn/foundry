@@ -2107,7 +2107,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
     const waiting = s.search.candidates.filter((cd) => !cd.earnedAttention).length;
     return waiting === 0 ? '' : html`<p class="quiet">I am working through
       ${String(waiting)} ${waiting === 1 ? 'possibility' : 'possibilities'}.
-      ${waiting === 1 ? 'It has' : 'None has'} earned your attention yet.</p>`;
+      ${waiting === 1 ? 'It has not' : 'None has'} earned your attention yet.</p>`;
   })()}
       ${s.search.candidates.filter((cand) => cand.earnedAttention).map((cand) => html`<div class="one">
         <div class="one-in">
@@ -3233,16 +3233,26 @@ foundryShellRoutes.post('/foundry/ask', requireInstitutionOwner(), async (c: any
     return absorbAndAnswer(c, String(founder.id), readings);
   }
 
+  // A QUESTION IS ANSWERED, NOT APOLOGISED FOR.
+  //
+  // This routed anything the door read as a question to a page headed "Let me
+  // answer that" whose next sentence was "I cannot answer questions in words
+  // yet" — two consecutive sentences contradicting each other, the second of
+  // them false. The first screen has answered these all along: the bar at the
+  // bottom of every page submits the same sentence to /foundry?q= and gets a
+  // real answer. Two entrances to one institution must not disagree about what
+  // it can do, so this one hands the question to the path that answers it.
+  if (door.destination === 'question') {
+    return c.redirect(`/foundry?q=${encodeURIComponent(said)}`);
+  }
+
   // AND WHAT IT COULD NOT PLACE COMES BACK WITH HIS WORDS IN IT. Losing three
   // hundred words of mandate because nothing recognised them is a worse failure
   // than the 404 was: the 404 at least did not pretend to have heard him.
   return c.html(page('What you said', html`
-    <h1>${door.destination === 'question' ? 'Let me answer that' : 'I did not follow that'}</h1>
+    <h1>I did not follow that</h1>
     <p class="lede">You said: <strong>${door.said}</strong></p>
-    ${door.destination === 'question' ? html`<p>I understood ${door.understoodAs}. I cannot
-      answer questions in words yet — what I can show you is on your first screen, and it is
-      the truth rather than a summary of it.</p>`
-    : door.needs !== null ? html`<p>I understood ${door.understoodAs}, but I need
+    ${door.needs !== null ? html`<p>I understood ${door.understoodAs}, but I need
       ${door.needs} before I can act on it. Say it on that company's page and it will
       stick.</p>`
     : html`<p>I understood you were telling me something, but not what to do about it.</p>`}

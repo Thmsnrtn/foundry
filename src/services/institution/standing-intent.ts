@@ -43,6 +43,12 @@ const SUBJECT_PHRASES: Record<string, string[]> = {
     'contact anyone', 'contact people', 'contact customers', 'email anyone',
     'email customers', 'email people', 'message anyone', 'message customers',
     'reach out', 'send anything', 'send any email', 'send emails', 'talk to customers',
+    // THE SINGULAR, BECAUSE HE SPEAKS IT. "Run it by me before you email any
+    // customer" matched nothing and fell through to unclear, while the same
+    // sentence in the plural produced a boundary.
+    'contact a customer', 'contact any customer', 'email a customer',
+    'email any customer', 'message a customer', 'message any customer',
+    'talk to a customer', 'talk to any customer',
   ],
   spend_money: [
     'spend anything', 'spend any money', 'spend money', 'spend my money',
@@ -216,7 +222,23 @@ export function interpret(raw: string): IntentProposal {
 
   if (PREFERRING.some((p) => text.includes(p))) return { kind: 'preference', statement };
 
-  const prohibited = PROHIBITIONS.some((p) => text.includes(p));
+  // "ASK ME FIRST" IS A BOUNDARY, AND IT WAS NOT REACHING THIS BRANCH.
+  //
+  // The gate below asks whether the sentence forbids something. Only then does
+  // it look at the ask-markers to decide whether the answer is "never" or "ask
+  // me first". But four of the five ask-markers — "ask me first", "ask first",
+  // "check with me", "run it by me" — appear in no prohibition phrase, so a
+  // sentence carrying one and nothing else never reached the branch at all.
+  //
+  // "Ask me first before you email customers" is not an odd way of phrasing it.
+  // It is the most natural way to say the thing this institution is most often
+  // asked to do, and it produced no boundary — the sentence fell through to a
+  // later branch and was filed as what the company is FOR.
+  //
+  // Asking to be consulted is a constraint on Foundry either way. Which kind it
+  // is stays exactly as it was.
+  const asking = ASK_MARKERS.some((m) => text.includes(m));
+  const prohibited = asking || PROHIBITIONS.some((p) => text.includes(p));
   if (prohibited) {
     // Longest phrase first, so the most specific subject wins a sentence that
     // could match two.
@@ -225,8 +247,7 @@ export function interpret(raw: string): IntentProposal {
       .sort((a, b) => b.phrase.length - a.phrase.length);
     const hit = candidates.find((c) => text.includes(c.phrase));
     if (hit) {
-      const mode: BoundaryMode = ASK_MARKERS.some((m) => text.includes(m))
-        ? 'ask_first' : 'never';
+      const mode: BoundaryMode = asking ? 'ask_first' : 'never';
       return { kind: 'boundary', subject: hit.subject, mode, statement };
     }
     return {
@@ -295,11 +316,28 @@ export async function setBoundary(input: {
   productId: string | null; subject: string; statement: string; mode?: BoundaryMode;
 }): Promise<string> {
   const live = (await query(
-    `SELECT id FROM owner_boundaries
+    `SELECT id, mode FROM owner_boundaries
       WHERE subject = ? AND lifted_at IS NULL
         AND product_id IS ?`, [input.subject, input.productId]))
     .rows[0] as Record<string, unknown> | undefined;
-  if (live) return String(live.id);
+
+  // CHANGING HIS MIND WAS A SILENT NO-OP, AND THE PAGE SAID IT HAD WORKED.
+  //
+  // Saying the same thing twice should change nothing, and that is why this
+  // returned the live row. But it compared nothing: "ask me first before you
+  // email customers", later replaced with "never email customers", found the
+  // live ask_first boundary and returned its id. Foundry then told him "I will
+  // not email your customers" — while still holding a boundary that permits it
+  // with his approval. The affirmation was the dangerous part: a no-op he could
+  // see would have been a smaller failure than one he was thanked for.
+  //
+  // A repeat is still idempotent. A change is recorded the way every other
+  // change of mind is recorded here: the old one lifted, the new one written,
+  // both kept.
+  if (live) {
+    if (String(live.mode) === (input.mode ?? 'never')) return String(live.id);
+    await liftBoundary(String(live.id), 'you replaced it with something different');
+  }
 
   const id = nanoid();
   await query(
