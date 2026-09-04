@@ -321,6 +321,14 @@ export function lifecycleProgress(currentPrompt: string): HtmlContent {
 // ─── Utility ─────────────────────────────────────────────────────────────────
 
 function formatCents(cents: number): string {
+  // "$NaN" IS NOT AN AMOUNT OF MONEY.
+  //
+  // A number that arrived as undefined, or as the result of arithmetic on a
+  // missing reading, divided cleanly by 100 and rendered as "$NaN" in the
+  // largest type on the page. A figure nobody can read is worse than a figure
+  // nobody has: it looks like a number and cannot be one. The honest answer is
+  // the one the rest of this file already uses when a reading is missing.
+  if (!Number.isFinite(cents)) return 'Not reported';
   return (cents / 100).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 

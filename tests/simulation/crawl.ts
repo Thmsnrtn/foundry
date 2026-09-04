@@ -436,7 +436,46 @@ async function main(): Promise<void> {
     console.log('');
   }
   console.log('====================================================\n');
-  process.exit(findings.filter((f) => f.kind === '5xx' || f.kind === 'artifact').length > 0 ? 1 : 0);
+
+  // A RATCHET, SO THIS CAN BE RUN BY THE BUILD RATHER THAN BY SOMEBODY
+  // REMEMBERING.
+  //
+  // This harness has existed and worked for months and nothing ran it. Most of
+  // what it finds is on the commercial surfaces the owner asked not to be
+  // developed, so demanding zero would mean either a large cleanup nobody wants
+  // or a gate that is switched off — which is how a harness ends up unrun. The
+  // count may fall and never rise, and the OWNER'S surface is held to zero,
+  // because that is the product being built.
+  const { readFileSync, writeFileSync } = await import('node:fs');
+  const BASELINE = 'scripts/crawl-findings-baseline.json';
+  const onOwnerSurface = findings.filter((f) => /\/foundry(\/|\s|$)/.test(f.where)
+    || /"\/foundry/.test(f.note));
+
+  if (process.argv.includes('--write')) {
+    writeFileSync(BASELINE, `${JSON.stringify({ findings: findings.length }, null, 2)}\n`);
+    console.log(`Baseline written: ${String(findings.length)} findings.`);
+    process.exit(0);
+  }
+
+  let ceiling = Number.POSITIVE_INFINITY;
+  try {
+    ceiling = Number((JSON.parse(readFileSync(BASELINE, 'utf8')) as { findings: number })
+      .findings);
+  } catch {
+    console.log(`No baseline at ${BASELINE}; run with --write to record one.`);
+  }
+
+  const fatal = findings.filter((f) => f.kind === '5xx' || f.kind === 'artifact');
+  if (onOwnerSurface.length > 0) {
+    console.error(`The owner's own surface has ${String(onOwnerSurface.length)} finding(s):`);
+    for (const f of onOwnerSurface) console.error(`  [${f.where}] ${f.note}`);
+  }
+  if (findings.length > ceiling) {
+    console.error(`Findings rose: ${String(findings.length)} against a baseline of `
+      + `${String(ceiling)}. Fix it, or record the new floor with --write and say why.`);
+  }
+  process.exit(fatal.length > 0 || onOwnerSurface.length > 0 || findings.length > ceiling
+    ? 1 : 0);
 }
 
 main().catch((e) => { console.error('CRAWL HARNESS CRASH:', e); process.exit(2); });

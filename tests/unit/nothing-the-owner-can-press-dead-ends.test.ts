@@ -30,6 +30,29 @@ const OWNER = 'press_owner';
 let app: Hono;
 
 /**
+ * A DEAD END IS NOT ONLY A 404.
+ *
+ * The gate treated 404 as the whole of the problem, so a raw JSON error blob,
+ * a bare text/plain 400 and a 500 all counted as fine — every one of which is
+ * the owner pressing something and meeting machinery. What makes an ending dead
+ * is that it is not a page he can read.
+ */
+function deadEnd(res: Response): boolean {
+  if (res.status === 404 || res.status >= 500) return true;
+  if (res.status >= 400) return true;
+  if (res.status < 300) {
+    const type = res.headers.get('content-type') ?? '';
+    return !type.includes('text/html');
+  }
+  return false;
+}
+
+/** What came back, for a failure message that says what to go and look at. */
+function whatCameBack(res: Response): string {
+  return `${String(res.status)} ${(res.headers.get('content-type') ?? 'no type').split(';')[0] ?? ''}`;
+}
+
+/**
  * Everything on a page the owner could press. The METHOD travels with the
  * action: a GET form posted to is a different question than the one the screen
  * is actually asking, and reading them the same way invents failures.
@@ -88,7 +111,7 @@ describe('the first screen, as he actually uses it', () => {
           headers: { 'content-type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({ said: 'anything at all' }).toString() })
         : await app.request(action);
-      if (res.status === 404) dead.push(`${method} ${action}`);
+      if (deadEnd(res)) dead.push(`${method} ${action} (${whatCameBack(res)})`);
     }
     expect(dead, `forms on the first screen leading into nothing: ${dead.join(', ')}`)
       .toEqual([]);
@@ -100,7 +123,7 @@ describe('the first screen, as he actually uses it', () => {
     const dead: string[] = [];
     for (const href of links) {
       const res = await app.request(href);
-      if (res.status === 404 || res.status >= 500) dead.push(`${href} (${String(res.status)})`);
+      if (deadEnd(res)) dead.push(`${href} (${whatCameBack(res)})`);
     }
     expect(dead, `links on the first screen leading nowhere: ${dead.join(', ')}`).toEqual([]);
   });
@@ -251,14 +274,14 @@ describe('the surfaces beyond the first screen', () => {
     const dead: string[] = [];
     for (const href of links.filter(mine)) {
       const res = await app.request(href);
-      if (res.status === 404) dead.push(`GET ${href}`);
+      if (deadEnd(res)) dead.push(`GET ${href} (${whatCameBack(res)})`);
     }
     for (const { action, method } of forms.filter((f) => mine(f.action))) {
       if (method !== 'POST') continue;
       const res = await app.request(action, { method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ said: 'anything' }).toString() });
-      if (res.status === 404) dead.push(`POST ${action}`);
+      if (deadEnd(res)) dead.push(`POST ${action} (${whatCameBack(res)})`);
     }
     expect(dead, `dead ends on the advanced surface: ${dead.join(', ')}`).toEqual([]);
   });
