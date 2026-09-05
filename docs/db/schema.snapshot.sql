@@ -16,6 +16,32 @@ CREATE TABLE acquirer_signals (
   notes TEXT,
   detected_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE act_classifications (
+  id             TEXT PRIMARY KEY,
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  product_id     TEXT REFERENCES products(id),
+  actor_id       TEXT REFERENCES business_actors(id),
+  delegation_id  TEXT REFERENCES delegations(id),
+  tool           TEXT NOT NULL,
+  capability     TEXT,
+  reversibility  TEXT NOT NULL CHECK (reversibility IN
+                   ('reversible','recoverable','irreversible')),
+  audience       TEXT NOT NULL CHECK (audience IN
+                   ('none','owned_surface','existing_customer','prospect','public','counterparty')),
+  external_effect TEXT NOT NULL,
+  money_cents    INTEGER NOT NULL DEFAULT 0,
+  rung           TEXT NOT NULL REFERENCES consequence_rungs(rung),
+  because        TEXT NOT NULL,
+  allowed        INTEGER NOT NULL,
+  classified_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE act_consequence_floors (
+  dimension   TEXT NOT NULL,
+  value       TEXT NOT NULL,
+  floor_rung  TEXT NOT NULL REFERENCES consequence_rungs(rung),
+  why         TEXT NOT NULL,
+  PRIMARY KEY (dimension, value)
+);
 CREATE TABLE action_drafts (
   id TEXT PRIMARY KEY,
   decision_id TEXT REFERENCES decisions(id),
@@ -553,6 +579,26 @@ CREATE TABLE browser_act_kinds (
   what_it_is  TEXT NOT NULL,
   rung        TEXT NOT NULL REFERENCES consequence_rungs(rung),
   sort_order  INTEGER NOT NULL
+);
+CREATE TABLE business_actors (
+  id           TEXT PRIMARY KEY,
+  founder_id   TEXT NOT NULL REFERENCES founders(id),
+  -- NULL means the institution itself. Foundry is a real company and acts as
+  -- one; it is not a stand-in for the owner.
+  product_id   TEXT REFERENCES products(id),
+  kind         TEXT NOT NULL CHECK (kind IN
+                 ('company','asset','brand','support_channel','marketplace_account','owner')),
+  -- What a recipient actually sees.
+  display_name TEXT NOT NULL,
+  -- How the world reaches it: a domain, an address, an account handle.
+  external_ref TEXT,
+  -- WOULD THIS IDENTITY GO WITH THE ASSET IF IT WERE SOLD?
+  --
+  -- Recorded at birth because it cannot be reconstructed later, and because an
+  -- asset whose channels are all personal is a job rather than a holding.
+  portable     INTEGER NOT NULL DEFAULT 0,
+  created_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  retired_at   TEXT
 );
 CREATE TABLE business_model_profile (
   id TEXT PRIMARY KEY,
@@ -1298,6 +1344,52 @@ CREATE TABLE "decisions" (
   frozen_at TEXT,
   autopilot_counted INTEGER NOT NULL DEFAULT 0,
   decided_by_founder_id TEXT
+);
+CREATE TABLE delegation_breakers (
+  id             TEXT PRIMARY KEY,
+  delegation_id  TEXT NOT NULL REFERENCES delegations(id),
+  counted_fact   TEXT NOT NULL CHECK (counted_fact IN
+                   ('complaint','bounce','provider_rejection','provider_error',
+                    'refund','dispute','negative_reply','unexpected_cost',
+                    'legal_language','security_anomaly','volume_deviation')),
+  window_minutes INTEGER NOT NULL,
+  threshold      INTEGER NOT NULL,
+  tripped_at     TEXT,
+  tripped_by     TEXT,
+  cleared_at     TEXT,
+  cleared_by     TEXT
+);
+CREATE TABLE delegations (
+  id             TEXT PRIMARY KEY,
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  product_id     TEXT REFERENCES products(id),
+  actor_id       TEXT NOT NULL REFERENCES business_actors(id),
+  class          TEXT NOT NULL,
+  purpose        TEXT NOT NULL,
+  -- CHECKED RATHER THAN REFERENCED: `act_consequence_floors` is keyed on
+  -- (dimension, value), so a foreign key to `value` alone is a mismatch. The
+  -- vocabulary is the same one, and the floors table remains where the meaning
+  -- of each value lives.
+  audience       TEXT NOT NULL CHECK (audience IN
+                   ('none','owned_surface','existing_customer','prospect','public','counterparty')),
+  -- WHAT IT MAY NEVER DO UNDER THIS DELEGATION. Required. A permission with no
+  -- stated exclusions has not been thought about, and the exclusions are the
+  -- half the owner actually reads.
+  excludes       TEXT NOT NULL,
+  -- The highest rung acts under this delegation may stand on.
+  ceiling        TEXT NOT NULL REFERENCES consequence_rungs(rung),
+  max_acts_per_day  INTEGER,
+  max_cents_per_day INTEGER,
+  -- NO PERMANENT DELEGATIONS. Standing authority that never lapses is authority
+  -- nobody revisits.
+  expires_at     TEXT NOT NULL,
+  granted_by     TEXT NOT NULL,
+  granted_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- What made this eligible: a calibration record, a controlled proof. Nullable
+  -- because the owner may grant on his own judgment and owes nobody a citation.
+  evidence_ref   TEXT,
+  revoked_at     TEXT,
+  revoked_reason TEXT
 );
 CREATE TABLE development_change_plans (
   id                    TEXT PRIMARY KEY,
@@ -4381,6 +4473,7 @@ CREATE TABLE workspaces (
 );
 CREATE INDEX idx_accuracy_scores_product ON agent_accuracy_scores(product_id, agent_name);
 CREATE INDEX idx_acquirer_signals_product ON acquirer_signals(product_id, detected_at DESC);
+CREATE INDEX idx_act_classifications ON act_classifications(founder_id, classified_at);
 CREATE INDEX idx_action_drafts_decision ON action_drafts(decision_id);
 CREATE INDEX idx_action_drafts_product ON action_drafts(product_id, status);
 CREATE INDEX idx_action_executions_action ON action_executions(outbound_action_id);
@@ -4458,6 +4551,7 @@ CREATE UNIQUE INDEX idx_board_packets_quarter ON board_packets(product_id, quart
 CREATE INDEX idx_briefing_share_code ON briefing_shares(share_code);
 CREATE INDEX idx_briefing_share_founder
   ON briefing_shares(founder_id, created_at DESC);
+CREATE INDEX idx_business_actors_product ON business_actors(product_id, retired_at);
 CREATE UNIQUE INDEX idx_calendar_alloc_week ON calendar_allocations(product_id, week_start, category);
 CREATE UNIQUE INDEX idx_candidate_single_promotion
   ON responsibility_candidate_decisions(candidate_id) WHERE decision='promoted';
@@ -4543,6 +4637,8 @@ CREATE INDEX idx_decisions_product ON decisions(product_id);
 CREATE INDEX idx_decisions_product_gate ON decisions(product_id, gate);
 CREATE INDEX idx_decisions_product_status ON decisions(product_id, status);
 CREATE INDEX idx_decisions_status ON decisions(status);
+CREATE INDEX idx_delegation_breakers ON delegation_breakers(delegation_id, tripped_at);
+CREATE INDEX idx_delegations_live ON delegations(founder_id, product_id, revoked_at);
 CREATE UNIQUE INDEX idx_development_change_identity ON development_change_plans(product_id,change_id);
 CREATE INDEX idx_development_change_responsibility ON development_change_plans(product_id,responsibility_id,created_at);
 CREATE UNIQUE INDEX idx_dimension_hints_unique ON dimension_hints(audit_score_id, dimension);
@@ -4893,6 +4989,15 @@ CREATE INDEX idx_workspace_events_ws ON workspace_events(workspace_id, at);
 CREATE UNIQUE INDEX idx_workspace_grant_live
   ON workspace_grants(workspace_id, capability_key) WHERE revoked_at IS NULL;
 CREATE INDEX idx_workspaces_live ON workspaces(founder_id) WHERE destroyed_at IS NULL;
+CREATE TRIGGER act_consequence_floors_constitutional_delete
+BEFORE DELETE ON act_consequence_floors
+BEGIN SELECT RAISE(ABORT,'act_consequence_floor:constitutional'); END;
+CREATE TRIGGER act_consequence_floors_constitutional_insert
+BEFORE INSERT ON act_consequence_floors
+BEGIN SELECT RAISE(ABORT,'act_consequence_floor:constitutional'); END;
+CREATE TRIGGER act_consequence_floors_constitutional_update
+BEFORE UPDATE ON act_consequence_floors
+BEGIN SELECT RAISE(ABORT,'act_consequence_floor:constitutional'); END;
 CREATE TRIGGER ai_spend_reservation_apply
 AFTER INSERT ON ai_spend_reservations
 BEGIN
@@ -5005,6 +5110,14 @@ BEGIN SELECT RAISE(ABORT,'browser_act_kind:constitutional'); END;
 CREATE TRIGGER browser_act_kinds_constitutional_update
 BEFORE UPDATE ON browser_act_kinds
 BEGIN SELECT RAISE(ABORT,'browser_act_kind:constitutional'); END;
+CREATE TRIGGER business_actor_asset_names_its_company
+BEFORE INSERT ON business_actors
+WHEN NEW.kind IN ('asset','support_channel','marketplace_account') AND NEW.product_id IS NULL
+BEGIN SELECT RAISE(ABORT,'business_actor:needs_a_company'); END;
+CREATE TRIGGER business_actor_owner_is_not_portable
+BEFORE INSERT ON business_actors
+WHEN NEW.kind = 'owner' AND NEW.portable = 1
+BEGIN SELECT RAISE(ABORT,'business_actor:owner_is_not_portable'); END;
 CREATE TRIGGER capabilities_constitutional_delete BEFORE DELETE ON capabilities
 BEGIN SELECT RAISE(ABORT,'capability:constitutional'); END;
 CREATE TRIGGER capabilities_constitutional_insert BEFORE INSERT ON capabilities
@@ -5329,6 +5442,23 @@ BEFORE UPDATE OF outcome_valence ON decisions
 WHEN NEW.outcome_valence IS NOT NULL AND NEW.outcome_valence NOT IN (-1, 0, 1)
 BEGIN
   SELECT RAISE(ABORT, 'outcome_valence:not_in_vocabulary');
+END;
+CREATE TRIGGER delegation_breaker_cleared_by_a_person
+BEFORE UPDATE OF cleared_at ON delegation_breakers
+WHEN NEW.cleared_at IS NOT NULL AND (NEW.cleared_by IS NULL OR NEW.cleared_by NOT LIKE 'founder:%')
+BEGIN SELECT RAISE(ABORT,'delegation_breaker:cleared_only_by_a_person'); END;
+CREATE TRIGGER delegation_may_not_absorb_the_unabsorbable
+BEFORE INSERT ON delegations
+BEGIN
+  SELECT RAISE(ABORT,'delegation:ceiling_is_not_absorbable')
+    WHERE (SELECT absorbable FROM consequence_rungs WHERE rung = NEW.ceiling) = 0;
+  SELECT RAISE(ABORT,'delegation:needs_exclusions')
+    WHERE trim(NEW.excludes) = '';
+  SELECT RAISE(ABORT,'delegation:must_expire')
+    WHERE datetime(NEW.expires_at) <= datetime(NEW.granted_at);
+  -- Only a person grants standing authority.
+  SELECT RAISE(ABORT,'delegation:not_granted_by_a_person')
+    WHERE NEW.granted_by NOT LIKE 'founder:%';
 END;
 CREATE TRIGGER development_authority_guard
 BEFORE INSERT ON autonomy_consents

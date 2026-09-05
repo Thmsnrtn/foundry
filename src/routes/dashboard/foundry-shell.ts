@@ -3061,6 +3061,19 @@ foundryShellRoutes.post('/foundry/companies', requireInstitutionOwner(), async (
   await query(
     "INSERT INTO products (id, name, owner_id, status) VALUES (?, ?, ?, 'active')",
     [id, name, String(founder.id)]);
+
+  // AND A NAME OF ITS OWN, FROM ITS FIRST DAY.
+  //
+  // The owner is not the default actor for his own businesses. An asset whose
+  // support inbox, sending domain and marketplace accounts are all personal
+  // cannot be sold — the buyer cannot take any of it — and by the time anybody
+  // notices, the accounts exist and the customers know them.
+  //
+  // Created here rather than offered as a setting, because a setting nobody
+  // visits produces exactly the asset that was never separable.
+  const { nameAnActor } = await import('../../services/institution/acting.js');
+  await nameAnActor({ founderId: String(founder.id), productId: id,
+    kind: 'company', displayName: name });
   return c.redirect(`/foundry/companies/${id}?done=added`);
 });
 

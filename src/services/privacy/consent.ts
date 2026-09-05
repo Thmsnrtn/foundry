@@ -686,6 +686,26 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
     reason: 'when he last looked, which exists only to tell him what changed since',
     onAccountErasure: { op: 'delete' },
   },
+  prediction_resolutions: {
+    reason: 'how often this institution was right about one person\'s businesses, '
+      + 'which is a fact about how it served him and about nobody else',
+    onAccountErasure: { op: 'delete' },
+  },
+  business_actors: {
+    reason: 'the identities his companies act as — a support address, a brand, a '
+      + 'marketplace account — which belong to his businesses and to him',
+    onAccountErasure: { op: 'delete' },
+  },
+  delegations: {
+    reason: 'what he allowed this institution to do without asking him each time, '
+      + 'including what he took back and why',
+    onAccountErasure: { op: 'delete' },
+  },
+  act_classifications: {
+    reason: 'what this institution did on his behalf, what consequence each act '
+      + 'carried, and whether anything covered it',
+    onAccountErasure: { op: 'delete' },
+  },
   venture_mandates: {
     reason: 'a search for a business, which belongs to the person who asked for it',
     onAccountErasure: { op: 'delete' },
@@ -946,6 +966,8 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   stance_bearings: 'which ways of knowing can support or contradict which kind of hypothesis, and why; constitutional, naming nobody — a missing row means that source says nothing',
   reality_only_questions: 'the questions no amount of reading can settle — whether somebody will pay, switch, click or come back — and what each is settled by instead; constitutional, naming nobody',
   consequence_rungs: 'the ladder of consequence an act can have, constitutional and the same for every owner',
+  prediction_kinds: 'the kinds of thing this institution predicts, where each is sealed, and what is allowed to settle it; constitutional, naming nobody',
+  act_consequence_floors: 'what an act\'s attributes imply about its consequence — who it reaches, whether it can be undone — and why; constitutional, naming nobody',
   browser_act_kinds: 'what a hand in a browser can be doing — reading a page, accepting somebody\'s terms — and which rung each stands on; constitutional, naming nobody',
   capabilities: 'what the institution can conceivably do, as concepts; constitutional, naming nobody',
   capability_providers: 'which implementations supply which capability and how far each is proven; institutional, naming no company',
