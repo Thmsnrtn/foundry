@@ -726,6 +726,11 @@ CREATE TABLE capability_acquisitions (
   acquired_at    TEXT,
   provider_id    TEXT REFERENCES capability_providers(id)
 );
+CREATE TABLE capability_fulfilled_through (
+  capability_key     TEXT PRIMARY KEY REFERENCES capabilities(capability_key),
+  through_capability TEXT NOT NULL REFERENCES capabilities(capability_key),
+  why                TEXT NOT NULL
+);
 CREATE TABLE capability_maturity_changes (
   id            TEXT PRIMARY KEY,
   provider_id   TEXT NOT NULL REFERENCES capability_providers(id),
@@ -5237,6 +5242,22 @@ BEGIN
   SELECT RAISE(ABORT,'capability_acquisition:cannot_arrive_decided')
     WHERE NEW.decision IS NOT NULL OR NEW.acquired_at IS NOT NULL;
 END;
+CREATE TRIGGER capability_fulfilled_through_constitutional_delete
+BEFORE DELETE ON capability_fulfilled_through
+BEGIN SELECT RAISE(ABORT,'capability_fulfilled_through:constitutional'); END;
+CREATE TRIGGER capability_fulfilled_through_constitutional_insert
+BEFORE INSERT ON capability_fulfilled_through
+BEGIN SELECT RAISE(ABORT,'capability_fulfilled_through:constitutional'); END;
+CREATE TRIGGER capability_fulfilled_through_constitutional_update
+BEFORE UPDATE ON capability_fulfilled_through
+BEGIN SELECT RAISE(ABORT,'capability_fulfilled_through:constitutional'); END;
+CREATE TRIGGER capability_fulfilled_through_is_not_circular
+BEFORE INSERT ON capability_fulfilled_through
+WHEN NEW.capability_key = NEW.through_capability
+     OR EXISTS (SELECT 1 FROM capability_fulfilled_through f
+                 WHERE f.capability_key = NEW.through_capability
+                   AND f.through_capability = NEW.capability_key)
+BEGIN SELECT RAISE(ABORT,'capability_fulfilled_through:circular'); END;
 CREATE TRIGGER capability_maturity_change_applies
 AFTER INSERT ON capability_maturity_changes
 BEGIN

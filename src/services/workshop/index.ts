@@ -22,6 +22,7 @@ async function substrate(name: Substrate): Promise<WorkshopSubstrate> {
   if (name === 'reference_world') return (await import('./reference.js')).referenceWorkshop;
   if (name === 'local_process') return (await import('./local-process.js')).localProcessWorkshop;
   if (name === 'fly_machines') return (await import('./fly-machines.js')).flyMachinesWorkshop;
+  if (name === 'fly_sprites') return (await import('./fly-sprites.js')).flySpritesWorkshop;
   throw new WorkshopError(name, 'substrate', `no adapter for ${name}: it is declared, not available`);
 }
 
