@@ -176,3 +176,74 @@ describe('the return leg closes on the next pass, not on this one', () => {
     expect(again.settled?.claimId).not.toBe('claim_yesterday');
   }, 60_000);
 });
+
+describe('"I may not" and "I cannot" are different answers', () => {
+  it('records a missing capability as a need, and does not ask him to allow it',
+    async () => {
+      const { whatStandsInTheWayOf } = await import(
+        '../../src/services/institution/carrying.js');
+      // A capability nothing can perform cannot be authorised into existence.
+      // Putting it to him as a permission would be asking him to allow
+      // something that still would not happen afterwards.
+      const cannot = await whatStandsInTheWayOf({
+        founderId: OWNER, responsibility: 'publish an offer somewhere',
+        capability: 'publish_page' });
+      expect(cannot.why).toBe('cannot');
+      expect(cannot.reachesHim).toBe(false);
+      const noted = (await query(
+        `SELECT why FROM capability_needs WHERE founder_id = ? AND capability_key = ?`,
+        [OWNER, 'publish_page'])).rows[0] as Record<string, unknown>;
+      expect(String(noted.why)).toContain('no permission would make the work happen');
+    });
+
+  it('asks him only when the capability exists and nothing permits the act', async () => {
+    const { whatStandsInTheWayOf } = await import(
+      '../../src/services/institution/carrying.js');
+    const mayNot = await whatStandsInTheWayOf({
+      founderId: OWNER, responsibility: 'open a pull request',
+      capability: 'open_pull_request' });
+    expect(mayNot.why).toBe('may_not');
+    expect(mayNot.reachesHim).toBe(true);
+  });
+
+  it('does not ask when the provider exists but cannot do the part that matters',
+    async () => {
+      const { whatStandsInTheWayOf } = await import(
+        '../../src/services/institution/carrying.js');
+      const halfway = await whatStandsInTheWayOf({
+        founderId: OWNER, responsibility: 'keep the description current',
+        capability: 'open_pull_request',
+        providerCannot: 'it opens a pull request from a branch that already exists' });
+      expect(halfway.why).toBe('cannot');
+      expect(halfway.reachesHim).toBe(false);
+      expect(halfway.sentence).toContain('cannot do the part that matters');
+    });
+});
+
+describe('the second responsibility, which would change software', () => {
+  it('checks whether the description actually drifted rather than assuming', async () => {
+    const { carrySchemaDescription } = await import(
+      '../../src/services/institution/carrying.js');
+    const chain = await carrySchemaDescription(OWNER);
+    // Whatever the answer, it came from comparing the live schema to the file.
+    expect(typeof chain.drifted).toBe('boolean');
+    if (!chain.drifted) {
+      expect(chain.needsHim).toBeNull();
+      expect(chain.standing).toBeNull();
+    } else {
+      // AND IT STOPS BEFORE HIM, FOR THE RIGHT REASON. The hand exists and
+      // cannot do the part that matters, so this is a capability need rather
+      // than a permission he could grant.
+      expect(chain.standing?.why).toBe('cannot');
+      expect(chain.needsHim).toBeNull();
+    }
+  }, 30_000);
+
+  it('records the work as recurring without ever interrupting him', async () => {
+    const recurring = await whatKeepsRecurring(OWNER, 1);
+    const snap = recurring.find((r) =>
+      r.responsibility === 'keep the description of my own database current');
+    expect(snap?.signals.map((s) => s.kind)).toEqual(['prepared_not_finished']);
+    expect(snap?.interruptions).toBe(0);
+  });
+});

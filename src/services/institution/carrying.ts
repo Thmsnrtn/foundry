@@ -256,3 +256,176 @@ async function settlePriorClaim(founderId: string): Promise<
   if ('refused' in done) return null;
   return { claimId, verdict, because };
 }
+
+
+// =============================================================================
+// "I MAY NOT" AND "I CANNOT" ARE DIFFERENT ANSWERS.
+//
+// Only one of them is his to decide, and confusing them is how an institution
+// starts asking its owner to authorise things that no permission would enable.
+//
+//   I MAY NOT — the capability exists, a provider is connected, and nothing
+//   permits this act. That is an owner decision, and it belongs on his screen.
+//
+//   I CANNOT — no provider can perform it at all, or the one that exists cannot
+//   do the part that matters. That is a CAPABILITY NEED. Putting it to him as a
+//   permission would be asking him to authorise something that would still not
+//   happen afterwards.
+//
+// Found by carrying the second real responsibility rather than by reasoning
+// about it. Foundry has exactly one consequential hand with a real provider —
+// `open_pull_request`, bound to `github_create_pr`, at maturity 'available' —
+// and it opens a pull request from a branch that ALREADY EXISTS. It cannot
+// create the branch and cannot put anything in it. So the work it would be
+// authorised to do could not be completed by the authority being sought.
+// =============================================================================
+
+export type WhyNot = 'may_not' | 'cannot';
+
+export interface WhatStandsInTheWay {
+  why: WhyNot;
+  /** The capability that would have to exist or be permitted. */
+  capability: string;
+  /** In his words. Only surfaced when this is genuinely his to decide. */
+  sentence: string;
+  /** True when this belongs on his first screen at all. */
+  reachesHim: boolean;
+}
+
+/**
+ * WHAT IS ACTUALLY STOPPING A RESPONSIBILITY, AND WHOSE PROBLEM IT IS.
+ *
+ * A capability with no provider at any maturity cannot be authorised into
+ * existence, so it is recorded as a need and never reaches him as a question. A
+ * capability whose provider exists and whose act nothing covers is a decision,
+ * and it does.
+ */
+export async function whatStandsInTheWayOf(input: {
+  founderId: string; responsibility: string; capability: string;
+  /** Named when the provider exists but cannot do the part that matters. */
+  providerCannot?: string | null;
+}): Promise<WhatStandsInTheWay> {
+  const provider = (await query(
+    `SELECT p.id, p.maturity FROM capability_providers p
+      WHERE p.capability_key = ? ORDER BY p.sort_order LIMIT 1`,
+    [input.capability])).rows[0] as Record<string, unknown> | undefined;
+
+  const { noteNeed } = await import('./capabilities.js');
+
+  if (!provider) {
+    await noteNeed({
+      founderId: input.founderId, subjectKind: 'responsibility',
+      subjectId: input.responsibility, capabilityKey: input.capability,
+      why: `nothing can perform this at all, so no permission would make the work happen`,
+    });
+    return {
+      why: 'cannot', capability: input.capability, reachesHim: false,
+      sentence: `Nothing I have can do this yet, so there is nothing to allow.`,
+    };
+  }
+
+  if (input.providerCannot != null && input.providerCannot !== '') {
+    await noteNeed({
+      founderId: input.founderId, subjectKind: 'responsibility',
+      subjectId: input.responsibility, capabilityKey: input.capability,
+      why: input.providerCannot,
+    });
+    return {
+      why: 'cannot', capability: input.capability, reachesHim: false,
+      sentence: `What I have cannot do the part that matters: ${input.providerCannot}.`,
+    };
+  }
+
+  return {
+    why: 'may_not', capability: input.capability, reachesHim: true,
+    sentence: `I can do this and nothing you have said permits it.`,
+  };
+}
+
+
+/** The responsibility this institution has toward its own description. */
+export const SNAPSHOT_RESPONSIBILITY = 'keep the description of my own database current';
+
+export interface SnapshotChain {
+  responsibility: string;
+  /** Whether the description has actually drifted from the migrations. */
+  drifted: boolean;
+  standing: WhatStandsInTheWay | null;
+  /** Present only when something genuinely belongs on his screen. */
+  needsHim: string | null;
+}
+
+/**
+ * THE SECOND REAL RESPONSIBILITY, WHICH HAS A CONSEQUENCE.
+ *
+ * Reading the registry changes nothing. This one would change software: the
+ * file that describes Foundry's own database drifts every time a migration is
+ * added, a gate catches it, and somebody regenerates it by hand. That has
+ * happened repeatedly and it is real recurring work with a real external effect
+ * — a pull request that exists in the world.
+ *
+ * AND IT STOPS BEFORE THE OWNER, FOR THE RIGHT REASON. `open_pull_request` has a
+ * real provider at maturity 'available', and `createPRHandler` opens a pull
+ * request from a branch that already exists. Nothing in the institution can
+ * create the branch or put the corrected file in it. So the answer is not "may
+ * I" — it is "I cannot", and it is recorded as a capability need rather than
+ * put to him as a permission that would change nothing if granted.
+ *
+ * The drift itself is detected from the live database, which is the honest
+ * source: what the institution's own schema actually contains, compared with
+ * what its description says it contains.
+ */
+export async function carrySchemaDescription(
+  founderId: string,
+): Promise<SnapshotChain> {
+  const acting = await import('./acting.js');
+
+  // Real recurrence, and it costs him nothing to learn: the work has been
+  // prepared and left unfinished every time the description drifted.
+  await acting.noteResponsibilitySignal({
+    founderId, productId: null, responsibility: SNAPSHOT_RESPONSIBILITY,
+    kind: 'prepared_not_finished',
+    ref: 'the schema snapshot drifts whenever a migration is added',
+  });
+
+  // Has it actually drifted? Asked of the live database rather than assumed —
+  // an institution that reported work needing doing without checking would be
+  // manufacturing its own recurrence.
+  const live = ((await query(
+    `SELECT name FROM sqlite_master
+      WHERE type IN ('table','view','index','trigger') AND name NOT LIKE 'sqlite_%'`,
+    [])).rows as unknown as Array<Record<string, unknown>>).map((r) => String(r.name));
+
+  const described = await (async () => {
+    try {
+      const { readFile } = await import('node:fs/promises');
+      return await readFile('docs/db/schema.snapshot.sql', 'utf8');
+    } catch { return null; }
+  })();
+
+  // Nothing to say when the description cannot be read at all — that is a
+  // deployment fact, not a drift, and reporting it as one would be a guess.
+  if (described === null) {
+    return { responsibility: SNAPSHOT_RESPONSIBILITY, drifted: false,
+      standing: null, needsHim: null };
+  }
+  const missing = live.filter((n) => !described.includes(n));
+  if (missing.length === 0) {
+    return { responsibility: SNAPSHOT_RESPONSIBILITY, drifted: false,
+      standing: null, needsHim: null };
+  }
+
+  const standing = await whatStandsInTheWayOf({
+    founderId, responsibility: SNAPSHOT_RESPONSIBILITY,
+    capability: 'open_pull_request',
+    // The specific thing the existing hand cannot do, named rather than
+    // implied, so the capability need says what would actually unblock it.
+    providerCannot: 'it opens a pull request from a branch that already exists, '
+      + 'and nothing here can create the branch or put the corrected file in it',
+  });
+
+  return {
+    responsibility: SNAPSHOT_RESPONSIBILITY, drifted: true, standing,
+    needsHim: standing.reachesHim ? standing.sentence : null,
+  };
+}

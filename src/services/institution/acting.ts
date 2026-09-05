@@ -88,6 +88,34 @@ export interface AccessVerdict {
  * nobody is addressed, and it costs no more than that basis permits — which
  * for a public one is nothing at all, enforced in the table. Fail any and it
  * is not perception, whatever it is called.
+ *
+ * WHAT THIS DEFINITION IS, AND WHAT IT IS NOT.
+ *
+ * "No credential and no cost" is a conservative implementation of public
+ * observation that fits what this institution can currently reach. It is not
+ * the definition of perception and must not become one.
+ *
+ * Three things it would be wrong to equate:
+ *   a credential is not automatically owner-connected private data — a
+ *     Foundry-owned service key on a paid search API observes public reality;
+ *   a small cost is not automatically per-act owner approval — metered research
+ *     inside a standing budget is already paid for;
+ *   public information is not automatically free or unauthenticated — licensed
+ *     datasets and aggregators are public reality behind a turnstile.
+ *
+ * The durable separation is four questions, not one: what INFORMATION CLASS is
+ * being observed (public, company-private, customer-confidential, licensed);
+ * through what ACCESS MECHANISM and as what principal; under what ECONOMIC
+ * COVERAGE (nothing, already-paid infrastructure, a standing research budget,
+ * or new spend needing authority); and whether the observation itself causes a
+ * material external effect, which ordinarily it does not.
+ *
+ * No abstraction is added for that here, because nothing in this repository
+ * yet observes through a paid or credentialed public provider — building the
+ * shape before the need would be inventing responsibilities. When the first one
+ * arrives, `basis` and `may_cost_cents` are where it goes, and the trigger that
+ * currently equates public with free is the thing to revisit rather than to
+ * work around.
  */
 export async function accessBasisFor(act: ActDescription): Promise<AccessVerdict> {
   const key = act.capability ?? null;
