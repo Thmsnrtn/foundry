@@ -642,7 +642,15 @@ async function whatItWouldCost(substrate: string): Promise<string> {
                              ELSE 2 END`, [substrate]))
     .rows as unknown as Array<Record<string, unknown>>);
   if (rows.length === 0) return 'not known — nothing has been read about what it costs';
-  return rows.map((r) => String(r.finding)).join('; ');
+  // AND WHAT THE FIRST ONE WOULD ACTUALLY COST HIM, which is the number he
+  // wants and the one a plan page never gives. Taken from the ceiling this
+  // institution enforces rather than estimated, so the figure on the card and
+  // the figure the workspace stops at are the same figure.
+  const ceiling = (WHAT_ONE_DESCRIPTION_MAY_COST_CENTS / 100).toFixed(2);
+  return `${rows.map((r) => String(r.finding)).join('; ')}. The first piece of work `
+    + `is one workspace alive for seconds, and I stop it at $${ceiling} — that is a `
+    + 'ceiling I enforce on each piece of work, not a promise about the bill, which '
+    + 'is the plan plus whatever is actually used';
 }
 
 /**
@@ -692,6 +700,26 @@ async function askForTheComputer(input: {
       + 'change nobody has run yet may not be produced on the machine I run on '
       + '— so it has to happen on a computer I am not, and I do not have one. '
       + 'Everything on either side of that already works',
+    // THE TWO LISTS, IN THE SAME WORDS, ON THE SAME SCREEN. What becomes
+    // possible, and what a yes still does not reach. Written here rather than
+    // rendered from the rung, because the rung says what class of thing this
+    // sits in and these say what he is actually deciding.
+    enables: [
+      'create temporary isolated workspaces',
+      'run generated or modified software inside them',
+      'test proposed changes there',
+      'return verified artifacts to me',
+      'measure what the compute cost',
+      'destroy or recover the workspace afterwards',
+    ],
+    doesNotAuthorize: [
+      'merging code',
+      'deploying anything to production',
+      'publishing repository changes, unless you authorise that separately',
+      'going around any boundary you have already set',
+      'putting a reusable credential where generated code can reach it',
+      'spending beyond the ceiling set on each piece of work',
+    ],
     proposedBy: 'institution:carrying',
   });
 }

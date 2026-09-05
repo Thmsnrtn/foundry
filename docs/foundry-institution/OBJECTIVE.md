@@ -222,3 +222,61 @@ output for evidence. So the honest form of it: for any claim the institution
 makes about value, name the external event that would have had to happen — and
 if nothing outside this repository has happened, nothing has been established,
 however much was produced.
+
+## 8. Capability acquisition, which is a recurring category and not a project
+
+Foundry will keep running into work it knows how to do and cannot currently
+carry. Isolated compute is the first one; research providers, model providers,
+paid datasets, monitoring, specialised infrastructure, licensed tooling and
+human expertise are the same shape. So the questions are worth stating once,
+here, rather than rediscovering under each of them:
+
+- What capability is missing?
+- What provider best satisfies it, on verified evidence?
+- What does it cost — from the account, not the marketing page?
+- What new exposure does acquiring it create?
+- What does having it enable?
+- What does it still **not** authorise?
+- Is existing owner policy already enough? If so, do not ask.
+- If not, what is the **smallest** owner decision that unblocks it?
+
+This is not a procurement framework and must not become one. What has to stay
+durable is one distinction:
+
+**Capability acquisition is not authority to use that capability for any
+purpose.**
+
+Acquiring makes a provider exist in the fabric. Every consequential act
+performed through it is governed independently, on the same rung, under the same
+boundaries and allowances as everything else, and the door does not know the
+provider is new. Where the owner is being asked for a recurring bill he reads
+both lists — what becomes possible and what still does not — in the same words,
+on the same screen.
+
+### The threshold for reaching him
+
+Not "this would be useful", and not "we have proved it works". Requiring reality
+proof before asking for the access that makes reality proof possible is a
+circular gate, and the way out of it is not another engineering tranche. The
+threshold is:
+
+**Everything the institution can legitimately establish without him has been
+established, AND a specific owner decision is now the smallest missing condition
+for the next real proof.**
+
+A yes authorises the resource boundary and lets the real proof proceed. It does
+not certify that the provider will work — that is what the proof is for, and the
+cost of finding out is reported either way.
+
+### And the proof vocabulary survives the yes
+
+A chain that runs cleanly in rehearsal proves the **contract**: material in,
+artifact out, compared rather than trusted, budget refused before spend, cost
+including teardown, teardown occurring, publication never reached. Every one of
+those is a property of this institution's own code.
+
+It proves nothing about **isolation**, which is a claim about an implementation
+somewhere else — that work really ran on a computer this institution is not,
+that a real provider really billed for it, that a real workspace really came
+back or really went away. Only a real external substrate answers that, and
+maturity advances only for exactly what was proven.

@@ -79,12 +79,45 @@ describe('the wall the real work runs into', () => {
         .filter((a) => a.capabilityKey === 'run_in_workspace');
       expect(ask?.costNote).toContain('$20/month');
       expect(ask?.costNote).toContain('usage');
-      // The trial credit is stated WITH its limit, because an unqualified "$30
-      // free" would be the sentence that made him say yes and the one that was
-      // not true of his account.
-      expect(ask?.costNote).toContain('applies to');
-      expect(ask?.costNote).toContain('cannot be read from here');
+      // AND THE FIRST-PROOF FIGURE, which is the number he actually wants and
+      // the one a plan page never gives. Taken from the ceiling the institution
+      // enforces, so the figure on the card and the figure the workspace stops
+      // at cannot become different figures.
+      expect(ask?.costNote).toContain('$0.25');
+      expect(ask?.costNote).toContain('not a promise about the bill');
     });
+
+  it('does not offer him a trial credit his account does not have', async () => {
+    // The vendor's public material says $30. His organisation's credit balance
+    // says $0.00. An unqualified "$30 free" would have been the sentence that
+    // made him say yes and the one that was not true — and this record carried
+    // exactly that figure until the account was asked.
+    const [ask] = (await acquisitionsAwaiting(OWNER))
+      .filter((a) => a.capabilityKey === 'run_in_workspace');
+    expect(ask?.costNote).toContain('NONE AVAILABLE TO THIS ORGANISATION');
+    expect(ask?.costNote).not.toContain('$30 trial credit exists');
+  });
+
+  it('reads both lists in the same words, because acquiring is not authority',
+    async () => {
+      const [ask] = (await acquisitionsAwaiting(OWNER))
+        .filter((a) => a.capabilityKey === 'run_in_workspace');
+      expect(ask?.enables).toContain('run generated or modified software inside them');
+      expect(ask?.enables).toContain('measure what the compute cost');
+      expect(ask?.doesNotAuthorize).toContain('merging code');
+      expect(ask?.doesNotAuthorize).toContain('deploying anything to production');
+      expect(ask?.doesNotAuthorize)
+        .toContain('putting a reusable credential where generated code can reach it');
+    });
+
+  it('earns the first screen by nothing being able to carry the work', async () => {
+    // Not "this would be useful". No provider of this capability is available
+    // or better, so a responsibility cannot be carried at all until he answers.
+    // Being unable to act outranks being allowed to act more widely.
+    const [ask] = (await acquisitionsAwaiting(OWNER))
+      .filter((a) => a.capabilityKey === 'run_in_workspace');
+    expect(ask?.blocking).toBe(true);
+  });
 
   it('does not say yes on its own, however much the work wants it', async () => {
     const [ask] = (await acquisitionsAwaiting(OWNER))
@@ -114,6 +147,12 @@ describe('a yes he can take back', () => {
       .rows as unknown as Array<Record<string, unknown>>;
     expect(rows).toHaveLength(1);
     expect(String(rows[0]!.maturity)).toBe('available');
+  });
+
+  it('stops claiming his first screen once something can carry the work', async () => {
+    const [held] = (await acquisitionsHeld(OWNER))
+      .filter((a) => a.capabilityKey === 'run_in_workspace');
+    expect(held?.blocking).toBe(false);
   });
 
   it('shows him what he is carrying, so stopping it is somewhere he can find it',

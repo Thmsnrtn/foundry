@@ -23,8 +23,21 @@ import {
 // The rehearsal runs on the host on purpose. That is how the lifecycle earns
 // its own reality — files really written, a step really run, cost really
 // recorded, teardown really removing it — on work that could not matter if it
-// went wrong. The only thing standing between this and the same chain against
-// real software is a computer the institution is not on.
+// went wrong.
+//
+// AND IT PROVES THE CONTRACT, NOT THE ISOLATION. Every property below is a
+// property of this institution's own code: material in, artifact out, compared
+// rather than trusted, budget refused before spend, cost including teardown,
+// teardown occurring, publication never reached, real work correctly refusing
+// when no real isolated substrate is available.
+//
+// The isolation property is a claim about an implementation somewhere else —
+// that work really ran on a computer this institution is not, that a real
+// provider really billed for it, that a real workspace really came back or
+// really went away. The host cannot answer that, because here the work ran
+// exactly where it must not. So nothing in this file may be read as the
+// isolation being proven, and the record must not say `reality_proven` until a
+// real external substrate has said it.
 // =============================================================================
 
 const OWNER = 'made_owner';
@@ -57,7 +70,7 @@ describe('choosing a computer by what it is, not what it is called', () => {
     });
 });
 
-describe('the chain, proven end to end in rehearsal', () => {
+describe('the contract, proven in rehearsal — which is not the isolation', () => {
   it('takes material in, runs the work elsewhere, and reads the artifact back',
     async () => {
       const made = await produceSchemaDescription({
@@ -113,5 +126,36 @@ describe('the chain, proven end to end in rehearsal', () => {
     expect(real.artifact).toBeNull();
     expect(real.because).toContain('SPRITE_TOKEN');
     expect(real.because).toContain('declared, not available');
+  });
+
+  it('has not promoted the isolated substrate on the strength of any of this',
+    async () => {
+      // THE VOCABULARY IS THE POINT. A chain that ran cleanly on the host is
+      // easy to describe as the whole thing working. The record must go on
+      // saying what is actually true: nothing has run on a real isolated
+      // computer, so the substrate that would do it is still a claim about
+      // code. `reality_proven` is what this must NOT say.
+      const p = (await query(
+        `SELECT maturity FROM capability_providers
+          WHERE capability_key = 'run_in_workspace' AND provider = 'fly_sprites'`))
+        .rows[0] as Record<string, unknown>;
+      expect(String(p.maturity)).toBe('declared');
+
+      const claims = (await query(
+        `SELECT COUNT(*) AS n FROM capability_maturity_changes c
+           JOIN capability_providers p ON p.id = c.provider_id
+          WHERE p.provider = 'fly_sprites'
+            AND c.to_maturity IN ('reality_proven','reliable')`))
+        .rows[0] as Record<string, unknown>;
+      expect(Number(claims.n)).toBe(0);
+    });
+
+  it('says in its own record what a rehearsal here can and cannot settle', async () => {
+    const finding = (await query(
+      `SELECT finding FROM substrate_evaluations
+        WHERE substrate = 'local_process' AND property = 'what a rehearsal here proves'`))
+      .rows[0] as Record<string, unknown>;
+    expect(String(finding.finding)).toContain('THE CONTRACT, NOT THE ISOLATION');
+    expect(String(finding.finding)).toContain('reality-proven only by a real external');
   });
 });

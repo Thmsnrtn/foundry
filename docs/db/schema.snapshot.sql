@@ -725,7 +725,7 @@ CREATE TABLE capability_acquisitions (
   -- outcome, not its approval.
   acquired_at    TEXT,
   provider_id    TEXT REFERENCES capability_providers(id)
-, withdrawn_at TEXT, withdraw_reason TEXT);
+, withdrawn_at TEXT, withdraw_reason TEXT, enables TEXT, does_not_authorize TEXT);
 CREATE TABLE capability_fulfilled_through (
   capability_key     TEXT PRIMARY KEY REFERENCES capabilities(capability_key),
   through_capability TEXT NOT NULL REFERENCES capabilities(capability_key),

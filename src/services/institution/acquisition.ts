@@ -24,6 +24,26 @@ export interface Acquisition {
   id: string; capabilityKey: string; whatItDoes: string; rung: string;
   route: Route; provider: string; how: string; costNote: string; because: string;
   decision: 'approved' | 'declined' | null; acquired: boolean;
+  /**
+   * THE DISTINCTION, AS TWO LISTS HE CAN READ SIDE BY SIDE.
+   *
+   * CAPABILITY ACQUISITION IS NOT AUTHORITY TO USE THAT CAPABILITY FOR ANY
+   * PURPOSE. One sentence carries that when the capability is small; it does
+   * not when the owner is being asked for a recurring bill. Empty when nobody
+   * wrote them, and the card falls back to the sentence.
+   */
+  enables: string[];
+  doesNotAuthorize: string[];
+  /**
+   * NOTHING CAN CARRY THIS CAPABILITY TODAY.
+   *
+   * The threshold that earns an owner's first screen. Not "this would be
+   * useful" and not "the institution would like it" — no provider of this
+   * capability is available or better, so a responsibility that needs it cannot
+   * be carried at all until he answers. Being unable to act outranks being
+   * allowed to act more widely.
+   */
+  blocking: boolean;
   /** Set when the owner has taken his yes back. */
   withdrawnAt: string | null;
   withdrawReason: string | null;
@@ -36,6 +56,7 @@ export async function proposeAcquisition(input: {
   how: 'api' | 'browser' | 'shell' | 'workspace' | 'human' | 'internal';
   costNote: string; because: string; proposedBy: string;
   subject?: { kind: 'opportunity' | 'company'; id: string } | null;
+  enables?: string[]; doesNotAuthorize?: string[];
 }): Promise<string> {
   // ONE OPEN PROPOSAL PER CAPABILITY PER PERSON. Asking twice for the same
   // thing is how an owner learns to stop reading.
@@ -48,12 +69,34 @@ export async function proposeAcquisition(input: {
   await query(
     `INSERT INTO capability_acquisitions
        (id, founder_id, capability_key, route, provider, how, cost_note, because,
-        subject_kind, subject_id, proposed_by)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        subject_kind, subject_id, proposed_by, enables, does_not_authorize)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [id, input.founderId, input.capabilityKey, input.route, input.provider.trim(), input.how,
       input.costNote.trim(), input.because.trim(), input.subject?.kind ?? null,
-      input.subject?.id ?? null, input.proposedBy]);
+      input.subject?.id ?? null, input.proposedBy,
+      (input.enables ?? []).join('\n') || null,
+      (input.doesNotAuthorize ?? []).join('\n') || null]);
   return id;
+}
+
+/**
+ * Whether anything could carry this capability as things stand. `declared` does
+ * not count: an adapter written against a service nobody has an account with is
+ * a claim about code, not a way of doing the work.
+ */
+async function somethingCanCarry(capabilityKey: string): Promise<boolean> {
+  const row = (await query(
+    `SELECT COUNT(*) AS n FROM capability_providers
+      WHERE capability_key = ?
+        AND maturity IN ('available','controlled_proven','reality_proven','reliable')`,
+    [capabilityKey])).rows[0] as Record<string, unknown>;
+  return Number(row.n) > 0;
+}
+
+/** One item per line, so the lists stay readable in the database itself. */
+function lines(v: unknown): string[] {
+  if (v == null) return [];
+  return String(v).split('\n').map((x) => x.trim()).filter((x) => x.length > 0);
 }
 
 async function read(row: Record<string, unknown>): Promise<Acquisition> {
@@ -68,6 +111,8 @@ async function read(row: Record<string, unknown>): Promise<Acquisition> {
     whatItDoes: c?.whatItDoes ?? '', rung, route: String(row.route) as Route,
     provider: String(row.provider), how: String(row.how), costNote: String(row.cost_note),
     because: String(row.because), decision, acquired: row.acquired_at != null,
+    enables: lines(row.enables), doesNotAuthorize: lines(row.does_not_authorize),
+    blocking: !(await somethingCanCarry(String(row.capability_key))),
     withdrawnAt: row.withdrawn_at == null ? null : String(row.withdrawn_at),
     withdrawReason: row.withdraw_reason == null ? null : String(row.withdraw_reason),
     sentence,

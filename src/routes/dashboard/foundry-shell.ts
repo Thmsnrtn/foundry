@@ -323,7 +323,8 @@ interface OwnerState {
   acquisitions: Array<{
     id: string; capabilityKey: string; whatItDoes: string; rung: string;
     route: string; provider: string; costNote: string; because: string;
-    sentence: string;
+    sentence: string; enables: string[]; doesNotAuthorize: string[];
+    blocking: boolean;
   }>;
   permissions: Array<{ id: string; what: string; until: string; path: string | null }>;
   declined: Array<{ id: string; title: string }>;
@@ -574,7 +575,8 @@ async function readOwnerState(
       return (await acquisitionsAwaiting(founderId)).map((a) => ({
         id: a.id, capabilityKey: a.capabilityKey, whatItDoes: a.whatItDoes,
         rung: a.rung, route: a.route, provider: a.provider, costNote: a.costNote,
-        because: a.because, sentence: a.sentence,
+        because: a.because, sentence: a.sentence, enables: a.enables,
+        doesNotAuthorize: a.doesNotAuthorize, blocking: a.blocking,
       }));
     })(),
     permissions: consents.map((consent) => {
@@ -804,8 +806,10 @@ type Attention =
   | { kind: 'authorise'; responsibilityId: string; check: string; path: string;
       verification: string[]; matched: number; wrong: number;
       layer: string; layerPlainly: string }
-  | { kind: 'acquire'; acquisitionId: string; whatItDoes: string; rung: string;
-      provider: string; costNote: string; because: string; route: string }
+  | { kind: 'acquire'; acquisitionId: string; capabilityKey: string;
+      whatItDoes: string; rung: string; provider: string; costNote: string;
+      because: string; route: string; enables: string[];
+      doesNotAuthorize: string[]; blocking: boolean }
   | { kind: 'recognise'; candidateId: string; check: string | null; proposal: string }
   | { kind: 'recognise_company'; candidateId: string; productId: string;
       companyName: string; proposal: string; rationale: string }
@@ -856,6 +860,28 @@ function whatNeedsHim(s: OwnerState): Attention {
       costCents: ask.costCents, expiresAt: ask.expiresAt, absorbable: ask.absorbable,
     };
   }
+  // BEING UNABLE TO ACT AT ALL OUTRANKS BEING ALLOWED TO ACT MORE WIDELY.
+  //
+  // A blocking acquisition is not the institution asking for room. It is the
+  // institution saying it has taken a responsibility as far as it can on its
+  // own and cannot finish it: nothing available can carry the capability, so
+  // the work stops here until he answers. Every other thing on this list can
+  // wait a day without a responsibility going uncarried.
+  //
+  // It has to be BLOCKING to sit here. An acquisition that would merely be
+  // useful ranks below, with the rest of what Foundry is offering to notice —
+  // otherwise this becomes a channel for putting shopping on his first screen.
+  const stuck = s.acquisitions.find((a) => a.blocking);
+  if (stuck) {
+    return {
+      kind: 'acquire', acquisitionId: stuck.id, capabilityKey: stuck.capabilityKey,
+      whatItDoes: stuck.whatItDoes, rung: stuck.rung, provider: stuck.provider,
+      costNote: stuck.costNote, because: stuck.because, route: stuck.route,
+      enables: stuck.enables, doesNotAuthorize: stuck.doesNotAuthorize,
+      blocking: true,
+    };
+  }
+
   // AN EARNED PERMISSION REQUEST IS THE MOST CONSEQUENTIAL THING FOUNDRY EVER
   // PUTS TO HIM, so it comes before anything it is merely offering to notice.
   const grant = s.grantable.find((g) => !s.permissions.some((p) => p.what === 'development'));
@@ -873,9 +899,11 @@ function whatNeedsHim(s: OwnerState): Attention {
   const acquire = s.acquisitions[0];
   if (acquire) {
     return {
-      kind: 'acquire', acquisitionId: acquire.id, whatItDoes: acquire.whatItDoes,
+      kind: 'acquire', acquisitionId: acquire.id, capabilityKey: acquire.capabilityKey,
+      whatItDoes: acquire.whatItDoes,
       rung: acquire.rung, provider: acquire.provider, costNote: acquire.costNote,
-      because: acquire.because, route: acquire.route,
+      because: acquire.because, route: acquire.route, enables: acquire.enables,
+      doesNotAuthorize: acquire.doesNotAuthorize, blocking: acquire.blocking,
     };
   }
   const candidate = s.pendingCandidates[0];
@@ -1332,6 +1360,24 @@ interface Decision {
   facts: Array<[string, string]>;
   primary: { label: string; action: string; fields?: Record<string, string> };
   secondary?: { label: string; action: string; fields?: Record<string, string> };
+  /**
+   * WHAT BECOMES POSSIBLE, BESIDE WHAT STILL DOES NOT.
+   *
+   * A `dl` of facts carries a small decision. It does not carry one where the
+   * owner is being asked for a recurring bill and the whole point is that
+   * ACQUIRING A CAPABILITY IS NOT AUTHORITY TO USE IT FOR ANY PURPOSE — he is
+   * entitled to read both lists in the same words on the same screen, rather
+   * than a promise in a sentence and the limits in a footnote.
+   */
+  lists?: Array<{ heading: string; items: string[] }>;
+  /**
+   * THE THIRD AFFORDANCE, WHICH IS NOT A DECISION.
+   *
+   * "Why?" is the question an owner asks before yes or no, and making him
+   * choose in order to find out is how a decision gets made blind. It sits
+   * beside the buttons and commits him to nothing.
+   */
+  why?: string[];
   technical: string;
   alert?: boolean;
 }
@@ -1344,7 +1390,14 @@ const decisionCard = (d: Decision): HtmlEscapedString | Promise<HtmlEscapedStrin
       <p class="lead">${d.title}</p>
       ${raw(d.meaning.map((m) => `<p>${m}</p>`).join(''))}
     </div>
+    ${(d.lists ?? []).map((l) => html`<div class="know">
+      <h2>${l.heading}</h2>
+      <ul>${l.items.map((i) => html`<li>${i}</li>`)}</ul>
+    </div>`)}
     <dl>${raw(d.facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join(''))}</dl>
+    ${d.why ? html`<details><summary>Why?</summary><div class="inner">
+      ${d.why.map((w) => html`<p>${w}</p>`)}
+    </div></details>` : ''}
     <div class="do">
       <form method="POST" action="${d.primary.action}">
         <input type="hidden" name="return_to" value="foundry" />
@@ -1363,6 +1416,15 @@ const decisionCard = (d: Decision): HtmlEscapedString | Promise<HtmlEscapedStrin
       <p class="mono">${d.technical}</p>
     </div></details>
   </section>`;
+
+/**
+ * WHAT A YES IS CALLED, where the generic word would hide what he is agreeing
+ * to. Only capabilities big enough to deserve their own sentence appear here;
+ * everything else keeps the plain label.
+ */
+const ALLOW_LABEL: Record<string, string> = {
+  run_in_workspace: 'Allow the isolated workshop',
+};
 
 /** The owner's own list of routes, in his words rather than the enum's. */
 const ROUTE_WORDS: Record<string, string> = {
@@ -1515,19 +1577,39 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
       : 'Say so and I stop using it the same day. "What I\u2019m allowed to do" '
         + 'has the button.';
 
+    // THE LABEL STATES THE RESULTING STATE, which for a capability the
+    // institution cannot otherwise carry is worth naming rather than leaving as
+    // "yes". "Not yet" rather than "not this" where the decision is a recurring
+    // bill: declining a subscription is a timing answer far more often than a
+    // permanent one, and the label should not put words in his mouth.
+    const allowLabel = ALLOW_LABEL[a.capabilityKey] ?? 'Yes — get it';
+
     return decisionCard({
       act: 'Authority',
-      question: 'Should I get hold of this?',
+      question: a.blocking
+        ? 'I have gone as far as I can on my own'
+        : 'Should I get hold of this?',
       title: a.whatItDoes,
       meaning: [
         `I would ${ROUTE_WORDS[a.route] ?? a.route} — ${a.provider}.`,
-        `I want it because ${a.because}.`,
+        `${a.because.charAt(0).toUpperCase()}${a.because.slice(1)}.`,
         'Saying yes gets me the ability. It does not let me use it for anything '
         + 'in particular — that is still a separate question, every time.',
       ],
+      lists: [
+        ...(a.enables.length
+          ? [{ heading: 'What this would let me do', items: a.enables }] : []),
+        ...(a.doesNotAuthorize.length
+          ? [{ heading: 'What it would still not let me do',
+            items: a.doesNotAuthorize }] : []),
+      ],
       facts: [
         ['What it costs', a.costNote],
-        ['What it would still not let me do', stillNot],
+        // The sentence form of the limits stays when there is no list, and goes
+        // when there is — saying the same thing twice in different words is how
+        // an owner starts skimming both.
+        ...(a.doesNotAuthorize.length
+          ? [] : [['What it would still not let me do', stillNot] as [string, string]]),
         ...(fromOutside
           ? [['What I will never ask you for',
             'A password, a key or a token typed into a screen or a message. '
@@ -1538,11 +1620,25 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
         ['If you change your mind', changeYourMind],
         ['If you say no', 'I leave it, and say so wherever the work needed it'],
       ],
-      primary: { label: 'Yes — get it', action: `/foundry/acquisitions/${a.acquisitionId}/decide`,
+      why: a.blocking
+        ? [
+          'Because I ran into it, not because I went looking. I was carrying a '
+          + 'piece of my own upkeep, got as far as the last step, and stopped '
+          + 'there — everything on either side of it already works.',
+          'Nothing available to me can do this. That is what makes it your '
+          + 'decision rather than mine: I cannot finish on my own, and I am not '
+          + 'willing to finish it the unsafe way, on the machine I run on.',
+          'A yes lets me try. It does not promise the attempt will work — that '
+          + 'is what the attempt is for, and you will hear what it cost either '
+          + 'way.',
+        ]
+        : undefined,
+      primary: { label: allowLabel, action: `/foundry/acquisitions/${a.acquisitionId}/decide`,
         fields: { decision: 'approved' } },
-      secondary: { label: 'Not this', action: `/foundry/acquisitions/${a.acquisitionId}/decide`,
+      secondary: { label: fromOutside ? 'Not yet' : 'Not this',
+        action: `/foundry/acquisitions/${a.acquisitionId}/decide`,
         fields: { decision: 'declined' } },
-      technical: `capability ${a.acquisitionId}`,
+      technical: `capability ${a.capabilityKey} · acquisition ${a.acquisitionId}`,
     });
   }
 
