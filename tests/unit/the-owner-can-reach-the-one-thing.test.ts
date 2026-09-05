@@ -58,6 +58,13 @@ beforeAll(async () => {
     '../../src/services/institution/carrying.js');
   await produceSchemaDescription({ founderId: OWNER, evidenceMode: 'real' });
 
+  // AND A STOPPED ROUTINE, BECAUSE THAT IS THE SCREEN HE ACTUALLY OPENED. The
+  // tidy case was the only one ever rendered, and the real one had a failing
+  // routine on it that took the whole first screen.
+  await query(
+    `INSERT INTO job_health (job_name, consecutive_failures, last_success_at)
+     VALUES ('institutional_judgment_tick', 3, datetime('now','-2 days'))`);
+
   const founder = (await query('SELECT * FROM founders WHERE id = ?', [OWNER]))
     .rows[0] as Record<string, unknown>;
   const app = new Hono();
@@ -195,6 +202,23 @@ phones('the first screen, on the phone he actually holds', () => {
     expect(text).not.toContain('SPRITES_TOKEN');
     expect(text).not.toContain('api.sprites.dev');
   }, 120_000);
+
+  it('does not let a notice that needs nothing stand in front of one that needs him',
+    async () => {
+      // The stopped card says, in its own words, "nothing needs you". It came
+      // first unconditionally, so the one thing on his screen was a notice
+      // asking nothing of him while a decision that could not proceed without
+      // him waited behind it.
+      const seen = await onThePhone(390, async (page) => page.evaluate(() => ({
+        one: document.querySelector('#the-one-thing')?.textContent ?? '',
+        page: document.body.innerText,
+      })));
+      expect(seen.one).toContain('Foundry needs an isolated workshop');
+      expect(seen.one).not.toContain('Part of me has stopped running');
+      // AND THE STOPPED ROUTINE IS STILL SAID. Demoting it must not delete it:
+      // what he is told elsewhere may genuinely be out of date.
+      expect(seen.page).toContain('has stopped');
+    }, 120_000);
 
   it('survives the text being doubled', async () => {
     const seen = await onThePhone(390, async (page) => {

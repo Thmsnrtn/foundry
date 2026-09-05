@@ -825,11 +825,27 @@ type Attention =
   | null;
 
 function whatNeedsHim(s: OwnerState): Attention {
-  // Broken outranks offered: a stopped routine means the rest of this page may
-  // be out of date, and he should learn that before anything else.
-  if (s.routinesFailing.length) return { kind: 'stopped', routines: s.routinesFailing };
+  // BROKEN OUTRANKS OFFERED, AND NEEDS-NOTHING DOES NOT OUTRANK NEEDS-HIM.
+  //
+  // A stopped routine used to come first unconditionally, and the card it
+  // produces says, in its own words, "nothing is lost, and nothing needs you —
+  // I am the one that has to recover". So the one thing on his screen was a
+  // notice that explicitly asked nothing of him, standing in front of a
+  // decision that could not proceed without him. That is the inversion this
+  // screen exists to prevent, arriving through the rule meant to prevent it.
+  //
+  // It still comes first when nothing needs him, because then it genuinely is
+  // the most important thing: what he is being told may be out of date. When
+  // something is blocked on his answer, that answer is the one thing and the
+  // stopped routine is said alongside it rather than instead of it.
+  const stuckOnHim = s.acquisitions.find((a) => a.blocking);
+  if (s.routinesFailing.length && !stuckOnHim) {
+    return { kind: 'stopped', routines: s.routinesFailing };
+  }
   const drifted = s.checks.filter((c) => c.result === 'failed');
-  if (drifted.length) return { kind: 'drifted', checks: drifted.map((d) => d.check) };
+  if (drifted.length && !stuckOnHim) {
+    return { kind: 'drifted', checks: drifted.map((d) => d.check) };
+  }
   // AN UNACCOUNTED COMMITMENT OUTRANKS A NEW ONE.
   //
   // He approved a test, the institution sealed what it expected, and it ran or
@@ -877,7 +893,7 @@ function whatNeedsHim(s: OwnerState): Attention {
   // It has to be BLOCKING to sit here. An acquisition that would merely be
   // useful ranks below, with the rest of what Foundry is offering to notice —
   // otherwise this becomes a channel for putting shopping on his first screen.
-  const stuck = s.acquisitions.find((a) => a.blocking);
+  const stuck = stuckOnHim;
   if (stuck) {
     return {
       kind: 'acquire', acquisitionId: stuck.id, capabilityKey: stuck.capabilityKey,
@@ -2638,6 +2654,16 @@ foundryShellRoutes.get('/foundry', async (c) => {
          "One thing needs you" and then put everything else in front of it. -->
     ${standingPermission(s)}
     ${theOneThing(attention)}
+    ${/* SAID ALONGSIDE, NOT INSTEAD OF. Demoting a stopped routine below a
+          decision that needs him must not make it disappear: what he is being
+          told may genuinely be out of date, and that is his to weigh. It is one
+          quiet line under the thing he came for rather than the thing itself. */
+    ''}
+    ${attention !== null && attention.kind !== 'stopped' && s.routinesFailing.length
+    ? html`<p class="quiet">Separately: ${count(s.routinesFailing.length, 'routine')} of
+      mine ${s.routinesFailing.length === 1 ? 'has' : 'have'} stopped, so some of what I
+      tell you elsewhere may be out of date. Nothing is lost and I am the one that has to
+      recover.</p>` : ''}
     ${attention === null ? '' : portfolioState}
 
     ${done === 'looking' ? html`<div class="done"><p><strong>I am looking.</strong>

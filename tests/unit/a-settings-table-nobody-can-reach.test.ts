@@ -88,7 +88,15 @@ describe('the table is gone', () => {
     // And `venture_discovery_tick` — which turns what the portfolio needs into
     // a search, sows a few seeds from what people wrote, and buries most of
     // them — makes ninety-four.
-    expect(Object.keys(JOB_REGISTRY).length, 'ninety-five before, ninety-six now').toBe(96);
+    // And `schema_description_tick` — which checks whether Foundry's own
+    // written description of its database still matches the database, and
+    // tries to produce the correction on a computer it is not running on —
+    // makes ninety-seven. IT IS HERE BECAUSE THE COUNT CAUGHT ITS ABSENCE
+    // BACKWARDS. Everything that responsibility needed was built and proven in
+    // rehearsal and then wired to nothing, so the owner opened his product
+    // looking for a decision the institution had reasoned its way to and found
+    // no trace of it. A chain with no caller is a description of work.
+    expect(Object.keys(JOB_REGISTRY).length, 'ninety-six before, ninety-seven now').toBe(97);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

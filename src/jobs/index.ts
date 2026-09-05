@@ -2902,6 +2902,71 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       + 'maintained, and let the capability earn its reality proof from the checked result '
       + '(daily)',
   },
+
+  // THE RESPONSIBILITY THAT NOBODY RAN.
+  //
+  // Everything about keeping Foundry's own written description of its database
+  // true was built, tested and proven in rehearsal — the drift check against
+  // the live schema, the capability need, the choice of a computer by standing,
+  // the workshop lifecycle, the verification, the teardown, the receipt, and
+  // the card that goes to the owner when the last thing missing is his
+  // decision. Then nothing called any of it.
+  //
+  // So in production the drift was never noticed, the wall was never hit, and
+  // the acquisition was never raised. The owner opened his product looking for
+  // a decision the institution had reasoned its way to and found no trace of
+  // it, because the reasoning had never been given a way to happen. A chain
+  // with no caller is a description of work, not work.
+  //
+  // IT STILL DECIDES NOTHING. The pass looks at the live schema, and if the
+  // description has drifted it tries to produce the correction somewhere the
+  // institution is not. That attempt stops at the one thing it cannot supply
+  // itself, and stopping there is what puts the question on his screen. No
+  // branch, no pull request, no publication — the same posture the rehearsal
+  // proved, now actually running.
+  schema_description_tick: {
+    fn: async () => {
+      const owner = await query(
+        `SELECT id FROM founders ORDER BY created_at, rowid LIMIT 1`, []);
+      const founderId = owner.rows.length
+        ? String((owner.rows[0] as Record<string, unknown>).id) : null;
+      if (founderId === null) {
+        logger.info('schema_description_tick: no owner yet',
+          { jobName: 'schema_description_tick' });
+        return;
+      }
+
+      const { carrySchemaDescription, produceSchemaDescription } = await import(
+        '../services/institution/carrying.js');
+
+      // HAS IT ACTUALLY DRIFTED? Asked of the live database rather than
+      // assumed. An institution that reported work needing doing without
+      // checking would be manufacturing its own recurrence.
+      const carried = await carrySchemaDescription(founderId);
+      if (!carried.drifted) {
+        logger.info('schema_description_tick: the description still matches',
+          { jobName: 'schema_description_tick' });
+        return;
+      }
+      logger.info(`schema_description_tick: ${carried.standing?.sentence ?? 'drifted'}`,
+        { jobName: 'schema_description_tick' });
+
+      // AND THE ATTEMPT IS WHAT RAISES THE QUESTION. Not a check that decides
+      // to ask him — the work going as far as it can and naming what stopped
+      // it. If a workspace ever becomes available this same call produces the
+      // correction instead, and nothing here has to change.
+      const made = await produceSchemaDescription({ founderId, evidenceMode: 'real' });
+      logger.info(
+        `schema_description_tick: ${made.workspaceId === null ? 'could not' : 'did'} `
+        + `produce the correction — ${made.because}`,
+        { jobName: 'schema_description_tick' });
+    },
+    schedule: '20 6 * * *',
+    description:
+      'Check whether Foundry\'s own written description of its database still matches the '
+      + 'database, and try to produce the correction on a computer it is not running on '
+      + '(daily)',
+  },
   // WHEN THE EVIDENCE DISAGREES, DO SOMETHING ABOUT IT.
   //
   // The institution could hold a contradiction and could say when reading had
