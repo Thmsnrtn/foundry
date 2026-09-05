@@ -157,10 +157,49 @@ describe('a second way of knowing, only where there is something to know', () =>
 });
 
 describe('the whole loop, run by the job', () => {
+  it('proves nothing while nothing authorises the read', async () => {
+    // THE GOVERNANCE CHANGED WHAT THE JOB DOES, and this is the change. The
+    // registry read is now carried as a responsibility rather than performed as
+    // a task: the act is described by what it does, its consequence is derived
+    // from that, and standing authority is consulted before anything happens.
+    //
+    // Nothing covers it yet, so nothing happens — and a capability cannot earn a
+    // rung from work it was not allowed to do. A test that let it would be
+    // proving the provider against an act the institution had refused.
+    const fresh = new Date(Date.now() - 20 * 86_400_000).toISOString();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => record('x', fresh));
+    await JOB_REGISTRY.dependency_health_tick.fn();
+    vi.restoreAllMocks();
+
+    const held = await capability('read_package_registry');
+    expect(held?.providers.find((p) => p.provider === 'npm_registry')?.maturity)
+      .toBe('declared');
+    expect((await query(
+      'SELECT COUNT(*) AS n FROM capability_maturity_changes', []))
+      .rows[0] as Record<string, unknown>).toMatchObject({ n: 0 });
+  });
+
   it('moves the capability one rung at a time, each with what was seen', async () => {
     const before = await capability('read_package_registry');
     expect(before?.providers.find((p) => p.provider === 'npm_registry')?.maturity)
       .toBe('declared');
+
+    // HIS ACT, WHICH IS THE ONLY THING THAT UNBLOCKS IT. Written here as he
+    // would grant it: a named responsibility, the identity it is performed as,
+    // what it may never do, and a cadence at which Foundry reassesses it.
+    const { nameAnActor } = await import('../../src/services/institution/acting.js');
+    const actorId = await nameAnActor({ founderId: OWNER, productId: null,
+      kind: 'company', displayName: 'Foundry', portable: false });
+    await query(
+      `INSERT INTO delegations (id, founder_id, product_id, actor_id, responsibility,
+         act_class, content_scope, class, purpose, audience, excludes, ceiling,
+         review_every_days, granted_by)
+       VALUES ('del_proof',?,NULL,?,'keep the dependency list honest',
+               'read a public registry','the packages this institution runs on',
+               'dependency health','know whether what we run on is still maintained',
+               'none','change any dependency; open a pull request; contact a maintainer',
+               'observe',90,?)`,
+      [OWNER, actorId, `founder:${OWNER}`]);
 
     const fresh = new Date(Date.now() - 20 * 86_400_000).toISOString();
     vi.spyOn(globalThis, 'fetch').mockImplementation(async () => record('x', fresh));

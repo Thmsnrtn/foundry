@@ -112,7 +112,10 @@ export async function carryDependencyHealth(
   const verdict = await acting.classifyAndRecord({
     founderId, productId: null, actorId,
     responsibility: DEPENDENCY_RESPONSIBILITY, actClass: ACT_CLASS,
-    tool: 'npm_registry_read',
+    // The capability, not a door tool: this read never passes the outbound
+    // gateway, and naming a tool that is not registered there would make it
+    // unclassifiable and therefore refused for the wrong reason.
+    capability: 'read_package_registry', tool: 'npm_registry_read',
     externalEffect: 'asks a public registry when each package Foundry runs on '
       + 'was last published',
     // Reading changes nothing and nobody outside can tell it happened.

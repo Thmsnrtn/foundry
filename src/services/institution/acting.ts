@@ -48,6 +48,13 @@ export interface ActDescription {
    *  responsibility, never a shape of act. */
   responsibility?: string | null;
   actClass?: string | null;
+  /**
+   * The capability this act uses. Preferred over `tool` where the two differ,
+   * and REQUIRED for anything that never passes the outbound door: a read has
+   * no tool registered there, and classifying only by tool name made every
+   * sense unclassifiable and therefore refused.
+   */
+  capability?: string | null;
   tool: string;
   /** What actually happens outside, in one sentence. */
   externalEffect: string;
@@ -88,10 +95,36 @@ export async function rungOfAct(act: ActDescription): Promise<{
     return acc;
   }, {});
 
+  // BY CAPABILITY WHERE ONE IS NAMED, BY TOOL OTHERWISE.
+  //
+  // A read does not pass the outbound door and has no tool registered there, so
+  // looking the rung up by tool name alone made every sense unclassifiable and
+  // therefore refused. Consequence belongs to the act; the door is one of
+  // several places an act can happen.
   const { rungOfTool } = await import('./consequence.js');
-  const facts = await rungOfTool(act.tool);
+  let facts = act.capability == null ? null : await (async () => {
+    const row = (await query(
+      `SELECT c.capability_key, c.what_it_does, c.draws_on_allowance,
+              r.rung, r.what_it_means, r.absorbable
+         FROM capabilities c
+         JOIN consequence_rungs r ON r.rung = c.rung
+        WHERE c.capability_key = ?`, [act.capability]))
+      .rows[0] as Record<string, unknown> | undefined;
+    return row === undefined ? null : {
+      rung: String(row.rung) as Rung, whatItMeans: String(row.what_it_means),
+      absorbable: Number(row.absorbable) === 1,
+      capabilityKey: String(row.capability_key),
+      whatItDoes: String(row.what_it_does),
+      drawsOnAllowance: Number(row.draws_on_allowance) === 1,
+      // Not a browser: a capability reached without a door provider has no
+      // `how`, and the browser rule keys on an actual hand on a page.
+      how: 'internal',
+    };
+  })();
+  facts ??= await rungOfTool(act.tool);
   if (!facts) {
-    return { refused: `nothing says what consequence '${act.tool}' has, so it may not act` };
+    return { refused: `nothing says what consequence `
+      + `'${act.capability ?? act.tool}' has, so it may not act` };
   }
 
   const floors = ((await query(
@@ -225,13 +258,13 @@ export async function classifyAndRecord(act: ActDescription): Promise<ActVerdict
     `INSERT INTO act_classifications
        (id, founder_id, product_id, actor_id, delegation_id, tool, reversibility,
         audience, external_effect, money_cents, rung, because, allowed,
-        responsibility, act_class)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        responsibility, act_class, capability)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [nanoid(), act.founderId, act.productId ?? null, act.actorId ?? null,
       verdict.delegationId, act.tool, act.reversibility, act.audience,
       act.externalEffect.trim(), act.moneyCents ?? 0, verdict.rung,
       verdict.because, verdict.allowed ? 1 : 0,
-      act.responsibility ?? null, act.actClass ?? null]);
+      act.responsibility ?? null, act.actClass ?? null, act.capability ?? null]);
 
   // A REFUSAL FOR WANT OF COVER IS EVIDENCE THAT THE WORK RECURS — and it is
   // the only kind of evidence that cost him something, so it is recorded rather
