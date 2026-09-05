@@ -105,22 +105,35 @@ describe('which computers could actually work', () => {
     expect(net?.finding).toContain('never change it');
   });
 
-  it('records the gap the vendor does not address, rather than assuming it', async () => {
-    // The property this institution cares about most is absent from the
-    // vendor's own description. That is a finding, not a blank to fill in.
+  it('keeps the correction, and how it came to be believed, in the record', async () => {
+    // This finding once said the property was NOT ADDRESSED. That was true of
+    // the pages read and false about the product — a finding recorded as an
+    // absence looks like knowledge and is really the shape of where somebody
+    // stopped reading. The correction is written into the finding rather than
+    // replacing it quietly, because how the institution came to believe
+    // something is part of what it knows.
     const all = await whichComputersCouldWork();
     const sprites = all.find((s) => s.substrate === 'fly_sprites');
     const cred = sprites?.findings.find((f) => f.property === 'credential isolation');
-    expect(cred?.finding).toContain('NOT ADDRESSED');
-    expect(cred?.finding).toContain('capability grant, never a credential');
+    expect(cred?.finding).toContain('ADDRESSED');
+    expect(cred?.finding).toContain('previously said otherwise');
+    expect(cred?.finding).toContain('never lands in the sandbox');
   });
 
-  it('finds exactly one missing link in the chain', async () => {
-    // Everything on either side of a workspace already has a provider that
-    // works. The institution is one computer away from carrying its own
-    // software maintenance.
-    const all = await whichComputersCouldWork();
-    const usable = all.filter((s) => s.mayProduceChanges && s.canRunAStep);
-    expect(usable).toEqual([]);
-  });
+  it('has closed the missing link in code, and the last gap is an account fact',
+    async () => {
+      // The chain used to break at the workspace itself: nothing was both
+      // isolated enough to produce a change and able to run a step. An adapter
+      // now exists, so exactly one substrate carries both — and what remains
+      // is not something this repository can write. There is no credential and
+      // no plan, which is the owner's decision to make and nobody else's.
+      const all = await whichComputersCouldWork();
+      const usable = all.filter((s) => s.mayProduceChanges && s.canRunAStep);
+      expect(usable.map((s) => s.substrate)).toEqual(['fly_sprites']);
+
+      const sprites = usable[0];
+      const runs = sprites.findings.find((f) => f.property === 'can run a step');
+      expect(runs?.finding).toContain('never run against the real service');
+      expect(sprites.findings.find((f) => f.property === 'plan required')).toBeDefined();
+    });
 });

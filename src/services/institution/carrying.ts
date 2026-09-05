@@ -551,13 +551,24 @@ export async function chooseAWorkspace(
       WHERE capability_key = 'run_in_workspace'`, []))
     .rows as unknown as Array<Record<string, unknown>>);
 
+  // MATURITY IS EARNED BY THE FIRST ATTEMPT, NOT REQUIRED BEFORE IT.
+  //
+  // This filter used to refuse a substrate whose provider was still 'declared'
+  // when the work was real — which is a deadlock, because a substrate earns
+  // anything better than 'declared' only by carrying real work. Nothing could
+  // ever have made the first attempt.
+  //
+  // The institution's own precedent settles it: `read_package_registry` was
+  // 'declared', was used, and was promoted by what was witnessed. So the gate
+  // here is capability rather than reputation — is this somewhere I am not, and
+  // can it run a step — and the honest stop for an unusable provider is the
+  // adapter refusing for want of a credential, which says exactly what is
+  // missing instead of pretending the substrate is unsuitable.
   const usable = standing.filter((s) => {
     if (!s.canRunAStep) return false;
     if (forRealChange && !s.mayProduceChanges) return false;
-    const p = providers.find((x) => String(x.provider) === s.substrate);
-    // 'declared' means an adapter exists and has never run against anything.
-    // For a rehearsal that is enough; for real work it is not.
-    return forRealChange ? p !== undefined && String(p.maturity) !== 'declared' : true;
+    return providers.some((x) => String(x.provider) === s.substrate)
+      || !forRealChange;
   });
 
   if (usable.length === 0) {
@@ -645,14 +656,26 @@ export async function produceSchemaDescription(input: {
   const content = `${objects.join('\n')}\n`;
 
   const workshop = await import('../workshop/index.js');
-  const made = await workshop.createWorkshop({
-    founderId: input.founderId, purpose: 'self_development',
-    substrate: choice.substrate as 'local_process' | 'fly_machines' | 'fly_sprites'
-      | 'reference_world',
-    ceiling: 'prepare', network: 'none', evidenceMode: input.evidenceMode,
-    budgetCents: WHAT_ONE_DESCRIPTION_MAY_COST_CENTS,
-    createdBy: 'institution:carrying', produces: 'a change to software',
-  });
+  let made;
+  try {
+    made = await workshop.createWorkshop({
+      founderId: input.founderId, purpose: 'self_development',
+      substrate: choice.substrate as 'local_process' | 'fly_machines'
+        | 'fly_sprites' | 'reference_world',
+      ceiling: 'prepare', network: 'none', evidenceMode: input.evidenceMode,
+      budgetCents: WHAT_ONE_DESCRIPTION_MAY_COST_CENTS,
+      createdBy: 'institution:carrying', produces: 'a change to software',
+    });
+  } catch (err) {
+    // THE HONEST STOP. A substrate that cannot be reached says why — no
+    // credential, no plan — and that is a different sentence from "no computer
+    // is suitable". Only this one names something the owner could change.
+    return {
+      workspaceId: null, substrate: choice.substrate,
+      because: err instanceof Error ? err.message : String(err),
+      path, artifact: null, costCents: 0, published: false,
+    };
+  }
 
   let costCents = 0;
   let artifact: ProducedChange['artifact'] = null;

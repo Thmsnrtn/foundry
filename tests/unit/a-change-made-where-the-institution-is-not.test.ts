@@ -36,19 +36,18 @@ beforeAll(async () => {
 });
 
 describe('choosing a computer by what it is, not what it is called', () => {
-  it('refuses to produce a real change anywhere available today', async () => {
-    // Nothing is both somewhere the institution is not AND able to run a step.
-    // `fly_machines` is isolated and its run() throws; `fly_sprites` has an
-    // adapter that has never run against anything.
-    const forReal = await chooseAWorkspace(true);
-    expect(forReal.substrate).toBeNull();
-    expect(forReal.because).toContain('somewhere I am not');
-  });
-
-  it('names the substrates blocking it, so the gap is legible', async () => {
-    const forReal = await chooseAWorkspace(true);
-    expect(forReal.because).toMatch(/fly_machines|fly_sprites/);
-  });
+  it('picks the isolated computer that can run a step, unproven though it is',
+    async () => {
+      // MATURITY IS EARNED BY THE FIRST ATTEMPT, NOT REQUIRED BEFORE IT.
+      // Refusing a substrate for being 'declared' when the work is real is a
+      // deadlock: a substrate earns anything better only by carrying real work,
+      // so nothing could ever make the first attempt. The institution's own
+      // precedent settles it — read_package_registry was declared, was used,
+      // and was promoted by what was witnessed.
+      const forReal = await chooseAWorkspace(true);
+      expect(forReal.substrate).toBe('fly_sprites');
+      expect(forReal.because).toContain('isolated');
+    });
 
   it('will carry a rehearsal on the host, which is how the lifecycle proves itself',
     async () => {
@@ -103,11 +102,16 @@ describe('the chain, proven end to end in rehearsal', () => {
       expect(made.costCents).toBe(Number(w.spent_cents));
     }, 60_000);
 
-  it('refuses the same chain for real, because the host is where it lives', async () => {
+  it('stops for real work at the one thing that is actually missing', async () => {
+    // Not "no computer is suitable" — a suitable one was chosen. The stop is
+    // that it cannot be reached, and the sentence names what would change that.
+    // That is the difference between a capability gap and a decision.
     const real = await produceSchemaDescription({
       founderId: OWNER, evidenceMode: 'real' });
+    expect(real.substrate).toBe('fly_sprites');
     expect(real.workspaceId).toBeNull();
     expect(real.artifact).toBeNull();
-    expect(real.because).toContain('somewhere I am not');
+    expect(real.because).toContain('SPRITE_TOKEN');
+    expect(real.because).toContain('declared, not available');
   });
 });
