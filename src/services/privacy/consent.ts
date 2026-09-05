@@ -577,6 +577,16 @@ const ERASE_BY_NAMED_KEY: Record<string, {
   // Rows written before migration 144 have no hash and cannot be attributed to
   // anyone; they are already excluded from every aggregation for the same
   // reason.
+  // WHAT A COMPANY'S OWN MACHINERY LEAVES BEHIND. Each of these holds a person
+  // inside a company: the identity it acted as, the evidence that work for it
+  // recurred, what he allowed it to do without him, and what was done. When the
+  // company goes, all of it goes — the identity most of all, because a support
+  // address or a marketplace account that outlived the business it belonged to
+  // is exactly the residue erasure exists to prevent.
+  business_actors: { column: 'product_id', subject: 'product_id' },
+  responsibility_signals: { column: 'product_id', subject: 'product_id' },
+  delegations: { column: 'product_id', subject: 'product_id' },
+  act_classifications: { column: 'product_id', subject: 'product_id' },
   decision_patterns: { column: 'contributor_hash', subject: 'contributor_hash' },
   // The daily spend rollup keys on `scope_id`, which is a product id when
   // scope='product'. Nothing found it before because it has no `product_id`
@@ -684,6 +694,11 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
   // person, because neither carries a founder id of its own.
   owner_visits: {
     reason: 'when he last looked, which exists only to tell him what changed since',
+    onAccountErasure: { op: 'delete' },
+  },
+  delegation_evidence_policy: {
+    reason: 'how much evidence he wants to see before this institution suggests '
+      + 'handling something routinely — his policy, about his own risk appetite',
     onAccountErasure: { op: 'delete' },
   },
   prediction_resolutions: {
@@ -1413,6 +1428,40 @@ const PERSON_ACROSS_COMPANIES: Record<string, PersonInOthersCompany> = {
   deal_rooms: {
     op: 'sever', columns: ['created_by'],
     reason: 'a shared artefact other people are using; it stays open and stops naming them',
+  },
+  // ── the machinery of carrying responsibility ──────────────────────────────
+  //
+  // AUTHORITY DOES NOT OUTLIVE THE PERSON WHO GRANTED IT. Everything else here
+  // is a record that can stay truthful without a name on it. A delegation is
+  // not a record — it is a live permission, and one still running under the id
+  // of somebody who has gone is precisely the self-granted standing authority
+  // the whole consequence ladder exists to make impossible. It goes.
+  delegations: {
+    op: 'delete', columns: ['founder_id'],
+    reason: 'a standing permission is the act of a particular person; when they go it goes, rather than running on with nobody behind it',
+  },
+  delegation_evidence_policy: {
+    op: 'delete', columns: ['founder_id'],
+    reason: 'how much evidence that person wanted before being asked to delegate',
+  },
+  // The identity a company acts as belongs to the COMPANY. It keeps working —
+  // a support address that stopped answering because somebody left is a
+  // customer-facing failure — and it stops naming them.
+  business_actors: {
+    op: 'sever', columns: ['founder_id'],
+    reason: 'an identity the company acts as; it keeps working and stops naming them',
+  },
+  responsibility_signals: {
+    op: 'sever', columns: ['founder_id'],
+    reason: 'evidence that work for this company recurred, which is true of the company rather than of them',
+  },
+  act_classifications: {
+    op: 'sever', columns: ['founder_id'],
+    reason: 'what was done for this company and under what authority; the record stays truthful and stops naming them',
+  },
+  prediction_resolutions: {
+    op: 'sever', columns: ['founder_id'],
+    reason: 'how often this institution was right; the record stays and stops naming who it was serving',
   },
   decision_votes: {
     op: 'sever', columns: ['founder_id'],
