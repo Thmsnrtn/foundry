@@ -11,6 +11,8 @@ COPY . .
 RUN npm run build
 
 FROM base AS runner
+ARG FOUNDRY_COMMIT=unknown
+ENV FOUNDRY_COMMIT=$FOUNDRY_COMMIT
 ENV NODE_ENV=production
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist

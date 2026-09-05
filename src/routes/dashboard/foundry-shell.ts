@@ -324,7 +324,9 @@ interface OwnerState {
     id: string; capabilityKey: string; whatItDoes: string; rung: string;
     route: string; provider: string; costNote: string; because: string;
     sentence: string; enables: string[]; doesNotAuthorize: string[];
-    blocking: boolean; economics: Array<{ label: string; note: string }>;
+    blocking: boolean;
+    economics: Array<{ label: string; note: string; amountCents: number | null;
+      period: string | null }>;
   }>;
   permissions: Array<{ id: string; what: string; until: string; path: string | null }>;
   declined: Array<{ id: string; title: string }>;
@@ -577,7 +579,8 @@ async function readOwnerState(
         rung: a.rung, route: a.route, provider: a.provider, costNote: a.costNote,
         because: a.because, sentence: a.sentence, enables: a.enables,
         doesNotAuthorize: a.doesNotAuthorize, blocking: a.blocking,
-        economics: a.economics.map((e) => ({ label: e.label, note: e.note })),
+        economics: a.economics.map((e) => ({
+          label: e.label, note: e.note, amountCents: e.amountCents, period: e.period })),
       }));
     })(),
     permissions: consents.map((consent) => {
@@ -811,7 +814,8 @@ type Attention =
       whatItDoes: string; rung: string; provider: string; costNote: string;
       because: string; route: string; enables: string[];
       doesNotAuthorize: string[]; blocking: boolean;
-      economics: Array<{ label: string; note: string }> }
+      economics: Array<{ label: string; note: string; amountCents: number | null;
+        period: string | null }> }
   | { kind: 'recognise'; candidateId: string; check: string | null; proposal: string }
   | { kind: 'recognise_company'; candidateId: string; productId: string;
       companyName: string; proposal: string; rationale: string }
@@ -1036,7 +1040,8 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
      10.5rem that did not know about the inset, so on a notched phone the last
      lines of every page sat underneath the composer. */
   .wrap{max-width:34rem;margin:0 auto;
-    padding:var(--s3) var(--s3) calc(11rem + env(safe-area-inset-bottom))}
+    padding:var(--s3) var(--s3)
+      calc(var(--chrome,calc(11rem + env(safe-area-inset-bottom))) + var(--s3))}
   h1{font-family:var(--serif);font-size:2rem;line-height:1.15;font-weight:500;
     letter-spacing:-.01em;margin:0 0 var(--s2)}
   .brand{display:flex;align-items:center;gap:10px;margin:0 0 var(--s4);color:var(--ink-2);
@@ -1045,19 +1050,34 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
     border-radius:50%;background:var(--card);border:1px solid var(--line);
     font-family:var(--serif);font-weight:500;color:var(--ink);font-size:1.05rem}
 
-  /* THE GLANCE. Three facts in a row on a phone, each one a number and the
-     sentence that keeps it honest. Never more than three. */
-  .glance{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--s2);margin:0 0 var(--s4)}
+  /* THE GLANCE. THREE ACROSS WAS A DESKTOP GRID THAT HAPPENED TO FIT.
+     At 390px, three equal tracks are about 104px each, and into each of them
+     went a label, a serif number and a sentence — so the sentence broke into
+     fragments and the whole row read as cramped columns rather than as three
+     facts. Nothing about a phone wanted three columns; the layout simply never
+     said otherwise, and a zero-floor track let it shrink without complaint.
+
+     One fact per row on a phone: the number reads at its real size, the
+     sentence beside it has the width of the screen, and the eye goes down the
+     column instead of across three cramped ones. Three across returns when
+     there is genuinely room for it. */
+  .glance{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s2);margin:0 0 var(--s4)}
+  .glance .tile{display:grid;grid-template-columns:minmax(0,1fr) auto;
+    align-items:baseline;column-gap:var(--s3)}
+  .glance .tile dt.k{grid-column:1;grid-row:1}
+  .glance .tile dd.v{grid-column:2;grid-row:1;text-align:right}
+  .glance .tile dd.d{grid-column:1/-1;grid-row:2}
   .tile{background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
     padding:var(--s2) var(--s2) 10px;min-width:0}
   .tile dt.k{font-size:.78rem;color:var(--ink-3);margin:0 0 4px;line-height:1.25}
   .tile dd.v{font-family:var(--serif);font-size:1.35rem;line-height:1.1;font-weight:500;
-    margin:0 0 4px;overflow-wrap:anywhere}
+    margin:0 0 4px;overflow-wrap:break-word}
   .tile dd.d{font-size:.78rem;color:var(--ink-2);margin:0;line-height:1.3}
   .tile .d.up{color:var(--good)} .tile .d.down{color:var(--alert)}
 
   /* THE NUMBERS. Two across on a phone, each with its trend. */
-  .numbers{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s2);margin:0 0 var(--s2)}
+  .numbers{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));
+    gap:var(--s2);margin:0 0 var(--s2)}
   .numbers .tile dd.v{font-size:1.5rem}
 
   /* THE RIVER. One row per layer: name, what it is, what it carries. */
@@ -1085,11 +1105,27 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
      a grid: visually paired, and to a screen reader eighteen loose fragments in
      a row with nothing saying which label belonged to which value — on the
      densest and most consequential card in the product. */
-  .facts{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s2) var(--s3);
+  /* A LABEL COLUMN THAT SIZES TO ITS CONTENT WILL EVENTUALLY STARVE THE VALUE.
+     A label track sized to content gives the labels whatever they ask for and
+     lets the values have what is left — which on a 390px phone, with a label
+     like "Every month, from the day you say yes", was ZERO. The values did
+     not overflow visibly; wrapping was set to break anywhere, so they broke
+     one character per line and a 141-character sentence rendered as a
+     2,728-pixel column of
+     single letters. That is where the split words came from, and it was a
+     layout
+     failure quietly converted into unreadable text rather than a visible one.
+
+     So a phone gets one column: label, then value under it. The two-column
+     pairing is a nicety for a wide screen and it is the wide screen that has
+     the room for it. */
+  .facts{display:grid;grid-template-columns:minmax(0,1fr);gap:2px var(--s3);
     margin:0;
     padding:var(--s3);border-top:1px solid var(--line);font-size:.95rem}
   .facts dt{color:var(--ink-3);font-weight:500;font-size:.85rem;padding-top:2px}
-  .facts dd{margin:0;min-width:0;overflow-wrap:anywhere;color:var(--ink)}
+  .facts dt+dd{margin-bottom:var(--s2)}
+  .facts dd:last-child{margin-bottom:0}
+  .facts dd{margin:0;min-width:0;overflow-wrap:break-word;color:var(--ink)}
   .facts dd.quiet{color:var(--ink-2)}
   .facts span.quiet{color:var(--ink-2)}
   .pill{display:inline-block;font-size:.78rem;padding:3px 9px;border-radius:999px;
@@ -1109,13 +1145,16 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
   .fold>summary{padding:var(--s2) 0;min-height:48px;gap:var(--s3)}
   .fold>summary h3{margin:0;flex:0 0 auto}
   .fold .gist{flex:1 1 auto;min-width:0;text-align:right;color:var(--ink-2);font-size:.93rem;
-    overflow-wrap:anywhere}
+    overflow-wrap:break-word}
   .fold[open]>summary{padding-bottom:var(--s2)}
   .fold>ul,.fold>p,.fold>div,.fold>form{margin-bottom:var(--s3)}
 
 
-  p{margin:0 0 var(--s2);overflow-wrap:anywhere}
+  p{margin:0 0 var(--s2);overflow-wrap:break-word}
   .lede{color:var(--ink-2);font-size:1.06rem;margin-bottom:var(--s4)}
+  .lede a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line);
+    padding-bottom:1px}
+  .lede a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
 
   /* The one thing. There is never more than one of these on the page. */
   /* THE ONLY ACCENT BORDER ON THE PAGE. Everything else is --line, so the
@@ -1143,10 +1182,12 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
   .one p{color:var(--ink-2);font-size:.98rem}
   .one p:last-child{margin-bottom:0}
   .lead{color:var(--ink)}
-  dl{display:grid;grid-template-columns:auto minmax(0,1fr);gap:var(--s1) var(--s3);
+  dl{display:grid;grid-template-columns:minmax(0,1fr);gap:2px var(--s3);
     margin:0;padding:var(--s2) var(--s3);border-top:1px solid var(--line);font-size:.93rem}
   dt{color:var(--ink-3)}
-  dd{margin:0;min-width:0;overflow-wrap:anywhere}
+  dt+dd{margin-bottom:var(--s2)}
+  dd:last-child{margin-bottom:0}
+  dd{margin:0;min-width:0;overflow-wrap:break-word}
   .do{padding:var(--s3);border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:var(--s2)}
   .do form{flex:1 1 auto;min-width:0}
   .btn{font:inherit;font-size:1rem;font-weight:500;cursor:pointer;text-decoration:none;width:100%;
@@ -1167,7 +1208,7 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
   details[open] summary::after{content:"\\2212"}
   .inner{padding:0 var(--s3) var(--s3);font-size:.93rem;color:var(--ink-2)}
   .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8rem;
-    color:var(--ink-3);overflow-wrap:anywhere}
+    color:var(--ink-3);overflow-wrap:break-word}
 
   /* A question and its answer read as an exchange, not as more cards. */
   .asked{color:var(--ink-3);font-size:.93rem;margin:var(--s4) 0 var(--s1)}
@@ -1296,7 +1337,17 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
     .ask-in{max-width:none;margin:0}
     main.wrap{display:flex;flex-direction:column}
     .glance{grid-template-columns:repeat(3,minmax(0,1fr));max-width:44rem}
+    .glance .tile{display:block}
+    .glance .tile dd.v{text-align:left}
     .numbers{grid-template-columns:repeat(4,minmax(0,1fr))}
+    /* THE PAIRED LABEL AND VALUE COME BACK WHEN THERE IS ROOM FOR BOTH. The
+       label track is capped so a long one can no longer take the value's
+       width — the failure it caused on a phone is the same failure here, just
+       further away. */
+    dl,.facts{grid-template-columns:minmax(0,14rem) minmax(0,1fr)}
+    dl{gap:var(--s1) var(--s3)}
+    .facts{gap:var(--s2) var(--s3)}
+    dt+dd,.facts dt+dd{margin-bottom:0}
     .cols{column-count:2;column-gap:var(--s4)}
     .cols>*{break-inside:avoid;-webkit-column-break-inside:avoid}
     .one,.hero{max-width:44rem}
@@ -1386,18 +1437,18 @@ interface Decision {
 }
 
 const decisionCard = (d: Decision): HtmlEscapedString | Promise<HtmlEscapedString> => html`
-  <section class="one${d.alert ? ' alert' : ''}" aria-labelledby="d-title">
+  <section id="the-one-thing" class="one${d.alert ? ' alert' : ''}" aria-labelledby="d-title">
     <div class="one-in">
       <p class="act">${d.act}</p>
       <h2 id="d-title">${d.question}</h2>
       <p class="lead">${d.title}</p>
       ${raw(d.meaning.map((m) => `<p>${m}</p>`).join(''))}
     </div>
+    <dl>${raw(d.facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join(''))}</dl>
     ${(d.lists ?? []).map((l) => html`<div class="know">
       <h2>${l.heading}</h2>
       <ul>${l.items.map((i) => html`<li>${i}</li>`)}</ul>
     </div>`)}
-    <dl>${raw(d.facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join(''))}</dl>
     ${d.why ? html`<details><summary>Why?</summary><div class="inner">
       ${d.why.map((w) => html`<p>${w}</p>`)}
     </div></details>` : ''}
@@ -1429,6 +1480,28 @@ const ALLOW_LABEL: Record<string, string> = {
   run_in_workspace: 'Allow the isolated workshop',
 };
 
+/**
+ * WHAT THE THING IS CALLED WHEN HE IS THE ONE READING IT.
+ *
+ * The card's title was the capability's own description — "run a process
+ * inside an isolated computer and read what it produced". That is what the
+ * institution needs to know and it is not what a decision is called. He is not
+ * deciding about a process; he is deciding whether Foundry may have a
+ * workshop.
+ */
+const OWNER_TITLE: Record<string, string> = {
+  run_in_workspace: 'Foundry needs an isolated workshop',
+};
+
+/** And a provider is a company with a name, not an identifier. */
+const PROVIDER_NAME: Record<string, string> = {
+  fly_sprites: 'Fly Sprites',
+  fly_machines: 'Fly Machines',
+  local_process: 'this machine',
+  github: 'GitHub',
+};
+const providerName = (x: string): string => PROVIDER_NAME[x] ?? x.replace(/_/g, ' ');
+
 /** The owner's own list of routes, in his words rather than the enum's. */
 const ROUTE_WORDS: Record<string, string> = {
   reuse: 'reuse something the portfolio already has',
@@ -1448,7 +1521,7 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
   if (a === null) return html``;
 
   if (a.kind === 'stopped') {
-    return html`<section class="one alert"><div class="one-in">
+    return html`<section id="the-one-thing" class="one alert"><div class="one-in">
       <h2>Part of me has stopped running</h2>
       <p class="lead">${count(a.routines.length, 'routine')} of mine
         ${a.routines.length === 1 ? 'has' : 'have'} failed, so what I tell you may be out of
@@ -1461,7 +1534,7 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
 
   if (a.kind === 'drifted') {
     const name = CHECK_IN_PLAIN_WORDS[a.checks[0]]?.name ?? a.checks[0];
-    return html`<section class="one alert"><div class="one-in">
+    return html`<section id="the-one-thing" class="one alert"><div class="one-in">
       <h2>${name}</h2>
       <p class="lead">This no longer matches. I have not changed anything — I only look.</p>
     </div></section>`;
@@ -1589,15 +1662,29 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
 
     return decisionCard({
       act: 'Authority',
+      // THE BIG LINE IS THE THING, NOT MY PREDICAMENT. It read "I have gone as
+      // far as I can on my own" in serif at the top and named what it wanted
+      // in small grey text underneath — so the loudest thing on the most
+      // consequential screen in the product was how Foundry felt about it.
       question: a.blocking
-        ? 'I have gone as far as I can on my own'
+        ? OWNER_TITLE[a.capabilityKey] ?? a.whatItDoes
         : 'Should I get hold of this?',
-      title: a.whatItDoes,
+      title: a.blocking
+        ? 'I have gone as far as I can on my own.'
+        : OWNER_TITLE[a.capabilityKey] ?? a.whatItDoes,
+      // ONE SENTENCE BEFORE THE MONEY.
+      //
+      // This led with three paragraphs — the route, the whole reason, and the
+      // caveat — so on a phone the first screenful was prose and the numbers
+      // and the buttons were somewhere below it. The reason is worth reading
+      // and it is not worth reading FIRST: it moves into Why?, where somebody
+      // who wants it can have all of it without everybody having to scroll
+      // past it to reach the decision.
       meaning: [
-        `I would ${ROUTE_WORDS[a.route] ?? a.route} — ${a.provider}.`,
-        `${a.because.charAt(0).toUpperCase()}${a.because.slice(1)}.`,
-        'Saying yes gets me the ability. It does not let me use it for anything '
-        + 'in particular — that is still a separate question, every time.',
+        'I have recurring software work I can already find and check, and I '
+        + 'will not run new or changed code on the machine I live on. I want '
+        + `to rent a computer I am not — ${providerName(a.provider)} — and do `
+        + 'the work there.',
       ],
       lists: [
         ...(a.enables.length
@@ -1635,6 +1722,10 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
       // behind the yes is asking to be trusted rather than read.
       why: a.blocking
         ? [
+          `${a.because.charAt(0).toUpperCase()}${a.because.slice(1)}.`,
+          'Saying yes gets me the ability. It does not let me use it for '
+          + 'anything in particular — that is still a separate question, every '
+          + 'time.',
           'Because I ran into it, not because I went looking. Something I look '
           + 'after — keeping my own written description of my database true — '
           + 'goes out of date every time I change, and I can already spot it and '
@@ -2500,30 +2591,54 @@ foundryShellRoutes.get('/foundry', async (c) => {
   const { glanceFor } = await import('../../services/founder/portfolio.js');
   const glance = await glanceFor(s.ownerId);
 
-  const body = html`
-    <h1><span id="greet">Hello</span>${s.firstName ? `, ${s.firstName}` : ''}.</h1>
-    ${orientation ? html`<p class="lede">${orientation}</p>` : ''}
-    ${glance.cashFlowCents !== null || glance.interruptions > 0 || glance.concentration
+  // PORTFOLIO STATE IS NOT WHAT HE OPENED THIS FOR WHEN SOMETHING NEEDS HIM.
+  //
+  // These three facts rendered ABOVE the decision, so a screen that said "one
+  // thing needs you" then put three tiles of context in front of the thing.
+  // That is the inversion this product exists to remove: the machinery knew
+  // what mattered and the layout made him scroll past it to find out.
+  //
+  // So the order follows the answer. Something needs him: greeting, what it
+  // is, the decision, and then the state of the portfolio underneath it.
+  // Nothing needs him: the state of the portfolio is the news, and it goes
+  // where it always did.
+  const portfolioState = glance.cashFlowCents !== null || glance.interruptions > 0
+    || glance.concentration
     ? html`<dl class="glance">
       <div class="tile"><dt class="k">Monthly cash flow</dt>
         <dd class="v">${glance.cashFlowCents === null ? '—' : money(glance.cashFlowCents)}</dd>
         <dd class="d">${glance.cashFlowCents === null ? 'nothing reports revenue yet'
     : `across ${String(glance.seen)} of ${String(glance.companies)} I can see`}</dd></div>
       <div class="tile"><dt class="k">Needed you</dt>
-        <dd class="v">${String(glance.interruptions)}</dd>
+        <dd class="v">${glance.interruptions === 0 ? '0'
+    : html`<a href="/foundry/decisions">${String(glance.interruptions)}</a>`}</dd>
         <dd class="d">${glance.interruptions === 0 ? 'not once this month' : 'times this month'}</dd></div>
       <div class="tile"><dt class="k">Most shared</dt>
         <dd class="v">${glance.concentration ? glance.concentration.split(' share ')[0] : 'nothing'}</dd>
         <dd class="d">${glance.concentration ? `share ${glance.concentration.split(' share ')[1]}`
     : 'no two depend on the same thing'}</dd></div>
-    </div>` : ''}
+    </dl>`
+    : '';
 
+  const body = html`
+    <h1><span id="greet">Hello</span>${s.firstName ? `, ${s.firstName}` : ''}.</h1>
+    ${orientation
+    ? attention === null
+      ? html`<p class="lede">${orientation}</p>`
+      // A LINE THAT ANNOUNCES AN INTERRUPTION AND GOES NOWHERE IS A DEAD
+      // SUMMARY. The card is directly below on this screen, so the jump is
+      // short — but it is the difference between a status and a way in, and
+      // on a long page or with the text at 200% it is not short at all.
+      : html`<p class="lede"><a href="#the-one-thing">${orientation}</a></p>`
+    : ''}
+    ${attention === null ? portfolioState : ''}
     <!-- THE ONE THING HE CAME FOR, BEFORE ANYTHING HE DID NOT.
          This was rendered last: after what changed, after ninety lines of
          search block that can carry a whole opportunity's case. The screen said
          "One thing needs you" and then put everything else in front of it. -->
     ${standingPermission(s)}
     ${theOneThing(attention)}
+    ${attention === null ? '' : portfolioState}
 
     ${done === 'looking' ? html`<div class="done"><p><strong>I am looking.</strong>
       I will bring you very few, and telling you none of them are worth it is a real

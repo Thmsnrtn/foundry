@@ -54,6 +54,30 @@ export const OWNER_SURFACE_SCRIPT =
   // of any kind. On a slow connection that reads as a dead button, and the
   // honest response to a dead button is to press it again. The delay keeps a
   // fast submission from flickering.
+  // AND THE PAGE RESERVED A GUESS FOR THE BARS THAT SIT ON TOP OF IT.
+  //
+  // The reserve at the bottom of every page was a constant — eleven rems plus
+  // the safe-area inset — chosen to be about the height of the composer and
+  // the tab bar. A constant is wrong in both directions: too large and it
+  // wastes a fifth of a phone screen on nothing, too small and the last thing
+  // on the page, which on a decision card is the buttons, sits underneath the
+  // composer. It cannot be right for every text size, and at 200% it is not
+  // close.
+  //
+  // So the bars measure themselves and the page reserves exactly that. The CSS
+  // keeps its constant as the starting value, which is what a browser with no
+  // script still gets.
+  + `  (function(){var a=document.querySelector('.ask'),n=document.querySelector('nav.places');`
+  + `var r=document.documentElement;\n`
+  + `    function m(){var H=window.innerHeight,h=0;[a,n].forEach(function(el){if(!el)return;`
+  + `if(getComputedStyle(el).position!=='fixed')return;`
+  + `var b=el.getBoundingClientRect();\n`
+  + `      if(b.height>H/2||b.bottom<H*0.6)return;h=Math.max(h,H-b.top);});\n`
+  + `      if(h>0)r.style.setProperty('--chrome',Math.ceil(h)+'px');`
+  + `else r.style.removeProperty('--chrome');}\n`
+  + `    m();window.addEventListener('resize',m);\n`
+  + `    if(window.ResizeObserver){var o=new ResizeObserver(m);`
+  + `if(a)o.observe(a);if(n)o.observe(n);}})();\n`
   + `  document.addEventListener('submit',function(e){`
   + `var f=e.target;if(!f||f.dataset.busy)return;f.dataset.busy='1';\n`
   + `    var b=f.querySelector('button[type=submit],button:not([type])');if(!b)return;\n`

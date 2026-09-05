@@ -74,6 +74,18 @@ healthRoutes.get('/internal/health', async (c) => {
       status: healthy ? 'ok' : 'degraded',
       timestamp: new Date().toISOString(),
       version: '0.1.0',
+      // WHICH COMMIT THIS ACTUALLY IS.
+      //
+      // A package version that never changes cannot tell anyone whether what
+      // is running is what was written. The institution reported a feature as
+      // live because the branch had it, while production was four commits and
+      // ten hours behind — and no observation available to anybody could have
+      // contradicted that, because the deployed process had no way to say
+      // which commit it was. Stamped into the image at build time, so it
+      // describes the artifact rather than the repository the question is
+      // being asked from. 'unknown' means an image built outside the deploy
+      // path, which is itself worth knowing.
+      commit: process.env.FOUNDRY_COMMIT ?? 'unknown',
       checks,
       storage,
     },

@@ -629,3 +629,58 @@ export async function observeFoundryBaselineLiveness(input: {
   }).catch(() => { /* offering is not observing */ });
   return { observed: true, productId, observation, result };
 }
+
+// =============================================================================
+// AND WHETHER THE THING THE OWNER OPENS IS THE THING THIS CODE DESCRIBES.
+//
+// Every other observation in this file asks whether the repository is honest
+// about itself. This one asks a question that had no asker at all: IS WHAT IS
+// RUNNING WHAT WAS WRITTEN.
+//
+// The institution reported a decision as live on the owner's first screen. The
+// branch had it, the chain was green, the commit was pushed — and production
+// was running the previous evening's build, because deploys fire on a marker
+// none of those commits carried. Nothing said was false about the repository.
+// It was a claim about one kind of truth stated as a claim about another, and
+// no observation existed that could have contradicted it.
+//
+// The weakest link was that the deployed process could not name itself. So the
+// first thing worth observing is whether it can: a build answering 'unknown'
+// is the state in which branch truth and deployed truth are indistinguishable,
+// and it should be visible as a finding rather than as silence.
+// =============================================================================
+
+export interface DeployedIdentity {
+  /** What this running process was built from, or null when it cannot say. */
+  thisBuild: string | null;
+  /** What the deployed instance reports, or null when it could not be asked. */
+  production: string | null;
+  /** True only when both are known and equal. */
+  sameThing: boolean;
+  says: string;
+}
+
+export async function observeDeployedIdentity(
+  base?: string,
+): Promise<DeployedIdentity> {
+  const stamped = process.env.FOUNDRY_COMMIT ?? '';
+  const thisBuild = stamped === '' || stamped === 'unknown' ? null : stamped;
+
+  const { whatProductionIsRunning, standingFrom } = await import(
+    '../institution/deployed.js');
+  const running = await whatProductionIsRunning(base);
+
+  if (thisBuild === null) {
+    return {
+      thisBuild: null, production: running.commit, sameThing: false,
+      says: 'this process cannot say which commit it was built from, so it may not '
+        + 'describe anything about itself as deployed'
+        + (running.commit === null ? '' : `. Production reports ${running.commit.slice(0, 7)}`),
+    };
+  }
+  const standing = standingFrom(thisBuild, running);
+  return {
+    thisBuild, production: running.commit,
+    sameThing: standing.isRunningThis, says: standing.says,
+  };
+}

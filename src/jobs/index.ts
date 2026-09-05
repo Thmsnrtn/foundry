@@ -3394,6 +3394,20 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
         // exercised by more than one input. Nothing here special-cases it: the
         // reader that puts a failing check on The Letter takes the latest
         // observation per check and needed no change to see this one.
+        // IS WHAT IS RUNNING WHAT WAS WRITTEN. The observation that did not
+        // exist when the institution described a branch as a product. It
+        // changes nothing and repairs nothing; it says out loud whether the
+        // deployed build can name itself, which is the fact whose absence made
+        // the two kinds of truth indistinguishable.
+        const { observeDeployedIdentity } = await import(
+          '../services/foundry/self-observation.js'
+        );
+        const identity = await observeDeployedIdentity();
+        if (!identity.sameThing) {
+          logger.warn(`deployed identity: ${identity.says}`,
+            { jobName: 'institutional_judgment_tick' });
+        }
+
         const { observeFoundryBaselineLiveness } = await import(
           '../services/foundry/self-observation.js'
         );

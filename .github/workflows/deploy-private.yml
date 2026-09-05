@@ -96,6 +96,7 @@ jobs:
             --app foundry-intel \
             --local-only \
             --ha=false \
+            --build-arg FOUNDRY_COMMIT=${{ github.sha }} \
             --now
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
@@ -105,7 +106,17 @@ jobs:
           for i in $(seq 1 20); do
             code=$(curl -s -o /tmp/h.json -w '%{http_code}' --max-time 15 \
               https://foundry-intel.fly.dev/internal/health || true)
-            if [ "$code" = "200" ]; then echo "healthy:"; cat /tmp/h.json; exit 0; fi
+            if [ "$code" = "200" ]; then
+              echo "healthy:"; cat /tmp/h.json
+              # A GREEN HEALTH CHECK FROM THE PREVIOUS BUILD LOOKS EXACTLY LIKE
+              # A GREEN HEALTH CHECK FROM THIS ONE. Ask which commit answered.
+              running=$(sed -n 's/.*"commit":"\([^"]*\)".*/\1/p' /tmp/h.json)
+              if [ "$running" != "${{ github.sha }}" ]; then
+                echo "health answered, but from commit '$running', not ${{ github.sha }}"
+                sleep 10; continue
+              fi
+              echo "production is running ${{ github.sha }}"; exit 0
+            fi
             echo "attempt $i: HTTP $code"; sleep 15
           done
           echo "health never returned 200"; flyctl logs --app foundry-intel --no-tail | tail -40; exit 1

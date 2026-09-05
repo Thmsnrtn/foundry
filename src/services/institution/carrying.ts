@@ -681,9 +681,9 @@ async function whatItCostsInParts(substrate: string): Promise<AcqEconomics[]> {
     out.push({
       kind: 'fixed_recurring', label: 'Every month, from the day you say yes',
       amountCents: 2000, period: 'month',
-      note: 'A subscription, not a one-off. It keeps costing this until you end '
-        + 'it, and ending it is something only you can do, in your account with '
-        + 'them.',
+      note: '$20.00, every month. A subscription, not a one-off: it keeps '
+        + 'costing that until you end it, and ending it is something only you '
+        + 'can do, in your account with them.',
     });
     out.push({
       kind: 'included_allowance', label: 'Included in that',
