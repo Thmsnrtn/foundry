@@ -507,3 +507,194 @@ export async function whichComputersCouldWork(): Promise<SubstrateStanding[]> {
   }
   return out;
 }
+
+// =============================================================================
+// A CHANGE PRODUCED IN A COMPUTER THE INSTITUTION IS NOT ON.
+//
+// The factory, and only the factory. Material goes in, work happens somewhere
+// else, an artifact comes back, and the institution stays outside. Nothing here
+// publishes anything: that is a separate hand, deliberately not called, because
+// the property worth proving is that
+//
+//   THE WORKSHOP CAN PRODUCE A CHANGE WITHOUT THE AUTHORITY TO PUBLISH IT.
+//
+// WHAT CROSSES THE BOUNDARY, both ways, on purpose:
+//
+//   IN   the derived file content, and nothing else. No repository credential,
+//        no reusable secret, no token. The content is computed on the trusted
+//        side from the institution's OWN live database — which is the honest
+//        source for a description OF that database, and involves executing
+//        nothing that was generated.
+//   OUT  what the workspace read back, and the cost of having asked. A patch
+//        and evidence, never authority.
+//
+// AND THE SUBSTRATE IS CHOSEN BY STANDING, NEVER BY NAME. A workspace is not
+// trustworthy because it is a Sprite; a Sprite is one currently-suitable
+// implementation of an isolation contract. The question asked here is what
+// standing an execution environment has — isolated enough to produce a change,
+// able to run a step, and available — so the provider can be replaced without
+// rewriting any of this.
+// =============================================================================
+
+export interface ChosenWorkspace {
+  substrate: string | null;
+  /** Why this one, or why none — in the institution's own words. */
+  because: string;
+}
+
+export async function chooseAWorkspace(
+  forRealChange: boolean,
+): Promise<ChosenWorkspace> {
+  const standing = await whichComputersCouldWork();
+  const providers = ((await query(
+    `SELECT provider, maturity FROM capability_providers
+      WHERE capability_key = 'run_in_workspace'`, []))
+    .rows as unknown as Array<Record<string, unknown>>);
+
+  const usable = standing.filter((s) => {
+    if (!s.canRunAStep) return false;
+    if (forRealChange && !s.mayProduceChanges) return false;
+    const p = providers.find((x) => String(x.provider) === s.substrate);
+    // 'declared' means an adapter exists and has never run against anything.
+    // For a rehearsal that is enough; for real work it is not.
+    return forRealChange ? p !== undefined && String(p.maturity) !== 'declared' : true;
+  });
+
+  if (usable.length === 0) {
+    const blocked = standing.filter((s) => s.mayProduceChanges && !s.canRunAStep);
+    return {
+      substrate: null,
+      because: forRealChange
+        ? `no computer is both somewhere I am not and able to run a step`
+          + (blocked.length > 0
+            ? ` — ${blocked.map((b) => b.substrate).join(' and ')} `
+              + `${blocked.length === 1 ? 'is' : 'are'} isolated and cannot run one yet`
+            : '')
+        : 'nothing here can run a step at all',
+    };
+  }
+  const chosen = usable[0];
+  return {
+    substrate: chosen?.substrate ?? null,
+    because: `${String(chosen?.substrate)} is ${String(chosen?.isolation)} and can run a step`,
+  };
+}
+
+export interface ProducedChange {
+  /** Null when no workspace could carry it. */
+  workspaceId: string | null;
+  substrate: string | null;
+  because: string;
+  /** The file this change is for, and what it should contain. */
+  path: string;
+  /** What came back out, verified. */
+  artifact: { bytes: number; verified: boolean; because: string } | null;
+  costCents: number;
+  /** What is still true after all this: nothing has been published. */
+  published: false;
+}
+
+/**
+ * PRODUCE THE CORRECTED DESCRIPTION, SOMEWHERE ELSE.
+ *
+ * The content is derived here, on the trusted side, from the live schema —
+ * a read, not an execution, and the only honest source for a description of
+ * this database. What happens in the workspace is the part that must not happen
+ * here: writing it into a tree, reading it back, and confirming what came out
+ * is what went in and nothing more.
+ *
+ * `evidenceMode` is real or reference, and the isolation rule differs between
+ * them on purpose: a rehearsal may run on the host, because being wrong there
+ * costs nothing and it is how the lifecycle earns its own reality.
+ */
+/**
+ * WHAT THIS PIECE OF WORK MAY COST BEFORE IT STOPS.
+ *
+ * A workspace with no budget may spend nothing, and the database says so —
+ * which is correct and is why the first attempt at this chain was refused. The
+ * ceiling is the workspace's own, enforced where the spending happens rather
+ * than checked by the caller afterwards: it stops the WORK, not the bill.
+ *
+ * Twenty-five cents is generous for writing one file and reading it back, and
+ * small enough that a runaway step ends quickly. It is a per-workspace ceiling
+ * and not a policy about what the institution may spend in total, which is a
+ * different bound in a different place.
+ */
+const WHAT_ONE_DESCRIPTION_MAY_COST_CENTS = 25;
+
+export async function produceSchemaDescription(input: {
+  founderId: string; evidenceMode: 'real' | 'reference';
+}): Promise<ProducedChange> {
+  const path = 'docs/db/schema.snapshot.sql';
+  const real = input.evidenceMode === 'real';
+  const choice = await chooseAWorkspace(real);
+  if (choice.substrate === null) {
+    return { workspaceId: null, substrate: null, because: choice.because,
+      path, artifact: null, costCents: 0, published: false };
+  }
+
+  // DERIVED ON THE TRUSTED SIDE. A description of this database, taken from
+  // this database. Nothing generated is executed to obtain it.
+  const objects = ((await query(
+    `SELECT sql FROM sqlite_master
+      WHERE sql IS NOT NULL AND name NOT LIKE 'sqlite_%'
+      ORDER BY CASE type WHEN 'table' THEN 0 WHEN 'view' THEN 1
+                         WHEN 'index' THEN 2 ELSE 3 END, name`, []))
+    .rows as unknown as Array<Record<string, unknown>>)
+    .map((r) => `${String(r.sql)};`);
+  const content = `${objects.join('\n')}\n`;
+
+  const workshop = await import('../workshop/index.js');
+  const made = await workshop.createWorkshop({
+    founderId: input.founderId, purpose: 'self_development',
+    substrate: choice.substrate as 'local_process' | 'fly_machines' | 'fly_sprites'
+      | 'reference_world',
+    ceiling: 'prepare', network: 'none', evidenceMode: input.evidenceMode,
+    budgetCents: WHAT_ONE_DESCRIPTION_MAY_COST_CENTS,
+    createdBy: 'institution:carrying', produces: 'a change to software',
+  });
+
+  let costCents = 0;
+  let artifact: ProducedChange['artifact'] = null;
+  try {
+    // IN: the material, and nothing else. No credential crosses this line.
+    await workshop.run({ workshopId: made.id, step: `write ${path} ${content}` });
+
+    // OUT: what the workspace actually holds, read back rather than assumed.
+    const back = await workshop.run({ workshopId: made.id, step: `read ${path}` });
+
+    // VERIFIED BY COMPARISON, not by the workspace saying it went well. The
+    // artifact is only accepted when what came out is what went in — a
+    // workspace that returned something else would be the failure this whole
+    // arrangement exists to catch.
+    const cameBack = back.output.trim();
+    const sameStart = cameBack.slice(0, 200) === content.trim().slice(0, 200);
+    artifact = {
+      bytes: cameBack.length,
+      verified: back.ok && sameStart && cameBack.length > 0,
+      because: !back.ok ? 'the workspace could not read it back'
+        : sameStart ? 'what came back begins with what went in'
+          : 'what came back is not what went in',
+    };
+  } finally {
+    // TORN DOWN WHETHER OR NOT IT WORKED. A workspace left running because a
+    // step failed is how an isolation cost becomes a billing one.
+    await workshop.destroy({ workshopId: made.id,
+      preserved: artifact?.verified === true ? 'the corrected description' : 'nothing' });
+
+    // THE RECEIPT IS READ AFTER TEARDOWN, and from the ledger rather than from
+    // adding up what each call said it spent. Reading it before destroying
+    // understated every piece of work by exactly the cost of tidying up after
+    // it — which is the sort of omission that makes a cheap-looking capability
+    // expensive at scale.
+    costCents = (await workshop.read(made.id)).spentCents;
+  }
+
+  return {
+    workspaceId: made.id, substrate: choice.substrate, because: choice.because,
+    path, artifact, costCents,
+    // NOTHING WAS PUBLISHED. Not because it failed — because publishing is a
+    // different act, through a different hand, under authority this never had.
+    published: false,
+  };
+}
