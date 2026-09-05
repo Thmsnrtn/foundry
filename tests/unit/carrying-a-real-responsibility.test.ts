@@ -11,7 +11,7 @@ import {
 } from '../../src/services/institution/carrying.js';
 import { howOftenRight } from '../../src/services/institution/calibration.js';
 import {
-  seedStartingPolicy, whatKeepsRecurring, whatWasDoneUnder,
+  seedStartingPolicy, whatKeepsRecurring,
 } from '../../src/services/institution/acting.js';
 
 // =============================================================================
@@ -47,79 +47,91 @@ beforeAll(async () => {
              'free','available',50)`, []);
 });
 
-describe('the chain, when nothing covers the act', () => {
-  it('refuses, keeps the reason, and asks one question', async () => {
-    // A REFUSAL IS NOT A FAILURE OF THE CHAIN. It is the chain reaching the
-    // owner where it should, and nothing is weakened to avoid it.
-    const carried = await carryDependencyHealth(OWNER);
-    expect(carried.covered).toBe(false);
-    expect(carried.performed).toBeNull();
+describe('a sense is not a hand, and does not ask him for permission to look', () => {
+  it('reads a public registry as ordinary perception, with nothing granted', async () => {
+    // THE CORRECTION THAT MATTERED MOST. This used to refuse and manufacture an
+    // owner question — "may I keep asking the registry when packages were
+    // published" — because every act was routed through consequential
+    // authority. A public, free, credential-less read that changes nothing and
+    // addresses nobody is ordinary institutional perception. An institution
+    // with hundreds of continuous eyes would have produced hundreds of those
+    // questions, which is the owner machinery it exists to absorb.
+    const carried = await carryDependencyHealth(OWNER, { root: process.cwd() });
+    expect(carried.covered).toBe(true);
     expect(carried.rung).toBe('observe');
-    expect(carried.needsHim).toContain('reads a public page, changes nothing');
-  });
+    expect(carried.because).toContain('ordinary perception');
+    // Nothing was delegated, because nothing needed to be.
+    expect(carried.delegationId).toBeNull();
+    expect((await query(
+      'SELECT COUNT(*) AS n FROM delegations WHERE founder_id = ?', [OWNER]))
+      .rows[0] as Record<string, unknown>).toMatchObject({ n: 0 });
+  }, 60_000);
 
-  it('records the refusal as evidence the work recurs, without inventing one', async () => {
+  it('never asks him anything for looking at something public', async () => {
+    const carried = await carryDependencyHealth(OWNER, { root: process.cwd() });
+    // The only thing that may reach him from this responsibility is a finding —
+    // a package that has actually gone quiet — never permission to keep looking.
+    if (carried.needsHim !== null) {
+      expect(carried.needsHim).toContain('not been published');
+    }
+    const asked = (await query(
+      `SELECT COUNT(*) AS n FROM responsibility_signals
+        WHERE founder_id = ? AND kind = 'refused_for_authority'`, [OWNER]))
+      .rows[0] as Record<string, unknown>;
+    expect(Number(asked.n)).toBe(0);
+  }, 60_000);
+
+  it('still records that the work recurs, at no cost to him', async () => {
     const recurring = await whatKeepsRecurring(OWNER, 1);
     const dep = recurring.find((r) => r.responsibility === DEPENDENCY_RESPONSIBILITY);
-    expect(dep).toBeDefined();
-    // Both kinds are present: the schedule that costs him nothing, and the
-    // refusal that cost him one question.
-    expect(dep?.signals.map((s) => s.kind).sort())
-      .toEqual(['refused_for_authority', 'scheduled']);
+    expect(dep?.signals.map((s) => s.kind)).toEqual(['scheduled']);
+    expect(dep?.interruptions).toBe(0);
   });
+
+  it('performs it and verifies what the provider actually did', async () => {
+    const carried = await carryDependencyHealth(OWNER, { root: process.cwd() });
+    if (carried.performed !== null) {
+      expect(carried.performed.checked).toBeGreaterThan(0);
+      expect(carried.performed.verificationBecause.length).toBeGreaterThan(0);
+    }
+  }, 60_000);
 });
 
-describe('the chain, once he has allowed it', () => {
-  let delegationId = '';
-
-  beforeAll(async () => {
-    const actor = (await query(
-      `SELECT id FROM business_actors WHERE founder_id = ? AND product_id IS NULL`,
-      [OWNER])).rows[0] as Record<string, unknown>;
-    // Foundry acts as itself — a real company — not as its owner.
-    expect(actor).toBeDefined();
-    delegationId = 'del_dep_health';
-    await query(
-      `INSERT INTO delegations (id, founder_id, product_id, actor_id, responsibility,
-         act_class, content_scope, class, purpose, audience, excludes, ceiling,
-         review_every_days, granted_by)
-       VALUES (?,?,NULL,?,?,'read a public registry',
-               'the packages this institution runs on','dependency health',
-               'know whether what we run on is still maintained','none',
-               'change any dependency; open a pull request; contact a maintainer',
-               'observe',90,'founder:carry_owner')`,
-      [delegationId, OWNER, String(actor.id), DEPENDENCY_RESPONSIBILITY]);
-
-    // The registry, stubbed. Two healthy, one abandoned.
-    const health = await import('../../src/services/institution/dependency-health.js');
-    vi.spyOn(health, 'checkOwnDependencies');
-  });
-
-  it('performs it, verifies what the provider actually did, and reports honestly',
+describe('but the eye itself is still his to grant', () => {
+  it('refuses a private source and asks once for the connection, not for the look',
     async () => {
-      const carried = await carryDependencyHealth(OWNER, { root: process.cwd() });
-      expect(carried.covered).toBe(true);
-      expect(carried.delegationId).toBe(delegationId);
-      // Either it reached the registry and has a verified claim, or it did not
-      // and says so — never a claim of success with nothing behind it.
-      if (carried.performed !== null) {
-        expect(carried.performed.checked).toBeGreaterThan(0);
-        expect(typeof carried.performed.providerVerified).toBe('boolean');
-        expect(carried.performed.verificationBecause.length).toBeGreaterThan(0);
-      }
-    }, 60_000);
+      const { accessBasisFor } = await import(
+        '../../src/services/institution/acting.js');
+      const priv = await accessBasisFor({
+        founderId: OWNER, capability: 'read_repository', tool: 'github_read',
+        externalEffect: 'reads the company own source code',
+        reversibility: 'changes_nothing', audience: 'none' });
+      expect(priv.ordinaryPerception).toBe(false);
+      expect(priv.basis).toBe('owner_connected');
+      // ONE ACT, ONCE, FOR THE EYE — and it says what it would never grant.
+      expect(priv.needsTheEye).toContain('May I look through this?');
+      expect(priv.needsTheEye).toContain('would not let me');
+    });
 
-  it('leaves a record of what it did under that permission', async () => {
-    const done = await whatWasDoneUnder(delegationId);
-    expect(done.length).toBeGreaterThan(0);
-    expect(done[0]?.did).toContain('asks a public registry');
-    expect(done[0]?.allowed).toBe(true);
-  }, 20_000);
+  it('will not let a public basis quietly require a credential or cost money',
+    async () => {
+      await expect(query(
+        `INSERT INTO capability_access (capability_key, basis, why, needs_credential,
+           may_cost_cents, never_grants, established_by)
+         VALUES ('read_reviews','public_observation','it is public really',1,0,
+                 'nothing','institution:test')`))
+        .rejects.toThrow(/public_means_free_and_open/);
+    });
 
-  it('stops proposing the responsibility he has now allowed', async () => {
-    const recurring = await whatKeepsRecurring(OWNER, 1);
-    expect(recurring.some((r) => r.responsibility === DEPENDENCY_RESPONSIBILITY))
-      .toBe(false);
+  it('is not ordinary perception the moment it addresses somebody', async () => {
+    const { accessBasisFor } = await import(
+      '../../src/services/institution/acting.js');
+    const reaching = await accessBasisFor({
+      founderId: OWNER, capability: 'read_community_discussion',
+      tool: 'hn_read', externalEffect: 'replies to somebody who posted',
+      reversibility: 'recoverable', audience: 'public' });
+    expect(reaching.ordinaryPerception).toBe(false);
+    expect(reaching.because).toContain('does more than look');
   });
 });
 

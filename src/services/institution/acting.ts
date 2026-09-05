@@ -66,6 +66,77 @@ export interface ActDescription {
   actorId?: string | null;
 }
 
+export interface AccessVerdict {
+  /** True when this act is ordinary perception under a basis already settled. */
+  ordinaryPerception: boolean;
+  basis: string | null;
+  because: string;
+  /** When an eye needs granting, what he would be granting. Never per-act. */
+  needsTheEye: string | null;
+}
+
+/**
+ * MAY FOUNDRY LOOK, AND ON WHAT BASIS?
+ *
+ * The question that had no home, so it was being answered by the mechanism for
+ * a different question. Access and consequence are independent: whether the
+ * institution may LOOK at something turns on credential, privacy, legal footing
+ * and cost, and whether it may CAUSE something turns on the rung.
+ *
+ * Ordinary perception is narrow on purpose. Every one of these must hold:
+ * the capability's basis is public observation, nothing outside changes,
+ * nobody is addressed, and it costs no more than that basis permits — which
+ * for a public one is nothing at all, enforced in the table. Fail any and it
+ * is not perception, whatever it is called.
+ */
+export async function accessBasisFor(act: ActDescription): Promise<AccessVerdict> {
+  const key = act.capability ?? null;
+  if (key === null) {
+    return { ordinaryPerception: false, basis: null,
+      because: 'the act did not say which capability it looks through',
+      needsTheEye: null };
+  }
+  const row = (await query(
+    `SELECT basis, why, needs_credential, may_cost_cents, never_grants
+       FROM capability_access WHERE capability_key = ?`, [key]))
+    .rows[0] as Record<string, unknown> | undefined;
+  if (!row) {
+    return { ordinaryPerception: false, basis: null,
+      because: `nothing says on what basis '${key}' may look at anything`,
+      needsTheEye: null };
+  }
+
+  const basis = String(row.basis);
+  const changesNothing = act.reversibility === 'changes_nothing'
+    && act.audience === 'none'
+    && (act.moneyCents ?? 0) <= Number(row.may_cost_cents);
+
+  if (basis === 'public_observation' && changesNothing) {
+    return {
+      ordinaryPerception: true, basis,
+      because: `ordinary perception: ${String(row.why)}`,
+      needsTheEye: null,
+    };
+  }
+  if (basis === 'owner_connected') {
+    return {
+      ordinaryPerception: false, basis,
+      because: `this looks through something only he can connect: ${String(row.why)}`,
+      // ONE ACT, ONCE, FOR THE EYE — not one per look. What he grants is the
+      // connection; what it never grants is stated in his own terms.
+      needsTheEye: `May I look through this? ${String(row.why)}. It would not let me `
+        + `${String(row.never_grants)}.`,
+    };
+  }
+  return {
+    ordinaryPerception: false, basis,
+    because: basis === 'public_observation'
+      ? 'the source is public, and this act does more than look at it'
+      : `this needs ${basis.replace('_', ' ')}`,
+    needsTheEye: null,
+  };
+}
+
 export interface ActVerdict {
   rung: Rung;
   /** Why it stands there, naming the attribute that raised it. */
@@ -166,6 +237,26 @@ export async function rungOfAct(act: ActDescription): Promise<{
  * Nothing here consults a hit rate.
  */
 export async function authorityForAct(act: ActDescription): Promise<ActVerdict> {
+  // ACCESS FIRST, AND SEPARATELY.
+  //
+  // A sense is not a hand. Looking at a public page under a basis already
+  // settled is ordinary institutional perception: it causes nothing outside,
+  // addresses nobody, costs nothing, and must not consume consequential
+  // authority or reach him. A mature institution will have hundreds of
+  // continuous eyes; requiring a delegation for each would recreate the owner
+  // machinery this exists to absorb.
+  //
+  // Deliberately checked before the rung and never after: an act that qualifies
+  // here never touches the delegation machinery at all, so no amount of change
+  // there can make an ordinary look start asking him.
+  const access = await accessBasisFor(act);
+  if (access.ordinaryPerception) {
+    return {
+      rung: 'observe', because: access.because, delegationId: null,
+      allowed: true, refusal: null,
+    };
+  }
+
   const judged = await rungOfAct(act);
   if ('refused' in judged) {
     return { rung: 'observe', because: judged.refused, delegationId: null,

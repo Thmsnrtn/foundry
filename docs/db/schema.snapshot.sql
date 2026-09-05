@@ -683,6 +683,22 @@ CREATE TABLE capabilities (
   rung           TEXT NOT NULL REFERENCES consequence_rungs(rung),
   sort_order     INTEGER NOT NULL
 , draws_on_allowance INTEGER NOT NULL DEFAULT 0);
+CREATE TABLE capability_access (
+  capability_key TEXT PRIMARY KEY REFERENCES capabilities(capability_key),
+  basis          TEXT NOT NULL CHECK (basis IN
+                   ('public_observation','owner_connected','bounded_delegation',
+                    'exact_approval')),
+  why            TEXT NOT NULL,
+  -- Whether looking through this requires something the owner connected.
+  needs_credential INTEGER NOT NULL DEFAULT 0,
+  -- What an ordinary look may cost. Above this it is not ordinary perception,
+  -- whatever else is true of it: spending is a hand.
+  may_cost_cents INTEGER NOT NULL DEFAULT 0,
+  -- What this basis does NOT permit, in the tradition of `senses.never_grants`.
+  never_grants   TEXT NOT NULL,
+  established_by TEXT NOT NULL,
+  established_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE capability_acquisitions (
   id             TEXT PRIMARY KEY,
   founder_id     TEXT NOT NULL REFERENCES founders(id),
@@ -5165,6 +5181,17 @@ CREATE TRIGGER capabilities_constitutional_insert BEFORE INSERT ON capabilities
 BEGIN SELECT RAISE(ABORT,'capability:constitutional'); END;
 CREATE TRIGGER capabilities_constitutional_update BEFORE UPDATE ON capabilities
 BEGIN SELECT RAISE(ABORT,'capability:constitutional'); END;
+CREATE TRIGGER capability_access_constitutional_delete
+BEFORE DELETE ON capability_access
+BEGIN SELECT RAISE(ABORT,'capability_access:constitutional'); END;
+CREATE TRIGGER capability_access_constitutional_update
+BEFORE UPDATE ON capability_access
+BEGIN SELECT RAISE(ABORT,'capability_access:constitutional'); END;
+CREATE TRIGGER capability_access_public_is_actually_public
+BEFORE INSERT ON capability_access
+WHEN NEW.basis = 'public_observation'
+     AND (NEW.needs_credential <> 0 OR NEW.may_cost_cents <> 0)
+BEGIN SELECT RAISE(ABORT,'capability_access:public_means_free_and_open'); END;
 CREATE TRIGGER capability_acquisition_decided_once
 BEFORE UPDATE ON capability_acquisitions
 BEGIN

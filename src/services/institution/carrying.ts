@@ -126,17 +126,21 @@ export async function carryDependencyHealth(
 
   if (!verdict.allowed) {
     // 6. REFUSED, AND THAT IS THE GOVERNANCE WORKING. Nothing is weakened to
-    //    produce a result; the reason is kept and what remains is one decision.
+    //    produce a result; the reason is kept.
+    //
+    //    WHAT DOES NOT HAPPEN HERE is an owner question. This used to manufacture
+    //    one — "may I keep asking the registry when packages were published" —
+    //    which is the wrong shape entirely: a public, free, credential-less read
+    //    that changes nothing is ordinary perception, and an institution with
+    //    hundreds of eyes would have produced hundreds of those. The eye is
+    //    granted once, where one is needed at all; the blink never asks.
     logger.info(
       `carrying ${DEPENDENCY_RESPONSIBILITY}: refused — ${verdict.refusal ?? ''}`,
       { jobName: 'carry_responsibility' });
     return {
       responsibility: DEPENDENCY_RESPONSIBILITY, covered: false,
       delegationId: null, rung: verdict.rung, because: verdict.because,
-      performed: null, settled,
-      needsHim: 'May I keep asking the package registry when the things I run on '
-        + 'were last published? It reads a public page, changes nothing, and tells '
-        + 'me when something I depend on has been abandoned.',
+      performed: null, settled, needsHim: null,
     };
   }
 
