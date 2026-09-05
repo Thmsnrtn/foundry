@@ -17,6 +17,15 @@ import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { capability, recordMaturity } from './capabilities.js';
 
+export interface Economics {
+  kind: 'fixed_recurring' | 'trial_credit' | 'included_allowance'
+    | 'first_proof_ceiling' | 'variable_usage';
+  label: string;
+  amountCents: number | null;
+  period: 'month' | 'once' | 'per_piece_of_work' | null;
+  note: string;
+}
+
 export type Route = 'reuse' | 'existing_api' | 'new_provider' | 'browser' | 'adapter'
   | 'build' | 'procure' | 'license' | 'human';
 
@@ -34,6 +43,15 @@ export interface Acquisition {
    */
   enables: string[];
   doesNotAuthorize: string[];
+  /**
+   * THE MONEY, AS SEPARATE FACTS.
+   *
+   * A recurring commitment and a one-off ceiling are different kinds of thing,
+   * and the small number is the reassuring one — so running them together in a
+   * sentence reads as cheaper than the truth. Empty when nobody recorded any,
+   * and `costNote` is then the whole of it.
+   */
+  economics: Economics[];
   /**
    * NOTHING CAN CARRY THIS CAPABILITY TODAY.
    *
@@ -57,6 +75,7 @@ export async function proposeAcquisition(input: {
   costNote: string; because: string; proposedBy: string;
   subject?: { kind: 'opportunity' | 'company'; id: string } | null;
   enables?: string[]; doesNotAuthorize?: string[];
+  economics?: Economics[];
 }): Promise<string> {
   // ONE OPEN PROPOSAL PER CAPABILITY PER PERSON. Asking twice for the same
   // thing is how an owner learns to stop reading.
@@ -76,6 +95,14 @@ export async function proposeAcquisition(input: {
       input.subject?.id ?? null, input.proposedBy,
       (input.enables ?? []).join('\n') || null,
       (input.doesNotAuthorize ?? []).join('\n') || null]);
+
+  for (const [i, e] of (input.economics ?? []).entries()) {
+    await query(
+      `INSERT INTO acquisition_economics
+         (id, acquisition_id, founder_id, kind, label, amount_cents, period, note, sort_order)
+       VALUES (?,?,?,?,?,?,?,?,?)`,
+      [nanoid(), id, input.founderId, e.kind, e.label, e.amountCents, e.period, e.note, i]);
+  }
   return id;
 }
 
@@ -91,6 +118,19 @@ async function somethingCanCarry(capabilityKey: string): Promise<boolean> {
         AND maturity IN ('available','controlled_proven','reality_proven','reliable')`,
     [capabilityKey])).rows[0] as Record<string, unknown>;
   return Number(row.n) > 0;
+}
+
+async function economicsFor(acquisitionId: string): Promise<Economics[]> {
+  return ((await query(
+    `SELECT kind, label, amount_cents, period, note FROM acquisition_economics
+      WHERE acquisition_id = ? ORDER BY sort_order, kind`, [acquisitionId]))
+    .rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+    kind: String(r.kind) as Economics['kind'],
+    label: String(r.label),
+    amountCents: r.amount_cents == null ? null : Number(r.amount_cents),
+    period: r.period == null ? null : String(r.period) as Economics['period'],
+    note: String(r.note),
+  }));
 }
 
 /** One item per line, so the lists stay readable in the database itself. */
@@ -112,6 +152,7 @@ async function read(row: Record<string, unknown>): Promise<Acquisition> {
     provider: String(row.provider), how: String(row.how), costNote: String(row.cost_note),
     because: String(row.because), decision, acquired: row.acquired_at != null,
     enables: lines(row.enables), doesNotAuthorize: lines(row.does_not_authorize),
+    economics: await economicsFor(String(row.id)),
     blocking: !(await somethingCanCarry(String(row.capability_key))),
     withdrawnAt: row.withdrawn_at == null ? null : String(row.withdrawn_at),
     withdrawReason: row.withdraw_reason == null ? null : String(row.withdraw_reason),
@@ -173,6 +214,38 @@ export async function decideAcquisition(input: {
     `UPDATE capability_acquisitions
         SET decision = ?, decided_at = datetime('now'), decided_by = ?
       WHERE id = ? AND decision IS NULL`, [input.decision, input.by, input.id]);
+  if (input.decision !== 'approved') return;
+
+  // THE SECOND GRANT, WRITTEN WHERE THE FIRST ONE IS ANSWERED.
+  //
+  // He read two numbers on the card: a subscription and a ceiling on metered
+  // use above it. Recording only the first would make the second a sentence he
+  // was shown, which is worse than not showing it — so the yes writes both, and
+  // the ceiling is read where workspaces are made.
+  //
+  // The lowest ceiling wins if one is already there. Approving a second
+  // capability must not quietly raise a limit he set answering a different
+  // question.
+  const row = (await query(
+    `SELECT a.founder_id, e.amount_cents
+       FROM capability_acquisitions a
+       JOIN acquisition_economics e ON e.acquisition_id = a.id
+      WHERE a.id = ? AND e.kind = 'variable_usage' AND e.period = 'month'
+        AND e.amount_cents IS NOT NULL`,
+    [input.id])).rows[0] as Record<string, unknown> | undefined;
+  if (!row) return;
+
+  const existing = (await query(
+    'SELECT cents_per_month FROM workshop_spend_ceiling WHERE founder_id = ?',
+    [String(row.founder_id)])).rows[0] as Record<string, unknown> | undefined;
+  if (existing && Number(existing.cents_per_month) <= Number(row.amount_cents)) return;
+  await query('DELETE FROM workshop_spend_ceiling WHERE founder_id = ?',
+    [String(row.founder_id)]);
+  await query(
+    `INSERT INTO workshop_spend_ceiling
+       (founder_id, cents_per_month, acquisition_id, authorized_by)
+     VALUES (?,?,?,?)`,
+    [String(row.founder_id), Number(row.amount_cents), input.id, input.by]);
 }
 
 /**
@@ -200,6 +273,10 @@ export async function withdrawAcquisition(input: {
     `UPDATE capability_acquisitions
         SET withdrawn_at = datetime('now'), withdraw_reason = ?
       WHERE id = ? AND withdrawn_at IS NULL`, [input.reason.trim(), input.id]);
+
+  // The ceiling this decision wrote goes with it. Leaving it behind would let a
+  // withdrawn decision go on governing spending it no longer authorises.
+  await query('DELETE FROM workshop_spend_ceiling WHERE acquisition_id = ?', [input.id]);
 
   if (a.provider_id != null) {
     await recordMaturity({

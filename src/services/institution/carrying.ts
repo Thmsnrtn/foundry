@@ -44,6 +44,7 @@
 import { query } from '../../db/client.js';
 import { log as logger } from '../../lib/logger.js';
 import { WorkshopError } from '../workshop/contract.js';
+import type { Economics as AcqEconomics } from './acquisition.js';
 
 /** What this responsibility is called, everywhere it is referred to. */
 export const DEPENDENCY_RESPONSIBILITY = 'keep the dependency list honest';
@@ -642,15 +643,85 @@ async function whatItWouldCost(substrate: string): Promise<string> {
                              ELSE 2 END`, [substrate]))
     .rows as unknown as Array<Record<string, unknown>>);
   if (rows.length === 0) return 'not known — nothing has been read about what it costs';
-  // AND WHAT THE FIRST ONE WOULD ACTUALLY COST HIM, which is the number he
-  // wants and the one a plan page never gives. Taken from the ceiling this
-  // institution enforces rather than estimated, so the figure on the card and
-  // the figure the workspace stops at are the same figure.
+  return rows.map((r) => String(r.finding)).join('; ');
+}
+
+/**
+ * WHAT A RECURRING BILL LOOKS LIKE WHEN IT IS TOLD HONESTLY.
+ *
+ * FOUR FACTS AND A POLICY, NEVER ONE SENTENCE. A $0.25 first-proof ceiling
+ * sitting in the same breath as a $20-a-month commitment reads as cheaper than
+ * the truth, because the small number is the reassuring one and the mind keeps
+ * that one. So they are carried apart, each with the sentence that makes its
+ * number mean something, and the card shows them apart.
+ *
+ * AND A YES TO A PLAN IS NOT A YES TO UNLIMITED COMPUTE. The last row is a
+ * separate grant with its own number, enforced where workspaces are made rather
+ * than described here — because a limit nothing checks is a sentence, not a
+ * limit. It is deliberately small: the plan's own allowance covers the work
+ * that raised this by a wide margin, so this ceiling is a backstop against
+ * something new rather than an expected cost.
+ */
+const WORKSHOP_OVERAGE_CEILING_CENTS = 500;
+
+async function whatItCostsInParts(substrate: string): Promise<AcqEconomics[]> {
+  const found = new Map(((await query(
+    `SELECT property, finding FROM substrate_evaluations WHERE substrate = ?`,
+    [substrate])).rows as unknown as Array<Record<string, unknown>>)
+    .map((r) => [String(r.property), String(r.finding)]));
+
+  const plan = found.get('plan required');
+  const trial = found.get('trial credit');
+  const headroom = found.get('does the plan cover ordinary work');
   const ceiling = (WHAT_ONE_DESCRIPTION_MAY_COST_CENTS / 100).toFixed(2);
-  return `${rows.map((r) => String(r.finding)).join('; ')}. The first piece of work `
-    + `is one workspace alive for seconds, and I stop it at $${ceiling} — that is a `
-    + 'ceiling I enforce on each piece of work, not a promise about the bill, which '
-    + 'is the plan plus whatever is actually used';
+  const overage = (WORKSHOP_OVERAGE_CEILING_CENTS / 100).toFixed(2);
+
+  const out: AcqEconomics[] = [];
+  if (plan !== undefined) {
+    out.push({
+      kind: 'fixed_recurring', label: 'Every month, from the day you say yes',
+      amountCents: 2000, period: 'month',
+      note: 'A subscription, not a one-off. It keeps costing this until you end '
+        + 'it, and ending it is something only you can do, in your account with '
+        + 'them.',
+    });
+    out.push({
+      kind: 'included_allowance', label: 'Included in that',
+      amountCents: null, period: null,
+      note: headroom !== undefined
+        ? '450 CPU-hours, 1800 RAM-hours and 50 GB-months a month, across up to '
+          + '20 workspaces at once. The work that made me ask for this is one '
+          + 'workspace alive for seconds — even a hundred times a day would use '
+          + 'a small fraction of that, and nothing is kept afterwards.'
+        : 'the plan states monthly allowances; how far they go for this work has '
+          + 'not been worked out',
+    });
+  }
+  if (trial !== undefined) {
+    out.push({
+      kind: 'trial_credit', label: 'Credit on your account', amountCents: 0,
+      period: 'once',
+      note: 'None. They advertise a starting credit; your organisation\'s balance '
+        + 'reads zero, so there is nothing here to offset the first month.',
+    });
+  }
+  out.push({
+    kind: 'first_proof_ceiling', label: 'The first real attempt',
+    amountCents: WHAT_ONE_DESCRIPTION_MAY_COST_CENTS, period: 'per_piece_of_work',
+    note: `At most $${ceiling}, because that is the ceiling I already stop at on `
+      + 'each piece of work. It comes out of the plan\'s allowance rather than '
+      + 'being extra.',
+  });
+  out.push({
+    kind: 'variable_usage', label: 'Anything beyond the plan',
+    amountCents: WORKSHOP_OVERAGE_CEILING_CENTS, period: 'month',
+    note: `I stop at $${overage} a month of metered use above the plan — twenty `
+      + 'pieces of work at the ceiling above. On the work I am asking for this '
+      + 'is zero. Saying yes to the plan is not saying yes to unlimited '
+      + 'computing, and this is the number that makes that true rather than a '
+      + 'promise.',
+  });
+  return out;
 }
 
 /**
@@ -694,6 +765,7 @@ async function askForTheComputer(input: {
     provider: input.substrate,
     how: 'workspace',
     costNote: await whatItWouldCost(input.substrate),
+    economics: await whatItCostsInParts(input.substrate),
     because:
       'I am carrying a responsibility that needs it. Keeping the description of '
       + 'my own database true means producing a change to real software, and a '

@@ -79,13 +79,32 @@ describe('the wall the real work runs into', () => {
         .filter((a) => a.capabilityKey === 'run_in_workspace');
       expect(ask?.costNote).toContain('$20/month');
       expect(ask?.costNote).toContain('usage');
-      // AND THE FIRST-PROOF FIGURE, which is the number he actually wants and
-      // the one a plan page never gives. Taken from the ceiling the institution
-      // enforces, so the figure on the card and the figure the workspace stops
-      // at cannot become different figures.
-      expect(ask?.costNote).toContain('$0.25');
-      expect(ask?.costNote).toContain('not a promise about the bill');
     });
+
+  it('keeps the recurring commitment apart from the one-off ceiling', async () => {
+    // A $0.25 first-proof ceiling in the same breath as a $20-a-month
+    // commitment reads as cheaper than the truth, because the small number is
+    // the reassuring one and that is the one the mind keeps. Four facts and a
+    // policy, each with the sentence that makes its number mean something.
+    const [ask] = (await acquisitionsAwaiting(OWNER))
+      .filter((a) => a.capabilityKey === 'run_in_workspace');
+    const by = new Map((ask?.economics ?? []).map((e) => [e.kind, e]));
+
+    expect(by.get('fixed_recurring')?.amountCents).toBe(2000);
+    expect(by.get('fixed_recurring')?.period).toBe('month');
+    expect(by.get('fixed_recurring')?.note).toContain('until you end it');
+
+    expect(by.get('trial_credit')?.amountCents).toBe(0);
+    expect(by.get('included_allowance')?.note).toContain('450 CPU-hours');
+
+    expect(by.get('first_proof_ceiling')?.amountCents).toBe(25);
+    expect(by.get('first_proof_ceiling')?.period).toBe('per_piece_of_work');
+
+    // AND A YES TO A PLAN IS NOT A YES TO UNLIMITED COMPUTING.
+    expect(by.get('variable_usage')?.amountCents).toBe(500);
+    expect(by.get('variable_usage')?.period).toBe('month');
+    expect(by.get('variable_usage')?.note).toContain('not saying yes to unlimited');
+  });
 
   it('does not offer him a trial credit his account does not have', async () => {
     // The vendor's public material says $30. His organisation's credit balance
@@ -96,6 +115,9 @@ describe('the wall the real work runs into', () => {
       .filter((a) => a.capabilityKey === 'run_in_workspace');
     expect(ask?.costNote).toContain('NONE AVAILABLE TO THIS ORGANISATION');
     expect(ask?.costNote).not.toContain('$30 trial credit exists');
+    const credit = ask?.economics.find((e) => e.kind === 'trial_credit');
+    expect(credit?.amountCents).toBe(0);
+    expect(credit?.note).toContain('balance\nreads zero'.replace('\n', ' '));
   });
 
   it('reads both lists in the same words, because acquiring is not authority',

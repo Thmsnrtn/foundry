@@ -7,19 +7,32 @@
 // because the exec semantics were never settled. Sprites publish an exec
 // endpoint, which is the whole difference.
 //
-// WHAT IS VERIFIED (read from Fly's own pages 2026-09-05, recorded with sources
-// in `substrate_evaluations`):
-//   POST https://api.sprites.dev/v1/sprites            create, JSON body
-//   POST https://api.sprites.dev/v1/sprites/{name}/exec?cmd=…&cmd=…
-//        run a command; `cmd` repeats, one per argument
-//   header authorization: Bearer <token>
+// WHAT THE VENDOR PUBLISHES (their own quickstart, read 2026-09-05, recorded
+// with sources in `substrate_evaluations`):
+//   PUT  https://api.sprites.dev/v1/sprites/{name}          create, by name
+//   POST https://api.sprites.dev/v1/sprites/{name}/exec     {"command": "…"}
+//   header authorization: Bearer <SPRITES_TOKEN>
 //   the filesystem is durable between runs - a cloned repository is still
 //   cloned and installed dependencies are still installed on return
 //   an idle sprite freezes and then suspends on its own
 //   a domain allowlist is enforced at packet level, and code running inside can
 //   read the policy it is under but never change it
 //
-// WHAT IS NOT VERIFIED, and therefore not attempted. Checkpoint, restore and
+// PUBLISHED IS NOT THE SAME AS EXERCISED, and this adapter learned the
+// difference the embarrassing way. It first posted to the collection with the
+// name in a body, and sent exec an argv as repeated `cmd` parameters. Both are
+// the shapes most APIs use. Neither is this one's. Nothing caught it because a
+// request with no credential never gets far enough to be told its body is
+// wrong: the 401 arrives first, and a real 401 from a real host proves the
+// service is there and the auth header is right and NOTHING WHATEVER about
+// what is being sent.
+//
+// So this is written to what the vendor publishes, and the request shapes below
+// remain unexercised until something has actually run. That is the difference
+// between an adapter that is careful and an adapter that is proven, and only
+// the second is worth calling reality-proven.
+//
+// WHAT IS NOT PUBLISHED ANYWHERE READ, and therefore not attempted. Checkpoint, restore and
 // network-policy are described as primitives and their endpoints were not
 // enumerated on the pages read. Guessing a URL for an operation whose job is to
 // contain damage would be the exact failure this substrate exists to prevent,
@@ -42,10 +55,14 @@ const BASE = 'https://api.sprites.dev/v1';
 const TIMEOUT_MS = 30_000;
 
 function token(): string {
-  const t = process.env.SPRITE_TOKEN;
+  // THE VENDOR'S OWN NAME FOR IT. Their quickstart says SPRITES_TOKEN, and a
+  // near-miss on a secret's name is the kind of thing that costs somebody an
+  // afternoon for no reason. The older singular is still read so nothing
+  // already set anywhere stops working.
+  const t = process.env.SPRITES_TOKEN ?? process.env.SPRITE_TOKEN;
   if (!t) {
     throw new WorkshopError('fly_sprites', 'credential',
-      'no SPRITE_TOKEN is configured, so no sprite can be created. This substrate '
+      'no SPRITES_TOKEN is configured, so no sprite can be created. This substrate '
       + 'is declared, not available.');
   }
   return t;
@@ -80,6 +97,44 @@ function spriteName(purpose: string): string {
   return `foundry-${slug}-${stamp}`.replace(/-+/g, '-');
 }
 
+/**
+ * IS THERE ACTUALLY AN ACCOUNT BEHIND THIS YET?
+ *
+ * A read, and the cheapest one there is: listing costs nothing and creates
+ * nothing. It exists so the institution can tell the owner the truth about
+ * where his decision has got to without asking him to confirm anything — he
+ * should not have to tell an app whether the thing he just did worked.
+ *
+ * The three answers are genuinely different and the owner-facing words differ
+ * with them: no credential set yet, a credential that the provider rejects, and
+ * a credential that works. Collapsing them into "not connected" is how somebody
+ * spends an evening re-doing a step that was already right.
+ */
+export async function spritesReachable(): Promise<
+{ ok: boolean; what: 'no_credential' | 'rejected' | 'reachable' | 'unreachable';
+  detail: string }> {
+  if ((process.env.SPRITES_TOKEN ?? process.env.SPRITE_TOKEN) === undefined) {
+    return { ok: false, what: 'no_credential',
+      detail: 'nothing has been set for this yet' };
+  }
+  try {
+    const res = await call('/sprites', { method: 'GET' });
+    if (res.status === 401 || res.status === 403) {
+      return { ok: false, what: 'rejected',
+        detail: `the provider refused it (HTTP ${String(res.status)})` };
+    }
+    if (res.status >= 400) {
+      return { ok: false, what: 'unreachable',
+        detail: `the provider answered HTTP ${String(res.status)}` };
+    }
+    return { ok: true, what: 'reachable',
+      detail: `the provider answered HTTP ${String(res.status)} to an authenticated read` };
+  } catch (err) {
+    return { ok: false, what: 'unreachable',
+      detail: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 export const flySpritesWorkshop: WorkshopSubstrate = {
   name: 'fly_sprites',
 
@@ -96,11 +151,16 @@ export const flySpritesWorkshop: WorkshopSubstrate = {
         'a domain allowlist was asked for and the endpoint that sets one has not '
         + 'been read yet, so this sprite would run with a policy nobody applied');
     }
+    // CREATE IS PUT-BY-NAME, WHICH IS NOT WHAT THIS ADAPTER FIRST DID.
+    //
+    // It posted to the collection with the name in a body, which is the shape
+    // most APIs use and not the one this one publishes. Nothing caught it,
+    // because an adapter with no credential never gets far enough to be told it
+    // is wrong — the 401 arrives before the request shape is ever judged. So a
+    // real 401 proves the host is there and the auth works, and proves nothing
+    // whatever about the body.
     const name = spriteName(spec.purpose);
-    const res = await call('/sprites', {
-      method: 'POST',
-      body: JSON.stringify({ name }),
-    });
+    const res = await call(`/sprites/${encodeURIComponent(name)}`, { method: 'PUT' });
     if (res.status >= 300) {
       throw new WorkshopError('fly_sprites', 'create',
         `sprite create -> HTTP ${String(res.status)}: ${res.text.slice(0, 200)}`);
@@ -120,19 +180,22 @@ export const flySpritesWorkshop: WorkshopSubstrate = {
     }
     const body = declared ? step.slice(declared[0].length) : step;
 
-    // `cmd` repeats, one per argument, which is how the API takes an argv
-    // rather than a shell string — so nothing here builds a command line that
-    // a filename with a space could break apart.
-    const argv = body.match(/"[^"]*"|\S+/g) ?? [];
-    if (argv.length === 0) {
+    // EXEC TAKES A JSON BODY, WHICH IS ALSO NOT WHAT THIS ADAPTER FIRST DID.
+    //
+    // It sent one repeated `cmd` query parameter per argument, on the reasoning
+    // that an argv cannot be broken apart by a filename with a space in it.
+    // Good reasoning about an API this is not: the published shape is a single
+    // `command` string in the body. Written to what the vendor publishes rather
+    // than to what would be nicer, because the adapter's job is to be right
+    // about somebody else's service.
+    const command = body.trim();
+    if (command.length === 0) {
       return { ok: false, costCents: 0, output: 'refused: nothing to run' };
     }
-    const qs = argv
-      .map((a) => `cmd=${encodeURIComponent(a.replace(/^"|"$/g, ''))}`)
-      .join('&');
 
     const res = await call(
-      `/sprites/${encodeURIComponent(externalRef)}/exec?${qs}`, { method: 'POST' });
+      `/sprites/${encodeURIComponent(externalRef)}/exec`,
+      { method: 'POST', body: JSON.stringify({ command }) });
     return {
       ok: res.status < 300,
       output: res.text.slice(0, 20_000),

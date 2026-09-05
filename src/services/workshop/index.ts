@@ -110,6 +110,39 @@ export async function createWorkshop(input: {
         + String(rule?.why ?? 'nothing says whether this substrate may produce one'));
     }
   }
+  // A YES TO A PLAN IS NOT A YES TO UNLIMITED COMPUTING.
+  //
+  // The owner authorises a subscription and, separately, a ceiling on metered
+  // use above it. Without this check the second grant would be a sentence on a
+  // card: the per-workspace budget resets every time a workspace is made, so
+  // nothing would stop a responsibility that had gone wrong from making a
+  // thousand of them.
+  //
+  // MONTH TO DATE, REAL WORK ONLY, AND IT STOPS THE WORK RATHER THAN THE BILL —
+  // the bill is the provider's and this institution cannot reach it. Rehearsals
+  // are exempt because they cost the owner nothing. When no ceiling has been
+  // authorised there is nothing to check: the substrates that cost money are
+  // unreachable without a credential anyway, and refusing here would stop the
+  // free ones for a reason that has nothing to do with them.
+  if (input.evidenceMode === 'real') {
+    const ceiling = (await query(
+      'SELECT cents_per_month FROM workshop_spend_ceiling WHERE founder_id = ?',
+      [input.founderId])).rows[0] as Record<string, unknown> | undefined;
+    if (ceiling) {
+      const spent = (await query(
+        `SELECT COALESCE(SUM(spent_cents), 0) AS n FROM workspaces
+          WHERE founder_id = ? AND evidence_mode = 'real'
+            AND datetime(created_at) >= datetime('now','start of month')`,
+        [input.founderId])).rows[0] as Record<string, unknown>;
+      if (Number(spent.n) >= Number(ceiling.cents_per_month)) {
+        throw new WorkshopError(input.substrate, 'create',
+          `this month's workshop spending has reached the ceiling you set `
+          + `(${String(ceiling.cents_per_month)} cents). Nothing more runs until `
+          + 'you raise it or the month turns.');
+      }
+    }
+  }
+
   const id = nanoid();
   await query(
     `INSERT INTO workspaces

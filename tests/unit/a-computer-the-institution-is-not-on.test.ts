@@ -80,22 +80,51 @@ describe('the grant is checked before the computer sees the step', () => {
 });
 
 describe('what it sends, when it does send', () => {
-  it('passes an argv rather than a shell string, so a space cannot split a filename',
+  it('sends what the vendor publishes, not what would be nicer to send',
     async () => {
-      process.env.SPRITE_TOKEN = 'test-token';
+      // THIS TEST USED TO ASSERT THE WRONG API. It checked for a repeated `cmd`
+      // query parameter per argument, on the reasoning that an argv cannot be
+      // split apart by a filename with a space in it — good reasoning about an
+      // API this is not. The published shape is a single `command` string in
+      // the body, and a test written from the same assumption as the code is
+      // not a check on it.
+      process.env.SPRITES_TOKEN = 'test-token';
       let asked = '';
-      vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any) => {
+      let sent = '';
+      vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any, init: any) => {
         asked = String(url);
+        sent = String(init?.body ?? '');
         return new Response('ok', { status: 200 });
       });
-      await flySpritesWorkshop.run('sprite-1',
-        'node -e "print two words"', []);
-      expect(asked).toContain('/v1/sprites/sprite-1/exec?');
-      // Three arguments, each its own cmd, with the quoted one kept whole.
-      expect(asked).toContain('cmd=node');
-      expect(asked).toContain('cmd=-e');
-      expect(asked).toContain(encodeURIComponent('print two words'));
+      await flySpritesWorkshop.run('sprite-1', 'node -e "print two words"', []);
+      expect(asked).toBe('https://api.sprites.dev/v1/sprites/sprite-1/exec');
+      expect(asked).not.toContain('?');
+      expect(JSON.parse(sent)).toEqual({ command: 'node -e "print two words"' });
     });
+
+  it('creates by name with a PUT, which is also not what it first did', async () => {
+    process.env.SPRITES_TOKEN = 'test-token';
+    let asked = '';
+    let method = '';
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (url: any, init: any) => {
+      asked = String(url);
+      method = String(init?.method ?? '');
+      return new Response('{}', { status: 200 });
+    });
+    const made = await flySpritesWorkshop.create({ purpose: 'self_development',
+      ceiling: 'prepare', network: 'none', budgetCents: 0, tooling: [] });
+    expect(method).toBe('PUT');
+    expect(asked).toBe(`https://api.sprites.dev/v1/sprites/${made.externalRef}`);
+  });
+
+  it('reads the credential under the name the vendor uses for it', async () => {
+    // A near-miss on a secret's name costs somebody an afternoon for no reason.
+    delete process.env.SPRITES_TOKEN;
+    delete process.env.SPRITE_TOKEN;
+    await expect(flySpritesWorkshop.create({ purpose: 'self_development',
+      ceiling: 'prepare', network: 'none', budgetCents: 0, tooling: [] }))
+      .rejects.toThrow(/SPRITES_TOKEN/);
+  });
 
   it('never puts a reusable secret inside the sandbox', async () => {
     process.env.SPRITE_TOKEN = 'test-token';

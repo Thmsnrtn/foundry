@@ -324,7 +324,7 @@ interface OwnerState {
     id: string; capabilityKey: string; whatItDoes: string; rung: string;
     route: string; provider: string; costNote: string; because: string;
     sentence: string; enables: string[]; doesNotAuthorize: string[];
-    blocking: boolean;
+    blocking: boolean; economics: Array<{ label: string; note: string }>;
   }>;
   permissions: Array<{ id: string; what: string; until: string; path: string | null }>;
   declined: Array<{ id: string; title: string }>;
@@ -577,6 +577,7 @@ async function readOwnerState(
         rung: a.rung, route: a.route, provider: a.provider, costNote: a.costNote,
         because: a.because, sentence: a.sentence, enables: a.enables,
         doesNotAuthorize: a.doesNotAuthorize, blocking: a.blocking,
+        economics: a.economics.map((e) => ({ label: e.label, note: e.note })),
       }));
     })(),
     permissions: consents.map((consent) => {
@@ -809,7 +810,8 @@ type Attention =
   | { kind: 'acquire'; acquisitionId: string; capabilityKey: string;
       whatItDoes: string; rung: string; provider: string; costNote: string;
       because: string; route: string; enables: string[];
-      doesNotAuthorize: string[]; blocking: boolean }
+      doesNotAuthorize: string[]; blocking: boolean;
+      economics: Array<{ label: string; note: string }> }
   | { kind: 'recognise'; candidateId: string; check: string | null; proposal: string }
   | { kind: 'recognise_company'; candidateId: string; productId: string;
       companyName: string; proposal: string; rationale: string }
@@ -878,7 +880,7 @@ function whatNeedsHim(s: OwnerState): Attention {
       whatItDoes: stuck.whatItDoes, rung: stuck.rung, provider: stuck.provider,
       costNote: stuck.costNote, because: stuck.because, route: stuck.route,
       enables: stuck.enables, doesNotAuthorize: stuck.doesNotAuthorize,
-      blocking: true,
+      blocking: true, economics: stuck.economics,
     };
   }
 
@@ -904,6 +906,7 @@ function whatNeedsHim(s: OwnerState): Attention {
       rung: acquire.rung, provider: acquire.provider, costNote: acquire.costNote,
       because: acquire.because, route: acquire.route, enables: acquire.enables,
       doesNotAuthorize: acquire.doesNotAuthorize, blocking: acquire.blocking,
+      economics: acquire.economics,
     };
   }
   const candidate = s.pendingCandidates[0];
@@ -1604,7 +1607,14 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
             items: a.doesNotAuthorize }] : []),
       ],
       facts: [
-        ['What it costs', a.costNote],
+        // THE MONEY, AS SEPARATE ROWS. A recurring commitment and a one-off
+        // ceiling are different kinds of fact, and the small number is the
+        // reassuring one — so running them together in a sentence reads as
+        // cheaper than the truth. The single blob stays only where nobody has
+        // taken the trouble to separate them.
+        ...(a.economics.length
+          ? a.economics.map((e) => [e.label, e.note] as [string, string])
+          : [['What it costs', a.costNote] as [string, string]]),
         // The sentence form of the limits stays when there is no list, and goes
         // when there is — saying the same thing twice in different words is how
         // an owner starts skimming both.
@@ -1620,17 +1630,38 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
         ['If you change your mind', changeYourMind],
         ['If you say no', 'I leave it, and say so wherever the work needed it'],
       ],
+      // OPENING THIS COMMITS HIM TO NOTHING. He has to be able to understand
+      // the decision without making it, and a product that hides the reasoning
+      // behind the yes is asking to be trusted rather than read.
       why: a.blocking
         ? [
-          'Because I ran into it, not because I went looking. I was carrying a '
-          + 'piece of my own upkeep, got as far as the last step, and stopped '
-          + 'there — everything on either side of it already works.',
-          'Nothing available to me can do this. That is what makes it your '
-          + 'decision rather than mine: I cannot finish on my own, and I am not '
-          + 'willing to finish it the unsafe way, on the machine I run on.',
-          'A yes lets me try. It does not promise the attempt will work — that '
-          + 'is what the attempt is for, and you will hear what it cost either '
-          + 'way.',
+          'Because I ran into it, not because I went looking. Something I look '
+          + 'after — keeping my own written description of my database true — '
+          + 'goes out of date every time I change, and I can already spot it and '
+          + 'check the fix. I got as far as the last step and stopped.',
+          'The last step is running the fix. I will not run new or changed code '
+          + 'on the machine I am running on: code nobody has run yet can break '
+          + 'that machine exactly as badly as a stranger\u2019s could, and I would '
+          + 'be doing it to myself. So it has to happen on a computer that is not '
+          + 'me, and I have not got one.',
+          'I chose these people because their service is the one I could check: '
+          + 'the workspaces are separate, they survive between steps, they shut '
+          + 'themselves down when idle, and code inside cannot loosen the network '
+          + 'rules it is under. I read that from their own material and wrote '
+          + 'down where each part came from.',
+          'What I have actually proved so far is my own half. Work goes in, comes '
+          + 'back out, gets compared rather than trusted, stops if it costs too '
+          + 'much, is cleaned up afterwards, and never gets published. All of '
+          + 'that runs today, on myself, which is exactly why it proves nothing '
+          + 'about the part that matters.',
+          'What is unproven is the outside. Nothing has ever run on one of their '
+          + 'computers. I have never been billed by them. I have never seen a '
+          + 'workspace of theirs come back or go away. That is what a yes buys a '
+          + 'chance to find out, and I will tell you what it found either way.',
+          'What the money buys is a place to work, and nothing else. It is not '
+          + 'permission to change anything of yours, to put anything live, or to '
+          + 'publish anything. Those are separate questions and stay separate '
+          + 'questions.',
         ]
         : undefined,
       primary: { label: allowLabel, action: `/foundry/acquisitions/${a.acquisitionId}/decide`,
@@ -3660,7 +3691,115 @@ foundryShellRoutes.post('/foundry/acquisitions/:id/decide',
     const { decideAcquisition } = await import('../../services/institution/acquisition.js');
     await decideAcquisition({
       id: c.req.param('id'), decision, by: `founder:${String(founder.id)}` });
+
+    // A YES THAT LEADS SOMEWHERE. Where the decision has a step left at the
+    // provider's end, he goes straight to it rather than back to a screen
+    // saying "acquiring" — the moment after the tap is when he is willing to
+    // finish, and a banner spends that willingness on nothing.
+    const key = (await query(
+      'SELECT capability_key FROM capability_acquisitions WHERE id = ?',
+      [c.req.param('id')])).rows[0] as Record<string, unknown> | undefined;
+    if (decision === 'approved' && String(key?.capability_key) === 'run_in_workspace') {
+      return c.redirect('/foundry/workshop');
+    }
     return c.redirect(`/foundry?done=${decision === 'approved' ? 'acquiring' : 'notacquiring'}`);
+  });
+
+/**
+ * WHERE A DECISION THAT COSTS MONEY ACTUALLY GETS TO.
+ *
+ * The half of the journey that happens somewhere this institution cannot see:
+ * he takes a plan, issues a key, sets it where the deployment reads secrets,
+ * and comes back. Every one of those can half-happen, so the state here is
+ * read from the provider rather than believed from him.
+ *
+ * NOTHING ON THIS PAGE ASKS FOR THE KEY. There is no field to paste it into and
+ * there never will be: a reusable secret typed into a screen is a secret in
+ * that screen's history, its logs and its backups. It goes into the deployment's
+ * own secret store, which is his to write and nothing here can read.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.get('/foundry/workshop', requireInstitutionOwner(), async (c: any) => {
+  const founder = c.get('founder') as { id?: string } | undefined;
+  if (!founder?.id) return c.redirect('/onboarding');
+
+  const { workshopStanding } = await import('../../services/institution/workshop-standing.js');
+  const standing = await workshopStanding(String(founder.id));
+  const checked = String(c.req.query('checked') ?? '');
+
+  // WHERE THE PLAN IS TAKEN, FROM THE RECORD RATHER THAN FROM MEMORY. Read out
+  // of the same evaluation the decision was made from, so a page that moves is
+  // corrected in one place and the owner is never sent somewhere that used to
+  // exist.
+  const where = (await query(
+    `SELECT finding FROM substrate_evaluations
+      WHERE substrate = 'fly_sprites' AND property = 'how a plan is taken'`))
+    .rows[0] as Record<string, unknown> | undefined;
+  const takeItAt = where == null ? null : String(where.finding);
+
+  const body = html`
+    <h1>The workshop</h1>
+    <p class="lede">${standing.says}</p>
+    ${checked.length > 0 ? html`<div class="know"><p>${checked}</p></div>` : ''}
+
+    ${standing.state === 'authorized' ? html`<div class="know">
+      <h2>What is left, and it is all at their end</h2>
+      <ol>
+        <li>Take the plan in your account with them.${takeItAt === null ? ''
+    : html` <span class="quiet">${takeItAt}</span>`}</li>
+        <li>Issue a key there.</li>
+        <li>Put it into this deployment&rsquo;s own secret store, under
+          <span class="mono">SPRITES_TOKEN</span>. That store is yours; I cannot read
+          what is in it and I do not want the key itself.</li>
+      </ol>
+      <p class="quiet">Then come back and press the button. I will ask them whether it
+        worked rather than asking you.</p>
+      <form method="POST" action="/foundry/workshop/check" style="margin-top:var(--s2)">
+        <button class="btn go" type="submit">Check whether it is working</button>
+      </form>
+    </div>` : ''}
+
+    ${standing.state === 'reachable' ? html`<div class="know">
+      <h2>What happens next</h2>
+      <p>Nothing needs you. The next time my own upkeep needs doing I will do it out
+        there, check what came back, and tell you what it found and what it cost.</p>
+      <p class="quiet">Answering me is not the same as having done anything. I will not
+        say the workshop works until something has actually run in it.</p>
+      <form method="POST" action="/foundry/workshop/check" style="margin-top:var(--s2)">
+        <button class="btn" type="submit" style="width:auto">Check it again</button>
+      </form>
+    </div>` : ''}
+
+    ${standing.state === 'not_yet' ? html`<div class="know">
+      <h2>Nothing is lost</h2>
+      <p>The work is still on my list and I still know exactly what it needs. I will not
+        bring this up again unless something changes or you ask.</p>
+    </div>` : ''}
+
+    <a class="btn go" href="/foundry">Back</a>`;
+
+  return c.html(page('The workshop', body, 'foundry'));
+});
+
+/**
+ * ASK THEM, NOT HIM.
+ *
+ * He should never have to tell an application whether the thing he just did
+ * worked. This makes one read against the provider and reports which of the
+ * three genuinely different things is true — nothing set yet, something set
+ * that they refuse, or working — because collapsing those into "not connected"
+ * is how somebody re-does a step that was already right.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/workshop/check',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const { checkTheWorkshop } = await import(
+      '../../services/institution/workshop-standing.js');
+    const result = await checkTheWorkshop({
+      founderId: String(founder.id), by: `founder:${String(founder.id)}` });
+    return c.redirect(`/foundry/workshop?checked=${encodeURIComponent(result.says)}`);
   });
 
 /**
@@ -4812,6 +4951,19 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
   const { acquisitionsHeld } = await import('../../services/institution/acquisition.js');
   const held = await acquisitionsHeld(s.ownerId);
 
+  // WHO SET THE LIMIT, NOT JUST WHAT IT IS.
+  //
+  // A ceiling on his money is a thing he should be able to look at and
+  // recognise as his own. Showing the number alone would leave "set by whom"
+  // as something only the database knows — and a limit he did not set is
+  // exactly the fact he would most want this page to surface.
+  const ceiling = (await query(
+    `SELECT cents_per_month, authorized_by, authorized_at
+       FROM workshop_spend_ceiling WHERE founder_id = ?`, [s.ownerId]))
+    .rows[0] as Record<string, unknown> | undefined;
+  const ceilingSetByHim = ceiling != null
+    && String(ceiling.authorized_by) === `founder:${s.ownerId}`;
+
   // WHAT STOPPING IT ACTUALLY DID. The row disappearing says I am not using it
   // any more and says nothing about the bill, which is the question he will
   // have. Answering it here is the difference between a control he trusts and
@@ -4856,6 +5008,20 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
         customers.</p>`
     : html`<ul>${raw(s.connectedSenses.map((x) => `<li>${x}</li>`).join(''))}</ul>`}
     </div>
+
+    ${ceiling == null ? '' : html`<div class="know">
+      <h2>Work I run outside myself</h2>
+      <p>I stop at <strong>$${(Number(ceiling.cents_per_month) / 100).toFixed(2)}</strong>
+        a month of metered use above whatever plan is paid for.
+        ${ceilingSetByHim
+    ? html`You set that on ${String(ceiling.authorized_at).slice(0, 10)}.`
+    : html`That was set by <span class="mono">${String(ceiling.authorized_by)}</span>
+        on ${String(ceiling.authorized_at).slice(0, 10)} &mdash; if that was not you,
+        it is worth asking why.`}</p>
+      <p class="quiet">This is separate from the plan itself. Agreeing to a subscription
+        is not agreeing to unlimited computing, and this is the number that makes that
+        true rather than a promise.</p>
+    </div>`}
 
     ${held.length === 0 ? '' : html`<div class="know">
       <h2>Things I hold</h2>

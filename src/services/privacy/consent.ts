@@ -821,6 +821,16 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
     reason: 'proposals to one person to acquire a capability, and what they decided',
     onAccountErasure: { op: 'delete' },
   },
+  acquisition_economics: {
+    reason: 'what one person was told a capability would cost them, broken into the '
+      + 'separate money facts they decided on',
+    onAccountErasure: { op: 'delete' },
+  },
+  workshop_spend_ceiling: {
+    reason: 'the limit one person set on what may be spent running work outside this '
+      + 'institution',
+    onAccountErasure: { op: 'delete' },
+  },
   capability_needs: {
     reason: 'which capabilities one person\'s candidates, companies and proposals need',
     onAccountErasure: { op: 'delete' },

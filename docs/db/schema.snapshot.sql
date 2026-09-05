@@ -16,6 +16,33 @@ CREATE TABLE acquirer_signals (
   notes TEXT,
   detected_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE acquisition_economics (
+  id             TEXT PRIMARY KEY,
+  acquisition_id TEXT NOT NULL REFERENCES capability_acquisitions(id),
+  -- WHOSE MONEY THIS DESCRIBES, NAMED HERE EVEN THOUGH THE PARENT KNOWS.
+  --
+  -- Erasing an account deletes founder-scoped tables by this column and does
+  -- not descend into children — that descent exists for the product tree and
+  -- nowhere else. So a child of a founder-scoped table that does not name the
+  -- founder is a row that quietly outlives the person, and what would have
+  -- outlived them here is a record of what they were asked to pay.
+  --
+  -- A copied fact can disagree with the fact it was copied from, so the trigger
+  -- below makes that impossible rather than unlikely.
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  kind           TEXT NOT NULL CHECK (kind IN (
+                   'fixed_recurring','trial_credit','included_allowance',
+                   'first_proof_ceiling','variable_usage')),
+  -- What the owner reads on the left of the row.
+  label          TEXT NOT NULL,
+  -- NULL where the fact is not a number, which is most of the allowances.
+  amount_cents   INTEGER,
+  period         TEXT CHECK (period IN ('month','once','per_piece_of_work')),
+  -- The sentence that makes the number mean something.
+  note           TEXT NOT NULL,
+  sort_order     INTEGER NOT NULL DEFAULT 0,
+  UNIQUE (acquisition_id, kind)
+);
 CREATE TABLE "act_classifications" (
   id             TEXT PRIMARY KEY,
   founder_id     TEXT NOT NULL REFERENCES founders(id),
@@ -4490,6 +4517,14 @@ CREATE TABLE wisdom_patterns (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE workshop_spend_ceiling (
+  founder_id      TEXT PRIMARY KEY REFERENCES founders(id),
+  cents_per_month INTEGER NOT NULL,
+  -- Which decision of his this came from, so it can be traced and withdrawn.
+  acquisition_id  TEXT REFERENCES capability_acquisitions(id),
+  authorized_by   TEXT NOT NULL,
+  authorized_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE workspace_events (
   id            TEXT PRIMARY KEY,
   workspace_id  TEXT NOT NULL REFERENCES workspaces(id),
@@ -5070,6 +5105,22 @@ CREATE INDEX idx_workspace_events_ws ON workspace_events(workspace_id, at);
 CREATE UNIQUE INDEX idx_workspace_grant_live
   ON workspace_grants(workspace_id, capability_key) WHERE revoked_at IS NULL;
 CREATE INDEX idx_workspaces_live ON workspaces(founder_id) WHERE destroyed_at IS NULL;
+CREATE TRIGGER acquisition_economics_guard
+BEFORE INSERT ON acquisition_economics
+BEGIN
+  SELECT RAISE(ABORT,'acquisition_economics:incomplete')
+    WHERE trim(NEW.label) = '' OR trim(NEW.note) = '';
+  -- A MONEY FACT WITH A NUMBER HAS TO SAY OVER WHAT. "$20" is not a fact; "$20
+  -- a month" is, and the difference is the whole point of this table.
+  SELECT RAISE(ABORT,'acquisition_economics:amount_without_period')
+    WHERE NEW.amount_cents IS NOT NULL AND NEW.period IS NULL;
+  SELECT RAISE(ABORT,'acquisition_economics:negative')
+    WHERE NEW.amount_cents IS NOT NULL AND NEW.amount_cents < 0;
+  -- The copy may not disagree with the original.
+  SELECT RAISE(ABORT,'acquisition_economics:wrong_founder')
+    WHERE NOT EXISTS (SELECT 1 FROM capability_acquisitions
+                       WHERE id = NEW.acquisition_id AND founder_id = NEW.founder_id);
+END;
 CREATE TRIGGER act_consequence_floors_constitutional_delete
 BEFORE DELETE ON act_consequence_floors
 BEGIN SELECT RAISE(ABORT,'act_consequence_floor:constitutional'); END;
@@ -7881,6 +7932,14 @@ BEGIN
     SELECT 1 FROM venture_mandates m
      WHERE m.id = NEW.mandate_id AND m.evidence_mode = NEW.evidence_mode
        AND m.founder_id = NEW.founder_id);
+END;
+CREATE TRIGGER workshop_spend_ceiling_guard
+BEFORE INSERT ON workshop_spend_ceiling
+BEGIN
+  SELECT RAISE(ABORT,'workshop_spend_ceiling:not_a_ceiling')
+    WHERE NEW.cents_per_month < 0;
+  SELECT RAISE(ABORT,'workshop_spend_ceiling:unattributed')
+    WHERE trim(NEW.authorized_by) = '';
 END;
 CREATE TRIGGER workspace_ceiling_is_immutable
 BEFORE UPDATE ON workspaces

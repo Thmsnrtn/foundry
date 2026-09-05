@@ -124,7 +124,7 @@ describe('the contract, proven in rehearsal — which is not the isolation', () 
     expect(real.substrate).toBe('fly_sprites');
     expect(real.workspaceId).toBeNull();
     expect(real.artifact).toBeNull();
-    expect(real.because).toContain('SPRITE_TOKEN');
+    expect(real.because).toContain('SPRITES_TOKEN');
     expect(real.because).toContain('declared, not available');
   });
 
