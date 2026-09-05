@@ -27,6 +27,18 @@ const { produceSchemaDescription } = await import(
   '../../src/services/institution/carrying.js');
 await produceSchemaDescription({ founderId: F, evidenceMode: 'real' });
 
+// THE STATE FROM THE OWNER'S OWN SCREENSHOT: a stopped routine, a glance with
+// something in it, and the invented search. Reproduced so the composition being
+// judged is the one he actually met, not a tidier one.
+if (process.env.MOB_STATE === 'stopped') {
+  await query(
+    `INSERT INTO job_health (job_name, consecutive_failures, last_success_at)
+     VALUES ('institutional_judgment_tick', 3, datetime('now','-2 days'))`);
+  await query(
+    `INSERT INTO job_health (job_name, consecutive_failures, last_success_at)
+     VALUES ('portfolio_sweep', 0, datetime('now'))`);
+}
+
 const founder = (await query('SELECT * FROM founders WHERE id = ?', [F]))
   .rows[0] as Record<string, unknown>;
 
