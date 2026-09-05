@@ -58,6 +58,12 @@ export async function createWorkshop(input: {
   subject?: { kind: 'opportunity' | 'company'; id: string } | null;
   substrate: Substrate; createdBy: string;
   evidenceMode: 'real' | 'reference';
+  /**
+   * What this workspace exists to make. Named where it is 'a change to
+   * software', because that is the case the isolation rule governs — and
+   * naming it is how a caller cannot get the weaker treatment by not saying.
+   */
+  produces?: 'a change to software' | null;
 }): Promise<Workshop> {
   // THE REHEARSAL SUBSTRATE IS FOR REHEARSALS. A real task on the in-process
   // computer would be pretending to have done work.
@@ -71,6 +77,37 @@ export async function createWorkshop(input: {
   if (input.substrate === 'reference_world' && input.evidenceMode !== 'reference') {
     throw new WorkshopError(input.substrate, 'create',
       'the rehearsal substrate executes nothing, so real work cannot happen in it');
+  }
+
+  // UNPROVEN CODE DOES NOT RUN WHERE THE INSTITUTION LIVES.
+  //
+  // The older rule was about authorship: code Foundry did not write may not run
+  // on the trusted host. Right instinct, wrong test. A change this institution
+  // generates for its own software has been run by nobody and verified by
+  // nothing, and is exactly as capable of destroying the machine it runs on as
+  // anything a stranger wrote.
+  //
+  // So the test is the code's STANDING. A workspace whose purpose is to PRODUCE
+  // A CHANGE must be somewhere the institution is not. `local_process` is
+  // recorded as `same_host` — a real directory and real commands on the machine
+  // Foundry itself runs on — and `write_code_in_branch` was 'available' through
+  // it, which means the institution believed it could build its own next
+  // version in its own living room.
+  //
+  // Rehearsals are exempt on purpose: a reference-world change produced on the
+  // host is how the lifecycle earns its own reality, and being wrong there
+  // costs nothing.
+  if (input.produces === 'a change to software' && input.evidenceMode === 'real') {
+    const rule = (await query(
+      `SELECT i.may_produce, i.why FROM workspace_substrates s
+         JOIN change_production_isolation i ON i.isolation = s.isolation
+        WHERE s.substrate = ?`, [input.substrate]))
+      .rows[0] as Record<string, unknown> | undefined;
+    if (!rule || Number(rule.may_produce) !== 1) {
+      throw new WorkshopError(input.substrate, 'create',
+        `a real change to software may not be produced on ${input.substrate}: `
+        + String(rule?.why ?? 'nothing says whether this substrate may produce one'));
+    }
   }
   const id = nanoid();
   await query(

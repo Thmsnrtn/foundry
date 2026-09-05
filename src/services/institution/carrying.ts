@@ -429,3 +429,81 @@ export async function carrySchemaDescription(
     needsHim: standing.reachesHim ? standing.sentence : null,
   };
 }
+
+/**
+ * WHAT WAS ACTUALLY READ ABOUT A SUBSTRATE, AND WHERE.
+ *
+ * A provider must earn the role. Recording the evaluation as rows rather than
+ * as a decision means the choice can be checked later against what was actually
+ * published, and revisited when the contract changes — which for a young
+ * product it will.
+ *
+ * Deliberately findings rather than a verdict. "Sprites are the answer" is a
+ * claim; "the API is at api.sprites.dev, exec is a POST, the filesystem is
+ * durable, the network policy is enforced at packet level and code inside can
+ * read it but never change it" are things somebody can go and check.
+ */
+export async function noteSubstrateEvaluation(input: {
+  substrate: string;
+  findings: Array<{ property: string; finding: string; source: string }>;
+}): Promise<void> {
+  for (const f of input.findings) {
+    await query(
+      `INSERT OR REPLACE INTO substrate_evaluations
+         (id, substrate, property, finding, source)
+       VALUES (?,?,?,?,?)`,
+      [`${input.substrate}:${f.property}`, input.substrate, f.property,
+        f.finding.trim(), f.source.trim()]);
+  }
+}
+
+export interface SubstrateStanding {
+  substrate: string;
+  isolation: string;
+  /** Whether a real change to software may be produced there at all. */
+  mayProduceChanges: boolean;
+  /** Whether an adapter exists that can actually run a step. */
+  canRunAStep: boolean;
+  findings: Array<{ property: string; finding: string; source: string }>;
+}
+
+/**
+ * WHICH COMPUTERS THE INSTITUTION COULD ACTUALLY USE.
+ *
+ * Two independent facts per substrate, and confusing them is how a capability
+ * comes to be believed available when nothing can run on it: whether the
+ * isolation permits producing a change, and whether an adapter exists that can
+ * execute a step. `fly_machines` passes the first and fails the second — its
+ * `run` throws by design, because the exec semantics were never settled.
+ */
+export async function whichComputersCouldWork(): Promise<SubstrateStanding[]> {
+  const subs = ((await query(
+    `SELECT s.substrate, s.isolation, COALESCE(i.may_produce, 0) AS may
+       FROM workspace_substrates s
+       LEFT JOIN change_production_isolation i ON i.isolation = s.isolation
+      ORDER BY s.sort_order`, []))
+    .rows as unknown as Array<Record<string, unknown>>);
+
+  const out: SubstrateStanding[] = [];
+  for (const s of subs) {
+    const name = String(s.substrate);
+    const findings = ((await query(
+      `SELECT property, finding, source FROM substrate_evaluations
+        WHERE substrate = ? ORDER BY property`, [name]))
+      .rows as unknown as Array<Record<string, unknown>>).map((f) => ({
+      property: String(f.property), finding: String(f.finding),
+      source: String(f.source),
+    }));
+    // An adapter that exists is not the same as one that can run a step, and
+    // this is read from the evaluation rather than assumed from the file
+    // existing — `fly-machines.ts` is a complete file whose `run` throws.
+    const runs = findings.find((f) => f.property === 'can run a step');
+    out.push({
+      substrate: name, isolation: String(s.isolation),
+      mayProduceChanges: Number(s.may) === 1,
+      canRunAStep: runs !== undefined && runs.finding.startsWith('yes'),
+      findings,
+    });
+  }
+  return out;
+}

@@ -777,6 +777,15 @@ CREATE TABLE causal_chains (
   actionable_insight TEXT,
   discovered_at TEXT DEFAULT (datetime('now'))
 , root_cause_label TEXT, effect_label TEXT);
+CREATE TABLE change_production_isolation (
+  -- Checked rather than referenced: `workspace_substrates` is keyed on the
+  -- substrate, so a foreign key to its isolation column is a mismatch. The
+  -- vocabulary is that column's, and this table says what each value permits.
+  isolation   TEXT PRIMARY KEY CHECK (isolation IN
+                ('executes_nothing','same_host','isolated')),
+  may_produce INTEGER NOT NULL,
+  why         TEXT NOT NULL
+);
 CREATE TABLE chat_messages (
   id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL REFERENCES chat_sessions(id),
@@ -4056,6 +4065,15 @@ CREATE TABLE stripe_webhook_events (
   event_type TEXT NOT NULL,
   processed_at DATETIME NOT NULL
 );
+CREATE TABLE substrate_evaluations (
+  id             TEXT PRIMARY KEY,
+  substrate      TEXT NOT NULL,
+  property       TEXT NOT NULL,
+  finding        TEXT NOT NULL,
+  -- Where this was read, so the evaluation can be checked rather than believed.
+  source         TEXT NOT NULL,
+  evaluated_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE support_channel_feeds (
   provider TEXT PRIMARY KEY
 );
@@ -4986,6 +5004,7 @@ CREATE INDEX idx_stressor_product ON stressor_history(product_id);
 CREATE INDEX idx_stressor_product_active ON stressor_history(product_id, status);
 CREATE INDEX idx_stressor_status ON stressor_history(status);
 CREATE INDEX idx_stripe_events_product ON stripe_events(product_id, processed);
+CREATE INDEX idx_substrate_evaluations ON substrate_evaluations(substrate, property);
 CREATE UNIQUE INDEX idx_support_channels_one_feed_per_provider
   ON support_channels(product_id, fed_by)
   WHERE fed_by IS NOT NULL AND revoked_at IS NULL;
@@ -5294,6 +5313,15 @@ WHEN date(NEW.as_of_date) > date('now')
 BEGIN
   SELECT RAISE(ABORT, 'financial_position:as_of_date is when this was true, not a projection');
 END;
+CREATE TRIGGER change_production_isolation_constitutional_delete
+BEFORE DELETE ON change_production_isolation
+BEGIN SELECT RAISE(ABORT,'change_production_isolation:constitutional'); END;
+CREATE TRIGGER change_production_isolation_constitutional_insert
+BEFORE INSERT ON change_production_isolation
+BEGIN SELECT RAISE(ABORT,'change_production_isolation:constitutional'); END;
+CREATE TRIGGER change_production_isolation_constitutional_update
+BEFORE UPDATE ON change_production_isolation
+BEGIN SELECT RAISE(ABORT,'change_production_isolation:constitutional'); END;
 CREATE TRIGGER company_loop_health_error_name_guard
 BEFORE INSERT ON company_loop_health
 BEGIN
