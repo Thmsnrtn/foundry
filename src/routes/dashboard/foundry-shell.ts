@@ -1481,8 +1481,18 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
     // approving an ACQUISITION, not an act: the new capability goes through the
     // same door, on the same rung, under the same boundaries as everything
     // else. Saying so here is what stops "yes" meaning more than he meant.
+    //
+    // A CHEAP RUNG IS NOT A FREE ONE. `run_in_workspace` sits on prepare — it
+    // reaches nobody and publishes nothing — and every second it runs is
+    // metered. Answering "Nothing" beside a monthly figure invites him to read
+    // that figure as the whole bill, which is the sentence that would make him
+    // say yes and the one that was not true.
     const stillNot = a.rung === 'observe' || a.rung === 'prepare'
-      ? 'Nothing. It can only look, or make drafts nobody outside can see.'
+      ? (a.route === 'procure' || a.route === 'license'
+        ? 'Nothing outside this institution — it can only look, or make drafts '
+          + 'nobody outside can see. It is not free, though: every time it runs '
+          + 'it spends, against a ceiling set on that piece of work.'
+        : 'Nothing. It can only look, or make drafts nobody outside can see.')
       : a.rung === 'public'
         ? 'Anything you have told me not to do still stands. Every use goes '
           + 'through the same door as every other message.'
@@ -1490,6 +1500,21 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
           ? 'It spends nothing on its own. Each use needs an allowance you set '
             + 'or an approval you give.'
           : 'Each single use still needs your approval, every time.';
+    // A DECISION THAT COSTS MONEY IS A DECISION HE CAN UNMAKE, and a card that
+    // cannot say so is asking him to treat a recurring commitment as permanent.
+    // What the withdrawal reaches is stated exactly: it stops the institution
+    // using the thing, and it cancels nothing at the provider, because a
+    // subscription lives in his account and only he can end it. Implying
+    // otherwise would be the more comfortable sentence and the false one.
+    const fromOutside = a.route === 'procure' || a.route === 'license'
+      || a.route === 'existing_api' || a.route === 'new_provider';
+    const changeYourMind = fromOutside
+      ? 'Say so and I stop using it the same day. I cannot cancel anything you '
+        + 'are paying for — that lives in your account with them, and only you '
+        + 'can end it. "What I\u2019m allowed to do" has the button.'
+      : 'Say so and I stop using it the same day. "What I\u2019m allowed to do" '
+        + 'has the button.';
+
     return decisionCard({
       act: 'Authority',
       question: 'Should I get hold of this?',
@@ -1503,6 +1528,14 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
       facts: [
         ['What it costs', a.costNote],
         ['What it would still not let me do', stillNot],
+        ...(fromOutside
+          ? [['What I will never ask you for',
+            'A password, a key or a token typed into a screen or a message. '
+            + 'Anything secret is set by you in their own store, where nothing '
+            + 'here ever sees it, and I will tell you exactly where when you '
+            + 'say yes.'] as [string, string]]
+          : []),
+        ['If you change your mind', changeYourMind],
         ['If you say no', 'I leave it, and say so wherever the work needed it'],
       ],
       primary: { label: 'Yes — get it', action: `/foundry/acquisitions/${a.acquisitionId}/decide`,
@@ -3534,6 +3567,35 @@ foundryShellRoutes.post('/foundry/acquisitions/:id/decide',
     return c.redirect(`/foundry?done=${decision === 'approved' ? 'acquiring' : 'notacquiring'}`);
   });
 
+/**
+ * HE TAKES IT BACK.
+ *
+ * The other half of a yes that costs money. Ownership is checked here and the
+ * service refuses anything that was never approved, so a withdrawal cannot
+ * invent a decision that did not happen. What it reaches is the institution:
+ * the provider becomes unavailable and everything asking what a piece of work
+ * would take gets the truth from that moment. It reaches nothing at the
+ * provider, and the screen he came from says so.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/acquisitions/:id/withdraw',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+
+    const owned = await query(
+      `SELECT id FROM capability_acquisitions
+        WHERE id = ? AND founder_id = ? AND decision = 'approved' AND withdrawn_at IS NULL`,
+      [c.req.param('id'), String(founder.id)]);
+    if (!owned.rows.length) return c.notFound();
+
+    const { withdrawAcquisition } = await import('../../services/institution/acquisition.js');
+    await withdrawAcquisition({
+      id: c.req.param('id'), reason: 'you stopped this from your controls',
+      by: `founder:${String(founder.id)}` });
+    return c.redirect('/foundry/controls?done=stopped');
+  });
+
 // ─── an entrepreneurial mandate ─────────────────────────────────────────────
 
 /**
@@ -4651,8 +4713,20 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
   }
   if (!s) return c.redirect('/onboarding');
 
+  const { acquisitionsHeld } = await import('../../services/institution/acquisition.js');
+  const held = await acquisitionsHeld(s.ownerId);
+
+  // WHAT STOPPING IT ACTUALLY DID. The row disappearing says I am not using it
+  // any more and says nothing about the bill, which is the question he will
+  // have. Answering it here is the difference between a control he trusts and
+  // one he checks his bank statement about.
+  const stopped = String(c.req.query('done') ?? '') === 'stopped';
+
   const body = html`
     <h1>What I'm allowed to do</h1>
+
+    ${stopped ? html`<p class="lede">Stopped. I will not use it again. If you are
+      paying for it, that has not stopped &mdash; end it in your account with them.</p>` : ''}
 
     ${standingPermission(s)}
 
@@ -4686,6 +4760,18 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
         customers.</p>`
     : html`<ul>${raw(s.connectedSenses.map((x) => `<li>${x}</li>`).join(''))}</ul>`}
     </div>
+
+    ${held.length === 0 ? '' : html`<div class="know">
+      <h2>Things I hold</h2>
+      <p class="quiet">Each of these is something you said I could have. Stopping one
+        stops me using it that day. It does not cancel anything you are paying for &mdash;
+        that lives in your account with them, and only you can end it.</p>
+      ${held.map((h) => html`<div style="margin-top:var(--s2)">
+        <p><strong>${h.whatItDoes}</strong> &mdash; ${h.provider}. ${h.costNote}</p>
+        <form method="POST" action="/foundry/acquisitions/${h.id}/withdraw">
+          <button class="btn" type="submit" style="width:auto">Stop this</button>
+        </form></div>`)}
+    </div>`}
 
     <div class="know">
       <h2>Stopping me</h2>

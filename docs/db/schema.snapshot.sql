@@ -725,7 +725,7 @@ CREATE TABLE capability_acquisitions (
   -- outcome, not its approval.
   acquired_at    TEXT,
   provider_id    TEXT REFERENCES capability_providers(id)
-);
+, withdrawn_at TEXT, withdraw_reason TEXT);
 CREATE TABLE capability_fulfilled_through (
   capability_key     TEXT PRIMARY KEY REFERENCES capabilities(capability_key),
   through_capability TEXT NOT NULL REFERENCES capabilities(capability_key),
@@ -5242,6 +5242,10 @@ BEGIN
   SELECT RAISE(ABORT,'capability_acquisition:cannot_arrive_decided')
     WHERE NEW.decision IS NOT NULL OR NEW.acquired_at IS NOT NULL;
 END;
+CREATE TRIGGER capability_acquisition_withdrawal_needs_a_yes
+BEFORE UPDATE OF withdrawn_at ON capability_acquisitions
+WHEN NEW.withdrawn_at IS NOT NULL AND OLD.decision IS NOT 'approved'
+BEGIN SELECT RAISE(ABORT,'capability_acquisition:nothing_to_withdraw'); END;
 CREATE TRIGGER capability_fulfilled_through_constitutional_delete
 BEFORE DELETE ON capability_fulfilled_through
 BEGIN SELECT RAISE(ABORT,'capability_fulfilled_through:constitutional'); END;

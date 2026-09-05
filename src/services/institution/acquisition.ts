@@ -24,6 +24,9 @@ export interface Acquisition {
   id: string; capabilityKey: string; whatItDoes: string; rung: string;
   route: Route; provider: string; how: string; costNote: string; because: string;
   decision: 'approved' | 'declined' | null; acquired: boolean;
+  /** Set when the owner has taken his yes back. */
+  withdrawnAt: string | null;
+  withdrawReason: string | null;
   /** The one paragraph he reads. */
   sentence: string;
 }
@@ -64,7 +67,10 @@ async function read(row: Record<string, unknown>): Promise<Acquisition> {
     id: String(row.id), capabilityKey: String(row.capability_key),
     whatItDoes: c?.whatItDoes ?? '', rung, route: String(row.route) as Route,
     provider: String(row.provider), how: String(row.how), costNote: String(row.cost_note),
-    because: String(row.because), decision, acquired: row.acquired_at != null, sentence,
+    because: String(row.because), decision, acquired: row.acquired_at != null,
+    withdrawnAt: row.withdrawn_at == null ? null : String(row.withdrawn_at),
+    withdrawReason: row.withdraw_reason == null ? null : String(row.withdraw_reason),
+    sentence,
   };
 }
 
@@ -93,8 +99,23 @@ const RUNG_IN_PLAIN_WORDS: Record<string, string> = {
 /** What is waiting on him. */
 export async function acquisitionsAwaiting(founderId: string): Promise<Acquisition[]> {
   const rows = (await query(
-    `SELECT * FROM capability_acquisitions WHERE founder_id = ? AND decision IS NULL
+    `SELECT * FROM capability_acquisitions
+      WHERE founder_id = ? AND decision IS NULL AND withdrawn_at IS NULL
       ORDER BY proposed_at`, [founderId])).rows as unknown as Array<Record<string, unknown>>;
+  const out: Acquisition[] = [];
+  for (const r of rows) out.push(await read(r));
+  return out;
+}
+
+/**
+ * WHAT HE IS ACTUALLY CARRYING, so that taking it back is somewhere he can find
+ * it rather than a promise made once on a card he has scrolled past.
+ */
+export async function acquisitionsHeld(founderId: string): Promise<Acquisition[]> {
+  const rows = (await query(
+    `SELECT * FROM capability_acquisitions
+      WHERE founder_id = ? AND decision = 'approved' AND withdrawn_at IS NULL
+      ORDER BY decided_at`, [founderId])).rows as unknown as Array<Record<string, unknown>>;
   const out: Acquisition[] = [];
   for (const r of rows) out.push(await read(r));
   return out;
@@ -107,6 +128,41 @@ export async function decideAcquisition(input: {
     `UPDATE capability_acquisitions
         SET decision = ?, decided_at = datetime('now'), decided_by = ?
       WHERE id = ? AND decision IS NULL`, [input.decision, input.by, input.id]);
+}
+
+/**
+ * HE TAKES HIS YES BACK.
+ *
+ * WHAT THIS REACHES AND WHAT IT DOES NOT. It stops the institution using the
+ * provider — the row moves to `unavailable`, and from that moment everything
+ * asking what a piece of work would take gets the truth rather than a
+ * capability the owner has stopped wanting. It cancels nothing at the provider:
+ * a subscription lives in his own account and only he can end it. Saying so is
+ * the whole point; a withdrawal that quietly implied it had stopped the billing
+ * would be worse than none.
+ */
+export async function withdrawAcquisition(input: {
+  id: string; reason: string; by: string;
+}): Promise<void> {
+  const a = (await query(
+    `SELECT provider_id, decision, withdrawn_at FROM capability_acquisitions WHERE id = ?`,
+    [input.id])).rows[0] as Record<string, unknown> | undefined;
+  if (!a) throw new Error('no such acquisition');
+  if (String(a.decision) !== 'approved') throw new Error('capability_acquisition:nothing_to_withdraw');
+  if (a.withdrawn_at != null) return;
+
+  await query(
+    `UPDATE capability_acquisitions
+        SET withdrawn_at = datetime('now'), withdraw_reason = ?
+      WHERE id = ? AND withdrawn_at IS NULL`, [input.reason.trim(), input.id]);
+
+  if (a.provider_id != null) {
+    await recordMaturity({
+      providerId: String(a.provider_id), to: 'unavailable',
+      evidence: `the owner withdrew this: ${input.reason.trim()}`,
+      evidenceMode: 'real', witnessedBy: input.by,
+    });
+  }
 }
 
 /**
@@ -123,12 +179,26 @@ export async function recordAcquired(input: {
     [input.id])).rows[0] as Record<string, unknown> | undefined;
   if (!a) throw new Error('no such acquisition');
   if (String(a.decision) !== 'approved') throw new Error('capability_acquisition:not_approved');
-  const providerId = nanoid();
-  await query(
-    `INSERT INTO capability_providers (id, capability_key, provider, how, tool, cost_note, maturity)
-     VALUES (?,?,?,?,?,?,'declared')`,
-    [providerId, String(a.capability_key), String(a.provider), String(a.how), input.tool ?? null,
-      String(a.cost_note)]);
+
+  // A PROVIDER THIS INSTITUTION ALREADY DESCRIBES IS NOT ACQUIRED TWICE.
+  //
+  // An adapter can be written before the owner is ever asked to pay for the
+  // service behind it — which is the right order, because a card that asks for
+  // money before anything could use it is asking him to fund a hope. But the
+  // acquisition then arrives at a capability that already has this provider
+  // declared, and inserting a second row would leave the fabric describing one
+  // real thing twice, with two maturities that drift apart.
+  const existing = (await query(
+    `SELECT id FROM capability_providers WHERE capability_key = ? AND provider = ?`,
+    [String(a.capability_key), String(a.provider)])).rows[0] as Record<string, unknown> | undefined;
+  const providerId = existing ? String(existing.id) : nanoid();
+  if (!existing) {
+    await query(
+      `INSERT INTO capability_providers (id, capability_key, provider, how, tool, cost_note, maturity)
+       VALUES (?,?,?,?,?,?,'declared')`,
+      [providerId, String(a.capability_key), String(a.provider), String(a.how), input.tool ?? null,
+        String(a.cost_note)]);
+  }
   await recordMaturity({ providerId, to: 'available', evidence: input.evidence,
     evidenceMode: 'real', witnessedBy: input.witnessedBy });
   await query(

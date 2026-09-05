@@ -43,6 +43,7 @@
 
 import { query } from '../../db/client.js';
 import { log as logger } from '../../lib/logger.js';
+import { WorkshopError } from '../workshop/contract.js';
 
 /** What this responsibility is called, everywhere it is referred to. */
 export const DEPENDENCY_RESPONSIBILITY = 'keep the dependency list honest';
@@ -546,9 +547,14 @@ export async function chooseAWorkspace(
   forRealChange: boolean,
 ): Promise<ChosenWorkspace> {
   const standing = await whichComputersCouldWork();
+  //
+  // `unavailable` is excluded and no other maturity is, because it is the one
+  // value that means DO NOT USE THIS — it is what a withdrawal sets, and a
+  // provider chosen after the owner stopped it would send the work back into a
+  // wall he has already refused to remove.
   const providers = ((await query(
     `SELECT provider, maturity FROM capability_providers
-      WHERE capability_key = 'run_in_workspace'`, []))
+      WHERE capability_key = 'run_in_workspace' AND maturity <> 'unavailable'`, []))
     .rows as unknown as Array<Record<string, unknown>>);
 
   // MATURITY IS EARNED BY THE FIRST ATTEMPT, NOT REQUIRED BEFORE IT.
@@ -619,6 +625,78 @@ export interface ProducedChange {
  * costs nothing and it is how the lifecycle earns its own reality.
  */
 /**
+ * WHAT THIS WOULD COST HIM, IN THE WORDS OF WHAT WAS ACTUALLY READ.
+ *
+ * Composed from the recorded evaluation rather than typed into the card, so the
+ * figure the owner decides on and the figure the institution believes cannot
+ * drift apart, and so a stale price is corrected in one place. When the record
+ * does not have it, the card says the cost is not known — which is a worse card
+ * and an honest one, and is the state that should stop a spending decision
+ * rather than a plausible number nobody sourced.
+ */
+async function whatItWouldCost(substrate: string): Promise<string> {
+  const rows = ((await query(
+    `SELECT property, finding FROM substrate_evaluations
+      WHERE substrate = ? AND property IN ('plan required','metering','trial credit')
+      ORDER BY CASE property WHEN 'plan required' THEN 0 WHEN 'metering' THEN 1
+                             ELSE 2 END`, [substrate]))
+    .rows as unknown as Array<Record<string, unknown>>);
+  if (rows.length === 0) return 'not known — nothing has been read about what it costs';
+  return rows.map((r) => String(r.finding)).join('; ');
+}
+
+/**
+ * THE ONE DECISION, PUT AS THE RESPONSIBILITY IT SERVES.
+ *
+ * Not "enter a token" and not "may I call this vendor". The owner is not being
+ * asked to operate anything or to hand anything over; he is being asked whether
+ * this institution may hold a computer of its own so that it can look after its
+ * own software without becoming the machine that software runs on. The vendor
+ * is an implementation detail of that, named because he is entitled to know
+ * where his money goes, and replaceable without asking him again.
+ *
+ * NO CREDENTIAL IS REQUESTED HERE OR ANYWHERE ELSE IN THIS CONVERSATION. A
+ * reusable secret pasted into a screen is a secret in a screen's history, a
+ * log, and a backup. It belongs in the provider's own secret store, set by him,
+ * where nothing here ever sees it.
+ */
+async function askForTheComputer(input: {
+  founderId: string; substrate: string;
+}): Promise<void> {
+  // A QUESTION HE HAS ANSWERED IS NOT ASKED AGAIN BY THE THING THAT ASKED IT.
+  //
+  // The work runs into this wall on every attempt. Asking once is a decision;
+  // asking every time is nagging, and asking again the day after he stopped it
+  // is worse than nagging — it tells him his answer did not take. `propose`
+  // already refuses to raise a second OPEN proposal; this refuses to raise one
+  // after he has said no or taken his yes back. Revisiting is still possible
+  // and is a deliberate act with new information, which is not this loop.
+  const answered = (await query(
+    `SELECT id FROM capability_acquisitions
+      WHERE founder_id = ? AND capability_key = 'run_in_workspace'
+        AND (decision IS NOT NULL OR withdrawn_at IS NOT NULL)`,
+    [input.founderId])).rows[0];
+  if (answered) return;
+
+  const { proposeAcquisition } = await import('./acquisition.js');
+  await proposeAcquisition({
+    founderId: input.founderId,
+    capabilityKey: 'run_in_workspace',
+    route: 'procure',
+    provider: input.substrate,
+    how: 'workspace',
+    costNote: await whatItWouldCost(input.substrate),
+    because:
+      'I am carrying a responsibility that needs it. Keeping the description of '
+      + 'my own database true means producing a change to real software, and a '
+      + 'change nobody has run yet may not be produced on the machine I run on '
+      + '— so it has to happen on a computer I am not, and I do not have one. '
+      + 'Everything on either side of that already works',
+    proposedBy: 'institution:carrying',
+  });
+}
+
+/**
  * WHAT THIS PIECE OF WORK MAY COST BEFORE IT STOPS.
  *
  * A workspace with no budget may spend nothing, and the database says so —
@@ -670,6 +748,17 @@ export async function produceSchemaDescription(input: {
     // THE HONEST STOP. A substrate that cannot be reached says why — no
     // credential, no plan — and that is a different sentence from "no computer
     // is suitable". Only this one names something the owner could change.
+    //
+    // AND NAMING SOMETHING HE COULD CHANGE IS A PROPOSAL, NOT A STOP. The
+    // institution's own rule: "I know what should happen but I cannot currently
+    // do it" goes to him as one decision with the whole picture, once. It is
+    // raised HERE, by the work actually hitting the wall, rather than written
+    // into a migration in advance — a card manufactured before anything could
+    // use it is asking him to fund a hope, and a card raised by real work
+    // arrives with the responsibility that needed it attached.
+    if (real && err instanceof WorkshopError && err.what === 'credential') {
+      await askForTheComputer({ founderId: input.founderId, substrate: choice.substrate });
+    }
     return {
       workspaceId: null, substrate: choice.substrate,
       because: err instanceof Error ? err.message : String(err),
