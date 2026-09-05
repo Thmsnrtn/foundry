@@ -2760,14 +2760,25 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
         logger.info('dependency_health_tick: no owner yet', { jobName: 'dependency_health_tick' });
         return;
       }
-      const { checkOwnDependencies, verifyRealEvidenceLanded } = await import(
-        '../services/institution/dependency-health.js');
       const { recordMaturity, capability } = await import(
         '../services/institution/capabilities.js');
 
-      let health;
+      // CARRIED AS A RESPONSIBILITY RATHER THAN PERFORMED AS A TASK.
+      //
+      // The registry read is the same read it always was. What is around it is
+      // new: the act is described by what it does, its consequence is derived
+      // from that rather than from the tool, standing authority is consulted
+      // before anything happens, and the claim the LAST pass made is settled
+      // against observations that genuinely came later.
+      //
+      // Until he allows it, this refuses — and that is the chain working rather
+      // than failing. The read does not happen, the reason is recorded, and
+      // what remains is one question on his first screen.
+      let carried;
       try {
-        health = await checkOwnDependencies({ founderId });
+        const { carryDependencyHealth } = await import(
+          '../services/institution/carrying.js');
+        carried = await carryDependencyHealth(founderId);
       } catch (err) {
         logger.error(
           `dependency_health_tick could not reach the registry: `
@@ -2775,12 +2786,31 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
           { jobName: 'dependency_health_tick' });
         return;
       }
+      if (carried.settled) {
+        logger.info(
+          `dependency_health_tick settled what the last pass said: `
+          + `${carried.settled.verdict} — ${carried.settled.because}`,
+          { jobName: 'dependency_health_tick' });
+      }
+      if (!carried.covered) {
+        logger.info(
+          `dependency_health_tick: not covered — ${carried.because}`,
+          { jobName: 'dependency_health_tick' });
+        return;
+      }
+      const health = carried.performed === null ? null : {
+        claimId: carried.performed.claimId,
+        checked: carried.performed.checked,
+        abandoned: carried.performed.abandoned,
+      };
       if (!health) {
         logger.info('dependency_health_tick: nothing to check',
           { jobName: 'dependency_health_tick' });
         return;
       }
-      logger.info(`dependency_health_tick: ${health.sentence}`,
+      logger.info(
+        `dependency_health_tick: checked ${String(health.checked)}, `
+        + `${String(health.abandoned.length)} quiet`,
         { jobName: 'dependency_health_tick' });
 
       // A SECOND WAY OF KNOWING, BUT ONLY WHERE THERE IS SOMETHING TO KNOW.
@@ -2829,11 +2859,13 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
         });
       }
 
-      // AND ONLY THEN, THE RESULT ITSELF, CHECKED.
-      const verified = await verifyRealEvidenceLanded(health.claimId);
-      if (!verified.ok) {
+      // AND ONLY THEN, THE RESULT ITSELF, CHECKED — verified inside the loop
+      // that performed it, because what the provider actually did belongs
+      // beside the act rather than being re-derived here.
+      if (carried.performed !== null && !carried.performed.providerVerified) {
         logger.error(`dependency_health_tick: the read left no usable evidence — `
-          + verified.because, { jobName: 'dependency_health_tick' });
+          + carried.performed.verificationBecause,
+          { jobName: 'dependency_health_tick' });
         return;
       }
       const now = (await capability('read_package_registry'))?.providers
@@ -2843,7 +2875,8 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
           providerId: now.id, to: 'reality_proven', evidenceMode: 'real',
           witnessedBy: 'dependency_health_tick',
           evidence: `performed its intended work on a real claim about Foundry's own `
-            + `dependencies and the result was checked: ${verified.because}`,
+            + 'dependencies and the result was checked: '
+            + (carried.performed?.verificationBecause ?? 'verified'),
         });
         logger.info('dependency_health_tick: read_package_registry is reality-proven',
           { jobName: 'dependency_health_tick' });

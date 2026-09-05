@@ -31,13 +31,23 @@ import { nanoid } from 'nanoid';
 import { query, realCompany } from '../../db/client.js';
 import type { Rung } from './consequence.js';
 
-export type Reversibility = 'reversible' | 'recoverable' | 'irreversible';
+/**
+ * A READ CHANGES NOTHING, which is not the same as being easy to undo. The
+ * lowest of the other three still describes an act that DID something and could
+ * be put back; looking at a public page does not belong on that scale.
+ */
+export type Reversibility = 'changes_nothing' | 'reversible' | 'recoverable'
+  | 'irreversible';
 export type Audience = 'none' | 'owned_surface' | 'existing_customer'
   | 'prospect' | 'public' | 'counterparty';
 
 export interface ActDescription {
   founderId: string;
   productId?: string | null;
+  /** What responsibility this act is part of. A delegation covers a
+   *  responsibility, never a shape of act. */
+  responsibility?: string | null;
+  actClass?: string | null;
   tool: string;
   /** What actually happens outside, in one sentence. */
   externalEffect: string;
@@ -149,11 +159,11 @@ export async function authorityForAct(act: ActDescription): Promise<ActVerdict> 
   }
 
   const live = ((await query(
-    `SELECT d.id, d.class, d.ceiling, d.audience, d.max_acts_per_day,
-            d.max_cents_per_day, d.excludes
+    `SELECT d.id, d.class, d.responsibility, d.act_class, d.ceiling, d.audience,
+            d.max_acts_per_day, d.max_cents_per_day, d.excludes
        FROM delegations d
       WHERE d.founder_id = ? AND d.revoked_at IS NULL
-        AND datetime(d.expires_at) > datetime('now')
+        AND (d.expires_at IS NULL OR datetime(d.expires_at) > datetime('now'))
         AND (d.product_id IS ? OR d.product_id IS NULL)
       ORDER BY d.granted_at DESC`,
     [act.founderId, act.productId ?? null]))
@@ -162,6 +172,11 @@ export async function authorityForAct(act: ActDescription): Promise<ActVerdict> 
   for (const d of live) {
     if (order(String(d.ceiling)) < order(rung)) continue;
     if (String(d.audience) !== act.audience) continue;
+    // THE RESPONSIBILITY HAS TO MATCH, not merely the company, the audience and
+    // the rung. A support reply and a promotional message to the same customer
+    // share all three and are not the same permission.
+    if (String(d.responsibility) !== (act.responsibility ?? '')) continue;
+    if (String(d.act_class) !== (act.actClass ?? '')) continue;
 
     const tripped = (await query(
       `SELECT id FROM delegation_breakers
@@ -209,12 +224,27 @@ export async function classifyAndRecord(act: ActDescription): Promise<ActVerdict
   await query(
     `INSERT INTO act_classifications
        (id, founder_id, product_id, actor_id, delegation_id, tool, reversibility,
-        audience, external_effect, money_cents, rung, because, allowed)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        audience, external_effect, money_cents, rung, because, allowed,
+        responsibility, act_class)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
     [nanoid(), act.founderId, act.productId ?? null, act.actorId ?? null,
       verdict.delegationId, act.tool, act.reversibility, act.audience,
       act.externalEffect.trim(), act.moneyCents ?? 0, verdict.rung,
-      verdict.because, verdict.allowed ? 1 : 0]);
+      verdict.because, verdict.allowed ? 1 : 0,
+      act.responsibility ?? null, act.actClass ?? null]);
+
+  // A REFUSAL FOR WANT OF COVER IS EVIDENCE THAT THE WORK RECURS — and it is
+  // the only kind of evidence that cost him something, so it is recorded rather
+  // than sought. Nothing here creates an interruption to qualify a proposal.
+  if (!verdict.allowed && verdict.delegationId === null
+      && (act.responsibility ?? '') !== ''
+      && verdict.refusal === 'nothing you have said covers this, so I am asking') {
+    await noteResponsibilitySignal({
+      founderId: act.founderId, productId: act.productId ?? null,
+      responsibility: String(act.responsibility),
+      kind: 'refused_for_authority', ref: act.externalEffect.trim(),
+    });
+  }
   return verdict;
 }
 
@@ -280,69 +310,216 @@ export interface DelegationAdvice {
  * function of the ceiling rather than one number for everything.
  */
 export async function adviceOnDelegating(input: {
-  founderId: string; ceiling: Rung; kind?: 'venture_experiment' | 'proposed_act';
+  founderId: string; ceiling: Rung; responsibility?: string | null;
+  kind?: 'venture_experiment' | 'proposed_act';
 }): Promise<DelegationAdvice> {
-  const NEEDED: Record<string, number> = {
-    observe: 3, prepare: 3, reversible: 8, public: 20, financial: 40,
-    legal: Number.POSITIVE_INFINITY, destructive: Number.POSITIVE_INFINITY,
-  };
-  const needed = NEEDED[input.ceiling] ?? Number.POSITIVE_INFINITY;
+  // THE PRINCIPLE IS CONSTITUTIONAL. THE NUMBERS ARE NOT.
+  //
+  // What must never move: the evidence required before recommending a broader
+  // delegation scales with the responsibility and its downside — failure cost,
+  // reversibility, blast radius, economic exposure, volume, variance, novelty,
+  // and how much of the record was settled by the world rather than by his
+  // agreement with it. Two acts on the same rung can need radically different
+  // evidence.
+  //
+  // What may move: every number below. They are conservative present policy in
+  // a table the owner can supersede, not truths about the world.
+  const policy = (await query(
+    `SELECT min_graded, min_from_world, max_surprise_bp FROM delegation_evidence_policy
+      WHERE founder_id = ? AND ceiling = ? AND superseded_at IS NULL
+        AND (responsibility IS NULL OR responsibility = ?)
+      ORDER BY responsibility IS NULL, set_at DESC LIMIT 1`,
+    [input.founderId, input.ceiling, input.responsibility ?? null]))
+    .rows[0] as Record<string, unknown> | undefined;
 
-  if (!Number.isFinite(needed)) {
+  const absorbable = (await query(
+    'SELECT absorbable FROM consequence_rungs WHERE rung = ?', [input.ceiling]))
+    .rows[0] as Record<string, unknown> | undefined;
+  if (!absorbable || Number(absorbable.absorbable) !== 1) {
     return { eligible: false, recommended: false,
       sentence: 'No amount of good history makes this delegable. Acts on this rung '
         + 'stay yours, one at a time.' };
   }
+  if (!policy) {
+    return { eligible: false, recommended: false,
+      sentence: `Nothing says how much evidence a ${input.ceiling} responsibility `
+        + 'should take before I suggest handling it routinely, so I am not suggesting it.' };
+  }
+
+  const needed = Number(policy.min_graded);
+  const neededFromWorld = Number(policy.min_from_world);
+  const maxSurpriseBp = Number(policy.max_surprise_bp);
 
   const { howOftenRight } = await import('./calibration.js');
   const record = await howOftenRight(input.founderId, input.kind);
-  const enough = record.graded >= needed;
-  // Settled by the world, not by his agreement with it — a record he graded
-  // himself is a record of agreement and is not evidence of competence.
-  const real = record.settledByTheWorld;
-  const clean = record.graded > 0 && record.surprised / record.graded <= 0.25;
+  const surpriseBp = record.graded === 0 ? 10_000
+    : Math.round((record.surprised / record.graded) * 10_000);
 
-  if (!enough) {
+  if (record.graded < needed || record.settledByTheWorld < neededFromWorld) {
     return { eligible: false, recommended: false,
-      sentence: `I have been graded ${String(record.graded)} times on this; for something `
-        + `at the ${input.ceiling} rung I would want at least ${String(needed)} before `
-        + 'suggesting you let me do it routinely.' };
+      sentence: `I have been graded ${String(record.graded)} times on this, `
+        + `${String(record.settledByTheWorld)} settled by what actually happened. For `
+        + `something at the ${input.ceiling} rung the policy asks for `
+        + `${String(needed)} and ${String(neededFromWorld)} before I suggest you let `
+        + 'me do it routinely.' };
   }
+  const clean = surpriseBp <= maxSurpriseBp;
   return {
     eligible: true,
-    recommended: clean && real >= Math.ceil(needed / 2),
-    sentence: `I have handled this ${String(record.graded)} times, ${String(real)} settled `
-      + `by what actually happened, and was wrong ${String(record.surprised)} times. `
+    recommended: clean,
+    sentence: `I have handled this ${String(record.graded)} times, `
+      + `${String(record.settledByTheWorld)} settled by what actually happened, and was `
+      + `wrong ${String(record.surprised)} times. `
       + (clean ? 'I think this is worth allowing routinely, within limits.'
-        : 'I would not suggest allowing this routinely yet.'),
+        : 'I would not suggest allowing this routinely yet — I have been wrong too often.'),
   };
 }
 
-export interface KeepsAsking {
-  productId: string;
-  companyName: string;
-  actorId: string | null;
-  actorName: string | null;
-  audience: Audience;
-  rung: Rung;
-  /** How many times this exact shape of act had to interrupt him. */
+/**
+ * WHAT SIGNALS THAT A RESPONSIBILITY RECURS.
+ *
+ * Written by whatever noticed. A refusal for want of authority is one kind and
+ * was briefly the only kind, which made owner attention the price of learning
+ * that work recurs — an institution that could only discover it should stop
+ * interrupting him by interrupting him three times first.
+ */
+/**
+ * THE STARTING BAR, WHICH IS POLICY AND SAYS SO.
+ *
+ * The same numbers migration 264 seeds, in one place so the two cannot drift.
+ * Every one of them is a present judgment the owner may supersede; what is
+ * durable is the shape — more evidence for more consequence, most of it settled
+ * by what happened rather than by agreeing in hindsight.
+ *
+ * The two non-absorbable rungs are absent rather than set high. No bar exists
+ * for them because no amount of evidence makes them delegable, and a large
+ * number would imply that one eventually would.
+ */
+export const STARTING_EVIDENCE_POLICY: Record<string, {
+  minGraded: number; minFromWorld: number; maxSurpriseBp: number;
+}> = {
+  observe: { minGraded: 3, minFromWorld: 1, maxSurpriseBp: 3300 },
+  prepare: { minGraded: 3, minFromWorld: 1, maxSurpriseBp: 3300 },
+  reversible: { minGraded: 8, minFromWorld: 4, maxSurpriseBp: 2500 },
+  public: { minGraded: 20, minFromWorld: 12, maxSurpriseBp: 1500 },
+  financial: { minGraded: 40, minFromWorld: 30, maxSurpriseBp: 1000 },
+};
+
+export async function seedStartingPolicy(founderId: string): Promise<void> {
+  for (const [ceiling, bar] of Object.entries(STARTING_EVIDENCE_POLICY)) {
+    await query(
+      `INSERT OR IGNORE INTO delegation_evidence_policy
+         (id, founder_id, ceiling, min_graded, min_from_world, max_surprise_bp,
+          why, set_by)
+       VALUES (?,?,?,?,?,?,?,'institution:starting_policy')`,
+      [`evp_${founderId}_${ceiling}`, founderId, ceiling, bar.minGraded,
+        bar.minFromWorld, bar.maxSurpriseBp,
+        'conservative starting policy, not a truth about the world: more evidence '
+        + 'for more consequence, and most of it settled by what happened rather '
+        + 'than by agreeing in hindsight']);
+  }
+}
+
+export async function noteResponsibilitySignal(input: {
+  founderId: string; productId?: string | null; responsibility: string;
+  kind: 'refused_for_authority' | 'recurring_queue' | 'scheduled'
+    | 'prepared_not_finished' | 'owner_intent';
+  ref: string;
+}): Promise<string> {
+  const id = nanoid();
+  await query(
+    `INSERT INTO responsibility_signals
+       (id, founder_id, product_id, responsibility, kind, ref)
+     VALUES (?,?,?,?,?,?)`,
+    [id, input.founderId, input.productId ?? null, input.responsibility.trim(),
+      input.kind, input.ref.trim()]);
+  return id;
+}
+
+export interface RecurringResponsibility {
+  responsibility: string;
+  productId: string | null;
+  companyName: string | null;
+  /** Every kind of evidence that this recurs, not only the kinds that cost him. */
+  signals: Array<{ kind: string; times: number }>;
   times: number;
-  /** One of them, verbatim, so the class is recognisable rather than abstract. */
   example: string;
-  advice: DelegationAdvice;
+  /** How many of these had to interrupt him. Zero is the good number. */
+  interruptions: number;
+}
+
+/**
+ * WHAT KEEPS COMING BACK.
+ *
+ * Where a delegation proposal may legitimately come from — and just as
+ * importantly, where it may not. Never "the institution thought of a permission
+ * it would like": only a responsibility that has demonstrably recurred, from
+ * evidence anybody can check.
+ *
+ * A refusal for want of authority is ONE signal and was briefly the only one,
+ * which made owner attention the price of learning that work recurs — an
+ * institution that could only discover it should stop interrupting him by
+ * interrupting him three times first. A queue that keeps filling, a schedule
+ * that keeps firing, work prepared and left unfinished for want of a hand, and
+ * the owner saying a class should eventually be handled are all evidence, and
+ * none of them costs him anything.
+ *
+ * Grouped by RESPONSIBILITY rather than by the shape of an act. A support reply
+ * and a promotional message to the same customer share a company, an audience
+ * and a rung, and must never share a permission.
+ */
+export async function whatKeepsRecurring(
+  founderId: string, atLeast = 3,
+): Promise<RecurringResponsibility[]> {
+  const rows = ((await query(
+    `SELECT s.responsibility, s.product_id, COUNT(*) AS times,
+            MIN(s.ref) AS example, p.name AS company_name,
+            SUM(CASE WHEN s.kind = 'refused_for_authority' THEN 1 ELSE 0 END)
+              AS interruptions
+       FROM responsibility_signals s
+       LEFT JOIN products p ON p.id = s.product_id
+      WHERE s.founder_id = ?
+        AND (s.product_id IS NULL OR ${realCompany('p')})
+        AND NOT EXISTS (
+          SELECT 1 FROM delegations d
+           WHERE d.founder_id = s.founder_id
+             AND d.responsibility = s.responsibility
+             AND d.product_id IS s.product_id
+             AND d.revoked_at IS NULL
+             AND (d.expires_at IS NULL OR datetime(d.expires_at) > datetime('now')))
+      GROUP BY s.responsibility, s.product_id
+      HAVING COUNT(*) >= ?
+      ORDER BY COUNT(*) DESC`, [founderId, atLeast]))
+    .rows as unknown as Array<Record<string, unknown>>);
+
+  const out: RecurringResponsibility[] = [];
+  for (const r of rows) {
+    const kinds = ((await query(
+      `SELECT kind, COUNT(*) AS n FROM responsibility_signals
+        WHERE founder_id = ? AND responsibility = ? AND product_id IS ?
+        GROUP BY kind ORDER BY COUNT(*) DESC`,
+      [founderId, String(r.responsibility), r.product_id ?? null]))
+      .rows as unknown as Array<Record<string, unknown>>)
+      .map((k) => ({ kind: String(k.kind), times: Number(k.n) }));
+    out.push({
+      responsibility: String(r.responsibility),
+      productId: r.product_id == null ? null : String(r.product_id),
+      companyName: r.company_name == null ? null : String(r.company_name),
+      signals: kinds, times: Number(r.times), example: String(r.example),
+      interruptions: Number(r.interruptions),
+    });
+  }
+  return out;
 }
 
 /**
  * GIVE A COMPANY A NAME OF ITS OWN.
  *
- * Called when a company is created, so that from its first day it has an
- * identity that is not its owner's. An asset whose support inbox, sending
- * domain and marketplace account are all personal cannot be sold — the buyer
- * cannot take any of it — and by the time that is discovered the accounts
- * exist and the customers know them.
- *
- * Portable by default, and that default is the point: an identity is assumed to
- * belong to the asset unless somebody says otherwise.
+ * Called when a company is created, so from its first day it has an identity
+ * that is not its owner's. An asset whose support inbox, sending domain and
+ * marketplace account are all personal cannot be sold — the buyer cannot take
+ * any of it — and by the time that is noticed the accounts exist and the
+ * customers know them.
  */
 export async function nameAnActor(input: {
   founderId: string; productId: string | null;
@@ -374,62 +551,6 @@ export async function actorsFor(productId: string): Promise<Array<{
 }
 
 /**
- * WHAT I KEEP HAVING TO ASK YOU ABOUT.
- *
- * Where a delegation proposal comes from, and it is deliberately not "the
- * institution thought of a permission it would like". It is grounded in acts
- * that ACTUALLY HAPPENED and actually had to interrupt him: the same company,
- * the same audience, the same rung, refused for want of cover, more than once.
- *
- * An institution that invented permissions to request would be asking to be
- * trusted with things nothing has needed. This can only ever ask about work it
- * has already been doing the hard way.
- *
- * Real companies only, and never a rung that may not be absorbed — proposing a
- * standing permission for something that can never have one would be teaching
- * him that his refusals are negotiable.
- */
-export async function whatIKeepAskingAbout(
-  founderId: string, atLeast = 3,
-): Promise<KeepsAsking[]> {
-  const rows = ((await query(
-    `SELECT c.product_id, c.audience, c.rung, COUNT(*) AS times,
-            MIN(c.external_effect) AS example,
-            MAX(c.actor_id) AS actor_id,
-            p.name AS company_name
-       FROM act_classifications c
-       JOIN products p ON p.id = c.product_id
-       JOIN consequence_rungs r ON r.rung = c.rung
-      WHERE c.founder_id = ? AND c.allowed = 0 AND c.delegation_id IS NULL
-        AND ${realCompany('p')} AND r.absorbable = 1
-        AND NOT EXISTS (
-          SELECT 1 FROM delegations d
-           WHERE d.founder_id = c.founder_id AND d.product_id = c.product_id
-             AND d.audience = c.audience AND d.revoked_at IS NULL
-             AND datetime(d.expires_at) > datetime('now'))
-      GROUP BY c.product_id, c.audience, c.rung
-      HAVING COUNT(*) >= ?
-      ORDER BY COUNT(*) DESC`, [founderId, atLeast]))
-    .rows as unknown as Array<Record<string, unknown>>);
-
-  const out: KeepsAsking[] = [];
-  for (const r of rows) {
-    const actorId = r.actor_id == null ? null : String(r.actor_id);
-    const actor = actorId === null ? null : (await query(
-      'SELECT display_name FROM business_actors WHERE id = ?', [actorId]))
-      .rows[0] as Record<string, unknown> | undefined;
-    out.push({
-      productId: String(r.product_id), companyName: String(r.company_name),
-      actorId, actorName: actor == null ? null : String(actor.display_name),
-      audience: String(r.audience) as Audience, rung: String(r.rung) as Rung,
-      times: Number(r.times), example: String(r.example),
-      advice: await adviceOnDelegating({ founderId, ceiling: String(r.rung) as Rung }),
-    });
-  }
-  return out;
-}
-
-/**
  * HIS ACT, AND ONLY HIS.
  *
  * `grantedBy` is built by the route from the authenticated session, never from
@@ -438,9 +559,20 @@ export async function whatIKeepAskingAbout(
  */
 export async function grantDelegation(input: {
   founderId: string; productId: string | null; actorId: string;
+  /** The responsibility being absorbed. What this exists to carry. */
+  responsibility: string;
+  /** The kind of act within it. Two act classes are two delegations. */
+  actClass: string;
+  /** What content or data it may touch — the axis that separates a support
+   *  reply from a promotional message to the same person. */
+  contentScope: string;
   className: string; purpose: string; audience: Audience; excludes: string;
   ceiling: Rung; maxActsPerDay?: number | null; maxCentsPerDay?: number | null;
-  days: number; grantedBy: string; evidenceRef?: string | null;
+  /** Either a lifetime in days, or null for a durable one that is reviewed. */
+  days?: number | null;
+  /** How often Foundry reassesses it. Required when there is no expiry. */
+  reviewEveryDays?: number | null;
+  grantedBy: string; evidenceRef?: string | null;
 }): Promise<{ id: string } | { refused: string }> {
   if (input.excludes.trim() === '') {
     return { refused: 'a permission with nothing excluded has not been thought about' };
@@ -452,17 +584,38 @@ export async function grantDelegation(input: {
     return { refused: 'acts on that rung stay yours, one at a time, and no standing '
       + 'permission can reach them' };
   }
+  // DURABLE IS ALLOWED. UNREASSESSABLE IS NOT.
+  //
+  // An expiry forces him to re-permission the same stable responsibility
+  // forever, which at nine assets is a calendar of re-permissioning — the
+  // organisational burden this institution exists to absorb. So a delegation
+  // may instead be durable with a review cadence Foundry carries, surfacing
+  // only when something materially changed. It may never have neither.
+  const days = input.days ?? null;
+  const review = input.reviewEveryDays ?? (days === null ? 90 : null);
+  if (days === null && review === null) {
+    return { refused: 'a permission with no expiry and no review is one nobody '
+      + 'would ever look at again' };
+  }
+  if (input.responsibility.trim() === '' || input.actClass.trim() === '') {
+    return { refused: 'a permission has to say which responsibility it carries' };
+  }
+
   const id = nanoid();
   await query(
     `INSERT INTO delegations
-       (id, founder_id, product_id, actor_id, class, purpose, audience, excludes,
-        ceiling, max_acts_per_day, max_cents_per_day, expires_at, granted_by,
-        evidence_ref)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?, datetime('now', ?), ?, ?)`,
-    [id, input.founderId, input.productId, input.actorId, input.className.trim(),
-      input.purpose.trim(), input.audience, input.excludes.trim(), input.ceiling,
+       (id, founder_id, product_id, actor_id, responsibility, act_class, class,
+        purpose, audience, content_scope, excludes, ceiling, max_acts_per_day,
+        max_cents_per_day, expires_at, review_every_days, granted_by, evidence_ref)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,
+             CASE WHEN ? IS NULL THEN NULL ELSE datetime('now', ?) END, ?,?,?)`,
+    [id, input.founderId, input.productId, input.actorId,
+      input.responsibility.trim(), input.actClass.trim(), input.className.trim(),
+      input.purpose.trim(), input.audience, input.contentScope.trim(),
+      input.excludes.trim(), input.ceiling,
       input.maxActsPerDay ?? null, input.maxCentsPerDay ?? null,
-      `+${String(input.days)} days`, input.grantedBy, input.evidenceRef ?? null]);
+      days, days === null ? null : `+${String(days)} days`,
+      review, input.grantedBy, input.evidenceRef ?? null]);
   return { id };
 }
 
@@ -571,5 +724,29 @@ export async function whatHeTookBack(founderId: string, limit = 10): Promise<Arr
     companyName: r.company_name == null ? null : String(r.company_name),
     reason: r.revoked_reason == null ? '' : String(r.revoked_reason),
     revokedAt: String(r.revoked_at),
+  }));
+}
+
+
+/**
+ * WHAT IT HAS ACTUALLY BEEN DOING UNDER A PERMISSION.
+ *
+ * The question standing authority makes urgent. He allowed a class of work and
+ * stopped seeing each act — so the record of what was done has to be legible on
+ * demand, or "I am carrying this for you" is indistinguishable from "I stopped
+ * telling you". Newest first, because the thing he wants is almost always the
+ * last thing that happened.
+ */
+export async function whatWasDoneUnder(delegationId: string, limit = 20): Promise<Array<{
+  did: string; rung: string; at: string; allowed: boolean;
+}>> {
+  return ((await query(
+    `SELECT external_effect, rung, classified_at, allowed
+       FROM act_classifications
+      WHERE delegation_id = ?
+      ORDER BY classified_at DESC, rowid DESC LIMIT ?`, [delegationId, limit]))
+    .rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+    did: String(r.external_effect), rung: String(r.rung),
+    at: String(r.classified_at), allowed: Number(r.allowed) === 1,
   }));
 }

@@ -7,7 +7,8 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import {
-  adviceOnDelegating, authorityForAct, classifyAndRecord, noteCountedFact, rungOfAct,
+  adviceOnDelegating, authorityForAct, classifyAndRecord, noteCountedFact,
+  rungOfAct, seedStartingPolicy, whatKeepsRecurring,
 } from '../../src/services/institution/acting.js';
 
 // =============================================================================
@@ -38,6 +39,7 @@ beforeAll(async () => {
   await query(
     `INSERT INTO products (id, name, owner_id, status, reality)
      VALUES (?,'Ashford',?,'active','real')`, [CO, OWNER]);
+  await seedStartingPolicy(OWNER);
   actorId = 'actor_support';
   await query(
     `INSERT INTO business_actors (id, founder_id, product_id, kind, display_name,
@@ -106,51 +108,88 @@ describe('standing authority has bounds that are enforced, not intended', () => 
 
   it('will not let any delegation reach a non-absorbable rung', async () => {
     await expect(query(
-      `INSERT INTO delegations (id, founder_id, product_id, actor_id, class, purpose,
+      `INSERT INTO delegations (id, founder_id, product_id, actor_id, responsibility,
+         act_class, content_scope, class, purpose,
          audience, excludes, ceiling, expires_at, granted_by)
-       VALUES ('bad',?,?,?,'signing things','because it is convenient',
+       VALUES ('bad',?,?,?,'signing things','sign','anything','signing things','because it is convenient',
                'counterparty','nothing','legal',datetime('now','+30 days'),'founder:x')`,
       [OWNER, CO, actorId])).rejects.toThrow(/ceiling_is_not_absorbable/);
   });
 
   it('will not accept a permission with no stated exclusions', async () => {
     await expect(query(
-      `INSERT INTO delegations (id, founder_id, product_id, actor_id, class, purpose,
+      `INSERT INTO delegations (id, founder_id, product_id, actor_id, responsibility,
+         act_class, content_scope, class, purpose,
          audience, excludes, ceiling, expires_at, granted_by)
-       VALUES ('bad2',?,?,?,'support','help people','existing_customer','  ',
+       VALUES ('bad2',?,?,?,'support','answer','anything','support','help people','existing_customer','  ',
                'public',datetime('now','+30 days'),'founder:x')`,
       [OWNER, CO, actorId])).rejects.toThrow(/needs_exclusions/);
   });
 
-  it('will not accept standing authority that never lapses', async () => {
+  it('will not accept authority that can never be reassessed', async () => {
+    // DURABLE IS ALLOWED; UNREASSESSABLE IS NOT. Requiring an expiry on every
+    // permission forces him to re-permission the same stable responsibility
+    // forever, which at nine assets is a calendar of re-permissioning — the
+    // organisational burden this institution exists to absorb. What may never
+    // exist is a permission with neither an expiry nor a review.
     await expect(query(
-      `INSERT INTO delegations (id, founder_id, product_id, actor_id, class, purpose,
+      `INSERT INTO delegations (id, founder_id, product_id, actor_id, responsibility,
+         act_class, content_scope, class, purpose,
          audience, excludes, ceiling, expires_at, granted_by)
-       VALUES ('bad3',?,?,?,'support','help people','existing_customer','no refunds',
+       VALUES ('bad3',?,?,?,'support','answer','anything','support','help people','existing_customer','no refunds',
                'public',datetime('now','-1 day'),'founder:x')`,
-      [OWNER, CO, actorId])).rejects.toThrow(/must_expire/);
+      [OWNER, CO, actorId])).rejects.toThrow(/must_be_reassessable/);
+
+    // Neither an expiry nor a cadence: refused.
+    await expect(query(
+      `INSERT INTO delegations (id, founder_id, product_id, actor_id, responsibility,
+         act_class, content_scope, class, purpose, audience, excludes, ceiling,
+         granted_by)
+       VALUES ('bad3b',?,?,?,'support','answer','anything','support','help people',
+               'existing_customer','no refunds','public','founder:x')`,
+      [OWNER, CO, actorId])).rejects.toThrow(/must_be_reassessable/);
+
+    // Durable with a review cadence: allowed, because Foundry carries the
+    // review and involves him only when something materially changed.
+    await query(
+      `INSERT INTO delegations (id, founder_id, product_id, actor_id, responsibility,
+         act_class, content_scope, class, purpose, audience, excludes, ceiling,
+         review_every_days, granted_by)
+       VALUES ('durable',?,?,?,'support','answer','anything','support','help people',
+               'existing_customer','no refunds','public',90,'founder:act_owner')`,
+      [OWNER, CO, actorId]);
+    const kept = (await query(
+      "SELECT expires_at, review_every_days FROM delegations WHERE id = 'durable'"))
+      .rows[0] as Record<string, unknown>;
+    expect(kept.expires_at).toBeNull();
+    expect(Number(kept.review_every_days)).toBe(90);
   });
 
   it('will not accept one the institution granted itself', async () => {
     await expect(query(
-      `INSERT INTO delegations (id, founder_id, product_id, actor_id, class, purpose,
+      `INSERT INTO delegations (id, founder_id, product_id, actor_id, responsibility,
+         act_class, content_scope, class, purpose,
          audience, excludes, ceiling, expires_at, granted_by)
-       VALUES ('bad4',?,?,?,'support','help people','existing_customer','no refunds',
+       VALUES ('bad4',?,?,?,'support','answer','anything','support','help people','existing_customer','no refunds',
                'public',datetime('now','+30 days'),'institution:foundry')`,
       [OWNER, CO, actorId])).rejects.toThrow(/not_granted_by_a_person/);
   });
 
   it('covers the act once he has said so, and says which permission covered it', async () => {
     await query(
-      `INSERT INTO delegations (id, founder_id, product_id, actor_id, class, purpose,
-         audience, excludes, ceiling, max_acts_per_day, expires_at, granted_by)
-       VALUES (?,?,?,?,'ordinary customer support','answer product questions',
-               'existing_customer',
+      `INSERT INTO delegations (id, founder_id, product_id, actor_id, responsibility,
+         act_class, class, purpose, audience, content_scope, excludes, ceiling,
+         max_acts_per_day, expires_at, granted_by)
+       VALUES (?,?,?,?,'ordinary customer support','answer a question',
+               'ordinary customer support','answer product questions',
+               'existing_customer','what the product does and how to use it',
                'change prices; promise refunds; contact anyone who is not already a customer',
                'public',2,datetime('now','+30 days'),'founder:act_owner')`,
       [DELEG, OWNER, CO, actorId]);
     const v = await classifyAndRecord({ founderId: OWNER, productId: CO,
-      actorId, tool: 'send_via_api', externalEffect: 'answers a customer question',
+      actorId, tool: 'send_via_api',
+      responsibility: 'ordinary customer support', actClass: 'answer a question',
+      externalEffect: 'answers a customer question',
       reversibility: 'recoverable', audience: 'existing_customer' });
     expect(v.allowed).toBe(true);
     expect(v.delegationId).toBe(DELEG);
@@ -158,18 +197,24 @@ describe('standing authority has bounds that are enforced, not intended', () => 
 
   it('stops at the daily limit rather than at the limit plus one', async () => {
     const second = await classifyAndRecord({ founderId: OWNER, productId: CO,
-      actorId, tool: 'send_via_api', externalEffect: 'answers another question',
+      actorId, tool: 'send_via_api',
+      responsibility: 'ordinary customer support', actClass: 'answer a question',
+      externalEffect: 'answers another question',
       reversibility: 'recoverable', audience: 'existing_customer' });
     expect(second.allowed).toBe(true);
     const third = await classifyAndRecord({ founderId: OWNER, productId: CO,
-      actorId, tool: 'send_via_api', externalEffect: 'answers a third question',
+      actorId, tool: 'send_via_api',
+      responsibility: 'ordinary customer support', actClass: 'answer a question',
+      externalEffect: 'answers a third question',
       reversibility: 'recoverable', audience: 'existing_customer' });
     expect(third.allowed).toBe(false);
   });
 
   it('does not stretch to a different audience than the one he named', async () => {
     const v = await authorityForAct({ founderId: OWNER, productId: CO,
-      tool: 'send_via_api', externalEffect: 'emails somebody who never signed up',
+      tool: 'send_via_api',
+      responsibility: 'ordinary customer support', actClass: 'answer a question',
+      externalEffect: 'emails somebody who never signed up',
       reversibility: 'recoverable', audience: 'prospect' });
     expect(v.allowed).toBe(false);
   });
@@ -180,9 +225,11 @@ describe('a breaker counts what the world did', () => {
 
   beforeAll(async () => {
     await query(
-      `INSERT INTO delegations (id, founder_id, product_id, actor_id, class, purpose,
+      `INSERT INTO delegations (id, founder_id, product_id, actor_id, responsibility,
+         act_class, content_scope, class, purpose,
          audience, excludes, ceiling, expires_at, granted_by)
-       VALUES (?,?,?,?,'support with a fuse','answer questions','existing_customer',
+       VALUES (?,?,?,?,'support with a fuse','answer a question','anything',
+               'support with a fuse','answer questions','existing_customer',
                'anything a person complained about','public',
                datetime('now','+30 days'),'founder:act_owner')`,
       [DELEG2, OWNER, CO, actorId]);
@@ -218,8 +265,8 @@ describe('calibration informs authority and never creates it', () => {
     const cheap = await adviceOnDelegating({ founderId: OWNER, ceiling: 'reversible' });
     const dear = await adviceOnDelegating({ founderId: OWNER, ceiling: 'financial' });
     // Both refuse today; what differs is the bar each names.
-    expect(cheap.sentence).toContain('at least 8');
-    expect(dear.sentence).toContain('at least 40');
+    expect(cheap.sentence).toContain('policy asks for 8');
+    expect(dear.sentence).toContain('policy asks for 40');
   });
 
   it('has no path from a good record to a wider permission', async () => {
@@ -250,5 +297,78 @@ describe('the company acts, not the owner', () => {
       `INSERT INTO business_actors (id, founder_id, kind, display_name, portable)
        VALUES ('a_orphan',?,'support_channel','Nobody Support',1)`, [OWNER]))
       .rejects.toThrow(/needs_a_company/);
+  });
+});
+
+describe('a responsibility is not a shape of act', () => {
+  it('will not let a support permission cover promotion to the same person', async () => {
+    // Same company, same audience, same rung — and not the same permission.
+    // This is the grouping error that would have scaled worst: at nine assets,
+    // a permission that generalised by shape would quietly authorise things
+    // nobody meant.
+    const promo = await authorityForAct({ founderId: OWNER, productId: CO,
+      tool: 'send_via_api', responsibility: 'promotional outreach',
+      actClass: 'send a campaign',
+      externalEffect: 'emails a customer about a new plan',
+      reversibility: 'recoverable', audience: 'existing_customer' });
+    expect(promo.allowed).toBe(false);
+    expect(promo.refusal).toContain('nothing you have said covers this');
+  });
+});
+
+describe('learning that work recurs must not cost him anything', () => {
+  it('counts a schedule and a prepared-but-unfinished job, not only interruptions', async () => {
+    const { noteResponsibilitySignal } = await import(
+      '../../src/services/institution/acting.js');
+    for (let i = 0; i < 3; i += 1) {
+      await noteResponsibilitySignal({
+        founderId: OWNER, productId: CO,
+        responsibility: 'keep the dependency list honest',
+        kind: i === 2 ? 'prepared_not_finished' : 'scheduled',
+        ref: `dependency_health_tick run ${String(i)}` });
+    }
+    const recurring = await whatKeepsRecurring(OWNER);
+    const found = recurring.find((r) =>
+      r.responsibility === 'keep the dependency list honest');
+    expect(found?.times).toBe(3);
+    // THE NUMBER THAT MATTERS: none of this reached him.
+    expect(found?.interruptions).toBe(0);
+    expect(found?.signals.map((s) => s.kind).sort())
+      .toEqual(['prepared_not_finished', 'scheduled']);
+  });
+
+  it('stops proposing once he has said yes', async () => {
+    const before = await whatKeepsRecurring(OWNER);
+    expect(before.some((r) => r.responsibility === 'keep the dependency list honest'))
+      .toBe(true);
+    await query(
+      `INSERT INTO delegations (id, founder_id, product_id, actor_id, responsibility,
+         act_class, content_scope, class, purpose, audience, excludes, ceiling,
+         review_every_days, granted_by)
+       VALUES ('del_dep',?,?,?,'keep the dependency list honest','read a registry',
+               'the packages this institution runs on','dependency health',
+               'know whether what we run on is still maintained','none',
+               'change any dependency; open a pull request','observe',90,
+               'founder:act_owner')`, [OWNER, CO, actorId]);
+    const after = await whatKeepsRecurring(OWNER);
+    expect(after.some((r) => r.responsibility === 'keep the dependency list honest'))
+      .toBe(false);
+  });
+});
+
+describe('the evidence bar is policy he can change', () => {
+  it('reads the bar from a table rather than from the code', async () => {
+    await query(
+      `UPDATE delegation_evidence_policy SET superseded_at = datetime('now')
+        WHERE founder_id = ? AND ceiling = 'public'`, [OWNER]);
+    await query(
+      `INSERT INTO delegation_evidence_policy
+         (id, founder_id, ceiling, min_graded, min_from_world, max_surprise_bp,
+          why, set_by)
+       VALUES ('evp_custom',?, 'public', 5, 3, 2000,
+               'this class is cheap to undo and I want it moving sooner',
+               'founder:act_owner')`, [OWNER]);
+    const advice = await adviceOnDelegating({ founderId: OWNER, ceiling: 'public' });
+    expect(advice.sentence).toContain('policy asks for 5');
   });
 });

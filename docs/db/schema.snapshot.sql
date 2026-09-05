@@ -16,7 +16,7 @@ CREATE TABLE acquirer_signals (
   notes TEXT,
   detected_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE TABLE act_classifications (
+CREATE TABLE "act_classifications" (
   id             TEXT PRIMARY KEY,
   founder_id     TEXT NOT NULL REFERENCES founders(id),
   product_id     TEXT REFERENCES products(id),
@@ -25,7 +25,7 @@ CREATE TABLE act_classifications (
   tool           TEXT NOT NULL,
   capability     TEXT,
   reversibility  TEXT NOT NULL CHECK (reversibility IN
-                   ('reversible','recoverable','irreversible')),
+                   ('changes_nothing','reversible','recoverable','irreversible')),
   audience       TEXT NOT NULL CHECK (audience IN
                    ('none','owned_surface','existing_customer','prospect','public','counterparty')),
   external_effect TEXT NOT NULL,
@@ -33,7 +33,9 @@ CREATE TABLE act_classifications (
   rung           TEXT NOT NULL REFERENCES consequence_rungs(rung),
   because        TEXT NOT NULL,
   allowed        INTEGER NOT NULL,
-  classified_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  classified_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  responsibility TEXT,
+  act_class      TEXT
 );
 CREATE TABLE act_consequence_floors (
   dimension   TEXT NOT NULL,
@@ -1359,34 +1361,55 @@ CREATE TABLE delegation_breakers (
   cleared_at     TEXT,
   cleared_by     TEXT
 );
-CREATE TABLE delegations (
+CREATE TABLE delegation_evidence_policy (
+  id                TEXT PRIMARY KEY,
+  founder_id        TEXT NOT NULL REFERENCES founders(id),
+  -- What this bar applies to. A rung is the coarsest useful key and the one
+  -- available today; a responsibility class may be named instead as classes
+  -- earn their own bars.
+  ceiling           TEXT NOT NULL REFERENCES consequence_rungs(rung),
+  responsibility    TEXT,
+  -- How many graded predictions before Foundry may RECOMMEND delegating.
+  min_graded        INTEGER NOT NULL,
+  -- Of those, how many must have been settled by what actually happened rather
+  -- than by the owner agreeing in hindsight. A record he graded himself is a
+  -- record of agreement.
+  min_from_world    INTEGER NOT NULL,
+  -- Above this proportion of surprises, no recommendation regardless of count.
+  max_surprise_bp   INTEGER NOT NULL,
+  why               TEXT NOT NULL,
+  set_by            TEXT NOT NULL,
+  set_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  superseded_at     TEXT
+);
+CREATE TABLE "delegations" (
   id             TEXT PRIMARY KEY,
   founder_id     TEXT NOT NULL REFERENCES founders(id),
   product_id     TEXT REFERENCES products(id),
   actor_id       TEXT NOT NULL REFERENCES business_actors(id),
+  -- WHAT RESPONSIBILITY THIS EXISTS TO CARRY. Not a shape of act.
+  responsibility TEXT NOT NULL,
+  -- The kind of act within it: 'answer a question', 'update a listing'. Two act
+  -- classes inside one responsibility are two delegations, on purpose.
+  act_class      TEXT NOT NULL,
   class          TEXT NOT NULL,
   purpose        TEXT NOT NULL,
-  -- CHECKED RATHER THAN REFERENCED: `act_consequence_floors` is keyed on
-  -- (dimension, value), so a foreign key to `value` alone is a mismatch. The
-  -- vocabulary is the same one, and the floors table remains where the meaning
-  -- of each value lives.
   audience       TEXT NOT NULL CHECK (audience IN
                    ('none','owned_surface','existing_customer','prospect','public','counterparty')),
-  -- WHAT IT MAY NEVER DO UNDER THIS DELEGATION. Required. A permission with no
-  -- stated exclusions has not been thought about, and the exclusions are the
-  -- half the owner actually reads.
+  -- What content or data this may touch. A support reply and a promotional
+  -- message can share a company, an audience and a rung; they do not share this.
+  content_scope  TEXT NOT NULL,
   excludes       TEXT NOT NULL,
-  -- The highest rung acts under this delegation may stand on.
   ceiling        TEXT NOT NULL REFERENCES consequence_rungs(rung),
   max_acts_per_day  INTEGER,
   max_cents_per_day INTEGER,
-  -- NO PERMANENT DELEGATIONS. Standing authority that never lapses is authority
-  -- nobody revisits.
-  expires_at     TEXT NOT NULL,
+  -- EITHER AN EXPIRY OR A CADENCE, NEVER NEITHER. Durable standing authority is
+  -- allowed; unreassessable authority is not.
+  expires_at     TEXT,
+  review_every_days INTEGER,
+  last_reviewed_at  TEXT,
   granted_by     TEXT NOT NULL,
   granted_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  -- What made this eligible: a calibration record, a controlled proof. Nullable
-  -- because the owner may grant on his own judgment and owes nobody a citation.
   evidence_ref   TEXT,
   revoked_at     TEXT,
   revoked_reason TEXT
@@ -3582,6 +3605,20 @@ CREATE TABLE responsibility_shadow_expectations (
   valid_until TEXT,
   created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 , observation_source_kind TEXT);
+CREATE TABLE responsibility_signals (
+  id             TEXT PRIMARY KEY,
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  product_id     TEXT REFERENCES products(id),
+  -- What the work IS, in the institution's own words. The identity of the
+  -- responsibility, not the shape of one act inside it.
+  responsibility TEXT NOT NULL,
+  kind           TEXT NOT NULL CHECK (kind IN
+                   ('refused_for_authority','recurring_queue','scheduled',
+                    'prepared_not_finished','owner_intent')),
+  -- What actually happened, so the signal can be checked rather than believed.
+  ref            TEXT NOT NULL,
+  noted_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE responsibility_transitions (
   id TEXT PRIMARY KEY,
   responsibility_id TEXT NOT NULL REFERENCES institutional_responsibilities(id),
@@ -4654,6 +4691,8 @@ CREATE INDEX idx_ethics_product ON ethical_assessment(product_id);
 CREATE INDEX idx_event_rules ON event_rules(product_id, trigger_event_type);
 CREATE INDEX idx_event_stream ON event_stream(product_id, created_at);
 CREATE INDEX idx_event_stream_unprocessed ON event_stream(processed, created_at);
+CREATE INDEX idx_evidence_policy_live
+  ON delegation_evidence_policy(founder_id, ceiling, superseded_at);
 CREATE UNIQUE INDEX idx_evolved_prompts_active ON evolved_prompts(product_id, agent_name) WHERE is_active = 1;
 CREATE INDEX idx_exec_playbooks_product ON execution_playbooks(product_id, is_active);
 CREATE INDEX idx_exec_queue_job ON execution_queue(job_type, status);
@@ -4895,6 +4934,8 @@ CREATE UNIQUE INDEX idx_responsibility_discovery_evidence
   ON institutional_responsibilities(product_id, discovery_evidence_ref)
   WHERE discovery_evidence_ref IS NOT NULL;
 CREATE INDEX idx_responsibility_dispositions ON responsibility_dispositions(responsibility_id,created_at);
+CREATE INDEX idx_responsibility_signals
+  ON responsibility_signals(founder_id, responsibility, noted_at);
 CREATE INDEX idx_responsibility_transitions
   ON responsibility_transitions(responsibility_id, created_at);
 CREATE INDEX idx_retrieval_items_of ON retrieval_items(retrieval_id);
@@ -5454,9 +5495,16 @@ BEGIN
     WHERE (SELECT absorbable FROM consequence_rungs WHERE rung = NEW.ceiling) = 0;
   SELECT RAISE(ABORT,'delegation:needs_exclusions')
     WHERE trim(NEW.excludes) = '';
-  SELECT RAISE(ABORT,'delegation:must_expire')
-    WHERE datetime(NEW.expires_at) <= datetime(NEW.granted_at);
-  -- Only a person grants standing authority.
+  SELECT RAISE(ABORT,'delegation:needs_a_responsibility')
+    WHERE trim(NEW.responsibility) = '' OR trim(NEW.act_class) = '';
+  -- NO DELEGATION IS IMMUNE TO REASSESSMENT. It may be durable — remaining
+  -- until revoked while its boundaries hold and nothing trips — and it may not
+  -- be unreviewable.
+  SELECT RAISE(ABORT,'delegation:must_be_reassessable')
+    WHERE (NEW.expires_at IS NULL AND NEW.review_every_days IS NULL)
+       OR (NEW.expires_at IS NOT NULL
+           AND datetime(NEW.expires_at) <= datetime(NEW.granted_at))
+       OR (NEW.review_every_days IS NOT NULL AND NEW.review_every_days <= 0);
   SELECT RAISE(ABORT,'delegation:not_granted_by_a_person')
     WHERE NEW.granted_by NOT LIKE 'founder:%';
 END;
