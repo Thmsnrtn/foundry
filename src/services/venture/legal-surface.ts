@@ -138,7 +138,7 @@ export async function legalPictureOf(input: {
        JOIN products p ON p.id = s.subject_id
       WHERE s.founder_id = ? AND s.subject_kind = 'company' AND s.retired_at IS NULL
         AND s.severity <> 'minor' AND s.evidence_mode = ? AND p.reality = ?
-        AND p.status = 'active' AND p.deleted_at IS NULL
+        AND p.status = 'active' AND p.standing = 'earned' AND p.deleted_at IS NULL
       GROUP BY s.class`, [input.founderId, input.world, input.world]))
     .rows as unknown as Array<Record<string, unknown>>;
   const sharedWithPortfolio = carried

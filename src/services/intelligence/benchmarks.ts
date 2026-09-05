@@ -37,7 +37,7 @@ export async function getBenchmarks(productId: string, marketCategory: string | 
        AVG(CAST(m.churned_mrr_cents AS REAL) / NULLIF(m.new_mrr_cents, 0)) as avg_health_ratio
      FROM metric_snapshots m
      JOIN products p ON m.product_id = p.id
-     WHERE m.product_id != ?
+     WHERE m.product_id != ? AND p.standing = 'earned'
        AND m.activation_rate IS NOT NULL
        ${categoryFilter}
      GROUP BY 1

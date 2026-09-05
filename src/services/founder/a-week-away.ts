@@ -40,7 +40,7 @@ export async function canIDisappear(founderId: string): Promise<WeekAwayView> {
             (SELECT COUNT(*) FROM company_senses s
               WHERE s.product_id = p.id AND s.disconnected_at IS NULL AND s.last_error IS NOT NULL) AS failing
        FROM products p
-      WHERE p.owner_id = ? AND p.status = 'active' AND p.deleted_at IS NULL
+      WHERE p.owner_id = ? AND p.status = 'active' AND p.standing = 'earned' AND p.deleted_at IS NULL
         AND ${realCompany('p')}
       ORDER BY p.created_at`, [founderId]))
     .rows as unknown as Array<Record<string, unknown>>;
@@ -168,7 +168,7 @@ export async function whileYouWereAway(founderId: string, days = 7): Promise<Ret
   const since = `-${String(days)} days`;
   const companies = (await query(
     `SELECT p.id, p.name FROM products p
-      WHERE p.owner_id = ? AND p.status = 'active' AND p.deleted_at IS NULL
+      WHERE p.owner_id = ? AND p.status = 'active' AND p.standing = 'earned' AND p.deleted_at IS NULL
         AND ${realCompany('p')}`, [founderId]))
     .rows as unknown as Array<Record<string, unknown>>;
   const names = new Map(companies.map((c) => [String(c.id), String(c.name)]));

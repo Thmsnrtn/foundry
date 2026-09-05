@@ -3336,7 +3336,9 @@ CREATE TABLE products (
   CHECK(company_lifecycle_state IN ('setup', 'learning', 'operating', 'optimizing', 'scaling')), scp_status TEXT DEFAULT 'provisioning'
   CHECK(scp_status IN ('provisioning', 'active', 'paused', 'archived')), operating_budget_monthly_usd REAL DEFAULT 50.0, ai_cost_trailing_30d_usd REAL DEFAULT 0.0, attributed_revenue_trailing_30d_usd REAL DEFAULT 0.0, total_evolution_cycles INTEGER DEFAULT 0, golden_suite_size INTEGER DEFAULT 0, evolution_enabled INTEGER DEFAULT 1, disabled_tools TEXT, cadence_mode TEXT, entitlement_paused_at TEXT, erasure_scheduled_at DATETIME, website_url TEXT, health_score INTEGER, reality TEXT NOT NULL DEFAULT 'real'
   CHECK (reality IN ('real', 'reference')), posture TEXT NOT NULL DEFAULT 'grow'
-  CHECK (posture IN ('grow','hold','harvest','reposition','sell','retire')), form TEXT, from_opportunity_id TEXT REFERENCES venture_opportunities(id));
+  CHECK (posture IN ('grow','hold','harvest','reposition','sell','retire')), form TEXT, from_opportunity_id TEXT REFERENCES venture_opportunities(id), standing TEXT NOT NULL DEFAULT 'earned'
+  CHECK (standing IN ('experimental','earned')), operating_boundary TEXT NOT NULL DEFAULT 'company'
+  CHECK (operating_boundary IN ('asset_only','company')), from_experiment_id TEXT REFERENCES venture_experiments(id), earned_at TEXT, earned_by TEXT, earned_because TEXT, retired_because TEXT);
 CREATE TABLE proposed_acts (
   id                  TEXT PRIMARY KEY,
   product_id          TEXT NOT NULL REFERENCES products(id),
@@ -4941,6 +4943,7 @@ CREATE INDEX idx_product_telemetry_step
   ON product_telemetry_events(step, created_at);
 CREATE INDEX idx_products_entitlement_paused
   ON products(entitlement_paused_at);
+CREATE INDEX idx_products_from_experiment ON products(from_experiment_id);
 CREATE INDEX idx_products_from_opportunity ON products(from_opportunity_id)
   WHERE from_opportunity_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_products_ingest_token ON products(ingest_token);
@@ -4948,6 +4951,7 @@ CREATE INDEX idx_products_market_category ON products(market_category);
 CREATE INDEX idx_products_owner ON products(owner_id);
 CREATE INDEX idx_products_reality ON products(reality);
 CREATE UNIQUE INDEX idx_products_share_token ON products(share_token);
+CREATE INDEX idx_products_standing ON products(standing);
 CREATE INDEX idx_products_status ON products(status);
 CREATE INDEX idx_proposed_acts_open
   ON proposed_acts(product_id, subject) WHERE decision IS NULL;
@@ -5130,6 +5134,10 @@ BEGIN SELECT RAISE(ABORT,'act_consequence_floor:constitutional'); END;
 CREATE TRIGGER act_consequence_floors_constitutional_update
 BEFORE UPDATE ON act_consequence_floors
 BEGIN SELECT RAISE(ABORT,'act_consequence_floor:constitutional'); END;
+CREATE TRIGGER agent_instances_not_for_experimental
+BEFORE INSERT ON agent_instances
+WHEN EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_cannot_be_provisioned'); END;
 CREATE TRIGGER ai_spend_reservation_apply
 AFTER INSERT ON ai_spend_reservations
 BEGIN
@@ -5170,6 +5178,11 @@ BEGIN
     WHERE scope = 'founder' AND scope_id = NEW.founder_id AND date = NEW.date), 0) + NEW.reserved_cents > NEW.founder_cap_cents
     ;
 END;
+CREATE TRIGGER ai_spend_reservations_not_for_experimental
+BEFORE INSERT ON ai_spend_reservations
+WHEN NEW.product_id IS NOT NULL
+ AND EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_has_no_company_spend'); END;
 CREATE TRIGGER asset_money_is_append_only
 BEFORE UPDATE ON asset_money_spent
 BEGIN SELECT RAISE(ABORT,'asset_money:append_only'); END;
@@ -5534,6 +5547,10 @@ BEGIN
     SELECT 1 FROM products p
      WHERE p.id = OLD.product_id AND p.erasure_scheduled_at IS NULL);
 END;
+CREATE TRIGGER company_situations_not_for_experimental
+BEFORE INSERT ON company_situations
+WHEN EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_has_no_situation'); END;
 CREATE TRIGGER consequence_rungs_constitutional_delete BEFORE DELETE ON consequence_rungs
 BEGIN SELECT RAISE(ABORT,'consequence_rung:constitutional'); END;
 CREATE TRIGGER consequence_rungs_constitutional_insert BEFORE INSERT ON consequence_rungs
@@ -5639,6 +5656,11 @@ BEGIN
   SELECT RAISE(ABORT,'delegation:not_granted_by_a_person')
     WHERE NEW.granted_by NOT LIKE 'founder:%';
 END;
+CREATE TRIGGER delegations_not_for_experimental
+BEFORE INSERT ON delegations
+WHEN NEW.product_id IS NOT NULL
+ AND EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_holds_no_delegation'); END;
 CREATE TRIGGER development_authority_guard
 BEFORE INSERT ON autonomy_consents
 WHEN NEW.responsibility_id IS NOT NULL AND NEW.capability='development'
@@ -6367,6 +6389,10 @@ BEGIN
         AND d.id=json_extract(NEW.payload_json,'$.judgment_id')
         AND datetime(rc.created_at)>datetime(d.made_at)));
 END;
+CREATE TRIGGER institutional_responsibilities_not_for_experimental
+BEFORE INSERT ON institutional_responsibilities
+WHEN EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_carries_no_responsibility'); END;
 CREATE TRIGGER integration_config_no_secrets_insert
 BEFORE INSERT ON integrations
 WHEN COALESCE(json_valid(NEW.config_json),0)=1
@@ -6807,6 +6833,11 @@ BEGIN
        OR NEW.value IS NOT OLD.value OR NEW.founder_id IS NOT OLD.founder_id
        OR NEW.evidence_mode IS NOT OLD.evidence_mode;
 END;
+CREATE TRIGGER portfolio_exposures_not_for_experimental
+BEFORE INSERT ON portfolio_exposures
+WHEN NEW.subject_kind = 'company'
+ AND EXISTS (SELECT 1 FROM products WHERE id = NEW.subject_id AND standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_is_not_a_concentration'); END;
 CREATE TRIGGER posture_change_guard
 BEFORE INSERT ON posture_changes
 BEGIN
@@ -6861,11 +6892,67 @@ BEFORE UPDATE OF from_opportunity_id ON products
 WHEN OLD.from_opportunity_id IS NOT NULL
      AND NEW.from_opportunity_id IS NOT OLD.from_opportunity_id
 BEGIN SELECT RAISE(ABORT,'product_lineage:write_once'); END;
+CREATE TRIGGER products_earning_immutable
+BEFORE UPDATE OF earned_at, earned_by, earned_because ON products
+WHEN OLD.earned_at IS NOT NULL
+BEGIN
+  SELECT RAISE(ABORT,'products:earning_immutable');
+END;
+CREATE TRIGGER products_experiment_lineage_immutable
+BEFORE UPDATE OF from_experiment_id ON products
+WHEN OLD.from_experiment_id IS NOT NULL
+BEGIN
+  SELECT RAISE(ABORT,'products:experiment_lineage_immutable');
+END;
 CREATE TRIGGER products_reality_immutable
 BEFORE UPDATE OF reality ON products
 WHEN NEW.reality IS NOT OLD.reality
 BEGIN
   SELECT RAISE(ABORT, 'products:reality_immutable');
+END;
+CREATE TRIGGER products_standing_birth
+BEFORE INSERT ON products
+BEGIN
+  SELECT RAISE(ABORT,'products:experimental_needs_an_experiment')
+    WHERE NEW.standing = 'experimental' AND NEW.from_experiment_id IS NULL;
+  SELECT RAISE(ABORT,'products:cannot_arrive_earned_from_an_experiment')
+    WHERE NEW.standing = 'earned' AND NEW.from_experiment_id IS NOT NULL;
+  SELECT RAISE(ABORT,'products:earning_is_a_transition')
+    WHERE NEW.earned_at IS NOT NULL OR NEW.earned_by IS NOT NULL
+       OR NEW.earned_because IS NOT NULL;
+  -- AN EXPERIMENT IN ONE WORLD CANNOT PRODUCE AN ASSET IN ANOTHER. A reference
+  -- experiment may only produce a reference row; a real one a real row.
+  SELECT RAISE(ABORT,'products:experiment_world_mismatch')
+    WHERE NEW.from_experiment_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1 FROM venture_experiments e
+         WHERE e.id = NEW.from_experiment_id
+           AND e.decision = 'approved'
+           AND ((e.evidence_mode = 'reference') = (NEW.reality = 'reference')));
+  -- ONE ASSET PER EXPERIMENT. A test that produced two assets is two tests.
+  SELECT RAISE(ABORT,'products:experiment_already_has_an_asset')
+    WHERE NEW.from_experiment_id IS NOT NULL
+      AND EXISTS (SELECT 1 FROM products p
+                   WHERE p.from_experiment_id = NEW.from_experiment_id
+                     AND p.deleted_at IS NULL);
+END;
+CREATE TRIGGER products_standing_transition
+BEFORE UPDATE OF standing ON products
+WHEN NEW.standing IS NOT OLD.standing
+BEGIN
+  SELECT RAISE(ABORT,'products:earned_cannot_become_experimental')
+    WHERE OLD.standing = 'earned';
+  SELECT RAISE(ABORT,'products:earning_needs_a_record')
+    WHERE NEW.earned_at IS NULL OR trim(coalesce(NEW.earned_by,'')) = ''
+       OR trim(coalesce(NEW.earned_because,'')) = '';
+  SELECT RAISE(ABORT,'products:reality_has_not_earned_it')
+    WHERE NEW.earned_by NOT LIKE 'founder:%'
+      AND NOT EXISTS (
+        SELECT 1 FROM prediction_resolutions r
+         WHERE r.kind = 'venture_experiment'
+           AND r.prediction_id = OLD.from_experiment_id
+           AND r.resolved_by = 'business_outcome'
+           AND r.verdict IN ('as_predicted','partly'));
 END;
 CREATE TRIGGER products_status_is_lifecycle_only_insert
 BEFORE INSERT ON products

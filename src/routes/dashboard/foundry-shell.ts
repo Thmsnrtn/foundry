@@ -385,7 +385,7 @@ async function questionsElsewhere(
        FROM responsibility_candidates c
        JOIN products p ON p.id = c.product_id
       WHERE p.owner_id = ? AND c.status = 'pending'
-        AND p.status = 'active' AND p.deleted_at IS NULL
+        AND p.status = 'active' AND p.standing = 'earned' AND p.deleted_at IS NULL
         -- OWNER ATTENTION IS CAPITAL, AND A COMPANY THAT DOES NOT EXIST MAY NOT
         -- SPEND IT. The reference world exists to be watched, and its questions
         -- are real questions about real machinery — but nothing is at stake in
@@ -554,7 +554,7 @@ async function readOwnerState(
                     THEN 1 ELSE 0 END) AS itself,
                 SUM(CASE WHEN ${referenceCompany('p')} THEN 1 ELSE 0 END) AS invented
            FROM products p
-          WHERE p.owner_id = ? AND p.status = 'active' AND p.deleted_at IS NULL`,
+          WHERE p.owner_id = ? AND p.status = 'active' AND p.standing = 'earned' AND p.deleted_at IS NULL`,
         [founderId])).rows[0] as Record<string, unknown> | undefined;
       return {
         real: Number(counted?.real ?? 0),
@@ -2886,6 +2886,16 @@ interface CompanyView {
   numbers: CompanyNumbers;
   /** Non-null only for a reference company: what it is, said before anything else. */
   reference: { situation: string; premise: string } | null;
+  /** HOW IT EXISTS. A test object with an identity and a budget, or something real
+   * economic evidence has recognised. Said before the numbers, because a page that
+   * showed a test object as a company would be the second most misleading screen. */
+  existence: {
+    standing: 'experimental' | 'earned';
+    boundary: 'asset_only' | 'company';
+    experimentId: string | null;
+    earned: { at: string; by: string; because: string } | null;
+    retiredBecause: string | null;
+  };
   /** What Foundry has noticed and is asking about. Recognition, and nothing more. */
   asks: Array<{ id: string; proposal: string; rationale: string }>;
   /** The one sentence at the top: what situation this company is in. */
@@ -2961,7 +2971,8 @@ interface CompanyView {
 async function readCompany(productId: string, founderId: string): Promise<CompanyView | null> {
   const row = (await query(
     `SELECT id, name, created_at, operating_budget_monthly_usd, ai_cost_trailing_30d_usd,
-            github_repo_url, reality
+            github_repo_url, reality, standing, operating_boundary, from_experiment_id,
+            earned_at, earned_by, earned_because, retired_because
        FROM products WHERE id = ? AND owner_id = ?`, [productId, founderId]))
     .rows[0] as Record<string, unknown> | undefined;
   if (!row) return null;
@@ -3081,6 +3092,16 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
   return {
     id: String(row.id), name: String(row.name),
     established: row.created_at == null ? null : String(row.created_at).slice(0, 10),
+    existence: {
+      standing: String(row.standing) as 'experimental' | 'earned',
+      boundary: String(row.operating_boundary) as 'asset_only' | 'company',
+      experimentId: row.from_experiment_id == null ? null : String(row.from_experiment_id),
+      earned: row.earned_at == null ? null : {
+        at: String(row.earned_at).slice(0, 10), by: String(row.earned_by),
+        because: String(row.earned_because),
+      },
+      retiredBecause: row.retired_because == null ? null : String(row.retired_because),
+    },
     said: objective ? { statement: objective.statement, steers: objective.channels.length > 0 } : null,
     boundaries: liveBoundaries.map((b) => ({
       id: b.id, statement: b.statement, ownerWords: b.ownerWords, mode: b.mode,
@@ -3229,7 +3250,7 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
        FROM portfolio_exposures e JOIN products p ON p.id = e.subject_id
       WHERE e.founder_id = ? AND e.subject_kind = 'company' AND e.dimension = 'revenue_model'
         AND e.retired_at IS NULL AND e.evidence_mode = 'real' AND p.reality = 'real'
-        AND p.status = 'active' AND p.deleted_at IS NULL
+        AND p.status = 'active' AND p.standing = 'earned' AND p.deleted_at IS NULL
       GROUP BY e.value ORDER BY cents DESC`, [String(founder.id)]))
     .rows as unknown as Array<Record<string, unknown>>)
     .map((r) => ({ form: String(r.value), cents: Number(r.cents) }))
@@ -3240,6 +3261,8 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
     ? 'nothing being looked at'
     : `${String(river.frontier.looking)} being looked at`
       + (river.frontier.awaiting > 0 ? `, ${String(river.frontier.awaiting)} waiting on you` : ''))
+    + (river.frontier.testing > 0
+      ? `, ${String(river.frontier.testing)} being tested` : '')
     + (river.frontier.buried > 0 ? `, ${String(river.frontier.buried)} buried` : '');
 
   const body = html`
@@ -3459,6 +3482,21 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
         for it, spend anything on it, or count it as a track record.</p>
       </details>
     </div>` : ''}
+    ${view.existence.standing === 'experimental' ? html`<div class="know">
+      <h3>This is a test, not a company</h3>
+      <p>It exists so an approved test has something to be: a name to act as, and the budget
+        you approved with the test. I do not operate it. It has no agents, no routine, no
+        company spend, and it cannot reach anyone except through the test you approved.</p>
+      <p class="quiet">It becomes real when something outside this institution pays for it, or
+        when you tell me in your own words that you are calling it real. Until then it does
+        not count among your companies${view.existence.boundary === 'asset_only'
+    ? ', and it is an asset rather than a company: no entity, no separate boundary' : ''}.</p>
+    </div>` : ''}
+    ${view.existence.earned && view.existence.experimentId ? html`<p class="quiet">Real since
+      ${view.existence.earned.at}: ${view.existence.earned.because}
+      (${view.existence.earned.by.startsWith('founder:') ? 'your call' : 'settled by what happened'}).
+      That says it exists; it does not say it is worth keeping.</p>` : ''}
+    ${view.existence.retiredBecause ? html`<p class="gap">Retired: ${view.existence.retiredBecause}</p>` : ''}
     ${done === 'added' ? html`<div class="done"><p><strong>Added.</strong> I know it exists and
       that it is yours. I cannot see anything about it yet.</p></div>` : ''}
     ${done === 'steered' ? html`<div class="done"><p><strong>Noted.</strong> I will weigh that

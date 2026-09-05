@@ -59,7 +59,7 @@ export async function concentrationsFor(
        JOIN products p ON p.id = e.subject_id
       WHERE e.founder_id = ? AND e.retired_at IS NULL
         AND e.subject_kind = 'company' AND e.evidence_mode = ?
-        AND p.reality = ?
+        AND p.reality = ? AND p.standing = 'earned'
         AND p.status = 'active' AND p.deleted_at IS NULL
       ORDER BY d.sort_order, e.value`, [founderId, world, world]))
     .rows as unknown as Array<Record<string, unknown>>;
@@ -144,7 +144,7 @@ export async function portfolioFitOf(input: {
        JOIN products p ON p.id = e.subject_id
       WHERE e.founder_id = ? AND e.retired_at IS NULL
         AND e.subject_kind = 'company' AND e.evidence_mode = ?
-        AND p.reality = ?
+        AND p.reality = ? AND p.standing = 'earned'
         AND p.status = 'active' AND p.deleted_at IS NULL`,
     [input.founderId, world, world]))
     .rows as unknown as Array<Record<string, unknown>>) {

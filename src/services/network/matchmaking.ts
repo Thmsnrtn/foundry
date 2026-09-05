@@ -35,7 +35,7 @@ export async function upsertNetworkProfile(
   // stage when they are unambiguous; when the founder's active companies
   // disagree, it carries neither, and the founder can state them themselves.
   const productsResult = await query(
-    "SELECT sector_profile, growth_stage FROM products WHERE owner_id = ? AND status = 'active'",
+    "SELECT sector_profile, growth_stage FROM products WHERE owner_id = ? AND status = 'active' AND standing = 'earned'",
     [founderId]
   );
   const rows = productsResult.rows as Array<Record<string, string | null>>;

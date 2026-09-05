@@ -134,7 +134,7 @@ export async function composeFleetLetter(founderId: string, f: Fluency = 'balanc
   const products = (await query(
     `SELECT p.id, p.name, COALESCE(ls.risk_state, 'green') as risk_state
        FROM products p LEFT JOIN lifecycle_state ls ON ls.product_id = p.id
-      WHERE p.owner_id = ? AND p.status != 'archived' AND ${realCompany('p')}
+      WHERE p.owner_id = ? AND p.status != 'archived' AND p.standing = 'earned' AND ${realCompany('p')}
       ORDER BY p.created_at ASC`,
     [founderId],
   )).rows as unknown as Array<Record<string, string>>;
@@ -171,7 +171,7 @@ export async function composeFleetLetter(founderId: string, f: Fluency = 'balanc
        FROM decisions d
        JOIN products p ON p.id = d.product_id
        LEFT JOIN lifecycle_state ls ON ls.product_id = d.product_id
-      WHERE p.owner_id = ? AND d.status = 'pending' AND p.status != 'archived'
+      WHERE p.owner_id = ? AND d.status = 'pending' AND p.status != 'archived' AND p.standing = 'earned'
       ORDER BY d.gate DESC, (d.deadline IS NULL) ASC, d.deadline ASC, d.created_at ASC
       LIMIT 200`,
     [founderId],

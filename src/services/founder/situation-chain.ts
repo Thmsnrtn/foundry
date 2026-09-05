@@ -321,7 +321,7 @@ export async function whatFollowed(kind: string): Promise<WhatFollowed> {
        FROM situation_recommendations r
        JOIN company_situations s ON s.id = r.situation_id
        JOIN products p ON p.id = r.product_id
-      WHERE r.kind = ? AND ${realCompany('p')}`, [kind]))
+      WHERE r.kind = ? AND p.standing = 'earned' AND ${realCompany('p')}`, [kind]))
     .rows[0] as Record<string, unknown>;
   return {
     kind, raised: Number(row.raised ?? 0), accepted: Number(row.accepted ?? 0),

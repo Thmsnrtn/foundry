@@ -192,10 +192,19 @@ export async function companyMayIncurCost(productId: string): Promise<string | n
               entitlement_paused_at AS billing_paused,
               erasure_scheduled_at AS erasing,
               reality,
+              standing,
               CASE WHEN ${operatingProduct()} THEN 1 ELSE 0 END AS operating
          FROM products WHERE id = ?`, [productId]);
     const row = res.rows[0] as Record<string, unknown> | undefined;
     if (!row) return null;
+    // A TEST OBJECT HAS NO COMPANY SPEND. Its experiment spends through the
+    // workshop budget and the founder scope; charging a model call to the
+    // asset itself is the accounting that lets a test look like a business.
+    // Said here, ahead of the ladder, so the reason is this and not the
+    // 'provisioning' the ladder would otherwise fall through to.
+    if (String(row.standing) === 'experimental') {
+      return 'an experimental asset — its test spends through its experiment, not as company cost';
+    }
     // A REHEARSAL MAY NOT SPEND THE REAL COMPANIES' MONEY.
     //
     // The founder and global ceilings are shared pools — $100 and $500 a day

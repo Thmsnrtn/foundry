@@ -262,7 +262,7 @@ async function autoCalibrate(founderId: string): Promise<FounderAIProfile> {
   // the founder's active companies agree; when they do not, the default stands,
   // because there is no single answer to give.
   const productsResult = await query(
-    "SELECT DISTINCT sector_profile FROM products WHERE owner_id = ? AND status = 'active' AND sector_profile IS NOT NULL",
+    "SELECT DISTINCT sector_profile FROM products WHERE owner_id = ? AND status = 'active' AND standing = 'earned' AND sector_profile IS NOT NULL",
     [founderId]
   );
   const sectors = (productsResult.rows as Array<Record<string, string>>).map((r) => r.sector_profile);

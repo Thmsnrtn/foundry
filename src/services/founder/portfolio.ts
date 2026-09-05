@@ -136,7 +136,7 @@ export async function portfolioFor(founderId: string): Promise<Portfolio> {
          FROM products p
          LEFT JOIN company_situations s
            ON s.product_id = p.id AND s.ended_at IS NULL
-        WHERE p.owner_id = ? AND p.status = 'active' AND p.deleted_at IS NULL
+        WHERE p.owner_id = ? AND p.status = 'active' AND p.standing = 'earned' AND p.deleted_at IS NULL
           AND ${reference ? referenceCompany('p') : realCompany('p')}
         ORDER BY p.created_at, p.rowid`, [founderId]))
       .rows as unknown as Array<Record<string, unknown>>;
@@ -263,7 +263,7 @@ export async function glanceFor(founderId: string): Promise<Glance> {
                 AND m.snapshot_date >= date('now','-45 day')
               ORDER BY m.snapshot_date DESC LIMIT 1) AS mrr_cents
        FROM products p
-      WHERE p.owner_id = ? AND p.status = 'active' AND p.deleted_at IS NULL
+      WHERE p.owner_id = ? AND p.status = 'active' AND p.standing = 'earned' AND p.deleted_at IS NULL
         AND ${realCompany('p')}`, [founderId]))
     .rows as unknown as Array<Record<string, unknown>>;
   const seen = rows.filter((r) => r.mrr_cents != null);
@@ -320,7 +320,8 @@ export function money(cents: number): string {
 }
 
 export async function layersFor(founderId: string): Promise<{
-  layers: Layer[]; frontier: { looking: number; awaiting: number; buried: number };
+  layers: Layer[];
+  frontier: { looking: number; awaiting: number; buried: number; testing: number };
 }> {
   const rows = (await query(
     `SELECT p.id, p.name, p.posture,
@@ -329,7 +330,7 @@ export async function layersFor(founderId: string): Promise<{
                 AND m.snapshot_date >= date('now','-45 day')
               ORDER BY m.snapshot_date DESC LIMIT 1) AS mrr_cents
        FROM products p
-      WHERE p.owner_id = ? AND p.status = 'active' AND p.deleted_at IS NULL
+      WHERE p.owner_id = ? AND p.status = 'active' AND p.standing = 'earned' AND p.deleted_at IS NULL
         AND ${realCompany('p')}
       ORDER BY mrr_cents DESC NULLS LAST, p.created_at`, [founderId]))
     .rows as unknown as Array<Record<string, unknown>>;
@@ -356,8 +357,15 @@ export async function layersFor(founderId: string): Promise<{
        (SELECT COUNT(*) FROM venture_experiments e
           WHERE e.founder_id = ? AND e.decision IS NULL AND e.evidence_mode = 'real') AS awaiting,
        (SELECT COUNT(*) FROM venture_opportunities o
-          WHERE o.founder_id = ? AND o.verdict = 'rejected' AND o.evidence_mode = 'real') AS buried`,
-    [founderId, founderId, founderId])).rows[0] as Record<string, unknown>;
+          WHERE o.founder_id = ? AND o.verdict = 'rejected' AND o.evidence_mode = 'real') AS buried,
+       -- AN EXPERIMENTAL ASSET IS ON THE FRONTIER, NOT IN A LAYER. A test
+       -- object with an identity and a budget is not a tributary and not an
+       -- anchor; it is a thing being tested, and it is counted as that here so
+       -- the layers above stay a picture of what actually earns.
+       (SELECT COUNT(*) FROM products x
+          WHERE x.owner_id = ? AND x.status = 'active' AND x.deleted_at IS NULL
+            AND x.standing = 'experimental' AND x.reality = 'real') AS testing`,
+    [founderId, founderId, founderId, founderId])).rows[0] as Record<string, unknown>;
 
   return {
     layers: [
@@ -375,6 +383,7 @@ export async function layersFor(founderId: string): Promise<{
     frontier: {
       looking: Number(frontier.looking), awaiting: Number(frontier.awaiting),
       buried: Number(frontier.buried),
+      testing: Number(frontier.testing),
     },
   };
 }

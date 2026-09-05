@@ -60,7 +60,7 @@ export async function selectedProductId(
   // time, which is how a pointless clause surfaced after years.)
   const all = await query(
     `SELECT id FROM products WHERE owner_id = ? AND status != 'archived'
-       AND ${realCompany()}`,
+       AND standing = 'earned' AND ${realCompany()}`,
     [founderId]);
   return all.rows.length === 1 ? (all.rows[0] as Record<string, string>).id : null;
 }

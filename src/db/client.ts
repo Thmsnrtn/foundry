@@ -495,6 +495,15 @@ export async function getAllActiveProducts(): Promise<ResultSet> {
 export function operatingProduct(alias = ''): string {
   const p = alias ? `${alias}.` : '';
   return `${p}status = 'active'`
+    // THE EXISTENCE AXIS. An experimental asset is a test object with an
+    // identity and a budget, not a company Foundry operates: no agents, no
+    // recurring company jobs, no ordinary model spend, no situation, no
+    // concentration. Migration 276 refuses those writes in the database; this
+    // clause is what keeps every work-list, count and spend check that reads
+    // the canonical predicate from ever offering it one. It becomes 'earned'
+    // only when a business outcome settles its test, or the owner says in
+    // words why he is calling it real.
+    + ` AND ${p}standing = 'earned'`
     + ` AND COALESCE(${p}scp_status,'active') NOT IN ('paused','archived')`
     + ` AND ${p}entitlement_paused_at IS NULL`
     // THE THIRD PAUSE AXIS. A company with a deletion scheduled is on its way

@@ -374,6 +374,34 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.code, r.output).toBe(0);
   });
 
+  it('check-standing-scope fails on a new query that counts every company as operating', () => {
+    // THE BOUNDARY THIS GUARDS. An experimental asset is a test object with an
+    // identity and a budget, not one of his companies. Migration 276 refuses the
+    // writes that would make it act like one; a SELECT that counts it as one is
+    // the other half, and the only thing that can catch a SELECT is a gate.
+    plant('src/services/_gate_fixture_standing.ts',
+      j("import { query } from '../db/client.js';\n",
+        'export async function howManyCompanies(owner: string) {\n',
+        "  return query('SELECT COUNT(*) AS n FROM ", "products WHERE owner_id = ? AND status = ?', [owner, 'active']);\n",
+        '}\n'));
+    const r = run('check-standing-scope.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_standing');
+  });
+
+  it('check-standing-scope does not object to a query that reads standing or names one company', () => {
+    plant('src/services/_gate_fixture_standing_ok.ts',
+      j("import { query } from '../db/client.js';\n",
+        'export async function earnedCompanies(owner: string) {\n',
+        "  return query('SELECT id FROM ", "products WHERE owner_id = ? AND standing = ?', [owner, 'earned']);\n",
+        '}\n',
+        'export async function oneCompany(id: string) {\n',
+        "  return query('SELECT name FROM ", "products WHERE id = ?', [id]);\n",
+        '}\n'));
+    const r = run('check-standing-scope.mjs');
+    expect(r.code, r.output).toBe(0);
+  });
+
   it('check-reachability fails on a module nothing can reach', () => {
     plant('src/services/_gate_fixture_orphan.ts',
       "export const orphan = () => 'nothing imports this';\n");

@@ -27,28 +27,11 @@
 // person has looked at and judged safe, and it shrinks as they are reviewed.
 // =============================================================================
 
-import { readFileSync, readdirSync, statSync, writeFileSync, existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { walk, boundToOneCompany } from './lib/product-queries.mjs';
 
 const BASELINE = 'docs/db/reality-scope-baseline.txt';
 const WRITE = process.argv.includes('--write');
-
-function walk(dir) {
-  let out = [];
-  for (const entry of readdirSync(dir)) {
-    const p = join(dir, entry);
-    if (statSync(p).isDirectory()) out = out.concat(walk(p));
-    else if (p.endsWith('.ts')) out.push(p);
-  }
-  return out;
-}
-
-/** A query that names one company by id is already scoped to that company. */
-function boundToOneCompany(sql) {
-  return /\b(id|product_id|p\.id)\s*=\s*\?/.test(sql)
-    || /\bWHERE\s+id\s*=/.test(sql)
-    || /products\s+WHERE\s+id/i.test(sql);
-}
 
 const offenders = [];
 for (const file of walk('src')) {

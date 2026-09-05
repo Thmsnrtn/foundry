@@ -144,9 +144,16 @@ export async function decideExperiment(input: {
     [input.decision, input.by, input.decision,
       `+${String(DAYS_BEFORE_IT_OWES_AN_ANSWER)} days`, input.experimentId]);
   if (input.decision !== 'approved') return { workshop: null };
-  // AN APPROVED TEST GETS SOMEWHERE TO BE BUILT, under a ceiling that lets it
-  // make things and never lets it reach the world on its own. When no real
-  // computer is available the experiment stays approved and says so.
+  // AN APPROVED TEST GETS SOMETHING TO BE. Before anything is built, before an
+  // offer can be placed, the test needs an identity to act as and a budget the
+  // doors can read: an EXPERIMENTAL asset, structurally not a company, that
+  // reality may later earn. Created here rather than from a page, so an asset
+  // cannot exist for a test nobody approved.
+  const { beginExperimentalAsset } = await import('./asset.js');
+  await beginExperimentalAsset({ experimentId: input.experimentId, by: input.by });
+  // AND SOMEWHERE TO BE BUILT, under a ceiling that lets it make things and
+  // never lets it reach the world on its own. When no real computer is
+  // available the experiment stays approved and says so.
   const { workshopFor } = await import('../workshop/index.js');
   const made = await workshopFor(input.experimentId);
   return { workshop: made.opened ? made.workshopId : null };

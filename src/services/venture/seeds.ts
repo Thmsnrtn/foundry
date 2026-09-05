@@ -340,14 +340,52 @@ export async function whyWeStartedLooking(opportunityId: string): Promise<{
  * existed before the link did. Silence, not a guess.
  */
 export async function whyWeOwnThis(productId: string): Promise<
-  (Awaited<ReturnType<typeof whyWeStartedLooking>> & { opportunityId: string }) | null
+  (Awaited<ReturnType<typeof whyWeStartedLooking>> & {
+    opportunityId: string;
+    /** The test that produced the asset, and how it stands. Null for an asset
+     * that predates the experiment link. */
+    experiment: {
+      id: string; whatWeDo: string; whatWeExpect: string; wouldDisprove: string;
+      decidedAt: string | null; ranAt: string | null; verdict: string | null;
+    } | null;
+    /** How the asset exists: a test object, or recognised by real evidence. */
+    standing: 'experimental' | 'earned';
+    earned: { at: string; by: string; because: string } | null;
+    retiredBecause: string | null;
+  }) | null
 > {
+  // THE EXPERIMENT IS THE LINK THAT WAS MISSING. `from_opportunity_id` existed
+  // for a long time and nothing wrote it; an asset comes from the test that
+  // earned it, and the test from the candidate. Read both, prefer the
+  // experiment's candidate when both are present, and say so when neither is.
   const row = (await query(
-    'SELECT from_opportunity_id FROM products WHERE id = ?', [productId]))
+    `SELECT p.from_opportunity_id, p.from_experiment_id, p.standing, p.earned_at,
+            p.earned_by, p.earned_because, p.retired_because,
+            e.opportunity_id AS experiment_opportunity, e.what_we_do, e.what_we_expect,
+            e.would_disprove, e.decided_at, e.ran_at, e.verdict
+       FROM products p
+       LEFT JOIN venture_experiments e ON e.id = p.from_experiment_id
+      WHERE p.id = ?`, [productId]))
     .rows[0] as Record<string, unknown> | undefined;
-  if (!row || row.from_opportunity_id == null) return null;
-  const opportunityId = String(row.from_opportunity_id);
+  if (!row) return null;
+  const opportunityId = row.experiment_opportunity != null ? String(row.experiment_opportunity)
+    : row.from_opportunity_id != null ? String(row.from_opportunity_id) : null;
+  if (opportunityId === null) return null;
   const chain = await whyWeStartedLooking(opportunityId);
   if (chain === null) return null;
-  return { ...chain, opportunityId };
+  return {
+    ...chain, opportunityId,
+    experiment: row.from_experiment_id == null ? null : {
+      id: String(row.from_experiment_id), whatWeDo: String(row.what_we_do),
+      whatWeExpect: String(row.what_we_expect), wouldDisprove: String(row.would_disprove),
+      decidedAt: row.decided_at == null ? null : String(row.decided_at),
+      ranAt: row.ran_at == null ? null : String(row.ran_at),
+      verdict: row.verdict == null ? null : String(row.verdict),
+    },
+    standing: String(row.standing) as 'experimental' | 'earned',
+    earned: row.earned_at == null ? null : {
+      at: String(row.earned_at), by: String(row.earned_by), because: String(row.earned_because),
+    },
+    retiredBecause: row.retired_because == null ? null : String(row.retired_because),
+  };
 }

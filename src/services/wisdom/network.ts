@@ -106,7 +106,7 @@ export async function aggregateInsights(): Promise<number> {
     `SELECT p.sector_profile, p.growth_stage, COUNT(*) as cnt
      FROM products p
      JOIN founders f ON p.owner_id = f.id
-     WHERE f.wisdom_network_opted_in = 1 AND p.status = 'active'
+     WHERE f.wisdom_network_opted_in = 1 AND p.status = 'active' AND p.standing = 'earned'
        -- A FABRICATED CONTRIBUTOR COULD CLEAR THE FLOOR. The minimum sample
        -- exists so no single company speaks for many; a reference company
        -- counted here would let a rehearsal manufacture the quorum that makes

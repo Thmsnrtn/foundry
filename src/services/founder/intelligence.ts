@@ -132,7 +132,7 @@ export async function getPulse(): Promise<PulseData> {
   // `decisions.status = 'pending'` inside the vocabulary scanner's window for
   // `stressor_history`, and it reported a violation neither line contains.
   const realProductCount = query(
-    `SELECT COUNT(*) as c FROM products WHERE status = 'active' AND ${realCompany()}`, []);
+    `SELECT COUNT(*) as c FROM products WHERE status = 'active' AND standing = 'earned' AND ${realCompany()}`, []);
 
   const [
     foundersResult, productsResult, stressorsResult, decisionsResult,
@@ -159,7 +159,7 @@ export async function getPulse(): Promise<PulseData> {
              FROM metric_snapshots m
              WHERE m.snapshot_date >= date('now', '-30 days')
                AND EXISTS (SELECT 1 FROM products p WHERE p.id = m.product_id
-                             AND ${realCompany('p')})`, []),
+                             AND p.standing = 'earned' AND ${realCompany('p')})`, []),
     query(`SELECT COALESCE(SUM(new_mrr_cents), 0) + COALESCE(SUM(expansion_mrr_cents), 0)
                 - COALESCE(SUM(contraction_mrr_cents), 0) - COALESCE(SUM(churned_mrr_cents), 0) AS total,
                 COUNT(new_mrr_cents) + COUNT(expansion_mrr_cents)
@@ -168,7 +168,7 @@ export async function getPulse(): Promise<PulseData> {
             WHERE m.snapshot_date >= date('now', '-60 days')
               AND m.snapshot_date <  date('now', '-30 days')
               AND EXISTS (SELECT 1 FROM products p WHERE p.id = m.product_id
-                            AND ${realCompany('p')})`, []),
+                            AND p.standing = 'earned' AND ${realCompany('p')})`, []),
     query("SELECT COUNT(*) as c FROM founders WHERE created_at > datetime('now', '-30 days')", []),
     query("SELECT COUNT(*) as c FROM founders WHERE tier IS NULL AND created_at < datetime('now', '-7 days')", []),
   ]);
@@ -343,7 +343,7 @@ export async function getMRRIntelligence(): Promise<MRRIntelligence> {
             COALESCE(SUM(new_mrr_cents), 0) + COALESCE(SUM(expansion_mrr_cents), 0)
           - COALESCE(SUM(contraction_mrr_cents), 0) - COALESCE(SUM(churned_mrr_cents), 0) as mrr
      FROM metric_snapshots m WHERE m.snapshot_date > date('now', '-90 days')
-       AND EXISTS (SELECT 1 FROM products p WHERE p.id = m.product_id AND ${realCompany('p')})
+       AND EXISTS (SELECT 1 FROM products p WHERE p.id = m.product_id AND p.standing = 'earned' AND ${realCompany('p')})
      GROUP BY snapshot_date ORDER BY snapshot_date`, []
   );
 
@@ -428,7 +428,7 @@ export async function getChurnIntelligence(): Promise<ChurnIntelligence> {
     `SELECT p.id, p.name, ls.risk_state, (SELECT COUNT(*) FROM stressor_history sh WHERE sh.product_id = p.id AND sh.status = 'active') as stressor_count
      FROM products p
      JOIN lifecycle_state ls ON p.id = ls.product_id
-     WHERE ls.risk_state IN ('yellow', 'red') AND p.status = 'active'
+     WHERE ls.risk_state IN ('yellow', 'red') AND p.status = 'active' AND p.standing = 'earned'
      ORDER BY ls.risk_state DESC LIMIT 20`, []
   );
 
@@ -436,11 +436,11 @@ export async function getChurnIntelligence(): Promise<ChurnIntelligence> {
   // without the limit that exists only so a card fits.
   const totals = await safeQuery(
     `SELECT
-       (SELECT COUNT(*) FROM products WHERE status = 'active' AND ${realCompany()}) AS active,
+       (SELECT COUNT(*) FROM products WHERE status = 'active' AND standing = 'earned' AND ${realCompany()}) AS active,
        (SELECT COUNT(*) FROM products p JOIN lifecycle_state ls ON p.id = ls.product_id
-         WHERE ls.risk_state IN ('yellow','red') AND p.status = 'active') AS at_risk,
+         WHERE ls.risk_state IN ('yellow','red') AND p.status = 'active' AND p.standing = 'earned') AS at_risk,
        (SELECT COUNT(*) FROM products p JOIN lifecycle_state ls ON p.id = ls.product_id
-         WHERE ls.risk_state = 'yellow' AND p.status = 'active') AS yellow`, []);
+         WHERE ls.risk_state = 'yellow' AND p.status = 'active' AND p.standing = 'earned') AS yellow`, []);
 
   const row = (totals.rows[0] ?? {}) as Record<string, unknown>;
   const active = Number(row.active ?? 0);

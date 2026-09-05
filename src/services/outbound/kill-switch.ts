@@ -61,7 +61,7 @@ export async function checkKillSwitch(
 ): Promise<KillSwitchResult> {
   const productResult = await query(
     `SELECT status, scp_status, entitlement_paused_at, erasure_scheduled_at, disabled_tools,
-            reality
+            reality, standing
        FROM products WHERE id = ?`,
     [productId]
   );
@@ -89,6 +89,24 @@ export async function checkKillSwitch(
     return {
       blocked: true,
       reason: 'company is a reference company and may not reach the world',
+    };
+  }
+  // A TEST OBJECT HAS NO AUTHORITY OF ITS OWN. An experimental asset exists so
+  // an approved test has something to be; the only external effect it may
+  // ever produce is one its approved experiment carries, named in the act
+  // and bounded by the allowance the approval wrote. Nothing at this door
+  // carries an experiment yet — no hand does — so the door refuses, and says
+  // what would pass. This is the shape the first hand will fill: an
+  // act-scoped experiment reference supplied by the gateway, never by the
+  // caller, checked here against `venture_experiments.decision = 'approved'`
+  // on this asset. Refused ahead of the exemptions below for the same reason
+  // a reference company is: none of them describe a relationship this object
+  // has.
+  if (productRow.standing === 'experimental') {
+    return {
+      blocked: true,
+      reason: 'this is an experimental asset — it may reach the world only through an '
+        + 'act its approved experiment carries, and this act names none',
     };
   }
   // WHAT THE OWNER SAID, BEFORE ANYTHING ELSE HE MIGHT HAVE CONFIGURED.

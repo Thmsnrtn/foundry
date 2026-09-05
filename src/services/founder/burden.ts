@@ -53,7 +53,7 @@ export async function burdenFor(founderId: string): Promise<Burden[]> {
                 AND m.snapshot_date >= date('now','-45 day')
               ORDER BY m.snapshot_date DESC LIMIT 1) AS mrr_cents
        FROM products p
-      WHERE p.owner_id = ? AND p.status = 'active' AND p.deleted_at IS NULL
+      WHERE p.owner_id = ? AND p.status = 'active' AND p.standing = 'earned' AND p.deleted_at IS NULL
         AND ${realCompany('p')}
       ORDER BY p.created_at, p.rowid`, [founderId]))
     .rows as unknown as Array<Record<string, unknown>>;
