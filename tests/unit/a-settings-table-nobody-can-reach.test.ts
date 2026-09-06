@@ -96,7 +96,16 @@ describe('the table is gone', () => {
     // rehearsal and then wired to nothing, so the owner opened his product
     // looking for a decision the institution had reasoned its way to and found
     // no trace of it. A chain with no caller is a description of work.
-    expect(Object.keys(JOB_REGISTRY).length, 'ninety-six before, ninety-seven now').toBe(97);
+    // And `legal_surface_tick` — which recognises, from a real candidate's own
+    // record and in its own words, what legal surface it creates, and answers
+    // whether the same value could be made with less of it — makes
+    // ninety-eight. Before it, no real candidate could ever advance: the gate
+    // asked a question nothing was built to answer.
+    // And `business_outcome_tick` — which applies the rule sealed with each
+    // approved test to what providers reported at its offer, so the world
+    // settles the prediction rather than the owner's opinion — makes
+    // ninety-nine.
+    expect(Object.keys(JOB_REGISTRY).length, 'ninety-seven before, ninety-nine now').toBe(99);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

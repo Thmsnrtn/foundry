@@ -188,9 +188,15 @@ function readGuidance(t: string, statement: string): GuidanceProposal | null {
   }
 
   // "KEEP OWNER BURDEN LOW." "SOMETHING THAT DOESN'T NEED ME."
+  // "REQUIRE ALMOST NONE OF MY ATTENTION." This is the sentence he actually
+  // typed, and it was not heard: "none" was not in the list, and "require"
+  // did not open a clause, so it was folded into "keep legal risk low" and
+  // only the legal preference survived.
   if (/\b(owner|my)\b[^.]{0,10}\b(burden|attention|time|involvement)\b[^.]{0,20}\b(low|down|minimal|small)\b/.test(t)
     || /\b(low|minimal|little)\b[^.]{0,10}\b(owner|my)\b[^.]{0,10}\b(burden|attention|involvement)\b/.test(t)
-    || /\b(doesn'?t|does not|won'?t) need (me|my attention)\b/.test(t)) {
+    || /\b(doesn'?t|does not|won'?t) need (me|my attention)\b/.test(t)
+    || /\b(almost |virtually |next to |practically )?(none|nothing|little) of (my|the owner'?s) (attention|time|involvement)\b/.test(t)
+    || /\b(require|need|take|demand)s?\b[^.]{0,20}\b(none|nothing|next to nothing|very little)\b[^.]{0,15}\b(my|the owner'?s|owner)\b[^.]{0,10}\b(attention|time|involvement)\b/.test(t)) {
     return say('prefer', 'almost none of your attention', 'owner_attention');
   }
 
@@ -309,7 +315,7 @@ export function exposureAnswersTo(word: string, value: string): boolean {
  * clause when it opens the way an instruction opens.
  */
 const OPENS_A_CLAUSE =
-  /^(and\s+|but\s+|then\s+|also\s+|plus\s+)?(keep|avoid|do ?n'?t|do not|never|no more|spend|bring|show|give|prefer|favou?r|focus|stay|stick|make|find|look|only|without|nothing|less|lower|reduce|minimi[sz]e|stop|leave)\b/i;
+  /^(and\s+|but\s+|then\s+|also\s+|plus\s+)?(keep|avoid|do ?n'?t|do not|never|no more|spend|bring|show|give|prefer|favou?r|focus|stay|stick|make|find|look|only|without|nothing|less|lower|reduce|minimi[sz]e|stop|leave|require|need|demand|take|sell|target|prove|try|research|be)s?\b/i;
 
 /**
  * ONE SENTENCE CAN CARRY A MANDATE AND EVERY CONSTRAINT ON IT.
@@ -491,10 +497,18 @@ export async function absorbParagraph(input: {
   let opened = false;
   let absorbed = 0;
 
-  const mandate = input.readings.find((r) => r.kind === 'mandate');
-  if (mandate && mandate.kind === 'mandate') {
+  // TWO SENTENCES THAT BOTH ASK ARE ONE ASK. "Make the river stronger. Find
+  // another small digital income stream..." is a purpose and its instruction,
+  // and reading them as two mandates dropped the second on the floor — the
+  // one that said what to look for. One search at a time is the rule; his
+  // words are kept whole, in the order he wrote them, and a shape he named in
+  // any of them is the shape on record.
+  const asks = input.readings.filter((r): r is MandateProposal => r.kind === 'mandate');
+  if (asks.length > 0) {
     const made = await openMandate({
-      founderId: input.founderId, statement: mandate.statement, shape: mandate.shape,
+      founderId: input.founderId,
+      statement: asks.map((a) => a.statement).join(' '),
+      shape: asks.find((a) => a.shape !== null)?.shape ?? null,
       evidenceMode: input.evidenceMode ?? 'real',
     });
     if ('refused' in made) refused.push(made.refused);
@@ -565,7 +579,9 @@ export interface MandateProgress {
    * pointed anywhere — and so the shape stays visible as the owner's choice
    * rather than something the institution filled in.
    */
-  brief: { lookingFor: string; shapeNamed: string | null; termsTried: string | null } | null;
+  brief: { lookingFor: string; shapeNamed: string | null; termsTried: string | null;
+    /** Where the terms came from: the portfolio, his own words, a shape he named. */
+    termsFrom: string[] } | null;
   /** What it still cannot answer, even with those. */
   stillDark: string[];
 }
@@ -620,13 +636,18 @@ export async function mandateProgress(founderId: string): Promise<MandateProgres
     seeingThrough: ways.map((w) => `${w.named} — ${w.whatItIs}`),
     brief: await (async () => {
       const row = (await query(
-        `SELECT looking_for, shape_named, terms_tried FROM search_briefs
+        `SELECT looking_for, shape_named, terms_tried, terms_from FROM search_briefs
           WHERE mandate_id = ? ORDER BY made_at DESC, rowid DESC LIMIT 1`, [mandate.id]))
         .rows[0] as Record<string, unknown> | undefined;
+      const from = ((): string[] => {
+        try { return row?.terms_from == null ? [] : JSON.parse(String(row.terms_from)) as string[]; }
+        catch { return []; }
+      })();
       return row === undefined ? null : {
         lookingFor: String(row.looking_for),
         shapeNamed: row.shape_named == null ? null : String(row.shape_named),
         termsTried: row.terms_tried == null ? null : String(row.terms_tried),
+        termsFrom: from,
       };
     })(),
     // WHAT WOULD ACTUALLY UNBLOCK IT, NAMED.

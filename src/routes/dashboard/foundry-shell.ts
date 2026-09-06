@@ -3264,6 +3264,11 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
     + (river.frontier.testing > 0
       ? `, ${String(river.frontier.testing)} being tested` : '')
     + (river.frontier.buried > 0 ? `, ${String(river.frontier.buried)} buried` : '');
+  // THE FIRST CLOSURE, IN THE STRONGEST WORDS THE LEDGER SUPPORTS. Shown only
+  // once an offer is in the world; before that there is nothing to say.
+  const { firstClosureOf } = await import('../../services/venture/outcome.js');
+  const closure = await firstClosureOf(String(founder.id));
+  const closureLine = closure.experimentId === null ? '' : closure.sentence;
 
   const body = html`
     <h1>Portfolio</h1>
@@ -3290,7 +3295,7 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
       <span>${l.companies.length === 0 ? 'none yet' : l.companies.map((c) => c.name).join(', ')} — ${l.what}</span></div>
       <div class="n">${l.cashFlowCents > 0 ? money(l.cashFlowCents) : '—'}</div></div>`).join(''))}
     <div class="layer"><div class="t"><b>Frontier</b>
-      <span>${frontierLine}</span></div>
+      <span>${frontierLine}${closureLine ? html`<br><em>${closureLine}</em>` : ''}</span></div>
       <div class="n">${String(river.frontier.looking)}</div></div>` : ''}
     ${byForm.length > 0 ? html`<div class="know" style="margin-top:var(--s3)">
       <h2>Cash flow by how it is earned</h2>

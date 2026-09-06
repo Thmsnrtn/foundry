@@ -116,6 +116,8 @@ describe('the river in its layers', () => {
   });
   it('counts the frontier from real searches only', async () => {
     const river = await layersFor(OWNER);
-    expect(river.frontier).toEqual({ looking: 0, awaiting: 0, buried: 0 });
+    // `testing` counts experimental assets: approved tests with something to
+    // be, not yet earned by reality. None here.
+    expect(river.frontier).toEqual({ looking: 0, awaiting: 0, buried: 0, testing: 0 });
   });
 });

@@ -176,7 +176,8 @@ export async function experimentalAssetsFor(
   const rows = (await query(
     `SELECT p.id, p.name, p.form, p.reality, p.standing, p.from_experiment_id,
             p.from_opportunity_id, p.created_at,
-            e.decision, e.ran_at, e.verdict, e.due_at
+            e.decision, e.ran_at, e.verdict, e.due_at, e.validity, e.invalid_because,
+            (SELECT COUNT(*) FROM venture_experiments r WHERE r.rerun_of = e.id) AS reruns
        FROM products p
        JOIN venture_experiments e ON e.id = p.from_experiment_id
       WHERE p.owner_id = ? AND p.status = 'active' AND p.deleted_at IS NULL
@@ -194,10 +195,65 @@ export async function experimentalAssetsFor(
 }
 
 function testStanding(e: Record<string, unknown>): string {
+  // A TEST THAT DID NOT MEASURE is neither passed nor failed.
+  if (String(e.validity) === 'invalid') {
+    return Number(e.reruns) > 0
+      ? 'the test did not measure what it was for; a re-run is proposed'
+      : `the test did not measure what it was for (${String(e.invalid_because ?? '').replace(/_/g, ' ')}); it needs a re-run`;
+  }
   if (e.ran_at == null) {
     return e.due_at == null ? 'test approved, not yet run'
       : `test approved; owes an answer by ${String(e.due_at).slice(0, 10)}`;
   }
   return String(e.verdict) === 'as_predicted' ? 'the test came back as predicted'
     : 'the test came back against the thesis';
+}
+
+// ─── The shape of the offer ───────────────────────────────────────────────────
+
+export interface OfferShape {
+  sells: string; claimsMade: string; collects: string;
+  deliversBy: string; sellsTo: string; chargesHow: string;
+}
+
+/**
+ * STATE WHAT THE ASSET ACTUALLY OFFERS. Six plain answers — what is sold, what
+ * it says about itself, what it collects, how value reaches the buyer, where it
+ * sells, how it charges — stated by a person or a hand, never inferred. This is
+ * the moment the structural facts that severity depends on stop being unknown,
+ * so the legal pass runs again at asset level once a shape exists. A restated
+ * shape supersedes the last one; nothing is edited.
+ */
+export async function stateOfferShape(input: {
+  productId: string; by: string; shape: OfferShape;
+}): Promise<{ id: string } | { refused: string }> {
+  const p = (await query(
+    `SELECT standing, from_experiment_id, owner_id FROM products WHERE id = ? AND deleted_at IS NULL`,
+    [input.productId])).rows[0] as Record<string, unknown> | undefined;
+  if (!p) return { refused: 'no such asset' };
+  if (p.standing !== 'experimental') {
+    return { refused: 'an offer shape is stated of an experimental asset; this one is not one' };
+  }
+  if (p.from_experiment_id == null) return { refused: 'this asset came from no experiment' };
+  const s = input.shape;
+  const blank = (['sells', 'claimsMade', 'collects', 'deliversBy', 'sellsTo', 'chargesHow'] as const)
+    .filter((k) => s[k].trim() === '');
+  if (blank.length > 0) return { refused: `the shape leaves ${blank.join(', ')} unsaid` };
+  const id = nanoid();
+  try {
+    await query(
+      `UPDATE offer_shapes SET superseded_at = datetime('now')
+        WHERE experiment_id = ? AND superseded_at IS NULL`, [String(p.from_experiment_id)]);
+    await query(
+      `INSERT INTO offer_shapes
+         (id, founder_id, product_id, experiment_id, sells, claims_made, collects,
+          delivers_by, sells_to, charges_how, stated_by)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      [id, String(p.owner_id), input.productId, String(p.from_experiment_id),
+        s.sells.trim(), s.claimsMade.trim(), s.collects.trim(), s.deliversBy.trim(),
+        s.sellsTo.trim(), s.chargesHow.trim(), input.by]);
+  } catch (err) {
+    return { refused: err instanceof Error ? err.message : String(err) };
+  }
+  return { id };
 }

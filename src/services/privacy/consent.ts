@@ -845,6 +845,36 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
       + 'what is known about each',
     onAccountErasure: { op: 'delete' },
   },
+  structural_facts: {
+    reason: 'what was established about the shape of one person\'s candidates and assets '
+      + '— whether each holds money, keeps data, bills again — and on what words',
+    onAccountErasure: { op: 'delete' },
+  },
+  origination_policy: {
+    reason: 'the first-proof policy he chose to supersede the institutional default with — '
+      + 'his own rows; the defaults name nobody and stay',
+    onAccountErasure: { op: 'delete' },
+  },
+  offer_shapes: {
+    reason: 'what one person\'s experimental asset actually sells, claims, collects and '
+      + 'charges, stated so its exposure could be read again once it had a shape',
+    onAccountErasure: { op: 'delete' },
+  },
+  experiment_exposures: {
+    reason: 'where one person\'s tests placed an offer in the world, and the reference a '
+      + 'provider reports against',
+    onAccountErasure: { op: 'delete' },
+  },
+  business_outcome_events: {
+    reason: 'what providers said happened at one person\'s offers — arrivals, payments, '
+      + 'deliveries — with no payer identity in it; a ledger never edited, erased with him',
+    onAccountErasure: { op: 'delete' },
+  },
+  internal_counterparties: {
+    reason: 'keyed hashes of the identities he registered as his own or internal, so his '
+      + 'own payments never count as the market; the identities themselves were never stored',
+    onAccountErasure: { op: 'delete' },
+  },
   research_sources: {
     reason: 'the ways one person can look outside their own companies, and what '
       + 'each of them never permits',
@@ -1002,6 +1032,11 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   capability_providers: 'which implementations supply which capability and how far each is proven; institutional, naming no company',
   capability_maturity_changes: 'the witnessed record of how far each provider has been proven; institutional evidence, naming no owner data',
   exposure_classes: 'the kinds of liability a thing can create and the structural way of not creating each; constitutional, naming nobody',
+  search_emphasis: 'the words people use when describing the work each kind of owner preference points at, so his steering reaches where the search looks; constitutional, naming nobody',
+  business_outcome_event_kinds: 'the kinds of thing a provider can report happened at an offer, and which of them is money leaving somebody\'s hands; constitutional, naming nobody',
+  experiment_invalidity_kinds: 'the ways a test can fail to measure what it was for, as distinct from the market saying no; constitutional, naming nobody',
+  exposure_floors: 'the four structural facts whose exposure is never graded down in context — custody, regulated decisions, professional reliance, decisions about a named person; constitutional, naming nobody',
+  structural_fact_kinds: 'the facts about an offer that decide how serious an exposure is and which first-proof policy row each answers; constitutional, naming nobody',
   exposure_dimensions: 'the axes a portfolio can be concentrated on and what each failure would cost; constitutional and the same for every owner, naming no company',
   market_source_types: 'the kinds of source market evidence can come from and whether each is self-reported, observed or solicited; constitutional, naming nobody',
   sense_providers: 'which provider could supply which sense, and what the credential hands over; constitutional, naming no company',
@@ -1457,6 +1492,30 @@ const PERSON_ACROSS_COMPANIES: Record<string, PersonInOthersCompany> = {
   delegation_evidence_policy: {
     op: 'delete', columns: ['founder_id'],
     reason: 'how much evidence that person wanted before being asked to delegate',
+  },
+  origination_policy: {
+    op: 'delete', columns: ['founder_id'],
+    reason: 'the first-proof policy that person chose over the default; nobody else\'s rows are touched',
+  },
+  structural_facts: {
+    op: 'delete', columns: ['founder_id'],
+    reason: 'what that person\'s pass established about a candidate or asset of theirs; read again by whoever remains',
+  },
+  offer_shapes: {
+    op: 'delete', columns: ['founder_id'],
+    reason: 'an offer shape stated by that person about an experimental asset; the asset can restate it',
+  },
+  experiment_exposures: {
+    op: 'delete', columns: ['founder_id'],
+    reason: 'where that person\'s test placed an offer; the test was theirs',
+  },
+  business_outcome_events: {
+    op: 'delete', columns: ['founder_id'],
+    reason: 'what the world did at that person\'s offer; names no payer and goes with the test',
+  },
+  internal_counterparties: {
+    op: 'delete', columns: ['founder_id'],
+    reason: 'hashes of identities that person registered as their own; meaningless without them',
   },
   // The identity a company acts as belongs to the COMPANY. It keeps working —
   // a support address that stopped answering because somebody left is a

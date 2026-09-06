@@ -10,6 +10,46 @@ true is `IMPLEMENTATION_STATE.md`.
 
 ---
 
+## FIRST ECONOMIC CLOSURE: THE CANDIDATE-INDEPENDENT TRANCHE IS BUILT (2026-09-06)
+
+On `claude/foundry-next-frontier-h2fsqe`, cut from `168ee901`, four migrations
+(276–279) and four test files. Read `PROOF_PROGRAM.md` § *First Economic
+Closure profile* for the doctrine and `history/IMPLEMENTATION_SLICES.md` for
+the slice record. In one paragraph:
+
+An approved test now gets **something to be** — an experimental asset with an
+identity, an allowance and a lineage, that the database refuses on every
+operating table and every door until reality earns it (`products.standing`).
+A real candidate's **legal surface is recognised** from its own record with
+quoted grounds, four durable floors, severity in context, "I cannot resolve
+this from here" as a first-class answer, and a first-proof **policy the owner
+can supersede row by row**; before this no real candidate could ever advance
+because the gate asked a question nothing answered. A **settlement rule is
+sealed with the prediction** and applied to what providers report, with no
+payer identity stored, the counterparty classified by control path
+(`unmatched_external` is exactly that and never "stranger"), validity kept
+apart from verdict, and reality — not the owner's opinion — earning the asset.
+And the owner's own paragraph is **heard in full** ("require almost none of my
+attention" was being dropped) and reaches where the search looks.
+
+**What it is NOT.** No provider adapter, no Hand, no mandate entered on his
+behalf, no AcreOS rule in the kernel. Everything is E2. **Deployment authority
+stays with the campaign steward**: this branch carries no deploy marker and
+is merged only after adversarial review.
+
+**Next, in order, with the stop conditions that apply:**
+1. The steward's adversarial review of this tranche; port findings.
+2. The owner enters his mandate through the product (never on his behalf).
+   The search runs under his words; NOTHING DESERVES TESTING is a valid result.
+3. The first candidate chooses the provider and the first Hand (offer
+   placement, event ingestion into `recordBusinessOutcome`). Building a
+   provider adapter before a candidate exists is refused by this file.
+4. Then the next high-leverage tranches: the responsibility engine as a
+   generative kernel, owner decision projection, an inspectable reasoning
+   trace, self-development handoff once the workshop is reality-proven.
+
+---
+
 ## THE PRIORITY FUNCTION WAS CORRECTED (2026-09-01)
 
 Read `CONSTITUTION.md` § *The owner's priority function* before choosing a

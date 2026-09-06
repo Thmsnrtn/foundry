@@ -18,3 +18,4 @@ foundry.db
 # of twelve. The test writes and removes them regardless of this rule; what this
 # stops is an interrupted run becoming a commit.
 _gate_fixture_*.ts
+node_modules

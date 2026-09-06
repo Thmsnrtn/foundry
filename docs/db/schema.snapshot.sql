@@ -648,6 +648,44 @@ CREATE TABLE business_model_profile (
   updated_at TEXT DEFAULT (datetime('now')),
   UNIQUE(product_id)
 );
+CREATE TABLE business_outcome_event_kinds (
+  kind        TEXT PRIMARY KEY,
+  what_it_is  TEXT NOT NULL,
+  -- Whether this kind is money leaving a stranger's hands. The milestone
+  -- predicate reads this rather than a list kept in code.
+  is_payment  INTEGER NOT NULL DEFAULT 0,
+  is_delivery INTEGER NOT NULL DEFAULT 0,
+  sort_order  INTEGER NOT NULL
+);
+CREATE TABLE business_outcome_events (
+  id             TEXT PRIMARY KEY,
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  exposure_id    TEXT NOT NULL REFERENCES experiment_exposures(id),
+  kind           TEXT NOT NULL REFERENCES business_outcome_event_kinds(kind),
+  amount_cents   INTEGER,
+  currency       TEXT NOT NULL DEFAULT 'usd',
+  -- THE SOURCE'S CLOCK, refused more than fifteen minutes ahead of ours (the
+  -- migration 217 rule): a skew allowance, not a grace period.
+  observed_at    TEXT NOT NULL,
+  provider       TEXT NOT NULL,
+  -- The provider's own id for the event. Dedup, and the receipt a reconciler
+  -- would ask the other side about.
+  provider_event_ref   TEXT NOT NULL,
+  evidence_mode  TEXT NOT NULL CHECK (evidence_mode IN ('real','sandbox','reference')),
+  -- WHO WAS ON THE OTHER SIDE, AS FAR AS THE CONTROL PATH CAN SAY. Never a
+  -- name, never an email, never inferred by a model. 'unmatched_external' is
+  -- exactly what it says: a real-mode provider supplied a payer reference that
+  -- matched no owner, internal, reference, sandbox or test identity. It is not
+  -- 'stranger'; the evidence cannot establish social independence and the
+  -- column does not pretend to.
+  counterparty   TEXT NOT NULL DEFAULT 'unknown' CHECK (counterparty IN
+                   ('unmatched_external','owner','internal','reference','sandbox',
+                    'test','known_invalid','unknown')),
+  -- Where the arrival came from when the provider says: recorded, never
+  -- inferred. Public distribution provenance strengthens independence.
+  arrived_via    TEXT,
+  recorded_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE calendar_allocations (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL,
@@ -1647,6 +1685,28 @@ CREATE TABLE experiment_events (
   metadata TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
+CREATE TABLE experiment_exposures (
+  id             TEXT PRIMARY KEY,
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  experiment_id  TEXT NOT NULL REFERENCES venture_experiments(id),
+  -- The asset the offer belongs to, once one exists. NULL only for exposures
+  -- placed before the asset machinery existed — none, today.
+  product_id     TEXT REFERENCES products(id),
+  provider       TEXT NOT NULL,
+  -- The reference the provider will report against: a listing id, a page
+  -- path, a checkout link id. Opaque to the institution.
+  exposure_ref   TEXT NOT NULL,
+  evidence_mode  TEXT NOT NULL CHECK (evidence_mode IN ('real','sandbox','reference')),
+  placed_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- The act that placed it, so the exposure walks back to an approval.
+  placed_by      TEXT NOT NULL,
+  withdrawn_at   TEXT
+);
+CREATE TABLE experiment_invalidity_kinds (
+  kind        TEXT PRIMARY KEY,
+  what_it_is  TEXT NOT NULL,
+  sort_order  INTEGER NOT NULL
+);
 CREATE TABLE experiment_variants (
   id TEXT PRIMARY KEY,
   experiment_id TEXT NOT NULL,
@@ -1697,6 +1757,14 @@ CREATE TABLE exposure_dimensions (
   -- Completes "if this went wrong, ...". What the owner would actually lose.
   if_it_fails  TEXT NOT NULL,
   sort_order   INTEGER NOT NULL
+);
+CREATE TABLE exposure_floors (
+  structural_fact    TEXT PRIMARY KEY,
+  class              TEXT NOT NULL REFERENCES exposure_classes(class),
+  min_severity       TEXT NOT NULL CHECK (min_severity IN ('minor','material','serious')),
+  needs_professional INTEGER NOT NULL DEFAULT 0,
+  why                TEXT NOT NULL,
+  sort_order         INTEGER NOT NULL
 );
 CREATE TABLE failure_log (
   id TEXT PRIMARY KEY,
@@ -2267,6 +2335,18 @@ CREATE TABLE intelligence_benchmarks (
   cohort_size INTEGER NOT NULL DEFAULT 0,
   computed_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE internal_counterparties (
+  id             TEXT PRIMARY KEY,
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  provider       TEXT NOT NULL,
+  -- 'owner' or 'internal' (household, collaborator, own test account).
+  relation       TEXT NOT NULL CHECK (relation IN ('owner','internal','test')),
+  -- HMAC-SHA256 of the identifier under the server key, hex. Never the value.
+  reference_hmac TEXT NOT NULL,
+  registered_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  registered_by  TEXT NOT NULL,
+  retired_at     TEXT
+);
 CREATE TABLE introductions (
   id TEXT PRIMARY KEY,
   founder_a_id TEXT NOT NULL,
@@ -2367,7 +2447,8 @@ CREATE TABLE legal_surfaces (
   recorded_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   evidence_mode      TEXT NOT NULL CHECK (evidence_mode IN ('real','reference')),
   retired_at         TEXT
-);
+, standing TEXT NOT NULL DEFAULT 'recognised'
+  CHECK (standing IN ('recognised','unresolved_internally')), grounds TEXT, recognised_by TEXT);
 CREATE TABLE lifecycle_conditions (
   product_id TEXT NOT NULL REFERENCES products(id),
   prompt TEXT NOT NULL,
@@ -2788,6 +2869,21 @@ CREATE TABLE observation_interpretations (
         AND misread_if IS NOT NULL)
   )
 );
+CREATE TABLE offer_shapes (
+  id             TEXT PRIMARY KEY,
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  product_id     TEXT NOT NULL REFERENCES products(id),
+  experiment_id  TEXT NOT NULL REFERENCES venture_experiments(id),
+  sells          TEXT NOT NULL,        -- what is actually sold
+  claims_made    TEXT NOT NULL,        -- what it says about itself and its results
+  collects       TEXT NOT NULL,        -- what data is collected, or 'nothing'
+  delivers_by    TEXT NOT NULL,        -- how value reaches the buyer
+  sells_to       TEXT NOT NULL,        -- where customers are, as far as known
+  charges_how    TEXT NOT NULL,        -- one-off, metered, subscription, free
+  stated_by      TEXT NOT NULL,
+  stated_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  superseded_at  TEXT
+);
 CREATE TABLE okr_progress_updates (
   id              TEXT PRIMARY KEY,
   key_result_id   TEXT NOT NULL REFERENCES key_results(id),
@@ -2873,6 +2969,21 @@ CREATE TABLE opportunity_seeds (
   CHECK (answerable_by IN ('read','ask','test','unknown')), interpretation_id TEXT
   REFERENCES observation_interpretations(id), hypothesis_kind TEXT
   REFERENCES hypothesis_kinds(kind));
+CREATE TABLE origination_policy (
+  id             TEXT PRIMARY KEY,
+  founder_id     TEXT REFERENCES founders(id),
+  requirement    TEXT NOT NULL,
+  -- refuse: blocks placing an offer under this profile. penalise: shown, and
+  -- weighs against, never blocks. prefer: shown as a preference. require: must
+  -- be satisfied. policy: a number the tick reads (value column).
+  treatment      TEXT NOT NULL CHECK (treatment IN ('refuse','penalise','prefer','require','policy')),
+  value          TEXT,
+  why            TEXT NOT NULL,
+  set_by         TEXT NOT NULL,
+  set_at         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  superseded_at  TEXT,
+  superseded_by  TEXT
+);
 CREATE TABLE outbound_actions (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -3373,7 +3484,7 @@ CREATE TABLE proposed_acts (
 
   consumed_at         TEXT,
   consumed_by         TEXT
-, rung TEXT REFERENCES consequence_rungs(rung), cost_cents INTEGER);
+, rung TEXT REFERENCES consequence_rungs(rung), cost_cents INTEGER, experiment_id TEXT REFERENCES venture_experiments(id), measurement_critical INTEGER);
 CREATE TABLE "push_log" (
   id TEXT PRIMARY KEY,
   founder_id TEXT NOT NULL REFERENCES founders(id),
@@ -3838,6 +3949,19 @@ CREATE TABLE search_briefs (
   terms_tried    TEXT,
   evidence_mode  TEXT NOT NULL CHECK (evidence_mode IN ('real','reference')),
   made_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+, terms_from TEXT);
+CREATE TABLE search_emphasis (
+  id             TEXT PRIMARY KEY,
+  -- The guidance this phrase answers: the dimension and kind the reader files.
+  dimension      TEXT NOT NULL,
+  guidance_kind  TEXT NOT NULL CHECK (guidance_kind IN ('avoid','prefer')),
+  -- The subject the guidance names, or NULL for any subject on that dimension.
+  subject        TEXT,
+  -- The words people use when describing the work this preference points at.
+  -- About effort and situation, never about what might be sold to them.
+  phrase         TEXT NOT NULL,
+  why            TEXT NOT NULL,
+  sort_order     INTEGER NOT NULL
 );
 CREATE TABLE sector_scoring_overrides (
   id TEXT PRIMARY KEY,
@@ -4099,6 +4223,30 @@ CREATE TABLE stripe_webhook_events (
   event_type TEXT NOT NULL,
   processed_at DATETIME NOT NULL
 );
+CREATE TABLE structural_fact_kinds (
+  fact                TEXT PRIMARY KEY,
+  what_it_is          TEXT NOT NULL,
+  -- The origination_policy requirement this fact answers, and what value of
+  -- the fact SATISFIES it. NULL where no policy asks.
+  answers_requirement TEXT,
+  satisfied_when      INTEGER,
+  sort_order          INTEGER NOT NULL
+);
+CREATE TABLE structural_facts (
+  id             TEXT PRIMARY KEY,
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  subject_kind   TEXT NOT NULL CHECK (subject_kind IN ('company','opportunity')),
+  subject_id     TEXT NOT NULL,
+  fact           TEXT NOT NULL REFERENCES structural_fact_kinds(fact),
+  present        INTEGER CHECK (present IN (0,1)),
+  basis          TEXT NOT NULL CHECK (basis IN ('stated','assumed_by_lighter','offer_shape','unknown')),
+  -- The words the answer rests on, copied from the record it was read from.
+  grounds        TEXT,
+  recognised_by  TEXT NOT NULL,
+  evidence_mode  TEXT NOT NULL CHECK (evidence_mode IN ('real','reference')),
+  recorded_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  superseded_at  TEXT
+);
 CREATE TABLE substrate_evaluations (
   id             TEXT PRIMARY KEY,
   substrate      TEXT NOT NULL,
@@ -4312,7 +4460,9 @@ CREATE TABLE venture_experiments (
   -- What actually happened, in the words of whoever saw it.
   what_happened  TEXT,
   verdict        TEXT CHECK (verdict IN ('as_predicted','surprised'))
-, due_at TEXT);
+, due_at TEXT, settles_when TEXT, validity TEXT NOT NULL DEFAULT 'valid'
+  CHECK (validity IN ('valid','invalid')), invalid_because TEXT
+  REFERENCES experiment_invalidity_kinds(kind), invalidated_by TEXT, invalidated_at TEXT, rerun_of TEXT REFERENCES venture_experiments(id));
 CREATE TABLE venture_guidance (
   id           TEXT PRIMARY KEY,
   mandate_id   TEXT NOT NULL REFERENCES venture_mandates(id),
@@ -4665,6 +4815,10 @@ CREATE INDEX idx_briefing_share_code ON briefing_shares(share_code);
 CREATE INDEX idx_briefing_share_founder
   ON briefing_shares(founder_id, created_at DESC);
 CREATE INDEX idx_business_actors_product ON business_actors(product_id, retired_at);
+CREATE INDEX idx_business_outcome_exposure
+  ON business_outcome_events(exposure_id, kind, observed_at);
+CREATE UNIQUE INDEX idx_business_outcome_provider_event_ref
+  ON business_outcome_events(provider, provider_event_ref);
 CREATE UNIQUE INDEX idx_calendar_alloc_week ON calendar_allocations(product_id, week_start, category);
 CREATE UNIQUE INDEX idx_candidate_single_promotion
   ON responsibility_candidate_decisions(candidate_id) WHERE decision='promoted';
@@ -4775,6 +4929,10 @@ CREATE INDEX idx_exec_queue_job ON execution_queue(job_type, status);
 CREATE INDEX idx_exec_queue_product ON execution_queue(product_id);
 CREATE INDEX idx_exec_queue_status ON execution_queue(status, created_at);
 CREATE INDEX idx_exp_events ON experiment_events(experiment_id, variant);
+CREATE UNIQUE INDEX idx_experiment_exposure_one_live
+  ON experiment_exposures(experiment_id) WHERE withdrawn_at IS NULL;
+CREATE UNIQUE INDEX idx_experiment_exposure_ref
+  ON experiment_exposures(provider, exposure_ref);
 CREATE INDEX idx_experiment_variants_experiment ON experiment_variants(experiment_id);
 CREATE INDEX idx_experiments_product ON experiments(product_id, status);
 CREATE INDEX idx_failure_log_category ON failure_log(product_id, category);
@@ -4829,6 +4987,8 @@ CREATE INDEX idx_integrations_product ON integrations(product_id);
 CREATE UNIQUE INDEX idx_integrations_product_name ON integrations(product_id, name);
 CREATE UNIQUE INDEX idx_integrations_product_provider
   ON integrations(product_id, provider);
+CREATE UNIQUE INDEX idx_internal_counterparty
+  ON internal_counterparties(founder_id, provider, reference_hmac) WHERE retired_at IS NULL;
 CREATE INDEX idx_interpretations_founder
   ON observation_interpretations(founder_id, interpreted_at DESC);
 CREATE INDEX idx_interpretations_observation
@@ -4880,6 +5040,7 @@ CREATE INDEX idx_network_contrib_cell
 CREATE INDEX idx_network_profiles_founder ON network_profiles(founder_id);
 CREATE INDEX idx_network_profiles_sector ON network_profiles(sector, growth_stage);
 CREATE INDEX idx_notifications_founder ON notifications(founder_id, read_at);
+CREATE UNIQUE INDEX idx_offer_shape_live ON offer_shapes(experiment_id) WHERE superseded_at IS NULL;
 CREATE INDEX idx_okr_updates_kr ON okr_progress_updates(key_result_id);
 CREATE INDEX idx_okrs_product ON company_okrs(product_id, period);
 CREATE UNIQUE INDEX idx_onboarding_product ON onboarding_sessions(product_id);
@@ -4887,6 +5048,8 @@ CREATE INDEX idx_operator_attention
   ON operator_attention(founder_id, product_id, created_at);
 CREATE INDEX idx_opportunity_seeds_open ON opportunity_seeds(founder_id)
   WHERE promoted_to IS NULL AND buried_at IS NULL;
+CREATE INDEX idx_origination_policy_live
+  ON origination_policy(founder_id, requirement, superseded_at);
 CREATE INDEX idx_outbound_actions_pending ON outbound_actions(product_id, status) WHERE status = 'pending_approval';
 CREATE INDEX idx_outbound_actions_product ON outbound_actions(product_id, status, created_at DESC);
 CREATE INDEX idx_outbound_rate_limits ON outbound_rate_limits(product_id, agent_name);
@@ -4953,6 +5116,7 @@ CREATE INDEX idx_products_reality ON products(reality);
 CREATE UNIQUE INDEX idx_products_share_token ON products(share_token);
 CREATE INDEX idx_products_standing ON products(standing);
 CREATE INDEX idx_products_status ON products(status);
+CREATE INDEX idx_proposed_act_experiment ON proposed_acts(experiment_id) WHERE experiment_id IS NOT NULL;
 CREATE INDEX idx_proposed_acts_open
   ON proposed_acts(product_id, subject) WHERE decision IS NULL;
 CREATE INDEX idx_proposed_acts_spendable
@@ -5028,6 +5192,7 @@ CREATE INDEX idx_scenarios_product ON forecast_scenarios(product_id, scenario_ty
 CREATE INDEX idx_scp_briefings_product ON scp_briefings(product_id, briefing_date DESC);
 CREATE UNIQUE INDEX idx_scratchpad_product_date ON agent_scratchpad(product_id, scratchpad_date);
 CREATE INDEX idx_search_briefs_of ON search_briefs(mandate_id, made_at);
+CREATE INDEX idx_search_emphasis_dimension ON search_emphasis(dimension, guidance_kind);
 CREATE INDEX idx_seed_questionings_seed ON seed_questionings(seed_id, asked_at DESC);
 CREATE UNIQUE INDEX idx_sense_credential_one_live
   ON sense_credentials(company_sense_id) WHERE revoked_at IS NULL;
@@ -5048,6 +5213,8 @@ CREATE INDEX idx_stressor_product ON stressor_history(product_id);
 CREATE INDEX idx_stressor_product_active ON stressor_history(product_id, status);
 CREATE INDEX idx_stressor_status ON stressor_history(status);
 CREATE INDEX idx_stripe_events_product ON stripe_events(product_id, processed);
+CREATE UNIQUE INDEX idx_structural_fact_live
+  ON structural_facts(subject_kind, subject_id, fact) WHERE superseded_at IS NULL;
 CREATE INDEX idx_substrate_evaluations ON substrate_evaluations(substrate, property);
 CREATE UNIQUE INDEX idx_support_channels_one_feed_per_provider
   ON support_channels(product_id, fed_by)
@@ -5075,6 +5242,7 @@ CREATE INDEX idx_ue_product_date ON unit_economics_snapshots(product_id, snapsho
 CREATE INDEX idx_vdm_product ON value_delivery_metrics(product_id);
 CREATE INDEX idx_vdm_product_date ON value_delivery_metrics(product_id, snapshot_date);
 CREATE INDEX idx_vendor_rec_product ON vendor_recommendations(product_id);
+CREATE INDEX idx_venture_experiment_rerun ON venture_experiments(rerun_of) WHERE rerun_of IS NOT NULL;
 CREATE INDEX idx_venture_experiments_open
   ON venture_experiments(opportunity_id) WHERE ran_at IS NULL;
 CREATE INDEX idx_venture_guidance_live
@@ -5263,6 +5431,42 @@ CREATE TRIGGER business_actor_owner_is_not_portable
 BEFORE INSERT ON business_actors
 WHEN NEW.kind = 'owner' AND NEW.portable = 1
 BEGIN SELECT RAISE(ABORT,'business_actor:owner_is_not_portable'); END;
+CREATE TRIGGER business_outcome_event_guard
+BEFORE INSERT ON business_outcome_events
+BEGIN
+  SELECT RAISE(ABORT,'business_outcome_event:incomplete')
+    WHERE trim(NEW.provider) = '' OR trim(NEW.provider_event_ref) = '';
+  SELECT RAISE(ABORT,'business_outcome_event:observed_in_the_future')
+    WHERE datetime(NEW.observed_at) > datetime('now', '+15 minutes');
+  SELECT RAISE(ABORT,'business_outcome_event:money_is_not_negative')
+    WHERE NEW.amount_cents IS NOT NULL AND NEW.amount_cents < 0;
+  SELECT RAISE(ABORT,'business_outcome_event:payment_needs_an_amount')
+    WHERE NEW.kind = 'payment' AND NEW.amount_cents IS NULL;
+  -- THE WORLD OF THE EVENT IS THE WORLD OF THE EXPOSURE.
+  SELECT RAISE(ABORT,'business_outcome_event:world_mismatch')
+    WHERE NOT EXISTS (SELECT 1 FROM experiment_exposures x
+                       WHERE x.id = NEW.exposure_id AND x.evidence_mode = NEW.evidence_mode);
+  -- COUNTERPARTY IS FORCED BY MODE. A rehearsal can never carry an external
+  -- counterparty, and a sandbox cannot either.
+  SELECT RAISE(ABORT,'business_outcome_event:reference_counterparty')
+    WHERE NEW.evidence_mode = 'reference' AND NEW.counterparty <> 'reference';
+  SELECT RAISE(ABORT,'business_outcome_event:sandbox_counterparty')
+    WHERE NEW.evidence_mode = 'sandbox' AND NEW.counterparty <> 'sandbox';
+  SELECT RAISE(ABORT,'business_outcome_event:real_cannot_be_reference')
+    WHERE NEW.evidence_mode = 'real' AND NEW.counterparty IN ('reference','sandbox');
+END;
+CREATE TRIGGER business_outcome_event_immutable
+BEFORE UPDATE ON business_outcome_events
+BEGIN SELECT RAISE(ABORT,'business_outcome_event:immutable'); END;
+CREATE TRIGGER business_outcome_event_kinds_constitutional_delete
+BEFORE DELETE ON business_outcome_event_kinds
+BEGIN SELECT RAISE(ABORT,'business_outcome_event_kind:constitutional'); END;
+CREATE TRIGGER business_outcome_event_kinds_constitutional_insert
+BEFORE INSERT ON business_outcome_event_kinds
+BEGIN SELECT RAISE(ABORT,'business_outcome_event_kind:constitutional'); END;
+CREATE TRIGGER business_outcome_event_kinds_constitutional_update
+BEFORE UPDATE ON business_outcome_event_kinds
+BEGIN SELECT RAISE(ABORT,'business_outcome_event_kind:constitutional'); END;
 CREATE TRIGGER capabilities_constitutional_delete BEFORE DELETE ON capabilities
 BEGIN SELECT RAISE(ABORT,'capability:constitutional'); END;
 CREATE TRIGGER capabilities_constitutional_insert BEFORE INSERT ON capabilities
@@ -5871,6 +6075,40 @@ BEGIN SELECT RAISE(ABORT,'epistemic_stance:constitutional'); END;
 CREATE TRIGGER epistemic_stances_constitutional_update
 BEFORE UPDATE ON epistemic_stances
 BEGIN SELECT RAISE(ABORT,'epistemic_stance:constitutional'); END;
+CREATE TRIGGER experiment_exposure_guard
+BEFORE INSERT ON experiment_exposures
+BEGIN
+  SELECT RAISE(ABORT,'experiment_exposure:incomplete')
+    WHERE trim(NEW.provider) = '' OR trim(NEW.exposure_ref) = ''
+       OR trim(NEW.placed_by) = '';
+  SELECT RAISE(ABORT,'experiment_exposure:cannot_arrive_withdrawn')
+    WHERE NEW.withdrawn_at IS NOT NULL;
+  -- ONLY AN APPROVED TEST HAS AN OFFER. An exposure for an experiment nobody
+  -- approved is an offer nobody authorised.
+  SELECT RAISE(ABORT,'experiment_exposure:experiment_not_approved')
+    WHERE NOT EXISTS (SELECT 1 FROM venture_experiments
+                       WHERE id = NEW.experiment_id AND decision = 'approved');
+  -- THE WORLD OF THE EXPOSURE IS THE WORLD OF THE EXPERIMENT. A reference
+  -- experiment may not be exposed for real; a real one may not be rehearsed
+  -- into a reference exposure and read as the world.
+  SELECT RAISE(ABORT,'experiment_exposure:world_mismatch')
+    WHERE EXISTS (SELECT 1 FROM venture_experiments e
+                   WHERE e.id = NEW.experiment_id
+                     AND ((e.evidence_mode = 'reference') <> (NEW.evidence_mode = 'reference')));
+  SELECT RAISE(ABORT,'experiment_exposure:asset_mismatch')
+    WHERE NEW.product_id IS NOT NULL
+      AND NOT EXISTS (SELECT 1 FROM products p
+                       WHERE p.id = NEW.product_id AND p.from_experiment_id = NEW.experiment_id);
+END;
+CREATE TRIGGER experiment_invalidity_kinds_constitutional_delete
+BEFORE DELETE ON experiment_invalidity_kinds
+BEGIN SELECT RAISE(ABORT,'experiment_invalidity_kind:constitutional'); END;
+CREATE TRIGGER experiment_invalidity_kinds_constitutional_insert
+BEFORE INSERT ON experiment_invalidity_kinds
+BEGIN SELECT RAISE(ABORT,'experiment_invalidity_kind:constitutional'); END;
+CREATE TRIGGER experiment_invalidity_kinds_constitutional_update
+BEFORE UPDATE ON experiment_invalidity_kinds
+BEGIN SELECT RAISE(ABORT,'experiment_invalidity_kind:constitutional'); END;
 CREATE TRIGGER exposure_classes_constitutional_delete
 BEFORE DELETE ON exposure_classes
 BEGIN SELECT RAISE(ABORT,'exposure_class:constitutional'); END;
@@ -5889,6 +6127,15 @@ BEGIN SELECT RAISE(ABORT,'exposure_dimension:constitutional'); END;
 CREATE TRIGGER exposure_dimensions_constitutional_update
 BEFORE UPDATE ON exposure_dimensions
 BEGIN SELECT RAISE(ABORT,'exposure_dimension:constitutional'); END;
+CREATE TRIGGER exposure_floors_constitutional_delete
+BEFORE DELETE ON exposure_floors
+BEGIN SELECT RAISE(ABORT,'exposure_floor:constitutional'); END;
+CREATE TRIGGER exposure_floors_constitutional_insert
+BEFORE INSERT ON exposure_floors
+BEGIN SELECT RAISE(ABORT,'exposure_floor:constitutional'); END;
+CREATE TRIGGER exposure_floors_constitutional_update
+BEFORE UPDATE ON exposure_floors
+BEGIN SELECT RAISE(ABORT,'exposure_floor:constitutional'); END;
 CREATE TRIGGER external_company_report_guard
 BEFORE INSERT ON signal_events WHEN NEW.source='external_company_report'
 BEGIN
@@ -6431,6 +6678,17 @@ WHEN NEW.direction IS NOT NULL
 BEGIN
   SELECT RAISE(ABORT, 'integration:direction is inbound, outbound or bidirectional');
 END;
+CREATE TRIGGER internal_counterparty_guard
+BEFORE INSERT ON internal_counterparties
+BEGIN
+  SELECT RAISE(ABORT,'internal_counterparty:incomplete')
+    WHERE trim(NEW.provider) = '' OR trim(NEW.registered_by) = ''
+       OR length(NEW.reference_hmac) <> 64;
+  -- ONLY A PERSON REGISTERS WHO IS INTERNAL. An institution that could declare
+  -- a counterparty internal could also declare one external.
+  SELECT RAISE(ABORT,'internal_counterparty:owner_only')
+    WHERE NEW.registered_by NOT LIKE 'founder:%';
+END;
 CREATE TRIGGER interpretation_is_sealed
 BEFORE UPDATE ON observation_interpretations
 BEGIN
@@ -6621,6 +6879,17 @@ BEGIN
   SELECT RAISE(ABORT,'market_unknown:cannot_arrive_answered')
     WHERE NEW.answered_at IS NOT NULL;
 END;
+CREATE TRIGGER offer_shape_guard
+BEFORE INSERT ON offer_shapes
+BEGIN
+  SELECT RAISE(ABORT,'offer_shape:incomplete')
+    WHERE trim(NEW.sells) = '' OR trim(NEW.claims_made) = '' OR trim(NEW.collects) = ''
+       OR trim(NEW.delivers_by) = '' OR trim(NEW.sells_to) = '' OR trim(NEW.charges_how) = ''
+       OR trim(NEW.stated_by) = '';
+  SELECT RAISE(ABORT,'offer_shape:asset_mismatch')
+    WHERE NOT EXISTS (SELECT 1 FROM products p
+                       WHERE p.id = NEW.product_id AND p.from_experiment_id = NEW.experiment_id);
+END;
 CREATE TRIGGER opportunity_seed_decided_once
 BEFORE UPDATE ON opportunity_seeds
 BEGIN
@@ -6652,6 +6921,30 @@ BEGIN
   -- thing this table exists to prevent.
   SELECT RAISE(ABORT,'opportunity_seed:reasoning_is_not_evidence')
     WHERE NEW.origin = 'reasoned' AND NEW.origin_observation_id IS NOT NULL;
+END;
+CREATE TRIGGER origination_policy_guard
+BEFORE INSERT ON origination_policy
+BEGIN
+  SELECT RAISE(ABORT,'origination_policy:incomplete')
+    WHERE trim(NEW.requirement) = '' OR trim(NEW.why) = '' OR trim(NEW.set_by) = '';
+  SELECT RAISE(ABORT,'origination_policy:cannot_arrive_superseded')
+    WHERE NEW.superseded_at IS NOT NULL;
+  -- A FOUNDER ROW IS THE OWNER'S. The institution seeds defaults with no
+  -- founder; only a person writes a row that overrides them.
+  SELECT RAISE(ABORT,'origination_policy:founder_row_is_the_owners')
+    WHERE NEW.founder_id IS NOT NULL AND NEW.set_by NOT LIKE 'founder:%';
+END;
+CREATE TRIGGER origination_policy_supersede_only
+BEFORE UPDATE ON origination_policy
+BEGIN
+  SELECT RAISE(ABORT,'origination_policy:immutable_except_supersession')
+    WHERE NEW.requirement IS NOT OLD.requirement OR NEW.treatment IS NOT OLD.treatment
+       OR NEW.value IS NOT OLD.value OR NEW.why IS NOT OLD.why
+       OR NEW.set_by IS NOT OLD.set_by OR NEW.founder_id IS NOT OLD.founder_id;
+  SELECT RAISE(ABORT,'origination_policy:already_superseded')
+    WHERE OLD.superseded_at IS NOT NULL;
+  SELECT RAISE(ABORT,'origination_policy:supersession_needs_a_person')
+    WHERE NEW.superseded_at IS NOT NULL AND coalesce(NEW.superseded_by,'') NOT LIKE 'founder:%';
 END;
 CREATE TRIGGER outbound_action_approval_not_in_the_future_insert
 BEFORE INSERT ON outbound_actions
@@ -7015,6 +7308,33 @@ BEGIN
        OR NEW.proposed_by IS NOT OLD.proposed_by
        OR NEW.proposed_at IS NOT OLD.proposed_at
        OR NEW.expires_at IS NOT OLD.expires_at;
+END;
+CREATE TRIGGER proposed_act_experiment_binding_guard
+BEFORE INSERT ON proposed_acts
+BEGIN
+  SELECT RAISE(ABORT,'proposed_act:criticality_needs_an_experiment')
+    WHERE NEW.measurement_critical IS NOT NULL AND NEW.experiment_id IS NULL;
+  SELECT RAISE(ABORT,'proposed_act:experiment_binding_needs_criticality')
+    WHERE NEW.experiment_id IS NOT NULL AND NEW.measurement_critical IS NULL;
+  -- The act belongs to the asset the experiment made, or to nothing yet.
+  SELECT RAISE(ABORT,'proposed_act:experiment_asset_mismatch')
+    WHERE NEW.experiment_id IS NOT NULL
+      AND EXISTS (SELECT 1 FROM products p WHERE p.id = NEW.product_id AND p.from_experiment_id IS NOT NULL
+                   AND p.from_experiment_id <> NEW.experiment_id);
+END;
+CREATE TRIGGER proposed_act_experiment_binding_sealed
+BEFORE UPDATE OF experiment_id, measurement_critical ON proposed_acts
+BEGIN
+  SELECT RAISE(ABORT,'proposed_act:experiment_binding_is_sealed')
+    WHERE OLD.experiment_id IS NOT NULL
+      AND EXISTS (SELECT 1 FROM venture_experiments e
+                   WHERE e.id = OLD.experiment_id AND e.decision IS NOT NULL)
+      AND (NEW.experiment_id IS NOT OLD.experiment_id
+        OR NEW.measurement_critical IS NOT OLD.measurement_critical);
+  SELECT RAISE(ABORT,'proposed_act:experiment_id_is_immutable')
+    WHERE OLD.experiment_id IS NOT NULL AND NEW.experiment_id IS NOT OLD.experiment_id;
+  SELECT RAISE(ABORT,'proposed_act:criticality_needs_an_experiment')
+    WHERE NEW.measurement_critical IS NOT NULL AND NEW.experiment_id IS NULL;
 END;
 CREATE TRIGGER proposed_act_guard
 BEFORE INSERT ON proposed_acts
@@ -7651,6 +7971,15 @@ BEGIN
     WHERE NEW.looking_for IS NOT OLD.looking_for
        OR NEW.mandate_id IS NOT OLD.mandate_id;
 END;
+CREATE TRIGGER search_emphasis_constitutional_delete
+BEFORE DELETE ON search_emphasis
+BEGIN SELECT RAISE(ABORT,'search_emphasis:constitutional'); END;
+CREATE TRIGGER search_emphasis_constitutional_insert
+BEFORE INSERT ON search_emphasis
+BEGIN SELECT RAISE(ABORT,'search_emphasis:constitutional'); END;
+CREATE TRIGGER search_emphasis_constitutional_update
+BEFORE UPDATE ON search_emphasis
+BEGIN SELECT RAISE(ABORT,'search_emphasis:constitutional'); END;
 CREATE TRIGGER sense_authorization_consumed_once
 BEFORE UPDATE ON sense_authorizations
 BEGIN
@@ -7828,6 +8157,33 @@ BEGIN SELECT RAISE(ABORT,'stance_bearing:constitutional'); END;
 CREATE TRIGGER stance_bearings_constitutional_update
 BEFORE UPDATE ON stance_bearings
 BEGIN SELECT RAISE(ABORT,'stance_bearing:constitutional'); END;
+CREATE TRIGGER structural_fact_guard
+BEFORE INSERT ON structural_facts
+BEGIN
+  SELECT RAISE(ABORT,'structural_fact:incomplete')
+    WHERE trim(NEW.subject_id) = '' OR trim(NEW.recognised_by) = '';
+  -- AN UNKNOWN HAS NO BASIS BUT UNKNOWN, AND A KNOWN ANSWER IS NOT UNKNOWN.
+  SELECT RAISE(ABORT,'structural_fact:unknown_means_unknown')
+    WHERE (NEW.present IS NULL) <> (NEW.basis = 'unknown');
+  SELECT RAISE(ABORT,'structural_fact:cannot_arrive_superseded')
+    WHERE NEW.superseded_at IS NOT NULL;
+END;
+CREATE TRIGGER structural_fact_kinds_constitutional_delete
+BEFORE DELETE ON structural_fact_kinds
+BEGIN SELECT RAISE(ABORT,'structural_fact_kind:constitutional'); END;
+CREATE TRIGGER structural_fact_kinds_constitutional_insert
+BEFORE INSERT ON structural_fact_kinds
+BEGIN SELECT RAISE(ABORT,'structural_fact_kind:constitutional'); END;
+CREATE TRIGGER structural_fact_kinds_constitutional_update
+BEFORE UPDATE ON structural_fact_kinds
+BEGIN SELECT RAISE(ABORT,'structural_fact_kind:constitutional'); END;
+CREATE TRIGGER structural_fact_supersede_only
+BEFORE UPDATE ON structural_facts
+BEGIN
+  SELECT RAISE(ABORT,'structural_fact:immutable_except_supersession')
+    WHERE NEW.present IS NOT OLD.present OR NEW.basis IS NOT OLD.basis
+       OR NEW.grounds IS NOT OLD.grounds OR NEW.fact IS NOT OLD.fact;
+END;
 CREATE TRIGGER support_channel_guard
 BEFORE INSERT ON support_channels
 BEGIN
@@ -7902,6 +8258,33 @@ BEGIN
     SELECT 1 FROM venture_opportunities o
      WHERE o.id = NEW.opportunity_id AND o.evidence_mode = NEW.evidence_mode);
 END;
+CREATE TRIGGER venture_experiment_rerun_guard
+BEFORE INSERT ON venture_experiments
+WHEN NEW.rerun_of IS NOT NULL
+BEGIN
+  SELECT RAISE(ABORT,'venture_experiment:rerun_of_unknown')
+    WHERE NOT EXISTS (SELECT 1 FROM venture_experiments WHERE id = NEW.rerun_of);
+  SELECT RAISE(ABORT,'venture_experiment:rerun_must_be_of_the_same_candidate')
+    WHERE NOT EXISTS (SELECT 1 FROM venture_experiments o
+                       WHERE o.id = NEW.rerun_of AND o.opportunity_id = NEW.opportunity_id
+                         AND o.evidence_mode = NEW.evidence_mode);
+  SELECT RAISE(ABORT,'venture_experiment:rerun_of_an_unfinished_test')
+    WHERE EXISTS (SELECT 1 FROM venture_experiments o
+                   WHERE o.id = NEW.rerun_of AND o.validity = 'valid' AND o.ran_at IS NULL);
+  SELECT RAISE(ABORT,'venture_experiment:rerun_needs_a_revised_claim')
+    WHERE EXISTS (SELECT 1 FROM venture_experiments o
+                   WHERE o.id = NEW.rerun_of AND o.validity = 'valid' AND o.verdict = 'surprised'
+                     AND o.claim_id IS NOT NULL
+                     AND NOT EXISTS (SELECT 1 FROM market_claims c
+                                      WHERE c.id = o.claim_id AND c.revised_at IS NOT NULL
+                                        AND datetime(c.revised_at) > datetime(o.ran_at)));
+END;
+CREATE TRIGGER venture_experiment_rerun_immutable
+BEFORE UPDATE OF rerun_of ON venture_experiments
+BEGIN
+  SELECT RAISE(ABORT,'venture_experiment:rerun_of_is_immutable')
+    WHERE NEW.rerun_of IS NOT OLD.rerun_of;
+END;
 CREATE TRIGGER venture_experiment_sealed
 BEFORE UPDATE ON venture_experiments
 BEGIN
@@ -7933,6 +8316,41 @@ BEGIN
   SELECT RAISE(ABORT,'venture_experiment:result_is_incomplete')
     WHERE NEW.ran_at IS NOT NULL
       AND (trim(coalesce(NEW.what_happened,'')) = '' OR NEW.verdict IS NULL);
+END;
+CREATE TRIGGER venture_experiment_settlement_sealed
+BEFORE UPDATE OF settles_when ON venture_experiments
+BEGIN
+  SELECT RAISE(ABORT,'venture_experiment:settlement_rule_is_sealed')
+    WHERE OLD.decision IS NOT NULL AND NEW.settles_when IS NOT OLD.settles_when;
+END;
+CREATE TRIGGER venture_experiment_validity
+BEFORE UPDATE OF validity, invalid_because, invalidated_by, invalidated_at ON venture_experiments
+BEGIN
+  SELECT RAISE(ABORT,'venture_experiment:invalid_needs_kind_witness_and_time')
+    WHERE NEW.validity = 'invalid'
+      AND (NEW.invalid_because IS NULL OR trim(coalesce(NEW.invalidated_by,'')) = ''
+           OR NEW.invalidated_at IS NULL);
+  SELECT RAISE(ABORT,'venture_experiment:valid_carries_no_invalidity')
+    WHERE NEW.validity = 'valid'
+      AND (NEW.invalid_because IS NOT NULL OR NEW.invalidated_by IS NOT NULL
+           OR NEW.invalidated_at IS NOT NULL);
+  SELECT RAISE(ABORT,'venture_experiment:invalid_is_final')
+    WHERE OLD.validity = 'invalid' AND (NEW.validity <> 'invalid'
+       OR NEW.invalid_because IS NOT OLD.invalid_because
+       OR NEW.invalidated_by IS NOT OLD.invalidated_by
+       OR NEW.invalidated_at IS NOT OLD.invalidated_at);
+  -- ONLY AN APPROVED, UNSETTLED TEST CAN BE INVALID. Before approval there is
+  -- nothing to invalidate; after a verdict the market has spoken and the
+  -- verdict cannot be escaped by finding the measurement wanting afterwards.
+  SELECT RAISE(ABORT,'venture_experiment:invalidity_needs_an_approved_unsettled_test')
+    WHERE NEW.validity = 'invalid' AND OLD.validity = 'valid'
+      AND (coalesce(OLD.decision,'') <> 'approved' OR OLD.verdict IS NOT NULL);
+END;
+CREATE TRIGGER venture_experiment_verdict_needs_validity
+BEFORE UPDATE OF ran_at, verdict ON venture_experiments
+BEGIN
+  SELECT RAISE(ABORT,'venture_experiment:invalid_test_has_no_verdict')
+    WHERE OLD.validity = 'invalid' AND (NEW.verdict IS NOT NULL OR NEW.ran_at IS NOT NULL);
 END;
 CREATE TRIGGER venture_guidance_guard
 BEFORE INSERT ON venture_guidance

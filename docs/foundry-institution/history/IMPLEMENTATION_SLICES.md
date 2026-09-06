@@ -1202,3 +1202,59 @@ defect; the two that did not produced a gate for the margin that made them safe.
 
 **Evidence maturity:** E2 throughout. These are structural and behavioural
 findings against local runtime; none of them is production evidence.
+
+## Completed slice: First Economic Closure, the candidate-independent tranche (migrations 276–279)
+
+**Verified baseline:** `168ee901` on `claude/private-foundry-continuation-51vz95`
+(the actual campaign tip, deployed: health `commit` = 168ee901). Full chain
+`npm run check` green there: 553 files / 4,828 tests.
+
+**Governing requirement:** the owner's First Economic Closure objective — owner
+mandate → stranger pays → value delivered → outcome observed — with the
+distinctions he set: policy ≠ constitution; economic asset ≠ company;
+experimental ≠ operating (structural); earned ≠ validated ≠ authority; owner
+judgment ≠ reality proof; recognition ≠ certification; measurement failure ≠
+market failure; unmatched external counterparty ≠ proven stranger.
+
+**Built, in order D → B → C → A:**
+
+- **D (276)** `products.standing` experimental|earned, `operating_boundary`,
+  experiment lineage, earning record. Triggers refuse an experimental asset on
+  every operating table (agent instances, situations, exposures,
+  responsibilities, spend reservations, delegations); the operating-product
+  predicate, the spend gate and the outbound door all refuse it; the earning
+  transition needs a `business_outcome` resolution or the owner's words and
+  cannot go back. Gate `check-standing-scope.mjs` with two planted defects.
+- **B (277)** `exposure_floors` (four durable, constitutional), `legal_surfaces`
+  standing/grounds/recognised_by, `origination_policy` (owner-supersedable,
+  twelve seeded rows), `offer_shapes`, `structural_fact_kinds` (constitutional)
+  and `structural_facts` (unknown is a real answer). `legal-pass.ts` recognises
+  from the record with quoted grounds, drops ungrounded recognitions, applies
+  floors deterministically, records unresolved and unknown, answers lighter;
+  `legalPictureOf` computes policy verdicts and the bounded sentence; job
+  `legal_surface_tick` daily.
+- **C (278)** `experiment_exposures`, `business_outcome_events` (closed kinds,
+  no payer identity, counterparty by control path incl. `unmatched_external`),
+  `internal_counterparties` (HMAC only), `settles_when` sealed at approval,
+  validity ≠ verdict with invalidity kinds, acts bound to experiments with
+  sealed measurement-criticality, re-run guard needing a revised claim after a
+  valid contradiction. `outcome.ts`: `settleFromTheWorld` applies the sealed
+  rule with no opinion, grades by `business_outcome`, earns on paid-and-received,
+  retires after policy grace; `firstClosureOf` reads the milestone from the
+  ledger in bounded words; job `business_outcome_tick` hourly.
+- **A (279)** the owner's paragraph is heard in full ("require almost none of
+  my attention"; two ask-sentences are one mandate); `search_emphasis`
+  (constitutional, work-words only) carries avoid/prefer guidance into search
+  terms; `search_briefs.terms_from` records where each term came from; the
+  reader is told what he holds the search to, as relevance, not shape.
+
+**Tests:** four new files (an asset that exists before revenue; recognise
+exposure without certifying it; the world settles the experiment; the owner is
+heard in full), every constitutional table's triggers exercised, the adversarial
+"disappointing result beside an incidental surprise" case planted, reference
+world end to end. Evidence maturity **E2** throughout: real code paths, local
+runtime, no provider has reported a real event yet.
+
+**Not built, deliberately:** any provider adapter; any Hand; a mandate for the
+owner; AcreOS rules in the kernel.
+

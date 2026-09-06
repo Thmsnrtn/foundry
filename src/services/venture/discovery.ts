@@ -32,6 +32,8 @@ import { recordQuestioning, whatItBears, whoCouldSettle } from './falsification.
 export interface Brief {
   id: string; lookingFor: string; heldTo: string | null;
   shapeNamed: string | null; terms: string[];
+  /** Where each term came from: the portfolio, his own words, or a shape he named. */
+  termsFrom: string[];
 }
 
 /**
@@ -61,16 +63,23 @@ export async function briefFor(input: {
   // TERMS COME FROM WHAT THE PORTFOLIO LACKS, not from a list of business ideas.
   // A need is "something not depending on google search"; the words worth
   // searching are about the work people do, not about the thing we might sell.
-  const terms = termsFrom(needs.map((n) => n.value), mandate.shape);
+  // AND FROM WHAT HE SAID. His guidance used to reach the candidates only
+  // after they were found, and never where the search looked; a preference
+  // for things that need none of his attention was applied to a pile of
+  // signals gathered as if he had said nothing. Now each avoid or prefer
+  // adds the words people use when describing the work it points at — about
+  // effort and situation, never a product form.
+  const { terms, from } = await termsFrom(needs.map((n) => n.value), mandate.shape, mandate.guidance);
 
   const id = nanoid();
   await query(
     `INSERT INTO search_briefs
-       (id, founder_id, mandate_id, looking_for, held_to, shape_named, terms_tried, evidence_mode)
-     VALUES (?,?,?,?,?,?,?,?)`,
+       (id, founder_id, mandate_id, looking_for, held_to, shape_named, terms_tried, evidence_mode,
+        terms_from)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
     [id, input.founderId, input.mandateId, lookingFor, heldTo, mandate.shape,
-      terms.join(' | '), input.world]);
-  return { id, lookingFor, heldTo, shapeNamed: mandate.shape, terms };
+      terms.join(' | '), input.world, JSON.stringify(from)]);
+  return { id, lookingFor, heldTo, shapeNamed: mandate.shape, terms, termsFrom: from };
 }
 
 /**
@@ -82,7 +91,10 @@ export async function briefFor(input: {
  * how a discovery system ends up rediscovering the things somebody already
  * built.
  */
-function termsFrom(concentratedOn: string[], shape: string | null): string[] {
+async function termsFrom(
+  concentratedOn: string[], shape: string | null,
+  guidance: Array<{ kind: string; subject: string | null; dimension: string | null; statement: string }>,
+): Promise<{ terms: string[]; from: string[] }> {
   const base = [
     'doing this manually every',
     'wrote a script to keep track',
@@ -90,8 +102,37 @@ function termsFrom(concentratedOn: string[], shape: string | null): string[] {
     'keep a spreadsheet for',
     'have to check every week',
   ];
+  const terms: string[] = [];
+  const from: string[] = [];
+  for (const t of base) {
+    terms.push(t);
+    from.push(concentratedOn.length === 0 ? 'the portfolio: nothing concentrated'
+      : `the portfolio: ${concentratedOn.slice(0, 3).join(', ')}`);
+  }
+  // WHAT HE SAID, AS WORDS TO LOOK FOR. The vocabulary is constitutional and
+  // about work; a guidance row with no phrase on record adds nothing, and says
+  // so in the record rather than inventing a term.
+  const { exposureAnswersTo } = await import('./mandate.js');
+  const emphasis = (await query(
+    `SELECT dimension, guidance_kind, subject, phrase, why FROM search_emphasis ORDER BY sort_order`, []))
+    .rows as unknown as Array<Record<string, unknown>>;
+  for (const g of guidance) {
+    if (g.kind !== 'avoid' && g.kind !== 'prefer') continue;
+    const rows = emphasis.filter((e) => String(e.dimension) === g.dimension && String(e.guidance_kind) === g.kind
+      && (e.subject == null || (g.subject !== null && exposureAnswersTo(String(e.subject), g.subject))));
+    for (const e of rows) {
+      const phrase = String(e.phrase);
+      if (terms.includes(phrase)) continue;
+      terms.push(phrase);
+      from.push(`he said: ${g.statement} (${String(e.why)})`);
+    }
+  }
   // The shape is used only where the owner named one, and only to narrow.
-  return shape === null ? base : base.map((t) => `${t} ${shape.replace(/_/g, ' ')}`);
+  if (shape === null) return { terms, from };
+  return {
+    terms: terms.map((t) => `${t} ${shape.replace(/_/g, ' ')}`),
+    from: from.map((f) => `${f}; narrowed to the shape he named: ${shape.replace(/_/g, ' ')}`),
+  };
 }
 
 /**
@@ -301,7 +342,7 @@ export async function discover(input: {
       read += 1;
       const understanding = await interpret({
         founderId: input.founderId, observationId, lookingFor: brief.lookingFor,
-        world: input.world,
+        heldTo: brief.heldTo, world: input.world,
       });
       if ('refused' in understanding) {
         passedOver.push({ what: signal.clause, because: understanding.refused });

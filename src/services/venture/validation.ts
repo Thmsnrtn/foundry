@@ -20,6 +20,7 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { matchRealityOnly, observe, realityOnlyPatterns } from './market-evidence.js';
+import { settlementRuleJson, type SettlementRule } from './outcome.js';
 
 export interface Experiment {
   id: string;
@@ -32,6 +33,15 @@ export interface Experiment {
   ranAt: string | null;
   whatHappened: string | null;
   verdict: 'as_predicted' | 'surprised' | null;
+  /** INVALID means the test did not measure what it was for. It has no
+   * verdict and is re-run, not read. Distinct from a market that said no. */
+  validity: 'valid' | 'invalid';
+  invalidBecause: string | null;
+  invalidatedBy: string | null;
+  invalidatedAt: string | null;
+  /** The rule sealed with the prediction for what the world would have to do. */
+  settlesWhen: string | null;
+  rerunOf: string | null;
 }
 
 /**
@@ -48,16 +58,21 @@ export async function designExperiment(input: {
   whatWeDo: string; whatWeExpect: string; wouldDisprove: string;
   costCents?: number;
   evidenceMode: 'real' | 'reference';
+  /** WHAT THE WORLD WOULD HAVE TO DO for the prediction to hold, as a rule the
+   * return leg can apply without opinion. Sealed with the prediction at
+   * approval. Without one, only the owner can settle the test. */
+  settlesWhen?: SettlementRule | null;
 }): Promise<string> {
   const id = nanoid();
   await query(
     `INSERT INTO venture_experiments
        (id, founder_id, opportunity_id, unknown_id, claim_id, what_we_do,
-        what_we_expect, would_disprove, cost_cents, evidence_mode)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+        what_we_expect, would_disprove, cost_cents, evidence_mode, settles_when)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
     [id, input.founderId, input.opportunityId, input.unknownId,
       input.claimId ?? null, input.whatWeDo.trim(), input.whatWeExpect.trim(),
-      input.wouldDisprove.trim(), input.costCents ?? 0, input.evidenceMode]);
+      input.wouldDisprove.trim(), input.costCents ?? 0, input.evidenceMode,
+      input.settlesWhen == null ? null : settlementRuleJson(input.settlesWhen)]);
   return id;
 }
 
@@ -101,7 +116,8 @@ export async function awaitingHim(opportunityId: string): Promise<Experiment[]> 
 export async function whatWasTried(opportunityId: string): Promise<Experiment[]> {
   return ((await query(
     `SELECT e.id, e.what_we_do, e.what_we_expect, e.would_disprove, e.cost_cents,
-            e.decision, e.ran_at, e.what_happened, e.verdict, u.question
+            e.decision, e.ran_at, e.what_happened, e.verdict, u.question,
+            e.validity, e.invalid_because, e.invalidated_by, e.invalidated_at, e.settles_when, e.rerun_of
        FROM venture_experiments e
        JOIN market_unknowns u ON u.id = e.unknown_id
       WHERE e.opportunity_id = ? AND e.decision IS NOT NULL
@@ -119,6 +135,12 @@ function read(r: Record<string, unknown>): Experiment {
     whatHappened: r.what_happened == null ? null : String(r.what_happened),
     verdict: r.verdict == null ? null
       : String(r.verdict) as 'as_predicted' | 'surprised',
+    validity: String(r.validity ?? 'valid') as 'valid' | 'invalid',
+    invalidBecause: r.invalid_because == null ? null : String(r.invalid_because),
+    invalidatedBy: r.invalidated_by == null ? null : String(r.invalidated_by),
+    invalidatedAt: r.invalidated_at == null ? null : String(r.invalidated_at).slice(0, 10),
+    settlesWhen: r.settles_when == null ? null : String(r.settles_when),
+    rerunOf: r.rerun_of == null ? null : String(r.rerun_of),
   };
 }
 
@@ -176,12 +198,17 @@ export async function recordResult(input: {
 }): Promise<{ settled: string | null }> {
   const e = (await query(
     `SELECT founder_id, unknown_id, claim_id, what_we_expect, would_disprove,
-            evidence_mode, decision, decided_at
+            evidence_mode, decision, decided_at, validity
        FROM venture_experiments WHERE id = ?`, [input.experimentId]))
     .rows[0] as Record<string, unknown> | undefined;
   if (!e) throw new Error('no such experiment');
   if (String(e.decision) !== 'approved') {
     throw new Error('venture_experiment:not_approved');
+  }
+  // AN INVALID TEST HAS NO RESULT TO RECORD. The measurement failed; the
+  // database refuses a verdict on it, and so does this door, in words.
+  if (String(e.validity) === 'invalid') {
+    throw new Error('venture_experiment:invalid_test_has_no_verdict');
   }
 
   await query(
@@ -422,6 +449,19 @@ export async function whatStandsInTheWay(opportunityId: string): Promise<string[
     .rows as unknown as Array<Record<string, unknown>>;
   for (const c of failed) {
     inTheWay.push(`"${String(c.claim)}" was tested and did not hold`);
+  }
+
+  // A TEST THAT DID NOT MEASURE is not a test that failed, and it is not a
+  // test that passed. Until it is re-run, the question it was for is open in
+  // a way the market never answered.
+  const broken = (await query(
+    `SELECT e.invalid_because, k.what_it_is FROM venture_experiments e
+       JOIN experiment_invalidity_kinds k ON k.kind = e.invalid_because
+      WHERE e.opportunity_id = ? AND e.validity = 'invalid'
+        AND NOT EXISTS (SELECT 1 FROM venture_experiments r WHERE r.rerun_of = e.id)`,
+    [opportunityId])).rows as unknown as Array<Record<string, unknown>>;
+  for (const b of broken) {
+    inTheWay.push(`a test did not measure what it was for (${String(b.what_it_is)}) and has not been re-run`);
   }
 
   const untested = (await query(

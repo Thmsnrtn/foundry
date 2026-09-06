@@ -16,7 +16,14 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 
 ## Verified now
 
-Measured at `f493af9` on `claude/foundry-autonomous-continuation-0gents`.
+Measured at the First Economic Closure tranche on `claude/foundry-next-frontier-h2fsqe`
+(cut from the campaign tip `168ee901`, which was also the deployed commit).
+
+**Two truths, kept apart on purpose.** The campaign branch
+`claude/private-foundry-continuation-51vz95` is what production runs; this
+tranche is on a separate branch, reviewed adversarially by the campaign steward
+before it is merged, and it carries NO deploy marker. Repository truth below
+describes this branch; deployed truth is still `168ee901`.
 
 **This table was stale for many cycles and said so nowhere** — it read
 `cb7fbeb`, 228 migrations, 347 files. The document's own rule is at the top:
@@ -27,8 +34,8 @@ removing, in the place it does the most damage.
 | | |
 |---|---|
 | Stack | Node 20, TypeScript, Hono, libSQL/Turso, Vitest. Fly.io. |
-| Migrations | **257 files**, highest number **221**. Applied lexically, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. **Snapshot freshness is a GATE now, not a note** — `check-schema-snapshot.mjs` runs at the front of the chain, because the reminder to regenerate it was right, was written into this file, and failed anyway an hour later. |
-| Validation | `npm run check` green end to end: **486 files / 4,084 tests**, `CHECK_EXIT=0`, read from the run that wrote the log. **`sqlite3` must be on PATH** — `lint:columns` shells out to it, and a container without it fails the chain at the first script while the HARNESS reports exit 0, because the wrapper's status is the pipeline's. That one command IS the gate chain. **Verify no suite is already running (`ps`) before starting one** — a completion notification can fire while the process lives, and two concurrent suites produce a false failure convincing enough to act on. |
+| Migrations | **315 files**, highest number **279** (276–279 are the First Economic Closure tranche: the experimental asset, recognition with floors and policy, the return leg from the world, the owner heard in full). Applied lexically, which equals numeric order because `check-migration-order.mjs` enforces fixed-width numbering; 31 numbers are duplicated from early parallel development and are baselined. **Snapshot freshness is a GATE now, not a note** — `check-schema-snapshot.mjs` runs at the front of the chain, because the reminder to regenerate it was right, was written into this file, and failed anyway an hour later. |
+| Validation | `npm run check` green end to end: **557 files / 4,865 tests**, `CHECK_EXIT=0`, read from the run that wrote the log. **`sqlite3` must be on PATH** — `lint:columns` shells out to it, and a container without it fails the chain at the first script while the HARNESS reports exit 0, because the wrapper's status is the pipeline's. That one command IS the gate chain. **Verify no suite is already running (`ps`) before starting one** — a completion notification can fire while the process lives, and two concurrent suites produce a false failure convincing enough to act on. |
 | CI | Runs on `master`, `main` and `claude/**`. |
 | Ratchets | Unguarded mutating routes **112** · fabricated test schemas **4** · writer-less tables **0** · SELECT drift **0** · untraced consequential effects **0** · unreachable modules **22** · write-only columns **62** · unread tables **2** · unscoped product-shaped routes **2** · id tiebreaks **18** · star-select phantom columns **0** · **tables no code can reach 0** · **gates with no planted-defect test 0**. |
 | Composition root | `src/index.ts`. Static/public, signed webhooks, internal service-key, Clerk-authenticated founder, and API-key `/api/v1` route groups coexist. |
@@ -250,6 +257,8 @@ the other direction.
   those too.
 
 - **Nothing has met reality.** No real founder, outside tool, or provider.
+- **The return leg has no provider behind it.** `business_outcome_events` can only be filled by code that calls `recordBusinessOutcome`, and nothing does yet: no Stripe, Gumroad or Lemon Squeezy adapter exists, by decision (providers are chosen by the first candidate, not before it). Until one does, `settleFromTheWorld` settles rehearsals and the owner's own typed result remains the only real settlement path.
+- **Recognition is a model reading a record.** The legal pass drops ungrounded recognitions and applies floors deterministically, and it is still Sonnet reading five sentences; the durable floors are the part that is not. `unresolved_internally` exists so it can say "I do not know" and be believed.
 - Production reachability is proven against **synthetic** companies. A
   production-facing code path is not production evidence.
 - `support-pilot-readiness-v1` green means **ready to attempt** a bounded
@@ -933,6 +942,7 @@ caller appears for one without the other. Wiring both needs a real answer to
 | Recursive Foundry operation | **E1** | `recursive-institution-contract.ts` has **zero importers in `src/`** — only its test reaches it. It was recorded as E2, which means "local runtime through production-facing services", and there is no production-facing service. `recursive-institution-v1` reporting ordinary on thirteen dimensions is a benchmark result, not a runtime one. Never run by a real owner in production. Corrected on evidence, not re-measured upward. |
 | Institutional economics | **E1** | `institutional-economics.ts` also has zero importers in `src/`. Attribution is structural and the arithmetic is tested; nothing in production consumes it, so the same correction applies. Seven components remain named-unmeasured. |
 | Assisting → Operating | frozen | migration 115; unchanged |
+| First Economic Closure machinery (276–279) | **E2** | An approved test gets an experimental asset the database keeps outside every operating path until reality earns it; a real candidate's legal surface is recognised from its own record with quoted grounds, durable floors and owner-supersedable policy; a sealed settlement rule is applied to provider events with no opinion; the owner's paragraph is heard in full and reaches the search. All of it local runtime against planted cases and the reference world. **No provider has reported a real event, no offer has been placed, no unmatched external counterparty has paid.** The milestone sentence on the first screen is composed from the ledger and reads "No offer has been placed in the world yet" today. |
 | Real founders, providers, pilots, production | unproven | E4/E5/E6 |
 
 ## Open proof debt

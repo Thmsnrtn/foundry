@@ -178,6 +178,8 @@ export async function interpret(input: {
   observationId: string;
   /** What the search was for. Context only, and the prompt says so. */
   lookingFor?: string | null;
+  /** What the owner said to hold it to, in his words. Relevance only, never a shape. */
+  heldTo?: string | null;
   world: 'real' | 'reference';
 }): Promise<Read> {
   const obs = (await query(
@@ -205,8 +207,11 @@ export async function interpret(input: {
     input.lookingFor == null || input.lookingFor.trim() === ''
       ? 'The institution is looking for anything that earns.'
       : `The institution is looking for: ${input.lookingFor}.`,
+    ...(input.heldTo == null || input.heldTo.trim() === '' ? []
+      : [`The owner holds the search to this, in his words: ${input.heldTo}.`]),
     'That context is for judging relevance only. It is NOT a shape to fit this',
-    'sentence into. If the sentence has nothing to do with it, abstain.',
+    'sentence into, and a preference of the owner\'s is not a fact about the',
+    'person who wrote this. If the sentence has nothing to do with it, abstain.',
     '',
     'The kinds a hypothesis may assert:',
     ...available.map((k) => `  ${k.kind} — ${k.asserts}`),

@@ -32,3 +32,4 @@ src/services/scp/scheduler.ts 3
 src/services/senses/credentials.ts 1
 src/services/team/members.ts 2
 src/services/triggers/behavioral.ts 3
+src/services/venture/outcome.ts 1

@@ -829,6 +829,21 @@ created.
 Optimise portfolio resilience, cash-flow quality, low correlation, owner
 leverage and expected economic value. **Never product count.**
 
+**Prefer the lightest economic and organisational architecture that achieves
+the owner objective at acceptable risk.** Whether an asset needs an account, a
+subscription, persistent data, live AI, a database, a dedicated deployment, a
+legal entity, a support queue, custom billing, or software at all is a question
+asked of every candidate, and "none of those" is a legitimate answer. This is
+permanent. What the institution currently biases toward for its first proofs is
+policy, recorded in `PROOF_PROGRAM.md` and in the `origination_policy` table the
+owner can supersede row by row, and it is superseded by evidence.
+
+An economic asset is not a company. A test the owner approved gets something to
+be — an experimental asset with an identity, an allowance and a lineage — and
+the database keeps it structurally outside every operating path until reality
+recognises it: a business outcome from the world, or the owner's own words. Earned
+means only that. It is never validated, profitable or authorised by being earned.
+
 ### What this test already implies about honesty
 
 **The model may reason over evidence. The model's recollection is not

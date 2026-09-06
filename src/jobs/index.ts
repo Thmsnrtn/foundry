@@ -3146,6 +3146,94 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       + 'bury the ones a capable source actually contradicts, and promote any that earn '
       + 'independent ways of knowing (daily)',
   },
+  // WHAT LIABILITY A CANDIDATE CREATES, ASKED OF EVERY REAL ONE.
+  //
+  // `legalPictureOf` gated advancement and, for a real candidate, nothing had
+  // ever written a legal surface or answered the lighter-architecture question
+  // — only the reference world did — so no real candidate could ever move.
+  // This pass recognises exposure from the candidate's own record, quoting the
+  // words it rests on, applying the durable floors, recording what it could
+  // not resolve, and answering the lighter question. It certifies nothing. At
+  // asset level it runs again once an offer has a shape, because that is when
+  // the facts severity depends on stop being unknown.
+  // THE WORLD SETTLES THE EXPERIMENT. For every approved, valid, unsettled
+  // test with a sealed rule and a live exposure, apply the rule to what the
+  // providers said happened; and retire the asset of a test that validly
+  // failed once the policy's grace has passed with no re-run. Nothing here
+  // has an opinion: the rule was approved with the prediction.
+  business_outcome_tick: {
+    fn: async () => {
+      const { settleFromTheWorld, whatTheWorldOwes, retireWhatFailed } = await import(
+        '../services/venture/outcome.js');
+      const due = await whatTheWorldOwes();
+      let settled = 0;
+      for (const experimentId of due) {
+        try {
+          const s = await settleFromTheWorld(experimentId);
+          if (s.settled !== null) {
+            settled += 1;
+            logger.info(`business_outcome_tick settled ${experimentId} ${s.settled}`
+              + `${s.earned ? ' and reality earned its asset' : ''}: ${s.because}`,
+              { jobName: 'business_outcome_tick' });
+          }
+        } catch (err) {
+          logger.error(`business_outcome_tick failed for ${experimentId}: `
+            + `${err instanceof Error ? err.message : String(err)}`, { jobName: 'business_outcome_tick' });
+        }
+      }
+      const retired = await retireWhatFailed();
+      logger.info(`business_outcome_tick: due=${String(due.length)}, settled=${String(settled)}, `
+        + `retired=${String(retired.length)}`, { jobName: 'business_outcome_tick' });
+    },
+    schedule: '35 * * * *', // Hourly
+    description:
+      'Apply each approved test\'s sealed settlement rule to what providers reported at its offer, '
+      + 'grade the prediction by the world, let reality earn the asset, and retire the asset of a '
+      + 'validly failed test after the policy\'s grace (hourly)',
+  },
+  legal_surface_tick: {
+    fn: async () => {
+      const { recogniseExposure, subjectsNeedingRecognition } = await import(
+        '../services/venture/legal-pass.js');
+      const due = await subjectsNeedingRecognition();
+      let recognised = 0;
+      let abstained = 0;
+      for (const subject of due) {
+        try {
+          const result = await recogniseExposure({
+            subjectKind: subject.subjectKind, subjectId: subject.subjectId });
+          if ('refused' in result) {
+            logger.info(`legal_surface_tick refused ${subject.subjectId}: ${result.refused}`,
+              { jobName: 'legal_surface_tick' });
+          } else if ('abstained' in result) {
+            abstained += 1;
+            logger.info(`legal_surface_tick abstained on ${subject.subjectId}: ${result.abstained}`,
+              { jobName: 'legal_surface_tick' });
+          } else {
+            recognised += 1;
+            logger.info(
+              `legal_surface_tick read ${subject.subjectId} (${subject.because}): `
+              + `${String(result.surfaces)} surfaces, ${String(result.unresolved)} unresolved, `
+              + `${String(result.unknownFacts)} of ${String(result.facts)} facts unknown, `
+              + `${String(result.droppedForGrounds)} dropped for want of grounds`,
+              { jobName: 'legal_surface_tick' });
+          }
+        } catch (err) {
+          logger.error(
+            `legal_surface_tick failed for ${subject.subjectId}: `
+            + `${err instanceof Error ? err.message : String(err)}`,
+            { jobName: 'legal_surface_tick' });
+        }
+      }
+      logger.info(`legal_surface_tick: due=${String(due.length)}, recognised=${String(recognised)}, `
+        + `abstained=${String(abstained)}`, { jobName: 'legal_surface_tick' });
+    },
+    schedule: '15 6 * * *',
+    description:
+      'Recognise what legal surface each real candidate creates, in its own words, apply the '
+      + 'durable floors, record what could not be resolved, and answer whether the same value '
+      + 'could be made with less of it (daily)',
+  },
   contested_evidence_tick: {
     fn: async () => {
       const { proposeWhatRealityWouldSettle } = await import(
