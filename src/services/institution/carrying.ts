@@ -411,7 +411,20 @@ export async function carrySchemaDescription(
     return { responsibility: SNAPSHOT_RESPONSIBILITY, drifted: false,
       standing: null, needsHim: null };
   }
-  const missing = live.filter((n) => !described.includes(n));
+  // WHAT THE MIGRATIONS CREATE, NOT WHATEVER HAPPENS TO BE LIVE.
+  //
+  // The description records what the migrations build. A running process also
+  // makes things for itself: the health check writes and deletes a row in
+  // health_write_probe to prove the volume is writable, creating the table
+  // when it is missing. That is not part of any schema somebody committed.
+  //
+  // Comparing against everything live meant a correctly built deployment
+  // reported drift forever, for a probe table — and the correction this
+  // responsibility would then have produced was to write that probe table into
+  // the committed description. A detector whose first real finding is false
+  // teaches everybody downstream to ignore it.
+  const madeAtRuntime = new Set(['health_write_probe']);
+  const missing = live.filter((n) => !madeAtRuntime.has(n) && !described.includes(n));
   if (missing.length === 0) {
     return { responsibility: SNAPSHOT_RESPONSIBILITY, drifted: false,
       standing: null, needsHim: null };
@@ -822,6 +835,16 @@ export async function produceSchemaDescription(input: {
       path, artifact: null, costCents: 0, published: false };
   }
 
+  // AND IT ASKS FOR THE NETWORK IT CAN ACTUALLY HAVE.
+  //
+  // This asked for none and was recorded as having none, on a substrate that
+  // applies no policy and hands the sprite whatever egress its vendor gives.
+  // The record was the only thing that was ever restricted. A rehearsal on the
+  // host really can have none; the isolated substrate cannot, until the
+  // endpoint that narrows egress has been read. Asking for the truth is the
+  // weaker claim and the real one — and the isolation that actually matters,
+  // that this is not the machine the institution runs on, is untouched by it.
+
   // DERIVED ON THE TRUSTED SIDE. A description of this database, taken from
   // this database. Nothing generated is executed to obtain it.
   const objects = ((await query(
@@ -840,7 +863,9 @@ export async function produceSchemaDescription(input: {
       founderId: input.founderId, purpose: 'self_development',
       substrate: choice.substrate as 'local_process' | 'fly_machines'
         | 'fly_sprites' | 'reference_world',
-      ceiling: 'prepare', network: 'none', evidenceMode: input.evidenceMode,
+      ceiling: 'prepare',
+      network: input.evidenceMode === 'reference' ? 'none' : 'open',
+      evidenceMode: input.evidenceMode,
       budgetCents: WHAT_ONE_DESCRIPTION_MAY_COST_CENTS,
       createdBy: 'institution:carrying', produces: 'a change to software',
     });
@@ -856,7 +881,8 @@ export async function produceSchemaDescription(input: {
     // into a migration in advance — a card manufactured before anything could
     // use it is asking him to fund a hope, and a card raised by real work
     // arrives with the responsibility that needed it attached.
-    if (real && err instanceof WorkshopError && err.what === 'credential') {
+    if (real && err instanceof WorkshopError
+      && (err.what === 'credential' || err.what === 'approval')) {
       await askForTheComputer({ founderId: input.founderId, substrate: choice.substrate });
     }
     return {

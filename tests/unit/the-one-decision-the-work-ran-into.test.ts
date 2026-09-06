@@ -47,7 +47,7 @@ describe('the wall the real work runs into', () => {
     const made = await produceSchemaDescription({ founderId: OWNER, evidenceMode: 'real' });
     expect(made.substrate).toBe('fly_sprites');
     expect(made.workspaceId).toBeNull();
-    expect(made.because).toContain('declared, not available');
+    expect(made.because).toContain('nothing you have decided authorises');
     expect(made.published).toBe(false);
   });
 

@@ -37,15 +37,48 @@ describe('what it will not do', () => {
         .rejects.toThrow(/declared, not available/);
     });
 
-  it('refuses an allowlist it cannot actually apply', async () => {
-    process.env.SPRITE_TOKEN = 'test-token';
-    // A workspace whose policy could not be applied must not quietly run as
-    // though it had one. The endpoint that sets the allowlist was not on the
-    // pages read, so asking for one is refused rather than silently ignored.
-    await expect(flySpritesWorkshop.create({
-      purpose: 'self_development', ceiling: 'prepare', network: 'allowlist',
-      budgetCents: 0, tooling: [] }))
-      .rejects.toThrow(/policy nobody applied/);
+  it('refuses every network it cannot actually apply, not only the allowlist',
+    async () => {
+      process.env.SPRITES_TOKEN = 'test-token';
+      // 'none' USED TO BE ACCEPTED SILENTLY. No policy was applied, the sprite
+      // got its vendor's default egress, and the ledger recorded a workspace
+      // with no network — then ran generated code on it. A claim of restriction
+      // the world does not honour is worse than no claim, because everything
+      // downstream trusts the record instead of the world.
+      for (const network of ['none', 'allowlist'] as const) {
+        await expect(flySpritesWorkshop.create({
+          purpose: 'self_development', ceiling: 'prepare', network,
+          budgetCents: 0, tooling: [] }))
+          .rejects.toThrow(/would be recorded as restricted and run unrestricted/);
+      }
+      delete process.env.SPRITES_TOKEN;
+    });
+
+  it('charges for the time it was active, so a bound can actually bind', async () => {
+    // ZERO WAS THE MOST FLATTERING LIE THIS ADAPTER COULD TELL. spent_cents
+    // never moved, so the per-workshop budget could not trip and the owner's
+    // monthly ceiling could not be reached. Estimated rather than metered, with
+    // a floor: work that takes a moment must still cost something, or a fast
+    // runaway is free.
+    process.env.SPRITES_TOKEN = 'test-token';
+    const calls: string[] = [];
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async (u: string | URL, init?: { method?: string }) => {
+      calls.push(`${init?.method ?? 'GET'} ${String(u)}`);
+      return new Response('{}', { status: 200 });
+    }) as unknown as typeof fetch;
+    try {
+      const made = await flySpritesWorkshop.create({
+        purpose: 'self_development', ceiling: 'prepare', network: 'open',
+        budgetCents: 0, tooling: [] });
+      expect(made.costCents).toBeGreaterThanOrEqual(1);
+      const gone = await flySpritesWorkshop.destroy(made.externalRef);
+      expect(gone.costCents).toBeGreaterThanOrEqual(1);
+      expect(calls.length).toBeGreaterThan(0);
+    } finally {
+      globalThis.fetch = realFetch;
+      delete process.env.SPRITES_TOKEN;
+    }
   });
 
   it('refuses checkpoint and restore rather than guessing their endpoints', async () => {
@@ -112,7 +145,7 @@ describe('what it sends, when it does send', () => {
       return new Response('{}', { status: 200 });
     });
     const made = await flySpritesWorkshop.create({ purpose: 'self_development',
-      ceiling: 'prepare', network: 'none', budgetCents: 0, tooling: [] });
+      ceiling: 'prepare', network: 'open', budgetCents: 0, tooling: [] });
     expect(method).toBe('PUT');
     expect(asked).toBe(`https://api.sprites.dev/v1/sprites/${made.externalRef}`);
   });
@@ -122,7 +155,7 @@ describe('what it sends, when it does send', () => {
     delete process.env.SPRITES_TOKEN;
     delete process.env.SPRITE_TOKEN;
     await expect(flySpritesWorkshop.create({ purpose: 'self_development',
-      ceiling: 'prepare', network: 'none', budgetCents: 0, tooling: [] }))
+      ceiling: 'prepare', network: 'open', budgetCents: 0, tooling: [] }))
       .rejects.toThrow(/SPRITES_TOKEN/);
   });
 
@@ -136,7 +169,7 @@ describe('what it sends, when it does send', () => {
       return new Response(JSON.stringify({ name: 'x' }), { status: 200 });
     });
     await flySpritesWorkshop.create({ purpose: 'self_development',
-      ceiling: 'prepare', network: 'none', budgetCents: 0, tooling: [] });
+      ceiling: 'prepare', network: 'open', budgetCents: 0, tooling: [] });
 
     // The token authenticates FOUNDRY to the provider. It is never handed to
     // the computer as configuration, and neither is anything else reusable.

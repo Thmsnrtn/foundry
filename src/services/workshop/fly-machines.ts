@@ -91,7 +91,12 @@ export const flyMachinesWorkshop: WorkshopSubstrate = {
       },
       metadata: { foundry_purpose: spec.purpose, foundry_ceiling: spec.ceiling },
     });
-    return { externalRef: made.id, costCents: 0 };
+    // A LAUNCHED MACHINE BILLS PER SECOND AND WAS RECORDED AS FREE, so nothing
+    // it did could ever move the owner's ceiling. Estimated rather than metered,
+    // with a floor, because a bound that cannot trip is not a bound. This
+    // substrate cannot run a step anyway; the cost is here so that creating one
+    // is never mistaken for costing nothing.
+    return { externalRef: made.id, costCents: 1 };
   },
   async run(): Promise<RunResult> {
     throw new WorkshopError('fly_machines', 'run',

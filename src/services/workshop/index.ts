@@ -125,12 +125,59 @@ export async function createWorkshop(input: {
   // unreachable without a credential anyway, and refusing here would stop the
   // free ones for a reason that has nothing to do with them.
   if (input.evidenceMode === 'real') {
+    // A SECRET IS NOT AN AUTHORITY.
+    //
+    // The gate on using a paid provider was the presence of an environment
+    // variable. The owner could be shown the card, answer "not yet", and the
+    // next tick would still create a sprite in his account and bill it to his
+    // plan — because nothing between choosing a computer and calling the
+    // provider ever read his answer. His own screen told him "you said not yet,
+    // so I am leaving it" while the work ran.
+    //
+    // The decision is now the gate, checked where workspaces are made, on the
+    // substrates where it costs him something. An isolated substrate is a
+    // computer somebody rents; a rehearsal on the host is not, and refusing
+    // those would stop free work for a reason that has nothing to do with it.
+    const iso = (await query(
+      'SELECT isolation FROM workspace_substrates WHERE substrate = ?',
+      [input.substrate])).rows[0] as Record<string, unknown> | undefined;
+    const costsHimMoney = String(iso?.isolation ?? '') === 'isolated';
+
+    if (costsHimMoney) {
+      const said = (await query(
+        `SELECT decision, withdrawn_at FROM capability_acquisitions
+          WHERE founder_id = ? AND capability_key = 'run_in_workspace'
+          ORDER BY decided_at DESC, proposed_at DESC LIMIT 1`,
+        [input.founderId])).rows[0] as Record<string, unknown> | undefined;
+      const approved = said !== undefined
+        && String(said.decision) === 'approved' && said.withdrawn_at == null;
+      if (!approved) {
+        throw new WorkshopError(input.substrate, 'approval',
+          said === undefined
+            ? `nothing you have decided authorises paid work on ${input.substrate}, `
+              + 'so nothing runs there'
+            : said.withdrawn_at != null
+              ? `you took back the workshop, so nothing more runs on ${input.substrate}`
+              : String(said.decision) === 'declined'
+                ? `you said not yet to the workshop, so nothing runs on ${input.substrate}`
+                : `the workshop is still your decision to make, so nothing runs on `
+                  + `${input.substrate} until you have made it`);
+      }
+    }
+
     const ceiling = (await query(
       'SELECT cents_per_month FROM workshop_spend_ceiling WHERE founder_id = ?',
       [input.founderId])).rows[0] as Record<string, unknown> | undefined;
     if (ceiling) {
+      // COUNTED BY RESERVATION, NOT BY WHAT AN UNMETERING ADAPTER REPORTS.
+      //
+      // Every real workshop counts at least what it was allowed to spend, so a
+      // provider this institution cannot meter exactly still moves the owner's
+      // number. Taking the larger of the two means a substrate that DOES report
+      // real cost is counted at the real cost — the reservation is a floor, not
+      // a substitute.
       const spent = (await query(
-        `SELECT COALESCE(SUM(spent_cents), 0) AS n FROM workspaces
+        `SELECT COALESCE(SUM(MAX(spent_cents, budget_cents)), 0) AS n FROM workspaces
           WHERE founder_id = ? AND evidence_mode = 'real'
             AND datetime(created_at) >= datetime('now','start of month')`,
         [input.founderId])).rows[0] as Record<string, unknown>;
@@ -152,11 +199,31 @@ export async function createWorkshop(input: {
     [id, input.founderId, input.purpose, input.subject?.kind ?? null, input.subject?.id ?? null,
       input.substrate, input.ceiling, input.network ?? 'none', input.budgetCents ?? 0,
       input.evidenceMode, input.createdBy]);
+  // THE ROW IS WRITTEN FIRST SO THE TRIGGERS CAN REFUSE BEFORE A REAL COMPUTER
+  // EXISTS — an isolation rule that fired after the create would orphan a
+  // sprite, which is the failure the allowlist refusal was already moved to
+  // avoid. But a row that outlives a failed create is its own problem: every
+  // tick without a credential left another 'real' workshop pointing at nothing,
+  // alive forever, counting against a ceiling for work that never happened.
+  //
+  // So the row goes back with the failure. Marked destroyed rather than
+  // deleted, because an append-only ledger keeps what it attempted, and the
+  // reason is recorded where somebody would look for it.
   const sub = await substrate(input.substrate);
-  const made = await sub.create({
-    purpose: input.purpose, ceiling: input.ceiling, network: input.network ?? 'none',
-    budgetCents: input.budgetCents ?? 0, tooling: input.tooling ?? [],
-  });
+  let made;
+  try {
+    made = await sub.create({
+      purpose: input.purpose, ceiling: input.ceiling, network: input.network ?? 'none',
+      budgetCents: input.budgetCents ?? 0, tooling: input.tooling ?? [],
+    });
+  } catch (err) {
+    const why = err instanceof Error ? err.message : String(err);
+    await query(
+      `UPDATE workspaces SET destroyed_at = datetime('now'), preserved = ?
+        WHERE id = ? AND destroyed_at IS NULL`,
+      [`nothing — the computer was never made: ${why}`.slice(0, 400), id]);
+    throw err;
+  }
   await query('UPDATE workspaces SET external_ref = ? WHERE id = ?', [made.externalRef, id]);
   await event(id, 'created', `${input.purpose} on ${input.substrate}, ceiling ${input.ceiling}`,
     made.costCents);
@@ -363,6 +430,15 @@ export async function history(workshopId: string): Promise<Array<{
  * rather than pretending, and the experiment stays approved for a person to
  * carry.
  */
+/**
+ * WHAT ONE EXPERIMENT MAY COST BEFORE IT STOPS.
+ *
+ * The real branch used to pass zero, which is not "unlimited" — it is a
+ * workspace that may spend nothing and therefore cannot take a step. A dollar
+ * is generous for one experiment and small enough that a runaway ends quickly.
+ */
+const WHAT_ONE_EXPERIMENT_MAY_COST_CENTS = 100;
+
 export async function workshopFor(experimentId: string): Promise<{
   opened: boolean; workshopId: string | null; because: string;
 }> {
@@ -374,14 +450,42 @@ export async function workshopFor(experimentId: string): Promise<{
     return { opened: false, workshopId: null, because: 'the experiment is not approved' };
   }
   const reference = String(e.evidence_mode) === 'reference';
+
+  // CHOSEN BY STANDING, NEVER BY NAME.
+  //
+  // A real approved experiment was handed to `fly_machines` because the line
+  // said so — a substrate whose run() throws by design. That created a billable
+  // machine nothing could run in and nothing tore down, on the strength of a
+  // hard-coded name, while the identical question one module over was answered
+  // by asking which computers could actually carry the work.
+  //
+  // And the real branch was given a budget of zero, so even had it worked, the
+  // per-workshop bound would have refused every step. The rehearsal got a
+  // hundred cents and reality got none.
+  let substrateName = 'reference_world';
+  let budget = 100;
+  if (!reference) {
+    const { chooseAWorkspace } = await import('../institution/carrying.js');
+    const choice = await chooseAWorkspace(true);
+    if (choice.substrate === null) {
+      // NOTHING IS CREATED WHEN NOTHING CAN CARRY IT. Returning before
+      // createWorkshop means no row is written for a workshop that was never
+      // going to exist.
+      return { opened: false, workshopId: null, because: choice.because };
+    }
+    substrateName = choice.substrate;
+    budget = WHAT_ONE_EXPERIMENT_MAY_COST_CENTS;
+  }
+
   try {
     const w = await createWorkshop({
       founderId: String(e.founder_id), purpose: 'venture_development', ceiling: 'prepare',
-      budgetCents: reference ? 100 : 0,
+      budgetCents: budget,
       subject: { kind: 'opportunity', id: String(e.opportunity_id) },
-      substrate: reference ? 'reference_world' : 'fly_machines',
+      substrate: substrateName as Substrate,
       createdBy: `experiment:${experimentId}`,
       evidenceMode: reference ? 'reference' : 'real',
+      network: reference ? 'none' : 'open',
     });
     await grant({ workshopId: w.id, capabilityKey: 'write_code_in_branch', grantedBy: `experiment:${experimentId}` });
     await grant({ workshopId: w.id, capabilityKey: 'render_screen', grantedBy: `experiment:${experimentId}` });

@@ -124,8 +124,8 @@ describe('the contract, proven in rehearsal — which is not the isolation', () 
     expect(real.substrate).toBe('fly_sprites');
     expect(real.workspaceId).toBeNull();
     expect(real.artifact).toBeNull();
-    expect(real.because).toContain('SPRITES_TOKEN');
-    expect(real.because).toContain('declared, not available');
+    expect(real.because).toContain('nothing you have decided authorises');
+    expect(real.because).toContain('fly_sprites');
   });
 
   it('has not promoted the isolated substrate on the strength of any of this',
@@ -158,4 +158,20 @@ describe('the contract, proven in rehearsal — which is not the isolation', () 
     expect(String(finding.finding)).toContain('THE CONTRACT, NOT THE ISOLATION');
     expect(String(finding.finding)).toContain('reality-proven only by a real external');
   });
+});
+
+describe('what counts as the description having drifted', () => {
+  it('does not call a table the running process made for itself a drift', async () => {
+    // THE HEALTH CHECK CREATES health_write_probe TO PROVE THE VOLUME IS
+    // WRITABLE. It is not part of any schema anybody committed, and comparing
+    // against everything live meant a correctly built deployment reported drift
+    // forever — with the correction being to write the probe table into the
+    // committed description. A detector whose first real finding is false
+    // teaches everybody downstream to ignore it.
+    const { carrySchemaDescription } = await import(
+      '../../src/services/institution/carrying.js');
+    await query('CREATE TABLE IF NOT EXISTS health_write_probe (at TEXT NOT NULL)');
+    const carried = await carrySchemaDescription(OWNER);
+    expect(carried.drifted).toBe(false);
+  }, 60_000);
 });

@@ -135,21 +135,61 @@ export async function spritesReachable(): Promise<
   }
 }
 
+/**
+ * WHAT THIS COST, ESTIMATED HONESTLY RATHER THAN REPORTED AS NOTHING.
+ *
+ * Every call here used to return zero. The consequence was not a rounding
+ * error: workspaces.spent_cents never moved, so the per-workshop budget could
+ * never trip and the owner's monthly ceiling could never be reached. A thousand
+ * sprites in his paid account would have passed a ceiling that said twenty. A
+ * boundary that cannot trip is not a boundary, and recording paid work as free
+ * is the most flattering lie this adapter could tell.
+ *
+ * The provider bills per second while a sprite is active and this adapter
+ * cannot read the invoice, so the figure is wall-clock at the rate the
+ * institution recorded from the vendor's own pricing. It is an ESTIMATE and the
+ * evaluation says so. The one-cent floor is what lets any bound bind at all:
+ * work that takes a moment must still cost something, or a fast runaway is
+ * free.
+ */
+const CENTS_PER_ACTIVE_SECOND = 0.1;
+function estimate(startedAtMs: number): number {
+  return Math.max(1, Math.round(((Date.now() - startedAtMs) / 1000) * CENTS_PER_ACTIVE_SECOND));
+}
+
 export const flySpritesWorkshop: WorkshopSubstrate = {
   name: 'fly_sprites',
 
   async create(spec: WorkshopSpec): Promise<{ externalRef: string; costCents: number }> {
-    // REFUSED BEFORE ANYTHING EXISTS, not after.
+    // REFUSED BEFORE ANYTHING EXISTS, not after. Refusing AFTER the create call
+    // would leave a sprite nobody tears down, which is how an isolation failure
+    // becomes a billing one as well.
     //
-    // The allowlist is real and the endpoint that sets one was not on the pages
-    // read. A workspace whose policy could not be applied must not quietly run
-    // as though it had one — and refusing AFTER the create call would leave a
-    // sprite nobody tears down, which is how an isolation failure becomes a
-    // billing one as well.
-    if (spec.network === 'allowlist') {
+    // THE CREDENTIAL IS CHECKED FIRST, so the owner's stop stays "no credential"
+    // and the card naming something he could change is still what gets raised.
+    // Refusing for the network policy first would replace a decision he can make
+    // with a sentence about an endpoint nobody has read.
+    const started = Date.now();
+    token();
+
+    // AND THE RECORD MAY NOT CLAIM MORE ISOLATION THAN THE PROVIDER ENFORCES.
+    //
+    // 'none' was accepted silently and no policy was applied, so the ledger said
+    // the workspace had no network while the sprite had whatever egress the
+    // vendor gives it by default — and then ran generated code on it. That is
+    // the one direction this adapter must never fail in: a claim of restriction
+    // the world does not honour is worse than no claim, because everything
+    // downstream trusts it.
+    //
+    // Neither 'none' nor an allowlist can be applied, because the endpoint that
+    // narrows egress has not been read. So the only network this adapter can
+    // honestly carry is the one the sprite actually gets.
+    if (spec.network !== 'open') {
       throw new WorkshopError('fly_sprites', 'create',
-        'a domain allowlist was asked for and the endpoint that sets one has not '
-        + 'been read yet, so this sprite would run with a policy nobody applied');
+        `network '${spec.network}' was asked for, and a sprite starts with the `
+        + 'egress its vendor gives it. The endpoint that narrows that has not '
+        + 'been read, so this workspace would be recorded as restricted and run '
+        + 'unrestricted. Nothing is created.');
     }
     // CREATE IS PUT-BY-NAME, WHICH IS NOT WHAT THIS ADAPTER FIRST DID.
     //
@@ -165,10 +205,11 @@ export const flySpritesWorkshop: WorkshopSubstrate = {
       throw new WorkshopError('fly_sprites', 'create',
         `sprite create -> HTTP ${String(res.status)}: ${res.text.slice(0, 200)}`);
     }
-    return { externalRef: name, costCents: 0 };
+    return { externalRef: name, costCents: estimate(started) };
   },
 
   async run(externalRef: string, step: string, granted: string[]): Promise<RunResult> {
+    const started = Date.now();
     // THE GRANT IS CHECKED HERE, NOT INSIDE. A step that names a capability it
     // was not granted is refused before it reaches the computer at all — the
     // same rule `local_process` applies, because the check belongs to the
@@ -199,7 +240,7 @@ export const flySpritesWorkshop: WorkshopSubstrate = {
     return {
       ok: res.status < 300,
       output: res.text.slice(0, 20_000),
-      costCents: 0,
+      costCents: estimate(started),
     };
   },
 
@@ -228,12 +269,13 @@ export const flySpritesWorkshop: WorkshopSubstrate = {
   },
 
   async destroy(externalRef: string): Promise<{ costCents: number }> {
+    const started = Date.now();
     const res = await call(`/sprites/${encodeURIComponent(externalRef)}`,
       { method: 'DELETE' });
     if (res.status >= 300 && res.status !== 404) {
       throw new WorkshopError('fly_sprites', 'destroy',
         `sprite delete -> HTTP ${String(res.status)}: ${res.text.slice(0, 200)}`);
     }
-    return { costCents: 0 };
+    return { costCents: estimate(started) };
   },
 };
