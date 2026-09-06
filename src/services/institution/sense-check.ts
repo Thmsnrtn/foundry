@@ -117,14 +117,23 @@ export async function checkTheSenses(): Promise<SenseCheck[]> {
       movedTo = 'degraded';
     }
     if (movedTo !== null) {
+      // MATURITY MOVES BY RECORDING A WITNESSED CHANGE, NOT BY WRITING THE
+      // COLUMN. This used to follow recordMaturity with its own UPDATE of
+      // capability_providers — a second write of a fact the ledger insert has
+      // already applied through a trigger, using that row's own changed_at.
+      //
+      // The redundant write re-derived the timestamp with datetime('now'), and
+      // the witness trigger requires maturity_since to EQUAL a change recorded
+      // in the last five seconds. Both are second-resolution, so when the clock
+      // ticked over between the two statements they disagreed by one second and
+      // the database refused the write. It passed here and failed on CI, which
+      // is what a race looks like when you only run it on the fast machine.
       await recordMaturity({
         providerId: String(row.id), to: movedTo, evidenceMode: 'real',
         witnessedBy: 'sense_check_tick',
         evidence: `asked it one dull question to see whether the instrument works, `
           + `and ${answer.because}`,
       });
-      await query('UPDATE capability_providers SET maturity = ?, maturity_since = '
-        + "datetime('now') WHERE id = ?", [movedTo, String(row.id)]);
     }
     checked.push({ provider: String(row.provider), sourceType, was,
       answered: answer.ok, because: answer.because, movedTo });

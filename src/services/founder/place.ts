@@ -20,6 +20,7 @@
 // =============================================================================
 import { query, realCompany } from '../../db/client.js';
 import { POSTURE_IN_PLAIN_WORDS } from './burden.js';
+import { ANCHOR_CENTS } from './portfolio.js';
 
 export type DimensionKey =
   'overview' | 'work' | 'economics' | 'customers' | 'experiments' | 'evidence';
@@ -95,7 +96,19 @@ export async function placeOf(founderId: string, productId: string): Promise<Com
     one(`SELECT COUNT(*) AS n FROM owner_allowances WHERE product_id = ? AND withdrawn_at IS NULL`, [id])
       .catch(() => 0),
     one(`SELECT COUNT(*) AS n FROM asset_money_spent WHERE product_id = ?`, [id]),
-    one(`SELECT COUNT(*) AS n FROM company_senses WHERE product_id = ? AND disconnected_at IS NULL
+    // COUNTED WHETHER OR NOT IT IS STILL CONNECTED.
+    //
+    // This counted only live senses, so the Customers place existed while a
+    // provider answered and VANISHED the moment it stopped — the address moving
+    // under him at exactly the moment it had something worth saying. A
+    // disconnected customer sense is not the absence of the customer dimension;
+    // it is the customer dimension with something wrong, which is precisely
+    // what that place is for.
+    //
+    // The concept has to have belonged here at some point: a company that never
+    // had a customer sense still gets no tab, because six empty addresses on
+    // every asset is the other way to be lost.
+    one(`SELECT COUNT(*) AS n FROM company_senses WHERE product_id = ?
            AND sense_key IN (${[...CUSTOMER_SENSES].map(() => '?').join(',')})`, [id, ...CUSTOMER_SENSES]),
     one(`SELECT COUNT(*) AS n FROM legal_surfaces WHERE subject_kind = 'company' AND subject_id = ?
            AND retired_at IS NULL`, [id]),
@@ -120,7 +133,24 @@ export async function placeOf(founderId: string, productId: string): Promise<Com
   if (String(p.standing) === 'experimental') chips.push('a test, not a company');
   if (p.form) chips.push(String(p.form));
   if (String(p.reality) === 'real' && String(p.standing) === 'earned') {
-    chips.push(mrr === null ? 'not reporting revenue' : mrr >= 100_000 ? 'anchor' : 'tributary');
+    // THE RIVER'S LINE IS DRAWN IN ONE PLACE, AND THIS IS NOT IT.
+    //
+    // This carried its own copy of the thousand-dollar figure. The number was
+    // right and the duplication was the defect: two places deciding the same
+    // thing drift, and the day somebody moves the canonical line the asset page
+    // goes on quietly disagreeing with the portfolio page about the same
+    // company. It projects the constant now rather than restating it.
+    //
+    // AND IT SAYS WHAT KIND OF FACT IT IS. Anchor and tributary are River
+    // LAYERS — membership by stated arithmetic on what a company earns, so he
+    // can argue with the line. They are not roles, and they are not what the
+    // institution does with an asset: `posture` is that, and it is set by
+    // decision rather than derived from a number. A chip that reads like an
+    // identity where the truth is a bracket invites him to think crossing a
+    // revenue threshold changed what this thing IS.
+    chips.push(mrr === null
+      ? 'not reporting revenue'
+      : mrr >= ANCHOR_CENTS ? 'in anchors, by what it earns' : 'in tributaries, by what it earns');
   }
   const posture = String(p.posture);
   if (posture !== 'grow') {

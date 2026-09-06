@@ -188,7 +188,16 @@ describe('deep-linked into an experiment', () => {
     expect(html).toContain(`href="/foundry/why/candidate/${opportunityId}"`);
     const o = orient(html);
     expect(o.crumbLinks).toContain('/foundry/searching');
-    for (const level of ['Why', 'Evidence', 'Assumptions', 'Alternatives', 'Uncertainty', 'Activity', 'Outcome', 'Cost', 'Authority', 'Technical']) {
+    // THE LEVELS ARE NAMED FOR WHAT THIS CAN ACTUALLY PROVE.
+    //
+    // Two of them used to be "Assumptions" and "Alternatives", which claim the
+    // institution enumerated its premises and weighed other courses at the
+    // moment it judged, and that the page is a record of that. It is not: the
+    // page assembles both today from other rows, and one alternative was a
+    // generic "not doing it" appended to every act. A page whose whole purpose
+    // is showing its work may not manufacture a thought process after the fact.
+    for (const level of ['Why', 'Evidence', 'What this rests on', 'Other recorded paths',
+      'Uncertainty', 'Activity', 'Outcome', 'Cost', 'Authority', 'Technical']) {
       expect(html).toContain(`<h3>${level}</h3>`);
     }
   });

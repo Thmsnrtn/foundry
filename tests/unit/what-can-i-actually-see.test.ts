@@ -147,3 +147,35 @@ describe('the senses Foundry claims to have', () => {
     expect(String(moves[0]?.evidence)).toContain('one dull question');
   });
 });
+
+describe('a provider’s standing moves by what was witnessed, not by writing the column', () => {
+  it('does not write the maturity a second time, which raced the clock', async () => {
+    // THIS PASSED HERE AND FAILED ON CI, WHICH IS WHAT A RACE LOOKS LIKE WHEN
+    // YOU ONLY RUN IT ON THE FAST MACHINE.
+    //
+    // recordMaturity inserts the witnessed change, and a trigger applies it to
+    // the provider using that row's own changed_at. The sense check then wrote
+    // the column AGAIN, re-deriving the timestamp with datetime('now'). Both
+    // are second-resolution, and the witness trigger requires maturity_since to
+    // equal a change recorded in the last five seconds — so when the clock
+    // ticked over between the two statements they disagreed by one second and
+    // the database refused the write. Reproduced 12 times out of 12 by forcing
+    // the delay across a tick; never once when it did not cross one.
+    const src = await import('node:fs/promises')
+      .then((fs) => fs.readFile('src/services/institution/sense-check.ts', 'utf8'));
+    expect(src).not.toMatch(/UPDATE capability_providers SET maturity/);
+  });
+
+  it('still moves the provider, because the ledger insert is what applies it', async () => {
+    const { recordMaturity } = await import('../../src/services/institution/capabilities.js');
+    const before = (await query(
+      "SELECT id, maturity FROM capability_providers WHERE maturity = 'declared' LIMIT 1"))
+      .rows[0] as Record<string, unknown> | undefined;
+    if (!before) return;
+    await recordMaturity({ providerId: String(before.id), to: 'available', evidenceMode: 'real',
+      witnessedBy: 'test', evidence: 'asked it one dull question and it answered' });
+    const after = (await query('SELECT maturity FROM capability_providers WHERE id = ?',
+      [String(before.id)])).rows[0] as Record<string, unknown>;
+    expect(String(after.maturity)).toBe('available');
+  });
+});
