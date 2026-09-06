@@ -37,8 +37,23 @@ behalf, no AcreOS rule in the kernel. Everything is E2. **Deployment authority
 stays with the campaign steward**: this branch carries no deploy marker and
 is merged only after adversarial review.
 
+**Checkpoint review of the workshop chain (read-only, same day).** Four
+adversarial readers, six most-severe findings each handed to a refuter told to
+default to refuted; all six were reproduced. In one line each: the metered
+substrates report zero cost so neither ceiling the owner approved can ever
+trip; the acquisition decision is not the gate on using the workshop, the
+environment variable is; `network: 'none'` is recorded and not applied on
+Sprites; a real approved experiment is handed to `fly_machines` by name,
+creating a billable machine nothing runs in and nothing tears down; the
+workspaces row is written before the substrate exists, so refused creates leave
+live rows pointing at nothing. Scenarios, reproductions and smallest fixes:
+`history/WORKSHOP_CHECKPOINT_REVIEW_2026-09-06.md`. Nothing in the chain was
+edited; it is the campaign steward's to fix.
+
 **Next, in order, with the stop conditions that apply:**
-1. The steward's adversarial review of this tranche; port findings.
+1. The steward's adversarial review of this tranche; port findings. And the
+   steward's fixes to the six workshop findings above before any real
+   experiment opens a workshop.
 2. The owner enters his mandate through the product (never on his behalf).
    The search runs under his words; NOTHING DESERVES TESTING is a valid result.
 3. The first candidate chooses the provider and the first Hand (offer
