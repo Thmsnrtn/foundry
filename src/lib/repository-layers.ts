@@ -130,6 +130,10 @@ export const LAYER_OF: Record<string, Layer> = {
   // versus CAPABILITIES, and it stays small because most of what makes Private
   // Foundry valuable is the institution, not the interface.
   'src/routes/dashboard/foundry-shell.ts': 'private',
+  // The addresses under the owner's places: company dimensions, the work
+  // behind a claim, decisions, the search. Built on the shell, so it is the
+  // shell's product too.
+  'src/routes/dashboard/places.ts': 'private',
   // THE DOOR THE SHELL LIVES BEHIND, and therefore part of the same product.
   // The Attention Law forbids a new top-level mount, so the shell is mounted
   // inside the Letter — which makes `letter.ts` the composition root for the

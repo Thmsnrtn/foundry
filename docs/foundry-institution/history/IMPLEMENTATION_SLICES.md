@@ -1258,3 +1258,61 @@ runtime, no provider has reported a real event yet.
 **Not built, deliberately:** any provider adapter; any Hand; a mandate for the
 owner; AcreOS rules in the kernel.
 
+
+## Completed slice: Product Convergence, the owner's places (no migration)
+
+**Date:** 2026-09-06. **Branch:** `claude/foundry-next-frontier-h2fsqe`, cut from
+the integrated campaign tip `2f068a98`. **Migrations:** none — every screen here
+is a projection of rows the institution already keeps.
+
+**What it is.** The owner's three doors stay three (Foundry, Portfolio,
+Controls). Under them, *addresses*: durable, linkable places reached from
+context rather than from a tab bar.
+
+- `page()` in `foundry-shell.ts` takes a `Where` — the trail, the object, what
+  Ask will take as its subject, the addresses inside the object — and renders
+  it in the same slots on every screen: crumbs above the title, identity chips
+  and a local nav under it (a scrollable row on a phone; a sub-list under the
+  object's name in the desktop rail), the composer's placeholder and a visible
+  "Asking about X · everything instead" line with a hidden `scope` input.
+- `services/founder/place.ts` — `placeOf` reads one company into chips (invented
+  · a test, not a company · form · anchor / tributary / not reporting revenue ·
+  posture · what Foundry is doing here) and dimensions (Overview · Work ·
+  Economics · Customers · Experiments · Evidence) in a fixed order, each present
+  only when the institution holds rows for it; Work always, because "is Foundry
+  doing anything here" must have an address even when the answer is no.
+  `mapOf` reads the Portfolio as a map, real companies only.
+- `services/founder/why.ts` — `whyOf(kind, id)` for company · advice ·
+  proposal · candidate · experiment, descending ANSWER → WHY → EVIDENCE ·
+  ASSUMPTIONS · ALTERNATIVES · UNCERTAINTY → ACTIVITY · OUTCOME · COST ·
+  AUTHORITY → TECHNICAL. Every line is read from a row; none is a model's
+  chain of thought.
+- `routes/dashboard/places.ts` — `/foundry/companies/:id/(work|economics|
+  customers|experiments|evidence)`, `/foundry/why/:kind/:id`,
+  `/foundry/decisions` (with `?company=`), `/foundry/searching`. Mounted after
+  the shell in `letter.ts`; declared `private` in `repository-layers.ts`.
+- Portfolio is a map first (find by name; show only *Needs you / I look after /
+  Being tested / Quiet*; test assets under their own heading, not counted as
+  companies) with the river one address away (`?view=river`).
+- A question typed inside a company is redirected to that company's page and
+  answered there with the scope visible and a way to widen it; a typed name
+  beats the scope; institution-wide questions stay on the first screen; "why"
+  goes to the work behind the claim; anything that reads as an instruction
+  changes nothing and is shown back with the existing `said` confirmation form.
+- Fixed on the way: a company page for an experimental asset threw
+  (`experimental_has_no_situation`) because `readCompany` recorded a situation
+  for any product — it now records none for a test asset and says what the
+  asset is.
+
+**Tests.** `tests/unit/can-thomas-get-lost.test.ts` — twenty-two cases over the
+ten states (deep-linked company, experiment, decision; refresh at depth; the app
+resumed; browser back; chat → object; object → portfolio; switching assets; the
+object changing while viewed), each asking the seven questions of the HTML, plus
+a crawl of every new page for dead links and template artifacts. The existing
+dead-ends crawler and the screen-reader outline test still pass over the new
+markup. **Rendered** at 375 / 390 / 393 / 414 / 430 / 1440 and 200% text with
+an overflow probe: no horizontal overflow, no page errors.
+
+**Not built, deliberately:** an agent org chart, a global manual/assisted/
+autonomous mode, an autopilot rule editor, composite scores, run-agent buttons,
+backend machinery as navigation, and any rule specific to one company.

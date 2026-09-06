@@ -42,6 +42,7 @@ import { OWNER_SURFACE_SCRIPT } from '../../lib/owner-surface-script.js';
 import { log as logger } from '../../lib/logger.js';
 import { reportError } from '../../lib/error-reporter.js';
 import { LAYER_IN_PLAIN_WORDS, layerOf } from '../../lib/repository-layers.js';
+import type { CompanyPlace, DimensionKey } from '../../services/founder/place.js';
 
 export const foundryShellRoutes = new Hono();
 
@@ -123,7 +124,7 @@ const CHECK_IN_PLAIN_WORDS: Record<string, { name: string; why: string }> = {
   },
 };
 
-const LADDER_IN_PLAIN_WORDS: Record<string, string> = {
+export const LADDER_IN_PLAIN_WORDS: Record<string, string> = {
   unknown: 'I do not know about it yet',
   visible: 'I know it exists',
   understood: 'I understand what it is',
@@ -135,7 +136,7 @@ const LADDER_IN_PLAIN_WORDS: Record<string, string> = {
 };
 
 /** "1 thing" / "2 things". "2 thing(s)" is machinery showing through. */
-function count(n: number, singular: string, plural = singular + 's'): string {
+export function count(n: number, singular: string, plural = singular + 's'): string {
   return `${n} ${n === 1 ? singular : plural}`;
 }
 
@@ -971,6 +972,103 @@ function whatNeedsHim(s: OwnerState): Attention {
 type Place = 'foundry' | 'companies' | 'controls';
 
 /**
+ * WHERE HE IS. Every owner screen can say it: the trail that got him here, the
+ * object under his feet, what Ask will take as its subject, and the addresses
+ * inside this object. Rendered by `page()` in the same slots on every screen,
+ * so the geography is stable even where the content is not.
+ */
+type H = HtmlEscapedString | Promise<HtmlEscapedString>;
+
+export interface Where {
+  eyebrow?: string;
+  crumbs: Array<{ href: string; label: string }>;
+  scope: {
+    kind: 'foundry' | 'portfolio' | 'company' | 'decisions' | 'searching';
+    id: string | null; name: string;
+  };
+  local: Array<{ href: string; label: string; count: number | null; on: boolean }>;
+  chips: string[];
+}
+
+/** The frame for one company, with one of its dimensions underfoot. */
+export function frameFor(place: CompanyPlace, on: DimensionKey): Where {
+  const here = place.dimensions.find((d) => d.key === on) ?? place.dimensions[0];
+  return {
+    eyebrow: 'Company',
+    crumbs: [
+      { href: '/foundry', label: 'Foundry' }, { href: '/foundry/companies', label: 'Portfolio' },
+      { href: `/foundry/companies/${place.id}`, label: place.name },
+      ...(on !== 'overview' && here ? [{ href: here.href, label: here.label }] : []),
+    ],
+    scope: { kind: 'company', id: place.id, name: place.name },
+    local: place.dimensions.map((d) => ({ href: d.href, label: d.label, count: d.count, on: d.key === on })),
+    chips: place.chips,
+  };
+}
+
+/**
+ * THE HEAD OF A PLACE: the title, what this object is in chips, and the
+ * addresses inside it. Always in this order, so once a dimension exists its
+ * position never moves.
+ */
+export function placeHead(where: Where | null, title: string): H {
+  if (!where) return html`<h1>${title}</h1>`;
+  const up = where.crumbs.length >= 2 ? where.crumbs[where.crumbs.length - 2] : null;
+  const here = where.crumbs[where.crumbs.length - 1];
+  return html`${up && where.crumbs.length > 3
+    ? html`<p class="crumbline"><a href="${up.href}">← ${up.label}</a></p>` : ''}
+    ${title ? html`<h1>${where.crumbs.length > 3 && here ? html`${title} <span class="dim">· ${here.label}</span>` : title}</h1>` : ''}
+    ${where.chips.length ? html`<p class="chips">${where.chips.map((ch) => html`<span class="chip">${ch}</span>`)}</p>` : ''}
+    ${where.local.length ? html`<nav class="local${where.scope.kind === 'company' ? ' rail' : ''}" aria-label="Within ${where.scope.name}">${where.local.map((l) =>
+      html`<a href="${l.href}"${l.on ? raw(' class="on" aria-current="page"') : ''}>${l.label}${
+        l.count !== null && l.count > 0 ? html` <b>${String(l.count)}</b>` : ''}</a>`)}</nav>` : ''}`;
+}
+
+/** The trail, for every screen below the first. */
+function crumbsOf(where: Where | null): H | '' {
+  if (!where || where.crumbs.length < 2) return '';
+  return html`<p class="crumbs" aria-label="Where you are">${where.crumbs.map((cr, i) =>
+    i === where.crumbs.length - 1
+      ? html`<span aria-current="location">${cr.label}</span>`
+      : html`<a href="${cr.href}">${cr.label}</a><i>›</i>`)}</p>`;
+}
+
+/**
+ * ON A WIDE SCREEN THE RAIL CARRIES THE OBJECT. Under the three doors: the
+ * object he is inside and its addresses, and the two places that are reached
+ * from context rather than owning a door.
+ */
+function railExtra(where: Where | null): H {
+  const object = where && where.scope.kind === 'company' && where.local.length
+    ? html`<section class="sub" aria-label="Within ${where.scope.name}"><b>${where.scope.name}</b>${where.local.map((l) =>
+      html`<a href="${l.href}"${l.on ? raw(' class="on"') : ''}>${l.label}${
+        l.count !== null && l.count > 0 ? html` <span>${String(l.count)}</span>` : ''}</a>`)}</section>`
+    : '';
+  return html`${object}<section class="more" aria-label="Also here">
+    <a href="/foundry/decisions"${where?.scope.kind === 'decisions' ? raw(' class="on"') : ''}>Decisions</a>
+    <a href="/foundry/searching"${where?.scope.kind === 'searching' ? raw(' class="on"') : ''}>Searching</a>
+  </section>`;
+}
+
+/** What Ask will take as its subject, said where he types. */
+function askScope(where: Where | null): { placeholder: string; hidden: string; line: H | '' } {
+  if (!where || where.scope.kind === 'foundry') {
+    return { placeholder: 'Ask Foundry anything…', hidden: '', line: '' };
+  }
+  if (where.scope.kind === 'company' && where.scope.id) {
+    return {
+      placeholder: `Ask about ${where.scope.name}…`,
+      hidden: `company:${where.scope.id}`,
+      line: html`<p class="askwhere">Asking about <b>${where.scope.name}</b> · <a href="/foundry">everything instead</a></p>`,
+    };
+  }
+  return {
+    placeholder: `Ask about ${where.scope.name}…`, hidden: '',
+    line: html`<p class="askwhere">Asking about <b>${where.scope.name}</b> · <a href="/foundry">everything instead</a></p>`,
+  };
+}
+
+/**
  * WHAT A SITUATION WAS, IN HIS WORDS RATHER THAN THE COLUMN'S.
  *
  * The history read "growth not converting for 12 days, until 2026-08-02 — then
@@ -991,12 +1089,12 @@ const SITUATION_IN_PLAIN_WORDS: Record<string, string> = {
 };
 
 /** The same, for a value that may be anything the column allows. */
-function plainly(situation: string): string {
+export function plainly(situation: string): string {
   return SITUATION_IN_PLAIN_WORDS[situation] ?? situation.replaceAll('_', ' ');
 }
 
-const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString>,
-  active: Place = 'foundry',
+export const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString>,
+  active: Place = 'foundry', where: Where | null = null,
 ) => html`<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -1158,9 +1256,9 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
      and opens in place. The page is understood at a glance and explored when
      wanted, which is the difference between a company and a report. */
   details.fold{border-top:1px solid var(--line);margin:0}
-  .fold>summary{padding:var(--s2) 0;min-height:48px;gap:var(--s3)}
+  .fold>summary{padding:var(--s2) 0;min-height:48px;gap:var(--s3);flex-wrap:wrap}
   .fold>summary h3{margin:0;flex:0 0 auto}
-  .fold .gist{flex:1 1 auto;min-width:0;text-align:right;color:var(--ink-2);font-size:.93rem;
+  .fold .gist{flex:1 1 8rem;min-width:0;text-align:right;color:var(--ink-2);font-size:.93rem;
     overflow-wrap:break-word}
   .fold[open]>summary{padding-bottom:var(--s2)}
   .fold>ul,.fold>p,.fold>div,.fold>form{margin-bottom:var(--s3)}
@@ -1298,6 +1396,54 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
   /* A revenue collapse should not be the same weight as twelve healthy metrics.
      One class, used once per page, on the single sentence that says so. */
   .alarm{color:var(--alert);font-weight:600}
+  /* WHERE HE IS: the same slots on every screen. */
+  .crumbs{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin:0 0 var(--s2);
+    font-size:.82rem;color:var(--ink-3)}
+  .crumbs a{color:var(--ink-2);text-decoration:none;padding:6px 0;min-height:32px;display:inline-flex;align-items:center}
+  .crumbs a:hover{text-decoration:underline}
+  .crumbs i{font-style:normal;color:var(--ink-3)}
+  .crumbs span{color:var(--ink)}
+  .crumbline{margin:0 0 var(--s2);font-size:.9rem}
+  .crumbline a{color:var(--ink-2);text-decoration:none;display:inline-flex;align-items:center;min-height:44px}
+  h1 .dim{color:var(--ink-3);font-weight:400}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:calc(-1 * var(--s2)) 0 var(--s3)}
+  .chip{display:inline-block;font-size:.8rem;padding:4px 10px;border-radius:999px;border:1px solid var(--line);
+    background:var(--card);color:var(--ink-2)}
+  .local{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;margin:0 calc(-1 * var(--s3)) var(--s4);
+    padding:0 var(--s3);border-bottom:1px solid var(--line)}
+  .local::-webkit-scrollbar{display:none}
+  .local a{flex:0 0 auto;text-decoration:none;color:var(--ink-2);font-size:.95rem;padding:10px 12px;min-height:44px;
+    display:inline-flex;align-items:center;gap:6px;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+  .local a b{font-weight:600;font-size:.8rem;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:1px 7px}
+  .local a.on{color:var(--ink);border-bottom-color:var(--ink)}
+  .local a:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:6px}
+  .why{color:var(--accent);font-size:.9rem;text-decoration:none;display:inline-flex;align-items:center;min-height:44px}
+  .why::before{content:"?";display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;
+    border-radius:50%;border:1px solid currentColor;font-size:.72rem;margin-right:6px}
+  .why:hover{text-decoration:underline}
+  .row{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s3);align-items:center;margin:var(--s1) 0 0}
+  .row .btn{width:auto}
+  .askwhere{max-width:34rem;margin:0 auto 6px;font-size:.8rem;color:var(--ink-3)}
+  .askwhere b{color:var(--ink-2);font-weight:500}
+  .askwhere a{color:var(--accent)}
+  .said-here{border:1px solid var(--accent-soft);border-radius:var(--r);padding:var(--s3);background:var(--card)}
+  .said-here h2{margin-top:0}
+  .level>summary h3{font-size:1rem}
+  .tech{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px var(--s3);font-size:.85rem;
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink-2);margin:0 0 var(--s3)}
+  .tech dt,.tech dd{margin:0;overflow-wrap:anywhere}
+  .mapfind{display:flex;gap:var(--s2);margin:0 0 var(--s2)}
+  .mapfind input{flex:1;min-width:0;font:inherit;font-size:max(16px,1rem);padding:11px 13px;min-height:44px;
+    border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink)}
+  .mapfind button{font:inherit;border:1px solid var(--line);background:var(--card);border-radius:12px;padding:0 14px;min-height:44px;color:var(--ink)}
+  .filters{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 0 var(--s3);padding-bottom:2px}
+  .filters a{flex:0 0 auto;text-decoration:none;font-size:.85rem;color:var(--ink-2);border:1px solid var(--line);
+    border-radius:999px;padding:7px 12px;min-height:36px;display:inline-flex;align-items:center;white-space:nowrap}
+  .filters a.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+  .item .where{display:flex;flex-wrap:wrap;gap:4px;margin-top:var(--s1)}
+  .item .where span{font-size:.75rem;color:var(--ink-3);border:1px solid var(--line);border-radius:999px;padding:2px 8px}
+  .item .where span.need{color:var(--alert);border-color:var(--alert)}
+  nav.places .sub,nav.places .more{display:none}
   /* Deliberately not named ask: that class is the fixed bar at the bottom of
      every page, and reusing it would pin every question to the floor. */
   .noticed{border:1px solid var(--line);border-radius:var(--r);padding:var(--s3);
@@ -1352,6 +1498,18 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
     .ask{position:static;background:none;padding:0;margin:0 0 var(--s4);order:-1}
     .ask-in{max-width:none;margin:0}
     main.wrap{display:flex;flex-direction:column}
+    .crumbs{margin-bottom:var(--s3)}
+    .local.rail{display:none}
+    .askwhere{max-width:none;margin:0 0 6px}
+    nav.places .sub,nav.places .more{display:flex;flex-direction:column;gap:2px;margin:var(--s2) 0 0;padding:var(--s2) 0 0;
+      border-top:1px solid var(--line)}
+    nav.places .sub b{font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);
+      padding:4px 12px 6px;font-weight:600}
+    nav.places .sub a,nav.places .more a{font-size:.92rem;min-height:36px;padding:6px 12px 6px 24px;color:var(--ink-2)}
+    nav.places .sub a span{margin-left:auto;font-size:.78rem;color:var(--accent);background:var(--accent-soft);
+      border-radius:999px;padding:1px 7px}
+    nav.places .sub a.on,nav.places .more a.on{color:var(--ink);background:var(--accent-soft)}
+    nav.places .more a{padding-left:12px}
     .glance{grid-template-columns:repeat(3,minmax(0,1fr));max-width:44rem}
     .glance .tile{display:block}
     .glance .tile dd.v{text-align:left}
@@ -1375,13 +1533,16 @@ const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString
 <body>
 <main class="wrap">
 <div class="brand"><b>F</b> Private Foundry</div>
+${crumbsOf(where)}
 ${body}
 <footer><a href="/letter">Advanced — inspect the system</a></footer>
 <form class="ask" method="GET" action="/foundry">
+  ${askScope(where).line}
+  ${askScope(where).hidden ? html`<input type="hidden" name="scope" value="${askScope(where).hidden}" />` : ''}
   <div class="ask-in">
-    <label for="q" class="sr">Ask Foundry anything</label>
+    <label for="q" class="sr">${askScope(where).placeholder}</label>
     <input id="q" name="q" type="search" enterkeyhint="search" autocorrect="on"
-      autocapitalize="sentences" spellcheck="true" placeholder="Ask Foundry anything…" />
+      autocapitalize="sentences" spellcheck="true" placeholder="${askScope(where).placeholder}" />
     <button type="submit">Ask</button>
   </div>
 </form>
@@ -1393,6 +1554,7 @@ ${body}
     <svg viewBox="0 0 24 24"><path d="M3 17c3-4 6 0 9-3s6 1 9-3"/><path d="M3 12c3-4 6 0 9-3s6 1 9-3"/></svg>Portfolio</a>
   <a href="/foundry/controls"${active === 'controls' ? ' class="on" aria-current="page"' : ''}>
     <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="var(--bg)"/><circle cx="15" cy="12" r="2" fill="var(--bg)"/><circle cx="8" cy="17" r="2" fill="var(--bg)"/></svg>Controls</a>
+  ${railExtra(where)}
 </div></nav>
 <script>${raw(OWNER_SURFACE_SCRIPT)}</script>
 </body>
@@ -2029,7 +2191,7 @@ function whatJustHappened(done: string, s: OwnerState,
  * companies are included deliberately: if he asks about one by name he should
  * get an answer, and the answer says what it is.
  */
-async function companyHeMeant(
+export async function companyHeMeant(
   founderId: string, text: string,
 ): Promise<{ id: string; name: string; reference: boolean } | null> {
   if (!text.trim()) return null;
@@ -2074,7 +2236,7 @@ const QUESTIONS: Record<string, string> = {
   back: 'What happened while I was away?',
 };
 
-function matchQuestion(text: string): string {
+export function matchQuestion(text: string): string {
   const t = text.toLowerCase();
   // ASKED ABOUT A COMPANY, WHICH IS A DIFFERENT QUESTION FROM ASKED ABOUT
   // FOUNDRY. These two run first because "how is AcreOS doing" also matches
@@ -2145,7 +2307,7 @@ function matchQuestion(text: string): string {
  * on two readings; whether that is bad is his to say, and an institution that
  * quietly decided would be inventing the one thing it cannot observe.
  */
-async function answerAboutCompany(
+export async function answerAboutCompany(
   about: { id: string; name: string; reference: boolean; key: string },
 ): Promise<HtmlEscapedString> {
   const { whatTheNumbersSay } = await import('../../services/founder/what-the-numbers-say.js');
@@ -2554,6 +2716,26 @@ foundryShellRoutes.get('/foundry', async (c) => {
   const typed = String(c.req.query('q') ?? '').trim();
   const done = String(c.req.query('done') ?? '').trim();
   const key = asked || (typed ? matchQuestion(typed) : '');
+
+  // A QUESTION TYPED INSIDE A COMPANY STAYS ABOUT THAT COMPANY. The composer on
+  // a company page carries its scope; the answer belongs on that page, where
+  // the scope is visible and can be widened. A name he typed beats the scope,
+  // and a question about the whole institution is answered here regardless.
+  const scoped = String(c.req.query('scope') ?? '').trim();
+  if (typed && scoped.startsWith('company:')) {
+    const wide = ['portfolio', 'capital', 'venture', 'companies', 'away', 'back', 'today', 'turneddown'];
+    const namedInstead = await companyHeMeant(s.ownerId, typed);
+    // Only whether it is his: the page this sends him to discloses reality
+    // and standing itself, and refusing the redirect for an invented company or
+    // a test asset would strand a question typed on that object's own page.
+    // Standing does not apply: this resolves a thing by id.
+    const owned = (await query(
+      `SELECT id FROM products WHERE id = ? AND owner_id = ? AND deleted_at IS NULL`,
+      [scoped.slice('company:'.length), s.ownerId])).rows as unknown as Array<Record<string, unknown>>;
+    if (owned[0] && !namedInstead && !wide.includes(key)) {
+      return c.redirect(`/foundry/companies/${String(owned[0].id)}?q=${encodeURIComponent(typed)}#answer`);
+    }
+  }
   const attention = whatNeedsHim(s);
 
   // Only when he TYPED a company's name. The chips below are institutional
@@ -2636,8 +2818,34 @@ foundryShellRoutes.get('/foundry', async (c) => {
     </dl>`
     : '';
 
+  // WHERE THINGS ARE, FROM THE FIRST SCREEN. Not doors: addresses, reached
+  // from here and from context, with a count only where one is honest.
+  //
+  // Standing does not apply: this counts DECISIONS waiting on him, not
+  // companies, and an act proposed for a test asset is exactly as much his to
+  // decide as one for a company. The reality boundary does apply, above.
+  const waiting = (await query(
+    `SELECT (SELECT COUNT(*) FROM proposed_acts a JOIN products p ON p.id = a.product_id
+              WHERE p.owner_id = ? AND ${realCompany('p')} AND a.decision IS NULL AND a.revoked_at IS NULL
+                AND a.expires_at > CURRENT_TIMESTAMP)
+          + (SELECT COUNT(*) FROM situation_recommendations r JOIN products p ON p.id = r.product_id
+              WHERE p.owner_id = ? AND ${realCompany('p')} AND r.decided_at IS NULL)
+          + (SELECT COUNT(*) FROM responsibility_candidates rc JOIN products p ON p.id = rc.product_id
+              WHERE p.owner_id = ? AND ${realCompany('p')} AND rc.status = 'pending') AS n`,
+    [s.ownerId, s.ownerId, s.ownerId])).rows as unknown as Array<Record<string, unknown>>;
+  const homeFrame: Where = {
+    crumbs: [{ href: '/foundry', label: 'Foundry' }],
+    scope: { kind: 'foundry', id: null, name: 'everything' },
+    local: [
+      { href: '/foundry/companies', label: 'Portfolio', count: s.watching.real + s.watching.invented, on: false },
+      { href: '/foundry/decisions', label: 'Decisions', count: Number(waiting[0]?.n ?? 0), on: false },
+      { href: '/foundry/searching', label: s.search ? 'Searching' : 'Not searching', count: null, on: false },
+    ],
+    chips: [],
+  };
   const body = html`
     <h1><span id="greet">Hello</span>${s.firstName ? `, ${s.firstName}` : ''}.</h1>
+    ${placeHead(homeFrame, '')}
     ${orientation
     ? attention === null
       ? html`<p class="lede">${orientation}</p>`
@@ -2745,7 +2953,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
         it so you could see what I do with a search before handing me a real one. Nothing
         it finds is a fact about any real market, and none of it can ever be counted or
         acted on.</p>` : ''}
-      <p>${s.search.statement}</p>
+      <p>${s.search.statement} <a class="why" href="/foundry/searching">Everything about this search</a></p>
       ${s.search.guidance.length ? html`<ul>${raw(s.search.guidance.map((g) =>
     `<li>${g}</li>`).join(''))}</ul>` : ''}
       ${s.search.blocked ? html`<p class="quiet"><strong>Where it has got to:</strong>
@@ -2864,7 +3072,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
     `<a href="/foundry?ask=${k}">${QUESTIONS[k]}</a>`).join(''))}
     </div>` : ''}`;
 
-  return c.html(page('Foundry', body, 'foundry'));
+  return c.html(page('Foundry', body, 'foundry', homeFrame));
 });
 
 // ─── companies ──────────────────────────────────────────────────────────────
@@ -2968,7 +3176,7 @@ interface CompanyView {
   posture: { now: string; inPlainWords: string; changes: Array<{ from: string; to: string; said: string; when: string }> };
 }
 
-async function readCompany(productId: string, founderId: string): Promise<CompanyView | null> {
+export async function readCompany(productId: string, founderId: string): Promise<CompanyView | null> {
   const row = (await query(
     `SELECT id, name, created_at, operating_budget_monthly_usd, ai_cost_trailing_30d_usd,
             github_repo_url, reality, standing, operating_boundary, from_experiment_id,
@@ -3025,14 +3233,23 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
   const formerAllowance = await intent.formerAllowanceFor(productId);
   const decisions = await intent.recentDecisions(productId);
   const { whatSituation } = await import('../../services/founder/what-situation.js');
-  const situation = await whatSituation(productId);
+  const situation = String(row.standing) === 'experimental'
+    ? { situation: 'unknown' as const, headline: 'A test, not a company: there is nothing to diagnose.',
+      because: [], demandsAttention: false }
+    : await whatSituation(productId);
   // RECORDED HERE TOO, not only in the tick. He may open a company the moment
   // he creates it, and a page that showed a situation the institution had not
   // recorded would be showing him something it cannot later refer back to.
+  //
+  // NOT FOR A TEST ASSET. A situation is a diagnosis of an operating company,
+  // and the schema refuses one for an experimental asset — so this page used to
+  // fail the moment an approved test made one. The asset has no situation to
+  // record, no advice to raise and no history to read; it says what it is.
   const chain = await import('../../services/founder/situation-chain.js');
-  const spell = await chain.recordSituation(productId);
-  const advice = await chain.recommendFor(productId);
-  const past = await chain.spellHistory(productId);
+  const experimental = String(row.standing) === 'experimental';
+  const spell = experimental ? null : await chain.recordSituation(productId);
+  const advice = experimental ? [] : await chain.recommendFor(productId);
+  const past = experimental ? [] : await chain.spellHistory(productId);
   const formerly = await intent.formerObjectiveFor(productId);
 
   const { getSelfCheckStanding } = await import(
@@ -3139,7 +3356,7 @@ async function readCompany(productId: string, founderId: string): Promise<Compan
     })),
     formerly, situation, decisions,
     posture: { now: postureNow, inPlainWords: POSTURE_WORDS[postureNow as keyof typeof POSTURE_WORDS] ?? postureNow, changes: postureChanges },
-    spell: { days: spell.days, beganAt: spell.beganAt },
+    spell: spell ? { days: spell.days, beganAt: spell.beganAt } : null,
     past: past.map((p) => ({
       situation: p.situation, becameWhat: p.becameWhat, days: p.days, endedAt: p.endedAt,
     })),
@@ -3270,9 +3487,62 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
   const closure = await firstClosureOf(String(founder.id));
   const closureLine = closure.experimentId === null ? '' : closure.sentence;
 
-  const body = html`
-    <h1>Portfolio</h1>
-    <p class="${portfolio.anythingNeedsHim ? 'lede alarm' : 'lede'}">${portfolio.headline}</p>
+  // TWO QUESTIONS, ONE PLACE. The map answers "what exactly do I own and how do
+  // I reach it"; the river answers "what is the economic shape of it". Both are
+  // addresses under Portfolio, and the map is where he lands, because reaching
+  // a company is the more frequent need.
+  const mode = String(c.req.query('view') ?? '') === 'river' ? 'river' : 'map';
+  const find = String(c.req.query('find') ?? '').trim();
+  const show = String(c.req.query('show') ?? '').trim();
+  const { mapOf } = await import('../../services/founder/place.js');
+  const everything = await mapOf(String(founder.id));
+  const shownAll = everything.filter((e) => !find || e.name.toLowerCase().includes(find.toLowerCase()))
+    .filter((e) => show === 'needs' ? e.needsHim > 0 : show === 'working' ? e.watching
+      : show === 'testing' ? e.testing : show === 'quiet' ? e.needsHim === 0 && !e.testing : true);
+  // A TEST ASSET IS A PLACE HE CAN REACH AND NOT A COMPANY HE OWNS. It is on
+  // the map, under its own heading, and never in the count of companies.
+  const shown = shownAll.filter((e) => !e.experimental);
+  const tests = shownAll.filter((e) => e.experimental);
+  const companies = everything.filter((e) => !e.experimental);
+  const filter = (key: string, label: string, n: number) => html`<a href="/foundry/companies?show=${key}${
+    find ? `&find=${encodeURIComponent(find)}` : ''}"${show === key ? raw(' class="on"') : ''}>${label}${n > 0 ? ` ${String(n)}` : ''}</a>`;
+  const mapBlock = html`
+    <form class="mapfind" method="GET" action="/foundry/companies" role="search">
+      <input type="search" name="find" value="${find}" placeholder="Find a company by name" aria-label="Find a company by name" />
+      ${show ? html`<input type="hidden" name="show" value="${show}" />` : ''}
+      <button type="submit">Find</button>
+    </form>
+    <nav class="filters" aria-label="Show only">
+      <a href="/foundry/companies${find ? `?find=${encodeURIComponent(find)}` : ''}"${show === '' ? raw(' class="on"') : ''}>All ${String(companies.length)}</a>
+      ${filter('needs', 'Needs you', companies.filter((e) => e.needsHim > 0).length)}
+      ${filter('working', 'I look after', companies.filter((e) => e.watching).length)}
+      ${filter('testing', 'Being tested', companies.filter((e) => e.testing).length)}
+      ${filter('quiet', 'Quiet', companies.filter((e) => e.needsHim === 0 && !e.testing).length)}
+    </nav>
+    ${shown.length + tests.length === 0 ? html`<p class="quiet">${companies.length === 0 ? 'You have not told me about anything you own.'
+      : find ? `Nothing you own is called anything like “${find}”.` : 'Nothing matches that.'}</p>` : ''}
+    ${shown.length ? html`<h2 class="section">What you own</h2>` : ''}
+    ${[...shown, ...tests].map((e, i) => html`${i === shown.length && tests.length ? html`<h2 class="section">Tests, not companies</h2>` : ''}<a class="item" href="/foundry/companies/${e.id}"
+        aria-label="${e.name}${e.reference ? ', a company I made up' : ''}">
+      <h3>${e.name}${e.reference ? html` <span class="pill">Invented</span>` : ''}${e.experimental ? html` <span class="pill">A test</span>` : ''}</h3>
+      <p>${e.headline}${e.days > 0 && e.situation !== 'steady' ? html` <span class="quiet">For ${String(e.days)} ${e.days === 1 ? 'day' : 'days'}.</span>` : ''}</p>
+      <p class="where">${e.needsHim > 0 ? html`<span class="need">${String(e.needsHim)} ${e.needsHim === 1 ? 'thing needs' : 'things need'} you</span>` : ''}${
+    e.form ? html`<span>${e.form}</span>` : ''}${e.watching ? html`<span>I look after it</span>` : ''}${
+    e.testing ? html`<span>being tested</span>` : ''}${e.canSee === 0 ? html`<span>I can see nothing</span>` : html`<span>I can see ${String(e.canSee)} ${e.canSee === 1 ? 'thing' : 'things'}</span>`}${
+    e.posture !== 'grow' ? html`<span>${POSTURE_IN_PLAIN_WORDS[e.posture as keyof typeof POSTURE_IN_PLAIN_WORDS] ?? e.posture}</span>` : ''}</p>
+    </a>`)}`;
+  const frame: Where = {
+    eyebrow: 'Portfolio',
+    crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: '/foundry/companies', label: 'Portfolio' }],
+    scope: { kind: 'portfolio', id: null, name: 'your portfolio' },
+    local: [
+      { href: '/foundry/companies', label: 'Map', count: null, on: mode === 'map' },
+      { href: '/foundry/companies?view=river', label: 'River', count: null, on: mode === 'river' },
+    ],
+    chips: [],
+  };
+
+  const riverBlock = html`
     ${glance.companies > 0 && glance.cashFlowCents === null && glance.interruptions === 0
     && !glance.concentration ? html`<p class="quiet">Nothing reports revenue to me yet, so
       there is nothing to total. The river below is its shape, not its size.</p>` : ''}
@@ -3315,7 +3585,12 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
     return line(c) + (b ? `<p class="${b.verdict === 'earning its keep' || b.verdict === 'too early to say' ? 'quiet' : 'gap'}"
       style="margin:-8px 0 var(--s3)">${b.sentence}${b.posture !== 'grow'
       ? ` You have me ${POSTURE_IN_PLAIN_WORDS[b.posture as keyof typeof POSTURE_IN_PLAIN_WORDS] ?? b.posture}.` : ''}</p>` : '');
-  }).join(''))}
+  }).join(''))}`;
+
+  const body = html`
+    ${placeHead(frame, 'Portfolio')}
+    <p class="${portfolio.anythingNeedsHim ? 'lede alarm' : 'lede'}">${portfolio.headline}</p>
+    ${mode === 'river' ? riverBlock : mapBlock}
 
     <form class="inline" method="POST" action="/foundry/companies" style="margin-top:var(--s4)">
       <input type="text" name="name" required maxlength="60" placeholder="Add a company by name"
@@ -3352,7 +3627,7 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
         </form>`).join(''))}
     </div>`;
 
-  return c.html(page('Companies', body, 'companies'));
+  return c.html(page('Portfolio', body, 'companies', frame));
 });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -3459,6 +3734,44 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
   // A company of someone else's and one that does not exist answer the same.
   if (!view) return c.notFound();
   const done = String(c.req.query('done') ?? '');
+  // THE COMPANY IS A PLACE. Its identity in chips and its addresses, read from
+  // the rows it actually has, framed the same way on every screen inside it.
+  const { placeOf } = await import('../../services/founder/place.js');
+  const place = await placeOf(String(founder.id), view.id);
+  const frame = place ? frameFor(place, 'overview') : null;
+
+  // A QUESTION ASKED HERE IS ABOUT HERE, AND SAYS SO. The composer on this page
+  // carries the company as its scope; the answer is rendered at the top with
+  // the scope visible and a way to widen it. Anything that reads as an
+  // instruction is not obeyed: it is shown back, and only binds through the
+  // same confirmation every other instruction goes through.
+  const typed = String(c.req.query('q') ?? '').trim();
+  let askedHere: H | '' = '';
+  if (typed) {
+    if (/\bwhy\b|show (me )?(your )?work|how do you know|what makes you say/i.test(typed)) {
+      return c.redirect(`/foundry/why/company/${view.id}`);
+    }
+    const key = matchQuestion(typed);
+    const instruction = /\b(stop|don'?t|do not|never|always|from now on|only ever)\b/i.test(typed);
+    const widen = html`<p class="quiet">Answered about ${view.name}.
+      <a href="/foundry?q=${encodeURIComponent(typed)}">Ask about everything instead</a>.</p>`;
+    askedHere = instruction
+      ? html`<div class="know said-here" id="answer"><h2>That sounds like an instruction</h2>
+          <p>Nothing has changed. A question I answer; an instruction I hold to only once you
+            have said so and seen what I understood.</p>
+          <form class="inline" method="POST" action="/foundry/companies/${view.id}/said">
+            <input type="text" name="said" required maxlength="300" value="${typed}"
+              aria-label="What to hold me to" />
+            <button class="btn" type="submit">Hold me to this</button>
+          </form>${widen}</div>`
+      : ['numbers', 'howdoing', 'working', 'needs', 'allowed'].includes(key)
+        ? html`<div class="know said-here" id="answer"><p class="quiet">You asked about ${view.name}: &ldquo;${typed}&rdquo;</p>
+            ${await answerAboutCompany({ id: view.id, name: view.name, reference: view.reference !== null, key })}${widen}</div>`
+        : html`<div class="know said-here" id="answer"><p class="quiet">You asked about ${view.name}: &ldquo;${typed}&rdquo;</p>
+            <p>I can answer about ${view.name}: how it is doing, its numbers, what I am doing here,
+              what needs you, and what I am allowed. For why I say what I say,
+              <a href="/foundry/why/company/${view.id}">show my work</a>.</p>${widen}</div>`;
+  }
   // Named from the query only to decide WHICH connection to describe; every
   // word describing it comes from the connection itself.
   const justConnected = done === 'seeing'
@@ -3475,7 +3788,8 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
   }).join('');
 
   const body = html`
-    <h1>${view.name}</h1>
+    ${placeHead(frame, view.name)}
+    ${askedHere}
     ${view.reference ? html`<div class="know" style="border-color:var(--alert)">
       <h3>This company does not exist</h3>
       <p>I made it up, so you could watch me work before handing me anything real.
@@ -3558,14 +3872,16 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     ? `. This has been true for ${String(view.spell.days)} `
       + `${view.spell.days === 1 ? 'day' : 'days'}`
     : ''}. That is what the numbers did — whether it is a problem is yours to say.</p>` : ''}
+      <p class="row"><a class="why" href="/foundry/why/company/${view.id}">Why I say this</a></p>
     </div>
 
-    ${view.advice.length ? html`<div class="know">
+    ${view.advice.length ? html`<div class="know" id="advice">
       <h2>${view.advice.length === 1 ? 'What I would do' : 'What I would do about it'}</h2>
       ${raw(view.advice.map((a) => `<div class="noticed">
         <p><strong>${a.summary}</strong></p>
         <p class="quiet">${a.why}.</p>
         <p class="quiet"><strong>What I would need:</strong> ${a.wouldNeed}.</p>
+        <p class="row"><a class="why" href="/foundry/why/advice/${a.id}">Show your work</a></p>
         <div class="pair">
         <form method="POST" action="/foundry/advice/${a.id}/accept">
           <button class="btn go" type="submit">Do that</button>
@@ -3579,7 +3895,7 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
         permission I will ask for it separately, and say exactly what I intend to do.</p>
     </div>` : ''}
 
-    ${view.proposals.length ? html`<div class="know">
+    ${view.proposals.length ? html`<div class="know" id="decide">
       <h2>${view.proposals.length === 1 ? 'I need you to decide this' : 'I need you to decide these'}</h2>
       <p class="quiet">You told me not to do this without asking. I cannot do any of it until
         you say yes to that exact thing, and a yes covers only the one act described.</p>
@@ -3598,6 +3914,7 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
           do this on my own. It is yours, one act at a time, permanently.</p>` : ''}
         <p class="quiet">If you do nothing, I do not do it, and this expires
           ${p.expiresAt}.</p>
+        <p class="row"><a class="why" href="/foundry/why/proposal/${p.id}">Show your work</a></p>
         <form method="POST" action="/foundry/proposals/${p.id}/approve">
           <button class="btn go" type="submit">Approve this one thing</button>
         </form>
@@ -3607,7 +3924,7 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
       </div>`)}
     </div>` : ''}
 
-    ${view.asks.length ? html`<div class="know">
+    ${view.asks.length ? html`<div class="know" id="noticed">
       <h2>${view.asks.length === 1 ? 'Something I noticed' : 'Things I noticed'}</h2>
       <p class="quiet">Each is a movement, not a diagnosis. Yes means I watch it and tell you
         what I see; it does not let me change, spend or contact anything.</p>
@@ -3703,7 +4020,7 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
        — ${LADDER_IN_PLAIN_WORDS[r.state] ?? r.state}</li>`).join(''))}</ul>
     </details>` : ''}
 
-    <details class="know fold"><summary><h3>What matters here</h3><span class="gist">${view.said ? 'you have told me' : 'you have not told me'}</span></summary>
+    <details class="know fold" id="matters"><summary><h3>What matters here</h3><span class="gist">${view.said ? 'you have told me' : 'you have not told me'}</span></summary>
       ${view.said
     ? html`<p>${view.said.statement}</p>
         <p class="quiet">${view.said.steers
@@ -3775,6 +4092,7 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     : d.outcome === 'refused' ? 'you said no, and nothing happened'
       : `you took the approval back${d.note ? ` — ${d.note}` : ''}, before I used it`
 } on ${d.at}.</li>`).join(''))}</ul>
+      <p class="quiet"><a href="/foundry/decisions?company=${view.id}">Every decision about it, with why I asked</a></p>
     </details>` : ''}
 
     ${view.lifted.length ? html`<details class="know fold"><summary><h3>What you lifted</h3><span class="gist">${count(view.lifted.length, 'boundary', 'boundaries')}</span></summary>
@@ -3803,7 +4121,7 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     </details>
     </div>`;
 
-  return c.html(page(view.name, body, 'companies'));
+  return c.html(page(view.name, body, 'companies', frame));
 });
 
 // ─── agreeing, or not, with what Foundry would do ───────────────────────────
@@ -5229,5 +5547,10 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
       </form>
     </div>`;
 
-  return c.html(page('Controls', body, 'controls'));
+  const controlsFrame: Where = {
+    eyebrow: 'Controls',
+    crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: '/foundry/controls', label: 'Controls' }],
+    scope: { kind: 'foundry', id: null, name: 'everything' }, local: [], chips: [],
+  };
+  return c.html(page('Controls', body, 'controls', controlsFrame));
 });

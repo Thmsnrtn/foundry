@@ -2775,3 +2775,8 @@ letterRoutes.post('/letter/responsibilities/:responsibilityId/channel',
 // =============================================================================
 const { foundryShellRoutes } = await import('./foundry-shell.js');
 letterRoutes.route('/', foundryShellRoutes);
+// The addresses under those places: a company's dimensions, the work behind
+// any claim, every decision, and the search. Mounted after the shell so the
+// shell's own paths win where they overlap.
+const { placeRoutes } = await import('./places.js');
+letterRoutes.route('/', placeRoutes);

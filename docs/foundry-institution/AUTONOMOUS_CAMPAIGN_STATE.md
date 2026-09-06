@@ -1908,6 +1908,24 @@ consequences:
 - Peer review is **retired** rather than given a reader (§16 decision).
 - Push notifications are wired through the gateway as `send_push`.
 
+## Product convergence — the owner's places (2026-09-06)
+
+The first-screen doctrine now extends to every screen below it. Every owner
+page carries the same frame: the trail (Foundry › Portfolio › AcreOS › Work),
+the object's identity in chips, the addresses inside the object in a fixed
+order, and what Ask will take as its subject — visible, and widenable in one
+tap. Decisions and the search have durable addresses reached from context;
+neither gained a door. Every claim on a company page, every piece of advice,
+every act, candidate and test descends to its work at `/foundry/why/…`, and
+that work is rows, not a transcript. Falsified by `can-thomas-get-lost.test.ts`
+(ten states × seven questions) and rendered at six widths plus 200% text.
+Evidence maturity **E2**: local runtime over planted rows and the reference
+world; no owner has yet been lost or not lost on a real day.
+
+**What it exposed:** the company page for an experimental asset had been a 500
+since migration 276 — `readCompany` recorded a situation the schema refuses.
+Nothing had opened one until the acceptance suite deep-linked into it.
+
 ## Blocked — external
 
 - **Real bounded support pilot (E4).** `support-pilot-readiness-v1` is green and means only *ready to attempt*.

@@ -6,7 +6,7 @@ src/routes/api/founder-intelligence.ts 4
 src/routes/api/priority.ts 1
 src/routes/auth/clerk.ts 1
 src/routes/dashboard/founder-ops.ts 3
-src/routes/dashboard/foundry-shell.ts 3
+src/routes/dashboard/foundry-shell.ts 6
 src/routes/dashboard/onboarding.ts 2
 src/routes/dashboard/plan.ts 1
 src/routes/dashboard/settings.ts 1
