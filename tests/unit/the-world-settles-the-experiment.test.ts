@@ -33,6 +33,8 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { resolvePrediction } from '../../src/services/institution/calibration.js';
 import { formClaim, observe, reviseClaim } from '../../src/services/venture/market-evidence.js';
 import { decideExperiment, designExperiment } from '../../src/services/venture/validation.js';
+import { stateOfferShape } from '../../src/services/venture/asset.js';
+import { answerLighter } from '../../src/services/venture/legal-surface.js';
 import {
   bindActToExperiment, counterpartyHmac, firstClosureOf, invalidateExperiment, placeExposure,
   recordBusinessOutcome, registerInternalCounterparty, rerunExperiment, retireWhatFailed,
@@ -90,8 +92,32 @@ async function approvedExperiment(world: 'real' | 'reference', rule = RULE): Pro
     opportunityId: c.opportunityId };
 }
 
+/** THE OFFER HAS A SHAPE, AND THE SHAPE HAS BEEN READ. A real offer is refused
+ * until its shape is stated and the asset-level facts the first-proof policy
+ * binds on are on record; the pass would write them from the shape, and here
+ * they are written as the pass would (basis offer_shape), so this file does
+ * not depend on a model. */
+async function readyToPlace(e: { experimentId: string; productId: string; opportunityId: string }, world: 'real' | 'reference') {
+  if (world !== 'real') return;
+  const shaped = await stateOfferShape({ productId: e.productId, by: `founder:${OWNER}`, shape: {
+    sells: 'a one-page day-rate figure', claimsMade: 'a suggested figure, nothing more', collects: 'nothing',
+    deliversBy: 'shown on the page at once', sellsTo: 'anyone on the open web', chargesHow: 'one-off' } });
+  if ('refused' in shaped) throw new Error(shaped.refused);
+  await answerLighter({ opportunityId: e.opportunityId, answer: 'a single page with the arithmetic in it' });
+  const facts = (await query(`SELECT fact, satisfied_when FROM structural_fact_kinds WHERE answers_requirement IS NOT NULL`, []))
+    .rows as unknown as Array<Record<string, unknown>>;
+  for (const f of facts) {
+    await query(
+      `INSERT INTO structural_facts (id, founder_id, subject_kind, subject_id, fact, present, basis, grounds, recognised_by, evidence_mode)
+       VALUES (?,?,?,?,?,?,?,?,?,'real')`,
+      ['sf_' + nanoid(6), OWNER, 'company', e.productId, String(f.fact), Number(f.satisfied_when), 'offer_shape',
+        'Charges: one-off', 'test:as_the_pass_would']);
+  }
+}
+
 async function exposed(world: 'real' | 'reference', rule = RULE) {
   const e = await approvedExperiment(world, rule);
+  await readyToPlace(e, world);
   const x = await placeExposure({ experimentId: e.experimentId, productId: e.productId,
     provider: 'stripe', exposureRef: 'plink_' + nanoid(6), evidenceMode: world, placedBy: `act:${nanoid(4)}` });
   if ('refused' in x) throw new Error(x.refused);
@@ -138,6 +164,7 @@ async function anAct(productId: string, experimentId: string, critical: boolean)
   await query(
     `UPDATE proposed_acts SET decision = 'approved', decided_by = ?, decided_at = datetime('now') WHERE id = ?`,
     [`founder:${OWNER}`, id]);
+  await query(`UPDATE proposed_acts SET consumed_at = datetime('now'), consumed_by = 'hand:test' WHERE id = ?`, [id]);
   return id;
 }
 
@@ -167,9 +194,24 @@ describe('the rule and the exposure', () => {
       provider: 'stripe', exposureRef: 'p2', evidenceMode: 'reference', placedBy: 'act:1' });
     expect('refused' in wrongWorld && wrongWorld.refused).toMatch(/world_mismatch/);
 
+    const unshaped = await placeExposure({ experimentId: e.experimentId, productId: e.productId,
+      provider: 'stripe', exposureRef: 'p3', evidenceMode: 'real', placedBy: 'act:1' });
+    expect('refused' in unshaped && unshaped.refused).toMatch(/no stated shape/);
+    const shapedOnly = await stateOfferShape({ productId: e.productId, by: `founder:${OWNER}`, shape: {
+      sells: 'x', claimsMade: 'x', collects: 'nothing', deliversBy: 'x', sellsTo: 'x', chargesHow: 'one-off' } });
+    if ('refused' in shapedOnly) throw new Error(shapedOnly.refused);
+    const unread = await placeExposure({ experimentId: e.experimentId, productId: e.productId,
+      provider: 'stripe', exposureRef: 'p3', evidenceMode: 'real', placedBy: 'act:1' });
+    expect('refused' in unread && unread.refused).toMatch(/legal picture stands in the way/);
+    await readyToPlace(e, 'real');
     const ok = await placeExposure({ experimentId: e.experimentId, productId: e.productId,
       provider: 'stripe', exposureRef: 'p3', evidenceMode: 'real', placedBy: 'act:1' });
     expect('id' in ok).toBe(true);
+    // A sandbox exposure never attaches to a real experiment: its events would
+    // be settled as the market.
+    const sandbox = await placeExposure({ experimentId: e.experimentId, productId: e.productId,
+      provider: 'stripe', exposureRef: 'p5', evidenceMode: 'sandbox', placedBy: 'act:1' });
+    expect('refused' in sandbox && sandbox.refused).toMatch(/world_mismatch/);
     const second = await placeExposure({ experimentId: e.experimentId, productId: e.productId,
       provider: 'gumroad', exposureRef: 'p4', evidenceMode: 'real', placedBy: 'act:1' });
     expect('refused' in second).toBe(true);
@@ -286,6 +328,14 @@ describe('settlement by the world', () => {
       [early.claimId])).rows[0] as Record<string, unknown>;
     expect(contradicts.bearing).toBe('contradicts');
 
+    // Thirty-one arrivals and THEN a payment: the world disproved it first,
+    // and when the tick ran does not change that.
+    const lateSale = await exposed('real', { ...RULE, atMost: 1 });
+    await event(lateSale.exposureId, 'arrival');
+    await event(lateSale.exposureId, 'arrival');
+    await event(lateSale.exposureId, 'payment', { payer: 'cus_late', at: new Date(Date.now() + 1000) });
+    expect((await settleFromTheWorld(lateSale.experimentId)).settled).toBe('surprised');
+
     const quiet = await exposed('real');
     const later = new Date(Date.now() + 15 * 86_400_000);
     expect((await settleFromTheWorld(quiet.experimentId)).settled).toBeNull();
@@ -298,6 +348,22 @@ describe('settlement by the world', () => {
     const s3 = await settleFromTheWorld(some.experimentId, later);
     expect(s3.settled).toBe('partly');
     expect(s3.earned).toBe(true);
+    // Partly is not a contradiction: the asset is not a failed test's asset,
+    // and re-running is not barred for want of a revised claim. What does bar
+    // the same test again is that its question was answered (some paid); a
+    // re-run would be busywork, and the database says so in those words.
+    const again = await rerunExperiment({ experimentId: some.experimentId });
+    expect('refused' in again && again.refused).toMatch(/unknown_already_answered/);
+    expect(await retireWhatFailed(new Date(later.getTime() + 60 * 86_400_000))).not.toContain(some.productId);
+
+    // Money that went back did not stay paid: no earning.
+    const refunded = await exposed('real');
+    await event(refunded.exposureId, 'payment', { payer: 'cus_r' });
+    await event(refunded.exposureId, 'delivery');
+    await event(refunded.exposureId, 'refund', { payer: 'cus_r' });
+    const s4 = await settleFromTheWorld(refunded.experimentId);
+    expect(s4.settled).toBe('as_predicted');
+    expect(s4.earned).toBe(false);
     const g = (await query(
       `SELECT verdict FROM prediction_resolutions WHERE kind = 'venture_experiment' AND prediction_id = ?`,
       [some.experimentId])).rows[0] as Record<string, unknown>;
@@ -326,8 +392,23 @@ describe('measurement failure is not market failure', () => {
     const incidental = await invalidateExperiment({ experimentId: e.experimentId, because: 'instrumentation_defect',
       by: 'hand:test', actId: banner });
     expect('refused' in incidental && incidental.refused).toMatch(/not measurement-critical/);
-    const notOwner = await invalidateExperiment({ experimentId: e.experimentId, because: 'checkout_broken', by: 'hand:test' });
-    expect('refused' in notOwner).toBe(true);
+    const noAct = await invalidateExperiment({ experimentId: e.experimentId, because: 'checkout_broken', by: `founder:${OWNER}` });
+    expect('refused' in noAct && noAct.refused).toMatch(/name the act/);
+    // An act that was never run did not break, and an act the owner graded
+    // himself is an opinion.
+    const unrun = await anAct(e.productId, e.experimentId, true);
+    await query(`UPDATE proposed_acts SET consumed_at = NULL, consumed_by = NULL WHERE id = ?`, [unrun]);
+    await resolvePrediction({ founderId: OWNER, kind: 'proposed_act', predictionId: unrun,
+      resolvedBy: 'later_observation', evidenceRef: 'log:0', verdict: 'surprised',
+      because: 'x', predictedAt: new Date(Date.now() - 60_000).toISOString() });
+    const never = await invalidateExperiment({ experimentId: e.experimentId, because: 'checkout_broken', by: 'hand:test', actId: unrun });
+    expect('refused' in never && never.refused).toMatch(/never approved and executed/);
+    const opined = await anAct(e.productId, e.experimentId, true);
+    await resolvePrediction({ founderId: OWNER, kind: 'proposed_act', predictionId: opined,
+      resolvedBy: 'owner', evidenceRef: 'his word', verdict: 'surprised',
+      because: 'I think it was broken', predictedAt: new Date(Date.now() - 60_000).toISOString() });
+    const opinion = await invalidateExperiment({ experimentId: e.experimentId, because: 'checkout_broken', by: 'hand:test', actId: opined });
+    expect('refused' in opinion && opinion.refused).toMatch(/opinion/);
 
     const done = await invalidateExperiment({ experimentId: e.experimentId, because: 'checkout_broken',
       by: 'hand:test', actId: checkout });
@@ -376,10 +457,14 @@ describe('measurement failure is not market failure', () => {
     const escape = await invalidateExperiment({ experimentId: e.experimentId, because: 'instrumentation_defect',
       by: 'hand:test', actId: banner });
     expect('refused' in escape && escape.refused).toMatch(/not measurement-critical/);
-    // Nor can the owner, now the world has answered.
-    const owner = await invalidateExperiment({ experimentId: e.experimentId, because: 'instrumentation_defect',
-      by: `founder:${OWNER}` });
-    expect('refused' in owner && owner.refused).toMatch(/approved_unsettled/);
+    // Nor can a critical act that fails after the world has answered.
+    const late = await anAct(e.productId, e.experimentId, true);
+    await resolvePrediction({ founderId: OWNER, kind: 'proposed_act', predictionId: late,
+      resolvedBy: 'later_observation', evidenceRef: 'log:9', verdict: 'surprised',
+      because: 'x', predictedAt: new Date(Date.now() - 60_000).toISOString() });
+    const afterwards = await invalidateExperiment({ experimentId: e.experimentId, because: 'instrumentation_defect',
+      by: 'hand:test', actId: late });
+    expect('refused' in afterwards && afterwards.refused).toMatch(/approved_unsettled/);
 
     const same = await rerunExperiment({ experimentId: e.experimentId });
     expect('refused' in same && same.refused).toMatch(/rerun_needs_a_revised_claim/);

@@ -155,6 +155,18 @@ export function readVentureSentence(raw: string): VentureReading {
   return { kind: 'not_venture', statement };
 }
 
+/** Whether a sentence asks for something that earns, in the mandate's own terms. */
+function sentenceAsks(statement: string): boolean {
+  const t = ` ${statement.toLowerCase().replace(/[’]/g, "'")} `;
+  return (ASKING.some((p) => t.includes(p)) && A_THING_THAT_EARNS.test(t))
+    || /\b(make|keep)\b[^.]{0,10}\b(the )?river\b[^.]{0,20}\b(strong|wider|deeper|resilient|better)/.test(t);
+}
+function shapeNamedIn(statement: string): string | null {
+  const t = ` ${statement.toLowerCase()} `;
+  const shape = SHAPES.find(([, phrases]) => phrases.some((p) => t.includes(p)));
+  return shape ? shape[0] : null;
+}
+
 function readGuidance(t: string, statement: string): GuidanceProposal | null {
   const say = (
     guidance: GuidanceKind, subject: string | null = null, dimension: string | null = null,
@@ -195,8 +207,14 @@ function readGuidance(t: string, statement: string): GuidanceProposal | null {
   if (/\b(owner|my)\b[^.]{0,10}\b(burden|attention|time|involvement)\b[^.]{0,20}\b(low|down|minimal|small)\b/.test(t)
     || /\b(low|minimal|little)\b[^.]{0,10}\b(owner|my)\b[^.]{0,10}\b(burden|attention|involvement)\b/.test(t)
     || /\b(doesn'?t|does not|won'?t) need (me|my attention)\b/.test(t)
-    || /\b(almost |virtually |next to |practically )?(none|nothing|little) of (my|the owner'?s) (attention|time|involvement)\b/.test(t)
-    || /\b(require|need|take|demand)s?\b[^.]{0,20}\b(none|nothing|next to nothing|very little)\b[^.]{0,15}\b(my|the owner'?s|owner)\b[^.]{0,10}\b(attention|time|involvement)\b/.test(t)) {
+    // POLARITY IS THE WHOLE MEANING HERE. "almost none of my time" is the
+    // preference; "a little of my time" and "nothing but my time" are its
+    // opposite, and a reader that heard them the same way would file the
+    // one thing he most wanted to avoid as the thing he asked for.
+    || (/\b(almost |virtually |next to |practically )?(none|nothing|very little|hardly any) of (my|the owner'?s) (attention|time|involvement)\b/.test(t)
+      && !/\b(a little|nothing but|plenty|all|most|much) of (my|the owner'?s) (attention|time|involvement)\b/.test(t))
+    || (/\b(require|need|take|demand)s?\b[^.]{0,20}\b(none|nothing|next to nothing|very little|hardly any)\b[^.]{0,15}\b(my|the owner'?s|owner)\b[^.]{0,10}\b(attention|time|involvement)\b/.test(t)
+      && !/\bnothing but\b/.test(t))) {
     return say('prefer', 'almost none of your attention', 'owner_attention');
   }
 
@@ -315,7 +333,7 @@ export function exposureAnswersTo(word: string, value: string): boolean {
  * clause when it opens the way an instruction opens.
  */
 const OPENS_A_CLAUSE =
-  /^(and\s+|but\s+|then\s+|also\s+|plus\s+)?(keep|avoid|do ?n'?t|do not|never|no more|spend|bring|show|give|prefer|favou?r|focus|stay|stick|make|find|look|only|without|nothing|less|lower|reduce|minimi[sz]e|stop|leave|require|need|demand|take|sell|target|prove|try|research|be)s?\b/i;
+  /^(and\s+|but\s+|then\s+|also\s+|plus\s+)?(keep|avoid|do ?n'?t|do not|never|no more|spend|bring|show|give|prefer|favou?r|focus|stay|stick|make|find|look|only|without|nothing|less|lower|reduce|minimi[sz]e|stop|leave|require|need|demand|sell|target|prove|try|research|almost|none)s?\b/i;
 
 /**
  * ONE SENTENCE CAN CARRY A MANDATE AND EVERY CONSTRAINT ON IT.
@@ -504,6 +522,16 @@ export async function absorbParagraph(input: {
   // words are kept whole, in the order he wrote them, and a shape he named in
   // any of them is the shape on record.
   const asks = input.readings.filter((r): r is MandateProposal => r.kind === 'mandate');
+  // A SENTENCE THAT ASKS AND STEERS IN ONE BREATH. "Find another income
+  // stream that needs none of my time" reads as guidance first, on purpose —
+  // and with no search open, guidance alone was refused, so the sentence that
+  // asked for a search prevented one. When nothing is open and no reading is
+  // a plain ask, a steering sentence that itself asks opens the search, and
+  // is absorbed as steering too.
+  if (asks.length === 0 && (await currentMandate(input.founderId)) === null) {
+    const asking = input.readings.find((r) => r.kind === 'guidance' && sentenceAsks(r.statement));
+    if (asking) asks.push({ kind: 'mandate', statement: asking.statement, shape: shapeNamedIn(asking.statement) });
+  }
   if (asks.length > 0) {
     const made = await openMandate({
       founderId: input.founderId,

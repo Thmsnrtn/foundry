@@ -161,6 +161,43 @@ describe('the pass recognises, and refuses to certify', () => {
     expect(pic.sentence).toBe('Somebody qualified needs to look before this goes further.');
   });
 
+  it('a floor class the model names carries the floor even when it leaves the floor fact unknown', async () => {
+    const id = await candidate('real', FOUNDER, 'A page that decides whether a named tenant may rent, for landlords');
+    reply({
+      abstain: null,
+      surfaces: [{ class: 'regulation', standing: 'recognised', severity: 'minor',
+        what_it_creates: 'a decision about a person', known: null, unknown: null,
+        grounds: 'decides whether a named tenant may rent' }],
+      // The model answered no fact at all. Unknown is not absent.
+      facts: [], lighter: null,
+    });
+    const r = await recogniseExposure({ subjectKind: 'opportunity', subjectId: id });
+    if (!('surfaces' in r)) throw new Error(JSON.stringify(r));
+    const s = (await legalSurfaceOf('opportunity', id)).find((x) => x.cls === 'regulation');
+    expect(s?.severity).toBe('serious');
+    expect(s?.needsProfessional).toBe(true);
+    const pic = await legalPictureOf({ founderId: FOUNDER, opportunityId: id, world: 'real' });
+    expect(pic.sentence).toBe('Somebody qualified needs to look before this goes further.');
+    // And a standing word that is not plainly 'recognised' is unresolved.
+    const id2 = await candidate('real', FOUNDER, 'A page that scores something for somebody');
+    reply({ abstain: null, surfaces: [{ class: 'privacy_data', standing: 'possibly', severity: 'material',
+      what_it_creates: 'x', known: null, unknown: null, grounds: 'scores something for somebody' }],
+      facts: [], lighter: null });
+    await recogniseExposure({ subjectKind: 'opportunity', subjectId: id2 });
+    expect((await legalSurfaceOf('opportunity', id2))[0]?.standing).toBe('unresolved_internally');
+  });
+
+  it('a pass that honestly names nothing still counts as asked, and is not re-read daily', async () => {
+    const id = await candidate('real', FOUNDER, 'A page that adds two numbers');
+    reply({ abstain: null, surfaces: [], facts: [{ fact: 'one_visit_delivery', present: true, basis: 'stated',
+      grounds: 'A page that adds two numbers' }], lighter: 'the page itself' });
+    await recogniseExposure({ subjectKind: 'opportunity', subjectId: id });
+    const pic = await legalPictureOf({ founderId: FOUNDER, opportunityId: id, world: 'real' });
+    expect(pic.inTheWay.some((w) => w.includes('nobody has asked what legal surface'))).toBe(false);
+    expect(pic.sentence).toContain('Nothing in the record gave grounds');
+    expect((await subjectsNeedingRecognition()).find((d) => d.subjectId === id)).toBeUndefined();
+  });
+
   it('"I cannot resolve this from here" blocks under the first-proof policy, and the sentence says so', async () => {
     const id = await candidate('real', FOUNDER, 'A tool that scores tenants for landlords from public records');
     reply({

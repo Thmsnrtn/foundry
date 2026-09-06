@@ -89,6 +89,21 @@ export async function placeExposure(input: {
     'SELECT founder_id FROM venture_experiments WHERE id = ?', [input.experimentId]))
     .rows[0] as Record<string, unknown> | undefined;
   if (!e) return { refused: 'no such experiment' };
+  // AN OFFER IN THE REAL WORLD HAS A STATED SHAPE, AND THE SHAPE HAS BEEN
+  // READ. The asset-level pass is what turns "unknown" structural facts into
+  // answers; placing the offer before it has run would put the first-proof
+  // policy's verdicts on a page nothing consulted.
+  if (input.evidenceMode === 'real' && input.productId != null) {
+    const shape = (await query(
+      `SELECT 1 FROM offer_shapes WHERE product_id = ? AND superseded_at IS NULL`, [input.productId])).rows[0];
+    if (!shape) return { refused: 'the offer has no stated shape; state it, let the pass read it, then place it' };
+    const { legalPictureOf } = await import('./legal-surface.js');
+    const picture = await legalPictureOf({ founderId: String(e.founder_id), opportunityId: input.productId,
+      world: 'real', subjectKind: 'company' });
+    if (picture.inTheWay.length > 0) {
+      return { refused: `the asset's legal picture stands in the way: ${picture.inTheWay.join('; ')}` };
+    }
+  }
   const id = nanoid();
   try {
     await query(
@@ -111,9 +126,13 @@ export async function withdrawExposure(exposureId: string): Promise<void> {
 
 // ─── Who the owner is, to a provider, without storing who he is ───────────────
 
-/** HMAC-SHA256 of a provider-side reference under the server key. Never the value. */
+/** HMAC-SHA256 of a provider-side reference under a key derived for this one
+ * purpose from the server's encryption key. Never the value; never unkeyed —
+ * an unkeyed hash of a low-entropy customer id is the id with extra steps. */
 export function counterpartyHmac(provider: string, reference: string): string {
-  const key = process.env.ENCRYPTION_KEY ?? process.env.CLERK_SECRET_KEY ?? '';
+  const root = process.env.ENCRYPTION_KEY;
+  if (!root) throw new Error('ENCRYPTION_KEY is required to classify a counterparty');
+  const key = createHmac('sha256', root).update('foundry:counterparty:v1').digest();
   return createHmac('sha256', key)
     .update(`${provider.trim().toLowerCase()}:${reference.trim().toLowerCase()}`)
     .digest('hex');
@@ -247,26 +266,39 @@ export type InvalidityKind =
 export async function invalidateExperiment(input: {
   experimentId: string; because: InvalidityKind; by: string; actId?: string | null;
 }): Promise<{ invalidated: true } | { refused: string }> {
-  if (input.actId != null) {
-    const act = (await query(
-      `SELECT a.experiment_id, a.measurement_critical,
-              (SELECT verdict FROM prediction_resolutions r
-                WHERE r.kind = 'proposed_act' AND r.prediction_id = a.id) AS verdict
-         FROM proposed_acts a WHERE a.id = ?`, [input.actId])).rows[0] as Record<string, unknown> | undefined;
-    if (!act) return { refused: 'no such act' };
-    if (String(act.experiment_id ?? '') !== input.experimentId) {
-      return { refused: 'that act does not belong to this experiment' };
-    }
-    if (Number(act.measurement_critical) !== 1) {
-      return { refused: 'that act was not measurement-critical: its surprise settles on its own and '
-        + 'says nothing about whether the market was asked' };
-    }
-    if (act.verdict !== 'surprised') {
-      return { refused: 'that act did not fail: nothing about the measurement is in doubt' };
-    }
-  } else if (!input.by.startsWith('founder:')) {
-    return { refused: 'without a failed measurement-critical act, only the owner can say the '
-      + 'measurement was wrong' };
+  // ONLY A MEASUREMENT-CRITICAL ACT THAT WAS APPROVED, EXECUTED AND RESOLVED
+  // 'SURPRISED' BY SOMETHING OTHER THAN AN OPINION. Not an act inserted after
+  // the fact, not one never run, not one the owner graded himself. And there
+  // is no owner door: the owner's rule is that only measurement failure
+  // invalidates a market inference, and his judgment that the measurement was
+  // wrong is recorded, if at all, as an act's resolution like any other.
+  if (input.actId == null) {
+    return { refused: 'only a failed measurement-critical act invalidates a test; name the act' };
+  }
+  const act = (await query(
+    `SELECT a.experiment_id, a.measurement_critical, a.decision, a.consumed_at,
+            (SELECT verdict FROM prediction_resolutions r
+              WHERE r.kind = 'proposed_act' AND r.prediction_id = a.id) AS verdict,
+            (SELECT resolved_by FROM prediction_resolutions r
+              WHERE r.kind = 'proposed_act' AND r.prediction_id = a.id) AS resolved_by
+       FROM proposed_acts a WHERE a.id = ?`, [input.actId])).rows[0] as Record<string, unknown> | undefined;
+  if (!act) return { refused: 'no such act' };
+  if (String(act.experiment_id ?? '') !== input.experimentId) {
+    return { refused: 'that act does not belong to this experiment' };
+  }
+  if (Number(act.measurement_critical) !== 1) {
+    return { refused: 'that act was not measurement-critical: its surprise settles on its own and '
+      + 'says nothing about whether the market was asked' };
+  }
+  if (act.decision !== 'approved' || act.consumed_at == null) {
+    return { refused: 'that act was never approved and executed; a plan that did not run did not break' };
+  }
+  if (act.verdict !== 'surprised') {
+    return { refused: 'that act did not fail: nothing about the measurement is in doubt' };
+  }
+  if (act.resolved_by === 'owner') {
+    return { refused: 'that act was graded by the owner\'s opinion, and an opinion cannot invalidate '
+      + 'what the world measured; it needs a later observation or a business outcome' };
   }
   try {
     const r = await query(
@@ -274,7 +306,7 @@ export async function invalidateExperiment(input: {
           SET validity = 'invalid', invalid_because = ?, invalidated_by = ?,
               invalidated_at = datetime('now')
         WHERE id = ?`,
-      [input.because, input.actId != null ? `act:${input.actId}` : input.by, input.experimentId]);
+      [input.because, `act:${input.actId}`, input.experimentId]);
     if (r.rowsAffected === 0) return { refused: 'no such experiment' };
   } catch (err) {
     return { refused: err instanceof Error ? err.message : String(err) };
@@ -434,8 +466,12 @@ export async function settleFromTheWorld(experimentId: string, now = new Date())
   const counted = { event, outOf: rule.outOf === undefined ? null : outOf, uncounted };
   const windowClosed = now.getTime() >= closesAt.getTime();
 
+  // WHICHEVER THE WORLD DID FIRST DECIDES, so the answer does not depend on
+  // when the tick happened to run. Thirty-one arrivals and then a payment is a
+  // disproved prediction that later got a sale; a payment and then thirty-one
+  // arrivals is a prediction that held.
   let verdict: 'as_predicted' | 'partly' | 'surprised' | null = null;
-  if (metAt !== null) verdict = 'as_predicted';
+  if (metAt !== null && (disprovedAt === null || metAt <= disprovedAt)) verdict = 'as_predicted';
   else if (disprovedAt !== null) verdict = 'surprised';
   else if (windowClosed) verdict = event > 0 ? 'partly' : 'surprised';
   if (verdict === null) {
@@ -496,15 +532,20 @@ export async function settleFromTheWorld(experimentId: string, now = new Date())
 }
 
 async function paidAndReceived(exposureId: string, world: OutcomeWorld): Promise<boolean> {
+  // PAID MEANS STILL PAID. Money that went back, or is contested, is not a
+  // stranger's money kept; the ledger records refunds and disputes and this
+  // is where they are read.
   const r = (await query(
     `SELECT
        (SELECT COUNT(*) FROM business_outcome_events b JOIN business_outcome_event_kinds k ON k.kind = b.kind
          WHERE b.exposure_id = ? AND k.is_payment = 1 AND b.counterparty = ?) AS paid,
        (SELECT COUNT(*) FROM business_outcome_events b JOIN business_outcome_event_kinds k ON k.kind = b.kind
-         WHERE b.exposure_id = ? AND k.is_delivery = 1) AS delivered`,
-    [exposureId, world === 'reference' ? 'reference' : 'unmatched_external', exposureId]))
+         WHERE b.exposure_id = ? AND k.is_delivery = 1) AS delivered,
+       (SELECT COUNT(*) FROM business_outcome_events b
+         WHERE b.exposure_id = ? AND b.kind IN ('refund','dispute')) AS reversed`,
+    [exposureId, world === 'reference' ? 'reference' : 'unmatched_external', exposureId, exposureId]))
     .rows[0] as Record<string, unknown>;
-  return Number(r.paid) > 0 && Number(r.delivered) > 0;
+  return Number(r.paid) > 0 && Number(r.delivered) > 0 && Number(r.reversed) === 0;
 }
 
 // ─── The milestone, bounded ───────────────────────────────────────────────────
@@ -533,14 +574,17 @@ export async function firstClosureOf(founderId: string): Promise<FirstClosure> {
               WHERE b.exposure_id = x.id AND k.is_delivery = 1) AS delivered,
             (SELECT COUNT(*) FROM prediction_resolutions p
               WHERE p.kind = 'venture_experiment' AND p.prediction_id = e.id
-                AND p.resolved_by = 'business_outcome' AND p.verdict IN ('as_predicted','partly')) AS settled
+                AND p.resolved_by = 'business_outcome' AND p.verdict IN ('as_predicted','partly')) AS settled,
+            (SELECT COUNT(*) FROM business_outcome_events b
+              WHERE b.exposure_id = x.id AND b.kind IN ('refund','dispute')) AS reversed
        FROM venture_experiments e
        JOIN experiment_exposures x ON x.experiment_id = e.id
       WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.validity = 'valid'
         AND x.evidence_mode = 'real'
       ORDER BY e.ran_at IS NULL, e.ran_at`, [founderId]))
     .rows as unknown as Array<Record<string, unknown>>;
-  const closed = r.find((row) => Number(row.paid_cents ?? 0) > 0 && Number(row.delivered) > 0 && Number(row.settled) > 0);
+  const closed = r.find((row) => Number(row.paid_cents ?? 0) > 0 && Number(row.delivered) > 0
+    && Number(row.settled) > 0 && Number(row.reversed) === 0);
   if (closed) {
     const dollars = (Number(closed.paid_cents) / 100).toFixed(2);
     return { reached: true, experimentId: String(closed.experiment_id),
@@ -596,6 +640,9 @@ export async function retireWhatFailed(now = new Date()): Promise<string[]> {
        JOIN venture_experiments e ON e.id = p.from_experiment_id
       WHERE p.standing = 'experimental' AND p.status = 'active' AND p.deleted_at IS NULL
         AND e.validity = 'valid' AND e.verdict = 'surprised' AND e.ran_at IS NOT NULL
+        -- 'partly' rides on the row as 'surprised'; the grade says some paid.
+        AND NOT EXISTS (SELECT 1 FROM prediction_resolutions g
+                         WHERE g.kind = 'venture_experiment' AND g.prediction_id = e.id AND g.verdict = 'partly')
         AND NOT EXISTS (SELECT 1 FROM venture_experiments r
                          WHERE r.rerun_of = e.id AND r.ran_at IS NULL AND r.validity = 'valid'
                            AND coalesce(r.decision,'') <> 'declined')`, []))
@@ -604,6 +651,9 @@ export async function retireWhatFailed(now = new Date()): Promise<string[]> {
   for (const row of due) {
     const policy = await originationPolicyFor(String(row.owner_id));
     const grace = Number(policy.find((p) => p.requirement === 'failed_test_grace_days')?.value ?? 30);
+    // A GRACE THAT IS NOT A NUMBER GRANTS NO ARCHIVE. Nothing retires on a
+    // blank; the row waits until the policy says a number.
+    if (!Number.isFinite(grace) || grace < 0) continue;
     const ranAt = Date.parse(String(row.ran_at));
     if (Number.isNaN(ranAt) || now.getTime() - ranAt < grace * 86_400_000) continue;
     const ok = await retireExperimentalAsset({ productId: String(row.id),

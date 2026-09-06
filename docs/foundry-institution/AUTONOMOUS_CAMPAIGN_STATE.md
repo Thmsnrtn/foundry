@@ -37,6 +37,16 @@ behalf, no AcreOS rule in the kernel. Everything is E2. **Deployment authority
 stays with the campaign steward**: this branch carries no deploy marker and
 is merged only after adversarial review.
 
+**Adversarial review of this tranche (same day).** Six readers, 34 findings,
+the nine most severe reproduced by refuters told to default to refuted. All
+nine fixed with tests; of the 25 not verified, 21 fixed and 4 recorded with
+the reason they were not. The record, finding by finding:
+`history/TRANCHE_ADVERSARIAL_REVIEW_2026-09-06.md`. The two that matter most
+for the steward's own review: a floor class the model names now carries the
+floor unless the record established the fact absent; and a real offer cannot
+be placed until its shape is stated and the asset-level legal picture has
+nothing in the way.
+
 **Checkpoint review of the workshop chain (read-only, same day).** Four
 adversarial readers, six most-severe findings each handed to a refuter told to
 default to refuted; all six were reproduced. In one line each: the metered

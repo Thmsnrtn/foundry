@@ -451,6 +451,9 @@ const RETAINED_ON_ERASURE: Record<string, RetentionDisposition> = {
     redactColumns: [
       'stack_description', 'market_category', 'sector_profile',
       'github_repo_url', 'github_repo_owner', 'github_repo_name',
+      // The candidate and the experiment it came from are the person's and go
+      // with them; the archived row keeps its id and lets go of the link.
+      'from_opportunity_id', 'from_experiment_id',
       // Every credential on the row, not just the one somebody remembered.
       // `ingest_token` is a live write credential and `share_token` is a public
       // link; both outlived the company they belonged to, so a monitoring
@@ -860,14 +863,16 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
       + 'charges, stated so its exposure could be read again once it had a shape',
     onAccountErasure: { op: 'delete' },
   },
-  experiment_exposures: {
-    reason: 'where one person\'s tests placed an offer in the world, and the reference a '
-      + 'provider reports against',
-    onAccountErasure: { op: 'delete' },
-  },
+  // CHILD BEFORE PARENT: events reference exposures, and the sweep deletes in
+  // this order.
   business_outcome_events: {
     reason: 'what providers said happened at one person\'s offers — arrivals, payments, '
       + 'deliveries — with no payer identity in it; a ledger never edited, erased with him',
+    onAccountErasure: { op: 'delete' },
+  },
+  experiment_exposures: {
+    reason: 'where one person\'s tests placed an offer in the world, and the reference a '
+      + 'provider reports against',
     onAccountErasure: { op: 'delete' },
   },
   internal_counterparties: {
@@ -1820,6 +1825,7 @@ export async function exportFounderData(founderId: string): Promise<Record<strin
 async function runFounderScopedErasure(founderId: string): Promise<void> {
   const entries = Object.entries(FOUNDER_SCOPED);
   const order = (op: AccountErasure) => (op.op === 'sever' ? 0 : 1);
+  const deletes: Array<[string, Extract<AccountErasure, { op: 'delete' }>]> = [];
   for (const [table, disposition] of entries
     .sort((a, b) => order(a[1].onAccountErasure) - order(b[1].onAccountErasure))) {
     const op = disposition.onAccountErasure;
@@ -1838,6 +1844,43 @@ async function runFounderScopedErasure(founderId: string): Promise<void> {
       continue;
     }
 
+    deletes.push([table, op]);
+  }
+  // CHILDREN BEFORE PARENTS, READ FROM THE SCHEMA RATHER THAN REMEMBERED. The
+  // map above is written by hand and grows; a venture mandate listed before
+  // the candidates that reference it, or a question before the experiments
+  // designed against it, made the sweep fail on the first owner who had ever
+  // approved a test — with foreign keys enforced, a parent cannot go while a
+  // child still points at it. So the order is computed from
+  // `foreign_key_list` at run time: a table is deleted after every table in
+  // this sweep that references it.
+  const inSweep = new Set(deletes.map(([t]) => t));
+  const referencedBy = new Map<string, Set<string>>();
+  for (const [table] of deletes) {
+    const fks = (await query(`PRAGMA foreign_key_list(${table})`, [])).rows as unknown as Array<Record<string, unknown>>;
+    for (const fk of fks) {
+      const parent = String(fk.table);
+      if (parent === table || !inSweep.has(parent)) continue;
+      if (!referencedBy.has(parent)) referencedBy.set(parent, new Set());
+      referencedBy.get(parent)?.add(table);
+    }
+  }
+  const ordered: string[] = [];
+  const seen = new Set<string>();
+  const visiting = new Set<string>();
+  const visit = (t: string): void => {
+    if (seen.has(t) || visiting.has(t)) return;
+    visiting.add(t);
+    for (const child of referencedBy.get(t) ?? []) visit(child);
+    visiting.delete(t);
+    seen.add(t);
+    ordered.push(t);
+  };
+  for (const [table] of deletes) visit(table);
+  const opOf = new Map(deletes);
+  for (const table of ordered) {
+    const op = opOf.get(table);
+    if (!op) continue;
     const column = op.by ?? 'founder_id';
     // `suffix` is for a composite key whose LAST component is the founder —
     // `audit:founder:<id>`. Anchored at the end for the same reason the

@@ -39,7 +39,10 @@ for (const file of walk('src')) {
   lines.forEach((line, i) => {
     if (!/FROM\s+products\b/i.test(line) && !/JOIN\s+products\b/i.test(line)) return;
     const window = lines.slice(Math.max(0, i - 6), Math.min(lines.length, i + 12)).join('\n');
-    if (/operatingProduct\(|\bstanding\b/.test(window)) return;
+    // A CLAUSE, NOT A WORD. "standing" in a comment above the query used to
+    // satisfy this; only a comparison on the column, a read of it, or the
+    // canonical predicate counts.
+    if (/operatingProduct\(|\bstanding\s*(=|<>|!=|IS\b|IN\b|NOT\b)|\.standing\b|\bstanding,|,\s*standing\b|\bstanding\s+AS\b/i.test(window)) return;
     if (boundToOneCompany(window)) return;
     offenders.push(file);
   });

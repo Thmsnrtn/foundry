@@ -5306,6 +5306,10 @@ CREATE TRIGGER agent_instances_not_for_experimental
 BEFORE INSERT ON agent_instances
 WHEN EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
 BEGIN SELECT RAISE(ABORT,'products:experimental_cannot_be_provisioned'); END;
+CREATE TRIGGER agent_instances_not_moved_to_experimental
+BEFORE UPDATE OF product_id ON agent_instances
+WHEN EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_cannot_be_provisioned'); END;
 CREATE TRIGGER ai_spend_reservation_apply
 AFTER INSERT ON ai_spend_reservations
 BEGIN
@@ -5348,6 +5352,11 @@ BEGIN
 END;
 CREATE TRIGGER ai_spend_reservations_not_for_experimental
 BEFORE INSERT ON ai_spend_reservations
+WHEN NEW.product_id IS NOT NULL
+ AND EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_has_no_company_spend'); END;
+CREATE TRIGGER ai_spend_reservations_not_moved_to_experimental
+BEFORE UPDATE OF product_id ON ai_spend_reservations
 WHEN NEW.product_id IS NOT NULL
  AND EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
 BEGIN SELECT RAISE(ABORT,'products:experimental_has_no_company_spend'); END;
@@ -5755,6 +5764,10 @@ CREATE TRIGGER company_situations_not_for_experimental
 BEFORE INSERT ON company_situations
 WHEN EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
 BEGIN SELECT RAISE(ABORT,'products:experimental_has_no_situation'); END;
+CREATE TRIGGER company_situations_not_moved_to_experimental
+BEFORE UPDATE OF product_id ON company_situations
+WHEN EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_has_no_situation'); END;
 CREATE TRIGGER consequence_rungs_constitutional_delete BEFORE DELETE ON consequence_rungs
 BEGIN SELECT RAISE(ABORT,'consequence_rung:constitutional'); END;
 CREATE TRIGGER consequence_rungs_constitutional_insert BEFORE INSERT ON consequence_rungs
@@ -5864,6 +5877,21 @@ CREATE TRIGGER delegations_not_for_experimental
 BEFORE INSERT ON delegations
 WHEN NEW.product_id IS NOT NULL
  AND EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_holds_no_delegation'); END;
+CREATE TRIGGER delegations_not_for_experimental_actor
+BEFORE INSERT ON delegations
+WHEN EXISTS (SELECT 1 FROM business_actors a JOIN products p ON p.id = a.product_id
+              WHERE a.id = NEW.actor_id AND p.standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_holds_no_delegation'); END;
+CREATE TRIGGER delegations_not_moved_to_experimental
+BEFORE UPDATE OF product_id ON delegations
+WHEN NEW.product_id IS NOT NULL
+ AND EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_holds_no_delegation'); END;
+CREATE TRIGGER delegations_not_moved_to_experimental_actor
+BEFORE UPDATE OF actor_id ON delegations
+WHEN EXISTS (SELECT 1 FROM business_actors a JOIN products p ON p.id = a.product_id
+              WHERE a.id = NEW.actor_id AND p.standing = 'experimental')
 BEGIN SELECT RAISE(ABORT,'products:experimental_holds_no_delegation'); END;
 CREATE TRIGGER development_authority_guard
 BEFORE INSERT ON autonomy_consents
@@ -6091,10 +6119,11 @@ BEGIN
   -- THE WORLD OF THE EXPOSURE IS THE WORLD OF THE EXPERIMENT. A reference
   -- experiment may not be exposed for real; a real one may not be rehearsed
   -- into a reference exposure and read as the world.
+  -- EXACTLY THE EXPERIMENT'S WORLD. A sandbox exposure on a real experiment
+  -- would collect provider test-mode events and be settled as the market.
   SELECT RAISE(ABORT,'experiment_exposure:world_mismatch')
-    WHERE EXISTS (SELECT 1 FROM venture_experiments e
-                   WHERE e.id = NEW.experiment_id
-                     AND ((e.evidence_mode = 'reference') <> (NEW.evidence_mode = 'reference')));
+    WHERE NOT EXISTS (SELECT 1 FROM venture_experiments e
+                       WHERE e.id = NEW.experiment_id AND e.evidence_mode = NEW.evidence_mode);
   SELECT RAISE(ABORT,'experiment_exposure:asset_mismatch')
     WHERE NEW.product_id IS NOT NULL
       AND NOT EXISTS (SELECT 1 FROM products p
@@ -6640,6 +6669,10 @@ CREATE TRIGGER institutional_responsibilities_not_for_experimental
 BEFORE INSERT ON institutional_responsibilities
 WHEN EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
 BEGIN SELECT RAISE(ABORT,'products:experimental_carries_no_responsibility'); END;
+CREATE TRIGGER institutional_responsibilities_not_moved_to_experimental
+BEFORE UPDATE OF product_id ON institutional_responsibilities
+WHEN EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_carries_no_responsibility'); END;
 CREATE TRIGGER integration_config_no_secrets_insert
 BEFORE INSERT ON integrations
 WHEN COALESCE(json_valid(NEW.config_json),0)=1
@@ -7131,6 +7164,11 @@ BEFORE INSERT ON portfolio_exposures
 WHEN NEW.subject_kind = 'company'
  AND EXISTS (SELECT 1 FROM products WHERE id = NEW.subject_id AND standing = 'experimental')
 BEGIN SELECT RAISE(ABORT,'products:experimental_is_not_a_concentration'); END;
+CREATE TRIGGER portfolio_exposures_not_moved_to_experimental
+BEFORE UPDATE OF subject_id, subject_kind ON portfolio_exposures
+WHEN NEW.subject_kind = 'company'
+ AND EXISTS (SELECT 1 FROM products WHERE id = NEW.subject_id AND standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_is_not_a_concentration'); END;
 CREATE TRIGGER posture_change_guard
 BEFORE INSERT ON posture_changes
 BEGIN
@@ -7184,6 +7222,7 @@ CREATE TRIGGER product_lineage_is_write_once
 BEFORE UPDATE OF from_opportunity_id ON products
 WHEN OLD.from_opportunity_id IS NOT NULL
      AND NEW.from_opportunity_id IS NOT OLD.from_opportunity_id
+     AND NOT (NEW.from_opportunity_id IS NULL AND OLD.erasure_scheduled_at IS NOT NULL)
 BEGIN SELECT RAISE(ABORT,'product_lineage:write_once'); END;
 CREATE TRIGGER products_earning_immutable
 BEFORE UPDATE OF earned_at, earned_by, earned_because ON products
@@ -7191,9 +7230,33 @@ WHEN OLD.earned_at IS NOT NULL
 BEGIN
   SELECT RAISE(ABORT,'products:earning_immutable');
 END;
+CREATE TRIGGER products_earning_needs_the_ledger
+BEFORE UPDATE OF standing ON products
+WHEN NEW.standing = 'earned' AND OLD.standing = 'experimental'
+ AND coalesce(NEW.earned_by,'') NOT LIKE 'founder:%'
+BEGIN
+  SELECT RAISE(ABORT,'products:reality_has_not_earned_it')
+    WHERE NOT EXISTS (
+      SELECT 1 FROM prediction_resolutions r
+        JOIN experiment_exposures x ON r.evidence_ref = 'experiment_exposure:' || x.id
+       WHERE r.kind = 'venture_experiment' AND r.prediction_id = OLD.from_experiment_id
+         AND r.resolved_by = 'business_outcome' AND r.verdict IN ('as_predicted','partly')
+         AND x.experiment_id = OLD.from_experiment_id
+         AND x.evidence_mode = OLD.reality
+         AND EXISTS (SELECT 1 FROM business_outcome_events b
+                       JOIN business_outcome_event_kinds k ON k.kind = b.kind
+                      WHERE b.exposure_id = x.id AND k.is_payment = 1
+                        AND b.counterparty = CASE OLD.reality WHEN 'reference' THEN 'reference' ELSE 'unmatched_external' END)
+         AND EXISTS (SELECT 1 FROM business_outcome_events b
+                       JOIN business_outcome_event_kinds k ON k.kind = b.kind
+                      WHERE b.exposure_id = x.id AND k.is_delivery = 1)
+         AND NOT EXISTS (SELECT 1 FROM business_outcome_events b
+                          WHERE b.exposure_id = x.id AND b.kind IN ('refund','dispute')));
+END;
 CREATE TRIGGER products_experiment_lineage_immutable
 BEFORE UPDATE OF from_experiment_id ON products
-WHEN OLD.from_experiment_id IS NOT NULL
+WHEN NEW.from_experiment_id IS NOT OLD.from_experiment_id
+ AND NOT (NEW.from_experiment_id IS NULL AND OLD.erasure_scheduled_at IS NOT NULL)
 BEGIN
   SELECT RAISE(ABORT,'products:experiment_lineage_immutable');
 END;
@@ -8271,10 +8334,16 @@ BEGIN
   SELECT RAISE(ABORT,'venture_experiment:rerun_of_an_unfinished_test')
     WHERE EXISTS (SELECT 1 FROM venture_experiments o
                    WHERE o.id = NEW.rerun_of AND o.validity = 'valid' AND o.ran_at IS NULL);
+  -- 'PARTLY' IS NOT A CONTRADICTION: some paid, fewer than predicted. The row
+  -- carries 'surprised' because its column admits two words; the grade
+  -- carries the finer one, and the guard reads the grade.
   SELECT RAISE(ABORT,'venture_experiment:rerun_needs_a_revised_claim')
     WHERE EXISTS (SELECT 1 FROM venture_experiments o
                    WHERE o.id = NEW.rerun_of AND o.validity = 'valid' AND o.verdict = 'surprised'
                      AND o.claim_id IS NOT NULL
+                     AND NOT EXISTS (SELECT 1 FROM prediction_resolutions g
+                                      WHERE g.kind = 'venture_experiment' AND g.prediction_id = o.id
+                                        AND g.verdict = 'partly')
                      AND NOT EXISTS (SELECT 1 FROM market_claims c
                                       WHERE c.id = o.claim_id AND c.revised_at IS NOT NULL
                                         AND datetime(c.revised_at) > datetime(o.ran_at)));
@@ -8345,12 +8414,15 @@ BEGIN
   SELECT RAISE(ABORT,'venture_experiment:invalidity_needs_an_approved_unsettled_test')
     WHERE NEW.validity = 'invalid' AND OLD.validity = 'valid'
       AND (coalesce(OLD.decision,'') <> 'approved' OR OLD.verdict IS NOT NULL);
+  -- AND NOT IN THE SAME BREATH: one statement may not both invalidate and settle.
+  SELECT RAISE(ABORT,'venture_experiment:invalid_test_has_no_verdict')
+    WHERE NEW.validity = 'invalid' AND (NEW.verdict IS NOT NULL OR NEW.ran_at IS NOT NULL);
 END;
 CREATE TRIGGER venture_experiment_verdict_needs_validity
 BEFORE UPDATE OF ran_at, verdict ON venture_experiments
 BEGIN
   SELECT RAISE(ABORT,'venture_experiment:invalid_test_has_no_verdict')
-    WHERE OLD.validity = 'invalid' AND (NEW.verdict IS NOT NULL OR NEW.ran_at IS NOT NULL);
+    WHERE NEW.validity = 'invalid' AND (NEW.verdict IS NOT NULL OR NEW.ran_at IS NOT NULL);
 END;
 CREATE TRIGGER venture_guidance_guard
 BEFORE INSERT ON venture_guidance

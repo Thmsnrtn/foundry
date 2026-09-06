@@ -236,7 +236,10 @@ export async function legalPictureOf(input: {
     .map((row) => ({ cls: String(row.class), carriedBy: Number(row.n) }));
 
   const inTheWay: string[] = [];
-  if (surfaces.length === 0) {
+  // ASKED MEANS READ. A pass that honestly recognised no surface still wrote
+  // its structural facts, and that record is what says the question was put.
+  const facts = await structuralFactsOf(input.subjectKind ?? 'opportunity', input.opportunityId);
+  if (surfaces.length === 0 && facts.length === 0) {
     inTheWay.push('nobody has asked what legal surface this creates');
   }
   if (lighter === null) {
@@ -267,7 +270,6 @@ export async function legalPictureOf(input: {
   // no shape yet and guessing would be worse; once an offer shape exists the
   // asset-level pass answers it, and a refused or required row that is still
   // unknown then stands in the way.
-  const facts = await structuralFactsOf(input.subjectKind ?? 'opportunity', input.opportunityId);
   const factByRequirement = new Map(facts.filter((f) => f.answersRequirement !== null)
     .map((f) => [String(f.answersRequirement), f]));
   const shaped = input.subjectKind === 'company';
@@ -294,7 +296,8 @@ export async function legalPictureOf(input: {
   const worst = surfaces[0];
   const unresolved = surfaces.filter((s) => s.standing === 'unresolved_internally');
   const profile = surfaces.length === 0
-    ? 'Not looked at yet.'
+    ? (facts.length === 0 ? 'Not looked at yet.'
+      : 'Read, and nothing in the record gave grounds to name an exposure. That is a reading of five sentences, not an absence of law.')
     : `${surfaces.length === 1 ? 'One kind of exposure' : `${String(surfaces.length)} kinds of exposure`}, `
       + `the heaviest ${worst?.severity ?? ''}: ${worst?.whatItCreates ?? ''}.`
       + (unresolved.length > 0
@@ -312,7 +315,8 @@ export async function legalPictureOf(input: {
   // not "legal risk is low" and it is not a certification. It is recognition,
   // bounded by what was recognised and by what could not be.
   const sentence = surfaces.length === 0
-    ? 'I have not yet looked at what legal surface this creates.'
+    ? (facts.length === 0 ? 'I have not yet looked at what legal surface this creates.'
+      : 'Nothing in the record gave grounds to name an exposure. That is recognition, not certification.')
     : surfaces.some((s) => s.needsProfessional)
       ? 'Somebody qualified needs to look before this goes further.'
       : unresolved.some((s) => s.severity !== 'minor')
@@ -369,6 +373,14 @@ export async function supersedeOriginationPolicy(input: {
     [input.requirement])).rows[0];
   if (!def) return { refused: `there is no policy row called ${input.requirement} to supersede` };
   if (input.why.trim() === '') return { refused: 'a policy change needs its reason' };
+  // A NUMBER THAT IS NOT A NUMBER IS NOT A POLICY. A day-count row with a
+  // blank or non-numeric value would read as zero days downstream.
+  if (input.requirement.endsWith('_days')) {
+    const n = Number(input.value);
+    if (input.value == null || !Number.isFinite(n) || n < 0 || !Number.isInteger(n)) {
+      return { refused: `${input.requirement} needs a whole number of days` };
+    }
+  }
   const id = nanoid();
   try {
     await query(

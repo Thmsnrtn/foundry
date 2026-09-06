@@ -80,12 +80,41 @@ describe('reading the paragraph', () => {
     for (const r of readings) if (r.kind === 'mandate') expect(r.shape).toBeNull();
   });
 
+  it('does not hear the opposite the same way: "a little of my time" is not "almost none"', () => {
+    for (const s of ['it can have a little of my time', 'it will take nothing but my time',
+      'find me another business, be it a newsletter or a course']) {
+      const r = readVentureParagraph(s);
+      expect(r.some((x) => x.kind === 'guidance' && x.dimension === 'owner_attention')).toBe(false);
+    }
+    // A named shape survives a sentence that also says "be it".
+    const shaped = readVentureParagraph('find me another business, be it a newsletter or a course');
+    expect(shaped.filter((x) => x.kind === 'not_venture')).toHaveLength(0);
+  });
+
   it('hears "needs none of my time" and "takes almost nothing of my attention" the same way', () => {
     for (const s of ['it needs none of my time', 'something that takes almost nothing of my attention',
       'demand very little of my attention']) {
       const r = readVentureParagraph(s)[0];
       expect(r?.kind === 'guidance' ? r.dimension : r?.kind).toBe('owner_attention');
     }
+  });
+});
+
+describe('a sentence that asks and steers in one breath', () => {
+  it('opens the search and steers it, rather than refusing the steering for want of a search', async () => {
+    const ONE = 'heard_one';
+    await query('INSERT INTO founders (id,clerk_user_id,email,name) VALUES (?,?,?,?)',
+      [ONE, 'clerk_heard_one', 'one@example.com', 'One']);
+    const readings = readVentureParagraph('Find another income stream that needs none of my time.');
+    expect(readings[0]?.kind).toBe('guidance');
+    const result = await absorbParagraph({ founderId: ONE, readings });
+    expect(result.opened).toBe(true);
+    expect(result.refused).toEqual([]);
+    expect(result.absorbed).toBe(1);
+    const m = await currentMandate(ONE);
+    expect(m?.statement).toBe('Find another income stream that needs none of my time.');
+    expect(m?.shape).toBeNull();
+    expect(m?.guidance[0]?.dimension).toBe('owner_attention');
   });
 });
 

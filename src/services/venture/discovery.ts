@@ -104,10 +104,15 @@ async function termsFrom(
   ];
   const terms: string[] = [];
   const from: string[] = [];
+  // The shape is used only where the owner named one, and only to narrow the
+  // portfolio's terms; a phrase that is his own steering is not narrowed,
+  // because "runs itself without me saas" is nobody's sentence.
+  const narrowed = (t: string): string => shape === null ? t : `${t} ${shape.replace(/_/g, ' ')}`;
   for (const t of base) {
-    terms.push(t);
-    from.push(concentratedOn.length === 0 ? 'the portfolio: nothing concentrated'
-      : `the portfolio: ${concentratedOn.slice(0, 3).join(', ')}`);
+    terms.push(narrowed(t));
+    from.push((concentratedOn.length === 0 ? 'the portfolio: nothing concentrated'
+      : `the portfolio: ${concentratedOn.slice(0, 3).join(', ')}`)
+      + (shape === null ? '' : `; narrowed to the shape he named: ${shape.replace(/_/g, ' ')}`));
   }
   // WHAT HE SAID, AS WORDS TO LOOK FOR. The vocabulary is constitutional and
   // about work; a guidance row with no phrase on record adds nothing, and says
@@ -127,12 +132,7 @@ async function termsFrom(
       from.push(`he said: ${g.statement} (${String(e.why)})`);
     }
   }
-  // The shape is used only where the owner named one, and only to narrow.
-  if (shape === null) return { terms, from };
-  return {
-    terms: terms.map((t) => `${t} ${shape.replace(/_/g, ' ')}`),
-    from: from.map((f) => `${f}; narrowed to the shape he named: ${shape.replace(/_/g, ' ')}`),
-  };
+  return { terms, from };
 }
 
 /**

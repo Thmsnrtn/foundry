@@ -4,6 +4,7 @@ process.env.FOUNDRY_INSTANCE_POSTURE = 'private_owner';
 process.env.FOUNDRY_OWNER_EMAIL = 'owner@example.com';
 
 import { beforeAll, describe, expect, it } from 'vitest';
+import { nanoid } from 'nanoid';
 import { runMigrations } from '../../src/db/migrate.js';
 import { getAllActiveProducts, operatingProduct, query } from '../../src/db/client.js';
 import { openMandate } from '../../src/services/venture/mandate.js';
@@ -173,6 +174,25 @@ describe('an experimental asset is structurally not an operating company', () =>
       .rejects.toThrow(/experimental_carries_no_responsibility/);
   });
 
+  it('re-pointing an existing row onto it, attaching lineage after birth, and naming its actor from above are all refused', async () => {
+    const other = 'asset_other_co';
+    // Archived, so the frontier count below is not disturbed by a fixture.
+    await query(`INSERT INTO products (id, owner_id, name, status) VALUES (?,?,?,?)`, [other, OWNER, 'Other', 'archived']);
+    await query(`INSERT INTO agent_instances (id, product_id, agent_name, display_name, status) VALUES (?,?,?,?,?)`,
+      ['ai_move', other, 'atlas', 'Atlas', 'active']);
+    await expect(query(`UPDATE agent_instances SET product_id = ? WHERE id = ?`, [productId, 'ai_move']))
+      .rejects.toThrow(/experimental_cannot_be_provisioned/);
+    await expect(query(`UPDATE products SET from_experiment_id = ? WHERE id = ?`, [experimentId, other]))
+      .rejects.toThrow(/experiment_lineage_immutable/);
+    const actor = (await query('SELECT id FROM business_actors WHERE product_id = ?', [productId])).rows[0] as Record<string, unknown>;
+    await expect(query(
+      `INSERT INTO delegations (id, founder_id, product_id, actor_id, responsibility, act_class, class, purpose,
+         audience, content_scope, excludes, ceiling, granted_by)
+       VALUES (?,?,NULL,?,?,?,?,?,?,?,?,?,?)`,
+      ['del_above', OWNER, String(actor.id), 'support', 'reply', 'routine', 'answer people', 'existing_customer',
+        'anything', 'nothing', 'reversible', `founder:${OWNER}`])).rejects.toThrow(/experimental_holds_no_delegation/);
+  });
+
   it('the spend gate and the outbound door both refuse it, naming the reason', async () => {
     const why = await companyMayIncurCost(productId);
     expect(why).toMatch(/experimental/);
@@ -198,7 +218,7 @@ describe('reality earns it, and the owner cannot rewrite reality', () => {
     expect(tried.because).toMatch(/no business outcome/);
   });
 
-  it('a business-outcome resolution earns it; earned means recognised, nothing more', async () => {
+  it('a resolution row is a label, not the ledger: it does not earn; the owner\'s words do, and earned means recognised, nothing more', async () => {
     const decided = (await query(
       'SELECT decided_at FROM venture_experiments WHERE id = ?', [experimentId]))
       .rows[0] as Record<string, unknown>;
@@ -209,15 +229,22 @@ describe('reality earns it, and the owner cannot rewrite reality', () => {
       resolvedBy: 'business_outcome', evidenceRef: 'business_outcome_event:evt1',
       verdict: 'as_predicted', because: '1 of 12 arrivals paid', predictedAt: String(decided.decided_at) });
     if ('refused' in res) throw new Error(res.refused);
-    const earned = await earnAsset({ productId, by: 'business_outcome_tick',
+    // A `business_outcome` resolution that points at no exposure, no payment
+    // and no delivery is a row somebody wrote. The world's record is the
+    // ledger (the-world-settles-the-experiment.test.ts earns through it).
+    const label = await earnAsset({ productId, by: 'business_outcome_tick',
       because: 'settled by a business outcome: 1 of 12 arrivals paid' });
+    expect(label.earned).toBe(false);
+    expect(label.because).toMatch(/no business outcome/);
+    const earned = await earnAsset({ productId, by: `founder:${OWNER}`,
+      because: 'somebody I do not know paid for it and got it; I am calling it real' });
     expect(earned.earned).toBe(true);
 
     const row = (await query(
       `SELECT standing, earned_by, posture FROM products WHERE id = ?`, [productId]))
       .rows[0] as Record<string, unknown>;
     expect(row.standing).toBe('earned');
-    expect(row.earned_by).toBe('business_outcome_tick');
+    expect(row.earned_by).toBe(`founder:${OWNER}`);
     // NOTHING ELSE CHANGED. No posture, no authority, no delegation appeared.
     expect(row.posture).toBe('grow');
     const delegations = (await query(
@@ -225,14 +252,51 @@ describe('reality earns it, and the owner cannot rewrite reality', () => {
       .rows[0] as Record<string, unknown>;
     expect(Number(delegations.n)).toBe(0);
 
+    // A SALE DOES NOT LOWER THE BAR. The candidate is put to the bar, not
+    // pushed past it: its legal picture was never read, so it stays open with
+    // that standing in the way, earned asset or not.
     const verdict = (await query(
       'SELECT verdict FROM venture_opportunities WHERE id = ?', [opportunityId]))
       .rows[0] as Record<string, unknown>;
-    expect(verdict.verdict).toBe('advanced');
+    expect(verdict.verdict).toBeNull();
+    const { whatStandsInTheWay } = await import('../../src/services/venture/validation.js');
+    expect((await whatStandsInTheWay(opportunityId)).some((w) => w.includes('nobody has asked'))).toBe(true);
     const became = (await query(
       'SELECT became_product FROM venture_mandates WHERE id = ?', [mandateId]))
       .rows[0] as Record<string, unknown>;
     expect(became.became_product).toBe(productId);
+  });
+
+  it('account erasure completes for an owner who approved an experiment: the archived row lets go of its lineage', async () => {
+    const GONE = 'asset_leaver';
+    await query('INSERT INTO founders (id,clerk_user_id,email,name) VALUES (?,?,?,?)',
+      [GONE, 'clerk_leaver', 'leaver@example.com', 'Leaver']);
+    const m = 'm_' + nanoid(6);
+    await query(`INSERT INTO venture_mandates (id, founder_id, statement, evidence_mode) VALUES (?,?,?,?)`,
+      [m, GONE, 'Make the river stronger', 'real']);
+    const o = 'o_' + nanoid(6);
+    await query(
+      `INSERT INTO venture_opportunities
+         (id, mandate_id, founder_id, headline, who_has_it, the_problem, why_it_might, kill_thesis, sources_json, evidence_mode)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      [o, m, GONE, 'a page', 'people', 'a problem', 'maybe', 'misread if not', '["https://x.example"]', 'real']);
+    const u = 'u_' + nanoid(6);
+    await query(`INSERT INTO market_unknowns (id, founder_id, opportunity_id, question, blocking) VALUES (?,?,?,?,1)`,
+      [u, GONE, o, 'whether anybody pays']);
+    const e = await designExperiment({ founderId: GONE, opportunityId: o, unknownId: u,
+      whatWeDo: 'x', whatWeExpect: 'y', wouldDisprove: 'z', costCents: 100, evidenceMode: 'real' });
+    await decideExperiment({ experimentId: e, decision: 'approved', by: `founder:${GONE}` });
+    const p = (await query('SELECT id FROM products WHERE from_experiment_id = ?', [e])).rows[0] as Record<string, unknown>;
+    const { eraseFounderAccount } = await import('../../src/services/privacy/consent.js');
+    const outcome = await eraseFounderAccount(GONE);
+    expect(outcome.failed).toEqual([]);
+    expect(outcome.founderRedacted).toBe(true);
+    const after = (await query('SELECT from_experiment_id, from_opportunity_id FROM products WHERE id = ?', [String(p.id)]))
+      .rows[0] as Record<string, unknown>;
+    expect(after.from_experiment_id).toBeNull();
+    expect(after.from_opportunity_id).toBeNull();
+    const gone = (await query('SELECT COUNT(*) AS n FROM venture_experiments WHERE founder_id = ?', [GONE])).rows[0] as Record<string, unknown>;
+    expect(Number(gone.n)).toBe(0);
   });
 
   it('once earned it cannot go back, and the earning record cannot be edited', async () => {

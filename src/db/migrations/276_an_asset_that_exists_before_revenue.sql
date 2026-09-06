@@ -135,12 +135,32 @@ END;
 -- 259), which lets an asset that never had a candidate be attributed by hand
 -- exactly once; this guard owns only the experiment link and leaves that
 -- behaviour alone.
+-- AND NEVER ATTACHED AFTER BIRTH EITHER: the one-asset-per-experiment and
+-- world-mismatch checks live on INSERT, so an experiment link that could be
+-- added later would be a link nothing checked.
+-- The one exception is erasure: the product row is archived rather than
+-- deleted so its id cannot be reissued, and the experiment it came from is
+-- the person's and goes with them. Severing is allowed only on a row already
+-- scheduled for erasure, and only to NULL.
 CREATE TRIGGER products_experiment_lineage_immutable
 BEFORE UPDATE OF from_experiment_id ON products
-WHEN OLD.from_experiment_id IS NOT NULL
+WHEN NEW.from_experiment_id IS NOT OLD.from_experiment_id
+ AND NOT (NEW.from_experiment_id IS NULL AND OLD.erasure_scheduled_at IS NOT NULL)
 BEGIN
   SELECT RAISE(ABORT,'products:experiment_lineage_immutable');
 END;
+
+-- AND THE SAME EXCEPTION FOR THE CANDIDATE LINK (migration 259), which had
+-- none: a product born from a candidate kept a foreign key into a table the
+-- account erasure deletes, so the erasure could not complete. Recreated with
+-- the erasure exception; every other property is as it was.
+DROP TRIGGER IF EXISTS product_lineage_is_write_once;
+CREATE TRIGGER product_lineage_is_write_once
+BEFORE UPDATE OF from_opportunity_id ON products
+WHEN OLD.from_opportunity_id IS NOT NULL
+     AND NEW.from_opportunity_id IS NOT OLD.from_opportunity_id
+     AND NOT (NEW.from_opportunity_id IS NULL AND OLD.erasure_scheduled_at IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'product_lineage:write_once'); END;
 
 CREATE INDEX idx_products_standing ON products(standing);
 CREATE INDEX idx_products_from_experiment ON products(from_experiment_id);
@@ -196,6 +216,50 @@ BEGIN SELECT RAISE(ABORT,'products:experimental_has_no_company_spend'); END;
 -- with nothing real behind it.
 CREATE TRIGGER delegations_not_for_experimental
 BEFORE INSERT ON delegations
+WHEN NEW.product_id IS NOT NULL
+ AND EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_holds_no_delegation'); END;
+
+-- NOR BY NAMING ITS ACTOR FROM ABOVE. A delegation with no product names an
+-- actor; an actor that belongs to an experimental asset is that asset acting,
+-- and the same refusal applies.
+CREATE TRIGGER delegations_not_for_experimental_actor
+BEFORE INSERT ON delegations
+WHEN EXISTS (SELECT 1 FROM business_actors a JOIN products p ON p.id = a.product_id
+              WHERE a.id = NEW.actor_id AND p.standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_holds_no_delegation'); END;
+CREATE TRIGGER delegations_not_moved_to_experimental_actor
+BEFORE UPDATE OF actor_id ON delegations
+WHEN EXISTS (SELECT 1 FROM business_actors a JOIN products p ON p.id = a.product_id
+              WHERE a.id = NEW.actor_id AND p.standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_holds_no_delegation'); END;
+
+-- RE-POINTING IS ARRIVING. A row moved onto an experimental asset by UPDATE
+-- is the same row the INSERT refusals exist for.
+CREATE TRIGGER agent_instances_not_moved_to_experimental
+BEFORE UPDATE OF product_id ON agent_instances
+WHEN EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_cannot_be_provisioned'); END;
+CREATE TRIGGER company_situations_not_moved_to_experimental
+BEFORE UPDATE OF product_id ON company_situations
+WHEN EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_has_no_situation'); END;
+CREATE TRIGGER portfolio_exposures_not_moved_to_experimental
+BEFORE UPDATE OF subject_id, subject_kind ON portfolio_exposures
+WHEN NEW.subject_kind = 'company'
+ AND EXISTS (SELECT 1 FROM products WHERE id = NEW.subject_id AND standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_is_not_a_concentration'); END;
+CREATE TRIGGER institutional_responsibilities_not_moved_to_experimental
+BEFORE UPDATE OF product_id ON institutional_responsibilities
+WHEN EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_carries_no_responsibility'); END;
+CREATE TRIGGER ai_spend_reservations_not_moved_to_experimental
+BEFORE UPDATE OF product_id ON ai_spend_reservations
+WHEN NEW.product_id IS NOT NULL
+ AND EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
+BEGIN SELECT RAISE(ABORT,'products:experimental_has_no_company_spend'); END;
+CREATE TRIGGER delegations_not_moved_to_experimental
+BEFORE UPDATE OF product_id ON delegations
 WHEN NEW.product_id IS NOT NULL
  AND EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
 BEGIN SELECT RAISE(ABORT,'products:experimental_holds_no_delegation'); END;

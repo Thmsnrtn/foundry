@@ -187,7 +187,8 @@ async function recordFor(subjectKind: 'company' | 'opportunity', subjectId: stri
       `Why it might: ${String(o.why_it_might)}`,
       `How it dies: ${String(o.kill_thesis)}`,
       `Unknowns: ${String(o.unknowns_json ?? '[]')}`,
-      o.lighter_architecture == null ? '' : `Lighter version already noted: ${String(o.lighter_architecture)}`,
+      // The pass's own earlier lighter answer is NOT part of the record: a fact
+      // quoted from it would be the model citing itself.
     ].filter(Boolean).join('\n');
     return { founderId: String(o.founder_id), text, opportunityId: subjectId, productId: null,
       world: String(o.evidence_mode) === 'reference' ? 'reference' : 'real' };
@@ -333,7 +334,10 @@ export async function recogniseExposure(input: {
   for (const s of parsed.surfaces) {
     if (!known.has(s.class) || !knownFacts) continue;
     if (!quoted(s.grounds, record.text)) { dropped += 1; continue; }
-    const standing = s.standing === 'unresolved' ? 'unresolved_internally' : 'recognised';
+    // ANYTHING BUT A PLAIN 'recognised' IS UNRESOLVED. A reader that wrote
+    // 'unclear', 'possible' or 'unresolved_internally' was not certain, and
+    // uncertainty is the thing this pass must never round up.
+    const standing = s.standing.trim().toLowerCase() === 'recognised' ? 'recognised' : 'unresolved_internally';
     let severity: Severity = s.severity === 'serious' ? 'serious'
       : s.severity === 'minor' ? 'minor' : 'material';
     // AN UNRESOLVED SURFACE IS AT LEAST MATERIAL: "I do not know whether this
@@ -341,12 +345,16 @@ export async function recogniseExposure(input: {
     // else it is a question that stands in the way.
     if (standing === 'unresolved_internally' && severity === 'minor') severity = 'material';
     let needs = severity === 'serious';
-    // DURABLE FLOORS OVERRIDE AN OPTIMISTIC READ. If the record establishes a
-    // floor fact, the floor's class carries at least the floor's severity and
-    // its professional-review trigger, whatever the model said.
+    // DURABLE FLOORS OVERRIDE AN OPTIMISTIC READ. A surface the model itself
+    // named in a floor's class carries the floor unless the record ESTABLISHED
+    // the floor fact as absent: naming financial activity and then leaving
+    // "custody of money" unknown is not a way past custody's floor. (The
+    // second loop below, which synthesises a surface the model did not name,
+    // keys on the fact being present, because it must not invent one from an
+    // unknown.)
     for (const floor of floors) {
       if (String(floor.class) !== s.class) continue;
-      if (present.get(String(floor.structural_fact)) !== true) continue;
+      if (present.get(String(floor.structural_fact)) === false) continue;
       severity = worse(severity, String(floor.min_severity) as Severity);
       needs = needs || Number(floor.needs_professional) === 1;
     }
@@ -418,8 +426,8 @@ export async function subjectsNeedingRecognition(): Promise<Array<{
   const out: Array<{ subjectKind: 'company' | 'opportunity'; subjectId: string; because: string }> = [];
   const candidates = (await query(
     `SELECT o.id,
-            (SELECT MAX(s.observed_at) FROM legal_surfaces s
-              WHERE s.subject_kind = 'opportunity' AND s.subject_id = o.id AND s.retired_at IS NULL) AS last_read,
+            (SELECT MAX(f.recorded_at) FROM structural_facts f
+              WHERE f.subject_kind = 'opportunity' AND f.subject_id = o.id AND f.superseded_at IS NULL) AS last_read,
             (SELECT MAX(c.revised_at) FROM market_claims c WHERE c.opportunity_id = o.id) AS last_revised
        FROM venture_opportunities o
       WHERE o.verdict IS NULL AND o.evidence_mode = 'real'
@@ -427,7 +435,7 @@ export async function subjectsNeedingRecognition(): Promise<Array<{
     .rows as unknown as Array<Record<string, unknown>>;
   for (const c of candidates) {
     if (c.last_read == null) { out.push({ subjectKind: 'opportunity', subjectId: String(c.id), because: 'never read' }); continue; }
-    const age = (Date.now() - Date.parse(String(c.last_read))) / 86_400_000;
+    const age = (Date.now() - Date.parse(String(c.last_read).replace(' ', 'T') + 'Z')) / 86_400_000;
     if (age > 180) { out.push({ subjectKind: 'opportunity', subjectId: String(c.id), because: 'over six months old' }); continue; }
     if (c.last_revised != null && Date.parse(String(c.last_revised)) > Date.parse(String(c.last_read))) {
       out.push({ subjectKind: 'opportunity', subjectId: String(c.id), because: 'a claim narrowed since' });
@@ -435,8 +443,8 @@ export async function subjectsNeedingRecognition(): Promise<Array<{
   }
   const assets = (await query(
     `SELECT p.id, s.stated_at,
-            (SELECT MAX(l.observed_at) FROM legal_surfaces l
-              WHERE l.subject_kind = 'company' AND l.subject_id = p.id AND l.retired_at IS NULL) AS last_read
+            (SELECT MAX(f.recorded_at) FROM structural_facts f
+              WHERE f.subject_kind = 'company' AND f.subject_id = p.id AND f.superseded_at IS NULL) AS last_read
        FROM products p
        JOIN offer_shapes s ON s.product_id = p.id AND s.superseded_at IS NULL
       WHERE p.standing = 'experimental' AND p.reality = 'real' AND p.status = 'active'
@@ -444,7 +452,8 @@ export async function subjectsNeedingRecognition(): Promise<Array<{
       ORDER BY p.rowid`, []))
     .rows as unknown as Array<Record<string, unknown>>;
   for (const a of assets) {
-    if (a.last_read == null || Date.parse(String(a.stated_at)) > Date.parse(String(a.last_read))) {
+    if (a.last_read == null
+      || Date.parse(String(a.stated_at).replace(' ', 'T') + 'Z') > Date.parse(String(a.last_read).replace(' ', 'T') + 'Z')) {
       out.push({ subjectKind: 'company', subjectId: String(a.id), because: 'the offer has a shape' });
     }
   }

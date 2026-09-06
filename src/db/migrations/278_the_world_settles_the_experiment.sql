@@ -66,10 +66,11 @@ BEGIN
   -- THE WORLD OF THE EXPOSURE IS THE WORLD OF THE EXPERIMENT. A reference
   -- experiment may not be exposed for real; a real one may not be rehearsed
   -- into a reference exposure and read as the world.
+  -- EXACTLY THE EXPERIMENT'S WORLD. A sandbox exposure on a real experiment
+  -- would collect provider test-mode events and be settled as the market.
   SELECT RAISE(ABORT,'experiment_exposure:world_mismatch')
-    WHERE EXISTS (SELECT 1 FROM venture_experiments e
-                   WHERE e.id = NEW.experiment_id
-                     AND ((e.evidence_mode = 'reference') <> (NEW.evidence_mode = 'reference')));
+    WHERE NOT EXISTS (SELECT 1 FROM venture_experiments e
+                       WHERE e.id = NEW.experiment_id AND e.evidence_mode = NEW.evidence_mode);
   SELECT RAISE(ABORT,'experiment_exposure:asset_mismatch')
     WHERE NEW.product_id IS NOT NULL
       AND NOT EXISTS (SELECT 1 FROM products p
@@ -277,6 +278,9 @@ BEGIN
   SELECT RAISE(ABORT,'venture_experiment:invalidity_needs_an_approved_unsettled_test')
     WHERE NEW.validity = 'invalid' AND OLD.validity = 'valid'
       AND (coalesce(OLD.decision,'') <> 'approved' OR OLD.verdict IS NOT NULL);
+  -- AND NOT IN THE SAME BREATH: one statement may not both invalidate and settle.
+  SELECT RAISE(ABORT,'venture_experiment:invalid_test_has_no_verdict')
+    WHERE NEW.validity = 'invalid' AND (NEW.verdict IS NOT NULL OR NEW.ran_at IS NOT NULL);
 END;
 -- A VERDICT AND INVALIDITY CANNOT BOTH BE TRUE. An invalid test has no market
 -- verdict; the two columns are exclusive at the row.
@@ -284,7 +288,7 @@ CREATE TRIGGER venture_experiment_verdict_needs_validity
 BEFORE UPDATE OF ran_at, verdict ON venture_experiments
 BEGIN
   SELECT RAISE(ABORT,'venture_experiment:invalid_test_has_no_verdict')
-    WHERE OLD.validity = 'invalid' AND (NEW.verdict IS NOT NULL OR NEW.ran_at IS NOT NULL);
+    WHERE NEW.validity = 'invalid' AND (NEW.verdict IS NOT NULL OR NEW.ran_at IS NOT NULL);
 END;
 
 -- ─── THE SETTLEMENT RULE IS SEALED WITH THE PREDICTION ───────────────────────
@@ -318,10 +322,16 @@ BEGIN
   SELECT RAISE(ABORT,'venture_experiment:rerun_of_an_unfinished_test')
     WHERE EXISTS (SELECT 1 FROM venture_experiments o
                    WHERE o.id = NEW.rerun_of AND o.validity = 'valid' AND o.ran_at IS NULL);
+  -- 'PARTLY' IS NOT A CONTRADICTION: some paid, fewer than predicted. The row
+  -- carries 'surprised' because its column admits two words; the grade
+  -- carries the finer one, and the guard reads the grade.
   SELECT RAISE(ABORT,'venture_experiment:rerun_needs_a_revised_claim')
     WHERE EXISTS (SELECT 1 FROM venture_experiments o
                    WHERE o.id = NEW.rerun_of AND o.validity = 'valid' AND o.verdict = 'surprised'
                      AND o.claim_id IS NOT NULL
+                     AND NOT EXISTS (SELECT 1 FROM prediction_resolutions g
+                                      WHERE g.kind = 'venture_experiment' AND g.prediction_id = o.id
+                                        AND g.verdict = 'partly')
                      AND NOT EXISTS (SELECT 1 FROM market_claims c
                                       WHERE c.id = o.claim_id AND c.revised_at IS NOT NULL
                                         AND datetime(c.revised_at) > datetime(o.ran_at)));
@@ -360,3 +370,35 @@ BEGIN
 END;
 CREATE INDEX idx_proposed_act_experiment ON proposed_acts(experiment_id) WHERE experiment_id IS NOT NULL;
 CREATE INDEX idx_venture_experiment_rerun ON venture_experiments(rerun_of) WHERE rerun_of IS NOT NULL;
+
+-- ─── EARNING IS A LEDGER FACT, NOT A LABEL ───────────────────────────────────
+-- Migration 276 lets reality earn an asset on a `business_outcome` resolution.
+-- A resolution is a row anybody with the door could write; the world's
+-- record is here. So a resolution earns only when it points at an exposure of
+-- the asset's own experiment in the same world at which somebody the provider
+-- could not match to the owner paid, and what they paid for was delivered,
+-- and nothing has been refunded or disputed. The owner's own words remain the
+-- other door, recorded as his.
+CREATE TRIGGER products_earning_needs_the_ledger
+BEFORE UPDATE OF standing ON products
+WHEN NEW.standing = 'earned' AND OLD.standing = 'experimental'
+ AND coalesce(NEW.earned_by,'') NOT LIKE 'founder:%'
+BEGIN
+  SELECT RAISE(ABORT,'products:reality_has_not_earned_it')
+    WHERE NOT EXISTS (
+      SELECT 1 FROM prediction_resolutions r
+        JOIN experiment_exposures x ON r.evidence_ref = 'experiment_exposure:' || x.id
+       WHERE r.kind = 'venture_experiment' AND r.prediction_id = OLD.from_experiment_id
+         AND r.resolved_by = 'business_outcome' AND r.verdict IN ('as_predicted','partly')
+         AND x.experiment_id = OLD.from_experiment_id
+         AND x.evidence_mode = OLD.reality
+         AND EXISTS (SELECT 1 FROM business_outcome_events b
+                       JOIN business_outcome_event_kinds k ON k.kind = b.kind
+                      WHERE b.exposure_id = x.id AND k.is_payment = 1
+                        AND b.counterparty = CASE OLD.reality WHEN 'reference' THEN 'reference' ELSE 'unmatched_external' END)
+         AND EXISTS (SELECT 1 FROM business_outcome_events b
+                       JOIN business_outcome_event_kinds k ON k.kind = b.kind
+                      WHERE b.exposure_id = x.id AND k.is_delivery = 1)
+         AND NOT EXISTS (SELECT 1 FROM business_outcome_events b
+                          WHERE b.exposure_id = x.id AND b.kind IN ('refund','dispute')));
+END;

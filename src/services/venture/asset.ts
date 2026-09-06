@@ -137,14 +137,14 @@ export async function earnAsset(input: {
     }
     throw err;
   }
-  // THE CANDIDATE ADVANCED AND THE SEARCH FOUND SOMETHING. Recorded on the
-  // objects that asked the question, so the mandate can say what it became.
+  // THE SEARCH FOUND SOMETHING, AND THE CANDIDATE IS PUT TO THE BAR. Earning
+  // says reality recognised the asset; advancing the candidate still means
+  // "nothing stands in the way", and it is asked rather than assumed. A
+  // candidate whose legal picture still blocks stays open with the blocker
+  // visible, asset earned or not: a sale does not lower the bar.
   if (row.from_opportunity_id != null) {
-    await query(
-      `UPDATE venture_opportunities
-          SET verdict = 'advanced', verdict_why = ?, decided_at = datetime('now')
-        WHERE id = ? AND verdict IS NULL`,
-      [`${input.by}: ${input.because.trim()}`, String(row.from_opportunity_id)]);
+    const { advance } = await import('./validation.js');
+    await advance({ opportunityId: String(row.from_opportunity_id), by: input.by });
     await query(
       `UPDATE venture_mandates SET became_product = ?
         WHERE became_product IS NULL
