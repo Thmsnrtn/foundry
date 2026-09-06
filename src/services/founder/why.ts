@@ -29,8 +29,24 @@ export interface Why {
   answer: string;
   because: string[];
   evidence: string[];
-  assumptions: string[];
-  alternatives: string[];
+  /**
+   * WHAT THIS RESTS ON — the rows the claim is standing on, read back today.
+   *
+   * These were called "assumptions" and "alternatives", which say something
+   * this institution cannot support: that at the moment of judgement it
+   * enumerated its premises and weighed other courses, and that what is on the
+   * screen is a record of that. It is not. It is a reconstruction assembled now
+   * from other rows, and one of the "alternatives" was a generic "not doing
+   * it" appended to every act.
+   *
+   * A page whose whole purpose is showing its work may not manufacture a
+   * thought process after the fact. The honest names are what the claim rests
+   * on, what else is genuinely recorded, and what is still unknown — and a
+   * later deliberation trace can persist the real thing prospectively, at
+   * judgement time, where it would actually be evidence.
+   */
+  restsOn: string[];
+  otherRecordedPaths: string[];
   uncertainty: string[];
   activity: string[];
   outcome: string[];
@@ -75,7 +91,67 @@ async function authorityOver(productId: string): Promise<string[]> {
     .catch(() => [] as Row[]);
   const out = bounds.map((b) => `You told me not to ${String(b.owner_words)} here: “${String(b.statement)}”.`);
   if (allowance[0]) out.push(`You allowed up to ${money(Number(allowance[0].amount_cents))}: “${String(allowance[0].statement)}”.`);
-  if (out.length === 0) out.push('You have set no boundary and no allowance for this company. I cannot act here anyway: every act is proposed and waits for your yes.');
+
+  // THE PAGE THAT EXPLAINS AUTHORITY MUST NOT CONTRADICT THE THING THAT HOLDS
+  // IT.
+  //
+  // This read two tables — boundaries and allowances — and when both were empty
+  // told him "every act is proposed and waits for your yes". That is false
+  // wherever the institution actually has authority, and the institution has
+  // several kinds this never looked at. An ordinary look at something public
+  // asks him nothing at all and never has; a live delegation is authority he
+  // granted, with a purpose and a ceiling and an expiry; a standing permission
+  // is the same; a responsibility is accountability WITHOUT authority to act,
+  // which is a different sentence again.
+  //
+  // An inspectability layer that reassures him more than the kernel does is
+  // worse than none, because it is the surface he checks when he wants to know
+  // what this thing can do without him.
+  const consents = await rows(
+    `SELECT capability, expires_at FROM autonomy_consents
+      WHERE product_id = ? AND revoked_at IS NULL
+        AND datetime(expires_at) > datetime('now')`, [productId]).catch(() => [] as Row[]);
+  for (const c of consents) {
+    out.push(`You allowed me to ${String(c.capability)} here on my own until `
+      + `${day(String(c.expires_at))}.`);
+  }
+
+  const delegated = await rows(
+    `SELECT purpose, ceiling, expires_at FROM delegations
+      WHERE product_id = ? AND revoked_at IS NULL
+        AND datetime(expires_at) > datetime('now')`, [productId]).catch(() => [] as Row[]);
+  for (const d of delegated) {
+    out.push(`You put me in charge of ${String(d.purpose)} here, up to `
+      + `${String(d.ceiling)}, until ${day(String(d.expires_at))}. I do that without asking.`);
+  }
+
+  const waiting = await rows(
+    `SELECT COUNT(*) AS n FROM proposed_acts
+      WHERE product_id = ? AND decision IS NULL AND revoked_at IS NULL
+        AND datetime(expires_at) > datetime('now')`, [productId]).catch(() => [] as Row[]);
+  const pending = Number(waiting[0]?.n ?? 0);
+  if (pending > 0) {
+    out.push(`${String(pending)} ${pending === 1 ? 'act is' : 'acts are'} written down and `
+      + 'waiting on your answer right now.');
+  }
+
+  const watching = await rows(
+    `SELECT COUNT(*) AS n FROM institutional_responsibilities
+      WHERE product_id = ? AND state <> 'unknown'`, [productId]).catch(() => [] as Row[]);
+  const carried = Number(watching[0]?.n ?? 0);
+
+  if (out.length === 0) {
+    // WHAT IS TRUE WHEN NOTHING HAS BEEN GRANTED, WHICH IS NOT NOTHING.
+    out.push(carried > 0
+      ? `You have granted me nothing here. I am accountable for `
+        + `${String(carried)} ${carried === 1 ? 'thing' : 'things'} and measured against `
+        + `${carried === 1 ? 'it' : 'them'}, which is not the same as being allowed to `
+        + 'change anything: I can look, and anything with a consequence is proposed '
+        + 'and waits for your yes.'
+      : 'You have granted me nothing here. I can look at what you have connected, '
+        + 'and anything with a consequence outside this company is proposed and waits '
+        + 'for your yes.');
+  }
   return out;
 }
 
@@ -123,14 +199,14 @@ async function whyCompany(founderId: string, productId: string): Promise<Why | n
         String(s.mode) === 'reference' ? ' (invented)' : String(s.mode) === 'sandbox' ? ' (test mode)' : ''}; ${
         s.last_observed_at ? `last reported ${day(s.last_observed_at)}` : 'nothing reported yet'}.`),
     ],
-    assumptions: [
+    restsOn: [
       numbers.asOf ? `That the reading of ${numbers.asOf} is the latest true one, compared against the nearest reading to a month before.`
         : 'No readings, so nothing is assumed about the numbers.',
       invented ? 'Every number here is invented. The arithmetic is real; none of it is a fact about a real company.'
         : 'That what each connected source reports is what it says it reports. I check freshness, not truth.',
       ...(spell ? [`That the situation began ${day(spell.beganAt)}; before that it was different, and that history is on the company page.`] : []),
     ],
-    alternatives: advice.length
+    otherRecordedPaths: advice.length
       ? advice.map((a) => `${String(a.summary)} — ${a.decision === null ? 'raised, and waiting on you' : `you ${String(a.decision)} it`}.`)
       : ['I have not raised anything to do about this. Watching is the whole of what I am doing.'],
     uncertainty: [
@@ -179,9 +255,9 @@ async function whyAdvice(founderId: string, adviceId: string): Promise<Why | nul
     answer: String(r.summary),
     because: [String(r.why)],
     evidence: [`The situation it answers: ${String(r.headline ?? 'none recorded')}.`, ...because],
-    assumptions: [`That I would have ${String(r.would_need)}.`,
+    restsOn: [`That I would have ${String(r.would_need)}.`,
       String(r.evidence_mode) === 'reference' ? 'The situation is invented; so is this advice.' : 'Read from real readings.'],
-    alternatives: [
+    otherRecordedPaths: [
       ...others.map((o) => `${String(o.summary)} — ${o.decision === null ? 'also raised' : `you ${String(o.decision)} it`}.`),
       'Doing nothing: the situation stays as it is and I keep watching.',
     ],
@@ -217,9 +293,11 @@ async function whyProposal(founderId: string, actId: string): Promise<Why | null
     answer: String(a.summary),
     because: [String(a.why)],
     evidence: [`What I expect: ${String(a.expected_effect)}`],
-    assumptions: [a.rung ? `That this ${String(a.what_it_means)}. Putting it back: ${String(a.putting_it_back ?? 'not stated')}.`
+    restsOn: [a.rung ? `That this ${String(a.what_it_means)}. Putting it back: ${String(a.putting_it_back ?? 'not stated')}.`
       : 'I have not classified what kind of act this is, so treat it as though it cannot be undone.'],
-    alternatives: ['Not doing it. Nothing happens, and I will not raise the same act again.'],
+    // NOTHING ELSE IS RECORDED HERE. Saying so is the honest line; a generic
+    // "not doing it" is the absence of a path dressed up as one.
+    otherRecordedPaths: [],
     uncertainty: [`What could go wrong: ${String(a.risk)}`],
     activity: [`Proposed ${day(a.proposed_at)} by ${String(a.proposed_by)}.`],
     outcome: [state],
@@ -263,8 +341,8 @@ async function whyCandidate(founderId: string, opportunityId: string): Promise<W
       ...sources.map((s) => `Source: ${s}`),
       ...(invented ? ['All of this is invented, for a search I made up.'] : []),
     ],
-    assumptions: unknowns.length ? unknowns.map((u) => `Open: ${u}`) : ['No open unknowns are recorded.'],
-    alternatives: [`What would kill it: ${String(o.kill_thesis)}.`,
+    restsOn: unknowns.length ? unknowns.map((u) => `Open: ${u}`) : ['No open unknowns are recorded.'],
+    otherRecordedPaths: [`What would kill it: ${String(o.kill_thesis)}.`,
       ...(presented?.against ?? []).map((a) => `Against your stated preference: ${a}.`),
       'Burying it. I remember why and do not bring the same thing again unless something changes.'],
     uncertainty: [
@@ -302,9 +380,9 @@ async function whyExperiment(founderId: string, experimentId: string): Promise<W
     answer: t.whatWeExpect,
     because: [`The question it settles: ${t.question}`, `What I do: ${t.whatWeDo}`],
     evidence: t.whatHappened ? [`What happened: ${t.whatHappened}`] : ['It has not run, so there is no evidence yet — only a prediction, sealed so the result can disagree with me.'],
-    assumptions: [`What would disprove it: ${t.wouldDisprove}`,
+    restsOn: [`What would disprove it: ${t.wouldDisprove}`,
       ...(t.settlesWhen ? [`Settles when: ${t.settlesWhen}`] : [])],
-    alternatives: ['Declining it: the question stays open, and it stays in the way of this becoming a company.'],
+    otherRecordedPaths: [],
     uncertainty: t.validity === 'invalid'
       ? [`Invalid: ${t.invalidBecause ?? 'it did not measure what it was for'}. It has no verdict and is re-run, not read.`]
       : ['One test answers one question. A result is what the world did once, not what it will do.'],

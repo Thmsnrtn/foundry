@@ -318,8 +318,8 @@ placeRoutes.get('/foundry/why/:kind/:id', async (c: any) => {
       <p>What I said. Everything under it is where it came from, in the order you would ask.</p></div>
     ${level('Why', why.because, true, 'I have nothing to give as a reason. That is itself a finding.')}
     ${level('Evidence', why.evidence, true, 'No evidence is recorded. It rests on the reasons above and nothing else.')}
-    ${level('Assumptions', why.assumptions)}
-    ${level('Alternatives', why.alternatives)}
+    ${level('What this rests on', why.restsOn)}
+    ${level('Other recorded paths', why.otherRecordedPaths)}
     ${level('Uncertainty', why.uncertainty, false, 'Nothing I know of makes this uncertain — which is a claim you may doubt.')}
     ${level('Activity', why.activity)}
     ${level('Outcome', why.outcome)}
