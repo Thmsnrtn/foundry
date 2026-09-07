@@ -79,10 +79,13 @@ describe('the line everything is measured from', () => {
 describe('what it tells him happened', () => {
   it('says a search started, in his register rather than the schema\'s', async () => {
     await comeBackTomorrow();
-    await app.request('/foundry/ask', { method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ said:
-        'Make the river stronger by finding another small digital income stream.' }).toString() });
+    // The door shows the sentence back first; the search opens when he says yes.
+    for (const path of ['/foundry/ask', '/foundry/venture/confirm']) {
+      await app.request(path, { method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({ said:
+          'Make the river stronger by finding another small digital income stream.' }).toString() });
+    }
     await comeBackTomorrow();
     const body = await firstScreen();
     expect(body).toContain('While you were away');

@@ -1443,6 +1443,16 @@ export const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscape
   .item .where{display:flex;flex-wrap:wrap;gap:4px;margin-top:var(--s1)}
   .item .where span{font-size:.75rem;color:var(--ink-3);border:1px solid var(--line);border-radius:999px;padding:2px 8px}
   .item .where span.need{color:var(--alert);border-color:var(--alert)}
+  .thread .pill{margin-left:6px;vertical-align:middle}
+  .steps{list-style:none;margin:var(--s2) 0;padding:0 0 0 12px;border-left:2px solid var(--line)}
+  .steps li{display:grid;grid-template-columns:5.2rem minmax(0,1fr);gap:4px var(--s2);align-items:baseline;
+    margin:0 0 var(--s2);position:relative}
+  .steps li::before{content:"";position:absolute;left:-17px;top:.45em;width:8px;height:8px;border-radius:50%;
+    background:var(--ink-3)}
+  .steps li:last-child::before{background:var(--accent)}
+  .steps .k{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+  .steps time{grid-column:2;font-size:.78rem}
+  .steps a{color:var(--accent)}
   nav.places .sub,nav.places .more{display:none}
   /* Deliberately not named ask: that class is the fixed bar at the bottom of
      every page, and reusing it would pin every question to the floor. */
@@ -2481,8 +2491,8 @@ async function answerAboutEverything(
   </div>`;
 }
 
-function answerTo(key: string, s: OwnerState, a: Attention,
-): HtmlEscapedString | Promise<HtmlEscapedString> {
+async function answerTo(key: string, s: OwnerState, a: Attention,
+): Promise<HtmlEscapedString> {
   const drifted = s.checks.filter((c) => c.result === 'failed');
 
   if (key === 'this' || key === 'ifyes' || key === 'change' || key === 'undo') {
@@ -2595,7 +2605,12 @@ function answerTo(key: string, s: OwnerState, a: Attention,
   }
 
   if (key === 'working') {
+    const { underWayFor } = await import('../../services/institution/undertaking.js');
+    const underWay = await underWayFor(s.ownerId);
     return html`<div class="said">
+      ${underWay.length ? html`<p>Under way, because you asked or agreed:</p>
+      <ul>${underWay.map((u) => html`<li><a href="/foundry/companies/${u.productId}/work">${u.companyName}</a>
+        — ${u.understoodAs}</li>`)}</ul>` : ''}
       ${s.checks.length === 0
     ? html`<p>Nothing yet. I can only see my own workings, and nobody has asked me to look
         after anything.</p>`
@@ -3063,7 +3078,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
     : about ? answerAboutCompany(about)
       : key === 'portfolio' || key === 'capital' || key === 'away' || key === 'back'
         ? answerAboutEverything(key, s.ownerId)
-        : answerTo(key, s, attention)}` : ''}
+        : await answerTo(key, s, attention)}` : ''}
 
     ${!key ? html`<div class="maybe">
       ${raw((attention !== null && attention.kind !== 'stopped' && attention.kind !== 'drifted'
@@ -3748,14 +3763,35 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
   const typed = String(c.req.query('q') ?? '').trim();
   let askedHere: H | '' = '';
   if (typed) {
-    if (/\bwhy\b|show (me )?(your )?work|how do you know|what makes you say/i.test(typed)) {
+    // "WHY AREN'T CUSTOMERS CONVERTING?" IS WORK, NOT A QUESTION ABOUT FOUNDRY.
+    // A why-question about the business, or any verb the institution can take
+    // on, is shown back as what it would undertake — and nothing starts until
+    // he says so. "Why do you say that" still goes to the work behind the claim.
+    const { readUndertaking } = await import('../../services/institution/undertaking.js');
+    const wanted = readUndertaking(typed);
+    if (wanted) {
+      const meaning = (await query('SELECT what_it_means FROM undertaking_kinds WHERE kind = ?', [wanted.kind]))
+        .rows[0] as Record<string, unknown> | undefined;
+      askedHere = html`<div class="know said-here" id="answer"><h2>That sounds like something for me to do</h2>
+          <p>You want me to <strong>${wanted.understoodAs}</strong> at ${view.name}. I would
+            ${String(meaning?.what_it_means ?? 'take it on')}.</p>
+          <p class="quiet">Nothing has started. First I read what I can already see and say what
+            I cannot; any act, spend or message still comes to you first.</p>
+          <form method="POST" action="/foundry/companies/${view.id}/said/confirm">
+            <input type="hidden" name="said" value="${typed}" />
+            <input type="hidden" name="understood" value="${wanted.understoodAs}" />
+            <input type="hidden" name="as" value="undertaking" />
+            <button class="btn go" type="submit">Yes — take it on</button>
+          </form>
+          <p class="quiet"><a href="/foundry?q=${encodeURIComponent(typed)}">Ask about everything instead</a>.</p></div>`;
+    } else if (/\bwhy\b|show (me )?(your )?work|how do you know|what makes you say/i.test(typed)) {
       return c.redirect(`/foundry/why/company/${view.id}`);
     }
     const key = matchQuestion(typed);
     const instruction = /\b(stop|don'?t|do not|never|always|from now on|only ever)\b/i.test(typed);
     const widen = html`<p class="quiet">Answered about ${view.name}.
       <a href="/foundry?q=${encodeURIComponent(typed)}">Ask about everything instead</a>.</p>`;
-    askedHere = instruction
+    askedHere = wanted ? askedHere : instruction
       ? html`<div class="know said-here" id="answer"><h2>That sounds like an instruction</h2>
           <p>Nothing has changed. A question I answer; an instruction I hold to only once you
             have said so and seen what I understood.</p>
@@ -3856,7 +3892,7 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
       do before anything happens.</p></div>` : ''}
     ${done === 'notthat' ? html`<div class="done"><p><strong>Not that.</strong> I will not
       raise it again for this situation.</p></div>` : ''}
-    ${done === 'stopped' ? html`<div class="done"><p><strong>Stopped.</strong> I am no longer
+    ${done === 'stopped' ? html`<div class="done"><p><strong>Stopped.</strong> Anything under way here is dropped, and I am no longer
       weighing that. Nothing else has changed.</p></div>` : ''}
     ${done === 'nothing' ? html`<div class="done"><p><strong>There was nothing to stop.</strong>
       You had not told me what this company is for.</p></div>` : ''}
@@ -4163,6 +4199,25 @@ foundryShellRoutes.post('/foundry/advice/:adviceId/:decision',
       decision: decision === 'accept' ? 'accepted' : 'declined',
       decidedBy: principalRef('founder', String(founder.id)),
     });
+    // AGREEING GIVES THE ADVICE A THREAD. Advice led nowhere as a row: he said
+    // "do that" and nothing recorded what was done about it. Now agreeing opens
+    // an undertaking from the recommendation, and every step since rests there.
+    // Agreeing still starts no act: the first step is a look.
+    if (decision === 'accept') {
+      const advice = (await query('SELECT kind, summary FROM situation_recommendations WHERE id = ?',
+        [c.req.param('adviceId')])).rows[0] as Record<string, unknown> | undefined;
+      const u = await import('../../services/institution/undertaking.js');
+      const opened = await u.openUndertaking({
+        founderId: String(founder.id), productId, kind: u.kindForRecommendation(String(advice?.kind ?? '')),
+        asked: null, understoodAs: String(advice?.summary ?? 'do what I advised'),
+        openedBy: 'institution:advice_accepted',
+        from: { kind: 'recommendation', id: c.req.param('adviceId') },
+      });
+      if (opened) {
+        await u.stepOn(opened.id, { kind: 'you_said', said: `You agreed: ${String(advice?.summary ?? '')}.`,
+          ref: { kind: 'recommendation', id: c.req.param('adviceId') }, actor: `founder:${String(founder.id)}` });
+      }
+    }
     return c.redirect(
       `/foundry/companies/${productId}?done=${decision === 'accept' ? 'agreed' : 'notthat'}`);
   });
@@ -4479,14 +4534,12 @@ foundryShellRoutes.post('/foundry/ask', requireInstitutionOwner(), async (c: any
   // WHAT IT COULD PLACE, IT HANDS ON — by calling the handler that owns the
   // responsibility, rather than by redirecting the browser to it. A redirect
   // would turn one submission into two requests and lose the body on the way.
+  // AND NOTHING BINDS FROM THIS DOOR WITHOUT HIM SEEING IT. This absorbed a
+  // mandate and its guidance the moment the door read one, while the same
+  // sentence typed on the venture screen was shown back first with "What I
+  // will do". The reading is the same; the confirmation is now the same too.
   if (door.destination === 'venture') {
-    const venture = await import('../../services/venture/mandate.js');
-    const readings = venture.readVentureParagraph(said);
-    if (readings.some((r) => r.kind === 'stop_mandate') && readings.length === 1) {
-      const stopped = await venture.stopMandate(String(founder.id), 'the owner said to stop');
-      return c.redirect(`/foundry?done=${stopped ? 'searchstopped' : 'nothing'}`);
-    }
-    return absorbAndAnswer(c, String(founder.id), readings);
+    return ventureConfirmation(c, String(founder.id), said);
   }
 
   // A QUESTION IS ANSWERED, NOT APOLOGISED FOR.
@@ -4531,6 +4584,18 @@ foundryShellRoutes.post('/foundry/venture', requireInstitutionOwner(), async (c:
   const said = String(form.said ?? '').trim().slice(0, 800);
   if (!said) return c.redirect('/foundry');
 
+  return ventureConfirmation(c, String(founder.id), said);
+});
+
+/**
+ * WHAT I WILL DO, BEFORE IT BINDS. One page for every venture reading — go and
+ * look, steer, stop — reached from both doors that hear a venture sentence.
+ * The single door used to absorb a mandate the moment it read one; the same
+ * words typed on the venture screen were shown back first. Two entrances to
+ * one institution must not disagree about whether he gets to see what he said.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+async function ventureConfirmation(c: any, founderId: string, said: string): Promise<Response> {
   const venture = await import('../../services/venture/mandate.js');
   const readings = venture.readVentureParagraph(said);
   const reading = readings.find((r) => r.kind !== 'not_venture') ?? readings[0]
@@ -4555,7 +4620,7 @@ foundryShellRoutes.post('/foundry/venture', requireInstitutionOwner(), async (c:
   }
 
   if (reading.kind === 'stop_mandate') {
-    const open = await venture.currentMandate(String(founder.id));
+    const open = await venture.currentMandate(founderId);
     return c.html(page('What you said', html`
       <h1>${open ? 'Stop looking?' : 'There is nothing to stop'}</h1>
       <p class="lede">You said: <strong>${said}</strong></p>
@@ -4581,7 +4646,7 @@ foundryShellRoutes.post('/foundry/venture', requireInstitutionOwner(), async (c:
   }
 
   if (reading.kind === 'guidance') {
-    const open = await venture.currentMandate(String(founder.id));
+    const open = await venture.currentMandate(founderId);
     if (!open) {
       return c.html(page('What you said', html`
         <h1>There is no search to steer</h1>
@@ -4631,7 +4696,7 @@ foundryShellRoutes.post('/foundry/venture', requireInstitutionOwner(), async (c:
       <button class="btn go" type="submit">Yes — go and look</button>
     </form>
     <a class="btn" href="/foundry">No</a>`, 'foundry'));
-});
+}
 
 /** Plain words for what a piece of steering will actually do. */
 function GUIDANCE_IN_PLAIN_WORDS(kind: string, subject: string | null): string {
@@ -4844,6 +4909,19 @@ foundryShellRoutes.post('/foundry/proposals/:proposalId/:decision',
       // this brace.
       decidedBy: principalRef('founder', String(founder.id)),
     });
+    // AND ITS THREAD HEARS IT — its thread only. An act joins an undertaking
+    // because it was proposed inside it, never because it shares a company
+    // with one; an act proposed outside any thread steps nothing.
+    {
+      const act = (await query('SELECT summary, undertaking_id FROM proposed_acts WHERE id = ?', [c.req.param('proposalId')]))
+        .rows[0] as Record<string, unknown> | undefined;
+      if (act?.undertaking_id) {
+        const u = await import('../../services/institution/undertaking.js');
+        await u.stepOn(String(act.undertaking_id), { kind: decision === 'approve' ? 'approved' : 'refused',
+          said: `${decision === 'approve' ? 'You approved' : 'You refused'}: ${String(act.summary ?? 'an act')}.`,
+          ref: { kind: 'proposed_act', id: c.req.param('proposalId') }, actor: `founder:${String(founder.id)}` });
+      }
+    }
     return c.redirect(
       `/foundry/companies/${productId}?done=${decision === 'approve' ? 'approved' : 'refused'}`);
   });
@@ -5139,13 +5217,48 @@ foundryShellRoutes.post('/foundry/companies/:id/said',
   const intent = await import('../../services/institution/standing-intent.js');
   const proposal = intent.interpret(said);
 
+  // A VERB HE WANTS ACTED ON. Boundaries, allowances, preferences and stops
+  // keep their priority; what would otherwise be filed as "what this company
+  // is for", or fall to "too short", is read for a verb the institution can
+  // take on. "Grow this" on a company already being grown is such a verb; on
+  // one being held it is a change of posture, and that reading wins below.
+  const { readUndertaking } = await import('../../services/institution/undertaking.js');
+  const asked = proposal.kind === 'objective' || proposal.kind === 'unclear'
+    ? readUndertaking(said) : null;
+  const postureNow = String(((await query('SELECT posture FROM products WHERE id = ?', [productId]))
+    .rows[0] as Record<string, unknown> | undefined)?.posture ?? 'grow');
+
   // "LEAVE IT ALONE." "HARVEST IT." "SHUT IT DOWN." Posture is read before
   // anything else because "leave that alone" also contains a stopping phrase,
   // and hearing it as "stop what is live" would do the opposite of what he
   // meant. Nothing binds until he confirms, same as every other sentence here.
   const { readPosture, POSTURE_IN_PLAIN_WORDS } = await import('../../services/founder/burden.js');
-  const posture = proposal.kind === 'preference' || proposal.kind === 'allowance'
+  const postureRead = proposal.kind === 'preference' || proposal.kind === 'allowance'
     || proposal.kind === 'boundary' ? null : readPosture(said);
+  const posture = postureRead !== null && asked !== null && postureRead === postureNow ? null : postureRead;
+  if (posture === null && asked !== null) {
+    const meaning = (await query('SELECT what_it_means FROM undertaking_kinds WHERE kind = ?', [asked.kind]))
+      .rows[0] as Record<string, unknown> | undefined;
+    return c.html(page('What you said', html`
+      <h1>Take this on?</h1>
+      <p class="lede">You said: <strong>${said}</strong></p>
+      <div class="know">
+        <h2>What I understood</h2>
+        <p>You want me to <strong>${asked.understoodAs}</strong> at ${name}.</p>
+        <h2>What I will do</h2>
+        <p>I will ${String(meaning?.what_it_means ?? 'take it on')}.</p>
+        <p class="quiet">First I read what I can already see and say what I cannot. Nothing I
+          find lets me act: an act, a spend or a message still comes to you first, one at a
+          time. Starting costs nothing. Say &ldquo;stop that&rdquo; and it stops.</p>
+      </div>
+      <form method="POST" action="/foundry/companies/${productId}/said/confirm">
+        <input type="hidden" name="said" value="${said}" />
+        <input type="hidden" name="understood" value="${asked.understoodAs}" />
+        <input type="hidden" name="as" value="undertaking" />
+        <button class="btn go" type="submit">Yes — take it on</button>
+      </form>
+      <a class="btn" href="/foundry/companies/${productId}">No</a>`, 'companies'));
+  }
   if (posture !== null) {
     return c.html(page('What you said', html`
       <h1>Change what I am doing with ${name}?</h1>
@@ -5234,15 +5347,44 @@ foundryShellRoutes.post('/foundry/companies/:id/said',
     // "that" to be before it stops it, because a stop aimed at the wrong thing
     // is worse than no stop.
     const live = await intent.objectiveFor(productId);
+    const { openUndertakings, isBroadStop } = await import('../../services/institution/undertaking.js');
+    const underWay = await openUndertakings(productId);
+    const broad = isBroadStop(said);
+    // "STOP THAT" NAMES ONE THING. With one thread open, that is the thing.
+    // With several, Foundry does not guess which: it asks. Only explicitly
+    // broad words — "stop everything on this" — stop all of them.
+    if (underWay.length > 1 && !broad) {
+      return c.html(page('What you said', html`
+        <h1>Which one?</h1>
+        <p class="lede">You said: <strong>${said}</strong></p>
+        <p>${String(underWay.length)} things are under way at ${name}. Say which to stop, or stop all of them.</p>
+        ${underWay.map((u) => html`<div class="noticed">
+          <p><strong>${u.understoodAs}</strong> <span class="quiet">— since ${u.openedAt.slice(0, 10)}${u.asked ? `; you said “${u.asked}”` : ''}</span></p>
+          <form method="POST" action="/foundry/undertakings/${u.id}/stop">
+            <button class="btn" type="submit">Stop this one</button>
+          </form>
+        </div>`)}
+        <form method="POST" action="/foundry/companies/${productId}/said/confirm" style="margin-top:var(--s3)">
+          <input type="hidden" name="said" value="${said}" />
+          <input type="hidden" name="as" value="stopall" />
+          <button class="btn" type="submit">Stop all ${String(underWay.length)}</button>
+        </form>
+        <a class="btn" href="/foundry/companies/${productId}">Neither — leave them</a>`, 'companies'));
+    }
+    const stopping = broad ? underWay : underWay.slice(0, 1);
     return c.html(page('What you said', html`
-      <h1>${live ? 'Stop this?' : 'There is nothing to stop'}</h1>
+      <h1>${live || stopping.length ? 'Stop this?' : 'There is nothing to stop'}</h1>
       <p class="lede">You said: <strong>${said}</strong></p>
-      ${live
+      ${live || stopping.length
     ? html`<div class="know">
         <h2>What I would stop</h2>
-        <p><strong>${live.statement}</strong></p>
+        ${stopping.map((u) => html`<p><strong>${u.understoodAs}</strong>
+          <span class="quiet">— under way since ${u.openedAt.slice(0, 10)}. I would drop it; what I found stays on the record.</span></p>`)}
+        ${live && stopping.length === 0 ? html`<p><strong>${live.statement}</strong></p>
         <p class="quiet">I will stop weighing that when I decide what is worth your attention
-          here. Nothing else changes: what I can see, what I look after, and what you have
+          here.</p>` : ''}
+        ${live && stopping.length > 0 ? html`<p class="quiet">What you told me this company is for stays as it is; say so separately if you want that dropped too.</p>` : ''}
+        <p class="quiet">Nothing else changes: what I can see, what I look after, and what you have
           told me not to do all stay exactly as they are.</p>
       </div>
       <form method="POST" action="/foundry/companies/${productId}/said/confirm">
@@ -5355,6 +5497,45 @@ foundryShellRoutes.post('/foundry/companies/:id/said/confirm',
     // is kept verbatim either way; only what it binds differs.
     const asObjective = String(form.as ?? '') === 'objective';
 
+    if (String(form.as ?? '') === 'undertaking') {
+      // RE-READ, NEVER TRUSTED FROM THE FORM. The verb is derived from his
+      // words again here, as every other binding sentence is — and what he
+      // was SHOWN must be what binds. If the reading has moved since the
+      // preview (a deploy between the page and the tap), nothing binds; he is
+      // shown the current reading and asked again.
+      const { readUndertaking, openUndertaking } = await import('../../services/institution/undertaking.js');
+      const asked = readUndertaking(said);
+      if (!asked) return c.redirect(`/foundry/companies/${productId}`);
+      const shown = String(form.understood ?? '');
+      if (shown !== asked.understoodAs) {
+        const name = String(((await query('SELECT name FROM products WHERE id = ?', [productId]))
+          .rows[0] as Record<string, unknown> | undefined)?.name ?? 'this company');
+        return c.html(page('What you said', html`
+          <h1>Let me say that again</h1>
+          <p class="lede">You said: <strong>${said}</strong></p>
+          <div class="know">
+            <h2>What I understand now</h2>
+            <p>You want me to <strong>${asked.understoodAs}</strong> at ${name}.
+              ${shown ? html`That is not what you were shown before, so nothing has started.` : ''}</p>
+          </div>
+          <form method="POST" action="/foundry/companies/${productId}/said/confirm">
+            <input type="hidden" name="said" value="${said}" />
+            <input type="hidden" name="understood" value="${asked.understoodAs}" />
+            <input type="hidden" name="as" value="undertaking" />
+            <button class="btn go" type="submit">Yes — take it on</button>
+          </form>
+          <a class="btn" href="/foundry/companies/${productId}">No</a>`, 'companies'));
+      }
+      const opened = await openUndertaking({
+        founderId: String(founder.id), productId, kind: asked.kind, asked: said,
+        understoodAs: asked.understoodAs, openedBy: `founder:${String(founder.id)}`,
+        from: { kind: 'owner', id: null },
+      });
+      return c.redirect(opened
+        ? `/foundry/companies/${productId}/work?done=undertaken#underway`
+        : `/foundry/companies/${productId}`);
+    }
+
     if (String(form.as ?? '') === 'posture') {
       const { readPosture, setPosture } = await import('../../services/founder/burden.js');
       const to = readPosture(said);
@@ -5371,9 +5552,26 @@ foundryShellRoutes.post('/foundry/companies/:id/said/confirm',
     }
     if (proposal.kind === 'unclear') return c.redirect(`/foundry/companies/${productId}`);
 
-    if (proposal.kind === 'stop') {
-      const stopped = await intent.stopWhatIsLive(productId);
-      return c.redirect(`/foundry/companies/${productId}?done=${stopped ? 'stopped' : 'nothing'}`);
+    if (proposal.kind === 'stop' || String(form.as ?? '') === 'stopall') {
+      // "STOP THAT" STOPS ONE THING: the thread under way, when there is
+      // exactly one, or all of them only on explicitly broad words. With
+      // several open and no broad words nothing is dropped — he was asked
+      // which, and this confirm is not an answer to that question. The
+      // objective is retired only when no thread was the referent.
+      const u = await import('../../services/institution/undertaking.js');
+      const underWay = await u.openUndertakings(productId);
+      const broad = String(form.as ?? '') === 'stopall' || u.isBroadStop(said);
+      const by = `founder:${String(founder.id)}`;
+      let dropped = 0;
+      if (broad) {
+        dropped = await u.dropEverythingUnderWay({ founderId: String(founder.id), productId, because: said, by });
+      } else if (underWay.length === 1 && underWay[0]) {
+        dropped = (await u.closeUndertaking({ founderId: String(founder.id), id: underWay[0].id, as: 'dropped', because: said, by })) ? 1 : 0;
+      } else if (underWay.length > 1) {
+        return c.redirect(`/foundry/companies/${productId}/work?done=which#underway`);
+      }
+      const stopped = underWay.length === 0 ? await intent.stopWhatIsLive(productId) : false;
+      return c.redirect(`/foundry/companies/${productId}?done=${stopped || dropped > 0 ? 'stopped' : 'nothing'}`);
     }
     if (proposal.kind === 'allowance') {
       await intent.setAllowance({

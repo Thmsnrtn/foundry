@@ -16,8 +16,8 @@
 import { query } from '../../db/client.js';
 import { money } from './portfolio.js';
 
-export type WhyKind = 'company' | 'advice' | 'proposal' | 'candidate' | 'experiment';
-export const WHY_KINDS: ReadonlySet<string> = new Set(['company', 'advice', 'proposal', 'candidate', 'experiment']);
+export type WhyKind = 'company' | 'advice' | 'proposal' | 'candidate' | 'experiment' | 'undertaking';
+export const WHY_KINDS: ReadonlySet<string> = new Set(['company', 'advice', 'proposal', 'candidate', 'experiment', 'undertaking']);
 
 export interface Why {
   kind: WhyKind;
@@ -68,6 +68,7 @@ export async function whyOf(founderId: string, kind: string, id: string): Promis
     case 'proposal': return whyProposal(founderId, id);
     case 'candidate': return whyCandidate(founderId, id);
     case 'experiment': return whyExperiment(founderId, id);
+    case 'undertaking': return whyUndertaking(founderId, id);
     default: return null;
   }
 }
@@ -397,5 +398,44 @@ async function whyExperiment(founderId: string, experimentId: string): Promise<W
     technical: [['venture_experiments', experimentId], ['opportunity', String(e.opportunity_id)],
       ['validity', t.validity], ['evidence_mode', String(e.evidence_mode)],
       ...(t.rerunOf ? [['rerun_of', t.rerunOf] as [string, string]] : [])],
+  };
+}
+
+/**
+ * AN UNDERTAKING IS THE ONE CLAIM WHOSE DELIBERATION WAS RECORDED AS IT
+ * HAPPENED. Every other page here assembles its levels from rows written for
+ * other reasons; this one reads a thread that was written step by step, each
+ * step resting on the row it came from. What it rests on is the `needs` steps;
+ * what else was recorded is the acts proposed, approved and refused along it.
+ */
+async function whyUndertaking(founderId: string, id: string): Promise<Why | null> {
+  const u = await import('../institution/undertaking.js');
+  const it = await u.undertakingById(founderId, id);
+  if (!it) return null;
+  const thread = await u.threadOf(id);
+  const of = (kinds: string[]) => thread.steps.filter((s) => kinds.includes(s.kind)).map((s) => s.said);
+  const from = it.openedFrom.kind === 'owner' ? 'your words'
+    : `${it.openedFrom.kind} ${it.openedFrom.id ?? ''}`.trim();
+  return {
+    kind: 'undertaking', id,
+    title: `Why I am ${it.closedAt ? 'no longer ' : ''}working to ${it.understoodAs}`,
+    object: { kind: 'company', id: it.productId, name: it.companyName, href: `/foundry/companies/${it.productId}/work` },
+    answer: it.understoodAs,
+    because: [it.asked ? `You said: “${it.asked}”` : `I opened this myself, from ${from}.`],
+    evidence: of(['looked', 'found']),
+    restsOn: of(['needs']).length ? of(['needs']) : ['Nothing I need is missing for the next step.'],
+    otherRecordedPaths: of(['proposed', 'approved', 'refused', 'you_said']),
+    uncertainty: of(['needs', 'waiting_on_world']),
+    activity: of(['did', 'asked_you', 'waiting_on_world']).length ? of(['did', 'asked_you', 'waiting_on_world'])
+      : ['I have not acted. Every step so far is a look, and any act comes to you first.'],
+    outcome: it.closedAt ? [...of(['outcome', 'learned']), `Closed ${it.closedAt.slice(0, 10)} as ${String(it.closedAs).replaceAll('_', ' ')}: ${it.closedBecause ?? ''}`,
+      ...(it.supersededBy ? [`Superseded by undertaking ${it.supersededBy}.`] : [])]
+      : [...of(['outcome', 'learned']), 'Open.'],
+    cost: [thread.costCents > 0 ? `${money(thread.costCents)} spent through acts proposed inside it, read from the ledger.`
+      : 'Nothing spent through acts proposed inside it. The thread holds no money of its own; spend stays in the ledger.'],
+    authority: [`Opened by ${it.openedBy} on ${it.openedAt.slice(0, 10)}. Taking this on granted nothing: each step acts only within its own authority, and an act still waits for your yes.`,
+      ...(it.closedBy ? [`Closed by ${it.closedBy}.`] : [])],
+    technical: [['undertakings', id], ['kind', it.kind], ['product', it.productId], ['opened_from', from],
+      ['evidence_mode', it.evidenceMode], ['steps', String(thread.steps.length)]],
   };
 }

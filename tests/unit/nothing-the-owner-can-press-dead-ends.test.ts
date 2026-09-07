@@ -158,10 +158,28 @@ describe('the journey he could not complete', () => {
         + 'our biggest existing dependencies, spend no more than $25 validating anything, '
         + 'and bring me only things that deserve my attention.' }).toString(),
     });
-    // He is never left wondering: either a redirect to a changed screen, or a
-    // page saying what landed and what did not. Never a 404, never silence.
-    expect([200, 302]).toContain(res.status);
-    if (res.status === 200) expect(await res.clone().text()).toContain('I am looking');
+    // HE SEES WHAT HE SAID BEFORE IT BINDS. The door used to open the search
+    // the moment it read the sentence; now it shows "What I will do" first, as
+    // the venture screen always did, and nothing is open until he says yes.
+    expect(res.status).toBe(200);
+    const shown = await res.text();
+    expect(shown).toContain('Go and look?');
+    expect((await query(
+      'SELECT COUNT(*) AS n FROM venture_mandates WHERE founder_id = ? AND closed_at IS NULL',
+      [OWNER])).rows[0]).toMatchObject({ n: 0 });
+    const yes = whatHeCanPress(shown).forms.find((f) => f.action.includes('venture/confirm'))?.action;
+    expect(yes, 'the confirmation must offer a way to say yes').toBeDefined();
+    const went = await app.request(String(yes), {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ said:
+        'Make the river stronger by finding another small digital income stream that '
+        + 'would make my portfolio more resilient, keep legal risk low, avoid increasing '
+        + 'our biggest existing dependencies, spend no more than $25 validating anything, '
+        + 'and bring me only things that deserve my attention.' }).toString(),
+    });
+    expect([200, 302]).toContain(went.status);
+    if (went.status === 200) expect(await went.clone().text()).toContain('I am looking');
 
     // AND THE SCREEN HE LANDS ON TELLS HIM IT HAPPENED.
     const after = await (await app.request('/foundry')).text();
@@ -187,9 +205,18 @@ describe('the journey he could not complete', () => {
       body: new URLSearchParams({ said:
         'Make the river stronger by finding another income stream.' }).toString(),
     });
-    expect([200, 302]).toContain(res.status);
-    if (res.status === 302) {
-      expect(res.headers.get('location')).toContain('alreadylooking');
+    // The door shows it back rather than opening anything; and saying yes to
+    // it a second time does not open a competing search.
+    expect(res.status).toBe(200);
+    const twice = await app.request('/foundry/venture/confirm', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ said:
+        'Make the river stronger by finding another income stream.' }).toString(),
+    });
+    expect([200, 302]).toContain(twice.status);
+    if (twice.status === 302) {
+      expect(twice.headers.get('location')).toContain('alreadylooking');
     }
     const open = (await query(
       'SELECT COUNT(*) AS n FROM venture_mandates WHERE founder_id = ? AND closed_at IS NULL',

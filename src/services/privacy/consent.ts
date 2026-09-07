@@ -890,6 +890,17 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
       + 'predicted before each one ran',
     onAccountErasure: { op: 'delete' },
   },
+  // CHILD BEFORE PARENT: steps reference undertakings.
+  undertaking_steps: {
+    reason: 'every step of what the institution undertook for one person\'s companies — '
+      + 'what it looked at, found, needed, and what he decided along the way',
+    onAccountErasure: { op: 'delete' },
+  },
+  undertakings: {
+    reason: 'what one person asked the institution to do about a company, in their own '
+      + 'words, and what it took on itself for them',
+    onAccountErasure: { op: 'delete' },
+  },
   ai_output_feedback: {
     reason: 'the founder\'s ratings of outputs, across all their products',
     onAccountErasure: { op: 'delete' },
@@ -1038,6 +1049,7 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   capability_maturity_changes: 'the witnessed record of how far each provider has been proven; institutional evidence, naming no owner data',
   exposure_classes: 'the kinds of liability a thing can create and the structural way of not creating each; constitutional, naming nobody',
   search_emphasis: 'the words people use when describing the work each kind of owner preference points at, so his steering reaches where the search looks; constitutional, naming nobody',
+  undertaking_kinds: 'the verbs the institution can be asked to take on, and what each means; constitutional, naming nobody',
   business_outcome_event_kinds: 'the kinds of thing a provider can report happened at an offer, and which of them is money leaving somebody\'s hands; constitutional, naming nobody',
   experiment_invalidity_kinds: 'the ways a test can fail to measure what it was for, as distinct from the market saying no; constitutional, naming nobody',
   exposure_floors: 'the four structural facts whose exposure is never graded down in context — custody, regulated decisions, professional reliance, decisions about a named person; constitutional, naming nobody',
@@ -1513,6 +1525,10 @@ const PERSON_ACROSS_COMPANIES: Record<string, PersonInOthersCompany> = {
   experiment_exposures: {
     op: 'delete', columns: ['founder_id'],
     reason: 'where that person\'s test placed an offer; the test was theirs',
+  },
+  undertakings: {
+    op: 'delete', columns: ['founder_id'],
+    reason: 'what that person asked of the institution about a company, in their words; their steps go with them',
   },
   business_outcome_events: {
     op: 'delete', columns: ['founder_id'],

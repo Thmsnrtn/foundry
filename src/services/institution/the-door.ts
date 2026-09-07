@@ -26,12 +26,14 @@
 import { interpret } from './standing-intent.js';
 import { readPosture } from '../founder/burden.js';
 import { readVentureParagraph } from '../venture/mandate.js';
+import { readUndertaking } from './undertaking.js';
 
 /** Where a sentence belongs. Each names a capability that already exists. */
 export type Destination =
   | 'venture'          // find, steer or stop a search for another asset
   | 'company'          // steer, bound or fund one company
   | 'posture'          // what a company is FOR now: grow, hold, harvest, retire
+  | 'undertaking'      // a verb: investigate, grow, fix, test, spend less, handle, take on
   | 'question'         // he is asking, not instructing
   | 'unplaceable';     // say so, and keep what he wrote
 
@@ -119,6 +121,16 @@ export function whichDoor(
   if (readPosture(said) !== null) {
     return { destination: 'posture',
       understoodAs: 'you are telling me what one of your companies is for now',
+      handOffTo: null, said, needs: 'which company you mean' };
+  }
+
+  // A VERB IS WORK TO TAKE ON, and it needs a company to take it on for. Read
+  // before the company parser, whose catch-all would file "spend less here" as
+  // what the company is for.
+  const asked = readUndertaking(said);
+  if (asked) {
+    return { destination: 'undertaking',
+      understoodAs: `you want me to ${asked.understoodAs}`,
       handOffTo: null, said, needs: 'which company you mean' };
   }
 

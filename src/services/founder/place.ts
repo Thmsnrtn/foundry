@@ -79,6 +79,7 @@ export async function placeOf(founderId: string, productId: string): Promise<Com
   const id = String(p.id);
   const opportunityId = p.from_opportunity_id ? String(p.from_opportunity_id) : null;
 
+  const underWay = await one(`SELECT COUNT(*) AS n FROM undertakings WHERE product_id = ? AND closed_at IS NULL`, [id]);
   const [proposals, advice, asks, responsibilities, workspaces, ventureTests, legacyTests,
     numbers, allowance, spend, customerSenses, legal, facts, resolutions, mrr] = await Promise.all([
     one(`SELECT COUNT(*) AS n FROM proposed_acts WHERE product_id = ? AND decision IS NULL
@@ -165,13 +166,16 @@ export async function placeOf(founderId: string, productId: string): Promise<Com
         + (workspaces > 0 ? `, ${String(workspaces)} ${workspaces === 1 ? 'workspace' : 'workspaces'} live` : '')
       : 'watching, not acting';
   chips.push(doing);
+  // WHAT HE ASKED FOR, OR AGREED TO, THAT IS STILL OPEN. A chip only when there
+  // is one: "0 under way" would be the tab bar's way of being lost.
+  if (underWay > 0) chips.push(`${String(underWay)} under way`);
 
   // ── dimensions, present only where rows are ────────────────────────────
   const present: Partial<Record<DimensionKey, number | null>> = {
     overview: null,
     // Work always exists: "is Foundry doing anything here" must have an
     // address even when the answer is no.
-    work: needsHim + responsibilities + workspaces + ventureTests,
+    work: needsHim + responsibilities + workspaces + ventureTests + underWay,
   };
   if (numbers > 0 || allowance > 0 || spend > 0 || mrr !== null) present.economics = null;
   if (customerSenses > 0) present.customers = customerSenses;

@@ -1926,6 +1926,25 @@ world; no owner has yet been lost or not lost on a real day.
 since migration 276 — `readCompany` recorded a situation the schema refuses.
 Nothing had opened one until the acceptance suite deep-linked into it.
 
+## What I have undertaken (2026-09-07)
+
+The owner can now tell the institution to DO something about a company —
+investigate, grow, fix, test, spend less, handle it, take it on — and every
+such sentence becomes an undertaking he saw before it bound, with a thread of
+steps each resting on a row. Advice he agrees to and acts he decides join the
+thread. "What are you doing" and "stop that" have rows to answer from. The
+study that led here is `history/MADETHIS_REFERENCE_2026-09-07.md`. Evidence
+maturity **E2**. State: BUILT LOCALLY, TESTED LOCALLY, PUSHED on
+`claude/foundry-next-frontier-h2fsqe`, NOT INTEGRATED, NOT DEPLOYED — awaiting
+Opus's adversarial review before integration.
+
+**Next, in order of leverage:** (1) a connected sense that is READ — the
+Stripe credential is stored and probed and never pulled through; every
+reading path terminates before the institution; gated on the Connect
+adapter's read step and real credentials. (2) `(purpose_kind, purpose_id)` on
+`ai_spend_reservations`, threaded through `SpendSubject`, so a step that
+thinks costs its thread; undertakings are the first writer. (3) A first hand.
+
 ## Blocked — external
 
 - **Real bounded support pilot (E4).** `support-pilot-readiness-v1` is green and means only *ready to attempt*.

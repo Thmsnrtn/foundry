@@ -97,7 +97,16 @@ describe('the door as the owner actually presses it', () => {
     });
     // NOT a 404. This is the assertion that would have caught what he hit.
     expect(res.status).toBe(200);
-    const body = await res.text();
+    // AND NOT A SEARCH YET. The door shows "What I will do" first, exactly as
+    // the venture screen does; the search opens when he says yes.
+    expect(await res.text()).toContain('Go and look?');
+    const yes = await app.request('/foundry/venture/confirm', {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ said: THE_MANDATE }).toString(),
+    });
+    expect(yes.status).toBe(200);
+    const body = await yes.text();
     // He is told the search is running AND told which constraint could not be
     // taken. With no companies yet, "avoid increasing our biggest existing
     // dependencies" has nothing to attach to, and saying so is the point:

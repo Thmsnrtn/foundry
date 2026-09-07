@@ -23,6 +23,7 @@ import type { Where } from './foundry-shell.js';
 import { CUSTOMER_SENSES, placeOf } from '../../services/founder/place.js';
 import type { DimensionKey } from '../../services/founder/place.js';
 import { WHY_KINDS, whyOf } from '../../services/founder/why.js';
+import { requireInstitutionOwner } from '../../middleware/rbac.js';
 
 export const placeRoutes = new Hono();
 
@@ -71,15 +72,38 @@ placeRoutes.get('/foundry/companies/:id/work', async (c: any) => {
     `SELECT e.id, e.what_we_do, e.decision, e.ran_at, e.verdict FROM venture_experiments e
        JOIN products p ON p.from_opportunity_id = e.opportunity_id
       WHERE p.id = ? ORDER BY e.proposed_at DESC`, [id]);
+  // WHAT IS UNDER WAY, AS THE THREAD IT IS. Each undertaking is what he asked
+  // for or agreed to, and every step under it is a sentence resting on a row:
+  // a look, a finding, a need, an act he decided. Nothing here is a status
+  // invented for the screen.
+  const u = await import('../../services/institution/undertaking.js');
+  const underWay = await u.openUndertakings(id);
+  const threads = await Promise.all(underWay.map(async (x) => ({ ...x, thread: await u.threadOf(x.id) })));
+  const lately = await u.closedUndertakings(id, 5);
+  const done = String(c.req.query('done') ?? '');
   const nothing = view.proposals.length + view.advice.length + view.asks.length
-    + view.responsibilities.length + workspaces.length + tests.length === 0;
+    + view.responsibilities.length + workspaces.length + tests.length + underWay.length === 0;
+  const stepWord: Record<string, string> = {
+    looked: 'looked', found: 'found', needs: 'need', asked_you: 'asked you', you_said: 'you said',
+    proposed: 'proposed', approved: 'approved', refused: 'refused', did: 'did',
+    waiting_on_world: 'waiting', outcome: 'outcome', learned: 'learned', closed: 'closed',
+  };
   const body = html`
     ${placeHead(frame, view.name)}
+    ${done === 'undertaken' ? html`<div class="done"><p><strong>Taken on.</strong> I have read what I
+      can see and said what I cannot. Nothing starts without you; every step is below.</p></div>` : ''}
+    ${done === 'dropped' ? html`<div class="done"><p><strong>Dropped.</strong> What I found stays on
+      the record. Nothing else changed.</p></div>` : ''}
+    ${done === 'which' ? html`<div class="done"><p><strong>Nothing stopped.</strong> More than one thing is
+      under way here, and &ldquo;stop that&rdquo; did not say which. Stop one below, or say
+      &ldquo;stop everything on ${view.name}&rdquo;.</p></div>` : ''}
     <p class="lede">${nothing
     ? 'Nothing is happening here. I am watching and not acting: no act is proposed, I look after nothing, and no test is running.'
     : place.needsHim > 0
       ? `${String(place.needsHim)} ${place.needsHim === 1 ? 'thing needs' : 'things need'} you. Everything else here is what I am doing without you.`
-      : 'Nothing needs you. This is what I am doing here.'}</p>
+      : underWay.length > 0
+        ? `${String(underWay.length)} ${underWay.length === 1 ? 'thing is' : 'things are'} under way because you asked or agreed. Nothing needs you.`
+        : 'Nothing needs you. This is what I am doing here.'}</p>
     ${place.needsHim > 0 ? html`<div class="know" id="needs">
       <h2>Waiting on you</h2>
       ${view.proposals.map((p) => html`<div class="noticed"><p><strong>${p.summary}</strong></p>
@@ -93,6 +117,28 @@ placeRoutes.get('/foundry/companies/:id/work', async (c: any) => {
       ${view.asks.map((a) => html`<div class="noticed"><p><strong>${a.proposal}</strong></p>
         <p class="quiet">Something I noticed and would look after, if you say so.</p>
         <p class="row"><a class="btn" href="/foundry/companies/${id}#noticed">Answer</a></p></div>`)}
+    </div>` : ''}
+    ${threads.length ? html`<div class="know" id="underway"><h2>Under way</h2>
+      ${threads.map((x) => html`<div class="noticed thread">
+        <p><strong>${x.understoodAs}</strong> <span class="pill">${x.kindInWords}</span></p>
+        ${x.asked ? html`<p class="quiet">You said: &ldquo;${x.asked}&rdquo;</p>`
+    : html`<p class="quiet">Opened by me, from ${x.openedFrom.kind === 'recommendation' ? 'advice you agreed to' : x.openedFrom.kind}.</p>`}
+        <ol class="steps">${x.thread.steps.map((st) => html`<li><span class="k">${stepWord[st.kind] ?? st.kind}</span>
+          <span>${st.said}${st.ref?.kind === 'sense' ? html` <a href="/foundry/companies/${id}/see/${st.ref.id}">Look at that</a>` : ''}${
+    st.ref?.kind === 'proposed_act' ? html` <a class="why" href="/foundry/why/proposal/${st.ref.id}">Show your work</a>` : ''}</span>
+          <time class="quiet">${st.at.slice(0, 10)}</time></li>`)}</ol>
+        <p class="quiet">${x.thread.costCents > 0 ? `${money(x.thread.costCents)} spent through its acts, from the ledger.` : 'Nothing spent through its acts.'}
+          Since ${x.openedAt.slice(0, 10)}.</p>
+        <p class="row">
+          <form method="POST" action="/foundry/undertakings/${x.id}/stop">
+            <button class="btn" type="submit">Stop this</button>
+          </form>
+          <a class="why" href="/foundry/why/undertaking/${x.id}">Show your work</a></p>
+      </div>`)}
+    </div>` : ''}
+    ${lately.length ? html`<div class="know"><h2>Lately closed</h2>
+      <ul>${lately.map((x) => html`<li>${x.understoodAs} — ${String(x.closedAs).replaceAll('_', ' ')} on ${String(x.closedAt).slice(0, 10)}${
+    x.closedBecause ? `: ${x.closedBecause}` : ''}. <a class="why" href="/foundry/why/undertaking/${x.id}">Show your work</a></li>`)}</ul>
     </div>` : ''}
     <div class="know"><h2>What I look after</h2>
       ${lines(view.responsibilities.map((x) => `${x.title} — ${LADDER_IN_PLAIN_WORDS[x.state] ?? x.state}.`),
@@ -285,6 +331,20 @@ placeRoutes.get('/foundry/companies/:id/evidence', async (c: any) => {
       ${view.blind.length ? html`<p class="quiet">I cannot see ${view.blind.map((b) => b.cannotSee).join('; ')}.</p>` : ''}
     </div>`;
   return c.html(page(`${view.name} — Evidence`, body, 'companies', frame));
+});
+
+// ─── Stop one thing that is under way ───────────────────────────────────────
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+placeRoutes.post('/foundry/undertakings/:id/stop', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return c.redirect('/onboarding');
+  const u = await import('../../services/institution/undertaking.js');
+  // Resolved against the owner: someone else's undertaking, and one that does
+  // not exist, answer the same.
+  const it = await u.undertakingById(founderId, String(c.req.param('id')));
+  if (!it) return c.notFound();
+  await u.closeUndertaking({ founderId, id: it.id, as: 'dropped', because: 'you said stop', by: `founder:${founderId}` });
+  return c.redirect(`/foundry/companies/${it.productId}/work?done=dropped`);
 });
 
 // ─── Why: the work behind any claim ─────────────────────────────────────────

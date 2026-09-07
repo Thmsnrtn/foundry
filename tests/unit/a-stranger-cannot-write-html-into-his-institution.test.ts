@@ -50,11 +50,14 @@ beforeAll(async () => {
   });
   app.route('/', foundryShellRoutes);
 
-  // A real search, and a real candidate carrying what the stranger wrote.
-  await app.request('/foundry/ask', { method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ said:
-      'Make the river stronger by finding another small digital income stream.' }).toString() });
+  // A real search, and a real candidate carrying what the stranger wrote. The
+  // door shows the sentence back first; the search opens on the confirm.
+  for (const path of ['/foundry/ask', '/foundry/venture/confirm']) {
+    await app.request(path, { method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ said:
+        'Make the river stronger by finding another small digital income stream.' }).toString() });
+  }
   const mandate = (await query(
     'SELECT id FROM venture_mandates WHERE founder_id = ? AND closed_at IS NULL', [OWNER]))
     .rows[0] as Record<string, unknown>;

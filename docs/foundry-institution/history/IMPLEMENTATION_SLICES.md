@@ -1316,3 +1316,56 @@ an overflow probe: no horizontal overflow, no page errors.
 **Not built, deliberately:** an agent org chart, a global manual/assisted/
 autonomous mode, an autopilot rule editor, composite scores, run-agent buttons,
 backend machinery as navigation, and any rule specific to one company.
+
+## Completed slice: what I have undertaken (migration 281)
+
+**Date:** 2026-09-07. **Cut from:** `437505b0`, the integrated tip with the
+Product Convergence tranche and its repairs. **Why:** the MadeThis reference
+study (`history/MADETHIS_REFERENCE_2026-09-07.md`) and four repository
+inventories found one gap under two symptoms — the owner's verbs had nowhere
+to go, and the institution's work had no thread.
+
+- `undertakings` and `undertaking_steps` (281): one thing taken on for one
+  company, his words verbatim, what it was understood as, where it came from,
+  how it closed; steps as sentences resting on rows, with cost and actor.
+  Constitutional verbs (understand, investigate, grow, fix, test, economise,
+  handle). Evidence mode checked against the company; closed threads take no
+  steps and cannot close twice.
+- `services/institution/undertaking.ts`: a phrase-table reader (never a
+  model), open/step/close/drop, the first look composed from the situation
+  reader, the numbers, the senses and what is blind, `kindForRecommendation`.
+- Every door shows what it understood before it binds and re-reads on
+  confirm: company `/said` and `/said/confirm` (`as=undertaking`), the
+  company composer (`?q=`), the single door (`the-door.ts` gains
+  `undertaking`, needing a company). Agreeing to advice opens a thread from
+  the recommendation; a decided act steps every open thread; "stop that"
+  drops them. The Work place renders threads with a Stop; the chip counts
+  them; "what are you doing" answers from them; `/foundry/why/undertaking/:id`
+  descends them.
+- Fixed: `POST /foundry/ask` absorbed a venture mandate without the "What I
+  will do" page the venture screen shows. Both doors now share
+  `ventureConfirmation`. Four tests that relied on the shortcut were updated
+  to say yes on the confirmation.
+
+**Tests:** `what-you-asked-of-me.test.ts` (fourteen cases: the seventeen
+sentences, nothing binds before confirm, threads from rows, stop, advice and
+acts as steps, the doors agree, invented and stranger boundaries). Rendered
+at 375–1440 and 200% text; no overflow.
+
+**Not built:** unattended steps, adapters, a model in the reader, a tick.
+
+**Review boundaries honoured before push:** no broadcast lineage (an act
+joins a thread only through `proposed_acts.undertaking_id`, same company and
+open, enforced by trigger); "stop that" resolves one thread or asks which,
+and only explicitly broad words stop all; the thread is not a second truth
+(steps reference rows, spend is read from `asset_money_spent` through the
+thread's acts, no cost column on a step); the verbs are a vocabulary table
+that grows by migration, not constitutional; accepting advice grants nothing
+(tested against every authority table); the confirmation binds exactly what
+was shown (`understood` travels with the form and is re-derived); one open
+thread per sentence per company, one step per fact, immutable identity,
+append-only steps, actor must be the owner or the institution, close once,
+successor same company — all in the schema.
+
+**State:** BUILT LOCALLY · TESTED LOCALLY · PUSHED (`claude/foundry-next-frontier-h2fsqe`) ·
+NOT INTEGRATED · NOT DEPLOYED.

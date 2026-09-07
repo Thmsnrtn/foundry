@@ -186,7 +186,9 @@ const CAPPING = ['up to', 'no more than', 'at most', 'maximum', 'max ', 'limit',
 const PREFERRING = ['i would rather', "i'd rather", 'i prefer', 'prefer to', 'rather than',
   'ideally', 'if possible', 'i would prefer'];
 const STOPPING = ['stop working on', 'stop doing', 'drop that', 'forget that',
-  'leave that', 'stop that', 'never mind that', 'stop focusing'];
+  'leave that', 'stop that', 'never mind that', 'stop focusing',
+  // "Stop everything on this" — broad, and still a stop.
+  'stop everything', 'stop all', 'stop it all', 'drop everything'];
 
 /**
  * Read one sentence from the owner.
@@ -551,18 +553,25 @@ export async function proposeAct(input: {
   /** What it would cost, in cents. Null means genuinely not known. */
   costCents?: number | null;
   proposedBy: string; validForHours?: number;
+  /**
+   * The undertaking this act was proposed inside, when there is one. This is
+   * the ONLY way an act joins a thread: sharing a company with an open thread
+   * attaches nothing. The schema refuses a thread for another company or one
+   * already closed.
+   */
+  undertakingId?: string | null;
 }): Promise<string> {
   const id = nanoid();
   await query(
     `INSERT INTO proposed_acts
        (id, product_id, subject, action_type, params_fingerprint, summary, why,
-        expected_effect, risk, consequence, rung, cost_cents, proposed_by, expires_at)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?, datetime('now', ?))`,
+        expected_effect, risk, consequence, rung, cost_cents, proposed_by, undertaking_id, expires_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?, datetime('now', ?))`,
     [id, input.productId, input.subject, input.actionType,
       fingerprint(input.params), input.summary.trim(), input.why.trim(),
       input.expectedEffect.trim(), input.risk.trim(), input.consequence,
       input.rung ?? null, input.costCents ?? null,
-      input.proposedBy, `+${String(input.validForHours ?? 72)} hours`]);
+      input.proposedBy, input.undertakingId ?? null, `+${String(input.validForHours ?? 72)} hours`]);
   return id;
 }
 

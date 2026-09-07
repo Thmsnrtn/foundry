@@ -3484,7 +3484,7 @@ CREATE TABLE proposed_acts (
 
   consumed_at         TEXT,
   consumed_by         TEXT
-, rung TEXT REFERENCES consequence_rungs(rung), cost_cents INTEGER, experiment_id TEXT REFERENCES venture_experiments(id), measurement_critical INTEGER);
+, rung TEXT REFERENCES consequence_rungs(rung), cost_cents INTEGER, experiment_id TEXT REFERENCES venture_experiments(id), measurement_critical INTEGER, undertaking_id TEXT REFERENCES undertakings(id));
 CREATE TABLE "push_log" (
   id TEXT PRIMARY KEY,
   founder_id TEXT NOT NULL REFERENCES founders(id),
@@ -4374,6 +4374,59 @@ CREATE TABLE term_sheet_models (
   market_context TEXT, -- Claude-generated commentary on how these terms compare to market
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE undertaking_kinds (
+  kind            TEXT PRIMARY KEY,
+  in_owner_words  TEXT NOT NULL,
+  what_it_means   TEXT NOT NULL,
+  sort_order      INTEGER NOT NULL
+);
+CREATE TABLE undertaking_steps (
+  id              TEXT PRIMARY KEY,
+  undertaking_id  TEXT NOT NULL REFERENCES undertakings(id),
+  -- Carried on the step so an erasure reaches it directly, as workspace_events
+  -- does; the trigger below keeps it equal to the undertaking's.
+  founder_id      TEXT NOT NULL REFERENCES founders(id),
+  at              TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  kind            TEXT NOT NULL CHECK (kind IN (
+                    'looked','found','needs','asked_you','you_said','proposed',
+                    'approved','refused','did','waiting_on_world','outcome','learned','closed')),
+  -- One sentence, in his register. The truth it speaks of is in the row it references.
+  said            TEXT NOT NULL,
+  -- The row this step rests on, when there is one.
+  ref_kind        TEXT CHECK (ref_kind IN (
+                    'situation','recommendation','proposed_act','responsibility','candidate',
+                    'experiment','workspace','sense','number','posture')),
+  ref_id          TEXT,
+  -- founder:<the undertaking's founder> or institution:<reader>. Nothing else.
+  actor           TEXT NOT NULL,
+  CHECK ((ref_kind IS NULL) = (ref_id IS NULL))
+);
+CREATE TABLE undertakings (
+  id               TEXT PRIMARY KEY,
+  founder_id       TEXT NOT NULL REFERENCES founders(id),
+  product_id       TEXT NOT NULL REFERENCES products(id),
+  kind             TEXT NOT NULL REFERENCES undertaking_kinds(kind),
+  -- His words, verbatim, or NULL when the institution opened this itself.
+  asked            TEXT,
+  -- What it was understood as: the sentence he saw before it bound.
+  understood_as    TEXT NOT NULL,
+  -- founder:<id> or institution:<reason>.
+  opened_by        TEXT NOT NULL,
+  -- Where it came from: his sentence, or a row of the institution's.
+  opened_from_kind TEXT NOT NULL CHECK (opened_from_kind IN ('owner','situation','recommendation','candidate')),
+  opened_from_id   TEXT,
+  opened_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  closed_at        TEXT,
+  closed_as        TEXT CHECK (closed_as IN ('done','dropped','superseded','nothing_to_do')),
+  closed_because   TEXT,
+  closed_by        TEXT,
+  -- When closed as superseded, the undertaking that took its place.
+  superseded_by    TEXT REFERENCES undertakings(id),
+  evidence_mode    TEXT NOT NULL CHECK (evidence_mode IN ('real','reference')),
+  CHECK ((closed_at IS NULL) = (closed_as IS NULL)),
+  CHECK ((closed_at IS NULL) = (closed_by IS NULL)),
+  CHECK ((closed_as = 'superseded') = (superseded_by IS NOT NULL))
+);
 CREATE TABLE unit_economics_snapshots (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL,
@@ -5239,6 +5292,13 @@ CREATE INDEX idx_transcripts_product ON call_transcripts(product_id, call_date D
 CREATE INDEX idx_transcripts_type ON call_transcripts(product_id, call_type);
 CREATE INDEX idx_trigger_log_playbook ON playbook_trigger_log(playbook_id, triggered_at DESC);
 CREATE INDEX idx_ue_product_date ON unit_economics_snapshots(product_id, snapshot_date);
+CREATE UNIQUE INDEX idx_undertaking_steps_one_per_ref
+  ON undertaking_steps(undertaking_id, kind, ref_kind, ref_id) WHERE ref_id IS NOT NULL;
+CREATE INDEX idx_undertaking_steps_thread ON undertaking_steps(undertaking_id, at);
+CREATE INDEX idx_undertakings_founder ON undertakings(founder_id, closed_at);
+CREATE UNIQUE INDEX idx_undertakings_one_open_ask
+  ON undertakings(product_id, asked) WHERE closed_at IS NULL AND asked IS NOT NULL;
+CREATE INDEX idx_undertakings_open ON undertakings(product_id, closed_at);
 CREATE INDEX idx_vdm_product ON value_delivery_metrics(product_id);
 CREATE INDEX idx_vdm_product_date ON value_delivery_metrics(product_id, snapshot_date);
 CREATE INDEX idx_vendor_rec_product ON vendor_recommendations(product_id);
@@ -7439,6 +7499,15 @@ BEGIN
   SELECT RAISE(ABORT,'proposed_act:unknown_rung')
     WHERE NOT EXISTS (SELECT 1 FROM consequence_rungs WHERE rung = NEW.rung);
 END;
+CREATE TRIGGER proposed_acts_undertaking_is_fixed
+BEFORE UPDATE OF undertaking_id ON proposed_acts
+BEGIN SELECT RAISE(ABORT,'proposed_acts:undertaking_is_fixed'); END;
+CREATE TRIGGER proposed_acts_undertaking_is_same_company
+BEFORE INSERT ON proposed_acts
+WHEN NEW.undertaking_id IS NOT NULL AND (
+  (SELECT product_id FROM undertakings WHERE id = NEW.undertaking_id) IS NOT NEW.product_id
+  OR (SELECT closed_at FROM undertakings WHERE id = NEW.undertaking_id) IS NOT NULL)
+BEGIN SELECT RAISE(ABORT,'proposed_acts:undertaking_must_be_same_company_and_open'); END;
 CREATE TRIGGER reality_only_questions_constitutional_delete
 BEFORE DELETE ON reality_only_questions
 BEGIN SELECT RAISE(ABORT,'reality_only_question:constitutional'); END;
@@ -8299,6 +8368,44 @@ WHEN (NEW.analysis_failed_at IS NULL) <> (NEW.analysis_failure_reason IS NULL)
 BEGIN
   SELECT RAISE(ABORT, 'call_transcript:failure_incomplete');
 END;
+CREATE TRIGGER undertaking_steps_actor_is_real
+BEFORE INSERT ON undertaking_steps
+WHEN NOT (NEW.actor = 'founder:' || NEW.founder_id OR NEW.actor LIKE 'institution:%')
+BEGIN SELECT RAISE(ABORT,'undertaking_steps:actor_must_be_owner_or_institution'); END;
+CREATE TRIGGER undertaking_steps_append_only
+BEFORE UPDATE ON undertaking_steps
+BEGIN SELECT RAISE(ABORT,'undertaking_steps:append_only'); END;
+CREATE TRIGGER undertaking_steps_founder_matches
+BEFORE INSERT ON undertaking_steps
+WHEN NEW.founder_id <> (SELECT founder_id FROM undertakings WHERE id = NEW.undertaking_id)
+BEGIN SELECT RAISE(ABORT,'undertaking_steps:founder_must_match_undertaking'); END;
+CREATE TRIGGER undertaking_steps_not_after_close
+BEFORE INSERT ON undertaking_steps
+WHEN NEW.kind <> 'closed'
+  AND (SELECT closed_at FROM undertakings WHERE id = NEW.undertaking_id) IS NOT NULL
+BEGIN SELECT RAISE(ABORT,'undertaking_steps:undertaking_is_closed'); END;
+CREATE TRIGGER undertakings_close_once
+BEFORE UPDATE OF closed_at, closed_as, closed_by, closed_because, superseded_by ON undertakings
+WHEN OLD.closed_at IS NOT NULL
+BEGIN SELECT RAISE(ABORT,'undertakings:already_closed'); END;
+CREATE TRIGGER undertakings_evidence_matches_reality
+BEFORE INSERT ON undertakings
+WHEN NEW.evidence_mode <> (SELECT reality FROM products WHERE id = NEW.product_id)
+BEGIN SELECT RAISE(ABORT,'undertakings:evidence_mode_must_match_reality'); END;
+CREATE TRIGGER undertakings_identity_immutable
+BEFORE UPDATE OF founder_id, product_id, kind, asked, understood_as, opened_by,
+  opened_from_kind, opened_from_id, opened_at, evidence_mode ON undertakings
+BEGIN SELECT RAISE(ABORT,'undertakings:identity_is_immutable'); END;
+CREATE TRIGGER undertakings_owner_owns_company
+BEFORE INSERT ON undertakings
+WHEN NEW.founder_id <> (SELECT owner_id FROM products WHERE id = NEW.product_id)
+BEGIN SELECT RAISE(ABORT,'undertakings:founder_must_own_company'); END;
+CREATE TRIGGER undertakings_successor_is_same_company
+BEFORE UPDATE OF superseded_by ON undertakings
+WHEN NEW.superseded_by IS NOT NULL AND (
+  NEW.superseded_by = NEW.id
+  OR (SELECT product_id FROM undertakings WHERE id = NEW.superseded_by) IS NOT NEW.product_id)
+BEGIN SELECT RAISE(ABORT,'undertakings:successor_must_be_same_company'); END;
 CREATE TRIGGER venture_experiment_guard
 BEFORE INSERT ON venture_experiments
 BEGIN
