@@ -4,7 +4,6 @@ agent_configs.updated_by
 agent_configs.word_count
 agent_sessions.agent_version
 agent_sessions.evolution_candidates
-ai_spend_reservations.actual_cents
 ai_spend_reservations.founder_cap_cents
 ai_spend_reservations.global_cap_cents
 ai_spend_reservations.product_cap_cents

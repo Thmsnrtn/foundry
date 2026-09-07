@@ -387,7 +387,9 @@ CREATE TABLE ai_spend_reservations (
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   expires_at TEXT NOT NULL
-);
+, purpose_kind TEXT
+  CHECK (purpose_kind IS NULL OR purpose_kind IN (
+    'observation','candidate','experiment','unknown','undertaking','responsibility','workspace','mandate')), purpose_id TEXT);
 CREATE TABLE alignment_snapshots (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -4816,6 +4818,8 @@ CREATE INDEX idx_agent_sessions_status ON agent_sessions(status, started_at);
 CREATE INDEX idx_ai_daily_spend_date ON ai_daily_spend(date);
 CREATE INDEX idx_ai_feedback_founder ON ai_output_feedback(founder_id);
 CREATE INDEX idx_ai_profile_founder ON founder_ai_profile(founder_id);
+CREATE INDEX idx_ai_spend_purpose ON ai_spend_reservations(purpose_kind, purpose_id)
+  WHERE purpose_id IS NOT NULL;
 CREATE INDEX idx_ai_spend_reservations_open
   ON ai_spend_reservations(status, expires_at);
 CREATE INDEX idx_alignment_product ON alignment_snapshots(product_id, snapshot_date DESC);
@@ -5292,6 +5296,8 @@ CREATE INDEX idx_transcripts_product ON call_transcripts(product_id, call_date D
 CREATE INDEX idx_transcripts_type ON call_transcripts(product_id, call_type);
 CREATE INDEX idx_trigger_log_playbook ON playbook_trigger_log(playbook_id, triggered_at DESC);
 CREATE INDEX idx_ue_product_date ON unit_economics_snapshots(product_id, snapshot_date);
+CREATE INDEX idx_undertaking_steps_by_ref ON undertaking_steps(ref_kind, ref_id)
+  WHERE ref_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_undertaking_steps_one_per_ref
   ON undertaking_steps(undertaking_id, kind, ref_kind, ref_id) WHERE ref_id IS NOT NULL;
 CREATE INDEX idx_undertaking_steps_thread ON undertaking_steps(undertaking_id, at);
@@ -5299,6 +5305,8 @@ CREATE INDEX idx_undertakings_founder ON undertakings(founder_id, closed_at);
 CREATE UNIQUE INDEX idx_undertakings_one_open_ask
   ON undertakings(product_id, asked) WHERE closed_at IS NULL AND asked IS NOT NULL;
 CREATE INDEX idx_undertakings_open ON undertakings(product_id, closed_at);
+CREATE INDEX idx_undertakings_opened_from ON undertakings(opened_from_kind, opened_from_id)
+  WHERE opened_from_id IS NOT NULL;
 CREATE INDEX idx_vdm_product ON value_delivery_metrics(product_id);
 CREATE INDEX idx_vdm_product_date ON value_delivery_metrics(product_id, snapshot_date);
 CREATE INDEX idx_vendor_rec_product ON vendor_recommendations(product_id);
@@ -5370,6 +5378,14 @@ CREATE TRIGGER agent_instances_not_moved_to_experimental
 BEFORE UPDATE OF product_id ON agent_instances
 WHEN EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
 BEGIN SELECT RAISE(ABORT,'products:experimental_cannot_be_provisioned'); END;
+CREATE TRIGGER ai_spend_purpose_is_whole_insert
+BEFORE INSERT ON ai_spend_reservations
+WHEN (NEW.purpose_kind IS NULL) <> (NEW.purpose_id IS NULL)
+BEGIN SELECT RAISE(ABORT,'ai_spend_reservations:purpose_needs_kind_and_id'); END;
+CREATE TRIGGER ai_spend_purpose_is_whole_update
+BEFORE UPDATE OF purpose_kind, purpose_id ON ai_spend_reservations
+WHEN (NEW.purpose_kind IS NULL) <> (NEW.purpose_id IS NULL)
+BEGIN SELECT RAISE(ABORT,'ai_spend_reservations:purpose_needs_kind_and_id'); END;
 CREATE TRIGGER ai_spend_reservation_apply
 AFTER INSERT ON ai_spend_reservations
 BEGIN

@@ -105,7 +105,7 @@ describe('the table is gone', () => {
     // approved test to what providers reported at its offer, so the world
     // settles the prediction rather than the owner's opinion — makes
     // ninety-nine.
-    expect(Object.keys(JOB_REGISTRY).length, 'ninety-seven before, ninety-nine now').toBe(99);
+    expect(Object.keys(JOB_REGISTRY).length, 'ninety-seven before, ninety-nine now').toBe(100);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

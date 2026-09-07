@@ -2699,6 +2699,33 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       + 'connection that has gone dark is said out loud before anything derived from it '
       + 'is shown (hourly)',
   },
+  // A SENSE THAT WAS LET SEE, READS.
+  //
+  // Until this job, a connected Stripe sense had a credential that was probed
+  // hourly and renewed near expiry, and nothing ever READ through it: the only
+  // Stripe reader was the legacy hourly sync on the `integrations` table, which
+  // the sense path does not populate. The owner saw "connected", the numbers
+  // page saw nothing, and no row could tell the two apart.
+  //
+  // This is a read, not a Hand: it changes nothing at Stripe, writes one
+  // snapshot row a day, and reports through the same observation channel every
+  // other provider sync uses — so sandbox mode stays test evidence and a
+  // refused page is a blind sense said out loud, never a confident zero.
+  sense_read_tick: {
+    fn: async () => {
+      const { readSenses } = await import('../services/senses/read.js');
+      const outcome = await readSenses();
+      logger.info(
+        `sense_read_tick: read=${String(outcome.read)} nothing_to_do=${String(outcome.nothingToDo)} `
+        + `blind=${String(outcome.blind)} failed=${String(outcome.failed)}`,
+        { jobName: 'sense_read_tick' });
+    },
+    schedule: '40 4 * * *', // Daily, after the credential tick has had a night to renew
+    description:
+      'Read, through each live sense credential, what the owner let Foundry see — one '
+      + 'revenue snapshot a day per connected Stripe sense, and a blind sense said out '
+      + 'loud when the provider refuses (daily)',
+  },
   // THE REFERENCE WORLD, ONE DAY AT A TIME.
   //
   // A reference company arrives with ninety days of history and no observations

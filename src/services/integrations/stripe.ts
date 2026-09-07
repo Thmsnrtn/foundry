@@ -41,15 +41,29 @@ interface StripeInvoice {
 // ─── Core Sync Function ───────────────────────────────────────────────────────
 
 /**
- * Pull subscription and invoice data from Stripe and update metric_snapshots.
- * Uses incremental sync via the sync_cursor (last invoice created timestamp).
+ * WHAT STRIPE SAYS, AND NOTHING WRITTEN. The read half of the old sync: three
+ * requests, one computation, no row touched. `strict` is the difference between
+ * the legacy hourly sync and the sense read leg — a page Stripe refuses makes
+ * the strict read throw, so a revoked key can never become a confident zero.
+ * Exported so the read leg and the tests can call it without the write.
  */
-export async function syncStripeMetrics(
-  productId: string,
-  integrationId: string,
-  credentials: StripeCredentials,
-  cursor: string | null,
-): Promise<{ metricsUpdated: string[]; newCursor: string; recordsProcessed: number }> {
+export interface StripeRevenueReading {
+  totalMrrCents: number;
+  newMrrCents: number;
+  churnedMrrCents: number;
+  expansionMrrCents: number;
+  contractionMrrCents: number;
+  healthRatio: number | null;
+  activeUserCount: number;
+  activeSubscriptions: number;
+  canceledSubscriptions: number;
+  invoicesRead: number;
+  today: string;
+}
+
+export async function readStripeRevenue(
+  credentials: StripeCredentials, cursor: string | null, strict: boolean,
+): Promise<StripeRevenueReading> {
   const headers: Record<string, string> = {
     'Authorization': `Bearer ${credentials.access_token}`,
     'Content-Type': 'application/x-www-form-urlencoded',
@@ -61,12 +75,14 @@ export async function syncStripeMetrics(
 
   // ── Fetch subscriptions ──────────────────────────────────────────────────
   const activeSubs = await fetchAllStripePages<StripeSubscription>(
+    strict,
     'https://api.stripe.com/v1/subscriptions',
     headers,
     { status: 'active', limit: '100' },
   );
 
   const canceledSubs = await fetchAllStripePages<StripeSubscription>(
+    strict,
     'https://api.stripe.com/v1/subscriptions',
     headers,
     { status: 'canceled', limit: '100', created: cursor ? `gt:${cursor}` : '' },
@@ -77,6 +93,7 @@ export async function syncStripeMetrics(
   if (cursor) invoiceParams['created[gt]'] = cursor;
 
   const invoices = await fetchAllStripePages<StripeInvoice>(
+    strict,
     'https://api.stripe.com/v1/invoices',
     headers,
     invoiceParams,
@@ -140,7 +157,22 @@ export async function syncStripeMetrics(
   const totalMrr = activeSubs.reduce((sum, s) => sum + getSubscriptionMonthlyCents(s), 0);
   const healthRatio = newMrrCents > 0 ? parseFloat((churnedMrrCents / newMrrCents).toFixed(4)) : null;
   const activeUserCount = activeSubs.length;
+  return {
+    totalMrrCents: totalMrr, newMrrCents, churnedMrrCents, expansionMrrCents, contractionMrrCents,
+    healthRatio, activeUserCount, activeSubscriptions: activeSubs.length,
+    canceledSubscriptions: canceledSubs.length, invoicesRead: invoices.length, today,
+  };
+}
 
+/** The write half: today's snapshot row, from a reading. Returns the columns written. */
+export async function writeStripeSnapshot(
+  productId: string, reading: StripeRevenueReading,
+): Promise<string[]> {
+  const { totalMrr, newMrrCents, churnedMrrCents, expansionMrrCents, contractionMrrCents, healthRatio, activeUserCount, today } = {
+    totalMrr: reading.totalMrrCents, newMrrCents: reading.newMrrCents, churnedMrrCents: reading.churnedMrrCents,
+    expansionMrrCents: reading.expansionMrrCents, contractionMrrCents: reading.contractionMrrCents,
+    healthRatio: reading.healthRatio, activeUserCount: reading.activeUserCount, today: reading.today,
+  };
   // ── Upsert today's metric snapshot ──────────────────────────────────────
   const columns = [
     'mrr_cents', 'new_mrr_cents', 'churned_mrr_cents', 'expansion_mrr_cents',
@@ -161,6 +193,25 @@ export async function syncStripeMetrics(
      ON CONFLICT(product_id, snapshot_date) DO UPDATE SET ${setClause}`,
     [nanoid(), productId, today, ...values, ...values],
   );
+
+  return columns;
+}
+
+/**
+ * Pull subscription and invoice data from Stripe and update metric_snapshots.
+ * Uses incremental sync via the sync_cursor (last invoice created timestamp).
+ */
+export async function syncStripeMetrics(
+  productId: string,
+  integrationId: string,
+  credentials: StripeCredentials,
+  cursor: string | null,
+): Promise<{ metricsUpdated: string[]; newCursor: string; recordsProcessed: number }> {
+  const reading = await readStripeRevenue(credentials, cursor, false);
+  const columns = await writeStripeSnapshot(productId, reading);
+  const activeSubs = { length: reading.activeSubscriptions };
+  const canceledSubs = { length: reading.canceledSubscriptions };
+  const invoices = { length: reading.invoicesRead };
 
   // ── Update integration state ──────────────────────────────────────────────
   const newCursor = String(Math.floor(Date.now() / 1000) - 60); // 1 minute ago
@@ -229,6 +280,8 @@ export async function handleStripeIntegrationEvent(
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 async function fetchAllStripePages<T>(
+  strict: boolean,
+  
   baseUrl: string,
   headers: Record<string, string>,
   params: Record<string, string>,
@@ -245,9 +298,19 @@ async function fetchAllStripePages<T>(
     const fullUrl = queryString ? `${url}?${queryString}` : url;
 
     const response = await fetch(fullUrl, { headers });
-    if (!response.ok) break;
+    if (!response.ok) {
 
-    const data = await response.json() as { data: T[]; has_more: boolean };
+      // A page Stripe refused is not an empty page. The legacy sync (strict=false)
+
+      // kept the old behaviour — stop and compute from what it had — which is how
+
+      // a revoked key produced a confident zero snapshot. The read leg throws.
+
+      if (strict) throw new Error(`stripe ${String(response.status)} on ${url}`);
+
+      break;
+
+    }const data = await response.json() as { data: T[]; has_more: boolean };
     results.push(...data.data);
 
     if (!data.has_more) break;

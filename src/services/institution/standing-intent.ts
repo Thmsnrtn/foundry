@@ -707,6 +707,16 @@ export async function spendApprovalFor(input: {
   await query(
     `UPDATE proposed_acts SET consumed_at = datetime('now'), consumed_by = 'outbound_door'
       WHERE id = ? AND consumed_at IS NULL`, [String(row.id)]);
+  // The thread the act was proposed inside hears that the approval was used.
+  // Its thread only, by the act's own reference; the outbound door does not
+  // know or care that threads exist.
+  const bound = (await query('SELECT undertaking_id, summary FROM proposed_acts WHERE id = ?', [String(row.id)]))
+    .rows[0] as Record<string, unknown> | undefined;
+  if (bound?.undertaking_id) {
+    const { stepOn } = await import('./undertaking.js');
+    await stepOn(String(bound.undertaking_id), { kind: 'did', said: `I used your approval: ${String(bound.summary)}.`,
+      ref: { kind: 'proposed_act', id: String(row.id) }, actor: 'institution:outbound_door' }).catch(() => null);
+  }
   return true;
 }
 

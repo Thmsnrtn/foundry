@@ -322,6 +322,8 @@ async function whyCandidate(founderId: string, opportunityId: string): Promise<W
   const { candidatesFor } = await import('../venture/mandate.js');
   const { whatWasTried } = await import('../venture/validation.js');
   const presented = (await candidatesFor(String(o.mandate_id))).find((c) => c.id === opportunityId) ?? null;
+  const { spentThinkingOn } = await import('../ai/spend-ledger.js');
+  const thoughtAbout = await spentThinkingOn({ kind: 'candidate', id: opportunityId });
   const tried = await whatWasTried(opportunityId);
   let sources: string[] = []; let unknowns: string[] = [];
   try { sources = JSON.parse(String(o.sources_json ?? '[]')) as string[]; } catch { sources = []; }
@@ -355,7 +357,8 @@ async function whyCandidate(founderId: string, opportunityId: string): Promise<W
       ? tried.map((t) => `${t.whatWeDo} — ${t.decision === null ? 'proposed' : t.decision}${t.ranAt ? `, ran ${day(t.ranAt)}` : ''}${t.verdict ? `, ${t.verdict.replace('_', ' ')}` : ''}.`)
       : ['No test has been designed for it yet.'],
     outcome: [o.verdict ? `${String(o.verdict)} on ${day(o.decided_at)}${o.verdict_why ? ` — ${String(o.verdict_why)}` : ''}.` : 'Undecided. Advancing or burying it is yours.'],
-    cost: [tried.length ? `${money(tried.reduce((n, t) => n + t.costCents, 0))} across ${String(tried.length)} ${tried.length === 1 ? 'test' : 'tests'}.` : 'Nothing spent.'],
+    cost: [tried.length ? `${money(tried.reduce((n, t) => n + t.costCents, 0))} across ${String(tried.length)} ${tried.length === 1 ? 'test' : 'tests'}.` : 'Nothing spent on tests.',
+      ...(thoughtAbout > 0 ? [`${money(thoughtAbout)} of my own thinking about it, from the ledger.`] : [])],
     authority: ['I can find and test. Making it a company is yours to do, and I have not made one.'],
     technical: [['venture_opportunities', opportunityId], ['mandate', String(o.mandate_id)],
       ['evidence_mode', String(o.evidence_mode)], ['found', day(o.found_at)]],
@@ -374,6 +377,8 @@ async function whyExperiment(founderId: string, experimentId: string): Promise<W
   const resolutions = await rows(
     `SELECT verdict, because, resolved_by, resolved_at FROM prediction_resolutions WHERE prediction_id = ?`,
     [experimentId]);
+  const { spentThinkingOn } = await import('../ai/spend-ledger.js');
+  const thinking = await spentThinkingOn({ kind: 'experiment', id: experimentId });
   return {
     kind: 'experiment', id: experimentId,
     title: 'Why I expect this',
@@ -393,7 +398,8 @@ async function whyExperiment(founderId: string, experimentId: string): Promise<W
       t.verdict ? `${t.verdict.replace('_', ' ')}.` : 'No verdict yet.',
       ...resolutions.map((r) => `Resolved ${String(r.verdict).replace('_', ' ')} by ${String(r.resolved_by)} on ${day(r.resolved_at)}: ${String(r.because)}`),
     ],
-    cost: [t.costCents > 0 ? `${money(t.costCents)}.` : 'Nothing.'],
+    cost: [t.costCents > 0 ? `${money(t.costCents)} to run.` : 'Nothing to run.',
+      ...(thinking > 0 ? [`${money(thinking)} of my own thinking about it, from the ledger.`] : [])],
     authority: [`Decided by ${e.decided_by ? String(e.decided_by) : 'nobody yet'}. I cannot run a test you have not approved.`],
     technical: [['venture_experiments', experimentId], ['opportunity', String(e.opportunity_id)],
       ['validity', t.validity], ['evidence_mode', String(e.evidence_mode)],

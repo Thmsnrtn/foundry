@@ -94,6 +94,28 @@ export function readUndertaking(raw: string): UndertakingReading | null {
   return { kind: hit.kind, understoodAs: understoodAs(hit.kind, subject), subject };
 }
 
+/**
+ * THE NAME HE GAVE, IN HIS OWN CASING. `readUndertaking` lowercases the
+ * sentence to read it; a company's name must come back the way he typed it.
+ * "Adopt my Etsy shop Tidewater Prints" → "Tidewater Prints" is out of reach
+ * without a parser of English, so this takes what follows the verb, drops a
+ * leading "my"/"the"/"our" and a trailing full stop, and gives up on anything
+ * that is not a plausible name (too long, or a clause).
+ */
+export function companyNamedIn(raw: string): string | null {
+  const said = raw.trim().replace(/[’]/g, "'");
+  const text = said.toLowerCase();
+  const hits = VERBS.map((v) => v.pattern.exec(text)).filter((m): m is RegExpExecArray => m !== null)
+    .sort((a, b) => a.index - b.index);
+  const m = hits[0];
+  if (!m) return null;
+  let name = said.slice(m.index + m[0].length).replace(/[.!?]+\s*$/, '').trim();
+  name = name.replace(/^(my|the|our|this)\s+/i, '').replace(/^(company|business|shop|store|app|product|site)\s+(called\s+)?/i, '').trim();
+  if (name.length < 2 || name.length > 60) return null;
+  if (/\b(and|because|so that|which|that is|is|are|was|were)\b/i.test(name)) return null;
+  return name;
+}
+
 function understoodAs(kind: UndertakingKind, subject: string | null): string {
   const about = subject ? subject.replace(/^(why|that|whether|if)\s+/, '') : null;
   switch (kind) {
@@ -315,6 +337,49 @@ export async function dropEverythingUnderWay(input: {
   return n;
 }
 
+// ─── hearing what happened, by reference only ───────────────────────────────
+
+/**
+ * THE OPEN THREADS THAT REFERENCE ONE ROW. Never "every open thread for the
+ * company": a thread hears about a situation, a recommendation, a sense or an
+ * act only because one of its own steps, or its origin, points at that row.
+ * A sense is referenced by key, so for senses the company is required too.
+ */
+export async function openThreadsReferencing(
+  ref: { kind: RefKind | 'origin'; id: string; originKind?: 'situation' | 'recommendation' | 'candidate' }, productId?: string,
+): Promise<string[]> {
+  const byStep = ref.kind === 'origin' ? [] : await rows(
+    `SELECT DISTINCT u.id FROM undertaking_steps s JOIN undertakings u ON u.id = s.undertaking_id
+      WHERE s.ref_kind = ? AND s.ref_id = ? AND u.closed_at IS NULL${productId ? ' AND u.product_id = ?' : ''}`,
+    productId ? [ref.kind, ref.id, productId] : [ref.kind, ref.id]);
+  const byOrigin = ref.kind === 'origin' && ref.originKind ? await rows(
+    `SELECT id FROM undertakings WHERE opened_from_kind = ? AND opened_from_id = ? AND closed_at IS NULL`,
+    [ref.originKind, ref.id]) : [];
+  return [...new Set([...byStep, ...byOrigin].map((r) => String(r.id)))];
+}
+
+/**
+ * NOTICE, ON EVERY OPEN THREAD THAT REFERENCES THE ROW. A pure notice: it
+ * writes a step and changes nothing else. A thread closed between the lookup
+ * and the write is skipped, not failed — the event still happened, and it is
+ * the caller's job that must not fall over because a thread ended.
+ */
+export async function noticeOnThreadsReferencing(
+  ref: Parameters<typeof openThreadsReferencing>[0],
+  step: { kind: StepKind; said: string; ref?: { kind: RefKind; id: string } | null; actor: string },
+  productId?: string,
+): Promise<number> {
+  let n = 0;
+  for (const id of await openThreadsReferencing(ref, productId)) {
+    try {
+      if (await stepOn(id, step) !== null) n += 1;
+    } catch (err) {
+      if (!/undertaking_is_closed/.test(err instanceof Error ? err.message : String(err))) throw err;
+    }
+  }
+  return n;
+}
+
 // ─── what the institution can honestly say on day one ───────────────────────
 
 /** Which recommendation kinds are the same verb, so accepting advice opens the right undertaking. */
@@ -368,6 +433,13 @@ async function firstLook(id: string, founderId: string, productId: string, kind:
   for (const a of advice) {
     await stepOn(id, { kind: 'proposed', said: `I have already raised: ${a.summary} — waiting on you.`,
       ref: { kind: 'recommendation', id: a.id }, actor: by });
+  }
+  const noticed = await rows(
+    `SELECT id, proposed_responsibility FROM responsibility_candidates WHERE product_id = ? AND status = 'pending'
+      ORDER BY created_at`, [productId]);
+  for (const c of noticed) {
+    await stepOn(id, { kind: 'proposed', said: `I have noticed something and asked whether to look after it: ${String(c.proposed_responsibility)}.`,
+      ref: { kind: 'candidate', id: String(c.id) }, actor: by });
   }
 
   // What each verb needs that it does not have, said as the thing that would let it.

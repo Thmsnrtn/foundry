@@ -289,6 +289,26 @@ async function secretOf(credentialId: string): Promise<Record<string, unknown> |
   return plain === null ? null : JSON.parse(plain) as Record<string, unknown>;
 }
 
+/**
+ * USE THE SECRET WITHOUT HOLDING IT. The only way out of this file for a
+ * sense's secret: the caller hands over a function, the function runs with the
+ * decrypted payload, and nothing is returned but what the function returns.
+ * The read leg reads through this; no job, route or service keeps a copy.
+ * Returns null when the sense has no live credential — which is an answer, not
+ * an error, and the caller must say so rather than read nothing and call it
+ * zero.
+ */
+export async function withSenseSecret<T>(
+  senseId: string,
+  fn: (secret: Record<string, unknown>, credential: CredentialState) => Promise<T>,
+): Promise<T | null> {
+  const credential = await credentialFor(senseId);
+  if (!credential) return null;
+  const secret = await secretOf(credential.id);
+  if (!secret) return null;
+  return fn(secret, credential);
+}
+
 export interface RenewalOutcome {
   renewed: number; nothingToDo: number; failed: number;
   broke: Array<{ productId: string; provider: string; why: string }>;

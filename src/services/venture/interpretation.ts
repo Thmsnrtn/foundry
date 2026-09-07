@@ -228,7 +228,8 @@ export async function interpret(input: {
     // unattributed spend.
     reply = await callSonnet(SYSTEM, user, 1200, institutionSpend(
       // eslint-disable-next-line max-len
-      'reading one real market signal for the owner\'s own portfolio search; there is no company to charge because no venture exists yet'));
+      'reading one real market signal for the owner\'s own portfolio search; there is no company to charge because no venture exists yet',
+      { kind: 'observation', id: input.observationId }));
   } catch (err) {
     return { refused: `could not read it: ${err instanceof Error ? err.message : 'unknown'}` };
   }
@@ -261,7 +262,8 @@ export async function interpret(input: {
       'inside the <observation> block instead — a span of it, unedited.',
     ].join('\n'), 1200, institutionSpend(
       // eslint-disable-next-line max-len
-      'a second attempt at getting the reader to quote the sentence it read; the owner\'s portfolio search, which has no company to charge')).catch(() => null);
+      'a second attempt at getting the reader to quote the sentence it read; the owner\'s portfolio search, which has no company to charge',
+      { kind: 'observation', id: input.observationId })).catch(() => null);
     const second = again === null ? null : parse(again.content);
     if (second === null || second.abstain !== null || !quoteIsInTheText(second, saw)) {
       return record({

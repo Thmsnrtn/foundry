@@ -130,22 +130,52 @@ export function computeCostCents(model: AIModel | string, inputTokens: number, o
  * The subject is now required at the type boundary, and institutional calls say
  * so out loud with a reason a reader can check.
  */
+/**
+ * WHAT THE THINKING IS FOR. The same (kind, id) shape prediction_resolutions
+ * uses, so what a question cost to reason about can later sit beside what it
+ * cost to test and how the test came out. Optional: a call without one is
+ * still attributed; it simply cannot be compared.
+ */
+export type SpendPurposeKind =
+  'observation' | 'candidate' | 'experiment' | 'unknown' | 'undertaking' | 'responsibility' | 'workspace' | 'mandate';
+export interface SpendPurpose { readonly kind: SpendPurposeKind; readonly id: string }
+
 export interface InstitutionSpend {
   readonly institutionReason: string;
+  readonly purpose?: SpendPurpose;
+}
+
+/** A company's call that also names what it was for. */
+export interface CompanySpend {
+  readonly productId: string;
+  readonly purpose: SpendPurpose;
 }
 
 /** Declare a model call as the institution's own, with the reason it has no
  * company to charge. The reason is not decoration: it is what a reviewer reads
  * to decide whether this really is institutional or just unattributed. */
-export function institutionSpend(reason: string): InstitutionSpend {
-  return { institutionReason: reason };
+export function institutionSpend(reason: string, purpose?: SpendPurpose): InstitutionSpend {
+  return purpose ? { institutionReason: reason, purpose } : { institutionReason: reason };
 }
 
-/** A company id, or an explicit institutional declaration. Never undefined. */
-export type SpendSubject = string | InstitutionSpend;
+/** A company's call with its purpose named. */
+export function companySpend(productId: string, purpose: SpendPurpose): CompanySpend {
+  return { productId, purpose };
+}
 
-function subjectProductId(subject: SpendSubject): string | undefined {
-  return typeof subject === 'string' ? subject : undefined;
+/** A company id, an explicit institutional declaration, or a company call with
+ * a purpose. Never undefined. */
+export type SpendSubject = string | InstitutionSpend | CompanySpend;
+
+function subjectProductId(subject: SpendSubject | undefined): string | undefined {
+  if (typeof subject === 'string') return subject;
+  return subject && 'productId' in subject ? subject.productId : undefined;
+}
+
+/** The purpose a subject names, if it names one. */
+export function subjectPurpose(subject: SpendSubject | undefined): SpendPurpose | null {
+  if (!subject || typeof subject === 'string') return null;
+  return subject.purpose ?? null;
 }
 
 /** Refuse before anything is reserved or dispatched. */
@@ -261,6 +291,7 @@ async function authorizeSpend(
   model: AIModel | string,
   prompt: string,
   maxOutputTokens: number,
+  purpose: SpendPurpose | null = null,
 ): Promise<SpendReservation> {
   const founderId = productId ? await resolveFounderId(productId) : null;
   if (productId && !founderId) {
@@ -274,6 +305,7 @@ async function authorizeSpend(
   return reserveSpend({
     productId, founderId: founderId ?? undefined, model, amountCents,
     caps: { global: GLOBAL_COST_CEILING_CENTS, product: DAILY_COST_CEILING_CENTS, founder: FOUNDER_COST_CEILING_CENTS },
+    purpose,
   });
 }
 
@@ -397,6 +429,7 @@ export async function callClaude(
   const baseUrl = getBaseUrl();
   const reservation = await authorizeSpend(
     productId, config.model, `${config.systemPrompt}\n${config.userPrompt}`, config.maxTokens,
+    subjectPurpose(config.subject),
   );
   const startedAt = Date.now();
   let lastError: Error | null = null;

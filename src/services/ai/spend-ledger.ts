@@ -38,6 +38,8 @@ export interface SpendReservation { id: string; amountCents: number; scopes: Spe
 export async function reserveSpend(input: {
   productId?: string; founderId?: string; model: string; amountCents: number;
   caps: { global: number; product: number; founder: number }; ttlMs?: number;
+  /** What the thinking is for, when the caller names it. Both halves or neither. */
+  purpose?: { kind: string; id: string } | null;
 }): Promise<SpendReservation> {
   const now = new Date().toISOString();
   const date = now.slice(0, 10);
@@ -52,12 +54,14 @@ export async function reserveSpend(input: {
     await query(
       `INSERT INTO ai_spend_reservations
        (id, product_id, founder_id, date, model, reserved_cents, global_cap_cents,
-        product_cap_cents, founder_cap_cents, status, created_at, updated_at, expires_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'reserved', ?, ?, ?)`,
+        product_cap_cents, founder_cap_cents, status, created_at, updated_at, expires_at,
+        purpose_kind, purpose_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'reserved', ?, ?, ?, ?, ?)`,
       [id, input.productId ?? null, input.founderId ?? null, date, input.model, input.amountCents,
         input.caps.global, input.productId ? input.caps.product : null,
         input.founderId ? input.caps.founder : null, now, now,
-        new Date(Date.now() + (input.ttlMs ?? 15 * 60_000)).toISOString()]);
+        new Date(Date.now() + (input.ttlMs ?? 15 * 60_000)).toISOString(),
+        input.purpose?.kind ?? null, input.purpose?.id ?? null]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const match = message.match(/ai_spend_ceiling:(global|product|founder)/);
@@ -70,6 +74,19 @@ export async function reserveSpend(input: {
     ...(input.founderId ? [{ scope: 'founder' as const, id: input.founderId, capCents: input.caps.founder }] : []),
   ];
   return { id, amountCents: input.amountCents, scopes };
+}
+
+/**
+ * WHAT THINKING ABOUT ONE THING HAS COST, settled cents only. Read beside what
+ * a test of the same question cost and how it came out; this is the join the
+ * purpose exists for.
+ */
+export async function spentThinkingOn(purpose: { kind: string; id: string }): Promise<number> {
+  const row = (await query(
+    `SELECT COALESCE(SUM(actual_cents), 0) AS cents FROM ai_spend_reservations
+      WHERE purpose_kind = ? AND purpose_id = ? AND status = 'settled'`, [purpose.kind, purpose.id]))
+    .rows[0] as Record<string, unknown> | undefined;
+  return Math.round(Number(row?.cents ?? 0));
 }
 
 export async function finishReservation(

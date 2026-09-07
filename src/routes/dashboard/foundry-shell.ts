@@ -1019,7 +1019,7 @@ export function placeHead(where: Where | null, title: string): H {
     ? html`<p class="crumbline"><a href="${up.href}">← ${up.label}</a></p>` : ''}
     ${title ? html`<h1>${where.crumbs.length > 3 && here ? html`${title} <span class="dim">· ${here.label}</span>` : title}</h1>` : ''}
     ${where.chips.length ? html`<p class="chips">${where.chips.map((ch) => html`<span class="chip">${ch}</span>`)}</p>` : ''}
-    ${where.local.length ? html`<nav class="local${where.scope.kind === 'company' ? ' rail' : ''}" aria-label="Within ${where.scope.name}">${where.local.map((l) =>
+    ${where.local.length ? html`<nav class="local${where.scope.kind === 'company' ? ' rail' : ''}" id="places" aria-label="Within ${where.scope.name}">${where.local.map((l) =>
       html`<a href="${l.href}"${l.on ? raw(' class="on" aria-current="page"') : ''}>${l.label}${
         l.count !== null && l.count > 0 ? html` <b>${String(l.count)}</b>` : ''}</a>`)}</nav>` : ''}`;
 }
@@ -1048,6 +1048,37 @@ function railExtra(where: Where | null): H {
     <a href="/foundry/decisions"${where?.scope.kind === 'decisions' ? raw(' class="on"') : ''}>Decisions</a>
     <a href="/foundry/searching"${where?.scope.kind === 'searching' ? raw(' class="on"') : ''}>Searching</a>
   </section>`;
+}
+
+/**
+ * INSIDE A COMPANY, THE BAR IS THE COMPANY'S. On a phone the three doors give
+ * way to the places inside the object he is standing in — Portfolio to go up,
+ * then Overview, Work and the rest in their fixed order — so moving between
+ * what a company is, what is happening to it and what it earns is one thumb
+ * away, the way it is in the products he finds easy. The doors are still one
+ * tap away through Portfolio; the trail above the title still says where he
+ * is. On a wide screen the rail carries all of this and the bar stays hidden.
+ */
+function companyBar(where: Where | null): H | '' {
+  if (!where || where.scope.kind !== 'company' || !where.local.length) return '';
+  const ICON: Record<string, string> = {
+    overview: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>',
+    work: '<svg viewBox="0 0 24 24"><path d="M4 7h16v11H4z"/><path d="M9 7V5h6v2M4 12h16"/></svg>',
+    economics: '<svg viewBox="0 0 24 24"><path d="M4 18 10 11l4 4 6-8"/><path d="M4 21h16"/></svg>',
+    customers: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M3 19c0-3 3-5 6-5s6 2 6 5M14 19c0-2 1.5-3.5 3-3.5s4 1.5 4 3.5"/></svg>',
+    experiments: '<svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6L4 19h16l-6-10V3"/></svg>',
+    evidence: '<svg viewBox="0 0 24 24"><path d="M6 3h9l5 5v13H6z"/><path d="M14 3v6h6M9 13h6M9 17h6"/></svg>',
+  };
+  const keyOf = (href: string): string => href.split('/').pop() ?? 'overview';
+  const places = where.local.map((l) => ({ ...l, key: l.href.endsWith(where.scope.id ?? '') ? 'overview' : keyOf(l.href) }));
+  const shown = places.slice(0, 4);
+  const more = places.length > 4;
+  return html`<nav class="places company" aria-label="Within ${where.scope.name}"><div>
+    <a href="/foundry/companies"><svg viewBox="0 0 24 24"><path d="M3 17c3-4 6 0 9-3s6 1 9-3"/><path d="M3 12c3-4 6 0 9-3s6 1 9-3"/></svg>Portfolio</a>
+    ${shown.map((l) => html`<a href="${l.href}"${l.on ? raw(' class="on" aria-current="page"') : ''}>${raw(ICON[l.key] ?? ICON.overview ?? '')}${l.label}${
+      l.count !== null && l.count > 0 ? html`<b>${String(l.count)}</b>` : ''}</a>`)}
+    ${more ? html`<a href="/foundry/companies/${where.scope.id ?? ''}#places"><svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="18" cy="12" r="1.5"/></svg>More</a>` : ''}
+  </div></nav>`;
 }
 
 /** What Ask will take as its subject, said where he types. */
@@ -1454,6 +1485,11 @@ export const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscape
   .steps time{grid-column:2;font-size:.78rem}
   .steps a{color:var(--accent)}
   nav.places .sub,nav.places .more{display:none}
+  nav.places.behind{display:none}
+  nav.places.company a{position:relative}
+  nav.places.company a b{position:absolute;top:2px;right:calc(50% - 22px);font-size:.62rem;font-weight:600;
+    color:var(--bg);background:var(--accent);border-radius:999px;min-width:16px;height:16px;line-height:16px;
+    text-align:center;padding:0 4px}
   /* Deliberately not named ask: that class is the fixed bar at the bottom of
      every page, and reusing it would pin every question to the floor. */
   .noticed{border:1px solid var(--line);border-radius:var(--r);padding:var(--s3);
@@ -1520,6 +1556,8 @@ export const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscape
       border-radius:999px;padding:1px 7px}
     nav.places .sub a.on,nav.places .more a.on{color:var(--ink);background:var(--accent-soft)}
     nav.places .more a{padding-left:12px}
+    nav.places.company{display:none}
+    nav.places.behind{display:block}
     .glance{grid-template-columns:repeat(3,minmax(0,1fr));max-width:44rem}
     .glance .tile{display:block}
     .glance .tile dd.v{text-align:left}
@@ -1557,7 +1595,8 @@ ${body}
   </div>
 </form>
 </main>
-<nav class="places" aria-label="Places"><div>
+${companyBar(where)}
+<nav class="places${where && where.scope.kind === 'company' && where.local.length ? ' behind' : ''}" aria-label="Places"><div>
   <a href="/foundry"${active === 'foundry' ? ' class="on" aria-current="page"' : ''}>
     <svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/></svg>Foundry</a>
   <a href="/foundry/companies"${active === 'companies' ? ' class="on" aria-current="page"' : ''}>
@@ -2858,6 +2897,31 @@ foundryShellRoutes.get('/foundry', async (c) => {
     ],
     chips: [],
   };
+  // EVERYTHING ELSE WAITING, WHERE HE IS. The one thing keeps its place; the
+  // rest used to be a count on a chip and a page away. Now each is one tap,
+  // through the same forms its own page posts, so a morning's decisions are
+  // made on the first screen rather than found one company at a time.
+  const { waitingOn } = await import('../../services/founder/attention.js');
+  const queue = (await waitingOn(s.ownerId))
+    .filter((item) => !(attention && attention.kind === 'spend' && item.kind === 'act' && item.id === attention.actId))
+    .filter((item) => !(attention && attention.kind === 'recognise_company' && item.kind === 'noticed' && item.id === attention.candidateId));
+  const alsoWaiting = queue.length ? html`<section class="know queue" id="waiting">
+    <h2>${attention ? 'Also waiting on you' : 'Waiting on you'} <span class="pill">${String(queue.length)}</span></h2>
+    ${queue.map((item) => html`<div class="noticed qitem">
+      <p class="quiet"><a href="/foundry/companies/${item.productId}">${item.companyName}</a> · ${
+    item.kind === 'act' ? 'an act' : item.kind === 'advice' ? 'advice' : 'something I noticed'}</p>
+      <p><strong>${item.summary}</strong></p>
+      <p class="quiet">${item.detail}</p>
+      <div class="pair">
+        <form method="POST" action="${item.yes.action}">${Object.entries(item.yes.fields ?? {}).map(([k, v]) => html`<input type="hidden" name="${k}" value="${v}" />`)}
+          <button class="btn go" type="submit">${item.yes.label}</button></form>
+        <form method="POST" action="${item.no.action}">${Object.entries(item.no.fields ?? {}).map(([k, v]) => html`<input type="hidden" name="${k}" value="${v}" />`)}
+          <button class="btn" type="submit">${item.no.label}</button></form>
+      </div>
+      ${item.why ? html`<p class="row"><a class="why" href="${item.why}">Show your work</a></p>` : ''}
+    </div>`)}
+  </section>` : '';
+
   const body = html`
     <h1><span id="greet">Hello</span>${s.firstName ? `, ${s.firstName}` : ''}.</h1>
     ${placeHead(homeFrame, '')}
@@ -2877,6 +2941,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
          "One thing needs you" and then put everything else in front of it. -->
     ${standingPermission(s)}
     ${theOneThing(attention)}
+    ${alsoWaiting}
     ${/* SAID ALONGSIDE, NOT INSTEAD OF. Demoting a stopped routine below a
           decision that needs him must not make it disappear: what he is being
           told may genuinely be out of date, and that is his to weigh. It is one
@@ -3675,11 +3740,22 @@ foundryShellRoutes.post('/foundry/companies', requireInstitutionOwner(), async (
     [String(founder.id), name])).rows[0] as Record<string, unknown> | undefined;
   if (already) return c.redirect(`/foundry/companies/${String(already.id)}?done=added`);
 
+  const id = await addCompany(String(founder.id), name);
+  return c.redirect(`/foundry/companies/${id}?done=added`);
+});
+
+/**
+ * THE SMALLEST TRUE COMPANY. It exists, and he owns it — reached from the
+ * companies page and from the single door when he names a business Foundry
+ * has not met. One writer, so the two entrances cannot disagree about what a
+ * new company is.
+ */
+async function addCompany(founderId: string, name: string): Promise<string> {
   const { nanoid } = await import('nanoid');
   const id = nanoid();
   await query(
     "INSERT INTO products (id, name, owner_id, status) VALUES (?, ?, ?, 'active')",
-    [id, name, String(founder.id)]);
+    [id, name, founderId]);
 
   // AND A NAME OF ITS OWN, FROM ITS FIRST DAY.
   //
@@ -3691,10 +3767,9 @@ foundryShellRoutes.post('/foundry/companies', requireInstitutionOwner(), async (
   // Created here rather than offered as a setting, because a setting nobody
   // visits produces exactly the asset that was never separable.
   const { nameAnActor } = await import('../../services/institution/acting.js');
-  await nameAnActor({ founderId: String(founder.id), productId: id,
-    kind: 'company', displayName: name });
-  return c.redirect(`/foundry/companies/${id}?done=added`);
-});
+  await nameAnActor({ founderId, productId: id, kind: 'company', displayName: name });
+  return id;
+}
 
 /**
  * BRING A COMPANY THAT DOES NOT EXIST INTO BEING.
@@ -4555,6 +4630,51 @@ foundryShellRoutes.post('/foundry/ask', requireInstitutionOwner(), async (c: any
     return c.redirect(`/foundry?q=${encodeURIComponent(said)}`);
   }
 
+  // A VERB NAMES ITS COMPANY, OR NAMES A NEW ONE.
+  //
+  // "Grow AcreOS" said at the front door used to come back as "I need which
+  // company you mean" — with the company's name in the sentence. And "Adopt
+  // Tidewater", the first thing an owner says about a business Foundry has not
+  // met, had nowhere to go at all: he had to add the company on one page and
+  // then find its page to say what he wanted. ADOPT is the verb for bringing an
+  // existing business in, and it is one sentence, not two screens.
+  //
+  // A company he already has → its page, with the offer to take the work on.
+  // A business he is naming for the first time → one preview: add it and take
+  // it on, both after he confirms exactly these words.
+  if (door.destination === 'undertaking') {
+    const mine = (await query(
+      `SELECT p.id, p.name FROM products p
+        WHERE p.owner_id = ? AND p.status = 'active' AND p.deleted_at IS NULL AND ${realCompany('p')}`,
+      [String(founder.id)])).rows as unknown as Array<Record<string, unknown>>;
+    const lower = said.toLowerCase();
+    const named = mine
+      .filter((p) => String(p.name).trim().length >= 2 && lower.includes(String(p.name).toLowerCase()))
+      .sort((a, b) => String(b.name).length - String(a.name).length)[0];
+    if (named) return c.redirect(`/foundry/companies/${String(named.id)}?q=${encodeURIComponent(said)}`);
+
+    const { readUndertaking, companyNamedIn } = await import('../../services/institution/undertaking.js');
+    const asked = readUndertaking(said);
+    const newName = asked?.kind === 'understand' ? companyNamedIn(said) : null;
+    if (asked && newName) {
+      return c.html(page('Take this on?', html`
+        <h1>Add ${newName} and take it on?</h1>
+        <p class="lede">You said: <strong>${said}</strong></p>
+        <p>I do not have a company called <strong>${newName}</strong>. If I add it, I will
+          ${asked.understoodAs.replace(/^learn what .* is,/, 'learn what it is,')} — and I will
+          say what I cannot see until you connect it.</p>
+        <p class="quiet">Adding it changes nothing outside Foundry. It costs nothing until I think about it,
+          and you will see that on its ledger.</p>
+        <form method="POST" action="/foundry/adopt">
+          <input type="hidden" name="said" value="${said}">
+          <input type="hidden" name="name" value="${newName}">
+          <input type="hidden" name="understood" value="${asked.understoodAs}">
+          <button class="btn go" type="submit">Add it and take it on</button>
+        </form>
+        <a class="btn" href="/foundry">Not now</a>`, 'foundry'));
+    }
+  }
+
   // AND WHAT IT COULD NOT PLACE COMES BACK WITH HIS WORDS IN IT. Losing three
   // hundred words of mandate because nothing recognised them is a worse failure
   // than the 404 was: the 404 at least did not pretend to have heard him.
@@ -4575,6 +4695,47 @@ foundryShellRoutes.post('/foundry/ask', requireInstitutionOwner(), async (c: any
       </form>
     </div>
     <a class="btn" href="/foundry">Back</a>`, 'foundry'));
+});
+
+// ADOPT, CONFIRMED. The preview above bound nothing; this binds exactly the
+// words it showed. A confirmation carrying a different reading — the sentence
+// edited, the reader changed between the two requests — is shown again rather
+// than acted on, which is the same binding-preview rule every other verb keeps.
+foundryShellRoutes.post('/foundry/adopt', requireInstitutionOwner(), async (c: any) => {
+  const founder = c.get('founder') as { id?: string } | undefined;
+  if (!founder?.id) return c.redirect('/onboarding');
+  const form = await c.req.parseBody();
+  const said = String(form.said ?? '').trim().slice(0, 800);
+  const name = String(form.name ?? '').trim().slice(0, 60);
+  const understood = String(form.understood ?? '');
+  const { readUndertaking, companyNamedIn, openUndertaking } = await import('../../services/institution/undertaking.js');
+  const asked = readUndertaking(said);
+  if (!said || !name || !asked || asked.kind !== 'understand' || asked.understoodAs !== understood
+    || companyNamedIn(said) !== name) {
+    return c.html(page('Let me say that again', html`
+      <h1>Let me say that again</h1>
+      <p class="lede">What you confirmed is not what I would do with these words now, so I have not acted.</p>
+      <form method="POST" action="/foundry/ask">
+        <input type="hidden" name="said" value="${said}">
+        <button class="btn go" type="submit">Show me again</button>
+      </form>
+      <a class="btn" href="/foundry">Back</a>`, 'foundry'));
+  }
+  // The company he already named is the company he meant, here as on the
+  // companies page: a double tap is one company, and one thread.
+  const already = (await query(
+    `SELECT id FROM products p
+      WHERE p.owner_id = ? AND lower(p.name) = lower(?) AND p.status = 'active'
+        AND p.deleted_at IS NULL AND ${realCompany('p')}
+      ORDER BY p.created_at LIMIT 1`,
+    [String(founder.id), name])).rows[0] as Record<string, unknown> | undefined;
+  const productId = already ? String(already.id) : await addCompany(String(founder.id), name);
+  await openUndertaking({
+    founderId: String(founder.id), productId, kind: asked.kind, asked: said,
+    understoodAs: asked.understoodAs, openedBy: `founder:${String(founder.id)}`,
+    from: { kind: 'owner', id: null },
+  });
+  return c.redirect(`/foundry/companies/${productId}/work?done=undertaken#underway`);
 });
 
 foundryShellRoutes.post('/foundry/venture', requireInstitutionOwner(), async (c: any) => {

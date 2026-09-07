@@ -404,11 +404,12 @@ describe('the doors agree', () => {
     expect(await count('SELECT COUNT(*) AS n FROM venture_mandates')).toBe(before + 1);
   });
 
-  it('a verb said at the single door needs a company, and says so without writing anything', async () => {
+  it('a verb said at the single door that names no company needs one, and says so without writing anything', async () => {
     const before = await count('SELECT COUNT(*) AS n FROM undertakings');
-    const html = await (await post('/foundry/ask', { said: 'Adopt AcreOS.' })).text();
+    // "Adopt X" now previews adding X; a verb with no name still needs a company.
+    const html = await (await post('/foundry/ask', { said: 'Investigate it.' })).text();
     expect(html).toContain('I did not follow that');
-    expect(html).toContain('you want me to learn what acreos is');
+    expect(html).toContain('you want me to find out what is going on here');
     expect(html).toContain('which company you mean');
     expect(await count('SELECT COUNT(*) AS n FROM undertakings')).toBe(before);
     const { whichDoor } = await import('../../src/services/institution/the-door.js');

@@ -228,6 +228,14 @@ export async function connectSense(input: {
      VALUES (?,?,?,?,?,?,?)`,
     [id, input.productId, input.senseKey, input.provider, input.mode,
       input.integrationId ?? null, disclosure]);
+  // A thread that said it could not see this now hears that it can. By the
+  // sense it named and the company it is for, never by company alone.
+  const { noticeOnThreadsReferencing } = await import('../institution/undertaking.js');
+  await noticeOnThreadsReferencing({ kind: 'sense', id: input.senseKey }, {
+    kind: 'looked', said: `I can now see ${offer.wouldLearn}, from ${input.provider}${
+      input.mode === 'sandbox' ? ' in test mode' : ''}. Nothing has reported yet.`,
+    ref: { kind: 'sense', id: input.senseKey }, actor: 'institution:sense_connected',
+  }, input.productId).catch(() => 0);
   return { id, disclosure };
 }
 
@@ -285,11 +293,26 @@ export async function channelFor(
 export async function noteSenseObserved(
   productId: string, provider: string, error?: string | null,
 ): Promise<void> {
+  // A sense that reports after never having reported, or after being blind,
+  // is an event a thread may be waiting for. Read before the row is written.
+  const firstTime = error ? [] : (await query(
+    `SELECT sense_key, last_observed_at FROM company_senses WHERE product_id = ? AND provider = ? AND disconnected_at IS NULL
+        AND (last_observed_at IS NULL OR last_error IS NOT NULL)`, [productId, provider])).rows as unknown as Array<Record<string, unknown>>;
   await query(
     `UPDATE company_senses
         SET last_observed_at = datetime('now'), last_error = ?
       WHERE product_id = ? AND provider = ? AND disconnected_at IS NULL`,
     [error ?? null, productId, provider]);
+  if (firstTime.length) {
+    const { noticeOnThreadsReferencing } = await import('../institution/undertaking.js');
+    for (const s of firstTime) {
+      await noticeOnThreadsReferencing({ kind: 'sense', id: String(s.sense_key) }, {
+        kind: 'found', said: `${String(s.sense_key).replaceAll('_', ' ')} has reported ${
+          s.last_observed_at ? 'again, after being blind' : 'for the first time'}, from ${provider}.`,
+        ref: { kind: 'sense', id: String(s.sense_key) }, actor: 'institution:sense_reported',
+      }, productId).catch(() => 0);
+    }
+  }
 }
 
 /**

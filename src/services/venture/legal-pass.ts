@@ -265,7 +265,8 @@ export async function recogniseExposure(input: {
   try {
     reply = await callSonnet(SYSTEM, user, 2000, institutionSpend(
       // eslint-disable-next-line max-len
-      'recognising legal exposure on a candidate for the owner\'s own portfolio search; there is no operating company to charge because no venture exists yet'));
+      'recognising legal exposure on a candidate for the owner\'s own portfolio search; there is no operating company to charge because no venture exists yet',
+      input.subjectKind === 'opportunity' ? { kind: 'candidate', id: input.subjectId } : undefined));
   } catch (err) {
     return { refused: `could not read it: ${err instanceof Error ? err.message : 'unknown'}` };
   }

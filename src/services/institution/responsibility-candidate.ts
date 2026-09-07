@@ -87,6 +87,12 @@ export async function promoteResponsibilityCandidate(input:{
     if (!won.rows.length) throw error;
     return String((won.rows[0] as Record<string,unknown>).resulting_responsibility_id);
   }
+  // A thread that had this candidate in view hears that it is now held.
+  const { noticeOnThreadsReferencing } = await import('./undertaking.js');
+  await noticeOnThreadsReferencing({ kind: 'candidate', id: input.candidateId }, {
+    kind: 'found', said: `I now look after: ${String(c.proposed_responsibility)}.`,
+    ref: { kind: 'responsibility', id: responsibilityId }, actor,
+  }).catch(() => 0);
   return responsibilityId;
 }
 

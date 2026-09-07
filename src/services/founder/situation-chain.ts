@@ -113,6 +113,15 @@ export async function recordSituation(productId: string): Promise<Spell> {
     if (raced) return raced;
     throw err;
   }
+  // THE THREADS THAT READ THE OLD SITUATION HEAR THAT IT ENDED. By reference
+  // to the spell they read, never by company. A notice, nothing more.
+  if (open) {
+    const { noticeOnThreadsReferencing } = await import('../institution/undertaking.js');
+    await noticeOnThreadsReferencing({ kind: 'situation', id: open.id }, {
+      kind: 'found', said: `The situation changed: it was ${open.situation.replaceAll('_', ' ')}; now ${read.headline}`,
+      ref: { kind: 'situation', id }, actor: 'institution:situation_changed',
+    }).catch(() => 0);
+  }
   return {
     id, situation: read.situation, headline: read.headline, because: read.because,
     evidenceMode: evidenceMode as Spell['evidenceMode'],
@@ -286,6 +295,14 @@ export async function decideRecommendation(input: {
         SET decision = ?, decided_by = ?, decided_at = datetime('now')
       WHERE id = ? AND decision IS NULL`,
     [input.decision, input.decidedBy, input.id]);
+  // Threads that had raised this advice hear how it was decided.
+  const advice = (await query('SELECT summary FROM situation_recommendations WHERE id = ?', [input.id]))
+    .rows[0] as Record<string, unknown> | undefined;
+  const { noticeOnThreadsReferencing } = await import('../institution/undertaking.js');
+  await noticeOnThreadsReferencing({ kind: 'recommendation', id: input.id }, {
+    kind: 'you_said', said: `${input.decision === 'accepted' ? 'You agreed' : 'You declined'}: ${String(advice?.summary ?? 'the advice')}.`,
+    ref: { kind: 'recommendation', id: input.id }, actor: input.decidedBy,
+  }).catch(() => 0);
 }
 
 // ─── what followed ───────────────────────────────────────────────────────────
