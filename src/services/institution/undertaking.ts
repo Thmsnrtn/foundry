@@ -111,8 +111,14 @@ export function companyNamedIn(raw: string): string | null {
   if (!m) return null;
   let name = said.slice(m.index + m[0].length).replace(/[.!?]+\s*$/, '').trim();
   name = name.replace(/^(my|the|our|this)\s+/i, '').replace(/^(company|business|shop|store|app|product|site)\s+(called\s+)?/i, '').trim();
+  const quoted = /^["“'‘](.+)["”'’]$/.exec(name);
+  if (quoted) name = quoted[1]!.trim();
   if (name.length < 2 || name.length > 60) return null;
-  if (/\b(and|because|so that|which|that is|is|are|was|were)\b/i.test(name)) return null;
+  if (/\b(and|because|so that|which|that is|is|are|was|were|more|less|why|how|what)\b/i.test(name)) return null;
+  // A NAME IS CAPITALISED OR QUOTED. "take on more customers" is a wish, not a
+  // company; "Adopt Tidewater Prints" and 'adopt "the little shop"' name one.
+  if (!quoted && !/^[A-Z0-9]/.test(name)) return null;
+  if (name.split(/\s+/).length > 6) return null;
   return name;
 }
 

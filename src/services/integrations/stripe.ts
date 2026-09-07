@@ -166,7 +166,7 @@ export async function readStripeRevenue(
 
 /** The write half: today's snapshot row, from a reading. Returns the columns written. */
 export async function writeStripeSnapshot(
-  productId: string, reading: StripeRevenueReading,
+  productId: string, reading: StripeRevenueReading, opts: { level: boolean } = { level: true },
 ): Promise<string[]> {
   const { totalMrr, newMrrCents, churnedMrrCents, expansionMrrCents, contractionMrrCents, healthRatio, activeUserCount, today } = {
     totalMrr: reading.totalMrrCents, newMrrCents: reading.newMrrCents, churnedMrrCents: reading.churnedMrrCents,
@@ -174,11 +174,16 @@ export async function writeStripeSnapshot(
     healthRatio: reading.healthRatio, activeUserCount: reading.activeUserCount, today: reading.today,
   };
   // ── Upsert today's metric snapshot ──────────────────────────────────────
+  // THE LEVEL ONLY WHEN THE MONEY IS REAL. A sandbox sense reports movement
+  // on the sandbox channel and never the level: `mrr_cents` is what the
+  // portfolio reads to say what a company earns, and test-mode money is not
+  // earnings.
   const columns = [
     'mrr_cents', 'new_mrr_cents', 'churned_mrr_cents', 'expansion_mrr_cents',
     'contraction_mrr_cents', 'active_users',
   ];
   const values = [totalMrr, newMrrCents, churnedMrrCents, expansionMrrCents, contractionMrrCents, activeUserCount];
+  if (!opts.level) { columns.shift(); values.shift(); }
 
   if (healthRatio !== null) {
     columns.push('mrr_health_ratio');
@@ -281,7 +286,6 @@ export async function handleStripeIntegrationEvent(
 
 async function fetchAllStripePages<T>(
   strict: boolean,
-  
   baseUrl: string,
   headers: Record<string, string>,
   params: Record<string, string>,
@@ -310,7 +314,8 @@ async function fetchAllStripePages<T>(
 
       break;
 
-    }const data = await response.json() as { data: T[]; has_more: boolean };
+    }
+    const data = await response.json() as { data: T[]; has_more: boolean };
     results.push(...data.data);
 
     if (!data.has_more) break;

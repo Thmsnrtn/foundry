@@ -76,7 +76,24 @@ beforeEach(async () => {
 afterEach(() => { vi.unstubAllGlobals(); });
 
 describe('a connected sense with a live credential', () => {
-  it('reads one revenue snapshot a day, through the credential, on the channel its mode decides', async () => {
+  it('reads the level for a real sense, once a day, through the credential', async () => {
+    const P = await company('Acme Real');
+    await connectedWithKey(P, 'real');
+    stripe(200, [{ id: 'sub_a', status: 'active', created: 1, canceled_at: null,
+      items: { data: [{ price: { unit_amount: 50000, recurring: { interval: 'month' } } }] } }]);
+    const first = await readSenses();
+    expect(first.read).toBe(1);
+    const snap = (await query("SELECT mrr_cents, active_users FROM metric_snapshots WHERE product_id = ? AND snapshot_date = date('now')", [P]))
+      .rows[0] as Record<string, unknown>;
+    expect(Number(snap.mrr_cents), 'the level, because the money is real').toBe(50000);
+    expect(Number(snap.active_users)).toBe(1);
+    const again = await readSenses();
+    expect(again.read).toBe(0);
+    expect(again.nothingToDo).toBe(1);
+    expect((await query("SELECT COUNT(*) AS n FROM metric_snapshots WHERE product_id = ? AND snapshot_date = date('now')", [P])).rows[0]).toMatchObject({ n: 1 });
+  });
+
+  it('reads movement but never the level for a sandbox sense, on the sandbox channel', async () => {
     const P = await company('Acme');
     await connectedWithKey(P, 'sandbox');
     // An observation is a movement, so there must be a yesterday to move from.
@@ -91,7 +108,7 @@ describe('a connected sense with a live credential', () => {
 
     const snap = (await query('SELECT mrr_cents, active_users FROM metric_snapshots WHERE product_id = ? AND snapshot_date = date(\'now\')', [P]))
       .rows[0] as Record<string, unknown>;
-    expect(Number(snap.mrr_cents)).toBe(50000);
+    expect(snap.mrr_cents, 'test-mode money is not earnings: no level').toBeNull();
     expect(Number(snap.active_users)).toBe(1);
 
     const sense = (await query('SELECT last_observed_at, last_error FROM company_senses WHERE product_id = ?', [P]))
@@ -106,11 +123,18 @@ describe('a connected sense with a live credential', () => {
     expect(events.length, 'the read reported through the observation channel').toBeGreaterThan(0);
     expect(events.every((e) => String(e.source).startsWith('sandbox')), JSON.stringify(events)).toBe(true);
 
-    // Same day, run again: nothing to do, one snapshot still.
-    const again = await readSenses();
-    expect(again.read).toBe(0);
-    expect(again.nothingToDo).toBe(1);
-    expect((await query("SELECT COUNT(*) AS n FROM metric_snapshots WHERE product_id = ? AND snapshot_date = date('now')", [P])).rows[0]).toMatchObject({ n: 1 });
+  });
+
+  it('reads once per company and provider, however many senses share the credential', async () => {
+    const P = await company('Acme Twice');
+    await connectedWithKey(P, 'real');
+    const customers = await connectSense({ productId: P, companyName: 'Acme Twice', senseKey: 'customers', provider: 'stripe', mode: 'real' });
+    expect(customers).toBeTruthy();
+    let calls = 0;
+    vi.stubGlobal('fetch', async () => { calls += 1; return { ok: true, status: 200, json: async () => ({ data: [], has_more: false }), text: async () => '' }; });
+    const outcome = await readSenses();
+    expect(outcome.read).toBe(1);
+    expect(calls, 'three requests, not six').toBe(3);
   });
 
   it('writes no snapshot when Stripe refuses, and says the sense is blind', async () => {

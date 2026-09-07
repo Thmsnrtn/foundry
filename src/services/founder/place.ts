@@ -23,7 +23,7 @@ import { POSTURE_IN_PLAIN_WORDS } from './burden.js';
 import { ANCHOR_CENTS } from './portfolio.js';
 
 export type DimensionKey =
-  'overview' | 'work' | 'economics' | 'customers' | 'experiments' | 'evidence';
+  'overview' | 'work' | 'authority' | 'economics' | 'customers' | 'experiments' | 'evidence';
 
 export interface Dimension {
   key: DimensionKey;
@@ -48,6 +48,7 @@ export interface CompanyPlace {
 const ORDER: Array<{ key: DimensionKey; label: string; path: string }> = [
   { key: 'overview', label: 'Overview', path: '' },
   { key: 'work', label: 'Work', path: '/work' },
+  { key: 'authority', label: 'Authority', path: '/authority' },
   { key: 'economics', label: 'Economics', path: '/economics' },
   { key: 'customers', label: 'Customers', path: '/customers' },
   { key: 'experiments', label: 'Experiments', path: '/experiments' },
@@ -81,7 +82,7 @@ export async function placeOf(founderId: string, productId: string): Promise<Com
 
   const underWay = await one(`SELECT COUNT(*) AS n FROM undertakings WHERE product_id = ? AND closed_at IS NULL`, [id]);
   const [proposals, advice, asks, responsibilities, workspaces, ventureTests, legacyTests,
-    numbers, allowance, spend, customerSenses, legal, facts, resolutions, mrr] = await Promise.all([
+    numbers, allowance, spend, customerSenses, legal, facts, resolutions, mrr, boundaries, grants] = await Promise.all([
     one(`SELECT COUNT(*) AS n FROM proposed_acts WHERE product_id = ? AND decision IS NULL
            AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP`, [id]),
     one(`SELECT COUNT(*) AS n FROM situation_recommendations WHERE product_id = ? AND decided_at IS NULL`, [id]),
@@ -126,6 +127,10 @@ export async function placeOf(founderId: string, productId: string): Promise<Com
         .rows as unknown as Array<Record<string, unknown>>;
       return r[0]?.mrr_cents == null ? null : Number(r[0].mrr_cents);
     })(),
+    one(`SELECT COUNT(*) AS n FROM owner_boundaries WHERE product_id = ? AND lifted_at IS NULL`, [id]),
+    one(`SELECT (SELECT COUNT(*) FROM autonomy_consents WHERE product_id = ? AND to_mode = 'act' AND revoked_at IS NULL)
+         + (SELECT COUNT(*) FROM delegations WHERE product_id = ? AND revoked_at IS NULL
+              AND (expires_at IS NULL OR datetime(expires_at) > datetime('now'))) AS n`, [id, id]),
   ]);
 
   // ── identity ────────────────────────────────────────────────────────────
@@ -176,6 +181,11 @@ export async function placeOf(founderId: string, productId: string): Promise<Com
     // Work always exists: "is Foundry doing anything here" must have an
     // address even when the answer is no.
     work: needsHim + responsibilities + workspaces + ventureTests + underWay,
+    // Authority always exists: "how much do I do here on my own" must have an
+    // address even when the answer is "nothing, and you have said nothing".
+    // The count is what he has set or allowed here — his own rows, not the
+    // global ones, which belong to every company and would be noise on each.
+    authority: boundaries + allowance + grants,
   };
   if (numbers > 0 || allowance > 0 || spend > 0 || mrr !== null) present.economics = null;
   if (customerSenses > 0) present.customers = customerSenses;

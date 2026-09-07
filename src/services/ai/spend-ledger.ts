@@ -89,6 +89,21 @@ export async function spentThinkingOn(purpose: { kind: string; id: string }): Pr
   return Math.round(Number(row?.cents ?? 0));
 }
 
+/**
+ * WHAT THE INSTITUTION SPENT THINKING ABOUT ONE COMPANY, over the last N days.
+ * Accounting, read here and nowhere else: the reservations table survives an
+ * erasure for accounting and ceiling enforcement only, so every reader of it
+ * lives in this module.
+ */
+export async function spentThinkingAbout(productId: string, days: number): Promise<number> {
+  const row = (await query(
+    `SELECT COALESCE(SUM(actual_cents), 0) AS cents FROM ai_spend_reservations
+      WHERE product_id = ? AND status = 'settled' AND created_at >= datetime('now', ?)`,
+    [productId, `-${String(Math.max(1, Math.floor(days)))} day`]))
+    .rows[0] as Record<string, unknown> | undefined;
+  return Math.round(Number(row?.cents ?? 0));
+}
+
 export async function finishReservation(
   reservation: SpendReservation,
   outcome: { kind: 'settled'; actualCents: number } | { kind: 'released' | 'ambiguous' },

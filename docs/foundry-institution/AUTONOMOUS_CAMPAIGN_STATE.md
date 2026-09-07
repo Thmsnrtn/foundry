@@ -1938,12 +1938,51 @@ maturity **E2**. State: BUILT LOCALLY, TESTED LOCALLY, PUSHED on
 `claude/foundry-next-frontier-h2fsqe`, NOT INTEGRATED, NOT DEPLOYED — awaiting
 Opus's adversarial review before integration.
 
-**Next, in order of leverage:** (1) a connected sense that is READ — the
-Stripe credential is stored and probed and never pulled through; every
-reading path terminates before the institution; gated on the Connect
-adapter's read step and real credentials. (2) `(purpose_kind, purpose_id)` on
-`ai_spend_reservations`, threaded through `SpendSubject`, so a step that
-thinks costs its thread; undertakings are the first writer. (3) A first hand.
+## The loop closes at the second edge, and the dial (2026-09-07)
+
+One campaign from 561c8f06, three milestones, no deploy marker.
+
+**Milestone 1 — the loop closes.** A connected Stripe sense is read through
+its stored credential once a day (`sense_read_tick`, the hundredth job): the
+old sync's read half is separated from its write half, a refused page throws
+instead of computing from what it had, sandbox stays on the sandbox channel,
+and a failure is written on the sense and the credential rather than as a
+zero. Threads hear what happened BY REFERENCE ONLY — the situation they read
+ended, the advice they raised was decided, the approval proposed inside them
+was used, the sense they said they could not see connected and then reported,
+the candidate they had in view became a responsibility. Thinking carries a
+purpose key (282) into the one ledger. "Adopt Tidewater Prints" at the single
+door previews adding the company and taking it on, and binds exactly the words
+it showed. Stubbed at the network edge; nothing here has met Stripe.
+
+**Milestone 2 — the navigation and the dial.** Inside a company the phone's
+bottom bar becomes Portfolio plus the company's own places; Home carries a
+one-tap "Waiting on you" queue from existing rows and routes. Every company
+now has an Authority place: how much the institution does on its own, read
+every time from the boundaries, the allowance, the consents and the
+delegations that actually govern — Watch, Propose, Carry within limits, Some
+of each — and never stored anywhere. Lighter is one tap, shown first as the
+exact sentences that will be written and fingerprinted against the rows it was
+read from, applied through `setBoundary`, `withdrawAllowance`, `revokeConsent`
+and `revokeDelegation` with his reason on every row. Heavier is never one tap:
+one sentence per door through `/said`, and standing authority from the
+responsibility it belongs to. The thirty-day line says "this would have
+changed nothing" when nothing was proposed. This is the owner's ask —
+"toggle the autopilot to be however heavy or light I want it to be" — built
+as a reading of authority rather than a mode, which is the only shape the
+doctrine allows.
+
+**Milestone 3 — hand-off.** Documents, adversarial review by a reader that
+tried to break it, full chain, push. State: BUILT LOCALLY, TESTED LOCALLY
+(full chain), PUSHED on `claude/foundry-next-frontier-h2fsqe` as the commit
+carrying this paragraph, NOT INTEGRATED, NOT DEPLOYED, NOT OBSERVED IN
+PRODUCTION, NOT REALITY-PROVEN. Awaiting Opus's review before integration.
+
+**Next, in order of leverage:** (1) a real Stripe Connect credential, so the
+read leg meets Stripe and the sense stops being stubbed; (2) a first Hand
+behind an ask-first door, so "Propose" has an act to propose; (3) an
+`outbound_actions.proposed_act_id` so an outbound outcome can reach the
+thread that proposed it.
 
 ## Blocked — external
 

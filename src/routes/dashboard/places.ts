@@ -54,6 +54,113 @@ async function companyPlace(founderId: string, id: string, on: DimensionKey) {
   return { founderId, id, place, view, frame: frameFor(place, on) };
 }
 
+// ─── Authority: how much I do here on my own ──────────────────────────────────
+//
+// The dial. Read from the rows that govern, never stored; lighter in one
+// confirmed tap through the writers that already exist; heavier one sentence
+// at a time through the door. See services/founder/authority.ts.
+placeRoutes.get('/foundry/companies/:id/authority', async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return c.redirect('/onboarding');
+  const r = await companyPlace(founderId, String(c.req.param('id')), 'authority');
+  if ('redirect' in r) return c.redirect(r.redirect);
+  if ('notFound' in r) return c.notFound();
+  const { id, view, frame } = r;
+  const { authorityOf, LABEL } = await import('../../services/founder/authority.js');
+  const a = await authorityOf(founderId, id);
+  if (!a) return c.notFound();
+  const done = String(c.req.query('done') ?? '');
+  const marks = a.setting === 'mixed' ? (['watch', 'propose', 'mixed', 'carry'] as const) : (['watch', 'propose', 'carry'] as const);
+  const rank = { watch: 0, propose: 1, carry: 2, mixed: 1.5 } as const;
+  const modeWords = (d: (typeof a.doors)[number]): string => d.mode === 'never' ? 'never'
+    : d.mode === 'ask_first' ? 'ask me first' : 'nothing said';
+  const body = html`
+    ${placeHead(frame, view.name)}
+    ${done === 'watch' || done === 'propose' ? html`<div class="done"><p><strong>Done.</strong> I am set to ${LABEL[done as 'watch' | 'propose'].toLowerCase()} here. Every line of it is a row you can lift or give back.</p></div>` : ''}
+    ${done === 'stale' ? html`<div class="done"><p><strong>Not done.</strong> What you confirmed is not what the rows say now, so I changed nothing. Here is how it stands.</p></div>` : ''}
+    <p class="lede">${a.sentence}</p>
+    <div class="dial" role="group" aria-label="How much I do on my own">
+      ${marks.map((m) => {
+    const current = a.setting === m;
+    const lighter = a.lighter.find((x) => x.to === m);
+    if (current) return html`<span class="mark on" aria-current="true">${LABEL[m]}</span>`;
+    if (lighter && rank[m] < rank[a.setting]) {
+      return html`<form method="POST" action="/foundry/companies/${id}/authority"><input type="hidden" name="to" value="${m}"><button class="mark" type="submit">${LABEL[m]}</button></form>`;
+    }
+    return html`<a class="mark" href="#heavier">${LABEL[m]}</a>`;
+  })}
+    </div>
+    ${a.setting === 'mixed' ? html`<p class="quiet">Between marks: some doors are shut and something is allowed elsewhere. Lighter is one tap; heavier is one sentence per door.</p>`
+    : html`<p class="quiet">Lighter is one tap, shown to you first. Heavier is one sentence at a time, because every widening is a thing you allowed.</p>`}
+    <div class="know"><h2>The doors</h2>
+      <ul>${a.doors.map((d) => html`<li><strong>${d.ownerWords}</strong>: ${modeWords(d)}${d.everywhere ? ' (everywhere)' : ''}${
+    d.door === null ? html` <span class="quiet">— honoured as a refusal; no act of that kind is built.</span>` : ''}${
+    d.statement ? html` <span class="quiet">“${d.statement}”</span>` : ''}${
+    d.boundaryId && !d.everywhere ? html` <form method="POST" action="/foundry/companies/${id}/boundaries/${d.boundaryId}/lift" class="inline"><button class="btn quiet" type="submit">Lift</button></form>` : ''}</li>`)}</ul>
+    </div>
+    <div class="know"><h2>What you allowed</h2>
+      ${a.allowance ? html`<p><strong>Up to $${(a.allowance.amountCents / 100).toFixed(2)}</strong> — $${(a.allowance.remainingCents / 100).toFixed(2)} of it left. “${a.allowance.statement}”
+        <form method="POST" action="/foundry/companies/${id}/allowance/${a.allowance.id}/withdraw" class="inline"><button class="btn quiet" type="submit">Take it back</button></form></p>`
+    : html`<p class="quiet">No allowance. I cannot spend here on my own.</p>`}
+      ${a.grants.length ? html`<ul>${a.grants.map((g) => html`<li>${g.what}${g.until ? `, until ${g.until}` : ''}.</li>`)}</ul>`
+    : html`<p class="quiet">No standing authority. Anything I carry without asking is granted from the responsibility it belongs to, on <a href="/foundry/companies/${id}/work">Work</a>.</p>`}
+    </div>
+    <div class="know"><h2>Over the last thirty days</h2>
+      <ul>${a.projections.map((p) => html`<li><strong>${p.label}${p.current ? ' (now)' : ''}</strong>: ${p.sentence}</li>`)}</ul>
+    </div>
+    <div class="know" id="heavier"><h2>Heavier</h2>
+      ${a.heavier.length ? a.heavier.map((h) => html`<form method="POST" action="/foundry/companies/${id}/said" class="say">
+        ${h.editable ? html`<input type="text" name="said" value="${h.said}" maxlength="300" aria-label="${h.label}">` : html`<input type="hidden" name="said" value="${h.said}">`}
+        <button class="btn" type="submit">${h.label}</button></form>`)
+    : html`<p class="quiet">Nothing heavier to offer: the doors are open and an allowance is live. More is granted per responsibility, on <a href="/foundry/companies/${id}/work">Work</a>.</p>`}
+      <p class="quiet">Each of these is shown back to you before it binds.</p>
+    </div>`;
+  return c.html(page(`${view.name} · Authority`, body, 'companies', frame));
+});
+
+// LIGHTER, SHOWN FIRST. The exact sentences that will be written, and a
+// fingerprint of the rows they were derived from, so a confirmation that
+// arrives after the rows changed is refused rather than applied to a
+// different state.
+placeRoutes.post('/foundry/companies/:id/authority', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return c.redirect('/onboarding');
+  const id = String(c.req.param('id'));
+  const form = await c.req.parseBody();
+  const to = String(form.to ?? '');
+  const { authorityOf, LABEL } = await import('../../services/founder/authority.js');
+  const a = await authorityOf(founderId, id);
+  if (!a) return c.notFound();
+  const move = a.lighter.find((m) => m.to === to);
+  if (!move) return c.redirect(`/foundry/companies/${id}/authority`);
+  const place = await placeOf(founderId, id);
+  const frame = place ? frameFor(place, 'authority') : null;
+  return c.html(page(`${a.name} · Authority`, html`
+    ${placeHead(frame, a.name)}
+    <h2>Set me to ${LABEL[move.to].toLowerCase()} here?</h2>
+    <p class="lede">I will write exactly these, each as a row with your reason on it:</p>
+    <ul>${move.would.map((w) => html`<li>${w}</li>`)}</ul>
+    <form method="POST" action="/foundry/companies/${id}/authority/confirm">
+      <input type="hidden" name="to" value="${move.to}">
+      <input type="hidden" name="fingerprint" value="${a.fingerprint}">
+      <button class="btn go" type="submit">Yes, ${LABEL[move.to].toLowerCase()}</button>
+      <a class="btn quiet" href="/foundry/companies/${id}/authority">No</a>
+    </form>`, 'companies', frame));
+});
+
+placeRoutes.post('/foundry/companies/:id/authority/confirm', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return c.redirect('/onboarding');
+  const id = String(c.req.param('id'));
+  const form = await c.req.parseBody();
+  const to = String(form.to ?? '');
+  if (to !== 'watch' && to !== 'propose') return c.redirect(`/foundry/companies/${id}/authority`);
+  const { moveLighter } = await import('../../services/founder/authority.js');
+  const outcome = await moveLighter({ founderId, productId: id, to, fingerprint: String(form.fingerprint ?? '') });
+  if ('stale' in outcome) return c.redirect(`/foundry/companies/${id}/authority?done=stale`);
+  return c.redirect(`/foundry/companies/${id}/authority?done=${to}`);
+});
+
 // ─── Work: is Foundry doing anything here ─────────────────────────────────────
 placeRoutes.get('/foundry/companies/:id/work', async (c: any) => {
   const founderId = await founderOf(c);

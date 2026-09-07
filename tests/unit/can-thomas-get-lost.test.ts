@@ -154,7 +154,7 @@ describe('deep-linked into a company page', () => {
     // What object: identity in chips, doing-line last.
     expect(o.chips.some((ch) => ch === `${String(waiting)} ${waiting === 1 ? 'thing needs' : 'things need'} you`)).toBe(true);
     // Stable geography: Overview first, Work second, and only what exists.
-    expect(o.local.map((l) => l.label)).toEqual(['Overview', 'Work', 'Economics', 'Customers']);
+    expect(o.local.map((l) => l.label)).toEqual(['Overview', 'Work', 'Authority', 'Economics', 'Customers']);
     expect(o.localOn).toBe('Overview');
     expect(o.local.find((l) => l.label === 'Work')?.href).toBe(`/foundry/companies/${tidewater}/work`);
     // Ask is grounded here, and says so.
@@ -208,7 +208,7 @@ describe('deep-linked into an experiment', () => {
     expect(status).toBe(200);
     const o = orient(html);
     expect(o.chips[0]).toBe('a test, not a company');
-    expect(o.local.map((l) => l.label)).toEqual(['Overview', 'Work', 'Economics', 'Experiments']);
+    expect(o.local.map((l) => l.label)).toEqual(['Overview', 'Work', 'Authority', 'Economics', 'Experiments']);
     const exp = await get(`/foundry/companies/${asset}/experiments`);
     expect(exp.status).toBe(200);
     expect(exp.html).toContain('put up a page with a price');

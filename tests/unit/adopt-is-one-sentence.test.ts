@@ -7,7 +7,7 @@ import { Hono } from 'hono';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { companyNamedIn } from '../../src/services/institution/undertaking.js';
+import { companyNamedIn, readUndertaking } from '../../src/services/institution/undertaking.js';
 
 // =============================================================================
 // ADOPT IS ONE SENTENCE.
@@ -54,7 +54,10 @@ describe('the name in the sentence', () => {
     expect(companyNamedIn('Adopt Tidewater Prints.')).toBe('Tidewater Prints');
     expect(companyNamedIn('take on my Etsy shop')).toBe('Etsy shop');
     expect(companyNamedIn('Understand the business called Soil API')).toBe('Soil API');
+    expect(companyNamedIn('adopt "the little shop"')).toBe('the little shop');
     expect(companyNamedIn('understand why customers are leaving and what to do')).toBeNull();
+    expect(companyNamedIn('Take on more customers')).toBeNull();
+    expect(companyNamedIn('take on the business')).toBeNull();
     expect(companyNamedIn('grow')).toBeNull();
   });
 });
@@ -75,6 +78,7 @@ describe('a verb that names a business Foundry has not met', () => {
     expect(body).toContain('Add Tidewater Prints and take it on?');
     expect(body).toContain('action="/foundry/adopt"');
     expect(body).toMatch(/name="understood" value="learn what tidewater prints is/);
+    expect(body).toContain('name="name" value="Tidewater Prints"');
     expect((await query("SELECT COUNT(*) AS n FROM products WHERE name = 'Tidewater Prints'")).rows[0],
       'the preview adds nothing').toMatchObject({ n: 0 });
   });
@@ -105,5 +109,17 @@ describe('a verb that names a business Foundry has not met', () => {
     expect(res.status).toBe(200);
     expect(await res.text()).toContain('Let me say that again');
     expect((await query("SELECT COUNT(*) AS n FROM products WHERE name = 'Soil API'")).rows[0]).toMatchObject({ n: 0 });
+    // A name that is not in his words is refused too; a shorter piece of it is his.
+    const forged = await post('/foundry/adopt', { said: 'Adopt Soil API.', name: 'Evil Corp', understood: 'learn what soil api is, and say what I can and cannot see' });
+    expect(await forged.text()).toContain('Let me say that again');
+    const shorter = await post('/foundry/adopt', { said: 'Adopt my Etsy shop Soil API.', name: 'Soil API', understood: readUndertaking('Adopt my Etsy shop Soil API.')!.understoodAs });
+    expect(shorter.status).toBe(302);
+    expect((await query("SELECT COUNT(*) AS n FROM products WHERE name = 'Soil API'")).rows[0]).toMatchObject({ n: 1 });
+  });
+
+  it('matches a company he has by whole word, not by substring', async () => {
+    await query("INSERT INTO products (id, name, owner_id, status) VALUES ('p_on', 'On', ?, 'active')", [OWNER]);
+    const res = await post('/foundry/ask', { said: 'Investigate Onboarding Co.' });
+    expect(res.headers.get('location') ?? '', 'On must not capture Onboarding').not.toContain('/p_on?');
   });
 });

@@ -120,7 +120,7 @@ describe('a place does not disappear because the news is bad', () => {
     expect(bare!.dimensions.map((d) => d.key)).not.toContain('customers');
     // Overview and Work are always there: "is anything happening here" must
     // have an address even when the answer is no.
-    expect(bare!.dimensions.map((d) => d.key)).toEqual(['overview', 'work']);
+    expect(bare!.dimensions.map((d) => d.key)).toEqual(['overview', 'work', 'authority']);
   });
 });
 

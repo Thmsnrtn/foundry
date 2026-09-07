@@ -1064,6 +1064,7 @@ function companyBar(where: Where | null): H | '' {
   const ICON: Record<string, string> = {
     overview: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>',
     work: '<svg viewBox="0 0 24 24"><path d="M4 7h16v11H4z"/><path d="M9 7V5h6v2M4 12h16"/></svg>',
+    authority: '<svg viewBox="0 0 24 24"><path d="M4 16a8 8 0 0 1 16 0"/><path d="M12 16l4-5"/><circle cx="12" cy="16" r="1.5"/></svg>',
     economics: '<svg viewBox="0 0 24 24"><path d="M4 18 10 11l4 4 6-8"/><path d="M4 21h16"/></svg>',
     customers: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M3 19c0-3 3-5 6-5s6 2 6 5M14 19c0-2 1.5-3.5 3-3.5s4 1.5 4 3.5"/></svg>',
     experiments: '<svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6L4 19h16l-6-10V3"/></svg>',
@@ -1486,6 +1487,16 @@ export const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscape
   .steps a{color:var(--accent)}
   nav.places .sub,nav.places .more{display:none}
   nav.places.behind{display:none}
+  .queue .btn.yes{border-color:currentColor;font-weight:600}
+  .dial{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
+  .dial form{flex:1 1 7rem;display:flex;margin:0}
+  .dial .mark{flex:1 1 7rem;display:block;text-align:center;padding:10px 6px;border:1px solid var(--line,#d9d4cc);
+    border-radius:10px;background:var(--card,#fff);color:inherit;font:inherit;font-size:.9rem;line-height:1.25;text-decoration:none;cursor:pointer}
+  .dial .mark.on{border-color:currentColor;font-weight:600;box-shadow:inset 0 0 0 1px currentColor}
+  form.inline{display:inline;margin:0}
+  form.inline .btn{display:inline-block;padding:4px 10px;margin:0 0 0 6px;font-size:.85rem;vertical-align:baseline}
+  form.say{display:flex;gap:6px;margin:6px 0;flex-wrap:wrap}
+  form.say input[type=text]{flex:1 1 14rem;padding:10px 12px;border:1px solid var(--line,#d9d4cc);border-radius:10px;font:inherit;background:var(--card,#fff)}
   nav.places.company a{position:relative}
   nav.places.company a b{position:absolute;top:2px;right:calc(50% - 22px);font-size:.62rem;font-weight:600;
     color:var(--bg);background:var(--accent);border-radius:999px;min-width:16px;height:16px;line-height:16px;
@@ -2914,7 +2925,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
       <p class="quiet">${item.detail}</p>
       <div class="pair">
         <form method="POST" action="${item.yes.action}">${Object.entries(item.yes.fields ?? {}).map(([k, v]) => html`<input type="hidden" name="${k}" value="${v}" />`)}
-          <button class="btn go" type="submit">${item.yes.label}</button></form>
+          <button class="btn yes" type="submit">${item.yes.label}</button></form>
         <form method="POST" action="${item.no.action}">${Object.entries(item.no.fields ?? {}).map(([k, v]) => html`<input type="hidden" name="${k}" value="${v}" />`)}
           <button class="btn" type="submit">${item.no.label}</button></form>
       </div>
@@ -4643,13 +4654,16 @@ foundryShellRoutes.post('/foundry/ask', requireInstitutionOwner(), async (c: any
   // A business he is naming for the first time → one preview: add it and take
   // it on, both after he confirms exactly these words.
   if (door.destination === 'undertaking') {
+    // Resolving a company BY NAME from his sentence: identity, not a work-list.
+    // Standing does not apply — naming an experimental asset is still naming it.
     const mine = (await query(
       `SELECT p.id, p.name FROM products p
         WHERE p.owner_id = ? AND p.status = 'active' AND p.deleted_at IS NULL AND ${realCompany('p')}`,
       [String(founder.id)])).rows as unknown as Array<Record<string, unknown>>;
-    const lower = said.toLowerCase();
+    // Whole words only: a company called "On" must not capture every sentence.
+    const wordOf = (n: string): RegExp => new RegExp(`(^|[^a-z0-9])${n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}($|[^a-z0-9])`, 'i');
     const named = mine
-      .filter((p) => String(p.name).trim().length >= 2 && lower.includes(String(p.name).toLowerCase()))
+      .filter((p) => String(p.name).trim().length >= 2 && wordOf(String(p.name).trim()).test(said))
       .sort((a, b) => String(b.name).length - String(a.name).length)[0];
     if (named) return c.redirect(`/foundry/companies/${String(named.id)}?q=${encodeURIComponent(said)}`);
 
@@ -4665,12 +4679,13 @@ foundryShellRoutes.post('/foundry/ask', requireInstitutionOwner(), async (c: any
           say what I cannot see until you connect it.</p>
         <p class="quiet">Adding it changes nothing outside Foundry. It costs nothing until I think about it,
           and you will see that on its ledger.</p>
-        <form method="POST" action="/foundry/adopt">
+        <form method="POST" action="/foundry/adopt" class="say">
           <input type="hidden" name="said" value="${said}">
-          <input type="hidden" name="name" value="${newName}">
+          <input type="text" name="name" value="${newName}" maxlength="60" aria-label="The company's name, from your words">
           <input type="hidden" name="understood" value="${asked.understoodAs}">
           <button class="btn go" type="submit">Add it and take it on</button>
         </form>
+        <p class="quiet">The name is taken from your words; shorten it if I took too much.</p>
         <a class="btn" href="/foundry">Not now</a>`, 'foundry'));
     }
   }
@@ -4710,8 +4725,10 @@ foundryShellRoutes.post('/foundry/adopt', requireInstitutionOwner(), async (c: a
   const understood = String(form.understood ?? '');
   const { readUndertaking, companyNamedIn, openUndertaking } = await import('../../services/institution/undertaking.js');
   const asked = readUndertaking(said);
-  if (!said || !name || !asked || asked.kind !== 'understand' || asked.understoodAs !== understood
-    || companyNamedIn(said) !== name) {
+  // The name must be in his words — the one I read, or a shorter piece of it.
+  const read = companyNamedIn(said);
+  const inHisWords = read !== null && (read === name || (name.length >= 2 && read.toLowerCase().includes(name.toLowerCase())));
+  if (!said || !name || !asked || asked.kind !== 'understand' || asked.understoodAs !== understood || !inHisWords) {
     return c.html(page('Let me say that again', html`
       <h1>Let me say that again</h1>
       <p class="lede">What you confirmed is not what I would do with these words now, so I have not acted.</p>
@@ -4722,7 +4739,8 @@ foundryShellRoutes.post('/foundry/adopt', requireInstitutionOwner(), async (c: a
       <a class="btn" href="/foundry">Back</a>`, 'foundry'));
   }
   // The company he already named is the company he meant, here as on the
-  // companies page: a double tap is one company, and one thread.
+  // companies page: a double tap is one company, and one thread. An identity
+  // lookup by name; standing does not apply.
   const already = (await query(
     `SELECT id FROM products p
       WHERE p.owner_id = ? AND lower(p.name) = lower(?) AND p.status = 'active'

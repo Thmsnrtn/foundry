@@ -30,6 +30,10 @@ const rows = async (sql: string, params: unknown[]): Promise<Row[]> =>
 
 /** Everything waiting on him at his real companies, acts first. */
 export async function waitingOn(founderId: string): Promise<AttentionItem[]> {
+  // STANDING DOES NOT APPLY to what is waiting on him. An act proposed, advice
+  // raised or a candidate noticed on an experimental asset is waiting on him
+  // exactly as one on an earned company is; this queue shows the frontier as
+  // the frontier. Reality still applies: an invented company waits for nobody.
   const acts = await rows(
     `SELECT a.id, a.summary, a.why, a.expires_at, p.id AS product_id, p.name FROM proposed_acts a
        JOIN products p ON p.id = a.product_id

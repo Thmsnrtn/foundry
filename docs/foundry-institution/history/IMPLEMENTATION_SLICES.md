@@ -1369,3 +1369,55 @@ successor same company — all in the schema.
 
 **State:** BUILT LOCALLY · TESTED LOCALLY · PUSHED (`claude/foundry-next-frontier-h2fsqe`) ·
 NOT INTEGRATED · NOT DEPLOYED.
+
+## The loop closes at the second edge, and the dial (2026-09-07)
+
+One campaign from 561c8f06 on `claude/foundry-next-frontier-h2fsqe`; migrations
+282–283; no deploy marker.
+
+- `sense_read_tick` (daily 04:40, the hundredth job): reads, through each
+  live sense credential, what the owner let Foundry see. `syncStripeMetrics`
+  split into `readStripeRevenue` (strict: a refused page throws) and
+  `writeStripeSnapshot`; `withSenseSecret` is the only way a secret leaves
+  `credentials.ts`. One snapshot a day per sense, deduplicated on
+  `last_observed_at`; reports through `recordProviderSyncObservations` so
+  sandbox stays sandbox; failure writes the error on the sense, bumps the
+  credential's failures, writes no snapshot. A read, not a Hand.
+- Threads hear what happened, by reference only: `openThreadsReferencing`
+  and `noticeOnThreadsReferencing` in `undertaking.ts`; notices from
+  `recordSituation` (the spell they read ended), `decideRecommendation`,
+  `spendApprovalFor` (the act's own thread through
+  `proposed_acts.undertaking_id`), `connectSense` and `noteSenseObserved`
+  (first report, or again after being blind), `promoteResponsibilityCandidate`.
+  `firstLook` references pending candidates. 283 indexes
+  `undertaking_steps(ref_kind, ref_id)` and `undertakings(opened_from_*)`.
+- Thinking has a purpose (282): `ai_spend_reservations.purpose_kind/_id`,
+  threaded through `SpendSubject`; interpretation and the legal pass are the
+  first writers; the why pages read it back. The ledger stays the one truth.
+- "Adopt Tidewater Prints." at the single door: a company he has goes to its
+  page offered; a business Foundry has not met gets one preview that adds it
+  and opens the understand thread, binding exactly the words shown
+  (`/foundry/adopt`, `companyNamedIn`, one `addCompany` for both entrances).
+- Navigation: the phone's bottom bar inside a company is Portfolio plus the
+  company's own places; Home carries a one-tap "Waiting on you" queue
+  (`attention.ts`) from existing rows and routes.
+- The Authority place (`/foundry/companies/:id/authority`, always present):
+  Watch · Propose · Carry within limits · Some of each, DERIVED by
+  `authorityOf` from boundaries, the allowance, consents and delegations;
+  nothing stored. Lighter: one tap → preview of the exact sentences and a
+  fingerprint of the rows → confirm → `moveLighter` composes `setBoundary`,
+  `withdrawAllowance`, `revokeConsent`, `revokeDelegation` with his reason;
+  a stale fingerprint is refused. Heavier: one sentence per door through
+  `/said`; standing authority from the responsibility on Work. Every sentence
+  the dial offers is held to `interpret` by test. Thirty days: "would have
+  changed nothing" when nothing was proposed.
+
+**Tests:** `a-sense-that-was-let-see-reads` (5), `adopt-is-one-sentence` (5),
+`thinking-has-a-purpose` (4), `how-much-i-do-on-my-own` (8);
+`what-you-asked-of-me`, `can-thomas-get-lost` and the registry count updated.
+
+**Not built:** anything that meets Stripe for real; a Hand behind a door; a
+tick that advances a thread; a stored autopilot level; a dollar threshold.
+
+**State:** BUILT LOCALLY · TESTED LOCALLY (full chain) · PUSHED
+(`claude/foundry-next-frontier-h2fsqe`) · NOT INTEGRATED · NOT DEPLOYED.

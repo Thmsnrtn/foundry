@@ -163,3 +163,13 @@ NOT OBSERVED IN PRODUCTION · NOT REALITY-PROVEN. An earlier draft of this
 document said "pushed" before the push existed; that is the class of error
 the institution exists to prevent, and the states above are now reported
 one at a time.
+
+**The campaign after it (same day):** the loop closed at its second edge (a
+sense is read; threads hear what happened by reference; thinking carries a
+purpose; "adopt" is one sentence) and the navigation the owner asked for was
+built — the company's own places in the phone's bar, a one-tap queue on Home,
+and the Authority place, which is MadeThis's "Propose / Autopilot" toggle
+rebuilt as a DERIVED reading of the rows that govern rather than a stored
+mode, with lighter as one confirmed tap and heavier as one sentence per door.
+Its state is reported in `../AUTONOMOUS_CAMPAIGN_STATE.md`, one state at a
+time.

@@ -17,7 +17,11 @@
 //     the job is idempotent within a day and the ledger of observations is not
 //     padded by re-runs;
 //   - the same observation channel every provider sync reports through, so a
-//     sandbox sense stays test evidence and never becomes a real number;
+//     sandbox sense's movements stay test evidence — and a sandbox sense NEVER
+//     writes the level (`mrr_cents`), because the level is what the portfolio
+//     reads to say what a company earns, and test-mode money is not earnings;
+//   - a cursor from the sense's own last reading, so expansion and contraction
+//     are "since I last looked", not the account's whole history every day;
 //   - a refused page THROWS in the read half, and a throw here writes the
 //     error on the sense, bumps the credential's failures, and writes NO
 //     snapshot. A revoked key produces a blind sense the owner can see, not a
@@ -26,7 +30,7 @@
 // It is a read. It changes nothing at Stripe. It is not a Hand, it is not a
 // generic autonomous tick, and it does not advance anything by model.
 // =============================================================================
-import { query } from '../../db/client.js';
+import { query, realCompany } from '../../db/client.js';
 import { createLogger } from '../../lib/logger.js';
 import { readStripeRevenue, writeStripeSnapshot } from '../integrations/stripe.js';
 import { invalidateSignalCache } from '../signal.js';
@@ -43,14 +47,15 @@ export interface SenseReadOutcome {
 }
 
 /** The providers this leg can read through, and the read for each. */
-const READERS: Record<string, (secret: Record<string, unknown>, productId: string) => Promise<string[]>> = {
-  stripe: async (secret, productId) => {
+interface ReadContext { productId: string; mode: 'real' | 'sandbox'; since: string | null }
+const READERS: Record<string, (secret: Record<string, unknown>, ctx: ReadContext) => Promise<string[]>> = {
+  stripe: async (secret, ctx) => {
     const accessToken = String(secret.access_token ?? secret.accessToken ?? '');
     const accountId = secret.stripe_account_id ?? secret.stripe_user_id ?? secret.accountId ?? null;
     if (!accessToken) throw new Error('credential holds no access token');
     const reading = await readStripeRevenue(
-      { access_token: accessToken, stripe_account_id: accountId ? String(accountId) : undefined }, null, true);
-    return writeStripeSnapshot(productId, reading);
+      { access_token: accessToken, stripe_account_id: accountId ? String(accountId) : undefined }, ctx.since, true);
+    return writeStripeSnapshot(ctx.productId, reading, { level: ctx.mode === 'real' });
   },
 };
 
@@ -60,8 +65,17 @@ const READERS: Record<string, (secret: Record<string, unknown>, productId: strin
  */
 export async function readSenses(): Promise<SenseReadOutcome> {
   const outcome: SenseReadOutcome = { read: 0, nothingToDo: 0, blind: 0, failed: 0, broke: [] };
+  // ONE READ PER COMPANY AND PROVIDER. Stripe is offered as two senses
+  // (revenue, customers) and both rows share one credential and one report;
+  // reading twice would write the same snapshot twice and count it twice.
+  // Real companies only: a reference company's senses are reference-mode and
+  // already excluded, and this is the row that says so. STANDING DOES NOT
+  // APPLY: an experimental asset with a connected sense is a test the world is
+  // settling, and reading what its provider reports is how the prediction
+  // gets settled. A read spends nothing and acts on nothing.
   const due = (await query(
-    `SELECT cs.id, cs.product_id, cs.provider, cs.mode
+    `SELECT cs.id, cs.product_id, cs.provider, cs.mode,
+            MAX(cs.last_observed_at) AS last_observed_at
        FROM company_senses cs
        JOIN products p ON p.id = cs.product_id AND p.deleted_at IS NULL AND p.status = 'active'
       WHERE cs.disconnected_at IS NULL
@@ -70,7 +84,9 @@ export async function readSenses(): Promise<SenseReadOutcome> {
         AND (cs.last_observed_at IS NULL OR date(cs.last_observed_at) < date('now'))
         AND EXISTS (SELECT 1 FROM sense_credentials sc
                      WHERE sc.company_sense_id = cs.id AND sc.revoked_at IS NULL)
-      ORDER BY cs.connected_at`,
+        AND ${realCompany('p')}
+      GROUP BY cs.product_id, cs.provider
+      ORDER BY MIN(cs.connected_at)`,
     Object.keys(READERS))).rows as unknown as Array<Record<string, unknown>>;
   if (!due.length) { outcome.nothingToDo = 1; return outcome; }
 
@@ -80,8 +96,14 @@ export async function readSenses(): Promise<SenseReadOutcome> {
     const provider = String(sense.provider);
     const reader = READERS[provider];
     if (!reader) continue;
+    const mode = String(sense.mode) === 'real' ? 'real' as const : 'sandbox' as const;
+    // Since the last reading, as Stripe counts time. A first reading has no
+    // "since" and reads what the account holds, as the legacy sync's first
+    // run did.
+    const lastAt = sense.last_observed_at ? Date.parse(`${String(sense.last_observed_at).replace(' ', 'T')}Z`) : NaN;
+    const since = Number.isFinite(lastAt) ? String(Math.floor(lastAt / 1000)) : null;
     try {
-      const written = await withSenseSecret(senseId, (secret) => reader(secret, productId));
+      const written = await withSenseSecret(senseId, (secret) => reader(secret, { productId, mode, since }));
       if (written === null) {
         // A live sense row with no readable credential: blind, and said so.
         outcome.blind += 1;

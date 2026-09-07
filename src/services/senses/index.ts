@@ -306,10 +306,13 @@ export async function noteSenseObserved(
   if (firstTime.length) {
     const { noticeOnThreadsReferencing } = await import('../institution/undertaking.js');
     for (const s of firstTime) {
+      // The first report is one fact, referenced so it is heard once. A
+      // recovery after blindness is an event each time it happens, so it
+      // carries no reference and is not deduplicated against the first.
       await noticeOnThreadsReferencing({ kind: 'sense', id: String(s.sense_key) }, {
         kind: 'found', said: `${String(s.sense_key).replaceAll('_', ' ')} has reported ${
           s.last_observed_at ? 'again, after being blind' : 'for the first time'}, from ${provider}.`,
-        ref: { kind: 'sense', id: String(s.sense_key) }, actor: 'institution:sense_reported',
+        ref: s.last_observed_at ? null : { kind: 'sense', id: String(s.sense_key) }, actor: 'institution:sense_reported',
       }, productId).catch(() => 0);
     }
   }
