@@ -1187,7 +1187,7 @@ export const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscape
      lines of every page sat underneath the composer. */
   .wrap{max-width:34rem;margin:0 auto;
     padding:var(--s3) var(--s3)
-      calc(var(--chrome,calc(11rem + env(safe-area-inset-bottom))) + var(--s3))}
+      calc(var(--chrome,calc(11rem + env(safe-area-inset-bottom))) + var(--s3) + 8px)}
   h1{font-family:var(--serif);font-size:2rem;line-height:1.15;font-weight:500;
     letter-spacing:-.01em;margin:0 0 var(--s2)}
   .brand{display:flex;align-items:center;gap:10px;margin:0 0 var(--s4);color:var(--ink-2);
@@ -2919,16 +2919,16 @@ foundryShellRoutes.get('/foundry', async (c) => {
   const alsoWaiting = queue.length ? html`<section class="know queue" id="waiting">
     <h2>${attention ? 'Also waiting on you' : 'Waiting on you'} <span class="pill">${String(queue.length)}</span></h2>
     ${queue.map((item) => html`<div class="noticed qitem">
-      <p class="quiet"><a href="/foundry/companies/${item.productId}">${item.companyName}</a> · ${
-    item.kind === 'act' ? 'an act' : item.kind === 'advice' ? 'advice' : 'something I noticed'}</p>
+      <p class="quiet"><a href="${item.kind === 'experiment' ? item.href : `/foundry/companies/${item.productId}`}">${item.companyName}</a> · ${
+    item.kind === 'act' ? 'an act' : item.kind === 'advice' ? 'advice' : item.kind === 'experiment' ? 'a real test' : 'something I noticed'}</p>
       <p><strong>${item.summary}</strong></p>
       <p class="quiet">${item.detail}</p>
-      <div class="pair">
+      ${item.open ? html`<div class="pair"><a class="btn yes" href="${item.open.href}">${item.open.label}</a></div>` : html`<div class="pair">
         <form method="POST" action="${item.yes.action}">${Object.entries(item.yes.fields ?? {}).map(([k, v]) => html`<input type="hidden" name="${k}" value="${v}" />`)}
           <button class="btn yes" type="submit">${item.yes.label}</button></form>
         <form method="POST" action="${item.no.action}">${Object.entries(item.no.fields ?? {}).map(([k, v]) => html`<input type="hidden" name="${k}" value="${v}" />`)}
           <button class="btn" type="submit">${item.no.label}</button></form>
-      </div>
+      </div>`}
       ${item.why ? html`<p class="row"><a class="why" href="${item.why}">Show your work</a></p>` : ''}
     </div>`)}
   </section>` : '';

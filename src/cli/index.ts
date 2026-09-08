@@ -829,4 +829,43 @@ program
     }
   });
 
+// ─── The first real experiment: recovery commands, not the owner's product ───
+//
+// The owner acts on /foundry/experiments/:id. These exist so an operator can
+// seed Proof 1 where only dist/ exists, run one pass of the hand by hand, and
+// read what the rows say, without inventing a second surface.
+program
+  .command('experiment:seed-proof1 <founderIdOrEmail>')
+  .description('Seed Proof 1 (MA millwork bid brief) for one owner. Idempotent; spends, permits and contacts nothing.')
+  .action(async (who: string) => {
+    const f = (await query('SELECT id FROM founders WHERE id = ? OR lower(email) = lower(?)', [who, who])).rows[0] as Record<string, unknown> | undefined;
+    if (!f) { process.stderr.write(`no founder ${who}\n`); process.exit(1); }
+    const { seedProof1 } = await import('../services/venture/proof-1.js');
+    const r = await seedProof1(String(f.id));
+    process.stdout.write(`${JSON.stringify({ ...r, open: `/foundry/experiments/${r.experimentId}` }, null, 2)}\n`);
+  });
+
+program
+  .command('experiment:tick')
+  .description('Run one pass of the hand over every live real experiment (what the hourly job does)')
+  .option('--offers <n>', 'offers per pass', '5')
+  .action(async (opts: { offers: string }) => {
+    const { runHand } = await import('../services/venture/hand.js');
+    const reports = await runHand({ offersPerTick: Number(opts.offers) });
+    process.stdout.write(`${JSON.stringify(reports, null, 2)}\n`);
+  });
+
+program
+  .command('experiment:status <experimentId>')
+  .description('What the rows say about one experiment, as the owner sees it')
+  .action(async (experimentId: string) => {
+    const e = (await query('SELECT founder_id FROM venture_experiments WHERE id = ?', [experimentId])).rows[0] as Record<string, unknown> | undefined;
+    if (!e) { process.stderr.write('no such experiment\n'); process.exit(1); }
+    const { getExperimentView } = await import('../services/founder/experiment-view.js');
+    const v = await getExperimentView(String(e.founder_id), experimentId);
+    if (!v) { process.stderr.write('no such experiment\n'); process.exit(1); }
+    const { recipients, timeline, ...rest } = v;
+    process.stdout.write(`${JSON.stringify({ ...rest, recipients: recipients.length, timeline: timeline.map((t) => `${t.at} ${t.kind}: ${t.text}`) }, null, 2)}\n`);
+  });
+
 program.parse();

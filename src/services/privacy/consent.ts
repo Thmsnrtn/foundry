@@ -875,6 +875,21 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
       + 'provider reports against',
     onAccountErasure: { op: 'delete' },
   },
+  experiment_recipients: {
+    reason: 'whom one person\'s test may write to, as businesses publish themselves, with his own '
+      + 'review of each; the review was his and goes with him',
+    onAccountErasure: { op: 'delete' },
+  },
+  experiment_materials: {
+    reason: 'what one person\'s test sends and delivers, as text with a digest so the gate can say '
+      + 'stale; written for his test and erased with him',
+    onAccountErasure: { op: 'delete' },
+  },
+  experiment_fulfilments: {
+    reason: 'what one person\'s test owes after a payment, keyed to the provider\'s references '
+      + 'and naming no buyer; goes with the test',
+    onAccountErasure: { op: 'delete' },
+  },
   internal_counterparties: {
     reason: 'keyed hashes of the identities he registered as his own or internal, so his '
       + 'own payments never count as the market; the identities themselves were never stored',
@@ -1525,6 +1540,18 @@ const PERSON_ACROSS_COMPANIES: Record<string, PersonInOthersCompany> = {
   experiment_exposures: {
     op: 'delete', columns: ['founder_id'],
     reason: 'where that person\'s test placed an offer; the test was theirs',
+  },
+  experiment_recipients: {
+    op: 'delete', columns: ['founder_id'],
+    reason: 'whom that person\'s test may write to, and his review of each; the test was theirs',
+  },
+  experiment_materials: {
+    op: 'delete', columns: ['founder_id'],
+    reason: 'what that person\'s test sends and delivers; the test was theirs',
+  },
+  experiment_fulfilments: {
+    op: 'delete', columns: ['founder_id'],
+    reason: 'what that person\'s test owed after a payment; names no buyer and goes with the test',
   },
   undertakings: {
     op: 'delete', columns: ['founder_id'],

@@ -101,6 +101,7 @@ POST /products/:id/patterns/:patternId/invalidate
 POST /settings/delete-all-products
 POST /settings/fluency
 POST /settings/interruption-ceiling
+POST /share/refund/:fulfilmentId/:token
 POST /switch-product
 POST /webhooks/integrations/stripe
 PUT /api/founder-health

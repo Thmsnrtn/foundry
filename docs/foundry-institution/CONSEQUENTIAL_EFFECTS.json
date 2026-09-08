@@ -31,42 +31,42 @@
     },
     {
       "file": "src/services/billing/stripe.ts",
-      "line": 45,
+      "line": 46,
       "detector": "stripe_sdk_mutation",
       "status": "control_path",
       "capability": "Foundry SaaS billing credential owner"
     },
     {
       "file": "src/services/billing/stripe.ts",
-      "line": 60,
+      "line": 61,
       "detector": "stripe_sdk_mutation",
       "status": "control_path",
       "capability": "Foundry SaaS billing credential owner"
     },
     {
       "file": "src/services/billing/stripe.ts",
-      "line": 83,
+      "line": 84,
       "detector": "stripe_sdk_mutation",
       "status": "control_path",
       "capability": "Foundry SaaS billing credential owner"
     },
     {
       "file": "src/services/billing/stripe.ts",
-      "line": 105,
+      "line": 106,
       "detector": "stripe_sdk_mutation",
       "status": "control_path",
       "capability": "Foundry SaaS billing credential owner"
     },
     {
       "file": "src/services/billing/stripe.ts",
-      "line": 115,
+      "line": 116,
       "detector": "stripe_sdk_mutation",
       "status": "control_path",
       "capability": "Foundry SaaS billing credential owner"
     },
     {
       "file": "src/services/billing/stripe.ts",
-      "line": 134,
+      "line": 135,
       "detector": "stripe_sdk_mutation",
       "status": "control_path",
       "capability": "Foundry SaaS billing credential owner"
@@ -101,14 +101,14 @@
     },
     {
       "file": "src/services/integration/resend.ts",
-      "line": 394,
+      "line": 396,
       "detector": "external_post",
       "status": "governed",
       "capability": "send_email capability handler"
     },
     {
       "file": "src/services/integration/resend.ts",
-      "line": 417,
+      "line": 419,
       "detector": "external_post",
       "status": "governed",
       "capability": "send_email capability handler"

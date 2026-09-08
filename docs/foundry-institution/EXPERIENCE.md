@@ -58,3 +58,17 @@ HANDLED | CHANGED | NEEDS YOU | DELIBERATELY NOT DONE | STILL OPEN
 Every item retains evidence, effect certainty, responsibility, and any deadline.
 This is a proof target for reduced founder dependency, not a claim that current
 surfaces or operations already satisfy it.
+
+## The River in the surfaces (owner direction 2026-09-07, ported 2026-09-08)
+
+The cockpit's questions map onto the owner's existing places rather than a second application: *Are things okay?* *What materially changed?* and *What genuinely needs me?* are Home (`/foundry`), where everything waiting on him — acts, advice, things noticed, and now a real test — is one queue with one tap each; *What is being tested or learned?* is the experiment's own place (`/foundry/experiments/:id`, listed at `/foundry/experiments`); economic structure and evidence are the company places under Portfolio; authority, budgets and standing policy are Controls and each company's Authority dial. Activity on a test is epistemically typed (Observed, Concluded, Planned, Authorized, Attempted, Verified, Learned) and every line names the row it was read from.
+
+**Doctrine.** Autonomous by default. Observable always. Controllable on demand. Deep institution, shallow interface; shallow must not mean hidden. **Owner absence must never mean owner blindness.** Watch → inspect → intervene: a test shows its state by default, opens to why it exists, its evidence, recipients, message, budget, authority, outcomes and stop rules, and offers the owner's real levers — exclude a business, connect his sender, allow, stop. Intervention is never forced and autonomy is never invisibility.
+
+**Interruption contract.** The first such interruption exists: an undecided real test asks for its own allowance and window, states its sealed rule and grounding, says exactly what Allow permits (three exact acts, no standing permission), and is refused — by the rows, not only by the page — while a prerequisite is missing. Recurring approvals never become standing authority.
+
+**Plain language, precise underneath.** Rungs, counterparties, validity and act ids stay behind "Details"; the default reads "10 businesses have received the offer; no one has paid yet", "Allow — up to $100.00", "Stopped by you". Nothing is stored for the screen: one derivation (`services/founder/experiment-view.ts`) reads the rows that govern, so there is no second state machine.
+
+**No runbook-only owner actions.** Every routine owner decision a live test needs has a route under `/foundry`; the CLI (`experiment:*`) is an operator and recovery ControlPath, not the founder product. The buyer's refund is the buyer's own act through a signed link in the delivery.
+
+**Mobile is a proof target.** `scripts/measure-mobile.mts` renders the experiment page and its review list in the state that matters most (everything in place, Allow on screen) at the five iPhone widths, at 100% and 200% text, and fails on a pixel of horizontal overflow or a line under the fixed bars.

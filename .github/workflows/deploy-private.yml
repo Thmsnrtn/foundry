@@ -41,6 +41,9 @@ on:
     branches:
       - 'claude/foundry-autonomous-continuation-0gents'
       - 'claude/private-foundry-continuation-51vz95'
+      # The River port session (Option A, 2026-09-08): the same lineage,
+      # continued on this session's designated branch.
+      - 'claude/foundry-river-constitution-rvd0mx'
 
 jobs:
   # NOTHING DEPLOYS THAT HAS NOT PASSED THE CHAIN.

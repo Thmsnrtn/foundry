@@ -1421,3 +1421,79 @@ tick that advances a thread; a stored autopilot level; a dollar threshold.
 
 **State:** BUILT LOCALLY · TESTED LOCALLY (full chain) · PUSHED
 (`claude/foundry-next-frontier-h2fsqe`) · NOT INTEGRATED · NOT DEPLOYED.
+
+## The first real experiment has a hand (2026-09-08)
+
+One campaign from `402b1f99` on `claude/foundry-river-constitution-rvd0mx`, cut from
+the frontier tip; migration 284; deploy marker on the campaign branch.
+
+**Baseline.** The River line (`river-line`, 5 commits past `master`, migrations
+123–124 of its own) and the frontier (840 commits past `master`, migrations to
+283) had forked. Production ran `437505b0` from the campaign branch. The owner
+chose Option A: the frontier is Foundry; the River work is ported onto it as a
+semantic reconciliation, never a Git merge.
+
+**Governing requirement.** The first real venture experiment — Proof 1, a $29
+one-time Massachusetts millwork bid brief — must run as ordinary frontier rows
+under the frontier's authority, outbound, settlement and experiment semantics,
+with the owner's part reduced to three acts on one page of his phone, and the
+deployed app must be the reconciled institution.
+
+**Built.**
+- Migration 284: `needs_workshop`; `offer_delivered` outcome kind; capabilities
+  `publish_payment_link` (public) and `withdraw_payment_link` (reversible) with
+  their Stripe providers; `experiment_recipients` (never born approved; only
+  the owner reviews, stamped; strikes carry reasons; immutable otherwise;
+  frozen once the test settles); `experiment_materials` (one live per kind,
+  immutable, an offer needs an https link); `experiment_fulfilments` (what is
+  owed, keyed to the provider's references, no payer identity; refund and
+  delivery final); outbound actions bound to the experiment, the act, the
+  recipient or the fulfilment, born unapproved and admitted only under an
+  owner-approved measurement-critical act to an approved recipient or an owed
+  purchase; bindings immutable.
+- The door names the act (`experimentActFor`): an experimental asset reaches
+  the world only through its own planned and claimed outbound row, a refund
+  requested on an owed purchase, the exact parameters the owner approved, or a
+  withdrawn exposure under the act that placed it; an ask-first boundary is
+  answered by that act and marked used. Kill switch and gateway carry it.
+- `hand.ts`: recipients, materials with quality gates, Allow (approve the test,
+  state the offer's shape and structural facts, three ask-first boundaries on
+  the asset, three exact acts approved by the owner), decline, stop (withdraw,
+  take down, revoke all, retire), the payment link as the exposure
+  (`payment-link.ts`, created or pasted, held to one contract), paced offers,
+  deliveries with the refund link, receipts as outcome events, refunds through
+  the governed door, the sealed rule, the link taken down on settlement, and
+  what is owed outliving the test. `settlement-intake.ts`: verified Stripe
+  events tagged for an experiment become payment/refund events on its exposure
+  and open what is owed, from the existing billing webhook.
+- Sending: an experimental asset sends as its owner's institution identity;
+  the identity is accepted only after the provider confirms the domain
+  (`sending-check.ts`); `reply_to` reaches the owner's inbox.
+- The owner's surface: `/foundry/experiments`, `/foundry/experiments/:id`
+  (state, steps, Allow with what it permits, offer, reach, money, rules,
+  learned, exceptions, stop, timeline, details), `/recipients` (review, the
+  rest are fine, add an address), Home's queue carries a real test with one
+  tap; the buyer's `/share/refund/:fulfilmentId/:token`. One derivation
+  (`experiment-view.ts`), nothing stored for the screen.
+- Proof 1 as rows: `proof-1.ts` (idempotent seed; the brief and template
+  embedded by `scripts/embed-proof-1.mjs`), rule sealed on `delivery`.
+- CLI: `experiment:seed-proof1`, `experiment:tick`, `experiment:status`. Job:
+  `experiment_hand_tick` (hourly at :20).
+
+**Tests.** `the-first-real-experiment-runs-by-hand` (14: seed → review →
+refused Allow → sender → Allow → tagged link → paced offers → receipts → stale
+brief refused → bounce refunded → purchase owed once → delivery with refund
+link → settled as predicted and taken down → the buyer's refund with money
+tools off and on → a second test stopped from the page → nothing dead-ends),
+`the-hand-cannot-write-to-anyone-unapproved` (7: every RAISE of 284 planted);
+provider stubs in `tests/helpers/provider-stubs.ts`; the mobile gate renders
+the experiment pages ready to allow.
+
+**Not built.** Reading replies (no receiving domain); a stored take-down
+receipt (a failed take-down is visible in the hand's report and the gateway
+log, not on the page); anything that meets Stripe or Resend for real before
+the owner connects them.
+
+**State:** BUILT · TESTED (full chain) · PUSHED · DEPLOYED through
+`[deploy-private]` (see `docs/operations/DEPLOYMENT_BASELINE.md` for the
+verified running commit and what the deployed smoke test covered).

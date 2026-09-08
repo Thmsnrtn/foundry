@@ -28,6 +28,8 @@ interface SendEmailParams {
   html: string;
   text?: string;
   from?: string;
+  /** Where a reply goes when the sender is the owner's identity: his own inbox. */
+  reply_to?: string;
 }
 
 interface ResendSuccess {
@@ -427,6 +429,7 @@ export async function sendEmailHandler(req: GatewayRequest): Promise<ResendSucce
             subject: params.subject,
             html: params.html,
             ...(params.text ? { text: params.text } : {}),
+            ...(params.reply_to ? { reply_to: params.reply_to } : {}),
           }),
         }),
       { timeoutMs: RESEND_TIMEOUT_MS, maxRetries: 2 },

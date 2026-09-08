@@ -2014,3 +2014,28 @@ thread that proposed it.
 - **Quality/cost comparator** — trigger: a real decision between two candidate methods for a consumed capability.
 - **Founder-attention measurement** — trigger: a real founder-facing or economic decision consuming it.
 - **Assisting → Operating** — frozen; must be designed prospectively from real E4/E5 evidence.
+
+## The first Hand behind an ask-first door (2026-09-08)
+
+The owner chose the lineage (Option A: the frontier is Foundry) and the River
+work was ported onto it as a reconciliation, not a merge. What was "(2) a first
+Hand behind an ask-first door" in the previous section's leverage list now
+exists: Proof 1 is the first real venture experiment, migration 284 gives it
+recipients, materials, what is owed and the binding of every outbound action
+to the owner's act, and the door resolves the act it runs under from rows
+(`experimentActFor`), which is the shape `kill-switch.ts` said the first hand
+would have to fill. Allow is three exact acts under three ask-first boundaries
+on the test's own asset; Stop revokes them after taking the offer down; what
+is owed outlives the test. The owner's part is three acts on one page of his
+phone. Records: `history/IMPLEMENTATION_SLICES.md` (the slice),
+`history/RIVER_PORT_RECONCILIATION.md`, `history/TRANCHE_ADVERSARIAL_REVIEW_2026-09-08.md`,
+`docs/operations/DEPLOYMENT_BASELINE.md` (the cutover and what was verified
+on the real app).
+
+**Next, in order of leverage:** (1) the owner's three acts on the deployed app
+— review, connect his sender, allow — then the first real offers, receipts and
+whatever the world does; (2) `FOUNDRY_ENABLE_MONEY_TOOLS` and
+`STRIPE_WEBHOOK_SECRET` in production, without which purchases cannot be
+received and refunds cannot move; (3) a re-pulled brief within seven days of
+launch, or the first delivery is refused by its own quality gate; (4) the
+"(1) real Stripe Connect credential" item above, unchanged.

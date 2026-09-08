@@ -8,6 +8,7 @@ import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { createNotification } from '../ux/notifications.js';
 import { withRetry } from '../resilience.js';
+import { log } from '../../lib/logger.js';
 
 let _stripe: Stripe | null = null;
 
@@ -201,6 +202,18 @@ export async function handleWebhook(payload: string, signature: string): Promise
   const existing = await query('SELECT event_id FROM stripe_webhook_events WHERE event_id = ?', [event.id]);
   if (existing.rows.length > 0) return; // Already processed
   await query('INSERT INTO stripe_webhook_events (event_id, event_type, processed_at) VALUES (?, ?, CURRENT_TIMESTAMP)', [event.id, event.type]);
+
+  // AN EXPERIMENT'S OFFER SETTLES THROUGH THE SAME DOOR. Events tagged for a
+  // venture experiment (`metadata.experiment_id`, app absent or 'foundry') are
+  // the world reporting to that experiment's exposure; they never touch
+  // Foundry's own subscription rows below, and a failure here never hides the
+  // event from the intake's own log.
+  try {
+    const { intakeStripeSettlement } = await import('../venture/settlement-intake.js');
+    await intakeStripeSettlement(event as unknown as { id?: string; type: string; created?: number; data?: { object?: unknown } });
+  } catch (err) {
+    log.warn('experiment settlement intake failed', { eventId: event.id, error: String(err) });
+  }
 
   switch (event.type) {
     case 'customer.subscription.created':

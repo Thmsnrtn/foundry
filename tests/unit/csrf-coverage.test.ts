@@ -80,6 +80,10 @@ const NON_COOKIE_SURFACES: Record<string, { why: string; proof: RegExp }> = {
     why: 'API key in the request body, validated with revocation and expiry',
     proof: /validateApiKey\(body\.api_key\)/,
   },
+  '/share/refund/:fulfilmentId/:token': {
+    why: 'the buyer has no session; the HMAC-signed token in the delivery link is the whole credential, verified before anything is read or refunded',
+    proof: /requestRefundByLink\(c\.req\.param\('fulfilmentId'\), c\.req\.param\('token'\)\)/,
+  },
 };
 
 /** Comments stripped. A file that MENTIONS a credential check in prose has not

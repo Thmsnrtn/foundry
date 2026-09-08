@@ -1704,10 +1704,57 @@ CREATE TABLE experiment_exposures (
   placed_by      TEXT NOT NULL,
   withdrawn_at   TEXT
 );
+CREATE TABLE experiment_fulfilments (
+  id                  TEXT PRIMARY KEY,
+  founder_id          TEXT NOT NULL REFERENCES founders(id),
+  experiment_id       TEXT NOT NULL REFERENCES venture_experiments(id),
+  exposure_id         TEXT NOT NULL REFERENCES experiment_exposures(id),
+  payment_event_id    TEXT NOT NULL REFERENCES business_outcome_events(id),
+  provider            TEXT NOT NULL,
+  payment_ref         TEXT NOT NULL,
+  charge_ref          TEXT,
+  amount_cents        INTEGER NOT NULL CHECK (amount_cents > 0),
+  currency            TEXT NOT NULL,
+  status              TEXT NOT NULL DEFAULT 'owed' CHECK (status IN ('owed','sent','delivered','failed','refunded')),
+  refund_requested_at TEXT,
+  refund_ref          TEXT,
+  created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(payment_event_id)
+);
 CREATE TABLE experiment_invalidity_kinds (
   kind        TEXT PRIMARY KEY,
   what_it_is  TEXT NOT NULL,
   sort_order  INTEGER NOT NULL
+);
+CREATE TABLE experiment_materials (
+  id               TEXT PRIMARY KEY,
+  founder_id       TEXT NOT NULL REFERENCES founders(id),
+  experiment_id    TEXT NOT NULL REFERENCES venture_experiments(id),
+  kind             TEXT NOT NULL CHECK (kind IN ('deliverable','offer_template','offer','offer_shape')),
+  title            TEXT NOT NULL,
+  body             TEXT NOT NULL,
+  pulled_at        TEXT,
+  digest           TEXT NOT NULL,
+  payment_link_url TEXT,
+  recorded_by      TEXT NOT NULL,
+  recorded_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  superseded_at    TEXT
+);
+CREATE TABLE experiment_recipients (
+  id               TEXT PRIMARY KEY,
+  founder_id       TEXT NOT NULL REFERENCES founders(id),
+  experiment_id    TEXT NOT NULL REFERENCES venture_experiments(id),
+  counterparty_ref TEXT NOT NULL,
+  email            TEXT,
+  channel          TEXT NOT NULL CHECK (channel IN ('email','web_form')),
+  source_url       TEXT,
+  review_status    TEXT NOT NULL DEFAULT 'pending' CHECK (review_status IN ('pending','approved','struck')),
+  review_reason    TEXT,
+  reviewed_by      TEXT,
+  reviewed_at      TEXT,
+  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(experiment_id, counterparty_ref)
 );
 CREATE TABLE experiment_variants (
   id TEXT PRIMARY KEY,
@@ -3009,7 +3056,7 @@ CREATE TABLE outbound_actions (
   cost_usd REAL DEFAULT 0.0,
   expires_at DATETIME,        -- Actions become stale after this
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-, responsibility_id TEXT REFERENCES institutional_responsibilities(id), authority_consent_id TEXT REFERENCES autonomy_consents(id), authority_scope TEXT, effect_id TEXT, effect_certainty TEXT, provider_receipt_json TEXT, reconcile_after TEXT, outcome_status TEXT, outcome_evidence_ref TEXT, learned_claim_id TEXT REFERENCES reconstruction_claims(id), inbound_message_id TEXT REFERENCES inbound_customer_messages(id), reply_proposal_id TEXT REFERENCES signal_events(id));
+, responsibility_id TEXT REFERENCES institutional_responsibilities(id), authority_consent_id TEXT REFERENCES autonomy_consents(id), authority_scope TEXT, effect_id TEXT, effect_certainty TEXT, provider_receipt_json TEXT, reconcile_after TEXT, outcome_status TEXT, outcome_evidence_ref TEXT, learned_claim_id TEXT REFERENCES reconstruction_claims(id), inbound_message_id TEXT REFERENCES inbound_customer_messages(id), reply_proposal_id TEXT REFERENCES signal_events(id), experiment_id TEXT REFERENCES venture_experiments(id), experiment_act TEXT CHECK (experiment_act IS NULL OR experiment_act IN ('offer','delivery')), recipient_id TEXT REFERENCES experiment_recipients(id), fulfilment_id TEXT REFERENCES experiment_fulfilments(id), proposed_act_id TEXT REFERENCES proposed_acts(id));
 CREATE TABLE outbound_rate_limits (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -4517,7 +4564,7 @@ CREATE TABLE venture_experiments (
   verdict        TEXT CHECK (verdict IN ('as_predicted','surprised'))
 , due_at TEXT, settles_when TEXT, validity TEXT NOT NULL DEFAULT 'valid'
   CHECK (validity IN ('valid','invalid')), invalid_because TEXT
-  REFERENCES experiment_invalidity_kinds(kind), invalidated_by TEXT, invalidated_at TEXT, rerun_of TEXT REFERENCES venture_experiments(id));
+  REFERENCES experiment_invalidity_kinds(kind), invalidated_by TEXT, invalidated_at TEXT, rerun_of TEXT REFERENCES venture_experiments(id), needs_workshop INTEGER NOT NULL DEFAULT 1);
 CREATE TABLE venture_guidance (
   id           TEXT PRIMARY KEY,
   mandate_id   TEXT NOT NULL REFERENCES venture_mandates(id),
@@ -4986,10 +5033,15 @@ CREATE INDEX idx_exec_queue_job ON execution_queue(job_type, status);
 CREATE INDEX idx_exec_queue_product ON execution_queue(product_id);
 CREATE INDEX idx_exec_queue_status ON execution_queue(status, created_at);
 CREATE INDEX idx_exp_events ON experiment_events(experiment_id, variant);
+CREATE INDEX idx_experiment_actions ON outbound_actions(experiment_id, experiment_act, status);
 CREATE UNIQUE INDEX idx_experiment_exposure_one_live
   ON experiment_exposures(experiment_id) WHERE withdrawn_at IS NULL;
 CREATE UNIQUE INDEX idx_experiment_exposure_ref
   ON experiment_exposures(provider, exposure_ref);
+CREATE INDEX idx_experiment_fulfilments ON experiment_fulfilments(experiment_id, status);
+CREATE UNIQUE INDEX idx_experiment_materials_live
+  ON experiment_materials(experiment_id, kind) WHERE superseded_at IS NULL;
+CREATE INDEX idx_experiment_recipients ON experiment_recipients(experiment_id, review_status);
 CREATE INDEX idx_experiment_variants_experiment ON experiment_variants(experiment_id);
 CREATE INDEX idx_experiments_product ON experiments(product_id, status);
 CREATE INDEX idx_failure_log_category ON failure_log(product_id, category);
@@ -6179,6 +6231,46 @@ BEGIN SELECT RAISE(ABORT,'epistemic_stance:constitutional'); END;
 CREATE TRIGGER epistemic_stances_constitutional_update
 BEFORE UPDATE ON epistemic_stances
 BEGIN SELECT RAISE(ABORT,'epistemic_stance:constitutional'); END;
+CREATE TRIGGER experiment_action_binding_immutable
+BEFORE UPDATE ON outbound_actions WHEN OLD.experiment_id IS NOT NULL
+BEGIN
+  SELECT RAISE(ABORT,'experiment_action:binding_immutable') WHERE
+    coalesce(NEW.experiment_id, '') <> coalesce(OLD.experiment_id, '')
+    OR coalesce(NEW.experiment_act, '') <> coalesce(OLD.experiment_act, '')
+    OR coalesce(NEW.recipient_id, '') <> coalesce(OLD.recipient_id, '')
+    OR coalesce(NEW.fulfilment_id, '') <> coalesce(OLD.fulfilment_id, '')
+    OR coalesce(NEW.proposed_act_id, '') <> coalesce(OLD.proposed_act_id, '')
+    OR coalesce(NEW.effect_id, '') <> coalesce(OLD.effect_id, '')
+    OR NEW.parameters_json <> OLD.parameters_json;
+END;
+CREATE TRIGGER experiment_action_plan_guard
+BEFORE INSERT ON outbound_actions WHEN NEW.experiment_id IS NOT NULL
+BEGIN
+  SELECT RAISE(ABORT,'experiment_action:born_approved') WHERE NEW.status <> 'pending_approval'
+    OR NEW.approved_by IS NOT NULL OR NEW.approved_at IS NOT NULL OR NEW.executed_at IS NOT NULL;
+  SELECT RAISE(ABORT,'experiment_action:binding_invalid') WHERE NEW.experiment_act IS NULL
+    OR NEW.proposed_act_id IS NULL OR NEW.effect_id IS NULL
+    OR NEW.action_type <> 'send_email' OR NEW.integration_name <> 'resend'
+    OR NEW.responsibility_id IS NOT NULL OR NEW.authority_consent_id IS NOT NULL;
+  SELECT RAISE(ABORT,'experiment_action:asset_mismatch') WHERE NOT EXISTS (
+    SELECT 1 FROM products p WHERE p.id = NEW.product_id AND p.from_experiment_id = NEW.experiment_id
+      AND p.standing = 'experimental' AND p.deleted_at IS NULL);
+  SELECT RAISE(ABORT,'experiment_action:experiment_not_live') WHERE NOT EXISTS (
+    SELECT 1 FROM venture_experiments e WHERE e.id = NEW.experiment_id AND e.decision = 'approved'
+      AND e.ran_at IS NULL AND e.validity = 'valid');
+  SELECT RAISE(ABORT,'experiment_action:not_authorised') WHERE NOT EXISTS (
+    SELECT 1 FROM proposed_acts a WHERE a.id = NEW.proposed_act_id AND a.product_id = NEW.product_id
+      AND a.experiment_id = NEW.experiment_id AND coalesce(a.measurement_critical, 0) = 1
+      AND a.subject = 'contact_people' AND a.action_type = 'send_email'
+      AND a.decision = 'approved' AND a.revoked_at IS NULL AND datetime(a.expires_at) > datetime('now'));
+  SELECT RAISE(ABORT,'experiment_action:recipient_not_approved') WHERE NEW.experiment_act = 'offer' AND NOT EXISTS (
+    SELECT 1 FROM experiment_recipients r WHERE r.id = NEW.recipient_id AND r.experiment_id = NEW.experiment_id
+      AND r.review_status = 'approved' AND r.channel = 'email'
+      AND r.email = coalesce(json_extract(NEW.parameters_json, '$.to[0]'), ''));
+  SELECT RAISE(ABORT,'experiment_action:nothing_owed') WHERE NEW.experiment_act = 'delivery' AND NOT EXISTS (
+    SELECT 1 FROM experiment_fulfilments f WHERE f.id = NEW.fulfilment_id AND f.experiment_id = NEW.experiment_id
+      AND f.status = 'owed');
+END;
 CREATE TRIGGER experiment_exposure_guard
 BEFORE INSERT ON experiment_exposures
 BEGIN
@@ -6205,6 +6297,32 @@ BEGIN
       AND NOT EXISTS (SELECT 1 FROM products p
                        WHERE p.id = NEW.product_id AND p.from_experiment_id = NEW.experiment_id);
 END;
+CREATE TRIGGER experiment_fulfilment_guard
+BEFORE INSERT ON experiment_fulfilments
+BEGIN
+  SELECT RAISE(ABORT,'experiment_fulfilment:cannot_arrive_settled') WHERE NEW.status <> 'owed'
+    OR NEW.refund_requested_at IS NOT NULL OR NEW.refund_ref IS NOT NULL;
+  SELECT RAISE(ABORT,'experiment_fulfilment:payment_invalid') WHERE NOT EXISTS (
+    SELECT 1 FROM business_outcome_events b
+      JOIN business_outcome_event_kinds k ON k.kind = b.kind
+      JOIN experiment_exposures x ON x.id = b.exposure_id
+     WHERE b.id = NEW.payment_event_id AND k.is_payment = 1 AND b.exposure_id = NEW.exposure_id
+       AND x.experiment_id = NEW.experiment_id AND x.founder_id = NEW.founder_id
+       AND b.provider = NEW.provider AND b.provider_event_ref = NEW.payment_ref);
+END;
+CREATE TRIGGER experiment_fulfilment_progress
+BEFORE UPDATE ON experiment_fulfilments
+BEGIN
+  SELECT RAISE(ABORT,'experiment_fulfilment:immutable') WHERE
+    NEW.id <> OLD.id OR NEW.founder_id <> OLD.founder_id OR NEW.experiment_id <> OLD.experiment_id
+    OR NEW.exposure_id <> OLD.exposure_id OR NEW.payment_event_id <> OLD.payment_event_id
+    OR NEW.provider <> OLD.provider OR NEW.payment_ref <> OLD.payment_ref
+    OR NEW.amount_cents <> OLD.amount_cents OR NEW.currency <> OLD.currency OR NEW.created_at <> OLD.created_at;
+  SELECT RAISE(ABORT,'experiment_fulfilment:refund_is_final') WHERE OLD.status = 'refunded' AND NEW.status <> 'refunded';
+  SELECT RAISE(ABORT,'experiment_fulfilment:delivered_is_final') WHERE OLD.status = 'delivered' AND NEW.status NOT IN ('delivered','refunded');
+  SELECT RAISE(ABORT,'experiment_fulfilment:request_in_the_future') WHERE NEW.refund_requested_at IS NOT NULL
+    AND datetime(NEW.refund_requested_at) > datetime('now', '+5 minutes');
+END;
 CREATE TRIGGER experiment_invalidity_kinds_constitutional_delete
 BEFORE DELETE ON experiment_invalidity_kinds
 BEGIN SELECT RAISE(ABORT,'experiment_invalidity_kind:constitutional'); END;
@@ -6214,6 +6332,62 @@ BEGIN SELECT RAISE(ABORT,'experiment_invalidity_kind:constitutional'); END;
 CREATE TRIGGER experiment_invalidity_kinds_constitutional_update
 BEFORE UPDATE ON experiment_invalidity_kinds
 BEGIN SELECT RAISE(ABORT,'experiment_invalidity_kind:constitutional'); END;
+CREATE TRIGGER experiment_material_guard
+BEFORE INSERT ON experiment_materials
+BEGIN
+  SELECT RAISE(ABORT,'experiment_material:experiment_invalid') WHERE NOT EXISTS (
+    SELECT 1 FROM venture_experiments e WHERE e.id = NEW.experiment_id AND e.founder_id = NEW.founder_id);
+  SELECT RAISE(ABORT,'experiment_material:incomplete') WHERE trim(NEW.title) = '' OR trim(NEW.body) = ''
+    OR trim(NEW.digest) = '' OR trim(NEW.recorded_by) = '';
+  SELECT RAISE(ABORT,'experiment_material:offer_needs_a_link') WHERE NEW.kind = 'offer'
+    AND (NEW.payment_link_url IS NULL OR NEW.payment_link_url NOT LIKE 'https://%');
+  SELECT RAISE(ABORT,'experiment_material:cannot_arrive_superseded') WHERE NEW.superseded_at IS NOT NULL;
+END;
+CREATE TRIGGER experiment_material_immutable
+BEFORE UPDATE ON experiment_materials
+BEGIN
+  SELECT RAISE(ABORT,'experiment_material:immutable') WHERE
+    NEW.id <> OLD.id OR NEW.founder_id <> OLD.founder_id OR NEW.experiment_id <> OLD.experiment_id
+    OR NEW.kind <> OLD.kind OR NEW.title <> OLD.title OR NEW.body <> OLD.body
+    OR coalesce(NEW.pulled_at, '') <> coalesce(OLD.pulled_at, '') OR NEW.digest <> OLD.digest
+    OR coalesce(NEW.payment_link_url, '') <> coalesce(OLD.payment_link_url, '')
+    OR NEW.recorded_by <> OLD.recorded_by OR NEW.recorded_at <> OLD.recorded_at
+    OR (OLD.superseded_at IS NOT NULL AND NEW.superseded_at IS NOT OLD.superseded_at);
+END;
+CREATE TRIGGER experiment_recipient_guard
+BEFORE INSERT ON experiment_recipients
+BEGIN
+  SELECT RAISE(ABORT,'experiment_recipient:experiment_invalid') WHERE NOT EXISTS (
+    SELECT 1 FROM venture_experiments e WHERE e.id = NEW.experiment_id AND e.founder_id = NEW.founder_id
+      AND e.ran_at IS NULL AND e.validity = 'valid');
+  SELECT RAISE(ABORT,'experiment_recipient:counterparty_required') WHERE trim(NEW.counterparty_ref) = '';
+  SELECT RAISE(ABORT,'experiment_recipient:email_invalid') WHERE NEW.channel = 'email'
+    AND (NEW.email IS NULL OR instr(NEW.email, '@') < 2 OR instr(NEW.email, ' ') > 0);
+  -- A recipient is never born approved: approval is the owner's act.
+  SELECT RAISE(ABORT,'experiment_recipient:review_not_owner_act') WHERE NEW.review_status <> 'pending'
+    OR NEW.reviewed_by IS NOT NULL OR NEW.reviewed_at IS NOT NULL;
+END;
+CREATE TRIGGER experiment_recipient_review_guard
+BEFORE UPDATE ON experiment_recipients
+BEGIN
+  SELECT RAISE(ABORT,'experiment_recipient:immutable') WHERE
+    NEW.experiment_id <> OLD.experiment_id OR NEW.founder_id <> OLD.founder_id
+    OR NEW.counterparty_ref <> OLD.counterparty_ref OR NEW.created_at <> OLD.created_at
+    OR (NEW.channel <> OLD.channel AND NOT (OLD.channel = 'web_form' AND NEW.channel = 'email'))
+    OR coalesce(NEW.source_url, '') <> coalesce(OLD.source_url, '');
+  -- Only the founder who owns the experiment reviews, and every review names him.
+  SELECT RAISE(ABORT,'experiment_recipient:reviewer_invalid') WHERE
+    (NEW.review_status <> OLD.review_status OR coalesce(NEW.email, '') <> coalesce(OLD.email, ''))
+    AND NEW.reviewed_by IS NOT 'founder:' || OLD.founder_id;
+  SELECT RAISE(ABORT,'experiment_recipient:review_stamp_required') WHERE
+    NEW.review_status <> OLD.review_status AND NEW.reviewed_at IS NULL;
+  SELECT RAISE(ABORT,'experiment_recipient:strike_reason_required') WHERE
+    NEW.review_status = 'struck' AND OLD.review_status <> 'struck' AND trim(coalesce(NEW.review_reason, '')) = '';
+  SELECT RAISE(ABORT,'experiment_recipient:email_invalid') WHERE NEW.channel = 'email'
+    AND (NEW.email IS NULL OR instr(NEW.email, '@') < 2 OR instr(NEW.email, ' ') > 0);
+  SELECT RAISE(ABORT,'experiment_recipient:experiment_settled') WHERE EXISTS (
+    SELECT 1 FROM venture_experiments e WHERE e.id = NEW.experiment_id AND (e.ran_at IS NOT NULL OR e.validity <> 'valid'));
+END;
 CREATE TRIGGER exposure_classes_constitutional_delete
 BEFORE DELETE ON exposure_classes
 BEGIN SELECT RAISE(ABORT,'exposure_class:constitutional'); END;

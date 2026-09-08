@@ -445,6 +445,9 @@ export async function boundaryStandingInTheWay(input: {
   productId: string; door: 'outbound' | 'spend'; tool?: string;
   /** What exactly is about to be done. Server-computed; see `fingerprint`. */
   paramsFingerprint?: string;
+  /** The act an approved experiment carries for this effect, resolved by the
+   * door from the rows (see `experimentActFor`); never supplied by a caller. */
+  experimentAct?: ExperimentAct | null;
 }): Promise<{ statement: string; refusal: string } | null> {
   const rows = (await query(
     `SELECT b.subject, b.statement, b.mode, s.refusal
@@ -463,6 +466,19 @@ export async function boundaryStandingInTheWay(input: {
       && !(input.tool != null && REACHES_A_PERSON.has(input.tool))) continue;
 
     if (String(row.mode) === 'ask_first') {
+      // AN EXPERIMENT'S ACT ANSWERS FOR EVERY MESSAGE IT CARRIES. The owner
+      // approved one act whose parameters are the campaign itself — the
+      // businesses he reviewed and the offer text — and each message was
+      // bound to that act and to one of those businesses (or to a purchase
+      // that is owed) by the plan guard before it could exist. The door
+      // verified the binding from the rows; what remains is to mark the
+      // approval used the first time it is, so the record shows it was.
+      if (input.experimentAct) {
+        await query(
+          `UPDATE proposed_acts SET consumed_at = datetime('now'), consumed_by = 'outbound_door:experiment'
+            WHERE id = ? AND consumed_at IS NULL`, [input.experimentAct.actId]);
+        continue;
+      }
       // HE ASKED TO BE ASKED, SO THE QUESTION IS WHETHER HE ANSWERED — about
       // THIS act, not about this kind of act. Spending the approval here rather
       // than after the handler is deliberate: between an approval spent on an
@@ -480,6 +496,85 @@ export async function boundaryStandingInTheWay(input: {
       };
     }
     return { statement: String(row.statement), refusal: String(row.refusal) };
+  }
+  return null;
+}
+
+/**
+ * THE ACT AN EXPERIMENT CARRIES, resolved by the door from server-held rows and
+ * never from the request. An experimental asset may reach the world only
+ * through an act its approved experiment carries (kill-switch.ts). The hand
+ * plans each message as an outbound_actions row bound to the act and, by the
+ * plan guard of migration 284, to an owner-approved recipient or an owed
+ * fulfilment; then it claims the row ('executing') and crosses the door with
+ * the row's effect id as the dedup key. This reads that row back and verifies
+ * everything the guard verified at birth is still true now: the experiment is
+ * approved, valid and unsettled; the act is approved, unrevoked, unexpired,
+ * measurement-critical, of this experiment, for this tool.
+ */
+export interface ExperimentAct { experimentId: string; actId: string }
+
+export async function experimentActFor(input: { productId: string; tool: string; effectId: string | null; paramsFingerprint?: string | null }): Promise<ExperimentAct | null> {
+  const standing = `e.decision = 'approved' AND e.validity = 'valid'
+        AND a.experiment_id = e.id AND a.product_id = ? AND a.action_type IS ?
+        AND a.decision = 'approved' AND a.revoked_at IS NULL AND datetime(a.expires_at) > datetime('now')`;
+  // Messages and placements belong to a test still running; what a buyer is
+  // owed outlives the test's settlement, so a refund needs only the act.
+  const live = `e.ran_at IS NULL AND ${standing}`;
+  const found = (row: Record<string, unknown> | undefined): ExperimentAct | null =>
+    row ? { experimentId: String(row.experiment_id), actId: String(row.act_id) } : null;
+  // A MESSAGE: the hand's own planned, guarded, claimed outbound_actions row.
+  if (input.effectId) {
+    const message = (await query(
+      `SELECT o.experiment_id, o.proposed_act_id AS act_id
+         FROM outbound_actions o
+         JOIN venture_experiments e ON e.id = o.experiment_id
+         JOIN products p ON p.id = o.product_id AND p.from_experiment_id = e.id AND p.standing = 'experimental'
+         JOIN proposed_acts a ON a.id = o.proposed_act_id AND coalesce(a.measurement_critical, 0) = 1
+        WHERE o.product_id = ? AND o.effect_id = ? AND o.status = 'executing'
+          AND (e.ran_at IS NULL OR o.experiment_act = 'delivery') AND ${standing}`,
+      [input.productId, input.effectId, input.productId, input.tool])).rows[0] as Record<string, unknown> | undefined;
+    if (message) return found(message);
+    // A REFUND: what is owed on a purchase the provider reported at this
+    // experiment's exposure, asked for by the hand or by the buyer's link.
+    const refund = (await query(
+      `SELECT f.experiment_id, a.id AS act_id
+         FROM experiment_fulfilments f
+         JOIN venture_experiments e ON e.id = f.experiment_id
+         JOIN products p ON p.from_experiment_id = e.id AND p.standing = 'experimental'
+         JOIN proposed_acts a ON a.experiment_id = e.id
+        WHERE p.id = ? AND 'experiment:' || f.experiment_id || ':refund:' || f.payment_ref = ?
+          AND f.refund_requested_at IS NOT NULL AND f.refund_ref IS NULL AND ${standing}
+        ORDER BY a.decided_at, a.rowid LIMIT 1`,
+      [input.productId, input.effectId, input.productId, input.tool])).rows[0] as Record<string, unknown> | undefined;
+    if (refund) return found(refund);
+    // THE OFFER COMING DOWN: an exposure this experiment withdrew, taken down
+    // by the same act that placed it. What was placed may be unplaced.
+    const takedown = (await query(
+      `SELECT x.experiment_id, a.id AS act_id
+         FROM experiment_exposures x
+         JOIN venture_experiments e ON e.id = x.experiment_id
+         JOIN products p ON p.from_experiment_id = e.id AND p.standing = 'experimental'
+         JOIN proposed_acts a ON a.experiment_id = e.id
+        WHERE p.id = ? AND 'experiment:' || x.experiment_id || ':payment_link:withdraw:' || x.exposure_ref = ?
+          AND x.withdrawn_at IS NOT NULL AND ? = 'stripe_deactivate_payment_link'
+          AND e.decision = 'approved' AND a.product_id = ? AND a.action_type = 'stripe_create_payment_link'
+          AND a.decision = 'approved' AND a.revoked_at IS NULL AND datetime(a.expires_at) > datetime('now')
+        ORDER BY a.decided_at, a.rowid LIMIT 1`,
+      [input.productId, input.effectId, input.tool, input.productId])).rows[0] as Record<string, unknown> | undefined;
+    if (takedown) return found(takedown);
+  }
+  // THE EXACT ACT: the owner approved these parameters and no others.
+  if (input.paramsFingerprint) {
+    const exact = (await query(
+      `SELECT e.id AS experiment_id, a.id AS act_id
+         FROM proposed_acts a
+         JOIN venture_experiments e ON e.id = a.experiment_id
+         JOIN products p ON p.from_experiment_id = e.id AND p.standing = 'experimental' AND p.id = a.product_id
+        WHERE p.id = ? AND a.params_fingerprint = ? AND ${live}
+        ORDER BY a.decided_at, a.rowid LIMIT 1`,
+      [input.productId, input.paramsFingerprint, input.productId, input.tool])).rows[0] as Record<string, unknown> | undefined;
+    if (exact) return found(exact);
   }
   return null;
 }

@@ -48,6 +48,7 @@ const DESKTOP_WIDTHS = [1024, 1280, 1440];
 const OWNER = 'mm_owner';
 const COMPANY = 'mm_company';
 let REFERENCE_COMPANY = '';
+let PROOF1 = '';
 
 /** Production's shape, so the measurement is of what the owner actually sees. */
 async function seed(): Promise<void> {
@@ -136,6 +137,19 @@ async function seed(): Promise<void> {
     epistemicStatus: 'known', capabilityDependency: 'development',
     authorityRequired: true, observedAt: new Date(),
   });
+
+  // THE FIRST REAL EXPERIMENT, READY TO ALLOW. Its page is the widest thing
+  // the owner will open on his phone: the three steps, the allowance
+  // sentence, the offer, a reach table, the sealed rule, a timeline. Measured
+  // in the state that matters most - everything in place, the Allow button
+  // on screen - and the review list beside it.
+  const { seedProof1 } = await import('../src/services/venture/proof-1.js');
+  const seeded = await seedProof1(OWNER);
+  PROOF1 = seeded.experimentId;
+  const { setSendingIdentity } = await import('../src/services/outbound/sending-identity.js');
+  await setSendingIdentity({ productId: COMPANY, provider: 'resend', credential: 're_measure', fromEmail: 'hello@mail.thomasnorton.example', fromName: 'Thomas Norton' });
+  const { approveRemaining } = await import('../src/services/venture/hand.js');
+  await approveRemaining({ founderId: OWNER, experimentId: PROOF1 });
 }
 
 async function main(): Promise<void> {
@@ -150,12 +164,15 @@ async function main(): Promise<void> {
     await next();
   });
   app.route('/', foundryShellRoutes as never);
+  const { experimentRoutes } = await import('../src/routes/dashboard/experiments-place.js');
+  app.route('/', experimentRoutes as never);
 
   const server = serve({ fetch: app.fetch, port: 4317 });
   const base = 'http://127.0.0.1:4317';
   const paths = ['/foundry', '/foundry?ask=okay', '/foundry?ask=working',
     '/foundry/companies', `/foundry/companies/${COMPANY}`,
     `/foundry/companies/${REFERENCE_COMPANY}`, '/foundry/controls',
+    '/foundry/experiments', `/foundry/experiments/${PROOF1}`, `/foundry/experiments/${PROOF1}/recipients`,
     // Asked about a company by name: the answer is the widest structured block
     // the ask box can produce, and it renders inside the same page.
     '/foundry?q=' + encodeURIComponent('How is Foundry doing?'),
@@ -294,6 +311,12 @@ async function main(): Promise<void> {
         if (path === `/foundry/companies/${REFERENCE_COMPANY}`) {
           await page.screenshot({ path: `${dir}/reference-company-390.png`, fullPage: true });
         }
+        if (path === `/foundry/experiments/${PROOF1}`) {
+          await page.screenshot({ path: `${dir}/experiment-390.png`, fullPage: true });
+        }
+        if (path === `/foundry/experiments/${PROOF1}/recipients`) {
+          await page.screenshot({ path: `${dir}/experiment-recipients-390.png`, fullPage: true });
+        }
       }
       if (path === '/foundry' && scale === 1 && width !== 390 && !desktop) {
         await page.screenshot({ path: `${dir}/foundry-${String(width)}.png`, fullPage: true });
@@ -304,7 +327,8 @@ async function main(): Promise<void> {
       if (desktop && width === 1280) {
         const name = path === '/foundry' ? 'foundry'
           : path === '/foundry/companies' ? 'portfolio'
-            : path === `/foundry/companies/${REFERENCE_COMPANY}` ? 'reference-company' : '';
+            : path === `/foundry/companies/${REFERENCE_COMPANY}` ? 'reference-company'
+              : path === `/foundry/experiments/${PROOF1}` ? 'experiment' : '';
         if (name) await page.screenshot({ path: `${desk}/${name}-1280.png`, fullPage: true });
       }
     }

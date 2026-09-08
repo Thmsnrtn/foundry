@@ -2780,3 +2780,5 @@ letterRoutes.route('/', foundryShellRoutes);
 // shell's own paths win where they overlap.
 const { placeRoutes } = await import('./places.js');
 letterRoutes.route('/', placeRoutes);
+const { experimentRoutes } = await import('./experiments-place.js');
+letterRoutes.route('/', experimentRoutes);

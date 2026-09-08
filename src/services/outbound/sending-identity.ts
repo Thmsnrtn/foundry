@@ -58,8 +58,24 @@ export async function getSendingIdentity(productId: string): Promise<SendingIden
   const res = await query(
     `SELECT provider, credential, from_email, from_name, last_accepted_at
        FROM product_sending_identities WHERE product_id = ?`, [productId]);
-  const row = res.rows[0] as Record<string, unknown> | undefined;
-  if (!row) return null;
+  let row = res.rows[0] as Record<string, unknown> | undefined;
+  if (!row) {
+    // AN EXPERIMENTAL ASSET SENDS AS ITS OWNER. A test has no domain of its
+    // own and must not acquire one to send eleven emails; its mail goes out as
+    // the person who approved it, from the identity his one earned company
+    // connected. Not "the platform's company": the kernel does not know who
+    // Foundry is, and the rule holds for any owner with exactly one earned
+    // real company. Two or more would be ambiguous, and ambiguity refuses.
+    const parents = (await query(
+      `SELECT i.provider, i.credential, i.from_email, i.from_name, i.last_accepted_at
+         FROM products p
+         JOIN products own ON own.owner_id = p.owner_id AND own.id <> p.id
+              AND own.standing = 'earned' AND own.reality = 'real' AND own.deleted_at IS NULL
+         JOIN product_sending_identities i ON i.product_id = own.id
+        WHERE p.id = ? AND p.standing = 'experimental'`, [productId])).rows as unknown as Array<Record<string, unknown>>;
+    if (parents.length !== 1) return null;
+    row = parents[0];
+  }
   return {
     productId,
     provider: String(row.provider) as SendingProvider,

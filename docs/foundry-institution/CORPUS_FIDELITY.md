@@ -24,7 +24,8 @@
 | Economic rent / quality-cost frontier | CANONICAL | PARTIALLY IMPLEMENTED | Regret and marginal-value comparisons are absent. |
 | Tier covenant | CANONICAL | UNRESOLVED | Product tier behavior needs exhaustive audit. |
 | Unfamiliar-company reconstruction | CANONICAL BUT UNDER-SPECIFIED | NOT IMPLEMENTED | No proven general adoption flow reconstructs the complete company. |
-| AcreOS golden target | CANONICAL | NOT IMPLEMENTED | No bounded AcreOS pilot evidence exists in this checkout. |
+| AcreOS golden target | CANONICAL | NOT IMPLEMENTED | No bounded AcreOS pilot evidence exists in this checkout. Owner deferred. |
+| The River (`RIVER.md`) and Proof 1 | CANONICAL | PARTIALLY IMPLEMENTED | The first real experiment exists as frontier rows with a hand behind the governed door (migration 284, `hand.ts`); ported onto the production lineage 2026-09-08 (Option A). Commercial evidence is CE1 until the world answers. Everything else in `RIVER.md` is destination. |
 | Multi-horizon executive cognition | CANONICAL BUT UNDER-SPECIFIED | PARTIALLY IMPLEMENTED | Grounding, comparison, and rent are not proven. |
 | Permanent named executive agents | SUPERSEDED | IMPLEMENTED IN CONFLICT WITH CURRENT CANON | Named-agent concepts need shadow/compare/deletion mapping. |
 | Development institution | CANONICAL BUT UNDER-SPECIFIED | PARTIALLY IMPLEMENTED | One governed lifecycle with runtime learning is not proven. |

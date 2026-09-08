@@ -57,7 +57,10 @@ export async function checkKillSwitch(
   /** Server-owned capability facts. Supplied by the gateway from the REGISTERED
    * policy for the tool — never from the request, which is why this parameter
    * has no route to a caller. */
-  capability?: { deliverableWhilePaused?: boolean; paramsFingerprint?: string },
+  capability?: { deliverableWhilePaused?: boolean; paramsFingerprint?: string;
+    /** The act an approved experiment carries for this effect, resolved by the
+     * gateway from the rows. The only way an experimental asset reaches the world. */
+    experimentAct?: { experimentId: string; actId: string } | null },
 ): Promise<KillSwitchResult> {
   const productResult = await query(
     `SELECT status, scp_status, entitlement_paused_at, erasure_scheduled_at, disabled_tools,
@@ -102,7 +105,7 @@ export async function checkKillSwitch(
   // on this asset. Refused ahead of the exemptions below for the same reason
   // a reference company is: none of them describe a relationship this object
   // has.
-  if (productRow.standing === 'experimental') {
+  if (productRow.standing === 'experimental' && !capability?.experimentAct) {
     return {
       blocked: true,
       reason: 'this is an experimental asset — it may reach the world only through an '
@@ -127,6 +130,7 @@ export async function checkKillSwitch(
     // caller has no route to this value, which is what makes an "ask me first"
     // approval bind to the act rather than to the kind of act.
     paramsFingerprint: capability?.paramsFingerprint,
+    experimentAct: capability?.experimentAct ?? null,
   });
   if (said) {
     return { blocked: true, reason: `${said.refusal} — you said: "${said.statement}"` };

@@ -105,6 +105,7 @@ const FOUNDRY_CHOSEN: Record<string, string> = {
   // a compiled-in https://api.stripe.com/v1/... base; the only dynamic part is
   // a query string built from a fixed parameter map.
   'src/services/integrations/stripe.ts': 'paginates a compiled-in api.stripe.com URL; only the query string varies',
+  'src/services/venture/payment-link.ts': 'STRIPE_API constant; the link and intent ids in the path are checked by pathSegment',
 };
 
 describe('posting to a URL somebody else chose', () => {

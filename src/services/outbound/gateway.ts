@@ -166,10 +166,15 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
   // of that is lost if the thing being checked is a value the caller supplied.
   // The gateway holds the params it is about to hand a handler; hashing them
   // here means the approval is spent against what will actually happen.
-  const { fingerprint } = await import('../institution/standing-intent.js');
+  const { fingerprint, experimentActFor } = await import('../institution/standing-intent.js');
+  // THE ACT AN EXPERIMENT CARRIES is read from the rows by the effect this
+  // call names — the hand's own planned, guarded, claimed outbound_actions row
+  // — and never from anything the caller could supply.
+  const experimentAct = await experimentActFor({ productId: req.productId, tool: req.tool, effectId: req.dedupKey ?? null, paramsFingerprint: fingerprint(req.params) });
   const ks = await checkKillSwitch(req.productId, req.tool, policy.actor, {
     deliverableWhilePaused: policy.deliverableWhilePaused === true,
     paramsFingerprint: fingerprint(req.params),
+    experimentAct,
   });
   if (ks.blocked) {
     await recordGatewayInvocation({

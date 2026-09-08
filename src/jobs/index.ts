@@ -3053,6 +3053,24 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   // losing the volume — the volume's own snapshots are for that, and are set in
   // fly.private.toml — but it survives the things that actually happen:
   // corruption, a bad migration, a delete nobody meant.
+  experiment_hand_tick: {
+    fn: async () => {
+      // The first real experiment's hand: offers to the businesses the owner
+      // approved, deliveries of what was paid for, the provider's receipts as
+      // outcome events, refunds of failed deliveries, then the sealed rule.
+      // Nothing here spends beyond the asset's allowance or writes to anyone
+      // the owner did not approve; the plan guard on outbound_actions is the
+      // authority, not this job.
+      const { runHand } = await import('../services/venture/hand.js');
+      const reports = await runHand({ offersPerTick: 5 });
+      for (const r of reports) {
+        logger.info(`experiment_hand_tick: ${r.experimentId} offers ${r.offersSent}/${r.offersPlanned}, deliveries ${r.deliveriesSent}, reconciled ${r.reconciled}, refunds ${r.refundsIssued}, settled ${r.settled ?? 'not yet'}`,
+          { jobName: 'experiment_hand_tick', exceptions: r.exceptions });
+      }
+    },
+    schedule: '20 * * * *',
+    description: 'Carry every live real experiment one step: offers, deliveries, receipts, refunds, settlement.',
+  },
   keep_a_copy_of_everything: {
     fn: async () => {
       const { copyTheInstitution } = await import('../services/institution/keeping.js');

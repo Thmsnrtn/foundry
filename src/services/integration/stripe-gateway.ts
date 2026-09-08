@@ -136,16 +136,107 @@ async function createRefundHandler(
   return { id: data.id, status: data.status, amount: data.amount };
 }
 
-// Side-effect at module load — register both handlers.
+// ─── Payment links (a real experiment's offer) ───────────────────────────────
+// Creates the catalog objects an experiment's offer needs on the shared
+// account: product, one-time price (found by lookup key first), and a Payment
+// Link tagged for the experiment on both the link and the payment intent, so
+// the billing webhook can attribute every settlement. Moves no money, so it is
+// not behind the clean-hands gate; it is behind the gateway because a public
+// link that charges people is a `public` act (capabilities: publish_payment_link).
+
+interface CreatePaymentLinkParams {
+  product_name: string; product_metadata: Record<string, string>;
+  price_lookup_key: string; unit_amount: number; currency: string; price_metadata: Record<string, string>;
+  link_metadata: Record<string, string>; payment_intent_metadata: Record<string, string>; confirmation_message?: string;
+}
+
+/** A form POST to one Stripe collection, or to one object in it. Every
+ * segment that reaches the URL is checked; a caller cannot hand this a path. */
+async function stripeForm(apiKey: string, resource: string, body: URLSearchParams, idempotencyKey: string, id?: string): Promise<Record<string, unknown>> {
+  const path = id === undefined ? `/${pathSegment(resource, 'stripe_resource')}` : `/${pathSegment(resource, 'stripe_resource')}/${pathSegment(id, 'stripe_id')}`;
+  const init = {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/x-www-form-urlencoded', 'Idempotency-Key': idempotencyKey },
+    body: body.toString(),
+  };
+  const response = await withRetry(
+    () => id === undefined
+      ? fetch(`${STRIPE_API}/${pathSegment(resource, 'stripe_resource')}`, init)
+      : fetch(`${STRIPE_API}/${pathSegment(resource, 'stripe_resource')}/${pathSegment(id, 'stripe_id')}`, init),
+    { timeoutMs: STRIPE_TIMEOUT_MS, maxRetries: 2 },
+  );
+  if (!response.ok) {
+    const text = await response.text().catch(() => '');
+    throw new Error(`Stripe ${path} ${response.status}: ${text.slice(0, 300)}`);
+  }
+  return (await response.json()) as Record<string, unknown>;
+}
+
+async function createPaymentLinkHandler(req: GatewayRequest): Promise<{ id: string; url: string; price_id: string }> {
+  const params = req.params as unknown as CreatePaymentLinkParams;
+  const apiKey = process.env.STRIPE_SECRET_KEY;
+  if (!apiKey) throw new Error('STRIPE_SECRET_KEY is not configured');
+  if (!Number.isInteger(params.unit_amount) || params.unit_amount <= 0) throw new Error('unit_amount must be a positive integer');
+  if (params.link_metadata?.app !== 'foundry' || params.payment_intent_metadata?.app !== 'foundry') throw new Error('payment links must be tagged app=foundry');
+  const key = req.dedupKey ?? `gw_plink_${Date.now()}`;
+
+  const found = await withRetry(
+    () => fetch(`${STRIPE_API}/prices?active=true&limit=1&lookup_keys[]=${pathSegment(params.price_lookup_key, 'price_lookup_key')}`, { headers: { Authorization: `Bearer ${apiKey}` } }),
+    { timeoutMs: STRIPE_TIMEOUT_MS, maxRetries: 2 },
+  );
+  if (!found.ok) throw new Error(`Stripe prices ${found.status}`);
+  let priceId = ((await found.json()) as { data: Array<{ id: string }> }).data[0]?.id;
+  if (!priceId) {
+    const product = new URLSearchParams({ name: params.product_name });
+    for (const [k, v] of Object.entries(params.product_metadata ?? {})) product.set(`metadata[${k}]`, v);
+    const created = await stripeForm(apiKey, 'products', product, `${key}:product`);
+    const price = new URLSearchParams({ product: String(created.id), unit_amount: String(params.unit_amount), currency: params.currency, lookup_key: params.price_lookup_key });
+    for (const [k, v] of Object.entries(params.price_metadata ?? {})) price.set(`metadata[${k}]`, v);
+    priceId = String((await stripeForm(apiKey, 'prices', price, `${key}:price`)).id);
+  }
+
+  const link = new URLSearchParams({ 'line_items[0][price]': priceId, 'line_items[0][quantity]': '1' });
+  for (const [k, v] of Object.entries(params.link_metadata)) link.set(`metadata[${k}]`, v);
+  for (const [k, v] of Object.entries(params.payment_intent_metadata)) link.set(`payment_intent_data[metadata][${k}]`, v);
+  if (params.confirmation_message) {
+    link.set('after_completion[type]', 'hosted_confirmation');
+    link.set('after_completion[hosted_confirmation][custom_message]', params.confirmation_message.slice(0, 500));
+  }
+  const data = await stripeForm(apiKey, 'payment_links', link, `${key}:link`);
+  log.info('stripe.create_payment_link.ok', { productId: req.productId, paymentLinkId: String(data.id) });
+  return { id: String(data.id), url: String(data.url), price_id: priceId };
+}
+
+/**
+ * THE OFFER COMES DOWN WHEN THE TEST ENDS. A Payment Link cannot be deleted,
+ * only deactivated; a deactivated link answers every visitor that it is no
+ * longer available, so a purchase cannot arrive at a test that has settled or
+ * been stopped. Idempotent: deactivating twice is one state.
+ */
+async function deactivatePaymentLinkHandler(req: GatewayRequest): Promise<{ id: string; active: boolean }> {
+  const params = req.params as unknown as { payment_link_id: string };
+  const apiKey = process.env.STRIPE_SECRET_KEY;
+  if (!apiKey) {
+    log.warn('stripe.deactivate_payment_link.no_key', { productId: req.productId });
+    return { id: params.payment_link_id, active: false };
+  }
+  const data = await stripeForm(apiKey, 'payment_links', new URLSearchParams({ active: 'false' }), `${req.dedupKey ?? `gw_plink_off_${Date.now()}`}:off`, params.payment_link_id);
+  log.info('stripe.deactivate_payment_link.ok', { productId: req.productId, paymentLinkId: String(data.id) });
+  return { id: String(data.id), active: Boolean(data.active) };
+}
+
+// Side-effect at module load — register the handlers.
 const STRIPE_POLICY = {
   actor: 'billing_control', surface: 'billing', dataClass: 'customer',
   requireDedupKey: true, requireCustomerExternalId: true,
 } as const;
 registerToolHandler('stripe_update_subscription', updateSubscriptionHandler, STRIPE_POLICY);
 registerToolHandler('stripe_create_refund', createRefundHandler, STRIPE_POLICY);
+registerToolHandler('stripe_create_payment_link', createPaymentLinkHandler, STRIPE_POLICY);
+registerToolHandler('stripe_deactivate_payment_link', deactivatePaymentLinkHandler, STRIPE_POLICY);
 
 // ─── Exposed for tests + external re-registration ────────────────────────────
-export { updateSubscriptionHandler, createRefundHandler };
+export { updateSubscriptionHandler, createRefundHandler, createPaymentLinkHandler, deactivatePaymentLinkHandler };
 
 // ─── Convenience callers ──────────────────────────────────────────────────────
 

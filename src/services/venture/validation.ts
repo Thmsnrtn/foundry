@@ -173,6 +173,12 @@ export async function decideExperiment(input: {
   // cannot exist for a test nobody approved.
   const { beginExperimentalAsset } = await import('./asset.js');
   await beginExperimentalAsset({ experimentId: input.experimentId, by: input.by });
+  // A TEST THAT BUILDS NOTHING OPENS NO WORKSHOP (migration 284). The first
+  // real experiment's deliverable already exists; a computer nothing runs in
+  // is a cost with no test behind it.
+  const needs = (await query('SELECT needs_workshop FROM venture_experiments WHERE id = ?', [input.experimentId]))
+    .rows[0] as Record<string, unknown> | undefined;
+  if (Number(needs?.needs_workshop ?? 1) === 0) return { workshop: null };
   // AND SOMEWHERE TO BE BUILT, under a ceiling that lets it make things and
   // never lets it reach the world on its own. When no real computer is
   // available the experiment stays approved and says so.
