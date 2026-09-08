@@ -221,7 +221,7 @@ describe('Foundry operates: offers, receipts, exposures', () => {
     const link = state.paymentLinks.find((l) => l.id === x.exposureRef)!;
     for (const s of state.sends) {
       expect(s.from).toBe('Thomas Norton <hello@mail.thomasnorton.example>');
-      expect(s.reply_to).toBe('thomas@example.com');
+      expect(s.reply_to).toBe('hello@mail.thomasnorton.example');
       expect(s.text).toContain(link.url);
       expect(s.text).not.toContain('{Business name}');
       expect(s.text).not.toContain('[PAYMENT LINK]');

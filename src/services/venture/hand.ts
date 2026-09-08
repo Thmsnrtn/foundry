@@ -511,9 +511,19 @@ async function existingByEffect(productId: string, effectId: string): Promise<Ac
   return r ? projectAction(r) : null;
 }
 
-async function founderOf(founderId: string): Promise<{ email: string; name: string }> {
-  const f = await one('SELECT email, name FROM founders WHERE id = ?', [founderId]);
-  return { email: String(f?.email ?? ''), name: String(f?.name ?? f?.email ?? 'the owner') };
+/**
+ * WHERE A REPLY GOES: the address the message is sent from. The owner's login
+ * address is often a personal mailbox on another domain, and a reply-to that
+ * differs from the From is a known mark of cold mail; replies to his own
+ * address on his own domain reach him without it. Only when no sending
+ * identity resolves (the send would be refused anyway) does it fall back to
+ * the address on his founder record.
+ */
+async function replyAddressFor(productId: string, founderId: string): Promise<string> {
+  const identity = await getSendingIdentity(productId);
+  if (identity) return identity.fromEmail;
+  const f = await one('SELECT email FROM founders WHERE id = ?', [founderId]);
+  return String(f?.email ?? '');
 }
 
 export async function planOffer(input: { experimentId: string; recipientId: string }): Promise<ActionPlan> {
@@ -530,7 +540,7 @@ export async function planOffer(input: { experimentId: string; recipientId: stri
   if (!offer) throw new HandRefused('offer_missing');
   const quality = checkOfferQuality(offer);
   if (!quality.ok) throw new HandRefused('offer_quality', quality.failures.join('; '));
-  const owner = await founderOf(e.founderId);
+  const replyTo = await replyAddressFor(e.productId, e.founderId);
   const body = offer.body.replace(/\{Business name\}/g, recipient.counterpartyRef.split(',')[0].trim());
   const id = nanoid();
   await query(
@@ -538,7 +548,7 @@ export async function planOffer(input: { experimentId: string; recipientId: stri
        (id, product_id, agent_name, integration_name, action_type, authority_level, status, parameters_json, preview_text, rationale, confidence, expires_at,
         effect_id, outcome_status, experiment_id, experiment_act, recipient_id, proposed_act_id)
      VALUES (?,?,?,'resend','send_email',0,'pending_approval',?,?,?,1,?,?,'unresolved',?,'offer',?,?)`,
-    [id, e.productId, HAND, JSON.stringify({ to: [recipient.email], subject: offer.title, html: markdownToHtml(body), text: body, reply_to: owner.email }),
+    [id, e.productId, HAND, JSON.stringify({ to: [recipient.email], subject: offer.title, html: markdownToHtml(body), text: body, reply_to: replyTo }),
       `Offer to ${recipient.counterpartyRef}`, `One message under the act you approved for ${e.whatWeDo.slice(0, 80)}`, new Date(Date.now() + 7 * 86_400_000).toISOString(),
       effectId, input.experimentId, recipient.id, act.id]);
   return (await existingByEffect(e.productId, effectId))!;
@@ -560,7 +570,7 @@ export async function planDelivery(input: { experimentId: string; fulfilmentId: 
   if (!quality.ok) throw new HandRefused('deliverable_quality', quality.failures.join('; '));
   const buyer = await buyerAddressFor(String(f.payment_ref));
   if (!buyer) throw new HandRefused('buyer_address_unknown', String(f.payment_ref));
-  const owner = await founderOf(e.founderId);
+  const replyTo = await replyAddressFor(e.productId, e.founderId);
   const intro = `Thank you for buying the ${deliverable.title}. It is below, exactly as described: a screened shortlist with links to each original notice, not a complete market listing. If it is not useful to you, [ask for a refund here](${refundLinkFor(String(f.id))}) and the payment will be refunded; replying to this message works too.\n\n---\n\n`;
   const body = intro + deliverable.body;
   const id = nanoid();
@@ -569,7 +579,7 @@ export async function planDelivery(input: { experimentId: string; fulfilmentId: 
        (id, product_id, agent_name, integration_name, action_type, authority_level, status, parameters_json, preview_text, rationale, confidence, expires_at,
         effect_id, outcome_status, experiment_id, experiment_act, fulfilment_id, proposed_act_id)
      VALUES (?,?,?,'resend','send_email',0,'pending_approval',?,?,?,1,?,?,'unresolved',?,'delivery',?,?)`,
-    [id, e.productId, HAND, JSON.stringify({ to: [buyer], subject: deliverable.title, html: markdownToHtml(body), text: body, reply_to: owner.email }),
+    [id, e.productId, HAND, JSON.stringify({ to: [buyer], subject: deliverable.title, html: markdownToHtml(body), text: body, reply_to: replyTo }),
       `Deliver ${deliverable.title}`, `Settled payment ${String(f.payment_ref)} for the test`, new Date(Date.now() + 7 * 86_400_000).toISOString(),
       effectId, input.experimentId, String(f.id), act.id]);
   return (await existingByEffect(e.productId, effectId))!;

@@ -96,3 +96,9 @@ Filled in as each step completed; see the end of this file.
 4. **Allow**. Foundry creates the tagged link and begins on the next hourly pass (minute 20).
 
 Foundry's own prerequisite: the brief was pulled 2026-09-07 and the quality gate refuses it after seven days; if Allow comes later than 2026-09-14, re-pull `river/proof-1/brief.md`, run `node scripts/embed-proof-1.mjs`, and re-seed (idempotent; it refreshes the material).
+
+### 2026-09-08, 15:50 UTC — the owner's sending address
+
+The owner registered `thomas-inc.com` as the lab domain and added it at Resend; its DNS records were already in place at GoDaddy, so verification was triggered from the machine and completed in about three minutes. The sending identity on his company (`Foundry`, the one earned real company) is now `Thomas Norton <thomas@thomas-inc.com>` through the deployment's own Resend key, accepted after the provider confirmed the domain. He reviewed the recipients in the app. `experiment:status` reads **Ready** — everything on Foundry's side is in place; Allow is his. Still absent in the deployment: `STRIPE_WEBHOOK_SECRET` (no purchase can be received without it) and `FOUNDRY_ENABLE_MONEY_TOOLS`.
+
+A mailbox for `thomas@thomas-inc.com` was then created at GoDaddy (Microsoft 365, still provisioning at the time of writing). With a real mailbox at the From address, the hand's reply-to becomes the sending address itself rather than the owner's login address on another domain (a reply-to that differs from the From is a known mark of cold mail); deployed as the commit carrying this paragraph.
