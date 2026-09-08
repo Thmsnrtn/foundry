@@ -84,7 +84,14 @@ afterAll(() => { vi.unstubAllGlobals(); });
 
 describe('the owner\'s part is three acts on one page', () => {
   it('act 0 (Foundry): the design, the businesses and the brief exist as ordinary venture rows; nothing is sent, spent or permitted', async () => {
+    // Production had a rehearsal search open; a real experiment cannot hang under it.
+    const { openMandate, currentMandate } = await import('../../src/services/venture/mandate.js');
+    const rehearsal = await openMandate({ founderId: OWNER, statement: 'Find another small digital income stream', shape: null, evidenceMode: 'reference' });
+    if ('refused' in rehearsal) throw new Error(rehearsal.refused);
     const seeded = await seedProof1(OWNER);
+    const now = (await currentMandate(OWNER))!;
+    expect(now.evidenceMode).toBe('real');
+    expect((await query('SELECT closed_reason FROM venture_mandates WHERE id = ?', [rehearsal.id])).rows[0]).toMatchObject({ closed_reason: expect.stringContaining('Proof 1') });
     X = seeded.experimentId;
     expect(seeded).toMatchObject({ recipientsAdded: 23, alreadyExisted: false });
     expect((await seedProof1(OWNER))).toMatchObject({ experimentId: X, recipientsAdded: 0, alreadyExisted: true });

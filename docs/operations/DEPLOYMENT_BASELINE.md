@@ -72,3 +72,27 @@ Steps, in order, each recorded here as it was done:
 ## Verification record
 
 Filled in as each step completed; see the end of this file.
+
+### Verified 2026-09-08, 04:13–04:20 UTC
+
+| Fact | Value | Source |
+|---|---|---|
+| Deploy | Workflow run 109 (`deploy-private.yml`, push of `8d1c5ab0` on `claude/foundry-river-constitution-rvd0mx` carrying `[deploy-private]`): the full chain on the runner, then the build and deploy; conclusion **success**, 03:38–04:13 UTC | GitHub Actions |
+| Running commit | `8d1c5ab081c3887aba6c59a3ad85f2cec04e86c8` | `GET /internal/health` → `commit`; checks database, ai_configured, clerk_configured, scheduler all `ok`; `storage: volume` |
+| Migration state | 320 rows in `schema_migrations`; latest `284_the_first_real_experiment_has_a_hand.sql`, applied 04:12:58 UTC; `experiment_recipients`, `experiment_materials`, `experiment_fulfilments` exist | machine exec, libSQL |
+| Data | one founder (the owner); `Foundry` (earned, real, active) and the two reference companies unchanged; the owner's one earned real company is what a test will send as | machine exec |
+| Proof 1 | Seeded once for the owner with the deployed code (`experiment:seed-proof1` semantics run on the machine): experiment `SkQeFRIbU9SR6oMNC3MSX`, 23 recipients pending, the brief and offer text attached, the rule sealed on the delivery, `needs_workshop = 0`. The open rehearsal search (`JCSTN2HBOgof5Sk0iEUie`, reference mode, opened 2026-09-03) was closed with the reason "superseded by the first real experiment the owner directed (Proof 1); a rehearsal search yields to a real one" and the real search opened; the seed now does the same on its own (follow-up commit, not redeployed — the effect is already in production by the same rule) | machine exec |
+| `experiment:status` | **Needs you** — "11 businesses still to review; email sending is not connected"; steps recipients/sending/allow todo, placing Foundry's; Allow not possible; allowance $100.00; sender company resolved to `Foundry`; refund handling reported off; no exceptions | machine exec |
+| Unauthenticated behaviour at the deployed app | `/` 200; `/foundry`, `/foundry/experiments`, the experiment page: 401 (JSON) / 302 to sign-in (HTML); POST `/foundry/experiments/…/allow` 401; the buyer's refund page with a wrong token 404 | curl |
+| Pre-deploy copy | `/data/backups/pre-deploy-river-port-from-437505b0.db`, 6,701,056 bytes, 03:38 UTC | machine exec |
+| Campaign branch | `claude/private-foundry-continuation-51vz95` still at `437505b0`; the lineage continues on `claude/foundry-river-constitution-rvd0mx`, listed in the workflow. It was not fast-forwarded, because a push there would trigger a second, redundant deploy of the same commit. | GitHub |
+
+**What was not verified on the real app, and why.** The owner's own pages — Home with the test in "Waiting on you", the experiment page, the review list, Allow refused while prerequisites are unmet, Stop — need the owner's Clerk session, which this environment does not hold and must not fabricate; the environment's egress proxy also drops the browser's tunnel to `foundry-intel.fly.dev` (curl passes). Those pages are proven on the same commit by the rehearsal through the assembled routers and by the mobile gate at five phone widths (`docs/design/mobile/experiment-390.png`, `experiment-recipients-390.png`). The first person to open `/foundry` on the phone is the owner, and the page he lands on is the one in those screenshots with his own rows.
+
+**What the owner must do to launch Proof 1** (nothing else is his):
+1. Open Foundry on the phone → "a real test" under Waiting on you → **Review who may be contacted**: exclude the employer and any conflict, then "The rest are fine".
+2. On the test page, **Email sending**: an address on a domain of his, his name, and the Resend API key for that domain (the provider must already show the domain verified).
+3. In the deployment, `STRIPE_WEBHOOK_SECRET` for an endpoint `https://foundry-intel.fly.dev/webhooks/stripe` on the shared Stripe account (events `payment_intent.succeeded`, `checkout.session.completed`, `charge.refunded`) — without it no purchase can be received — and `FOUNDRY_ENABLE_MONEY_TOOLS=true` if refunds are to move on their own (`flyctl secrets set … -a foundry-intel`).
+4. **Allow**. Foundry creates the tagged link and begins on the next hourly pass (minute 20).
+
+Foundry's own prerequisite: the brief was pulled 2026-09-07 and the quality gate refuses it after seven days; if Allow comes later than 2026-09-14, re-pull `river/proof-1/brief.md`, run `node scripts/embed-proof-1.mjs`, and re-seed (idempotent; it refreshes the material).

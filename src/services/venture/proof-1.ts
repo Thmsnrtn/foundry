@@ -17,7 +17,7 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
-import { currentMandate, openMandate } from './mandate.js';
+import { currentMandate, openMandate, stopMandate } from './mandate.js';
 import { formClaim, observe } from './market-evidence.js';
 import { designExperiment } from './validation.js';
 import { addRecipients, recordMaterial, materialOf } from './hand.js';
@@ -120,6 +120,15 @@ export async function seedProof1(founderId: string): Promise<Proof1Seed> {
   }
 
   let mandate = await currentMandate(founderId);
+  // A REHEARSAL SEARCH YIELDS TO A REAL ONE. A reference mandate exercises the
+  // machinery; a real experiment cannot hang under it (the candidate is only
+  // as real as the search that found it), and one search runs at a time. It
+  // is closed with the reason on its row, never deleted, and the owner can
+  // open another search whenever he likes.
+  if (mandate && mandate.evidenceMode !== 'real') {
+    await stopMandate(founderId, 'superseded by the first real experiment the owner directed (Proof 1); a rehearsal search yields to a real one');
+    mandate = null;
+  }
   if (!mandate) {
     const opened = await openMandate({ founderId, statement: 'Find out whether small Massachusetts trade businesses will pay for filtered public-bid discovery', shape: null, evidenceMode: 'real' });
     if ('refused' in opened) throw new Error(opened.refused);
