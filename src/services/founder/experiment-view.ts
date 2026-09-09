@@ -75,12 +75,20 @@ export async function getExperimentView(founderId: string, experimentId: string,
   const actLive = !!act && act.decision === 'approved' && act.revokedAt === null && new Date(act.expiresAt).getTime() > now.getTime();
 
   // ── Steps: exactly the owner's acts, then what Foundry does on its own ──
+  // WHAT THE SCREENING FOUND, ON THE STEP HE READS BEFORE HE OPENS IT. The
+  // decision he is being asked for is whom to write to; the evidence under it
+  // is Foundry's, and the shape of it belongs on the first screen rather than
+  // one page further in.
+  const screened = recipients.filter((r) => r.qualifiedAt).length;
+  const cohort = recipients.length === 0 ? ''
+    : ` Foundry screened ${plural(recipients.length, 'candidate', 'candidates')} against the evidence this design requires: `
+      + `${screened} qualify, ${recipients.length - screened} have no such record and cannot be written to whatever you decide here.`;
   const steps: Step[] = [
     { key: 'recipients', label: 'Review who may be contacted',
       status: recipients.length === 0 || ready.pending > 0 || ready.reachable === 0 ? 'todo' : 'done',
       detail: recipients.length === 0 ? 'No candidate businesses are loaded yet.'
-        : ready.pending > 0 ? `${plural(ready.pending, 'business', 'businesses')} still to review. Exclude your employer and anything that could be a conflict; the rest can be approved together.`
-          : ready.reachable > 0 ? `${ready.reachable} approved and reachable · ${ready.struck} excluded${ready.pendingWebForm ? ` · ${ready.pendingWebForm} web-form only, not contacted unless you add an email` : ''}.`
+        : ready.pending > 0 ? `${plural(ready.pending, 'business', 'businesses')} still to review.${cohort} Exclude your employer and anything that could be a conflict; the rest can be approved together.`
+          : ready.reachable > 0 ? `${ready.reachable} approved and reachable · ${ready.struck} excluded${ready.pendingWebForm ? ` · ${ready.pendingWebForm} web-form only, not contacted unless you add an email` : ''}.${cohort}`
             : 'Nobody approved can be reached by email. Add a published address for at least one, or nothing can be sent.',
       href: `/foundry/experiments/${experimentId}/recipients` },
     { key: 'sending', label: 'Email sending', status: ready.sending.status === 'ready' ? 'done' : 'todo', detail: ready.sending.detail, href: `/foundry/experiments/${experimentId}#sending` },

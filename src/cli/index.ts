@@ -912,6 +912,9 @@ program.command('workshop:ears-key <founderIdOrEmail>').description('Print the i
   .action(async (who: string) => { const { openTheEars } = await import('../services/public-workshop/mail.js'); process.stdout.write(`${(await openTheEars(await founderIdOf(who))).intakeKey}\n`); });
 program.command('workshop:inbox <founderIdOrEmail>').description('What people wrote to the Workshop, and what it made of them')
   .action(async (who: string) => { const { theInbox } = await import('../services/public-workshop/mail.js'); const m = await theInbox(await founderIdOf(who), 50); out(m.map((x) => ({ from: x.from, subject: x.subject, reading: x.reading, handling: x.handling, at: x.receivedAt }))); });
+program.command('probe:screen-001 <founderIdOrEmail>').description('Apply the recorded public-record screening to Experiment 001 candidates; contacts nobody')
+  .action(async (who: string) => { const { applyProof1Screening } = await import('../services/venture/proof-1-screening.js'); out(await applyProof1Screening(await founderIdOf(who))); });
+
 program.command('workshop:stand-up-ears <founderIdOrEmail>').description('Deploy the program that hears and point the Workshop address at it; forwards to the owner first, always')
   .action(async (who: string) => { const { standUpTheEars } = await import('../services/public-workshop/infrastructure.js'); out(await standUpTheEars(await founderIdOf(who))); });
 program.command('workshop:gate <experimentId>').description('The publication gate for one experiment, as outbound would see it')

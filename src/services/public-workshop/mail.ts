@@ -33,7 +33,8 @@ const one = async (sql: string, params: unknown[] = []): Promise<Row | undefined
 const normalise = (e: string): string => e.trim().toLowerCase();
 
 export type Reading = 'unknown' | 'stop_writing' | 'wants_more' | 'answering_offer' | 'asking'
-  | 'owed_something' | 'wants_money_back' | 'complaint' | 'not_for_us' | 'needs_a_person';
+  | 'owed_something' | 'wants_money_back' | 'complaint' | 'not_for_us' | 'needs_a_person'
+  | 'not_interested' | 'already_has_one' | 'was_useful' | 'was_not_useful';
 export type Handling = 'foundry_reading' | 'waiting_on_them' | 'needs_owner' | 'resolved' | 'no_action';
 
 export class MailRefused extends Error {
@@ -208,6 +209,26 @@ export function readIt(subject: string, body: string, from: string, workshopAddr
   const more = has('send me more', 'more like this', 'keep me posted', 'keep sending', 'sign me up',
     'add me to', 'going forward', 'would pay', 'interested in');
   if (more) return { reading: 'wants_more', because: `they wrote "${more}"` };
+
+  // WHAT THE FIRST TEST IS LISTENING FOR. Each of these is a decision somebody
+  // made and troubled themselves to say, which is worth more than silence and
+  // must not be filed as the same thing. None of them is answerable here: they
+  // are recorded, and what to do about them is a judgement made elsewhere.
+  const already = has('already have', 'already use', 'already subscribe', 'we get these', 'we already get',
+    'our own', 'we track', 'we have a service', 'we use a service', 'covered by');
+  if (already) return { reading: 'already_has_one', because: `they wrote "${already}"` };
+
+  const useless = has('not useful', 'no use to', 'not relevant', 'not helpful', 'nothing i can use',
+    'nothing we can use', 'nothing new', 'waste of');
+  if (useless) return { reading: 'was_not_useful', because: `they wrote "${useless}"` };
+
+  const useful = has('this was useful', 'very useful', 'really useful', 'this is useful', 'helpful',
+    'saved me', 'saved us', 'good stuff', 'this is great');
+  if (useful) return { reading: 'was_useful', because: `they wrote "${useful}"` };
+
+  const declines = has('not interested', 'no thanks', 'no thank you', 'we\'ll pass', 'we will pass',
+    'not for us', 'not at this time', 'not right now');
+  if (declines) return { reading: 'not_interested', because: `they wrote "${declines}"` };
 
   const asking = has('?', 'question', 'how much', 'can you', 'do you');
   if (asking) return { reading: 'asking', because: 'it reads as a question' };

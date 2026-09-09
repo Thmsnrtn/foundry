@@ -1604,3 +1604,78 @@ rather than left to confound the answer afterwards.
 
 **Blocked on two owner-owed facts** (postal address, recipient approval) and
 one Foundry-owed action (the screening above). Nobody has been contacted.
+
+## The screening, done (2026-09-09)
+
+Twenty-three candidates, screened against public evidence, contacting nobody.
+**Two qualify. Twenty-one do not.**
+
+Two free public sources were used: each business's own site, read for named
+public or institutional projects and for explicit statements about bidding; and
+the Comptroller of the Commonwealth's spending record (CTHRU dataset
+`pegc-naaa`), searched for the business as a paid vendor. A payment record
+alone was deliberately not enough — it shows a state entity once paid someone,
+not that they pursue advertised public solicitations.
+
+| | |
+|---|---|
+| **Continental Woodcraft, Worcester** | Its own project list names Shrewsbury Police Station, Malden City Hall and Worcester State University; the site says the shop is "well-versed in the bidding process for your retail, healthcare, education, government, or municipality project" and carries a Submit Bid Invite form. CTHRU independently shows $6,167.70 from Worcester Sheriff's Department, FY2022. |
+| **General Woodworking, Lowell** | Its own gallery names Henry K. Oliver School (Lawrence), Tyngsborough Middle School, Cabot Elementary and Stoughton High School. CTHRU independently shows a UMass payment, FY2018. |
+
+Four looked promising and did not survive reading: "commercial / institutional
+organization" as marketing copy with no named project; "state of the art CNC
+machine"; a "Resource Library" navigation link; and "municipal construction
+markets" describing a PVC moulding product line. **A keyword is not evidence.**
+The remaining seventeen showed residential or generic commercial work only.
+
+**What COMMBUYS could and could not give.** Solicitations are fetchable over
+plain GET — that is where the brief comes from. Bidder and award history sits
+behind a stateful POST search, so the design's stated evidence, *the COMMBUYS
+record*, could not be read for a named business at acceptable cost. This is the
+third time this session that a claim which sounded rigorous turned out not to
+be backed until somebody touched it. The screening therefore used what could
+actually be read, and says so on every line.
+
+**The consequence is the finding.** A cohort of two cannot answer this
+experiment's question. A settle rule of "at least one payment out of offers
+delivered" is uninformative at n=2: two shops declining is entirely consistent
+with a good product. The candidate list was built from *who makes millwork in
+Massachusetts* rather than *who bids public work*, and screening it after the
+fact cannot repair that.
+
+## Recipient approval and Allow: both stay, and why (2026-09-09)
+
+They protect different things, and the difference is not procedural.
+
+**Allow** decides whether the test runs at all — it seals the prediction,
+creates the asset, publishes the page, creates the payment link and sets the
+boundaries. **Recipient approval** decides who is written to, and its real
+content is the power to *strike*: to remove his employer, a customer, a
+competitor, someone he knows. That is knowledge no public record contains and
+no screening can supply. Collapsing it into Allow would mean a screened cohort
+could be contacted without the owner ever having looked at the names — and the
+one thing he can see that the evidence cannot is precisely a conflict.
+
+So both remain. What changed is that his look is now **informed**: the step he
+reads before opening the page says how many candidates were screened, how many
+qualify, and that the rest cannot be written to whatever he decides; and each
+line carries its grounds and the record they came from. That is the burden
+reduction — inspectable rather than manually operated — without giving up the
+judgement only he can make.
+
+## What was deliberately not built: the model-based interpreter
+
+The directive asks for a capability-isolated interpretation responsibility
+before real replies arrive. What was built instead is smaller: four new
+evidence-bearing readings (`not_interested`, `already_has_one`, `was_useful`,
+`was_not_useful`, migration 291) that the first experiment's own deliberation
+says it must tell apart from silence, still decided by rules with no model
+consulted, and proved against all fourteen reply kinds the probe can plausibly
+produce.
+
+A model in this path would add an interpretation surface that hostile text can
+reach, and it would buy nothing today: there are no messages, so there is
+nothing rules cannot read and no correspondence to evaluate a model against.
+Autonomy is earned from real replies, and none exist. Exactly two readings may
+be answered without a person — a refusal and machine mail — and that is
+enforced in the vocabulary rather than in judgement.
