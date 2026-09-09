@@ -1368,3 +1368,46 @@ command that installs the credential.
 
 Nobody has been contacted. Nothing is published. Allow, at
 `/foundry/experiments/:id/decide`, remains the only path to a stranger.
+
+## The Workshop is in the world (2026-09-09)
+
+Apex Micro is live at `apexmicro.ai`. Fourteen pages served from a Cloudflare
+Worker out of KV, every one read back over public HTTPS; `www` redirects to the
+apex; the sender authenticates as `Thomas Norton — Apex Micro
+<thomas@apexmicro.ai>`; replies reach the owner's inbox; and Experiment 002 ran
+the full publish → verify → update → conclude → close cycle against the real
+edge and left its page standing. Four stale records pointing at an address that
+served nothing were retired, with rollback recorded. The Google site
+verification TXT and four unrelated Workers on the account were untouched — the
+envelope is scoped to one zone and one program name.
+
+**Crossing into reality found five defects that a green suite had not.** Each
+was a check that answered a convenient question instead of the true one, and in
+every case the stub had agreed with the convenient answer:
+
+| Defect | What it did |
+|---|---|
+| Token verified at `/user/tokens/verify` | reported a working account-owned credential as invalid, and the escalation repeated it |
+| Mail routing enabled via `/email/routing/dns` | that endpoint routes a *subdomain* and refuses the apex |
+| A route that could not route recorded as `applied` | the at-most-once key then refused every retry; a rule existed that could never receive mail |
+| Rules read only when routing already enabled | a half-configured zone looked empty, so the retry recreated a rule and was refused as duplicate |
+| Publication verified once, immediately | the edge is eventually consistent, so a normal delay read as "the world does not carry this page" |
+
+The last is the one that would have mattered most in flight: since the pass that
+would write to a stranger now reads the page from its public address first, a
+false negative there stops the probe. A mismatch is retried for a bounded window
+before it is believed; the standard is unchanged.
+
+Each fix is held by a test whose stub now models what the real service does —
+refusing the apex on the subdomain endpoint, failing to enable, holding rules on
+a disabled zone — so none of them can quietly come back.
+
+**Experiment 001 readiness, against the world: 0 blocked, 6 verified over public
+HTTPS, 7 ready, 3 waiting.** The waiting three resolve at Allow. The publication
+gate names four things, three of which Allow supplies; the fourth is the
+Workshop's postal address, which is the owner's to give and which Foundry will
+not invent.
+
+Nobody has been contacted. `apexmicro.ai/experiments/ma-millwork-bid-brief`
+returns 404 by design: an offer page for an unapproved experiment is exactly the
+premature public act the design exists to prevent.

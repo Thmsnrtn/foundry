@@ -717,71 +717,58 @@ Nothing here reaches a provider — that stays point 1, and stays yours.
 
 ---
 
-## §15 PENDING — Zone-level Edit on the working Cloudflare token
+## §15 RESOLVED — The Workshop is live at apexmicro.ai (2026-09-09)
 
-**Resolved 2026-09-09: the credential works.** The third token
-(`hidden-wave-924d`, confirmed) is accepted, is installed as a production
-secret, and has already done real work. **Pressing Confirm was the missing
-step**, exactly as suspected.
+The third token (`hidden-wave-924d`), confirmed and then widened to Edit at the
+zone level, did the work. **Pressing Confirm was the missing step all along.**
 
-**The institution's own check was wrong, and that cost a round.** Cloudflare
-issues account-owned tokens as well as user-owned ones, and an account-owned
-token answers `GET /user/tokens/verify` with a flat 401 "Invalid API Token"
-while working perfectly everywhere it is actually used. The Workshop's health
-check trusted that endpoint and reported a working credential as invalid; this
-document repeated that reading. Fixed: health now asks what the token can
-*reach* — the account's stores and the zone — with two calls the capability
-itself makes, and the provider stub models the 401 so it cannot recur.
+**What now exists in the world**, every change through the governed door with a
+receipt and a recorded way back:
 
-**What the token has already done, through the door, with receipts.**
-
-| Step | Result |
+| | |
 |---|---|
-| `cloudflare_kv_namespace_create` → `apexmicro-pages` | applied, verified present |
-| `cloudflare_worker_deploy` → `apexmicro` | applied, verified, digest matches the reviewed source, rollback recorded |
-| `cloudflare_dns_delete` → a stale root record | **refused: 403 code 10000** |
+| Page store | `apexmicro-pages` |
+| Program | `apexmicro`, digest matching the reviewed source |
+| Hostnames | `apexmicro.ai` and `www.apexmicro.ai` attached; www 301s to the apex |
+| Retired | four stale records pointing at a Fly address that served nothing |
+| Preserved | the Google site-verification TXT, and four unrelated Workers on the account |
+| Sender | `Thomas Norton — Apex Micro <thomas@apexmicro.ai>`, DKIM/SPF/DMARC written and verified |
+| Reply inbox | `thomas@apexmicro.ai` → the owner's address, routing enabled |
+| Pages | 14, each read back over public HTTPS |
+| Experiment 002 | published, updated, concluded, closed, page preserved — the full cycle against the real edge |
 
-Four unrelated Workers on the account (`accounts-proxy`, `accounts-redirect`,
-`clerk-accounts-proxy`, `clerk-proxy`) were not touched — the envelope is scoped
-to the name `apexmicro`. DNS is exactly as it was, Google's verification TXT
-included, and `apexmicro.ai` is unchanged in the world.
+**Four defects surfaced, all of the same family.** Every one was a check that
+answered a convenient question instead of the true one, and no stub had an
+opinion about any of them:
 
-**What is still needed: Edit at the zone level.** The token clearly carries
-Account-level Edit — it created a store and deployed a program. Every zone read
-succeeds, so it has Zone Read. The first zone *write* was refused, which places
-the gap precisely: the zone scopes are Read where they need to be Edit.
+1. Health verified the token at `/user/tokens/verify`, which reports on *user*
+   tokens. An account-owned token answers it 401 while working everywhere it is
+   used — so a working credential was reported invalid, and this document said
+   so. Health now asks what the token can reach.
+2. Mail routing was enabled by `POST /email/routing/dns`, which is for routing a
+   *subdomain* and refuses the zone apex. `/email/routing/enable` is the one.
+3. A route that could not route was recorded as `applied`, and the door's
+   at-most-once key then refused every retry — a rule existed that could never
+   receive mail, and the act that would have fixed it was deduped away
+   permanently. The handler now refuses when the routing it was asked for is not
+   enabled, and the key names the effect wanted rather than the call made.
+4. Forwarding rules were read only when routing already reported enabled, so a
+   half-configured zone looked empty and the retry tried to create a rule that
+   already existed. Rules are now read either way.
 
-**The smallest fix, and it needs no copying.** Cloudflare lets an existing
-token's permissions be edited, and **the token value does not change** — so the
-secret already installed stays valid and nothing has to be pasted anywhere
-again. At *Account API tokens → `hidden-wave-924d` → Edit*, ensure these three
-are **Edit**, not Read, on `apexmicro.ai`:
+**A fifth, and the one that would have mattered most.** The page store is
+eventually consistent: a write is not readable at the edge the instant it
+returns. Verifying once, immediately, turned a normal few-second delay into
+"the world does not carry this page" — which stops publication and stops
+outbound. A mismatch is now retried for a bounded window before it is believed.
+The standard is unchanged; the world simply gets the seconds it needs to answer.
 
-| Scope | Needs |
-|---|---|
-| Zone → DNS (apexmicro.ai) | **Edit** — retire the stale records, write the sender's |
-| Zone → Workers Routes (apexmicro.ai) | **Edit** — attach apexmicro.ai and www to the program |
-| Zone → Email Routing Rules (apexmicro.ai) | **Edit** — the rule that routes the Workshop address |
+**Readiness for Experiment 001, checked against the world: 0 blocked**, 6
+surfaces verified over public HTTPS, 7 ready, 3 waiting. The three waiting all
+resolve at Allow: the experiment's own page, its payment link, and outbound
+eligibility.
 
-Also confirm **Account → Email Routing Addresses: Edit** (untested — the run
-stopped before reaching it). Zone resources stay limited to `apexmicro.ai`.
-Nothing needs Zone Settings, SSL, billing, registrar or account membership.
-
-**Then say the word and I resume.** The stand-up is idempotent: it will skip the
-store and the program that already exist, retire the four stale records, attach
-both hostnames, write the sender's DNS, enable the reply route, publish the
-pages and read every one of them back over public HTTPS. Then Experiment 002
-runs the full cycle against the real edge.
-
-**Still nobody is contacted.** Proof 1 publishes its page and writes to its
-first business only when you press Allow.
-
-**One security note, unchanged.** The permission list on that screen is very
-wide — Billing Write, Account Settings Write, Account API Tokens Write, OAuth
-Client Write, SCIM, SSO Connector. Grant the zone scopes above and nothing more;
-a credential that can mint further credentials or change billing is authority
-Foundry has no tool to exercise. And **rotate the R2 Secret Access Key** that
-was shared in plain text: Foundry uses no R2, has not stored it, and never will.
+**One thing is still owed by you, and Foundry will not invent it.**
 
 **Also owed by the owner, and not a blocker to the token.** A postal address for
 commercial mail — a business or PO box address, not his home address, which
