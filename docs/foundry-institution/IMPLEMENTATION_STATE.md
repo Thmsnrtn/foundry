@@ -1679,3 +1679,68 @@ nothing rules cannot read and no correspondence to evaluate a model against.
 Autonomy is earned from real replies, and none exist. Exactly two readings may
 be answered without a person — a refusal and machine mail — and that is
 enforced in the vocabulary rather than in judgement.
+
+## Experiment 001: the final readiness surface (2026-09-09)
+
+**The uncertainty.** Will a Massachusetts millwork shop pay $29, before reading
+it, for a screened shortlist of open public bid notices? That is one link in a
+chain, and it is the link the money is being spent to test.
+
+**The population, after screening.** 2 qualify. 21 do not — 4 whose promising
+evidence did not survive reading, 17 with no public-project record found either
+way. A rejection here says only that the evidence this design requires was not
+found; it is never a statement about a shop.
+
+**The exchange.** $29 upfront, one message each, no automated follow-up.
+
+**What payment would demonstrate.** That a shop will pay for the *expected*
+value of a brief it has not read — willingness to buy on description, from a
+workshop it has never heard of, through cold email.
+
+**What it would not.** That the brief was useful; that $29 is the right price;
+that the value recurs; that the shop would pay again having seen one. Upfront
+payment and pay-after-value are different evidence and neither is promoted into
+the other.
+
+**The remaining ambiguity, and why it is now fatal at this size.** With 2
+recipients, the settle rule — at least one payment out of offers delivered —
+cannot discriminate. Zero payments from two shops is exactly what a good
+product looks like some of the time. The probe would spend the Workshop's first
+impression and return an answer nobody could read.
+
+**True material cost.** Cash is near zero; the real costs are 2 strangers'
+attention, one first impression for an identity that has none yet, and the
+owner's time. None of it buys a decision at this cohort size.
+
+**Reputation exposure.** Low in volume, high in kind: these are the first two
+people Apex Micro would ever write to.
+
+**Stops and cap.** Stop conditions and the fulfilment cap are recorded and
+enforced; maximum outstanding fulfilment is bounded by the cap; obligations
+outlive a stop.
+
+**Readiness.** Public page: ready, published and read back over public HTTPS at
+Allow. Payment: link created at Allow through the governed door. Sending:
+authenticated as `Thomas Norton — Apex Micro <thomas@apexmicro.ai>`. Inbound:
+the Workshop can hear, rules-only, fourteen reply kinds proved — but the ears
+are not stood up in production yet. Remedy: refunds through the governed door
+and a buyer's own refund link.
+
+**Owner blockers.** The postal address, and recipient approval — now over a
+screened cohort.
+
+**Recommendation: SENSE MORE FIRST — do not run at n=2.**
+
+Not because the thesis weakened. Nothing disconfirmed it. The candidate list
+was built from *who makes millwork in Massachusetts* when the design needed
+*who bids public work*, and no amount of screening after the fact repairs a
+population sourced on the wrong axis. The instrument that just separated 2 from
+21 is the instrument that should have built the list: search from the evidence
+side — shops naming public projects, appearing in award and spending records —
+and contact those. It costs nobody any attention, it is free, and it is the
+same dominance argument that narrowed this design in the first place, applied
+one step earlier.
+
+Kill is wrong: nothing failed. Run is wrong: it would buy an unreadable answer.
+Defer to re-source the population, then present a cohort large enough that a
+null result means something.
