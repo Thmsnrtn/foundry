@@ -136,21 +136,7 @@
     },
     {
       "file": "src/services/integration/cloudflare-gateway.ts",
-      "line": 412,
-      "detector": "templated_post",
-      "status": "governed",
-      "capability": "Cloudflare capability handlers for the public Workshop — kv, dns, worker, domain and mail routing, each with a receipt and a verification of the public result"
-    },
-    {
-      "file": "src/services/integration/cloudflare-gateway.ts",
-      "line": 416,
-      "detector": "templated_post",
-      "status": "governed",
-      "capability": "Cloudflare capability handlers for the public Workshop — kv, dns, worker, domain and mail routing, each with a receipt and a verification of the public result"
-    },
-    {
-      "file": "src/services/integration/cloudflare-gateway.ts",
-      "line": 422,
+      "line": 419,
       "detector": "templated_post",
       "status": "governed",
       "capability": "Cloudflare capability handlers for the public Workshop — kv, dns, worker, domain and mail routing, each with a receipt and a verification of the public result"
@@ -158,6 +144,20 @@
     {
       "file": "src/services/integration/cloudflare-gateway.ts",
       "line": 423,
+      "detector": "templated_post",
+      "status": "governed",
+      "capability": "Cloudflare capability handlers for the public Workshop — kv, dns, worker, domain and mail routing, each with a receipt and a verification of the public result"
+    },
+    {
+      "file": "src/services/integration/cloudflare-gateway.ts",
+      "line": 429,
+      "detector": "templated_post",
+      "status": "governed",
+      "capability": "Cloudflare capability handlers for the public Workshop — kv, dns, worker, domain and mail routing, each with a receipt and a verification of the public result"
+    },
+    {
+      "file": "src/services/integration/cloudflare-gateway.ts",
+      "line": 430,
       "detector": "templated_post",
       "status": "governed",
       "capability": "Cloudflare capability handlers for the public Workshop — kv, dns, worker, domain and mail routing, each with a receipt and a verification of the public result"

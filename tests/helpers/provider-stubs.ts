@@ -150,10 +150,18 @@ export function providerStubs(): { state: ProviderState; fetch: (url: string | U
           const d = { id: `dom_${++state.seq}`, hostname, service: String(body.service), zone_id: String(body.zone_id) }; cf.domains.push(d); return cfOk(d);
         }
       }
-      m = /^\/zones\/([^/]+)\/email\/routing(?:\/(dns|rules)(?:\/([^/]+))?)?$/.exec(pathOnly);
+      m = /^\/zones\/([^/]+)\/email\/routing(?:\/(dns|enable|rules)(?:\/([^/]+))?)?$/.exec(pathOnly);
       if (m) {
         if (!m[2]) return cfOk({ enabled: cf.routing.enabled, status: cf.routing.enabled ? 'ready' : 'unconfigured' });
-        if (m[2] === 'dns' && method === 'POST') { cf.routing.enabled = true; return cfOk({ enabled: true }); }
+        // FAITHFUL TO THE REAL ONE: `/dns` is for routing a subdomain and
+        // refuses the zone apex; `/enable` is what turns the zone on. The stub
+        // said yes to both, which is why the wrong endpoint shipped.
+        if (m[2] === 'dns' && method === 'POST') {
+          return String(body.name) === 'apexmicro.ai'
+            ? cfErr(2007, 'Invalid Input: must be a subdomains of apexmicro.ai', 422)
+            : cfOk({ enabled: true });
+        }
+        if (m[2] === 'enable' && method === 'POST') { cf.routing.enabled = true; return cfOk({ enabled: true }); }
         if (m[2] === 'rules') {
           if (method === 'GET') return cfOk(cf.routing.rules);
           if (method === 'POST') { const rule = { id: `rule_${++state.seq}`, enabled: true, matchers: body.matchers as never, actions: body.actions as never }; cf.routing.rules.push(rule); return cfOk(rule); }

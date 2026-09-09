@@ -407,9 +407,16 @@ async function emailRouteHandler(req: GatewayRequest): Promise<{ to: string; for
     if (!before.enabled) {
       // Turning routing on writes the zone's inbound MX; the previous mail
       // records are read first and kept in the receipt.
+      //
+      // THE APEX IS ENABLED, NOT ADDED. `/email/routing/dns` adds the records
+      // for routing a SUBDOMAIN and refuses the zone itself — "must be a
+      // subdomain of apexmicro.ai", which reads like a validation quibble and
+      // is actually the wrong endpoint. `/email/routing/enable` is the one that
+      // turns routing on for the zone and writes its MX. Found by doing it to a
+      // real zone; no stub had an opinion about which URL was correct.
       const mxBefore = await readDnsRecords(z.id, { type: 'MX', name: z.name });
       steps.mxBefore = mxBefore;
-      const response = await withRetry(() => fetch(`${CF_API}/zones/${pathSegment(z.id, 'zone_id')}/email/routing/dns`, { method: 'POST', headers: auth({ 'Content-Type': 'application/json' }), body: JSON.stringify({ name: z.name }) }), { timeoutMs: CF_TIMEOUT_MS, maxRetries: 1 });
+      const response = await withRetry(() => fetch(`${CF_API}/zones/${pathSegment(z.id, 'zone_id')}/email/routing/enable`, { method: 'POST', headers: auth({ 'Content-Type': 'application/json' }), body: '{}' }), { timeoutMs: CF_TIMEOUT_MS, maxRetries: 1 });
       steps.enable = await cfRead<unknown>(response).then((r) => r.result).catch((e: unknown) => ({ error: e instanceof Error ? e.message : String(e) }));
     }
     if (!before.destinations.some((d) => d.email === forwardTo)) {
