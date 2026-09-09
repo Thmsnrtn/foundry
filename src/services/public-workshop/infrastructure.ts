@@ -151,12 +151,23 @@ export async function connectWorkshopSending(founderId: string, fetchImpl: typeo
 
 /** Mail to the Workshop's address reaches the owner's inbox. The destination
  * needs one click from him at the provider the first time; the report says so. */
+/**
+ * THE KEY NAMES THE EFFECT WANTED, NOT THE CALL MADE.
+ *
+ * An at-most-once key stops the same act happening twice, which is right, and
+ * it does it by what the act was for. This one used to say "a route from this
+ * address to that one" — and a run that created the rule but failed to turn
+ * routing on satisfied that description while leaving mail on the floor. The
+ * key now says what was actually wanted: a route that is *enabled*. The earlier
+ * half-finished invocation keeps its own record and its own key; it is not
+ * rewritten, and it no longer answers for this.
+ */
 export async function connectReplyInbox(founderId: string): Promise<{ to: string; forwardTo: string; destinationVerified: boolean }> {
   const w = need(await publicWorkshopOf(founderId));
   const founder = (await rows('SELECT email FROM founders WHERE id = ?', [founderId]))[0];
   const forwardTo = String(founder?.email ?? '');
   if (!forwardTo) throw new WorkshopRefused('no_owner_address');
-  const r = await door(w, 'cloudflare_email_route_upsert', `forward ${w.contactEmail} to the owner`, { zone_name: w.zoneName, to: w.contactEmail, forward_to: forwardTo, purpose: 'replies to the Workshop reach the person who wrote' }, `public:${founderId}:route:${w.contactEmail}:${forwardTo}`);
+  const r = await door(w, 'cloudflare_email_route_upsert', `forward ${w.contactEmail} to the owner`, { zone_name: w.zoneName, to: w.contactEmail, forward_to: forwardTo, purpose: 'replies to the Workshop reach the person who wrote' }, `public:${founderId}:route:enabled:${w.contactEmail}:${forwardTo}`);
   return { to: w.contactEmail, forwardTo, destinationVerified: Boolean(r.destinationVerified) };
 }
 
