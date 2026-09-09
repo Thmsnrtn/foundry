@@ -1497,3 +1497,64 @@ the owner connects them.
 **State:** BUILT · TESTED (full chain) · PUSHED · DEPLOYED through
 `[deploy-private]` (see `docs/operations/DEPLOYMENT_BASELINE.md` for the
 verified running commit and what the deployed smoke test covered).
+
+## Slice: the Workshop has one public face (2026-09-09)
+
+**Owner direction.** "Apex Micro public workshop, experiment identity,
+reputation, and autonomous Cloudflare refoundation." Do not launch Proof 1;
+build the durable public membrane the second through hundredth experiment enters
+the world through.
+
+**What the first proof found.** Proof 1 reached the edge of launch and stopped
+on a real contradiction: identity, sender, mailbox, trust surface and legal
+posture cost more owner attention and more shared reputation than a "$29, $100
+ceiling" probe had counted, and its design pointed a stranger at a raw payment
+link from a domain bought that week. The learning is preserved rather than
+tidied: the original experiment is **declined as superseded**, by the
+institution, and Experiment 001 is a successor that names it.
+
+**What was built.**
+
+- **Migration 285.** `public_workshop` (one durable identity per owner, with
+  the owner-only pause on new economic activity), `public_experiments` (number
+  and slug given once and immutable; public copy authored for publication),
+  `public_publications` (what was put at which address, its digest, and whether
+  the world was seen to carry it; append-only, never deleted),
+  `public_suppressions` and `public_contacts` (one no across every experiment,
+  and the Workshop's contact history), `cloudflare_mutations` (receipts).
+  Eight `public_workshop` capabilities, each with its rung. The plan guard on
+  `outbound_actions` gains three refusals for an owner who has a Workshop:
+  paused, suppressed, and no verified public page.
+- **`services/integration/cloudflare-gateway.ts`.** Eight registered tools
+  bounded to the Workshop's own zone, program and store; reads for zone, DNS,
+  store, program, hostnames and mail routing; a receipt for every mutation and
+  for every refusal, carrying previous state, request, response, verification
+  and rollback.
+- **`services/public-workshop/`.** The identity, the allowlist projection, the
+  pure site renderer, the Worker source as text, publication with public
+  verification and the quality gate, Workshop-wide suppression and frequency,
+  standing-up/sending/health, and the Experiment 002 rehearsal.
+- **The hand learns the Workshop.** Allow places the link *and* publishes the
+  page; offers point at the page rather than a raw link, carry the Workshop's
+  footer and opt-out, and are refused for suppression, frequency, a stale or
+  unseen page, a price or cadence that differs from the provider, or an
+  unhealthy sender. A bounce or complaint lands on the shared list. A pause
+  stops offers and not deliveries or refunds. Settling or stopping republishes
+  the record.
+- **`/foundry/public-workshop`.** Health read from the world, stand-up,
+  publish, sending, reply inbox, pause, public experiments with their addresses
+  and last verification, obligations, the do-not-contact list, the provider
+  receipts, and the two prerequisites only the owner can supply.
+
+**What holds it.** `tests/unit/the-workshop-has-one-public-face.test.ts`: 14
+tests over the whole pipeline and every adversarial case the direction names —
+private routes through the public host, a private field in a projection,
+publication before approval, outreach with no page or a stale one, a suppressed
+contact, a wrong price, a mismatched cadence, an unhealthy sender, a mutation
+outside the envelope, duplicate publication, and provider-success with
+public-failure.
+
+**Not done here.** Nothing is live: the Cloudflare token the owner supplied is
+rejected by Cloudflare, so the Workshop stands up in rehearsal and not yet in
+the world. Proof 1 is not launched, and its first-principles reassessment waits
+until the Workshop exists in reality.

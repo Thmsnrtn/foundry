@@ -15,7 +15,15 @@ describe('the Proof 1 seed carries the files it says it does', () => {
   it('would pass its own quality gates on the day after the pull, and names every participant once', () => {
     const now = new Date('2026-09-08T00:00:00Z');
     expect(checkDeliverableQuality({ id: 'x', kind: 'deliverable', title: 'brief', body: BRIEF_MD, pulledAt: '2026-09-07T12:00:00.000Z', digest: 'd', paymentLinkUrl: null, recordedAt: '' }, now)).toEqual({ ok: true, failures: [] });
-    expect(checkOfferQuality({ id: 'y', kind: 'offer', title: PROOF1_PLAN.offerSubject, body: OUTREACH_TEMPLATE_MD.replace('[PAYMENT LINK]', 'https://buy.stripe.com/test_x'), pulledAt: null, digest: 'd', paymentLinkUrl: 'https://buy.stripe.com/test_x', recordedAt: '' })).toEqual({ ok: true, failures: [] });
+    // The template names the Workshop's page. Filled either way it passes: with
+    // a page (the message points there and the payment path is on it), and
+    // without one (the link takes the page's place, as `fillOffer` does).
+    const filled = (to: string) => ({ id: 'y', kind: 'offer' as const, title: PROOF1_PLAN.offerSubject, body: OUTREACH_TEMPLATE_MD.replace('[APEX MICRO EXPERIMENT PAGE]', to), pulledAt: null, digest: 'd', paymentLinkUrl: 'https://buy.stripe.com/test_x', recordedAt: '' });
+    const page = 'https://apexmicro.ai/experiments/ma-millwork-bid-brief';
+    expect(checkOfferQuality(filled(page), page)).toEqual({ ok: true, failures: [] });
+    expect(checkOfferQuality(filled('https://buy.stripe.com/test_x'), null)).toEqual({ ok: true, failures: [] });
+    // And a message that points nowhere the buyer can act is refused.
+    expect(checkOfferQuality(filled(page), null).ok).toBe(false);
     expect(new Set(PROOF1_RECIPIENTS.map((r) => r.counterpartyRef)).size).toBe(PROOF1_RECIPIENTS.length);
     expect(PROOF1_RECIPIENTS.filter((r) => r.channel === 'email').every((r) => r.email?.includes('@'))).toBe(true);
     expect(PROOF1_PLAN.price).toMatchObject({ amountCents: 2900, currency: 'USD' });

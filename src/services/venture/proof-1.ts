@@ -96,13 +96,38 @@ export const PROOF1_PLAN: OfferShapePlan = {
   offerSubject: 'A shortlist of open Massachusetts public bids with cabinet and millwork scope',
 };
 
+/**
+ * THE PUBLIC WORDS FOR EXPERIMENT 001, authored for publication. Nothing here
+ * is inferred from private rows; it is the offer as the owner reviewed it,
+ * said to a stranger in his voice.
+ */
+export const PROOF1_SLUG = 'ma-millwork-bid-brief';
+export const PROOF1_PUBLIC = {
+  title: 'Massachusetts Millwork Bid Brief',
+  summary: 'A one-time test of a simpler way for commercial millwork shops to find potentially relevant Massachusetts public bid opportunities.',
+  who: 'Independent commercial cabinet, casework and architectural millwork shops in Massachusetts that bid, or would like to bid, on public work.',
+  what: 'One brief, by email, within one business day of payment: a hand-screened shortlist of the public bid notices currently open on COMMBUYS that appear relevant to cabinet, casework, countertop and millwork work. Each item carries the bid number, the opening date, the agency contact, one line on why it may fit, and a link to the original notice. The pilot edition lists thirteen notices screened from the 952 solicitations open in the week it was pulled.',
+  limits: 'It is not complete. It covers COMMBUYS only, not the Central Register, DCAMM\'s e-bid room or agency portals. Relevance is judged from the notice text, not from the bid documents, so a notice that says "renovation" may or may not carry casework in its scope; the brief says which inferences are weak. It does not guarantee that any bid is winnable or right for you.',
+  sources: 'COMMBUYS, the Commonwealth of Massachusetts public procurement record, read in full for each listed notice on the date shown in the brief. Every item links to the authoritative record so you can check it yourself.',
+  selection: 'A small number of Massachusetts millwork businesses were chosen by hand from their public websites, where the commercial work shown suggested the brief could be relevant. Each was written to once, from my own address, using the contact address the business publishes. There is no list, no purchased data and no follow-up.',
+  note: 'Hi, I\'m Thomas Norton. I run Apex Micro, a small digital workshop where I test useful niche products and services before deciding whether they\'re worth developing into independent businesses. I use software I\'ve built to help research and operate these tests, but I\'m the person responsible for this one.\n\nFor this experiment I\'m testing whether a short, curated brief of current Massachusetts public bid notices is useful enough to commercial millwork shops that they\'d pay $29 for it. This is a pilot, not an established service and not a subscription.',
+} as const;
+
 export interface Proof1Seed { experimentId: string; opportunityId: string; recipientsAdded: number; alreadyExisted: boolean }
 
-/** The experiment already seeded for this owner, if any: by its deliverable's title. */
+/**
+ * The experiment already seeded for this owner, if any: by its deliverable's
+ * title. A superseded design and its successor share a title and can share a
+ * second, so the order is stated rather than left to the rows: the one still
+ * open wins, then the newest, then the last written. Without the last of those
+ * this returned whichever the storage engine happened to hand back first.
+ */
 export async function findProof1(founderId: string): Promise<string | null> {
   const r = (await query(
     `SELECT e.id FROM venture_experiments e JOIN experiment_materials m ON m.experiment_id = e.id AND m.kind = 'deliverable'
-      WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND m.title = ? ORDER BY e.proposed_at DESC LIMIT 1`, [founderId, PROOF1_TITLE]))
+      WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND m.title = ?
+      ORDER BY CASE WHEN e.decision IS NULL THEN 0 WHEN e.decision = 'approved' THEN 1 ELSE 2 END,
+               e.proposed_at DESC, e.rowid DESC LIMIT 1`, [founderId, PROOF1_TITLE]))
     .rows[0] as Record<string, unknown> | undefined;
   return r ? String(r.id) : null;
 }
@@ -167,6 +192,49 @@ export async function seedProof1(founderId: string): Promise<Proof1Seed> {
   const recipientsAdded = await addRecipients({ founderId, experimentId, recipients: PROOF1_RECIPIENTS });
   await refreshMaterials(founderId, experimentId);
   return { experimentId, opportunityId, recipientsAdded, alreadyExisted: false };
+}
+
+export interface Proof1Reframe { original: string; successor: string; number: number; slug: string; alreadyReframed: boolean }
+
+/**
+ * PROOF 1 REACHED A REAL CONTRADICTION BEFORE LAUNCH: the identity, the sender
+ * and the trust surface a stranger would meet cost more owner attention and
+ * more shared reputation than the design had counted, and the design pointed
+ * a raw payment link from a fresh domain. Under the existing semantics the
+ * prediction of an undecided test is not sealed, but a rewrite in place would
+ * leave no trace of the contradiction. So: the original is declined as
+ * superseded, by the institution and with the successor naming it, and the
+ * successor carries the same question, the same rule, the same brief and the
+ * same businesses under the Workshop's identity, with a public page. The
+ * owner's review of who may be contacted is not carried: whether those
+ * businesses are still the right ones is one of the questions the reframe
+ * asks, and the answer is his.
+ */
+export async function reframeProof1UnderTheWorkshop(founderId: string): Promise<Proof1Reframe> {
+  const { publicWorkshopOf } = await import('../public-workshop/settings.js');
+  const { givePublicIdentity, publicIdentityOf } = await import('../public-workshop/identity.js');
+  const w = await publicWorkshopOf(founderId);
+  if (!w) throw new Error('no public Workshop; establish it first');
+  const current = await findProof1(founderId);
+  if (!current) throw new Error('Proof 1 is not seeded');
+  const already = await publicIdentityOf(current);
+  if (already) return { original: already.supersedes ?? current, successor: current, number: already.number, slug: already.slug, alreadyReframed: true };
+  const e = (await query('SELECT opportunity_id, unknown_id, claim_id, decision, cost_cents, settles_when FROM venture_experiments WHERE id = ?', [current])).rows[0] as Record<string, unknown>;
+  if (e.decision != null) throw new Error(`Proof 1 is already decided (${String(e.decision)}); a decided test is not reframed in place`);
+  const successor = await designExperiment({
+    founderId, opportunityId: String(e.opportunity_id), unknownId: String(e.unknown_id), claimId: e.claim_id == null ? null : String(e.claim_id), evidenceMode: 'real', costCents: Number(e.cost_cents),
+    whatWeDo: `Write once to each approved Massachusetts millwork business as ${w.operatorName} — ${w.publicName}, pointing at the experiment's page on ${w.zoneName}, offering a $29 one-time pilot brief of open public bid notices relevant to millwork, and deliver it by email on payment. Supersedes ${current}, which was declined before launch because its design pointed a raw payment link from a fresh domain and carried more identity and reputation cost than it counted.`,
+    whatWeExpect: 'At least one business pays $29 and receives the brief before 25 have received the offer, within seven days of the offer being placed',
+    wouldDisprove: 'Twenty-five businesses receive the offer and none pays and receives the brief, or seven days pass without one; a refunded or undelivered purchase does not count',
+    settlesWhen: { event: 'delivery', atLeast: 1, outOf: 'offer_delivered', atMost: 25, withinDays: 7 },
+  });
+  await query('UPDATE venture_experiments SET needs_workshop = 0 WHERE id = ?', [successor]);
+  const identity = await givePublicIdentity({ experimentId: successor, founderId, slug: PROOF1_SLUG, copy: PROOF1_PUBLIC, supersedesExperimentId: current });
+  await addRecipients({ founderId, experimentId: successor, recipients: PROOF1_RECIPIENTS });
+  await refreshMaterials(founderId, successor);
+  const { decideExperiment } = await import('./validation.js');
+  await decideExperiment({ experimentId: current, decision: 'declined', by: 'institution:workshop_keeper' });
+  return { original: current, successor, number: identity.number, slug: identity.slug, alreadyReframed: false };
 }
 
 async function refreshMaterials(founderId: string, experimentId: string): Promise<void> {

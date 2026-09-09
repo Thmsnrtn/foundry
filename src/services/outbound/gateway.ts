@@ -239,7 +239,7 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
   // of the registered capability rather than a new field a caller could omit.
   if (policy.requireCustomerExternalId && req.customerExternalId) {
     const { contactIsRefused } = await import('../institution/contact-constraint.js');
-    const constraint = await contactIsRefused(req.productId, req.customerExternalId);
+    const constraint = await contactIsRefused(req.productId, req.customerExternalId, req.dedupKey);
     if (constraint.refused) {
       await recordGatewayInvocation({
         invocation_id: invocationId,

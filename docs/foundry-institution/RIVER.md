@@ -182,3 +182,71 @@ The River's words name destinations; the rows that carry them are the frontier's
 ## What exists today
 
 See `IMPLEMENTATION_STATE.md` and `history/RIVER_PORT_RECONCILIATION.md`. In one sentence: the first real experiment exists as ordinary venture rows with its prediction and rule sealed at approval; the owner's part is three acts on one page of his phone (review who may be contacted, connect his own sending address, allow); Foundry places the tagged payment link, writes once to each approved business through the governed door under the act he approved, records what the provider confirms, receives purchases through the existing Stripe webhook into what is owed, delivers after a quality gate, refunds what fails or is returned, settles by the sealed rule and takes the offer down, and shows all of it in his words with the row each line was read from. Everything else in this document is destination.
+
+## The public Workshop (2026-09-09)
+
+A probe reaches the world through one durable public identity, never through a
+domain invented for it. That identity is **Apex Micro** (`apexmicro.ai`), a
+digital workshop operated by Thomas Norton as a person: not a company Foundry
+invented, not a persona, not a legal entity, and not a lead-generation shell.
+Foundry stays private and is not described publicly; Thomas is the accountable
+human; a venture earns an independent name only when independence creates more
+value than it costs.
+
+Three identities, kept strictly apart:
+
+| | What it is | What it is not |
+|---|---|---|
+| **Private Foundry** | The owner-governed institution: it reasons, allocates, governs and operates | The public sender or customer-facing brand |
+| **Apex Micro** | The permanent public workshop every externally exposed experiment enters the world through | A disposable domain, a shell, an AI persona, or automatically a legal entity |
+| **Graduated ventures** | An experiment that earned its own name, domain and identity | The default consequence of existing |
+
+Its laws:
+
+1. **A new experiment is a publication event, not an infrastructure project.**
+   Experiment 2 and Experiment 20 require zero DNS, no new mailbox, no new
+   sender, no new site and no new legal surface.
+2. **Every externally exposed economic experiment gets a permanent public
+   record** at `apexmicro.ai/experiments/<slug>`, answering in ordinary language
+   who is behind it, what it is, what it costs, whether it recurs, what it does
+   not claim, what it relies on, why you may have been written to, what happens
+   to your information, how to reach a person, how to get a refund and how to
+   opt out. Internal simulations, rehearsals of the machinery, benchmarks and
+   copy variants get none: the record is for people the institution has reached.
+3. **The public page is a projection of canonical state, never a second truth
+   system.** Fields cross one explicit allowlist boundary; recipients, internal
+   economics, authority state, private evidence, model judgment, owner notes and
+   provider references never do.
+4. **The address is durable.** The number and slug are given once and cannot
+   change. A closed experiment keeps its page and says what happened; a
+   graduated one keeps its page and links onward. Failure is not erased and
+   history is not destroyed by a redirect.
+5. **Publication precedes exposure.** A page that does not exist, that the world
+   is not seen to carry, that is stale, whose price or cadence differs from the
+   provider's, or that lacks a contact, refund or opt-out path refuses outbound.
+   A provider's acknowledgement is not the page existing: the public address is
+   read back over HTTPS and the reading is the record.
+6. **One sender, never rotated.** Mail goes out as *Thomas Norton — Apex Micro*
+   from the Workshop's own authenticated domain, carrying who is writing, a
+   postal address and one way to stop. No tracking pixels, no click wrapping, no
+   chase sequence, small qualified sets, one message.
+7. **The public plane does not depend on the private one.** The site is served
+   at the edge and stays up while the owner's control plane is stopped.
+
+## Cloudflare as a bounded governed capability (2026-09-09)
+
+The Workshop's infrastructure is operated by the institution on the owner's
+behalf, within an envelope defined by **what exists rather than by what is
+permitted**. The tools are: make the one page store; publish a page; sweep an
+opt-out already recorded; set or retire one DNS record on the Workshop's own
+zone; deploy the one public program; attach the Workshop's own hostname; forward
+its mail to the owner. There is no tool that could transfer the domain, change
+its nameservers, delete a zone, touch another zone, weaken a protection, or
+create wildcard exposure — those are not high-consequence capabilities, they are
+absent ones.
+
+Every mutation writes a receipt: what was there before, what was asked, what the
+provider answered, what the world then showed, why, under what authority, when,
+and what would put it back. **Evidence outranks API narrative**: a DNS record
+created is resolved, a deployment accepted is fetched, a domain attached is
+verified over HTTPS. A refusal leaves a receipt too.

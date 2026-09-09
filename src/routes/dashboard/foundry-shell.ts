@@ -2905,6 +2905,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
       { href: '/foundry/companies', label: 'Portfolio', count: s.watching.real + s.watching.invented, on: false },
       { href: '/foundry/decisions', label: 'Decisions', count: Number(waiting[0]?.n ?? 0), on: false },
       { href: '/foundry/searching', label: s.search ? 'Searching' : 'Not searching', count: null, on: false },
+      { href: '/foundry/public-workshop', label: 'Workshop', count: null, on: false },
     ],
     chips: [],
   };
@@ -5849,6 +5850,18 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
   // one he checks his bank statement about.
   const stopped = String(c.req.query('done') ?? '') === 'stopped';
 
+  // THE PUBLIC WORKSHOP is the one place I reach the world under his name, so
+  // what I may do to its infrastructure is listed here with everything else I
+  // may do, and the pause that stops new economic activity is a step away.
+  const { publicWorkshopOf } = await import('../../services/public-workshop/settings.js');
+  const workshop = await publicWorkshopOf(s.ownerId);
+  const workshopBlock = workshop ? html`<div class="know">
+      <h2>The Workshop</h2>
+      <p>At <strong>${workshop.zoneName}</strong> I may publish pages, deploy the one program that serves them, keep the Workshop's own DNS records, and forward its mail to you. Each change leaves a receipt with what was there before. I cannot transfer the domain, change its nameservers, delete a zone, or touch any other domain: those tools do not exist.</p>
+      <p>${workshop.economicPause ? html`<strong>New economic activity is paused</strong> since ${workshop.economicPause.at.slice(0, 10)}: ${workshop.economicPause.reason}. What is owed still goes out.` : html`Tests write to strangers only as ${workshop.operatorName} — ${workshop.publicName}, from ${workshop.contactEmail}, pointing at a page I have read back from the world.`}</p>
+      <p class="quiet"><a href="/foundry/public-workshop">The Workshop</a></p>
+    </div>` : '';
+
   const body = html`
     <h1>What I'm allowed to do</h1>
 
@@ -5913,6 +5926,8 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
           <button class="btn" type="submit" style="width:auto">Stop this</button>
         </form></div>`)}
     </div>`}
+
+    ${workshopBlock}
 
     <div class="know">
       <h2>Stopping me</h2>

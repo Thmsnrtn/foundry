@@ -881,6 +881,24 @@ CREATE TABLE chat_sessions (
   message_count INTEGER DEFAULT 0,
   status TEXT DEFAULT 'active'
 );
+CREATE TABLE cloudflare_mutations (
+  id                TEXT PRIMARY KEY,
+  founder_id        TEXT NOT NULL REFERENCES founders(id),
+  product_id        TEXT NOT NULL REFERENCES products(id),
+  tool              TEXT NOT NULL,
+  resource          TEXT NOT NULL,
+  purpose           TEXT NOT NULL,
+  authority         TEXT NOT NULL,
+  previous_json     TEXT,
+  requested_json    TEXT NOT NULL,
+  response_json     TEXT,
+  outcome           TEXT NOT NULL CHECK (outcome IN ('applied','refused','failed')),
+  verification_json TEXT,
+  verified_at       TEXT,
+  rollback_json     TEXT,
+  invocation_id     TEXT,
+  recorded_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE cofounder_alignment_scores (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL,
@@ -3534,6 +3552,103 @@ CREATE TABLE proposed_acts (
   consumed_at         TEXT,
   consumed_by         TEXT
 , rung TEXT REFERENCES consequence_rungs(rung), cost_cents INTEGER, experiment_id TEXT REFERENCES venture_experiments(id), measurement_critical INTEGER, undertaking_id TEXT REFERENCES undertakings(id));
+CREATE TABLE public_contacts (
+  id             TEXT PRIMARY KEY,
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  email          TEXT NOT NULL,
+  experiment_id  TEXT NOT NULL REFERENCES venture_experiments(id),
+  action_id      TEXT NOT NULL REFERENCES outbound_actions(id),
+  contacted_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(action_id)
+);
+CREATE TABLE public_experiments (
+  experiment_id    TEXT PRIMARY KEY REFERENCES venture_experiments(id),
+  founder_id       TEXT NOT NULL REFERENCES founders(id),
+  number           INTEGER NOT NULL,
+  slug             TEXT NOT NULL,
+  -- Listed in the public registry. A rehearsal of the machinery is published
+  -- (the machinery is the thing rehearsed) but not listed among real tests.
+  listed           INTEGER NOT NULL DEFAULT 1,
+  public_title     TEXT NOT NULL,
+  public_summary   TEXT NOT NULL,   -- one or two plain sentences: what and why
+  public_who       TEXT NOT NULL,   -- who it is for
+  public_what      TEXT NOT NULL,   -- exactly what a buyer receives
+  public_limits    TEXT NOT NULL,   -- what it does not claim
+  public_sources   TEXT NOT NULL,   -- what it relies on
+  public_selection TEXT NOT NULL,   -- why somebody received an email
+  public_note      TEXT NOT NULL,   -- the operator's personal section
+  -- Written at conclusion, in public words, at the right abstraction level.
+  public_outcome   TEXT,
+  supersedes_experiment_id TEXT REFERENCES venture_experiments(id),
+  graduated_to_url TEXT,
+  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(founder_id, number),
+  UNIQUE(founder_id, slug)
+);
+CREATE TABLE public_publications (
+  id             TEXT PRIMARY KEY,
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  path           TEXT NOT NULL,
+  kind           TEXT NOT NULL CHECK (kind IN ('page','experiment')),
+  experiment_id  TEXT REFERENCES venture_experiments(id),
+  version        INTEGER NOT NULL,
+  digest         TEXT NOT NULL,
+  bytes          INTEGER NOT NULL,
+  published_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  published_by   TEXT NOT NULL,
+  invocation_id  TEXT,
+  -- The provider accepting the page is not the page existing. This is the
+  -- public world's answer, read back over HTTPS.
+  verified_at     TEXT,
+  verified_status TEXT CHECK (verified_status IN ('verified','mismatch','unreachable')),
+  verified_detail TEXT,
+  superseded_at  TEXT
+);
+CREATE TABLE public_suppressions (
+  id             TEXT PRIMARY KEY,
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  email          TEXT NOT NULL,
+  reason         TEXT NOT NULL CHECK (reason IN ('they_asked','bounced','complained','founder')),
+  source         TEXT NOT NULL CHECK (source IN ('page_opt_out','provider','reply','owner')),
+  experiment_id  TEXT REFERENCES venture_experiments(id),
+  note           TEXT,
+  recorded_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(founder_id, email)
+);
+CREATE TABLE public_workshop (
+  founder_id       TEXT PRIMARY KEY REFERENCES founders(id),
+  -- The company the Workshop acts and sends as: the owner's one earned real
+  -- company. Its sending identity is the Workshop's sender.
+  product_id       TEXT NOT NULL REFERENCES products(id),
+  public_name      TEXT NOT NULL,                 -- 'Apex Micro'
+  operator_name    TEXT NOT NULL,                 -- 'Thomas Norton'
+  origin           TEXT NOT NULL,                 -- 'https://apexmicro.ai'
+  zone_name        TEXT NOT NULL,                 -- 'apexmicro.ai'
+  contact_email    TEXT NOT NULL,                 -- 'thomas@apexmicro.ai'
+  statement        TEXT NOT NULL,                 -- the owner-approved founding voice
+  about            TEXT NOT NULL DEFAULT '',      -- owner-supplied biography, never mined
+  worker_name      TEXT NOT NULL DEFAULT 'apexmicro',
+  kv_namespace_id  TEXT,
+  -- Commercial mail carries a postal address by law (CAN-SPAM); the owner
+  -- supplies one, never his home address by default, and none is invented.
+  postal_address   TEXT,
+  -- The last health reading, kept so the owner sees the last known state when
+  -- the provider cannot be reached right now.
+  health_json      TEXT,
+  health_at        TEXT,
+  -- How often the Workshop may write to the same address across experiments.
+  contact_gap_days         INTEGER NOT NULL DEFAULT 90,
+  contact_ceiling_per_year INTEGER NOT NULL DEFAULT 3,
+  -- STOP NEW ECONOMIC ACTIVITY is not the same as abandon what is owed. While
+  -- set: no offers, no placements, no new experiments run. Deliveries,
+  -- refunds and the public record carry on.
+  economic_pause_at     TEXT,
+  economic_pause_reason TEXT,
+  economic_pause_by     TEXT,
+  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE "push_log" (
   id TEXT PRIMARY KEY,
   founder_id TEXT NOT NULL REFERENCES founders(id),
@@ -4943,6 +5058,7 @@ CREATE INDEX idx_chat_messages_session ON chat_messages(session_id, created_at);
 CREATE INDEX idx_chat_sessions_founder ON chat_sessions(founder_id);
 CREATE INDEX idx_chat_sessions_product ON chat_sessions(product_id, status);
 CREATE INDEX idx_checkpoints_product ON forecast_checkpoints(product_id, metric_name, checkpoint_date);
+CREATE INDEX idx_cloudflare_mutations_resource ON cloudflare_mutations(founder_id, resource, recorded_at);
 CREATE INDEX idx_cohort_members ON cohort_memberships(cohort_group_id);
 CREATE INDEX idx_cohort_patterns_key ON cohort_patterns(cohort_key, pattern_type);
 CREATE INDEX idx_cohorts_channel ON cohorts(acquisition_channel);
@@ -5234,6 +5350,9 @@ CREATE INDEX idx_proposed_acts_spendable
 CREATE INDEX idx_psych_founder ON founder_psychology_insights(founder_id);
 CREATE INDEX idx_psych_product ON founder_psychology_insights(product_id);
 CREATE INDEX idx_psych_status ON founder_psychology_insights(status);
+CREATE INDEX idx_public_contacts_email ON public_contacts(founder_id, email, contacted_at);
+CREATE INDEX idx_public_publication_experiment ON public_publications(experiment_id, superseded_at);
+CREATE UNIQUE INDEX idx_public_publication_live ON public_publications(founder_id, path) WHERE superseded_at IS NULL;
 CREATE INDEX idx_push_log_founder ON push_log(founder_id, sent_at DESC);
 CREATE INDEX idx_push_log_type ON push_log(notification_type, sent_at DESC);
 CREATE UNIQUE INDEX idx_push_subscriptions_apns
@@ -5752,6 +5871,29 @@ BEGIN SELECT RAISE(ABORT,'change_production_isolation:constitutional'); END;
 CREATE TRIGGER change_production_isolation_constitutional_update
 BEFORE UPDATE ON change_production_isolation
 BEGIN SELECT RAISE(ABORT,'change_production_isolation:constitutional'); END;
+CREATE TRIGGER cloudflare_mutation_guard
+BEFORE INSERT ON cloudflare_mutations
+BEGIN
+  SELECT RAISE(ABORT,'cloudflare_mutation:incomplete')
+    WHERE trim(NEW.tool) = '' OR trim(NEW.resource) = '' OR trim(NEW.purpose) = '' OR trim(NEW.authority) = '';
+END;
+CREATE TRIGGER cloudflare_mutation_is_a_record
+BEFORE UPDATE ON cloudflare_mutations
+BEGIN
+  SELECT RAISE(ABORT,'cloudflare_mutation:only_verification_may_follow')
+    WHERE NEW.founder_id IS NOT OLD.founder_id OR NEW.product_id IS NOT OLD.product_id OR NEW.tool IS NOT OLD.tool
+       OR NEW.resource IS NOT OLD.resource OR NEW.purpose IS NOT OLD.purpose OR NEW.authority IS NOT OLD.authority
+       OR NEW.previous_json IS NOT OLD.previous_json OR NEW.requested_json IS NOT OLD.requested_json
+       OR NEW.response_json IS NOT OLD.response_json OR NEW.outcome IS NOT OLD.outcome
+       OR NEW.rollback_json IS NOT OLD.rollback_json OR NEW.invocation_id IS NOT OLD.invocation_id
+       OR NEW.recorded_at IS NOT OLD.recorded_at;
+END;
+CREATE TRIGGER cloudflare_mutation_never_deleted
+BEFORE DELETE ON cloudflare_mutations
+BEGIN
+  SELECT RAISE(ABORT,'cloudflare_mutation:never_deleted') WHERE NOT EXISTS (
+    SELECT 1 FROM products p WHERE p.id = OLD.product_id AND p.erasure_scheduled_at IS NOT NULL);
+END;
 CREATE TRIGGER company_loop_health_error_name_guard
 BEFORE INSERT ON company_loop_health
 BEGIN
@@ -6257,7 +6399,7 @@ BEGIN
       AND p.standing = 'experimental' AND p.deleted_at IS NULL);
   SELECT RAISE(ABORT,'experiment_action:experiment_not_live') WHERE NOT EXISTS (
     SELECT 1 FROM venture_experiments e WHERE e.id = NEW.experiment_id AND e.decision = 'approved'
-      AND e.ran_at IS NULL AND e.validity = 'valid');
+      AND (e.ran_at IS NULL OR NEW.experiment_act = 'delivery') AND e.validity = 'valid');
   SELECT RAISE(ABORT,'experiment_action:not_authorised') WHERE NOT EXISTS (
     SELECT 1 FROM proposed_acts a WHERE a.id = NEW.proposed_act_id AND a.product_id = NEW.product_id
       AND a.experiment_id = NEW.experiment_id AND coalesce(a.measurement_critical, 0) = 1
@@ -6270,6 +6412,22 @@ BEGIN
   SELECT RAISE(ABORT,'experiment_action:nothing_owed') WHERE NEW.experiment_act = 'delivery' AND NOT EXISTS (
     SELECT 1 FROM experiment_fulfilments f WHERE f.id = NEW.fulfilment_id AND f.experiment_id = NEW.experiment_id
       AND f.status = 'owed');
+  -- THE WORKSHOP'S RULES. Offers only: what a buyer is owed survives a pause.
+  SELECT RAISE(ABORT,'experiment_action:workshop_paused') WHERE NEW.experiment_act = 'offer' AND EXISTS (
+    SELECT 1 FROM public_workshop w JOIN venture_experiments e ON e.founder_id = w.founder_id
+     WHERE e.id = NEW.experiment_id AND w.economic_pause_at IS NOT NULL);
+  SELECT RAISE(ABORT,'experiment_action:recipient_suppressed') WHERE NEW.experiment_act = 'offer' AND EXISTS (
+    SELECT 1 FROM public_suppressions s JOIN venture_experiments e ON e.founder_id = s.founder_id
+     WHERE e.id = NEW.experiment_id AND s.email = lower(coalesce(json_extract(NEW.parameters_json, '$.to[0]'), '')));
+  -- The page is required of an owner who HAS a public Workshop: under one, no
+  -- stranger is written to without a record they can read; without one, the
+  -- pre-Workshop path stands unchanged.
+  SELECT RAISE(ABORT,'experiment_action:no_public_page') WHERE NEW.experiment_act = 'offer'
+    AND EXISTS (SELECT 1 FROM public_workshop w JOIN venture_experiments e ON e.founder_id = w.founder_id
+                 WHERE e.id = NEW.experiment_id)
+    AND NOT EXISTS (
+      SELECT 1 FROM public_publications p WHERE p.experiment_id = NEW.experiment_id AND p.kind = 'experiment'
+        AND p.superseded_at IS NULL AND p.verified_status = 'verified');
 END;
 CREATE TRIGGER experiment_exposure_guard
 BEFORE INSERT ON experiment_exposures
@@ -7698,6 +7856,132 @@ WHEN NEW.undertaking_id IS NOT NULL AND (
   (SELECT product_id FROM undertakings WHERE id = NEW.undertaking_id) IS NOT NEW.product_id
   OR (SELECT closed_at FROM undertakings WHERE id = NEW.undertaking_id) IS NOT NULL)
 BEGIN SELECT RAISE(ABORT,'proposed_acts:undertaking_must_be_same_company_and_open'); END;
+CREATE TRIGGER public_contact_append_only_delete
+BEFORE DELETE ON public_contacts
+BEGIN
+  SELECT RAISE(ABORT,'public_contact:append_only') WHERE NOT EXISTS (
+    SELECT 1 FROM products p WHERE p.owner_id = OLD.founder_id AND p.erasure_scheduled_at IS NOT NULL);
+END;
+CREATE TRIGGER public_contact_append_only_update
+BEFORE UPDATE ON public_contacts
+BEGIN SELECT RAISE(ABORT,'public_contact:append_only'); END;
+CREATE TRIGGER public_experiment_guard
+BEFORE INSERT ON public_experiments
+BEGIN
+  SELECT RAISE(ABORT,'public_experiment:experiment_invalid') WHERE NOT EXISTS (
+    SELECT 1 FROM venture_experiments e WHERE e.id = NEW.experiment_id AND e.founder_id = NEW.founder_id);
+  SELECT RAISE(ABORT,'public_experiment:slug_invalid')
+    WHERE NEW.slug GLOB '*[^a-z0-9-]*' OR NEW.slug LIKE '-%' OR NEW.slug LIKE '%-' OR length(NEW.slug) < 3 OR length(NEW.slug) > 60;
+  SELECT RAISE(ABORT,'public_experiment:number_invalid') WHERE NEW.number < 1;
+  SELECT RAISE(ABORT,'public_experiment:copy_incomplete')
+    WHERE trim(NEW.public_title) = '' OR trim(NEW.public_summary) = '' OR trim(NEW.public_who) = ''
+       OR trim(NEW.public_what) = '' OR trim(NEW.public_limits) = '' OR trim(NEW.public_sources) = ''
+       OR trim(NEW.public_selection) = '' OR trim(NEW.public_note) = '';
+  SELECT RAISE(ABORT,'public_experiment:cannot_arrive_concluded') WHERE NEW.public_outcome IS NOT NULL OR NEW.graduated_to_url IS NOT NULL;
+  SELECT RAISE(ABORT,'public_experiment:supersedes_unknown') WHERE NEW.supersedes_experiment_id IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM venture_experiments e WHERE e.id = NEW.supersedes_experiment_id AND e.founder_id = NEW.founder_id);
+END;
+CREATE TRIGGER public_experiment_identity_is_durable
+BEFORE UPDATE ON public_experiments
+BEGIN
+  SELECT RAISE(ABORT,'public_experiment:identity_is_durable')
+    WHERE NEW.experiment_id IS NOT OLD.experiment_id OR NEW.founder_id IS NOT OLD.founder_id
+       OR NEW.number IS NOT OLD.number OR NEW.slug IS NOT OLD.slug
+       OR NEW.supersedes_experiment_id IS NOT OLD.supersedes_experiment_id;
+  -- A public outcome is written about a test that has ended: settled, stopped
+  -- or declined. Writing one earlier would be a prediction dressed as a result.
+  SELECT RAISE(ABORT,'public_experiment:outcome_needs_an_ended_test')
+    WHERE NEW.public_outcome IS NOT NULL AND NEW.public_outcome IS NOT OLD.public_outcome AND NOT EXISTS (
+      SELECT 1 FROM venture_experiments e WHERE e.id = NEW.experiment_id
+        AND (e.ran_at IS NOT NULL OR e.decision = 'declined' OR e.validity = 'invalid'
+             OR EXISTS (SELECT 1 FROM experiment_exposures x WHERE x.experiment_id = e.id AND x.withdrawn_at IS NOT NULL)));
+END;
+CREATE TRIGGER public_publication_guard
+BEFORE INSERT ON public_publications
+BEGIN
+  SELECT RAISE(ABORT,'public_publication:path_invalid')
+    WHERE NEW.path NOT LIKE '/%' OR NEW.path LIKE '%..%' OR NEW.path LIKE '%?%' OR NEW.path LIKE '%#%'
+       OR NEW.path GLOB '*[^a-z0-9/-]*';
+  SELECT RAISE(ABORT,'public_publication:incomplete')
+    WHERE trim(NEW.digest) = '' OR NEW.bytes <= 0 OR trim(NEW.published_by) = '';
+  SELECT RAISE(ABORT,'public_publication:cannot_arrive_verified')
+    WHERE NEW.verified_at IS NOT NULL OR NEW.verified_status IS NOT NULL;
+  SELECT RAISE(ABORT,'public_publication:experiment_needs_a_public_identity')
+    WHERE NEW.kind = 'experiment' AND NOT EXISTS (
+      SELECT 1 FROM public_experiments w WHERE w.experiment_id = NEW.experiment_id AND w.founder_id = NEW.founder_id
+        AND NEW.path = '/experiments/' || w.slug);
+  SELECT RAISE(ABORT,'public_publication:page_carries_no_experiment')
+    WHERE NEW.kind = 'page' AND NEW.experiment_id IS NOT NULL;
+  -- AN EXPERIMENT IS PUBLISHED ONLY WHEN THE OWNER HAS DECIDED IT. Before his
+  -- decision nothing exists to put the Workshop's name behind. A declined test
+  -- that was never published stays unpublished; one that was published stays
+  -- (its record is the point), and its page says what happened.
+  SELECT RAISE(ABORT,'public_publication:experiment_not_approved')
+    WHERE NEW.kind = 'experiment' AND NOT EXISTS (
+      SELECT 1 FROM venture_experiments e WHERE e.id = NEW.experiment_id AND e.decision = 'approved');
+  SELECT RAISE(ABORT,'public_publication:version_must_follow')
+    WHERE NEW.version <> 1 + coalesce((SELECT max(version) FROM public_publications p
+                                        WHERE p.founder_id = NEW.founder_id AND p.path = NEW.path), 0);
+END;
+CREATE TRIGGER public_publication_never_deleted
+BEFORE DELETE ON public_publications
+BEGIN
+  SELECT RAISE(ABORT,'public_publication:never_deleted') WHERE NOT EXISTS (
+    SELECT 1 FROM products p WHERE p.owner_id = OLD.founder_id AND p.erasure_scheduled_at IS NOT NULL);
+END;
+CREATE TRIGGER public_publication_record_is_durable
+BEFORE UPDATE ON public_publications
+BEGIN
+  SELECT RAISE(ABORT,'public_publication:immutable')
+    WHERE NEW.founder_id IS NOT OLD.founder_id OR NEW.path IS NOT OLD.path OR NEW.kind IS NOT OLD.kind
+       OR NEW.experiment_id IS NOT OLD.experiment_id OR NEW.version IS NOT OLD.version
+       OR NEW.digest IS NOT OLD.digest OR NEW.bytes IS NOT OLD.bytes OR NEW.published_at IS NOT OLD.published_at
+       OR NEW.published_by IS NOT OLD.published_by;
+  SELECT RAISE(ABORT,'public_publication:verification_needs_time_and_status')
+    WHERE (NEW.verified_at IS NULL) <> (NEW.verified_status IS NULL);
+END;
+CREATE TRIGGER public_suppression_append_only_delete
+BEFORE DELETE ON public_suppressions
+BEGIN
+  SELECT RAISE(ABORT,'public_suppression:append_only') WHERE NOT EXISTS (
+    SELECT 1 FROM products p WHERE p.owner_id = OLD.founder_id AND p.erasure_scheduled_at IS NOT NULL);
+END;
+CREATE TRIGGER public_suppression_append_only_update
+BEFORE UPDATE ON public_suppressions
+BEGIN SELECT RAISE(ABORT,'public_suppression:append_only'); END;
+CREATE TRIGGER public_suppression_guard
+BEFORE INSERT ON public_suppressions
+BEGIN
+  SELECT RAISE(ABORT,'public_suppression:email_invalid')
+    WHERE NEW.email NOT LIKE '%_@_%.__%' OR NEW.email <> lower(trim(NEW.email));
+END;
+CREATE TRIGGER public_workshop_guard
+BEFORE INSERT ON public_workshop
+BEGIN
+  SELECT RAISE(ABORT,'public_workshop:incomplete')
+    WHERE trim(NEW.public_name) = '' OR trim(NEW.operator_name) = '' OR trim(NEW.statement) = ''
+       OR trim(NEW.contact_email) = '' OR trim(NEW.zone_name) = '';
+  SELECT RAISE(ABORT,'public_workshop:origin_must_be_https_on_its_zone')
+    WHERE NEW.origin <> 'https://' || NEW.zone_name;
+  SELECT RAISE(ABORT,'public_workshop:contact_must_be_on_its_zone')
+    WHERE NEW.contact_email NOT LIKE '%@' || NEW.zone_name;
+  SELECT RAISE(ABORT,'public_workshop:acts_as_an_earned_real_company') WHERE NOT EXISTS (
+    SELECT 1 FROM products p WHERE p.id = NEW.product_id AND p.owner_id = NEW.founder_id
+      AND p.standing = 'earned' AND p.reality = 'real' AND p.deleted_at IS NULL);
+  SELECT RAISE(ABORT,'public_workshop:cannot_arrive_paused') WHERE NEW.economic_pause_at IS NOT NULL;
+END;
+CREATE TRIGGER public_workshop_pause_guard
+BEFORE UPDATE ON public_workshop
+BEGIN
+  SELECT RAISE(ABORT,'public_workshop:identity_is_durable')
+    WHERE NEW.founder_id IS NOT OLD.founder_id OR NEW.zone_name IS NOT OLD.zone_name OR NEW.origin IS NOT OLD.origin;
+  SELECT RAISE(ABORT,'public_workshop:pause_needs_reason_and_witness')
+    WHERE NEW.economic_pause_at IS NOT NULL
+      AND (trim(coalesce(NEW.economic_pause_reason,'')) = '' OR trim(coalesce(NEW.economic_pause_by,'')) = '');
+  SELECT RAISE(ABORT,'public_workshop:pause_is_the_owners')
+    WHERE NEW.economic_pause_at IS NOT OLD.economic_pause_at
+      AND NEW.economic_pause_at IS NOT NULL AND NEW.economic_pause_by <> 'founder:' || NEW.founder_id;
+END;
 CREATE TRIGGER reality_only_questions_constitutional_delete
 BEFORE DELETE ON reality_only_questions
 BEGIN SELECT RAISE(ABORT,'reality_only_question:constitutional'); END;

@@ -72,3 +72,27 @@ The cockpit's questions map onto the owner's existing places rather than a secon
 **No runbook-only owner actions.** Every routine owner decision a live test needs has a route under `/foundry`; the CLI (`experiment:*`) is an operator and recovery ControlPath, not the founder product. The buyer's refund is the buyer's own act through a signed link in the delivery.
 
 **Mobile is a proof target.** `scripts/measure-mobile.mts` renders the experiment page and its review list in the state that matters most (everything in place, Allow on screen) at the five iPhone widths, at 100% and 200% text, and fails on a pixel of horizontal overflow or a line under the fixed bars.
+
+## The Workshop in the owner's surfaces (2026-09-09)
+
+`/foundry/public-workshop` is one place answering the questions an owner asks
+about something operating publicly in his name: is the site up, is the provider
+connected, does mail go out as the Workshop and come back to him, which
+experiments are public and in what state, who has said no, what is owed to
+customers, what was changed at the provider and how to reverse it. Each reading
+comes from the world rather than from a stored belief, and the last reading is
+kept so a provider that cannot be reached right now does not blank the page.
+
+Two things are his alone and are asked for as prerequisites rather than
+invented: the postal address commercial mail must carry (never his home address
+by default), and anything published about him personally. A missing prerequisite
+appears in the same "waiting on you" queue as everything else, with one link.
+
+On an experiment's page, a "Public page" section shows its permanent address,
+whether the world was seen to carry it, when, a preview of exactly what would be
+published, and — while the test could still write to anyone — every reason the
+publication gate would refuse to let it.
+
+The pause is stated in the owner's terms: it stops new offers, placements and
+tests, and it does not touch deliveries, refunds, the public record or the
+contact path. The page says which of those is true while it is on.

@@ -99,6 +99,13 @@ const FOUNDRY_CHOSEN: Record<string, string> = {
   // sent as a form field.
   'src/services/senses/providers/stripe.ts': 'three compiled-in Stripe endpoints; no founder value reaches the host or the path',
   'src/services/integration/stripe-gateway.ts': 'STRIPE_API constant; the object id in the path is checked by pathSegment',
+  // THE PUBLIC WORKSHOP'S INFRASTRUCTURE. CF_API is compiled in; the only
+  // values that reach a path are the account id, a zone id, a record id, a
+  // namespace id and the program's name, each checked by pathSegment, and a
+  // store key, which is percent-encoded. Nothing a founder supplies chooses
+  // the host, and the zone every mutating handler acts on is resolved from
+  // the Workshop's own name rather than from the request.
+  'src/services/integration/cloudflare-gateway.ts': 'CF_API constant; every id in a path is checked by pathSegment and the zone is the Workshop\'s own',
   'src/services/notifications/push.ts': 'the APNs host is chosen by NODE_ENV; the device token in the path is checked by pathSegment',
   // Newly visible for the same reason the MCP client was: `fullUrl` and
   // `baseUrl` contain the keyword but not as a whole word. Every caller passes

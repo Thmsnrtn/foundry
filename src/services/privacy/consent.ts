@@ -829,6 +829,33 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
       + 'separate money facts they decided on',
     onAccountErasure: { op: 'delete' },
   },
+  // THE PUBLIC WORKSHOP IS THE PERSON'S, and so is everything under it. There
+  // is no company here either: the Workshop is the face one person puts on
+  // their own experiments, and the addresses under it are people that person
+  // wrote to or heard "stop" from.
+  //
+  // Deleted rather than kept. The tempting argument for keeping a suppression
+  // list is that it prevents future contact — but the thing that would do the
+  // contacting is the Workshop, and it is going with the person. Keeping a
+  // stranger's address to protect them from a sender that no longer exists
+  // would be retaining somebody's data for a reason that has stopped being
+  // true, which is the shape of every bad retention policy ever written.
+  public_experiments: {
+    reason: 'the public identity and words of one person\'s experiments',
+    onAccountErasure: { op: 'delete' },
+  },
+  public_publications: {
+    reason: 'what one person\'s workshop put at which public address, and whether the world was seen to carry it',
+    onAccountErasure: { op: 'delete' },
+  },
+  public_suppressions: {
+    reason: 'people who told one person\'s workshop not to write to them; the workshop goes with them',
+    onAccountErasure: { op: 'delete' },
+  },
+  public_contacts: {
+    reason: 'whom one person\'s workshop wrote to, for which experiment and when',
+    onAccountErasure: { op: 'delete' },
+  },
   workshop_spend_ceiling: {
     reason: 'the limit one person set on what may be spent running work outside this '
       + 'institution',
@@ -1450,6 +1477,17 @@ const PERSON_ACROSS_COMPANIES: Record<string, PersonInOthersCompany> = {
   onboarding_sessions: { op: 'delete', columns: ['founder_id'], reason: 'their own onboarding progress' },
   onboarding_tour: { op: 'delete', columns: ['founder_id'], reason: 'their own onboarding progress' },
   saved_insights: { op: 'delete', columns: ['founder_id'], reason: 'insights this person bookmarked' },
+  // THE PUBLIC WORKSHOP AND ITS RECEIPTS. Both carry a product id and a founder
+  // id, so this map has to name them — and both are wholly the person's: the
+  // Workshop's row requires its founder to OWN the company it acts as, and a
+  // receipt records a change made to that person's own infrastructure. A member
+  // of somebody else's company can hold no row in either, so the deletes here
+  // match nothing for a person inside a company they do not own, and the
+  // person's own rows have already gone with their products by the time this
+  // runs. Named anyway, because a table nobody decided about is a table the
+  // erasure steps around in silence.
+  public_workshop: { op: 'delete', columns: ['founder_id'], reason: 'the public face one person put on their own experiments' },
+  cloudflare_mutations: { op: 'delete', columns: ['founder_id'], reason: 'what was changed on one person\'s own public infrastructure, and how to put it back' },
   operator_attention: { op: 'delete', columns: ['founder_id'], reason: 'what was competing for their attention' },
   rejection_streaks: { op: 'delete', columns: ['founder_id'], reason: 'a behavioural counter about them' },
   cofounder_dna_responses: { op: 'delete', columns: ['founder_id'], reason: 'their own questionnaire answers' },

@@ -134,3 +134,33 @@ problem/evidence → requirement → plan → implementation → tests → chall
 It must serve arbitrary software companies, AcreOS, and Foundry itself through
 the same semantics. Foundry may operate and improve Foundry, but constitutional
 authority and consequential evaluation remain owner-controlled and independent.
+
+## The public membrane (2026-09-09)
+
+The Workshop is the smallest architecture that satisfies independent public
+availability, strict public/private isolation, near-zero cost, simple automation
+and verification, easy rollback and durable URLs: **one Cloudflare Worker
+serving finished pages out of one KV store**, with the Workshop's own hostnames
+attached to it.
+
+- **Isolation is structural, not configured.** The public program contains no
+  credential, no origin and no route to the private institution: a private path
+  requested through the public hostname has nothing to reach and fails closed to
+  a 404. Public and private share a repository and nothing else.
+- **Pages are finished before they are stored.** Rendering happens privately,
+  from rows, through the projection boundary; the edge does no templating and
+  holds no state beyond the pages and the opt-outs people post.
+- **The opt-out is the one thing the public plane writes.** It lands in the
+  store, is copied onto the Workshop's do-not-contact list, and is then swept
+  from the edge so nobody's address lingers where it need not.
+- **Publication is idempotent by digest**, so the hourly pass costs nothing when
+  nothing has changed, and a version history exists per address.
+- No R2 and no Pages project: neither earns its place at this size.
+
+`src/services/public-workshop/` holds the whole membrane — `settings` (the
+identity), `identity` (an experiment's number, slug and public words),
+`projection` (the allowlist boundary), `site` (pure rendering), `worker-source`
+(the program, as text, so what runs can be compared with what was reviewed),
+`publication` (the door, the verification and the quality gate), `suppression`
+(one no, Workshop-wide), `infrastructure` (standing it up, sending, health) and
+`rehearsal` (the machinery proving itself on a synthetic experiment).

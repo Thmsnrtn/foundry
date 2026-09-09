@@ -185,16 +185,31 @@ export function checkDeliverableQuality(m: Material, now: Date, maxAgeDays = 7):
   return { ok: failures.length === 0, failures };
 }
 
-export function checkOfferQuality(m: Material): { ok: boolean; failures: string[] } {
+export function checkOfferQuality(m: Material, pageUrl: string | null = null): { ok: boolean; failures: string[] } {
   const failures: string[] = [];
   const body = m.body;
   if (!m.paymentLinkUrl || !/^https:\/\/buy\.stripe\.com\//.test(m.paymentLinkUrl)) failures.push('no Stripe payment link');
-  if (m.paymentLinkUrl && !body.includes(m.paymentLinkUrl)) failures.push('the payment link is not in the message');
+  // THE MESSAGE POINTS AT THE WORKSHOP'S PAGE, where the offer, its limits and
+  // the ways to reach, refund and opt out all are; a raw payment link from an
+  // unknown sender is exactly the shape the doctrine refuses. Without a
+  // Workshop the link itself is the one place to pay and must be there.
+  if (pageUrl) { if (!body.includes(pageUrl)) failures.push('the experiment page is not in the message'); }
+  else if (m.paymentLinkUrl && !body.includes(m.paymentLinkUrl)) failures.push('the payment link is not in the message');
   if (/\[[A-Z ]+\]|\{[a-zA-Z ]+\}/.test(body.replace('{Business name}', ''))) failures.push('placeholder text remains');
   if (!/no reply needed|reply .{0,20}(no|stop)|unsubscribe|won't hear from me again/i.test(body)) failures.push('no plain opt-out line');
   if (!/one[- ]time/i.test(body) || !/no subscription/i.test(body)) failures.push('one-time and no-subscription are not both stated');
   for (const phrase of BANNED_CLAIMS) if (body.toLowerCase().includes(phrase)) failures.push(`banned claim: "${phrase}"`);
   return { ok: failures.length === 0, failures };
+}
+
+/** The template, completed: the page it points at and the link it rests on. */
+export async function fillOffer(experimentId: string, template: string, linkUrl: string): Promise<{ body: string; pageUrl: string | null }> {
+  const { pageUrlFor } = await import('../public-workshop/publication.js');
+  const pageUrl = await pageUrlFor(experimentId);
+  const body = template
+    .replace(/\[PAYMENT LINK\]/g, linkUrl)
+    .replace(/\[(APEX MICRO )?EXPERIMENT PAGE\]/g, pageUrl ?? linkUrl);
+  return { body, pageUrl };
 }
 
 export function markdownToHtml(md: string): string {
@@ -287,6 +302,9 @@ export async function allowExperiment(input: { founderId: string; experimentId: 
   if (!ready.ok) throw new HandRefused('not_ready', ready.missing.join('; '));
   const plan = await offerShapePlanOf(input.experimentId);
   if (!plan) throw new HandRefused('no_offer_shape');
+  const { publicWorkshopOf } = await import('../public-workshop/settings.js');
+  const paused = (await publicWorkshopOf(input.founderId))?.economicPause;
+  if (paused) throw new HandRefused('workshop_paused', paused.reason);
   const by = `founder:${input.founderId}`;
   await decideExperiment({ experimentId: input.experimentId, decision: 'approved', by });
   const after = await experimentRow(input.experimentId);
@@ -392,6 +410,8 @@ export async function stopExperiment(input: { founderId: string; experimentId: s
     await revokeApproval(String(a.id), reason);
   }
   if (e.productId) await retireExperimentalAsset({ productId: e.productId, because: `you stopped it: ${reason}` });
+  // The public record says what happened, and stays.
+  await republishRecord(input.experimentId).catch(() => undefined);
   return { takenDown: down.done, because: down.reason };
 }
 
@@ -415,6 +435,13 @@ export async function sendingReadiness(founderId: string): Promise<SendingReadin
   if (!identityProductId) return { status: 'unavailable', fromLine: null, detail: 'Tests send as your own company, and Foundry cannot tell which one that is: you have none, or more than one. Establish exactly one before a test can write to anyone.', identityProductId: null };
   const identity = await getSendingIdentity(identityProductId);
   if (!identity) return { status: 'not_connected', fromLine: null, detail: 'Messages for tests go out as you, from an address on your own domain, through your own mail provider account. Nothing goes out from a Foundry address.', identityProductId };
+  // UNDER A WORKSHOP, THE SENDER IS THE WORKSHOP: its one stable address on
+  // its own domain, named for the person and the workshop, never rotated.
+  const { publicWorkshopOf } = await import('../public-workshop/settings.js');
+  const w = await publicWorkshopOf(founderId);
+  if (w && (!identity.fromEmail.endsWith(`@${w.zoneName}`) || !(identity.fromName ?? '').includes(w.publicName))) {
+    return { status: 'not_connected', fromLine: null, detail: `Tests write as ${w.operatorName} — ${w.publicName} <${w.contactEmail}>; the connected address is ${identity.fromEmail}. Connect the Workshop's sending from the Workshop page.`, identityProductId };
+  }
   const fromLine = identity.fromName ? `${identity.fromName} <${identity.fromEmail}>` : identity.fromEmail;
   return { status: 'ready', fromLine, detail: `Ready. Messages go out as ${fromLine}${identity.lastAcceptedAt ? '; the provider has accepted mail from it before' : '; not yet used'}.`, identityProductId };
 }
@@ -435,6 +462,14 @@ export async function readiness(experimentId: string): Promise<Readiness> {
   if (!(await materialOf(experimentId, 'deliverable'))) missing.push('nothing to deliver is attached');
   if (!(await materialOf(experimentId, 'offer_template'))) missing.push('the offer text is not written');
   if (!(await offerShapePlanOf(experimentId))) missing.push('the offer has no stated shape');
+  // WHAT THE WORKSHOP NEEDS before a stranger can be written to under its name.
+  const { publicWorkshopOfExperiment } = await import('../public-workshop/settings.js');
+  const w = await publicWorkshopOfExperiment(experimentId);
+  if (w) {
+    if (!(await one('SELECT experiment_id FROM public_experiments WHERE experiment_id = ?', [experimentId]))) missing.push('the experiment has no public page identity');
+    if (!w.postalAddress) missing.push('the Workshop has no postal address for commercial mail');
+    if (w.economicPause) missing.push('new economic activity is paused');
+  }
   return { ok: missing.length === 0, missing, reachable, pending, pendingWebForm: pendingAll.length - pending, struck: rs.filter((r) => r.reviewStatus === 'struck').length, sending };
 }
 
@@ -469,10 +504,31 @@ export async function ensureExposure(experimentId: string): Promise<{ exposureId
   const template = await materialOf(experimentId, 'offer_template');
   if (!template) return { refused: 'no offer template' };
   const offer = await materialOf(experimentId, 'offer');
-  if (!offer || offer.paymentLinkUrl !== link.url) {
-    await recordMaterial({ founderId: e.founderId, experimentId, kind: 'offer', title: plan.offerSubject, body: template.body.replace(/\[PAYMENT LINK\]/g, link.url), paymentLinkUrl: link.url, by: HAND });
+  const filled = await fillOffer(experimentId, template.body, link.url);
+  if (!offer || offer.paymentLinkUrl !== link.url || offer.body !== filled.body) {
+    await recordMaterial({ founderId: e.founderId, experimentId, kind: 'offer', title: plan.offerSubject, body: filled.body, paymentLinkUrl: link.url, by: HAND });
   }
   return { exposureId, url: link.url };
+}
+
+/**
+ * THE OFFER IS PLACED AND THE PAGE IS UP, as one step after Allow. Placing
+ * makes the link; publishing renders the Workshop from the rows (which now
+ * carry the link) and puts every changed page in the world, then reads it
+ * back. Idempotent by digest, so the hourly pass repeats it for nothing.
+ */
+export async function prepareExposure(experimentId: string): Promise<{ exposureId: string; url: string; pageUrl: string | null; published: boolean; failures: string[] } | { refused: string }> {
+  const placed = await ensureExposure(experimentId);
+  if ('refused' in placed) return placed;
+  const e = await experimentRow(experimentId);
+  const { publicWorkshopOfExperiment } = await import('../public-workshop/settings.js');
+  const w = await publicWorkshopOfExperiment(experimentId);
+  if (!w || !e) return { ...placed, pageUrl: null, published: false, failures: ['no public Workshop'] };
+  const { publishSite, pageUrlFor } = await import('../public-workshop/publication.js');
+  const report = await publishSite(w.founderId, HAND);
+  const pageUrl = await pageUrlFor(experimentId);
+  const failures = [...report.failed.map((f) => `${f.path}: ${f.reason}`), ...report.unverified];
+  return { ...placed, pageUrl, published: failures.length === 0, failures };
 }
 
 /** A link the owner made by hand: held to the same contract, then placed. */
@@ -493,7 +549,7 @@ export async function attachPaymentLinkByUrl(input: { experimentId: string; url:
   }
   const template = await materialOf(input.experimentId, 'offer_template');
   if (!template) return { refused: 'no offer template' };
-  await recordMaterial({ founderId: e.founderId, experimentId: input.experimentId, kind: 'offer', title: plan.offerSubject, body: template.body.replace(/\[PAYMENT LINK\]/g, link.url), paymentLinkUrl: link.url, by: `founder:${e.founderId}` });
+  await recordMaterial({ founderId: e.founderId, experimentId: input.experimentId, kind: 'offer', title: plan.offerSubject, body: (await fillOffer(input.experimentId, template.body, link.url)).body, paymentLinkUrl: link.url, by: `founder:${e.founderId}` });
   return { ok: true };
 }
 
@@ -526,7 +582,7 @@ async function replyAddressFor(productId: string, founderId: string): Promise<st
   return String(f?.email ?? '');
 }
 
-export async function planOffer(input: { experimentId: string; recipientId: string }): Promise<ActionPlan> {
+export async function planOffer(input: { experimentId: string; recipientId: string; now?: Date }): Promise<ActionPlan> {
   const e = await experimentRow(input.experimentId);
   if (!e?.productId) throw new HandRefused('no_asset');
   const act = await campaignActOf(input.experimentId);
@@ -538,10 +594,26 @@ export async function planOffer(input: { experimentId: string; recipientId: stri
   if (existing) return existing;
   const offer = await materialOf(input.experimentId, 'offer');
   if (!offer) throw new HandRefused('offer_missing');
-  const quality = checkOfferQuality(offer);
+  // THE WORKSHOP'S RULES, before the door's: a no said anywhere, too many
+  // messages to one address across tests, and the gate on the public page.
+  const { isSuppressed, contactFrequencyRefusal } = await import('../public-workshop/suppression.js');
+  const said = await isSuppressed(e.founderId, recipient.email);
+  if (said.suppressed) throw new HandRefused('recipient_suppressed', said.reason);
+  const tooOften = await contactFrequencyRefusal({ founderId: e.founderId, email: recipient.email, experimentId: input.experimentId, now: input.now });
+  if (tooOften) throw new HandRefused('contact_frequency', tooOften);
+  const { publicationGate, pageUrlFor } = await import('../public-workshop/publication.js');
+  const { publicWorkshopOfExperiment } = await import('../public-workshop/settings.js');
+  const w = await publicWorkshopOfExperiment(input.experimentId);
+  if (w) {
+    const gate = await publicationGate(input.experimentId, { now: input.now, verifyLive: false });
+    if (!gate.ok) throw new HandRefused('publication_gate', gate.failures.join('; '));
+  }
+  const quality = checkOfferQuality(offer, w ? await pageUrlFor(input.experimentId) : null);
   if (!quality.ok) throw new HandRefused('offer_quality', quality.failures.join('; '));
   const replyTo = await replyAddressFor(e.productId, e.founderId);
-  const body = offer.body.replace(/\{Business name\}/g, recipient.counterpartyRef.split(',')[0].trim());
+  // Every message carries who is writing, from where, and how to stop it.
+  const footer = w ? `\n\n—\n${w.publicName} is an independent digital workshop operated by ${w.operatorName}.${w.postalAddress ? ` ${w.postalAddress}.` : ''}\nTo not hear from ${w.publicName} again: ${w.origin}/email` : '';
+  const body = offer.body.replace(/\{Business name\}/g, recipient.counterpartyRef.split(',')[0].trim()) + footer;
   const id = nanoid();
   await query(
     `INSERT INTO outbound_actions
@@ -551,6 +623,10 @@ export async function planOffer(input: { experimentId: string; recipientId: stri
     [id, e.productId, HAND, JSON.stringify({ to: [recipient.email], subject: offer.title, html: markdownToHtml(body), text: body, reply_to: replyTo }),
       `Offer to ${recipient.counterpartyRef}`, `One message under the act you approved for ${e.whatWeDo.slice(0, 80)}`, new Date(Date.now() + 7 * 86_400_000).toISOString(),
       effectId, input.experimentId, recipient.id, act.id]);
+  if (w) {
+    const { recordContact } = await import('../public-workshop/suppression.js');
+    await recordContact({ founderId: e.founderId, email: recipient.email, experimentId: input.experimentId, actionId: id });
+  }
   return (await existingByEffect(e.productId, effectId))!;
 }
 
@@ -653,6 +729,7 @@ export async function reconcileAction(actionId: string, status?: DeliveryStatus)
     return { outcome: 'pending', status: st };
   }
   const experimentId = String(r.experiment_id);
+  const e = await experimentRow(experimentId);
   const x = await exposureOf(experimentId);
   const delivered = st === 'delivered';
   if (x) {
@@ -671,6 +748,15 @@ export async function reconcileAction(actionId: string, status?: DeliveryStatus)
   }
   await query(`UPDATE outbound_actions SET outcome_status = ?, outcome_evidence_ref = ?, reconcile_after = NULL WHERE id = ?`,
     [delivered ? 'verified_success' : 'verified_failure', `resend:${receipt.message_id}:${st}`, actionId]);
+  // AN ADDRESS THAT BOUNCED OR COMPLAINED IS NOT WRITTEN TO AGAIN by any test
+  // of this Workshop: the provider's word goes straight onto the shared list.
+  if (!delivered && e) {
+    const to = (JSON.parse(String(r.parameters_json)) as { to?: string[] }).to?.[0];
+    if (to) {
+      const { suppress } = await import('../public-workshop/suppression.js');
+      await suppress({ founderId: e.founderId, email: to, reason: st === 'complained' ? 'complained' : 'bounced', source: 'provider', experimentId, note: `resend:${receipt.message_id}:${st}` });
+    }
+  }
   if (String(r.experiment_act) === 'delivery' && r.fulfilment_id != null) {
     await query(`UPDATE experiment_fulfilments SET status = ?, updated_at = datetime('now') WHERE id = ? AND status IN ('owed','sent')`, [delivered ? 'delivered' : 'failed', String(r.fulfilment_id)]);
   }
@@ -763,22 +849,39 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
     const e = await experimentRow(experimentId);
     if (!e?.productId) { report.exceptions.push('no asset'); continue; }
 
-    // The place the offer lives, before anyone is written to.
-    const placed = await ensureExposure(experimentId).catch((err: unknown) => ({ refused: err instanceof Error ? err.message : String(err) }));
-    if ('refused' in placed) { report.exceptions.push(`offer not placed: ${placed.refused}`); continue; }
+    // NEW ECONOMIC ACTIVITY STOPS AT THE OWNER'S PAUSE. Three things do not:
+    // what a buyer is owed, the refund of what failed, and the world's verdict.
+    // Concluding a test is reading what already happened, not starting
+    // something new — and a test left running because nobody was watching is
+    // the opposite of a pause. So a pause, an unplaceable offer and an
+    // unpublished page each stop the WRITING and nothing else below it.
+    const { publicWorkshopOf } = await import('../public-workshop/settings.js');
+    const w = await publicWorkshopOf(e.founderId);
+    let mayWrite = true;
+    if (w?.economicPause) {
+      report.exceptions.push(`new economic activity is paused: ${w.economicPause.reason}`);
+      mayWrite = false;
+    } else {
+      // The place the offer lives and the page that explains it, before anyone is written to.
+      const placed = await prepareExposure(experimentId).catch((err: unknown) => ({ refused: err instanceof Error ? err.message : String(err) }));
+      if ('refused' in placed) { report.exceptions.push(`offer not placed: ${placed.refused}`); mayWrite = false; }
+      else if (w && !placed.published) { report.exceptions.push(`page not published: ${placed.failures.join('; ')}`); mayWrite = false; }
+    }
 
     // Offers, paced, one per approved business, never twice.
-    const done = new Set((await rows(`SELECT recipient_id FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'offer' AND recipient_id IS NOT NULL`, [experimentId])).map((r) => String(r.recipient_id)));
-    const targets = (await recipientsOf(experimentId)).filter((r) => r.reviewStatus === 'approved' && r.channel === 'email' && r.email && !done.has(r.id)).slice(0, perTick);
-    for (const recipient of targets) {
-      try {
-        const plan = await planOffer({ experimentId, recipientId: recipient.id });
-        report.offersPlanned += 1;
-        const sent = await executeAction(plan.id);
-        if (sent.dispatched) report.offersSent += 1; else report.exceptions.push(`offer to ${recipient.counterpartyRef}: ${sent.refusedReason}`);
-      } catch (error) {
-        report.exceptions.push(`offer: ${error instanceof Error ? error.message : String(error)}`);
-        if (error instanceof HandRefused && (error.code === 'offer_quality' || error.code === 'offer_missing')) break;
+    if (mayWrite) {
+      const done = new Set((await rows(`SELECT recipient_id FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'offer' AND recipient_id IS NOT NULL`, [experimentId])).map((r) => String(r.recipient_id)));
+      const targets = (await recipientsOf(experimentId)).filter((r) => r.reviewStatus === 'approved' && r.channel === 'email' && r.email && !done.has(r.id)).slice(0, perTick);
+      for (const recipient of targets) {
+        try {
+          const plan = await planOffer({ experimentId, recipientId: recipient.id, now });
+          report.offersPlanned += 1;
+          const sent = await executeAction(plan.id);
+          if (sent.dispatched) report.offersSent += 1; else report.exceptions.push(`offer to ${recipient.counterpartyRef}: ${sent.refusedReason}`);
+        } catch (error) {
+          report.exceptions.push(`offer: ${error instanceof Error ? error.message : String(error)}`);
+          if (error instanceof HandRefused && (error.code === 'offer_quality' || error.code === 'offer_missing' || error.code === 'publication_gate')) break;
+        }
       }
     }
 
@@ -793,6 +896,7 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
       if (x && x.withdrawnAt === null) await withdrawExposure(x.id);
       const down = await takeDownExposure(experimentId).catch((err: unknown) => ({ done: false, reason: err instanceof Error ? err.message : String(err) }));
       if (!down.done && down.reason) report.exceptions.push(`offer not taken down: ${down.reason}`);
+      await republishRecord(experimentId, report);
     }
   }
 
@@ -819,6 +923,18 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
     if (report.deliveriesSent || report.reconciled || report.refundsIssued || report.exceptions.length) reports.push(report);
   }
   return reports;
+}
+
+/** THE PUBLIC RECORD FOLLOWS THE TEST. A settled or stopped test's page says
+ * so and keeps its address; the way to pay comes off it with the offer. */
+async function republishRecord(experimentId: string, report?: HandReport): Promise<void> {
+  const { publicWorkshopOfExperiment } = await import('../public-workshop/settings.js');
+  const w = await publicWorkshopOfExperiment(experimentId);
+  if (!w) return;
+  const { publishSite } = await import('../public-workshop/publication.js');
+  const r = await publishSite(w.founderId, HAND).catch((err: unknown) => ({ failed: [{ path: '*', reason: err instanceof Error ? err.message : String(err) }], unverified: [] as string[] }));
+  for (const f of r.failed) report?.exceptions.push(`public record not updated: ${f.path}: ${f.reason}`);
+  for (const u of r.unverified) report?.exceptions.push(`public record not seen: ${u}`);
 }
 
 /** Deliveries for what is owed, receipts, refunds of what failed or was withdrawn. */

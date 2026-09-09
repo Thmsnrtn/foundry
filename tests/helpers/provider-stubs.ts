@@ -18,6 +18,37 @@ export interface ProviderState {
   buyers: Map<string, string>;
   calls: string[];
   seq: number;
+  /** Cloudflare, shape-faithful: the zone, its records, the store, the program, the hostnames, mail routing. */
+  cf: CloudflareState;
+}
+
+export interface CloudflareState {
+  token: 'active' | 'invalid';
+  zones: Array<{ id: string; name: string; status: string; name_servers: string[] }>;
+  dns: Array<{ id: string; zone_id: string; type: string; name: string; content: string; ttl: number; priority: number | null; proxied: boolean }>;
+  namespaces: Array<{ id: string; title: string }>;
+  kv: Map<string, Map<string, string>>;
+  workers: Map<string, { source: string; bindings: unknown[] }>;
+  domains: Array<{ id: string; hostname: string; service: string; zone_id: string }>;
+  routing: { enabled: boolean; rules: Array<{ id: string; enabled: boolean; matchers: Array<{ type: string; field?: string; value?: string }>; actions: Array<{ type: string; value?: string[] }> }>; destinations: Array<{ email: string; verified: string | null }> };
+  /** When true the public site answers 503 whatever the store holds: a provider that said yes to a page nobody can see. */
+  siteDown: boolean;
+}
+
+export function freshCloudflare(): CloudflareState {
+  return {
+    token: 'active',
+    zones: [{ id: 'zone_apex', name: 'apexmicro.ai', status: 'active', name_servers: ['anton.ns.cloudflare.com', 'peaches.ns.cloudflare.com'] }],
+    // The reality found on the zone: root and www pointing at an anycast address with nothing behind it.
+    dns: [
+      { id: 'rec_a', zone_id: 'zone_apex', type: 'A', name: 'apexmicro.ai', content: '66.241.124.62', ttl: 1, priority: null, proxied: false },
+      { id: 'rec_aaaa', zone_id: 'zone_apex', type: 'AAAA', name: 'apexmicro.ai', content: '2a09:8280:1::d6:872d:0', ttl: 1, priority: null, proxied: false },
+      { id: 'rec_www', zone_id: 'zone_apex', type: 'A', name: 'www.apexmicro.ai', content: '66.241.124.62', ttl: 1, priority: null, proxied: false },
+      { id: 'rec_gsv', zone_id: 'zone_apex', type: 'TXT', name: 'apexmicro.ai', content: 'google-site-verification=abc', ttl: 1, priority: null, proxied: false },
+    ],
+    namespaces: [], kv: new Map(), workers: new Map(), domains: [],
+    routing: { enabled: false, rules: [], destinations: [] }, siteDown: false,
+  };
 }
 
 function form(body: unknown): Record<string, string> {
@@ -32,12 +63,104 @@ function nested(params: Record<string, string>, prefix: string): Record<string, 
 }
 
 export function providerStubs(): { state: ProviderState; fetch: (url: string | URL, init?: RequestInit) => Promise<Response> } {
-  const state: ProviderState = { sends: [], deliveryState: new Map(), refunds: [], domains: [], nextDomainStatus: 'pending', products: [], prices: [], paymentLinks: [], buyers: new Map(), calls: [], seq: 0 };
+  const state: ProviderState = { sends: [], deliveryState: new Map(), refunds: [], domains: [], nextDomainStatus: 'pending', products: [], prices: [], paymentLinks: [], buyers: new Map(), calls: [], seq: 0, cf: freshCloudflare() };
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+  const cfOk = (result: unknown, status = 200) => json({ success: true, result, errors: [] }, status);
+  const cfErr = (code: number, message: string, status = 400) => json({ success: false, result: null, errors: [{ code, message }] }, status);
   const fetchStub = async (url: string | URL, init?: RequestInit): Promise<Response> => {
     const u = String(url); const method = init?.method ?? 'GET';
     const headers = (init?.headers ?? {}) as Record<string, string>;
     state.calls.push(`${method} ${u}`);
+
+    // ── The public Workshop, as the world sees it: the program serving the store ──
+    const site = /^https:\/\/(www\.)?apexmicro\.ai(\/[^?#]*)?$/.exec(u);
+    if (site) {
+      const cf = state.cf;
+      const served = cf.workers.has('apexmicro') && cf.domains.some((d) => d.hostname === 'apexmicro.ai' && d.service === 'apexmicro');
+      if (!served || cf.siteDown) return new Response('Service Unavailable', { status: 503 });
+      if (site[1]) return new Response('', { status: 301, headers: { location: `https://apexmicro.ai${site[2] ?? '/'}` } });
+      const path = (site[2] ?? '/').replace(/\/+$/, '') || '/';
+      const ns = cf.namespaces.find((n) => n.title === 'apexmicro-pages');
+      const store = ns ? cf.kv.get(ns.id) : undefined;
+      if (method === 'POST' && path === '/email/opt-out') {
+        const email = String(new URLSearchParams(String(init?.body ?? '')).get('email') ?? '').trim().toLowerCase();
+        if (!email || !email.includes('@')) return new Response('An email address is needed.', { status: 400 });
+        store?.set(`optout:${++state.seq}`, JSON.stringify({ email, at: new Date().toISOString() }));
+        return new Response(store?.get('page:/email/done') ?? 'Done', { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
+      }
+      if (method !== 'GET' && method !== 'HEAD') return new Response('Method not allowed', { status: 405 });
+      const html = /[^a-z0-9/-]/.test(path) ? undefined : store?.get(`page:${path}`);
+      return html === undefined ? new Response(store?.get('page:/404') ?? 'Not found', { status: 404, headers: { 'content-type': 'text/html; charset=utf-8' } })
+        : new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
+    }
+
+    // ── Cloudflare API ──
+    if (u.startsWith('https://api.cloudflare.com/client/v4/')) {
+      const cf = state.cf;
+      const bearer = String(headers.Authorization ?? '');
+      if (cf.token !== 'active' || !bearer.startsWith('Bearer ')) return cfErr(1000, 'Invalid API Token', 401);
+      const rel = u.slice('https://api.cloudflare.com/client/v4'.length);
+      const [pathOnly, qs] = rel.split('?'); const q = new URLSearchParams(qs ?? '');
+      const ct = String(headers['Content-Type'] ?? headers['content-type'] ?? '');
+      const body = init?.body && typeof init.body === 'string' && ct.includes('json') ? JSON.parse(init.body) as Record<string, unknown> : {};
+      if (pathOnly === '/user/tokens/verify') return cfOk({ id: 'tok', status: 'active' });
+      if (pathOnly === '/zones') return cfOk(cf.zones.filter((z) => !q.get('name') || z.name === q.get('name')));
+      let m = /^\/zones\/([^/]+)\/dns_records(?:\/([^/]+))?$/.exec(pathOnly);
+      if (m) {
+        const zone = cf.zones.find((z) => z.id === m![1]); if (!zone) return cfErr(7003, 'no such zone', 404);
+        if (method === 'GET') return cfOk(cf.dns.filter((r) => r.zone_id === zone.id && (!q.get('type') || r.type === q.get('type')) && (!q.get('name') || r.name === q.get('name'))));
+        if (method === 'POST') { const rec = { id: `rec_${++state.seq}`, zone_id: zone.id, type: String(body.type), name: String(body.name), content: String(body.content), ttl: Number(body.ttl ?? 1), priority: body.priority == null ? null : Number(body.priority), proxied: Boolean(body.proxied) }; cf.dns.push(rec); return cfOk(rec); }
+        const rec = cf.dns.find((r) => r.id === m![2]); if (!rec) return cfErr(81044, 'record not found', 404);
+        if (method === 'PATCH') { Object.assign(rec, { type: String(body.type ?? rec.type), name: String(body.name ?? rec.name), content: String(body.content ?? rec.content), ttl: Number(body.ttl ?? rec.ttl), priority: body.priority == null ? rec.priority : Number(body.priority), proxied: Boolean(body.proxied ?? rec.proxied) }); return cfOk(rec); }
+        if (method === 'DELETE') { cf.dns.splice(cf.dns.indexOf(rec), 1); return cfOk({ id: rec.id }); }
+      }
+      if (pathOnly === '/accounts/acct_test/storage/kv/namespaces') {
+        if (method === 'GET') return cfOk(cf.namespaces);
+        const ns = { id: `ns_${++state.seq}`, title: String(body.title) }; cf.namespaces.push(ns); cf.kv.set(ns.id, new Map()); return cfOk(ns);
+      }
+      m = /^\/accounts\/acct_test\/storage\/kv\/namespaces\/([^/]+)\/(values|keys)(?:\/(.+))?$/.exec(pathOnly);
+      if (m) {
+        const store = cf.kv.get(m[1]); if (!store) return cfErr(10013, 'namespace not found', 404);
+        if (m[2] === 'keys') return cfOk([...store.keys()].filter((k) => k.startsWith(q.get('prefix') ?? '')).map((name) => ({ name })), 200);
+        const key = decodeURIComponent(m[3] ?? '');
+        if (method === 'GET') { const v = store.get(key); return v === undefined ? new Response('', { status: 404 }) : new Response(v, { status: 200 }); }
+        if (method === 'PUT') { store.set(key, String(init?.body ?? '')); return cfOk(null); }
+        if (method === 'DELETE') { const had = store.delete(key); return had ? cfOk(null) : cfErr(10009, 'key not found', 404); }
+      }
+      m = /^\/accounts\/acct_test\/workers\/scripts\/([^/]+)$/.exec(pathOnly);
+      if (m) {
+        if (method === 'GET') { const w = cf.workers.get(m[1]); return w ? new Response(`--b\r\nContent-Disposition: form-data; name="worker.js"; filename="worker.js"\r\nContent-Type: application/javascript+module\r\n\r\n${w.source}\r\n--b--`, { status: 200 }) : new Response('', { status: 404 }); }
+        if (method === 'PUT') {
+          const form = init?.body as FormData;
+          const source = await (form.get('worker.js') as Blob).text();
+          const meta = JSON.parse(await (form.get('metadata') as Blob).text()) as { bindings: unknown[] };
+          cf.workers.set(m[1], { source, bindings: meta.bindings }); return cfOk({ id: m[1], etag: `etag_${++state.seq}` });
+        }
+      }
+      if (pathOnly === '/accounts/acct_test/workers/domains') {
+        if (method === 'GET') return cfOk(cf.domains);
+        if (method === 'PUT') {
+          const hostname = String(body.hostname);
+          if (cf.dns.some((r) => r.name === hostname && ['A', 'AAAA', 'CNAME'].includes(r.type))) return cfErr(100117, 'A DNS record already exists for this hostname', 409);
+          const d = { id: `dom_${++state.seq}`, hostname, service: String(body.service), zone_id: String(body.zone_id) }; cf.domains.push(d); return cfOk(d);
+        }
+      }
+      m = /^\/zones\/([^/]+)\/email\/routing(?:\/(dns|rules)(?:\/([^/]+))?)?$/.exec(pathOnly);
+      if (m) {
+        if (!m[2]) return cfOk({ enabled: cf.routing.enabled, status: cf.routing.enabled ? 'ready' : 'unconfigured' });
+        if (m[2] === 'dns' && method === 'POST') { cf.routing.enabled = true; return cfOk({ enabled: true }); }
+        if (m[2] === 'rules') {
+          if (method === 'GET') return cfOk(cf.routing.rules);
+          if (method === 'POST') { const rule = { id: `rule_${++state.seq}`, enabled: true, matchers: body.matchers as never, actions: body.actions as never }; cf.routing.rules.push(rule); return cfOk(rule); }
+          if (method === 'PUT') { const rule = cf.routing.rules.find((r) => r.id === m![3]); if (!rule) return cfErr(2003, 'no rule', 404); Object.assign(rule, { matchers: body.matchers, actions: body.actions, enabled: Boolean(body.enabled) }); return cfOk(rule); }
+        }
+      }
+      if (pathOnly === '/accounts/acct_test/email/routing/addresses') {
+        if (method === 'GET') return cfOk(cf.routing.destinations);
+        const d = { email: String(body.email), verified: null }; cf.routing.destinations.push(d); return cfOk(d);
+      }
+      throw new Error(`unexpected Cloudflare call in rehearsal: ${method} ${u}`);
+    }
 
     // ── Resend ──
     if (u === 'https://api.resend.com/emails' && method === 'POST') {

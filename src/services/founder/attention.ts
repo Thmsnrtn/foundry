@@ -75,8 +75,27 @@ export async function waitingOn(founderId: string): Promise<AttentionItem[]> {
       });
     }
   }
+  // THE WORKSHOP NEEDS HIM when something only he can supply is missing or
+  // the world stopped carrying what was put up. One item, one place to go.
+  const workshop: AttentionItem[] = [];
+  const w = (await rows('SELECT founder_id, product_id, public_name, postal_address, health_json FROM public_workshop WHERE founder_id = ?', [founderId]))[0];
+  if (w) {
+    const health = w.health_json == null ? null : JSON.parse(String(w.health_json)) as Record<string, { status: string; detail: string }>;
+    const needs: string[] = [];
+    if (w.postal_address == null) needs.push('a postal address for commercial mail');
+    for (const k of ['site', 'cloudflare', 'sending', 'replyInbox'] as const) if (health?.[k]?.status === 'needs_attention') needs.push(`${k === 'replyInbox' ? 'the reply inbox' : k === 'site' ? 'the public site' : k === 'sending' ? 'email sending' : 'Cloudflare'}: ${health[k].detail}`);
+    if (needs.length) {
+      workshop.push({
+        kind: 'experiment', id: 'workshop', productId: String(w.product_id), companyName: String(w.public_name),
+        summary: `The Workshop needs you: ${needs[0]}`, detail: needs.length > 1 ? `Also: ${needs.slice(1).join('; ')}.` : 'Everything else is in place.',
+        yes: { label: 'Open the Workshop', action: '/foundry/public-workshop' }, no: { label: 'Later', action: '/foundry/public-workshop' },
+        why: null, href: '/foundry/public-workshop', open: { label: 'Open the Workshop', href: '/foundry/public-workshop' },
+      });
+    }
+  }
   return [
     ...tests,
+    ...workshop,
     ...acts.map((a): AttentionItem => ({
       kind: 'act', id: String(a.id), productId: String(a.product_id), companyName: String(a.name),
       summary: String(a.summary), detail: `An act I cannot take until you say yes. Expires ${String(a.expires_at).slice(0, 10)}.`,

@@ -2782,3 +2782,5 @@ const { placeRoutes } = await import('./places.js');
 letterRoutes.route('/', placeRoutes);
 const { experimentRoutes } = await import('./experiments-place.js');
 letterRoutes.route('/', experimentRoutes);
+const { workshopRoutes } = await import('./workshop-place.js');
+letterRoutes.route('/', workshopRoutes);

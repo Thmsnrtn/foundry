@@ -18,7 +18,7 @@ import { requireInstitutionOwner } from '../../middleware/rbac.js';
 import { getExperimentView, listExperiments } from '../../services/founder/experiment-view.js';
 import type { ExperimentView } from '../../services/founder/experiment-view.js';
 import {
-  HandRefused, allowExperiment, approveRemaining, attachPaymentLinkByUrl, declineExperiment, ensureExposure,
+  HandRefused, allowExperiment, approveRemaining, attachPaymentLinkByUrl, declineExperiment, prepareExposure,
   reviewRecipient, senderCompanyOf, stopExperiment,
 } from '../../services/venture/hand.js';
 
@@ -121,6 +121,13 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
         <form method="POST" action="/foundry/experiments/${id}/place"><button class="btn" type="submit">Try placing it now</button></form>
         <form method="POST" action="/foundry/experiments/${id}/payment" class="stack"><label>Or a Stripe link you made, tagged for this test <input type="url" name="url" required placeholder="https://buy.stripe.com/..." /></label><button class="btn" type="submit">Use this link</button></form></div>` : ''}
     </section>
+
+    ${v.publicPage ? html`<section class="know" id="public"><h2>Public page</h2>
+      <p><a href="${v.publicPage.url}" rel="noopener">${v.publicPage.url}</a> <span class="pill">${v.publicPage.status}</span></p>
+      <p class="quiet">${v.publicPage.detail}</p>
+      <p class="quiet"><a href="/foundry/public-workshop/preview/${id}">Preview as it would be published</a> · <a href="/foundry/public-workshop">The Workshop</a></p>
+      ${v.publicPage.gate.length ? html`<p><strong>Before anyone is written to:</strong></p><ul>${v.publicPage.gate.map((g) => html`<li>${g}</li>`)}</ul>` : ''}
+    </section>` : ''}
 
     <section class="know" id="reach"><h2>Reach</h2>
       <dl class="facts">
@@ -264,7 +271,7 @@ experimentRoutes.post('/foundry/experiments/:id/allow', requireInstitutionOwner(
   } catch (e) { return back(c, id, 'test', null, said(e)); }
   // Placing the offer is Foundry's act, not his. A provider hiccup here is an
   // exception on the page and a retry on the next pass, never a failed Allow.
-  try { await ensureExposure(id); } catch { /* shown as an exception by the view */ }
+  try { await prepareExposure(id); } catch { /* shown as an exception by the view */ }
   return back(c, id, 'test', 'allowed');
 });
 
@@ -287,7 +294,7 @@ experimentRoutes.post('/foundry/experiments/:id/place', requireInstitutionOwner(
   const founderId = await founderOf(c); if (!founderId) return c.redirect('/onboarding');
   const id = String(c.req.param('id'));
   if (!(await getExperimentView(founderId, id))) return c.notFound();
-  try { const r = await ensureExposure(id); return 'refused' in r ? back(c, id, 'test', null, r.refused) : back(c, id, 'test', 'placed'); }
+  try { const r = await prepareExposure(id); return 'refused' in r ? back(c, id, 'test', null, r.refused) : !r.published ? back(c, id, 'test', null, r.failures.join('; ')) : back(c, id, 'test', 'placed'); }
   catch (e) { return back(c, id, 'test', null, said(e)); }
 });
 

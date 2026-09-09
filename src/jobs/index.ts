@@ -3071,6 +3071,27 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
     schedule: '20 * * * *',
     description: 'Carry every live real experiment one step: offers, deliveries, receipts, refunds, settlement.',
   },
+  public_workshop_tick: {
+    fn: async () => {
+      // THE PUBLIC WORKSHOP, KEPT: opt-outs that arrived at the public store
+      // copied onto the Workshop's list and swept, every live page read back
+      // from its public address, and the health reading the owner sees
+      // refreshed. Nothing here publishes anything new or writes to anyone.
+      const { query } = await import('../db/client.js');
+      const owners = (await query('SELECT founder_id FROM public_workshop')).rows as unknown as Array<Record<string, unknown>>;
+      const { syncOptOutsFromStore } = await import('../services/public-workshop/suppression.js');
+      const { workshopHealth } = await import('../services/public-workshop/infrastructure.js');
+      for (const o of owners) {
+        const founderId = String(o.founder_id);
+        const opt = await syncOptOutsFromStore(founderId);
+        const health = await workshopHealth(founderId);
+        logger.info(`public_workshop_tick: ${founderId} opt-outs +${opt.recorded} swept ${opt.swept}; site ${health.site.status}, cloudflare ${health.cloudflare.status}, sending ${health.sending.status}, inbox ${health.replyInbox.status}`,
+          { jobName: 'public_workshop_tick', failing: health.pagesFailing, optOutFailures: opt.failed });
+      }
+    },
+    schedule: '40 * * * *',
+    description: 'Keep the public Workshop: record opt-outs from its store, read every page back from its address, refresh its health.',
+  },
   keep_a_copy_of_everything: {
     fn: async () => {
       const { copyTheInstitution } = await import('../services/institution/keeping.js');

@@ -57,6 +57,10 @@ const normalise = (email: string): string => email.toLowerCase().trim();
  */
 export async function contactIsRefused(
   productId: string, email: string,
+  /** The at-most-once identity of the effect about to be attempted, when the
+   * caller has one. Used only to recognise an effect the institution already
+   * owes; never to widen what may be done. */
+  effectId?: string | null,
 ): Promise<{ refused: true; reason: string } | { refused: false }> {
   const address = normalise(email);
   if (!address) return { refused: false };
@@ -64,7 +68,34 @@ export async function contactIsRefused(
     'SELECT reason FROM outreach_suppressions WHERE product_id = ? AND email = ?',
     [productId, address],
   )).rows[0] as Record<string, unknown> | undefined;
-  return row ? { refused: true, reason: String(row.reason) } : { refused: false };
+  if (row) return { refused: true, reason: String(row.reason) };
+  // AND THE OWNER'S PUBLIC WORKSHOP'S LIST (migration 285). One public identity
+  // stands behind every experiment of an owner, so a no said to any of them
+  // is a no said to all of them: a person who opted out during one test is
+  // not written to by the next because its id changed. Resolved through the
+  // company's owner, so a company that is not the Workshop's (another
+  // owner's) reads nothing here.
+  const shared = (await query(
+    `SELECT s.reason FROM public_suppressions s JOIN products p ON p.owner_id = s.founder_id
+      WHERE p.id = ? AND s.email = ?`, [productId, address],
+  )).rows[0] as Record<string, unknown> | undefined;
+  if (!shared) return { refused: false };
+  // WHAT IS OWED IS NOT PROSPECTING. Somebody who told the Workshop to stop
+  // writing to them and then bought something is owed what they bought: this
+  // list governs being APPROACHED, never being ANSWERED, and a workshop that
+  // withheld a paid-for delivery because of a marketing opt-out would be
+  // keeping the money and calling it respect.
+  //
+  // The exemption is exactly the effects the institution already owes — an
+  // outbound action bound to a purchase as a delivery — and nothing else. It
+  // is recognised from the effect's own row, so no caller can claim it.
+  if (effectId) {
+    const owed = (await query(
+      `SELECT 1 AS owed FROM outbound_actions WHERE effect_id = ? AND experiment_act = 'delivery'`, [effectId],
+    )).rows[0];
+    if (owed) return { refused: false };
+  }
+  return { refused: true, reason: `workshop:${String(shared.reason)}` };
 }
 
 /**

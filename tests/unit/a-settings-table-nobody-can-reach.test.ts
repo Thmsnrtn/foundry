@@ -108,7 +108,7 @@ describe('the table is gone', () => {
     // And `experiment_hand_tick` — the first real experiment's hand: offers,
     // receipts, deliveries, refunds, settlement, the offer taken down — makes
     // one hundred and one.
-    expect(Object.keys(JOB_REGISTRY).length, 'ninety-seven before, one hundred and one now').toBe(101);
+    expect(Object.keys(JOB_REGISTRY).length, 'ninety-seven before, one hundred and two now').toBe(102);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

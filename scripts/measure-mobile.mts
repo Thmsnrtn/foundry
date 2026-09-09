@@ -150,6 +150,13 @@ async function seed(): Promise<void> {
   await setSendingIdentity({ productId: COMPANY, provider: 'resend', credential: 're_measure', fromEmail: 'hello@mail.thomasnorton.example', fromName: 'Thomas Norton' });
   const { approveRemaining } = await import('../src/services/venture/hand.js');
   await approveRemaining({ founderId: OWNER, experimentId: PROOF1 });
+
+  // THE PUBLIC WORKSHOP, as the owner sees it: the widest page in the private
+  // surface, since it carries health readings, public experiments with their
+  // addresses, a do-not-contact list and the provider's receipts. Measured with
+  // its prerequisites unmet, which is the state that shows the most.
+  const { establishPublicWorkshop } = await import('../src/services/public-workshop/settings.js');
+  await establishPublicWorkshop({ founderId: OWNER });
 }
 
 async function main(): Promise<void> {
@@ -166,6 +173,8 @@ async function main(): Promise<void> {
   app.route('/', foundryShellRoutes as never);
   const { experimentRoutes } = await import('../src/routes/dashboard/experiments-place.js');
   app.route('/', experimentRoutes as never);
+  const { workshopRoutes } = await import('../src/routes/dashboard/workshop-place.js');
+  app.route('/', workshopRoutes as never);
 
   const server = serve({ fetch: app.fetch, port: 4317 });
   const base = 'http://127.0.0.1:4317';
@@ -173,6 +182,7 @@ async function main(): Promise<void> {
     '/foundry/companies', `/foundry/companies/${COMPANY}`,
     `/foundry/companies/${REFERENCE_COMPANY}`, '/foundry/controls',
     '/foundry/experiments', `/foundry/experiments/${PROOF1}`, `/foundry/experiments/${PROOF1}/recipients`,
+    '/foundry/public-workshop',
     // Asked about a company by name: the answer is the widest structured block
     // the ask box can produce, and it renders inside the same page.
     '/foundry?q=' + encodeURIComponent('How is Foundry doing?'),
@@ -316,6 +326,9 @@ async function main(): Promise<void> {
         }
         if (path === `/foundry/experiments/${PROOF1}/recipients`) {
           await page.screenshot({ path: `${dir}/experiment-recipients-390.png`, fullPage: true });
+        }
+        if (path === '/foundry/public-workshop') {
+          await page.screenshot({ path: `${dir}/public-workshop-390.png`, fullPage: true });
         }
       }
       if (path === '/foundry' && scale === 1 && width !== 390 && !desktop) {

@@ -2039,3 +2039,59 @@ whatever the world does; (2) `FOUNDRY_ENABLE_MONEY_TOOLS` and
 received and refunds cannot move; (3) a re-pulled brief within seven days of
 launch, or the first delivery is refused by its own quality gate; (4) the
 "(1) real Stripe Connect credential" item above, unchanged.
+
+---
+
+## The public Workshop (2026-09-09)
+
+Proof 1 is **not launched**, by direction. The tranche that would let it launch
+cleanly is built and proven in rehearsal; one thing is blocked on the owner.
+
+**What now exists in the repository.** One durable public identity — Apex Micro
+at apexmicro.ai, a digital workshop operated by Thomas Norton — through which
+every externally exposed experiment enters the world: a public site rendered
+from canonical rows through an explicit allowlist, a permanent page per exposed
+experiment at a number and slug that can never change, publication through the
+governed door with the public address read back over HTTPS as the record, a
+quality gate that refuses outbound when the page is missing, stale, unseen, or
+disagrees with the provider about price or cadence, one never-rotated sender,
+Workshop-wide suppression and contact frequency, a pause that stops new economic
+activity without touching what is owed, and Cloudflare as a bounded capability
+whose envelope is defined by which tools exist.
+
+**What is blocked, and it is the only thing.** The Cloudflare API token the
+owner supplied is rejected by Cloudflare: `code 1000 "Invalid API Token"` on
+`GET /user/tokens/verify` and `code 9109 "Invalid access token"` on zone
+listing, with and without its `cfat_` prefix, at 2026-09-09. Until a working
+token exists, nothing of the Workshop is live: no store, no program, no
+hostname, no page, no DNS, no sending domain, no reply route. The account id
+(`959f0bb2…`) is fine and unused so far.
+
+**What the owner still owes, beyond the token.** A postal address for
+commercial mail (a business or PO box address, never his home) — the readiness
+check names it and Allow refuses without it. Optionally, anything he wants
+published about himself on the About page; nothing is inferred.
+
+**What happens once the token works** (each is one command or one button, and
+each verifies the world rather than the provider's word): stand the Workshop up;
+connect sending as the Workshop and let the provider verify its domain; connect
+the reply inbox and click Cloudflare's one confirmation; run the Experiment 002
+rehearsal against the real edge; then reassess Proof 1 from first principles —
+run, reframe, defer or kill, all acceptable — before anything is sent.
+
+### A known gap in the offer's numbers (2026-09-09)
+
+The Proof 1 offer text states two counts — thirteen relevant notices screened
+from 952 open solicitations — that are true of the brief pulled on 2026-09-07
+and of no other pull. `checkOfferQuality` checks the message for a payment path,
+a page, an opt-out line, the one-time terms and the banned claims; it does not
+check that a number in the message still matches the deliverable beside it.
+
+It bites only if the brief is re-pulled and the offer text is not rewritten in
+the same act, and the launch path already requires both: the deliverable's
+quality gate refuses anything pulled more than seven days ago, so a launch
+demands a fresh brief, and a fresh brief means fresh counts. Recorded rather
+than fixed because the cheap fix — comparing an integer in prose against a
+count of the deliverable's items — would be a gate that only appears to read the
+message. The real answer, when a second experiment needs it, is for the offer
+text to derive its counts from the deliverable rather than restate them.

@@ -714,3 +714,58 @@ A minimal accept/reject: close the set to the six literals; make the five
 model-named sites choose from that set or be refused, exactly as `configType`
 now is; and split the queue so a proposal-for-a-person is not an action at all.
 Nothing here reaches a provider — that stays point 1, and stays yours.
+
+---
+
+## §15 PENDING — A Cloudflare token that Cloudflare accepts
+
+**Asked 2026-09-09.** The public Workshop is built and proven in rehearsal, and
+one credential stands between it and reality.
+
+**What was tried.** The token supplied with the Workshop direction was presented
+to Cloudflare four ways: as given and with its `cfat_` prefix stripped, against
+`GET /user/tokens/verify` and against zone listing. Every attempt was rejected:
+
+```
+GET  /client/v4/user/tokens/verify        → 401  code 1000  "Invalid API Token"
+GET  /client/v4/zones?name=apexmicro.ai   → 403  code 9109  "Invalid access token"
+```
+
+The account id `959f0bb25e98e07e8379bdf7aa311c23` is well-formed and has not
+been used, because every call needs the token first. The rejection is
+Cloudflare's, not a network or proxy failure: the API answered each time, with a
+Cloudflare error body.
+
+**Worth checking, since the shape is unusual.** A Cloudflare *API token* is
+about forty characters of letters, digits, underscores and hyphens with **no
+prefix**; the supplied value is 54 characters beginning `cfat_`. That is the
+shape of a different Cloudflare credential, or of a value copied from a
+preview rather than from the one-time reveal. A token is shown **once**, when it
+is created; if the page was left and returned to, what was copied may not be the
+secret.
+
+**What is needed.** One API token created at *My Profile → API Tokens → Create
+Token*, with these permissions, which are exactly what the built capability
+uses and no more:
+
+| Scope | Permission |
+|---|---|
+| Account → Workers Scripts | Edit |
+| Account → Workers KV Storage | Edit |
+| Account → Email Routing Addresses | Edit |
+| Zone → DNS (apexmicro.ai) | Edit |
+| Zone → Zone (apexmicro.ai) | Read |
+| Zone → Email Routing Rules (apexmicro.ai) | Edit |
+
+Zone resources limited to `apexmicro.ai`. Nothing needs Zone Settings, SSL,
+billing, registrar, account membership or any other zone: the institution has no
+tool that could use them.
+
+**Blocks.** Standing the Workshop up; publishing any page; sending as the
+Workshop; the reply inbox; the Experiment 002 acceptance run against the real
+edge; and therefore any launch of Proof 1. Nothing else in the campaign.
+
+**Also owed by the owner, and not a blocker to the token.** A postal address for
+commercial mail — a business or PO box address, not his home address, which
+Foundry will not publish by default and will not invent. Recorded at
+`/foundry/public-workshop`.

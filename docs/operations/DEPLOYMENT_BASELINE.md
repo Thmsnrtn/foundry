@@ -104,3 +104,49 @@ The owner registered `thomas-inc.com` as the lab domain and added it at Resend; 
 A mailbox for `thomas@thomas-inc.com` was then created at GoDaddy (Microsoft 365, still provisioning at the time of writing). With a real mailbox at the From address, the hand's reply-to becomes the sending address itself rather than the owner's login address on another domain (a reply-to that differs from the From is a known mark of cold mail); deployed as the commit carrying this paragraph.
 
 The reply-to change was proven by the full chain (568 files / 4,988 tests, `CHECK_EXIT 0`) and ships as the commit carrying this line. The owner has since questioned `thomas-inc.com` as the face of a cold email (a day old, a hyphenated "-inc" name nobody can look up); the sender for Proof 1 may move to a subdomain of an older domain he owns before Allow, which is a one-step identity change on the machine and needs no deploy. Whichever address sends, replies go to it.
+
+## The public Workshop (2026-09-09)
+
+Apex Micro is a **second deployment target**, deliberately independent of this
+one: the private institution runs on Fly and may be stopped at will; the public
+site is served at Cloudflare's edge and must not stop with it.
+
+| | Private Foundry | Apex Micro |
+|---|---|---|
+| Where | Fly app `foundry-intel`, one machine, one volume | Cloudflare Worker `apexmicro` + one KV store |
+| Reached at | the Fly hostname, owner-authenticated | `apexmicro.ai` and `www.apexmicro.ai`, public |
+| Deployed by | `[deploy-private]` in a commit on the release branch | `workshop:stand-up`, or the button on `/foundry/public-workshop` |
+| Stopping it | intentional and normal | never done to pause economic activity |
+
+**Standing it up** (each step verifies the world, not the provider's answer).
+In development `npm run cli -- <command>`; on the machine, where only the build
+exists, `node dist/cli/index.js <command>` from `/app`:
+
+```bash
+npm run cli -- workshop:establish  <owner>   # rows only; touches nothing outside
+npm run cli -- workshop:stand-up   <owner>   # store, program, hostnames, pages
+npm run cli -- workshop:sending    <owner>   # provider domain + its DNS + verification
+npm run cli -- workshop:inbox      <owner>   # replies forwarded (one click at Cloudflare)
+npm run cli -- workshop:postal     <owner> "PO Box …"
+npm run cli -- workshop:health     <owner>   # site, Cloudflare, sending, reply inbox
+npm run cli -- workshop:rehearse   <owner>   # Experiment 002, end to end
+```
+
+**Secrets it needs in production**, set the same way as every other:
+
+```bash
+fly secrets set -a foundry-intel \
+  CLOUDFLARE_API_TOKEN='…' CLOUDFLARE_ACCOUNT_ID='959f0bb25e98e07e8379bdf7aa311c23'
+```
+
+Neither is set yet, and the token supplied on 2026-09-09 is rejected by
+Cloudflare (`code 1000`), so nothing of the Workshop is live. See
+`OWNER_DECISIONS_PENDING.md` §15 for exactly what token is needed.
+
+**Rollback.** Publication is per-address and versioned: every page carries its
+digest, its predecessor is kept, and a bad page is corrected by publishing the
+previous content again. Infrastructure changes are reversible from their
+receipts, which record the prior state verbatim (`/foundry/public-workshop`, or
+`SELECT * FROM cloudflare_mutations`). The root records this replaces on the
+apexmicro.ai zone — `A`/`AAAA` to `66.241.124.62` and `2a09:8280:1::d6:872d:0`,
+serving nothing — are retired with their contents kept in their own receipts.

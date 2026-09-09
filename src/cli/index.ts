@@ -868,4 +868,35 @@ program
     process.stdout.write(`${JSON.stringify({ ...rest, recipients: recipients.length, timeline: timeline.map((t) => `${t.at} ${t.kind}: ${t.text}`) }, null, 2)}\n`);
   });
 
+// ─── The public Workshop ─────────────────────────────────────────────────────
+// Each command is a read or a step the owner's page also offers; the CLI is
+// for the cutover and for looking, never a second authority.
+const founderIdOf = async (who: string): Promise<string> => {
+  const f = (await query('SELECT id FROM founders WHERE id = ? OR lower(email) = lower(?)', [who, who])).rows[0] as Record<string, unknown> | undefined;
+  if (!f) { process.stderr.write(`no founder ${who}\n`); process.exit(1); }
+  return String(f.id);
+};
+const out = (v: unknown): void => { process.stdout.write(`${JSON.stringify(v, null, 2)}\n`); };
+
+program.command('workshop:establish <founderIdOrEmail>').description('Establish the public Workshop rows for one owner (idempotent)')
+  .action(async (who: string) => { const { establishPublicWorkshop } = await import('../services/public-workshop/settings.js'); out(await establishPublicWorkshop({ founderId: await founderIdOf(who) })); });
+program.command('workshop:stand-up <founderIdOrEmail>').description('Store, program, hostnames and pages at Cloudflare, through the door, with receipts; verifies the public result')
+  .action(async (who: string) => { const { standUpWorkshop } = await import('../services/public-workshop/infrastructure.js'); out(await standUpWorkshop(await founderIdOf(who))); });
+program.command('workshop:publish <founderIdOrEmail>').description('Render the site from the rows and publish what changed')
+  .action(async (who: string) => { const { publishSite } = await import('../services/public-workshop/publication.js'); out(await publishSite(await founderIdOf(who), 'founder:cli')); });
+program.command('workshop:health <founderIdOrEmail>').description('Read the Workshop from the world: site, Cloudflare, sending, reply inbox')
+  .action(async (who: string) => { const { workshopHealth } = await import('../services/public-workshop/infrastructure.js'); out(await workshopHealth(await founderIdOf(who))); });
+program.command('workshop:sending <founderIdOrEmail>').description('Connect sending as the Workshop: provider domain, its DNS through the door, verification, identity')
+  .action(async (who: string) => { const { connectWorkshopSending } = await import('../services/public-workshop/infrastructure.js'); out(await connectWorkshopSending(await founderIdOf(who))); });
+program.command('workshop:inbox <founderIdOrEmail>').description('Forward the Workshop address to the owner (one confirmation click at the provider the first time)')
+  .action(async (who: string) => { const { connectReplyInbox } = await import('../services/public-workshop/infrastructure.js'); out(await connectReplyInbox(await founderIdOf(who))); });
+program.command('workshop:postal <founderIdOrEmail> <address>').description('Record the owner-supplied postal address commercial mail must carry')
+  .action(async (who: string, address: string) => { const { setPostalAddress } = await import('../services/public-workshop/settings.js'); await setPostalAddress(await founderIdOf(who), address); out({ ok: true }); });
+program.command('workshop:rehearse <founderIdOrEmail>').description('Experiment 002: publish, verify, update, conclude and close a synthetic experiment page')
+  .action(async (who: string) => { const { rehearseWorkshop } = await import('../services/public-workshop/rehearsal.js'); const r = await rehearseWorkshop(await founderIdOf(who)); out(r); if (!r.ok) process.exit(1); });
+program.command('workshop:reframe-proof1 <founderIdOrEmail>').description('Supersede the pre-Workshop design of Proof 1 with Experiment 001 under the Workshop; launches nothing')
+  .action(async (who: string) => { const { reframeProof1UnderTheWorkshop } = await import('../services/venture/proof-1.js'); out(await reframeProof1UnderTheWorkshop(await founderIdOf(who))); });
+program.command('workshop:gate <experimentId>').description('The publication gate for one experiment, as outbound would see it')
+  .action(async (experimentId: string) => { const { publicationGate } = await import('../services/public-workshop/publication.js'); out(await publicationGate(experimentId)); });
+
 program.parse();

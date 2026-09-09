@@ -1255,3 +1255,21 @@ Everything built in sessions four through seven: the founder evidence bridge, co
 - **THE PRIMARY SENSE WAS NEVER SHADOWED, WHICH IS THE REASSURING HALF OF THE MOUNTING DEFECT.** `/ingest` — how a company's own systems post its numbers — is mounted at line 216, well above the first router that was applying its guard to everything at 463. The three surfaces that died were the REST API and two webhooks; the route by which a company reports its own reality was always reachable.
 - **A SENSE THAT FEEDS A PAGE IS NOT A SENSE THE INSTITUTION HAS.** Transcripts arrive, are analysed, and land in `call_transcripts`, read by `signals-multimodal`. `transcripts.ts` writes no `signal_events` at all, so nothing a meeting reveals can reach responsibility discovery, an expectation, or a judgment. Wiring it would mean deciding what a transcript MEANS — which obligation kind a competitor mention or a complaint amounts to — and `discovery.ts` admits only evidence whose operational responsibility the company stated explicitly, because "Foundry does not paraphrase the company back to itself". **Not a cleanup's decision, and recorded rather than taken.**
 - **A LENS THAT FINDS AUTOMATIC-VERSUS-MANUAL PAIRS HAS A BLIND SPOT WORTH KNOWING.** Looking for tables written by both a dashboard route and a webhook/job found three — `metric_snapshots`, `weekly_plans`, `integrations` — and none defective. It did NOT find the transcript case, which is the one that motivated it, because both paths call one shared `ingestTranscript` and the table therefore has a single writing FILE. **File-level writer analysis cannot see a shared writer with two callers.**
+
+## The public Workshop (2026-09-09)
+
+Migration 285 and `src/services/public-workshop/` add the public membrane
+described in `RIVER.md` and `history/IMPLEMENTATION_SLICES.md`. In one sentence:
+an externally exposed experiment now has a permanent public record at
+`apexmicro.ai/experiments/<slug>` that is a projection of canonical rows through
+an explicit allowlist, published through the governed door and verified by
+reading the public address back over HTTPS; the owner's sender is one durable
+Workshop identity; a no said to any experiment is a no to all of them; a pause
+stops new offers without touching deliveries, refunds or the public record; and
+the Cloudflare capability that operates it has no tool that could transfer the
+domain, change its nameservers, delete a zone or touch another one.
+
+Nothing is live: the supplied Cloudflare token is rejected by Cloudflare, so the
+Workshop exists in the repository and in rehearsal only. Proof 1 is reframed as
+Experiment 001 (its pre-Workshop design declined as superseded, by the
+institution, with the successor naming it) and is not launched.

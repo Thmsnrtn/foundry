@@ -9,7 +9,7 @@ Owner direction received 2026-09-07; ported onto the production lineage 2026-09-
 | `brief.md` | The deliverable: 13 open COMMBUYS notices screened from 952, with dates, contacts, links, explicit coverage limits. Pull date 2026-09-07. The quality gate refuses to deliver it once it is older than seven days; re-pull and run `node scripts/embed-proof-1.mjs` to refresh. |
 | `participants.md` | 23 candidate businesses with published B2B contacts and the owner conflict-review column. Loaded as pending recipients; the review happens in the app, not in this file. |
 | `outreach.md` | The rules the one message follows, and how offers, deliveries and refunds are carried. |
-| `outreach-template.md` | The message body Foundry sends, once, per approved recipient. `[PAYMENT LINK]` and `{Business name}` are filled in. |
+| `outreach-template.md` | The message body Foundry sends, once, per approved recipient. `[APEX MICRO EXPERIMENT PAGE]` (the experiment's page on the Workshop) and `{Business name}` are filled in; the payment path is on the page, never a raw link in the message. |
 | `evidence.md` | Grounding observations, the prediction, the rights basis, data handling. |
 
 The brief and the template are embedded into `src/services/venture/proof-1-content.ts` by `scripts/embed-proof-1.mjs` so the seed runs where only `dist/` exists; a test fails if the embedded copy drifts from these files.

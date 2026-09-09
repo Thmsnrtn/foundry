@@ -50,6 +50,8 @@ export interface ExperimentView {
   details: Array<[string, string]>;
   recipients: Recipient[];
   readiness: Readiness;
+  /** The Workshop's page for this test, when it has a public identity. */
+  publicPage: { url: string; status: string; detail: string; gate: string[] } | null;
 }
 
 const money = (cents: number, currency = 'USD') => `${currency.toUpperCase() === 'USD' ? '$' : ''}${(cents / 100).toFixed(2)}${currency.toUpperCase() === 'USD' ? '' : ` ${currency.toUpperCase()}`}`;
@@ -168,7 +170,24 @@ export async function getExperimentView(founderId: string, experimentId: string,
       ['Counterparties that counted', String(said.filter((s) => s.kind === 'payment' && s.counterparty === 'unmatched_external').length)],
     ],
     recipients, readiness: ready,
+    publicPage: await publicPageOf(experimentId, e, now),
   };
+}
+
+/** What the owner sees of the public page: its address, whether the world
+ * was seen to carry it, and what the gate would still refuse outbound for. */
+async function publicPageOf(experimentId: string, e: ExperimentRow, now: Date): Promise<ExperimentView['publicPage']> {
+  const { pageUrlFor, experimentPublication, publicationGate } = await import('../public-workshop/publication.js');
+  const url = await pageUrlFor(experimentId);
+  if (!url) return null;
+  const pub = await experimentPublication(experimentId);
+  const status = !pub ? (e.decision === 'approved' ? 'not published yet' : 'published when you allow it')
+    : pub.verifiedStatus === 'verified' ? `published · seen ${String(pub.verifiedAt).slice(0, 16).replace('T', ' ')}` : `published · not seen (${pub.verifiedDetail ?? 'unverified'})`;
+  const detail = pub ? `Version ${pub.version}, put up ${pub.publishedAt.slice(0, 16).replace('T', ' ')}. The address never changes; the page stays whatever happens to the test.`
+    : 'The address is fixed now. Foundry publishes the page when you allow the test, reads it back from the world, and writes to nobody until it has.';
+  // The gate is shown for a test that could still write to someone.
+  const gate = e.decision === 'approved' && e.ranAt === null ? (await publicationGate(experimentId, { now, verifyLive: false })).failures : [];
+  return { url, status, detail, gate };
 }
 
 function describeRule(rule: { event: string; atLeast: number; outOf?: string; atMost?: number; withinDays: number }): string {
