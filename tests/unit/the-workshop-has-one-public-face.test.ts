@@ -169,7 +169,14 @@ describe('the Workshop stands up through the door, and the world is read back', 
     expect((await query(`SELECT COUNT(*) AS n FROM public_publications`)).rows[0]).toMatchObject({ n: 14 });
     const health = await workshopHealth(OWNER);
     expect(health.site).toMatchObject({ status: 'healthy' });
+    // HEALTHY EVEN THOUGH `/user/tokens/verify` REFUSES THE TOKEN. An
+    // account-owned Cloudflare token answers that endpoint with a flat 401 and
+    // works everywhere it is actually used; trusting it once told the owner a
+    // working credential was invalid. Health asks what the token can reach.
     expect(health.cloudflare).toMatchObject({ status: 'healthy' });
+    expect(health.cloudflare.detail).toContain('apexmicro.ai active');
+    const { verifyToken } = await import('../../src/services/integration/cloudflare-gateway.js');
+    expect(await verifyToken()).toMatchObject({ ok: true, status: 'active' });
     expect(health.sending.status).toBe('needs_attention');
     expect((await page('/foundry/public-workshop')).text).toContain('14 pages served as published');
   });

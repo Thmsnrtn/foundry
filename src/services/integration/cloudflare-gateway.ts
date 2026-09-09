@@ -77,13 +77,34 @@ export interface ZoneFacts { id: string; name: string; status: string; nameServe
 export interface DnsRecord { id: string; type: string; name: string; content: string; ttl: number; priority: number | null; proxied: boolean }
 export interface TokenFacts { ok: boolean; status: string | null; detail: string }
 
+/**
+ * ASK THE QUESTION THAT MATTERS, NOT THE ONE WITH A TIDY ENDPOINT.
+ *
+ * `/user/tokens/verify` reports on a token owned by a *user*. Cloudflare also
+ * issues account-owned tokens, and one of those answers that endpoint with a
+ * flat 401 "Invalid API Token" while working perfectly everywhere it is
+ * actually meant to be used. This health check therefore told the owner his
+ * credential was invalid when it was not, and cost a round of replacing a
+ * credential that had nothing wrong with it.
+ *
+ * What the institution needs to know is not "what kind of token is this" but
+ * "can it reach this account and this zone" — so it asks that instead, with
+ * two calls the capability itself makes. A token that answers both can do the
+ * work; a token that cannot is unusable however healthy it claims to be.
+ */
 export async function verifyToken(): Promise<TokenFacts> {
   if (!cloudflareConfigured()) return { ok: false, status: null, detail: 'not configured' };
   try {
-    const r = await getJson<{ status: string }>(`${CF_API}/user/tokens/verify`);
-    return { ok: r.result.status === 'active', status: r.result.status, detail: r.result.status };
+    await getJson<Array<{ id: string }>>(`${CF_API}/accounts/${account()}/storage/kv/namespaces?per_page=1`);
   } catch (e) {
-    return { ok: false, status: null, detail: e instanceof Error ? e.message : String(e) };
+    return { ok: false, status: null, detail: `the account cannot be reached: ${e instanceof Error ? e.message : String(e)}` };
+  }
+  try {
+    const zone = await readZone();
+    if (!zone) return { ok: false, status: 'no_zone', detail: `the token reaches the account but ${WORKSHOP_ZONE_NAME()} is not on it` };
+    return { ok: true, status: 'active', detail: `reaches the account and ${zone.name} (${zone.status})` };
+  } catch (e) {
+    return { ok: false, status: null, detail: `the zone cannot be read: ${e instanceof Error ? e.message : String(e)}` };
   }
 }
 

@@ -105,7 +105,10 @@ export function providerStubs(): { state: ProviderState; fetch: (url: string | U
       const [pathOnly, qs] = rel.split('?'); const q = new URLSearchParams(qs ?? '');
       const ct = String(headers['Content-Type'] ?? headers['content-type'] ?? '');
       const body = init?.body && typeof init.body === 'string' && ct.includes('json') ? JSON.parse(init.body) as Record<string, unknown> : {};
-      if (pathOnly === '/user/tokens/verify') return cfOk({ id: 'tok', status: 'active' });
+      // AN ACCOUNT-OWNED TOKEN ANSWERS THIS ENDPOINT WITH A FLAT 401 and works
+      // everywhere else. Modelled, because trusting this endpoint once told the
+      // owner a working credential was invalid.
+      if (pathOnly === '/user/tokens/verify') return cfErr(1000, 'Invalid API Token', 401);
       if (pathOnly === '/zones') return cfOk(cf.zones.filter((z) => !q.get('name') || z.name === q.get('name')));
       let m = /^\/zones\/([^/]+)\/dns_records(?:\/([^/]+))?$/.exec(pathOnly);
       if (m) {
