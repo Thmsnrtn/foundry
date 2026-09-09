@@ -792,6 +792,61 @@ business only when you press Allow at `/foundry/experiments/<id>/decide`.
 Workshop; the reply inbox; the Experiment 002 run against the real edge; and
 therefore any launch of Proof 1. Nothing else in the campaign.
 
+**Second token, 2026-09-09 11:26 ("PrivateFoundry"), also rejected — and the
+rejection now says something more useful than the first one did.** It was
+presented to six endpoints, including the one Cloudflare's own Example Usage
+line shows:
+
+```
+GET /accounts/{id}/tokens/verify              → 401  code 1000   Invalid API Token
+GET /accounts/{id}/storage/kv/namespaces      → 401  code 10000  Authentication error
+GET /accounts/{id}/workers/scripts            → 401  code 10000  Authentication error
+GET /accounts/{id}/workers/domains            → 401  code 10000  Authentication error
+GET /accounts/{id}/email/routing/addresses    → 401  code 10000  Authentication error
+GET /accounts/{id}/r2/buckets                 → 401  code 10000  Authentication error
+GET /zones?name=apexmicro.ai                  → 403  code 9109   Invalid access token
+```
+
+Retried four minutes later, unchanged, so it is not propagation delay. **It fails
+against R2 as well**, which is the diagnostic that matters: a token that was live
+but too narrowly scoped would pass authentication and fail on permission, with a
+403 naming the missing scope. Failing authentication everywhere means the value
+is not a credential Cloudflare recognises at all. No permission change can fix
+that; nothing is wrong with the scopes.
+
+**Three things to check, in the order they are likely.**
+
+1. **The Confirm button.** In the screenshot the token dialog is still open with
+   **Confirm** unpressed. If that step is what finalises the token, the value
+   shown was never activated. This costs nothing to rule out and would explain
+   both attempts.
+2. **How the value left the screen.** It contains adjacent characters that are
+   easy to confuse when read rather than copied — capital `O` beside `0`, and
+   capital `I` beside `l` and `1` (`…OzfIFbt…`, `…8da0a18a`). One wrong
+   character produces exactly this failure. Use the copy button beside the
+   field, and paste without retyping.
+3. **Which token was created.** The page that produced it offers S3-compatible
+   credentials "with the R2 API or any S3 client" — that is the **R2** token
+   flow. An R2 token would not carry Workers Scripts, Workers KV, Workers
+   Routes, DNS or Email Routing even once live, so it could not stand the
+   Workshop up. **Foundry uses no R2 at all**: the public pages are served by a
+   Worker out of KV. The token needed is created at *My Profile → API Tokens →
+   Create Custom Token*, with the seven scopes in the table above and nothing
+   else.
+
+**Two security notes, neither of them a blocker.**
+
+- **The permission list visible on that screen is very wide** — Billing Write,
+  Account Settings Write, Account API Tokens Write, OAuth Client Write, SCIM
+  Provisioning, SSO Connector. If any of those were actually granted, the
+  credential can mint further credentials and change billing, which is authority
+  Foundry has no tool to exercise and should not hold. Grant the seven scopes
+  and nothing more.
+- **The R2 Secret Access Key was shared in full, in plain text.** Foundry does
+  not use it, has not stored it, and will not: it is not part of any capability
+  the institution has. Because it has been out of its box, **rotate it** — R2 →
+  Manage API tokens → roll. That is housekeeping, not an obstacle to Proof 1.
+
 **One more real-world fact, found while checking.** `apexmicro.ai` and
 `www.apexmicro.ai` currently resolve to `66.241.124.62`, a Fly.io address, and
 nothing answers TLS there. The domain is pointing at infrastructure that is not
