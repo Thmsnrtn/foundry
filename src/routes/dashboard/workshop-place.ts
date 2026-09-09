@@ -172,21 +172,30 @@ workshopRoutes.get('/foundry/public-workshop/preview/:experimentId', async (c: a
   return c.html(preview.html);
 });
 
-const act = (path: string, fn: (founderId: string, form: Record<string, unknown>) => Promise<string>) => {
-  workshopRoutes.post(path, requireInstitutionOwner(), async (c: any) => {
+/**
+ * EACH ACT IS REGISTERED AT A LITERAL PATH, not through a helper that takes one
+ * as a variable. The repository's route census reads the source for
+ * `.post('/…')`, so a router that registered its paths from a loop would put
+ * eleven owner-authenticated, mutating routes outside every stranger-facing
+ * invariant the suite applies — surface nobody knew about, which is the exact
+ * defect that census exists to find. The shared part is the handler wrapper.
+ */
+const act = (fn: (founderId: string, form: Record<string, unknown>) => Promise<string>) =>
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  async (c: any) => {
     const founderId = await founderOf(c); if (!founderId) return c.redirect('/onboarding');
     const form = (await c.req.parseBody().catch(() => ({}))) as Record<string, unknown>;
     try { return back(c, await fn(founderId, form)); } catch (e) { return back(c, null, said(e)); }
-  });
-};
-act('/foundry/public-workshop/establish', async (founderId) => { await establishPublicWorkshop({ founderId }); return 'established'; });
-act('/foundry/public-workshop/stand-up', async (founderId) => { const r = await standUpWorkshop(founderId); if (r.site.failed.length || r.site.unverified.length) throw new WorkshopRefused('not_all_seen', [...r.site.failed, ...r.site.unverified].join('; ')); return 'stood-up'; });
-act('/foundry/public-workshop/publish', async (founderId) => { const r = await publishSite(founderId, `founder:${founderId}`); if (r.failed.length) throw new WorkshopRefused('publication_failed', r.failed.map((f) => `${f.path}: ${f.reason}`).join('; ')); return 'published'; });
-act('/foundry/public-workshop/check', async (founderId) => { await verifySite(founderId); await workshopHealth(founderId); return 'checked'; });
-act('/foundry/public-workshop/sending', async (founderId) => { const r = await connectWorkshopSending(founderId); await workshopHealth(founderId); if (!r.verified) throw new WorkshopRefused('domain_pending', `the provider reports ${r.domain} as ${r.status}; records written: ${r.records.join(', ')}. Try again in a few minutes.`); return 'sending'; });
-act('/foundry/public-workshop/inbox', async (founderId) => { const r = await connectReplyInbox(founderId); await workshopHealth(founderId); if (!r.destinationVerified) throw new WorkshopRefused('confirm_at_cloudflare', `forwarding to ${r.forwardTo} is set; Cloudflare has emailed you a confirmation link to click`); return 'inbox'; });
-act('/foundry/public-workshop/pause', async (founderId, form) => { await pauseNewEconomicActivity({ founderId, reason: String(form.reason ?? '') }); return 'paused'; });
-act('/foundry/public-workshop/resume', async (founderId) => { await resumeEconomicActivity(founderId); return 'resumed'; });
-act('/foundry/public-workshop/postal', async (founderId, form) => { await setPostalAddress(founderId, String(form.address ?? '')); return 'saved'; });
-act('/foundry/public-workshop/about', async (founderId, form) => { await setAbout(founderId, String(form.about ?? '')); return 'saved'; });
-act('/foundry/public-workshop/suppress', async (founderId, form) => { const r = await suppress({ founderId, email: String(form.email ?? ''), reason: 'founder', source: 'owner' }); if (!r.recorded) throw new WorkshopRefused('not_recorded', 'that is not an email address, or it is already on the list'); return 'suppressed'; });
+  };
+
+workshopRoutes.post('/foundry/public-workshop/establish', requireInstitutionOwner(), act(async (founderId) => { await establishPublicWorkshop({ founderId }); return 'established'; }));
+workshopRoutes.post('/foundry/public-workshop/stand-up', requireInstitutionOwner(), act(async (founderId) => { const r = await standUpWorkshop(founderId); if (r.site.failed.length || r.site.unverified.length) throw new WorkshopRefused('not_all_seen', [...r.site.failed, ...r.site.unverified].join('; ')); return 'stood-up'; }));
+workshopRoutes.post('/foundry/public-workshop/publish', requireInstitutionOwner(), act(async (founderId) => { const r = await publishSite(founderId, `founder:${founderId}`); if (r.failed.length) throw new WorkshopRefused('publication_failed', r.failed.map((f) => `${f.path}: ${f.reason}`).join('; ')); return 'published'; }));
+workshopRoutes.post('/foundry/public-workshop/check', requireInstitutionOwner(), act(async (founderId) => { await verifySite(founderId); await workshopHealth(founderId); return 'checked'; }));
+workshopRoutes.post('/foundry/public-workshop/sending', requireInstitutionOwner(), act(async (founderId) => { const r = await connectWorkshopSending(founderId); await workshopHealth(founderId); if (!r.verified) throw new WorkshopRefused('domain_pending', `the provider reports ${r.domain} as ${r.status}; records written: ${r.records.join(', ')}. Try again in a few minutes.`); return 'sending'; }));
+workshopRoutes.post('/foundry/public-workshop/inbox', requireInstitutionOwner(), act(async (founderId) => { const r = await connectReplyInbox(founderId); await workshopHealth(founderId); if (!r.destinationVerified) throw new WorkshopRefused('confirm_at_cloudflare', `forwarding to ${r.forwardTo} is set; Cloudflare has emailed you a confirmation link to click`); return 'inbox'; }));
+workshopRoutes.post('/foundry/public-workshop/pause', requireInstitutionOwner(), act(async (founderId, form) => { await pauseNewEconomicActivity({ founderId, reason: String(form.reason ?? '') }); return 'paused'; }));
+workshopRoutes.post('/foundry/public-workshop/resume', requireInstitutionOwner(), act(async (founderId) => { await resumeEconomicActivity(founderId); return 'resumed'; }));
+workshopRoutes.post('/foundry/public-workshop/postal', requireInstitutionOwner(), act(async (founderId, form) => { await setPostalAddress(founderId, String(form.address ?? '')); return 'saved'; }));
+workshopRoutes.post('/foundry/public-workshop/about', requireInstitutionOwner(), act(async (founderId, form) => { await setAbout(founderId, String(form.about ?? '')); return 'saved'; }));
+workshopRoutes.post('/foundry/public-workshop/suppress', requireInstitutionOwner(), act(async (founderId, form) => { const r = await suppress({ founderId, email: String(form.email ?? ''), reason: 'founder', source: 'owner' }); if (!r.recorded) throw new WorkshopRefused('not_recorded', 'that is not an email address, or it is already on the list'); return 'suppressed'; }));

@@ -96,7 +96,17 @@ describe('no adapter takes its credential from the request', () => {
     // `post_webhook` is the deliberate exception and is named, not inferred:
     // its whole purpose is delivering to a target the founder registered, and
     // it screens that target with the SSRF guard at call time.
-    const allowed = new Set(['services/distribution/outbound-webhooks.ts → config']);
+    //
+    // The Workshop's `hostname` is the second, and it is not a destination at
+    // all: every Cloudflare call goes to the compiled-in CF_API, and this field
+    // names the hostname being ATTACHED to the Workshop's own program. The
+    // handler refuses it unless it is inside the Workshop's own zone and is
+    // that zone's apex or its www, so a caller cannot point the Workshop at
+    // somebody else's name any more than at somebody else's server.
+    const allowed = new Set([
+      'services/distribution/outbound-webhooks.ts → config',
+      'services/integration/cloudflare-gateway.ts → hostname',
+    ]);
     expect([...new Set(offenders)].filter((o) => !allowed.has(o))).toEqual([]);
   });
 });
