@@ -150,3 +150,24 @@ receipts, which record the prior state verbatim (`/foundry/public-workshop`, or
 `SELECT * FROM cloudflare_mutations`). The root records this replaces on the
 apexmicro.ai zone — `A`/`AAAA` to `66.241.124.62` and `2a09:8280:1::d6:872d:0`,
 serving nothing — are retired with their contents kept in their own receipts.
+
+### Verified 2026-09-09, 03:47–04:26 UTC — the public Workshop
+
+Pre-deploy backup `/data/backups/pre-deploy-workshop-from-69067395.db` (7,168,000
+bytes, 02:51 UTC) taken before anything shipped. CI ran the full chain on
+`9e8b9260` for 28 minutes and passed; the deploy job followed and succeeded.
+The first push, `fdb71ecc`, failed its chain on three gates and deployed
+nothing, which is the gate working.
+
+| Read from production | Answer |
+|---|---|
+| `/internal/health` | `200`, commit `9e8b9260dec1c38884ee7af0ef5ebdbf57a365a3`, database/ai/clerk/scheduler all `ok` |
+| Migration 285 | applied; `public_workshop`, `public_experiments`, `public_publications`, `public_suppressions`, `public_contacts`, `cloudflare_mutations` all present |
+| Workshop capabilities | 8 in family `public_workshop` |
+| `/foundry/public-workshop` | `401` — registered and owner-guarded, not `404` |
+| `workshop:establish` | Apex Micro, `apexmicro.ai`, acting as `az80cRLkDhZHkZfbXRztz`, no store, no postal address, not paused |
+| `workshop:reframe-proof1` | original `SkQeFRIbU9SR6oMNC3MSX` declined as superseded; successor `uohKaTpLwSCESTjmiuh7l` is Experiment 001 at `/experiments/ma-millwork-bid-brief` |
+| Experiment 001 | *Needs you*: 11 businesses to review, sending not connected, no postal address |
+
+Nothing was published, nothing was sent, and no Cloudflare call was made: the
+token is still rejected, so the Workshop has rows and no presence in the world.
