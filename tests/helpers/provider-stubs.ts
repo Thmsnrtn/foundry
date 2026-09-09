@@ -35,6 +35,8 @@ export interface CloudflareState {
   routing: { enabled: boolean; rules: Array<{ id: string; enabled: boolean; matchers: Array<{ type: string; field?: string; value?: string }>; actions: Array<{ type: string; value?: string[] }> }>; destinations: Array<{ email: string; verified: string | null }> };
   /** When true the public site answers 503 whatever the store holds: a provider that said yes to a page nobody can see. */
   siteDown: boolean;
+  /** Enabling routing on the zone refuses, as it did on the real one. */
+  routingEnableFails: boolean;
 }
 
 export function freshCloudflare(): CloudflareState {
@@ -49,7 +51,7 @@ export function freshCloudflare(): CloudflareState {
       { id: 'rec_gsv', zone_id: 'zone_apex', type: 'TXT', name: 'apexmicro.ai', content: 'google-site-verification=abc', ttl: 1, priority: null, proxied: false },
     ],
     namespaces: [], kv: new Map(), workers: new Map(), domains: [],
-    routing: { enabled: false, rules: [], destinations: [] }, siteDown: false,
+    routing: { enabled: false, rules: [], destinations: [] }, siteDown: false, routingEnableFails: false,
   };
 }
 
@@ -161,7 +163,10 @@ export function providerStubs(): { state: ProviderState; fetch: (url: string | U
             ? cfErr(2007, 'Invalid Input: must be a subdomains of apexmicro.ai', 422)
             : cfOk({ enabled: true });
         }
-        if (m[2] === 'enable' && method === 'POST') { cf.routing.enabled = true; return cfOk({ enabled: true }); }
+        if (m[2] === 'enable' && method === 'POST') {
+          if (cf.routingEnableFails) return cfErr(2007, 'Invalid Input', 422);
+          cf.routing.enabled = true; return cfOk({ enabled: true });
+        }
         if (m[2] === 'rules') {
           if (method === 'GET') return cfOk(cf.routing.rules);
           if (method === 'POST') { const rule = { id: `rule_${++state.seq}`, enabled: true, matchers: body.matchers as never, actions: body.actions as never }; cf.routing.rules.push(rule); return cfOk(rule); }

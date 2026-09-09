@@ -277,6 +277,13 @@ describe('Proof 1 is reframed under the Workshop without rewriting its history',
     expect(state.cf.dns.filter((r) => r.name === 'send.apexmicro.ai')).toHaveLength(2);
     expect((await getExperimentView(OWNER, X, NOW))!.readiness.sending).toMatchObject({ status: 'ready', fromLine: 'Thomas Norton — Apex Micro <thomas@apexmicro.ai>' });
     // The reply inbox: forwarded, awaiting his one click at the provider.
+    // A ROUTE THAT CANNOT ROUTE IS REFUSED, NOT REPORTED. When enabling the
+    // zone fails, the door must record a failure — an "applied" receipt would
+    // dedup every retry away and leave a rule that never receives mail.
+    state.cf.routingEnableFails = true;
+    await expect(connectReplyInbox(OWNER)).rejects.toThrow(/routing_not_enabled|door_refused/);
+    expect(state.cf.routing.enabled).toBe(false);
+    state.cf.routingEnableFails = false;
     const inbox = await connectReplyInbox(OWNER);
     expect(inbox).toMatchObject({ to: 'thomas@apexmicro.ai', forwardTo: 'thomas@example.com', destinationVerified: false });
     expect((await workshopHealth(OWNER)).replyInbox.detail).toContain('not yet confirmed');

@@ -432,6 +432,19 @@ async function emailRouteHandler(req: GatewayRequest): Promise<{ to: string; for
     const after = await readEmailRouting(z.id);
     const present = after.rules.find((r) => r.to === to);
     const destinationVerified = after.destinations.some((d) => d.email === forwardTo && d.verified);
+    // A ROUTE THAT DOES NOT ROUTE IS NOT AN APPLIED CHANGE.
+    //
+    // This handler used to return the steps it had taken and let the caller
+    // read `enabled: false` out of the verification. The door does not read
+    // that: it recorded the invocation as applied, and its at-most-once key
+    // then refused every retry as already done — so a rule was created that
+    // could never receive mail, and the one act that would have fixed it was
+    // permanently deduped away. Silence about a half-finished change is worse
+    // than the failure, because it removes the way back.
+    if (!after.enabled) {
+      throw new CloudflareRefused('routing_not_enabled',
+        `the rule for ${to} exists but mail routing is not enabled on ${z.name}: ${JSON.stringify(steps.enable ?? 'not attempted')}`);
+    }
     return { previous: before, response: steps, verification: { ruleForwards: present?.forwardTo ?? [], destinationVerified, enabled: after.enabled },
       rollback: existing ? { rule: existing } : { deleteRule: present?.id ?? null, disableRouting: !before.enabled },
       result: { to, forwardTo, destinationVerified, enabled: after.enabled } };
