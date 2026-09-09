@@ -72,6 +72,8 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
   if (!v) return c.notFound();
   const done = String(c.req.query('done') ?? ''); const error = String(c.req.query('error') ?? '');
   const id = v.id;
+  const { theShortVersion } = await import('../../services/venture/probe-design.js');
+  const short = await theShortVersion(id);
   const step = (s: ExperimentView['steps'][number]) => html`<li class="${s.status}">
     <p><strong>${s.status === 'done' ? '✓ ' : s.status === 'todo' ? '○ ' : '· '}${s.label}</strong>${s.status === 'todo' && s.key === 'recipients' ? html` — <a href="${s.href}">open</a>` : ''}</p>
     <p class="quiet">${s.detail}</p></li>`;
@@ -81,6 +83,11 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
     <p class="lede">${v.stateDetail}</p>
     ${v.exceptions.length ? html`<section class="know" id="exceptions"><h2>Needs your attention</h2>
       <ul>${v.exceptions.map((x) => html`<li>${x}</li>`)}</ul></section>` : ''}
+
+    ${short ? html`<section class="know said" id="short"><h2>${short.headline}</h2>
+      <ul class="plain">${short.lines.map((l) => html`<li>${l}</li>`)}</ul>
+      <p class="quiet">${short.sealed ? 'This was written before you decided and sealed when you did, so it cannot be edited to match the result.' : 'Written before this runs. It seals when you decide.'} <a class="why" href="/foundry/why/experiment/${id}">Show your work</a></p>
+    </section>` : ''}
 
     <section class="know" id="what"><h2>What this tests</h2>
       <p><strong>Question</strong> — ${v.why.question || v.title}</p>
@@ -182,6 +189,7 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
       .facts{display:grid;grid-template-columns:minmax(8rem,auto) 1fr;gap:.25rem .75rem;margin:0}.facts dd{margin:0}
       .stack{display:grid;gap:.5rem;max-width:26rem}.stack label{display:grid;gap:.25rem}.stack input{max-width:100%;box-sizing:border-box}
       .timeline{padding-left:1rem}.timeline li{margin:.5rem 0;overflow-wrap:anywhere}
+      .plain{list-style:none;padding:0;margin:0}.plain li{margin:.4rem 0}
     </style>`;
   return c.html(page(`${v.assetName ?? 'Experiment'} — ${v.stateLabel}`, body, 'foundry', where(v, 'test')));
 });
@@ -194,6 +202,8 @@ experimentRoutes.get('/foundry/experiments/:id/recipients', async (c: any) => {
   if (!v) return c.notFound();
   const done = String(c.req.query('done') ?? ''); const error = String(c.req.query('error') ?? '');
   const id = v.id;
+  const { theShortVersion } = await import('../../services/venture/probe-design.js');
+  const short = await theShortVersion(id);
   const open = v.state === 'needs_you' || v.state === 'ready';
   const pending = v.recipients.filter((r) => r.reviewStatus === 'pending');
   const decided = v.recipients.filter((r) => r.reviewStatus !== 'pending');

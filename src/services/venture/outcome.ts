@@ -193,6 +193,10 @@ export async function recordBusinessOutcome(input: {
   exposureId: string; kind: string; amountCents?: number | null; currency?: string;
   observedAt: Date; provider: string; providerRef: string;
   payerReference?: string | null; arrivedVia?: string | null;
+  /** The exchange the probe was running under, so a payment never loses the
+   * instrument that produced it. Null where none was recorded, which is the
+   * honest answer for every row written before designs existed. */
+  exchange?: string | null;
 }): Promise<{ id: string; counterparty: Counterparty; duplicate: boolean } | { refused: string }> {
   const x = (await query(
     `SELECT founder_id, evidence_mode, withdrawn_at FROM experiment_exposures WHERE id = ?`,
@@ -214,11 +218,12 @@ export async function recordBusinessOutcome(input: {
     await query(
       `INSERT INTO business_outcome_events
          (id, founder_id, exposure_id, kind, amount_cents, currency, observed_at, provider,
-          provider_event_ref, evidence_mode, counterparty, arrived_via)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
+          provider_event_ref, evidence_mode, counterparty, arrived_via, exchange)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [id, String(x.founder_id), input.exposureId, input.kind, input.amountCents ?? null,
         input.currency ?? 'usd', input.observedAt.toISOString(), input.provider.trim(),
-        input.providerRef.trim(), evidenceMode, counterparty, input.arrivedVia ?? null]);
+        input.providerRef.trim(), evidenceMode, counterparty, input.arrivedVia ?? null,
+        input.exchange ?? null]);
   } catch (err) {
     return { refused: err instanceof Error ? err.message : String(err) };
   }
@@ -686,9 +691,13 @@ export async function exposureOf(experimentId: string): Promise<{
 export async function whatTheWorldSaid(exposureId: string): Promise<Array<{
   kind: string; whatItIs: string; amountCents: number | null; currency: string;
   observedAt: string; counterparty: Counterparty; arrivedVia: string | null;
+  /** The exchange it was said under. Null for anything observed before probe
+   * designs existed; never guessed, because guessing it is the collapse the
+   * column was added to prevent. */
+  exchange: string | null;
 }>> {
   return ((await query(
-    `SELECT b.kind, k.what_it_is, b.amount_cents, b.currency, b.observed_at, b.counterparty, b.arrived_via
+    `SELECT b.kind, k.what_it_is, b.amount_cents, b.currency, b.observed_at, b.counterparty, b.arrived_via, b.exchange
        FROM business_outcome_events b JOIN business_outcome_event_kinds k ON k.kind = b.kind
       WHERE b.exposure_id = ? ORDER BY b.observed_at, b.rowid`, [exposureId]))
     .rows as unknown as Array<Record<string, unknown>>).map((r) => ({
@@ -696,6 +705,7 @@ export async function whatTheWorldSaid(exposureId: string): Promise<Array<{
     amountCents: r.amount_cents == null ? null : Number(r.amount_cents), currency: String(r.currency),
     observedAt: String(r.observed_at), counterparty: String(r.counterparty) as Counterparty,
     arrivedVia: r.arrived_via == null ? null : String(r.arrived_via),
+    exchange: r.exchange == null ? null : String(r.exchange),
   }));
 }
 

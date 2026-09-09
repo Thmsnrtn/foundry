@@ -1,0 +1,193 @@
+// =============================================================================
+// PROOF 1, RECONSIDERED FROM FIRST PRINCIPLES, BEFORE ANYONE IS WRITTEN TO.
+//
+// The first design of this probe was declined as superseded because it counted
+// a $29 offer as a $29 cost. The successor carries the same question, the same
+// brief and the same businesses under the Workshop's identity — and until now
+// it carried no record of the thinking that decided any of it. This module
+// writes that record: what the probe actually settles, which exchange was
+// chosen and which were weighed and refused, what it can and cannot prove,
+// what it truly costs across every dimension it spends, where it stops itself,
+// and what happens if it works.
+//
+// It is a judgement, not a launch. Nothing here contacts anybody, spends
+// anything, publishes anything or grants permission. The owner's decision on
+// /foundry/experiments/:id is still the only thing that lets it run, and the
+// deliberation is sealed at that moment so it cannot be edited to match the
+// result. Every sentence below was written before the world was asked.
+// =============================================================================
+
+import { designOf, recordDesign } from './probe-design.js';
+import type { ProbeDesign } from './probe-design.js';
+import { findProof1 } from './proof-1.js';
+
+export interface Proof1Deliberation { experimentId: string; design: ProbeDesign; alreadyRecorded: boolean }
+
+const BY = 'institution:probe_designer';
+
+export async function reconsiderProof1(founderId: string): Promise<Proof1Deliberation> {
+  const experimentId = await findProof1(founderId);
+  if (!experimentId) throw new Error('Proof 1 is not seeded');
+  const existing = await designOf(experimentId);
+  if (existing) return { experimentId, design: existing, alreadyRecorded: true };
+
+  const design = await recordDesign({
+    founderId, experimentId, designedBy: BY,
+
+    decides: 'Whether the screening labour in a bid brief — not access to the bid data, which is public '
+      + 'and free — is worth money to a Massachusetts millwork shop.',
+    decidesBecause: 'COMMBUYS is open to anybody and costs nothing to read. Every incumbent charges for '
+      + 'notification, from $109 a month upward, so somebody believes the screening is valuable; nobody has '
+      + 'shown that a shop of this size agrees, at any price. Desk research has settled the supply side and '
+      + 'cannot settle this one. A stranger\'s payment can.',
+
+    exchange: 'upfront_price',
+    exchangeBecause: 'Money moved before delivery is the only observation in which a stranger\'s action is '
+      + 'unambiguous. Its confound — that people do not transact with strangers — is real, and it is exactly '
+      + 'what the named operator, the permanent public page and the stated refund exist to reduce. That is '
+      + 'why the identity work came first rather than as a later polish.',
+
+    canProve: 'That at least one Massachusetts millwork shop, written to once by a named person and pointed '
+      + 'at a page it can read before deciding, will pay $29 for a hand-screened shortlist of open public '
+      + 'bid notices.',
+    cannotProve: 'That there is a business here. Twenty-five hand-picked shops reached by cold email inside '
+      + 'seven days cannot establish a market, a price, a channel that repeats, or a second purchase — and at '
+      + 'one payment I cannot tell a buyer from a well-wisher.',
+
+    ratherThanWaiting: 'The alternative is more reading about whether millwork shops value bid screening, and '
+      + 'no quantity of it produces a person paying money. Each further week of research returns less than one '
+      + 'stranger\'s decision.',
+
+    distribution: 'Cold outbound to twenty-five hand-reviewed businesses, once each, from a named operator, '
+      + 'landing on a permanent public page. It is the dirtiest distribution this institution recognises, and '
+      + 'its own doctrine says an opportunity reachable only this way is worth less than a smaller one found '
+      + 'through search or a marketplace. It is used here because it is the fastest honest route to a first '
+      + 'real answer, not because it is a channel a business would keep.',
+
+    ifItSucceeds: 'Nothing widens. New offers stop at ten briefs owed at once: a hand-made pilot that promises '
+      + 'more than one person can deliver has turned a good result into an obligation. Massachusetts and '
+      + 'COMMBUYS only — a second state, the Central Register, or a second data source is a new probe with its '
+      + 'own rights question, not an extension of this one. And a payment is one shop\'s decision, not demand: '
+      + 'the next step is a second cheap probe that reaches shops some other way, to learn whether the answer '
+      + 'survives without cold email. The goal is a small thing that works, not a larger version of something '
+      + 'that has worked once.',
+
+    fulfilmentCap: 10,
+
+    recommendation: 'run',
+    recommendationBecause: 'The question is real, the brief already exists, the public surface is built and '
+      + 'amortised, the ceiling is $100 and the stop conditions cost less than the budget does. What was wrong '
+      + 'with this probe was never the test but its reading: a null result looked like a settled no when it is '
+      + 'the most likely outcome of writing to twenty-five strangers about anything. With the competing '
+      + 'readings recorded before it runs, and a second free observation on the page, the likely outcome is '
+      + 'informative rather than merely disappointing. It should not go out before the page is genuinely '
+      + 'published and the sending domain authenticates — but those are gates the institution already '
+      + 'enforces on the send itself, not reasons for me to take the decision away from you.',
+
+    // WHAT EACH LIKELY OBSERVATION COULD MEAN, WRITTEN BEFORE IT IS SEEN. Two
+    // of these cannot be told apart by anything this probe collects, and saying
+    // so now is the only way that admission survives contact with a result.
+    interpretations: [
+      { observation: 'Nobody pays inside seven days',
+        reading: 'the screening work is not worth $29 to shops of this size',
+        distinguishedBy: null },
+      { observation: 'Nobody pays inside seven days',
+        reading: 'a cold email from an unknown sender is not a thing these shops transact through, whatever it offers',
+        distinguishedBy: null },
+      { observation: 'Nobody pays, but somebody answers the page asking for more like this',
+        reading: 'the brief is useful and the price or the sender, not the value, ended the sale',
+        distinguishedBy: 'the continuation answer recorded on the experiment\'s public page' },
+      { observation: 'One business pays',
+        reading: 'at least one shop finds the screening worth money',
+        distinguishedBy: null },
+      { observation: 'Several offers bounce or none is confirmed delivered',
+        reading: 'the addresses or the sending identity decided the outcome, and the offer was never read',
+        distinguishedBy: 'delivery confirmation from the provider and the domain\'s authentication health' },
+      { observation: 'Somebody replies asking what the brief leaves out',
+        reading: 'the stated coverage limits are the objection, not the price',
+        distinguishedBy: 'the reply itself, in the Workshop inbox' },
+      { observation: 'A business asks not to be written to again',
+        reading: 'the approach was wrong for them, which says nothing about the product',
+        distinguishedBy: 'the suppression records which experiment the person was answering' },
+    ],
+
+    // THE EXCHANGES WEIGHED AND REFUSED. Pay-after-value is here because it was
+    // put to me as a better idea, and it is a better idea in general; it is
+    // refused for this probe on its merits, not by reflex in either direction.
+    alternatives: [
+      { exchange: 'value_first',
+        notChosenBecause: 'Sending the brief unrequested and asking to be paid afterwards gives away the one '
+          + 'thing being tested and turns an offer into an unsolicited delivery, which is a heavier imposition '
+          + 'on a stranger than a question is. It also confounds generosity with demand: almost nobody pays a '
+          + 'stranger for something already in hand, so a zero would prove nothing about the value. It is the '
+          + 'right exchange once there is a relationship to trade on; there is none here.' },
+      { exchange: 'sample_then_paid',
+        notChosenBecause: 'The pilot brief is thirteen notices. A sample large enough to be useful is most of '
+          + 'the product, and one small enough not to be is not a sample of anything.' },
+      { exchange: 'subscription',
+        notChosenBecause: 'The unknown is whether one brief is worth money at all. Asking for a recurring '
+          + 'commitment before that is settled tests a harder question, and a no would not tell me which of '
+          + 'the two was refused.' },
+      { exchange: 'free_with_role',
+        notChosenBecause: 'Giving it away in exchange for a conversation buys an opinion about whether someone '
+          + 'would pay, and a stated willingness to pay is the evidence this institution distrusts most.' },
+    ],
+
+    // THE TRUE COST, ACROSS EVERY DIMENSION IT SPENDS. The first design of this
+    // probe called itself $29 and spent hours of the owner and a new public
+    // surface; the difference now is that the surface is built and shared.
+    costs: [
+      { dimension: 'cash', level: 'low',
+        grounds: 'A $100 ceiling, a $29 price, provider fees. The brief is already written and costs nothing per copy.' },
+      { dimension: 'owner_attention', level: 'material',
+        grounds: 'Reviewing twenty-five businesses by hand and connecting a sending address. Lower than the first '
+          + 'design only because the domain, the mailbox, the page and the privacy surface already exist.' },
+      { dimension: 'participant_burden', level: 'low',
+        grounds: 'One message each, never a second. A page they can read before deciding, and one refusal that '
+          + 'binds the whole Workshop rather than this experiment alone.' },
+      { dimension: 'reputation', level: 'material',
+        grounds: 'The first cold outbound from a domain with no sending history, under the one public name every '
+          + 'later experiment will also stand behind. A bad send here is paid for by all of them.' },
+      { dimension: 'legal_uncertainty', level: 'low',
+        grounds: 'Public procurement metadata, linked to its source. No personal data kept, one jurisdiction, a '
+          + 'one-time charge, a refund offered in the delivery itself.' },
+      { dimension: 'support_burden', level: 'low',
+        grounds: 'A refund link instead of a support commitment, and a brief that answers its own coverage question.' },
+      { dimension: 'infrastructure', level: 'none',
+        grounds: 'Nothing new is required. The domain, sender, mailbox, public site and payment path were built '
+          + 'once for the Workshop and are shared by every experiment after this one — which is the whole reason '
+          + 'they were built before this probe rather than for it.' },
+      { dimension: 'obligation', level: 'low',
+        grounds: 'One brief per buyer, already written, delivered by the institution. What is owed survives a '
+          + 'pause and outlives the experiment.' },
+      { dimension: 'complexity', level: 'low',
+        grounds: 'No account, no feed, no recurring billing, nothing to maintain after it concludes.' },
+      { dimension: 'opportunity_cost', level: 'material',
+        grounds: 'The same owner attention spent on a probe reachable through search, a marketplace or the '
+          + 'Workshop\'s own pages would produce a business with a channel worth keeping. This one buys a fast '
+          + 'answer at the price of learning it through the ugliest distribution available.' },
+    ],
+
+    // WHERE IT STOPS ITSELF, SET BEFORE IT STARTS. A budget is a ceiling, not a
+    // target; these thresholds are all reached long before $100 is spent.
+    stopConditions: [
+      { kind: 'complaints', threshold: 1,
+        because: 'One spam complaint on a domain with no sending history is not noise. It is the world saying '
+          + 'this approach was wrong, and it costs every later experiment.' },
+      { kind: 'bounces', threshold: 3,
+        because: 'Three undeliverable addresses mean the list was researched worse than it was believed to be, '
+          + 'and continuing damages the sending domain to learn nothing.' },
+      { kind: 'opt_outs', threshold: 2,
+        because: 'Two people asking not to be written to is a pattern, not a preference, and the remaining '
+          + 'twenty-three did not consent to be the control group for it.' },
+      { kind: 'declined_value', threshold: 3,
+        because: 'Three shops saying plainly that they want nothing further has already answered the question '
+          + 'the offer was asking, at a lower price than sending the rest would cost.' },
+      { kind: 'unfulfillable', threshold: 1,
+        because: 'One paid brief that cannot be delivered is an unmet obligation. Selling a second before that '
+          + 'is fixed would be taking money for something known not to arrive.' },
+    ],
+  });
+
+  return { experimentId, design, alreadyRecorded: false };
+}

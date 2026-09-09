@@ -99,3 +99,74 @@ stops new commitments; it does not cancel the ones already made.
 
 This is why the public surface does not depend on the private control plane
 being awake, and why the pause is enforced on offers rather than on the door.
+
+## The deliberation is recorded before the answer (2026-09-09)
+
+`why.ts` carried a comment against its own "assumptions" and "alternatives"
+levels: they were a reconstruction assembled after the fact, one of the
+alternatives was a generic "not doing it" appended to every act, and a page
+whose whole purpose is showing its work may not manufacture a thought process
+retrospectively. It ended by naming the remedy — **a later deliberation trace
+can persist the real thing prospectively, at judgement time, where it would
+actually be evidence.** This is that trace.
+
+Before a probe may be decided, the institution records: the uncertainty it
+settles and why desk research cannot; the **exchange** chosen and what that
+exchange reveals and confounds; the exchanges weighed and refused, each with a
+reason; what it can prove and — separately — what it cannot; the competing
+readings of each likely observation, and which of them this probe **cannot tell
+apart**; the true cost across every dimension it spends; where it stops itself;
+what happens if it succeeds; and the recommendation, in the institution's own
+words. The record is written before the owner decides and **sealed at his
+decision**, so it cannot be edited to agree with the result.
+
+Three behavioural consequences follow:
+
+- **Nothing runs without one.** A test whose thinking is not recorded, whose
+  chosen exchange the institution cannot actually execute, which records no
+  competing reading of its own likely result, or which states no cost beyond
+  cash, is refused at the decision — before the sending address, before the
+  postal line, before anything a checklist could supply.
+- **A budget is a ceiling, not a target.** Stop conditions are set before the
+  probe starts, counted from the provider's own reports and the Workshop's
+  lists, and every one of them is reached long before the cash ceiling is. A
+  reputation cost is spent in the first few messages; a spend limit does not
+  protect it.
+- **Success is answered, not merely enjoyed.** A fulfilment cap stops new
+  offers when more is owed than one person can deliver. A good result that
+  becomes an unmet obligation is not a good result, and scaling is not the
+  reflex the institution has when something works.
+
+### The exchange is part of the evidence
+
+A commercial observation now carries the exchange it was made under, because
+"one person paid" and "one person accepted something free" are not the same
+fact, and a probe that changed its instrument mid-flight would otherwise leave
+no trace of having done so. Where no design was recorded the column is null; it
+is never guessed, since guessing it is the collapse the column exists to
+prevent.
+
+**Pay-after-value is a real instrument, not a slogan.** It separates "is this
+useful" from "would you buy from a stranger", and it is the right exchange once
+there is a relationship to trade on. It is the wrong one for a first cold
+approach: it gives away the thing being tested, turns an offer into an
+unsolicited delivery — a heavier imposition on a stranger than a question is —
+and confounds generosity with demand, because almost nobody pays a stranger for
+something already in hand. The institution records that reasoning rather than
+adopting or dismissing the idea by reflex.
+
+### What a participant asks for is evidence nothing else can be
+
+The public page asks one question after the offer: what would you like next?
+The answers are a closed vocabulary — nothing further, only unusual ones, more
+like this, I'd pay for this regularly, I'll explain, never write again — so
+nothing can invent a permission, and the person's own words are kept beside the
+answer rather than folded into it. Nothing tracks whether the page was read.
+
+"I had it and it was not useful" is much stronger evidence about the thing than
+a bounce, and "keep sending me these" is the first sign a one-off might be a
+relationship. So both become commercial observations. **A stated "nothing
+further" is not a complaint and does not join the do-not-contact list** — but it
+outranks any contact interval, because a Workshop that recorded the answer and
+then wrote again would be keeping it and ignoring it. Only "never" suppresses,
+and it suppresses across the whole Workshop.

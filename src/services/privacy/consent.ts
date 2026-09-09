@@ -856,6 +856,41 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
     reason: 'whom one person\'s workshop wrote to, for which experiment and when',
     onAccountErasure: { op: 'delete' },
   },
+  // THE DELIBERATION BEHIND A PROBE. A design says what one person was
+  // uncertain about, what they were willing to risk, what they would have
+  // regarded as a refusal and where they would have stopped. It is a record of
+  // their judgement, and it is not institutional knowledge that outlives them:
+  // no other founder's reasoning improves by keeping it.
+  probe_designs: {
+    reason: 'what one person was trying to learn from an experiment, and on what terms',
+    onAccountErasure: { op: 'delete' },
+  },
+  probe_interpretations: {
+    reason: 'the competing readings one person recorded before seeing the result',
+    onAccountErasure: { op: 'delete' },
+  },
+  probe_alternatives: {
+    reason: 'the exchanges one person considered and did not choose, and why',
+    onAccountErasure: { op: 'delete' },
+  },
+  probe_costs: {
+    reason: 'what one person judged an experiment would truly cost them',
+    onAccountErasure: { op: 'delete' },
+  },
+  probe_stop_conditions: {
+    reason: 'the point at which one person had decided to stop, set before starting',
+    onAccountErasure: { op: 'delete' },
+  },
+  // A STRANGER'S ANSWER, HELD BY THE WORKSHOP THAT ASKED. Same shape as
+  // `public_suppressions`: the address belongs to somebody who is not the
+  // founder, but the only thing that could ever act on it is this Workshop, and
+  // the Workshop goes with its owner. Keeping "write to me again" for a sender
+  // that no longer exists retains a stranger's address for a reason that has
+  // stopped being true.
+  workshop_continuations: {
+    reason: 'what people told one person\'s workshop they wanted next; the workshop goes with them',
+    onAccountErasure: { op: 'delete' },
+  },
   workshop_spend_ceiling: {
     reason: 'the limit one person set on what may be spent running work outside this '
       + 'institution',
@@ -1094,6 +1129,10 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   undertaking_kinds: 'the verbs the institution can be asked to take on, and what each means; constitutional, naming nobody',
   business_outcome_event_kinds: 'the kinds of thing a provider can report happened at an offer, and which of them is money leaving somebody\'s hands; constitutional, naming nobody',
   experiment_invalidity_kinds: 'the ways a test can fail to measure what it was for, as distinct from the market saying no; constitutional, naming nobody',
+  probe_exchanges: 'the ways a probe can ask somebody to pay, what each reveals and what each confounds, and which of them the institution can actually run; constitutional, naming nobody',
+  probe_cost_dimensions: 'the axes a probe spends on beyond cash, so a cheap-sounding number never stands alone; constitutional, naming nobody',
+  probe_stop_kinds: 'the things the world can do that end a probe before its budget does, and what each is counted from; constitutional, naming nobody',
+  continuation_kinds: 'the answers a participant can give about what should happen next, and which of them permit more contact; constitutional, naming nobody',
   exposure_floors: 'the four structural facts whose exposure is never graded down in context — custody, regulated decisions, professional reliance, decisions about a named person; constitutional, naming nobody',
   structural_fact_kinds: 'the facts about an offer that decide how serious an exposure is and which first-proof policy row each answers; constitutional, naming nobody',
   exposure_dimensions: 'the axes a portfolio can be concentrated on and what each failure would cost; constitutional and the same for every owner, naming no company',

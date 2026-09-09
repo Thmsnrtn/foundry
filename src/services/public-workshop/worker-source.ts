@@ -52,6 +52,30 @@ export default {
       const done = await env.PAGES.get('page:/email/done');
       return new Response(done || 'Done. That address will not be contacted.', { status: 200, headers: { ...HEADERS, 'cache-control': 'no-store' } });
     }
+    // WHAT THE READER WANTS NEXT. Unauthenticated, like the opt-out beside it,
+    // and bounded the same way: the only answer that changes what the Workshop
+    // may do is "never", which can only ever remove permission. None of the
+    // others grants any — whom to write to stays the owner's review — and a
+    // slug that names no experiment records a Workshop-level answer and no
+    // commercial evidence at all.
+    if (request.method === 'POST' && path !== null && /^\\/experiments\\/[a-z0-9-]+\\/continue$/.test(path)) {
+      const slug = path.split('/')[2];
+      let email = '', wants = '', said = '';
+      try {
+        const form = await request.formData();
+        email = String(form.get('email') || '').trim().toLowerCase();
+        wants = String(form.get('wants') || '').trim();
+        said = String(form.get('said') || '').trim().slice(0, 2000);
+      } catch (e) { email = ''; }
+      const kinds = ['never', 'nothing', 'more_like_this', 'only_unusual', 'would_pay_regularly', 'will_explain'];
+      if (!email || email.length > 320 || !/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(email) || kinds.indexOf(wants) === -1) {
+        return new Response('An email address and one choice are needed.', { status: 400, headers: HEADERS });
+      }
+      const id = crypto.randomUUID();
+      await env.PAGES.put('continue:' + id, JSON.stringify({ email, wants, said, slug, at: new Date().toISOString() }));
+      const done = await env.PAGES.get('page:/thank-you');
+      return new Response(done || 'Thank you. That is recorded.', { status: 200, headers: { ...HEADERS, 'cache-control': 'no-store' } });
+    }
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method not allowed', { status: 405, headers: HEADERS });
     return pageOr404(env, path);
   },

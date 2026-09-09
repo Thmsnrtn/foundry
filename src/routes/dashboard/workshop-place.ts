@@ -69,6 +69,8 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
   const lists = await suppressionsOf(founderId, 50);
   const owed = await outstandingObligations(founderId);
   const receipts = await cloudflareReceipts(founderId, 25);
+  const { continuationsFor } = await import('../../services/public-workshop/suppression.js');
+  const answers = await continuationsFor(founderId, 50);
   const byStatus = (s: string) => registry.filter((x) => x.status === s);
   const experimentIds = new Map<string, string>();
   for (const r of ((await (await import('../../db/client.js')).query('SELECT experiment_id, slug FROM public_experiments WHERE founder_id = ?', [founderId])).rows as unknown as Array<Record<string, unknown>>)) experimentIds.set(String(r.slug), String(r.experiment_id));
@@ -117,6 +119,11 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
     <section class="know" id="obligations"><h2>Owed to customers</h2>
       ${owed.length === 0 ? html`<p class="quiet">Nothing outstanding.</p>` : html`<ul>${owed.map((o) => html`<li>Payment ${o.paymentRef} · ${o.status} since ${o.since.slice(0, 10)} · <a href="/foundry/experiments/${o.experimentId}">the test</a></li>`)}</ul>`}
       <p class="quiet">These survive a pause, a stop and a closed test.</p>
+    </section>
+
+    <section class="know" id="answers"><h2>What people asked for</h2>
+      <p class="quiet">The only thing anybody volunteers about whether the work was any use. Kept in their words, never paraphrased into the answer beside it. A refusal here holds across every test, and "nothing further" stops the next one writing to them even though it is not a complaint.</p>
+      ${answers.length === 0 ? html`<p class="quiet">Nobody has said yet.</p>` : html`<ul>${answers.map((a) => html`<li>${a.email} — <strong>${a.wants.replaceAll('_', ' ')}</strong>${a.experimentId ? html` · <a href="/foundry/experiments/${a.experimentId}">the test</a>` : ''} · ${a.recordedAt.slice(0, 10)}${a.said ? html`<br /><span class="quiet">“${a.said}”</span>` : ''}</li>`)}</ul>`}
     </section>
 
     <section class="know" id="suppression"><h2>Do not contact</h2>

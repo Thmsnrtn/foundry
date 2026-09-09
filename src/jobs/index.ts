@@ -3085,7 +3085,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
         const founderId = String(o.founder_id);
         const opt = await syncOptOutsFromStore(founderId);
         const health = await workshopHealth(founderId);
-        logger.info(`public_workshop_tick: ${founderId} opt-outs +${opt.recorded} swept ${opt.swept}; site ${health.site.status}, cloudflare ${health.cloudflare.status}, sending ${health.sending.status}, inbox ${health.replyInbox.status}`,
+        logger.info(`public_workshop_tick: ${founderId} opt-outs +${opt.recorded}, answers +${opt.continuations}, swept ${opt.swept}; site ${health.site.status}, cloudflare ${health.cloudflare.status}, sending ${health.sending.status}, inbox ${health.replyInbox.status}`,
           { jobName: 'public_workshop_tick', failing: health.pagesFailing, optOutFailures: opt.failed });
       }
     },

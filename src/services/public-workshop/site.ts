@@ -13,7 +13,7 @@ const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;'
 const paras = (s: string): string => s.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('\n');
 const money = (p: NonNullable<PublicExperiment['price']>): string => p.label;
 
-export const PUBLIC_PATHS = ['/', '/about', '/experiments', '/operating', '/graduated', '/closed', '/contact', '/privacy', '/email', '/email/done', '/refunds', '/terms', '/404'] as const;
+export const PUBLIC_PATHS = ['/', '/about', '/experiments', '/operating', '/graduated', '/closed', '/contact', '/privacy', '/email', '/email/done', '/thank-you', '/refunds', '/terms', '/404'] as const;
 export type PublicPath = typeof PUBLIC_PATHS[number];
 
 const CSS = `
@@ -36,7 +36,10 @@ a{color:var(--accent)}main{padding-bottom:3rem}
 .item .t{font-weight:600}.item .s{color:var(--soft);font-size:.95rem}
 .btn{display:inline-flex;align-items:center;justify-content:center;min-height:48px;padding:.6rem 1.2rem;border-radius:10px;background:var(--accent);color:#fff;text-decoration:none;font-weight:600}
 dl{margin:1rem 0}dt{font-weight:600;margin-top:1rem}dd{margin:.25rem 0 0}
-label{display:block;font-weight:600;margin-top:1rem}input[type=email]{width:100%;font:inherit;padding:.7rem .8rem;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);margin:.4rem 0 .8rem}
+label{display:block;font-weight:600;margin-top:1rem}
+fieldset{border:1px solid var(--line);border-radius:10px;margin:1rem 0;padding:.5rem 1rem 1rem}legend{font-weight:600;padding:0 .4rem}
+label.choice{font-weight:400;display:flex;gap:.6rem;align-items:flex-start;min-height:44px;padding:.4rem 0}
+textarea{width:100%;font:inherit;padding:.7rem .8rem;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);margin:.4rem 0 .8rem}input[type=email]{width:100%;font:inherit;padding:.7rem .8rem;border:1px solid var(--line);border-radius:10px;background:var(--card);color:var(--ink);margin:.4rem 0 .8rem}
 button{font:inherit}footer{border-top:1px solid var(--line);padding:1.5rem 1.25rem 3rem;color:var(--soft);font-size:.9rem}
 footer p{margin:.3rem 0}`;
 
@@ -133,6 +136,7 @@ ${which === 'all' ? `<p class="quiet"><a href="/operating">Operating</a> · <a h
 
 export function renderExperiment(f: PublicWorkshopFacts, x: PublicExperiment): string {
   const number = String(x.number).padStart(3, '0');
+  const asking = x.status === 'testing' || x.status === 'operating';
   const pay = x.payUrl && x.price ? `<div class="card">
   <p><strong>${esc(money(x.price))}.</strong> Not a subscription; nothing renews. Payment is taken by Stripe on a page tagged for this experiment.</p>
   <p><a class="btn" href="${esc(x.payUrl)}" rel="nofollow">Buy for ${esc(money(x.price))}</a></p>
@@ -166,6 +170,26 @@ ${paras(x.selection)}
 <p>I send one message and no follow-ups. If you would rather not hear from ${esc(f.name)} again, <a href="/email">say so here</a> and you will not.</p>
 <h2>Your information</h2>
 <p>If you buy, Stripe handles the payment and passes me your email address so I can deliver what you bought. I use it for that and for nothing else. I do not use tracking pixels, click tracking or analytics on email or on this site. See <a href="/privacy">privacy</a>.</p>
+${asking ? `<h2>What would you like next?</h2>
+<p>If you received this and have a view, one answer here is enough. What you say is read before ${esc(f.name)} writes to anybody again, and a refusal here is honoured across every experiment, not just this one.</p>
+<form method="POST" action="${x.path}/continue" class="card">
+  <label for="c-email">Your email address</label>
+  <input id="c-email" name="email" type="email" inputmode="email" autocomplete="email" required maxlength="320">
+  <fieldset>
+    <legend>What should happen next</legend>
+    <label class="choice"><input type="radio" name="wants" value="never" required> Do not contact me again</label>
+    <label class="choice"><input type="radio" name="wants" value="nothing"> Nothing further, no objection</label>
+    <label class="choice"><input type="radio" name="wants" value="more_like_this"> Send me more of this kind of thing</label>
+    <label class="choice"><input type="radio" name="wants" value="only_unusual"> Only when something unusually relevant appears</label>
+    <label class="choice"><input type="radio" name="wants" value="would_pay_regularly"> I would pay for this on an ongoing basis</label>
+    <label class="choice"><input type="radio" name="wants" value="will_explain"> I will tell you what would make it more useful</label>
+  </fieldset>
+  <label for="c-said">Anything you want to say (optional)</label>
+  <textarea id="c-said" name="said" rows="3" maxlength="2000"></textarea>
+  <button class="btn" type="submit">Send</button>
+</form>
+<p class="quiet">No tracking of any kind is used to tell whether you read this. The only thing ${esc(f.name)} knows is what you choose to say here.</p>` : ''}
+
 <h2>Refunds and contact</h2>
 <p>If what you receive is not useful, reply to the delivery email or use the link in it and the payment is refunded in full. For anything else, <a href="/contact">contact me</a>; replies to any experiment email reach me directly.</p>
 <p class="quiet">Opened ${esc(x.openedOn ?? '—')}${x.closedOn ? ` · Closed ${esc(x.closedOn)}` : ''} · Updated ${esc(x.updatedOn)}</p>
@@ -222,6 +246,15 @@ export function renderEmailDone(f: PublicWorkshopFacts): string {
   return shell(f, 'Opted out', '/email', body, 'Your address is on the do-not-contact list.');
 }
 
+export function renderThankYou(f: PublicWorkshopFacts): string {
+  const body = `
+<h1>Thank you</h1>
+<p class="lede">That is recorded, and it is what decides whether you hear from ${esc(f.name)} again.</p>
+<p>If you asked not to be contacted, no experiment of this workshop will write to you. If you said nothing further was wanted, nothing further is sent. Anything else you said is kept in your own words and read before the next experiment goes out.</p>
+<p><a href="/">Back to ${esc(f.name)}</a></p>`;
+  return shell(f, 'Thank you', '', body, 'Your answer is recorded.');
+}
+
 export function renderRefunds(f: PublicWorkshopFacts): string {
   const body = `
 <h1>Refunds</h1>
@@ -265,6 +298,7 @@ export function renderSite(f: PublicWorkshopFacts, registry: PublicExperiment[])
   pages.set('/privacy', renderPrivacy(f));
   pages.set('/email', renderEmail(f));
   pages.set('/email/done', renderEmailDone(f));
+  pages.set('/thank-you', renderThankYou(f));
   pages.set('/refunds', renderRefunds(f));
   pages.set('/terms', renderTerms(f));
   pages.set('/404', renderNotFound(f));

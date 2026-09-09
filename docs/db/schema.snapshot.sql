@@ -687,7 +687,7 @@ CREATE TABLE business_outcome_events (
   -- inferred. Public distribution provenance strengthens independence.
   arrived_via    TEXT,
   recorded_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+, exchange TEXT REFERENCES probe_exchanges(exchange));
 CREATE TABLE calendar_allocations (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL,
@@ -1151,6 +1151,13 @@ CREATE TABLE consequence_rungs (
   absorbable     INTEGER NOT NULL,
   sort_order     INTEGER NOT NULL
 , delegable_when TEXT NOT NULL DEFAULT '', putting_it_back TEXT NOT NULL DEFAULT '');
+CREATE TABLE continuation_kinds (
+  kind         TEXT PRIMARY KEY,
+  what_it_is   TEXT NOT NULL,
+  -- Whether this answer permits any further contact at all.
+  permits_more INTEGER NOT NULL,
+  sort_order   INTEGER NOT NULL
+);
 CREATE TABLE conversation_messages (
   id TEXT PRIMARY KEY,
   thread_id TEXT NOT NULL REFERENCES conversation_threads(id) ON DELETE CASCADE,
@@ -3407,6 +3414,107 @@ CREATE TABLE privacy_consents (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   UNIQUE(product_id, consent_type)
 );
+CREATE TABLE probe_alternatives (
+  id            TEXT PRIMARY KEY,
+  experiment_id TEXT NOT NULL REFERENCES venture_experiments(id),
+  founder_id    TEXT NOT NULL REFERENCES founders(id),
+  exchange      TEXT NOT NULL REFERENCES probe_exchanges(exchange),
+  not_chosen_because TEXT NOT NULL,
+  recorded_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(experiment_id, exchange)
+);
+CREATE TABLE probe_cost_dimensions (
+  dimension   TEXT PRIMARY KEY,
+  what_it_is  TEXT NOT NULL,
+  sort_order  INTEGER NOT NULL
+);
+CREATE TABLE probe_costs (
+  id            TEXT PRIMARY KEY,
+  experiment_id TEXT NOT NULL REFERENCES venture_experiments(id),
+  founder_id    TEXT NOT NULL REFERENCES founders(id),
+  dimension     TEXT NOT NULL REFERENCES probe_cost_dimensions(dimension),
+  level         TEXT NOT NULL CHECK (level IN ('none','low','material','high')),
+  grounds       TEXT NOT NULL,
+  recorded_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(experiment_id, dimension)
+);
+CREATE TABLE probe_designs (
+  experiment_id     TEXT PRIMARY KEY REFERENCES venture_experiments(id),
+  founder_id        TEXT NOT NULL REFERENCES founders(id),
+  -- THE UNCERTAINTY THIS TEST IS FOR, and why this one rather than another.
+  -- "Does this idea work" is not an uncertainty; it is a mood.
+  decides           TEXT NOT NULL,
+  decides_because   TEXT NOT NULL,
+  -- The instrument, and why it was chosen over the alternatives recorded below.
+  exchange          TEXT NOT NULL REFERENCES probe_exchanges(exchange),
+  exchange_because  TEXT NOT NULL,
+  -- Stated before the result, so neither can be written to fit it.
+  can_prove         TEXT NOT NULL,
+  cannot_prove      TEXT NOT NULL,
+  -- Doing nothing yet is always an alternative. Why is knowing this now worth
+  -- more than waiting, observing, or spending the same attention elsewhere?
+  rather_than_waiting TEXT NOT NULL,
+  -- How cleanly it reaches reality: the acquisition path and what it costs.
+  distribution      TEXT NOT NULL,
+  -- What happens if it succeeds much faster than expected. Success is not
+  -- permission to lose control of fulfilment, quality or obligations.
+  if_it_succeeds    TEXT NOT NULL,
+  -- The circuit breaker: purchases owed and undelivered beyond this stop the
+  -- offer until the institution has caught up. NULL where nothing is sold.
+  fulfilment_cap    INTEGER,
+  recommendation    TEXT NOT NULL CHECK (recommendation IN ('run','reframe','defer','kill')),
+  recommendation_because TEXT NOT NULL,
+  designed_by       TEXT NOT NULL,
+  designed_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- Sealed when the owner decides, exactly as the prediction is.
+  sealed_at         TEXT
+);
+CREATE TABLE probe_exchanges (
+  exchange         TEXT PRIMARY KEY,
+  what_it_is       TEXT NOT NULL,
+  reveals          TEXT NOT NULL,
+  confounds        TEXT NOT NULL,
+  -- The outcome kind that constitutes capture evidence under this exchange.
+  capture_evidence TEXT REFERENCES business_outcome_event_kinds(kind),
+  -- Whether the institution can actually execute it today. A design may name
+  -- an exchange Foundry cannot yet run; the readiness check refuses the launch
+  -- and says so, rather than the design quietly becoming something else.
+  available        INTEGER NOT NULL DEFAULT 0,
+  sort_order       INTEGER NOT NULL
+);
+CREATE TABLE probe_interpretations (
+  id              TEXT PRIMARY KEY,
+  experiment_id   TEXT NOT NULL REFERENCES venture_experiments(id),
+  founder_id      TEXT NOT NULL REFERENCES founders(id),
+  observation     TEXT NOT NULL,
+  reading         TEXT NOT NULL,
+  distinguished_by TEXT,
+  recorded_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE probe_stop_conditions (
+  id             TEXT PRIMARY KEY,
+  experiment_id  TEXT NOT NULL REFERENCES venture_experiments(id),
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  kind           TEXT NOT NULL REFERENCES probe_stop_kinds(kind),
+  threshold      INTEGER NOT NULL,
+  because        TEXT NOT NULL,
+  triggered_at   TEXT,
+  triggered_detail TEXT,
+  recorded_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(experiment_id, kind)
+);
+CREATE TABLE probe_stop_kinds (
+  kind        TEXT PRIMARY KEY,
+  what_it_is  TEXT NOT NULL,
+  counts      TEXT NOT NULL,
+  -- WHAT ONE OF THEM IS CALLED, so a threshold can be read as a sentence.
+  -- "It stops at 1 complaint" is a thing the owner can hold in mind; "it stops
+  -- at 1 people said the thing was wrong" is a database row with a number on
+  -- it, and a summary written out of those is not a summary.
+  counted_one  TEXT NOT NULL,
+  counted_many TEXT NOT NULL,
+  sort_order  INTEGER NOT NULL
+);
 CREATE TABLE product_dna (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL UNIQUE REFERENCES products(id),
@@ -4886,6 +4994,17 @@ CREATE TABLE wisdom_patterns (
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE workshop_continuations (
+  id            TEXT PRIMARY KEY,
+  founder_id    TEXT NOT NULL REFERENCES founders(id),
+  email         TEXT NOT NULL,
+  experiment_id TEXT REFERENCES venture_experiments(id),
+  wants         TEXT NOT NULL REFERENCES continuation_kinds(kind),
+  -- Their own words, when they left any. Never paraphrased into the kind.
+  said          TEXT,
+  recorded_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(founder_id, email, experiment_id)
+);
 CREATE TABLE workshop_spend_ceiling (
   founder_id      TEXT PRIMARY KEY REFERENCES founders(id),
   cents_per_month INTEGER NOT NULL,
@@ -5324,6 +5443,7 @@ CREATE INDEX idx_predictions_type ON predictions(prediction_type);
 CREATE INDEX idx_premises_decision ON decision_premises(decision_id);
 CREATE INDEX idx_premises_product_status ON decision_premises(product_id, status);
 CREATE INDEX idx_priority_actions_product ON priority_actions(product_id, priority_score DESC) WHERE is_active = 1;
+CREATE INDEX idx_probe_interpretations ON probe_interpretations(experiment_id);
 CREATE INDEX idx_product_dna_product ON product_dna(product_id);
 CREATE UNIQUE INDEX idx_product_telemetry_identity
   ON product_telemetry_events(contributor_hash, step);
@@ -5512,6 +5632,7 @@ CREATE UNIQUE INDEX idx_wiki_entries_unique
   ON agent_wiki_entries(product_id, section, title);
 CREATE INDEX idx_wisdom_patterns_agent ON wisdom_patterns(product_id, agent_name);
 CREATE INDEX idx_wisdom_patterns_product ON wisdom_patterns(product_id, active);
+CREATE INDEX idx_workshop_continuations ON workshop_continuations(founder_id, email);
 CREATE INDEX idx_workspace_events_ws ON workspace_events(workspace_id, at);
 CREATE UNIQUE INDEX idx_workspace_grant_live
   ON workspace_grants(workspace_id, capability_key) WHERE revoked_at IS NULL;
@@ -6044,6 +6165,12 @@ CREATE TRIGGER consequence_rungs_constitutional_insert BEFORE INSERT ON conseque
 BEGIN SELECT RAISE(ABORT,'consequence_rung:constitutional'); END;
 CREATE TRIGGER consequence_rungs_constitutional_update BEFORE UPDATE ON consequence_rungs
 BEGIN SELECT RAISE(ABORT,'consequence_rung:constitutional'); END;
+CREATE TRIGGER continuation_kinds_constitutional_delete BEFORE DELETE ON continuation_kinds
+BEGIN SELECT RAISE(ABORT,'continuation_kind:constitutional'); END;
+CREATE TRIGGER continuation_kinds_constitutional_insert BEFORE INSERT ON continuation_kinds
+BEGIN SELECT RAISE(ABORT,'continuation_kind:constitutional'); END;
+CREATE TRIGGER continuation_kinds_constitutional_update BEFORE UPDATE ON continuation_kinds
+BEGIN SELECT RAISE(ABORT,'continuation_kind:constitutional'); END;
 CREATE TRIGGER cost_event_attribution_guard
 BEFORE INSERT ON cost_events
 BEGIN
@@ -7612,6 +7739,144 @@ BEGIN
   SELECT RAISE(ABORT,'prediction_resolution:needs_a_reason')
     WHERE trim(NEW.because) = '' OR trim(NEW.evidence_ref) = '';
 END;
+CREATE TRIGGER probe_alternative_guard
+BEFORE INSERT ON probe_alternatives
+BEGIN
+  SELECT RAISE(ABORT,'probe_alternative:incomplete') WHERE trim(NEW.not_chosen_because) = '';
+  SELECT RAISE(ABORT,'probe_alternative:no_design') WHERE NOT EXISTS (
+    SELECT 1 FROM probe_designs d WHERE d.experiment_id = NEW.experiment_id AND d.founder_id = NEW.founder_id);
+  -- The chosen exchange is not one of the alternatives.
+  SELECT RAISE(ABORT,'probe_alternative:is_the_chosen_one') WHERE EXISTS (
+    SELECT 1 FROM probe_designs d WHERE d.experiment_id = NEW.experiment_id AND d.exchange = NEW.exchange);
+  -- A SEALED DELIBERATION TAKES NOTHING NEW. Adding a reading, an alternative,
+  -- a cost or a stop condition after the owner has decided is editing the
+  -- thinking to fit the answer, which is the one thing this table exists to
+  -- make impossible.
+  SELECT RAISE(ABORT,'probe_alternative:is_sealed') WHERE EXISTS (
+    SELECT 1 FROM probe_designs d WHERE d.experiment_id = NEW.experiment_id AND d.sealed_at IS NOT NULL);
+END;
+CREATE TRIGGER probe_cost_dimensions_constitutional_delete BEFORE DELETE ON probe_cost_dimensions
+BEGIN SELECT RAISE(ABORT,'probe_cost_dimension:constitutional'); END;
+CREATE TRIGGER probe_cost_dimensions_constitutional_insert BEFORE INSERT ON probe_cost_dimensions
+BEGIN SELECT RAISE(ABORT,'probe_cost_dimension:constitutional'); END;
+CREATE TRIGGER probe_cost_dimensions_constitutional_update BEFORE UPDATE ON probe_cost_dimensions
+BEGIN SELECT RAISE(ABORT,'probe_cost_dimension:constitutional'); END;
+CREATE TRIGGER probe_cost_guard
+BEFORE INSERT ON probe_costs
+BEGIN
+  -- A LEVEL WITHOUT GROUNDS IS A NUMBER WITH A WORD ON IT.
+  SELECT RAISE(ABORT,'probe_cost:grounds_required') WHERE trim(NEW.grounds) = '';
+  SELECT RAISE(ABORT,'probe_cost:no_design') WHERE NOT EXISTS (
+    SELECT 1 FROM probe_designs d WHERE d.experiment_id = NEW.experiment_id AND d.founder_id = NEW.founder_id);
+  -- A SEALED DELIBERATION TAKES NOTHING NEW. Adding a reading, an alternative,
+  -- a cost or a stop condition after the owner has decided is editing the
+  -- thinking to fit the answer, which is the one thing this table exists to
+  -- make impossible.
+  SELECT RAISE(ABORT,'probe_cost:is_sealed') WHERE EXISTS (
+    SELECT 1 FROM probe_designs d WHERE d.experiment_id = NEW.experiment_id AND d.sealed_at IS NOT NULL);
+END;
+CREATE TRIGGER probe_design_guard
+BEFORE INSERT ON probe_designs
+BEGIN
+  SELECT RAISE(ABORT,'probe_design:incomplete')
+    WHERE trim(NEW.decides) = '' OR trim(NEW.decides_because) = '' OR trim(NEW.exchange_because) = ''
+       OR trim(NEW.can_prove) = '' OR trim(NEW.cannot_prove) = '' OR trim(NEW.rather_than_waiting) = ''
+       OR trim(NEW.distribution) = '' OR trim(NEW.if_it_succeeds) = ''
+       OR trim(NEW.recommendation_because) = '' OR trim(NEW.designed_by) = '';
+  SELECT RAISE(ABORT,'probe_design:experiment_invalid') WHERE NOT EXISTS (
+    SELECT 1 FROM venture_experiments e WHERE e.id = NEW.experiment_id AND e.founder_id = NEW.founder_id);
+  -- THE DELIBERATION COMES BEFORE THE DECISION. One written after the owner
+  -- has already said yes is a justification, and the whole point of the row is
+  -- that it is not one.
+  SELECT RAISE(ABORT,'probe_design:after_the_decision') WHERE EXISTS (
+    SELECT 1 FROM venture_experiments e WHERE e.id = NEW.experiment_id AND e.decision IS NOT NULL);
+  SELECT RAISE(ABORT,'probe_design:cannot_arrive_sealed') WHERE NEW.sealed_at IS NOT NULL;
+  SELECT RAISE(ABORT,'probe_design:cap_cannot_be_negative') WHERE NEW.fulfilment_cap IS NOT NULL AND NEW.fulfilment_cap < 1;
+END;
+CREATE TRIGGER probe_design_sealed
+BEFORE UPDATE ON probe_designs
+BEGIN
+  SELECT RAISE(ABORT,'probe_design:immutable')
+    WHERE NEW.experiment_id IS NOT OLD.experiment_id OR NEW.founder_id IS NOT OLD.founder_id
+       OR NEW.designed_by IS NOT OLD.designed_by OR NEW.designed_at IS NOT OLD.designed_at;
+  -- Once sealed, the thinking is what it was. A design that could be edited
+  -- after exposure would let every outcome be narrated as the expected one.
+  SELECT RAISE(ABORT,'probe_design:is_sealed')
+    WHERE OLD.sealed_at IS NOT NULL
+      AND (NEW.decides IS NOT OLD.decides OR NEW.decides_because IS NOT OLD.decides_because
+        OR NEW.exchange IS NOT OLD.exchange OR NEW.exchange_because IS NOT OLD.exchange_because
+        OR NEW.can_prove IS NOT OLD.can_prove OR NEW.cannot_prove IS NOT OLD.cannot_prove
+        OR NEW.rather_than_waiting IS NOT OLD.rather_than_waiting
+        OR NEW.distribution IS NOT OLD.distribution OR NEW.if_it_succeeds IS NOT OLD.if_it_succeeds
+        OR NEW.fulfilment_cap IS NOT OLD.fulfilment_cap
+        OR NEW.recommendation IS NOT OLD.recommendation
+        OR NEW.recommendation_because IS NOT OLD.recommendation_because);
+  SELECT RAISE(ABORT,'probe_design:unsealed_once_sealed')
+    WHERE OLD.sealed_at IS NOT NULL AND NEW.sealed_at IS NULL;
+END;
+CREATE TRIGGER probe_exchanges_constitutional_delete BEFORE DELETE ON probe_exchanges
+BEGIN SELECT RAISE(ABORT,'probe_exchange:constitutional'); END;
+CREATE TRIGGER probe_exchanges_constitutional_insert BEFORE INSERT ON probe_exchanges
+BEGIN SELECT RAISE(ABORT,'probe_exchange:constitutional'); END;
+CREATE TRIGGER probe_exchanges_constitutional_update BEFORE UPDATE ON probe_exchanges
+BEGIN
+  SELECT RAISE(ABORT,'probe_exchange:constitutional') WHERE
+    NEW.exchange IS NOT OLD.exchange OR NEW.what_it_is IS NOT OLD.what_it_is
+    OR NEW.reveals IS NOT OLD.reveals OR NEW.confounds IS NOT OLD.confounds
+    OR NEW.capture_evidence IS NOT OLD.capture_evidence OR NEW.sort_order IS NOT OLD.sort_order;
+END;
+CREATE TRIGGER probe_interpretation_guard
+BEFORE INSERT ON probe_interpretations
+BEGIN
+  SELECT RAISE(ABORT,'probe_interpretation:incomplete')
+    WHERE trim(NEW.observation) = '' OR trim(NEW.reading) = '';
+  SELECT RAISE(ABORT,'probe_interpretation:no_design') WHERE NOT EXISTS (
+    SELECT 1 FROM probe_designs d WHERE d.experiment_id = NEW.experiment_id AND d.founder_id = NEW.founder_id);
+  -- A SEALED DELIBERATION TAKES NOTHING NEW. Adding a reading, an alternative,
+  -- a cost or a stop condition after the owner has decided is editing the
+  -- thinking to fit the answer, which is the one thing this table exists to
+  -- make impossible.
+  SELECT RAISE(ABORT,'probe_interpretation:is_sealed') WHERE EXISTS (
+    SELECT 1 FROM probe_designs d WHERE d.experiment_id = NEW.experiment_id AND d.sealed_at IS NOT NULL);
+END;
+CREATE TRIGGER probe_interpretation_sealed
+BEFORE UPDATE ON probe_interpretations
+BEGIN
+  SELECT RAISE(ABORT,'probe_interpretation:is_sealed') WHERE EXISTS (
+    SELECT 1 FROM probe_designs d WHERE d.experiment_id = OLD.experiment_id AND d.sealed_at IS NOT NULL);
+END;
+CREATE TRIGGER probe_stop_condition_guard
+BEFORE INSERT ON probe_stop_conditions
+BEGIN
+  SELECT RAISE(ABORT,'probe_stop_condition:incomplete')
+    WHERE trim(NEW.because) = '' OR NEW.threshold < 1;
+  SELECT RAISE(ABORT,'probe_stop_condition:no_design') WHERE NOT EXISTS (
+    SELECT 1 FROM probe_designs d WHERE d.experiment_id = NEW.experiment_id AND d.founder_id = NEW.founder_id);
+  SELECT RAISE(ABORT,'probe_stop_condition:cannot_arrive_triggered') WHERE NEW.triggered_at IS NOT NULL;
+  -- A SEALED DELIBERATION TAKES NOTHING NEW. Adding a reading, an alternative,
+  -- a cost or a stop condition after the owner has decided is editing the
+  -- thinking to fit the answer, which is the one thing this table exists to
+  -- make impossible.
+  SELECT RAISE(ABORT,'probe_stop_condition:is_sealed') WHERE EXISTS (
+    SELECT 1 FROM probe_designs d WHERE d.experiment_id = NEW.experiment_id AND d.sealed_at IS NOT NULL);
+END;
+CREATE TRIGGER probe_stop_condition_triggered_once
+BEFORE UPDATE ON probe_stop_conditions
+BEGIN
+  SELECT RAISE(ABORT,'probe_stop_condition:immutable')
+    WHERE NEW.experiment_id IS NOT OLD.experiment_id OR NEW.kind IS NOT OLD.kind
+       OR NEW.threshold IS NOT OLD.threshold OR NEW.because IS NOT OLD.because;
+  SELECT RAISE(ABORT,'probe_stop_condition:triggered_once')
+    WHERE OLD.triggered_at IS NOT NULL AND NEW.triggered_at IS NOT OLD.triggered_at;
+  SELECT RAISE(ABORT,'probe_stop_condition:trigger_needs_detail')
+    WHERE NEW.triggered_at IS NOT NULL AND trim(coalesce(NEW.triggered_detail,'')) = '';
+END;
+CREATE TRIGGER probe_stop_kinds_constitutional_delete BEFORE DELETE ON probe_stop_kinds
+BEGIN SELECT RAISE(ABORT,'probe_stop_kind:constitutional'); END;
+CREATE TRIGGER probe_stop_kinds_constitutional_insert BEFORE INSERT ON probe_stop_kinds
+BEGIN SELECT RAISE(ABORT,'probe_stop_kind:constitutional'); END;
+CREATE TRIGGER probe_stop_kinds_constitutional_update BEFORE UPDATE ON probe_stop_kinds
+BEGIN SELECT RAISE(ABORT,'probe_stop_kind:constitutional'); END;
 CREATE TRIGGER product_lineage_evidence_mode_insert
 BEFORE INSERT ON products
 WHEN NEW.from_opportunity_id IS NOT NULL
@@ -9090,6 +9355,21 @@ BEGIN
     SELECT 1 FROM venture_mandates m
      WHERE m.id = NEW.mandate_id AND m.evidence_mode = NEW.evidence_mode
        AND m.founder_id = NEW.founder_id);
+END;
+CREATE TRIGGER workshop_continuation_append_only_delete
+BEFORE DELETE ON workshop_continuations
+BEGIN
+  SELECT RAISE(ABORT,'workshop_continuation:append_only') WHERE NOT EXISTS (
+    SELECT 1 FROM products p WHERE p.owner_id = OLD.founder_id AND p.erasure_scheduled_at IS NOT NULL);
+END;
+CREATE TRIGGER workshop_continuation_append_only_update
+BEFORE UPDATE ON workshop_continuations
+BEGIN SELECT RAISE(ABORT,'workshop_continuation:append_only'); END;
+CREATE TRIGGER workshop_continuation_guard
+BEFORE INSERT ON workshop_continuations
+BEGIN
+  SELECT RAISE(ABORT,'workshop_continuation:email_invalid')
+    WHERE NEW.email NOT LIKE '%_@_%.__%' OR NEW.email <> lower(trim(NEW.email));
 END;
 CREATE TRIGGER workshop_spend_ceiling_guard
 BEFORE INSERT ON workshop_spend_ceiling

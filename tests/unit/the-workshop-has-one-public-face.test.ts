@@ -137,7 +137,7 @@ describe('the Workshop stands up through the door, and the world is read back', 
     expect(r.retiredRecords).toHaveLength(3);
     expect(r.site.failed).toEqual([]);
     expect(r.site.unverified).toEqual([]);
-    expect(r.site.verified).toBe(13);
+    expect(r.site.verified).toBe(14);
     // The world: the site answers, www redirects, the trust surface is there, the private institution is not.
     expect((await publicGet('/')).text).toContain('a digital workshop by Thomas Norton');
     expect((await publicGet('/about')).text).toContain('I\'m Thomas Norton');
@@ -156,7 +156,7 @@ describe('the Workshop stands up through the door, and the world is read back', 
     expect(JSON.parse(String(retired.verification_json))).toMatchObject({ gone: true });
     expect(receipts.filter((x) => x.tool === 'cloudflare_worker_deploy')).toHaveLength(1);
     expect(receipts.filter((x) => x.tool === 'cloudflare_domain_attach')).toHaveLength(2);
-    expect(receipts.filter((x) => x.tool === 'cloudflare_kv_put')).toHaveLength(13);
+    expect(receipts.filter((x) => x.tool === 'cloudflare_kv_put')).toHaveLength(14);
     expect(receipts.filter((x) => x.tool === 'cloudflare_kv_namespace_create')).toHaveLength(1);
     expect(receipts.every((x) => x.outcome === 'applied')).toBe(true);
     await expect(query(`UPDATE cloudflare_mutations SET previous_json = '{}' WHERE rowid = 1`)).rejects.toThrow(/only_verification_may_follow/);
@@ -166,12 +166,12 @@ describe('the Workshop stands up through the door, and the world is read back', 
     const again = await standUpWorkshop(OWNER);
     expect(again).toMatchObject({ program: 'unchanged', retiredRecords: [] });
     expect(again.site.published).toEqual([]);
-    expect((await query(`SELECT COUNT(*) AS n FROM public_publications`)).rows[0]).toMatchObject({ n: 13 });
+    expect((await query(`SELECT COUNT(*) AS n FROM public_publications`)).rows[0]).toMatchObject({ n: 14 });
     const health = await workshopHealth(OWNER);
     expect(health.site).toMatchObject({ status: 'healthy' });
     expect(health.cloudflare).toMatchObject({ status: 'healthy' });
     expect(health.sending.status).toBe('needs_attention');
-    expect((await page('/foundry/public-workshop')).text).toContain('13 pages served as published');
+    expect((await page('/foundry/public-workshop')).text).toContain('14 pages served as published');
   });
 
   it('the envelope: another zone, an NS record, a wildcard, a page key deleted, another program, another hostname are refused and the refusal is a receipt', async () => {
@@ -285,6 +285,10 @@ describe('Proof 1 is reframed under the Workshop without rewriting its history',
 
 describe('Allow publishes the page; offers point at it and go out as the Workshop', () => {
   it('Allow: the link is placed, the page is published and read back, the offer text carries the page and no raw link', async () => {
+    // The thinking comes before the decision: nothing is allowed until the
+    // deliberation behind it exists, so Proof 1's is recorded here first.
+    const { reconsiderProof1 } = await import('../../src/services/venture/proof-1-deliberation.js');
+    await reconsiderProof1(OWNER);
     expect(redirectedTo(await post(`/foundry/experiments/${X}/allow`))).toContain('done=allowed');
     await query(`UPDATE venture_experiments SET decided_at = '2026-09-07 13:00:00' WHERE id = ?`, [X]);
     const pub = (await experimentPublication(X))!;
@@ -331,7 +335,7 @@ describe('Allow publishes the page; offers point at it and go out as the Worksho
     const sync = await syncOptOutsFromStore(OWNER);
     expect(sync).toMatchObject({ recorded: 1, swept: 1, failed: [] });
     expect(await isSuppressed(OWNER, victim.email!)).toMatchObject({ suppressed: true, reason: 'they_asked' });
-    expect(state.cf.kv.get((await publicWorkshopOf(OWNER))!.kvNamespaceId!)!.size).toBe(14); // 14 pages, the opt-out swept
+    expect(state.cf.kv.get((await publicWorkshopOf(OWNER))!.kvNamespaceId!)!.size).toBe(15); // 15 pages, the opt-out swept
     await expect(planOffer({ experimentId: X, recipientId: victim.id, now: NOW })).rejects.toThrow(/recipient_suppressed/);
     expect(await contactIsRefused(FOUNDRY, victim.email!)).toMatchObject({ refused: true, reason: 'workshop:they_asked' });
     // The row refuses on its own, and the list is append-only.

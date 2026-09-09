@@ -298,6 +298,13 @@ export async function allowExperiment(input: { founderId: string; experimentId: 
   const e = await experimentRow(input.experimentId);
   if (!e || e.founderId !== input.founderId) throw new HandRefused('experiment_not_found');
   if (e.decision !== null) throw new HandRefused('already_decided', e.decision);
+  // THE THINKING COMES BEFORE THE DECISION — before the sending address, before
+  // the postal line, before anything a checklist could supply. What the
+  // deliberation says it is not ready for is refused here rather than
+  // discovered by the people it would have reached.
+  const { designStandsInTheWay, sealDesign } = await import('./probe-design.js');
+  const inTheWay = await designStandsInTheWay(input.experimentId);
+  if (inTheWay.length) throw new HandRefused('design_not_ready', inTheWay.join('; '));
   const ready = await readiness(input.experimentId);
   if (!ready.ok) throw new HandRefused('not_ready', ready.missing.join('; '));
   const plan = await offerShapePlanOf(input.experimentId);
@@ -359,6 +366,9 @@ export async function allowExperiment(input: { founderId: string; experimentId: 
   const bound = await bindActToExperiment({ actId, experimentId: input.experimentId, measurementCritical: true });
   if ('refused' in bound) throw new HandRefused('act_binding_refused', bound.refused);
   await decideProposedAct({ id: actId, decision: 'approved', decidedBy: by });
+  // Sealed with the prediction, for the same reason: a deliberation that could
+  // be edited afterwards would let every result be narrated as the expected one.
+  await sealDesign(input.experimentId);
   return { productId: after.productId, actId };
 }
 
@@ -741,9 +751,11 @@ export async function reconcileAction(actionId: string, status?: DeliveryStatus)
       const f = await one('SELECT payment_ref FROM experiment_fulfilments WHERE id = ?', [String(r.fulfilment_id)]);
       payer = f ? await buyerAddressFor(String(f.payment_ref)).catch(() => null) : null;
     }
+    const { exchangeOf } = await import('./probe-design-context.js');
     await recordBusinessOutcome({
       exposureId: x.id, kind: String(r.experiment_act) === 'offer' ? (delivered ? 'offer_delivered' : 'delivery_failed') : (delivered ? 'delivery' : 'delivery_failed'),
       observedAt: new Date(), provider: 'resend', providerRef: receipt.message_id, payerReference: payer, arrivedVia: 'email',
+      exchange: await exchangeOf(experimentId),
     });
   }
   await query(`UPDATE outbound_actions SET outcome_status = ?, outcome_evidence_ref = ?, reconcile_after = NULL WHERE id = ?`,
@@ -866,6 +878,18 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
       const placed = await prepareExposure(experimentId).catch((err: unknown) => ({ refused: err instanceof Error ? err.message : String(err) }));
       if ('refused' in placed) { report.exceptions.push(`offer not placed: ${placed.refused}`); mayWrite = false; }
       else if (w && !placed.published) { report.exceptions.push(`page not published: ${placed.failures.join('; ')}`); mayWrite = false; }
+    }
+
+    // WHAT THE WORLD HAS ALREADY SAID CAN STOP IT BEFORE ITS BUDGET DOES.
+    // Once enough people have said it is not useful, or complained, or asked
+    // not to be written to, further exposure buys no information and spends
+    // other people's attention and the Workshop's standing.
+    if (mayWrite) {
+      const { stopConditionsMet, overFulfilmentCap } = await import('./probe-design.js');
+      const stop = await stopConditionsMet(experimentId);
+      if (stop.stop) { report.exceptions.push(`stopped early: ${stop.because.join('; ')}`); mayWrite = false; }
+      const capacity = await overFulfilmentCap(experimentId);
+      if (capacity.over) { report.exceptions.push(`holding the offer: ${capacity.owed} purchases owed against a cap of ${capacity.cap} until they are delivered`); mayWrite = false; }
     }
 
     // Offers, paced, one per approved business, never twice.

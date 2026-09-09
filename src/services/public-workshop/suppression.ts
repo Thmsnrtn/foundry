@@ -55,6 +55,20 @@ export async function contactFrequencyRefusal(input: { founderId: string; email:
   if (!w) return null;
   const now = input.now ?? new Date();
   const email = normalise(input.email);
+  // WHAT THEY LAST ASKED FOR OUTRANKS ANY INTERVAL. "Nothing further" is not a
+  // complaint and does not belong on the do-not-contact list, but it is still
+  // an answer, and a workshop that recorded it and then wrote again would be
+  // keeping the answer and ignoring it. An answer given about one experiment
+  // is not permission for the next one either (§consent has scope), so a
+  // continuation that permits more lifts nothing here; only a refusal binds.
+  const said = (await rows(
+    `SELECT c.wants, c.experiment_id, k.permits_more FROM workshop_continuations c
+       JOIN continuation_kinds k ON k.kind = c.wants
+      WHERE c.founder_id = ? AND c.email = ? ORDER BY c.recorded_at DESC, c.rowid DESC LIMIT 1`,
+    [input.founderId, email]))[0];
+  if (said && Number(said.permits_more) === 0 && String(said.experiment_id ?? '') !== input.experimentId) {
+    return `they answered "${String(said.wants).replaceAll('_', ' ')}" the last time the Workshop wrote to them`;
+  }
   const history = await rows('SELECT experiment_id, contacted_at FROM public_contacts WHERE founder_id = ? AND email = ? ORDER BY contacted_at DESC', [input.founderId, email]);
   const gapMs = w.contactGapDays * 86_400_000;
   const yearMs = 365 * 86_400_000;
@@ -75,19 +89,84 @@ export async function contactHistory(founderId: string, limit = 200): Promise<Ar
     .map((r) => ({ email: String(r.email), experimentId: String(r.experiment_id), contactedAt: String(r.contacted_at), outcome: String(r.outcome_status ?? 'unresolved') }));
 }
 
+// ─── What somebody asked for ─────────────────────────────────────────────────
+
+/**
+ * CONSENT HAS SCOPE. An opt-out was the only answer the Workshop could hear,
+ * so every other thing a participant might say — send me more of these, only
+ * tell me when something unusual appears, I would pay for this regularly, this
+ * was not useful — arrived as silence. Silence is not permission, and it is not
+ * refusal either; it is the absence of an answer, and treating it as either is
+ * how a workshop starts writing to people who never asked.
+ *
+ * A stated continuation is kept as the person stated it. The kind is a closed
+ * vocabulary so the institution cannot invent a permission; their own words are
+ * kept beside it and never paraphrased into the kind.
+ */
+export type ContinuationKind = 'never' | 'nothing' | 'more_like_this' | 'only_unusual' | 'would_pay_regularly' | 'will_explain';
+
+export async function recordContinuation(input: {
+  founderId: string; email: string; experimentId?: string | null; wants: ContinuationKind; said?: string | null;
+}): Promise<{ recorded: boolean }> {
+  const email = normalise(input.email);
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return { recorded: false };
+  const kind = (await rows('SELECT kind, permits_more FROM continuation_kinds WHERE kind = ?', [input.wants]))[0];
+  if (!kind) return { recorded: false };
+  const r = await query(
+    `INSERT INTO workshop_continuations (id, founder_id, email, experiment_id, wants, said) VALUES (?,?,?,?,?,?)
+       ON CONFLICT(founder_id, email, experiment_id) DO NOTHING`,
+    [nanoid(), input.founderId, email, input.experimentId ?? null, input.wants, input.said?.trim() || null]);
+  // A CONTINUATION THAT PERMITS NOTHING IS A NO, and is enforced as one.
+  // Recording the preference and leaving the list untouched would be keeping
+  // the answer and ignoring it.
+  if (Number(kind.permits_more) === 0 && input.wants === 'never') {
+    await suppress({ founderId: input.founderId, email, reason: 'they_asked', source: 'page_opt_out', experimentId: input.experimentId ?? null, note: input.said?.trim() || null });
+  }
+  return { recorded: (r.rowsAffected ?? 0) > 0 };
+}
+
+/** What this person has asked of the Workshop, newest first. */
+export async function continuationsOf(founderId: string, email: string): Promise<Array<{ wants: ContinuationKind; permitsMore: boolean; said: string | null; experimentId: string | null; recordedAt: string }>> {
+  return (await rows(
+    `SELECT c.wants, c.said, c.experiment_id, c.recorded_at, k.permits_more
+       FROM workshop_continuations c JOIN continuation_kinds k ON k.kind = c.wants
+      WHERE c.founder_id = ? AND c.email = ? ORDER BY c.recorded_at DESC, c.rowid DESC`,
+    [founderId, normalise(email)]))
+    .map((r) => ({ wants: String(r.wants) as ContinuationKind, permitsMore: Number(r.permits_more) === 1,
+      said: r.said == null ? null : String(r.said), experimentId: r.experiment_id == null ? null : String(r.experiment_id),
+      recordedAt: String(r.recorded_at) }));
+}
+
+/** Everything anybody has asked of this Workshop, for the owner to read. */
+export async function continuationsFor(founderId: string, limit = 100): Promise<Array<{ email: string; wants: ContinuationKind; said: string | null; experimentId: string | null; recordedAt: string }>> {
+  return (await rows(
+    `SELECT email, wants, said, experiment_id, recorded_at FROM workshop_continuations WHERE founder_id = ? ORDER BY recorded_at DESC, rowid DESC LIMIT ?`,
+    [founderId, limit]))
+    .map((r) => ({ email: String(r.email), wants: String(r.wants) as ContinuationKind,
+      said: r.said == null ? null : String(r.said), experimentId: r.experiment_id == null ? null : String(r.experiment_id),
+      recordedAt: String(r.recorded_at) }));
+}
 /**
  * OPT-OUTS ARRIVE AT THE PUBLIC STORE, since the page is served without the
  * private institution awake. Each is copied onto the Workshop's list, then
  * removed from the store through the door so no personal data lingers at
  * the edge longer than it must.
  */
-export async function syncOptOutsFromStore(founderId: string): Promise<{ recorded: number; swept: number; failed: string[] }> {
+export async function syncOptOutsFromStore(founderId: string): Promise<{ recorded: number; continuations: number; swept: number; failed: string[] }> {
   const w = await publicWorkshopOf(founderId);
-  const out = { recorded: 0, swept: 0, failed: [] as string[] };
+  const out = { recorded: 0, continuations: 0, swept: 0, failed: [] as string[] };
   if (!w?.kvNamespaceId) return out;
   const { listKvKeys, readKvValue, cloudflareConfigured } = await import('../integration/cloudflare-gateway.js');
   if (!cloudflareConfigured()) return out;
   const { invoke } = await import('../outbound/gateway.js');
+  const sweep = async (key: string): Promise<void> => {
+    const swept = await invoke({
+      productId: w.productId, tool: 'cloudflare_kv_delete', action: `sweep an answer already kept (${key})`,
+      params: { namespace_id: w.kvNamespaceId, key, purpose: 'remove a person\'s answer from the public store after recording it privately' },
+      dedupKey: `public:${founderId}:sweep:${key}`, surface: 'public_workshop', dataClass: 'general',
+    });
+    if (swept.ok) out.swept += 1; else out.failed.push(`${key}: ${swept.phase} ${swept.reason}`);
+  };
   for (const key of await listKvKeys(w.kvNamespaceId, 'optout:')) {
     try {
       const raw = await readKvValue(w.kvNamespaceId, key);
@@ -97,13 +176,55 @@ export async function syncOptOutsFromStore(founderId: string): Promise<{ recorde
         const r = await suppress({ founderId, email: v.email, reason: 'they_asked', source: 'page_opt_out', note: v.at ? `opted out on the page at ${v.at}` : null });
         if (r.recorded) out.recorded += 1;
       }
-      const swept = await invoke({
-        productId: w.productId, tool: 'cloudflare_kv_delete', action: `sweep an opt-out record already kept (${key})`,
-        params: { namespace_id: w.kvNamespaceId, key, purpose: 'remove an opt-out from the public store after recording it privately' },
-        dedupKey: `public:${founderId}:sweep:${key}`, surface: 'public_workshop', dataClass: 'general',
-      });
-      if (swept.ok) out.swept += 1; else out.failed.push(`${key}: ${swept.phase} ${swept.reason}`);
+      await sweep(key);
+    } catch (e) { out.failed.push(`${key}: ${e instanceof Error ? e.message : String(e)}`); }
+  }
+  // WHAT THEY ASKED FOR ARRIVES THE SAME WAY, and is worth more than an
+  // opt-out: it is the only thing anybody volunteers that says whether the
+  // thing was any use. Recorded as a continuation, and — where the person
+  // stated it plainly — as commercial evidence of the kind no bounce can be.
+  for (const key of await listKvKeys(w.kvNamespaceId, 'continue:')) {
+    try {
+      const raw = await readKvValue(w.kvNamespaceId, key);
+      if (raw === null) continue;
+      const v = JSON.parse(raw) as { email?: string; wants?: string; said?: string; slug?: string; at?: string };
+      if (v.email && v.wants) {
+        const experimentId = v.slug ? await experimentBySlug(founderId, v.slug) : null;
+        const r = await recordContinuation({ founderId, email: v.email, experimentId, wants: v.wants as ContinuationKind, said: v.said ?? null });
+        if (r.recorded) {
+          out.continuations += 1;
+          if (experimentId) await recordContinuationEvidence(experimentId, v.wants as ContinuationKind, key);
+        }
+      }
+      await sweep(key);
     } catch (e) { out.failed.push(`${key}: ${e instanceof Error ? e.message : String(e)}`); }
   }
   return out;
+}
+
+async function experimentBySlug(founderId: string, slug: string): Promise<string | null> {
+  const r = (await rows('SELECT experiment_id FROM public_experiments WHERE founder_id = ? AND slug = ?', [founderId, slug]))[0];
+  return r ? String(r.experiment_id) : null;
+}
+
+/**
+ * WHAT A STATED ANSWER IS WORTH AS EVIDENCE. "I had it and it was not useful"
+ * is much stronger evidence about the thing than a bounce, and "keep sending
+ * me these" is the first sign a one-off might be a relationship. Neither is
+ * inferred: both are what the person chose to say, on a page they chose to
+ * open, with nothing tracking whether they opened it.
+ */
+async function recordContinuationEvidence(experimentId: string, wants: ContinuationKind, key: string): Promise<void> {
+  const kind = wants === 'nothing' || wants === 'never' ? 'declined_value'
+    : wants === 'more_like_this' || wants === 'only_unusual' || wants === 'would_pay_regularly' ? 'continuation_requested'
+      : null;
+  if (kind === null) return;
+  const { exposureOf, recordBusinessOutcome } = await import('../venture/outcome.js');
+  const { exchangeOf } = await import('../venture/probe-design-context.js');
+  const x = await exposureOf(experimentId);
+  if (!x) return;
+  await recordBusinessOutcome({
+    exposureId: x.id, kind, observedAt: new Date(), provider: 'apexmicro', providerRef: key,
+    arrivedVia: 'experiment_page', exchange: await exchangeOf(experimentId),
+  });
 }

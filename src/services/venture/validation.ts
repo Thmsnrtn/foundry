@@ -125,6 +125,23 @@ export async function whatWasTried(opportunityId: string): Promise<Experiment[]>
     .rows as unknown as Array<Record<string, unknown>>).map(read);
 }
 
+/**
+ * ONE EXPERIMENT, DECIDED OR NOT. `whatWasTried` is a history and rightly shows
+ * only what was decided; the page that explains a test has to exist before the
+ * owner decides it, or the deliberation he is being asked to read is unreadable
+ * until reading it no longer matters.
+ */
+export async function theExperiment(experimentId: string): Promise<Experiment | null> {
+  const r = (await query(
+    `SELECT e.id, e.what_we_do, e.what_we_expect, e.would_disprove, e.cost_cents,
+            e.decision, e.ran_at, e.what_happened, e.verdict, u.question,
+            e.validity, e.invalid_because, e.invalidated_by, e.invalidated_at, e.settles_when, e.rerun_of
+       FROM venture_experiments e
+       JOIN market_unknowns u ON u.id = e.unknown_id
+      WHERE e.id = ?`, [experimentId])).rows[0] as unknown as Record<string, unknown> | undefined;
+  return r ? read(r) : null;
+}
+
 function read(r: Record<string, unknown>): Experiment {
   return {
     id: String(r.id), whatWeDo: String(r.what_we_do),

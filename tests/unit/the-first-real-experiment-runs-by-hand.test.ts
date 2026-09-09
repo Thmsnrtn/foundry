@@ -141,6 +141,16 @@ describe('the owner\'s part is three acts on one page', () => {
     expect((await readiness(X)).reachable).toBe(11);
   });
 
+  it('Allow is refused before any prerequisite is read, while the thinking behind the test is unrecorded', async () => {
+    await expect(allowExperiment({ founderId: OWNER, experimentId: X }))
+      .rejects.toThrow(/design_not_ready.*the thinking comes before the decision/);
+    const { reconsiderProof1 } = await import('../../src/services/venture/proof-1-deliberation.js');
+    const { design } = await reconsiderProof1(OWNER);
+    expect(design.experimentId).toBe(X);
+    expect(design.sealedAt).toBeNull();
+    expect((await page(`/foundry/experiments/${X}`)).text).toContain('I think this is worth running.');
+  });
+
   it('Allow is refused while a prerequisite is missing, by the page and by the rows', async () => {
     const shown = (await page(`/foundry/experiments/${X}`)).text;
     expect(shown).toContain('Not yet.');
@@ -405,6 +415,21 @@ describe('Stop, and nothing he can press dead-ends', () => {
     await recordMaterial({ founderId: OWNER, experimentId: Y, kind: 'offer_shape', title: 'shape', body: JSON.stringify({ ...PROOF1_PLAN, price: { ...PROOF1_PLAN.price, lookupKey: 'foundry_second_brief' } }), by });
     await addRecipients({ founderId: OWNER, experimentId: Y, recipients: [{ counterpartyRef: 'A Shop, Lowell', email: 'shop@example.com', channel: 'email' }] });
     expect(redirectedTo(await post(`/foundry/experiments/${Y}/recipients/approve-remaining`))).toContain('done=reviewed');
+    // A second test needs its own thinking; the first one's does not carry over.
+    const { recordDesign } = await import('../../src/services/venture/probe-design.js');
+    await recordDesign({
+      founderId: OWNER, experimentId: Y, designedBy: 'test',
+      decides: 'whether a second set of shops answers the same way',
+      decidesBecause: 'one set of eleven cannot say whether the first answer was the shops or the offer',
+      exchange: 'upfront_price', exchangeBecause: 'the same instrument, so the two results can be compared at all',
+      canProve: 'that a shop outside the first set will pay', cannotProve: 'that either set represents the trade',
+      ratherThanWaiting: 'the first result is already in hand and cannot be interpreted alone',
+      distribution: 'the same cold outbound, to a second hand-reviewed set',
+      ifItSucceeds: 'nothing widens; two results are still two results',
+      recommendation: 'run', recommendationBecause: 'it is the cheapest way to learn whether the first answer was about the shops',
+      interpretations: [{ observation: 'the second set answers differently', reading: 'the first result was about those shops, not the offer' }],
+      costs: [{ dimension: 'reputation', level: 'material', grounds: 'the same public name stands behind both' }],
+    });
     expect(redirectedTo(await post(`/foundry/experiments/${Y}/allow`))).toContain('done=allowed');
     expect((await getExperimentView(OWNER, Y, NOW))!.controls.canStop).toBe(true);
     expect(redirectedTo(await post(`/foundry/experiments/${Y}/stop`, { reason: '' }))).toMatch(/error=reason[+%]20required/);

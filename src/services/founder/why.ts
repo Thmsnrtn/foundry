@@ -371,27 +371,54 @@ async function whyExperiment(founderId: string, experimentId: string): Promise<W
        FROM venture_experiments e JOIN venture_opportunities o ON o.id = e.opportunity_id
       WHERE e.id = ? AND e.founder_id = ?`, [experimentId, founderId]))[0];
   if (!e) return null;
-  const { whatWasTried } = await import('../venture/validation.js');
-  const t = (await whatWasTried(String(e.opportunity_id))).find((x) => x.id === experimentId);
+  const { theExperiment } = await import('../venture/validation.js');
+  const t = await theExperiment(experimentId);
   if (!t) return null;
   const resolutions = await rows(
     `SELECT verdict, because, resolved_by, resolved_at FROM prediction_resolutions WHERE prediction_id = ?`,
     [experimentId]);
   const { spentThinkingOn } = await import('../ai/spend-ledger.js');
   const thinking = await spentThinkingOn({ kind: 'experiment', id: experimentId });
+  // THE DELIBERATION, WHERE ONE WAS RECORDED BEFORE THE ANSWER. The comment on
+  // `restsOn` above says a page that shows its work may not manufacture a thought
+  // process after the fact, and that a later trace could persist the real thing
+  // prospectively. This is that trace: every line below was written at design
+  // time and sealed at the owner's decision, so the alternatives here are ones
+  // that were genuinely weighed and the uncertainty is what was genuinely not
+  // known — not a reconstruction assembled now out of rows kept for other
+  // reasons. Where no design was recorded, these levels stay as they were.
+  const { designOf, readStopConditions } = await import('../venture/probe-design.js');
+  const d = await designOf(experimentId);
+  const stops = d ? await readStopConditions(experimentId) : [];
+  const level = (l: string): string => l === 'high' ? 'high' : l === 'material' ? 'material' : l;
   return {
     kind: 'experiment', id: experimentId,
     title: 'Why I expect this',
     object: { kind: 'search', id: String(e.opportunity_id), name: String(e.headline), href: `/foundry/why/candidate/${String(e.opportunity_id)}` },
     answer: t.whatWeExpect,
-    because: [`The question it settles: ${t.question}`, `What I do: ${t.whatWeDo}`],
+    because: [`The question it settles: ${t.question}`, `What I do: ${t.whatWeDo}`,
+      ...(d ? [`What it decides: ${d.decides} — ${d.decidesBecause}`,
+        `Rather than waiting: ${d.ratherThanWaiting}`,
+        `How it reaches people: ${d.distribution}`] : [])],
     evidence: t.whatHappened ? [`What happened: ${t.whatHappened}`] : ['It has not run, so there is no evidence yet — only a prediction, sealed so the result can disagree with me.'],
     restsOn: [`What would disprove it: ${t.wouldDisprove}`,
-      ...(t.settlesWhen ? [`Settles when: ${t.settlesWhen}`] : [])],
-    otherRecordedPaths: [],
+      ...(t.settlesWhen ? [`Settles when: ${t.settlesWhen}`] : []),
+      ...(d ? [`The exchange: ${d.exchange.whatItIs} — ${d.exchangeBecause}`,
+        `What that exchange shows: ${d.exchange.reveals}`,
+        `What it confounds: ${d.exchange.confounds}`,
+        `What it can prove: ${d.canProve}`] : [])],
+    otherRecordedPaths: d
+      ? [...d.alternatives.map((x) => `Not chosen — ${x.whatItIs}: ${x.notChosenBecause}`),
+        ...d.interpretations.map((i) => `If ${i.observation}, it could mean: ${i.reading}${i.distinguishedBy ? ` (told apart by ${i.distinguishedBy})` : ''}`),
+        `If it succeeds: ${d.ifItSucceeds}`,
+        ...(d.recommendation === 'run' ? [] : [`I recommended ${d.recommendation} rather than run: ${d.recommendationBecause}`])]
+      : [],
     uncertainty: t.validity === 'invalid'
       ? [`Invalid: ${t.invalidBecause ?? 'it did not measure what it was for'}. It has no verdict and is re-run, not read.`]
-      : ['One test answers one question. A result is what the world did once, not what it will do.'],
+      : ['One test answers one question. A result is what the world did once, not what it will do.',
+        ...(d ? [`What it cannot prove: ${d.cannotProve}`,
+          ...d.interpretations.filter((i) => i.distinguishedBy === null)
+            .map((i) => `I could not tell apart, from this test alone: ${i.observation} → ${i.reading}`)] : [])],
     activity: [`Proposed ${day(e.proposed_at)}.`, t.decision ? `You ${t.decision} it${e.decided_at ? ` on ${day(e.decided_at)}` : ''}.` : 'Waiting on you.',
       ...(t.ranAt ? [`Ran ${day(t.ranAt)}.`] : [])],
     outcome: [
@@ -399,10 +426,20 @@ async function whyExperiment(founderId: string, experimentId: string): Promise<W
       ...resolutions.map((r) => `Resolved ${String(r.verdict).replace('_', ' ')} by ${String(r.resolved_by)} on ${day(r.resolved_at)}: ${String(r.because)}`),
     ],
     cost: [t.costCents > 0 ? `${money(t.costCents)} to run.` : 'Nothing to run.',
-      ...(thinking > 0 ? [`${money(thinking)} of my own thinking about it, from the ledger.`] : [])],
-    authority: [`Decided by ${e.decided_by ? String(e.decided_by) : 'nobody yet'}. I cannot run a test you have not approved.`],
+      ...(thinking > 0 ? [`${money(thinking)} of my own thinking about it, from the ledger.`] : []),
+      // Cash is the smallest of these. What a probe truly costs is stated at
+      // design time across every dimension it spends, so the cheap-sounding
+      // number never stands alone on the page that explains it.
+      ...d ? d.costs.filter((c) => c.level !== 'none')
+        .map((c) => `${c.whatItIs}: ${level(c.level)} — ${c.grounds}`) : []],
+    authority: [`Decided by ${e.decided_by ? String(e.decided_by) : 'nobody yet'}. I cannot run a test you have not approved.`,
+      ...(d ? [`Designed by ${d.designedBy} on ${day(d.designedAt)}${d.sealedAt ? `, sealed ${day(d.sealedAt)} when you decided` : ', not yet sealed'}.`,
+        ...(d.fulfilmentCap === null ? [] : [`I stop taking new work at ${d.fulfilmentCap} — success is not a reason to promise more than one person can deliver.`]),
+        ...stops.map((x) => `Stops at ${x.threshold} ${x.whatItIs} (${x.count} so far)${x.met ? ' — reached; no more is being sent' : ''}: ${x.because}`)] : [])],
     technical: [['venture_experiments', experimentId], ['opportunity', String(e.opportunity_id)],
       ['validity', t.validity], ['evidence_mode', String(e.evidence_mode)],
+      ...(d ? [['probe_designs.exchange', d.exchange.exchange] as [string, string],
+        ['probe_designs.recommendation', d.recommendation] as [string, string]] : []),
       ...(t.rerunOf ? [['rerun_of', t.rerunOf] as [string, string]] : [])],
   };
 }

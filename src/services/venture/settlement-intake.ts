@@ -69,9 +69,14 @@ export async function intakeStripeSettlement(event: { id?: string; type: string;
       result.refused.push({ providerRef: fact.providerRef, reason: `the payment was not made at the experiment's exposure (${x.provider}:${x.exposureRef})` });
       continue;
     }
+    // A PAYMENT KEEPS THE EXCHANGE IT WAS MADE UNDER. Money paid before
+    // anything was received and money paid afterwards by somebody who had
+    // already read the thing are different evidence about willingness to pay.
+    const { exchangeOf } = await import('./probe-design-context.js');
     const ev = await recordBusinessOutcome({
       exposureId: x.id, kind: fact.kind, amountCents: fact.amountCents, currency: fact.currency.toLowerCase(), observedAt: fact.observedAt,
       provider: 'stripe', providerRef: fact.providerRef, payerReference: fact.payerReference, arrivedVia: 'payment_link',
+      exchange: await exchangeOf(fact.experimentId),
     });
     if ('refused' in ev) { result.refused.push({ providerRef: fact.providerRef, reason: ev.refused }); continue; }
     result.recorded.push({ eventId: ev.id, kind: fact.kind, duplicate: ev.duplicate });

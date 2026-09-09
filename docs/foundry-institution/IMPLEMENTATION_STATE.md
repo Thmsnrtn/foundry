@@ -1273,3 +1273,49 @@ Nothing is live: the supplied Cloudflare token is rejected by Cloudflare, so the
 Workshop exists in the repository and in rehearsal only. Proof 1 is reframed as
 Experiment 001 (its pre-Workshop design declined as superseded, by the
 institution, with the successor naming it) and is not launched.
+
+## The deliberation behind a probe (2026-09-09)
+
+Migration 286 and `src/services/venture/probe-design.ts` answer the standing
+comment in `src/services/founder/why.ts`: the "assumptions" and "alternatives"
+levels of *Show your work* were a reconstruction assembled after the fact, and
+the comment named the remedy as a trace persisted prospectively, at judgement
+time. Seven tables hold it — `probe_exchanges`, `probe_cost_dimensions`,
+`probe_stop_kinds` and `continuation_kinds` as constitutional vocabularies;
+`probe_designs`, `probe_interpretations`, `probe_alternatives`, `probe_costs`
+and `probe_stop_conditions` as one experiment's recorded thinking — and
+`workshop_continuations` holds what a participant asked for next.
+
+What changed behaviourally, rather than structurally:
+
+- `allowExperiment` refuses before readiness when no deliberation is recorded,
+  when the chosen exchange is one the institution cannot execute, when no
+  competing reading of the likely result exists, or when no cost beyond cash is
+  stated. It seals the design at the owner's decision.
+- `runHand` stops new offers when a stop condition the design set is met, or
+  when more is owed than the fulfilment cap allows, while deliveries, refunds
+  and settlement continue.
+- `business_outcome_events.exchange` records the instrument each observation was
+  made under; null where none was recorded, never guessed.
+- The public experiment page asks what the reader would like next; the six
+  answers are a closed vocabulary, `never` suppresses across the Workshop,
+  `nothing` and `never` are recorded as `declined_value`, and the three that
+  permit more are recorded as `continuation_requested`. A stated refusal
+  outranks any contact interval on a later experiment.
+- `whyExperiment` now reads the trace instead of reconstructing one, and exists
+  before the decision rather than only after it. The experiment page opens with
+  a compressed reading — what it settles, what it truly costs, where the
+  institution could be wrong, where it stops, why — with the full record one
+  link away.
+
+**Proof 1 is reconsidered, not launched.** `probe:reconsider-proof1` records the
+judgement behind Experiment 001: that the unknown is whether the *screening
+labour* is worth money, not access to data that is public and free; that upfront
+price is chosen because a stranger's payment is the only unambiguous
+observation, with pay-after-value weighed and refused on its merits; that a null
+result cannot be told apart from "these shops do not transact by cold email";
+that the true cost is material in owner attention, shared reputation and
+opportunity cost while cash is low and new infrastructure is none; that it stops
+at one complaint, three bounces, two opt-outs or three declined-value answers;
+that new offers stop at ten owed briefs; and that it should run — with the
+decision remaining entirely the owner's. Nobody has been contacted.

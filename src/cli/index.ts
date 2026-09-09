@@ -896,6 +896,10 @@ program.command('workshop:rehearse <founderIdOrEmail>').description('Experiment 
   .action(async (who: string) => { const { rehearseWorkshop } = await import('../services/public-workshop/rehearsal.js'); const r = await rehearseWorkshop(await founderIdOf(who)); out(r); if (!r.ok) process.exit(1); });
 program.command('workshop:reframe-proof1 <founderIdOrEmail>').description('Supersede the pre-Workshop design of Proof 1 with Experiment 001 under the Workshop; launches nothing')
   .action(async (who: string) => { const { reframeProof1UnderTheWorkshop } = await import('../services/venture/proof-1.js'); out(await reframeProof1UnderTheWorkshop(await founderIdOf(who))); });
+program.command('probe:reconsider-proof1 <founderIdOrEmail>').description('Record the deliberation behind Proof 1 before the owner decides; contacts nobody and permits nothing')
+  .action(async (who: string) => { const { reconsiderProof1 } = await import('../services/venture/proof-1-deliberation.js'); out(await reconsiderProof1(await founderIdOf(who))); });
+program.command('probe:short <experimentId>').description('The compressed reading of one probe\'s deliberation, as the owner meets it')
+  .action(async (experimentId: string) => { const { theShortVersion } = await import('../services/venture/probe-design.js'); out(await theShortVersion(experimentId)); });
 program.command('workshop:gate <experimentId>').description('The publication gate for one experiment, as outbound would see it')
   .action(async (experimentId: string) => { const { publicationGate } = await import('../services/public-workshop/publication.js'); out(await publicationGate(experimentId)); });
 
