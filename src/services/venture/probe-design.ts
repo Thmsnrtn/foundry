@@ -51,8 +51,13 @@ export interface ProbeDesign {
   fulfilmentCap: number | null;
   recommendation: Recommendation; recommendationBecause: string;
   designedBy: string; designedAt: string; sealedAt: string | null;
+  /** Narrowed before it was sealed, and why. Null when it stands as first written. */
+  amendedAt: string | null; amendedBecause: string | null;
   interpretations: Interpretation[]; alternatives: Alternative[]; costs: Cost[]; stopConditions: StopCondition[];
+  amendments: Amendment[];
 }
+
+export interface Amendment { field: string; was: string; readsNow: string; because: string; amendedBy: string; amendedAt: string }
 
 export async function exchanges(): Promise<ExchangeFacts[]> {
   return (await rows('SELECT * FROM probe_exchanges ORDER BY sort_order')).map(projectExchange);
@@ -131,6 +136,11 @@ export async function designOf(experimentId: string): Promise<ProbeDesign | null
       counted: String(Number(r.threshold) === 1 ? r.counted_one : r.counted_many), threshold: Number(r.threshold),
       because: String(r.because), triggeredAt: r.triggered_at == null ? null : String(r.triggered_at),
       triggeredDetail: r.triggered_detail == null ? null : String(r.triggered_detail) }));
+  const amendments = (await rows(
+    `SELECT field, was, reads_now, because, amended_by, amended_at FROM probe_design_amendments
+      WHERE experiment_id = ? ORDER BY amended_at, rowid`, [experimentId]))
+    .map((r) => ({ field: String(r.field), was: String(r.was), readsNow: String(r.reads_now),
+      because: String(r.because), amendedBy: String(r.amended_by), amendedAt: String(r.amended_at) }));
   return {
     experimentId, founderId: String(d.founder_id),
     decides: String(d.decides), decidesBecause: String(d.decides_because),
@@ -141,8 +151,80 @@ export async function designOf(experimentId: string): Promise<ProbeDesign | null
     recommendation: String(d.recommendation) as Recommendation, recommendationBecause: String(d.recommendation_because),
     designedBy: String(d.designed_by), designedAt: String(d.designed_at),
     sealedAt: d.sealed_at == null ? null : String(d.sealed_at),
-    interpretations, alternatives, costs, stopConditions,
+    amendedAt: d.amended_at == null ? null : String(d.amended_at),
+    amendedBecause: d.amended_because == null ? null : String(d.amended_because),
+    interpretations, alternatives, costs, stopConditions, amendments,
   };
+}
+
+const AMENDABLE = {
+  decides: 'decides', decidesBecause: 'decides_because', exchangeBecause: 'exchange_because',
+  canProve: 'can_prove', cannotProve: 'cannot_prove', ratherThanWaiting: 'rather_than_waiting',
+  distribution: 'distribution', ifItSucceeds: 'if_it_succeeds',
+  recommendationBecause: 'recommendation_because',
+} as const;
+export type AmendableField = keyof typeof AMENDABLE;
+
+/**
+ * NARROW A CLAIM BEFORE THE WORLD IS ASKED, AND SAY THAT YOU DID.
+ *
+ * The one legitimate reason to change a recorded deliberation is that the
+ * claim it states is broader than the exchange it chose can establish. Doing
+ * that before the owner decides is honest; doing it afterwards is narration.
+ * So this refuses once sealed, refuses without a reason, keeps every sentence
+ * it replaced, and stamps the design — a design that was narrowed can never
+ * afterwards be read as one that was always this narrow.
+ *
+ * The exchange itself is deliberately not amendable. Changing the instrument
+ * is designing a different probe, and a different probe deserves its own
+ * record rather than this one with a new sentence in it.
+ */
+export async function amendDesign(input: {
+  experimentId: string; because: string; amendedBy: string;
+  fields?: Partial<Record<AmendableField, string>>;
+  interpretations?: Array<{ observation: string; was: string; reading: string; distinguishedBy?: string | null }>;
+}): Promise<{ amended: number; design: ProbeDesign }> {
+  const d = await designOf(input.experimentId);
+  if (!d) throw new DesignRefused('no_design', 'there is no deliberation to amend');
+  if (d.sealedAt !== null) throw new DesignRefused('is_sealed', 'the deliberation was sealed when you decided; it is the record now');
+  const because = input.because.trim();
+  if (!because) throw new DesignRefused('needs_a_reason', 'an amendment without a stated reason is a silent rewrite');
+
+  const ledger: Array<[string, string, string]> = [];
+  const sets: string[] = []; const args: unknown[] = [];
+  for (const [key, column] of Object.entries(AMENDABLE) as Array<[AmendableField, string]>) {
+    const next = input.fields?.[key]?.trim();
+    if (next === undefined || next === (d[key] as string)) continue;
+    ledger.push([key, d[key] as string, next]);
+    sets.push(`${column} = ?`); args.push(next);
+  }
+  for (const i of input.interpretations ?? []) {
+    const had = d.interpretations.find((x) => x.observation === i.observation && x.reading === i.was);
+    if (!had || had.reading === i.reading.trim()) continue;
+    ledger.push([`interpretation: ${i.observation}`, had.reading, i.reading.trim()]);
+  }
+  if (ledger.length === 0) return { amended: 0, design: d };
+
+  // THE LEDGER FIRST. The design's own trigger refuses a stamp that no
+  // amendment stands behind, and refuses a changed sentence that carries no
+  // stamp — so the words being replaced are kept before they can be replaced,
+  // and the whole change lands as one statement rather than a sequence of
+  // edits any one of which would look unexplained.
+  for (const [field, was, readsNow] of ledger) {
+    await query(
+      `INSERT INTO probe_design_amendments (id, experiment_id, founder_id, field, was, reads_now, because, amended_by)
+       VALUES (?,?,?,?,?,?,?,?)`,
+      [nanoid(), input.experimentId, d.founderId, field, was, readsNow, because, input.amendedBy]);
+  }
+  for (const i of input.interpretations ?? []) {
+    await query(
+      `UPDATE probe_interpretations SET reading = ?, distinguished_by = ?
+        WHERE experiment_id = ? AND observation = ? AND reading = ?`,
+      [i.reading.trim(), i.distinguishedBy?.trim() ?? null, input.experimentId, i.observation, i.was]);
+  }
+  sets.push(`amended_at = datetime('now')`, 'amended_because = ?'); args.push(because, input.experimentId);
+  await query(`UPDATE probe_designs SET ${sets.join(', ')} WHERE experiment_id = ?`, args);
+  return { amended: ledger.length, design: (await designOf(input.experimentId))! };
 }
 
 /** Sealed with the prediction, at the owner's decision, for the same reason. */
@@ -296,6 +378,10 @@ export async function theShortVersion(experimentId: string): Promise<ShortVersio
       : [`If it works, I stop taking new work at ${d.fulfilmentCap} — more than that is a promise neither of us can keep.`]),
     `Why: ${lower(gist(d.recommendationBecause))}`,
   ];
+  if (d.amendedAt !== null) {
+    lines.splice(lines.length - 1, 0,
+      `I narrowed what this claims to settle on ${d.amendedAt.slice(0, 10)}, before you decided: ${lower(gist(d.amendedBecause ?? ''))}`);
+  }
   return { recommendation: d.recommendation, headline: RECOMMENDATION_HEADLINE[d.recommendation], lines, sealed: d.sealedAt !== null };
 }
 

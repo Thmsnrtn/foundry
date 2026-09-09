@@ -411,7 +411,8 @@ async function whyExperiment(founderId: string, experimentId: string): Promise<W
       ? [...d.alternatives.map((x) => `Not chosen — ${x.whatItIs}: ${x.notChosenBecause}`),
         ...d.interpretations.map((i) => `If ${i.observation}, it could mean: ${i.reading}${i.distinguishedBy ? ` (told apart by ${i.distinguishedBy})` : ''}`),
         `If it succeeds: ${d.ifItSucceeds}`,
-        ...(d.recommendation === 'run' ? [] : [`I recommended ${d.recommendation} rather than run: ${d.recommendationBecause}`])]
+        ...(d.recommendation === 'run' ? [] : [`I recommended ${d.recommendation} rather than run: ${d.recommendationBecause}`]),
+        ...d.amendments.map((a) => `Before it was narrowed, ${a.field} read: “${a.was}”`)]
       : [],
     uncertainty: t.validity === 'invalid'
       ? [`Invalid: ${t.invalidBecause ?? 'it did not measure what it was for'}. It has no verdict and is re-run, not read.`]
@@ -434,6 +435,9 @@ async function whyExperiment(founderId: string, experimentId: string): Promise<W
         .map((c) => `${c.whatItIs}: ${level(c.level)} — ${c.grounds}`) : []],
     authority: [`Decided by ${e.decided_by ? String(e.decided_by) : 'nobody yet'}. I cannot run a test you have not approved.`,
       ...(d ? [`Designed by ${d.designedBy} on ${day(d.designedAt)}${d.sealedAt ? `, sealed ${day(d.sealedAt)} when you decided` : ', not yet sealed'}.`,
+        // A DESIGN THAT WAS NARROWED MAY NOT READ AS ONE THAT WAS ALWAYS THIS
+        // NARROW. The stamp sits on the page beside the words it changed.
+        ...(d.amendedAt === null ? [] : [`Narrowed ${day(d.amendedAt)}, before you decided: ${String(d.amendedBecause)}`]),
         ...(d.fulfilmentCap === null ? [] : [`I stop taking new work at ${d.fulfilmentCap} — success is not a reason to promise more than one person can deliver.`]),
         ...stops.map((x) => `Stops at ${x.threshold} ${x.whatItIs} (${x.count} so far)${x.met ? ' — reached; no more is being sent' : ''}: ${x.because}`)] : [])],
     technical: [['venture_experiments', experimentId], ['opportunity', String(e.opportunity_id)],

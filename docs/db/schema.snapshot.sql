@@ -3438,6 +3438,19 @@ CREATE TABLE probe_costs (
   recorded_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(experiment_id, dimension)
 );
+CREATE TABLE probe_design_amendments (
+  id            TEXT PRIMARY KEY,
+  experiment_id TEXT NOT NULL REFERENCES venture_experiments(id),
+  founder_id    TEXT NOT NULL REFERENCES founders(id),
+  -- Which sentence changed. A design field ('decides'), or one reading of a
+  -- likely observation ('interpretation: Nobody pays inside seven days').
+  field         TEXT NOT NULL,
+  was           TEXT NOT NULL,
+  reads_now     TEXT NOT NULL,
+  because       TEXT NOT NULL,
+  amended_by    TEXT NOT NULL,
+  amended_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE probe_designs (
   experiment_id     TEXT PRIMARY KEY REFERENCES venture_experiments(id),
   founder_id        TEXT NOT NULL REFERENCES founders(id),
@@ -3468,7 +3481,7 @@ CREATE TABLE probe_designs (
   designed_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   -- Sealed when the owner decides, exactly as the prediction is.
   sealed_at         TEXT
-);
+, amended_at TEXT, amended_because TEXT);
 CREATE TABLE probe_exchanges (
   exchange         TEXT PRIMARY KEY,
   what_it_is       TEXT NOT NULL,
@@ -5443,6 +5456,7 @@ CREATE INDEX idx_predictions_type ON predictions(prediction_type);
 CREATE INDEX idx_premises_decision ON decision_premises(decision_id);
 CREATE INDEX idx_premises_product_status ON decision_premises(product_id, status);
 CREATE INDEX idx_priority_actions_product ON priority_actions(product_id, priority_score DESC) WHERE is_active = 1;
+CREATE INDEX idx_probe_design_amendments ON probe_design_amendments(experiment_id, amended_at);
 CREATE INDEX idx_probe_interpretations ON probe_interpretations(experiment_id);
 CREATE INDEX idx_product_dna_product ON product_dna(product_id);
 CREATE UNIQUE INDEX idx_product_telemetry_identity
@@ -7775,6 +7789,32 @@ BEGIN
   SELECT RAISE(ABORT,'probe_cost:is_sealed') WHERE EXISTS (
     SELECT 1 FROM probe_designs d WHERE d.experiment_id = NEW.experiment_id AND d.sealed_at IS NOT NULL);
 END;
+CREATE TRIGGER probe_design_amendment_append_only
+BEFORE UPDATE ON probe_design_amendments
+BEGIN
+  SELECT RAISE(ABORT,'probe_design_amendment:append_only');
+END;
+CREATE TRIGGER probe_design_amendment_erasable
+BEFORE DELETE ON probe_design_amendments
+BEGIN
+  SELECT RAISE(ABORT,'probe_design_amendment:append_only') WHERE NOT EXISTS (
+    SELECT 1 FROM products p WHERE p.owner_id = OLD.founder_id AND p.erasure_scheduled_at IS NOT NULL);
+END;
+CREATE TRIGGER probe_design_amendment_guard
+BEFORE INSERT ON probe_design_amendments
+BEGIN
+  SELECT RAISE(ABORT,'probe_design_amendment:incomplete')
+    WHERE trim(NEW.field) = '' OR trim(NEW.was) = '' OR trim(NEW.reads_now) = ''
+       OR trim(NEW.because) = '' OR trim(NEW.amended_by) = '';
+  SELECT RAISE(ABORT,'probe_design_amendment:no_change') WHERE NEW.was = NEW.reads_now;
+  SELECT RAISE(ABORT,'probe_design_amendment:no_design') WHERE NOT EXISTS (
+    SELECT 1 FROM probe_designs d WHERE d.experiment_id = NEW.experiment_id AND d.founder_id = NEW.founder_id);
+  -- THE SEAL IS THE END OF THE WINDOW. After the owner has decided, the reason
+  -- for a change is always the same reason — the result — and no wording of it
+  -- makes the amended claim evidence again.
+  SELECT RAISE(ABORT,'probe_design_amendment:after_the_seal') WHERE EXISTS (
+    SELECT 1 FROM probe_designs d WHERE d.experiment_id = NEW.experiment_id AND d.sealed_at IS NOT NULL);
+END;
 CREATE TRIGGER probe_design_guard
 BEFORE INSERT ON probe_designs
 BEGIN
@@ -7813,6 +7853,25 @@ BEGIN
         OR NEW.recommendation_because IS NOT OLD.recommendation_because);
   SELECT RAISE(ABORT,'probe_design:unsealed_once_sealed')
     WHERE OLD.sealed_at IS NOT NULL AND NEW.sealed_at IS NULL;
+  -- BEFORE THE SEAL, A CHANGE IS ALLOWED AND MUST SAY SO. Every content change
+  -- stamps the design and carries a reason, so nothing can be rewritten in a
+  -- way that leaves the row looking untouched.
+  SELECT RAISE(ABORT,'probe_design:amendment_needs_a_reason')
+    WHERE OLD.sealed_at IS NULL
+      AND (NEW.decides IS NOT OLD.decides OR NEW.decides_because IS NOT OLD.decides_because
+        OR NEW.exchange IS NOT OLD.exchange OR NEW.exchange_because IS NOT OLD.exchange_because
+        OR NEW.can_prove IS NOT OLD.can_prove OR NEW.cannot_prove IS NOT OLD.cannot_prove
+        OR NEW.rather_than_waiting IS NOT OLD.rather_than_waiting
+        OR NEW.distribution IS NOT OLD.distribution OR NEW.if_it_succeeds IS NOT OLD.if_it_succeeds
+        OR NEW.fulfilment_cap IS NOT OLD.fulfilment_cap
+        OR NEW.recommendation IS NOT OLD.recommendation
+        OR NEW.recommendation_because IS NOT OLD.recommendation_because)
+      AND (NEW.amended_at IS OLD.amended_at OR trim(coalesce(NEW.amended_because,'')) = '');
+  -- An amendment stamp without an amendment is a claim of care that did not
+  -- happen; it is refused in the same breath as an amendment without a stamp.
+  SELECT RAISE(ABORT,'probe_design:stamp_without_a_change')
+    WHERE NEW.amended_at IS NOT OLD.amended_at
+      AND NOT EXISTS (SELECT 1 FROM probe_design_amendments a WHERE a.experiment_id = NEW.experiment_id);
 END;
 CREATE TRIGGER probe_exchanges_constitutional_delete BEFORE DELETE ON probe_exchanges
 BEGIN SELECT RAISE(ABORT,'probe_exchange:constitutional'); END;
@@ -7824,6 +7883,18 @@ BEGIN
     NEW.exchange IS NOT OLD.exchange OR NEW.what_it_is IS NOT OLD.what_it_is
     OR NEW.reveals IS NOT OLD.reveals OR NEW.confounds IS NOT OLD.confounds
     OR NEW.capture_evidence IS NOT OLD.capture_evidence OR NEW.sort_order IS NOT OLD.sort_order;
+END;
+CREATE TRIGGER probe_interpretation_amended
+BEFORE UPDATE ON probe_interpretations
+BEGIN
+  -- The same window, for the readings. `probe_interpretation_sealed` already
+  -- refuses after the seal; this refuses a silent change before it.
+  SELECT RAISE(ABORT,'probe_interpretation:amendment_needs_a_reason')
+    WHERE (NEW.observation IS NOT OLD.observation OR NEW.reading IS NOT OLD.reading
+        OR NEW.distinguished_by IS NOT OLD.distinguished_by)
+      AND NOT EXISTS (
+        SELECT 1 FROM probe_design_amendments a
+         WHERE a.experiment_id = NEW.experiment_id AND a.reads_now = NEW.reading);
 END;
 CREATE TRIGGER probe_interpretation_guard
 BEFORE INSERT ON probe_interpretations

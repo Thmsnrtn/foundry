@@ -881,6 +881,10 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
     reason: 'the point at which one person had decided to stop, set before starting',
     onAccountErasure: { op: 'delete' },
   },
+  probe_design_amendments: {
+    reason: 'the sentences one person\'s deliberation used to say, and why it stopped saying them',
+    onAccountErasure: { op: 'delete' },
+  },
   // A STRANGER'S ANSWER, HELD BY THE WORKSHOP THAT ASKED. Same shape as
   // `public_suppressions`: the address belongs to somebody who is not the
   // founder, but the only thing that could ever act on it is this Workshop, and

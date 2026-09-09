@@ -898,6 +898,10 @@ program.command('workshop:reframe-proof1 <founderIdOrEmail>').description('Super
   .action(async (who: string) => { const { reframeProof1UnderTheWorkshop } = await import('../services/venture/proof-1.js'); out(await reframeProof1UnderTheWorkshop(await founderIdOf(who))); });
 program.command('probe:reconsider-proof1 <founderIdOrEmail>').description('Record the deliberation behind Proof 1 before the owner decides; contacts nobody and permits nothing')
   .action(async (who: string) => { const { reconsiderProof1 } = await import('../services/venture/proof-1-deliberation.js'); out(await reconsiderProof1(await founderIdOf(who))); });
+program.command('probe:narrow-proof1 <founderIdOrEmail>').description('Narrow the recorded Proof 1 claim to what its exchange can establish; refused once sealed, and keeps the words it replaced')
+  .action(async (who: string) => { const { narrowProof1ToWhatItCanEstablish } = await import('../services/venture/proof-1-deliberation.js'); out(await narrowProof1ToWhatItCanEstablish(await founderIdOf(who))); });
+program.command('workshop:readiness <founderIdOrEmail> <experimentId>').description('Walk the whole external chain and read every public surface from its public address; reports verified, ready, waiting or blocked')
+  .action(async (who: string, experimentId: string) => { const { externalReadiness } = await import('../services/public-workshop/readiness.js'); out(await externalReadiness(await founderIdOf(who), experimentId)); });
 program.command('probe:short <experimentId>').description('The compressed reading of one probe\'s deliberation, as the owner meets it')
   .action(async (experimentId: string) => { const { theShortVersion } = await import('../services/venture/probe-design.js'); out(await theShortVersion(experimentId)); });
 program.command('workshop:gate <experimentId>').description('The publication gate for one experiment, as outbound would see it')

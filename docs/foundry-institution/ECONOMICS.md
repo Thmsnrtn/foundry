@@ -170,3 +170,53 @@ further" is not a complaint and does not join the do-not-contact list** — but 
 outranks any contact interval, because a Workshop that recorded the answer and
 then wrote again would be keeping it and ignoring it. Only "never" suppresses,
 and it suppresses across the whole Workshop.
+
+## A claim may be narrowed before it is sealed (2026-09-09)
+
+Migration 286 made a deliberation immutable after the owner decides, which is
+what makes it evidence. It said nothing about the window before that, and left a
+gap that looks harmless: an unsealed design could be rewritten silently, so a
+claim could be quietly widened after being read and quietly narrowed after being
+doubted, with the row showing no sign either happened.
+
+The window itself is worth keeping. **A probe's stated claim should be narrowed
+when it turns out to be broader than the chosen exchange can establish**, and
+before the world is asked is the only honest time to do it. What must not be
+possible is doing it invisibly. So an amendment carries a reason, keeps the
+sentences it replaced, is refused once sealed, and stamps the design — a design
+that was narrowed can never afterwards read as one that was always this narrow.
+The chosen exchange is deliberately not amendable: changing the instrument is
+designing a different probe, and a different probe deserves its own record.
+
+**A price paid before delivery is the cleanest observation of pre-delivery
+willingness to pay. It is not the only unambiguous observation a stranger can
+produce.** A voluntary payment after experienced value is equally unambiguous
+about a different economic fact, and remains available to any later experiment
+where a relationship exists to trade on. Choosing upfront price for a first cold
+approach is a judgement about which question is being asked, not a claim that
+the other instrument is mute.
+
+## The outside is proven from outside (2026-09-09)
+
+A provider returning 200 is not evidence that a stranger can read a page, and a
+row saying "published" is not evidence either. Readiness is therefore reported
+in four words and no fifth: **verified** (observed from the public internet, just
+now), **ready** (true, but established privately), **waiting** (legitimately not
+done yet, and what it waits for), **blocked** (cannot proceed until somebody
+supplies something). Nothing is allowed to report the nearest green thing it can
+find in place of the thing that was actually asked.
+
+`waiting` carries the most weight. An experiment's public page is published when
+the owner allows the test, and that is deliberate: putting an offer page for an
+unapproved experiment on the internet would be the premature public act the
+design exists to prevent. Its leg reads `waiting`, and the same machinery is
+proven end to end against the rehearsal experiment instead.
+
+**A page that goes dark is read as dark, at the moment of writing.** The gate
+accepts a page verified within the last day, which is right for showing the
+owner a dashboard and wrong for deciding whether to write to a stranger: a probe
+of twenty-five messages over seven days can spend itself entirely inside that
+window, every recipient sent to a page the world no longer serves, under the one
+public name every later experiment also stands behind. So the pass that would
+write reads the page from its public address first. One request, at the only
+moment the answer changes anything.

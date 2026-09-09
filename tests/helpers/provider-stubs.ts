@@ -11,6 +11,8 @@ export interface ProviderState {
   domains: Array<{ id: string; name: string; status: string; records: Array<Record<string, unknown>> }>;
   /** Flip to 'verified' to simulate the registrar step being done. */
   nextDomainStatus: string;
+  /** The payment provider is unreachable, so a probe cannot place or check its offer. */
+  stripeDown: boolean;
   products: Array<{ id: string; name: string; metadata: Record<string, string> }>;
   prices: Array<{ id: string; product: string; unit_amount: number; currency: string; lookup_key: string; recurring: null; metadata: Record<string, string> }>;
   paymentLinks: Array<{ id: string; url: string; active: boolean; metadata: Record<string, string>; payment_intent_data: { metadata: Record<string, string> } | null; line_items: Array<{ price: string; quantity: number }> }>;
@@ -63,7 +65,7 @@ function nested(params: Record<string, string>, prefix: string): Record<string, 
 }
 
 export function providerStubs(): { state: ProviderState; fetch: (url: string | URL, init?: RequestInit) => Promise<Response> } {
-  const state: ProviderState = { sends: [], deliveryState: new Map(), refunds: [], domains: [], nextDomainStatus: 'pending', products: [], prices: [], paymentLinks: [], buyers: new Map(), calls: [], seq: 0, cf: freshCloudflare() };
+  const state: ProviderState = { sends: [], deliveryState: new Map(), refunds: [], domains: [], nextDomainStatus: 'pending', stripeDown: false, products: [], prices: [], paymentLinks: [], buyers: new Map(), calls: [], seq: 0, cf: freshCloudflare() };
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   const cfOk = (result: unknown, status = 200) => json({ success: true, result, errors: [] }, status);
   const cfErr = (code: number, message: string, status = 400) => json({ success: false, result: null, errors: [{ code, message }] }, status);
@@ -191,6 +193,9 @@ export function providerStubs(): { state: ProviderState; fetch: (url: string | U
     if (dg && method === 'GET') { const d = state.domains.find((x) => x.id === dg[1]); return d ? json(d) : json({ message: 'not found' }, 404); }
 
     // ── Stripe ──
+    if (state.stripeDown && u.startsWith('https://api.stripe.com/')) {
+      return json({ error: { message: 'the payment provider is unreachable' } }, 503);
+    }
     if (u === 'https://api.stripe.com/v1/refunds' && method === 'POST') {
       state.refunds.push({ body: String(init?.body), idempotency: headers['Idempotency-Key'] });
       return json({ id: `re_${state.refunds.length}`, status: 'succeeded', amount: 2900 });

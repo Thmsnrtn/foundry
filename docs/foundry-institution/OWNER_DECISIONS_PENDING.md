@@ -719,51 +719,84 @@ Nothing here reaches a provider — that stays point 1, and stays yours.
 
 ## §15 PENDING — A Cloudflare token that Cloudflare accepts
 
-**Asked 2026-09-09.** The public Workshop is built and proven in rehearsal, and
-one credential stands between it and reality.
+**Asked 2026-09-09. Re-checked 2026-09-09 and still rejected.** The public
+Workshop is built and proven in rehearsal, and one credential stands between it
+and reality. This is the whole of what is needed; nothing else about the
+Workshop waits on you.
 
-**What was tried.** The token supplied with the Workshop direction was presented
-to Cloudflare four ways: as given and with its `cfat_` prefix stripped, against
-`GET /user/tokens/verify` and against zone listing. Every attempt was rejected:
+**What was tried.** The supplied token was presented to Cloudflare as given and
+with its `cfat_` prefix stripped, against token verification and zone listing.
+Every attempt was rejected by Cloudflare itself — the API answered, with a
+Cloudflare error body, so this is not a network or proxy failure:
 
 ```
-GET  /client/v4/user/tokens/verify        → 401  code 1000  "Invalid API Token"
-GET  /client/v4/zones?name=apexmicro.ai   → 403  code 9109  "Invalid access token"
+GET /client/v4/user/tokens/verify        → 401  code 1000  "Invalid API Token"
+GET /client/v4/zones?name=apexmicro.ai   → 403  code 9109  "Invalid access token"
 ```
 
-The account id `959f0bb25e98e07e8379bdf7aa311c23` is well-formed and has not
-been used, because every call needs the token first. The rejection is
-Cloudflare's, not a network or proxy failure: the API answered each time, with a
-Cloudflare error body.
+**Worth knowing, since the shape is unusual.** A Cloudflare *API token* is about
+forty characters of letters, digits, underscores and hyphens with **no prefix**;
+the supplied value is 54 characters beginning `cfat_`. That is the shape of a
+different Cloudflare credential, or of a value copied from a preview rather than
+from the one-time reveal. A token is shown **once**, at creation; if the page
+was left and returned to, what was copied is not the secret.
 
-**Worth checking, since the shape is unusual.** A Cloudflare *API token* is
-about forty characters of letters, digits, underscores and hyphens with **no
-prefix**; the supplied value is 54 characters beginning `cfat_`. That is the
-shape of a different Cloudflare credential, or of a value copied from a
-preview rather than from the one-time reveal. A token is shown **once**, when it
-is created; if the page was left and returned to, what was copied may not be the
-secret.
+**Two things, and you are done.**
 
-**What is needed.** One API token created at *My Profile → API Tokens → Create
-Token*, with these permissions, which are exactly what the built capability
-uses and no more:
+**1. Create the token** at *My Profile → API Tokens → Create Token → Create
+Custom Token*, with exactly these permissions — the ones the built capability
+uses, and no others:
 
-| Scope | Permission |
-|---|---|
-| Account → Workers Scripts | Edit |
-| Account → Workers KV Storage | Edit |
-| Account → Email Routing Addresses | Edit |
-| Zone → DNS (apexmicro.ai) | Edit |
-| Zone → Zone (apexmicro.ai) | Read |
-| Zone → Email Routing Rules (apexmicro.ai) | Edit |
+| Scope | Permission | What uses it |
+|---|---|---|
+| Account → Workers Scripts | Edit | deploying the page-serving program |
+| Account → Workers KV Storage | Edit | the store the pages are served from |
+| Account → Email Routing Addresses | Edit | forwarding the Workshop address to you |
+| Zone → Zone (apexmicro.ai) | Read | finding the zone by name |
+| Zone → DNS (apexmicro.ai) | Edit | the records for the site and the sender |
+| Zone → Workers Routes (apexmicro.ai) | Edit | attaching apexmicro.ai to the program |
+| Zone → Email Routing Rules (apexmicro.ai) | Edit | the rule that routes the address |
 
 Zone resources limited to `apexmicro.ai`. Nothing needs Zone Settings, SSL,
-billing, registrar, account membership or any other zone: the institution has no
-tool that could use them.
+billing, registrar, account membership, or any other zone — the institution has
+no tool that could use them, and a broader token would grant authority nothing
+would ever exercise.
+
+*(`Zone → Workers Routes: Edit` is new since this was first written. Attaching a
+custom domain to the Worker goes through the Workers domains API, which is
+zone-scoped; without it the stand-up would have failed one step from the end and
+cost you a second round trip.)*
+
+**2. Install it**, from a machine with `flyctl` and access to the app. The token
+goes straight into the production secret store and nowhere else — not into the
+repository, not into logs, not into any page:
+
+```
+flyctl secrets set CLOUDFLARE_API_TOKEN='<the token>' \
+                   CLOUDFLARE_ACCOUNT_ID='959f0bb25e98e07e8379bdf7aa311c23' \
+                   --app foundry-intel
+```
+
+**What happens then, without further instruction from you.** The Workshop tick
+finds Cloudflare configured and stands the Workshop up through the governed
+door, with a receipt for every change and a recorded way to put each one back:
+the page store, the program, `apexmicro.ai` and `www`, the sender's DNS records,
+and the reply route. It then reads every public page back over public HTTPS and
+records what the world actually served. Experiment 002 — the synthetic rehearsal
+— runs the full publish/verify/update/conclude cycle against the real edge.
+
+**Still nobody is contacted.** Proof 1 publishes its page and writes to its first
+business only when you press Allow at `/foundry/experiments/<id>/decide`.
 
 **Blocks.** Standing the Workshop up; publishing any page; sending as the
-Workshop; the reply inbox; the Experiment 002 acceptance run against the real
-edge; and therefore any launch of Proof 1. Nothing else in the campaign.
+Workshop; the reply inbox; the Experiment 002 run against the real edge; and
+therefore any launch of Proof 1. Nothing else in the campaign.
+
+**One more real-world fact, found while checking.** `apexmicro.ai` and
+`www.apexmicro.ai` currently resolve to `66.241.124.62`, a Fly.io address, and
+nothing answers TLS there. The domain is pointing at infrastructure that is not
+serving it. The stand-up retires those stale records as part of its normal work
+and records how to restore them; no action is needed from you.
 
 **Also owed by the owner, and not a blocker to the token.** A postal address for
 commercial mail — a business or PO box address, not his home address, which

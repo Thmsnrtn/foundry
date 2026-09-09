@@ -131,30 +131,44 @@ describe('Proof 1, reconsidered from first principles before anyone is written t
     expect(alreadyRecorded).toBe(false);
     expect((await reconsiderProof1(OWNER)).alreadyRecorded).toBe(true);
 
-    // The uncertainty is about the labour, not the data, and says why desk research cannot settle it.
-    expect(d.decides).toContain('screening labour');
-    expect(d.decides).toContain('not access to the bid data');
+    // WHAT THE EXCHANGE CAN ESTABLISH, AND NOT AN INCH MORE. Every clause is
+    // part of the observation: this offer, this identity, this channel, this
+    // trust context. "Worth money" is the wider question it is a step toward.
+    expect(d.decides).toContain('will pay $29 up front for the expected value');
+    expect(d.decides).toContain('under this offer, this identity, this channel and this trust context');
+    expect(d.decides).not.toContain('is worth money to a Massachusetts millwork shop');
     expect(d.decidesBecause).toContain('COMMBUYS is open to anybody and costs nothing');
+    expect(d.decidesBecause).toContain('first step toward the wider question');
+    // Upfront price is the cleanest pre-delivery observation, not the only
+    // unambiguous one a stranger can produce.
+    expect(d.exchange.exchange).toBe('upfront_price');
+    expect(d.exchangeBecause).toContain('cleanest observation of pre-delivery willingness to pay');
+    expect(d.exchangeBecause).toContain('not the only unambiguous observation');
+    expect(d.exchangeBecause).toContain('stays open to a later experiment');
+    expect(d.cannotProve).toContain('worth money in general');
+    expect(d.cannotProve).toContain('what the same shops would pay after experiencing the brief');
 
     // Pay-after-value was weighed on its merits and refused with a reason, not skipped.
     const weighed = d.alternatives.map((a) => a.exchange);
     expect(weighed).toContain('value_first');
     expect(weighed).toContain('subscription');
     expect(weighed).not.toContain(d.exchange.exchange);
-    expect(d.alternatives.find((a) => a.exchange === 'value_first')!.notChosenBecause).toContain('almost nobody pays a stranger for something already in hand');
+    // Refused for this probe on its merits, and named as a real instrument for later — not dismissed.
+    expect(d.alternatives.find((a) => a.exchange === 'value_first')!.notChosenBecause).toContain('answers a different question from the one being asked here');
+    expect(d.alternatives.find((a) => a.exchange === 'value_first')!.notChosenBecause).toContain('a real instrument and a good one once there is a relationship to trade on');
     expect(d.alternatives.find((a) => a.exchange === 'free_with_role')!.notChosenBecause).toContain('distrusts most');
     await expect(query(`INSERT INTO probe_alternatives (id, experiment_id, founder_id, exchange, not_chosen_because) VALUES ('pa1',?,?,'upfront_price','x')`, [X, OWNER]))
       .rejects.toThrow(/probe_alternative:is_the_chosen_one/);
 
     // What it can and cannot prove are different sentences, and the second is the honest one.
-    expect(d.canProve).toContain('at least one Massachusetts millwork shop');
+    expect(d.canProve).toContain('at least one sufficiently relevant Massachusetts millwork shop');
     expect(d.cannotProve).toContain('cannot establish a market');
     expect(d.cannotProve).toContain('a buyer from a well-wisher');
 
     // TWO READINGS OF THE SAME NULL RESULT THAT THIS PROBE CANNOT SEPARATE.
     const blind = d.interpretations.filter((i) => i.distinguishedBy === null);
     expect(blind.map((i) => i.reading)).toEqual(expect.arrayContaining([
-      expect.stringContaining('not worth $29'),
+      expect.stringContaining('not worth $29 up front, sight unseen'),
       expect.stringContaining('not a thing these shops transact through'),
     ]));
     // And one it can separate, because the page now asks.
@@ -187,12 +201,12 @@ describe('Proof 1, reconsidered from first principles before anyone is written t
     expect(short.sealed).toBe(false);
     expect(short.lines.length).toBeLessThanOrEqual(7);
     // The pair it cannot separate, not one of them quoted as if it were a finding.
-    expect(short.lines.join(' ')).toContain('I cannot tell “the screening work is not worth $29 to shops of this size” from “a cold email from an unknown sender is not a thing these shops transact through');
-    expect(short.lines[0]).toContain('It settles: Whether the screening labour');
+    expect(short.lines.join(' ')).toContain('I cannot tell “the screening work is not worth $29 up front, sight unseen, to shops of this size” from “a cold email from an unknown sender is not a thing these shops transact through');
+    expect(short.lines[0]).toContain('It settles: Whether a sufficiently relevant Massachusetts millwork shop');
     expect(short.lines.join(' ')).toContain('What it really costs you');
     expect(short.lines.join(' ')).toContain('It stops itself at 1 complaint, 3 messages that did not arrive, 2 people asking not to be contacted, 3 people saying it was not useful, or 1 purchase that could not be delivered.');
     // The summary is a summary: the first sentence of a stored reason, never a paraphrase.
-    expect(short.lines.join(' ')).toContain('because money moved before delivery is the only observation in which a stranger\'s action is unambiguous.');
+    expect(short.lines.join(' ')).toContain('because money moved before delivery is the cleanest observation of pre-delivery willingness to pay');
     expect(short.lines.join(' ')).not.toContain('That is why the identity work came first');
     expect(short.lines.join(' ')).toContain('I stop taking new work at 10');
     // On his page, above everything, with the record behind it.
@@ -200,6 +214,37 @@ describe('Proof 1, reconsidered from first principles before anyone is written t
     expect(shown.text).toContain('I think this is worth running.');
     expect(shown.text).toContain('It seals when you decide.');
     expect(shown.text).toContain(`/foundry/why/experiment/${X}`);
+  });
+
+  it('the owner meets one decision surface carrying every question he asked to see answered', async () => {
+    const shown = await page(`/foundry/experiments/${X}/decide`);
+    expect(shown.status).toBe(200);
+    for (const must of [
+      'What I want to learn',
+      'will pay $29 up front for the expected value',          // the narrowed claim
+      'Why a fixed price paid before anything is received',    // the exchange, and why
+      'What else I weighed, and did not choose',               // pay-after-value, refused on merit
+      'What each answer would mean',
+      'What it still would not establish',                     // the negative result's limits
+      'Who it reaches, and what it spends',
+      'Where it stops itself',
+      'briefs owed at once',                                   // maximum fulfilment obligation
+      'One public name stands behind this',                    // reputation exposure
+      'Contact policy',
+      'What they can ask for',                                 // continuation behaviour
+      'Readiness, checked against the world',
+      'waiting',                                               // the page publishes at Allow, and says so
+      'My recommendation: run',
+    ]) expect(shown.text, must).toContain(must);
+    // It offers no way to allow anything while a prerequisite is missing: the
+    // one control that reaches a stranger appears only when it is truly ready.
+    expect(shown.text).toContain('Not yet');
+    expect(shown.text).not.toContain(`/foundry/experiments/${X}/allow`);
+    expect(shown.text).toContain(`https://apexmicro.ai/experiments/${PROOF1_SLUG}`);
+    // Publishing an offer page for a test he has not approved would be the
+    // premature public act the design exists to prevent, and it says so.
+    expect(shown.text).toContain('publishes at');
+    expect(shown.text).toContain('premature public act');
   });
 
   it('"Show your work" is no longer a reconstruction: it reads the trace written before the answer', async () => {
@@ -216,13 +261,59 @@ describe('Proof 1, reconsidered from first principles before anyone is written t
     expect(why.technical.some(([k, v]) => k === 'probe_designs.exchange' && v === 'upfront_price')).toBe(true);
   });
 
+  it('a claim broader than its exchange can establish is narrowed before the seal, and the words it replaced are kept', async () => {
+    const { amendDesign } = await import('../../src/services/venture/probe-design.js');
+    const { narrowProof1ToWhatItCanEstablish } = await import('../../src/services/venture/proof-1-deliberation.js');
+    // Recorded correctly to begin with, so narrowing it again changes nothing.
+    expect((await narrowProof1ToWhatItCanEstablish(OWNER)).amended).toBe(0);
+    expect((await designOf(X))!.amendedAt).toBeNull();
+
+    // A widening — or any change — must say why, and keeps what it replaced.
+    await expect(amendDesign({ experimentId: X, amendedBy: 'test', because: '  ', fields: { decides: 'anything at all' } }))
+      .rejects.toThrow(/needs_a_reason/);
+    const r = await amendDesign({
+      experimentId: X, amendedBy: 'test', because: 'proving the window exists and is not silent',
+      fields: { canProve: 'That at least one shop pays $29 up front for this brief, from this sender.' },
+    });
+    expect(r.amended).toBe(1);
+    expect(r.design.amendedAt).not.toBeNull();
+    expect(r.design.amendedBecause).toBe('proving the window exists and is not silent');
+    expect(r.design.amendments[0]).toMatchObject({ field: 'canProve', amendedBy: 'test' });
+    expect(r.design.amendments[0]!.was).toContain('sufficiently relevant Massachusetts millwork shop');
+
+    // The rows refuse a silent rewrite and a stamp with nothing behind it.
+    await expect(query(`UPDATE probe_designs SET decides = 'something else' WHERE experiment_id = ?`, [X]))
+      .rejects.toThrow(/amendment_needs_a_reason/);
+    await expect(query(`INSERT INTO probe_design_amendments (id, experiment_id, founder_id, field, was, reads_now, because, amended_by) VALUES ('pda_x',?,?,'decides','same','same','r','t')`, [X, OWNER]))
+      .rejects.toThrow(/no_change/);
+    await expect(query(`UPDATE probe_design_amendments SET because = 'a better reason' WHERE experiment_id = ?`, [X]))
+      .rejects.toThrow(/append_only/);
+
+    // And the owner is told, on both surfaces, that it was narrowed.
+    expect((await theShortVersion(X))!.lines.join(' ')).toContain('I narrowed what this claims to settle');
+    const why = (await whyOf(OWNER, 'experiment', X))!;
+    expect(why.authority.join(' ')).toContain('Narrowed');
+    expect(why.otherRecordedPaths.join(' ')).toContain('Before it was narrowed, canProve read:');
+  });
+
   it('the deliberation seals when he decides, and refuses every later improvement', async () => {
     state.nextDomainStatus = 'verified';
     await connectWorkshopSending(OWNER);
     await setPostalAddress(OWNER, 'PO Box 123, Example, MA 01000');
+    // Now, and only now, the decision surface offers the decision.
+    const offered = await page(`/foundry/experiments/${X}/decide`);
+    expect(offered.text).toContain('Your decision');
+    expect(offered.text).toContain(`/foundry/experiments/${X}/allow`);
+    expect(offered.text).toContain('Nothing is sent before you press it.');
     await allowExperiment({ founderId: OWNER, experimentId: X, by: 'owner' });
     const d = (await designOf(X))!;
     expect(d.sealedAt).not.toBeNull();
+    // The window closes with the seal: no further narrowing, by any path.
+    const { amendDesign: amend } = await import('../../src/services/venture/probe-design.js');
+    await expect(amend({ experimentId: X, amendedBy: 'test', because: 'after the fact', fields: { decides: 'what it turned out to be' } }))
+      .rejects.toThrow(/is_sealed/);
+    await expect(query(`INSERT INTO probe_design_amendments (id, experiment_id, founder_id, field, was, reads_now, because, amended_by) VALUES ('pda_late',?,?,'decides','a','b','r','t')`, [X, OWNER]))
+      .rejects.toThrow(/after_the_seal/);
     await expect(query(`UPDATE probe_designs SET recommendation_because = 'and I always said so' WHERE experiment_id = ?`, [X]))
       .rejects.toThrow(/is_sealed/);
     await expect(query(`INSERT INTO probe_interpretations (id, experiment_id, founder_id, observation, reading) VALUES ('pi_late',?,?,'o','r')`, [X, OWNER]))
@@ -343,6 +434,40 @@ describe('a stranger says what they want next, and the Workshop keeps the answer
       .rejects.toThrow();
     await expect(query(`UPDATE workshop_continuations SET wants = 'more_like_this' WHERE email = 'gone@example.com'`))
       .rejects.toThrow(/append_only/);
+  });
+});
+
+describe('the whole external chain, checked against the world', () => {
+  it('reads every public surface from its public address, and says waiting rather than green where the evidence cannot exist yet', async () => {
+    const { externalReadiness } = await import('../../src/services/public-workshop/readiness.js');
+    // A reply that reaches a person is part of the chain, not a nicety.
+    const { connectReplyInbox } = await import('../../src/services/public-workshop/infrastructure.js');
+    await connectReplyInbox(OWNER);
+    state.cf.routing.destinations[0]!.verified = '2026-09-09';
+    const r = await externalReadiness(OWNER, X);
+    const by = Object.fromEntries(r.legs.map((l) => [l.leg, l]));
+    // Nothing is blocked, and the surfaces a stranger needs were actually read.
+    expect(r.blocked, JSON.stringify(r.legs.filter((l) => l.status === 'blocked'), null, 1)).toBe(0);
+    for (const p of ['/', '/experiments', '/contact', '/email', '/refunds', '/privacy']) {
+      expect(by[`public HTTPS ${p}`]!.status, p).toBe('verified');
+    }
+    expect(by['public HTTPS experiment page']!.status).toBe('verified');
+    expect(by['authenticated sender identity']!.status).toBe('ready');
+    expect(by['fulfilment readiness']!.status).toBe('ready');
+    expect(by['payment readiness']!.status).toBe('ready');
+    expect(by['outbound eligibility']!.status).toBe('ready');
+    expect(r.ok).toBe(true);
+  });
+
+  it('a public surface that goes dark is reported blocked, not ready, however healthy the provider is', async () => {
+    const { externalReadiness } = await import('../../src/services/public-workshop/readiness.js');
+    state.cf.siteDown = true;
+    const dark = await externalReadiness(OWNER, X);
+    state.cf.siteDown = false;
+    expect(dark.ok).toBe(false);
+    expect(dark.verified).toBe(0);
+    expect(dark.legs.find((l) => l.leg === 'public HTTPS /')!.status).toBe('blocked');
+    expect(dark.legs.find((l) => l.leg === 'outbound eligibility')!.status).toBe('blocked');
   });
 });
 

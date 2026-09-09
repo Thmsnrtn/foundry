@@ -17,11 +17,85 @@
 // result. Every sentence below was written before the world was asked.
 // =============================================================================
 
-import { designOf, recordDesign } from './probe-design.js';
+import { amendDesign, designOf, recordDesign } from './probe-design.js';
 import type { ProbeDesign } from './probe-design.js';
 import { findProof1 } from './proof-1.js';
 
 export interface Proof1Deliberation { experimentId: string; design: ProbeDesign; alreadyRecorded: boolean }
+
+/**
+ * THE CLAIM WAS BROADER THAN THE EXCHANGE COULD ESTABLISH.
+ *
+ * As first written this probe said it settled whether the screening labour is
+ * worth money. It does not. A $29 charge asked of a stranger who has never
+ * heard of the workshop measures one thing: whether a sufficiently relevant
+ * cold recipient will pay that price up front for the EXPECTED value of the
+ * work, under this offer, this identity, this channel and this trust context.
+ * Every one of those is part of the observation and none of them is separable
+ * from it. "Worth money" is the wider question the probe is a first step
+ * toward, not the question it answers.
+ *
+ * The same overreach appeared in the reason for the exchange. Payment before
+ * delivery is the cleanest observation of PRE-DELIVERY willingness to pay; it
+ * is not the only unambiguous observation a stranger can produce. A voluntary
+ * payment after experienced value is equally unambiguous about a different
+ * economic fact, and that instrument stays available to later experiments
+ * where a relationship exists to trade on.
+ *
+ * The judgement itself is unchanged, deliberately: $29 up front rather than
+ * pay-after-value is still the right instrument for a first cold approach, and
+ * the exchange is not amendable here precisely so that tightening a claim can
+ * never quietly become choosing a different probe. Only what the probe claims
+ * to establish has been brought back inside what it can.
+ */
+export async function narrowProof1ToWhatItCanEstablish(founderId: string): Promise<{ amended: number; design: ProbeDesign }> {
+  const experimentId = await findProof1(founderId);
+  if (!experimentId) throw new Error('Proof 1 is not seeded');
+  return amendDesign({
+    experimentId, amendedBy: BY,
+    because: 'The claim was broader than the chosen exchange can establish: a $29 charge to a cold '
+      + 'recipient measures willingness to pay up front for expected value under this offer, identity, '
+      + 'channel and trust context, not whether the screening labour is worth money in general. Narrowed '
+      + 'before the owner decides and before anybody is written to; the exchange and the judgement are '
+      + 'unchanged.',
+    fields: {
+      decides: 'Whether a sufficiently relevant Massachusetts millwork shop, reached cold, will pay $29 '
+        + 'up front for the expected value of a hand-screened brief of open public bid notices — under this '
+        + 'offer, this identity, this channel and this trust context.',
+      decidesBecause: 'COMMBUYS is open to anybody and costs nothing to read. Every incumbent charges for '
+        + 'notification, from $109 a month upward, so somebody believes the screening is valuable; nobody '
+        + 'has shown that a shop of this size will pay a stranger for it sight unseen. That is the first '
+        + 'step toward the wider question of whether the screening labour is worth money, and it is the '
+        + 'step no amount of desk research can take.',
+      exchangeBecause: 'Money moved before delivery is the cleanest observation of pre-delivery '
+        + 'willingness to pay: the recipient acts on the description alone, and nothing about the act is '
+        + 'ambiguous once it happens. It is not the only unambiguous observation a stranger can produce — a '
+        + 'voluntary payment after experienced value would be just as unambiguous about a different '
+        + 'economic fact, and that instrument stays open to a later experiment where there is a '
+        + 'relationship to trade on. What this exchange confounds — trust in an unknown sender, the price, '
+        + 'and the value of the work — is real, and is what the named operator, the permanent public page '
+        + 'and the stated refund exist to reduce; that is why the identity work came first rather than as '
+        + 'a later polish.',
+      canProve: 'That at least one sufficiently relevant Massachusetts millwork shop, written to once by a '
+        + 'named person and pointed at a page it can read before deciding, will pay $29 up front for a '
+        + 'hand-screened shortlist of open public bid notices.',
+      cannotProve: 'That there is a business here, or that the screening labour is worth money in general. '
+        + 'It says nothing about what the same shops would pay after experiencing the brief, what they '
+        + 'would pay through a channel they came to themselves, or what anyone would pay under a different '
+        + 'identity or price. Twenty-five hand-picked shops reached by cold email inside seven days cannot '
+        + 'establish a market, a price, a channel that repeats, or a second purchase — and at one payment I '
+        + 'cannot tell a buyer from a well-wisher.',
+    },
+    interpretations: [
+      { observation: 'Nobody pays inside seven days',
+        was: 'the screening work is not worth $29 to shops of this size',
+        reading: 'the screening work is not worth $29 up front, sight unseen, to shops of this size' },
+      { observation: 'One business pays',
+        was: 'at least one shop finds the screening worth money',
+        reading: 'at least one shop will pay $29 up front for the expected value of this brief, from this sender' },
+    ],
+  });
+}
 
 const BY = 'institution:probe_designer';
 
@@ -34,25 +108,37 @@ export async function reconsiderProof1(founderId: string): Promise<Proof1Deliber
   const design = await recordDesign({
     founderId, experimentId, designedBy: BY,
 
-    decides: 'Whether the screening labour in a bid brief — not access to the bid data, which is public '
-      + 'and free — is worth money to a Massachusetts millwork shop.',
+    // NARROWED TO WHAT THE EXCHANGE CAN ESTABLISH. Every clause after the dash
+    // is part of the observation and none of them is separable from it; "worth
+    // money" is the wider question this is a first step toward.
+    decides: 'Whether a sufficiently relevant Massachusetts millwork shop, reached cold, will pay $29 up '
+      + 'front for the expected value of a hand-screened brief of open public bid notices — under this '
+      + 'offer, this identity, this channel and this trust context.',
     decidesBecause: 'COMMBUYS is open to anybody and costs nothing to read. Every incumbent charges for '
       + 'notification, from $109 a month upward, so somebody believes the screening is valuable; nobody has '
-      + 'shown that a shop of this size agrees, at any price. Desk research has settled the supply side and '
-      + 'cannot settle this one. A stranger\'s payment can.',
+      + 'shown that a shop of this size will pay a stranger for it sight unseen. That is the first step '
+      + 'toward the wider question of whether the screening labour is worth money, and it is the step no '
+      + 'amount of desk research can take.',
 
     exchange: 'upfront_price',
-    exchangeBecause: 'Money moved before delivery is the only observation in which a stranger\'s action is '
-      + 'unambiguous. Its confound — that people do not transact with strangers — is real, and it is exactly '
-      + 'what the named operator, the permanent public page and the stated refund exist to reduce. That is '
-      + 'why the identity work came first rather than as a later polish.',
+    exchangeBecause: 'Money moved before delivery is the cleanest observation of pre-delivery willingness '
+      + 'to pay: the recipient acts on the description alone, and nothing about the act is ambiguous once it '
+      + 'happens. It is not the only unambiguous observation a stranger can produce — a voluntary payment '
+      + 'after experienced value would be just as unambiguous about a different economic fact, and that '
+      + 'instrument stays open to a later experiment where there is a relationship to trade on. What this '
+      + 'exchange confounds — trust in an unknown sender, the price, and the value of the work — is real, '
+      + 'and is what the named operator, the permanent public page and the stated refund exist to reduce; '
+      + 'that is why the identity work came first rather than as a later polish.',
 
-    canProve: 'That at least one Massachusetts millwork shop, written to once by a named person and pointed '
-      + 'at a page it can read before deciding, will pay $29 for a hand-screened shortlist of open public '
-      + 'bid notices.',
-    cannotProve: 'That there is a business here. Twenty-five hand-picked shops reached by cold email inside '
-      + 'seven days cannot establish a market, a price, a channel that repeats, or a second purchase — and at '
-      + 'one payment I cannot tell a buyer from a well-wisher.',
+    canProve: 'That at least one sufficiently relevant Massachusetts millwork shop, written to once by a '
+      + 'named person and pointed at a page it can read before deciding, will pay $29 up front for a '
+      + 'hand-screened shortlist of open public bid notices.',
+    cannotProve: 'That there is a business here, or that the screening labour is worth money in general. It '
+      + 'says nothing about what the same shops would pay after experiencing the brief, what they would pay '
+      + 'through a channel they came to themselves, or what anyone would pay under a different identity or '
+      + 'price. Twenty-five hand-picked shops reached by cold email inside seven days cannot establish a '
+      + 'market, a price, a channel that repeats, or a second purchase — and at one payment I cannot tell a '
+      + 'buyer from a well-wisher.',
 
     ratherThanWaiting: 'The alternative is more reading about whether millwork shops value bid screening, and '
       + 'no quantity of it produces a person paying money. Each further week of research returns less than one '
@@ -89,7 +175,7 @@ export async function reconsiderProof1(founderId: string): Promise<Proof1Deliber
     // so now is the only way that admission survives contact with a result.
     interpretations: [
       { observation: 'Nobody pays inside seven days',
-        reading: 'the screening work is not worth $29 to shops of this size',
+        reading: 'the screening work is not worth $29 up front, sight unseen, to shops of this size',
         distinguishedBy: null },
       { observation: 'Nobody pays inside seven days',
         reading: 'a cold email from an unknown sender is not a thing these shops transact through, whatever it offers',
@@ -98,7 +184,7 @@ export async function reconsiderProof1(founderId: string): Promise<Proof1Deliber
         reading: 'the brief is useful and the price or the sender, not the value, ended the sale',
         distinguishedBy: 'the continuation answer recorded on the experiment\'s public page' },
       { observation: 'One business pays',
-        reading: 'at least one shop finds the screening worth money',
+        reading: 'at least one shop will pay $29 up front for the expected value of this brief, from this sender',
         distinguishedBy: null },
       { observation: 'Several offers bounce or none is confirmed delivered',
         reading: 'the addresses or the sending identity decided the outcome, and the offer was never read',
@@ -118,9 +204,10 @@ export async function reconsiderProof1(founderId: string): Promise<Proof1Deliber
       { exchange: 'value_first',
         notChosenBecause: 'Sending the brief unrequested and asking to be paid afterwards gives away the one '
           + 'thing being tested and turns an offer into an unsolicited delivery, which is a heavier imposition '
-          + 'on a stranger than a question is. It also confounds generosity with demand: almost nobody pays a '
-          + 'stranger for something already in hand, so a zero would prove nothing about the value. It is the '
-          + 'right exchange once there is a relationship to trade on; there is none here.' },
+          + 'on a stranger than a question is. It also answers a different question from the one being asked '
+          + 'here: what somebody pays after experiencing value is an observation about the work, not about '
+          + 'whether it can be sold to a stranger who has not seen it. It is a real instrument and a good one '
+          + 'once there is a relationship to trade on; there is none here yet.' },
       { exchange: 'sample_then_paid',
         notChosenBecause: 'The pilot brief is thirteen notices. A sample large enough to be useful is most of '
           + 'the product, and one small enough not to be is not a sample of anything.' },

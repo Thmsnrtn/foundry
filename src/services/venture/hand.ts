@@ -615,7 +615,18 @@ export async function planOffer(input: { experimentId: string; recipientId: stri
   const { publicWorkshopOfExperiment } = await import('../public-workshop/settings.js');
   const w = await publicWorkshopOfExperiment(input.experimentId);
   if (w) {
-    const gate = await publicationGate(input.experimentId, { now: input.now, verifyLive: false });
+    // READ THE PAGE FROM THE PUBLIC INTERNET, NOW, NOT FROM WHAT WE SAW OF IT.
+    //
+    // The gate is happy with a page verified inside the last day, which is
+    // right for showing the owner a dashboard and wrong here. A page that went
+    // dark after it was published stays "verified" for up to twenty-four
+    // hours, and a probe of twenty-five messages over seven days can spend
+    // itself entirely inside that window — every recipient sent to a page the
+    // world no longer serves, under the one public name every later experiment
+    // also stands behind. So the pass that would write to a stranger reads the
+    // page from its public address first. One request, at the only moment the
+    // answer changes anything.
+    const gate = await publicationGate(input.experimentId, { now: input.now });
     if (!gate.ok) throw new HandRefused('publication_gate', gate.failures.join('; '));
   }
   const quality = checkOfferQuality(offer, w ? await pageUrlFor(input.experimentId) : null);

@@ -29,12 +29,13 @@ async function founderOf(c: any): Promise<string | null> {
   return founder?.id ? String(founder.id) : null;
 }
 
-const where = (v: ExperimentView | null, on: 'test' | 'recipients' | 'list'): Where => ({
+const where = (v: ExperimentView | null, on: 'test' | 'recipients' | 'list' | 'decide'): Where => ({
   crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: '/foundry/experiments', label: 'Experiments' }, ...(v ? [{ href: `/foundry/experiments/${v.id}`, label: v.assetName ?? 'This test' }] : [])],
   scope: { kind: 'foundry', id: v?.id ?? null, name: v?.assetName ?? 'Experiments' },
   local: v ? [
     { href: `/foundry/experiments/${v.id}`, label: 'The test', count: null, on: on === 'test' },
     { href: `/foundry/experiments/${v.id}/recipients`, label: 'Who may be contacted', count: v.exposure.pending || null, on: on === 'recipients' },
+    { href: `/foundry/experiments/${v.id}/decide`, label: 'Before you decide', count: null, on: on === 'decide' },
   ] : [],
   chips: [],
 });
@@ -86,7 +87,7 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
 
     ${short ? html`<section class="know said" id="short"><h2>${short.headline}</h2>
       <ul class="plain">${short.lines.map((l) => html`<li>${l}</li>`)}</ul>
-      <p class="quiet">${short.sealed ? 'This was written before you decided and sealed when you did, so it cannot be edited to match the result.' : 'Written before this runs. It seals when you decide.'} <a class="why" href="/foundry/why/experiment/${id}">Show your work</a></p>
+      <p class="quiet">${short.sealed ? 'This was written before you decided and sealed when you did, so it cannot be edited to match the result.' : 'Written before this runs. It seals when you decide.'} <a class="why" href="/foundry/experiments/${id}/decide">Before you decide</a> · <a class="why" href="/foundry/why/experiment/${id}">Show your work</a></p>
     </section>` : ''}
 
     <section class="know" id="what"><h2>What this tests</h2>
@@ -192,6 +193,105 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
       .plain{list-style:none;padding:0;margin:0}.plain li{margin:.4rem 0}
     </style>`;
   return c.html(page(`${v.assetName ?? 'Experiment'} — ${v.stateLabel}`, body, 'foundry', where(v, 'test')));
+});
+
+// ─── Before you decide ───────────────────────────────────────────────────────
+//
+// ONE PAGE, ONCE, FOR THE ONLY DECISION THAT REACHES A STRANGER.
+//
+// Everything on it is read from rows written before this moment: the
+// deliberation sealed at the decision it is asking for, the businesses the
+// owner reviewed himself, the stop conditions set before the probe starts, and
+// every readiness leg checked against the public internet rather than against
+// a provider's optimism. It states what a positive result would establish and
+// — the sentence that matters more — what a negative one would not.
+//
+// It has one control, and pressing it is the only way anybody is written to.
+experimentRoutes.get('/foundry/experiments/:id/decide', async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return c.redirect('/onboarding');
+  const id = String(c.req.param('id'));
+  const v = await getExperimentView(founderId, id);
+  if (!v) return c.notFound();
+  const { designOf, theShortVersion, readStopConditions } = await import('../../services/venture/probe-design.js');
+  const { externalReadiness } = await import('../../services/public-workshop/readiness.js');
+  const d = await designOf(id);
+  const short = await theShortVersion(id);
+  const stops = d ? await readStopConditions(id) : [];
+  const ready = await externalReadiness(founderId, id);
+  const badge: Record<string, string> = { verified: 'seen in the world', ready: 'ready', waiting: 'waiting', blocked: 'blocked' };
+
+  const body = html`
+    <h1>Before you decide</h1>
+    <p class="lede">${v.assetName ?? 'This test'} — ${v.stateLabel}. Everything here was written before this moment, and nothing on this page contacts anybody.</p>
+    ${d === null ? html`<p class="noticed"><strong>Nothing is recorded yet.</strong> There is no deliberation behind this test, so it cannot be allowed.</p>` : html`
+    <section class="know"><h2>${short!.headline}</h2>
+      <ul class="plain">${short!.lines.map((l) => html`<li>${l}</li>`)}</ul>
+      <p class="quiet"><a class="why" href="/foundry/why/experiment/${id}">Show your work</a> — the whole record, including what it replaced.</p>
+    </section>
+
+    <section class="know"><h2>What I want to learn</h2>
+      <p>${d.decides}</p>
+      <p class="quiet">${d.decidesBecause}</p>
+    </section>
+
+    <section class="know"><h2>Why ${d.exchange.whatItIs.toLowerCase()}</h2>
+      <p>${d.exchangeBecause}</p>
+      <p class="quiet">What it shows: ${d.exchange.reveals}. What it confounds: ${d.exchange.confounds}.</p>
+      <details><summary>What else I weighed, and did not choose</summary>
+        <ul>${d.alternatives.map((a) => html`<li><strong>${a.whatItIs}</strong> — ${a.notChosenBecause}</li>`)}</ul>
+      </details>
+    </section>
+
+    <section class="know"><h2>What each answer would mean</h2>
+      <p><strong>If it works</strong> — ${d.canProve}</p>
+      <p><strong>What it still would not establish</strong> — ${d.cannotProve}</p>
+      <p class="quiet">Readings of the same result I cannot tell apart from this test alone:</p>
+      <ul>${d.interpretations.filter((i) => i.distinguishedBy === null).map((i) => html`<li>If ${i.observation.toLowerCase()}: ${i.reading}</li>`)}</ul>
+    </section>
+
+    <section class="know"><h2>Who it reaches, and what it spends</h2>
+      <dl class="facts">
+        <dt>Written to</dt><dd>${String(v.exposure.approved)} businesses you reviewed yourself, once each, never twice</dd>
+        <dt>Still to review</dt><dd>${String(v.exposure.pending)}</dd>
+        <dt>How it reaches them</dt><dd>${d.distribution}</dd>
+        <dt>Money</dt><dd>up to ${cents(v.money.allowanceCents)}</dd>
+      </dl>
+      <p class="quiet">Beyond money:</p>
+      <ul>${d.costs.filter((x) => x.level !== 'none').map((x) => html`<li>${x.whatItIs} — <strong>${x.level}</strong>: ${x.grounds}</li>`)}</ul>
+    </section>
+
+    <section class="know"><h2>Where it stops itself</h2>
+      <ul>${stops.map((x) => html`<li>At ${String(x.threshold)} ${x.whatItIs} (${String(x.count)} so far) — ${x.because}</li>`)}</ul>
+      <p>${d.fulfilmentCap === null ? 'No cap on what may be owed at once.' : html`If it works, new offers stop at <strong>${String(d.fulfilmentCap)}</strong> briefs owed at once. ${d.ifItSucceeds}`}</p>
+    </section>
+
+    <section class="know"><h2>What it costs Apex Micro, and what people can ask of it</h2>
+      <p>One public name stands behind this and every later experiment. ${d.costs.find((x) => x.dimension === 'reputation')?.grounds ?? ''}</p>
+      <p><strong>Contact policy</strong> — one message per business, no follow-up, from ${v.publicPage ? 'the Workshop' : 'the connected sender'}, with a postal address and an unsubscribe in every message. A refusal said to this test is a refusal for every test.</p>
+      <p><strong>What they can ask for</strong> — the page asks each reader what should happen next. "Never" removes them from the whole Workshop; "nothing further" stops the next experiment writing to them even though it is not a complaint; anything else is kept in their own words.</p>
+      ${v.publicPage ? html`<p><strong>Public page</strong> — <a href="${v.publicPage.url}" rel="noopener">${v.publicPage.url}</a> (${v.publicPage.status})</p>` : ''}
+    </section>
+
+    <section class="know"><h2>Readiness, checked against the world</h2>
+      <p class="quiet">A provider answering is not proof. Every line marked “seen in the world” was read back over public HTTPS just now.</p>
+      <ul class="plain">${ready.legs.map((l) => html`<li><span class="pill">${badge[l.status]}</span> <strong>${l.leg}</strong> — ${l.detail}</li>`)}</ul>
+      ${ready.blocked > 0 ? html`<p class="noticed"><strong>${String(ready.blocked)} blocked.</strong> Nobody can be written to while any of these stands, whatever you press.</p>` : ''}
+    </section>
+
+    <section class="know" id="allow"><h2>${v.state === 'ready' ? 'Your decision' : 'Not yet'}</h2>
+      <p><strong>My recommendation: ${d.recommendation}.</strong> ${d.recommendationBecause}</p>
+      ${v.state === 'ready' ? html`<div class="pair">
+        <form method="POST" action="/foundry/experiments/${id}/allow"><button class="btn yes" type="submit">Allow — up to ${cents(v.money.allowanceCents)}</button></form>
+        <form method="POST" action="/foundry/experiments/${id}/decline"><button class="btn" type="submit">Do not run it</button></form></div>
+      <p class="quiet">Allowing seals this record, publishes the page and lets Foundry begin writing on its next pass. Nothing is sent before you press it.</p>`
+    : html`<p class="noticed">${v.allow.reason} Allowing is refused until then, by the rows themselves, not only by this page.</p>`}
+    </section>`}
+    <style>
+      .facts{display:grid;grid-template-columns:minmax(8rem,auto) 1fr;gap:.25rem .75rem;margin:0}.facts dd{margin:0}
+      .plain{list-style:none;padding:0;margin:0}.plain li{margin:.4rem 0}
+    </style>`;
+  return c.html(page('Before you decide', body, 'foundry', where(v, 'decide')));
 });
 
 // ─── Who may be contacted ────────────────────────────────────────────────────
