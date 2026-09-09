@@ -60,18 +60,49 @@ export async function pageUrlFor(experimentId: string): Promise<string | null> {
 
 /** Read the public address and compare with what was put. The world's answer
  * is the record; a provider's earlier yes is not consulted. */
-export async function verifyPublication(founderId: string, path: string, fetchImpl: typeof fetch = fetch): Promise<Publication | null> {
+/**
+ * THE EDGE IS EVENTUALLY CONSISTENT, AND "NOT YET" IS NOT "NO".
+ *
+ * A page store of this kind does not promise that a write is readable at the
+ * edge the instant it returns; propagation takes seconds. Reading once,
+ * immediately, and recording `mismatch` turns a normal delay into a verdict
+ * that the world does not carry the page — which stops publication, stops
+ * outbound, and is untrue. It cost the first real rehearsal three of its six
+ * steps.
+ *
+ * So a mismatch is retried for a bounded window before it is believed. Nothing
+ * about the standard is relaxed: the bytes served must still equal the bytes
+ * published, and an honest failure after the window is still a failure. The
+ * only thing that changed is that the world is given the few seconds it
+ * actually needs to answer.
+ */
+// A knob, not a behaviour: the standard for "the world carries this page" is
+// unchanged, only how long the world is given to say so. Zero under the test
+// runner, where the edge is a stub that answers instantly and waiting would
+// buy nothing but minutes.
+const PROPAGATION_MS = Number(process.env.FOUNDRY_EDGE_PROPAGATION_MS ?? (process.env.VITEST ? 0 : 45_000));
+const PROPAGATION_STEP_MS = 3_000;
+
+export async function verifyPublication(founderId: string, path: string, fetchImpl: typeof fetch = fetch, opts: { waitMs?: number } = {}): Promise<Publication | null> {
   const w = await publicWorkshopOf(founderId);
   const p = await livePublication(founderId, path);
   if (!w || !p) return null;
+  const deadline = Date.now() + (opts.waitMs ?? PROPAGATION_MS);
   let status: 'verified' | 'mismatch' | 'unreachable'; let detail: string;
-  try {
-    const res = await fetchImpl(`${w.origin}${path}`, { headers: { accept: 'text/html' }, redirect: 'manual' });
-    const body = await res.text();
-    if (res.status !== 200) { status = 'unreachable'; detail = `HTTP ${res.status}`; }
-    else if (digestOf(body) !== p.digest) { status = 'mismatch'; detail = `served digest ${digestOf(body)} ≠ published ${p.digest}`; }
-    else { status = 'verified'; detail = `HTTP 200, ${body.length} bytes, digest matches`; }
-  } catch (e) { status = 'unreachable'; detail = e instanceof Error ? e.message : String(e); }
+  let attempts = 0;
+  for (;;) {
+    attempts += 1;
+    try {
+      const res = await fetchImpl(`${w.origin}${path}`, { headers: { accept: 'text/html' }, redirect: 'manual' });
+      const body = await res.text();
+      if (res.status !== 200) { status = 'unreachable'; detail = `HTTP ${res.status}`; }
+      else if (digestOf(body) !== p.digest) { status = 'mismatch'; detail = `served digest ${digestOf(body)} ≠ published ${p.digest}`; }
+      else { status = 'verified'; detail = `HTTP 200, ${body.length} bytes, digest matches${attempts > 1 ? `, after ${attempts} reads` : ''}`; }
+    } catch (e) { status = 'unreachable'; detail = e instanceof Error ? e.message : String(e); }
+    if (status === 'verified' || Date.now() + PROPAGATION_STEP_MS > deadline) break;
+    await new Promise((r) => { setTimeout(r, PROPAGATION_STEP_MS); });
+  }
+  if (status !== 'verified' && attempts > 1) detail = `${detail}, still after ${attempts} reads over ${Math.round((PROPAGATION_MS) / 1000)}s`;
   await query(`UPDATE public_publications SET verified_at = datetime('now'), verified_status = ?, verified_detail = ? WHERE id = ?`, [status, detail, p.id]);
   return (await livePublication(founderId, path))!;
 }
