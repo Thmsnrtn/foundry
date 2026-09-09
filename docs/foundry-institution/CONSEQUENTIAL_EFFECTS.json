@@ -80,35 +80,28 @@
     },
     {
       "file": "src/services/integration/cloudflare-gateway.ts",
-      "line": 236,
+      "line": 257,
       "detector": "templated_post",
       "status": "governed",
       "capability": "Cloudflare capability handlers for the public Workshop — kv, dns, worker, domain and mail routing, each with a receipt and a verification of the public result"
     },
     {
       "file": "src/services/integration/cloudflare-gateway.ts",
-      "line": 254,
+      "line": 275,
       "detector": "templated_post",
       "status": "governed",
       "capability": "Cloudflare capability handlers for the public Workshop — kv, dns, worker, domain and mail routing, each with a receipt and a verification of the public result"
     },
     {
       "file": "src/services/integration/cloudflare-gateway.ts",
-      "line": 273,
+      "line": 294,
       "detector": "templated_post",
       "status": "governed",
       "capability": "Cloudflare capability handlers for the public Workshop — kv, dns, worker, domain and mail routing, each with a receipt and a verification of the public result"
     },
     {
       "file": "src/services/integration/cloudflare-gateway.ts",
-      "line": 300,
-      "detector": "templated_post",
-      "status": "governed",
-      "capability": "Cloudflare capability handlers for the public Workshop — kv, dns, worker, domain and mail routing, each with a receipt and a verification of the public result"
-    },
-    {
-      "file": "src/services/integration/cloudflare-gateway.ts",
-      "line": 301,
+      "line": 321,
       "detector": "templated_post",
       "status": "governed",
       "capability": "Cloudflare capability handlers for the public Workshop — kv, dns, worker, domain and mail routing, each with a receipt and a verification of the public result"
@@ -122,42 +115,49 @@
     },
     {
       "file": "src/services/integration/cloudflare-gateway.ts",
-      "line": 344,
+      "line": 343,
       "detector": "templated_post",
       "status": "governed",
       "capability": "Cloudflare capability handlers for the public Workshop — kv, dns, worker, domain and mail routing, each with a receipt and a verification of the public result"
     },
     {
       "file": "src/services/integration/cloudflare-gateway.ts",
-      "line": 367,
+      "line": 365,
       "detector": "templated_post",
       "status": "governed",
       "capability": "Cloudflare capability handlers for the public Workshop — kv, dns, worker, domain and mail routing, each with a receipt and a verification of the public result"
     },
     {
       "file": "src/services/integration/cloudflare-gateway.ts",
-      "line": 391,
+      "line": 388,
       "detector": "templated_post",
       "status": "governed",
       "capability": "Cloudflare capability handlers for the public Workshop — kv, dns, worker, domain and mail routing, each with a receipt and a verification of the public result"
     },
     {
       "file": "src/services/integration/cloudflare-gateway.ts",
-      "line": 395,
+      "line": 412,
       "detector": "templated_post",
       "status": "governed",
       "capability": "Cloudflare capability handlers for the public Workshop — kv, dns, worker, domain and mail routing, each with a receipt and a verification of the public result"
     },
     {
       "file": "src/services/integration/cloudflare-gateway.ts",
-      "line": 401,
+      "line": 416,
       "detector": "templated_post",
       "status": "governed",
       "capability": "Cloudflare capability handlers for the public Workshop — kv, dns, worker, domain and mail routing, each with a receipt and a verification of the public result"
     },
     {
       "file": "src/services/integration/cloudflare-gateway.ts",
-      "line": 402,
+      "line": 422,
+      "detector": "templated_post",
+      "status": "governed",
+      "capability": "Cloudflare capability handlers for the public Workshop — kv, dns, worker, domain and mail routing, each with a receipt and a verification of the public result"
+    },
+    {
+      "file": "src/services/integration/cloudflare-gateway.ts",
+      "line": 423,
       "detector": "templated_post",
       "status": "governed",
       "capability": "Cloudflare capability handlers for the public Workshop — kv, dns, worker, domain and mail routing, each with a receipt and a verification of the public result"
