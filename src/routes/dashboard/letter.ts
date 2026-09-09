@@ -2783,4 +2783,6 @@ letterRoutes.route('/', placeRoutes);
 const { experimentRoutes } = await import('./experiments-place.js');
 letterRoutes.route('/', experimentRoutes);
 const { workshopRoutes } = await import('./workshop-place.js');
+  const { inboxRoutes } = await import('./inbox-place.js');
 letterRoutes.route('/', workshopRoutes);
+letterRoutes.route('/', inboxRoutes);

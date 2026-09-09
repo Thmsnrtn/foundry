@@ -138,6 +138,7 @@ export const LAYER_OF: Record<string, Layer> = {
   // inspected and stopped where everything else is.
   'src/routes/dashboard/experiments-place.ts': 'private',
   'src/routes/dashboard/workshop-place.ts': 'private',
+  'src/routes/dashboard/inbox-place.ts': 'private',
   // THE DOOR THE SHELL LIVES BEHIND, and therefore part of the same product.
   // The Attention Law forbids a new top-level mount, so the shell is mounted
   // inside the Letter — which makes `letter.ts` the composition root for the

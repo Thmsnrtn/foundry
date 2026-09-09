@@ -33,6 +33,12 @@ const rules = [
   // findings that run no program at all, which would have made the inventory
   // useless by making it noisy. The fact worth inventorying is per file and it
   // is this: THIS FILE CAN RUN PROGRAMS.
+  // A CALL WHOSE DESTINATION COMES FROM AN ENVIRONMENT BINDING. This is what an
+  // edge program's source looks like: the host is injected at deploy time, so
+  // no literal and no template appears anywhere in the file. Detected on its
+  // own rather than waved through, because a worker source that called
+  // somewhere it should not would look exactly the same to every other rule.
+  { id: 'env_bound_post', re: /fetch\(\s*env\.[A-Z_]+\s*,\s*\{[\s\S]{0,500}?method:\s*['"](POST|PUT|PATCH|DELETE)['"]/g },
   { id: 'process_spawn', re: /from\s+['"]node:child_process['"]|require\(\s*['"]child_process['"]/g },
 ];
 
@@ -46,6 +52,16 @@ const classifications = new Map(Object.entries({
   'src/lib/webhooks.ts|dynamic_webhook_post': ['governed', 'customer webhook fan-out — kill-switch checked before dispatch, per-delivery receipt after'],
   'src/routes/dashboard/onboarding.ts|external_post': ['control_path', 'GitHub OAuth credential exchange'],
   'src/services/distribution/outbound-webhooks.ts|dynamic_webhook_post': ['governed', 'post_webhook capability handler'],
+  // NOT AN EFFECT THIS PROCESS CAN HAVE. It is the SOURCE TEXT of the program
+  // that runs at Cloudflare's edge, held as a string so that what is deployed
+  // is what was reviewed and a digest of it is what the receipt records.
+  // Foundry never executes it. Its one destination is Foundry's own mail
+  // intake, it carries no provider credential, and it reaches the world only
+  // by being deployed through the governed door — which is itself inventoried
+  // as `cloudflare_worker_deploy`. Classified rather than excluded, because a
+  // rule that simply skipped worker sources would also skip a worker source
+  // that called somewhere it should not.
+  'src/services/public-workshop/mail-worker-source.ts|env_bound_post': ['read_only', 'edge mail program source — hands a copy to Foundry\'s own intake; deployed through the door, executed only by Cloudflare'],
   'src/services/integration/resend.ts|external_post': ['governed', 'send_email capability handler'],
   'src/services/integration/stripe-gateway.ts|external_post': ['governed', 'Stripe capability handlers'],
   'src/services/integration/github-gateway.ts|external_post': ['governed', 'GitHub capability handlers'],

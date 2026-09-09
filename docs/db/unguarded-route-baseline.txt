@@ -104,6 +104,7 @@ POST /settings/interruption-ceiling
 POST /share/refund/:fulfilmentId/:token
 POST /switch-product
 POST /webhooks/integrations/stripe
+POST /workshop/mail
 PUT /api/founder-health
 PUT /api/network/profile
 PUT /api/products/:id/business-model

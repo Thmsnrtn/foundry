@@ -220,3 +220,70 @@ window, every recipient sent to a page the world no longer serves, under the one
 public name every later experiment also stands behind. So the pass that would
 write reads the page from its public address first. One request, at the only
 moment the answer changes anything.
+
+## The Workshop can hear, and hearing grants nobody anything (2026-09-09)
+
+Apex Micro could write to people and could not hear them answer: mail to its
+address was forwarded to a personal mailbox and never reached the institution,
+so a reply saying *stop writing to me*, *I paid and got nothing*, or *I would
+pay for this monthly* was invisible to every mechanism built to honour it. A
+workshop with a mouth and no ears cannot keep its promises, and cannot learn.
+
+The path now exists, and one rule governs it:
+
+**An inbound message is evidence that somebody said something. It is never an
+instruction, a permission, or an authority.**
+
+A stranger who can write to an address must not acquire anything by writing —
+not a refund, not a secret, not a reply, and above all not the lifting of a
+refusal somebody else made. What a message *can* do is create a record, a
+scoped obligation, or a refusal, and each runs through the paths that already
+govern. The function that acts on a message has no access to money,
+infrastructure or sending; that is a property of what it can reach, not a
+promise about how it behaves.
+
+**Readings are made by rules, and `unknown` is a safe resting state.** The
+classifications that carry consequence — a refusal to be contacted, a claim
+that something is owed, a demand for money back — are exactly the ones a
+hostile or careless message would most like to have misapplied, and exactly the
+ones prose most easily talks a model into. So they are decided by looking for
+what people actually write when they mean them; anything unrecognised stays
+unknown and goes to a person. No model is consulted on this path at all: nothing
+here yet needs judgement a rule cannot give, and a model added before it is
+needed is an attack surface added before it is needed.
+
+**A stated refusal is honoured immediately, without asking.** The asymmetry
+decides it: acting on a false positive costs the Workshop one message it might
+have sent; ignoring a true one is the thing the whole suppression system exists
+to prevent. **A request for more grants nothing** — it is recorded in the
+person's own words, scoped to the experiment they were answering, and the owner
+decides whether it can be honoured.
+
+**The edge forwards before it tells us anything.** The program that receives
+mail forwards it to the owner first and unconditionally, then offers Foundry a
+copy on a best-effort, time-bounded basis. If Foundry is down, redeploying, or
+refuses the copy, the institution loses a copy and the person loses nothing. An
+institution that can eat its customers' mail while claiming to serve them is
+worse than one that cannot hear at all.
+
+## Sense broadly, contact narrowly — including about whom to contact (2026-09-09)
+
+Re-judging the first probe from its assumption chain rather than its design
+found a dominated population. The chain runs: these shops bid public work →
+finding relevant notices is a chore → nobody has solved it for them → the value
+is recognisable from a description → the person reached decides → the price is
+payable → a cold message can carry it. The probe tests the last four fused into
+one observation and *assumes* the first three.
+
+The first is the cheapest of all to check. A null result had three readings,
+not two — the screening is not worth the price sight unseen; these shops do not
+transact by cold email; or they do not bid public work at all. The third is
+observable for nothing in the same free public record the product is built on,
+and unlike the other two it can be removed **before** anybody is written to.
+
+**Spending strangers' attention and the Workshop's one first impression to
+produce an ambiguity a free lookup could have prevented is a dominated design.**
+So the population narrows to shops with observed public-bid activity, and the
+same messages carry more information. This is not deferral: the surface is
+built, the ceiling is set, the stops are set, and endless pre-analysis is its
+own failure. Sensing sharpens the shot; it does not replace taking it.

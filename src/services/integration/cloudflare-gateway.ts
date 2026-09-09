@@ -39,6 +39,9 @@ const CF_TIMEOUT_MS = 15_000;
 
 export const WORKSHOP_ZONE_NAME = (): string => (process.env.WORKSHOP_ZONE_NAME ?? 'apexmicro.ai').toLowerCase();
 export const WORKSHOP_WORKER_NAME = (): string => process.env.WORKSHOP_WORKER_NAME ?? 'apexmicro';
+/** The program that hears. A second name, and exactly one more — the envelope
+ *  is a short list of things this institution may deploy, not a pattern. */
+export const WORKSHOP_MAIL_WORKER_NAME = (): string => `${WORKSHOP_WORKER_NAME()}-mail`;
 
 export function cloudflareConfigured(): boolean {
   return Boolean(process.env.CLOUDFLARE_API_TOKEN?.trim() && process.env.CLOUDFLARE_ACCOUNT_ID?.trim());
@@ -162,7 +165,7 @@ export async function readWorkerDomains(): Promise<Array<{ id: string; hostname:
   return r.result.map((d) => ({ id: d.id, hostname: d.hostname, service: d.service, zoneId: d.zone_id }));
 }
 
-export async function readEmailRouting(zoneId: string): Promise<{ enabled: boolean; status: string | null; rules: Array<{ id: string; to: string; forwardTo: string[]; enabled: boolean }>; destinations: Array<{ email: string; verified: boolean }> }> {
+export async function readEmailRouting(zoneId: string): Promise<{ enabled: boolean; status: string | null; rules: Array<{ id: string; to: string; forwardTo: string[]; worker: string | null; enabled: boolean }>; destinations: Array<{ email: string; verified: boolean }> }> {
   const settings = await getJson<{ enabled: boolean; status?: string }>(`${CF_API}/zones/${pathSegment(zoneId, 'zone_id')}/email/routing`).catch(() => null);
   // RULES EXIST WHETHER OR NOT ROUTING IS ON. Reading them only when the zone
   // is enabled sounds like a saving and is a lie: a zone that was half set up
@@ -173,7 +176,11 @@ export async function readEmailRouting(zoneId: string): Promise<{ enabled: boole
   const destinations = (await getJson<Array<{ email: string; verified?: string | null }>>(`${CF_API}/accounts/${account()}/email/routing/addresses`).catch(() => ({ result: [] as Array<{ email: string; verified?: string | null }> }))).result;
   return {
     enabled: Boolean(settings?.result.enabled), status: settings?.result.status ?? null,
-    rules: rules.map((r) => ({ id: r.id, to: r.matchers.find((m) => m.field === 'to')?.value ?? '*', forwardTo: r.actions.find((a) => a.type === 'forward')?.value ?? [], enabled: r.enabled })),
+    rules: rules.map((r) => ({ id: r.id, to: r.matchers.find((m) => m.field === 'to')?.value ?? '*',
+      forwardTo: r.actions.find((a) => a.type === 'forward')?.value ?? [],
+      // A rule that routes to a program still routes: the program forwards.
+      worker: r.actions.find((a) => a.type === 'worker')?.value?.[0] ?? null,
+      enabled: r.enabled })),
     destinations: destinations.map((d) => ({ email: d.email, verified: Boolean(d.verified) })),
   };
 }
@@ -355,10 +362,33 @@ async function workerDeployHandler(req: GatewayRequest): Promise<{ name: string;
   const p = req.params as { script_name: string; source: string; kv_namespace_id: string; purpose: string };
   const name = String(p.script_name ?? '');
   const source = String(p.source ?? '');
-  const metadata = { main_module: 'worker.js', compatibility_date: '2026-06-01', bindings: [{ type: 'kv_namespace', name: 'PAGES', namespace_id: String(p.kv_namespace_id ?? '') }] };
-  return withReceipt(req, () => `worker:${name}`, () => purposeOf(req.params), { digest: digestOf(source), bytes: source.length, metadata }, async () => {
+  // TWO PROGRAMS, TWO SHAPES. The site program is bound to the page store; the
+  // mail program is bound to where to forward and where to hand a copy in. The
+  // intake secret is a `secret_text` binding, so it is set once and is not
+  // readable back out of the deployed program — the same discipline every other
+  // credential in this institution gets.
+  const isMail = name === WORKSHOP_MAIL_WORKER_NAME();
+  const bindings = isMail
+    ? [
+      { type: 'plain_text', name: 'FORWARD_TO', text: String((p as unknown as { forward_to?: string }).forward_to ?? '') },
+      { type: 'plain_text', name: 'INTAKE_URL', text: String((p as unknown as { intake_url?: string }).intake_url ?? '') },
+      { type: 'secret_text', name: 'INTAKE_KEY', text: String((p as unknown as { intake_key?: string }).intake_key ?? '') },
+    ]
+    : [{ type: 'kv_namespace', name: 'PAGES', namespace_id: String(p.kv_namespace_id ?? '') }];
+  const metadata = { main_module: 'worker.js', compatibility_date: '2026-06-01', bindings };
+  // A RECEIPT IS READ BY PEOPLE. The bindings are recorded by name and kind;
+  // the secret's value is not, here or anywhere else it could be read back.
+  const shown = { digest: digestOf(source), bytes: source.length,
+    metadata: { ...metadata, bindings: bindings.map((b) => ({ type: b.type, name: b.name })) } };
+  return withReceipt(req, () => `worker:${name}`, () => purposeOf(req.params), shown, async () => {
     purposeOf(req.params);
-    if (name !== WORKSHOP_WORKER_NAME()) throw new CloudflareRefused('not_the_workshop_program', name);
+    if (name !== WORKSHOP_WORKER_NAME() && name !== WORKSHOP_MAIL_WORKER_NAME()) {
+      throw new CloudflareRefused('not_the_workshop_program', name);
+    }
+    if (isMail && !/message\.forward\(/.test(source)) {
+      // A mail program that cannot forward is a mail program that eats mail.
+      throw new CloudflareRefused('mail_program_must_forward');
+    }
     if (!source.includes('export default')) throw new CloudflareRefused('source_invalid');
     pathSegment(p.kv_namespace_id, 'kv_namespace_id');
     const before = await readWorkerScript(name);
@@ -397,7 +427,7 @@ async function domainAttachHandler(req: GatewayRequest): Promise<{ hostname: str
 
 /** cloudflare_email_route_upsert: mail to the Workshop's address forwarded to the owner. */
 async function emailRouteHandler(req: GatewayRequest): Promise<{ to: string; forwardTo: string; destinationVerified: boolean; enabled: boolean }> {
-  const p = req.params as { zone_name: string; to: string; forward_to: string; purpose: string };
+  const p = req.params as { zone_name: string; to: string; forward_to: string; worker?: string; purpose: string };
   const to = String(p.to ?? '').toLowerCase().trim();
   const forwardTo = String(p.forward_to ?? '').toLowerCase().trim();
   return withReceipt(req, () => `email_route:${String(p.zone_name)}/${to}`, () => purposeOf(req.params), { to, forwardTo }, async () => {
@@ -426,7 +456,15 @@ async function emailRouteHandler(req: GatewayRequest): Promise<{ to: string; for
       const response = await withRetry(() => fetch(`${CF_API}/accounts/${account()}/email/routing/addresses`, { method: 'POST', headers: auth({ 'Content-Type': 'application/json' }), body: JSON.stringify({ email: forwardTo }) }), { timeoutMs: CF_TIMEOUT_MS, maxRetries: 1 });
       steps.destination = (await cfRead<unknown>(response)).result;
     }
-    const rule = { name: `Workshop: ${to}`, enabled: true, matchers: [{ type: 'literal', field: 'to', value: to }], actions: [{ type: 'forward', value: [forwardTo] }] };
+    // WHERE THE MAIL GOES: straight to the owner, or to the program that
+    // forwards it to the owner and hands Foundry a copy. Only the Workshop's
+    // own mail program may be named — a rule that could point at an arbitrary
+    // worker would be a way to hand the Workshop's mail to anything.
+    const worker = String(p.worker ?? '').trim();
+    if (worker && worker !== WORKSHOP_MAIL_WORKER_NAME()) throw new CloudflareRefused('not_the_workshop_program', worker);
+    const rule = worker
+      ? { name: `Workshop: ${to}`, enabled: true, matchers: [{ type: 'literal', field: 'to', value: to }], actions: [{ type: 'worker', value: [worker] }] }
+      : { name: `Workshop: ${to}`, enabled: true, matchers: [{ type: 'literal', field: 'to', value: to }], actions: [{ type: 'forward', value: [forwardTo] }] };
     const existing = before.rules.find((r) => r.to === to);
     const response = existing
       ? await withRetry(() => fetch(`${CF_API}/zones/${pathSegment(z.id, 'zone_id')}/email/routing/rules/${pathSegment(existing.id, 'email_rule_id')}`, { method: 'PUT', headers: auth({ 'Content-Type': 'application/json' }), body: JSON.stringify(rule) }), { timeoutMs: CF_TIMEOUT_MS, maxRetries: 1 })
@@ -448,7 +486,7 @@ async function emailRouteHandler(req: GatewayRequest): Promise<{ to: string; for
       throw new CloudflareRefused('routing_not_enabled',
         `the rule for ${to} exists but mail routing is not enabled on ${z.name}: ${JSON.stringify(steps.enable ?? 'not attempted')}`);
     }
-    return { previous: before, response: steps, verification: { ruleForwards: present?.forwardTo ?? [], destinationVerified, enabled: after.enabled },
+    return { previous: before, response: steps, verification: { ruleForwards: present?.forwardTo ?? [], routedToProgram: present?.worker ?? null, destinationVerified, enabled: after.enabled },
       rollback: existing ? { rule: existing } : { deleteRule: present?.id ?? null, disableRouting: !before.enabled },
       result: { to, forwardTo, destinationVerified, enabled: after.enabled } };
   });

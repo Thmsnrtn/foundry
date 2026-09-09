@@ -768,9 +768,18 @@ surfaces verified over public HTTPS, 7 ready, 3 waiting. The three waiting all
 resolve at Allow: the experiment's own page, its payment link, and outbound
 eligibility.
 
-**One thing is still owed by you, and Foundry will not invent it.**
+**Two things are still owed by you, and Foundry will invent neither.**
 
-**Also owed by the owner, and not a blocker to the token.** A postal address for
-commercial mail — a business or PO box address, not his home address, which
-Foundry will not publish by default and will not invent. Recorded at
-`/foundry/public-workshop`.
+**One: the twenty-three recipients have not been reviewed.** Reconstructing
+production corrected a note this document had carried: the twenty-two *approved*
+recipients belong to the ORIGINAL probe, the one that was declined. Experiment
+001 carries twenty-three of its own and every one of them is still `pending`.
+Approval is the owner's act alone and no part of it can be delegated, so Allow
+cannot clear until they are reviewed at `/foundry/experiments`.
+
+**Two: a postal address for commercial mail** — a business or PO box address,
+not his home address, which Foundry will not publish by default and will not
+invent. Recorded at `/foundry/public-workshop`.
+
+Neither is a blocker to the token, and neither is something the readiness chain
+can retire on its own. Everything else that Allow needs, Allow supplies.

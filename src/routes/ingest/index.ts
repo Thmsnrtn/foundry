@@ -14,6 +14,11 @@ import { invalidateSignalCache } from '../../services/signal.js';
 
 export const ingestRoutes = new Hono();
 
+// The Workshop's mail intake lives behind this door: same authentication
+// shape, same tenancy discipline, no new surface for the owner to know about.
+const { mountWorkshopMail } = await import('../workshop-mail.js');
+mountWorkshopMail(ingestRoutes);
+
 // ─── Validation (security close-out 2026-07-13) ──────────────────────────────
 // This is a PUBLIC endpoint (token-authed). Before this schema, parseFloat
 // let Infinity through ("1e999"), rates accepted 500%, and unknown fields

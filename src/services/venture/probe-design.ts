@@ -183,6 +183,14 @@ export async function amendDesign(input: {
   experimentId: string; because: string; amendedBy: string;
   fields?: Partial<Record<AmendableField, string>>;
   interpretations?: Array<{ observation: string; was: string; reading: string; distinguishedBy?: string | null }>;
+  /**
+   * A READING NOBODY HAD THOUGHT OF YET. Adding one before the seal is not
+   * rewriting the deliberation — it is the deliberation getting better — but it
+   * is recorded in the ledger all the same, because a probe that quietly grew a
+   * new way to read its own result would be indistinguishable from one that had
+   * always been that careful.
+   */
+  addInterpretations?: Array<{ observation: string; reading: string; distinguishedBy?: string | null }>;
 }): Promise<{ amended: number; design: ProbeDesign }> {
   const d = await designOf(input.experimentId);
   if (!d) throw new DesignRefused('no_design', 'there is no deliberation to amend');
@@ -203,6 +211,10 @@ export async function amendDesign(input: {
     if (!had || had.reading === i.reading.trim()) continue;
     ledger.push([`interpretation: ${i.observation}`, had.reading, i.reading.trim()]);
   }
+  for (const i of input.addInterpretations ?? []) {
+    if (d.interpretations.some((x) => x.observation === i.observation && x.reading === i.reading.trim())) continue;
+    ledger.push([`new reading of "${i.observation}"`, '(no reading of this was recorded)', i.reading.trim()]);
+  }
   if (ledger.length === 0) return { amended: 0, design: d };
 
   // THE LEDGER FIRST. The design's own trigger refuses a stamp that no
@@ -222,7 +234,19 @@ export async function amendDesign(input: {
         WHERE experiment_id = ? AND observation = ? AND reading = ?`,
       [i.reading.trim(), i.distinguishedBy?.trim() ?? null, input.experimentId, i.observation, i.was]);
   }
-  sets.push(`amended_at = datetime('now')`, 'amended_because = ?'); args.push(because, input.experimentId);
+  for (const i of input.addInterpretations ?? []) {
+    if (d.interpretations.some((x) => x.observation === i.observation && x.reading === i.reading.trim())) continue;
+    await query('INSERT INTO probe_interpretations (id, experiment_id, founder_id, observation, reading, distinguished_by) VALUES (?,?,?,?,?,?)',
+      [nanoid(), input.experimentId, d.founderId, i.observation.trim(), i.reading.trim(), i.distinguishedBy?.trim() || null]);
+  }
+  if (sets.length === 0) {
+    await query(`UPDATE probe_designs SET amended_at = strftime('%Y-%m-%d %H:%M:%f','now'), amended_because = ? WHERE experiment_id = ?`, [because, input.experimentId]);
+    return { amended: ledger.length, design: (await designOf(input.experimentId))! };
+  }
+  // SUB-SECOND, because two amendments in the same second are still two
+  // amendments and the row must be able to say so — the stamp is what the
+  // trigger reads to know a change was declared rather than slipped in.
+  sets.push(`amended_at = strftime('%Y-%m-%d %H:%M:%f','now')`, 'amended_because = ?'); args.push(because, input.experimentId);
   await query(`UPDATE probe_designs SET ${sets.join(', ')} WHERE experiment_id = ?`, args);
   return { amended: ledger.length, design: (await designOf(input.experimentId))! };
 }

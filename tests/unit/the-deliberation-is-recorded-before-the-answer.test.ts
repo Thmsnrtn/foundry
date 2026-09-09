@@ -296,6 +296,27 @@ describe('Proof 1, reconsidered from first principles before anyone is written t
     expect(why.otherRecordedPaths.join(' ')).toContain('Before it was narrowed, canProve read:');
   });
 
+  it('re-judging from the assumption chain narrows the population and records the reading it removes', async () => {
+    const { judgeProof1AgainstObservedBidders } = await import('../../src/services/venture/proof-1-deliberation.js');
+    const before = (await designOf(X))!;
+    const r = await judgeProof1AgainstObservedBidders(OWNER);
+    expect(r.amended).toBeGreaterThan(0);
+    // The question and the instrument are untouched; only who is asked changed.
+    expect(r.design.decides).toBe(before.decides);
+    expect(r.design.exchange.exchange).toBe(before.exchange.exchange);
+    expect(r.design.recommendation).toBe('run');
+    expect(r.design.distribution).toContain('observed public-bid activity in the COMMBUYS record');
+    expect(r.design.distribution).toContain('Sensing is broad and free; contact stays narrow');
+    // The third reading of a null result is now recorded — and, unlike the
+    // other two, it is one the probe can rule out before anybody is written to.
+    const third = r.design.interpretations.find((i) => i.reading.includes('do not bid public work'))!;
+    expect(third.distinguishedBy).toContain('COMMBUYS bidder and award record');
+    // The ledger shows it was added rather than always having been there.
+    expect(r.design.amendments.some((a) => a.field.startsWith('new reading of') && a.was.includes('no reading of this was recorded'))).toBe(true);
+    // Running it again is a no-op: the judgment is idempotent, not repeated.
+    expect((await judgeProof1AgainstObservedBidders(OWNER)).amended).toBe(0);
+  });
+
   it('the deliberation seals when he decides, and refuses every later improvement', async () => {
     state.nextDomainStatus = 'verified';
     await connectWorkshopSending(OWNER);

@@ -398,6 +398,11 @@ function checkMiddlewareCoverage(): void {
     /^\/share\//, /^\/ingest\//, /^\/webhooks\//, /^\/internal\//, /^\/health/, /^\/static\//, /^\/api\/v1\//,
     /^\/beta$/, /^\/beta\/intake/, /^\/legal/, /^\/refer\//, /^\/r\//, /^\/manifest\.json$/, /^\/sw\.js$/, /^\/robots\.txt$/, /^\/sitemap/,
     /^\/llms\.txt$/, /^\/security\.txt$/, /^\/\.well-known\//, /^\/api\/webhooks\//, /^\/api\/transcripts\//, /^\/api\/voice/,
+    // The Workshop's mail door. Public because the caller is a program at
+    // Cloudflare's edge with no session to carry; it authenticates with its own
+    // secret, and the only institutional state it can reach — the
+    // do-not-contact list — it can only add to.
+    /^\/workshop\/mail$/,
   ];
 
   for (const r of allRoutes) {

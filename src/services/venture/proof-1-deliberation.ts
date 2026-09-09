@@ -24,6 +24,77 @@ import { findProof1 } from './proof-1.js';
 export interface Proof1Deliberation { experimentId: string; design: ProbeDesign; alreadyRecorded: boolean }
 
 /**
+ * SENSE BROADLY, CONTACT NARROWLY — APPLIED TO THIS PROBE'S OWN POPULATION.
+ *
+ * Re-judged from the assumption chain rather than from the design. The chain
+ * runs: these shops bid public work → finding relevant notices is a real chore
+ * → nobody has already solved it for them → screening is recognisable as
+ * valuable from a description → the person reached decides → $29 is payable
+ * without procurement friction → a cold message can carry it.
+ *
+ * The probe as designed tests the last four links fused into one observation.
+ * It assumes the first three. And the first one is the cheapest of all to
+ * check: COMMBUYS is the public record of Massachusetts procurement, it
+ * publishes award and vendor activity as well as open solicitations, and it is
+ * free — the same source the product itself is built on. Whether a given shop
+ * has ever actually bid public work is therefore observable without asking
+ * anybody anything.
+ *
+ * That matters because it changes what a null result means. The recorded
+ * readings already admit two indistinguishable explanations for nobody paying:
+ * the screening is not worth $29 sight unseen, or these shops do not transact
+ * by cold email. There is a third — they do not bid public work at all, or
+ * already have it covered — and unlike the other two it can be removed in
+ * advance, for nothing, from public data. Twenty-three strangers' attention
+ * and the Workshop's one and only first impression should not be spent
+ * producing an ambiguity that a free lookup could have prevented.
+ *
+ * So the instrument is improved rather than deferred. The population becomes
+ * shops with observed public-bid activity instead of shops whose websites
+ * merely suggest relevance. The same twenty-three messages then carry more
+ * information, and the timing is right: none of the recipients has been
+ * reviewed yet, so nothing is being rewritten.
+ *
+ * What this deliberately does NOT do: defer the probe. The surface is built,
+ * the ceiling is $100, the stops are set, and endless pre-analysis is its own
+ * failure. Sensing sharpens the shot; it does not replace taking it.
+ */
+export async function judgeProof1AgainstObservedBidders(founderId: string): Promise<{ amended: number; design: ProbeDesign }> {
+  const experimentId = await findProof1(founderId);
+  if (!experimentId) throw new Error('Proof 1 is not seeded');
+  return amendDesign({
+    experimentId, amendedBy: BY,
+    because: 'Re-judged from the assumption chain. A null result had three readings, not two, and the '
+      + 'third — that these shops do not bid public work, or already have it covered — is observable for '
+      + 'nothing in the same public record the product is built on. Spending twenty-three strangers\' '
+      + 'attention to produce an ambiguity a free lookup could remove is a dominated design. The population '
+      + 'is narrowed to observed bidders before anyone is reviewed or written to; the question, the '
+      + 'exchange and the decision to run are unchanged.',
+    fields: {
+      distribution: 'Cold outbound to Massachusetts millwork shops with observed public-bid activity in the '
+        + 'COMMBUYS record — not shops whose websites merely suggest relevance — written to once each, from '
+        + 'a named operator, landing on a permanent public page. Sensing is broad and free; contact stays '
+        + 'narrow and hand-reviewed. It is still the dirtiest distribution this institution recognises, and '
+        + 'its own doctrine still says an opportunity reachable only this way is worth less than one found '
+        + 'through search or a marketplace. It is used because it is the fastest honest route to a first '
+        + 'real answer, not because it is a channel a business would keep.',
+      ratherThanWaiting: 'The public record can say whether a shop bids at all; it cannot say whether one '
+        + 'would pay a stranger $29 for screening. That second question has no answer anywhere except from '
+        + 'a person, and no quantity of further reading produces one. So: observe what is free to observe, '
+        + 'then ask — rather than asking first and spending the answer on a confound.',
+    },
+    addInterpretations: [
+      { observation: 'Nobody pays inside seven days',
+        reading: 'these shops do not bid public work, or already have it covered, and the offer was never relevant to them',
+        distinguishedBy: 'their presence or absence in the COMMBUYS bidder and award record, checked before anyone is written to' },
+      { observation: 'Somebody replies that they already use a bid service',
+        reading: 'the incumbent is the competitor, not the chore, and the question becomes what the incumbent misses',
+        distinguishedBy: 'what they name in the reply, now that the Workshop can hear replies at all' },
+    ],
+  });
+}
+
+/**
  * THE CLAIM WAS BROADER THAN THE EXCHANGE COULD ESTABLISH.
  *
  * As first written this probe said it settled whether the screening labour is

@@ -171,16 +171,55 @@ export async function connectReplyInbox(founderId: string): Promise<{ to: string
   return { to: w.contactEmail, forwardTo, destinationVerified: Boolean(r.destinationVerified) };
 }
 
+/**
+ * GIVE THE WORKSHOP EARS.
+ *
+ * Deploys the edge mail program through the same door as everything else, then
+ * points the Workshop's address at it. The order matters and is not an
+ * accident: the program is deployed and verified BEFORE the routing rule is
+ * changed, so at no moment is mail routed to a program that is not there. If
+ * the deploy fails, routing is untouched and mail keeps forwarding exactly as
+ * it does today.
+ *
+ * Reversible in one step: point the rule back at the address. The program
+ * forwards before it does anything else, so even while it is live the worst
+ * case for a person writing in is that Foundry does not hear them.
+ */
+export async function standUpTheEars(founderId: string): Promise<{ program: string; hearing: boolean; forwardTo: string }> {
+  const w = need(await publicWorkshopOf(founderId));
+  const founder = (await rows('SELECT email FROM founders WHERE id = ?', [founderId]))[0];
+  const forwardTo = String(founder?.email ?? '');
+  if (!forwardTo) throw new WorkshopRefused('no_owner_address');
+  const { openTheEars } = await import('./mail.js');
+  const { MAIL_WORKER_SOURCE } = await import('./mail-worker-source.js');
+  const { WORKSHOP_MAIL_WORKER_NAME } = await import('../integration/cloudflare-gateway.js');
+  const ears = await openTheEars(founderId);
+  if (!ears.url.startsWith('https://')) {
+    throw new WorkshopRefused('intake_not_public', 'the mail program can only hand mail to an https address');
+  }
+  const name = WORKSHOP_MAIL_WORKER_NAME();
+  await door(w, 'cloudflare_worker_deploy', 'the program that hears for the Workshop',
+    { script_name: name, source: MAIL_WORKER_SOURCE, kv_namespace_id: w.kvNamespaceId ?? '',
+      forward_to: forwardTo, intake_url: ears.url, intake_key: ears.intakeKey,
+      purpose: 'receive the Workshop\'s mail, forward it to the owner, and hand a copy to Foundry' },
+    `public:${founderId}:mail_program:${digestOf(MAIL_WORKER_SOURCE)}`);
+  const routed = await door(w, 'cloudflare_email_route_upsert', 'route the Workshop address to the program that hears',
+    { zone_name: w.zoneName, to: w.contactEmail, forward_to: forwardTo, worker: name,
+      purpose: 'replies to the Workshop reach the person who wrote, and the institution hears them too' },
+    `public:${founderId}:route:hearing:${w.contactEmail}:${name}`);
+  return { program: name, hearing: Boolean((routed as { enabled?: boolean }).enabled), forwardTo };
+}
+
 // ─── Health ──────────────────────────────────────────────────────────────────
 
 export type Signal = { status: 'healthy' | 'needs_attention' | 'unknown'; detail: string };
-export interface WorkshopHealth { site: Signal; cloudflare: Signal; sending: Signal; replyInbox: Signal; checkedAt: string; pages: number; pagesFailing: string[] }
+export interface WorkshopHealth { site: Signal; cloudflare: Signal; sending: Signal; replyInbox: Signal; mail: Signal; checkedAt: string; pages: number; pagesFailing: string[] }
 
 export async function workshopHealth(founderId: string, opts: { fetchImpl?: typeof fetch } = {}): Promise<WorkshopHealth> {
   const w = need(await publicWorkshopOf(founderId));
   const fetchImpl = opts.fetchImpl ?? fetch;
   const health: WorkshopHealth = {
-    site: { status: 'unknown', detail: '' }, cloudflare: { status: 'unknown', detail: '' }, sending: { status: 'unknown', detail: '' }, replyInbox: { status: 'unknown', detail: '' },
+    site: { status: 'unknown', detail: '' }, cloudflare: { status: 'unknown', detail: '' }, sending: { status: 'unknown', detail: '' }, replyInbox: { status: 'unknown', detail: '' }, mail: { status: 'unknown', detail: '' },
     checkedAt: new Date().toISOString(), pages: 0, pagesFailing: [],
   };
   // The site: every live page read from its public address.
@@ -229,6 +268,19 @@ export async function workshopHealth(founderId: string, opts: { fetchImpl?: type
     } catch (e) { health.replyInbox = { status: 'unknown', detail: e instanceof Error ? e.message : String(e) }; }
   } else health.replyInbox = { status: 'unknown', detail: 'cannot be read without Cloudflare' };
   await recordWorkshopHealth(founderId, health as unknown as Record<string, unknown>);
+  // CAN IT HEAR, AND IS ANYBODY WAITING? Not a mail dashboard: the only two
+  // questions that bear on an obligation or on somebody's patience.
+  try {
+    const { mailHealth, earsAreOpen } = await import('./mail.js');
+    const open = await earsAreOpen(founderId);
+    const m = await mailHealth(founderId);
+    health.mail = !open
+      ? { status: 'needs_attention', detail: 'the Workshop cannot hear: mail is forwarded to the owner and never reaches Foundry' }
+      : m.waiting > 0
+        ? { status: 'needs_attention', detail: `${m.waiting} waiting on you${m.oldestWaitingHours != null ? `, oldest ${m.oldestWaitingHours}h` : ''}` }
+        : { status: 'healthy', detail: m.heard === 0 ? 'listening; nobody has written yet' : `${m.heard} heard, none waiting on you` };
+  } catch (e) { health.mail = { status: 'unknown', detail: e instanceof Error ? e.message : String(e) }; }
+
   return health;
 }
 

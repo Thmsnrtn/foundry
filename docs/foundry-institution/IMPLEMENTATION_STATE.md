@@ -1411,3 +1411,90 @@ not invent.
 Nobody has been contacted. `apexmicro.ai/experiments/ma-millwork-bid-brief`
 returns 404 by design: an offer page for an unapproved experiment is exactly the
 premature public act the design exists to prevent.
+
+## The Workshop can hear (2026-09-09)
+
+Migration 288, `src/services/public-workshop/mail.ts`, the edge mail program,
+the intake behind the existing ingest door, and `/foundry/inbox`.
+
+Apex Micro could write to people and could not hear them answer: mail to its
+address was forwarded to a personal mailbox and never reached the institution.
+Every mechanism built to honour a reply — Workshop-wide suppression, scoped
+continuation, obligations, commercial evidence — was unreachable in production
+because nothing could deliver a reply to it.
+
+**Architecture, chosen against reconstructed reality rather than a diagram.**
+Cloudflare Email Routing already receives the Workshop's mail. An Email Worker
+now forwards to the owner *first and unconditionally*, then hands Foundry a
+copy on a best-effort, time-bounded basis. If Foundry is down the institution
+loses a copy and the person loses nothing. No provider change, no second public
+identity, no mailbox migration, and the owner's mailbox stays the durable
+archive it already was.
+
+**It extends the evidence spine rather than replacing it.** Migration 131 had
+already established provider-neutral inbound customer messages and stated the
+governing invariant — *evidence, not authority*. That table is bound to a
+product's support channel under a customer-support responsibility, and Apex
+Micro has no customers and no support channel, so routing the Workshop through
+it would have meant inventing a responsibility for a company with zero
+customers. `workshop_mail.support_message_id` names the convergence point for
+when that stops being true, so it is a recorded decision rather than an
+accident to rediscover.
+
+What holds structurally, and is tested adversarially:
+
+- **A message cannot instruct.** A single envelope carrying every classic
+  injection — ignore-previous-instructions, a forged SYSTEM line, refund
+  demands, a credential request, a DNS change — produced exactly one row and
+  changed nothing: not the suppression list it tried to lift, not one
+  outbound action, not one provider mutation.
+- **Readings are made by rules, and `unknown` is a safe resting state.** No
+  model is consulted on this path at all. Prose claiming to *be* a
+  classification stays `unknown`; a real refusal is caught however phrased.
+- **The same message twice is one message**, by the sender's own Message-ID.
+- **Threads come from headers**, and the grounds travel with the record so the
+  owner can check the inference.
+- **A refusal binds the whole Workshop immediately**; a request for more grants
+  nothing and is kept in the person's own words, scoped to the experiment.
+- **The edge cannot eat mail**: the door refuses to deploy a mail program that
+  does not forward, and refuses any program name but the Workshop's own.
+- **The intake secret never reaches a receipt.**
+
+The mail door lives behind the existing ingest mount (the Attention Law is
+right that a new top-level surface is a new thing to know about), carries no
+capability guard by design — it can only ever *add* to the do-not-contact list
+— and that reasoning is written above it rather than left implicit.
+
+`/foundry/inbox` is reached from the first screen, beside Workshop. A page
+nothing links to is a page the owner has to already know about, which is not a
+surface at all. Its count is mail waiting on **him**, not mail received: a
+number that reports volume trains him to ignore it, and the only figure he can
+act on is the one Foundry declined to settle by itself.
+
+**Not yet live.** `workshop:stand-up-ears` deploys the program and repoints the
+address in one governed, reversible act, deploy-then-route so mail is never
+pointed at a program that is not there. It has not been run against production:
+the Workshop currently forwards exactly as before.
+
+## Experiment 001, re-judged from the assumption chain (2026-09-09)
+
+Not from the design. The chain assumes three links and tests four fused into
+one. The cheapest assumed link — *do these shops bid public work at all* — is
+observable for nothing in COMMBUYS, the same free public record the product is
+built on, which publishes award and vendor activity as well as open
+solicitations.
+
+That gives a null result a **third** reading alongside the two already
+recorded, and unlike those two it can be removed *before* anybody is written to.
+Spending twenty-three strangers' attention and the Workshop's one first
+impression to produce an ambiguity a free lookup would have prevented is a
+dominated design.
+
+So the population narrows to shops with observed public-bid activity, recorded
+through the pre-seal amendment path with both new readings kept in the ledger.
+The question, the exchange and the recommendation to **run** are unchanged —
+this sharpens the instrument, it does not defer the probe. The timing is clean:
+all twenty-three recipients are still unreviewed, so nothing was rewritten.
+
+**Allow remains blocked on two owner-owed things**: the Workshop's postal
+address, and the owner's review of who may be contacted.

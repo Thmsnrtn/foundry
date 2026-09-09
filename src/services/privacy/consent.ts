@@ -891,6 +891,18 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
   // the Workshop goes with its owner. Keeping "write to me again" for a sender
   // that no longer exists retains a stranger's address for a reason that has
   // stopped being true.
+  // WHAT STRANGERS WROTE TO ONE PERSON'S WORKSHOP. Their words, their address,
+  // and what the institution made of it. It goes with the Workshop for the same
+  // reason the suppression list does: the only thing that could ever act on it
+  // is a workshop that is leaving with its owner.
+  workshop_mail: {
+    reason: 'what people wrote to one person\'s workshop, and what it made of what they said',
+    onAccountErasure: { op: 'delete' },
+  },
+  workshop_mail_intake: {
+    reason: 'the secret the workshop\'s own mail program uses to hand mail in',
+    onAccountErasure: { op: 'delete' },
+  },
   workshop_continuations: {
     reason: 'what people told one person\'s workshop they wanted next; the workshop goes with them',
     onAccountErasure: { op: 'delete' },
@@ -1137,6 +1149,7 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   probe_cost_dimensions: 'the axes a probe spends on beyond cash, so a cheap-sounding number never stands alone; constitutional, naming nobody',
   probe_stop_kinds: 'the things the world can do that end a probe before its budget does, and what each is counted from; constitutional, naming nobody',
   continuation_kinds: 'the answers a participant can give about what should happen next, and which of them permit more contact; constitutional, naming nobody',
+  workshop_mail_readings: 'the meanings the institution has words for when somebody writes to it, and which of them it may answer without asking; constitutional, naming nobody',
   exposure_floors: 'the four structural facts whose exposure is never graded down in context — custody, regulated decisions, professional reliance, decisions about a named person; constitutional, naming nobody',
   structural_fact_kinds: 'the facts about an offer that decide how serious an exposure is and which first-proof policy row each answers; constitutional, naming nobody',
   exposure_dimensions: 'the axes a portfolio can be concentrated on and what each failure would cost; constitutional and the same for every owner, naming no company',

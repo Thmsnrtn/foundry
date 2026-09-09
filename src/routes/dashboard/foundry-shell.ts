@@ -2898,6 +2898,13 @@ foundryShellRoutes.get('/foundry', async (c) => {
           + (SELECT COUNT(*) FROM responsibility_candidates rc JOIN products p ON p.id = rc.product_id
               WHERE p.owner_id = ? AND ${realCompany('p')} AND rc.status = 'pending') AS n`,
     [s.ownerId, s.ownerId, s.ownerId])).rows as unknown as Array<Record<string, unknown>>;
+  // WHAT PEOPLE SAID HAS A DOOR ON THE FIRST SCREEN. A page nothing links to is
+  // a page the owner has to already know about, which is not a surface. The
+  // count is mail waiting on HIM, not mail received: an inbox that shouts about
+  // volume trains him to ignore it, and the only number he can act on is the
+  // one Foundry declined to settle by itself.
+  const { mailHealth } = await import('../../services/public-workshop/mail.js');
+  const mail = await mailHealth(s.ownerId);
   const homeFrame: Where = {
     crumbs: [{ href: '/foundry', label: 'Foundry' }],
     scope: { kind: 'foundry', id: null, name: 'everything' },
@@ -2906,6 +2913,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
       { href: '/foundry/decisions', label: 'Decisions', count: Number(waiting[0]?.n ?? 0), on: false },
       { href: '/foundry/searching', label: s.search ? 'Searching' : 'Not searching', count: null, on: false },
       { href: '/foundry/public-workshop', label: 'Workshop', count: null, on: false },
+      { href: '/foundry/inbox', label: 'Inbox', count: mail.waiting || null, on: false },
     ],
     chips: [],
   };

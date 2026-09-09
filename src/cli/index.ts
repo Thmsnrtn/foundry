@@ -902,8 +902,18 @@ program.command('probe:narrow-proof1 <founderIdOrEmail>').description('Narrow th
   .action(async (who: string) => { const { narrowProof1ToWhatItCanEstablish } = await import('../services/venture/proof-1-deliberation.js'); out(await narrowProof1ToWhatItCanEstablish(await founderIdOf(who))); });
 program.command('workshop:readiness <founderIdOrEmail> <experimentId>').description('Walk the whole external chain and read every public surface from its public address; reports verified, ready, waiting or blocked')
   .action(async (who: string, experimentId: string) => { const { externalReadiness } = await import('../services/public-workshop/readiness.js'); out(await externalReadiness(await founderIdOf(who), experimentId)); });
+program.command('probe:rejudge-proof1 <founderIdOrEmail>').description('Re-judge Proof 1 from the assumption chain: narrow the population to observed bidders and record the third reading of a null result')
+  .action(async (who: string) => { const { judgeProof1AgainstObservedBidders } = await import('../services/venture/proof-1-deliberation.js'); out(await judgeProof1AgainstObservedBidders(await founderIdOf(who))); });
 program.command('probe:short <experimentId>').description('The compressed reading of one probe\'s deliberation, as the owner meets it')
   .action(async (experimentId: string) => { const { theShortVersion } = await import('../services/venture/probe-design.js'); out(await theShortVersion(experimentId)); });
+program.command('workshop:ears <founderIdOrEmail>').description('Open the Workshop\'s ears: mint the intake secret the edge mail program uses to hand mail in')
+  .action(async (who: string) => { const { openTheEars } = await import('../services/public-workshop/mail.js'); const r = await openTheEars(await founderIdOf(who)); out({ url: r.url, intakeKeyLength: r.intakeKey.length, note: 'the key is printed only by workshop:ears-key, never here' }); });
+program.command('workshop:ears-key <founderIdOrEmail>').description('Print the intake secret once, for installing into the edge program')
+  .action(async (who: string) => { const { openTheEars } = await import('../services/public-workshop/mail.js'); process.stdout.write(`${(await openTheEars(await founderIdOf(who))).intakeKey}\n`); });
+program.command('workshop:inbox <founderIdOrEmail>').description('What people wrote to the Workshop, and what it made of them')
+  .action(async (who: string) => { const { theInbox } = await import('../services/public-workshop/mail.js'); const m = await theInbox(await founderIdOf(who), 50); out(m.map((x) => ({ from: x.from, subject: x.subject, reading: x.reading, handling: x.handling, at: x.receivedAt }))); });
+program.command('workshop:stand-up-ears <founderIdOrEmail>').description('Deploy the program that hears and point the Workshop address at it; forwards to the owner first, always')
+  .action(async (who: string) => { const { standUpTheEars } = await import('../services/public-workshop/infrastructure.js'); out(await standUpTheEars(await founderIdOf(who))); });
 program.command('workshop:gate <experimentId>').description('The publication gate for one experiment, as outbound would see it')
   .action(async (experimentId: string) => { const { publicationGate } = await import('../services/public-workshop/publication.js'); out(await publicationGate(experimentId)); });
 
