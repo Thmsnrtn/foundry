@@ -164,9 +164,12 @@ export async function readWorkerDomains(): Promise<Array<{ id: string; hostname:
 
 export async function readEmailRouting(zoneId: string): Promise<{ enabled: boolean; status: string | null; rules: Array<{ id: string; to: string; forwardTo: string[]; enabled: boolean }>; destinations: Array<{ email: string; verified: boolean }> }> {
   const settings = await getJson<{ enabled: boolean; status?: string }>(`${CF_API}/zones/${pathSegment(zoneId, 'zone_id')}/email/routing`).catch(() => null);
-  const rules = settings?.result.enabled
-    ? (await getJson<Array<{ id: string; enabled: boolean; matchers: Array<{ field?: string; value?: string; type: string }>; actions: Array<{ type: string; value?: string[] }> }>>(`${CF_API}/zones/${pathSegment(zoneId, 'zone_id')}/email/routing/rules`)).result
-    : [];
+  // RULES EXIST WHETHER OR NOT ROUTING IS ON. Reading them only when the zone
+  // is enabled sounds like a saving and is a lie: a zone that was half set up
+  // holds rules while reporting disabled, and a caller told there are none
+  // tries to create one and is refused as a duplicate — which is exactly how a
+  // half-finished setup becomes a stuck one.
+  const rules = (await getJson<Array<{ id: string; enabled: boolean; matchers: Array<{ field?: string; value?: string; type: string }>; actions: Array<{ type: string; value?: string[] }> }>>(`${CF_API}/zones/${pathSegment(zoneId, 'zone_id')}/email/routing/rules`).catch(() => ({ result: [] as Array<{ id: string; enabled: boolean; matchers: Array<{ field?: string; value?: string; type: string }>; actions: Array<{ type: string; value?: string[] }> }> }))).result;
   const destinations = (await getJson<Array<{ email: string; verified?: string | null }>>(`${CF_API}/accounts/${account()}/email/routing/addresses`).catch(() => ({ result: [] as Array<{ email: string; verified?: string | null }> }))).result;
   return {
     enabled: Boolean(settings?.result.enabled), status: settings?.result.status ?? null,

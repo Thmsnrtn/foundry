@@ -283,6 +283,10 @@ describe('Proof 1 is reframed under the Workshop without rewriting its history',
     state.cf.routingEnableFails = true;
     await expect(connectReplyInbox(OWNER)).rejects.toThrow(/routing_not_enabled|door_refused/);
     expect(state.cf.routing.enabled).toBe(false);
+    // The half-finished attempt left a rule behind on a disabled zone. The
+    // retry must SEE it and update it, not try to create a second one and be
+    // refused as a duplicate — which is how a half-finished setup gets stuck.
+    expect(state.cf.routing.rules).toHaveLength(1);
     state.cf.routingEnableFails = false;
     const inbox = await connectReplyInbox(OWNER);
     expect(inbox).toMatchObject({ to: 'thomas@apexmicro.ai', forwardTo: 'thomas@example.com', destinationVerified: false });
