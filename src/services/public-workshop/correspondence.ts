@@ -480,6 +480,13 @@ export async function unanswered(founderId: string, limit = 25): Promise<string[
 export interface ReplyRecord {
   id: string; mailId: string; intent: string; decision: Decision; because: string;
   says: string | null; did: string[]; authority: string; status: string; sentAt: string | null;
+  /**
+   * WHAT THE PROVIDER SAID WHEN IT TOOK THE MESSAGE. The owner's answer to
+   * "was this actually sent, and what is the other side's name for it" — the
+   * difference between our claim that a reply went out and the receipt that
+   * says so.
+   */
+  providerMessageId: string | null;
 }
 const projectReply = (r: Row): ReplyRecord => ({
   id: String(r.id), mailId: String(r.mail_id), intent: String(r.intent),
@@ -487,7 +494,18 @@ const projectReply = (r: Row): ReplyRecord => ({
   says: r.says == null ? null : String(r.says), did: r.did ? String(r.did).split('; ') : [],
   authority: String(r.authority), status: String(r.status),
   sentAt: r.sent_at == null ? null : String(r.sent_at),
+  providerMessageId: providerMessageIdOf(r.provider_receipt),
 });
+
+/** The provider's own id for the message, out of the receipt we stored. */
+function providerMessageIdOf(receipt: unknown): string | null {
+  if (receipt == null) return null;
+  try {
+    const parsed = JSON.parse(String(receipt)) as Record<string, unknown>;
+    const id = parsed.message_id ?? parsed.id;
+    return id == null ? null : String(id);
+  } catch { return null; }
+}
 
 export async function replyTo(mailId: string): Promise<ReplyRecord | null> {
   const r = await one('SELECT * FROM workshop_replies WHERE mail_id = ?', [mailId]);

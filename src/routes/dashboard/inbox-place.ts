@@ -133,7 +133,7 @@ inboxRoutes.get('/foundry/inbox/:thread', async (c: any) => {
         <p class="quiet">Read as <strong>${replies.get(m.id)!.intent.replaceAll('_', ' ')}</strong> · ${replies.get(m.id)!.because}</p>
         ${replies.get(m.id)!.says ? html`<pre class="said">${replies.get(m.id)!.says}</pre>` : html`<p class="quiet">Nothing was said. This one is yours.</p>`}
         ${replies.get(m.id)!.did.length ? html`<p class="quiet"><strong>And it did:</strong> ${replies.get(m.id)!.did.join('; ')}</p>` : ''}
-        <p class="quiet">${replies.get(m.id)!.status === 'sent' ? `Sent ${when(replies.get(m.id)!.sentAt ?? '')} — the provider accepted it.` : replies.get(m.id)!.status === 'failed' ? 'The send did not complete, and nothing was retried blindly.' : 'Not sent.'}</p>
+        <p class="quiet">${replies.get(m.id)!.status === 'sent' ? `Sent ${when(replies.get(m.id)!.sentAt ?? '')} — the provider accepted it${replies.get(m.id)!.providerMessageId ? ` and calls it ${replies.get(m.id)!.providerMessageId}` : ''}.` : replies.get(m.id)!.status === 'failed' ? 'The send did not complete, and nothing was retried blindly.' : 'Not sent.'}</p>
       </div>` : ''}
       ${m.handling === 'needs_owner' ? html`<form method="POST" action="/foundry/inbox/${m.id}/settle" class="stack">
         <label>How you handled it <input type="text" name="because" required placeholder="one line, for the record" /></label>

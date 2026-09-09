@@ -910,7 +910,7 @@ program.command('workshop:ears <founderIdOrEmail>').description('Open the Worksh
   .action(async (who: string) => { const { openTheEars } = await import('../services/public-workshop/mail.js'); const r = await openTheEars(await founderIdOf(who)); out({ url: r.url, intakeKeyLength: r.intakeKey.length, note: 'the key is printed only by workshop:ears-key, never here' }); });
 program.command('workshop:ears-key <founderIdOrEmail>').description('Print the intake secret once, for installing into the edge program')
   .action(async (who: string) => { const { openTheEars } = await import('../services/public-workshop/mail.js'); process.stdout.write(`${(await openTheEars(await founderIdOf(who))).intakeKey}\n`); });
-program.command('workshop:inbox <founderIdOrEmail>').description('What people wrote to the Workshop, and what it made of them')
+program.command('workshop:post <founderIdOrEmail>').description('What people wrote to the Workshop, and what it made of them')
   .action(async (who: string) => { const { theInbox } = await import('../services/public-workshop/mail.js'); const m = await theInbox(await founderIdOf(who), 50); out(m.map((x) => ({ from: x.from, subject: x.subject, reading: x.reading, handling: x.handling, at: x.receivedAt }))); });
 program.command('workshop:answering <founderIdOrEmail> <mode> <because>').description('How much the Workshop answers for itself: off, draft or autonomous')
   .action(async (who: string, mode: string, because: string) => {
