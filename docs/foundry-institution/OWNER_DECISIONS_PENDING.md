@@ -717,141 +717,71 @@ Nothing here reaches a provider — that stays point 1, and stays yours.
 
 ---
 
-## §15 PENDING — A Cloudflare token that Cloudflare accepts
+## §15 PENDING — Zone-level Edit on the working Cloudflare token
 
-**Asked 2026-09-09. Re-checked 2026-09-09 and still rejected.** The public
-Workshop is built and proven in rehearsal, and one credential stands between it
-and reality. This is the whole of what is needed; nothing else about the
-Workshop waits on you.
+**Resolved 2026-09-09: the credential works.** The third token
+(`hidden-wave-924d`, confirmed) is accepted, is installed as a production
+secret, and has already done real work. **Pressing Confirm was the missing
+step**, exactly as suspected.
 
-**What was tried.** The supplied token was presented to Cloudflare as given and
-with its `cfat_` prefix stripped, against token verification and zone listing.
-Every attempt was rejected by Cloudflare itself — the API answered, with a
-Cloudflare error body, so this is not a network or proxy failure:
+**The institution's own check was wrong, and that cost a round.** Cloudflare
+issues account-owned tokens as well as user-owned ones, and an account-owned
+token answers `GET /user/tokens/verify` with a flat 401 "Invalid API Token"
+while working perfectly everywhere it is actually used. The Workshop's health
+check trusted that endpoint and reported a working credential as invalid; this
+document repeated that reading. Fixed: health now asks what the token can
+*reach* — the account's stores and the zone — with two calls the capability
+itself makes, and the provider stub models the 401 so it cannot recur.
 
-```
-GET /client/v4/user/tokens/verify        → 401  code 1000  "Invalid API Token"
-GET /client/v4/zones?name=apexmicro.ai   → 403  code 9109  "Invalid access token"
-```
+**What the token has already done, through the door, with receipts.**
 
-**Worth knowing, since the shape is unusual.** A Cloudflare *API token* is about
-forty characters of letters, digits, underscores and hyphens with **no prefix**;
-the supplied value is 54 characters beginning `cfat_`. That is the shape of a
-different Cloudflare credential, or of a value copied from a preview rather than
-from the one-time reveal. A token is shown **once**, at creation; if the page
-was left and returned to, what was copied is not the secret.
+| Step | Result |
+|---|---|
+| `cloudflare_kv_namespace_create` → `apexmicro-pages` | applied, verified present |
+| `cloudflare_worker_deploy` → `apexmicro` | applied, verified, digest matches the reviewed source, rollback recorded |
+| `cloudflare_dns_delete` → a stale root record | **refused: 403 code 10000** |
 
-**Two things, and you are done.**
+Four unrelated Workers on the account (`accounts-proxy`, `accounts-redirect`,
+`clerk-accounts-proxy`, `clerk-proxy`) were not touched — the envelope is scoped
+to the name `apexmicro`. DNS is exactly as it was, Google's verification TXT
+included, and `apexmicro.ai` is unchanged in the world.
 
-**1. Create the token** at *My Profile → API Tokens → Create Token → Create
-Custom Token*, with exactly these permissions — the ones the built capability
-uses, and no others:
+**What is still needed: Edit at the zone level.** The token clearly carries
+Account-level Edit — it created a store and deployed a program. Every zone read
+succeeds, so it has Zone Read. The first zone *write* was refused, which places
+the gap precisely: the zone scopes are Read where they need to be Edit.
 
-| Scope | Permission | What uses it |
-|---|---|---|
-| Account → Workers Scripts | Edit | deploying the page-serving program |
-| Account → Workers KV Storage | Edit | the store the pages are served from |
-| Account → Email Routing Addresses | Edit | forwarding the Workshop address to you |
-| Zone → Zone (apexmicro.ai) | Read | finding the zone by name |
-| Zone → DNS (apexmicro.ai) | Edit | the records for the site and the sender |
-| Zone → Workers Routes (apexmicro.ai) | Edit | attaching apexmicro.ai to the program |
-| Zone → Email Routing Rules (apexmicro.ai) | Edit | the rule that routes the address |
+**The smallest fix, and it needs no copying.** Cloudflare lets an existing
+token's permissions be edited, and **the token value does not change** — so the
+secret already installed stays valid and nothing has to be pasted anywhere
+again. At *Account API tokens → `hidden-wave-924d` → Edit*, ensure these three
+are **Edit**, not Read, on `apexmicro.ai`:
 
-Zone resources limited to `apexmicro.ai`. Nothing needs Zone Settings, SSL,
-billing, registrar, account membership, or any other zone — the institution has
-no tool that could use them, and a broader token would grant authority nothing
-would ever exercise.
+| Scope | Needs |
+|---|---|
+| Zone → DNS (apexmicro.ai) | **Edit** — retire the stale records, write the sender's |
+| Zone → Workers Routes (apexmicro.ai) | **Edit** — attach apexmicro.ai and www to the program |
+| Zone → Email Routing Rules (apexmicro.ai) | **Edit** — the rule that routes the Workshop address |
 
-*(`Zone → Workers Routes: Edit` is new since this was first written. Attaching a
-custom domain to the Worker goes through the Workers domains API, which is
-zone-scoped; without it the stand-up would have failed one step from the end and
-cost you a second round trip.)*
+Also confirm **Account → Email Routing Addresses: Edit** (untested — the run
+stopped before reaching it). Zone resources stay limited to `apexmicro.ai`.
+Nothing needs Zone Settings, SSL, billing, registrar or account membership.
 
-**2. Install it**, from a machine with `flyctl` and access to the app. The token
-goes straight into the production secret store and nowhere else — not into the
-repository, not into logs, not into any page:
+**Then say the word and I resume.** The stand-up is idempotent: it will skip the
+store and the program that already exist, retire the four stale records, attach
+both hostnames, write the sender's DNS, enable the reply route, publish the
+pages and read every one of them back over public HTTPS. Then Experiment 002
+runs the full cycle against the real edge.
 
-```
-flyctl secrets set CLOUDFLARE_API_TOKEN='<the token>' \
-                   CLOUDFLARE_ACCOUNT_ID='959f0bb25e98e07e8379bdf7aa311c23' \
-                   --app foundry-intel
-```
+**Still nobody is contacted.** Proof 1 publishes its page and writes to its
+first business only when you press Allow.
 
-**What happens then, without further instruction from you.** The Workshop tick
-finds Cloudflare configured and stands the Workshop up through the governed
-door, with a receipt for every change and a recorded way to put each one back:
-the page store, the program, `apexmicro.ai` and `www`, the sender's DNS records,
-and the reply route. It then reads every public page back over public HTTPS and
-records what the world actually served. Experiment 002 — the synthetic rehearsal
-— runs the full publish/verify/update/conclude cycle against the real edge.
-
-**Still nobody is contacted.** Proof 1 publishes its page and writes to its first
-business only when you press Allow at `/foundry/experiments/<id>/decide`.
-
-**Blocks.** Standing the Workshop up; publishing any page; sending as the
-Workshop; the reply inbox; the Experiment 002 run against the real edge; and
-therefore any launch of Proof 1. Nothing else in the campaign.
-
-**Second token, 2026-09-09 11:26 ("PrivateFoundry"), also rejected — and the
-rejection now says something more useful than the first one did.** It was
-presented to six endpoints, including the one Cloudflare's own Example Usage
-line shows:
-
-```
-GET /accounts/{id}/tokens/verify              → 401  code 1000   Invalid API Token
-GET /accounts/{id}/storage/kv/namespaces      → 401  code 10000  Authentication error
-GET /accounts/{id}/workers/scripts            → 401  code 10000  Authentication error
-GET /accounts/{id}/workers/domains            → 401  code 10000  Authentication error
-GET /accounts/{id}/email/routing/addresses    → 401  code 10000  Authentication error
-GET /accounts/{id}/r2/buckets                 → 401  code 10000  Authentication error
-GET /zones?name=apexmicro.ai                  → 403  code 9109   Invalid access token
-```
-
-Retried four minutes later, unchanged, so it is not propagation delay. **It fails
-against R2 as well**, which is the diagnostic that matters: a token that was live
-but too narrowly scoped would pass authentication and fail on permission, with a
-403 naming the missing scope. Failing authentication everywhere means the value
-is not a credential Cloudflare recognises at all. No permission change can fix
-that; nothing is wrong with the scopes.
-
-**Three things to check, in the order they are likely.**
-
-1. **The Confirm button.** In the screenshot the token dialog is still open with
-   **Confirm** unpressed. If that step is what finalises the token, the value
-   shown was never activated. This costs nothing to rule out and would explain
-   both attempts.
-2. **How the value left the screen.** It contains adjacent characters that are
-   easy to confuse when read rather than copied — capital `O` beside `0`, and
-   capital `I` beside `l` and `1` (`…OzfIFbt…`, `…8da0a18a`). One wrong
-   character produces exactly this failure. Use the copy button beside the
-   field, and paste without retyping.
-3. **Which token was created.** The page that produced it offers S3-compatible
-   credentials "with the R2 API or any S3 client" — that is the **R2** token
-   flow. An R2 token would not carry Workers Scripts, Workers KV, Workers
-   Routes, DNS or Email Routing even once live, so it could not stand the
-   Workshop up. **Foundry uses no R2 at all**: the public pages are served by a
-   Worker out of KV. The token needed is created at *My Profile → API Tokens →
-   Create Custom Token*, with the seven scopes in the table above and nothing
-   else.
-
-**Two security notes, neither of them a blocker.**
-
-- **The permission list visible on that screen is very wide** — Billing Write,
-  Account Settings Write, Account API Tokens Write, OAuth Client Write, SCIM
-  Provisioning, SSO Connector. If any of those were actually granted, the
-  credential can mint further credentials and change billing, which is authority
-  Foundry has no tool to exercise and should not hold. Grant the seven scopes
-  and nothing more.
-- **The R2 Secret Access Key was shared in full, in plain text.** Foundry does
-  not use it, has not stored it, and will not: it is not part of any capability
-  the institution has. Because it has been out of its box, **rotate it** — R2 →
-  Manage API tokens → roll. That is housekeeping, not an obstacle to Proof 1.
-
-**One more real-world fact, found while checking.** `apexmicro.ai` and
-`www.apexmicro.ai` currently resolve to `66.241.124.62`, a Fly.io address, and
-nothing answers TLS there. The domain is pointing at infrastructure that is not
-serving it. The stand-up retires those stale records as part of its normal work
-and records how to restore them; no action is needed from you.
+**One security note, unchanged.** The permission list on that screen is very
+wide — Billing Write, Account Settings Write, Account API Tokens Write, OAuth
+Client Write, SCIM, SSO Connector. Grant the zone scopes above and nothing more;
+a credential that can mint further credentials or change billing is authority
+Foundry has no tool to exercise. And **rotate the R2 Secret Access Key** that
+was shared in plain text: Foundry uses no R2, has not stored it, and never will.
 
 **Also owed by the owner, and not a blocker to the token.** A postal address for
 commercial mail — a business or PO box address, not his home address, which
