@@ -94,6 +94,21 @@ export async function contactIsRefused(
       `SELECT 1 AS owed FROM outbound_actions WHERE effect_id = ? AND experiment_act = 'delivery'`, [effectId],
     )).rows[0];
     if (owed) return { refused: false };
+    // AND ANSWERING SOMEBODY IS NOT APPROACHING THEM. A person who writes to
+    // the Workshop — including to say "stop" — is owed a reply to the message
+    // they chose to send; a list that governs being approached must not make
+    // the Workshop go silent on somebody mid-sentence, least of all when the
+    // sentence was a refusal and the reply is what confirms it was heard.
+    //
+    // Recognised, like the delivery above, from the effect's OWN row: there
+    // must be a recorded answer bound to a message that THIS address actually
+    // sent. A caller cannot claim it, because it requires an inbound message
+    // that exists and came from them.
+    const answering = (await query(
+      `SELECT 1 AS answering FROM workshop_replies r JOIN workshop_mail m ON m.id = r.mail_id
+        WHERE r.effect_id = ? AND m.from_email = ?`, [effectId, address],
+    )).rows[0];
+    if (answering) return { refused: false };
   }
   return { refused: true, reason: `workshop:${String(shared.reason)}` };
 }

@@ -3053,6 +3053,41 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   // losing the volume — the volume's own snapshots are for that, and are set in
   // fly.private.toml — but it survives the things that actually happen:
   // corruption, a bad migration, a delete nobody meant.
+  workshop_correspondence_tick: {
+    fn: async () => {
+      // THE WORKSHOP ANSWERS ITS OWN POST. Interpretation and answering happen
+      // here rather than at the intake door, so that hearing a message can
+      // never be slowed, failed or refused by the work of deciding what to say
+      // about it — and so an answer that could not be sent is retried as a
+      // decision rather than lost with the request that carried it.
+      const { unanswered, answer, correspondenceMode } = await import('../services/public-workshop/correspondence.js');
+      const founders = (await query(`SELECT founder_id FROM workshop_correspondence_policy WHERE mode <> 'off'`, []))
+        .rows as unknown as Array<Record<string, unknown>>;
+      for (const f of founders) {
+        const founderId = String(f.founder_id);
+        const mode = await correspondenceMode(founderId);
+        const waiting = await unanswered(founderId, 20);
+        let sent = 0; let escalated = 0;
+        for (const mailId of waiting) {
+          try {
+            const a = await answer(founderId, mailId);
+            if (a.sent) sent += 1;
+            if (a.decision === 'escalate') escalated += 1;
+          } catch (error) {
+            logger.warn(`workshop_correspondence_tick: ${mailId}: ${error instanceof Error ? error.message : String(error)}`,
+              { jobName: 'workshop_correspondence_tick' });
+          }
+        }
+        if (waiting.length) {
+          logger.info(`workshop_correspondence_tick: ${waiting.length} heard, ${sent} answered, ${escalated} for the owner (${mode})`,
+            { jobName: 'workshop_correspondence_tick' });
+        }
+      }
+    },
+    schedule: '*/10 * * * *',
+    description: 'Answer what the Workshop has been asked, inside the envelope the owner set',
+  },
+
   experiment_hand_tick: {
     fn: async () => {
       // The first real experiment's hand: offers to the businesses the owner

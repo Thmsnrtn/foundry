@@ -5002,6 +5002,18 @@ CREATE TABLE workshop_continuations (
   recorded_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(founder_id, email, experiment_id)
 );
+CREATE TABLE workshop_correspondence_modes (
+  mode       TEXT PRIMARY KEY,
+  what_it_is TEXT NOT NULL,
+  sort_order INTEGER NOT NULL
+);
+CREATE TABLE workshop_correspondence_policy (
+  founder_id TEXT PRIMARY KEY REFERENCES founders(id),
+  mode       TEXT NOT NULL REFERENCES workshop_correspondence_modes(mode),
+  because    TEXT NOT NULL,
+  changed_by TEXT NOT NULL,
+  changed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE workshop_mail (
   id              TEXT PRIMARY KEY,
   founder_id      TEXT NOT NULL REFERENCES founders(id),
@@ -5067,6 +5079,32 @@ CREATE TABLE workshop_mail_readings (
   -- advance, not a property of how confident something felt at the time.
   may_answer INTEGER NOT NULL CHECK (may_answer IN (0,1)),
   sort_order INTEGER NOT NULL
+);
+CREATE TABLE workshop_replies (
+  id             TEXT PRIMARY KEY,
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  -- One answer per message, forever. This is the whole of the exactly-once
+  -- property: a retried delivery finds a row and stops.
+  mail_id        TEXT NOT NULL UNIQUE REFERENCES workshop_mail(id),
+  -- The structured reading the interpreter produced, kept so the owner can see
+  -- what was understood separately from what was done about it.
+  understood     TEXT NOT NULL,
+  intent         TEXT NOT NULL,
+  -- What Foundry decided, in its own words, and the grounds.
+  decision       TEXT NOT NULL CHECK (decision IN ('answer','answer_and_act','ask_them','escalate','say_nothing')),
+  because        TEXT NOT NULL,
+  -- The words that went out, exactly.
+  says           TEXT,
+  -- What else changed in the world because of it, named.
+  did            TEXT,
+  -- 'foundry' when it went out inside the envelope; 'owner' when he sent it.
+  authority      TEXT NOT NULL CHECK (authority IN ('foundry','owner')),
+  status         TEXT NOT NULL DEFAULT 'drafted' CHECK (status IN ('drafted','sent','failed','withheld')),
+  effect_id      TEXT,
+  provider_receipt TEXT,
+  sent_at        TEXT,
+  created_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE workshop_spend_ceiling (
   founder_id      TEXT PRIMARY KEY REFERENCES founders(id),
@@ -5699,6 +5737,7 @@ CREATE INDEX idx_workshop_continuations ON workshop_continuations(founder_id, em
 CREATE INDEX idx_workshop_mail_handling ON workshop_mail(founder_id, handling);
 CREATE UNIQUE INDEX idx_workshop_mail_rfc ON workshop_mail(founder_id, rfc_message_id);
 CREATE INDEX idx_workshop_mail_thread ON workshop_mail(founder_id, thread_key, received_at);
+CREATE INDEX idx_workshop_replies ON workshop_replies(founder_id, status, created_at);
 CREATE INDEX idx_workspace_events_ws ON workspace_events(workspace_id, at);
 CREATE UNIQUE INDEX idx_workspace_grant_live
   ON workspace_grants(workspace_id, capability_key) WHERE revoked_at IS NULL;
@@ -9510,6 +9549,30 @@ BEGIN
   SELECT RAISE(ABORT,'workshop_continuation:email_invalid')
     WHERE NEW.email NOT LIKE '%_@_%.__%' OR NEW.email <> lower(trim(NEW.email));
 END;
+CREATE TRIGGER workshop_correspondence_modes_constitutional
+BEFORE DELETE ON workshop_correspondence_modes
+BEGIN SELECT RAISE(ABORT,'workshop_correspondence_modes:constitutional'); END;
+CREATE TRIGGER workshop_correspondence_modes_fixed
+BEFORE UPDATE ON workshop_correspondence_modes
+BEGIN SELECT RAISE(ABORT,'workshop_correspondence_modes:constitutional'); END;
+CREATE TRIGGER workshop_correspondence_modes_no_new
+BEFORE INSERT ON workshop_correspondence_modes
+BEGIN SELECT RAISE(ABORT,'workshop_correspondence_modes:constitutional'); END;
+CREATE TRIGGER workshop_correspondence_policy_change_guard
+BEFORE UPDATE ON workshop_correspondence_policy
+BEGIN
+  SELECT RAISE(ABORT,'workshop_correspondence_policy:reason_required') WHERE trim(NEW.because) = '';
+  SELECT RAISE(ABORT,'workshop_correspondence_policy:owner_act') WHERE NEW.changed_by IS NOT 'founder:' || OLD.founder_id;
+  SELECT RAISE(ABORT,'workshop_correspondence_policy:immutable') WHERE NEW.founder_id <> OLD.founder_id;
+END;
+CREATE TRIGGER workshop_correspondence_policy_guard
+BEFORE INSERT ON workshop_correspondence_policy
+BEGIN
+  SELECT RAISE(ABORT,'workshop_correspondence_policy:reason_required') WHERE trim(NEW.because) = '';
+  -- Only the owner decides how much the Workshop may say for itself. Nothing
+  -- that reads a message can widen what messages are answered.
+  SELECT RAISE(ABORT,'workshop_correspondence_policy:owner_act') WHERE NEW.changed_by IS NOT 'founder:' || NEW.founder_id;
+END;
 CREATE TRIGGER workshop_mail_erasable
 BEFORE DELETE ON workshop_mail
 BEGIN
@@ -9569,6 +9632,40 @@ END;
 CREATE TRIGGER workshop_mail_readings_no_new
 BEFORE INSERT ON workshop_mail_readings
 BEGIN SELECT RAISE(ABORT,'workshop_mail_readings:constitutional'); END;
+CREATE TRIGGER workshop_replies_erasure
+BEFORE DELETE ON workshop_replies
+BEGIN
+  SELECT RAISE(ABORT,'workshop_reply:append_only') WHERE NOT EXISTS (
+    SELECT 1 FROM products p WHERE p.owner_id = OLD.founder_id AND p.erasure_scheduled_at IS NOT NULL);
+END;
+CREATE TRIGGER workshop_reply_guard
+BEFORE INSERT ON workshop_replies
+BEGIN
+  -- A reply cannot arrive already sent: sending is an act with a receipt, not
+  -- a property a row may assert about itself.
+  SELECT RAISE(ABORT,'workshop_reply:cannot_arrive_sent') WHERE NEW.status = 'sent'
+    OR NEW.sent_at IS NOT NULL OR NEW.provider_receipt IS NOT NULL;
+  SELECT RAISE(ABORT,'workshop_reply:grounds_required') WHERE trim(NEW.because) = '';
+  -- If it means to say something, there must be something to say.
+  SELECT RAISE(ABORT,'workshop_reply:nothing_to_say') WHERE NEW.decision IN ('answer','answer_and_act','ask_them')
+    AND trim(coalesce(NEW.says, '')) = '';
+  SELECT RAISE(ABORT,'workshop_reply:not_the_workshops') WHERE NOT EXISTS (
+    SELECT 1 FROM workshop_mail m WHERE m.id = NEW.mail_id AND m.founder_id = NEW.founder_id);
+END;
+CREATE TRIGGER workshop_reply_sent_guard
+BEFORE UPDATE ON workshop_replies
+BEGIN
+  SELECT RAISE(ABORT,'workshop_reply:immutable') WHERE
+    NEW.mail_id <> OLD.mail_id OR NEW.founder_id <> OLD.founder_id OR NEW.created_at <> OLD.created_at;
+  -- Sent is a claim about the world, so it needs the world's answer: the
+  -- effect it went out under and the provider's receipt, in the same statement.
+  SELECT RAISE(ABORT,'workshop_reply:sent_needs_a_receipt') WHERE NEW.status = 'sent'
+    AND (NEW.effect_id IS NULL OR NEW.provider_receipt IS NULL OR NEW.sent_at IS NULL);
+  -- What went out cannot be edited afterwards. The record of what a stranger
+  -- was told is not a draft.
+  SELECT RAISE(ABORT,'workshop_reply:what_was_said_stands') WHERE OLD.status = 'sent'
+    AND (NEW.says IS NOT OLD.says OR NEW.status <> 'sent');
+END;
 CREATE TRIGGER workshop_spend_ceiling_guard
 BEFORE INSERT ON workshop_spend_ceiling
 BEGIN

@@ -912,6 +912,23 @@ program.command('workshop:ears-key <founderIdOrEmail>').description('Print the i
   .action(async (who: string) => { const { openTheEars } = await import('../services/public-workshop/mail.js'); process.stdout.write(`${(await openTheEars(await founderIdOf(who))).intakeKey}\n`); });
 program.command('workshop:inbox <founderIdOrEmail>').description('What people wrote to the Workshop, and what it made of them')
   .action(async (who: string) => { const { theInbox } = await import('../services/public-workshop/mail.js'); const m = await theInbox(await founderIdOf(who), 50); out(m.map((x) => ({ from: x.from, subject: x.subject, reading: x.reading, handling: x.handling, at: x.receivedAt }))); });
+program.command('workshop:answering <founderIdOrEmail> <mode> <because>').description('How much the Workshop answers for itself: off, draft or autonomous')
+  .action(async (who: string, mode: string, because: string) => {
+    const { setCorrespondenceMode, correspondenceHealth } = await import('../services/public-workshop/correspondence.js');
+    const founderId = await founderIdOf(who);
+    await setCorrespondenceMode({ founderId, mode: mode as 'off' | 'draft' | 'autonomous', because });
+    out(await correspondenceHealth(founderId));
+  });
+
+program.command('workshop:answer-post <founderIdOrEmail>').description('Answer everything heard and not yet answered, inside the mode in force')
+  .action(async (who: string) => {
+    const { unanswered, answer, correspondenceHealth } = await import('../services/public-workshop/correspondence.js');
+    const founderId = await founderIdOf(who);
+    const done = [];
+    for (const id of await unanswered(founderId, 50)) done.push(await answer(founderId, id));
+    out({ answered: done, health: await correspondenceHealth(founderId) });
+  });
+
 program.command('probe:screen-001 <founderIdOrEmail>').description('Apply the recorded public-record screening to Experiment 001 candidates; contacts nobody')
   .action(async (who: string) => { const { applyProof1Screening } = await import('../services/venture/proof-1-screening.js'); out(await applyProof1Screening(await founderIdOf(who))); });
 
