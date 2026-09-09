@@ -122,7 +122,7 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
     </section>
 
     <section class="know" id="answers"><h2>What people asked for</h2>
-      <p class="quiet">The only thing anybody volunteers about whether the work was any use. Kept in their words, never paraphrased into the answer beside it. A refusal here holds across every test, and "nothing further" stops the next one writing to them even though it is not a complaint.</p>
+      <p class="quiet">The only thing anybody volunteers about whether the work was useful. Kept in their words, never paraphrased into the answer beside it. A refusal here holds across every test, and "nothing further" stops the next one writing to them even though it is not a complaint.</p>
       ${answers.length === 0 ? html`<p class="quiet">Nobody has said yet.</p>` : html`<ul>${answers.map((a) => html`<li>${a.email} — <strong>${a.wants.replaceAll('_', ' ')}</strong>${a.experimentId ? html` · <a href="/foundry/experiments/${a.experimentId}">the test</a>` : ''} · ${a.recordedAt.slice(0, 10)}${a.said ? html`<br /><span class="quiet">“${a.said}”</span>` : ''}</li>`)}</ul>`}
     </section>
 

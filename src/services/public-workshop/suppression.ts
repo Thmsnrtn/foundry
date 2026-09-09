@@ -181,7 +181,7 @@ export async function syncOptOutsFromStore(founderId: string): Promise<{ recorde
   }
   // WHAT THEY ASKED FOR ARRIVES THE SAME WAY, and is worth more than an
   // opt-out: it is the only thing anybody volunteers that says whether the
-  // thing was any use. Recorded as a continuation, and — where the person
+  // thing was useful at all. Recorded as a continuation, and — where the person
   // stated it plainly — as commercial evidence of the kind no bounce can be.
   for (const key of await listKvKeys(w.kvNamespaceId, 'continue:')) {
     try {
