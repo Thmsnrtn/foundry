@@ -1319,3 +1319,52 @@ opportunity cost while cash is low and new infrastructure is none; that it stops
 at one complaint, three bounces, two opt-outs or three declined-value answers;
 that new offers stop at ten owed briefs; and that it should run — with the
 decision remaining entirely the owner's. Nobody has been contacted.
+
+## Pre-launch closure for Experiment 001 (2026-09-09)
+
+Migration 287, `src/services/public-workshop/readiness.ts`, the decision surface
+at `/foundry/experiments/:id/decide`, and one behavioural change in the hand.
+
+**The recorded claim was narrowed to what its exchange can establish**, while
+the design was still legitimately unsealed. Production run: seven sentences
+amended, each keeping the words it replaced, with a stated reason and a stamp on
+the design. The probe now says it settles whether *a sufficiently relevant cold
+recipient will pay $29 up front for the expected value of the brief, under this
+offer, identity, channel and trust context* — not whether the screening labour
+is worth money, which is the wider question it is a first step toward. Upfront
+price is the *cleanest observation of pre-delivery willingness to pay*, no
+longer "the only unambiguous observation"; pay-after-value is recorded as a real
+instrument held for a later experiment where a relationship exists to trade on.
+The exchange itself is not amendable — changing the instrument is designing a
+different probe.
+
+**Outbound fails closed, and it is proven, not asserted.**
+`tests/unit/outbound-fails-closed-on-every-missing-dependency.test.ts` breaks
+one prerequisite at a time on an experiment the owner has already allowed —
+page dark in the world, store unreachable, payment provider unreachable, postal
+address removed, sender off the zone, sender's domain unauthenticated, pause —
+and shows nothing leaves in any of them, beside a baseline that does write when
+everything is genuinely ready. One real gap was found: the gate accepted a page
+verified within the last day, and a twenty-five-message probe over seven days
+can spend itself entirely inside that window pointing at a page the world no
+longer serves. Closed with the mechanism already present — the pass that would
+write now reads the page from its public address first.
+
+**Readiness is reported in four words and no fifth**: verified (read from the
+public internet, just now), ready, waiting, blocked. `workshop:readiness` walks
+the whole chain. Run in production against Experiment 001 on 2026-09-09:
+**4 ready, 9 waiting, 1 blocked, 0 verified.** Blocked: no Cloudflare credential,
+so nothing can be published or read back — §15. Waiting: every public surface,
+the payment link, and outbound eligibility, all of which follow from the
+credential and from Allow. Ready: the canonical probe with its deliberation, the
+public-safe projection, the sealed offer and price, and the deliverable.
+
+**Also true in the world, and recorded rather than worked around**:
+`apexmicro.ai` resolves to a Fly.io address serving no TLS, and the supplied
+Cloudflare token is still rejected (code 1000) with and without its prefix. §15
+now carries the corrected permission set — `Zone → Workers Routes: Edit` was
+missing and would have failed the stand-up one step from the end — and the one
+command that installs the credential.
+
+Nobody has been contacted. Nothing is published. Allow, at
+`/foundry/experiments/:id/decide`, remains the only path to a stranger.
