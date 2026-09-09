@@ -113,6 +113,13 @@ const FOUNDRY_CHOSEN: Record<string, string> = {
   // a query string built from a fixed parameter map.
   'src/services/integrations/stripe.ts': 'paginates a compiled-in api.stripe.com URL; only the query string varies',
   'src/services/venture/payment-link.ts': 'STRIPE_API constant; the link and intent ids in the path are checked by pathSegment',
+  // NOT SERVER CODE AT ALL. This module exports a STRING: the source of the
+  // Email Worker that runs at Cloudflare's edge, in a different runtime, with
+  // no access to anything in this repository — `safeFetch` cannot exist there.
+  // Its one destination is `env.INTAKE_URL`, a binding Foundry writes itself
+  // when it deploys the program, pointing at Foundry's own intake endpoint.
+  // Neither a founder nor the sender of a message can reach that value.
+  'src/services/public-workshop/mail-worker-source.ts': 'the edge program\'s own source text; its only destination is the INTAKE_URL binding Foundry sets when it deploys it',
 };
 
 describe('posting to a URL somebody else chose', () => {

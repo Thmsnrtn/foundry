@@ -1498,3 +1498,109 @@ all twenty-three recipients are still unreviewed, so nothing was rewritten.
 
 **Allow remains blocked on two owner-owed things**: the Workshop's postal
 address, and the owner's review of who may be contacted.
+
+## The completion audit, and the three things it found (2026-09-09)
+
+An audit whose job was to falsify the claim that the institutional directive
+was complete. Three material findings, all fixed in this commit.
+
+**1. A stated population was a sentence, not a constraint.** The Proof 1
+deliberation had been amended to say the test population was "shops with
+observed public-bid activity in the COMMBUYS record". Nothing enforced it.
+COMMBUYS appeared in the codebase only as source material for the brief; no
+code qualified a recipient against anything, and `approve remaining` could
+admit twenty-three unscreened names in one gesture. A claim recorded in a
+sealed design that the hand does not honour is worse than no claim, because it
+reads like a control.
+
+Migration 289 gives a recipient `qualified_at`, `qualified_because` and
+`qualified_source`, and `planOffer` — the single place every offer in the
+system is created — refuses a recipient without them. The rule is
+unconditional rather than per-experiment, because it should be true of every
+test Foundry ever runs: **Foundry may not write to a stranger without a
+recorded, sourced reason that stranger belongs to the population the design
+named.** It fails closed: no qualification means no message, never "probably
+fine". A recipient is never born qualified, a qualification needs its grounds
+and its record in the same statement that stamps it, and once written it cannot
+be rewritten or withdrawn — a screening the owner could not rely on afterwards
+is not a screening.
+
+This also answers the owner-burden question honestly. His approval was never
+twenty-three decisions — `approve remaining` was always one act. The problem
+was that the one act was **uninformed**: raw names, no screening, no evidence.
+Now readiness names the unscreened cohort *before* Allow rather than leaving him
+to press it and get silence, and the review page shows, on every line, why that
+business is in this test's population and the record that says so. The target
+was inspectable, not manually operated, and approval stays exactly where it
+was: the owner's act alone.
+
+**2. Ethics was structural in one place and a score in another.** The venture
+path deliberately produces sentences rather than numbers — "not a score, not a
+ranking with a number on it" — so there is no scalar for a large revenue
+prediction to outweigh, and the public-explainability test is already enforced
+rather than advised: an offer cannot reach anyone until the mechanism it
+describes is published on a durable page and read back from the public
+internet. But `src/services/audit/ethics.ts` was still live and mounted, an
+inheritance from the advisory product Foundry used to be, returning a
+demographic-fairness score, a consent score, a surveillance-proportionality
+score and an overall ethics score out of a hundred. That is precisely the shape
+the constitution rejects. The service, its three endpoints and its table are
+deleted (migration 290).
+
+**3. The source message had no identity on the owner's surface.** Mail carried
+its RFC Message-ID in the row but never projected it, so "which exact message
+was this?" could not be answered from the record the owner reads. Now it can.
+
+**What the audit checked and did not change.** Both new routes are genuinely
+reached by the canonical path (`inboxRoutes` through the letter, the mail
+intake behind the ingest mount) rather than registered nowhere. Nothing that
+talks to a model can read a mail body — `workshop_mail` is read by exactly the
+mail service, the inbox page and the erasure registry. Two adversarial cases
+were missing and are now held: a forged message from the owner's own address
+with SPF, DKIM and DMARC all failing acquires nothing and has its failed
+authentication shown on the thread; and an attachment that would be a program
+if anything ran it is never decoded, its payload never stored, its links never
+fetched.
+
+**Backups, corrected.** No backup script exists anywhere in the repository,
+which reads like an absence. It is not one: Fly snapshots the volume daily and
+retains five, the most recent taken hours before this audit
+(`vol_r1j5m8y52p0oq2pr`, five snapshots, 71–96 MiB each). What is true is
+narrower and worth saying exactly: **backups are real and automatic; restore is
+unproven; retention is five days.** A logical corruption found on the sixth day
+is not recoverable. That is the bounded proof path, not a claim of maturity.
+
+## Experiment 001, re-judged after the completion audit (2026-09-09)
+
+Nothing in the audit changed the question, the instrument, the exchange or the
+population. What changed is that the population is now true of behaviour rather
+than only of the record.
+
+**Disposition: RUN WITH BOUNDED AMENDMENT.** The amendment is not a change of
+design — it is the design's own claim, enforced. Before anyone is written to,
+each candidate must carry a recorded reason, read from the COMMBUYS award and
+vendor record, that it bids public work at all. That is the cheapest link in
+the assumption chain, it is observable for free in the same public record the
+product is built on, and it costs no stranger any attention. None of the
+twenty-three carries it yet.
+
+This does not defer the probe and it is not new caution. It is the same
+judgement recorded before: spending twenty-three strangers' attention and the
+Workshop's one first impression to produce an ambiguity a free lookup would
+have prevented is a dominated design. The difference is that a dominated design
+is now refused by the door rather than avoided by good intentions.
+
+**Unchanged:** $29 upfront, one message each, thirteen briefs screened from 952
+open solicitations, the public page carrying the mechanism before anyone is
+contacted, the fulfilment cap, the stop conditions, the obligations that
+outlive a stop.
+
+**What upfront payment still proves and still cannot.** It proves a shop will
+pay for the expected value of a brief it has not read. It cannot prove the
+brief was useful, that the price is right, or that the value recurs — and a
+null result now has one fewer reading than it had, because "these shops do not
+bid public work at all" will have been removed before anyone is written to
+rather than left to confound the answer afterwards.
+
+**Blocked on two owner-owed facts** (postal address, recipient approval) and
+one Foundry-owed action (the screening above). Nobody has been contacted.

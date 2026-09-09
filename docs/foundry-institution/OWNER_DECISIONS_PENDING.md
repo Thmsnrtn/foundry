@@ -770,12 +770,26 @@ eligibility.
 
 **Two things are still owed by you, and Foundry will invent neither.**
 
-**One: the twenty-three recipients have not been reviewed.** Reconstructing
-production corrected a note this document had carried: the twenty-two *approved*
+**One: the twenty-three recipients have not been reviewed — and the screening
+under that review is Foundry's, not yet done.** Reconstructing production
+corrected a note this document had carried: the twenty-two *approved*
 recipients belong to the ORIGINAL probe, the one that was declined. Experiment
 001 carries twenty-three of its own and every one of them is still `pending`.
 Approval is the owner's act alone and no part of it can be delegated, so Allow
 cannot clear until they are reviewed at `/foundry/experiments`.
+
+But the completion audit found that his act, as it stood, was *uninformed*. His
+approval was never twenty-three decisions — "the rest are fine" was always one
+gesture — yet the sealed design says this test is for shops with observed
+public-bid activity, and nothing checked that. The design named a population
+and the hand would have written to whoever was approved. That is now enforced:
+no business can be written to without a recorded, sourced reason it belongs to
+the population, readiness says so before Allow rather than after, and the review
+page shows the reason and the record on every line. **None of the twenty-three
+carries that screening yet**, and Foundry will not invent it — the evidence is
+the COMMBUYS award and vendor record, which is public, free, and costs nobody
+any attention to read. Doing that screening is the next action, and it involves
+contacting no one.
 
 **Two: a postal address for commercial mail** — a business or PO box address,
 not his home address, which Foundry will not publish by default and will not

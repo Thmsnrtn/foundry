@@ -310,6 +310,9 @@ experimentRoutes.get('/foundry/experiments/:id/recipients', async (c: any) => {
   const row = (r: ExperimentView['recipients'][number]) => html`<div class="noticed qitem">
     <p><strong>${r.counterpartyRef}</strong> <span class="pill">${r.reviewStatus === 'pending' ? (r.channel === 'email' ? 'to review' : 'web form only') : r.reviewStatus === 'approved' ? 'approved' : 'excluded'}</span></p>
     <p class="quiet">${r.email ?? 'no published email'}${r.sourceUrl ? html` · <a href="${r.sourceUrl}" rel="noopener">source</a>` : ''}${r.reviewReason ? ` · ${r.reviewReason}` : ''}</p>
+    ${r.qualifiedAt
+      ? html`<p class="quiet">Why they are in this test's population: ${r.qualifiedBecause} · <a href="${r.qualifiedSource}" rel="noopener">the record that says so</a></p>`
+      : html`<p class="quiet"><strong>No recorded reason this business is in the population this test names.</strong> Nothing will be written to them, whether or not you approve them here.</p>`}
     ${open && r.reviewStatus === 'pending' ? html`<div class="pair">
       <form method="POST" action="/foundry/experiments/${id}/recipients/${r.id}">
         <input type="hidden" name="decision" value="approved" />
@@ -323,6 +326,8 @@ experimentRoutes.get('/foundry/experiments/:id/recipients', async (c: any) => {
     <h1>Who may be contacted</h1>
     ${notice(done, error)}
     <p class="lede">${v.recipients.length === 0 ? 'No candidate businesses are loaded.' : `${count(v.recipients.length, 'business', 'businesses')} from public listings. Exclude your employer and anything that could be a conflict. Nobody is written to until you allow the test, and nobody excluded is ever written to.`}</p>
+    ${v.recipients.length ? html`<p class="quiet">${
+    String(v.recipients.filter((r) => r.qualifiedAt).length)} of ${String(v.recipients.length)} carry a recorded, sourced reason for being in the population this design names. Your decision is whom to write to; the screening under it is Foundry's, and you can read it on every line.</p>` : ''}
     ${open && pending.some((r) => r.channel === 'email') ? html`<div class="pair"><form method="POST" action="/foundry/experiments/${id}/recipients/approve-remaining">
       <button class="btn yes" type="submit">The rest are fine (${String(pending.filter((r) => r.channel === 'email').length)})</button></form></div>` : ''}
     ${pending.map(row)}

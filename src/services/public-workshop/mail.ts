@@ -268,6 +268,8 @@ async function actOnIt(input: {
 
 export interface MailRecord {
   id: string; threadKey: string; from: string; fromName: string | null; to: string;
+  /** The sender's own Message-ID: the identity of the exact message that arrived. */
+  rfcMessageId: string;
   subject: string | null; body: string; reading: Reading; readingBecause: string | null;
   handling: Handling; handledBecause: string | null; experimentId: string | null;
   spf: string | null; dkim: string | null; dmarc: string | null;
@@ -294,6 +296,7 @@ const project = (r: Row): MailRecord => ({
   spf: r.spf == null ? null : String(r.spf), dkim: r.dkim == null ? null : String(r.dkim),
   dmarc: r.dmarc == null ? null : String(r.dmarc),
   sentAt: r.sent_at == null ? null : String(r.sent_at), receivedAt: String(r.received_at),
+  rfcMessageId: String(r.rfc_message_id),
   threadKeyHref: encodeURIComponent(String(r.thread_key)),
   threadedBecause: String(r.rfc_message_id) === String(r.thread_key)
     ? 'it starts the conversation'

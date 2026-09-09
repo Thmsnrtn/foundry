@@ -1,0 +1,22 @@
+-- A SCORE IS NOT HOW THIS INSTITUTION JUDGES ETHICS.
+--
+-- `ethical_assessment` held model-generated numbers — a fairness score, a
+-- consent score, a surveillance-proportionality score, an overall ethics score
+-- out of a hundred — written by an endpoint inherited from the advisory product
+-- Foundry used to be. It is the exact shape the constitution rejects: ethics as
+-- one weighted dimension that a large enough number somewhere else could
+-- outweigh.
+--
+-- The institution does not judge this way. Ethics is an admissibility
+-- condition, and the places it actually binds are structural: an offer cannot
+-- reach anyone until the mechanism it describes is published on a durable page
+-- and read back from the public internet, a refusal binds the whole Workshop,
+-- and the opportunity path deliberately produces sentences rather than a score
+-- for anything to be traded against.
+--
+-- The service and its three endpoints are deleted in this commit. The table
+-- goes with them: a table nobody can reach is still schema to migrate, still an
+-- erasure question to answer, and its name is still a claim about how this
+-- institution decides.
+DROP INDEX IF EXISTS idx_ethics_product;
+DROP TABLE IF EXISTS ethical_assessment;

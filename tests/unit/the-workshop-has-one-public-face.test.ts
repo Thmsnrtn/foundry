@@ -36,7 +36,7 @@ import '../../src/services/integration/cloudflare-gateway.js';
 import { handleWebhook } from '../../src/services/billing/stripe.js';
 import { providerStubs } from '../helpers/provider-stubs.js';
 import { PROOF1_SLUG, PROOF1_TITLE, findProof1, reframeProof1UnderTheWorkshop, seedProof1 } from '../../src/services/venture/proof-1.js';
-import { addRecipients, approveRemaining, campaignActOf, materialOf, planOffer, prepareExposure, recipientsOf, reviewRecipient, runHand, stopExperiment } from '../../src/services/venture/hand.js';
+import { addRecipients, approveRemaining, campaignActOf, materialOf, planOffer, prepareExposure, qualifyRecipient, recipientsOf, reviewRecipient, runHand, stopExperiment } from '../../src/services/venture/hand.js';
 import { getExperimentView } from '../../src/services/founder/experiment-view.js';
 import { waitingOn } from '../../src/services/founder/attention.js';
 import { exposureOf } from '../../src/services/venture/outcome.js';
@@ -253,6 +253,10 @@ describe('Proof 1 is reframed under the Workshop without rewriting its history',
 
   it('the owner\'s prerequisites now include the Workshop\'s: a postal address, and sending as the Workshop', async () => {
     await approveRemaining({ founderId: OWNER, experimentId: X });
+    for (const cand of (await recipientsOf(X)).filter((x) => x.reviewStatus === 'approved')) {
+      await qualifyRecipient({ founderId: OWNER, experimentId: X, recipientId: cand.id,
+        because: 'appears as a bidder in the COMMBUYS public award record', source: 'https://www.commbuys.com/bso/' });
+    }
     const v = (await getExperimentView(OWNER, X, NOW))!;
     expect(v.state).toBe('needs_you');
     expect(v.stateDetail).toContain('email sending is not connected');
@@ -390,6 +394,11 @@ describe('Allow publishes the page; offers point at it and go out as the Worksho
     await addRecipients({ founderId: OWNER, experimentId: X, recipients: [{ counterpartyRef: 'Late Millwork, Lowell', email: 'late@millwork.example', channel: 'email', sourceUrl: 'https://late.example' }] });
     const untouched = (await recipientsOf(X)).find((r) => r.email === 'late@millwork.example')!;
     await reviewRecipient({ founderId: OWNER, experimentId: X, recipientId: untouched.id, decision: 'approved' });
+    // Approved, but with no recorded reason for being in the population this
+    // design names — so the door refuses before it consults anything else.
+    await expect(planOffer({ experimentId: X, recipientId: untouched.id, now: NOW })).rejects.toThrow(/recipient_unqualified/);
+    await qualifyRecipient({ founderId: OWNER, experimentId: X, recipientId: untouched.id,
+      because: 'appears as a bidder in the COMMBUYS public award record', source: 'https://www.commbuys.com/bso/' });
     await expect(planOffer({ experimentId: X, recipientId: untouched.id, now: NOW })).rejects.toThrow(/publication_gate.*stale/);
     const rep = await publishSite(OWNER, 'test');
     expect(rep.published).toEqual(expect.arrayContaining([`/experiments/${PROOF1_SLUG}`]));

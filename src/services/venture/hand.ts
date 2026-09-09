@@ -87,6 +87,8 @@ export function isLive(e: ExperimentRow, exposureWithdrawn: boolean): boolean {
 export interface Recipient {
   id: string; experimentId: string; counterpartyRef: string; email: string | null; channel: 'email' | 'web_form';
   sourceUrl: string | null; reviewStatus: 'pending' | 'approved' | 'struck'; reviewReason: string | null;
+  /** Why this business belongs to the population the design named, and the record it was read from. */
+  qualifiedAt: string | null; qualifiedBecause: string | null; qualifiedSource: string | null;
 }
 
 const recipientId = (experimentId: string, counterpartyRef: string) =>
@@ -117,7 +119,30 @@ export async function recipientsOf(experimentId: string): Promise<Recipient[]> {
     email: r.email == null ? null : String(r.email), channel: String(r.channel) as Recipient['channel'],
     sourceUrl: r.source_url == null ? null : String(r.source_url), reviewStatus: String(r.review_status) as Recipient['reviewStatus'],
     reviewReason: r.review_reason == null ? null : String(r.review_reason),
+    qualifiedAt: r.qualified_at == null ? null : String(r.qualified_at),
+    qualifiedBecause: r.qualified_because == null ? null : String(r.qualified_because),
+    qualifiedSource: r.qualified_source == null ? null : String(r.qualified_source),
   }));
+}
+
+/**
+ * WHY THIS BUSINESS IS IN THE POPULATION THE DESIGN NAMED. A screening
+ * observation, recorded before anyone may be written to and readable by the
+ * owner when he decides. Foundry records it; the database refuses it without
+ * grounds and a source, and refuses to let it be rewritten afterwards.
+ */
+export async function qualifyRecipient(input: {
+  founderId: string; experimentId: string; recipientId: string; because: string; source: string;
+}): Promise<void> {
+  const because = input.because.trim();
+  const source = input.source.trim();
+  if (!because || !source) throw new HandRefused('qualification_needs_grounds');
+  const r = await query(
+    `UPDATE experiment_recipients
+        SET qualified_at = datetime('now'), qualified_because = ?, qualified_source = ?
+      WHERE id = ? AND experiment_id = ? AND founder_id = ? AND qualified_at IS NULL`,
+    [because, source, input.recipientId, input.experimentId, input.founderId]);
+  if ((r.rowsAffected ?? 0) === 0) throw new HandRefused('recipient_not_found');
 }
 
 /** The owner's review of one candidate. The database re-verifies the reviewer. */
@@ -468,6 +493,12 @@ export async function readiness(experimentId: string): Promise<Readiness> {
   if (rs.length === 0) missing.push('no candidate businesses are loaded');
   else if (pending > 0) missing.push(`${pending} business${pending === 1 ? '' : 'es'} still to review`);
   else if (reachable === 0) missing.push('nobody approved can be reached by email');
+  // AN UNSCREENED COHORT IS A MISSING PREREQUISITE, NOT A SURPRISE AFTERWARDS.
+  // The door refuses to write to a business with no recorded reason it belongs
+  // to the population the design named. Saying so here means the owner reads it
+  // before he allows the test, rather than pressing Allow and getting silence.
+  const unqualified = rs.filter((r) => r.reviewStatus === 'approved' && r.channel === 'email' && r.email && !r.qualifiedAt).length;
+  if (unqualified > 0) missing.push(`${unqualified} approved business${unqualified === 1 ? ' has' : 'es have'} no recorded reason for being in the population this design names`);
   if (sending.status !== 'ready') missing.push('email sending is not connected');
   if (!(await materialOf(experimentId, 'deliverable'))) missing.push('nothing to deliver is attached');
   if (!(await materialOf(experimentId, 'offer_template'))) missing.push('the offer text is not written');
@@ -599,6 +630,13 @@ export async function planOffer(input: { experimentId: string; recipientId: stri
   if (!act) throw new HandRefused('no_campaign_act');
   const recipient = (await recipientsOf(input.experimentId)).find((r) => r.id === input.recipientId);
   if (!recipient?.email) throw new HandRefused('recipient_unreachable');
+  // THE POPULATION THE DESIGN NAMED IS A PROMISE, AND THIS IS WHERE IT BINDS.
+  // A design that says it is testing shops with observed public-bid activity is
+  // making a claim about who receives the message, not a note about how the
+  // list was gathered. Every offer in the system is planned here, so refusing
+  // an unscreened stranger here is the whole of the rule — and it fails closed:
+  // no qualification recorded means no message, never "probably fine".
+  if (!recipient.qualifiedAt) throw new HandRefused('recipient_unqualified', recipient.counterpartyRef);
   const effectId = `experiment:${input.experimentId}:offer:${recipient.id}`;
   const existing = await existingByEffect(e.productId, effectId);
   if (existing) return existing;

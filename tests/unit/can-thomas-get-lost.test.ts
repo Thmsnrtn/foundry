@@ -266,7 +266,7 @@ describe('the app resumed', () => {
     const { status, html } = await get('/foundry');
     expect(status).toBe(200);
     const o = orient(html);
-    expect(o.local.map((l) => l.label)).toEqual(['Portfolio', 'Decisions', 'Searching', 'Workshop']);
+    expect(o.local.map((l) => l.label)).toEqual(['Portfolio', 'Decisions', 'Searching', 'Workshop', 'Inbox']);
     expect(html).toMatch(new RegExp(`href="/foundry/decisions"[^>]*>Decisions <b>${String(waiting)}</b>`));
     expect(o.placeholder).toBe('Ask Foundry anything…');
     expect(o.scope).toBeNull();

@@ -38,8 +38,6 @@ POST /api/products/:id/compliance-pathway
 POST /api/products/:id/customers
 POST /api/products/:id/customers/:customerId/events
 POST /api/products/:id/customers/refresh-health
-POST /api/products/:id/ethics/assess
-POST /api/products/:id/ethics/remediate
 POST /api/products/:id/event-rules
 POST /api/products/:id/events
 POST /api/products/:id/experiments

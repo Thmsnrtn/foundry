@@ -37,7 +37,7 @@ import '../../src/services/integration/cloudflare-gateway.js';
 import { providerStubs } from '../helpers/provider-stubs.js';
 import { PROOF1_SLUG, findProof1, reframeProof1UnderTheWorkshop, seedProof1 } from '../../src/services/venture/proof-1.js';
 import { reconsiderProof1 } from '../../src/services/venture/proof-1-deliberation.js';
-import { allowExperiment, approveRemaining, planOffer, runHand } from '../../src/services/venture/hand.js';
+import { allowExperiment, approveRemaining, planOffer, qualifyRecipient, recipientsOf, runHand } from '../../src/services/venture/hand.js';
 import { establishPublicWorkshop, pauseNewEconomicActivity, publicWorkshopOf, resumeEconomicActivity, setPostalAddress } from '../../src/services/public-workshop/settings.js';
 import { connectWorkshopSending, standUpWorkshop } from '../../src/services/public-workshop/infrastructure.js';
 import { publicationGate } from '../../src/services/public-workshop/publication.js';
@@ -91,6 +91,10 @@ beforeAll(async () => {
   await standUpWorkshop(OWNER);
   X = (await reframeProof1UnderTheWorkshop(OWNER)).successor;
   await approveRemaining({ founderId: OWNER, experimentId: X });
+  for (const cand of (await recipientsOf(X)).filter((x) => x.reviewStatus === 'approved')) {
+    await qualifyRecipient({ founderId: OWNER, experimentId: X, recipientId: cand.id,
+      because: 'appears as a bidder in the COMMBUYS public award record', source: 'https://www.commbuys.com/bso/' });
+  }
   await reconsiderProof1(OWNER);
   state.nextDomainStatus = 'verified';
   await connectWorkshopSending(OWNER);

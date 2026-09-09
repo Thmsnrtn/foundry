@@ -1615,22 +1615,6 @@ CREATE TABLE epistemic_stances (
   not_the_same_as TEXT NOT NULL,
   sort_order   INTEGER NOT NULL
 );
-CREATE TABLE ethical_assessment (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  owner_id TEXT NOT NULL,
-  has_ai_components INTEGER DEFAULT 0,
-  demographic_fairness_score REAL,
-  consent_adequacy_score REAL,
-  minor_user_risk TEXT DEFAULT 'none',
-  claims_substantiation_score REAL,
-  surveillance_proportionality_score REAL,
-  crisis_safety_score REAL,
-  social_license_risk TEXT DEFAULT 'low',
-  overall_ethics_score REAL,
-  findings TEXT,
-  assessed_at TEXT DEFAULT (datetime('now'))
-);
 CREATE TABLE event_rules (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL,
@@ -1778,7 +1762,7 @@ CREATE TABLE experiment_recipients (
   review_reason    TEXT,
   reviewed_by      TEXT,
   reviewed_at      TEXT,
-  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, qualified_at TEXT, qualified_because TEXT, qualified_source TEXT,
   UNIQUE(experiment_id, counterparty_ref)
 );
 CREATE TABLE experiment_variants (
@@ -5335,7 +5319,6 @@ CREATE INDEX idx_effect_outcome_reports
   ON signal_events(product_id, source, created_at);
 CREATE INDEX idx_envelope_usage_lookup
   ON envelope_usage(product_id, scope, week_starting);
-CREATE INDEX idx_ethics_product ON ethical_assessment(product_id);
 CREATE INDEX idx_event_rules ON event_rules(product_id, trigger_event_type);
 CREATE INDEX idx_event_stream ON event_stream(product_id, created_at);
 CREATE INDEX idx_event_stream_unprocessed ON event_stream(processed, created_at);
@@ -6734,6 +6717,11 @@ BEGIN
   -- A recipient is never born approved: approval is the owner's act.
   SELECT RAISE(ABORT,'experiment_recipient:review_not_owner_act') WHERE NEW.review_status <> 'pending'
     OR NEW.reviewed_by IS NOT NULL OR NEW.reviewed_at IS NOT NULL;
+  -- Nor born qualified. Belonging to the population is something observed and
+  -- recorded afterwards, never a property a row can assert about itself at the
+  -- moment it is written.
+  SELECT RAISE(ABORT,'experiment_recipient:qualification_not_a_default') WHERE
+    NEW.qualified_at IS NOT NULL OR NEW.qualified_because IS NOT NULL OR NEW.qualified_source IS NOT NULL;
 END;
 CREATE TRIGGER experiment_recipient_review_guard
 BEFORE UPDATE ON experiment_recipients
@@ -6755,6 +6743,17 @@ BEGIN
     AND (NEW.email IS NULL OR instr(NEW.email, '@') < 2 OR instr(NEW.email, ' ') > 0);
   SELECT RAISE(ABORT,'experiment_recipient:experiment_settled') WHERE EXISTS (
     SELECT 1 FROM venture_experiments e WHERE e.id = NEW.experiment_id AND (e.ran_at IS NOT NULL OR e.validity <> 'valid'));
+  -- A qualification is a record of what was observed, so it needs grounds and
+  -- the record they were read from, in the same statement that stamps it.
+  SELECT RAISE(ABORT,'experiment_recipient:qualification_needs_grounds') WHERE
+    NEW.qualified_at IS NOT NULL AND OLD.qualified_at IS NULL
+    AND (trim(coalesce(NEW.qualified_because, '')) = '' OR trim(coalesce(NEW.qualified_source, '')) = '');
+  -- And once written it stands. A screening that could be quietly withdrawn or
+  -- rewritten after the owner read it is not a screening he can rely on.
+  SELECT RAISE(ABORT,'experiment_recipient:qualification_stands') WHERE OLD.qualified_at IS NOT NULL
+    AND (NEW.qualified_at IS NOT OLD.qualified_at
+      OR NEW.qualified_because IS NOT OLD.qualified_because
+      OR NEW.qualified_source IS NOT OLD.qualified_source);
 END;
 CREATE TRIGGER exposure_classes_constitutional_delete
 BEFORE DELETE ON exposure_classes

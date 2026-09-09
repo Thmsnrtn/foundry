@@ -10,7 +10,6 @@ import { requireTier } from '../../middleware/tier-gate.js';
 import { generatePsychologyInsights, dismissInsight } from '../../services/intelligence/psychology.js';
 import { estimateTAMCeiling, projectTAMSaturation, identifyExpansionOpportunities, modelDepthVsBreadth, generateExpansionBrief } from '../../services/intelligence/expansion.js';
 import { getRelevantInsights } from '../../services/wisdom/network.js';
-import { assessEthicalDimensions, getLatestEthicsAssessment, getEthicsRemediationPlan } from '../../services/audit/ethics.js';
 
 export const tier4ApiRoutes = new Hono<AuthEnv>();
 
@@ -101,40 +100,4 @@ tier4ApiRoutes.put('/api/settings/wisdom-network', requireTier('investor_layer')
   );
 
   return c.json({ status: 'updated', opted_in: optIn });
-});
-
-// ─── Ethical Assessment ─────────────────────────────────────────────────────
-
-tier4ApiRoutes.get('/api/products/:id/ethics', requireTier('investor_layer'), async (c) => {
-  const founder = c.get('founder');
-  const productId = c.req.param('id');
-  const prodResult = await getProductByOwner(productId, founder.id);
-  if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
-
-  const assessment = await getLatestEthicsAssessment(productId);
-  return c.json({ assessment });
-});
-
-tier4ApiRoutes.post('/api/products/:id/ethics/assess', requireTier('investor_layer'), async (c) => {
-  const founder = c.get('founder');
-  const productId = c.req.param('id');
-  const prodResult = await getProductByOwner(productId, founder.id);
-  if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
-
-  const assessment = await assessEthicalDimensions(productId);
-  return c.json({ assessment });
-});
-
-tier4ApiRoutes.post('/api/products/:id/ethics/remediate', requireTier('investor_layer'), async (c) => {
-  const founder = c.get('founder');
-  const productId = c.req.param('id');
-  const prodResult = await getProductByOwner(productId, founder.id);
-  if (prodResult.rows.length === 0) return c.json({ error: 'Not found' }, 404);
-
-  const body = await c.req.json() as Record<string, unknown>;
-  const finding = body.finding as { dimension: string; severity: string; finding: string; remediation: string };
-  if (!finding) return c.json({ error: 'finding object required' }, 400);
-
-  const plan = await getEthicsRemediationPlan(productId, finding as any);
-  return c.json(plan);
 });

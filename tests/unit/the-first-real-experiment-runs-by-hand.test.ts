@@ -36,7 +36,7 @@ import { providerStubs, seedHandMadeLink } from '../helpers/provider-stubs.js';
 import { PROOF1_PLAN, PROOF1_TITLE, seedProof1 } from '../../src/services/venture/proof-1.js';
 import { BRIEF_MD, OUTREACH_TEMPLATE_MD } from '../../src/services/venture/proof-1-content.js';
 import {
-  addRecipients, allowExperiment, attachPaymentLinkByUrl, campaignActOf, planDelivery, readiness, recipientsOf, recordMaterial, reviewRecipient, runHand,
+  addRecipients, allowExperiment, attachPaymentLinkByUrl, campaignActOf, planDelivery, qualifyRecipient, readiness, recipientsOf, recordMaterial, reviewRecipient, runHand,
 } from '../../src/services/venture/hand.js';
 import { getExperimentView } from '../../src/services/founder/experiment-view.js';
 import { exposureOf, whatTheWorldSaid } from '../../src/services/venture/outcome.js';
@@ -139,6 +139,33 @@ describe('the owner\'s part is three acts on one page', () => {
     expect(redirectedTo(await post(`/foundry/experiments/${X}/recipients/${web.id}`, { decision: 'approved', email: 'office@masscabinetsinc.com' }))).toContain('done=reviewed');
     expect((await recipientsOf(X)).find((x) => x.id === web.id)).toMatchObject({ channel: 'email', email: 'office@masscabinetsinc.com', reviewStatus: 'approved' });
     expect((await readiness(X)).reachable).toBe(11);
+
+    // APPROVAL IS HIS; THE SCREENING UNDER IT IS FOUNDRY'S. The design names a
+    // population, so an approved business with no recorded reason for being in
+    // it is not yet reachable — and that is said here, before Allow, rather
+    // than discovered as silence after it.
+    const unscreened = await readiness(X);
+    expect(unscreened.ok).toBe(false);
+    expect(unscreened.missing.join(' · ')).toContain('no recorded reason for being in the population');
+    await expect(qualifyRecipient({ founderId: OWNER, experimentId: X, recipientId: web.id, because: '  ', source: 'https://www.commbuys.com/bso/' }))
+      .rejects.toThrow(/qualification_needs_grounds/);
+    await expect(query(
+      `UPDATE experiment_recipients SET qualified_at = datetime('now') WHERE id = ?`, [web.id]))
+      .rejects.toThrow(/qualification_needs_grounds/);
+    for (const cand of (await recipientsOf(X)).filter((x) => x.reviewStatus === 'approved')) {
+      await qualifyRecipient({ founderId: OWNER, experimentId: X, recipientId: cand.id,
+        because: 'appears as a bidder in the COMMBUYS public award record', source: 'https://www.commbuys.com/bso/' });
+    }
+    // A screening the owner has read cannot be quietly rewritten or withdrawn.
+    await expect(query(`UPDATE experiment_recipients SET qualified_because = 'something else' WHERE id = ?`, [web.id]))
+      .rejects.toThrow(/qualification_stands/);
+    await expect(query(`UPDATE experiment_recipients SET qualified_at = NULL WHERE id = ?`, [web.id]))
+      .rejects.toThrow(/qualification_stands/);
+    await expect(qualifyRecipient({ founderId: OWNER, experimentId: X, recipientId: web.id, because: 'a second story', source: 'https://example.com' }))
+      .rejects.toThrow(/recipient_not_found/);
+    const screened = (await recipientsOf(X)).find((x) => x.id === web.id)!;
+    expect(screened.qualifiedBecause).toContain('COMMBUYS public award record');
+    expect((await page(`/foundry/experiments/${X}/recipients`)).text).toContain('Why they are in this test\'s population');
   });
 
   it('Allow is refused before any prerequisite is read, while the thinking behind the test is unrecorded', async () => {
@@ -415,6 +442,10 @@ describe('Stop, and nothing he can press dead-ends', () => {
     await recordMaterial({ founderId: OWNER, experimentId: Y, kind: 'offer_shape', title: 'shape', body: JSON.stringify({ ...PROOF1_PLAN, price: { ...PROOF1_PLAN.price, lookupKey: 'foundry_second_brief' } }), by });
     await addRecipients({ founderId: OWNER, experimentId: Y, recipients: [{ counterpartyRef: 'A Shop, Lowell', email: 'shop@example.com', channel: 'email' }] });
     expect(redirectedTo(await post(`/foundry/experiments/${Y}/recipients/approve-remaining`))).toContain('done=reviewed');
+    for (const cand of (await recipientsOf(Y)).filter((x) => x.reviewStatus === 'approved')) {
+      await qualifyRecipient({ founderId: OWNER, experimentId: Y, recipientId: cand.id,
+        because: 'appears as a bidder in the COMMBUYS public award record', source: 'https://www.commbuys.com/bso/' });
+    }
     // A second test needs its own thinking; the first one's does not carry over.
     const { recordDesign } = await import('../../src/services/venture/probe-design.js');
     await recordDesign({

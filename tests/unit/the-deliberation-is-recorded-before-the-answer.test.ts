@@ -41,7 +41,7 @@ import {
   recordDesign, stopConditionsMet, theShortVersion,
 } from '../../src/services/venture/probe-design.js';
 import { exchangeOf } from '../../src/services/venture/probe-design-context.js';
-import { allowExperiment, approveRemaining, HandRefused, runHand } from '../../src/services/venture/hand.js';
+import { allowExperiment, approveRemaining, HandRefused, qualifyRecipient, recipientsOf, runHand } from '../../src/services/venture/hand.js';
 import { establishPublicWorkshop, setPostalAddress } from '../../src/services/public-workshop/settings.js';
 import { connectWorkshopSending, standUpWorkshop } from '../../src/services/public-workshop/infrastructure.js';
 import { continuationsFor, continuationsOf, isSuppressed, recordContinuation, syncOptOutsFromStore } from '../../src/services/public-workshop/suppression.js';
@@ -118,6 +118,10 @@ describe('the thinking comes before the decision, and cannot be improved afterwa
   it('nothing may be allowed without a deliberation; the refusal names what is missing', async () => {
     expect(await designStandsInTheWay(X)).toEqual(['no deliberation is recorded for this test; the thinking comes before the decision']);
     await approveRemaining({ founderId: OWNER, experimentId: X });
+    for (const cand of (await recipientsOf(X)).filter((x) => x.reviewStatus === 'approved')) {
+      await qualifyRecipient({ founderId: OWNER, experimentId: X, recipientId: cand.id,
+        because: 'appears as a bidder in the COMMBUYS public award record', source: 'https://www.commbuys.com/bso/' });
+    }
     await expect(allowExperiment({ founderId: OWNER, experimentId: X, by: 'owner' }))
       .rejects.toThrow(HandRefused);
     await expect(allowExperiment({ founderId: OWNER, experimentId: X, by: 'owner' }))
