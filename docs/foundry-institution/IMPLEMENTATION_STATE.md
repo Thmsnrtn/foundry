@@ -2046,3 +2046,44 @@ owner's private mailbox makes that mailbox part of the proof and then part of
 the furniture. Future live send proofs use the provider's own sink —
 `success@simulator.amazonses.com`, which the sending path already runs through
 — which accepts, discards, never bounces and costs no sender reputation.
+
+## The Workshop answered for itself, in production (2026-09-10)
+
+Production runs `e5ff472a`, which carries the fix that made the send path ask
+for its own capability. The loop was run again, with the instrument the
+identity boundary requires: the correspondent is the provider's own sink,
+`success@simulator.amazonses.com` — not a person, not the owner, not a mailbox
+anybody has to own. It accepts, discards, never bounces and costs no sender
+reputation.
+
+| | |
+|---|---|
+| Identity, from the `From:` header | `success@simulator.amazonses.com` |
+| Decision | `answer` |
+| Sent | **true** |
+| Provider receipt | `35431c18-534c-40c2-8e01-c7eaf54a30e6` |
+| Mode afterwards | `off` |
+
+What it said, composed only from the published page and nothing else:
+
+> It is $29, one time, once.
+>
+> Everything this test does is written down here:
+> https://apexmicro.ai/experiments/ma-millwork-bid-brief
+>
+> — Apex Micro
+>
+> This reply was written by Apex Micro's automated assistant. Thomas Norton is
+> the person responsible for Apex Micro and reads anything that needs him.
+
+**Every stage of the membrane is now real rather than modelled**: a message
+arrives at `apexmicro.ai`, reaches the institution through the edge program,
+is identified by the header a human wrote, is read, is decided on by policy
+rather than by the message, is answered from published truth, goes out through
+the governed door, and comes back with the provider's own name for it. Three
+deliveries of one message still make one row; a hostile one still acquires
+nothing; a refusal is still honoured at the moment it is heard.
+
+Correspondence mode is `off` again. The Workshop does not answer for itself
+until the owner says it may — one control, three states, every change carrying
+its reason.
