@@ -65,6 +65,8 @@ export function renderDecision(input: {
   c.maxCents === 0 ? 'and none authorised' : `at most ${cash(c.maxCents)}`}.</dd>
     ${c.expires === null ? '' : html`<dt>Until</dt><dd>${c.expires}.</dd>`}
     <dt>Afterwards</dt><dd>${REVERSAL[c.reversibility]}.</dd>
+    ${(c.alsoTrue ?? []).length === 0 ? '' : html`<dt>Also true</dt><dd>
+      <ul class="alsotrue">${(c.alsoTrue ?? []).map((t) => html`<li>${t}</li>`)}</ul></dd>`}
   </dl>`;
 
   // ── A decision with a surface of its own is not offered a second time ──
@@ -82,6 +84,8 @@ export function renderDecision(input: {
 
   return html`<div class="decision">
     ${facts}
+    <style>.alsotrue{list-style:none;padding:0;margin:0}.alsotrue li{margin:.15rem 0}
+      .decision .btn{white-space:normal;text-align:left}</style>
     <form method="POST" action="${input.action}">
       ${raw(Object.entries(input.hidden)
     .map(([k, v]) => `<input type="hidden" name="${k}" value="${v}" />`).join(''))}

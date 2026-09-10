@@ -180,7 +180,7 @@ describe('the owner\'s part is three acts on one page', () => {
 
   it('Allow is refused while a prerequisite is missing, by the page and by the rows', async () => {
     const shown = (await page(`/foundry/experiments/${X}`)).text;
-    expect(shown).toContain('Not yet.');
+    expect(shown).toContain('Not yet');
     expect(shown).toContain('email sending is not connected');
     expect(redirectedTo(await post(`/foundry/experiments/${X}/allow`))).toMatch(/error=not[+%]20ready/);
     await expect(allowExperiment({ founderId: OWNER, experimentId: X })).rejects.toThrow(/not_ready.*email sending is not connected/);
@@ -206,11 +206,27 @@ describe('the owner\'s part is three acts on one page', () => {
     expect(home).toContain('Allow the test');
   });
 
-  it('act 3 (owner): Allow approves the test, seals the prediction, sets the allowance, approves one measurement-critical act; Foundry places the tagged link', async () => {
+  it('act 3 (owner): one press authorises the named businesses, seals the prediction, sets the allowance, approves one measurement-critical act; Foundry places the tagged link', async () => {
     const shown = (await page(`/foundry/experiments/${X}`)).text;
-    expect(shown).toContain('Allow — up to $100.00');
+    // THE DECISION SAYS WHAT IT DOES, ON ITSELF. Not "Allow — up to $100.00",
+    // which is a budget; the class of act, the businesses it reaches, and the
+    // fact that a sent message cannot be unsent.
+    expect(shown).toContain('First real market test');
+    expect(shown).toContain('Authorize contact with these 11 businesses');
+    expect(shown).toContain('person-facing');
+    expect(shown).toContain('Partly reversible');
+    expect(shown).toContain('one email each, 11 in total, never a second');
+    expect(shown).not.toContain('Go ahead');
     expect(shown).toContain('writes once to each of the 11 approved businesses');
-    expect(redirectedTo(await post(`/foundry/experiments/${X}/allow`))).toContain('done=allowed');
+
+    // He authorises what he read. A list that moved authorises nothing.
+    const ids = (await recipientsOf(X)).filter((r) => r.reviewStatus === 'approved').map((r) => r.id);
+    expect(redirectedTo(await post(`/foundry/experiments/${X}/authorise-contact`,
+      { expect: ids.slice(1).join(','), exclude: '' }))).toMatch(/error=.*changed/);
+    expect(((await query('SELECT decision FROM venture_experiments WHERE id = ?', [X])).rows[0] as Record<string, unknown>).decision).toBeNull();
+
+    expect(redirectedTo(await post(`/foundry/experiments/${X}/authorise-contact`,
+      { expect: ids.join(','), exclude: '' }))).toContain('done=allowed');
     const e = (await query('SELECT decision, decided_by FROM venture_experiments WHERE id = ?', [X])).rows[0];
     expect(e).toMatchObject({ decision: 'approved', decided_by: `founder:${OWNER}` });
     const asset = (await query('SELECT id, standing, operating_boundary FROM products WHERE from_experiment_id = ?', [X])).rows[0] as Record<string, unknown>;

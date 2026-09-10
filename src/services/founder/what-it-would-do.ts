@@ -57,6 +57,12 @@ export interface Consequence {
    * a dedicated authorisation.
    */
   dedicated: { path: string; why: string } | null;
+  /**
+   * The other things true of this act, as short facts rather than a paragraph —
+   * how many messages, whether there is a follow-up, whether anything answers a
+   * reply. Rendered as rows beside the five standing ones, never as prose.
+   */
+  alsoTrue?: string[];
 }
 
 export interface CannotSay { cannotSay: string }
@@ -109,6 +115,92 @@ export function labelFor(c: Consequence): string {
  * however much it is budgeted, and stays internal until a separate act says
  * otherwise — which is why `doesNotAuthorise` is on every one of them.
  */
+/**
+ * THE ONE DECISION THAT REACHES A STRANGER, WITH ITS RECIPIENTS INSIDE IT.
+ *
+ * Two acts used to be needed and they lived on different pages: reviewing who
+ * may be contacted, and allowing the test. On 10 September the owner did
+ * neither and believed he had done both, because a third control looked like
+ * the second one.
+ *
+ * So the authorisation carries its own recipient set. `include` is the closed
+ * list this decision covers — approved by him in the same press, screened
+ * beforehand by the institution, each with a recorded reason for being in the
+ * population the design names. `exclude` is every other reachable candidate,
+ * struck by name with the reason on the row, so "these two" means these two and
+ * the page is not quietly silent about the rest.
+ *
+ * The authority itself is unchanged and still act-scoped: `allowExperiment`
+ * stamps `authorised_act_id` on exactly the businesses the act covers, and the
+ * row guard refuses an offer to anybody else. What changes is that the owner
+ * sees the whole set in the sentence he is pressing.
+ */
+export async function firstContactDecision(experimentId: string): Promise<{
+  consequence: Consequence;
+  include: Array<{ id: string; name: string; email: string; because: string; source: string }>;
+  exclude: Array<{ id: string; name: string; email: string }>;
+} | { notNow: string[] }> {
+  const e = (await query(
+    `SELECT id, founder_id, decision, cost_cents FROM venture_experiments WHERE id = ?`,
+    [experimentId])).rows[0] as Record<string, unknown> | undefined;
+  if (!e) return { notNow: ['there is no such test'] };
+  if (e.decision != null) return { notNow: ['it has already been decided'] };
+
+  const rs = (await query(
+    `SELECT id, counterparty_ref, email, channel, review_status, qualified_at,
+            qualified_because, qualified_source
+       FROM experiment_recipients WHERE experiment_id = ? ORDER BY rowid`,
+    [experimentId])).rows as unknown as Array<Record<string, unknown>>;
+  const reachable = rs.filter((r) => r.channel === 'email' && r.email
+    && String(r.review_status) !== 'struck');
+  const include = reachable.filter((r) => r.qualified_at != null).map((r) => ({
+    id: String(r.id), name: String(r.counterparty_ref), email: String(r.email),
+    because: String(r.qualified_because ?? ''), source: String(r.qualified_source ?? ''),
+  }));
+  const exclude = reachable.filter((r) => r.qualified_at == null).map((r) => ({
+    id: String(r.id), name: String(r.counterparty_ref), email: String(r.email),
+  }));
+
+  const { readiness } = await import('../venture/hand.js');
+  const ready = await readiness(experimentId).catch(() => null);
+  const notNow = (ready?.missing ?? ['the test could not be read'])
+    // Reviewing the cohort is what this decision DOES, so it is not a reason to
+    // withhold it. Everything else missing genuinely is.
+    .filter((m) => !/still to review/.test(m));
+  if (include.length === 0) notNow.push('no business has a recorded reason for being in the population this test names');
+  if (notNow.length) return { notNow };
+
+  const { offerShapePlanOf } = await import('../venture/hand.js');
+  const plan = await offerShapePlanOf(experimentId);
+  const price = plan
+    ? `$${(plan.price.amountCents / 100).toFixed(2)} ${plan.price.currency.toUpperCase()}`
+    : 'the stated price';
+  const n = include.length;
+  return {
+    include, exclude,
+    consequence: {
+      what: `Authorize contact with ${n === 1 ? 'this business' : `these ${n} businesses`}`,
+      effect: 'person',
+      touches: include.map((r) => r.name).join(' and '),
+      expectedCents: 0,
+      maxCents: Number(e.cost_cents ?? 0),
+      expires: null,
+      reversibility: 'partly_reversible',
+      doesNotAuthorise: [],
+      dedicated: null,
+      alsoTrue: [
+        `${price}, one time`,
+        `one email each, ${n} in total, never a second`,
+        'no follow-up, and an opt-out is honoured everywhere at once',
+        'replies are recorded and shown to you; nothing answers them',
+        exclude.length === 0 ? 'no other candidate is reachable by email'
+          : `${exclude.length} other reachable candidate${exclude.length === 1 ? ' is' : 's are'} excluded from this test by this same press`,
+        'a sent message cannot be unsent; everything else stops on your word',
+      ],
+    },
+  };
+}
+
 export async function consequenceOfApproving(experimentId: string): Promise<Consequence | CannotSay> {
   const e = (await query(
     `SELECT id, founder_id, decision, cost_cents, evidence_mode, needs_workshop,

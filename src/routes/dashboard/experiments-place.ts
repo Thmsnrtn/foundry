@@ -15,6 +15,8 @@ import type { HtmlEscapedString } from 'hono/utils/html';
 import { count, page } from './foundry-shell.js';
 import type { Where } from './foundry-shell.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
+import { renderDecision } from './decision-control.js';
+import { firstContactDecision } from '../../services/founder/what-it-would-do.js';
 import { getExperimentView, listExperiments } from '../../services/founder/experiment-view.js';
 import type { ExperimentView } from '../../services/founder/experiment-view.js';
 import {
@@ -78,10 +80,41 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
   const step = (s: ExperimentView['steps'][number]) => html`<li class="${s.status}">
     <p><strong>${s.status === 'done' ? '✓ ' : s.status === 'todo' ? '○ ' : '· '}${s.label}</strong>${s.status === 'todo' && s.key === 'recipients' ? html` — <a href="${s.href}">open</a>` : ''}</p>
     <p class="quiet">${s.detail}</p></li>`;
+  // ── WATCH, THEN INSPECT ──
+  //
+  // One decision at the top, then the state in a sentence, then everything the
+  // decision rests on — behind a summary, because a wall of evidence at first
+  // glance is how a page stops being read. Nothing is hidden; it is ordered.
+  const decision = await firstContactDecision(id);
+  const launch = 'notNow' in decision ? null : decision;
   const body = html`
     <h1>${v.assetName ?? 'The test'} <span class="pill">${v.stateLabel}</span></h1>
     ${notice(done, error)}
+    ${launch ? html`<section class="launch" id="authorise">
+      <p class="act">First real market test</p>
+      ${renderDecision({
+    consequence: launch.consequence,
+    action: `/foundry/experiments/${id}/authorise-contact`,
+    hidden: { expect: launch.include.map((r) => r.id).join(','),
+      exclude: launch.exclude.map((r) => r.id).join(',') },
+    primary: true,
+  })}
+      <details class="who"><summary>${count(launch.include.length, 'business', 'businesses')} this contacts, and why</summary>
+        <ul class="plain">${launch.include.map((r) => html`<li><strong>${r.name}</strong>
+          <span class="quiet">${r.email}</span><br /><span class="quiet">${r.because}
+          &middot; <a href="${r.source}" rel="noopener">the record that says so</a></span></li>`)}</ul>
+        ${launch.exclude.length ? html`<p class="quiet">Excluded by this same press, because nothing on
+          record says they belong to the population this test names:
+          ${launch.exclude.map((r) => r.name).join(', ')}.</p>` : ''}
+      </details>
+      <p class="quiet"><a class="why" href="/foundry/experiments/${id}/decide">Everything this rests on</a>
+        &middot; <a class="why" href="/foundry/experiments/${id}/recipients">The whole cohort</a></p>
+    </section>` : ''}
     <p class="lede">${v.stateDetail}</p>
+    ${'notNow' in decision && v.state === 'needs_you' ? html`<section class="know" id="notyet">
+      <h2>Not yet</h2><ul>${decision.notNow.map((m) => html`<li>${m}</li>`)}</ul>
+      <p class="quiet">Authorising is refused until then by the rows themselves, not only by this page.</p>
+    </section>` : ''}
     ${v.exceptions.length ? html`<section class="know" id="exceptions"><h2>Needs your attention</h2>
       <ul>${v.exceptions.map((x) => html`<li>${x}</li>`)}</ul></section>` : ''}
 
@@ -112,13 +145,10 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
         <button class="btn yes" type="submit">Connect</button></form>` : ''}
     </section>` : html`<section class="know" id="sending"><h2>Email sending</h2><p>${v.readiness.sending.detail}</p></section>`}
 
-    <section class="know" id="allow"><h2>${v.state === 'ready' ? 'Allow this test' : v.state === 'needs_you' ? 'Allowing it' : 'What you allowed'}</h2>
+    <section class="know" id="allow"><h2>${launch ? 'What authorising means' : 'What you allowed'}</h2>
       <ul>${v.allow.explanation.map((l) => html`<li>${l}</li>`)}</ul>
-      ${v.state === 'ready' ? html`<div class="pair">
-        <form method="POST" action="/foundry/experiments/${id}/allow"><button class="btn yes" type="submit">Allow — up to ${cents(v.money.allowanceCents)}</button></form>
-        <form method="POST" action="/foundry/experiments/${id}/decline"><button class="btn" type="submit">Do not run it</button></form></div>`
-    : v.state === 'needs_you' ? html`<p class="noticed"><strong>Not yet.</strong> ${v.allow.reason} Allowing is refused until then, by the rows themselves, not only by this page.</p>
-        <form method="POST" action="/foundry/experiments/${id}/allow"><button class="btn" type="submit" aria-disabled="true">Allow</button></form>` : ''}
+      ${launch ? html`<form method="POST" action="/foundry/experiments/${id}/decline">
+        <button class="btn" type="submit">Do not run it</button></form>` : ''}
     </section>
 
     <section class="know" id="offer"><h2>The offer</h2>
@@ -191,6 +221,12 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
       .stack{display:grid;gap:.5rem;max-width:26rem}.stack label{display:grid;gap:.25rem}.stack input{max-width:100%;box-sizing:border-box}
       .timeline{padding-left:1rem}.timeline li{margin:.5rem 0;overflow-wrap:anywhere}
       .plain{list-style:none;padding:0;margin:0}.plain li{margin:.4rem 0}
+      .launch{background:var(--card,#fff);border:1px solid var(--line,#e2e6de);border-radius:14px;
+        padding:1rem;margin:1rem 0 1.25rem}
+      .launch>.act{margin:0 0 .35rem}
+      .launch .who{margin-top:.5rem}
+      .launch .who summary{cursor:pointer}
+      @media (max-width:480px){.launch{padding:.85rem;border-radius:12px}}
     </style>`;
   return c.html(page(`${v.assetName ?? 'Experiment'} — ${v.stateLabel}`, body, 'foundry', where(v, 'test')));
 });
@@ -386,6 +422,51 @@ experimentRoutes.post('/foundry/experiments/:id/allow', requireInstitutionOwner(
   } catch (e) { return back(c, id, 'test', null, said(e)); }
   // Placing the offer is Foundry's act, not his. A provider hiccup here is an
   // exception on the page and a retry on the next pass, never a failed Allow.
+  try { await prepareExposure(id); } catch { /* shown as an exception by the view */ }
+  return back(c, id, 'test', 'allowed');
+});
+
+/**
+ * THE ONE PRESS THAT REACHES A STRANGER.
+ *
+ * Two acts on two pages became one act on one page, and the set it covers is
+ * carried in the form rather than assumed: `expect` names the businesses the
+ * owner was shown, `exclude` names every other reachable candidate the same
+ * press strikes. If either list has moved since the page was drawn — a
+ * screening pass qualified somebody, a candidate was loaded — nothing happens
+ * and he is shown the page again. He authorises what he read, or nothing.
+ *
+ * Then the ordinary path, unchanged: the recipients are reviewed under his own
+ * stamp, `allowExperiment` approves one measurement-critical act and writes
+ * `authorised_act_id` on exactly the businesses it covers, and the row guard
+ * refuses an offer to anybody else.
+ */
+experimentRoutes.post('/foundry/experiments/:id/authorise-contact', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c); if (!founderId) return c.redirect('/onboarding');
+  const id = String(c.req.param('id'));
+  const form = await c.req.parseBody();
+  const asked = String(form.expect ?? '').split(',').filter(Boolean).sort();
+  const dropped = String(form.exclude ?? '').split(',').filter(Boolean).sort();
+
+  const now = await firstContactDecision(id);
+  if ('notNow' in now) return back(c, id, 'test', null, now.notNow.join('; '));
+  const include = now.include.map((r) => r.id).sort();
+  const exclude = now.exclude.map((r) => r.id).sort();
+  if (include.join(',') !== asked.join(',') || exclude.join(',') !== dropped.join(',')) {
+    return back(c, id, 'test', null,
+      'the businesses changed since this page was drawn, so nothing was authorised. Read it again.');
+  }
+
+  try {
+    for (const r of now.include) {
+      await reviewRecipient({ founderId, experimentId: id, recipientId: r.id, decision: 'approved' });
+    }
+    for (const r of now.exclude) {
+      await reviewRecipient({ founderId, experimentId: id, recipientId: r.id, decision: 'struck',
+        reason: 'not in this authorisation: no recorded reason for being in the population this test names' });
+    }
+    await allowExperiment({ founderId, experimentId: id });
+  } catch (e) { return back(c, id, 'test', null, said(e)); }
   try { await prepareExposure(id); } catch { /* shown as an exception by the view */ }
   return back(c, id, 'test', 'allowed');
 });
