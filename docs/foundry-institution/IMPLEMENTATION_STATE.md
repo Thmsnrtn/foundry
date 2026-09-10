@@ -2556,3 +2556,18 @@ delivery would refuse — after somebody had paid. Readiness now reads
 `DELIVERABLE_MAX_AGE_DAYS` and blocks a day *earlier* than delivery does, because
 an offer sent today is bought tomorrow. The usable window for an edition is
 therefore its first five days, and a test holds the two in that order.
+
+## Green, and the clock that governs the launch (2026-09-10)
+
+The full chain is green on this tree: every gate, **577 of 577 test files and
+5,091 of 5,091 tests**, with the September 10 edition in place and the freshness
+rules reconciled to one number.
+
+**The operating clock, stated once so it is not discovered later.** An edition is
+deliverable for seven days after its pull (`DELIVERABLE_MAX_AGE_DAYS`), and
+readiness blocks a day earlier so a purchase made the day after an offer goes out
+can still be filled. The September 10 edition is therefore offerable through
+**15 September 2026**. After that the readiness leg blocks and the brief must be
+pulled again — one request through the platform's own export, so this is a chore
+rather than an obstacle. Nothing about that mechanism appears on the customer's
+page; what the customer sees is the pull date and that it is a fixed edition.
