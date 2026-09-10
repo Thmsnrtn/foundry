@@ -196,7 +196,16 @@ export async function materialOf(experimentId: string, kind: MaterialKind): Prom
 /** Phrases the promise ledger forbids in anything Foundry sends for a test. */
 export const BANNED_CLAIMS = ['never miss', 'guarantee', 'guaranteed', 'complete coverage', 'every bid', 'save you hours', 'hours saved', 'increase your revenue', 'more revenue', 'our customers', 'trusted by'];
 
-export function checkDeliverableQuality(m: Material, now: Date, maxAgeDays = 7): { ok: boolean; failures: string[] } {
+/**
+ * HOW OLD A BRIEF MAY BE WHEN IT IS DELIVERED. One number, exported, because
+ * two places need it and they were disagreeing: the delivery gate refused at
+ * seven days while the launch readiness check was content at fourteen, so
+ * readiness could report a green chain for goods that could not lawfully be
+ * handed over.
+ */
+export const DELIVERABLE_MAX_AGE_DAYS = 7;
+
+export function checkDeliverableQuality(m: Material, now: Date, maxAgeDays = DELIVERABLE_MAX_AGE_DAYS): { ok: boolean; failures: string[] } {
   const failures: string[] = [];
   const ageDays = m.pulledAt ? (now.getTime() - new Date(m.pulledAt).getTime()) / 86_400_000 : Number.POSITIVE_INFINITY;
   if (!(ageDays <= maxAgeDays)) failures.push(m.pulledAt ? `pulled ${Math.floor(ageDays)} days ago; the limit is ${maxAgeDays}` : 'no pull date');

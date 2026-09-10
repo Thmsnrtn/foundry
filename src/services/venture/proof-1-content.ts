@@ -238,9 +238,9 @@ If anything here is wrong or out of date, reply to the email this arrived with. 
  */
 export const OUTREACH_TEMPLATE_MD = `Hi,
 
-I run Apex Micro, a small digital workshop in Massachusetts. I've put together a short brief of the Massachusetts public bid notices that look like commercial cabinet, casework or millwork work — twenty-three of them, each with the bid number, when it opens, who to contact and a link to the notice. It was pulled from COMMBUYS on 10 September.
+I run Apex Micro, a small digital workshop in Massachusetts. I've put together a short brief of the Massachusetts public bid notices that look like commercial cabinet, casework or millwork work — twenty-three of them, out of 726 that were open on COMMBUYS when I pulled it on 10 September. Each one with the bid number, when it opens, who to contact and a link to the notice.
 
-Two of the twenty-three turn up if you search COMMBUYS for "cabinet" or "millwork". The rest are in the scope text of notices titled things like "Renovation of vacant Unit 1", which is the part that takes the time.
+You can search COMMBUYS yourself; it's free. This is for shops that would rather not read through hundreds of notices to find the few worth a look.
 
 It's $29, one-time. No subscription. What's in it, and what it doesn't cover:
 

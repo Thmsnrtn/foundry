@@ -103,20 +103,20 @@ export async function externalReadiness(
     say('sealed offer, price and limitations', states.length ? 'blocked' : 'ready',
       states.length ? states.join('; ') : `${x.price?.label ?? '—'}, one-time, with stated coverage limits`);
 
-    // 6b ─ HOW OLD THE GOODS ARE, said before they are sold rather than after.
+    // 6b ─ HOW OLD THE GOODS ARE, judged by the rule that will actually refuse.
     //
-    // The thing being sold here is a dated document about things with deadlines.
-    // Every day between the day it was assembled and the day it is sent takes
-    // value out of it, and nothing in the machinery noticed: the page could be
-    // green, the payment link live, the sender verified, and the brief three
-    // weeks stale with half its notices already opened. That is not a copy
-    // problem — the page says plainly that it is a dated edition — it is a fact
-    // about the owner's own goods that he is owed at the moment he decides to
-    // sell them, which is here.
+    // The thing being sold here is a dated document about things with deadlines,
+    // and delivery has its own hard limit: `checkDeliverableQuality` will not
+    // hand over a brief pulled more than DELIVERABLE_MAX_AGE_DAYS ago. This
+    // check used to carry a softer fortnight of its own, which meant readiness
+    // could report a green chain for goods the delivery path would then refuse —
+    // the worst possible arrangement, because the refusal would land after
+    // somebody had paid.
     //
-    // Fourteen days because public bid notices commonly run two to four weeks
-    // from posting to opening: past a fortnight, a meaningful share of any such
-    // brief is describing bids that have closed.
+    // So it reads the same number, and it is stricter by a day rather than
+    // looser: an offer that goes out today is bought tomorrow at the earliest,
+    // and a brief that cannot survive until tomorrow should not be offered.
+    const { DELIVERABLE_MAX_AGE_DAYS } = await import('../venture/hand.js');
     const pulled = await one(
       `SELECT pulled_at FROM experiment_materials WHERE experiment_id = ? AND kind = 'deliverable' AND pulled_at IS NOT NULL
         ORDER BY recorded_at DESC, rowid DESC LIMIT 1`, [experimentId]);
@@ -124,10 +124,11 @@ export async function externalReadiness(
     else {
       const at = new Date(String(pulled.pulled_at).replace(' ', 'T') + (String(pulled.pulled_at).endsWith('Z') ? '' : 'Z'));
       const days = Math.floor((Date.now() - at.getTime()) / 86_400_000);
-      say('how fresh the goods are', days > 14 ? 'blocked' : 'ready',
-        days > 14
-          ? `the deliverable was assembled ${days} days ago (${String(pulled.pulled_at).slice(0, 10)}); bid notices run two to four weeks, so a meaningful share of it now describes bids that have closed. Pull it again before selling it.`
-          : `assembled ${days} day${days === 1 ? '' : 's'} ago (${String(pulled.pulled_at).slice(0, 10)})`);
+      const day = String(pulled.pulled_at).slice(0, 10);
+      say('how fresh the goods are', days + 1 >= DELIVERABLE_MAX_AGE_DAYS ? 'blocked' : 'ready',
+        days + 1 >= DELIVERABLE_MAX_AGE_DAYS
+          ? `the deliverable was assembled ${days} days ago (${day}), and delivery refuses anything older than ${DELIVERABLE_MAX_AGE_DAYS} days — a purchase tomorrow could not be filled. Pull it again before selling it.`
+          : `assembled ${days} day${days === 1 ? '' : 's'} ago (${day}); delivery refuses anything older than ${DELIVERABLE_MAX_AGE_DAYS} days`);
     }
   }
 

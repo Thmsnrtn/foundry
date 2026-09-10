@@ -2536,8 +2536,23 @@ complete — it is COMMBUYS only. That the inferences are right. That a shop wil
 find something. A brief where nothing suits is a possible and honest outcome,
 and the refund exists for exactly that.
 
-**On the page.** The second paragraph of *What you get* now carries these
-numbers, because the sharpest reader deserves the measurement rather than an
-adjective. It says COMMBUYS is free and that a bidder is probably already on it;
-it does not say the platform is bad. A bid is filed the way the agency thinks of
-the job, and that is nobody's fault.
+**On the page, two numbers and no argument.** The measurements above are
+internal evidence for the experiment; the page says only that it started with
+726 open notices and twenty-three made the cut, that COMMBUYS is free and a
+bidder is probably already on it, and that this is for shops who would rather
+not do the reading. A page that argues its own case at length is a page that
+does not trust it.
+
+**The distinction that must not collapse.** Some entries name the cabinetry,
+countertops or carpentry outright. Others are there because the work described
+usually carries some — an inference, labelled as one, *worth a look rather than
+a fact*. Surviving a screen does not promote a guess into a claim, and the page
+now says that in those words rather than relying on the brief to say it later.
+
+**And the freshness rule stopped being two rules.** `checkDeliverableQuality`
+refuses to hand over a brief pulled more than seven days ago; the readiness check
+carried a fortnight of its own, so it could report a green chain for goods that
+delivery would refuse — after somebody had paid. Readiness now reads
+`DELIVERABLE_MAX_AGE_DAYS` and blocks a day *earlier* than delivery does, because
+an offer sent today is bought tomorrow. The usable window for an edition is
+therefore its first five days, and a test holds the two in that order.

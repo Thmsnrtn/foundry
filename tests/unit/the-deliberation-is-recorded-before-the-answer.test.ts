@@ -512,6 +512,23 @@ describe('the whole external chain, checked against the world', () => {
     const staleLeg = stale.legs.find((l) => l.leg === 'how fresh the goods are')!;
     expect(staleLeg.status).toBe('blocked');
     expect(staleLeg.detail).toContain('Pull it again before selling it');
+    // READINESS AND DELIVERY AGREE, AND READINESS IS THE STRICTER OF THE TWO.
+    // The pair used to disagree — fourteen days here, seven at delivery — so a
+    // green chain could be reported for goods that would be refused after
+    // somebody had already paid. Now readiness reads delivery's own number, and
+    // blocks a day early, because an offer sent today is bought tomorrow.
+    const { DELIVERABLE_MAX_AGE_DAYS, checkDeliverableQuality } = await import('../../src/services/venture/hand.js');
+    const edge = new Date(Date.now() - (DELIVERABLE_MAX_AGE_DAYS - 1) * 86_400_000 - 3_600_000);
+    await recordMaterial({ founderId: OWNER, experimentId: X, kind: 'deliverable',
+      title: 'Massachusetts Commercial Millwork Bid Brief, pilot edition',
+      body: 'an edition a day short of the limit', pulledAt: edge, by: 'test' });
+    const edged = await externalReadiness(OWNER, X);
+    expect(edged.legs.find((l) => l.leg === 'how fresh the goods are')!.status).toBe('blocked');
+    // Delivery would still take it today — which is exactly why readiness must
+    // not, since the sale it is clearing the way for happens later than today.
+    const material = (await import('../../src/services/venture/hand.js')).materialOf;
+    expect(checkDeliverableQuality((await material(X, 'deliverable'))!, new Date()).failures
+      .filter((f) => f.includes('days ago'))).toEqual([]);
     expect(stale.ok).toBe(false);
     await recordMaterial({ founderId: OWNER, experimentId: X, kind: 'deliverable',
       title: 'Massachusetts Commercial Millwork Bid Brief, pilot edition',
