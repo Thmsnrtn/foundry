@@ -1,12 +1,12 @@
 # Massachusetts Commercial Millwork Bid Brief — Pilot Edition
 
-**Prepared:** September 7, 2026 · **Data pulled:** September 7, 2026 from COMMBUYS open solicitations · **Covers:** public bid notices open on that date that appear relevant to cabinetmaking, casework, countertops, carpentry, or architectural millwork.
+**Pulled:** September 7, 2026, from the COMMBUYS open solicitations · **Every item re-checked at source:** September 10, 2026 · **Covers:** public bid notices open on the pull date that look relevant to cabinetmaking, casework, countertops, carpentry or architectural millwork.
 
 ## What this is, and what it is not
 
 This is a curated shortlist, not a database. Every item below links to the authoritative public notice on COMMBUYS, the Commonwealth of Massachusetts procurement record. Dates, agencies, and contacts are copied from those notices; nothing here is estimated.
 
-**Coverage is limited to COMMBUYS.** On the pull date COMMBUYS listed 952 open solicitations; each was screened by title, and the candidates were read in full. This brief does **not** cover the Central Register (the Secretary of the Commonwealth's paid weekly listing of public construction), DCAMM's Bid Express e-bid room (login required), or municipal portals that do not post to COMMBUYS. An opportunity that is not here is not necessarily absent from the market.
+**Coverage is limited to COMMBUYS.** On the pull date COMMBUYS listed 952 open solicitations; every one was screened by title and every candidate was read in full. This brief does **not** cover the Central Register (the Secretary of the Commonwealth's paid weekly listing of public construction), DCAMM's Bid Express e-bid room (login required), or municipal portals that do not post to COMMBUYS. An opportunity that is not here is not necessarily absent from the market.
 
 **Relevance is inferred from the notice text.** We did not download the bid documents, so where a notice says "renovation" the presence of casework or millwork in the scope is a reasonable inference, marked as such, and nothing more. Always read the bid documents before spending time on a bid.
 
@@ -103,18 +103,13 @@ Items are listed by bid opening date. "Closing soon" means the opening is within
 - **Why it may fit:** a library repair in an older building may carry finish carpentry; relevance is **low** and included only for completeness.
 - **Source:** https://www.commbuys.com/bso/external/bidDetail.sda?docId=BD-25-1634-LNX01-LNX-133008&external=true&parentUrl=close
 
-### 13. City of Boston — 7289 South End Branch Library (Re-Ad), contractor prequalification
-- **Bid #** BD-27-1142-PFD01-PFD01-132077 · **Prequalification RFQ due:** September 10, 2026, 12:00 PM · **Closing soon; this is the prequalification stage, not the bid**
-- **What the notice says:** "demolish S.E. library, build new S.E. Library, comprised of ground up, fully electric 2-story bldg to house local Boston Public Library. Spaces include reading areas, meeting spaces, staff work areas, supporting spaces."
-- **Contact:** bid.info@boston.gov, (617) 635-4809
-- **Why it may fit:** a new branch library will carry substantial millwork; the way in is through the prequalified general contractors once the bid itself is advertised. Worth watching.
-- **Source:** https://www.commbuys.com/bso/external/bidDetail.sda?docId=BD-27-1142-PFD01-PFD01-132077&external=true&parentUrl=close
-
 ---
 
 ## Screened and excluded
 
 Of the 952 open solicitations, 62 matched building-related keywords and were read. Excluded as not relevant to millwork: roofing, boilers, overhead doors, windows-only, snow removal, security and AV systems, transportation, lab services, and professional services. Two large renovations with millwork potential opened before this brief could reach you (UMass Medical School locker room expansion, September 11; NECC AV installation, September 11) and are omitted.
+
+On September 10 every remaining notice was opened again at its source and the dates confirmed. One item was dropped at that point: the City of Boston South End Branch Library prequalification (BD-27-1142-PFD01-PFD01-132077), whose RFQ closed at noon that day. Twelve remain, and all twelve were open when this was checked.
 
 ## How to use this
 

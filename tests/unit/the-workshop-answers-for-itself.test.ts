@@ -193,7 +193,7 @@ describe('what a message may cause is decided by policy, never by the message', 
   it('a refusal is honoured and confirmed; a narrower request is recorded as exactly that', () => {
     const stop = decide(u({ intent: 'stop_contacting' }), ctx());
     expect(stop.acts).toEqual(['suppress']);
-    expect(stop.says).toContain('everything this workshop does');
+    expect(stop.says).toContain('everything I do');
     const scope = decide(u({ intent: 'wants_narrower_scope', scope: 'only projects over $500k' }), ctx());
     expect(scope.acts).toEqual(['record_scope']);
     expect(scope.says).toContain('only projects over $500k');
@@ -233,7 +233,7 @@ describe('the Workshop answers, once, and only as far as the owner allowed', () 
     expect(a.sent).toBe(true);
     expect(a.says).toContain('COMMBUYS');
     // It does not pretend a person typed it, and it names who is responsible.
-    expect(a.says).toContain('automated assistant');
+    expect(a.says).toContain('Automated reply from Apex Micro');
     expect(a.says).toContain('Thomas Norton');
     expect(state.sends).toHaveLength(1);
     expect(state.sends[0]!.to).toEqual(['asks@example.com']);
@@ -275,7 +275,7 @@ describe('the Workshop answers, once, and only as far as the owner allowed', () 
     expect(a.sent).toBe(true);
     const wants = await continuationsOf(OWNER, 'scoped@example.com');
     expect(wants.some((w) => (w.said ?? '').includes('Rhode Island'))).toBe(true);
-    expect(a.says).toContain('nothing will be charged');
+    expect(a.says).toContain('nothing gets charged');
   });
 
   it('a hostile message is answered by nobody and acquires nothing', async () => {

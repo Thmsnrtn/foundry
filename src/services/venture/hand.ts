@@ -676,7 +676,7 @@ export async function planOffer(input: { experimentId: string; recipientId: stri
   if (!quality.ok) throw new HandRefused('offer_quality', quality.failures.join('; '));
   const replyTo = await replyAddressFor(e.productId, e.founderId);
   // Every message carries who is writing, from where, and how to stop it.
-  const footer = w ? `\n\n—\n${w.publicName} is an independent digital workshop operated by ${w.operatorName}.${w.postalAddress ? ` ${postalLines(w.postalAddress).join(', ')}.` : ''}\nTo not hear from ${w.publicName} again: ${w.origin}/email` : '';
+  const footer = w ? `\n\n—\n${w.publicName} is a small digital workshop run by ${w.operatorName}.${w.postalAddress ? ` ${postalLines(w.postalAddress).join(', ')}.` : ''}\nTo hear nothing further from ${w.publicName}: ${w.origin}/email` : '';
   const body = offer.body.replace(/\{Business name\}/g, recipient.counterpartyRef.split(',')[0].trim()) + footer;
   const id = nanoid();
   await query(
@@ -711,7 +711,7 @@ export async function planDelivery(input: { experimentId: string; fulfilmentId: 
   const buyer = await buyerAddressFor(String(f.payment_ref));
   if (!buyer) throw new HandRefused('buyer_address_unknown', String(f.payment_ref));
   const replyTo = await replyAddressFor(e.productId, e.founderId);
-  const intro = `Thank you for buying the ${deliverable.title}. It is below, exactly as described: a screened shortlist with links to each original notice, not a complete market listing. If it is not useful to you, [ask for a refund here](${refundLinkFor(String(f.id))}) and the payment will be refunded; replying to this message works too.\n\n---\n\n`;
+  const intro = `Thanks for buying the ${deliverable.title} — it's below. It's a shortlist with a link to each original notice, not a complete listing of the market. If it's no use to you, [ask for your money back here](${refundLinkFor(String(f.id))}) and it's refunded in full; replying to this message works just as well.\n\n---\n\n`;
   const body = intro + deliverable.body;
   const id = nanoid();
   await query(

@@ -422,12 +422,12 @@ describe('a stranger says what they want next, and the Workshop keeps the answer
     const { publicWorkshopOf } = await import('../../src/services/public-workshop/settings.js');
     const site = renderSite(workshopFacts((await publicWorkshopOf(OWNER))!), await projectRegistry(OWNER));
     const experiment = site.get(`/experiments/${PROOF1_SLUG}`)!;
-    expect(experiment).toContain('What would you like next?');
+    expect(experiment).toContain("Anything you'd like to say?");
     // The claim, wherever the page makes it: nothing here reports back whether
     // this was read. (It used to be asserted as one exact sentence sitting under
     // the form, which said the same thing the privacy section two paragraphs
     // below already said.)
-    expect(experiment).toContain('no click tracking');
+    expect(experiment).toContain("There's no tracking in the email or on this site");
     expect(experiment).toContain('the only thing I know is what you choose to tell me');
     expect(site.has('/thank-you')).toBe(true);
     expect(WORKER_SOURCE).toContain('/continue');

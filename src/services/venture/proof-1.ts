@@ -91,7 +91,7 @@ export const PROOF1_PLAN: OfferShapePlan = {
     amountCents: 2900, currency: 'USD', lookupKey: 'foundry_proof1_ma_millwork_brief_one_time',
     productName: 'Massachusetts Commercial Millwork Bid Brief — pilot edition',
     productMetadata: { app_object: 'experiment_deliverable', plan_key: 'proof1_ma_millwork_bid_brief' },
-    confirmationMessage: 'Thanks. The brief arrives by email within one business day.',
+    confirmationMessage: 'Thanks — the brief will be in your inbox within a business day.',
   },
   offerSubject: 'A shortlist of open Massachusetts public bids with cabinet and millwork scope',
 };
@@ -104,33 +104,30 @@ export const PROOF1_PLAN: OfferShapePlan = {
 export const PROOF1_SLUG = 'ma-millwork-bid-brief';
 export const PROOF1_PUBLIC = {
   title: 'Massachusetts Millwork Bid Brief',
-  // WHAT IT IS, NOT WHAT IT IS AN INSTANCE OF. This read "a one-time test of a
-  // simpler way for commercial millwork shops to find potentially relevant
-  // Massachusetts public bid opportunities" — three hedges deep, describing the
-  // test rather than the thing, so five seconds on the page taught a shop owner
-  // nothing about what he would get. The developmental status is true and stays;
-  // it belongs on the status line, not in front of the offer.
-  summary: 'A hand-screened shortlist of the Massachusetts public bid notices that look like cabinet, casework or millwork work — thirteen of them, each with its bid number, opening date, agency contact and a link to the original notice.',
-  who: 'Independent commercial cabinet, casework and architectural millwork shops in Massachusetts that bid, or would like to bid, on public work.',
-  // A FIXED EDITION, SAID AS SUCH. "The public bid notices currently open" sat
-  // in the same paragraph as "the week it was pulled" and the two do not agree.
-  // A buyer reading the first sentence expects a live view; what arrives is a
-  // dated document. The pull date is now stated wherever the brief is described,
-  // so the claim cannot quietly go stale as the launch date moves.
-  what: 'One brief, by email, within one business day of payment. It is a fixed edition, not a live feed: the pilot edition lists thirteen notices, screened by hand from the 952 solicitations that were open on COMMBUYS on 7 September 2026. Each item carries the bid number, the opening date, the agency contact, one line on why it may fit, and a link to the original notice, so you can check every one of them yourself.',
-  limits: 'It is not complete. It covers COMMBUYS only — not the Central Register, not DCAMM\'s e-bid room, not the municipal portals that do not post there — so a job that is not in it is not necessarily absent from the market. Relevance is judged from the notice text, not from the bid documents: where a notice says "renovation", casework may or may not be in the scope, and the brief says plainly where it is guessing. Because it is a dated edition, some of the notices in it will already have opened by the time you read this; each one shows its own date. It does not promise that any bid is winnable or right for you.',
-  sources: 'COMMBUYS — the Commonwealth of Massachusetts public procurement record, where state agencies, housing authorities and many municipalities post their bids. Every listed notice was read in full on the date shown in the brief, and every item links back to the original so you can check it yourself.',
-  // THE COLD RECIPIENT'S FIRST QUESTION, ANSWERED IN THE FIRST PERSON. This was
-  // written about the recipient in the passive voice ("were chosen by hand") and
-  // sat seventh on the page. It is the question a stranger actually arrives with.
-  selection: 'I chose a small number of Massachusetts millwork businesses by hand, from their own public websites, where the commercial work shown suggested this might be relevant. I wrote to each of them once, at the address the business publishes. There is no list, nobody sold me your details, no data was purchased, and there is no follow-up.',
-  note: 'I\'m Thomas Norton. Apex Micro is mine — a small digital workshop in Marlborough, Massachusetts, where I test useful niche products and services before deciding whether they are worth building out properly. I use software I have built to help with the research and the running of it, but the decisions and the responsibility are mine.\n\nThis is the first run of this brief. I am finding out whether it is worth $29 to the shops it is meant for. It is not an established service yet.',
-  // ONE ITEM, AS IT ARRIVES. Not a mock-up and not a description of a mock-up:
-  // the first entry of the edition that is actually sent. The agency officer's
-  // name, phone and email are in the brief and are deliberately NOT here — they
-  // are a real person's contact details, and a page anyone can read is not the
-  // place to republish them.
-  sample: '1. Framingham Housing Authority — On-Call Carpentry Services\n\nBid # BD-26-1507-FHA01-JJB01-132802 · Quotes due 14 September 2026\n\nWhat the notice says: "invites written quotes from Contractors for On-Call Carpentry Services for the FHA in Framingham, MA." Coded UNSPSC 72-10-26, Carpentry.\n\nWhy it may fit: a standing carpentry contract with a housing authority; how broad the scope is will not be clear until you read the ad.\n\nContact: the agency\'s procurement officer, named in the brief with phone and email. Source: linked to the original COMMBUYS notice.\n\nThe other twelve are in the same shape.',
+  // SAID ACROSS A TABLE, NOT ACROSS A LECTERN. The earlier versions described a
+  // test of a way of finding opportunities, then a hand-screened shortlist of
+  // notices that look like work. Both were true; both sounded written. What a
+  // shop owner needs in the first line is the thing itself and roughly how many.
+  summary: 'A short brief of the Massachusetts public bid notices that look like cabinet, casework or millwork work — twelve of them, with the bid number, when it opens, who to contact and a link to the notice itself.',
+  who: 'Small commercial cabinet, casework and architectural millwork shops in Massachusetts that bid on public work, or would like to.',
+  // NOBODY'S HAND. "Screened by hand" implied Thomas sat and read 952 notices.
+  // Software did most of that, and saying otherwise is the manufactured personal
+  // attention this workshop is not allowed to fake — so the sentence says what
+  // was done and stays quiet about whose hands did it.
+  what: 'One brief, by email, within a business day of paying. It\'s a fixed edition rather than a live feed: this one was pulled from COMMBUYS on 7 September 2026, and every notice in it was opened again at its source and confirmed still live on 10 September. Twelve notices, out of the 952 that were open on the pull date — every candidate was read in full before it went in. Each one gives you the bid number, when it opens, who to contact, a line on why it might fit, and a link to the notice so you can read it yourself.',
+  limits: 'It\'s a shortlist, not a database. It covers COMMBUYS only — not the Central Register, not DCAMM\'s e-bid room, not the town portals that don\'t post there — so something missing from it isn\'t necessarily missing from the market. Relevance is judged from the notice text rather than the bid documents, so where a notice says "renovation" the casework might or might not be in scope; the brief says when that is a guess. And nothing in it tells you a job is winnable or worth your time. Read the bid documents before you commit to anything.',
+  sources: 'COMMBUYS is the state\'s public procurement site — where Massachusetts agencies, housing authorities and a lot of towns post their bids. Every notice in the brief was read there in full, and each item links back to the original so you can check it.',
+  // ONLY WHAT THE RECORD SUPPORTS. The grounds actually written down for each
+  // qualifying shop are public-sector projects shown on the business's own site.
+  // That is what this says, and it does not claim anybody browsed it personally.
+  selection: 'Your shop came up because your own website shows public-sector work — schools, municipal buildings, that kind of thing. I\'m trying this brief with a small number of Massachusetts shops it might genuinely be useful to, writing to the address each one publishes. Nobody sold me your details, there\'s no list, and I only write once.',
+  note: 'I\'m Thomas Norton, and Apex Micro is my workshop. I build small, practical things, try them for real, and keep the ones that turn out to be useful. Software I\'ve built does a lot of the research and the running; the decisions and the responsibility are mine.\n\nThis is the first edition of this brief, so I\'m finding out whether it\'s worth $29 to the shops it\'s meant for. If it isn\'t, I\'d rather know.',
+  // ONE ITEM, AS IT ARRIVES. Not a mock-up and not a description of one: the
+  // first entry of the edition that is actually sent. The agency officer's name,
+  // phone and email are in the brief and deliberately are not here — they are a
+  // real person's contact details, and a page anyone can read is not the place
+  // to republish them.
+  sample: '1. Framingham Housing Authority — On-Call Carpentry Services\n\nBid # BD-26-1507-FHA01-JJB01-132802 · Quotes due 14 September 2026\n\nWhat the notice says: "invites written quotes from Contractors for On-Call Carpentry Services for the FHA in Framingham, MA." Coded UNSPSC 72-10-26, Carpentry.\n\nWhy it may fit: a standing carpentry contract with a housing authority; how broad the scope is won\'t be clear until you read the ad.\n\nContact: the agency\'s procurement officer, with phone and email. Source: a link to the notice on COMMBUYS.\n\nThe other eleven look like that too.',
 } as const;
 
 export interface Proof1Seed { experimentId: string; opportunityId: string; recipientsAdded: number; alreadyExisted: boolean }

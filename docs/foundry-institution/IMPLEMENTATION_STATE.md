@@ -2329,3 +2329,86 @@ reader should conclude they do not need this, and *What it doesn't cover* lets
 them do it in ten seconds. Nothing in the sealed economics, the population, the
 substantive promise, the evidence claims, the refund commitment or the exposure
 boundaries was changed to improve conversion.
+
+## The public side stops sounding like the institution behind it (2026-09-10)
+
+A final pass over every word a customer can meet before Experiment 001 reaches
+anybody: the landing page, the brief's page, the outreach note, the automated
+replies and their signature, contact, privacy, opt-out, refunds, terms, the
+purchase confirmation, the delivery email and the register.
+
+The problem was not clarity. The previous pass had already fixed the order and
+the burying of the price. What was left was **voice**: it read as written *at* a
+visitor by an institution rather than *to* one by a person.
+
+### What was changed, and why
+
+**The introduction explained the business model before it showed the work.** The
+front page opened with two paragraphs on what an experiment is, what happens to
+one, and why some are closed — accurate, and a prospectus. It now says who this
+is, shows what is for sale, and explains the workshop afterwards. The founding
+statement was rewritten to the same effect at a fifth of the length, keeping
+every fact in it: it is his, it is small, the things are tried for real,
+software does much of the work, the responsibility is his, and what does not
+work is closed with its page left up saying so.
+
+**Nobody's hand.** The copy said the notices were *"screened by hand"* and the
+email said *"I screened them by hand"*. Software did most of that work.
+Claiming a person's attention that was never spent is the one kind of warmth
+this workshop may not manufacture, and it is now written the other way round:
+active where the act is genuinely Thomas's (*"I'm trying this brief with a small
+number of shops"*), passive where the actor is software (*"every candidate was
+read in full before it went in"*).
+
+**Contractions, and the sentences a person would actually say.** *"It is a fixed
+edition rather than a live feed"* became *"It's a fixed edition rather than a
+live feed"*, and so on through every surface. This sounds like a triviality and
+is most of the difference between prose that was typed and prose that was
+generated.
+
+**"Why did you write to me?" stopped sounding like a compliance disclosure.**
+*"A small number of Massachusetts millwork businesses were chosen by hand from
+their public websites, where the commercial work shown suggested the brief could
+be relevant"* became *"Your shop came up because your own website shows
+public-sector work — schools, municipal buildings, that kind of thing."* Same
+fact, same recorded grounds, said to a person.
+
+**The sign-off on an automated reply was longer than most of the replies.** It
+now reads: *"Automated reply from Apex Micro. Thomas Norton runs the workshop
+and handles anything that needs a person."* The answer comes first and the
+disclosure sits quietly under it.
+
+**"Pilot" was kept light.** The page carries one quiet line — *"A small pilot
+from Apex Micro"* — instead of a status pill and a bold status sentence stacked
+above the offer. `Experiment 001` is gone from the page altogether; the number
+lives on the register beside the name, where a workshop's own filing order
+belongs and a buyer can ignore it.
+
+**Internal vocabulary left the visible surfaces.** The register is *"Everything
+I've made"* rather than *"Experiments"*; *"Operating / Graduated / Closed"* is
+*"Still going / On their own now / Closed"*; *"What it relies on"* is *"Where it
+comes from"*; the six answers on the reply form are things a person would tick
+(*"Don't write to me again"*, *"I'd pay for this regularly"*). The paths did not
+change — only what a visitor reads.
+
+### The freshness question, answered with evidence rather than a disclaimer
+
+The directive asked whether the right pre-launch action was simply to re-pull the
+brief. It was checked rather than guessed:
+
+- Every one of the thirteen notices was fetched from its own COMMBUYS page on
+  10 September. **All thirteen dates matched the brief exactly** — the edition
+  was accurate, not merely recent.
+- Twelve were still open. One — the City of Boston South End Branch Library
+  **prequalification**, RFQ due at noon that day — was not, by the time a buyer
+  could act on it. It has been removed rather than sold with a disclaimer, and
+  the exclusion note says why. The brief now carries both dates: pulled the 7th,
+  every item re-checked at source on the 10th.
+- A **full** re-pull is not available honestly. COMMBUYS listed 1,001 open
+  solicitations on the 10th, and its result paginator refuses scripted requests
+  (HTTP 403). Defeating that would be platform evasion. A partial re-screen
+  presented as a fresh pull would be worse than an honestly dated older one.
+
+So: fresher goods where they could be got honestly, and no excuse-making where
+they could not. The fourteen-day freshness leg added in the previous pass stays
+as the internal rule; the customer sees only the two dates and what they mean.

@@ -77,9 +77,9 @@ shareRoutes.post('/share/refund/:fulfilmentId/:token', async (c) => {
   const r = await requestRefundByLink(c.req.param('fulfilmentId'), c.req.param('token'));
   if (r.status === 'not_found' || !r.view) return c.notFound();
   const amount = `${r.view.currency === 'USD' ? '$' : ''}${(r.view.amountCents / 100).toFixed(2)}${r.view.currency === 'USD' ? '' : ` ${r.view.currency}`}`;
-  if (r.status === 'refunded') return c.html(refundPage('Refunded', `<h1>Refunded</h1><p>${amount} is on its way back to your card. Banks usually show it within 5–10 days.</p>`));
+  if (r.status === 'refunded') return c.html(refundPage('Refunded', `<h1>Refunded</h1><p>${amount} is on its way back to your card. Most banks show it within 5–10 days.</p>`));
   if (r.status === 'already_refunded') return c.html(refundPage('Refunded', `<h1>Already refunded</h1><p>The ${amount} has already been refunded.</p>`));
-  return c.html(refundPage('Refund requested', `<h1>Request recorded</h1><p>Your refund of ${amount} could not be issued automatically just now. It has been recorded and will be handled by a person; you do not need to write again.</p>`));
+  return c.html(refundPage('Refund requested', `<h1>Got it</h1><p>Your refund of ${amount} couldn't go through automatically just now. It's been noted and someone will sort it out — you don't need to write again.</p>`));
 });
 
 // ─── Share Page ───────────────────────────────────────────────────────────────

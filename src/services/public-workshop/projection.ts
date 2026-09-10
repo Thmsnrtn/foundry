@@ -151,9 +151,9 @@ export interface PublicWorkshopFacts {
 
 export function workshopFacts(w: PublicWorkshop): PublicWorkshopFacts {
   return {
-    name: w.publicName, operator: w.operatorName, origin: w.origin, tagline: `a digital workshop by ${w.operatorName}`,
+    name: w.publicName, operator: w.operatorName, origin: w.origin, tagline: `a small digital workshop run by ${w.operatorName}`,
     statement: w.statement, about: w.about, contactEmail: w.contactEmail, postalAddress: w.postalAddress,
-    region: 'Massachusetts, USA',
+    region: 'Massachusetts',
   };
 }
 

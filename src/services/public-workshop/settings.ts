@@ -38,10 +38,16 @@ export const APEX_MICRO = {
   operatorName: 'Thomas Norton',
   zoneName: 'apexmicro.ai',
   contactLocalPart: 'thomas',
-  tagline: 'a digital workshop by Thomas Norton',
+  tagline: 'a small digital workshop run by Thomas Norton',
+  // SAID THE WAY A PERSON SAYS IT. The first version explained the business
+  // model — what an experiment is, what happens to one, why some are closed —
+  // before a visitor knew what was made here. It was accurate and it read like
+  // a prospectus. Every fact in it survives: it is his, it is small, the things
+  // are tried for real, software does much of the work, the responsibility is
+  // his, and what does not work is closed and says so.
   statement: [
-    'I\'m Thomas Norton. I run Apex Micro, a small digital workshop where I test useful niche products and services before deciding whether they\'re worth developing into independent businesses. I use software I\'ve built to help with research and operations, but I\'m the person responsible for every experiment here.',
-    'Experiments start small and are clearly labeled as experiments. Some become businesses. Some remain small useful tools. Others are closed when the evidence says they aren\'t worth continuing.',
+    'Apex Micro is my small digital workshop. I build practical, niche things, try them out in the real world, and keep working on the ones that turn out to be useful.',
+    'I\'m Thomas Norton. Software I\'ve built does a lot of the research and the day-to-day running, but everything here is mine and so is the responsibility. Each thing says what it costs, what you get and what it doesn\'t cover. The ones that don\'t work get closed, and their page stays up saying so.',
   ].join('\n\n'),
 } as const;
 

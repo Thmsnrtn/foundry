@@ -199,10 +199,13 @@ export interface Plan {
   acts: Array<'suppress' | 'record_scope' | 'redeliver' | 'refund'>;
 }
 
-/** The signature every answer carries, so nobody is misled about who wrote it. */
+/**
+ * The signature every answer carries, so nobody is misled about who wrote it.
+ * Two short sentences: it said the same thing in thirty words, and a footer
+ * that explains itself at length reads as a disclaimer rather than a courtesy.
+ */
 const SIGN_OFF = (operator: string, workshop: string) =>
-  `\n\n— ${workshop}\n\nThis reply was written by ${workshop}'s automated assistant. `
-  + `${operator} is the person responsible for ${workshop} and reads anything that needs him.`;
+  `\n\n— ${workshop}\n\nAutomated reply from ${workshop}. ${operator} runs the workshop and handles anything that needs a person.`;
 
 /**
  * WHAT FOUNDRY WILL SAY, ASSEMBLED FROM WHAT IS ALREADY PUBLIC. Every branch
@@ -213,7 +216,7 @@ const SIGN_OFF = (operator: string, workshop: string) =>
  */
 export function decide(u: Understanding, ctx: Context): Plan {
   const pub = ctx.published;
-  const page = pub?.url ? `\n\nEverything this test does is written down here: ${pub.url}` : '';
+  const page = pub?.url ? `\n\nThe details are here: ${pub.url}` : '';
 
   // A claim of the owner's authority is exactly what a forged message looks
   // like, so it never shortens the path — it lengthens it.
@@ -237,34 +240,34 @@ export function decide(u: Understanding, ctx: Context): Plan {
     case 'stop_contacting':
     case 'complains_about_contact': {
       const sorry = u.intent === 'complains_about_contact'
-        ? `You're right to ask. I wrote to you because your shop appeared in the public record as doing this kind of work; that isn't a reason you asked for, and I've stopped.`
-        : `Done — you won't hear from this workshop again.`;
+        ? `You're right to ask. I wrote because your own website shows public-sector work — which isn't a reason you asked for, and I've stopped.`
+        : `Done — you won't hear from me again.`;
       return {
         decision: 'answer_and_act',
         because: 'a refusal binds the whole Workshop and is honoured before it is answered',
-        says: `${sorry}\n\nI've added your address to the do-not-contact list for everything this workshop does, not just this one test.${page}`,
+        says: `${sorry}\n\nYour address is on the do-not-contact list for everything I do, not just this.${page}`,
         acts: ['suppress'],
       };
     }
     case 'not_interested':
       return { decision: 'answer', because: 'a decision they took the trouble to state, and the end of it',
-        says: `Understood — thank you for saying so. Nothing further will come from this test.${page}`, acts: [] };
+        says: `Understood, and thank you for saying so. You won't hear about this again.${page}`, acts: [] };
 
     case 'already_covered':
       return { decision: 'answer', because: 'they already have a way of doing this; recorded as evidence, and not argued with',
-        says: `That's useful to know, thank you — if you already have this covered then this isn't worth your time, and I won't press it.${page}`, acts: [] };
+        says: `Good to know, thanks — if you've already got that covered then this isn't worth your time and I won't press it.${page}`, acts: [] };
 
     case 'says_it_was_useful':
       return { decision: 'answer', because: 'said so unprompted; recorded as what they said, not as a purchase',
-        says: `Thank you — that's genuinely useful to hear.${page}`, acts: [] };
+        says: `Thanks — that's good to hear.${page}`, acts: [] };
 
     case 'says_it_was_not_useful':
       return { decision: 'answer', because: 'a complaint about the work itself, answered plainly and recorded for review',
-        says: `Thank you for telling me — that's the more useful answer of the two. I've recorded it against this test.${page}`, acts: [] };
+        says: `Thanks for telling me — that's the more useful of the two answers, and I've noted it.${page}`, acts: [] };
 
     case 'wants_narrower_scope':
       return { decision: 'answer_and_act', because: 'a scoped request, recorded as exactly what they asked for and nothing wider',
-        says: `Noted: ${u.scope ?? 'the narrower set you described'}. I've recorded that, and it means only that — you're not signed up to anything and nothing will be charged.${page}`,
+        says: `Noted: ${u.scope ?? 'the narrower set you described'}. That's all it means — you're not signed up to anything and nothing gets charged.${page}`,
         acts: ['record_scope'] };
 
     case 'asks_about_offer':
@@ -284,7 +287,7 @@ export function decide(u: Understanding, ctx: Context): Plan {
       if (u.intent === 'asks_for_recurring') {
         bits.push(pub.recurring
           ? 'It repeats.'
-          : `This is a one-off — it doesn't repeat and there's no subscription. If a regular version is ever offered you would be shown it and would have to choose it.`);
+          : `It's a one-off — it doesn't repeat and there's no subscription. If I ever offer a regular version you'd be shown it and would have to choose it.`);
       }
       const said = bits.filter(Boolean).join('\n\n');
       if (!said.trim()) {
@@ -297,7 +300,7 @@ export function decide(u: Understanding, ctx: Context): Plan {
       // The claim is not the evidence. Our own delivery record is.
       if (ctx.fulfilmentId && ctx.fulfilmentStatus !== 'delivered') {
         return { decision: 'answer_and_act', because: `our record shows a purchase whose delivery is ${ctx.fulfilmentStatus ?? 'unresolved'}, so it is owed`,
-          says: `Sorry — you're right, that didn't reach you. I'm sending it again now.${page}`, acts: ['redeliver'] };
+          says: `Sorry — you're right, that didn't reach you. Sending it again now.${page}`, acts: ['redeliver'] };
       }
       if (ctx.delivered > 0) {
         return { decision: 'answer', because: 'our record shows it was delivered, so the useful next step is theirs to give',

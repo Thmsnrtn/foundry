@@ -35,7 +35,7 @@ import '../../src/services/integration/stripe-gateway.js';
 import '../../src/services/integration/cloudflare-gateway.js';
 import { handleWebhook } from '../../src/services/billing/stripe.js';
 import { providerStubs } from '../helpers/provider-stubs.js';
-import { PROOF1_SLUG, PROOF1_TITLE, findProof1, reframeProof1UnderTheWorkshop, seedProof1 } from '../../src/services/venture/proof-1.js';
+import { PROOF1_PUBLIC, PROOF1_SLUG, PROOF1_TITLE, findProof1, reframeProof1UnderTheWorkshop, seedProof1 } from '../../src/services/venture/proof-1.js';
 import { addRecipients, approveRemaining, campaignActOf, materialOf, planOffer, prepareExposure, qualifyRecipient, recipientsOf, reviewRecipient, runHand, stopExperiment } from '../../src/services/venture/hand.js';
 import { getExperimentView } from '../../src/services/founder/experiment-view.js';
 import { waitingOn } from '../../src/services/founder/attention.js';
@@ -139,12 +139,12 @@ describe('the Workshop stands up through the door, and the world is read back', 
     expect(r.site.unverified).toEqual([]);
     expect(r.site.verified).toBe(14);
     // The world: the site answers, www redirects, the trust surface is there, the private institution is not.
-    expect((await publicGet('/')).text).toContain('a digital workshop by Thomas Norton');
+    expect((await publicGet('/')).text).toContain('small digital workshop run by Thomas Norton');
     expect((await publicGet('/about')).text).toContain('I\'m Thomas Norton');
     expect((await publicGet('/privacy')).text).toContain('no tracking pixels');
-    expect((await publicGet('/email')).text).toContain('Do not contact me');
+    expect((await publicGet('/email')).text).toContain("Don't contact me");
     expect((await publicGet('/refunds')).text).toContain('you get your money back');
-    expect((await publicGet('/terms')).text).toContain('operated by Thomas Norton');
+    expect((await publicGet('/terms')).text).toContain('run by Thomas Norton');
     expect((await fetchStub('https://www.apexmicro.ai/about')).status).toBe(301);
     for (const p of ['/foundry', '/foundry/controls', '/foundry/experiments', '/letter', '/api/products', '/admin', '/foundry/public-workshop', '/share/refund/x/y']) expect((await publicGet(p)).status, p).toBe(404);
     // Receipts: what was there, what was asked, what came back, what was seen, how to put it back.
@@ -245,7 +245,7 @@ describe('Proof 1 is reframed under the Workshop without rewriting its history',
     const view = (await getExperimentView(OWNER, X, NOW))!;
     expect(view.publicPage).toMatchObject({ url: `https://apexmicro.ai/experiments/${PROOF1_SLUG}`, status: 'published when you allow it' });
     expect((await page(`/foundry/experiments/${X}`)).text).toContain('Public page');
-    expect((await page(`/foundry/public-workshop/preview/${X}`)).text).toContain('Experiment 001');
+    expect((await page(`/foundry/public-workshop/preview/${X}`)).text).toContain(PROOF1_PUBLIC.title);
     currentFounder = { id: OTHER, email: 'other@example.com', preferences: {} };
     expect((await page(`/foundry/public-workshop/preview/${X}`)).status).toBe(403);
     currentFounder = { id: OWNER, email: 'thomas@example.com', preferences: {} };
@@ -333,7 +333,8 @@ describe('Allow publishes the page; offers point at it and go out as the Worksho
     expect(pub).toMatchObject({ version: 1, verifiedStatus: 'verified', kind: 'experiment', path: `/experiments/${PROOF1_SLUG}` });
     const shown = await publicGet(`/experiments/${PROOF1_SLUG}`);
     expect(shown.status).toBe(200);
-    expect(shown.text).toContain('Experiment 001');
+    expect(shown.text).not.toContain('Experiment 001');
+    expect((await publicGet('/experiments')).text).toContain('No. 001');
     expect(shown.text).toContain('$29, once. No subscription, nothing renews.');
     expect(shown.text).toContain('Buy for $29');
     expect(shown.text).toContain('https://buy.stripe.com/');
@@ -375,8 +376,8 @@ describe('Allow publishes the page; offers point at it and go out as the Worksho
       expect(s.reply_to).toBe('thomas@apexmicro.ai');
       expect(s.text).toContain(`https://apexmicro.ai/experiments/${PROOF1_SLUG}`);
       expect(s.text).not.toContain('buy.stripe.com');
-      expect(s.text).toContain('Apex Micro is an independent digital workshop operated by Thomas Norton. PO Box 123, Example, MA 01000.');
-      expect(s.text).toContain('To not hear from Apex Micro again: https://apexmicro.ai/email');
+      expect(s.text).toContain('Apex Micro is a small digital workshop run by Thomas Norton. PO Box 123, Example, MA 01000.');
+      expect(s.text).toContain('To hear nothing further from Apex Micro: https://apexmicro.ai/email');
       expect(s.text).not.toMatch(/\[[A-Z ]+\]|\{Business name\}/);
     }
     expect((await query(`SELECT COUNT(*) AS n FROM public_contacts WHERE founder_id = ?`, [OWNER])).rows[0]).toMatchObject({ n: 3 });
@@ -567,7 +568,7 @@ describe('Experiment 002: the machinery rehearsed end to end', () => {
     expect(r.steps.map((s) => s.step)).toEqual(['identity', 'publish', 'update', 'displayed', 'closed', 'preserved']);
     const shown = await publicGet('/experiments/workshop-rehearsal');
     expect(shown.status).toBe(200);
-    expect(shown.text).toContain('Experiment 002');
+    expect(shown.text).toContain('Workshop rehearsal');
     expect(shown.text).toContain('Closed — a rehearsal');
     expect(shown.text).toContain('Nothing is for sale here');
     expect((await publicGet('/experiments')).text).not.toContain('Workshop rehearsal');
