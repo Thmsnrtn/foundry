@@ -655,7 +655,7 @@ export async function planOffer(input: { experimentId: string; recipientId: stri
   const tooOften = await contactFrequencyRefusal({ founderId: e.founderId, email: recipient.email, experimentId: input.experimentId, now: input.now });
   if (tooOften) throw new HandRefused('contact_frequency', tooOften);
   const { publicationGate, pageUrlFor } = await import('../public-workshop/publication.js');
-  const { publicWorkshopOfExperiment } = await import('../public-workshop/settings.js');
+  const { postalLines, publicWorkshopOfExperiment } = await import('../public-workshop/settings.js');
   const w = await publicWorkshopOfExperiment(input.experimentId);
   if (w) {
     // READ THE PAGE FROM THE PUBLIC INTERNET, NOW, NOT FROM WHAT WE SAW OF IT.
@@ -676,7 +676,7 @@ export async function planOffer(input: { experimentId: string; recipientId: stri
   if (!quality.ok) throw new HandRefused('offer_quality', quality.failures.join('; '));
   const replyTo = await replyAddressFor(e.productId, e.founderId);
   // Every message carries who is writing, from where, and how to stop it.
-  const footer = w ? `\n\n—\n${w.publicName} is an independent digital workshop operated by ${w.operatorName}.${w.postalAddress ? ` ${w.postalAddress}.` : ''}\nTo not hear from ${w.publicName} again: ${w.origin}/email` : '';
+  const footer = w ? `\n\n—\n${w.publicName} is an independent digital workshop operated by ${w.operatorName}.${w.postalAddress ? ` ${postalLines(w.postalAddress).join(', ')}.` : ''}\nTo not hear from ${w.publicName} again: ${w.origin}/email` : '';
   const body = offer.body.replace(/\{Business name\}/g, recipient.counterpartyRef.split(',')[0].trim()) + footer;
   const id = nanoid();
   await query(

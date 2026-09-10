@@ -42,8 +42,8 @@ import { waitingOn } from '../../src/services/founder/attention.js';
 import { exposureOf } from '../../src/services/venture/outcome.js';
 import { invoke } from '../../src/services/outbound/gateway.js';
 import { contactIsRefused } from '../../src/services/institution/contact-constraint.js';
-import { APEX_MICRO, establishPublicWorkshop, pauseNewEconomicActivity, publicWorkshopOf, resumeEconomicActivity, setMailForwardTo, setPostalAddress } from '../../src/services/public-workshop/settings.js';
-import { connectReplyInbox, connectWorkshopSending, standUpWorkshop, workshopHealth } from '../../src/services/public-workshop/infrastructure.js';
+import { APEX_MICRO, establishPublicWorkshop, pauseNewEconomicActivity, publicWorkshopOf, resumeEconomicActivity, setPostalAddress } from '../../src/services/public-workshop/settings.js';
+import { connectWorkshopSending, standUpWorkshop, workshopHealth } from '../../src/services/public-workshop/infrastructure.js';
 import { experimentPublication, livePublications, publicationGate, publishPage, publishSite, verifyPublication } from '../../src/services/public-workshop/publication.js';
 import { PUBLIC_EXPERIMENT_FIELDS, leakIn, privateStringsOf, projectExperiment, projectRegistry } from '../../src/services/public-workshop/projection.js';
 import { updatePublicCopy } from '../../src/services/public-workshop/identity.js';
@@ -97,7 +97,6 @@ afterAll(() => { vi.unstubAllGlobals(); });
 describe('the Workshop exists as rows before it exists in the world', () => {
   it('is established once, from the approved voice, as the owner\'s one earned company; its rows refuse what would make it untrue', async () => {
     const w = await establishPublicWorkshop({ founderId: OWNER });
-    await setMailForwardTo(OWNER, 'workshop-post@example.com');
     expect(w).toMatchObject({ publicName: 'Apex Micro', operatorName: 'Thomas Norton', origin: 'https://apexmicro.ai', zoneName: 'apexmicro.ai', contactEmail: 'thomas@apexmicro.ai', productId: FOUNDRY, economicPause: null, kvNamespaceId: null });
     expect(w.statement).toBe(APEX_MICRO.statement);
     expect((await establishPublicWorkshop({ founderId: OWNER })).founderId).toBe(OWNER);
@@ -109,9 +108,9 @@ describe('the Workshop exists as rows before it exists in the world', () => {
     await expect(query(`UPDATE public_workshop SET economic_pause_at = datetime('now'), economic_pause_reason = 'r', economic_pause_by = 'institution:hand' WHERE founder_id = ?`, [OWNER])).rejects.toThrow(/pause_is_the_owners/);
     // The capabilities exist, each with its consequence, and nothing that could transfer or delete.
     const caps = (await query(`SELECT capability_key, rung FROM capabilities WHERE family = 'public_workshop' ORDER BY sort_order`)).rows as unknown as Array<Record<string, unknown>>;
-    expect(caps.map((c) => `${String(c.capability_key)}:${String(c.rung)}`)).toEqual(['prepare_public_store:prepare', 'publish_public_page:public', 'sweep_public_store:reversible', 'operate_public_dns:reversible', 'retire_public_dns:reversible', 'deploy_public_workshop:public', 'attach_public_domain:public', 'route_public_mail:reversible']);
+    expect(caps.map((c) => `${String(c.capability_key)}:${String(c.rung)}`)).toEqual(['prepare_public_store:prepare', 'publish_public_page:public', 'sweep_public_store:reversible', 'operate_public_dns:reversible', 'retire_public_dns:reversible', 'deploy_public_workshop:public', 'attach_public_domain:public', 'route_public_mail:reversible', 'retire_public_mailbox:reversible']);
     expect((await query(`SELECT tool FROM capability_providers WHERE provider = 'cloudflare' ORDER BY tool`)).rows.map((r) => String((r as Record<string, unknown>).tool)))
-      .toEqual(['cloudflare_dns_delete', 'cloudflare_dns_upsert', 'cloudflare_domain_attach', 'cloudflare_email_route_upsert', 'cloudflare_kv_delete', 'cloudflare_kv_namespace_create', 'cloudflare_kv_put', 'cloudflare_worker_deploy']);
+      .toEqual(['cloudflare_dns_delete', 'cloudflare_dns_upsert', 'cloudflare_domain_attach', 'cloudflare_email_destination_delete', 'cloudflare_email_route_upsert', 'cloudflare_kv_delete', 'cloudflare_kv_namespace_create', 'cloudflare_kv_put', 'cloudflare_worker_deploy']);
     expect(Object.keys(JOB_REGISTRY)).toContain('public_workshop_tick');
   });
 
@@ -281,23 +280,39 @@ describe('Proof 1 is reframed under the Workshop without rewriting its history',
     // Written once: the same records asked for again change nothing.
     expect(state.cf.dns.filter((r) => r.name === 'send.apexmicro.ai')).toHaveLength(2);
     expect((await getExperimentView(OWNER, X, NOW))!.readiness.sending).toMatchObject({ status: 'ready', fromLine: 'Thomas Norton — Apex Micro <thomas@apexmicro.ai>' });
-    // The reply inbox: forwarded, awaiting his one click at the provider.
+    // THE WORKSHOP'S POST GOES TO THE WORKSHOP. Standing up the ears deploys
+    // the program that hears, gives it a store of its own, and points the
+    // Workshop's address at the program — no mailbox anywhere, private or
+    // otherwise, is part of the path.
     // A ROUTE THAT CANNOT ROUTE IS REFUSED, NOT REPORTED. When enabling the
     // zone fails, the door must record a failure — an "applied" receipt would
     // dedup every retry away and leave a rule that never receives mail.
+    const { standUpTheEars } = await import('../../src/services/public-workshop/infrastructure.js');
+    // The edge program is told where to hand messages, and that address has to
+    // be one the public internet can reach; the rest of this file speaks to the
+    // app locally, so the setting goes back the moment the ears are up.
+    const appUrl = process.env.APP_URL;
+    process.env.APP_URL = 'https://foundry-intel.fly.dev';
     state.cf.routingEnableFails = true;
-    await expect(connectReplyInbox(OWNER)).rejects.toThrow(/routing_not_enabled|door_refused/);
+    await expect(standUpTheEars(OWNER)).rejects.toThrow();
     expect(state.cf.routing.enabled).toBe(false);
+    expect((await workshopHealth(OWNER, { fetchImpl: fetchStub })).replyInbox.status).toBe('needs_attention');
     // The half-finished attempt left a rule behind on a disabled zone. The
     // retry must SEE it and update it, not try to create a second one and be
     // refused as a duplicate — which is how a half-finished setup gets stuck.
     expect(state.cf.routing.rules).toHaveLength(1);
     state.cf.routingEnableFails = false;
-    const inbox = await connectReplyInbox(OWNER);
-    expect(inbox).toMatchObject({ to: 'thomas@apexmicro.ai', forwardTo: 'workshop-post@example.com', destinationVerified: false });
-    expect((await workshopHealth(OWNER)).replyInbox.detail).toContain('not yet confirmed');
-    state.cf.routing.destinations[0].verified = '2026-09-09';
-    expect((await workshopHealth(OWNER)).replyInbox).toMatchObject({ status: 'healthy' });
+    const ears = await standUpTheEars(OWNER);
+    expect(state.cf.routing.rules).toHaveLength(1);
+    // The store it keeps post in is its own, and is never the store the site
+    // is served out of: mail in that one would be mail on the web.
+    expect(ears.store).not.toBe((await publicWorkshopOf(OWNER))!.kvNamespaceId);
+    expect((await publicWorkshopOf(OWNER))!.mailKvNamespaceId).toBe(ears.store);
+    const inboxHealth = (await workshopHealth(OWNER, { fetchImpl: fetchStub })).replyInbox;
+    expect(inboxHealth).toMatchObject({ status: 'healthy' });
+    expect(inboxHealth.detail).toContain('program that hears');
+    expect(inboxHealth.detail).toContain("Workshop's own store");
+    process.env.APP_URL = appUrl;
     // The postal address is his to supply; never invented.
     expect((await getExperimentView(OWNER, X, NOW))!.state).toBe('needs_you');
     expect(redirectedTo(await post('/foundry/public-workshop/postal', { address: 'PO Box 123, Example, MA 01000' }))).toContain('done=saved');

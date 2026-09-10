@@ -32,7 +32,7 @@ export interface CloudflareState {
   kv: Map<string, Map<string, string>>;
   workers: Map<string, { source: string; bindings: unknown[] }>;
   domains: Array<{ id: string; hostname: string; service: string; zone_id: string }>;
-  routing: { enabled: boolean; rules: Array<{ id: string; enabled: boolean; matchers: Array<{ type: string; field?: string; value?: string }>; actions: Array<{ type: string; value?: string[] }> }>; destinations: Array<{ email: string; verified: string | null }> };
+  routing: { enabled: boolean; rules: Array<{ id: string; enabled: boolean; matchers: Array<{ type: string; field?: string; value?: string }>; actions: Array<{ type: string; value?: string[] }> }>; destinations: Array<{ tag: string; email: string; verified: string | null }> };
   /** When true the public site answers 503 whatever the store holds: a provider that said yes to a page nobody can see. */
   siteDown: boolean;
   /** Enabling routing on the zone refuses, as it did on the real one. */
@@ -175,7 +175,13 @@ export function providerStubs(): { state: ProviderState; fetch: (url: string | U
       }
       if (pathOnly === '/accounts/acct_test/email/routing/addresses') {
         if (method === 'GET') return cfOk(cf.routing.destinations);
-        const d = { email: String(body.email), verified: null }; cf.routing.destinations.push(d); return cfOk(d);
+        const d = { tag: `dst_${++state.seq}`, email: String(body.email), verified: null }; cf.routing.destinations.push(d); return cfOk(d);
+      }
+      m = /^\/accounts\/acct_test\/email\/routing\/addresses\/([^/]+)$/.exec(pathOnly);
+      if (m && method === 'DELETE') {
+        const at = cf.routing.destinations.findIndex((d) => d.tag === m![1]);
+        if (at < 0) return cfErr(1003, 'destination not found', 404);
+        const [gone] = cf.routing.destinations.splice(at, 1); return cfOk(gone);
       }
       throw new Error(`unexpected Cloudflare call in rehearsal: ${method} ${u}`);
     }

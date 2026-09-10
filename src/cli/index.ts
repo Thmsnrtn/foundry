@@ -888,11 +888,6 @@ program.command('workshop:health <founderIdOrEmail>').description('Read the Work
   .action(async (who: string) => { const { workshopHealth } = await import('../services/public-workshop/infrastructure.js'); out(await workshopHealth(await founderIdOf(who))); });
 program.command('workshop:sending <founderIdOrEmail>').description('Connect sending as the Workshop: provider domain, its DNS through the door, verification, identity')
   .action(async (who: string) => { const { connectWorkshopSending } = await import('../services/public-workshop/infrastructure.js'); out(await connectWorkshopSending(await founderIdOf(who))); });
-program.command('workshop:inbox <founderIdOrEmail>').description('Forward the Workshop address to the owner (one confirmation click at the provider the first time)')
-  .action(async (who: string) => { const { connectReplyInbox } = await import('../services/public-workshop/infrastructure.js'); out(await connectReplyInbox(await founderIdOf(who))); });
-program.command('workshop:forward-to <founderIdOrEmail> <address>').description('Where Apex Micro\'s post is delivered. An owner decision; never the founder account address')
-  .action(async (who: string, address: string) => { const { setMailForwardTo } = await import('../services/public-workshop/settings.js'); await setMailForwardTo(await founderIdOf(who), address); out({ ok: true }); });
-
 program.command('workshop:postal <founderIdOrEmail> <address>').description('Record the owner-supplied postal address commercial mail must carry')
   .action(async (who: string, address: string) => { const { setPostalAddress } = await import('../services/public-workshop/settings.js'); await setPostalAddress(await founderIdOf(who), address); out({ ok: true }); });
 program.command('workshop:rehearse <founderIdOrEmail>').description('Experiment 002: publish, verify, update, conclude and close a synthetic experiment page')
@@ -935,8 +930,12 @@ program.command('workshop:answer-post <founderIdOrEmail>').description('Answer e
 program.command('probe:screen-001 <founderIdOrEmail>').description('Apply the recorded public-record screening to Experiment 001 candidates; contacts nobody')
   .action(async (who: string) => { const { applyProof1Screening } = await import('../services/venture/proof-1-screening.js'); out(await applyProof1Screening(await founderIdOf(who))); });
 
-program.command('workshop:stand-up-ears <founderIdOrEmail>').description('Deploy the program that hears and point the Workshop address at it; forwards to the owner first, always')
+program.command('workshop:stand-up-ears <founderIdOrEmail>').description('Deploy the program that hears, give it a store of its own, and point the Workshop address at it; nothing is forwarded to a mailbox')
   .action(async (who: string) => { const { standUpTheEars } = await import('../services/public-workshop/infrastructure.js'); out(await standUpTheEars(await founderIdOf(who))); });
+program.command('workshop:retire-mailbox <founderIdOrEmail> <email>').description('Remove a mailbox the Workshop no longer delivers to from its provider account; refuses while anything still routes there')
+  .action(async (who: string, email: string) => { const { retireMailbox } = await import('../services/public-workshop/infrastructure.js'); out(await retireMailbox(await founderIdOf(who), email)); });
+program.command('workshop:replay-post <founderIdOrEmail>').description('Read the Workshop\'s own store and hear anything that arrived while Foundry could not take it')
+  .action(async (who: string) => { const { replayHeldMail } = await import('../services/public-workshop/mail.js'); out(await replayHeldMail(await founderIdOf(who))); });
 program.command('workshop:gate <experimentId>').description('The publication gate for one experiment, as outbound would see it')
   .action(async (experimentId: string) => { const { publicationGate } = await import('../services/public-workshop/publication.js'); out(await publicationGate(experimentId)); });
 

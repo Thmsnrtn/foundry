@@ -149,60 +149,46 @@ export async function connectWorkshopSending(founderId: string, fetchImpl: typeo
   return { domain: after.name, status: after.status, records: written, identity, verified: after.status === 'verified' };
 }
 
-/** Mail to the Workshop's address reaches the owner's inbox. The destination
- * needs one click from him at the provider the first time; the report says so. */
-/**
- * THE KEY NAMES THE EFFECT WANTED, NOT THE CALL MADE.
- *
- * An at-most-once key stops the same act happening twice, which is right, and
- * it does it by what the act was for. This one used to say "a route from this
- * address to that one" — and a run that created the rule but failed to turn
- * routing on satisfied that description while leaving mail on the floor. The
- * key now says what was actually wanted: a route that is *enabled*. The earlier
- * half-finished invocation keeps its own record and its own key; it is not
- * rewritten, and it no longer answers for this.
- */
-export async function connectReplyInbox(founderId: string): Promise<{ to: string; forwardTo: string; destinationVerified: boolean }> {
-  const w = need(await publicWorkshopOf(founderId));
-  // WHERE THE WORKSHOP'S POST GOES IS A DECISION, NOT AN INFERENCE. This read
-  // `founders.email` and so made the owner's private mailbox — the address he
-  // signs in with — into Apex Micro's mail infrastructure, silently, because it
-  // was the default in a line of code. The Workshop's forwarding address is its
-  // own setting now, and absent one this refuses rather than reaching for
-  // whatever address happens to be on the founder row.
-  const forwardTo = w.mailForwardTo ?? '';
-  if (!forwardTo) {
-    throw new WorkshopRefused('no_forwarding_address',
-      'the Workshop has no address of its own to deliver post to, and the owner\'s personal mailbox is not one');
-  }
-  const r = await door(w, 'cloudflare_email_route_upsert', `forward ${w.contactEmail} to the owner`, { zone_name: w.zoneName, to: w.contactEmail, forward_to: forwardTo, purpose: 'replies to the Workshop reach the person who wrote' }, `public:${founderId}:route:enabled:${w.contactEmail}:${forwardTo}`);
-  return { to: w.contactEmail, forwardTo, destinationVerified: Boolean(r.destinationVerified) };
-}
-
 /**
  * GIVE THE WORKSHOP EARS.
  *
- * Deploys the edge mail program through the same door as everything else, then
- * points the Workshop's address at it. The order matters and is not an
- * accident: the program is deployed and verified BEFORE the routing rule is
- * changed, so at no moment is mail routed to a program that is not there. If
- * the deploy fails, routing is untouched and mail keeps forwarding exactly as
- * it does today.
+ * Makes the Workshop a store of its own if it has none, deploys the edge mail
+ * program through the same door as everything else, then points the Workshop's
+ * address at it. The order matters and is not an accident: the store exists and
+ * the program is deployed and verified BEFORE the routing rule is changed, so
+ * at no moment is mail routed to a program that is not there, or to a program
+ * with nowhere to put what it receives. If either fails, routing is untouched.
  *
- * Reversible in one step: point the rule back at the address. The program
- * forwards before it does anything else, so even while it is live the worst
- * case for a person writing in is that Foundry does not hear them.
+ * THE KEY NAMES THE EFFECT WANTED, NOT THE CALL MADE. An at-most-once key stops
+ * the same act happening twice, which is right, and it does it by what the act
+ * was for. The routing key used to say "a route from this address to that one"
+ * — and a run that created the rule but failed to turn routing on satisfied
+ * that description while leaving mail on the floor. It now says what was
+ * actually wanted: a route that is *enabled*, to the program that hears. The
+ * earlier half-finished invocations keep their own records and their own keys;
+ * they are not rewritten, and they no longer answer for this.
+ *
+ * Reversible in one step, and the step is a decision rather than a default:
+ * point the rule at whatever mailbox somebody chooses. Nothing here knows one.
  */
-export async function standUpTheEars(founderId: string): Promise<{ program: string; hearing: boolean; forwardTo: string }> {
+export async function standUpTheEars(founderId: string): Promise<{ program: string; hearing: boolean; store: string }> {
   const w = need(await publicWorkshopOf(founderId));
-  // The Workshop's own address, for the reason given on connectReplyInbox: the
-  // founder row's address is who the owner is to Foundry, not where Apex
-  // Micro's post is delivered, and defaulting to it is how a private mailbox
-  // becomes Workshop infrastructure without anybody deciding it should.
-  const forwardTo = w.mailForwardTo ?? '';
-  if (!forwardTo) {
-    throw new WorkshopRefused('no_forwarding_address',
-      'the Workshop has no address of its own to deliver post to, and the owner\'s personal mailbox is not one');
+  // SOMEWHERE THAT IS NOT FOUNDRY. The edge writes every message down before
+  // it tells Foundry anything, so an outage here cannot lose one. That used to
+  // be a mailbox; it is a store the Workshop owns, which buys the same
+  // property without making a private account infrastructure.
+  let store = w.mailKvNamespaceId ?? '';
+  if (!store) {
+    // Made through the same governed door as everything else, with a receipt,
+    // and never the page store.
+    const made = await door(w, 'cloudflare_kv_namespace_create', 'a store for the Workshop\'s own post',
+      { title: `${w.workerName}-mail`, purpose: 'keep every message the Workshop receives, where only the Workshop can read it' },
+      `public:${founderId}:mail_store`);
+    store = String((made as { id?: string }).id ?? '');
+    if (!store) throw new WorkshopRefused('no_mail_store', 'the store could not be made');
+    if (store === w.kvNamespaceId) throw new WorkshopRefused('mail_store_is_not_the_page_store');
+    const { setMailStore } = await import('./settings.js');
+    await setMailStore(founderId, store);
   }
   const { openTheEars } = await import('./mail.js');
   const { MAIL_WORKER_SOURCE } = await import('./mail-worker-source.js');
@@ -214,14 +200,38 @@ export async function standUpTheEars(founderId: string): Promise<{ program: stri
   const name = WORKSHOP_MAIL_WORKER_NAME();
   await door(w, 'cloudflare_worker_deploy', 'the program that hears for the Workshop',
     { script_name: name, source: MAIL_WORKER_SOURCE, kv_namespace_id: w.kvNamespaceId ?? '',
-      forward_to: forwardTo, intake_url: ears.url, intake_key: ears.intakeKey,
-      purpose: 'receive the Workshop\'s mail, forward it to the owner, and hand a copy to Foundry' },
+      mail_namespace_id: store, intake_url: ears.url, intake_key: ears.intakeKey,
+      purpose: 'receive the Workshop\'s mail, write it down where only the Workshop can read it, and hand it to Foundry' },
     `public:${founderId}:mail_program:${digestOf(MAIL_WORKER_SOURCE)}`);
   const routed = await door(w, 'cloudflare_email_route_upsert', 'route the Workshop address to the program that hears',
-    { zone_name: w.zoneName, to: w.contactEmail, forward_to: forwardTo, worker: name,
-      purpose: 'replies to the Workshop reach the person who wrote, and the institution hears them too' },
+    { zone_name: w.zoneName, to: w.contactEmail, worker: name,
+      purpose: 'mail to the Workshop is kept by the Workshop and heard by the institution' },
     `public:${founderId}:route:hearing:${w.contactEmail}:${name}`);
-  return { program: name, hearing: Boolean((routed as { enabled?: boolean }).enabled), forwardTo };
+  return { program: name, hearing: Boolean((routed as { enabled?: boolean }).enabled), store };
+}
+
+/**
+ * RETIRE A MAILBOX THE WORKSHOP NO LONGER DELIVERS TO.
+ *
+ * The last step of removing a path, and the one that is easy to skip because
+ * skipping it changes nothing today. A verified destination address is standing
+ * permission for this provider account to deliver mail into a private inbox;
+ * once nothing routes there it is not leftover configuration, it is a path that
+ * still exists and that a later rule could point at without anybody deciding to.
+ *
+ * The door refuses while an enabled rule still forwards there, so this cannot
+ * be the act that drops somebody's mail. Reversing it means inviting the
+ * address again and its owner accepting — which is the right amount of friction
+ * for putting a private mailbox back into an institution's mail path.
+ */
+export async function retireMailbox(founderId: string, email: string): Promise<{ email: string; gone: boolean }> {
+  const w = need(await publicWorkshopOf(founderId));
+  const address = email.trim().toLowerCase();
+  if (!address) throw new WorkshopRefused('no_mailbox', 'name the address to retire');
+  const r = await door(w, 'cloudflare_email_destination_delete', `retire ${address} from the Workshop's provider account`,
+    { zone_name: w.zoneName, email: address, purpose: 'the Workshop keeps its own post; nothing is delivered to a mailbox' },
+    `public:${founderId}:mailbox_retired:${address}`);
+  return { email: address, gone: Boolean((r as { gone?: boolean }).gone) };
 }
 
 // ─── Health ──────────────────────────────────────────────────────────────────
@@ -275,24 +285,21 @@ export async function workshopHealth(founderId: string, opts: { fetchImpl?: type
       const routing = zone ? await readEmailRouting(zone.id) : null;
       const rule = routing?.rules.find((r) => r.to === w.contactEmail);
       // ONCE THE WORKSHOP CAN HEAR, THE RULE NAMES THE PROGRAM, NOT A MAILBOX.
-      // The mail program forwards to the owner itself, so a check that reads
-      // the forwarding address off the RULE finds nothing and concludes the
-      // owner never confirmed his address — which is how this reported "you
-      // have not yet confirmed" about an address Cloudflare had verified, and
-      // named no address at all while doing it. Where the rule routes to the
-      // Workshop's own program, the address to ask about is the owner's.
-      const { WORKSHOP_MAIL_WORKER_NAME: mailProgram } = await import('../integration/cloudflare-gateway.js');
+      // WHAT THE RULE POINTS AT, AND WHETHER WHAT IT POINTS AT KEEPS ANYTHING.
+      // There is no forwarding address to check any more: mail goes to the
+      // Workshop's own program, which writes every message into the Workshop's
+      // own store before Foundry is told. So the question is no longer "did
+      // the owner confirm a mailbox" but "is the post being kept".
+      const { WORKSHOP_MAIL_WORKER_NAME: mailProgram, listKvKeys } = await import('../integration/cloudflare-gateway.js');
       const throughProgram = rule?.worker != null && rule.worker === mailProgram();
-      // The Workshop's own forwarding address, never the founder row's.
-      const wanted = throughProgram ? [String(w.mailForwardTo ?? '')] : (rule?.forwardTo ?? []);
-      const dest = rule ? routing?.destinations.find((d) => wanted.includes(d.email)) : undefined;
+      const held = throughProgram && w.mailKvNamespaceId
+        ? (await listKvKeys(w.mailKvNamespaceId, 'inbox/')).length
+        : null;
       health.replyInbox = !routing?.enabled ? { status: 'needs_attention', detail: 'mail routing is not enabled on the zone' }
-        : !rule ? { status: 'needs_attention', detail: `no forwarding rule for ${w.contactEmail}` }
-          : wanted.filter(Boolean).length === 0 ? { status: 'needs_attention', detail: `the rule for ${w.contactEmail} names nowhere to deliver` }
-            : !dest?.verified ? { status: 'needs_attention', detail: `forwards to ${wanted.filter(Boolean).join(', ')}, which you have not yet confirmed at Cloudflare (one click in the email they sent you)` }
-              : { status: 'healthy', detail: throughProgram
-                ? `replies to ${w.contactEmail} reach ${dest.email} through the program that hears`
-                : `replies to ${w.contactEmail} reach ${dest.email}` };
+        : !rule ? { status: 'needs_attention', detail: `no rule for ${w.contactEmail}` }
+          : !throughProgram ? { status: 'needs_attention', detail: `${w.contactEmail} does not reach the program that hears` }
+            : !w.mailKvNamespaceId ? { status: 'needs_attention', detail: 'the Workshop has nowhere of its own to keep post' }
+              : { status: 'healthy', detail: `${w.contactEmail} reaches the program that hears, which keeps every message in the Workshop's own store${held === 0 ? ' (nothing held yet)' : ` (${String(held)} held)`}` };
     } catch (e) { health.replyInbox = { status: 'unknown', detail: e instanceof Error ? e.message : String(e) }; }
   } else health.replyInbox = { status: 'unknown', detail: 'cannot be read without Cloudflare' };
   await recordWorkshopHealth(founderId, health as unknown as Record<string, unknown>);
@@ -303,7 +310,7 @@ export async function workshopHealth(founderId: string, opts: { fetchImpl?: type
     const open = await earsAreOpen(founderId);
     const m = await mailHealth(founderId);
     health.mail = !open
-      ? { status: 'needs_attention', detail: 'the Workshop cannot hear: mail is forwarded to the owner and never reaches Foundry' }
+      ? { status: 'needs_attention', detail: 'the Workshop cannot hear: nothing at the edge is authorised to hand it a message' }
       : m.waiting > 0
         ? { status: 'needs_attention', detail: `${m.waiting} waiting on you${m.oldestWaitingHours != null ? `, oldest ${m.oldestWaitingHours}h` : ''}` }
         : { status: 'healthy', detail: m.heard === 0 ? 'listening; nobody has written yet' : `${m.heard} heard, none waiting on you` };

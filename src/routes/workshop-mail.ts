@@ -35,7 +35,7 @@ export function mountWorkshopMail(app: Hono): void {
   // capability, and giving it one would be theatre.
   app.post('/workshop/mail', async (c) => {
   const key = c.req.header('x-workshop-intake') ?? '';
-  const { earsFor, hearMail } = await import('../services/public-workshop/mail.js');
+  const { earsFor } = await import('../services/public-workshop/mail.js');
   const founderId = await earsFor(key);
   // The same shape of refusal whether the key is absent, malformed or wrong.
   if (!founderId) return c.json({ ok: false }, 401);
@@ -47,106 +47,19 @@ export function mountWorkshopMail(app: Hono): void {
     payload = JSON.parse(text) as Record<string, unknown>;
   } catch { return c.json({ ok: false, reason: 'unreadable' }, 400); }
 
-  const headers = (payload.headers ?? {}) as Record<string, string>;
-  const s = (v: unknown): string => (typeof v === 'string' ? v : '');
-  const raw = s(payload.raw_base64);
-  const decoded = raw ? Buffer.from(raw, 'base64').toString('utf8') : '';
-
   try {
-    const heard = await hearMail({
-      founderId,
-      to: s(payload.to), from: addressFrom(s(headers.from)) || s(payload.from),
-      fromName: nameFrom(s(headers.from)),
-      subject: decodeWords(s(headers.subject)) || null,
-      body: textOf(decoded),
-      rfcMessageId: s(headers['message-id']) || `<generated-${Date.now()}@intake>`,
-      inReplyTo: s(headers['in-reply-to']) || null,
-      references: s(headers.references) || null,
-      spf: s(headers['received-spf']) || null,
-      dkim: s(headers['dkim-signature']) ? 'present' : null,
-      dmarc: s(headers['authentication-results']) || null,
-      sentAt: s(headers.date) || null,
-      size: typeof payload.size === 'number' ? payload.size : null,
-    });
+    // ONE READING, SHARED WITH REPLAY. A message recovered from the Workshop's
+    // own store after an outage must become the same message as one that
+    // arrived live, or an outage would quietly change what somebody said.
+    const { ingestEdgeRecord } = await import('../services/public-workshop/mail.js');
+    const heard = await ingestEdgeRecord(founderId, payload);
     // Enough for the edge to know it landed, and nothing about who or what.
     return c.json({ ok: true, duplicate: heard.duplicate });
   } catch {
-    // A message we could not take is a message the owner still has: the edge
-    // forwarded it before calling here. Report failure without explaining it.
+    // A message we could not take is a message the Workshop still holds: the
+    // edge wrote it into its own store before calling here, and replay will
+    // find it. Report failure without explaining it.
     return c.json({ ok: false }, 500);
   }
   });
-}
-
-/** The display name, if the header carries one. Never trusted as identity. */
-function nameFrom(fromHeader: string): string | null {
-  const m = /^\s*"?([^"<]+?)"?\s*</.exec(fromHeader);
-  return m ? m[1]!.trim() || null : null;
-}
-
-/**
- * WHO A PERSON WOULD SAY WROTE THIS, out of the From: header.
- *
- * The envelope sender is not it. A message relayed through any sending service
- * arrives with a return-path like
- * `010001a0…-000000@send.apexmicro.ai` — a bounce address, unique per message,
- * belonging to nobody. The first real message the Workshop ever received had
- * exactly that as its envelope sender, and storing it as the person's identity
- * would mean a reply going nowhere and, far worse, an opt-out recorded against
- * an address that will never be seen again while the person who asked to be
- * left alone stays on the list.
- *
- * So identity comes from the header a human composes, and the envelope is the
- * fallback for the case where there is no usable one.
- */
-function addressFrom(fromHeader: string): string {
-  const angled = /<([^>]+)>/.exec(fromHeader);
-  const candidate = (angled ? angled[1]! : fromHeader).trim();
-  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate) ? candidate.toLowerCase() : '';
-}
-
-/**
- * A SUBJECT AS A PERSON WROTE IT, not as SMTP carried it.
- *
- * Anything outside ASCII travels as an RFC 2047 encoded-word — the first real
- * message arrived as `=?UTF-8?Q?Ingress_check_=E2=80=94_please_ignore?=`. Left
- * encoded it is unreadable to the owner, and worse: the rules that read a
- * message see the `?` in the encoding and take a statement for a question.
- */
-function decodeWords(subject: string): string {
-  if (!subject.includes('=?')) return subject;
-  return subject.replace(/=\?([A-Za-z0-9_-]+)\?([BbQq])\?([^?]*)\?=/g, (whole, charset: string, kind: string, text: string) => {
-    try {
-      const enc = charset.toLowerCase() === 'utf-8' ? 'utf8' : 'latin1';
-      if (kind.toLowerCase() === 'b') return Buffer.from(text, 'base64').toString(enc);
-      const bytes = text.replace(/_/g, ' ').replace(/=([0-9A-Fa-f]{2})/g, (_m, h: string) => String.fromCharCode(parseInt(h, 16)));
-      return Buffer.from(bytes, 'latin1').toString(enc);
-    } catch { return whole; }
-  }).replace(/\?=\s+=\?/g, '').trim();
-}
-
-/**
- * THE TEXT A PERSON WROTE, out of the MIME a machine sent.
- *
- * Deliberately small and deliberately not a MIME library: it takes the first
- * text/plain part it can find, falls back to stripping tags, and truncates.
- * The whole message is kept verbatim upstream, so nothing here has to be
- * perfect — it only has to be safe. No HTML is stored for rendering, no
- * attachment is decoded, nothing is executed, and no external reference in the
- * message is fetched. An attachment that is never opened cannot run.
- */
-function textOf(rawMime: string): string {
-  if (!rawMime.trim()) return '(no readable body)';
-  const body = rawMime.split(/\r?\n\r?\n/).slice(1).join('\n\n') || rawMime;
-  const plain = /content-type:\s*text\/plain[\s\S]*?\r?\n\r?\n([\s\S]*?)(?:\r?\n--|\r?\n\.\r?\n|$)/i.exec(rawMime);
-  const chosen = plain ? plain[1]! : body;
-  const stripped = chosen
-    .replace(/<script[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
-    .replace(/&nbsp;/gi, ' ')
-    .replace(/\r/g, '')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-  return (stripped || '(no readable body)').slice(0, 20_000);
 }

@@ -8,6 +8,7 @@
 // enough for a thumb, because a recipient opens an experiment link on a phone.
 // =============================================================================
 import type { PublicExperiment, PublicWorkshopFacts } from './projection.js';
+import { postalLines } from './settings.js';
 
 const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const paras = (s: string): string => s.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('\n');
@@ -66,7 +67,7 @@ ${body}
 <footer>
   <p><strong>${esc(f.name)}</strong> is an independent digital workshop operated by ${esc(f.operator)}, ${esc(f.region)}.</p>
   <p><a href="/contact">Contact</a> · <a href="/privacy">Privacy</a> · <a href="/email">Email &amp; opt-out</a> · <a href="/refunds">Refunds</a> · <a href="/terms">Terms</a></p>
-  ${f.postalAddress ? `<p>${esc(f.postalAddress)}</p>` : ''}
+  ${f.postalAddress ? `<p>${postalLines(f.postalAddress).map(esc).join('<br />')}</p>` : ''}
 </footer>
 </body>
 </html>
@@ -203,7 +204,7 @@ export function renderContact(f: PublicWorkshopFacts): string {
 <p class="lede">Email <a href="mailto:${esc(f.contactEmail)}">${esc(f.contactEmail)}</a>. It reaches ${esc(f.operator)} directly.</p>
 <p>Replies to any experiment email arrive at the same place. If you bought something and want a refund, the delivery email has a link; replying works too.</p>
 <p>If you would rather not hear from ${esc(f.name)} again, use the <a href="/email">opt-out page</a> or say so in a reply.</p>
-${f.postalAddress ? `<p>Post: ${esc(f.postalAddress)}</p>` : ''}`;
+${f.postalAddress ? `<p>Post: ${postalLines(f.postalAddress).map(esc).join('<br />')}</p>` : ''}`;
   return shell(f, 'Contact', '/contact', body, `How to reach ${f.operator} at ${f.name}.`);
 }
 

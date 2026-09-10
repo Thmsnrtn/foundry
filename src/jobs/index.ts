@@ -3088,6 +3088,36 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
     description: 'Answer what the Workshop has been asked, inside the envelope the owner set',
   },
 
+  workshop_mail_replay_tick: {
+    fn: async () => {
+      // NOTHING IS LOST BECAUSE FOUNDRY WAS DOWN. The program at the edge
+      // writes every message into the Workshop's own store before it tells
+      // Foundry anything, so a message that arrived mid-deploy, mid-outage or
+      // while the intake door was refusing is sitting there rather than gone.
+      // Recovery is therefore not an operator's errand to remember: it is this,
+      // running on a timer, deduplicating on the sender's own Message-ID, and
+      // costing an index lookup per message it has already heard.
+      const { replayHeldMail } = await import('../services/public-workshop/mail.js');
+      const held = (await query(`SELECT founder_id FROM public_workshop WHERE mail_kv_namespace_id IS NOT NULL`, []))
+        .rows as unknown as Array<Record<string, unknown>>;
+      for (const w of held) {
+        const founderId = String(w.founder_id);
+        try {
+          const r = await replayHeldMail(founderId);
+          if (r.recovered || r.unreadable) {
+            logger.info(`workshop_mail_replay_tick: ${r.recovered} recovered, ${r.unreadable} unreadable of ${r.held} held`,
+              { jobName: 'workshop_mail_replay_tick' });
+          }
+        } catch (error) {
+          logger.warn(`workshop_mail_replay_tick: ${founderId}: ${error instanceof Error ? error.message : String(error)}`,
+            { jobName: 'workshop_mail_replay_tick' });
+        }
+      }
+    },
+    schedule: '*/10 * * * *',
+    description: 'Hear anything the Workshop held while Foundry could not take it',
+  },
+
   experiment_hand_tick: {
     fn: async () => {
       // The first real experiment's hand: offers to the businesses the owner

@@ -18,7 +18,7 @@ import { requireInstitutionOwner } from '../../middleware/rbac.js';
 import { establishPublicWorkshop, pauseNewEconomicActivity, publicWorkshopOf, resumeEconomicActivity, setAbout, setPostalAddress, WorkshopRefused } from '../../services/public-workshop/settings.js';
 import { livePublications, previewExperimentPage, publishSite, verifySite } from '../../services/public-workshop/publication.js';
 import { projectRegistry } from '../../services/public-workshop/projection.js';
-import { cloudflareReceipts, connectReplyInbox, connectWorkshopSending, outstandingObligations, standUpWorkshop, workshopHealth } from '../../services/public-workshop/infrastructure.js';
+import { cloudflareReceipts, connectWorkshopSending, outstandingObligations, standUpWorkshop, workshopHealth } from '../../services/public-workshop/infrastructure.js';
 import type { Signal, WorkshopHealth } from '../../services/public-workshop/infrastructure.js';
 import { suppress, suppressionsOf } from '../../services/public-workshop/suppression.js';
 import { cloudflareConfigured } from '../../services/integration/cloudflare-gateway.js';
@@ -156,7 +156,7 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
         <dt>Postal address</dt><dd>${w.postalAddress ?? html`<span class="quiet">none recorded — commercial email must carry one, so no offer goes out until it does</span>`}</dd>
         <dt>Contact spacing</dt><dd>${String(w.contactGapDays)} days between tests to one address; at most ${String(w.contactCeilingPerYear)} a year</dd>
       </dl>
-      <form method="POST" action="/foundry/public-workshop/postal" class="stack"><label>Postal address for commercial mail (a business or PO box address, not your home) <input type="text" name="address" value="${w.postalAddress ?? ''}" placeholder="PO Box …, Town, MA 0xxxx" /></label><button class="btn" type="submit">Save</button></form>
+      <form method="POST" action="/foundry/public-workshop/postal" class="stack"><label>Postal address for commercial mail (a business or mailbox address, not your home) <textarea name="address" rows="4" placeholder="Street, Suite …&#10;Town, MA 0xxxx">${w.postalAddress ?? ''}</textarea></label><button class="btn" type="submit">Save</button></form>
       <form method="POST" action="/foundry/public-workshop/about" class="stack"><label>About you, for the public About page (only what you want published) <textarea name="about" rows="4">${w.about}</textarea></label><button class="btn" type="submit">Save</button></form>
     </section>
     <style>
@@ -200,7 +200,6 @@ workshopRoutes.post('/foundry/public-workshop/stand-up', requireInstitutionOwner
 workshopRoutes.post('/foundry/public-workshop/publish', requireInstitutionOwner(), act(async (founderId) => { const r = await publishSite(founderId, `founder:${founderId}`); if (r.failed.length) throw new WorkshopRefused('publication_failed', r.failed.map((f) => `${f.path}: ${f.reason}`).join('; ')); return 'published'; }));
 workshopRoutes.post('/foundry/public-workshop/check', requireInstitutionOwner(), act(async (founderId) => { await verifySite(founderId); await workshopHealth(founderId); return 'checked'; }));
 workshopRoutes.post('/foundry/public-workshop/sending', requireInstitutionOwner(), act(async (founderId) => { const r = await connectWorkshopSending(founderId); await workshopHealth(founderId); if (!r.verified) throw new WorkshopRefused('domain_pending', `the provider reports ${r.domain} as ${r.status}; records written: ${r.records.join(', ')}. Try again in a few minutes.`); return 'sending'; }));
-workshopRoutes.post('/foundry/public-workshop/inbox', requireInstitutionOwner(), act(async (founderId) => { const r = await connectReplyInbox(founderId); await workshopHealth(founderId); if (!r.destinationVerified) throw new WorkshopRefused('confirm_at_cloudflare', `forwarding to ${r.forwardTo} is set; Cloudflare has emailed you a confirmation link to click`); return 'inbox'; }));
 workshopRoutes.post('/foundry/public-workshop/pause', requireInstitutionOwner(), act(async (founderId, form) => { await pauseNewEconomicActivity({ founderId, reason: String(form.reason ?? '') }); return 'paused'; }));
 workshopRoutes.post('/foundry/public-workshop/resume', requireInstitutionOwner(), act(async (founderId) => { await resumeEconomicActivity(founderId); return 'resumed'; }));
 workshopRoutes.post('/foundry/public-workshop/postal', requireInstitutionOwner(), act(async (founderId, form) => { await setPostalAddress(founderId, String(form.address ?? '')); return 'saved'; }));

@@ -2087,3 +2087,73 @@ nothing; a refusal is still honoured at the moment it is heard.
 Correspondence mode is `off` again. The Workshop does not answer for itself
 until the owner says it may — one control, three states, every change carrying
 its reason.
+
+## The Workshop keeps its own post (2026-09-10)
+
+Migration 294. The previous section named a live dependency and did not remove
+it: `thomas@apexmicro.ai` was delivered to the edge program, which forwarded
+every message to the owner's personal mailbox. The reasoning was that durable
+receipt requires a mailbox, that Cloudflare hosts none, and that Foundry has no
+SMTP inbox — so pointing the forward elsewhere would drop the Workshop's mail
+on the floor.
+
+**The premise was wrong.** The property that mattered was never *a mailbox*. It
+was *somewhere durable that is not Foundry*, so that a message is not lost
+because the institution happened to be redeploying when it arrived. A Workers
+KV store the Workshop already owns is exactly that, and an Email Worker may
+write to KV inside its `email()` handler. The mailbox was a habit, not a
+requirement.
+
+**The architecture, end to end:**
+
+```
+internet sender
+  → MX for apexmicro.ai (Cloudflare Email Routing)
+    → the Workshop's own edge program
+       1. env.MAIL.put('inbox/<when>/<Message-ID>', the whole message)   durable
+       2. POST the intake door, 10s budget, best effort                  doorbell
+       3. if BOTH failed: message.setReject(...)                         fail closed
+    → Foundry hears it, reads it, decides, answers as Apex Micro
+      → the owner sees it in the Founder Inbox
+```
+
+No `message.forward`. No destination address. Nothing to point at a private
+account by default, because there is no address field left to default.
+
+| | |
+|---|---|
+| `founders.email` | who the owner is to Foundry |
+| `public_workshop.contact_email` | who Apex Micro is to the world |
+| `public_workshop.mail_kv_namespace_id` | where Apex Micro keeps its own post |
+
+`mail_forward_to` is dropped. `connectReplyInbox` is deleted, with its route and
+its CLI command. `standUpTheEars` now makes the Workshop a store of its own
+through the governed door if it has none, and a row guard refuses a mail store
+that is the same namespace as the page store — mail in the store the site is
+served out of would be mail on the web.
+
+**What the three failure cases do.** Store ok: the message is safe whether or
+not Foundry ever hears the doorbell. Store fails but the POST lands: degraded,
+nothing lost. Both fail: the sender is told, with an SMTP rejection, because an
+institution that can eat its customers' mail while claiming to serve them is
+worse than one that cannot hear at all.
+
+**Recovery is not an errand somebody has to remember.** `replayHeldMail` lists
+the store, skips what is already heard by reading the Message-ID out of the key
+itself, and hands the rest through the ordinary intake door — the same reading,
+`edge-record.ts`, that the live route uses, so a message recovered after an
+outage is the same message as one that arrived live. `workshop_mail_replay_tick`
+runs it every ten minutes; `workshop:replay-post` runs it by hand.
+
+**The postal address is the owner's, exactly as he gave it.** It arrives as
+lines and is stored as lines — a suite and a mailbox number on their own line
+are not decoration — and `postalLines()` reshapes it at the point of rendering:
+a block where a block reads, one line where only one line fits. One recorded
+truth, no second copy to drift.
+
+**What remains of the personal address, and why.** It is the *authentication*
+identity of this private instance — `getOwnerEmail()`, deployment configuration,
+the answer to "who may sign in here". It is not a communication endpoint, not a
+routing destination, not a sender, not a test correspondent, and no module in
+`public-workshop/` may read it. Changing who owns the instance is the owner's
+decision and not a mail-system change.

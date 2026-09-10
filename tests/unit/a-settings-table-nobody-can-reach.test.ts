@@ -110,7 +110,7 @@ describe('the table is gone', () => {
     // one hundred and one.
     // And `workshop_correspondence_tick` — the Workshop answering its own post,
     // inside whatever envelope the owner set — makes one hundred and three.
-    expect(Object.keys(JOB_REGISTRY).length, 'ninety-seven before, one hundred and three now').toBe(103);
+    expect(Object.keys(JOB_REGISTRY).length, 'ninety-seven before, one hundred and four now').toBe(104);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

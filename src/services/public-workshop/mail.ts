@@ -375,3 +375,63 @@ export async function mailHealth(founderId: string): Promise<{ waiting: number; 
     unread: Number(u?.n ?? 0), heard: Number(t?.n ?? 0),
   };
 }
+
+// ─── What the edge kept, when Foundry was not listening ──────────────────────
+
+/**
+ * REPLAY WHAT THE WORKSHOP HELD ONTO.
+ *
+ * The edge writes every message into the Workshop's own store BEFORE it tells
+ * Foundry anything, so a message that arrived while Foundry was down, mid-
+ * deploy, or refusing is not lost — it is sitting there. This reads the store
+ * and hands anything Foundry has not already heard through the ordinary door.
+ *
+ * Idempotent twice over: the store is read, never trusted to say what was
+ * consumed, and `hearMail` deduplicates on the sender's own Message-ID. Running
+ * it after every outage, or on a timer, or twice by accident, produces the same
+ * inbox either way.
+ */
+export async function replayHeldMail(founderId: string, limit = 200): Promise<{
+  held: number; alreadyHeard: number; recovered: number; unreadable: number;
+}> {
+  const w = await publicWorkshopOf(founderId);
+  if (!w?.mailKvNamespaceId) throw new MailRefused('no_mail_store');
+  const { listKvKeys, readKvValue } = await import('../integration/cloudflare-gateway.js');
+  const keys = (await listKvKeys(w.mailKvNamespaceId, 'inbox/')).slice(0, limit);
+  let alreadyHeard = 0; let recovered = 0; let unreadable = 0;
+  for (const key of keys) {
+    // THE KEY SAYS WHICH MESSAGE IT IS: `inbox/<when>/<its own Message-ID>`.
+    // A message already heard therefore costs one index lookup instead of
+    // fetching a whole message body back out of the store to learn nothing.
+    // This is only a shortcut — `hearMail` still deduplicates for real, so a
+    // key that lies about its contents changes nothing.
+    const named = key.slice(key.indexOf('/', 'inbox/'.length) + 1);
+    let rfc = '';
+    try { rfc = decodeURIComponent(named); } catch { rfc = named; }
+    if (rfc && await one('SELECT id FROM workshop_mail WHERE founder_id = ? AND rfc_message_id = ?', [founderId, rfc])) {
+      alreadyHeard += 1; continue;
+    }
+    let payload: Record<string, unknown>;
+    try {
+      const value = await readKvValue(w.mailKvNamespaceId, key);
+      if (!value) { unreadable += 1; continue; }
+      payload = JSON.parse(value) as Record<string, unknown>;
+    } catch { unreadable += 1; continue; }
+    try {
+      const heard = await ingestEdgeRecord(founderId, payload);
+      if (heard.duplicate) alreadyHeard += 1; else recovered += 1;
+    } catch { unreadable += 1; }
+  }
+  return { held: keys.length, alreadyHeard, recovered, unreadable };
+}
+
+/**
+ * ONE READING OF WHAT THE EDGE WROTE, used by both doors. The intake route and
+ * the replay must agree about what a stored message means, or a message
+ * recovered after an outage would be a different message from the one that
+ * arrived.
+ */
+export async function ingestEdgeRecord(founderId: string, payload: Record<string, unknown>): Promise<Heard> {
+  const { edgeRecordToMessage } = await import('./edge-record.js');
+  return hearMail({ founderId, ...edgeRecordToMessage(payload) });
+}

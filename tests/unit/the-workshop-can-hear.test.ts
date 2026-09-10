@@ -28,7 +28,7 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import '../../src/services/integration/cloudflare-gateway.js';
 import { providerStubs } from '../helpers/provider-stubs.js';
-import { establishPublicWorkshop, setMailForwardTo } from '../../src/services/public-workshop/settings.js';
+import { establishPublicWorkshop } from '../../src/services/public-workshop/settings.js';
 import { standUpWorkshop } from '../../src/services/public-workshop/infrastructure.js';
 import { earsFor, hearMail, mailHealth, needsTheOwner, openTheEars, readIt, theInbox, theThread } from '../../src/services/public-workshop/mail.js';
 import { isSuppressed, continuationsOf } from '../../src/services/public-workshop/suppression.js';
@@ -56,9 +56,6 @@ beforeAll(async () => {
   await query(`INSERT INTO products (id,name,owner_id,status,operating_budget_monthly_usd) VALUES (?,'Foundry',?,'active',50)`, [FOUNDRY, OWNER]);
   await query(`INSERT INTO system_identities (identity_key,product_id,established_reason) VALUES ('foundry',?,'hearing')`, [FOUNDRY]);
   await establishPublicWorkshop({ founderId: OWNER });
-  // Where Apex Micro's post is delivered — the Workshop's decision, never the
-  // owner's account address.
-  await setMailForwardTo(OWNER, 'workshop-post@example.com');
   await standUpWorkshop(OWNER);
   INTAKE = (await openTheEars(OWNER)).intakeKey;
   const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
@@ -426,28 +423,66 @@ describe('the rows refuse what the service would not do anyway', () => {
   });
 });
 
-describe('the edge forwards before it tells us anything', () => {
-  it('the owner gets the mail whether or not Foundry is reachable', () => {
-    // The order in the source is the guarantee: forward, then best-effort copy.
-    const forwardAt = MAIL_WORKER_SOURCE.indexOf('message.forward');
+describe('the edge writes it down before it tells us anything', () => {
+  it('a message is somewhere that is not Foundry before Foundry is told', () => {
+    // The order in the source IS the guarantee. This used to be "forward to
+    // the owner, then tell Foundry", which bought durability by making a
+    // private mailbox infrastructure. The property was never the mailbox: it
+    // was somewhere that is not Foundry. A store the Workshop owns is that.
+    const storeAt = MAIL_WORKER_SOURCE.indexOf('env.MAIL.put(');
     const postAt = MAIL_WORKER_SOURCE.indexOf('fetch(env.INTAKE_URL');
-    expect(forwardAt).toBeGreaterThan(-1);
-    expect(postAt).toBeGreaterThan(forwardAt);
-    // The forward is not conditional on the copy succeeding.
-    expect(MAIL_WORKER_SOURCE).toMatch(/try\s*\{\s*await message\.forward/);
-    // A failing intake cannot bounce, drop or delay the message.
+    expect(storeAt).toBeGreaterThan(-1);
+    expect(postAt).toBeGreaterThan(storeAt);
+
+    // AND IT NEVER ACCEPTS WHAT IT COULD PUT NOWHERE. If both the store and
+    // the intake fail, the sender is told rather than believing it arrived.
+    expect(MAIL_WORKER_SOURCE).toMatch(/if\s*\(!stored\s*&&\s*!handed\)/);
+    expect(MAIL_WORKER_SOURCE).toContain('setReject(');
+
+    // A slow intake cannot hold a delivery open.
     expect(MAIL_WORKER_SOURCE).toContain('AbortSignal.timeout');
-    expect(MAIL_WORKER_SOURCE).toContain('.catch(');
+    // No mailbox belonging to a person is anywhere in it.
+    expect(MAIL_WORKER_SOURCE).not.toContain('message.forward');
+    expect(MAIL_WORKER_SOURCE).not.toContain('FORWARD_TO');
     // The edge holds nothing that could change the world.
     expect(MAIL_WORKER_SOURCE).not.toContain('CLOUDFLARE');
     expect(MAIL_WORKER_SOURCE).not.toMatch(/api\.cloudflare\.com|api\.stripe\.com|api\.resend\.com/);
     // It never replies to the sender on its own account.
     expect(MAIL_WORKER_SOURCE).not.toContain('message.reply');
   });
+
+  it('what the store held becomes the same message as one that arrived live', async () => {
+    // THE OUTAGE PROOF. A message the edge kept while Foundry was unreachable
+    // is read back through the same code the live door uses, so recovering it
+    // cannot quietly change what somebody said.
+    const { edgeRecordToMessage } = await import('../../src/services/public-workshop/edge-record.js');
+    const raw = ['Content-Type: text/plain', '', 'Held while nobody was listening.', ''].join('\r\n');
+    const record = {
+      to: 'thomas@apexmicro.ai', from: 'bounce@relay.example.test', size: raw.length,
+      headers: {
+        'message-id': '<held-1@example.test>',
+        subject: '=?UTF-8?Q?Held_=E2=80=94_please_read?=',
+        from: '"A Shop" <office@millwork.example.test>',
+      },
+      raw_base64: Buffer.from(raw, 'utf8').toString('base64'),
+    };
+    const read = edgeRecordToMessage(record);
+    expect(read.from).toBe('office@millwork.example.test');
+    expect(read.subject).toBe('Held — please read');
+    expect(read.body).toContain('Held while nobody was listening');
+    expect(read.rfcMessageId).toBe('<held-1@example.test>');
+
+    // Heard once from the store, and heard again is still once.
+    const first = await hearMail({ founderId: OWNER, ...read });
+    expect(first.duplicate).toBe(false);
+    const again = await hearMail({ founderId: OWNER, ...read });
+    expect(again.duplicate).toBe(true);
+    expect(again.id).toBe(first.id);
+  });
 });
 
 describe('giving the Workshop ears is one governed, reversible act', () => {
-  it('deploys the program that hears before it points mail at it, and refuses a program that cannot forward', async () => {
+  it('deploys the program that hears before it points mail at it, and refuses a program that cannot keep what it hears', async () => {
     const { standUpTheEars } = await import('../../src/services/public-workshop/infrastructure.js');
     const { WORKSHOP_MAIL_WORKER_NAME } = await import('../../src/services/integration/cloudflare-gateway.js');
     process.env.APP_URL = 'https://foundry-intel.fly.dev';
@@ -457,19 +492,18 @@ describe('giving the Workshop ears is one governed, reversible act', () => {
     // there. In production that made it report "you have not yet confirmed" —
     // naming no address at all — about an address Cloudflare had verified. The
     // reply path is now read the way it actually runs.
-    const dest = state.cf.routing.destinations.find((d) => d.email === 'workshop-post@example.com');
-    if (dest) dest.verified = new Date().toISOString();
+
     const { workshopHealth } = await import('../../src/services/public-workshop/infrastructure.js');
     const h = await workshopHealth(OWNER, { fetchImpl: fetchStub });
-    expect(h.replyInbox.detail).not.toContain('have not yet confirmed');
-    expect(h.replyInbox.detail).toContain('through the program that hears');
+    expect(h.replyInbox.detail).toContain('program that hears');
+    expect(h.replyInbox.detail).toContain("Workshop's own store");
     expect(h.replyInbox.status).toBe('healthy');
     // It can hear. (Whether anything is WAITING is the other half of that
     // signal, and messages earlier in this file are deliberately waiting.)
     expect(h.mail.detail).not.toContain('cannot hear');
     expect(r.program).toBe(WORKSHOP_MAIL_WORKER_NAME());
-    // The Workshop's own destination, not the founder account's address.
-    expect(r.forwardTo).toBe('workshop-post@example.com');
+    // Its own store, not a mailbox belonging to anybody.
+    expect(r.store).toBeTruthy();
     // The program exists at the edge, and the address points at it.
     const routed = await rowsOf(`SELECT resource, outcome, verification_json FROM cloudflare_mutations WHERE tool = 'cloudflare_email_route_upsert' ORDER BY rowid DESC LIMIT 1`);
     expect(String(routed[0]!.verification_json)).toContain(WORKSHOP_MAIL_WORKER_NAME());
@@ -496,7 +530,32 @@ describe('giving the Workshop ears is one governed, reversible act', () => {
     const { WORKSHOP_MAIL_WORKER_NAME } = await import('../../src/services/integration/cloudflare-gateway.js');
     const cannotForward = await attempt({ script_name: WORKSHOP_MAIL_WORKER_NAME(), source: 'export default { async email(m){ /* drops it */ } }', kv_namespace_id: 'x', purpose: 'p', forward_to: 'a@b.com', intake_url: 'https://x/y', intake_key: 'k' });
     expect(cannotForward.ok).toBe(false);
-    expect(String(cannotForward.reason)).toContain('mail_program_must_forward');
+    expect(String(cannotForward.reason)).toContain('mail_program_must_record');
+  });
+
+  it('retires the mailbox the old path used, and refuses while anything still routes to it', async () => {
+    const { retireMailbox } = await import('../../src/services/public-workshop/infrastructure.js');
+    const { readEmailRouting, readZone } = await import('../../src/services/integration/cloudflare-gateway.js');
+    const zone = (await readZone('apexmicro.ai'))!;
+    // A MAILBOX SOMETHING STILL DELIVERS TO IS NOT RETIRED, IT IS BROKEN.
+    // A second address on the zone still forwards, so retiring its destination
+    // would silently drop whoever writes there. The door says no.
+    state.cf.routing.destinations.push({ tag: 'dst_old', email: 'someone@example.com', verified: '2026-01-01' });
+    state.cf.routing.rules.push({ id: 'rule_old', enabled: true,
+      matchers: [{ type: 'literal', field: 'to', value: 'old@apexmicro.ai' }],
+      actions: [{ type: 'forward', value: ['someone@example.com'] }] });
+    await expect(retireMailbox(OWNER, 'someone@example.com')).rejects.toThrow(/destination_still_routed/);
+    expect(state.cf.routing.destinations.some((d) => d.email === 'someone@example.com')).toBe(true);
+    // Stop routing there first, then retire: two acts, two receipts, in order.
+    state.cf.routing.rules = state.cf.routing.rules.filter((r) => r.id !== 'rule_old');
+    expect(await retireMailbox(OWNER, 'someone@example.com')).toMatchObject({ gone: true });
+    expect((await readEmailRouting(zone.id)).destinations.some((d) => d.email === 'someone@example.com')).toBe(false);
+    // Safe to run again: already gone is the wanted state, not a failure.
+    expect(await retireMailbox(OWNER, 'someone@example.com')).toMatchObject({ gone: true });
+    // What it did and how to undo it are on the record.
+    const receipt = (await rowsOf(`SELECT purpose, outcome, rollback_json FROM cloudflare_mutations WHERE tool = 'cloudflare_email_destination_delete' AND outcome = 'applied' ORDER BY rowid LIMIT 1`))[0]!;
+    expect(String(receipt.outcome)).toBe('applied');
+    expect(String(receipt.rollback_json)).toContain('someone@example.com');
   });
 });
 

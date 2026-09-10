@@ -165,7 +165,7 @@ export async function readWorkerDomains(): Promise<Array<{ id: string; hostname:
   return r.result.map((d) => ({ id: d.id, hostname: d.hostname, service: d.service, zoneId: d.zone_id }));
 }
 
-export async function readEmailRouting(zoneId: string): Promise<{ enabled: boolean; status: string | null; rules: Array<{ id: string; to: string; forwardTo: string[]; worker: string | null; enabled: boolean }>; destinations: Array<{ email: string; verified: boolean }> }> {
+export async function readEmailRouting(zoneId: string): Promise<{ enabled: boolean; status: string | null; rules: Array<{ id: string; to: string; forwardTo: string[]; worker: string | null; enabled: boolean }>; destinations: Array<{ tag: string; email: string; verified: boolean }> }> {
   const settings = await getJson<{ enabled: boolean; status?: string }>(`${CF_API}/zones/${pathSegment(zoneId, 'zone_id')}/email/routing`).catch(() => null);
   // RULES EXIST WHETHER OR NOT ROUTING IS ON. Reading them only when the zone
   // is enabled sounds like a saving and is a lie: a zone that was half set up
@@ -173,15 +173,20 @@ export async function readEmailRouting(zoneId: string): Promise<{ enabled: boole
   // tries to create one and is refused as a duplicate — which is exactly how a
   // half-finished setup becomes a stuck one.
   const rules = (await getJson<Array<{ id: string; enabled: boolean; matchers: Array<{ field?: string; value?: string; type: string }>; actions: Array<{ type: string; value?: string[] }> }>>(`${CF_API}/zones/${pathSegment(zoneId, 'zone_id')}/email/routing/rules`).catch(() => ({ result: [] as Array<{ id: string; enabled: boolean; matchers: Array<{ field?: string; value?: string; type: string }>; actions: Array<{ type: string; value?: string[] }> }> }))).result;
-  const destinations = (await getJson<Array<{ email: string; verified?: string | null }>>(`${CF_API}/accounts/${account()}/email/routing/addresses`).catch(() => ({ result: [] as Array<{ email: string; verified?: string | null }> }))).result;
+  const destinations = (await getJson<Array<{ tag?: string; id?: string; email: string; verified?: string | null }>>(`${CF_API}/accounts/${account()}/email/routing/addresses`).catch(() => ({ result: [] as Array<{ tag?: string; id?: string; email: string; verified?: string | null }> }))).result;
   return {
     enabled: Boolean(settings?.result.enabled), status: settings?.result.status ?? null,
     rules: rules.map((r) => ({ id: r.id, to: r.matchers.find((m) => m.field === 'to')?.value ?? '*',
       forwardTo: r.actions.find((a) => a.type === 'forward')?.value ?? [],
-      // A rule that routes to a program still routes: the program forwards.
+      // A rule that names a program routes to the program; a rule that names an
+      // address routes to a mailbox. They are read the same way and mean
+      // different things, so both are reported rather than collapsed.
       worker: r.actions.find((a) => a.type === 'worker')?.value?.[0] ?? null,
       enabled: r.enabled })),
-    destinations: destinations.map((d) => ({ email: d.email, verified: Boolean(d.verified) })),
+    // The provider calls a destination's identifier its `tag`; older shapes of
+    // the same record call it `id`. Both are read so a retirement can name the
+    // thing it is retiring rather than guessing at it.
+    destinations: destinations.map((d) => ({ tag: String(d.tag ?? d.id ?? ''), email: d.email, verified: Boolean(d.verified) })),
   };
 }
 
@@ -368,9 +373,13 @@ async function workerDeployHandler(req: GatewayRequest): Promise<{ name: string;
   // readable back out of the deployed program — the same discipline every other
   // credential in this institution gets.
   const isMail = name === WORKSHOP_MAIL_WORKER_NAME();
+  // A DIFFERENT STORE, AND THAT IS NOT A DETAIL. The page store is served to
+  // the public internet by the site program; a message written into it would
+  // be a message on the web. The mail program gets its own namespace and the
+  // site program never binds it.
   const bindings = isMail
     ? [
-      { type: 'plain_text', name: 'FORWARD_TO', text: String((p as unknown as { forward_to?: string }).forward_to ?? '') },
+      { type: 'kv_namespace', name: 'MAIL', namespace_id: String((p as unknown as { mail_namespace_id?: string }).mail_namespace_id ?? '') },
       { type: 'plain_text', name: 'INTAKE_URL', text: String((p as unknown as { intake_url?: string }).intake_url ?? '') },
       { type: 'secret_text', name: 'INTAKE_KEY', text: String((p as unknown as { intake_key?: string }).intake_key ?? '') },
     ]
@@ -385,9 +394,18 @@ async function workerDeployHandler(req: GatewayRequest): Promise<{ name: string;
     if (name !== WORKSHOP_WORKER_NAME() && name !== WORKSHOP_MAIL_WORKER_NAME()) {
       throw new CloudflareRefused('not_the_workshop_program', name);
     }
-    if (isMail && !/message\.forward\(/.test(source)) {
-      // A mail program that cannot forward is a mail program that eats mail.
-      throw new CloudflareRefused('mail_program_must_forward');
+    if (isMail) {
+      // A MAIL PROGRAM THAT CANNOT WRITE THE MESSAGE DOWN IS ONE THAT EATS
+      // MAIL. It used to have to forward; forwarding was only ever how it kept
+      // a message somewhere that is not Foundry, and a store the Workshop owns
+      // does that without making a private mailbox load-bearing. What it must
+      // still do is refuse to accept anything it could put nowhere.
+      if (!/env\.MAIL\.put\(/.test(source)) throw new CloudflareRefused('mail_program_must_record');
+      if (!/setReject\(/.test(source)) throw new CloudflareRefused('mail_program_must_refuse_what_it_cannot_keep');
+      const mailNs = String((p as unknown as { mail_namespace_id?: string }).mail_namespace_id ?? '');
+      pathSegment(mailNs, 'kv_namespace_id');
+      // And it must not be handed the store the world can read.
+      if (mailNs === String(p.kv_namespace_id ?? '')) throw new CloudflareRefused('mail_store_is_not_the_page_store');
     }
     if (!source.includes('export default')) throw new CloudflareRefused('source_invalid');
     pathSegment(p.kv_namespace_id, 'kv_namespace_id');
@@ -434,7 +452,12 @@ async function emailRouteHandler(req: GatewayRequest): Promise<{ to: string; for
     purposeOf(req.params);
     const z = await workshopZone(p.zone_name);
     if (!to.endsWith(`@${z.name}`)) throw new CloudflareRefused('address_outside_envelope', to);
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(forwardTo)) throw new CloudflareRefused('destination_invalid');
+    // A ROUTE GOES TO A MAILBOX OR TO THE WORKSHOP'S OWN PROGRAM, and exactly
+    // one of those. Requiring a forwarding address unconditionally was right
+    // while forwarding was how mail was kept; now the program keeps it, and a
+    // rule that names a program needs no mailbox behind it.
+    const toWorker = String((p as unknown as { worker?: string }).worker ?? '').trim();
+    if (!toWorker && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(forwardTo)) throw new CloudflareRefused('destination_invalid');
     const before = await readEmailRouting(z.id);
     const steps: Record<string, unknown> = {};
     if (!before.enabled) {
@@ -452,13 +475,17 @@ async function emailRouteHandler(req: GatewayRequest): Promise<{ to: string; for
       const response = await withRetry(() => fetch(`${CF_API}/zones/${pathSegment(z.id, 'zone_id')}/email/routing/enable`, { method: 'POST', headers: auth({ 'Content-Type': 'application/json' }), body: '{}' }), { timeoutMs: CF_TIMEOUT_MS, maxRetries: 1 });
       steps.enable = await cfRead<unknown>(response).then((r) => r.result).catch((e: unknown) => ({ error: e instanceof Error ? e.message : String(e) }));
     }
-    if (!before.destinations.some((d) => d.email === forwardTo)) {
+    // A destination address is only meaningful for a rule that forwards. When
+    // the rule names the Workshop's own program there is no mailbox behind it,
+    // and asking the provider to register the empty address would be a
+    // guaranteed failure standing in for a decision nobody made.
+    if (forwardTo && !before.destinations.some((d) => d.email === forwardTo)) {
       const response = await withRetry(() => fetch(`${CF_API}/accounts/${account()}/email/routing/addresses`, { method: 'POST', headers: auth({ 'Content-Type': 'application/json' }), body: JSON.stringify({ email: forwardTo }) }), { timeoutMs: CF_TIMEOUT_MS, maxRetries: 1 });
       steps.destination = (await cfRead<unknown>(response)).result;
     }
-    // WHERE THE MAIL GOES: straight to the owner, or to the program that
-    // forwards it to the owner and hands Foundry a copy. Only the Workshop's
-    // own mail program may be named — a rule that could point at an arbitrary
+    // WHERE THE MAIL GOES: to a mailbox, or to the program that keeps it in the
+    // Workshop's own store and hands Foundry a copy. Only the Workshop's own
+    // mail program may be named — a rule that could point at an arbitrary
     // worker would be a way to hand the Workshop's mail to anything.
     const worker = String(p.worker ?? '').trim();
     if (worker && worker !== WORKSHOP_MAIL_WORKER_NAME()) throw new CloudflareRefused('not_the_workshop_program', worker);
@@ -501,6 +528,53 @@ export const CLOUDFLARE_POLICY = {
   actor: 'workshop_keeper', surface: 'public_workshop', dataClass: 'general',
   requireDedupKey: true, requireCustomerExternalId: false,
 } as const;
+/**
+ * cloudflare_email_destination_delete: RETIRE A MAILBOX THE WORKSHOP NO LONGER
+ * DELIVERS TO.
+ *
+ * A verified destination address is a standing permission for this provider
+ * account to deliver mail into somebody's private inbox. Once nothing routes
+ * there it is not harmless leftover configuration — it is a path that still
+ * exists, that a later rule could point at by accident, and that reads to
+ * anyone auditing the account as though the Workshop still uses it. Removing it
+ * is how "the old path is gone" becomes true rather than asserted.
+ *
+ * FAIL CLOSED ON USE. It refuses while any enabled rule still forwards there,
+ * because deleting a destination out from under a live rule silently drops
+ * whoever writes to that address. The order is: stop routing there, then retire
+ * the address, in two acts with two receipts.
+ */
+async function emailDestinationDeleteHandler(req: GatewayRequest): Promise<{ email: string; gone: boolean }> {
+  const p = req.params as { zone_name: string; email: string; purpose: string };
+  const email = String(p.email ?? '').toLowerCase().trim();
+  return withReceipt(req, () => `email_destination:${email}`, () => purposeOf(req.params), { retire: email }, async () => {
+    purposeOf(req.params);
+    const z = await workshopZone(p.zone_name);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new CloudflareRefused('destination_invalid');
+    const before = await readEmailRouting(z.id);
+    const still = before.rules.filter((r) => r.enabled && r.forwardTo.some((a) => a.toLowerCase() === email));
+    if (still.length) throw new CloudflareRefused('destination_still_routed', still.map((r) => r.to).join(', '));
+    const target = before.destinations.find((d) => d.email.toLowerCase() === email);
+    // Already gone is the wanted state, not a failure: this must be safe to run
+    // twice, and the receipt should say what it found rather than throw.
+    if (!target) return { previous: null, response: null, verification: { gone: true }, rollback: null, result: { email, gone: true } };
+    const response = await withRetry(() => fetch(`${CF_API}/accounts/${account()}/email/routing/addresses/${pathSegment(target.tag, 'email_destination_id')}`, { method: 'DELETE', headers: auth() }), { timeoutMs: CF_TIMEOUT_MS, maxRetries: 1 });
+    const said = response.status === 404 ? { success: true, result: null } : await cfRead<unknown>(response);
+    const after = await readEmailRouting(z.id);
+    const gone = !after.destinations.some((d) => d.email.toLowerCase() === email);
+    return {
+      previous: { destination: target },
+      response: said,
+      verification: { gone, destinations: after.destinations.map((d) => d.email) },
+      // Undoing it re-invites the address; the person who owns it must accept
+      // again, which is the correct amount of friction for putting a private
+      // mailbox back into an institution's mail path.
+      rollback: gone ? { addDestination: email, note: 'the owner of that address must confirm the provider\'s invitation again' } : null,
+      result: { email, gone },
+    };
+  });
+}
+
 registerToolHandler('cloudflare_kv_namespace_create', kvNamespaceCreateHandler, CLOUDFLARE_POLICY);
 registerToolHandler('cloudflare_kv_put', kvPutHandler, CLOUDFLARE_POLICY);
 registerToolHandler('cloudflare_kv_delete', kvDeleteHandler, CLOUDFLARE_POLICY);
@@ -509,5 +583,6 @@ registerToolHandler('cloudflare_dns_delete', dnsDeleteHandler, CLOUDFLARE_POLICY
 registerToolHandler('cloudflare_worker_deploy', workerDeployHandler, CLOUDFLARE_POLICY);
 registerToolHandler('cloudflare_domain_attach', domainAttachHandler, CLOUDFLARE_POLICY);
 registerToolHandler('cloudflare_email_route_upsert', emailRouteHandler, CLOUDFLARE_POLICY);
+registerToolHandler('cloudflare_email_destination_delete', emailDestinationDeleteHandler, CLOUDFLARE_POLICY);
 
-export { kvNamespaceCreateHandler, kvPutHandler, kvDeleteHandler, dnsUpsertHandler, dnsDeleteHandler, workerDeployHandler, domainAttachHandler, emailRouteHandler };
+export { kvNamespaceCreateHandler, kvPutHandler, kvDeleteHandler, dnsUpsertHandler, dnsDeleteHandler, workerDeployHandler, domainAttachHandler, emailRouteHandler, emailDestinationDeleteHandler };

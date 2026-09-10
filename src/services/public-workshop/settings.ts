@@ -21,11 +21,12 @@ export interface PublicWorkshop {
   contactEmail: string; statement: string; about: string; workerName: string; kvNamespaceId: string | null;
   postalAddress: string | null; contactGapDays: number; contactCeilingPerYear: number;
   /**
-   * WHERE APEX MICRO'S POST IS DELIVERED. Deliberately not the founder row's
-   * address: that is who the owner is to Foundry, and it is not the Workshop's
-   * mail infrastructure. Absent means the Workshop cannot be given ears.
+   * WHERE APEX MICRO KEEPS ITS OWN POST. A store of the Workshop's, written by
+   * the edge before Foundry is told anything, so that Foundry being down
+   * cannot lose a message. Never the page store, which the world can read.
+   * Absent means the Workshop cannot be given ears.
    */
-  mailForwardTo: string | null;
+  mailKvNamespaceId: string | null;
   economicPause: { at: string; reason: string; by: string } | null;
   health: Record<string, unknown> | null; healthAt: string | null;
 }
@@ -53,7 +54,7 @@ function project(r: Row): PublicWorkshop {
     origin: String(r.origin), zoneName: String(r.zone_name), contactEmail: String(r.contact_email), statement: String(r.statement), about: String(r.about ?? ''),
     workerName: String(r.worker_name), kvNamespaceId: r.kv_namespace_id == null ? null : String(r.kv_namespace_id),
     postalAddress: r.postal_address == null ? null : String(r.postal_address),
-    mailForwardTo: r.mail_forward_to == null ? null : String(r.mail_forward_to),
+    mailKvNamespaceId: r.mail_kv_namespace_id == null ? null : String(r.mail_kv_namespace_id),
     contactGapDays: Number(r.contact_gap_days), contactCeilingPerYear: Number(r.contact_ceiling_per_year),
     economicPause: r.economic_pause_at == null ? null : { at: String(r.economic_pause_at), reason: String(r.economic_pause_reason ?? ''), by: String(r.economic_pause_by ?? '') },
     health: r.health_json == null ? null : (JSON.parse(String(r.health_json)) as Record<string, unknown>), healthAt: r.health_at == null ? null : String(r.health_at),
@@ -100,14 +101,28 @@ export async function setWorkshopStore(founderId: string, kvNamespaceId: string)
 }
 
 /** Owner-supplied only. Never his home address by default; never invented. */
-/** Where the Workshop's post goes. An owner decision, never inferred. */
-export async function setMailForwardTo(founderId: string, address: string | null): Promise<void> {
-  const a = address?.trim().toLowerCase() || null;
-  await query(`UPDATE public_workshop SET mail_forward_to = ?, updated_at = datetime('now') WHERE founder_id = ?`, [a, founderId]);
+/** The store the Workshop keeps its own post in. Never the page store. */
+export async function setMailStore(founderId: string, namespaceId: string | null): Promise<void> {
+  await query(`UPDATE public_workshop SET mail_kv_namespace_id = ?, updated_at = datetime('now') WHERE founder_id = ?`, [namespaceId?.trim() || null, founderId]);
+}
+
+/**
+ * THE ADDRESS AS THE OWNER GAVE IT, AND NOTHING ELSE.
+ *
+ * A postal address arrives from a person as lines, and the lines are part of
+ * what is true about it: a suite and a mailbox number on their own line are not
+ * decoration. It is therefore stored exactly as supplied and reshaped only at
+ * the moment of rendering — a block where a block reads (the site footer, the
+ * legal pages) and one line where only one line fits (an email footer). One
+ * recorded truth, two readings of it, no second copy to drift.
+ */
+export function postalLines(address: string | null): string[] {
+  return (address ?? '').split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
 }
 
 export async function setPostalAddress(founderId: string, address: string | null): Promise<void> {
-  const a = address?.trim() || null;
+  // Trailing and leading blanks are noise; the lines between them are not.
+  const a = postalLines(address).join('\n') || null;
   await query(`UPDATE public_workshop SET postal_address = ?, updated_at = datetime('now') WHERE founder_id = ?`, [a, founderId]);
 }
 

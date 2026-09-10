@@ -474,10 +474,14 @@ describe('a stranger says what they want next, and the Workshop keeps the answer
 describe('the whole external chain, checked against the world', () => {
   it('reads every public surface from its public address, and says waiting rather than green where the evidence cannot exist yet', async () => {
     const { externalReadiness } = await import('../../src/services/public-workshop/readiness.js');
-    // A reply that reaches a person is part of the chain, not a nicety.
-    const { connectReplyInbox } = await import('../../src/services/public-workshop/infrastructure.js');
-    await connectReplyInbox(OWNER);
-    state.cf.routing.destinations[0]!.verified = '2026-09-09';
+    // A reply that reaches a person is part of the chain, not a nicety — and
+    // the Workshop's own post is kept by the Workshop, so the chain is complete
+    // without any mailbox, anywhere, belonging to anyone.
+    const { standUpTheEars } = await import('../../src/services/public-workshop/infrastructure.js');
+    const appUrl = process.env.APP_URL;
+    process.env.APP_URL = 'https://foundry-intel.fly.dev';
+    await standUpTheEars(OWNER);
+    process.env.APP_URL = appUrl;
     const r = await externalReadiness(OWNER, X);
     const by = Object.fromEntries(r.legs.map((l) => [l.leg, l]));
     // Nothing is blocked, and the surfaces a stranger needs were actually read.

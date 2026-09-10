@@ -3753,7 +3753,7 @@ CREATE TABLE public_workshop (
   economic_pause_by     TEXT,
   created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-, mail_forward_to TEXT);
+, mail_kv_namespace_id TEXT);
 CREATE TABLE "push_log" (
   id TEXT PRIMARY KEY,
   founder_id TEXT NOT NULL REFERENCES founders(id),
@@ -8398,17 +8398,6 @@ BEGIN
   SELECT RAISE(ABORT,'public_suppression:email_invalid')
     WHERE NEW.email NOT LIKE '%_@_%.__%' OR NEW.email <> lower(trim(NEW.email));
 END;
-CREATE TRIGGER public_workshop_forward_guard
-BEFORE UPDATE ON public_workshop
-BEGIN
-  -- It must look like an address, and it must not be the workshop's own —
-  -- forwarding a workshop's post to itself is a loop, not a destination.
-  SELECT RAISE(ABORT,'public_workshop:forward_address_invalid')
-    WHERE NEW.mail_forward_to IS NOT NULL
-      AND (instr(NEW.mail_forward_to, '@') < 2 OR instr(NEW.mail_forward_to, ' ') > 0);
-  SELECT RAISE(ABORT,'public_workshop:forward_would_loop')
-    WHERE NEW.mail_forward_to IS NOT NULL AND lower(NEW.mail_forward_to) = lower(NEW.contact_email);
-END;
 CREATE TRIGGER public_workshop_guard
 BEFORE INSERT ON public_workshop
 BEGIN
@@ -8423,6 +8412,14 @@ BEGIN
     SELECT 1 FROM products p WHERE p.id = NEW.product_id AND p.owner_id = NEW.founder_id
       AND p.standing = 'earned' AND p.reality = 'real' AND p.deleted_at IS NULL);
   SELECT RAISE(ABORT,'public_workshop:cannot_arrive_paused') WHERE NEW.economic_pause_at IS NOT NULL;
+END;
+CREATE TRIGGER public_workshop_mail_store_guard
+BEFORE UPDATE ON public_workshop
+BEGIN
+  -- The Workshop's post is not kept where the world can read it.
+  SELECT RAISE(ABORT,'public_workshop:mail_store_is_not_the_page_store')
+    WHERE NEW.mail_kv_namespace_id IS NOT NULL
+      AND NEW.mail_kv_namespace_id = NEW.kv_namespace_id;
 END;
 CREATE TRIGGER public_workshop_pause_guard
 BEFORE UPDATE ON public_workshop
