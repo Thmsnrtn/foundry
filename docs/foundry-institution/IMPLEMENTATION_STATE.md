@@ -2625,3 +2625,19 @@ payment. What a buyer actually thought arrives separately and in their own words
 through the page's form or a reply, and is read before anybody else is written
 to. The authorization package used *Value* as a heading over that paragraph; the
 heading has been corrected, and the evidence model was already right.
+
+### What the chain said, and what shipped
+
+The first attempt at migration 296 rebuilt the three trigger bodies from memory
+of migration 289 rather than from the schema as installed, and 289 is not the
+last word on them — the live insert guard raises `experiment_invalid` where the
+copy said `experiment_not_open`. The dedicated guard test caught it in five
+assertions, which is what that test is for. The definitions now come from
+`docs/db/schema.snapshot.sql` itself, with only the new clauses appended.
+
+The full chain then ran green over the whole tree — 577 test files, 5092 tests,
+50 minutes — and that is the build that carries the authority column into
+production. The column arrives empty: nobody holds authority until an Allow
+stamps it, so shipping this changes nothing about who can be written to today,
+and closes the path by which somebody could have become contactable tomorrow
+without a decision.
