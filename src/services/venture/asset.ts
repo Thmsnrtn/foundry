@@ -94,13 +94,21 @@ export async function beginExperimentalAsset(input: {
   // "spend no more than $25 proving anything" becomes arithmetic at the door
   // rather than a sentence on a card. A test approved at $0 gets no allowance
   // and therefore no spend, which is what $0 means.
+  //
+  // AND IT ENDS WHEN THE TEST OWES ITS ANSWER. The first version of this wrote
+  // no `until` at all, so a press meant to fund one fourteen-day test left a
+  // ceiling standing for good — an authority nobody decided to grant, sitting
+  // where the spend door would have read it for every later act. The horizon is
+  // the test's own: the day it owes an answer is the day its budget stops.
   const cost = Number(e.cost_cents ?? 0);
   if (cost > 0) {
+    const { DAYS_BEFORE_IT_OWES_AN_ANSWER } = await import('./validation.js');
     await query(
-      `INSERT INTO owner_allowances (id, product_id, purpose, statement, amount_cents)
-       VALUES (?,?,?,?,?)`,
+      `INSERT INTO owner_allowances (id, product_id, purpose, statement, amount_cents, until)
+       VALUES (?,?,?,?,?,datetime('now', ?))`,
       [nanoid(), id, `testing: ${String(e.what_we_do).slice(0, 120)}`,
-        `${String(e.decided_by)} approved this test at $${(cost / 100).toFixed(2)}`, cost]);
+        `${String(e.decided_by)} approved this test at $${(cost / 100).toFixed(2)}`, cost,
+        `+${String(DAYS_BEFORE_IT_OWES_AN_ANSWER)} days`]);
   }
   return { productId: id, created: true };
 }

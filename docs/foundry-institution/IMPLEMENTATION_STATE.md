@@ -2641,3 +2641,89 @@ production. The column arrives empty: nobody holds authority until an Allow
 stamps it, so shipping this changes nothing about who can be written to today,
 and closes the path by which somebody could have become contactable tomorrow
 without a decision.
+
+## A decision says what it does (2026-09-10)
+
+The owner opened Foundry at 22:06 to authorise one thing and pressed nine
+buttons by 22:09:46. Every one of them read **"Go ahead — nothing"** or **"Go
+ahead — $100.00"**; the label was built as `cost === 0 ? 'nothing' : '$X'` and
+appended after a dash. Eight were internal tests. The ninth was Experiment 001,
+whose text begins *"Write once to each approved Massachusetts millwork business
+as Thomas Norton"*.
+
+**Nothing reached anybody, and that was not luck.** `runHand` selects only
+experiments carrying an approved, unrevoked, unexpired, measurement-critical
+`proposed_act`, and none was created — the generic control is not the Allow. The
+audit read production directly: 0 proposed acts, 0 recipients carrying
+authority, 0 contacts, 0 offers, 0 purchases, no publication since 18:07:43, no
+workspace provisioned. The consequence boundary held. What failed was the
+interface in front of it.
+
+### Three things it actually did
+
+- Wrote a **$100 allowance with no end date** (`until` NULL) onto a product
+  created in the same second. A ceiling meant to fund one fourteen-day test
+  would have stood for good.
+- Started a **fourteen-day settlement clock** on a test that had no way to run.
+- Moved the public projection to `testing`, which took the page's branch that
+  prints *"The offer is not open at the moment"* **instead of** the price line —
+  silently deleting *"No subscription, nothing renews"*, the exact sentence the
+  publication gate and the readiness check both require. Readiness went from
+  `ok: true, 0 blocked` to `ok: false, 1 blocked` with nobody saying anything.
+
+### The repair
+
+**The consequence is computed before the control exists.**
+`consequenceOfApproving` reads the test and answers five questions — what
+happens, where it lands (`internal` / `provider` / `account` / `public` /
+`person`), who or what it touches, expected and maximum cash with the horizon
+that authority ends on, and whether it can be undone. `renderDecision` is the
+only thing in `src/routes` allowed to build a whole-test decision form, and it
+cannot build one without that object. A test it cannot classify renders as a
+refusal with no button.
+
+**Cost is never the risk signal.** `$0` is a statement about a budget. A free
+test that ends with a real person reading a message is `person`-facing, and the
+label says so: *"Continue internal investigation · $0 · nobody contacted"* against
+*"Authorize writing to 2 businesses · person-facing · 2 named businesses · $0"*.
+Neither can be read as the other.
+
+**One test, one authorisation path.** An experiment that names recipients or has
+a public identity owns a decision surface of its own. The card renders a link to
+it rather than a button; the route redirects there; and `decideExperiment`
+refuses it a third time unless the caller says it came `via: 'its own
+authorisation'`. A guard that exists only in a page is a guard the next page
+will not have.
+
+**And the general control states what approval does not authorise** —
+contacting anybody, publishing, spending outside Foundry, creating a paid
+provider resource, acting as the owner, changing an account, entering a
+commitment. Each of those is a decision of its own.
+
+### What the database now holds (migration 297)
+
+- `owner_allowances.until` is required, or `unbounded_because` says in words why
+  there is no end date. `beginExperimentalAsset` sets the horizon to the day the
+  test owes its answer; `setAllowance` records that a budget the owner typed as a
+  standing sentence genuinely has none.
+- `owner_decision_reversals` — append-only, carrying **the words the button
+  actually said**, writable only by the person whose decision it was. The
+  constitution rightly refuses to let an approval be edited into never having
+  happened, so a withdrawal is a record before it is an edit: the row is written
+  first, and only then may the decision, its stamp and its clock be cleared —
+  and only while no act was authorised, nobody carries authority, nothing was
+  sent and nothing was paid.
+- `venture_experiments.retired_at / retired_because / superseded_by` — two tests
+  that ask the same question of the same population with the same evidence are
+  one test approved twice. Nothing that ran can be retired: a result is history.
+
+### The gate
+
+`check-decision-legibility.mjs` holds four static rules: only the control file
+may write a whole-test decision form; "Go ahead" is banned outright; every
+`renderDecision` call passes a consequence; and any route that calls
+`decideExperiment` must call `consequenceOfApproving` first. Its planted-defect
+tests live beside the 10 September session itself, which is now a regression
+fixture: the classification, the two labels, the bypass, the bounded allowance,
+the withdrawal, the retirement, and every lifecycle state proving a material
+offer term cannot vanish because an internal status changed.

@@ -114,7 +114,9 @@ describe('what it sends and what it delivers', () => {
 
 describe('the binding of an outbound action to the experiment', () => {
   beforeAll(async () => {
-    await decideExperiment({ experimentId: X, decision: 'approved', by: `founder:${OWNER}` });
+    // Through the surface that owns this decision: the test names real
+    // businesses, so the general control refuses it by design.
+    await decideExperiment({ experimentId: X, decision: 'approved', by: `founder:${OWNER}`, via: 'its own authorisation' });
     ASSET = String(((await query('SELECT id FROM products WHERE from_experiment_id = ?', [X])).rows[0] as Record<string, unknown>).id);
     await setBoundary({ productId: ASSET, subject: 'contact_people', mode: 'ask_first', statement: 'ask me' });
     ACT = await proposeAct({ productId: ASSET, subject: 'contact_people', actionType: 'send_email', params: { campaign: X }, summary: 'write to them', why: 'w', expectedEffect: 'e', risk: 'r', consequence: 'low', rung: 'public', costCents: 0, proposedBy: 'institution:hand' });

@@ -36,6 +36,10 @@ import { query, realCompany, referenceCompany } from '../../db/client.js';
 import { money } from '../../services/founder/portfolio.js';
 import { selectedProductId } from '../../services/founder/selected-company.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
+import { renderDecision } from './decision-control.js';
+import {
+  type CannotSay, type Consequence, consequenceOfApproving, isCannotSay,
+} from '../../services/founder/what-it-would-do.js';
 import type { CompanyNumbers } from '../../services/founder/what-the-numbers-say.js';
 import type { VentureReading } from '../../services/venture/mandate.js';
 import { OWNER_SURFACE_SCRIPT } from '../../lib/owner-surface-script.js';
@@ -267,10 +271,15 @@ interface OwnerState {
       readingIsDone: boolean;
       /** What would have to be true before this could become a company. */
       inTheWay: string[];
-      /** A test waiting on him, with the prediction he would be approving. */
+      /**
+       * A test waiting on him, with the prediction he would be approving and
+       * what approving it would actually do. The consequence is carried rather
+       * than the cost: a price is not a classification, and treating one as the
+       * other is what made nine different decisions look like one.
+       */
       awaiting: Array<{
         id: string; whatWeDo: string; whatWeExpect: string;
-        wouldDisprove: string; cost: string;
+        wouldDisprove: string; consequence: Consequence | CannotSay;
       }>;
       reference: boolean;
     }>;
@@ -738,7 +747,7 @@ async function readOwnerState(
               : c.fit?.makesItWorse ? 'Keep looking: this would make the portfolio more fragile, not less.'
                 : c.inTheWay.length === 0 ? 'Take it forward. Nothing is left standing in the way.'
                   : c.awaiting.length > 0
-                    ? `Run the test. It costs ${c.awaiting[0]?.costCents === 0 ? 'nothing' : `$${((c.awaiting[0]?.costCents ?? 0) / 100).toFixed(2)}`} and settles the thing that matters most.`
+                    ? `Run the test. It settles the thing that matters most; what approving it would do is on the control itself.`
                     : `Not yet: ${c.inTheWay[0] ?? ''}.`,
           exposures: c.legal.surfaces.map((sf) =>
             `${sf.whatItIs} (${sf.severity}${sf.needsProfessional ? ', needs somebody qualified' : ''}`
@@ -781,12 +790,11 @@ async function readOwnerState(
             ? `${u.question} (nothing cheap would settle it)`
             : `${u.question} — ${u.cheapestTest}`),
           inTheWay: c.inTheWay,
-          awaiting: c.awaiting.map((e) => ({
+          awaiting: await Promise.all(c.awaiting.map(async (e) => ({
             id: e.id, whatWeDo: e.whatWeDo, whatWeExpect: e.whatWeExpect,
             wouldDisprove: e.wouldDisprove,
-            cost: e.costCents === 0 ? 'nothing'
-              : `$${(e.costCents / 100).toFixed(2)}`,
-          })),
+            consequence: await consequenceOfApproving(e.id),
+          }))),
           reference: c.reference,
         }))),
       };
@@ -3122,12 +3130,12 @@ foundryShellRoutes.get('/foundry', async (c) => {
           <dt>I recommend</dt><dd>${cand.recommendation}</dd>
         </dl>
         <div class="do">
-          ${cand.awaiting.map((e) => html`<form method="POST" action="/foundry/venture/experiment">
-            <input type="hidden" name="experimentId" value="${e.id}" />
-            <input type="hidden" name="decision" value="approved" />
-            <button class="${attention === null ? 'btn go' : 'btn'}" type="submit">Go ahead
-              &mdash; ${e.cost}</button>
-          </form>`)}
+          ${cand.awaiting.map((e) => renderDecision({
+    consequence: e.consequence,
+    action: '/foundry/venture/experiment',
+    hidden: { experimentId: e.id, decision: 'approved' },
+    primary: attention === null,
+  }))}
           ${!cand.inTheWay.length ? html`<form method="POST" action="/foundry/venture/advance">
             <input type="hidden" name="opportunityId" value="${cand.id}" />
             <button class="${attention === null ? 'btn go' : 'btn'}" type="submit">Take it
@@ -4957,6 +4965,17 @@ foundryShellRoutes.post('/foundry/venture/experiment',
     if (!experimentId || (decision !== 'approved' && decision !== 'declined')) {
       return c.redirect('/foundry');
     }
+    // ── THE GENERAL CONTROL DECIDES NOTHING IT CANNOT DESCRIBE ──
+    //
+    // Two refusals, both learned on 10 September. A test whose consequence the
+    // institution cannot classify is not decided here at all; and a test that
+    // owns a decision surface of its own is handed back to that surface rather
+    // than approved by a control that would approve it in a different sense.
+    // The page already renders a link instead of a button, so reaching this is
+    // a stale form or a hand-made POST — either way it stops here.
+    const consequence = await consequenceOfApproving(experimentId);
+    if (isCannotSay(consequence)) return c.redirect('/foundry?done=unclassified');
+    if (consequence.dedicated) return c.redirect(consequence.dedicated.path);
     const { decideExperiment } = await import('../../services/venture/validation.js');
     await decideExperiment({
       experimentId, decision, by: `founder:${String(founder.id)}` });

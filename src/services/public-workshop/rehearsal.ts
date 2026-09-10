@@ -68,7 +68,7 @@ export async function rehearseWorkshop(founderId: string, fetchImpl?: typeof fet
       wouldDisprove: 'Any step needs a manual act at the provider, or the public address does not carry what was published',
     });
     await query('UPDATE venture_experiments SET needs_workshop = 0 WHERE id = ?', [experimentId]);
-    await decideExperiment({ experimentId, decision: 'approved', by: KEEPER });
+    await decideExperiment({ experimentId, decision: 'approved', by: KEEPER, via: 'its own authorisation' });
   }
   const identity = await givePublicIdentity({
     experimentId, founderId, slug: REHEARSAL_SLUG, listed: false,

@@ -169,11 +169,26 @@ function read(r: Record<string, unknown>): Experiment {
  * would be the model deciding how long it gets to be unaccountable. What the
  * date is for is making an unrun experiment OVERDUE rather than invisible.
  */
-const DAYS_BEFORE_IT_OWES_AN_ANSWER = 14;
+export const DAYS_BEFORE_IT_OWES_AN_ANSWER = 14;
 
 export async function decideExperiment(input: {
   experimentId: string; decision: 'approved' | 'declined'; by: string;
-}): Promise<{ workshop: string | null }> {
+  /**
+   * WHICH DOOR THIS CAME THROUGH. A test that names real businesses, or already
+   * has a page written for strangers, is decided on its own surface — and the
+   * general "approve this test" control must not be able to decide it in a
+   * different sense while looking like the same act. The route refuses first;
+   * this refuses again, because a guard that only exists in a page is a guard
+   * that the next page will not have.
+   */
+  via?: 'the general control' | 'its own authorisation';
+}): Promise<{ workshop: string | null; refused?: string }> {
+  if ((input.via ?? 'the general control') === 'the general control') {
+    const { consequenceOfApproving, isCannotSay } = await import('../founder/what-it-would-do.js');
+    const c = await consequenceOfApproving(input.experimentId);
+    if (isCannotSay(c)) return { workshop: null, refused: c.cannotSay };
+    if (c.dedicated) return { workshop: null, refused: c.dedicated.why };
+  }
   await query(
     `UPDATE venture_experiments
         SET decision = ?, decided_at = datetime('now'), decided_by = ?,
@@ -538,4 +553,100 @@ export async function advance(input: {
     because: 'nothing is standing in the way any more. Making it a company is '
       + 'yours to do.',
   };
+}
+
+/**
+ * A DECISION HE DID NOT MEAN TO MAKE.
+ *
+ * On 10 September the general control approved Experiment 001 in a sense the
+ * owner had not intended, and the constitution rightly refused to let anybody
+ * simply edit the decision away: `venture_experiment:already_decided` exists so
+ * that an approval cannot be quietly rewritten into never having happened.
+ *
+ * So the withdrawal is a record before it is an edit. The reversal row is
+ * written first, carries the words the button actually said, and can only be
+ * written by the person whose decision it was. The database then permits the
+ * decision to be cleared — and only while nothing has happened under it: no
+ * authorised act, nobody carrying authority, nothing sent, nothing paid. Past
+ * any of those the decision is part of what the world already did, and the
+ * institution says so rather than tidying it.
+ *
+ * The stamp and the clock go with it. A test that owes an answer by a date is a
+ * test somebody approved; leaving the date behind would leave the approval
+ * behind in the only form that still had consequences.
+ */
+export async function withdrawExperimentDecision(input: {
+  experimentId: string; by: string; theControlSaid: string; because: string;
+}): Promise<{ withdrawn: boolean; because: string }> {
+  const e = (await query(
+    `SELECT id, founder_id, decision, decided_at, decided_by, ran_at
+       FROM venture_experiments WHERE id = ?`, [input.experimentId]))
+    .rows[0] as Record<string, unknown> | undefined;
+  if (!e) return { withdrawn: false, because: 'no such experiment' };
+  if (e.decision == null) return { withdrawn: false, because: 'it was never decided' };
+  if (e.ran_at != null) return { withdrawn: false, because: 'it has already run' };
+  if (String(e.decided_by) !== input.by) {
+    return { withdrawn: false, because: 'only the person who decided may undecide' };
+  }
+  await query(
+    `INSERT INTO owner_decision_reversals
+       (id, founder_id, subject_kind, subject_id, original_decision,
+        originally_decided_at, originally_decided_by, the_control_said, because, reversed_by)
+     VALUES (?,?,'venture_experiment',?,?,?,?,?,?,?)`,
+    [nanoid(), String(e.founder_id), String(e.id), String(e.decision),
+      String(e.decided_at), String(e.decided_by), input.theControlSaid.trim(),
+      input.because.trim(), input.by]);
+  await query(
+    `UPDATE venture_experiments
+        SET decision = NULL, decided_at = NULL, decided_by = NULL, due_at = NULL
+      WHERE id = ?`, [input.experimentId]);
+  return { withdrawn: true, because: input.because.trim() };
+}
+
+/** What he decided and then unmade, so a page can say both. */
+export async function reversalsOfDecisions(experimentId: string): Promise<Array<{
+  originalDecision: string; originallyDecidedAt: string; originallyDecidedBy: string;
+  theControlSaid: string; because: string; reversedAt: string; reversedBy: string;
+}>> {
+  return ((await query(
+    `SELECT original_decision, originally_decided_at, originally_decided_by,
+            the_control_said, because, reversed_at, reversed_by
+       FROM owner_decision_reversals
+      WHERE subject_kind = 'venture_experiment' AND subject_id = ?
+      ORDER BY reversed_at, rowid`, [experimentId]))
+    .rows as unknown as Array<Record<string, unknown>>).map((r) => ({
+    originalDecision: String(r.original_decision),
+    originallyDecidedAt: String(r.originally_decided_at),
+    originallyDecidedBy: String(r.originally_decided_by),
+    theControlSaid: String(r.the_control_said),
+    because: String(r.because),
+    reversedAt: String(r.reversed_at),
+    reversedBy: String(r.reversed_by),
+  }));
+}
+
+/**
+ * TWO TESTS THAT ARE ONE TEST.
+ *
+ * Retirement is for a duplicate, never for a question somebody would rather not
+ * answer. The caller states why in words that go on the row, and the survivor is
+ * named so the lineage is followable in both directions. Nothing that ran can be
+ * retired: a result is history, and history is read rather than tidied.
+ */
+export async function retireExperiment(input: {
+  experimentId: string; by: string; because: string; supersededBy?: string | null;
+}): Promise<{ retired: boolean; because: string }> {
+  const e = (await query(
+    'SELECT id, ran_at, retired_at FROM venture_experiments WHERE id = ?',
+    [input.experimentId])).rows[0] as Record<string, unknown> | undefined;
+  if (!e) return { retired: false, because: 'no such experiment' };
+  if (e.retired_at != null) return { retired: true, because: 'already retired' };
+  if (e.ran_at != null) return { retired: false, because: 'it has already run' };
+  await query(
+    `UPDATE venture_experiments
+        SET retired_at = datetime('now'), retired_because = ?, superseded_by = ?
+      WHERE id = ?`,
+    [`${input.because.trim()} (retired by ${input.by})`,
+      input.supersededBy ?? null, input.experimentId]);
+  return { retired: true, because: input.because.trim() };
 }

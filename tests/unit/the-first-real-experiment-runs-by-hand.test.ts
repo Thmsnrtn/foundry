@@ -118,7 +118,7 @@ describe('the owner\'s part is three acts on one page', () => {
     const r = await page(`/foundry/experiments/${X}/recipients`);
     expect(r.status).toBe(200);
     expect(r.text).toContain('Exclude your employer');
-    expect(r.text).toContain('The rest are fine (11)');
+    expect(r.text).toContain('Approve the rest (11)');
     const strike = (await recipientsOf(X)).find((x) => x.email === 'info@genwood.com')!;
     currentFounder = { id: OTHER, email: 'other@example.com', preferences: {} };
     expect((await post(`/foundry/experiments/${X}/recipients/${strike.id}`, { decision: 'struck' })).status).toBe(403);

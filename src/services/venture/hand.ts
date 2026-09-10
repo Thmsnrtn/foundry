@@ -347,7 +347,7 @@ export async function allowExperiment(input: { founderId: string; experimentId: 
   const paused = (await publicWorkshopOf(input.founderId))?.economicPause;
   if (paused) throw new HandRefused('workshop_paused', paused.reason);
   const by = `founder:${input.founderId}`;
-  await decideExperiment({ experimentId: input.experimentId, decision: 'approved', by });
+  await decideExperiment({ experimentId: input.experimentId, decision: 'approved', by, via: 'its own authorisation' });
   const after = await experimentRow(input.experimentId);
   if (!after?.productId) throw new HandRefused('asset_missing');
   await statedShapeAndFacts(after, after.productId, plan);
@@ -425,7 +425,7 @@ export async function declineExperiment(input: { founderId: string; experimentId
   const e = await experimentRow(input.experimentId);
   if (!e || e.founderId !== input.founderId) throw new HandRefused('experiment_not_found');
   if (e.decision !== null) throw new HandRefused('already_decided', e.decision);
-  await decideExperiment({ experimentId: input.experimentId, decision: 'declined', by: `founder:${input.founderId}` });
+  await decideExperiment({ experimentId: input.experimentId, decision: 'declined', by: `founder:${input.founderId}`, via: 'its own authorisation' });
 }
 
 /**

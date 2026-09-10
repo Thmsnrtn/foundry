@@ -273,7 +273,7 @@ export async function reframeProof1UnderTheWorkshop(founderId: string): Promise<
   await addRecipients({ founderId, experimentId: successor, recipients: PROOF1_RECIPIENTS });
   await refreshMaterials(founderId, successor);
   const { decideExperiment } = await import('./validation.js');
-  await decideExperiment({ experimentId: current, decision: 'declined', by: 'institution:workshop_keeper' });
+  await decideExperiment({ experimentId: current, decision: 'declined', by: 'institution:workshop_keeper', via: 'its own authorisation' });
   return { original: current, successor, number: identity.number, slug: identity.slug, alreadyReframed: false };
 }
 

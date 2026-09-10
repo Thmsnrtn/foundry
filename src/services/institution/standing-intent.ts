@@ -913,6 +913,8 @@ export async function recentDecisions(
 export interface LiveAllowance {
   id: string; statement: string; amountCents: number; spentCents: number;
   remainingCents: number; setAt: string;
+  /** When the ceiling stops, or why it does not. Never silently absent. */
+  horizon: string;
 }
 
 /**
@@ -935,7 +937,7 @@ export interface LiveAllowance {
  */
 export async function allowanceFor(productId: string): Promise<LiveAllowance | null> {
   const row = (await query(
-    `SELECT id, statement, amount_cents, set_at FROM owner_allowances
+    `SELECT id, statement, amount_cents, set_at, until, unbounded_because FROM owner_allowances
       WHERE product_id = ? AND withdrawn_at IS NULL
         AND (until IS NULL OR datetime(until) > datetime('now'))`, [productId]))
     .rows[0] as Record<string, unknown> | undefined;
@@ -956,6 +958,12 @@ export async function allowanceFor(productId: string): Promise<LiveAllowance | n
     id: String(row.id), statement: String(row.statement), amountCents: amount,
     spentCents: spent, remainingCents: Math.max(0, amount - spent),
     setAt: String(row.set_at).slice(0, 10),
+    // WHEN IT STOPS, IN THE WORDS THE ROW CARRIES. A ceiling with no end date
+    // now has to say why, and the page says it back to him rather than showing
+    // a budget that looks bounded and is not.
+    horizon: row.until == null
+      ? `no end date — ${String(row.unbounded_because ?? 'no reason recorded')}`
+      : `until ${String(row.until).slice(0, 10)}`,
   };
 }
 
@@ -993,6 +1001,8 @@ export async function recordMoneySpent(input: {
 
 export async function setAllowance(input: {
   productId: string; statement: string; amountCents: number; purpose: string;
+  /** When this ceiling stops. Omit for a standing budget he stated in words. */
+  until?: string | null;
 }): Promise<string> {
   // Replacing rather than refusing: saying a new number is how a person changes
   // a budget, and making him withdraw the old one first would be machinery.
@@ -1001,10 +1011,17 @@ export async function setAllowance(input: {
             withdraw_reason = 'the owner set a different amount'
       WHERE product_id = ? AND withdrawn_at IS NULL`, [input.productId]);
   const id = nanoid();
+  // EVERY CEILING SAYS WHEN IT STOPS, OR WHY IT DOES NOT. A budget the owner
+  // typed as a standing sentence genuinely has no end date, and that is a fact
+  // worth writing down rather than a null worth inheriting: the $100 that got
+  // written on 10 September had no horizon because nobody had ever had to say.
   await query(
-    `INSERT INTO owner_allowances (id, product_id, purpose, statement, amount_cents)
-     VALUES (?,?,?,?,?)`,
-    [id, input.productId, input.purpose.trim(), input.statement.trim(), input.amountCents]);
+    `INSERT INTO owner_allowances
+       (id, product_id, purpose, statement, amount_cents, until, unbounded_because)
+     VALUES (?,?,?,?,?,?,?)`,
+    [id, input.productId, input.purpose.trim(), input.statement.trim(), input.amountCents,
+      input.until ?? null,
+      input.until ? null : 'he said it in his own words and named no end to it']);
   return id;
 }
 

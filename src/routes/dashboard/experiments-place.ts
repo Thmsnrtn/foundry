@@ -317,10 +317,10 @@ experimentRoutes.get('/foundry/experiments/:id/recipients', async (c: any) => {
       <form method="POST" action="/foundry/experiments/${id}/recipients/${r.id}">
         <input type="hidden" name="decision" value="approved" />
         ${r.channel === 'web_form' ? html`<input type="email" name="email" placeholder="published email, if you have one" />` : ''}
-        <button class="btn yes" type="submit">Fine</button></form>
+        <button class="btn yes" type="submit">Approve &mdash; may be written to once</button></form>
       <form method="POST" action="/foundry/experiments/${id}/recipients/${r.id}">
         <input type="hidden" name="decision" value="struck" /><input type="text" name="reason" placeholder="why (optional)" />
-        <button class="btn" type="submit">Exclude</button></form></div>` : ''}
+        <button class="btn" type="submit">Exclude &mdash; never written to</button></form></div>` : ''}
   </div>`;
   const body = html`
     <h1>Who may be contacted</h1>
@@ -329,7 +329,7 @@ experimentRoutes.get('/foundry/experiments/:id/recipients', async (c: any) => {
     ${v.recipients.length ? html`<p class="quiet">${
     String(v.recipients.filter((r) => r.qualifiedAt).length)} of ${String(v.recipients.length)} carry a recorded, sourced reason for being in the population this design names. Your decision is whom to write to; the screening under it is Foundry's, and you can read it on every line.</p>` : ''}
     ${open && pending.some((r) => r.channel === 'email') ? html`<div class="pair"><form method="POST" action="/foundry/experiments/${id}/recipients/approve-remaining">
-      <button class="btn yes" type="submit">The rest are fine (${String(pending.filter((r) => r.channel === 'email').length)})</button></form></div>` : ''}
+      <button class="btn yes" type="submit">Approve the rest (${String(pending.filter((r) => r.channel === 'email').length)}) &mdash; each may be written to once</button></form></div>` : ''}
     ${pending.map(row)}
     ${decided.length ? html`<h2 class="section">Reviewed</h2>${decided.map(row)}` : ''}
     <p class="row"><a class="btn go" href="/foundry/experiments/${id}">Back to the test</a></p>`;

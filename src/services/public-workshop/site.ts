@@ -167,12 +167,22 @@ export function renderExperiment(f: PublicWorkshopFacts, x: PublicExperiment): s
   // to if they wanted the terms. Saying it fully in both places is how a page
   // starts sounding like it is trying to convince itself.
   const shortRefund = x.price ? `Refundable in full, no time limit.` : '';
+  // A MATERIAL TERM IS NOT A FEATURE OF ONE LIFECYCLE STATE.
+  //
+  // This branch used to replace the price line with "The offer is not open at
+  // the moment" whenever the experiment was testing without a payment link —
+  // which silently removed "No subscription, nothing renews" from the page, and
+  // with it the fact the publication gate and the readiness check both require.
+  // An internal state change made the page less honest and nobody said
+  // anything. So the terms are printed whenever there is a price, and being
+  // closed is said IN ADDITION to them rather than INSTEAD of them.
+  const closed = x.status === 'testing'
+    ? '<p class="quiet">The offer is not open at the moment.</p>' : '';
   const pay = x.payUrl && x.price ? `<div class="card">
   <p><strong>${esc(priceLine)}</strong></p>
   <p><a class="btn" href="${esc(x.payUrl)}" rel="nofollow">Buy for ${esc(amount(x.price))}</a></p>
   <p class="quiet">${esc(shortRefund)}</p>
-</div>` : x.status === 'testing' ? '<p class="quiet">The offer is not open at the moment.</p>'
-    : priceLine ? `<p><strong>${esc(priceLine)}</strong></p>` : '';
+</div>` : priceLine ? `<p><strong>${esc(priceLine)}</strong></p>${closed}` : closed;
   // A SPECIMEN BEATS A DESCRIPTION. Three paragraphs about the shape of the
   // thing tell a buyer less than one item of the thing itself, and the item
   // cannot overstate what it is, because it is what arrives.

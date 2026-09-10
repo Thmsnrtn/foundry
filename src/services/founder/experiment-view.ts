@@ -169,12 +169,20 @@ export async function getExperimentView(founderId: string, experimentId: string,
     learned, judgment,
     exceptions: await handExceptions(experimentId),
     timeline: await getExperimentTimeline(founderId, experimentId),
-    controls: { canStop: e.decision === 'approved' && e.ranAt === null && !withdrawn, allowance: allowance ? { budget: money(allowance.amountCents), statement: allowance.statement } : null, actId: act?.id ?? null },
+    controls: { canStop: e.decision === 'approved' && e.ranAt === null && !withdrawn, allowance: allowance ? { budget: money(allowance.amountCents), statement: `${allowance.statement} (${allowance.horizon})` } : null, actId: act?.id ?? null },
     details: [
       ['Experiment', experimentId], ['Decision', e.decision ?? 'undecided'], ['Validity', e.validity], ['Verdict', e.verdict ?? 'none yet'],
       ['Exposure', x ? `${x.provider}:${x.exposureRef}${withdrawn ? ' (withdrawn)' : ''}` : 'not placed'],
       ['Campaign act', act ? `${act.id} · ${act.decision ?? 'undecided'}${act.revokedAt ? ' · revoked' : ''}` : 'none'],
       ['Settlement rule', e.settlesWhen ?? 'none'], ['Asset', e.productId ?? 'none yet'],
+      // WHAT HE DECIDED AND THEN UNMADE. A withdrawal that left no trace on the
+      // page would be the same erasure the reversal record exists to prevent.
+      ['Withdrawn decisions', await (async () => {
+        const { reversalsOfDecisions } = await import('../venture/validation.js');
+        const back = await reversalsOfDecisions(experimentId);
+        return back.length === 0 ? 'none'
+          : back.map((r) => `${r.originalDecision} by ${r.originallyDecidedBy} at ${r.originallyDecidedAt} through "${r.theControlSaid}", withdrawn by ${r.reversedBy} at ${r.reversedAt}: ${r.because}`).join(' · ');
+      })()],
       ['Counterparties that counted', String(said.filter((s) => s.kind === 'payment' && s.counterparty === 'unmatched_external').length)],
     ],
     recipients, readiness: ready,
