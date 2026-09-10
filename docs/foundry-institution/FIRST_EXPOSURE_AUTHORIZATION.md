@@ -20,8 +20,12 @@ not touched that rule to save you a click. If you want the recorded screening to
 carry the admission instead, that is an amendment for you to ask for, not one for
 me to make on the way to a launch.
 
-Approving all eleven is safe: `planOffer` refuses any recipient without recorded
-qualification grounds, so **exactly two** businesses can receive anything.
+Approving all eleven is safe, and now closed rather than merely narrow. At Allow
+the act stamps `authorised_act_id` on exactly the businesses it covers — approved,
+reachable, and already carrying recorded grounds — and the row guard refuses an
+offer to anybody else (`experiment_action:recipient_not_in_this_authorisation`).
+**Exactly two** businesses can receive anything, and screening a third afterwards
+makes them eligible for a future decision rather than this one.
 
 ---
 
@@ -172,9 +176,13 @@ page stays up with an honest note of what happened.
   row with the charge reference. Not a click, not a visit.
 - **Delivery** — the provider's message ID and delivery status on the outbound
   action, reconciled afterwards; a bounce becomes a refund rather than a silence.
-- **Value** — the sealed rule reads *paid deliveries*, not opens or replies.
-  Anything said in a reply or through the page's form is recorded in the buyer's
-  own words and read before anybody else is written to.
+- **Willingness to pay, and a fulfilled delivery** — and *only* that. The sealed
+  rule reads `{ event: 'delivery', atLeast: 1, outOf: 'offer_delivered', atMost:
+  25, withinDays: 7 }`; a refunded or undelivered purchase does not count. A
+  payment is never read as evidence that the buyer found the brief useful.
+- **Whether it was any good** — a separate question, answered only by what
+  somebody actually says, through the page's form or a reply, in their own words,
+  and read before anybody else is written to. Absent that, it stays unanswered.
 
 ---
 

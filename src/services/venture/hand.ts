@@ -351,7 +351,15 @@ export async function allowExperiment(input: { founderId: string; experimentId: 
   const after = await experimentRow(input.experimentId);
   if (!after?.productId) throw new HandRefused('asset_missing');
   await statedShapeAndFacts(after, after.productId, plan);
-  const approved = (await recipientsOf(input.experimentId)).filter((r) => r.reviewStatus === 'approved' && r.channel === 'email' && r.email);
+  // WHO THIS APPROVAL COVERS, decided here and never again. Approval is the
+  // owner's consent and screening is the institution's evidence; an offer needs
+  // both, and until now it needed them *at the moment of sending*, which made
+  // consent over a group into standing authority over whoever later qualified.
+  // The set is closed at this instant: approved, reachable, and already carrying
+  // recorded grounds. Qualifying somebody afterwards makes them eligible for a
+  // future decision, which is what evidence is for.
+  const reachable = (await recipientsOf(input.experimentId)).filter((r) => r.reviewStatus === 'approved' && r.channel === 'email' && r.email);
+  const approved = reachable.filter((r) => r.qualifiedAt);
   const template = await materialOf(input.experimentId, 'offer_template');
   const hours = Math.max(24, Math.ceil(((input.within?.getTime() ?? Date.now() + 21 * 86_400_000) - Date.now()) / 3_600_000));
   // HIS STANDING WORD FOR THIS ASSET: nobody is written to from it without
@@ -393,13 +401,19 @@ export async function allowExperiment(input: { founderId: string; experimentId: 
   const actId = await proposeAct({
     productId: after.productId, subject: 'contact_people', actionType: 'send_email',
     params: campaignParams(input.experimentId, approved, template),
-    summary: `Write once to each of the ${approved.length} businesses you approved, in your name, offering ${plan.price.productName} at $${(plan.price.amountCents / 100).toFixed(2)} one-time`,
+    summary: `Write once to each of the ${approved.length} businesses you approved that the screening puts in this population${reachable.length > approved.length ? ` (${reachable.length - approved.length} more you approved carry no recorded grounds and are not covered)` : ''}, in your name, offering ${plan.price.productName} at $${(plan.price.amountCents / 100).toFixed(2)} one-time`,
     why: e.whatWeDo, expectedEffect: e.whatWeExpect, risk: 'One message per business, no follow-ups; a business that does not reply is never written to again for this test.',
     consequence: 'medium', rung: 'public', costCents: 0, proposedBy: HAND, validForHours: hours,
   });
   const bound = await bindActToExperiment({ actId, experimentId: input.experimentId, measurementCritical: true });
   if ('refused' in bound) throw new HandRefused('act_binding_refused', bound.refused);
   await decideProposedAct({ id: actId, decision: 'approved', decidedBy: by });
+  // The act's own list is a fingerprint, and a hash is not something a row guard
+  // can check membership against. So the membership is written where it can be
+  // enforced: on the people it covers, naming the act that covered them.
+  for (const r of approved) {
+    await query('UPDATE experiment_recipients SET authorised_act_id = ? WHERE id = ? AND authorised_act_id IS NULL', [actId, r.id]);
+  }
   // Sealed with the prediction, for the same reason: a deliberation that could
   // be edited afterwards would let every result be narrated as the expected one.
   await sealDesign(input.experimentId);

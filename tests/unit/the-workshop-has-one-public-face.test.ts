@@ -368,6 +368,47 @@ describe('Allow publishes the page; offers point at it and go out as the Worksho
     expect((await getExperimentView(OWNER, X, NOW))!.publicPage!.status).toMatch(/^published · seen/);
   });
 
+  it('an approval names who it approved: qualifying somebody afterwards does not make them contactable', async () => {
+    // THE DEFECT THIS EXISTS FOR. "The rest are fine" over a group used to mean
+    // consent to whoever in that group later acquired evidence — because the two
+    // gates, the owner's approval and the institution's screening, were both read
+    // at the moment of sending, and the institution may record screening on its
+    // own. Consent over a group had quietly become standing authority.
+    const act = (await campaignActOf(X))!;
+    const covered = (await recipientsOf(X)).filter((r) => r.qualifiedAt && r.reviewStatus === 'approved');
+    expect(covered.length).toBeGreaterThan(0);
+    for (const r of covered) {
+      expect((await one('SELECT authorised_act_id FROM experiment_recipients WHERE id = ?', [r.id])).authorised_act_id).toBe(act.id);
+    }
+    // A business that turns up AFTER the owner decided. Approve it, screen it,
+    // give it everything that used to make somebody contactable.
+    await addRecipients({ founderId: OWNER, experimentId: X, recipients: [
+      { counterpartyRef: 'Latecomer Millwork, Quincy', email: 'hello@latecomer.example.test', channel: 'email', sourceUrl: 'https://latecomer.example.test/' }] });
+    const outside = (await recipientsOf(X)).find((r) => r.counterpartyRef.startsWith('Latecomer'))!;
+    await reviewRecipient({ founderId: OWNER, experimentId: X, recipientId: outside.id, decision: 'approved' });
+    await qualifyRecipient({ founderId: OWNER, experimentId: X, recipientId: outside.id,
+      because: 'grounds recorded after the owner had already decided who this test writes to',
+      source: 'https://latecomer.example.test/projects' });
+    // Approved and screened, and still carrying no authority from this act.
+    expect((await one('SELECT authorised_act_id FROM experiment_recipients WHERE id = ?', [outside.id])).authorised_act_id).toBeNull();
+    // The row still refuses, and says why: approved is not the same as covered by
+    // THIS approval. Only a fresh decision can widen it.
+    const asset = await one('SELECT id FROM products WHERE from_experiment_id = ?', [X]);
+    await expect(query(
+      `INSERT INTO outbound_actions (id, product_id, agent_name, integration_name, action_type, authority_level, status, parameters_json, preview_text, rationale, confidence, expires_at, effect_id, outcome_status, experiment_id, experiment_act, recipient_id, proposed_act_id)
+       VALUES ('late_auth', ?, 'institution:hand', 'resend', 'send_email', 0, 'pending_approval', ?, 'p', 'r', 1, '2030-01-01', 'late_auth', 'unresolved', ?, 'offer', ?, ?)`,
+      [String(asset.id), JSON.stringify({ to: [outside.email], subject: 's', html: 'h' }), X, outside.id, act.id]))
+      .rejects.toThrow(/recipient_not_in_this_authorisation/);
+    // The hand's own path refuses in the same place, so nothing reaches them by
+    // any route: planOffer builds the row and the row is what says no.
+    await expect(planOffer({ experimentId: X, recipientId: outside.id, now: NOW }))
+      .rejects.toThrow(/recipient_not_in_this_authorisation/);
+    // Left as found: a business nobody decided about is not left standing as one
+    // the next pass will keep trying and failing to write to.
+    await reviewRecipient({ founderId: OWNER, experimentId: X, recipientId: outside.id,
+      decision: 'struck', reason: 'added only to prove that a later approval carries no authority from an earlier one' });
+  });
+
   it('the hand writes as Thomas Norton — Apex Micro, pointing at the page, with the Workshop\'s footer; the contact is on the Workshop\'s record', async () => {
     const reports = await runHand({ now: NOW, offersPerTick: 3 });
     expect(reports[0]).toMatchObject({ experimentId: X, offersSent: 3, exceptions: [] });

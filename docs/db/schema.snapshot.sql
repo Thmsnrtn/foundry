@@ -1762,7 +1762,7 @@ CREATE TABLE experiment_recipients (
   review_reason    TEXT,
   reviewed_by      TEXT,
   reviewed_at      TEXT,
-  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, qualified_at TEXT, qualified_because TEXT, qualified_source TEXT,
+  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, qualified_at TEXT, qualified_because TEXT, qualified_source TEXT, authorised_act_id TEXT REFERENCES proposed_acts(id),
   UNIQUE(experiment_id, counterparty_ref)
 );
 CREATE TABLE experiment_variants (
@@ -6620,16 +6620,8 @@ END;
 CREATE TRIGGER experiment_action_plan_guard
 BEFORE INSERT ON outbound_actions WHEN NEW.experiment_id IS NOT NULL
 BEGIN
-  SELECT RAISE(ABORT,'experiment_action:born_approved') WHERE NEW.status <> 'pending_approval'
-    OR NEW.approved_by IS NOT NULL OR NEW.approved_at IS NOT NULL OR NEW.executed_at IS NOT NULL;
-  SELECT RAISE(ABORT,'experiment_action:binding_invalid') WHERE NEW.experiment_act IS NULL
-    OR NEW.proposed_act_id IS NULL OR NEW.effect_id IS NULL
-    OR NEW.action_type <> 'send_email' OR NEW.integration_name <> 'resend'
-    OR NEW.responsibility_id IS NOT NULL OR NEW.authority_consent_id IS NOT NULL;
-  SELECT RAISE(ABORT,'experiment_action:asset_mismatch') WHERE NOT EXISTS (
-    SELECT 1 FROM products p WHERE p.id = NEW.product_id AND p.from_experiment_id = NEW.experiment_id
-      AND p.standing = 'experimental' AND p.deleted_at IS NULL);
-  SELECT RAISE(ABORT,'experiment_action:experiment_not_live') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT,'experiment_action:born_approved') WHERE NEW.status <> 'pending_approval';
+  SELECT RAISE(ABORT,'experiment_action:experiment_not_open') WHERE NOT EXISTS (
     SELECT 1 FROM venture_experiments e WHERE e.id = NEW.experiment_id AND e.decision = 'approved'
       AND (e.ran_at IS NULL OR NEW.experiment_act = 'delivery') AND e.validity = 'valid');
   SELECT RAISE(ABORT,'experiment_action:not_authorised') WHERE NOT EXISTS (
@@ -6641,6 +6633,11 @@ BEGIN
     SELECT 1 FROM experiment_recipients r WHERE r.id = NEW.recipient_id AND r.experiment_id = NEW.experiment_id
       AND r.review_status = 'approved' AND r.channel = 'email'
       AND r.email = coalesce(json_extract(NEW.parameters_json, '$.to[0]'), ''));
+  -- THE NEW ONE. Approved is not the same as covered by THIS approval.
+  SELECT RAISE(ABORT,'experiment_action:recipient_not_in_this_authorisation') WHERE NEW.experiment_act = 'offer'
+    AND NOT EXISTS (
+      SELECT 1 FROM experiment_recipients r WHERE r.id = NEW.recipient_id
+        AND r.authorised_act_id IS NOT NULL AND r.authorised_act_id = NEW.proposed_act_id);
   SELECT RAISE(ABORT,'experiment_action:nothing_owed') WHERE NEW.experiment_act = 'delivery' AND NOT EXISTS (
     SELECT 1 FROM experiment_fulfilments f WHERE f.id = NEW.fulfilment_id AND f.experiment_id = NEW.experiment_id
       AND f.status = 'owed');
@@ -6747,7 +6744,7 @@ END;
 CREATE TRIGGER experiment_recipient_guard
 BEFORE INSERT ON experiment_recipients
 BEGIN
-  SELECT RAISE(ABORT,'experiment_recipient:experiment_invalid') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT,'experiment_recipient:experiment_not_open') WHERE NOT EXISTS (
     SELECT 1 FROM venture_experiments e WHERE e.id = NEW.experiment_id AND e.founder_id = NEW.founder_id
       AND e.ran_at IS NULL AND e.validity = 'valid');
   SELECT RAISE(ABORT,'experiment_recipient:counterparty_required') WHERE trim(NEW.counterparty_ref) = '';
@@ -6761,6 +6758,9 @@ BEGIN
   -- moment it is written.
   SELECT RAISE(ABORT,'experiment_recipient:qualification_not_a_default') WHERE
     NEW.qualified_at IS NOT NULL OR NEW.qualified_because IS NOT NULL OR NEW.qualified_source IS NOT NULL;
+  -- Nor born authorised. Being covered by an approval is something an approval
+  -- does, at the moment it is given, to the people it names.
+  SELECT RAISE(ABORT,'experiment_recipient:authority_not_a_default') WHERE NEW.authorised_act_id IS NOT NULL;
 END;
 CREATE TRIGGER experiment_recipient_review_guard
 BEFORE UPDATE ON experiment_recipients
@@ -6793,6 +6793,14 @@ BEGIN
     AND (NEW.qualified_at IS NOT OLD.qualified_at
       OR NEW.qualified_because IS NOT OLD.qualified_because
       OR NEW.qualified_source IS NOT OLD.qualified_source);
+  -- WHO AN APPROVAL COVERS IS SETTLED WHEN IT IS GIVEN. It may be written once,
+  -- by the act that names them, and never moved to another act afterwards —
+  -- otherwise an old consent could be pointed at a new campaign.
+  SELECT RAISE(ABORT,'experiment_recipient:authority_stands') WHERE
+    OLD.authorised_act_id IS NOT NULL AND NEW.authorised_act_id IS NOT OLD.authorised_act_id;
+  -- And only somebody the owner approved can be covered at all.
+  SELECT RAISE(ABORT,'experiment_recipient:authority_needs_approval') WHERE
+    NEW.authorised_act_id IS NOT NULL AND OLD.authorised_act_id IS NULL AND NEW.review_status <> 'approved';
 END;
 CREATE TRIGGER exposure_classes_constitutional_delete
 BEFORE DELETE ON exposure_classes

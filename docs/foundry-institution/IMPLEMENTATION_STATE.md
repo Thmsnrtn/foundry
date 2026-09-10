@@ -2571,3 +2571,57 @@ can still be filled. The September 10 edition is therefore offerable through
 pulled again — one request through the platform's own export, so this is a chore
 rather than an obstacle. Nothing about that mechanism appears on the customer's
 page; what the customer sees is the pull date and that it is a fixed edition.
+
+## An approval names who it approved (2026-09-10)
+
+Migration 296, found by the owner asking the right question before authorising:
+*could approving eleven businesses later let one of the other nine become
+contactable without a fresh decision?*
+
+**It could, and here is the exact path.** Two rules stood between an approved
+business and a message. The row guard required `review_status = 'approved'` —
+the owner's consent. `planOffer` refused anybody with no recorded qualification —
+the institution's evidence. Both were read **at the moment of sending**, and
+`qualifyRecipient` needs only grounds and a source, with no owner stamp, because
+evidence is properly the institution's to record.
+
+Put together, consent over a group became standing authority over whoever in
+that group later acquired evidence. "The rest are fine" over eleven meant two
+were contactable today and a third the moment a screening pass wrote grounds for
+them. Nobody would have decided that.
+
+The act the owner approves already carries the list of who it covers, but only as
+a **fingerprint** — a hash is not something a row guard can check membership
+against. So the membership is written where it can be enforced: on the recipients
+themselves, at the instant the act is approved, naming the act that authorised
+them.
+
+- `experiment_recipients.authorised_act_id` — never set at insert
+  (`authority_not_a_default`), settable only for somebody already approved
+  (`authority_needs_approval`), and never moved to another act once written
+  (`authority_stands`), so an old consent cannot be pointed at a new campaign.
+- The plan guard gains `experiment_action:recipient_not_in_this_authorisation`.
+- `allowExperiment` closes the set at Allow: approved **and** reachable **and**
+  already carrying recorded grounds. The act's summary now says how many that is
+  and how many approved businesses it does *not* cover.
+
+Approval, evidence and authority are three different things, and only the third
+decides who receives a message. Qualifying somebody afterwards now makes them
+eligible for a **future** decision, which is what evidence is for.
+
+A test plants the defect: a business added after Allow, approved, screened, given
+everything that used to make somebody contactable — and refused, by the row and
+by `planOffer`, with the reason named.
+
+### The other semantic, checked and left alone
+
+A settled payment plus a successful delivery is recorded as **willingness to pay
+and fulfilled delivery**, not as evidence that the buyer found the brief useful.
+The sealed rule reads `{ event: 'delivery', atLeast: 1, outOf: 'offer_delivered',
+atMost: 25, withinDays: 7 }`; the prediction says *"at least one business pays $29
+**and receives the brief**"*; and the disproof says *"a refunded or undelivered
+purchase does not count"*. Nothing in that path infers satisfaction from a
+payment. What a buyer actually thought arrives separately and in their own words,
+through the page's form or a reply, and is read before anybody else is written
+to. The authorization package used *Value* as a heading over that paragraph; the
+heading has been corrected, and the evidence model was already right.
