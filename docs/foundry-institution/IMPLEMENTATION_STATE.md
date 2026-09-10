@@ -1916,3 +1916,30 @@ Code, tests and this file no longer assert the old criterion anywhere; test
 fixtures that stated "appears as a bidder in the COMMBUYS public award record"
 as a synthetic ground said something untrue in the same shape, and were changed
 too.
+
+## Exactly-once ingress, proved against the live door (2026-09-10)
+
+The edge program forwards to the owner and then tells Foundry best-effort, and
+it is that POST which retries — so the redelivery that matters is a repeated
+call at the intake, not a repeated SMTP delivery. Proved against production's
+own endpoint, with the intake secret read and used on the machine and never
+printed:
+
+| Delivery | Answer |
+|---|---|
+| first | `{ ok: true, duplicate: false }` |
+| second | `{ ok: true, duplicate: true }` |
+| third | `{ ok: true, duplicate: true }` |
+
+**One row.** Three deliveries of a message somebody sent once produced one
+record, one reading and one thing for the owner to look at.
+
+It also confirmed the envelope-sender defect is real in production and not just
+in theory: the stored `from_email` was `bounce-xyz@relay.example.test`, the
+envelope, rather than the `From:` header's address. That fix is written and
+tested but not yet deployed, so this is the before half of a before-and-after.
+
+Both controlled messages were then settled to `no_action` with a reason saying
+plainly what they were — checks Foundry ran against itself, written by nobody,
+contacting nobody. The owner's queue is empty rather than holding two artefacts
+of my own testing.
