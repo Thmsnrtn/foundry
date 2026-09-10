@@ -141,6 +141,20 @@ describe('the binding of an outbound action to the experiment', () => {
     await expect(insertAction({ recipient_id: 'g_r1', parameters_json: JSON.stringify({ to: ['someone-else@example.com'] }) })).rejects.toThrow(/recipient_not_approved/);
     await query(`INSERT INTO experiment_recipients (id, founder_id, experiment_id, counterparty_ref, email, channel) VALUES ('g_r_pending', ?, ?, 'Pending Shop', 'p@shop.example', 'email')`, [OWNER, X]);
     await expect(insertAction({ recipient_id: 'g_r_pending', parameters_json: JSON.stringify({ to: ['p@shop.example'] }) })).rejects.toThrow(/recipient_not_approved/);
+    // APPROVED IS NOT THE SAME AS COVERED BY THIS APPROVAL. Consent and evidence
+    // were both read at the moment of sending, so consent over a group silently
+    // extended to whoever in that group later qualified. An offer now needs the
+    // act that named them, and being approved is not that.
+    await expect(insertAction({ recipient_id: 'g_r1', parameters_json: JSON.stringify({ to: ['a@shop.example'] }) }))
+      .rejects.toThrow(/recipient_not_in_this_authorisation/);
+    await query(`UPDATE experiment_recipients SET authorised_act_id = ? WHERE id = 'g_r1'`, [ACT]);
+    // And it cannot be moved to another act afterwards, or an old consent could
+    // be pointed at a new campaign.
+    await expect(query(`UPDATE experiment_recipients SET authorised_act_id = 'g_some_other_act' WHERE id = 'g_r1'`))
+      .rejects.toThrow(/authority_stands/);
+    // Nor given to somebody the owner never approved.
+    await expect(query(`UPDATE experiment_recipients SET authorised_act_id = ? WHERE id = 'g_r_pending'`, [ACT]))
+      .rejects.toThrow(/authority_needs_approval/);
     await expect(insertAction({ id: 'g_act_ok', recipient_id: 'g_r1', parameters_json: JSON.stringify({ to: ['a@shop.example'] }) })).resolves.toBeDefined();
     // The binding never changes; the door's own record of what happened may.
     await expect(query(`UPDATE outbound_actions SET recipient_id = 'g_r_pending' WHERE id = 'g_act_ok'`)).rejects.toThrow(/binding_immutable/);

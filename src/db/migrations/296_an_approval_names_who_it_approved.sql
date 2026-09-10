@@ -27,7 +27,7 @@ DROP TRIGGER experiment_recipient_guard;
 CREATE TRIGGER experiment_recipient_guard
 BEFORE INSERT ON experiment_recipients
 BEGIN
-  SELECT RAISE(ABORT,'experiment_recipient:experiment_not_open') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT,'experiment_recipient:experiment_invalid') WHERE NOT EXISTS (
     SELECT 1 FROM venture_experiments e WHERE e.id = NEW.experiment_id AND e.founder_id = NEW.founder_id
       AND e.ran_at IS NULL AND e.validity = 'valid');
   SELECT RAISE(ABORT,'experiment_recipient:counterparty_required') WHERE trim(NEW.counterparty_ref) = '';
@@ -88,14 +88,20 @@ BEGIN
     NEW.authorised_act_id IS NOT NULL AND OLD.authorised_act_id IS NULL AND NEW.review_status <> 'approved';
 END;
 
--- THE OFFER GOES TO SOMEBODY THIS ACT NAMED. Approval, evidence and authority
--- are three different things, and only the third decides who receives a message.
 DROP TRIGGER experiment_action_plan_guard;
 CREATE TRIGGER experiment_action_plan_guard
 BEFORE INSERT ON outbound_actions WHEN NEW.experiment_id IS NOT NULL
 BEGIN
-  SELECT RAISE(ABORT,'experiment_action:born_approved') WHERE NEW.status <> 'pending_approval';
-  SELECT RAISE(ABORT,'experiment_action:experiment_not_open') WHERE NOT EXISTS (
+  SELECT RAISE(ABORT,'experiment_action:born_approved') WHERE NEW.status <> 'pending_approval'
+    OR NEW.approved_by IS NOT NULL OR NEW.approved_at IS NOT NULL OR NEW.executed_at IS NOT NULL;
+  SELECT RAISE(ABORT,'experiment_action:binding_invalid') WHERE NEW.experiment_act IS NULL
+    OR NEW.proposed_act_id IS NULL OR NEW.effect_id IS NULL
+    OR NEW.action_type <> 'send_email' OR NEW.integration_name <> 'resend'
+    OR NEW.responsibility_id IS NOT NULL OR NEW.authority_consent_id IS NOT NULL;
+  SELECT RAISE(ABORT,'experiment_action:asset_mismatch') WHERE NOT EXISTS (
+    SELECT 1 FROM products p WHERE p.id = NEW.product_id AND p.from_experiment_id = NEW.experiment_id
+      AND p.standing = 'experimental' AND p.deleted_at IS NULL);
+  SELECT RAISE(ABORT,'experiment_action:experiment_not_live') WHERE NOT EXISTS (
     SELECT 1 FROM venture_experiments e WHERE e.id = NEW.experiment_id AND e.decision = 'approved'
       AND (e.ran_at IS NULL OR NEW.experiment_act = 'delivery') AND e.validity = 'valid');
   SELECT RAISE(ABORT,'experiment_action:not_authorised') WHERE NOT EXISTS (
@@ -107,7 +113,11 @@ BEGIN
     SELECT 1 FROM experiment_recipients r WHERE r.id = NEW.recipient_id AND r.experiment_id = NEW.experiment_id
       AND r.review_status = 'approved' AND r.channel = 'email'
       AND r.email = coalesce(json_extract(NEW.parameters_json, '$.to[0]'), ''));
-  -- THE NEW ONE. Approved is not the same as covered by THIS approval.
+  -- APPROVED IS NOT THE SAME AS COVERED BY THIS APPROVAL. Consent was read at
+  -- the moment of sending, alongside evidence the institution may record on its
+  -- own — so consent over a group silently extended to whoever in that group
+  -- later qualified. The act names who it covers when it is given, and this is
+  -- where that naming is enforced.
   SELECT RAISE(ABORT,'experiment_action:recipient_not_in_this_authorisation') WHERE NEW.experiment_act = 'offer'
     AND NOT EXISTS (
       SELECT 1 FROM experiment_recipients r WHERE r.id = NEW.recipient_id
