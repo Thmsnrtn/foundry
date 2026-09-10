@@ -42,7 +42,7 @@ import { waitingOn } from '../../src/services/founder/attention.js';
 import { exposureOf } from '../../src/services/venture/outcome.js';
 import { invoke } from '../../src/services/outbound/gateway.js';
 import { contactIsRefused } from '../../src/services/institution/contact-constraint.js';
-import { APEX_MICRO, establishPublicWorkshop, pauseNewEconomicActivity, publicWorkshopOf, resumeEconomicActivity, setPostalAddress } from '../../src/services/public-workshop/settings.js';
+import { APEX_MICRO, establishPublicWorkshop, pauseNewEconomicActivity, publicWorkshopOf, resumeEconomicActivity, setMailForwardTo, setPostalAddress } from '../../src/services/public-workshop/settings.js';
 import { connectReplyInbox, connectWorkshopSending, standUpWorkshop, workshopHealth } from '../../src/services/public-workshop/infrastructure.js';
 import { experimentPublication, livePublications, publicationGate, publishPage, publishSite, verifyPublication } from '../../src/services/public-workshop/publication.js';
 import { PUBLIC_EXPERIMENT_FIELDS, leakIn, privateStringsOf, projectExperiment, projectRegistry } from '../../src/services/public-workshop/projection.js';
@@ -97,6 +97,7 @@ afterAll(() => { vi.unstubAllGlobals(); });
 describe('the Workshop exists as rows before it exists in the world', () => {
   it('is established once, from the approved voice, as the owner\'s one earned company; its rows refuse what would make it untrue', async () => {
     const w = await establishPublicWorkshop({ founderId: OWNER });
+    await setMailForwardTo(OWNER, 'workshop-post@example.com');
     expect(w).toMatchObject({ publicName: 'Apex Micro', operatorName: 'Thomas Norton', origin: 'https://apexmicro.ai', zoneName: 'apexmicro.ai', contactEmail: 'thomas@apexmicro.ai', productId: FOUNDRY, economicPause: null, kvNamespaceId: null });
     expect(w.statement).toBe(APEX_MICRO.statement);
     expect((await establishPublicWorkshop({ founderId: OWNER })).founderId).toBe(OWNER);
@@ -293,7 +294,7 @@ describe('Proof 1 is reframed under the Workshop without rewriting its history',
     expect(state.cf.routing.rules).toHaveLength(1);
     state.cf.routingEnableFails = false;
     const inbox = await connectReplyInbox(OWNER);
-    expect(inbox).toMatchObject({ to: 'thomas@apexmicro.ai', forwardTo: 'thomas@example.com', destinationVerified: false });
+    expect(inbox).toMatchObject({ to: 'thomas@apexmicro.ai', forwardTo: 'workshop-post@example.com', destinationVerified: false });
     expect((await workshopHealth(OWNER)).replyInbox.detail).toContain('not yet confirmed');
     state.cf.routing.destinations[0].verified = '2026-09-09';
     expect((await workshopHealth(OWNER)).replyInbox).toMatchObject({ status: 'healthy' });

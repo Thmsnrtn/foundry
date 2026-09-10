@@ -28,7 +28,7 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import '../../src/services/integration/cloudflare-gateway.js';
 import { providerStubs } from '../helpers/provider-stubs.js';
-import { establishPublicWorkshop } from '../../src/services/public-workshop/settings.js';
+import { establishPublicWorkshop, setMailForwardTo } from '../../src/services/public-workshop/settings.js';
 import { standUpWorkshop } from '../../src/services/public-workshop/infrastructure.js';
 import { earsFor, hearMail, mailHealth, needsTheOwner, openTheEars, readIt, theInbox, theThread } from '../../src/services/public-workshop/mail.js';
 import { isSuppressed, continuationsOf } from '../../src/services/public-workshop/suppression.js';
@@ -56,6 +56,9 @@ beforeAll(async () => {
   await query(`INSERT INTO products (id,name,owner_id,status,operating_budget_monthly_usd) VALUES (?,'Foundry',?,'active',50)`, [FOUNDRY, OWNER]);
   await query(`INSERT INTO system_identities (identity_key,product_id,established_reason) VALUES ('foundry',?,'hearing')`, [FOUNDRY]);
   await establishPublicWorkshop({ founderId: OWNER });
+  // Where Apex Micro's post is delivered — the Workshop's decision, never the
+  // owner's account address.
+  await setMailForwardTo(OWNER, 'workshop-post@example.com');
   await standUpWorkshop(OWNER);
   INTAKE = (await openTheEars(OWNER)).intakeKey;
   const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
@@ -454,7 +457,7 @@ describe('giving the Workshop ears is one governed, reversible act', () => {
     // there. In production that made it report "you have not yet confirmed" —
     // naming no address at all — about an address Cloudflare had verified. The
     // reply path is now read the way it actually runs.
-    const dest = state.cf.routing.destinations.find((d) => d.email === 'thomas@example.com');
+    const dest = state.cf.routing.destinations.find((d) => d.email === 'workshop-post@example.com');
     if (dest) dest.verified = new Date().toISOString();
     const { workshopHealth } = await import('../../src/services/public-workshop/infrastructure.js');
     const h = await workshopHealth(OWNER, { fetchImpl: fetchStub });
@@ -465,7 +468,8 @@ describe('giving the Workshop ears is one governed, reversible act', () => {
     // signal, and messages earlier in this file are deliberately waiting.)
     expect(h.mail.detail).not.toContain('cannot hear');
     expect(r.program).toBe(WORKSHOP_MAIL_WORKER_NAME());
-    expect(r.forwardTo).toBe('thomas@example.com');
+    // The Workshop's own destination, not the founder account's address.
+    expect(r.forwardTo).toBe('workshop-post@example.com');
     // The program exists at the edge, and the address points at it.
     const routed = await rowsOf(`SELECT resource, outcome, verification_json FROM cloudflare_mutations WHERE tool = 'cloudflare_email_route_upsert' ORDER BY rowid DESC LIMIT 1`);
     expect(String(routed[0]!.verification_json)).toContain(WORKSHOP_MAIL_WORKER_NAME());

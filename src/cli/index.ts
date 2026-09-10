@@ -890,6 +890,9 @@ program.command('workshop:sending <founderIdOrEmail>').description('Connect send
   .action(async (who: string) => { const { connectWorkshopSending } = await import('../services/public-workshop/infrastructure.js'); out(await connectWorkshopSending(await founderIdOf(who))); });
 program.command('workshop:inbox <founderIdOrEmail>').description('Forward the Workshop address to the owner (one confirmation click at the provider the first time)')
   .action(async (who: string) => { const { connectReplyInbox } = await import('../services/public-workshop/infrastructure.js'); out(await connectReplyInbox(await founderIdOf(who))); });
+program.command('workshop:forward-to <founderIdOrEmail> <address>').description('Where Apex Micro\'s post is delivered. An owner decision; never the founder account address')
+  .action(async (who: string, address: string) => { const { setMailForwardTo } = await import('../services/public-workshop/settings.js'); await setMailForwardTo(await founderIdOf(who), address); out({ ok: true }); });
+
 program.command('workshop:postal <founderIdOrEmail> <address>').description('Record the owner-supplied postal address commercial mail must carry')
   .action(async (who: string, address: string) => { const { setPostalAddress } = await import('../services/public-workshop/settings.js'); await setPostalAddress(await founderIdOf(who), address); out({ ok: true }); });
 program.command('workshop:rehearse <founderIdOrEmail>').description('Experiment 002: publish, verify, update, conclude and close a synthetic experiment page')

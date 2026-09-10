@@ -164,9 +164,17 @@ export async function connectWorkshopSending(founderId: string, fetchImpl: typeo
  */
 export async function connectReplyInbox(founderId: string): Promise<{ to: string; forwardTo: string; destinationVerified: boolean }> {
   const w = need(await publicWorkshopOf(founderId));
-  const founder = (await rows('SELECT email FROM founders WHERE id = ?', [founderId]))[0];
-  const forwardTo = String(founder?.email ?? '');
-  if (!forwardTo) throw new WorkshopRefused('no_owner_address');
+  // WHERE THE WORKSHOP'S POST GOES IS A DECISION, NOT AN INFERENCE. This read
+  // `founders.email` and so made the owner's private mailbox — the address he
+  // signs in with — into Apex Micro's mail infrastructure, silently, because it
+  // was the default in a line of code. The Workshop's forwarding address is its
+  // own setting now, and absent one this refuses rather than reaching for
+  // whatever address happens to be on the founder row.
+  const forwardTo = w.mailForwardTo ?? '';
+  if (!forwardTo) {
+    throw new WorkshopRefused('no_forwarding_address',
+      'the Workshop has no address of its own to deliver post to, and the owner\'s personal mailbox is not one');
+  }
   const r = await door(w, 'cloudflare_email_route_upsert', `forward ${w.contactEmail} to the owner`, { zone_name: w.zoneName, to: w.contactEmail, forward_to: forwardTo, purpose: 'replies to the Workshop reach the person who wrote' }, `public:${founderId}:route:enabled:${w.contactEmail}:${forwardTo}`);
   return { to: w.contactEmail, forwardTo, destinationVerified: Boolean(r.destinationVerified) };
 }
@@ -187,9 +195,15 @@ export async function connectReplyInbox(founderId: string): Promise<{ to: string
  */
 export async function standUpTheEars(founderId: string): Promise<{ program: string; hearing: boolean; forwardTo: string }> {
   const w = need(await publicWorkshopOf(founderId));
-  const founder = (await rows('SELECT email FROM founders WHERE id = ?', [founderId]))[0];
-  const forwardTo = String(founder?.email ?? '');
-  if (!forwardTo) throw new WorkshopRefused('no_owner_address');
+  // The Workshop's own address, for the reason given on connectReplyInbox: the
+  // founder row's address is who the owner is to Foundry, not where Apex
+  // Micro's post is delivered, and defaulting to it is how a private mailbox
+  // becomes Workshop infrastructure without anybody deciding it should.
+  const forwardTo = w.mailForwardTo ?? '';
+  if (!forwardTo) {
+    throw new WorkshopRefused('no_forwarding_address',
+      'the Workshop has no address of its own to deliver post to, and the owner\'s personal mailbox is not one');
+  }
   const { openTheEars } = await import('./mail.js');
   const { MAIL_WORKER_SOURCE } = await import('./mail-worker-source.js');
   const { WORKSHOP_MAIL_WORKER_NAME } = await import('../integration/cloudflare-gateway.js');
@@ -267,10 +281,10 @@ export async function workshopHealth(founderId: string, opts: { fetchImpl?: type
       // have not yet confirmed" about an address Cloudflare had verified, and
       // named no address at all while doing it. Where the rule routes to the
       // Workshop's own program, the address to ask about is the owner's.
-      const owner = (await rows('SELECT email FROM founders WHERE id = ?', [founderId]))[0];
       const { WORKSHOP_MAIL_WORKER_NAME: mailProgram } = await import('../integration/cloudflare-gateway.js');
       const throughProgram = rule?.worker != null && rule.worker === mailProgram();
-      const wanted = throughProgram ? [String(owner?.email ?? '')] : (rule?.forwardTo ?? []);
+      // The Workshop's own forwarding address, never the founder row's.
+      const wanted = throughProgram ? [String(w.mailForwardTo ?? '')] : (rule?.forwardTo ?? []);
       const dest = rule ? routing?.destinations.find((d) => wanted.includes(d.email)) : undefined;
       health.replyInbox = !routing?.enabled ? { status: 'needs_attention', detail: 'mail routing is not enabled on the zone' }
         : !rule ? { status: 'needs_attention', detail: `no forwarding rule for ${w.contactEmail}` }

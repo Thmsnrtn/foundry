@@ -1992,3 +1992,57 @@ the failure was honest — and it surfaced a latent fragility that no green suit
 would have shown, because in a test the provider is always imported.
 
 **Mode is back to `off`.** Zero contacts, zero offers, zero approved recipients.
+
+## Apex Micro is the communication identity; the owner's mailbox is not (2026-09-10)
+
+Migration 293, and a boundary that should have been there from the start.
+
+`standUpTheEars` and `connectReplyInbox` read `founders.email` and made the
+address the owner signs in with the destination every message to apexmicro.ai
+is delivered to. Nobody decided that. It was the default in a line of code, and
+it quietly turned a private mailbox into Workshop infrastructure — the kind of
+dependency that stays invisible until somebody reads their own routing rules
+and finds their personal account in them. My live send proof then made it
+worse by using that address as the stand-in customer.
+
+**Three identities, and the schema now says so:**
+
+| | |
+|---|---|
+| `founders.email` | who the owner is to Foundry |
+| `public_workshop.contact_email` | who Apex Micro is to the world |
+| `public_workshop.mail_forward_to` | where Apex Micro's post is delivered |
+
+The third is a decision, never an inference. Absent one, both doors that point
+mail somewhere now refuse — `no_forwarding_address`, *"the Workshop has no
+address of its own to deliver post to, and the owner's personal mailbox is not
+one"* — rather than reaching for the founder row. A test holds the whole
+communications surface to it: no module in `public-workshop/` may read the
+founder row's address or the configured instance owner, and no Workshop test
+may use the owner's address as a correspondent.
+
+**What was found in production, and what it is now.** Nothing else had taken
+the dependency: the personal address is not a contact, not a recipient, not
+suppressed, holds no continuation, and nothing was ever sent to it. It exists
+in exactly one `workshop_mail` row — my own proof — whose reply is `failed` and
+which `answer()` can never retry, because it returns early on any existing
+reply. That row stays. Mail is append-only except under account erasure, and
+that rule exists so a Workshop cannot quietly delete what somebody said to it;
+carving an exception for my own convenience would be the wrong trade. It is
+settled to `no_action` with a note saying exactly what it was.
+
+**The live dependency that remains, and why I did not remove it.** Cloudflare
+Email Routing delivers `thomas@apexmicro.ai` to the program, which forwards to
+the owner's personal address, because that is what it was stood up with. A
+destination must be a real, verified mailbox somewhere; Cloudflare does not
+host one, and Foundry has no SMTP inbox — it hears over HTTP and stores parsed
+text, not raw MIME. **Pointing the forward anywhere else with nothing behind it
+would drop the Workshop's mail on the floor**, so the live route is unchanged
+and the dependency is named here rather than silently preserved or silently
+broken.
+
+**Test instrument, replaced.** Proving a live send by pointing it at the
+owner's private mailbox makes that mailbox part of the proof and then part of
+the furniture. Future live send proofs use the provider's own sink —
+`success@simulator.amazonses.com`, which the sending path already runs through
+— which accepts, discards, never bounces and costs no sender reputation.

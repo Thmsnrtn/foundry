@@ -20,6 +20,12 @@ export interface PublicWorkshop {
   founderId: string; productId: string; publicName: string; operatorName: string; origin: string; zoneName: string;
   contactEmail: string; statement: string; about: string; workerName: string; kvNamespaceId: string | null;
   postalAddress: string | null; contactGapDays: number; contactCeilingPerYear: number;
+  /**
+   * WHERE APEX MICRO'S POST IS DELIVERED. Deliberately not the founder row's
+   * address: that is who the owner is to Foundry, and it is not the Workshop's
+   * mail infrastructure. Absent means the Workshop cannot be given ears.
+   */
+  mailForwardTo: string | null;
   economicPause: { at: string; reason: string; by: string } | null;
   health: Record<string, unknown> | null; healthAt: string | null;
 }
@@ -47,6 +53,7 @@ function project(r: Row): PublicWorkshop {
     origin: String(r.origin), zoneName: String(r.zone_name), contactEmail: String(r.contact_email), statement: String(r.statement), about: String(r.about ?? ''),
     workerName: String(r.worker_name), kvNamespaceId: r.kv_namespace_id == null ? null : String(r.kv_namespace_id),
     postalAddress: r.postal_address == null ? null : String(r.postal_address),
+    mailForwardTo: r.mail_forward_to == null ? null : String(r.mail_forward_to),
     contactGapDays: Number(r.contact_gap_days), contactCeilingPerYear: Number(r.contact_ceiling_per_year),
     economicPause: r.economic_pause_at == null ? null : { at: String(r.economic_pause_at), reason: String(r.economic_pause_reason ?? ''), by: String(r.economic_pause_by ?? '') },
     health: r.health_json == null ? null : (JSON.parse(String(r.health_json)) as Record<string, unknown>), healthAt: r.health_at == null ? null : String(r.health_at),
@@ -93,6 +100,12 @@ export async function setWorkshopStore(founderId: string, kvNamespaceId: string)
 }
 
 /** Owner-supplied only. Never his home address by default; never invented. */
+/** Where the Workshop's post goes. An owner decision, never inferred. */
+export async function setMailForwardTo(founderId: string, address: string | null): Promise<void> {
+  const a = address?.trim().toLowerCase() || null;
+  await query(`UPDATE public_workshop SET mail_forward_to = ?, updated_at = datetime('now') WHERE founder_id = ?`, [a, founderId]);
+}
+
 export async function setPostalAddress(founderId: string, address: string | null): Promise<void> {
   const a = address?.trim() || null;
   await query(`UPDATE public_workshop SET postal_address = ?, updated_at = datetime('now') WHERE founder_id = ?`, [a, founderId]);
