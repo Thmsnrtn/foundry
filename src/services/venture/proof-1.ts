@@ -104,13 +104,33 @@ export const PROOF1_PLAN: OfferShapePlan = {
 export const PROOF1_SLUG = 'ma-millwork-bid-brief';
 export const PROOF1_PUBLIC = {
   title: 'Massachusetts Millwork Bid Brief',
-  summary: 'A one-time test of a simpler way for commercial millwork shops to find potentially relevant Massachusetts public bid opportunities.',
+  // WHAT IT IS, NOT WHAT IT IS AN INSTANCE OF. This read "a one-time test of a
+  // simpler way for commercial millwork shops to find potentially relevant
+  // Massachusetts public bid opportunities" — three hedges deep, describing the
+  // test rather than the thing, so five seconds on the page taught a shop owner
+  // nothing about what he would get. The developmental status is true and stays;
+  // it belongs on the status line, not in front of the offer.
+  summary: 'A hand-screened shortlist of the Massachusetts public bid notices that look like cabinet, casework or millwork work — thirteen of them, each with its bid number, opening date, agency contact and a link to the original notice.',
   who: 'Independent commercial cabinet, casework and architectural millwork shops in Massachusetts that bid, or would like to bid, on public work.',
-  what: 'One brief, by email, within one business day of payment: a hand-screened shortlist of the public bid notices currently open on COMMBUYS that appear relevant to cabinet, casework, countertop and millwork work. Each item carries the bid number, the opening date, the agency contact, one line on why it may fit, and a link to the original notice. The pilot edition lists thirteen notices screened from the 952 solicitations open in the week it was pulled.',
-  limits: 'It is not complete. It covers COMMBUYS only, not the Central Register, DCAMM\'s e-bid room or agency portals. Relevance is judged from the notice text, not from the bid documents, so a notice that says "renovation" may or may not carry casework in its scope; the brief says which inferences are weak. It does not guarantee that any bid is winnable or right for you.',
-  sources: 'COMMBUYS, the Commonwealth of Massachusetts public procurement record, read in full for each listed notice on the date shown in the brief. Every item links to the authoritative record so you can check it yourself.',
-  selection: 'A small number of Massachusetts millwork businesses were chosen by hand from their public websites, where the commercial work shown suggested the brief could be relevant. Each was written to once, from my own address, using the contact address the business publishes. There is no list, no purchased data and no follow-up.',
-  note: 'Hi, I\'m Thomas Norton. I run Apex Micro, a small digital workshop where I test useful niche products and services before deciding whether they\'re worth developing into independent businesses. I use software I\'ve built to help research and operate these tests, but I\'m the person responsible for this one.\n\nFor this experiment I\'m testing whether a short, curated brief of current Massachusetts public bid notices is useful enough to commercial millwork shops that they\'d pay $29 for it. This is a pilot, not an established service and not a subscription.',
+  // A FIXED EDITION, SAID AS SUCH. "The public bid notices currently open" sat
+  // in the same paragraph as "the week it was pulled" and the two do not agree.
+  // A buyer reading the first sentence expects a live view; what arrives is a
+  // dated document. The pull date is now stated wherever the brief is described,
+  // so the claim cannot quietly go stale as the launch date moves.
+  what: 'One brief, by email, within one business day of payment. It is a fixed edition, not a live feed: the pilot edition lists thirteen notices, screened by hand from the 952 solicitations that were open on COMMBUYS on 7 September 2026. Each item carries the bid number, the opening date, the agency contact, one line on why it may fit, and a link to the original notice, so you can check every one of them yourself.',
+  limits: 'It is not complete. It covers COMMBUYS only — not the Central Register, not DCAMM\'s e-bid room, not the municipal portals that do not post there — so a job that is not in it is not necessarily absent from the market. Relevance is judged from the notice text, not from the bid documents: where a notice says "renovation", casework may or may not be in the scope, and the brief says plainly where it is guessing. Because it is a dated edition, some of the notices in it will already have opened by the time you read this; each one shows its own date. It does not promise that any bid is winnable or right for you.',
+  sources: 'COMMBUYS — the Commonwealth of Massachusetts public procurement record, where state agencies, housing authorities and many municipalities post their bids. Every listed notice was read in full on the date shown in the brief, and every item links back to the original so you can check it yourself.',
+  // THE COLD RECIPIENT'S FIRST QUESTION, ANSWERED IN THE FIRST PERSON. This was
+  // written about the recipient in the passive voice ("were chosen by hand") and
+  // sat seventh on the page. It is the question a stranger actually arrives with.
+  selection: 'I chose a small number of Massachusetts millwork businesses by hand, from their own public websites, where the commercial work shown suggested this might be relevant. I wrote to each of them once, at the address the business publishes. There is no list, nobody sold me your details, no data was purchased, and there is no follow-up.',
+  note: 'I\'m Thomas Norton. Apex Micro is mine — a small digital workshop in Marlborough, Massachusetts, where I test useful niche products and services before deciding whether they are worth building out properly. I use software I have built to help with the research and the running of it, but the decisions and the responsibility are mine.\n\nThis is the first run of this brief. I am finding out whether it is worth $29 to the shops it is meant for. It is not an established service yet.',
+  // ONE ITEM, AS IT ARRIVES. Not a mock-up and not a description of a mock-up:
+  // the first entry of the edition that is actually sent. The agency officer's
+  // name, phone and email are in the brief and are deliberately NOT here — they
+  // are a real person's contact details, and a page anyone can read is not the
+  // place to republish them.
+  sample: '1. Framingham Housing Authority — On-Call Carpentry Services\n\nBid # BD-26-1507-FHA01-JJB01-132802 · Quotes due 14 September 2026\n\nWhat the notice says: "invites written quotes from Contractors for On-Call Carpentry Services for the FHA in Framingham, MA." Coded UNSPSC 72-10-26, Carpentry.\n\nWhy it may fit: a standing carpentry contract with a housing authority; how broad the scope is will not be clear until you read the ad.\n\nContact: the agency\'s procurement officer, named in the brief with phone and email. Source: linked to the original COMMBUYS notice.\n\nThe other twelve are in the same shape.',
 } as const;
 
 export interface Proof1Seed { experimentId: string; opportunityId: string; recipientsAdded: number; alreadyExisted: boolean }
@@ -212,7 +232,7 @@ export interface Proof1Reframe { original: string; successor: string; number: nu
  */
 export async function reframeProof1UnderTheWorkshop(founderId: string): Promise<Proof1Reframe> {
   const { publicWorkshopOf } = await import('../public-workshop/settings.js');
-  const { givePublicIdentity, publicIdentityOf } = await import('../public-workshop/identity.js');
+  const { givePublicIdentity, publicIdentityOf, updatePublicCopy } = await import('../public-workshop/identity.js');
   const w = await publicWorkshopOf(founderId);
   if (!w) throw new Error('no public Workshop; establish it first');
   const current = await findProof1(founderId);
@@ -230,6 +250,11 @@ export async function reframeProof1UnderTheWorkshop(founderId: string): Promise<
   });
   await query('UPDATE venture_experiments SET needs_workshop = 0 WHERE id = ?', [successor]);
   const identity = await givePublicIdentity({ experimentId: successor, founderId, slug: PROOF1_SLUG, copy: PROOF1_PUBLIC, supersedesExperimentId: current });
+  // THE IDENTITY IS FIXED; THE WORDS ARE NOT. Reframing is idempotent, so an
+  // identity that already exists keeps its number and its slug — and would
+  // otherwise keep whatever copy it was first given, leaving an improvement to
+  // the public words with no way to reach the page it was written for.
+  await updatePublicCopy(successor, PROOF1_PUBLIC);
   await addRecipients({ founderId, experimentId: successor, recipients: PROOF1_RECIPIENTS });
   await refreshMaterials(founderId, successor);
   const { decideExperiment } = await import('./validation.js');

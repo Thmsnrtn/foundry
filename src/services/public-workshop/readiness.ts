@@ -96,10 +96,39 @@ export async function externalReadiness(
     // 6 ─ What the page states about the offer, checked against the render itself.
     const states: string[] = [];
     if (!x.price) states.push('no price');
-    if (!/Is this recurring\? <strong>No\.<\/strong>/.test(html)) states.push('no recurrence statement');
+    // The commitment, not one sentence of it — the same reading the publication
+    // gate uses, so the two cannot disagree about whether the page is honest.
+    if (!/\bno subscription\b|\bnot a subscription\b/i.test(html)) states.push('no plain statement that there is no subscription');
     if (!x.limits) states.push('no stated limitations');
     say('sealed offer, price and limitations', states.length ? 'blocked' : 'ready',
       states.length ? states.join('; ') : `${x.price?.label ?? '—'}, one-time, with stated coverage limits`);
+
+    // 6b ─ HOW OLD THE GOODS ARE, said before they are sold rather than after.
+    //
+    // The thing being sold here is a dated document about things with deadlines.
+    // Every day between the day it was assembled and the day it is sent takes
+    // value out of it, and nothing in the machinery noticed: the page could be
+    // green, the payment link live, the sender verified, and the brief three
+    // weeks stale with half its notices already opened. That is not a copy
+    // problem — the page says plainly that it is a dated edition — it is a fact
+    // about the owner's own goods that he is owed at the moment he decides to
+    // sell them, which is here.
+    //
+    // Fourteen days because public bid notices commonly run two to four weeks
+    // from posting to opening: past a fortnight, a meaningful share of any such
+    // brief is describing bids that have closed.
+    const pulled = await one(
+      `SELECT pulled_at FROM experiment_materials WHERE experiment_id = ? AND kind = 'deliverable' AND pulled_at IS NOT NULL
+        ORDER BY recorded_at DESC, rowid DESC LIMIT 1`, [experimentId]);
+    if (!pulled) say('how fresh the goods are', 'ready', 'the deliverable is not time-sensitive, or records no pull date');
+    else {
+      const at = new Date(String(pulled.pulled_at).replace(' ', 'T') + (String(pulled.pulled_at).endsWith('Z') ? '' : 'Z'));
+      const days = Math.floor((Date.now() - at.getTime()) / 86_400_000);
+      say('how fresh the goods are', days > 14 ? 'blocked' : 'ready',
+        days > 14
+          ? `the deliverable was assembled ${days} days ago (${String(pulled.pulled_at).slice(0, 10)}); bid notices run two to four weeks, so a meaningful share of it now describes bids that have closed. Pull it again before selling it.`
+          : `assembled ${days} day${days === 1 ? '' : 's'} ago (${String(pulled.pulled_at).slice(0, 10)})`);
+    }
   }
 
   // 3 ─ Cloudflare: the program and the store that serve the public surface.

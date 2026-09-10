@@ -334,11 +334,28 @@ describe('Allow publishes the page; offers point at it and go out as the Worksho
     const shown = await publicGet(`/experiments/${PROOF1_SLUG}`);
     expect(shown.status).toBe(200);
     expect(shown.text).toContain('Experiment 001');
-    expect(shown.text).toContain('Is this recurring? <strong>No.</strong>');
+    expect(shown.text).toContain('$29, once. No subscription, nothing renews.');
     expect(shown.text).toContain('Buy for $29');
     expect(shown.text).toContain('https://buy.stripe.com/');
-    expect(shown.text).toContain('Hi, I\'m Thomas Norton');
+    expect(shown.text).toContain('I\'m Thomas Norton');
     expect(shown.text).toContain('PO Box 123');
+    // THE ORDER A STRANGER READS IN. The offer and its price come before the
+    // seller's biography, because five seconds on a phone is what a cold
+    // recipient gives a page, and the page used to spend them on Apex Micro.
+    const at = (needle: string) => shown.text.indexOf(needle);
+    expect(at('What you get')).toBeGreaterThan(0);
+    expect(at('Buy for $29')).toBeLessThan(at('What you get'));
+    expect(at('What you get')).toBeLessThan(at('Why I wrote to you'));
+    expect(at('Why I wrote to you')).toBeLessThan(at('Who I am'));
+    // A SPECIMEN, NOT A DESCRIPTION OF ONE — and not the agency officer's own
+    // name, phone and email, which are a real person's details and belong in
+    // the brief a buyer receives rather than on a page anyone can read.
+    expect(shown.text).toContain('BD-26-1507-FHA01-JJB01-132802');
+    expect(shown.text).not.toContain('kdavis@framha.org');
+    // SAID ONCE. Reassurance repeated four times stops reassuring and starts
+    // sounding like somebody who has been in trouble before.
+    expect(shown.text.match(/[Nn]o subscription/g) ?? []).toHaveLength(1);
+    expect(shown.text.toLowerCase()).not.toContain('is this recurring');
     expect(leakIn(shown.text, await privateStringsOf(X))).toBeNull();
     expect((await publicGet('/experiments')).text).toContain('Massachusetts Millwork Bid Brief');
     const offer = (await materialOf(X, 'offer'))!;

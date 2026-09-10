@@ -3687,7 +3687,7 @@ CREATE TABLE public_experiments (
   supersedes_experiment_id TEXT REFERENCES venture_experiments(id),
   graduated_to_url TEXT,
   created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, public_sample TEXT,
   UNIQUE(founder_id, number),
   UNIQUE(founder_id, slug)
 );

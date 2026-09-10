@@ -11,6 +11,9 @@ import { query } from '../../db/client.js';
 
 export interface PublicCopy { title: string; summary: string; who: string; what: string; limits: string; sources: string; selection: string; note: string }
 
+/** The copy that can be improved after the identity exists, specimen included. */
+export type EditableCopy = Partial<PublicCopy> & { sample?: string | null };
+
 type Row = Record<string, unknown>;
 const rows = async (sql: string, params: unknown[]): Promise<Row[]> => (await query(sql, params)).rows as unknown as Row[];
 
@@ -34,24 +37,24 @@ export async function publicIdentityOf(experimentId: string): Promise<{ number: 
 }
 
 /** Idempotent on the experiment: a second call returns the identity it has. */
-export async function givePublicIdentity(input: { experimentId: string; founderId: string; slug: string; copy: PublicCopy; listed?: boolean; number?: number; supersedesExperimentId?: string | null }): Promise<{ number: number; slug: string; created: boolean }> {
+export async function givePublicIdentity(input: { experimentId: string; founderId: string; slug: string; copy: PublicCopy & { sample?: string | null }; listed?: boolean; number?: number; supersedesExperimentId?: string | null }): Promise<{ number: number; slug: string; created: boolean }> {
   const existing = await publicIdentityOf(input.experimentId);
   if (existing) return { number: existing.number, slug: existing.slug, created: false };
   const number = input.number ?? await nextExperimentNumber(input.founderId);
   const slug = slugify(input.slug);
   const c = input.copy;
   await query(
-    `INSERT INTO public_experiments (experiment_id, founder_id, number, slug, listed, public_title, public_summary, public_who, public_what, public_limits, public_sources, public_selection, public_note, supersedes_experiment_id)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-    [input.experimentId, input.founderId, number, slug, input.listed === false ? 0 : 1, c.title, c.summary, c.who, c.what, c.limits, c.sources, c.selection, c.note, input.supersedesExperimentId ?? null]);
+    `INSERT INTO public_experiments (experiment_id, founder_id, number, slug, listed, public_title, public_summary, public_who, public_what, public_limits, public_sources, public_selection, public_note, public_sample, supersedes_experiment_id)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+    [input.experimentId, input.founderId, number, slug, input.listed === false ? 0 : 1, c.title, c.summary, c.who, c.what, c.limits, c.sources, c.selection, c.note, input.copy.sample?.trim() || null, input.supersedesExperimentId ?? null]);
   return { number, slug, created: true };
 }
 
 /** The words can improve; the identity cannot. */
-export async function updatePublicCopy(experimentId: string, copy: Partial<PublicCopy>): Promise<void> {
+export async function updatePublicCopy(experimentId: string, copy: EditableCopy): Promise<void> {
   const sets: string[] = []; const params: unknown[] = [];
-  const map: Record<keyof PublicCopy, string> = { title: 'public_title', summary: 'public_summary', who: 'public_who', what: 'public_what', limits: 'public_limits', sources: 'public_sources', selection: 'public_selection', note: 'public_note' };
-  for (const [k, col] of Object.entries(map) as Array<[keyof PublicCopy, string]>) if (copy[k] !== undefined) { sets.push(`${col} = ?`); params.push(copy[k]); }
+  const map: Record<keyof EditableCopy, string> = { title: 'public_title', summary: 'public_summary', who: 'public_who', what: 'public_what', limits: 'public_limits', sources: 'public_sources', selection: 'public_selection', note: 'public_note', sample: 'public_sample' };
+  for (const [k, col] of Object.entries(map) as Array<[keyof EditableCopy, string]>) if (copy[k] !== undefined) { sets.push(`${col} = ?`); params.push(copy[k] ?? null); }
   if (!sets.length) return;
   await query(`UPDATE public_experiments SET ${sets.join(', ')}, updated_at = datetime('now') WHERE experiment_id = ?`, [...params, experimentId]);
 }

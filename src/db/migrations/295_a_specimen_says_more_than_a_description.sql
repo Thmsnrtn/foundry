@@ -1,0 +1,15 @@
+-- A SPECIMEN SAYS MORE THAN A DESCRIPTION.
+--
+-- An experiment page could say what shape the thing it sells has — "each item
+-- carries the bid number, the opening date, the agency contact" — and could not
+-- show one. Three paragraphs about the shape of a thing tell a stranger less
+-- than one item of the thing itself, and cost more of their attention.
+--
+-- It is also the honest direction. A description can drift from the deliverable
+-- without anybody noticing; a specimen cannot overstate what arrives, because it
+-- is what arrives. So the public shape gains one optional field: an excerpt of
+-- what a buyer receives, in the buyer's own words rather than the seller's.
+--
+-- Optional, because most things do not need one, and an empty one is better
+-- than an invented one.
+ALTER TABLE public_experiments ADD COLUMN public_sample TEXT;

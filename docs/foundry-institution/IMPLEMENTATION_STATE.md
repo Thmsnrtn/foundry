@@ -2226,3 +2226,106 @@ asking for the report specifies (RFC 7489 §7.2.1.1) rather than any one
 provider, and files it as not for us. A queue that fills with machinery is a
 queue worth ignoring, which is the failure mode this whole membrane exists to
 avoid.
+
+## Pre-launch public reality review of Apex Micro (2026-09-10)
+
+Before Experiment 001 is offered to anybody, the three surfaces a cold recipient
+actually meets — the outreach message, the brief's page, and the landing page —
+were read through roughly forty-six constructed lenses at five seconds, thirty
+seconds and two minutes: Massachusetts millwork owners, estimators, project
+managers, the office manager who screens `info@`, shops already on COMMBUYS and
+shops intimidated by public work, hardened cold-email skeptics, people burned by
+lead-gen subscriptions, privacy-minded readers, older non-technical owners,
+phone users, screen-reader users, and several perspectives that exist only to
+disagree with the others. **These are lenses, not customers. Nothing here is
+market evidence and none of it is a substitute for the thing this experiment is
+actually for: finding out what real shops do.**
+
+### What the review found, in order of how much it cost
+
+**The offer was buried under the business model.** The message opened with two
+sentences about what kind of company Apex Micro is; the page opened with a
+biography. A shop owner reading on a phone gives this five seconds, and both
+surfaces spent them on the seller. The message now opens with thirteen open bid
+notices in his own trade, and the page opens with what the brief is, who is
+behind it, what it costs and how to buy it — all above the fold at 375px.
+
+**The price was two and a half screens down.** A price you have to hunt for
+reads as a price somebody hoped you would not check. It is now the first thing
+under the title.
+
+**"Why did you write to me?" was the seventh section.** It is the question a
+cold recipient actually arrives with. It is now the second, in the first person,
+and it says plainly that there is no list and that nobody sold his details.
+
+**Reassurance had been repeated until it stopped reassuring.** "No subscription"
+appeared four times, the refund twice at full length, "no tracking" twice, and
+the page interrogated itself — *"Is this recurring? **No.**"* — which is the
+single most artificial sentence a page can contain. Every commitment is kept;
+each is now made once, in the place somebody would look for it, with the refund
+appearing as five words at the button and in full under its own heading. The
+publication gate and the external-readiness check used to require that exact
+sentence; both now check that the page states plainly that there is no
+subscription, which is the promise rather than one phrasing of it.
+
+**There was no specimen.** The page described the shape of what arrives — bid
+number, opening date, agency contact, one line on fit, a link — and showed none
+of it. Migration 295 adds an optional `public_sample`, and the page now carries
+one real entry from the edition that is actually sent. The agency officer's
+name, phone and email are deliberately *not* on it: they are a real person's
+contact details, they belong in the brief a buyer receives, and a page anyone
+can read is not the place to republish them.
+
+**A dated document was described as a live one.** *"The public bid notices
+currently open"* sat in the same paragraph as *"the week it was pulled"*, and the
+message said *"13 notices this week"* — a sentence that becomes untrue simply by
+sitting still while the launch date moves. The copy now states the pull date
+wherever the brief is described and says it is a fixed edition rather than a
+feed. That is a narrowing of the claim, not a broadening.
+
+That last one is not only a wording problem, so it did not get only a wording
+fix. `externalReadiness` now carries a leg — **how fresh the goods are** — that
+reads the deliverable's own recorded pull date and blocks past fourteen days,
+because public bid notices commonly run two to four weeks from posting to
+opening. The owner is told the age of his own goods at the moment he decides to
+sell them, rather than discovering it from a buyer.
+
+### The language question
+
+`experiment` is accurate about the decision status and inaccurate about two
+things that matter: it invites the reader to think **they** are the thing being
+tested, which is false — the service is — and it implies the deliverable might be
+half-built, which is also false. `pilot` is true on both counts, is what the
+construction and public-sector trades already say, and was *already* the word
+used inside the copy ("This is a pilot") and in the deliverable's own title
+("Pilot Edition") while the frame around it said something else.
+
+So: **publicly a pilot, and the record is of experiments.** The status label a
+stranger reads is now `Pilot`; the title tag leads with the product rather than
+`Experiment 001:`; and the number survives as a provenance line at the foot of
+the page — *"Experiment 001 in Apex Micro's record"* — because the register of
+what was tried and what happened to it is the most trustworthy thing this
+workshop has, and flattening it away to sound like a normal vendor would cost
+more than it saves.
+
+Foundry's own register had leaked into the public voice in a handful of places,
+mostly as tone rather than vocabulary: *"a stated list of what it does not
+claim"*, *"the evidence says"*, *"put in front of real people"*, *"which
+inferences are weak"*, *"a refusal here is honoured"*. Section headings were
+legalistic where they could be ordinary — *What it does not claim* → *What it
+doesn't cover*, *What it relies on* → *Where the information comes from*, *Why
+you may have received an email about this* → *Why I wrote to you*. The founding
+statement is the owner's own approved words and was not touched.
+
+### What was deliberately not done
+
+No testimonials, no usage counts, no urgency, no scarcity, no badges, no
+invented credentials — there are none to report, and a new one-person workshop
+saying so quietly is more credible than one dressing up. The disclaimers a
+compliance-minded reader wants were kept in full even though a skeptical reader
+finds them heavy; the resolution was to say each once rather than to drop any.
+The page was **not** made more persuasive to a shop already on COMMBUYS: that
+reader should conclude they do not need this, and *What it doesn't cover* lets
+them do it in ten seconds. Nothing in the sealed economics, the population, the
+substantive promise, the evidence claims, the refund commitment or the exposure
+boundaries was changed to improve conversion.

@@ -269,7 +269,14 @@ export async function publicationGate(experimentId: string, opts: { now?: Date; 
   for (const [needle, what] of [['/contact', 'a contact path'], ['/email', 'an opt-out path'], ['/refunds', 'a refund path'], ['/privacy', 'a privacy statement'], ['name="viewport"', 'a mobile viewport']] as const) {
     if (!html.includes(needle)) failures.push(`the page lacks ${what}`);
   }
-  if (!/Is this recurring\? <strong>No\.<\/strong>/.test(html)) failures.push('the page does not state recurrence');
+  // THE PAGE SAYS, IN WORDS, THAT NOTHING RECURS — and this now checks the
+  // commitment rather than one sentence. It used to require the exact string
+  // "Is this recurring? <strong>No.</strong>", which pinned a phrasing instead
+  // of a promise, and pinned a bad one: a page that puts a question to itself on
+  // the reader's behalf and then answers it reads as written by something that
+  // is not a person. What a buyer is owed is a plain statement that there is no
+  // subscription, wherever on the page it is made.
+  if (!/\bno subscription\b|\bnot a subscription\b/i.test(html)) failures.push('the page does not say plainly that there is no subscription');
   const leak = leakIn(html, await privateStringsOf(experimentId));
   if (leak) failures.push('a private value would appear on the page');
   return { ok: failures.length === 0, failures, pageUrl, verifiedAt: pub?.verifiedAt ?? null, checkedAt: now.toISOString() };

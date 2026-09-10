@@ -13,6 +13,16 @@ import { postalLines } from './settings.js';
 const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const paras = (s: string): string => s.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('\n');
 const money = (p: NonNullable<PublicExperiment['price']>): string => p.label;
+/**
+ * JUST THE AMOUNT. `label` carries the terms as well ("$29, one time"), which
+ * reads correctly on its own and badly inside a sentence — "the whole $29, one
+ * time back", "Buy for $29, one time". The terms are stated once, on their own
+ * line; everywhere else the page needs the number and nothing else.
+ */
+const amount = (p: NonNullable<PublicExperiment['price']>): string =>
+  p.currency.toUpperCase() === 'USD'
+    ? `$${(p.amountCents / 100).toFixed(p.amountCents % 100 === 0 ? 0 : 2)}`
+    : `${(p.amountCents / 100).toFixed(2)} ${p.currency.toUpperCase()}`;
 
 export const PUBLIC_PATHS = ['/', '/about', '/experiments', '/operating', '/graduated', '/closed', '/contact', '/privacy', '/email', '/email/done', '/thank-you', '/refunds', '/terms', '/404'] as const;
 export type PublicPath = typeof PUBLIC_PATHS[number];
@@ -87,10 +97,10 @@ export function renderHome(f: PublicWorkshopFacts, registry: PublicExperiment[])
 <h1>${esc(f.name)}</h1>
 <p class="lede">${esc(f.tagline.charAt(0).toUpperCase() + f.tagline.slice(1))}.</p>
 ${paras(f.statement)}
-<h2>What an experiment means here</h2>
-<p>Each experiment is a small, clearly labeled test of one useful thing: a report, a monitor, a dataset, a small service. It has a fixed price, a stated scope, a stated list of what it does not claim, and a way to reach me. Some experiments turn out to be worth continuing and stay here as small products. A few may earn their own name. Others close, and their page stays so the record is honest.</p>
-<h2>Experiments</h2>
-${listOf(listed, 'Nothing is being tested publicly yet.')}
+<h2>Open now</h2>
+${listOf(listed, 'Nothing is open at the moment.')}
+<h2>How this works</h2>
+<p>Each thing here is one small, clearly labelled offering: a report, a monitor, a dataset, a small service. It has a fixed price, says exactly what you get, says what it does not cover, and gives you a way to reach me. Some turn out to be worth continuing and stay here. A few grow into a business of their own. The rest are closed, and their page stays up saying so.</p>
 <p><a href="/experiments">All experiments</a> · <a href="/about">About ${esc(f.operator)}</a></p>`;
   return shell(f, f.name, '/', body, `${f.name}: ${f.tagline}. Small, clearly labeled experiments in useful niche products and services.`);
 }
@@ -103,15 +113,15 @@ ${paras(f.statement)}
 ${f.about ? `<h2>A little more</h2>${paras(f.about)}` : ''}
 <h2>How the workshop works</h2>
 <p>I look for small, specific problems where a modest, well-made thing would help: a shortlist somebody would otherwise assemble by hand, a monitor for a deadline that is easy to miss, a dataset that is scattered across public sources. Before building anything larger I run a small experiment: a real offer, at a real price, to a small number of people for whom it is plausibly relevant.</p>
-<p>Every experiment states what you receive, what it costs, whether it recurs (by default it does not), what it does not claim, and what it relies on. If you buy something and it is not useful, you can have your money back. If you hear from me and would rather not, one message tells me so and I will not write again.</p>
+<p>Everything here states what you get, what it costs, whether it recurs (by default it does not), what it does not cover, and where its information comes from. If you buy something and it is not useful, you can have your money back. If you hear from me and would rather not, one message tells me so and I will not write again.</p>
 <h2>Accountability</h2>
 <p>I use software I have built to help with research and operations. The decisions, the offers and the responsibility are mine. If something on this site is wrong, <a href="/contact">tell me</a> and I will fix it.</p>
 <h2>What happens to experiments</h2>
 <dl>
-  <dt>Testing</dt><dd>A live pilot with a stated price and scope.</dd>
+  <dt>Pilot</dt><dd>A live first run, with a stated price and scope.</dd>
   <dt>Operating</dt><dd>It worked well enough to keep as a small product here.</dd>
-  <dt>Graduated</dt><dd>It earned an identity of its own; its page here links to where it lives now.</dd>
-  <dt>Closed</dt><dd>The evidence said it was not worth continuing. The page stays, with a short honest note of why.</dd>
+  <dt>Graduated</dt><dd>It grew into a business of its own; its page here links to where it lives now.</dd>
+  <dt>Closed</dt><dd>It was not worth continuing. The page stays, with a short honest note of why.</dd>
 </dl>`;
   return shell(f, 'About', '/about', body, `Who is behind ${f.name} and how its experiments work.`);
 }
@@ -120,13 +130,13 @@ export function renderRegistry(f: PublicWorkshopFacts, registry: PublicExperimen
   const listed = registry.filter((x) => x.listed);
   const titles = { all: 'Experiments', operating: 'Operating', graduated: 'Graduated', closed: 'Closed' } as const;
   const intro = {
-    all: 'Every experiment this workshop has put in front of real people, numbered in the order they began. Each page stays up whatever happened to it.',
-    operating: 'Experiments that worked well enough to keep as small products here.',
-    graduated: 'Experiments that earned an identity of their own. Their record here stays, and links to where they live now.',
-    closed: 'Experiments that ended. The evidence said they were not worth continuing, or they were stopped. Each keeps its page and a short note of why.',
+    all: 'Everything Apex Micro has offered to anybody, numbered in the order it began. Every page stays up, whatever happened to it.',
+    operating: 'Things that worked well enough to keep as small products here.',
+    graduated: 'Things that grew into a business of their own. Their record here stays, and links to where they live now.',
+    closed: 'Things that ended — they did not work well enough to keep going, or they were stopped. Each keeps its page and a short note of why.',
   } as const;
   const xs = which === 'all' ? listed : listed.filter((x) => x.status === which);
-  const empty = { all: 'Nothing is being tested publicly yet.', operating: 'Nothing is operating here yet.', graduated: 'Nothing has graduated yet.', closed: 'Nothing has closed yet.' } as const;
+  const empty = { all: 'Nothing is open at the moment.', operating: 'Nothing is operating here yet.', graduated: 'Nothing has graduated yet.', closed: 'Nothing has closed yet.' } as const;
   const body = `
 <h1>${titles[which]}</h1>
 <p class="lede">${intro[which]}</p>
@@ -138,41 +148,57 @@ ${which === 'all' ? `<p class="quiet"><a href="/operating">Operating</a> · <a h
 export function renderExperiment(f: PublicWorkshopFacts, x: PublicExperiment): string {
   const number = String(x.number).padStart(3, '0');
   const asking = x.status === 'testing' || x.status === 'operating';
+  // THE PRICE IS NOT A REVEAL. It used to sit under its own heading four
+  // sections down, which on a phone is two and a half screens below the fold —
+  // and a price you have to hunt for reads as a price somebody hoped you would
+  // not check. It is said once, plainly, where anyone can see it.
+  const priceLine = x.price ? `${amount(x.price)}, once. No subscription, nothing renews.` : '';
+  const refundLine = x.price
+    ? `If it isn't useful, reply to the delivery email or use the link in it and you get the whole ${amount(x.price)} back. No time limit, and you do not have to explain.`
+    : '';
+  // The same promise at two sizes, not twice at full length: five words where a
+  // person is deciding, the whole sentence under the heading they would scroll
+  // to if they wanted the terms. Saying it fully in both places is how a page
+  // starts sounding like it is trying to convince itself.
+  const shortRefund = x.price ? `Refundable in full, no time limit.` : '';
   const pay = x.payUrl && x.price ? `<div class="card">
-  <p><strong>${esc(money(x.price))}.</strong> Not a subscription; nothing renews. Payment is taken by Stripe on a page tagged for this experiment.</p>
-  <p><a class="btn" href="${esc(x.payUrl)}" rel="nofollow">Buy for ${esc(money(x.price))}</a></p>
-  <p class="quiet">If it is not useful, reply to the delivery email or use the refund link in it and the payment is returned in full.</p>
-</div>` : x.status === 'testing' ? '<p class="quiet">The offer is not open at the moment.</p>' : '';
+  <p><strong>${esc(priceLine)}</strong></p>
+  <p><a class="btn" href="${esc(x.payUrl)}" rel="nofollow">Buy for ${esc(amount(x.price))}</a></p>
+  <p class="quiet">${esc(shortRefund)}</p>
+</div>` : x.status === 'testing' ? '<p class="quiet">The offer is not open at the moment.</p>'
+    : priceLine ? `<p><strong>${esc(priceLine)}</strong></p>` : '';
+  // A SPECIMEN BEATS A DESCRIPTION. Three paragraphs about the shape of the
+  // thing tell a buyer less than one item of the thing itself, and the item
+  // cannot overstate what it is, because it is what arrives.
+  const sample = x.sample ? `<div class="card">
+  <p class="quiet">One of them, exactly as it appears in the brief:</p>
+${paras(x.sample)}
+</div>` : '';
   const body = `
-<p class="quiet">Experiment ${number}</p>
-<h1>${esc(x.title)}<span class="pill">${x.statusLabel}</span></h1>
+<h1>${esc(x.title)}</h1>
 <p class="lede">${esc(x.summary)}</p>
-<p><strong>${esc(x.statusLine)}</strong></p>
+<p><span class="pill">${esc(x.statusLabel)}</span> <strong>${esc(x.statusLine)}</strong></p>
+<p class="quiet">${esc(f.operator)} · ${esc(f.name)} · ${esc(f.region)}</p>
 ${x.graduatedTo ? `<p>It now lives at <a href="${esc(x.graduatedTo)}">${esc(x.graduatedTo.replace(/^https?:\/\//, ''))}</a>.</p>` : ''}
 ${x.successor ? `<p>It was reframed as <a href="/experiments/${x.successor.slug}">${esc(x.successor.title)}</a>.</p>` : ''}
 ${x.supersedes ? `<p class="quiet">This continues an earlier design, <a href="/experiments/${x.supersedes.slug}">${esc(x.supersedes.title)}</a>.</p>` : ''}
-
-<h2>From ${esc(f.operator)}</h2>
-${paras(x.note)}
-
-<h2>What you receive</h2>
-${paras(x.what)}
-<h2>Who it is for</h2>
-${paras(x.who)}
-<h2>What it costs</h2>
-<p>${x.price ? `${esc(money(x.price))}. ` : ''}Is this recurring? <strong>No.</strong> There is no subscription and nothing renews.</p>
 ${pay}
-<h2>What it does not claim</h2>
-${paras(x.limits)}
-<h2>What it relies on</h2>
-${paras(x.sources)}
-<h2>Why you may have received an email about this</h2>
+<h2>What you get</h2>
+${paras(x.what)}
+${sample}
+<h2>Why I wrote to you</h2>
 ${paras(x.selection)}
-<p>I send one message and no follow-ups. If you would rather not hear from ${esc(f.name)} again, <a href="/email">say so here</a> and you will not.</p>
-<h2>Your information</h2>
-<p>If you buy, Stripe handles the payment and passes me your email address so I can deliver what you bought. I use it for that and for nothing else. I do not use tracking pixels, click tracking or analytics on email or on this site. See <a href="/privacy">privacy</a>.</p>
+<p>If you would rather not hear from ${esc(f.name)} again, <a href="/email">say so here</a> and you will not.</p>
+<h2>Who it's for</h2>
+${paras(x.who)}
+<h2>What it doesn't cover</h2>
+${paras(x.limits)}
+<h2>Where the information comes from</h2>
+${paras(x.sources)}
+<h2>Who I am</h2>
+${paras(x.note)}
 ${asking ? `<h2>What would you like next?</h2>
-<p>If you received this and have a view, one answer here is enough. What you say is read before ${esc(f.name)} writes to anybody again, and a refusal here is honoured across every experiment, not just this one.</p>
+<p>If you received this and have a view, one answer here is enough. What you say is read before ${esc(f.name)} writes to anybody again, and a no here is honoured everywhere, not just for this.</p>
 <form method="POST" action="${x.path}/continue" class="card">
   <label for="c-email">Your email address</label>
   <input id="c-email" name="email" type="email" inputmode="email" autocomplete="email" required maxlength="320">
@@ -188,14 +214,15 @@ ${asking ? `<h2>What would you like next?</h2>
   <label for="c-said">Anything you want to say (optional)</label>
   <textarea id="c-said" name="said" rows="3" maxlength="2000"></textarea>
   <button class="btn" type="submit">Send</button>
-</form>
-<p class="quiet">No tracking of any kind is used to tell whether you read this. The only thing ${esc(f.name)} knows is what you choose to say here.</p>` : ''}
+</form>` : ''}
 
-<h2>Refunds and contact</h2>
-<p>If what you receive is not useful, reply to the delivery email or use the link in it and the payment is refunded in full. For anything else, <a href="/contact">contact me</a>; replies to any experiment email reach me directly.</p>
-<p class="quiet">Opened ${esc(x.openedOn ?? '—')}${x.closedOn ? ` · Closed ${esc(x.closedOn)}` : ''} · Updated ${esc(x.updatedOn)}</p>
-<p class="quiet"><a href="/experiments">All experiments</a></p>`;
-  return shell(f, `Experiment ${number}: ${x.title}`, '/experiments', body, x.summary);
+<h2>Refunds, privacy and how to reach me</h2>
+${refundLine ? `<p>${esc(refundLine)}</p>` : ''}
+<p>If you buy, Stripe takes the payment and passes me your email address so I can send you the brief. I use it for that and nothing else. No tracking pixels, no click tracking, no analytics — not on the email and not on this site, so the only thing I know is what you choose to tell me. More in <a href="/privacy">privacy</a>.</p>
+<p>Anything else, <a href="/contact">write to me</a>; replies to any ${esc(f.name)} email reach me directly.</p>
+<p class="quiet">Experiment ${number} in ${esc(f.name)}'s record${x.openedOn ? ` · Opened ${esc(x.openedOn)}` : ''}${x.closedOn ? ` · Closed ${esc(x.closedOn)}` : ''} · Updated ${esc(x.updatedOn)}</p>
+<p class="quiet"><a href="/experiments">Everything ${esc(f.name)} has tried</a></p>`;
+  return shell(f, x.title, '/experiments', body, x.summary);
 }
 
 export function renderContact(f: PublicWorkshopFacts): string {

@@ -22,6 +22,8 @@ export type PublicStatus = 'preparing' | 'testing' | 'operating' | 'graduated' |
 export interface PublicExperiment {
   number: number; slug: string; path: string; listed: boolean;
   title: string; summary: string; who: string; what: string; limits: string; sources: string; selection: string; note: string;
+  /** An excerpt of what a buyer actually receives, when the thing has one. */
+  sample: string | null;
   status: PublicStatus; statusLabel: string; statusLine: string; outcome: string | null;
   price: { amountCents: number; currency: string; label: string } | null;
   recurring: false;
@@ -34,14 +36,24 @@ export interface PublicExperiment {
 
 /** The fields the public shape carries, as a record the tests can read. */
 export const PUBLIC_EXPERIMENT_FIELDS = [
-  'number', 'slug', 'path', 'listed', 'title', 'summary', 'who', 'what', 'limits', 'sources', 'selection', 'note',
+  'number', 'slug', 'path', 'listed', 'title', 'summary', 'who', 'what', 'limits', 'sources', 'selection', 'note', 'sample',
   'status', 'statusLabel', 'statusLine', 'outcome', 'price', 'recurring', 'payUrl', 'openedOn', 'closedOn', 'updatedOn', 'supersedes', 'successor', 'graduatedTo',
 ] as const;
 
 type Row = Record<string, unknown>;
 const rows = async (sql: string, params: unknown[]): Promise<Row[]> => (await query(sql, params)).rows as unknown as Row[];
 const day = (s: unknown): string | null => s == null ? null : String(s).slice(0, 10);
-export const STATUS_LABELS: Record<PublicStatus, string> = { preparing: 'Preparing', testing: 'Testing', operating: 'Operating', graduated: 'Graduated', closed: 'Closed' };
+/**
+ * THE WORD A STRANGER READS, WHICH IS NOT THE WORD THE INSTITUTION FILES UNDER.
+ *
+ * A live one is a `testing` row here and a PILOT to the person reading the page.
+ * Both are true and they are not interchangeable: "pilot" says a real first run
+ * that may or may not continue, which is exactly what this is, while "testing"
+ * invites a reader to think they are the thing being tested. They are not — the
+ * service is. The number and the record stay; the label stops implying that the
+ * customer is the subject.
+ */
+export const STATUS_LABELS: Record<PublicStatus, string> = { preparing: 'Not open yet', testing: 'Pilot', operating: 'Open', graduated: 'Now its own business', closed: 'Closed' };
 
 function money(cents: number, currency: string): string {
   return currency.toUpperCase() === 'USD' ? `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}` : `${(cents / 100).toFixed(2)} ${currency.toUpperCase()}`;
@@ -94,8 +106,8 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
           ? 'Closed — the pilot ran and the thesis held. It is not on sale at the moment.'
           : 'Closed — the pilot ran and the thesis did not hold.')
         : 'Closed — stopped before it settled.'))
-        : status === 'testing' ? 'Testing — this is a live pilot. What is offered, what it costs and what it does not claim are below.'
-          : 'Preparing — not yet offered to anyone.';
+        : status === 'testing' ? 'Open now — the first run of this, so it may or may not continue.'
+          : 'Not offered to anyone yet.';
 
   let price: PublicExperiment['price'] = null;
   if (r.shape_json != null) {
@@ -109,6 +121,7 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
     number: Number(r.number), slug, path: `/experiments/${slug}`, listed: Number(r.listed) === 1,
     title: String(r.public_title), summary: String(r.public_summary), who: String(r.public_who), what: String(r.public_what),
     limits: String(r.public_limits), sources: String(r.public_sources), selection: String(r.public_selection), note: String(r.public_note),
+    sample: r.public_sample == null || String(r.public_sample).trim() === '' ? null : String(r.public_sample),
     status, statusLabel: STATUS_LABELS[status], statusLine, outcome,
     price, recurring: false,
     // The way to pay is public only while the offer stands; a closed test's

@@ -125,17 +125,33 @@ Read the bid documents at the source named in each notice (biddocs.com, Projectd
 
 If anything here is wrong or out of date, reply to the email this arrived with. A correction goes out to every buyer of this edition.
 `;
+/**
+ * THE MESSAGE LEADS WITH THE BIDS, NOT WITH APEX MICRO.
+ *
+ * The first draft opened with two sentences about what kind of business Apex
+ * Micro is and why it exists. A shop owner reading on a phone at six in the
+ * morning gets about five seconds, and those five seconds went on the seller's
+ * business model rather than on thirteen open bids in his own trade. Who I am
+ * matters to a stranger — but after he knows what this is, not before.
+ *
+ * "13 notices this week" is also a sentence that becomes untrue by sitting
+ * still: the edition is dated, the send date is not, and the gap between them
+ * only grows. The date is stated instead, so the message stays true whenever it
+ * goes out and the reader can judge the vintage for himself.
+ */
 export const OUTREACH_TEMPLATE_MD = `Hi,
 
-I'm Thomas Norton. I run Apex Micro, a small digital workshop in Massachusetts where I test useful niche services before deciding whether they're worth developing further.
+Thirteen bid notices open on COMMBUYS look like cabinet, casework or millwork work: a housing-authority on-call carpentry contract, a kitchen-and-pantry replacement, a bathroom renovation across two addresses, and ten more. Each one with its bid number, opening date, agency contact and a link to the original notice.
 
-I'm testing a $29 one-time brief that filters the public bid notices currently open on COMMBUYS for commercial cabinet, casework and millwork work: 13 notices this week, screened by hand from the 952 open solicitations, each with its opening date, the agency contact and a link to the original record. I thought {Business name} might find it relevant based on the commercial work shown on your website.
+I screened them by hand from the 952 solicitations that were open on 7 September 2026. It is $29, one-time — no subscription, and I will not follow up.
 
-This is a pilot, one-time with no subscription, and I won't send follow-ups. Exactly what's included, what it doesn't cover, the price, and how a refund works are on the experiment's page:
+I wrote to {Business name} because the commercial work on your own website looked like the kind these notices ask for. That is how I found you: by looking at your site. There is no list and nobody sold me your details.
+
+My name is Thomas Norton and I run Apex Micro, a one-person digital workshop in Marlborough, Massachusetts. This is the first run of this brief, so I am finding out whether it is worth doing again. What you get, what it does not cover, and how a refund works are here:
 
 [APEX MICRO EXPERIMENT PAGE]
 
-If it isn't relevant, no reply needed and you won't hear from me again. Replies reach me directly.
+If it is not relevant, no reply needed and you will not hear from me again. Replies come straight to me.
 
 Thomas Norton
 Apex Micro

@@ -423,7 +423,12 @@ describe('a stranger says what they want next, and the Workshop keeps the answer
     const site = renderSite(workshopFacts((await publicWorkshopOf(OWNER))!), await projectRegistry(OWNER));
     const experiment = site.get(`/experiments/${PROOF1_SLUG}`)!;
     expect(experiment).toContain('What would you like next?');
-    expect(experiment).toContain('No tracking of any kind is used to tell whether you read this.');
+    // The claim, wherever the page makes it: nothing here reports back whether
+    // this was read. (It used to be asserted as one exact sentence sitting under
+    // the form, which said the same thing the privacy section two paragraphs
+    // below already said.)
+    expect(experiment).toContain('no click tracking');
+    expect(experiment).toContain('the only thing I know is what you choose to tell me');
     expect(site.has('/thank-you')).toBe(true);
     expect(WORKER_SOURCE).toContain('/continue');
     for (const k of ['never', 'nothing', 'more_like_this', 'only_unusual', 'would_pay_regularly', 'will_explain']) {
@@ -491,6 +496,28 @@ describe('the whole external chain, checked against the world', () => {
     }
     expect(by['public HTTPS experiment page']!.status).toBe('verified');
     expect(by['authenticated sender identity']!.status).toBe('ready');
+    // HOW OLD THE GOODS ARE, before they are sold. The thing sold here is a
+    // dated document about things with deadlines, and nothing used to notice
+    // the gap between the day it was assembled and the day it goes out.
+    expect(by['how fresh the goods are']!.status).toBe('ready');
+    // A material cannot be edited — that is the point of them — so an older
+    // edition is RECORDED rather than backdated, which is also how staleness
+    // would actually arise: the brief that is current is the last one pulled.
+    const { recordMaterial } = await import('../../src/services/venture/hand.js');
+    await recordMaterial({ founderId: OWNER, experimentId: X, kind: 'deliverable',
+      title: 'Massachusetts Commercial Millwork Bid Brief, pilot edition',
+      body: 'an edition assembled a month ago', pulledAt: new Date(Date.now() - 30 * 86_400_000),
+      by: 'test' });
+    const stale = await externalReadiness(OWNER, X);
+    const staleLeg = stale.legs.find((l) => l.leg === 'how fresh the goods are')!;
+    expect(staleLeg.status).toBe('blocked');
+    expect(staleLeg.detail).toContain('Pull it again before selling it');
+    expect(stale.ok).toBe(false);
+    await recordMaterial({ founderId: OWNER, experimentId: X, kind: 'deliverable',
+      title: 'Massachusetts Commercial Millwork Bid Brief, pilot edition',
+      body: 'the current edition', pulledAt: new Date(), by: 'test' });
+    const fresh = await externalReadiness(OWNER, X);
+    expect(fresh.legs.find((l) => l.leg === 'how fresh the goods are')!.status).toBe('ready');
     expect(by['fulfilment readiness']!.status).toBe('ready');
     expect(by['payment readiness']!.status).toBe('ready');
     expect(by['outbound eligibility']!.status).toBe('ready');
