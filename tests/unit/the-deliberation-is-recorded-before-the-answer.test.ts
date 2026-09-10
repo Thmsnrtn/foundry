@@ -120,7 +120,7 @@ describe('the thinking comes before the decision, and cannot be improved afterwa
     await approveRemaining({ founderId: OWNER, experimentId: X });
     for (const cand of (await recipientsOf(X)).filter((x) => x.reviewStatus === 'approved')) {
       await qualifyRecipient({ founderId: OWNER, experimentId: X, recipientId: cand.id,
-        because: 'appears as a bidder in the COMMBUYS public award record', source: 'https://www.commbuys.com/bso/' });
+        because: 'names two public schools among its own completed projects', source: 'https://example-millwork.test/projects' });
     }
     await expect(allowExperiment({ founderId: OWNER, experimentId: X, by: 'owner' }))
       .rejects.toThrow(HandRefused);
@@ -309,12 +309,21 @@ describe('Proof 1, reconsidered from first principles before anyone is written t
     expect(r.design.decides).toBe(before.decides);
     expect(r.design.exchange.exchange).toBe(before.exchange.exchange);
     expect(r.design.recommendation).toBe('run');
-    expect(r.design.distribution).toContain('observed public-bid activity in the COMMBUYS record');
+    // THE CRITERION IS OBSERVED PUBLIC-SECTOR WORK, NOT PRESENCE IN COMMBUYS.
+    // Narrowing to shops already in COMMBUYS would select for the ones already
+    // receiving these notices — who need a screening brief least — and the
+    // evidence for it is not obtainable honestly anyway.
+    expect(r.design.distribution).toContain('observed public-sector work');
+    expect(r.design.distribution).toContain('not narrowed to shops already present in');
     expect(r.design.distribution).toContain('Sensing is broad and free; contact stays narrow');
     // The third reading of a null result is now recorded — and, unlike the
     // other two, it is one the probe can rule out before anybody is written to.
-    const third = r.design.interpretations.find((i) => i.reading.includes('do not bid public work'))!;
-    expect(third.distinguishedBy).toContain('COMMBUYS bidder and award record');
+    const third = r.design.interpretations.find((i) => i.reading.includes('do not pursue public work'))!;
+    expect(third.distinguishedBy).toContain('public evidence of public-sector work recorded against each business');
+    // And the reading the narrowing deliberately does NOT screen out, because
+    // screening it out would remove the customer this product is for.
+    const already = r.design.interpretations.find((i) => i.reading.includes('already watch the source themselves'))!;
+    expect(already.distinguishedBy).toContain('does NOT pre-screen');
     // The ledger shows it was added rather than always having been there.
     expect(r.design.amendments.some((a) => a.field.startsWith('new reading of') && a.was.includes('no reading of this was recorded'))).toBe(true);
     // Running it again is a no-op: the judgment is idempotent, not repeated.

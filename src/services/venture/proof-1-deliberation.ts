@@ -50,7 +50,7 @@ export interface Proof1Deliberation { experimentId: string; design: ProbeDesign;
  * producing an ambiguity that a free lookup could have prevented.
  *
  * So the instrument is improved rather than deferred. The population becomes
- * shops with observed public-bid activity instead of shops whose websites
+ * shops with observed public-sector work instead of shops whose websites
  * merely suggest relevance. The same twenty-three messages then carry more
  * information, and the timing is right: none of the recipients has been
  * reviewed yet, so nothing is being rewritten.
@@ -64,29 +64,42 @@ export async function judgeProof1AgainstObservedBidders(founderId: string): Prom
   if (!experimentId) throw new Error('Proof 1 is not seeded');
   return amendDesign({
     experimentId, amendedBy: BY,
-    because: 'Re-judged from the assumption chain. A null result had three readings, not two, and the '
-      + 'third — that these shops do not bid public work, or already have it covered — is observable for '
-      + 'nothing in the same public record the product is built on. Spending twenty-three strangers\' '
-      + 'attention to produce an ambiguity a free lookup could remove is a dominated design. The population '
-      + 'is narrowed to observed bidders before anyone is reviewed or written to; the question, the '
-      + 'exchange and the decision to run are unchanged.',
+    because: 'Re-judged from the assumption chain, and then corrected. A null result had three readings, '
+      + 'not two, and the third — that these shops do not pursue public work at all — is observable for '
+      + 'nothing before anyone is written to. Spending strangers\' attention to produce an ambiguity a free '
+      + 'lookup could remove is a dominated design. THE CRITERION IS OBSERVED PUBLIC-SECTOR WORK, NOT '
+      + 'PRESENCE IN COMMBUYS, and the difference is not cosmetic. First, because it is the right '
+      + 'criterion: requiring a shop to appear in COMMBUYS selects FOR shops already watching COMMBUYS, '
+      + 'who therefore already receive these notices and need a screening brief least — the opposite of '
+      + 'the customer this is for, whose complaint is losing work they never saw. Second, because the '
+      + 'COMMBUYS evidence is not obtainable honestly: solicitation pages are openly readable, which is '
+      + 'where the brief comes from, but the vendor and award directory refuses automated queries with a '
+      + '403, and defeating that refusal is not a thing this institution does. A shop that names public '
+      + 'schools, a city hall or a police station among its own projects, or appears in the Commonwealth\'s '
+      + 'payment record, demonstrably does public work — which is the whole of what this narrowing was '
+      + 'ever for. The question, the exchange and the decision to run are unchanged.',
     fields: {
-      distribution: 'Cold outbound to Massachusetts millwork shops with observed public-bid activity in the '
-        + 'COMMBUYS record — not shops whose websites merely suggest relevance — written to once each, from '
-        + 'a named operator, landing on a permanent public page. Sensing is broad and free; contact stays '
+      distribution: 'Cold outbound to Massachusetts millwork shops with observed public-sector work — named '
+        + 'public projects in their own public record, or a public award or payment record naming them — '
+        + 'not shops whose websites merely suggest relevance, and not narrowed to shops already present in '
+        + 'COMMBUYS, which would select for the people who need this least. Written to once each, from a '
+        + 'named operator, landing on a permanent public page. Sensing is broad and free; contact stays '
         + 'narrow and hand-reviewed. It is still the dirtiest distribution this institution recognises, and '
         + 'its own doctrine still says an opportunity reachable only this way is worth less than one found '
         + 'through search or a marketplace. It is used because it is the fastest honest route to a first '
         + 'real answer, not because it is a channel a business would keep.',
-      ratherThanWaiting: 'The public record can say whether a shop bids at all; it cannot say whether one '
-        + 'would pay a stranger $29 for screening. That second question has no answer anywhere except from '
-        + 'a person, and no quantity of further reading produces one. So: observe what is free to observe, '
-        + 'then ask — rather than asking first and spending the answer on a confound.',
+      ratherThanWaiting: 'The public record can say whether a shop does public work at all; it cannot say '
+        + 'whether one would pay a stranger $29 for screening. That second question has no answer anywhere '
+        + 'except from a person, and no quantity of further reading produces one. So: observe what is free '
+        + 'to observe, then ask — rather than asking first and spending the answer on a confound.',
     },
     addInterpretations: [
       { observation: 'Nobody pays inside seven days',
-        reading: 'these shops do not bid public work, or already have it covered, and the offer was never relevant to them',
-        distinguishedBy: 'their presence or absence in the COMMBUYS bidder and award record, checked before anyone is written to' },
+        reading: 'these shops do not pursue public work, and the offer was never relevant to them',
+        distinguishedBy: 'the public evidence of public-sector work recorded against each business, with its source, before anyone is written to' },
+      { observation: 'Nobody pays inside seven days',
+        reading: 'they do public work and already watch the source themselves, so a screening brief adds nothing they did not have',
+        distinguishedBy: 'what a reply says about how they currently find work — which the narrowing deliberately does NOT pre-screen for, because screening it out would remove the customer this is for' },
       { observation: 'Somebody replies that they already use a bid service',
         reading: 'the incumbent is the competitor, not the chore, and the question becomes what the incumbent misses',
         distinguishedBy: 'what they name in the reply, now that the Workshop can hear replies at all' },

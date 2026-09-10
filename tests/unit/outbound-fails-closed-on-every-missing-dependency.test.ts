@@ -93,7 +93,7 @@ beforeAll(async () => {
   await approveRemaining({ founderId: OWNER, experimentId: X });
   for (const cand of (await recipientsOf(X)).filter((x) => x.reviewStatus === 'approved')) {
     await qualifyRecipient({ founderId: OWNER, experimentId: X, recipientId: cand.id,
-      because: 'appears as a bidder in the COMMBUYS public award record', source: 'https://www.commbuys.com/bso/' });
+      because: 'names two public schools among its own completed projects', source: 'https://example-millwork.test/projects' });
   }
   await reconsiderProof1(OWNER);
   state.nextDomainStatus = 'verified';

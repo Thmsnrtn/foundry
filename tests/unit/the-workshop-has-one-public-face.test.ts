@@ -255,7 +255,7 @@ describe('Proof 1 is reframed under the Workshop without rewriting its history',
     await approveRemaining({ founderId: OWNER, experimentId: X });
     for (const cand of (await recipientsOf(X)).filter((x) => x.reviewStatus === 'approved')) {
       await qualifyRecipient({ founderId: OWNER, experimentId: X, recipientId: cand.id,
-        because: 'appears as a bidder in the COMMBUYS public award record', source: 'https://www.commbuys.com/bso/' });
+        because: 'names two public schools among its own completed projects', source: 'https://example-millwork.test/projects' });
     }
     const v = (await getExperimentView(OWNER, X, NOW))!;
     expect(v.state).toBe('needs_you');
@@ -398,7 +398,7 @@ describe('Allow publishes the page; offers point at it and go out as the Worksho
     // design names — so the door refuses before it consults anything else.
     await expect(planOffer({ experimentId: X, recipientId: untouched.id, now: NOW })).rejects.toThrow(/recipient_unqualified/);
     await qualifyRecipient({ founderId: OWNER, experimentId: X, recipientId: untouched.id,
-      because: 'appears as a bidder in the COMMBUYS public award record', source: 'https://www.commbuys.com/bso/' });
+      because: 'names two public schools among its own completed projects', source: 'https://example-millwork.test/projects' });
     await expect(planOffer({ experimentId: X, recipientId: untouched.id, now: NOW })).rejects.toThrow(/publication_gate.*stale/);
     const rep = await publishSite(OWNER, 'test');
     expect(rep.published).toEqual(expect.arrayContaining([`/experiments/${PROOF1_SLUG}`]));

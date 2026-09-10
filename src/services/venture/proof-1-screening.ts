@@ -1,10 +1,13 @@
 // =============================================================================
 // WHO ACTUALLY BELONGS TO THE POPULATION EXPERIMENT 001 NAMES.
 //
-// The sealed design says this test is for shops with observed public-bid
-// activity. Until this file existed that was a sentence; `planOffer` now
-// refuses anyone without a recorded, sourced reason, and this is where the
-// reasons come from.
+// The design says this test is for shops with OBSERVED PUBLIC-SECTOR WORK —
+// named public projects in their own public record, or a public award or
+// payment record naming them. Deliberately not "present in COMMBUYS": that
+// would select for shops already watching the source, who therefore already
+// receive these notices and need a screening brief least, and the vendor
+// directory refuses automated queries in any case. `planOffer` refuses anyone
+// without a recorded, sourced reason, and this is where the reasons come from.
 //
 // EVERY LINE BELOW IS AN OBSERVATION, NOT A JUDGEMENT ABOUT A BUSINESS. It
 // records what a named public page or public record said on the date given,

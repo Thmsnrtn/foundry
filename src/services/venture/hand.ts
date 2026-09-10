@@ -636,7 +636,7 @@ export async function planOffer(input: { experimentId: string; recipientId: stri
   const recipient = (await recipientsOf(input.experimentId)).find((r) => r.id === input.recipientId);
   if (!recipient?.email) throw new HandRefused('recipient_unreachable');
   // THE POPULATION THE DESIGN NAMED IS A PROMISE, AND THIS IS WHERE IT BINDS.
-  // A design that says it is testing shops with observed public-bid activity is
+  // A design that says it is testing shops with observed public-sector work is
   // making a claim about who receives the message, not a note about how the
   // list was gathered. Every offer in the system is planned here, so refusing
   // an unscreened stranger here is the whole of the rule — and it fails closed:

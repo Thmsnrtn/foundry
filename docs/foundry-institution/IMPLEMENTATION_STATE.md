@@ -1864,3 +1864,55 @@ Workshop's own program, the address to ask about is the owner's.
 
 **Still true:** zero contacts, zero offers, zero outbound. Correspondence mode
 is `off`, so nothing has been answered.
+
+## The population criterion, reconciled against reality (2026-09-10)
+
+The owner asked how two shops qualified on evidence of public-sector *projects*
+when the design was said to require observed activity in *COMMBUYS*. Checking
+production rather than my own notes found something worse than a mismatch.
+
+**The COMMBUYS narrowing had never been applied in production at all.** The
+amendment ledger held seven amendments, every one of them from the
+claim-narrowing pass; the population still read "twenty-five hand-reviewed
+businesses". `judgeProof1AgainstObservedBidders` existed in code, was described
+in commit messages and in this file, and had never been run against the real
+database. So there was no sealed population criterion for the screening grounds
+to match or contradict — and I had been reporting that narrowing as in force
+for several messages. **A claim in notes is not a claim in reality**, which is
+the lesson this session keeps re-teaching and which I applied to everything
+except my own reporting.
+
+**Then: could the COMMBUYS evidence be obtained at all?** No. Solicitation
+pages are openly readable over plain GET — that is where the brief comes from
+and it is the read the site serves to the public. The vendor and award
+directory is a different matter: it exists publicly and refuses automated
+queries with **HTTP 403**. Defeating that refusal — session tricks, spoofed
+headers, a headless browser — is platform evasion, which this institution does
+not do. So the evidence the code named was not available honestly.
+
+**And should it have been the criterion in the first place? No.** Requiring a
+shop to appear in COMMBUYS selects **for** shops already watching COMMBUYS —
+who therefore already receive these notices and need a screening brief *least*.
+That is the opposite of the customer this product is for, whose complaint is
+losing work they never saw. The narrowing existed to remove one reading of a
+null result — *these shops do not do public work at all* — and named public
+projects plus a public payment record remove exactly that reading, without
+selecting against the intended buyer.
+
+So the criterion is now recorded, in production, through the governed pre-seal
+amendment path, as **observed public-sector work**: named public projects in a
+shop's own public record, or a public award or payment record naming them —
+explicitly *not* narrowed to COMMBUYS presence, with that reason stated. Five
+amendments, every replaced sentence kept, before anyone is approved or written
+to. The two recorded qualifications match it exactly.
+
+**A new reading came with it**, and it is the one the correction earns: *they
+do public work and already watch the source themselves, so a screening brief
+adds nothing.* The design now says out loud that it deliberately does **not**
+pre-screen for that, because screening it out would remove the customer this is
+for — and that a reply is what would distinguish it.
+
+Code, tests and this file no longer assert the old criterion anywhere; test
+fixtures that stated "appears as a bidder in the COMMBUYS public award record"
+as a synthetic ground said something untrue in the same shape, and were changed
+too.

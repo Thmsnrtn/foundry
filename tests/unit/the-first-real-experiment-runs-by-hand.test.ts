@@ -154,7 +154,7 @@ describe('the owner\'s part is three acts on one page', () => {
       .rejects.toThrow(/qualification_needs_grounds/);
     for (const cand of (await recipientsOf(X)).filter((x) => x.reviewStatus === 'approved')) {
       await qualifyRecipient({ founderId: OWNER, experimentId: X, recipientId: cand.id,
-        because: 'appears as a bidder in the COMMBUYS public award record', source: 'https://www.commbuys.com/bso/' });
+        because: 'names two public schools among its own completed projects', source: 'https://example-millwork.test/projects' });
     }
     // A screening the owner has read cannot be quietly rewritten or withdrawn.
     await expect(query(`UPDATE experiment_recipients SET qualified_because = 'something else' WHERE id = ?`, [web.id]))
@@ -164,7 +164,7 @@ describe('the owner\'s part is three acts on one page', () => {
     await expect(qualifyRecipient({ founderId: OWNER, experimentId: X, recipientId: web.id, because: 'a second story', source: 'https://example.com' }))
       .rejects.toThrow(/recipient_not_found/);
     const screened = (await recipientsOf(X)).find((x) => x.id === web.id)!;
-    expect(screened.qualifiedBecause).toContain('COMMBUYS public award record');
+    expect(screened.qualifiedBecause).toContain('among its own completed projects');
     expect((await page(`/foundry/experiments/${X}/recipients`)).text).toContain('Why they are in this test\'s population');
   });
 
@@ -444,7 +444,7 @@ describe('Stop, and nothing he can press dead-ends', () => {
     expect(redirectedTo(await post(`/foundry/experiments/${Y}/recipients/approve-remaining`))).toContain('done=reviewed');
     for (const cand of (await recipientsOf(Y)).filter((x) => x.reviewStatus === 'approved')) {
       await qualifyRecipient({ founderId: OWNER, experimentId: Y, recipientId: cand.id,
-        because: 'appears as a bidder in the COMMBUYS public award record', source: 'https://www.commbuys.com/bso/' });
+        because: 'names two public schools among its own completed projects', source: 'https://example-millwork.test/projects' });
     }
     // A second test needs its own thinking; the first one's does not carry over.
     const { recordDesign } = await import('../../src/services/venture/probe-design.js');
