@@ -2157,3 +2157,72 @@ the answer to "who may sign in here". It is not a communication endpoint, not a
 routing destination, not a sender, not a test correspondent, and no module in
 `public-workshop/` may read it. Changing who owns the instance is the owner's
 decision and not a mail-system change.
+
+## The personal mailbox is out of the mail path, in production (2026-09-10)
+
+Production runs `464c916c`. The cutover is done and every claim below was read
+back from the world, not from the code.
+
+**The store, the program, the route.** `standUpTheEars` made the Workshop a
+store of its own — receipt `kBmjHoolJ7PGHTDQ4ocKT`, namespace
+`62a37d5bb86a48a798944d6de80192e9`, which is not the page store
+`ca13f8478cfe47f5a47774ca44bef1b3` — and redeployed the edge program onto it
+(receipt `1lW-Uo5p-769le4pH8gfG`). The program read back off Cloudflare matches
+the reviewed source byte for byte, contains no `message.forward`, and contains
+no email address of any kind.
+
+**The old path is gone, not merely unused.** `thmsnrtn@gmail.com` was a verified
+destination on the provider account. It was retired through the new governed
+door — receipt `ojwtCg6PeEIRBYSsabpwl` — leaving `destinations: []` with routing
+still enabled and the rule still naming the program. Post check C, sent after
+the retirement, arrived normally.
+
+**Held, then heard: the outage proof.** The edge program was redeployed, same
+reviewed source, with its doorbell pointed at a path that does not exist — what
+a deploy, a restart or an outage looks like from the program's side, with
+Foundry itself untouched and healthy. A message sent during that window was
+**held in the store and absent from `workshop_mail`**: `heldButNotHeard` named
+exactly one key. The doorbell was restored and replay run:
+
+| | held | already heard | recovered |
+|---|---|---|---|
+| first run | 2 | 1 | **1** |
+| again | 2 | 2 | 0 |
+
+`heldButNotHeard` was then empty and "Apex Micro post check B (outage)" was in
+the inbox. Nothing was lost, nothing was doubled, and the recovery needed no
+operator — the ten-minute tick would have done the same thing unattended.
+
+**Exactly once.** The same message delivered three times at the live intake:
+`ok/duplicate:false`, `ok/duplicate:true`, `ok/duplicate:true`, one row. A
+delivery with the wrong key: `401 {"ok":false}` and nothing else said.
+
+**Where the personal address now appears in the live system.** Nowhere in the
+path: not in the mail program, not in the site program, not in routing, not as
+a contact, not as a recipient, not on the suppression list, and nothing has ever
+been sent to it (`0` outbound actions naming it). It survives in exactly one
+`workshop_mail` row — my own earlier proof — which is append-only by design and
+already settled with a note saying what it was.
+
+| | |
+|---|---|
+| site | healthy — 15 pages served as published |
+| cloudflare | healthy — apexmicro.ai active, program and hostnames in place |
+| sending | healthy — sends as Thomas Norton — Apex Micro <thomas@apexmicro.ai> |
+| reply inbox | healthy — reaches the program that hears, which keeps every message in the Workshop's own store |
+| correspondence mode | `off` |
+
+**The postal address is live and exact.** Stored as the owner wrote it and
+rendered from that one record: `11 Apex Drive`, `Suite 300A #361`,
+`Marlborough, MA 01752`, each on its own line in the footer of all fifteen
+published pages, and on one line in the commercial-email footer.
+
+**One false escalation, found by doing this.** The first real stranger to reach
+the new path was Google, with a DMARC aggregate report — which no rule
+recognised, so it read as an unclassifiable message from a person and landed in
+the owner's queue. Every provider that receives mail from the zone sends one of
+those daily, forever. The reader now recognises the subject line the standard
+asking for the report specifies (RFC 7489 §7.2.1.1) rather than any one
+provider, and files it as not for us. A queue that fills with machinery is a
+queue worth ignoring, which is the failure mode this whole membrane exists to
+avoid.

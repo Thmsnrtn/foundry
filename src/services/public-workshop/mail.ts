@@ -187,6 +187,17 @@ export function readIt(subject: string, body: string, from: string, workshopAddr
   if (normalise(from) === normalise(workshopAddress)) {
     return { reading: 'not_for_us', because: 'the Workshop writing to itself' };
   }
+  // A REPORT ABOUT THE WORKSHOP'S OWN MAIL IS NOT SOMEBODY WRITING TO IT.
+  // Every mailbox provider that receives mail from apexmicro.ai sends a DMARC
+  // aggregate report, daily, forever, to the address the zone publishes — which
+  // is this one. Left unrecognised each of them reads as a stranger saying
+  // something unclassifiable and lands in the owner's queue, which is exactly
+  // the false escalation that makes a queue worth ignoring. The subject line is
+  // specified by the standard that asks for the report (RFC 7489 §7.2.1.1), so
+  // this recognises the standard rather than any one provider.
+  if (/report[\s-]?domain:/.test(t) && /report[\s-]?id:/.test(t)) {
+    return { reading: 'not_for_us', because: 'a DMARC report about the Workshop\'s own mail, not a person writing' };
+  }
 
   const stop = has('unsubscribe', 'stop emailing', 'stop contacting', 'do not contact', "don't contact",
     'remove me', 'take me off', 'opt out', 'opt-out', 'no longer wish to receive');

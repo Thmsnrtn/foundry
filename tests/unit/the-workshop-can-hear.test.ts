@@ -278,6 +278,16 @@ describe('a message is evidence, and evidence is not authority', () => {
     expect(readIt('', 'This is a security vulnerability report', 'a@b.com', 'x@y.ai').reading).toBe('needs_a_person');
     // A bounce is not a person.
     expect(readIt('Undeliverable', 'mail delivery failed', 'mailer-daemon@x.com', 'x@y.ai').reading).toBe('not_for_us');
+    // THE POST THE INTERNET SENDS EVERY DAY WITHOUT BEING ASKED. A DMARC
+    // aggregate report arrives from every provider that receives mail from the
+    // zone; unrecognised, each one is a stranger saying something the reader
+    // cannot classify, and every one of them ends up in the owner's queue.
+    const dmarc = readIt('Report domain: apexmicro.ai Submitter: google.com Report-ID: 4324492987',
+      '<feedback><report_metadata/></feedback>', 'noreply-dmarc-support@google.com', 'thomas@apexmicro.ai');
+    expect(dmarc.reading).toBe('not_for_us');
+    expect(dmarc.because).toContain('DMARC');
+    // A person who happens to use the word report is still a person.
+    expect(readIt('Report on last week', 'Can you send me a report?', 'a@b.com', 'thomas@apexmicro.ai').reading).not.toBe('not_for_us');
   });
 });
 
