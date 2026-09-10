@@ -52,7 +52,13 @@ export function renderDecision(input: {
     </div>`;
   }
 
-  const facts = html`<dl class="facts">
+  // WHERE IT LANDS, BEFORE THE FACTS AND BEFORE THE BUTTON. Anything that is
+  // not internal wears the warning colour: the eye has to be able to tell these
+  // two classes apart across a page of cards, not only by reading them.
+  const where = html`<p class="act"><span class="pill ${
+  c.effect === 'internal' ? 'ok' : 'warn'}">${effectInWords(c.effect)}</span></p>`;
+
+  const facts = html`${where}<dl class="facts">
     <dt>What happens</dt><dd>${c.what}.</dd>
     <dt>Where it lands</dt><dd>${effectInWords(c.effect)} &mdash; ${c.touches}.</dd>
     <dt>Cash</dt><dd>${c.expectedCents === 0 ? 'none expected' : `${cash(c.expectedCents)} expected`}, ${
@@ -65,7 +71,7 @@ export function renderDecision(input: {
   if (c.dedicated) {
     return html`<div class="decision elsewhere">
       ${facts}
-      <p><strong>This one is decided on its own page.</strong> ${c.dedicated.why}.</p>
+      <p><strong>This one is decided on its own page</strong> &mdash; ${c.dedicated.why}.</p>
       <p><a class="btn" href="${c.dedicated.path}">Open the decision &mdash; ${labelFor(c)}</a></p>
     </div>`;
   }
