@@ -2404,11 +2404,76 @@ brief. It was checked rather than guessed:
   could act on it. It has been removed rather than sold with a disclaimer, and
   the exclusion note says why. The brief now carries both dates: pulled the 7th,
   every item re-checked at source on the 10th.
-- A **full** re-pull is not available honestly. COMMBUYS listed 1,001 open
-  solicitations on the 10th, and its result paginator refuses scripted requests
-  (HTTP 403). Defeating that would be platform evasion. A partial re-screen
-  presented as a fresh pull would be worse than an honestly dated older one.
+- A **full** re-pull looked unavailable: COMMBUYS listed 1,001 open
+  solicitations on the 10th and its result paginator answered HTTP 403.
 
-So: fresher goods where they could be got honestly, and no excuse-making where
-they could not. The fourteen-day freshness leg added in the previous pass stays
-as the internal rule; the customer sees only the two dates and what they mean.
+**That last conclusion was wrong, and the next section corrects it.** The 403 was
+a missing CSRF token — a field the page itself hands out — not a refusal to be
+read by a program. See *A genuinely fresh edition*, below.
+
+## A genuinely fresh edition, and a 403 I had misread (2026-09-10)
+
+**I got the earlier conclusion wrong and it is worth saying how.** I reported
+that COMMBUYS "refuses scripted requests (HTTP 403)" and that a full re-pull was
+therefore unavailable without evasion. The 403 was a **missing CSRF token** — a
+field the page hands out in its own form, which its own JavaScript sends back.
+My request was malformed, not unwelcome. Reading a refusal into my own bug is
+the more expensive of the two mistakes available here: it would have shipped a
+staler product than necessary, with a confident sentence explaining why nothing
+better was possible.
+
+The sanctioned path was the platform's own **Export to CSV** button on the
+public Advanced Search — the same control a person clicks. Submitting that form,
+with the token and the view state the page provides, returned
+`200 text/csv`, 993 solicitations, in one request.
+
+### The September 10 edition
+
+| | September 7 | September 10 |
+|---|---|---|
+| Universe | 952 open solicitations | 993 exported; **726** still open for bidding with an opening date ahead |
+| Read in full | 62 | every candidate of 114 title matches |
+| In the brief | 13 | **23** |
+
+Eleven of the twenty-three were posted after the September 7 pull and could not
+have been in the earlier edition. Several are the strongest entries in it: the
+Dukes County Regional Housing Authority rebid names *"new fully accessible
+kitchens with new kitchen cabinets & solid surface countertops"*; Mansfield
+Housing Authority has two separate kitchen jobs, one of which spells out
+*"remove and dispose of existing kitchen cabinets, appliances and countertops
+and install new"*; Middleborough Housing Authority wants residential **wood
+doors** replaced in existing frames.
+
+The screen was not loosened to get there. The same criteria and the same honesty
+about inference apply, and eight notices that matched on title were read and
+then excluded with the reason recorded — roofing and cooling towers, windows and
+siding only, exterior doors only, overhead doors, interior finishes with no
+millwork named, and a qualification statement that is not a bid.
+
+Two defects in my own earlier screen surfaced while doing this. The first-pass
+keyword filter contained the bare token `IT ` , which matches inside *"Unit 1"*
+and silently dropped two notices that belong in the brief; short tokens are
+word-anchored now, and nothing is excluded by regex at all — exclusion is a
+judgement made after reading. And the earlier pull counted every result the
+search returned as "open", including 194 whose bid opening had already passed;
+this edition filters on both status and a future opening date, which is why it
+starts from 726 rather than 993.
+
+### What is preserved
+
+`river/proof-1/brief-2026-09-07.md` keeps the September 7 edition and its
+September 10 revalidation exactly as they were. The recorded observations that
+support the claim keep their own date — `PROOF1_PULLED_AT` is when the evidence
+was seen and does not move; `PROOF1_EDITION_PULLED_AT` is when the goods now on
+sale were pulled, and does. Materials are append-only in production, so
+recording the new edition leaves the old one in place rather than replacing it.
+
+### What this also settled
+
+`checkDeliverableQuality` already refuses to deliver a brief pulled more than
+**seven** days ago — a stricter rule than the fourteen-day readiness leg added
+earlier, and it sits at the delivery boundary rather than the launch one. So the
+edition on sale must be re-pulled within a week of the last delivery, which is
+the real constraint on how long Experiment 001 can sit unlaunched. That gate now
+has a test that ages the *goods* rather than the clock, which is how this
+actually goes wrong.

@@ -33,7 +33,7 @@ import '../../src/services/integration/resend.js';
 import '../../src/services/integration/stripe-gateway.js';
 import { handleWebhook } from '../../src/services/billing/stripe.js';
 import { providerStubs, seedHandMadeLink } from '../helpers/provider-stubs.js';
-import { PROOF1_PLAN, PROOF1_TITLE, seedProof1 } from '../../src/services/venture/proof-1.js';
+import { PROOF1_EDITION_PULLED_AT, PROOF1_PLAN, PROOF1_TITLE, seedProof1 } from '../../src/services/venture/proof-1.js';
 import { BRIEF_MD, OUTREACH_TEMPLATE_MD } from '../../src/services/venture/proof-1-content.js';
 import {
   addRecipients, allowExperiment, attachPaymentLinkByUrl, campaignActOf, planDelivery, qualifyRecipient, readiness, recipientsOf, recordMaterial, reviewRecipient, runHand,
@@ -311,14 +311,25 @@ describe('Foundry operates: purchase, delivery, refund, settlement', () => {
     await handleWebhook(p, s);
     const owed = (await query('SELECT id, status, charge_ref FROM experiment_fulfilments WHERE experiment_id = ? AND payment_ref = ?', [X, 'pi_h_bounce'])).rows[0] as Record<string, unknown>;
     expect(owed).toMatchObject({ status: 'owed', charge_ref: 'ch_h_2' });
-    // Stale for the brief (pulled 09-07), still inside the seven-day window that opened at placement.
-    const STALE = new Date('2026-09-14T18:00:00Z');
+    // AN OLD EDITION, RATHER THAN A LATER CLOCK. Staleness is a property of the
+    // goods, and moving time forward far enough to age them also walks past the
+    // window the experiment was placed in — which would prove something else.
+    // So the current edition is an old one, which is how this actually goes
+    // wrong: somebody records a brief that was pulled a fortnight ago.
+    const { recordMaterial } = await import('../../src/services/venture/hand.js');
+    const { BRIEF_MD } = await import('../../src/services/venture/proof-1-content.js');
+    await recordMaterial({ founderId: OWNER, experimentId: X, kind: 'deliverable', title: PROOF1_TITLE,
+      body: `${BRIEF_MD}\n\n<!-- an earlier pull -->`, pulledAt: new Date('2026-08-25T12:00:00Z'), by: 'test' });
+    const STALE = new Date('2026-09-08T18:00:00Z');
     await expect(planDelivery({ experimentId: X, fulfilmentId: String(owed.id), now: STALE })).rejects.toThrow(/deliverable_quality/);
     const stale = await runHand({ now: STALE });
     expect(stale[0].exceptions.join(' ')).toMatch(/deliverable_quality/);
     expect(state.sends.filter((m) => m.to[0] === buyer && m.subject === PROOF1_TITLE)).toHaveLength(0);
     // The payment alone settles nothing: the rule reads deliveries.
     expect(((await query('SELECT ran_at FROM venture_experiments WHERE id = ?', [X])).rows[0] as Record<string, unknown>).ran_at).toBeNull();
+    // The current edition again, so what follows tests delivery rather than this.
+    await recordMaterial({ founderId: OWNER, experimentId: X, kind: 'deliverable', title: PROOF1_TITLE,
+      body: BRIEF_MD, pulledAt: PROOF1_EDITION_PULLED_AT, by: 'test' });
   });
 
   it('a bounced delivery is refunded through the governed Stripe capability; a refunded purchase validates nothing', async () => {
@@ -401,7 +412,7 @@ describe('Foundry operates: purchase, delivery, refund, settlement', () => {
     const delivery = state.sends.find((m) => m.to[0] === 'sales@rgcmillwork.com' && m.subject === PROOF1_TITLE)!;
     const link = /\((http:\/\/localhost:8080\/share\/refund\/[^)]+)\)/.exec(delivery.text ?? '')![1];
     const path = link.replace('http://localhost:8080', '');
-    expect(delivery.html).toContain(`<a href="${link}">ask for a refund here</a>`);
+    expect(delivery.html).toContain(`<a href="${link}">ask for your money back here</a>`);
     expect((await app.request(`${path}x`)).status).toBe(404);
     expect((await app.request(path.replace(/\/share\/refund\/[^/]+\//, '/share/refund/nope_nope_nope/'))).status).toBe(404);
     const shown = await page(path);
@@ -410,7 +421,7 @@ describe('Foundry operates: purchase, delivery, refund, settlement', () => {
     expect(state.refunds).toHaveLength(1);
     process.env.FOUNDRY_ENABLE_MONEY_TOOLS = 'false';
     const blocked = await app.request(path, { method: 'POST' });
-    expect(await blocked.text()).toContain('Request recorded');
+    expect(await blocked.text()).toContain("someone will sort it out");
     expect(state.refunds).toHaveLength(1);
     // The request is on the row, in the timeline, and on the page as the owner's exception.
     const asked = (await getExperimentView(OWNER, X, NOW))!;

@@ -25,7 +25,18 @@ import type { OfferShapePlan } from './hand.js';
 import { BRIEF_MD, OUTREACH_TEMPLATE_MD } from './proof-1-content.js';
 
 export const PROOF1_TITLE = 'Massachusetts Commercial Millwork Bid Brief, pilot edition';
+/**
+ * WHEN THE EVIDENCE WAS SEEN, which is not when the goods were made.
+ *
+ * The observations below were made on 7 September and are dated for ever as
+ * that: an observation is a record of a moment and re-dating one because a
+ * later edition of the product exists would be rewriting what was known when.
+ * The brief that is actually sent has its own date, which moves as it is
+ * re-pulled.
+ */
 export const PROOF1_PULLED_AT = new Date('2026-09-07T12:00:00Z');
+/** When the edition now on sale was pulled from COMMBUYS. */
+export const PROOF1_EDITION_PULLED_AT = new Date('2026-09-10T18:00:00Z');
 
 export const PROOF1_RECIPIENTS: Array<{ counterpartyRef: string; email: string | null; channel: 'email' | 'web_form'; sourceUrl: string }> = [
   { counterpartyRef: 'Quality Design Cabinet, Boston', email: 'contact@qualitydesigncabinet.com', channel: 'email', sourceUrl: 'https://qualitydesigncabinet.com/commercial' },
@@ -108,13 +119,13 @@ export const PROOF1_PUBLIC = {
   // test of a way of finding opportunities, then a hand-screened shortlist of
   // notices that look like work. Both were true; both sounded written. What a
   // shop owner needs in the first line is the thing itself and roughly how many.
-  summary: 'A short brief of the Massachusetts public bid notices that look like cabinet, casework or millwork work — twelve of them, with the bid number, when it opens, who to contact and a link to the notice itself.',
+  summary: 'A short brief of the Massachusetts public bid notices that look like cabinet, casework or millwork work — twenty-three of them, with the bid number, when it opens, who to contact and a link to the notice itself.',
   who: 'Small commercial cabinet, casework and architectural millwork shops in Massachusetts that bid on public work, or would like to.',
   // NOBODY'S HAND. "Screened by hand" implied Thomas sat and read 952 notices.
   // Software did most of that, and saying otherwise is the manufactured personal
   // attention this workshop is not allowed to fake — so the sentence says what
   // was done and stays quiet about whose hands did it.
-  what: 'One brief, by email, within a business day of paying. It\'s a fixed edition rather than a live feed: this one was pulled from COMMBUYS on 7 September 2026, and every notice in it was opened again at its source and confirmed still live on 10 September. Twelve notices, out of the 952 that were open on the pull date — every candidate was read in full before it went in. Each one gives you the bid number, when it opens, who to contact, a line on why it might fit, and a link to the notice so you can read it yourself.',
+  what: 'One brief, by email, within a business day of paying. It\'s a fixed edition rather than a live feed: this one was pulled from COMMBUYS on 10 September 2026. Twenty-three notices, screened out of the 726 that were open for bidding that day with an opening date still ahead — every one screened by title, and every candidate read in full before it went in. Each one gives you the bid number, when it opens, who to contact, a line on why it might fit, and a link to the notice so you can read it yourself.',
   limits: 'It\'s a shortlist, not a database. It covers COMMBUYS only — not the Central Register, not DCAMM\'s e-bid room, not the town portals that don\'t post there — so something missing from it isn\'t necessarily missing from the market. Relevance is judged from the notice text rather than the bid documents, so where a notice says "renovation" the casework might or might not be in scope; the brief says when that is a guess. And nothing in it tells you a job is winnable or worth your time. Read the bid documents before you commit to anything.',
   sources: 'COMMBUYS is the state\'s public procurement site — where Massachusetts agencies, housing authorities and a lot of towns post their bids. Every notice in the brief was read there in full, and each item links back to the original so you can check it.',
   // ONLY WHAT THE RECORD SUPPORTS. The grounds actually written down for each
@@ -127,7 +138,7 @@ export const PROOF1_PUBLIC = {
   // phone and email are in the brief and deliberately are not here — they are a
   // real person's contact details, and a page anyone can read is not the place
   // to republish them.
-  sample: '1. Framingham Housing Authority — On-Call Carpentry Services\n\nBid # BD-26-1507-FHA01-JJB01-132802 · Quotes due 14 September 2026\n\nWhat the notice says: "invites written quotes from Contractors for On-Call Carpentry Services for the FHA in Framingham, MA." Coded UNSPSC 72-10-26, Carpentry.\n\nWhy it may fit: a standing carpentry contract with a housing authority; how broad the scope is won\'t be clear until you read the ad.\n\nContact: the agency\'s procurement officer, with phone and email. Source: a link to the notice on COMMBUYS.\n\nThe other eleven look like that too.',
+  sample: '1. Framingham Housing Authority — On-Call Carpentry Services\n\nBid # BD-26-1507-FHA01-JJB01-132802 · Bid opening: September 14, 2026, 2:00 PM · Closing soon\n\nWhat the notice says: "invites written quotes from Contractors for On-Call Carpentry Services for the FHA in Framingham, MA."\n\nContact: the housing authority\'s procurement officer, by name, with email and phone.\n\nAlso worth knowing: electronic quotes are not accepted; see the ad attached to the notice.\n\nWhy it may fit: a standing carpentry contract with a housing authority. How broad the scope is won\'t be clear until you read the ad.\n\nSource: a link to the notice on COMMBUYS.\n\nThe other twenty-two look like that too.',
 } as const;
 
 export interface Proof1Seed { experimentId: string; opportunityId: string; recipientsAdded: number; alreadyExisted: boolean }
@@ -262,7 +273,7 @@ export async function reframeProof1UnderTheWorkshop(founderId: string): Promise<
 async function refreshMaterials(founderId: string, experimentId: string): Promise<void> {
   const by = 'institution:seed:proof-1';
   const same = async (kind: 'deliverable' | 'offer_template' | 'offer_shape', body: string) => (await materialOf(experimentId, kind))?.body === body;
-  if (!(await same('deliverable', BRIEF_MD))) await recordMaterial({ founderId, experimentId, kind: 'deliverable', title: PROOF1_TITLE, body: BRIEF_MD, pulledAt: PROOF1_PULLED_AT, by });
+  if (!(await same('deliverable', BRIEF_MD))) await recordMaterial({ founderId, experimentId, kind: 'deliverable', title: PROOF1_TITLE, body: BRIEF_MD, pulledAt: PROOF1_EDITION_PULLED_AT, by });
   if (!(await same('offer_template', OUTREACH_TEMPLATE_MD))) await recordMaterial({ founderId, experimentId, kind: 'offer_template', title: PROOF1_PLAN.offerSubject, body: OUTREACH_TEMPLATE_MD, by });
   const plan = JSON.stringify(PROOF1_PLAN);
   if (!(await same('offer_shape', plan))) await recordMaterial({ founderId, experimentId, kind: 'offer_shape', title: 'The offer\'s shape', body: plan, by });
