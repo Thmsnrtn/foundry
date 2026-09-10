@@ -2477,3 +2477,67 @@ edition on sale must be re-pulled within a week of the last delivery, which is
 the real constraint on how long Experiment 001 can sit unlaunched. That gate now
 has a test that ages the *goods* rather than the clock, which is how this
 actually goes wrong.
+
+## Is it worth $29 to somebody who already knows COMMBUYS? (2026-09-10)
+
+The hardest buyer for Experiment 001 is a shop that is already registered on
+COMMBUYS, already gets seller notifications, and has bid public work before.
+Everything in this section was counted against the September 10 edition rather
+than argued.
+
+**The universe.** 726 notices open for bidding on 10 September with an opening
+date still ahead. The brief keeps 23.
+
+**What that buyer's free alternatives actually return:**
+
+| What they would do | Finds, of the 23 |
+|---|---|
+| Search notice titles for cabinet / millwork / casework / countertop / carpentry | **2** |
+| Search the item text for the same words | **3** |
+| Widest scope-text sweep — the trade words plus kitchen, door, wood, trim | **11** |
+| Broad title sweep — renovation, interior, kitchen, the trade words | **13** (returning 16 results) |
+| A commodity-code notification for carpentry or woodwork | **1** |
+
+Only one of the twenty-three carries a carpentry commodity code (72-10-26).
+**Fourteen are filed under 72-13-00, general building construction** — the same
+code as every other general building renovation in the state, so a notification
+that delivers them delivers a great deal else besides.
+
+**No single free query returns the set.** The relevance signal is scattered:
+sometimes in the title (*Kitchen Countertops and Electrical Panel Replacement*),
+sometimes only in the scope text (*"new fully accessible kitchens with new
+kitchen cabinets & solid surface countertops"* under the title *Various Building
+& Site Improvements REBID*), and sometimes in neither — the Lawrence airport
+administration building, the Mattapoisett water and sewer building and the
+Chelsea office fit-out are relevant because of what such buildings contain, which
+no notice states.
+
+**So what has actually been removed:**
+
+1. **The reading.** 726 notices, of which 114 look building-related from the
+   title and each has to be opened to see whether there is casework in it.
+2. **The judgement, marked.** Which of the 23 are certain and which are
+   inferred. The brief says *"this is a guess"* where it is guessing.
+3. **Four items nothing would have surfaced**, including two separate Mansfield
+   Housing Authority kitchen jobs and the Middleborough wood-door replacement.
+4. **The cross-references a search does not give you.** Several notices say
+   plainly **do not bid through COMMBUYS** — bids go to biddocs.com or
+   Projectdoc.com. Several name the designer or the owner's project manager as
+   the real contact rather than the purchasing officer. Two Great Barrington
+   units are next door to each other and bid the same day.
+
+**Does it fail the "public links in a PDF" test?** No. Twenty-one of the
+twenty-three are not reachable by the obvious search and twenty-two are not
+reachable by trade notification. The collection is not the work; the reading and
+the judgement are.
+
+**What is NOT claimed.** That any of it is winnable. That the coverage is
+complete — it is COMMBUYS only. That the inferences are right. That a shop will
+find something. A brief where nothing suits is a possible and honest outcome,
+and the refund exists for exactly that.
+
+**On the page.** The second paragraph of *What you get* now carries these
+numbers, because the sharpest reader deserves the measurement rather than an
+adjective. It says COMMBUYS is free and that a bidder is probably already on it;
+it does not say the platform is bad. A bid is filed the way the agency thinks of
+the job, and that is nobody's fault.
