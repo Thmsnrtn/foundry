@@ -1,6 +1,6 @@
 # Experiment 001 — authorization for first external exposure
 
-**Prepared 10 September 2026 against production `0483a5d0`.** Every figure below
+**Prepared 10 September 2026 against production `cb652802`.** Every figure below
 was read from the live system, not from the code.
 
 ---
@@ -26,6 +26,15 @@ reachable, and already carrying recorded grounds — and the row guard refuses a
 offer to anybody else (`experiment_action:recipient_not_in_this_authorisation`).
 **Exactly two** businesses can receive anything, and screening a third afterwards
 makes them eligible for a future decision rather than this one.
+
+That is not a claim about the source tree. Read back out of the database
+production is actually running: the column is installed, migration 296 applied,
+`experiment_recipient_guard` refuses authority at insert
+(`authority_not_a_default`), `experiment_recipient_review_guard` refuses to move
+it once written (`authority_stands`) or to give it to somebody unapproved
+(`authority_needs_approval`), and `experiment_action_plan_guard` names
+`recipient_not_in_this_authorisation`. **No row carries authority today** — the
+column is empty, and your Allow is what writes it.
 
 ---
 
