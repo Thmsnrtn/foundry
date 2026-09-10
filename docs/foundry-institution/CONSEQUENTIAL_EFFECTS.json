@@ -248,7 +248,7 @@
     },
     {
       "file": "src/services/public-workshop/mail-worker-source.ts",
-      "line": 85,
+      "line": 91,
       "detector": "env_bound_post",
       "status": "read_only",
       "capability": "edge mail program source — hands a copy to Foundry's own intake; deployed through the door, executed only by Cloudflare"
