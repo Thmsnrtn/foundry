@@ -319,7 +319,7 @@ describe('Foundry operates: purchase, delivery, refund, settlement', () => {
     const { recordMaterial } = await import('../../src/services/venture/hand.js');
     const { BRIEF_MD } = await import('../../src/services/venture/proof-1-content.js');
     await recordMaterial({ founderId: OWNER, experimentId: X, kind: 'deliverable', title: PROOF1_TITLE,
-      body: `${BRIEF_MD}\n\n<!-- an earlier pull -->`, pulledAt: new Date('2026-08-25T12:00:00Z'), by: 'test' });
+      body: BRIEF_MD + '\n\nAn earlier pull of this brief.', pulledAt: new Date('2026-08-25T12:00:00Z'), by: 'test' });
     const STALE = new Date('2026-09-08T18:00:00Z');
     await expect(planDelivery({ experimentId: X, fulfilmentId: String(owed.id), now: STALE })).rejects.toThrow(/deliverable_quality/);
     const stale = await runHand({ now: STALE });
