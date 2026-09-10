@@ -108,8 +108,22 @@ describe('only what the evidence supports becomes reachable', () => {
     for (const r of unscreened.slice(0, 2)) {
       await expect(planOffer({ experimentId: X, recipientId: r.id })).rejects.toThrow(/no_asset/);
     }
+    // AN UNSCREENED APPROVAL COSTS NOTHING AND REACHES NOBODY, so it does not
+    // block the test — the door refuses each one individually. What would be
+    // wrong is allowing a test that can write to nobody at all, and that is
+    // what readiness refuses.
     const ready = await readiness(X);
-    expect(ready.ok).toBe(false);
-    expect(ready.missing.join(' · ')).toContain('no recorded reason for being in the population');
+    expect(ready.missing.join(' · ')).not.toContain('recorded reason');
+    expect(approved.filter((r) => r.qualifiedAt).length).toBe(2);
+
+    // Strike the two screened ones and the cohort becomes unreachable: now it
+    // says so, before Allow, rather than after.
+    const { reviewRecipient } = await import('../../src/services/venture/hand.js');
+    for (const r of approved.filter((x) => x.qualifiedAt)) {
+      await reviewRecipient({ founderId: OWNER, experimentId: X, recipientId: r.id, decision: 'struck', reason: 'testing the empty cohort' });
+    }
+    const empty = await readiness(X);
+    expect(empty.ok).toBe(false);
+    expect(empty.missing.join(' · ')).toContain('nothing could be sent');
   });
 });

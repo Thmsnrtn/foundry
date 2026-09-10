@@ -493,12 +493,17 @@ export async function readiness(experimentId: string): Promise<Readiness> {
   if (rs.length === 0) missing.push('no candidate businesses are loaded');
   else if (pending > 0) missing.push(`${pending} business${pending === 1 ? '' : 'es'} still to review`);
   else if (reachable === 0) missing.push('nobody approved can be reached by email');
-  // AN UNSCREENED COHORT IS A MISSING PREREQUISITE, NOT A SURPRISE AFTERWARDS.
-  // The door refuses to write to a business with no recorded reason it belongs
-  // to the population the design named. Saying so here means the owner reads it
-  // before he allows the test, rather than pressing Allow and getting silence.
-  const unqualified = rs.filter((r) => r.reviewStatus === 'approved' && r.channel === 'email' && r.email && !r.qualifiedAt).length;
-  if (unqualified > 0) missing.push(`${unqualified} approved business${unqualified === 1 ? ' has' : 'es have'} no recorded reason for being in the population this design names`);
+  // AN UNSCREENED COHORT IS A MISSING PREREQUISITE ONLY WHEN IT IS THE WHOLE
+  // COHORT. The door refuses each business with no recorded reason for being in
+  // the population the design names, one at a time, so approving somebody
+  // unscreened costs nothing and reaches nobody. What would be wrong is
+  // allowing a test that can write to NOBODY — that is pressing Allow and
+  // getting silence, and it is what this refuses.
+  const approvedReachable = rs.filter((r) => r.reviewStatus === 'approved' && r.channel === 'email' && r.email);
+  const screened = approvedReachable.filter((r) => r.qualifiedAt).length;
+  if (approvedReachable.length > 0 && screened === 0) {
+    missing.push(`none of the ${approvedReachable.length} approved business${approvedReachable.length === 1 ? '' : 'es'} has a recorded reason for being in the population this design names, so nothing could be sent`);
+  }
   if (sending.status !== 'ready') missing.push('email sending is not connected');
   if (!(await materialOf(experimentId, 'deliverable'))) missing.push('nothing to deliver is attached');
   if (!(await materialOf(experimentId, 'offer_template'))) missing.push('the offer text is not written');

@@ -146,7 +146,7 @@ describe('the owner\'s part is three acts on one page', () => {
     // than discovered as silence after it.
     const unscreened = await readiness(X);
     expect(unscreened.ok).toBe(false);
-    expect(unscreened.missing.join(' · ')).toContain('no recorded reason for being in the population');
+    expect(unscreened.missing.join(' · ')).toContain('nothing could be sent');
     await expect(qualifyRecipient({ founderId: OWNER, experimentId: X, recipientId: web.id, because: '  ', source: 'https://www.commbuys.com/bso/' }))
       .rejects.toThrow(/qualification_needs_grounds/);
     await expect(query(
