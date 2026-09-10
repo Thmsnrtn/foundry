@@ -263,9 +263,26 @@ describe('a decision can be withdrawn by the person who made it, on the record',
       : record[0]?.originallyDecidedAt));
   });
 
-  it('nobody but the decider may undecide', async () => {
+  it('the asset the withdrawal archived comes back on re-approval, rather than a second one', async () => {
+    const was = (await query('SELECT id FROM products WHERE from_experiment_id = ?',
+      [internalExperiment])).rows[0] as Record<string, unknown>;
+    const { retireExperimentalAsset } = await import('../../src/services/venture/asset.js');
+    await retireExperimentalAsset({ productId: String(was.id),
+      because: 'its approval was withdrawn' });
     await decideExperiment({ experimentId: internalExperiment, decision: 'approved',
       by: `founder:${OWNER}` });
+    const again = await beginExperimentalAsset({ experimentId: internalExperiment,
+      by: `founder:${OWNER}` });
+    if ('refused' in again) throw new Error(again.refused);
+    expect(again.productId).toBe(String(was.id));
+    expect(again.created).toBe(false);
+    const rows = await query('SELECT id, status FROM products WHERE from_experiment_id = ?',
+      [internalExperiment]);
+    expect(rows.rows).toHaveLength(1);
+    expect((rows.rows[0] as Record<string, unknown>).status).toBe('active');
+  });
+
+  it('nobody but the decider may undecide', async () => {
     const nope = await withdrawExperimentDecision({
       experimentId: internalExperiment, by: 'institution:workshop_keeper',
       theControlSaid: 'Go ahead', because: 'tidying up' });

@@ -63,10 +63,29 @@ export async function beginExperimentalAsset(input: {
   if (!e) return { refused: 'no such experiment' };
   if (String(e.decision) !== 'approved') return { refused: 'the experiment is not approved' };
 
+  // ONE ASSET PER TEST, EVEN ACROSS A WITHDRAWN DECISION.
+  //
+  // A decision the owner withdraws takes its asset with it — the object existed
+  // for a test nobody had approved. But the withdrawal is not the end of the
+  // test, and approving it later must not quietly hand the hand an ARCHIVED
+  // asset, nor make a second one for the same experiment where every guard
+  // joins on from_experiment_id and expects to find one. So the object comes
+  // back rather than being duplicated, and says on its own row why.
   const existing = (await query(
-    `SELECT id FROM products WHERE from_experiment_id = ? AND deleted_at IS NULL`,
+    `SELECT id, status FROM products WHERE from_experiment_id = ? AND deleted_at IS NULL`,
     [input.experimentId])).rows[0] as Record<string, unknown> | undefined;
-  if (existing) return { productId: String(existing.id), created: false };
+  if (existing) {
+    if (String(existing.status) === 'archived') {
+      await query(
+        `UPDATE products SET status = 'active', retired_because = NULL,
+                updated_at = datetime('now')
+          WHERE id = ? AND standing = 'experimental'`, [String(existing.id)]);
+      await query(
+        `UPDATE business_actors SET retired_at = NULL
+          WHERE product_id = ? AND kind = 'asset'`, [String(existing.id)]);
+    }
+    return { productId: String(existing.id), created: false };
+  }
 
   const founderId = String(e.founder_id);
   const reference = String(e.evidence_mode) === 'reference';
