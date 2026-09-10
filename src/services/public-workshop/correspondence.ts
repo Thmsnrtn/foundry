@@ -431,6 +431,14 @@ export async function answer(founderId: string, mailId: string): Promise<Answere
 
   let sent = false;
   if (mode === 'autonomous' && says && plan.decision !== 'escalate' && plan.decision !== 'say_nothing') {
+    // WHAT REGISTERS THE CAPABILITY IS THE IMPORT. The gateway's handler registry
+    // is process-global and filled by side effect, so a send only works if the
+    // provider module happens to have been imported by somebody. Relying on that
+    // means the first real message out depends on an unrelated module's import
+    // order — which is how a proof of this path failed with "no trusted policy
+    // registered for tool 'send_email'" while the provider was configured and
+    // working. Ask for it here, where the send is.
+    await import('../integration/resend.js');
     const result = await invoke({
       productId: w.productId, tool: 'send_email',
       action: `reply to ${mail.from}: ${plan.decision}`,

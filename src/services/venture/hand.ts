@@ -745,6 +745,14 @@ export async function executeAction(actionId: string): Promise<ActionResult> {
   const claimed = await query(`UPDATE outbound_actions SET status = 'executing' WHERE id = ? AND status = 'pending_approval'`, [actionId]);
   if ((claimed.rowsAffected ?? 0) === 0) return { actionId, dispatched: false, certainty: 'not_attempted', refusedReason: 'already_claimed' };
   const params = JSON.parse(String(r.parameters_json)) as { to: string[]; subject: string; html: string; text?: string; reply_to?: string };
+  // WHAT REGISTERS THE CAPABILITY IS THE IMPORT. The gateway's handler registry
+  // is process-global and filled by side effect, so a send only works if the
+  // provider module happens to have been imported by somebody. Relying on that
+  // means the first real message out depends on an unrelated module's import
+  // order — which is how a proof of this path failed with "no trusted policy
+  // registered for tool 'send_email'" while the provider was configured and
+  // working. Ask for it here, where the send is.
+  await import('../integration/resend.js');
   const result = await invoke({
     productId: String(r.product_id), tool: 'send_email', action: String(r.preview_text), params,
     dedupKey: String(r.effect_id), customerExternalId: params.to[0], surface: 'email_outbound', dataClass: 'customer',

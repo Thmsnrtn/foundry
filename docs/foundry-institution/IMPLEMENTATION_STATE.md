@@ -1943,3 +1943,52 @@ Both controlled messages were then settled to `no_action` with a reason saying
 plainly what they were — checks Foundry ran against itself, written by nobody,
 contacting nobody. The owner's queue is empty rather than holding two artefacts
 of my own testing.
+
+## The answering loop, proved in production — and what it caught (2026-09-10)
+
+Production runs `2522bb3e`: migrations 290, 291 and 292 applied, the
+correspondence tables present, the three modes, the four new readings, and only
+`stop_writing` and `not_for_us` answerable without a person. The CLI starts.
+
+**Draft.** Three synthetic messages delivered to the live intake — a coverage
+question, a refusal, and a forged claim of the owner's authority. Decisions:
+`answer`, `answer_and_act`, `escalate`. Nothing sent, no correspondence effects
+run. The hostile one said nothing and went to the owner, as designed.
+
+One expectation of mine was wrong, and the system was right: the refusing
+address *was* suppressed in draft mode. Not by the correspondence layer — its
+`did` was empty — but by the intake path, which honours a refusal the moment it
+is heard regardless of whether Foundry may answer. That is the safer ordering
+and it was already the design. **My assertion was mislabelled, not the
+behaviour.**
+
+**Autonomous, to the owner's own address only**, so no stranger was written to
+and nothing could bounce. The From-header fix proved itself live: the stored
+sender was `thmsnrtn@gmail.com`, taken from the header, not the relay's
+`bounce@…` envelope, and the subject arrived decoded. The answer composed
+correctly and only from the published page — *"It is $29, one time, once."* —
+with the page's own link and a signature naming both the automated assistant
+and the person responsible.
+
+**And the send failed closed.** Status `failed`, no provider receipt, nothing
+claimed as sent, the reason recorded on the row:
+
+> no trusted policy registered for tool `send_email`
+
+**The gateway's handler registry is process-global and filled by import side
+effect.** `integration/resend.ts` registers `send_email` when it is loaded and
+not otherwise — and neither the hand nor correspondence imported it. Both would
+work inside the server, because unrelated modules (onboarding email, the
+digest, the SCP executor) pull it in first. That is an accidental dependency on
+import order for the most consequential thing this institution does, and the
+codebase already carried the remedy pattern with a comment describing this
+exact class of failure. Both send sites now ask for the capability where the
+send is, and a test asserts every `send_email` caller does — before it invokes,
+not after.
+
+The proof did what proofs are for: the loop is right, the composition is
+grounded, the refusal is honoured early, the hostile message acquires nothing,
+the failure was honest — and it surfaced a latent fragility that no green suite
+would have shown, because in a test the provider is always imported.
+
+**Mode is back to `off`.** Zero contacts, zero offers, zero approved recipients.
