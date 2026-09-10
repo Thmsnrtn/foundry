@@ -1,14 +1,16 @@
 Hi,
 
-I'm Thomas Norton. I run Apex Micro, a small digital workshop in Massachusetts where I test useful niche services before deciding whether they're worth developing further.
+Thirteen bid notices open on COMMBUYS look like cabinet, casework or millwork work: a housing-authority on-call carpentry contract, a kitchen-and-pantry replacement, a bathroom renovation across two addresses, and ten more. Each one with its bid number, opening date, agency contact and a link to the original notice.
 
-I'm testing a $29 one-time brief that filters the public bid notices currently open on COMMBUYS for commercial cabinet, casework and millwork work: 13 notices this week, screened by hand from the 952 open solicitations, each with its opening date, the agency contact and a link to the original record. I thought {Business name} might find it relevant based on the commercial work shown on your website.
+I screened them by hand from the 952 solicitations that were open on 7 September 2026. It is $29, one-time — no subscription, and I will not follow up.
 
-This is a pilot, one-time with no subscription, and I won't send follow-ups. Exactly what's included, what it doesn't cover, the price, and how a refund works are on the experiment's page:
+I wrote to {Business name} because the commercial work on your own website looked like the kind these notices ask for. That is how I found you: by looking at your site. There is no list and nobody sold me your details.
+
+My name is Thomas Norton and I run Apex Micro, a one-person digital workshop in Marlborough, Massachusetts. This is the first run of this brief, so I am finding out whether it is worth doing again. What you get, what it does not cover, and how a refund works are here:
 
 [APEX MICRO EXPERIMENT PAGE]
 
-If it isn't relevant, no reply needed and you won't hear from me again. Replies reach me directly.
+If it is not relevant, no reply needed and you will not hear from me again. Replies come straight to me.
 
 Thomas Norton
 Apex Micro
