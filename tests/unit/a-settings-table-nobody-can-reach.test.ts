@@ -108,7 +108,9 @@ describe('the table is gone', () => {
     // And `experiment_hand_tick` — the first real experiment's hand: offers,
     // receipts, deliveries, refunds, settlement, the offer taken down — makes
     // one hundred and one.
-    expect(Object.keys(JOB_REGISTRY).length, 'ninety-seven before, one hundred and two now').toBe(102);
+    // And `workshop_correspondence_tick` — the Workshop answering its own post,
+    // inside whatever envelope the owner set — makes one hundred and three.
+    expect(Object.keys(JOB_REGISTRY).length, 'ninety-seven before, one hundred and three now').toBe(103);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

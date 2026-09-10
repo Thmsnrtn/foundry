@@ -903,6 +903,14 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
     reason: 'the secret the workshop\'s own mail program uses to hand mail in',
     onAccountErasure: { op: 'delete' },
   },
+  workshop_replies: {
+    reason: 'what the workshop said back to the people who wrote to it, and why; their side of a conversation goes when they do',
+    onAccountErasure: { op: 'delete' },
+  },
+  workshop_correspondence_policy: {
+    reason: 'how much of its own post one person\'s workshop may answer, and the reason he last changed it',
+    onAccountErasure: { op: 'delete' },
+  },
   workshop_continuations: {
     reason: 'what people told one person\'s workshop they wanted next; the workshop goes with them',
     onAccountErasure: { op: 'delete' },
@@ -1150,6 +1158,7 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   probe_stop_kinds: 'the things the world can do that end a probe before its budget does, and what each is counted from; constitutional, naming nobody',
   continuation_kinds: 'the answers a participant can give about what should happen next, and which of them permit more contact; constitutional, naming nobody',
   workshop_mail_readings: 'the meanings the institution has words for when somebody writes to it, and which of them it may answer without asking; constitutional, naming nobody',
+  workshop_correspondence_modes: 'the three states of how much a workshop may answer for itself — nothing, drafts, or ordinary post; constitutional, naming nobody',
   exposure_floors: 'the four structural facts whose exposure is never graded down in context — custody, regulated decisions, professional reliance, decisions about a named person; constitutional, naming nobody',
   structural_fact_kinds: 'the facts about an offer that decide how serious an exposure is and which first-proof policy row each answers; constitutional, naming nobody',
   exposure_dimensions: 'the axes a portfolio can be concentrated on and what each failure would cost; constitutional and the same for every owner, naming no company',
