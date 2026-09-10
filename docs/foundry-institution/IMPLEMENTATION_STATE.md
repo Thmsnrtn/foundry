@@ -1819,3 +1819,48 @@ conversation conducted without him; and revocation stopping the sending at once.
 
 **Not yet true.** The ears are not stood up in production, so no real message
 has arrived, and the mode is `off`. Nothing has been said to anybody.
+
+## The Workshop is hearing, and the first real message corrected two things (2026-09-10)
+
+`workshop:stand-up-ears` run against production. The program `apexmicro-mail`
+is deployed (receipt `zFg7KOK-w5gd9EqmZqsGN`) and `thomas@apexmicro.ai` routes
+to it (receipt `sLqKzRJOKwu8nt9pPCENp`), forwarding to the owner first and
+unconditionally. Read back from Cloudflare: routing enabled and ready, one rule
+matching `thomas@apexmicro.ai` acting `worker:apexmicro-mail`, destination
+`thmsnrtn@gmail.com` **verified**.
+
+A controlled message was sent to the Workshop's own address — nothing offered,
+nobody contacted — and arrived in `workshop_mail` sixty seconds later with SPF
+pass, DKIM present, DMARC pass, 4,855 bytes at the edge, and its Message-ID
+kept. **The whole chain is real.**
+
+It also arrived wrong in two ways, both of which a green suite had not caught
+because no stub had an opinion about what real mail looks like.
+
+**The sender was a bounce address.** `message.from` at the edge is the SMTP
+envelope sender, and anything relayed through a sending service carries a
+per-message return-path — this one was
+`010001a088b5bd59-…-000000@send.apexmicro.ai`, unique to that message and
+belonging to nobody. Stored as identity that means a reply addressed nowhere
+and, far worse, **an opt-out recorded against an address that will never be
+seen again while the person who asked to be left alone stays on the list.**
+Identity now comes from the `From:` header a human composes, with the envelope
+as the fallback when there is no usable one.
+
+**The subject was still in transit encoding.** It arrived as
+`=?UTF-8?Q?Ingress_check_=E2=80=94_please_ignore?=`. Unreadable to the owner —
+and the rules that read a message saw the `?` in the encoding and classified a
+plain statement as `asking`. RFC 2047 encoded-words are decoded now, and the
+test asserts that same message no longer reads as a question.
+
+Both are held by a test built from the exact shapes that arrived.
+
+**Reply-inbox health was also wrong, in the other direction.** It read the
+forwarding address off the routing *rule*, but once the Workshop can hear the
+rule names the program rather than a mailbox — so it found nothing, printed
+`forwards to ,` with no address, and reported that the owner had never
+confirmed a destination Cloudflare had verified. Where the rule routes to the
+Workshop's own program, the address to ask about is the owner's.
+
+**Still true:** zero contacts, zero offers, zero outbound. Correspondence mode
+is `off`, so nothing has been answered.

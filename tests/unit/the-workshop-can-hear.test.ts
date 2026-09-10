@@ -37,7 +37,7 @@ import { mountWorkshopMail } from '../../src/routes/workshop-mail.js';
 
 vi.setConfig({ testTimeout: 180_000 });
 const OWNER = 'h_owner'; const FOUNDRY = 'h_foundry';
-const { fetch: fetchStub } = providerStubs();
+const { state, fetch: fetchStub } = providerStubs();
 let app: Hono; let INTAKE = '';
 let currentFounder: Record<string, unknown> = { id: OWNER, email: 'thomas@example.com', preferences: {} };
 const rowsOf = async (sql: string, p: unknown[] = []) => (await query(sql, p)).rows as unknown as Array<Record<string, unknown>>;
@@ -281,6 +281,59 @@ describe('a message is evidence, and evidence is not authority', () => {
   });
 });
 
+describe('what the first real message taught', () => {
+  it('takes identity from the From header, not the envelope, and reads the subject as a person wrote it', async () => {
+    // These are the exact shapes the first message ever delivered to
+    // apexmicro.ai arrived with: a per-message bounce address as the envelope
+    // sender, and an RFC 2047 encoded-word subject.
+    const raw = ['Content-Type: text/plain', '', 'A controlled check. Nothing is offered.', ''].join('\r\n');
+    const res = await app.request('/workshop/mail', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-workshop-intake': INTAKE },
+      body: JSON.stringify({
+        to: 'thomas@apexmicro.ai',
+        from: '010001a088b5bd59-10247955-402e-000000@send.apexmicro.ai',
+        size: raw.length,
+        headers: {
+          'message-id': '<real-shape-1@email.amazonses.com>',
+          subject: '=?UTF-8?Q?Ingress_check_=E2=80=94_please_ignore?=',
+          from: '"A Shop" <office@millwork.example>',
+        },
+        raw_base64: Buffer.from(raw, 'utf8').toString('base64'),
+      }),
+    });
+    expect(res.status).toBe(200);
+    const m = (await theInbox(OWNER)).find((x) => x.rfcMessageId === '<real-shape-1@email.amazonses.com>')!;
+
+    // WHO IT IS FROM is the address a person would answer, never the
+    // per-message bounce address — which would send a reply nowhere and, far
+    // worse, record an opt-out against an address nobody will ever use again.
+    expect(m.from).toBe('office@millwork.example');
+    expect(m.from).not.toContain('send.apexmicro.ai');
+    expect(m.fromName).toBe('A Shop');
+
+    // AND THE SUBJECT READS AS IT WAS WRITTEN. Left encoded it is unreadable to
+    // the owner, and the rules that read a message see the `?` in the encoding
+    // and take a statement for a question — which is exactly what happened.
+    expect(m.subject).toBe('Ingress check — please ignore');
+    expect(m.subject).not.toContain('=?UTF-8?');
+    expect(readIt(m.subject ?? '', m.body, m.from, 'thomas@apexmicro.ai').reading).not.toBe('asking');
+  });
+
+  it('still falls back to the envelope when no usable address is in the header', async () => {
+    const raw = 'Content-Type: text/plain\r\n\r\nno from header worth having\r\n';
+    await app.request('/workshop/mail', {
+      method: 'POST', headers: { 'content-type': 'application/json', 'x-workshop-intake': INTAKE },
+      body: JSON.stringify({
+        to: 'thomas@apexmicro.ai', from: 'envelope@example.com', size: raw.length,
+        headers: { 'message-id': '<no-from-1@example.com>', subject: 'plain', from: 'Nobody At All' },
+        raw_base64: Buffer.from(raw, 'utf8').toString('base64'),
+      }),
+    });
+    const m = (await theInbox(OWNER)).find((x) => x.rfcMessageId === '<no-from-1@example.com>')!;
+    expect(m.from).toBe('envelope@example.com');
+  });
+});
+
 describe('the same message twice is one message', () => {
   it('a redelivery creates no second row, no second refusal and no second record', async () => {
     const id = '<dup-1@example.com>';
@@ -396,6 +449,21 @@ describe('giving the Workshop ears is one governed, reversible act', () => {
     const { WORKSHOP_MAIL_WORKER_NAME } = await import('../../src/services/integration/cloudflare-gateway.js');
     process.env.APP_URL = 'https://foundry-intel.fly.dev';
     const r = await standUpTheEars(OWNER);
+    // ONCE IT CAN HEAR, THE RULE NAMES THE PROGRAM RATHER THAN A MAILBOX, and a
+    // health check that reads the forwarding address off the RULE finds nothing
+    // there. In production that made it report "you have not yet confirmed" —
+    // naming no address at all — about an address Cloudflare had verified. The
+    // reply path is now read the way it actually runs.
+    const dest = state.cf.routing.destinations.find((d) => d.email === 'thomas@example.com');
+    if (dest) dest.verified = new Date().toISOString();
+    const { workshopHealth } = await import('../../src/services/public-workshop/infrastructure.js');
+    const h = await workshopHealth(OWNER, { fetchImpl: fetchStub });
+    expect(h.replyInbox.detail).not.toContain('have not yet confirmed');
+    expect(h.replyInbox.detail).toContain('through the program that hears');
+    expect(h.replyInbox.status).toBe('healthy');
+    // It can hear. (Whether anything is WAITING is the other half of that
+    // signal, and messages earlier in this file are deliberately waiting.)
+    expect(h.mail.detail).not.toContain('cannot hear');
     expect(r.program).toBe(WORKSHOP_MAIL_WORKER_NAME());
     expect(r.forwardTo).toBe('thomas@example.com');
     // The program exists at the edge, and the address points at it.

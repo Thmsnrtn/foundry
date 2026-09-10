@@ -55,9 +55,9 @@ export function mountWorkshopMail(app: Hono): void {
   try {
     const heard = await hearMail({
       founderId,
-      to: s(payload.to), from: s(payload.from),
+      to: s(payload.to), from: addressFrom(s(headers.from)) || s(payload.from),
       fromName: nameFrom(s(headers.from)),
-      subject: s(headers.subject) || null,
+      subject: decodeWords(s(headers.subject)) || null,
       body: textOf(decoded),
       rfcMessageId: s(headers['message-id']) || `<generated-${Date.now()}@intake>`,
       inReplyTo: s(headers['in-reply-to']) || null,
@@ -82,6 +82,47 @@ export function mountWorkshopMail(app: Hono): void {
 function nameFrom(fromHeader: string): string | null {
   const m = /^\s*"?([^"<]+?)"?\s*</.exec(fromHeader);
   return m ? m[1]!.trim() || null : null;
+}
+
+/**
+ * WHO A PERSON WOULD SAY WROTE THIS, out of the From: header.
+ *
+ * The envelope sender is not it. A message relayed through any sending service
+ * arrives with a return-path like
+ * `010001a0…-000000@send.apexmicro.ai` — a bounce address, unique per message,
+ * belonging to nobody. The first real message the Workshop ever received had
+ * exactly that as its envelope sender, and storing it as the person's identity
+ * would mean a reply going nowhere and, far worse, an opt-out recorded against
+ * an address that will never be seen again while the person who asked to be
+ * left alone stays on the list.
+ *
+ * So identity comes from the header a human composes, and the envelope is the
+ * fallback for the case where there is no usable one.
+ */
+function addressFrom(fromHeader: string): string {
+  const angled = /<([^>]+)>/.exec(fromHeader);
+  const candidate = (angled ? angled[1]! : fromHeader).trim();
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate) ? candidate.toLowerCase() : '';
+}
+
+/**
+ * A SUBJECT AS A PERSON WROTE IT, not as SMTP carried it.
+ *
+ * Anything outside ASCII travels as an RFC 2047 encoded-word — the first real
+ * message arrived as `=?UTF-8?Q?Ingress_check_=E2=80=94_please_ignore?=`. Left
+ * encoded it is unreadable to the owner, and worse: the rules that read a
+ * message see the `?` in the encoding and take a statement for a question.
+ */
+function decodeWords(subject: string): string {
+  if (!subject.includes('=?')) return subject;
+  return subject.replace(/=\?([A-Za-z0-9_-]+)\?([BbQq])\?([^?]*)\?=/g, (whole, charset: string, kind: string, text: string) => {
+    try {
+      const enc = charset.toLowerCase() === 'utf-8' ? 'utf8' : 'latin1';
+      if (kind.toLowerCase() === 'b') return Buffer.from(text, 'base64').toString(enc);
+      const bytes = text.replace(/_/g, ' ').replace(/=([0-9A-Fa-f]{2})/g, (_m, h: string) => String.fromCharCode(parseInt(h, 16)));
+      return Buffer.from(bytes, 'latin1').toString(enc);
+    } catch { return whole; }
+  }).replace(/\?=\s+=\?/g, '').trim();
 }
 
 /**

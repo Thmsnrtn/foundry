@@ -260,11 +260,25 @@ export async function workshopHealth(founderId: string, opts: { fetchImpl?: type
       const zone = await readZone(w.zoneName);
       const routing = zone ? await readEmailRouting(zone.id) : null;
       const rule = routing?.rules.find((r) => r.to === w.contactEmail);
-      const dest = rule ? routing?.destinations.find((d) => rule.forwardTo.includes(d.email)) : undefined;
+      // ONCE THE WORKSHOP CAN HEAR, THE RULE NAMES THE PROGRAM, NOT A MAILBOX.
+      // The mail program forwards to the owner itself, so a check that reads
+      // the forwarding address off the RULE finds nothing and concludes the
+      // owner never confirmed his address — which is how this reported "you
+      // have not yet confirmed" about an address Cloudflare had verified, and
+      // named no address at all while doing it. Where the rule routes to the
+      // Workshop's own program, the address to ask about is the owner's.
+      const owner = (await rows('SELECT email FROM founders WHERE id = ?', [founderId]))[0];
+      const { WORKSHOP_MAIL_WORKER_NAME: mailProgram } = await import('../integration/cloudflare-gateway.js');
+      const throughProgram = rule?.worker != null && rule.worker === mailProgram();
+      const wanted = throughProgram ? [String(owner?.email ?? '')] : (rule?.forwardTo ?? []);
+      const dest = rule ? routing?.destinations.find((d) => wanted.includes(d.email)) : undefined;
       health.replyInbox = !routing?.enabled ? { status: 'needs_attention', detail: 'mail routing is not enabled on the zone' }
         : !rule ? { status: 'needs_attention', detail: `no forwarding rule for ${w.contactEmail}` }
-          : !dest?.verified ? { status: 'needs_attention', detail: `forwards to ${rule.forwardTo.join(', ')}, which you have not yet confirmed at Cloudflare (one click in the email they sent you)` }
-            : { status: 'healthy', detail: `replies to ${w.contactEmail} reach ${dest.email}` };
+          : wanted.filter(Boolean).length === 0 ? { status: 'needs_attention', detail: `the rule for ${w.contactEmail} names nowhere to deliver` }
+            : !dest?.verified ? { status: 'needs_attention', detail: `forwards to ${wanted.filter(Boolean).join(', ')}, which you have not yet confirmed at Cloudflare (one click in the email they sent you)` }
+              : { status: 'healthy', detail: throughProgram
+                ? `replies to ${w.contactEmail} reach ${dest.email} through the program that hears`
+                : `replies to ${w.contactEmail} reach ${dest.email}` };
     } catch (e) { health.replyInbox = { status: 'unknown', detail: e instanceof Error ? e.message : String(e) }; }
   } else health.replyInbox = { status: 'unknown', detail: 'cannot be read without Cloudflare' };
   await recordWorkshopHealth(founderId, health as unknown as Record<string, unknown>);
