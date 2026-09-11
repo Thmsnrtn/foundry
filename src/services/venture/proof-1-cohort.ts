@@ -74,15 +74,18 @@ export interface CohortMember {
 }
 
 /**
- * THE CLOSED COHORT. Eight businesses, each with observed public-sector work,
- * each reachable at an address it published itself.
+ * THE CLOSED COHORT. Twenty-one Massachusetts businesses in the trade, each
+ * reachable at an address it published itself, in two strata that are not
+ * grades: ten with public or institutional work observed in a public record,
+ * eleven with commercial or institutional capability and no public-work record
+ * found. Both get the same offer, at the same price, in the same words, once.
  *
  * ADDRESS CHOSEN, NEVER DEFAULTED TO. A shop that publishes an estimating,
  * invitation-to-bid or bid-request mailbox has said where commercial approaches
  * belong, and writing to its general inbox instead ignores an instruction it
- * took the trouble to give. Three of the eight say so and are written to there.
- * Where the general inbox genuinely is the best published route, the row says
- * that in as many words rather than dressing it up.
+ * took the trouble to give. Eight of the twenty-one say so and are written to
+ * there; four publish a named person and no role mailbox; nine publish only a
+ * general inbox, and the row says so in as many words rather than dressing it up.
  */
 export const PROOF1_COHORT: CohortMember[] = [
   // ── Public or institutional work observed in a public record ──────────────
