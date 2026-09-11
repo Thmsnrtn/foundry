@@ -67,17 +67,46 @@ describe('every business in the cohort earned its place and says how', () => {
     expect(s.nearly).toBe(PROOF1_NEARLY.length);
   });
 
-  it('keeps the near-misses out of the cohort entirely', () => {
-    // PROOF1_NEARLY is the cost of holding the standard, written down. The
-    // moment a name appears in both lists, the standard has quietly moved and
-    // the cohort's size has stopped meaning what it says.
+  it('keeps the unreachable businesses out of the cohort entirely', () => {
+    // PROOF1_NEARLY is what the cohort cost, written down. The moment a name
+    // appears in both lists, a business nobody could find an address for has
+    // acquired one, and the likeliest way that happened is a guess.
     const inCohort = new Set(PROOF1_COHORT.map((m) => m.counterpartyRef.toLowerCase()));
     for (const n of PROOF1_NEARLY) {
       expect(inCohort.has(n.counterpartyRef.toLowerCase()),
-        `${n.counterpartyRef} is in the cohort and on the list of businesses that did not qualify`)
+        `${n.counterpartyRef} is in the cohort and on the list of businesses this test cannot reach`)
         .toBe(false);
-      expect(n.shortOf.trim().length, `${n.counterpartyRef}: no reason it fell short`)
+      expect(n.shortOf.trim().length, `${n.counterpartyRef}: no reason it could not be reached`)
         .toBeGreaterThan(30);
+    }
+  });
+
+  it('carries both strata, and neither is a grade', () => {
+    // THE SPLIT MUST BE REAL OR IT IS NOISE. A stratum with nothing in it means
+    // the correction to the population never actually took effect and the test
+    // is still being run on the businesses that need the brief least.
+    const s = cohortSummary();
+    expect(s.byStratum.public_work_observed, 'no business with observed public work').toBeGreaterThan(0);
+    expect(s.byStratum.commercial_institutional_capable,
+      'the corrected population admitted nobody, so it was not really corrected').toBeGreaterThan(0);
+    expect(s.byStratum.public_work_observed + s.byStratum.commercial_institutional_capable).toBe(s.total);
+    // Both strata are written to on the same terms. A difference in how they
+    // are addressed would confound the only comparison the split exists for.
+    for (const st of ['public_work_observed', 'commercial_institutional_capable'] as const) {
+      const inIt = PROOF1_COHORT.filter((m) => m.stratum === st);
+      expect(inIt.length, `${st} is empty`).toBeGreaterThan(0);
+    }
+  });
+
+  it('is entirely Massachusetts, by a name that says so or grounds that do', () => {
+    // THREE BUSINESSES REACHED A DRAFT OF THIS LIST FROM OUT OF STATE —
+    // Connecticut, Wisconsin and Ontario — because a directory listed them
+    // against Massachusetts cities and nobody checked. The population says
+    // Massachusetts, so something in each row has to say it too.
+    for (const m of PROOF1_COHORT) {
+      const says = /Massachusetts|, (Lowell|Worcester|Canton|Wakefield|Woburn|Watertown|Springfield|Norton|Webster|Norwood|Boston|Fall River|Marlborough|Gloucester|Wilbraham|East Boston)/
+        .test(m.counterpartyRef);
+      expect(says, `${m.counterpartyRef}: nothing in the name places it in Massachusetts`).toBe(true);
     }
   });
 

@@ -1,71 +1,52 @@
 // =============================================================================
 // FOUNDRY — the cohort, and the reason it is the size it is
 //
-// The amendment asked for thirty to fifty qualified Massachusetts millwork
-// businesses in place of two, because a zero from two carries almost no
-// information: it cannot separate a weak proposition from a bad address, or a
-// wrong reading of the market from an ordinary quiet week.
+// The first design of this experiment reached two businesses. The second held a
+// population that required OBSERVED PUBLIC-SECTOR WORK and reached eight. The
+// owner then corrected the population itself, and he was right to: requiring a
+// visible public-work history selects for shops that already know how to find
+// these notices and therefore need a screening brief least. The criterion was
+// not too loose. It was aimed at the wrong end of the market.
 //
-// EIGHT BUSINESSES MEET THE SEALED STANDARD. Not thirty, and not because the
-// search was lazy. The standard was held exactly where Experiment 001 sealed
-// it — `proof-1-screening.ts` states it and this file does not move it — and
-// the search that ran against it was the largest this institution has done:
-// all 739 open COMMBUYS notices read in full, the Comptroller's spending record
-// swept by trade, and twenty-one shop websites crawled to depth.
+// SO THE QUESTION IS NOW WHETHER THE SHOP COULD DO THE WORK, and prior public
+// work is kept as an observation rather than a gate. A business is here if it
+// is a Massachusetts business in the trade — commercial or institutional
+// millwork, cabinetry, casework, architectural woodwork, countertops or closely
+// related contract work — with capability the notices in this edition would
+// actually call for, and a legitimate public business address to write to.
 //
-// WHY THE NUMBER IS EIGHT, which is a finding about Massachusetts and not about
-// the businesses. The sealed standard admits a shop on OBSERVED PUBLIC-SECTOR
-// WORK — a named public project in its own public record, or a public payment
-// record naming it. For this trade, in this state, that is very nearly
-// unobservable by construction, and three independent facts say so:
+// TWENTY-ONE. Not thirty to fifty, and not because the search was thin: this is
+// the largest search this institution has run. All 739 open COMMBUYS notices
+// read in full; the Comptroller's spending record swept by trade; a contractor
+// directory mined across eleven metros; 143 businesses crawled; every candidate
+// checked for a street address in Massachusetts rather than assumed to be here.
 //
-//   1. DCAMM's published categories of work do not name millwork, casework,
-//      cabinetry or architectural woodwork among them. That says the registry
-//      is not organised around this trade — NOT that such work cannot be done
-//      or certified under a broader category, which it plainly can.
-//   2. M.G.L. c.149 §44F enumerates named classes of filed sub-bid work and
-//      millwork is not among the named ones. The statute also lets an awarding
-//      authority require a separate sub-bid for another class of work where it
-//      judges that necessary or convenient, so the named list is not a closed
-//      set and no inference of the form "millwork can never be filed" follows.
-//   3. The Commonwealth's own spending record contains exactly three
-//      Massachusetts vendors with "millwork" in the name, and one is a
-//      condominium trust. Swept again for "casework" and "cabinet" it yields
-//      seven more, and every one fails this design for a reason of its own: a
-//      garage-storage installer, a furniture maker, two spellings of one
-//      residential distributor, a sales outfit last paid in 2012, and a shop
-//      whose site will not answer this environment at all. The buyers in this
-//      market are municipalities and local housing authorities, and they pay
-//      from their own treasuries — not through the state ledger that record is
-//      drawn from.
+// THE BINDING CONSTRAINT IS NOT EVIDENCE ANY MORE — IT IS THE ADDRESS. Under
+// the corrected population almost nothing is turned away for weak grounds. What
+// turns businesses away is that they publish no email at all. Old Colony
+// Cabinets names William James College and Cape Cod Hospital and offers a
+// contact form; Mass Cabinets, CMD, FabWright and Caliper the same;
+// Metropolitan publishes thirty addresses and every one is a residential
+// kitchen designer. `PROOF1_NEARLY` names them, because a cohort that is
+// twenty-one rather than thirty for a reason should say the reason out loud.
 //
-// THE SUPPORTED CONCLUSION IS NARROWER THAN IT FIRST LOOKED, and it is worth
-// stating at its real strength rather than its rhetorical one: millwork,
-// casework and cabinetry are not clearly represented as named standard
-// categories in the public classification surfaces examined, which makes those
-// surfaces poor EXHAUSTIVE DISCOVERY MECHANISMS for this market. That is a
-// claim about the usefulness of a search method. It is not a claim about how
-// public construction law treats the trade, and an earlier draft of this file
-// overreached into exactly that.
+// WHAT THE SEARCH COST IN CORRECTIONS, kept here because they were the kind of
+// mistake that would otherwise have reached a stranger:
+//   · Millcraft Cabinetry is in Connecticut. It sat in an early draft of this
+//     list on an assumption nobody had checked.
+//   · Lannon Millwork is in Menomonee Falls, Wisconsin.
+//   · CCW Inc is in Waterloo, Ontario.
+//   · A national contractor directory listed firms from Tulsa, Oregon,
+//     Missouri, Kansas and the United Kingdom against Massachusetts metro
+//     pages. Of 111 businesses it produced, four were new, in state and
+//     reachable.
+// None of these are Massachusetts businesses and none of them is in the cohort.
 //
-// The fourth door, COMMBUYS' own award and contract search, would name these
-// shops; it redirects to a login, and an authentication boundary is not
-// something this institution goes around.
-//
-// THE STANDARD IS ALSO ADVERSELY SELECTED, which the institution noticed when
-// it first narrowed the design and is worth repeating here: a shop with a
-// visible public-work record is a shop that already finds these notices, and
-// therefore needs a screening brief least. Holding the standard costs cohort
-// size AND aims at the customers least likely to buy. That is a real cost and
-// it is the owner's to weigh, which is why `PROOF1_NEARLY` below is written out
-// in full rather than summarised — it is the concrete shape of the alternative,
-// not an argument for it.
-//
-// NOTHING HERE IS PADDED. Every address was READ ON THE BUSINESS'S OWN SITE and
-// carries the page it was read from. Not one was guessed from a pattern, and
-// where a shop publishes no address this environment can reach, it is absent
-// rather than approximated — Old Colony Cabinets and Lannon Millwork are the
-// painful cases, both naming institutional work plainly, neither reachable.
+// NOTHING HERE IS PADDED. Every address below was READ ON THE BUSINESS'S OWN
+// SITE and carries the page it was read from. Not one was guessed from a
+// pattern. Where a shop publishes several addresses and states no role against
+// any of them, it is absent rather than approximated — choosing between four
+// unlabelled staff mailboxes is a guess wearing a decision's clothes.
 // =============================================================================
 
 export type ContactKind = 'role' | 'named' | 'general';
@@ -104,180 +85,289 @@ export interface CohortMember {
  * that in as many words rather than dressing it up.
  */
 export const PROOF1_COHORT: CohortMember[] = [
+  // ── Public or institutional work observed in a public record ──────────────
   {
     counterpartyRef: 'General Woodworking, Lowell',
-    email: 'info@genwood.com',
-    contactKind: 'general', stratum: 'public_work_observed',
+    email: 'info@genwood.com', contactKind: 'general', stratum: 'public_work_observed',
     contactSource: 'the only address published on its own site — no estimating or bid mailbox is offered',
     because: 'Its own project gallery names Henry K. Oliver School (Lawrence), Tyngsborough Middle School, '
       + 'Cabot Elementary School and Stoughton High School, and it lists AWI QCP accreditation. The '
-      + "Comptroller's spending record independently shows a payment from the University of Massachusetts "
-      + 'system in FY2018.',
-    source: 'https://genwood.com/ (address read there) and CTHRU dataset pegc-naaa, vendor like %GENERAL WOODWORKING%',
+      + "Comptroller's record independently shows a payment from the University of Massachusetts system.",
+    source: 'https://genwood.com/ and CTHRU dataset pegc-naaa, vendor like %GENERAL WOODWORKING%',
   },
   {
     counterpartyRef: 'Continental Woodcraft, Worcester',
-    email: 'info@continentalwoodcraft.com',
-    contactKind: 'general', stratum: 'public_work_observed',
+    email: 'info@continentalwoodcraft.com', contactKind: 'general', stratum: 'public_work_observed',
     contactSource: 'the only address published on its own site; its bid route is a web form, which this test does not use',
     because: 'Its own project list names Wareham Elementary School, Shrewsbury Police Station, Malden City '
-      + 'Hall and Worcester State University under Education and Municipality headings, and the site says the '
-      + 'shop is "well-versed in the bidding process for your retail, healthcare, education, government, or '
-      + 'municipality project". The Comptroller\'s record independently shows a $6,167.70 payment from '
-      + "Worcester Sheriff's Department in FY2022.",
-    source: 'https://continentalwoodcraft.com/ (address read there) and CTHRU dataset pegc-naaa, vendor like %CONTINENTAL WOODCRAFT%',
+      + 'Hall and Worcester State University, and the site says the shop is "well-versed in the bidding '
+      + 'process for your retail, healthcare, education, government, or municipality project". The '
+      + "Comptroller's record shows a $6,167.70 payment from Worcester Sheriff's Department in FY2022.",
+    source: 'https://continentalwoodcraft.com/ and CTHRU dataset pegc-naaa, vendor like %CONTINENTAL WOODCRAFT%',
   },
   {
     counterpartyRef: 'Woodcraft Millwork, Canton',
-    email: 'estimating@woodcraftgroup.com',
-    contactKind: 'role', stratum: 'public_work_observed',
+    email: 'estimating@woodcraftgroup.com', contactKind: 'role', stratum: 'public_work_observed',
     contactSource: 'the estimating mailbox published on its own site — the route it asks commercial work to come through',
-    because: 'Its own completed projects are indexed by sector, and the sectors include Education, Healthcare '
-      + 'and Municipality alongside Office/Industrial and Retail. These are projects it has done, not markets '
-      + 'it says it serves.',
-    source: 'https://woodcraftgroup.com/ (address read there)',
+    because: 'Its own completed projects are indexed by sector and the sectors include Education, Healthcare '
+      + 'and Municipality. These are projects it has done, not markets it says it serves.',
+    source: 'https://woodcraftgroup.com/',
   },
   {
     counterpartyRef: 'STEM Solutions, Wakefield',
-    email: 'itb@labfitout.com',
-    contactKind: 'role', stratum: 'public_work_observed',
+    email: 'itb@labfitout.com', contactKind: 'role', stratum: 'public_work_observed',
     contactSource: 'the invitation-to-bid mailbox published on its own site, chosen over the named estimator it also lists',
     because: 'Its own project highlights name the Phase 1 Walpole High School renovation and the '
       + 'Dennis-Yarmouth Intermediate Middle School — public school casework and fit-out.',
-    source: 'https://labfitout.com/ (address read there)',
+    source: 'https://labfitout.com/',
   },
   {
     counterpartyRef: 'New England Lab, Woburn',
-    email: 'info@newenglandlab.com',
-    contactKind: 'general', stratum: 'public_work_observed',
-    contactSource: 'the address published on its own contact page; its bid route is a quote request form, which this test does not use',
-    because: 'Its own portfolio is indexed by industry and the industries include government, private K-12, '
-      + "university teaching and university research. The Comptroller's record independently shows $72,993 "
-      + 'across thirteen payments from eight state bodies between 2014 and 2023 — Bridgewater State '
-      + 'University, DCAMM itself, the Department of Environmental Protection, MassDOT and the Norfolk '
-      + "Sheriff's Department among them. It is the most heavily evidenced business in this cohort.",
-    source: 'https://newenglandlab.com/contact/index.cfm (address read there) and CTHRU dataset pegc-naaa, '
-      + 'vendor like %NEW ENGLAND LABORATORY CASEWORK%',
+    email: 'info@newenglandlab.com', contactKind: 'general', stratum: 'public_work_observed',
+    contactSource: 'the address published on its own contact page; its bid route is a quote form, which this test does not use',
+    because: 'Its own portfolio is indexed by industry and the industries include government, private K-12 '
+      + "and university research. The Comptroller's record shows $72,993 across thirteen payments from "
+      + 'eight state bodies between 2014 and 2023 — Bridgewater State University, DCAMM itself, the '
+      + 'Department of Environmental Protection and MassDOT among them.',
+    source: 'https://newenglandlab.com/contact/index.cfm and CTHRU pegc-naaa, vendor like %NEW ENGLAND LABORATORY CASEWORK%',
   },
   {
     counterpartyRef: 'M.L. McDonald, Watertown',
-    email: 'bidrequests@mlmcdonald.com',
-    contactKind: 'role', stratum: 'public_work_observed',
+    email: 'bidrequests@mlmcdonald.com', contactKind: 'role', stratum: 'public_work_observed',
     contactSource: 'the address its contact page labels "Invitations To Bid", chosen over the general inbox beside it '
-      + 'and over a near-identical singular spelling that appears on its services page',
+      + 'and over a near-identical singular spelling on its services page',
     because: 'Its own site quotes the Facilities Manager of the J.F.K. Presidential Library & Museum by name '
       + 'about its work — a named public building, and a named client at it.',
-    source: 'https://mlmcdonald.com/contact (address read there)',
+    source: 'https://mlmcdonald.com/contact',
   },
   {
     counterpartyRef: 'TrimBoard, Springfield',
-    email: 'info@trimboard.net',
-    contactKind: 'general', stratum: 'public_work_observed',
+    email: 'info@trimboard.net', contactKind: 'general', stratum: 'public_work_observed',
     contactSource: 'the only address published across its site, where it appears six times',
     because: 'Its own site names the Centerville Public Library among completed projects and describes work '
       + 'for institutional buildings, including replicating classical moulding profiles for a university '
-      + 'building. It was recorded as an unevidenced trim supplier in the first screening; this is new '
-      + 'evidence found by a deeper read of the same public site, not a relaxed standard.',
-    source: 'https://trimboard.net/ (address read there)',
+      + 'building.',
+    source: 'https://trimboard.net/',
   },
   {
     counterpartyRef: 'South Shore Millwork, Norton',
-    email: 'thamlin@southshoremillwork.com',
-    contactKind: 'named', stratum: 'public_work_observed',
+    email: 'thamlin@southshoremillwork.com', contactKind: 'named', stratum: 'public_work_observed',
     contactSource: 'the named contact published on its own site; no estimating or bid mailbox is published',
-    because: "The Comptroller's spending record shows $51,148 across six payments from the Plymouth District "
-      + 'Attorney and the Department of Workforce Development between 2010 and 2021 — a sustained public '
+    because: "The Comptroller's record shows $51,148 across six payments from the Plymouth District Attorney "
+      + 'and the Department of Workforce Development between 2010 and 2021 — a sustained public '
       + 'relationship rather than a single transaction. Its own site shows corporate, hospitality and '
       + 'historical restoration millwork.',
-    source: 'https://southshoremillwork.com/ (address read there) and CTHRU dataset pegc-naaa, vendor like %SOUTH SHORE MILLWORK%',
+    source: 'https://southshoremillwork.com/ and CTHRU pegc-naaa, vendor like %SOUTH SHORE MILLWORK%',
+  },
+  {
+    counterpartyRef: 'Classic Millwork Design, Webster',
+    email: 'contact@classicmillworkdesign.com', contactKind: 'general', stratum: 'public_work_observed',
+    contactSource: 'the address published on its own site; no estimating mailbox is offered',
+    because: 'Its own portfolio names Ashland Public Library, East Longmeadow Public Library, Boston College '
+      + 'and Dana-Farber/Milford Hospital, and its stated client list includes government facilities and '
+      + 'military facilities. It works from a 17,500 square foot manufacturing facility in Webster. An '
+      + 'earlier screening recorded it as unevidenced on a shallower read of the same public site.',
+    source: 'https://www.classicmillworkdesign.com/',
+  },
+  {
+    counterpartyRef: 'Norfolk Kitchen & Bath, Norwood',
+    email: 'info@mynkb.com', contactKind: 'general', stratum: 'public_work_observed',
+    contactSource: 'the address published on its own site for its contractor and trade business',
+    because: 'Its own site says it supplies cabinetry, countertops and property maintenance supplies to '
+      + 'general contractors, property managers and HOUSING AUTHORITIES across New England, and it runs a '
+      + 'commercial countertop and casework factory. Housing authorities are the buyers most of this '
+      + "edition's notices come from.",
+    source: 'https://www.norfolkkitchenandbath.com/contractors-remodelers/our-factory/',
+  },
+
+  // ── Commercial or institutional capability, no public-work record found ───
+  {
+    counterpartyRef: 'Integrated At Work, Boston',
+    email: 'estimating@integratedatwork.com', contactKind: 'role', stratum: 'commercial_institutional_capable',
+    contactSource: 'the estimating mailbox published on its own site, chosen over the general and sales inboxes beside it',
+    because: 'Its own site calls it "a premier specialty contractor providing interior architectural products '
+      + 'and engineered solutions for commercial projects throughout New England" and lists Casework & '
+      + 'Cabinetry among its interior product lines. Its named clients are corporate rather than public.',
+    source: 'https://www.integratedatwork.com/products',
+  },
+  {
+    counterpartyRef: 'Specialty Millwork Inc., Fall River',
+    email: 'estimating.specialtymillwork@gmail.com', contactKind: 'role', stratum: 'commercial_institutional_capable',
+    contactSource: 'the estimating address published on its own site beside its Fall River address',
+    because: 'Its own site says the shop employs nine skilled tradespeople on Pocasset Street in Fall River '
+      + 'and offers "everything from custom stairs to full renovations of kitchens and all commercial '
+      + 'architectural millwork", with commercial desks and retail displays among its listed work.',
+    source: 'https://specialtymillwork.com/',
+  },
+  {
+    counterpartyRef: 'New England Cabinetry & Millwork, Marlborough',
+    email: 'sales@necabinetry.com', contactKind: 'role', stratum: 'commercial_institutional_capable',
+    contactSource: 'the sales mailbox published on its own site, which is the route it offers for trade enquiries',
+    because: 'Its own site says it works "from elegant residential designs to sophisticated commercial '
+      + 'spaces", and it operates from a Lincoln Street address in Marlborough. No public project is named.',
+    source: 'https://necabinetry.com/',
+  },
+  {
+    counterpartyRef: 'RGC Millwork, Lowell',
+    email: 'sales@rgcmillwork.com', contactKind: 'role', stratum: 'commercial_institutional_capable',
+    contactSource: 'the sales mailbox published on its own site, alongside a named principal',
+    because: 'Its own site lists hospitals, lab casework, biotech and medtech, dental offices, reception '
+      + 'areas, lobbies and education among the work it specialises in. These are stated specialities '
+      + 'rather than named projects, which is why it sits in this stratum.',
+    source: 'https://www.rgcmillwork.com/',
+  },
+  {
+    counterpartyRef: 'Tight Line Construction, Boston',
+    email: 'bidinvites@tightlineco.com', contactKind: 'role', stratum: 'commercial_institutional_capable',
+    contactSource: 'the bid-invitation mailbox published on its own site — the route it asks bids to come through',
+    because: 'Its own site calls it "New England\'s premier specialty subcontractor, performing a multitude '
+      + 'of services including drywall & metal framing, acoustical ceilings, doors & hardware, specialties, '
+      + 'and general trades packages", and lists Millwork among those services. Doors and hardware and '
+      + "general trades are a direct match for several of this edition's notices. Its primary trades are "
+      + 'drywall and ceilings, which is said here rather than left for him to discover.',
+    source: 'https://tightlineco.com/',
+  },
+  {
+    counterpartyRef: 'Grain Architectural Millwork, East Boston',
+    email: 'brandon@grainarchitecturalmillwork.com', contactKind: 'named', stratum: 'commercial_institutional_capable',
+    contactSource: 'the named contact published on its own site; no role mailbox is offered',
+    because: 'Its own commercial portfolio covers corporate, hospitality, retail and multi-family millwork '
+      + 'from an 8,000 square foot facility at the Boston Harbor Shipyard. Not one public or institutional '
+      + 'project appears anywhere on the site.',
+    source: 'https://grainarchitecturalmillwork.com/',
+  },
+  {
+    counterpartyRef: 'Salem Architectural Woodworking, Gloucester',
+    email: 'pguido@salemwoodworking.net', contactKind: 'named', stratum: 'commercial_institutional_capable',
+    contactSource: "the principal's address published on its own site",
+    because: 'Its own site says it serves commercial and institutional organisations and quotes the Gallery '
+      + 'Director at Gordon College by name about work done for the college. Gordon College is private, so '
+      + 'the project is institutional but not public — which is exactly what this stratum is for.',
+    source: 'http://salemwoodworking.net/',
+  },
+  {
+    counterpartyRef: 'Camio Custom Cabinetry, Canton',
+    email: 'chris@camiocabinetry.com', contactKind: 'named', stratum: 'commercial_institutional_capable',
+    contactSource: 'the named contact published on its own site; no role mailbox is offered',
+    because: 'Its own site says it has provided colleges, schools, corporate offices and medical centres with '
+      + 'custom cabinets and countertops, and that it works to the timelines of general contractors. Sectors '
+      + 'are described; no individual project is named.',
+    source: 'https://www.camiocabinetry.com/commercial-cabinets-and-countertops',
+  },
+  {
+    counterpartyRef: 'Master Millwork, Massachusetts',
+    email: 'info@mastermillwork.com', contactKind: 'general', stratum: 'commercial_institutional_capable',
+    contactSource: 'the only address published on its own site',
+    because: 'Its own site describes estimating, drafting and shop drawings, design assist, custom and '
+      + 'premium architectural millwork, commercial production casework and installation — a full '
+      + 'commercial millwork operation. It names senior living, multi-unit apartments, hotels, restaurants, '
+      + 'libraries and schools as its markets without naming a project.',
+    source: 'https://www.mastermillwork.com/',
+  },
+  {
+    counterpartyRef: 'Kitchen Encounters, Wilbraham',
+    email: 'info@kitchen-encounters.com', contactKind: 'general', stratum: 'commercial_institutional_capable',
+    contactSource: 'the address published on its own site beside its Railroad Avenue address',
+    because: 'Its own Custom Commercial Millwork page names assisted living facilities, doctor and dental '
+      + 'offices, banks, universities and colleges, and courthouses as the work it does. Courthouses and '
+      + 'colleges are listed as categories of work rather than as projects it points to.',
+    source: 'https://kitchen-encounters.com/',
+  },
+  {
+    counterpartyRef: 'Quality Design Cabinet, Boston',
+    email: 'contact@qualitydesigncabinet.com', contactKind: 'general', stratum: 'commercial_institutional_capable',
+    contactSource: 'the address published on its own site, chosen over the generic mail-provider address it also lists',
+    because: 'Its own portfolio names custom tenant cabinetry for a twelve-storey Boston commercial '
+      + 'development and hospitality suites on Beacon Hill. Named projects, all of them private.',
+    source: 'https://qualitydesigncabinet.com/commercial',
   },
 ];
 
 /**
- * WHAT HOLDING THE STANDARD COSTS, named rather than summarised.
+ * WHAT THE COHORT COST, named rather than summarised.
  *
- * Each of these is a Massachusetts millwork or cabinet shop, reachable at an
- * address it published itself, whose own site shows commercial or institutional
- * work — and none of which clears the sealed standard, because the work it
- * shows is either described rather than named, or named but not public.
+ * Under the corrected population almost nothing is turned away for weak
+ * evidence any more. These are Massachusetts businesses in the right trade
+ * that this test cannot reach, and the reason is nearly always the same one:
+ * THEY PUBLISH NO EMAIL ADDRESS. A contact form is a different act from the one
+ * the owner is authorising, and inventing an address from a pattern is the
+ * thing he explicitly forbade.
  *
- * This list is NOT a reserve to be drawn on if eight feels small. Admitting it
- * would be an amendment to the sealed population, which is the owner's act and
- * nobody else's. It is written out so that if he makes that amendment he is
- * choosing a known set of businesses rather than authorising a direction.
+ * This list is not a reserve to draw on if twenty-one feels thin. Reaching any
+ * of them needs a capability this experiment does not have, not a lower bar.
  */
 export interface NearMiss {
   counterpartyRef: string;
-  email: string;
-  contactKind: ContactKind;
-  /** What its own site does show. */
+  /** What it is, so the loss is legible. */
   shows: string;
-  /** The precise reason that is not enough under the sealed standard. */
+  /** Why this test cannot write to it. */
   shortOf: string;
 }
 
 export const PROOF1_NEARLY: NearMiss[] = [
   {
-    counterpartyRef: 'Salem Architectural Woodworking, Gloucester',
-    email: 'pguido@salemwoodworking.net',
-    contactKind: 'named',
-    shows: 'Gordon College work, with the college\'s Gallery Director quoted by name about it.',
-    shortOf: 'Gordon College is a private college. The project is named and institutional, but it is not public work.',
+    counterpartyRef: 'Old Colony Cabinets, Stoughton',
+    shows: 'commercial and institutional casework; its own site names William James College, Brigham and '
+      + "Women's MRI and Cape Cod Hospital, and says it works in both the pure commercial and institutional space.",
+    shortOf: 'Publishes no email anywhere. Telephone, a postal address and a contact form only. On evidence '
+      + 'this is one of the strongest businesses found anywhere in this search.',
   },
   {
-    counterpartyRef: 'Camio Custom Cabinetry, Canton',
-    email: 'chris@camiocabinetry.com',
-    contactKind: 'named',
-    shows: 'a statement that it has supplied colleges, schools, corporate offices and medical centres, and that '
-      + 'it works to the timelines of general contractors.',
-    shortOf: 'Sectors described, no project named. This is the same evidence the first screening rejected Salem for, '
-      + 'and it is rejected here for the same reason.',
+    counterpartyRef: 'Mass Cabinets, Inc., Methuen',
+    shows: 'an architectural woodworking firm fabricating cabinets, countertops and reception desks for '
+      + 'commercial and residential projects, at 99 Cross Street, Methuen.',
+    shortOf: 'Publishes no email. A contact form only.',
   },
   {
-    counterpartyRef: 'Kitchen Encounters, Wilbraham',
-    email: 'info@kitchen-encounters.com',
-    contactKind: 'general',
-    shows: 'a Custom Commercial Millwork page naming assisted living facilities, doctor and dental offices, banks, '
-      + 'universities and colleges, and courthouses as the work it does.',
-    shortOf: 'Courthouses and colleges are listed as categories of work, not as projects it can point to.',
+    counterpartyRef: 'CMD Cabinetry, Walpole',
+    shows: 'commercial cabinetry, countertops and millwork from 124 Production Road, Walpole.',
+    shortOf: 'Publishes no email. A contact form only.',
   },
   {
-    counterpartyRef: 'RGC Millwork, Lowell',
-    email: 'sales@rgcmillwork.com',
-    contactKind: 'role',
-    shows: 'hospitals, lab casework, biotech, dental offices, reception areas, lobbies and education among its '
-      + 'stated specialities.',
-    shortOf: 'Specialities stated, no project named, no payment record.',
+    counterpartyRef: 'FabWright Origins, Boston',
+    shows: 'commercial custom cabinetry and millwork from 13 Humphreys Street, Boston, with institutional '
+      + 'and laboratory work described.',
+    shortOf: 'Publishes no email. A contact form only.',
   },
   {
-    counterpartyRef: 'Classic Millwork Design, Webster',
-    email: 'contact@classicmillworkdesign.com',
-    contactKind: 'general',
-    shows: 'typical clients given as hospitals, schools, retirement facilities and rehabilitation centres.',
-    shortOf: 'Typical clients are not named clients.',
+    counterpartyRef: 'Caliper Woodworking',
+    shows: 'architectural millwork with corporate, medical, retail and education work described.',
+    shortOf: 'Publishes no email. A contact form only.',
   },
   {
-    counterpartyRef: 'Grain Architectural Millwork, East Boston',
-    email: 'brandon@grainarchitecturalmillwork.com',
-    contactKind: 'named',
-    shows: 'a commercial portfolio across corporate, hospitality, retail and multi-family millwork.',
-    shortOf: 'Genuinely commercial millwork, and not one public or institutional project anywhere on the site.',
+    counterpartyRef: 'Metropolitan Cabinets & Countertops, Norwood',
+    shows: 'hand-built cabinets and in-house countertop fabrication, a multi-family division, a trade '
+      + "programme for architects and contractors, and $35,858 of payments from the Senate in the "
+      + "Comptroller's record.",
+    shortOf: 'Publishes about thirty individual addresses, every one a residential kitchen designer, and no '
+      + 'trade, contract or estimating mailbox — its own trade page directs professionals to a phone number. '
+      + 'Writing to a residential designer about a public-bid brief would be a worse act than not writing.',
   },
   {
-    counterpartyRef: 'Quality Design Cabinet, Boston',
-    email: 'contact@qualitydesigncabinet.com',
-    contactKind: 'general',
-    shows: 'custom tenant cabinetry for a twelve-storey Boston commercial development and hospitality suites on '
-      + 'Beacon Hill.',
-    shortOf: 'Named projects, all of them private.',
+    counterpartyRef: 'Butler Architectural Woodworking, New Bedford',
+    shows: 'a full-service architectural millwork company since 2000, affiliated with the North Atlantic '
+      + 'Carpenters Union, whose work includes the Charles Hotel, 100 Summer Street, Parthenon Capital and Wayfair.',
+    shortOf: 'Its contact page publishes no address at all — a form and a phone number. Four staff addresses '
+      + 'appear elsewhere on the site with no role stated against any of them, so there is no way to choose '
+      + 'an appropriate one rather than a guess.',
+  },
+  {
+    counterpartyRef: 'Eastern Woodworks, Georgetown',
+    shows: 'a full line of commercial casework and custom cabinetry fabricated at its own plant.',
+    shortOf: 'The only address published is a product-specific mailbox for Corian vanity tops, which is not '
+      + 'where a public-bid brief belongs.',
+  },
+  {
+    counterpartyRef: 'New England Custom Cabinetry, Plainville; Toby Leary Fine Woodworking, Cape Cod',
+    shows: 'cabinet and millwork shops with published addresses and Massachusetts premises.',
+    shortOf: 'Neither publishes evidence of commercial or institutional work. Under the corrected population '
+      + 'that is the one thing still required, and trade name alone does not supply it.',
   },
   {
     counterpartyRef: 'Marino Custom Display Woodworking, Topsfield',
-    email: 'charlie@marinowoodworking.com',
-    contactKind: 'named',
-    shows: 'a payment from the Supreme Judicial Court in FY2015 in the Comptroller\'s record.',
-    shortOf: 'Public work, but the trade is display and fixture woodworking rather than building casework. It fails '
-      + 'the population on trade, not on public work — the opposite of everyone else on this list.',
+    shows: 'a payment from the Supreme Judicial Court in the Comptroller\'s record, and a published named contact.',
+    shortOf: 'The trade is display and fixture woodworking rather than building casework, so it fails the '
+      + 'population on what it makes — the opposite of everyone else on this list.',
   },
 ];
 
