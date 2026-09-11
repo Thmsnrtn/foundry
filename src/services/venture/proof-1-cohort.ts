@@ -19,12 +19,15 @@
 // record naming it. For this trade, in this state, that is very nearly
 // unobservable by construction, and three independent facts say so:
 //
-//   1. DCAMM certifies contractors in thirty-odd categories of work. None of
-//      them is millwork, casework, cabinetry or architectural woodwork. A
-//      millwork shop cannot be certified as one, so no state registry lists it.
-//   2. The filed sub-bid trades are fixed by M.G.L. c.149 §44F and there are
-//      seventeen of them — acoustical tile through terrazzo. Millwork is not
-//      among them either, so no shop appears in a filed sub-bid record.
+//   1. DCAMM's published categories of work do not name millwork, casework,
+//      cabinetry or architectural woodwork among them. That says the registry
+//      is not organised around this trade — NOT that such work cannot be done
+//      or certified under a broader category, which it plainly can.
+//   2. M.G.L. c.149 §44F enumerates named classes of filed sub-bid work and
+//      millwork is not among the named ones. The statute also lets an awarding
+//      authority require a separate sub-bid for another class of work where it
+//      judges that necessary or convenient, so the named list is not a closed
+//      set and no inference of the form "millwork can never be filed" follows.
 //   3. The Commonwealth's own spending record contains exactly three
 //      Massachusetts vendors with "millwork" in the name, and one is a
 //      condominium trust. Swept again for "casework" and "cabinet" it yields
@@ -36,10 +39,18 @@
 //      from their own treasuries — not through the state ledger that record is
 //      drawn from.
 //
-// So the shops doing this work are real and numerous, and the public record
-// simply does not name them. The fourth door, COMMBUYS' own award and contract
-// search, would name them; it redirects to a login, and an authentication
-// boundary is not something this institution goes around.
+// THE SUPPORTED CONCLUSION IS NARROWER THAN IT FIRST LOOKED, and it is worth
+// stating at its real strength rather than its rhetorical one: millwork,
+// casework and cabinetry are not clearly represented as named standard
+// categories in the public classification surfaces examined, which makes those
+// surfaces poor EXHAUSTIVE DISCOVERY MECHANISMS for this market. That is a
+// claim about the usefulness of a search method. It is not a claim about how
+// public construction law treats the trade, and an earlier draft of this file
+// overreached into exactly that.
+//
+// The fourth door, COMMBUYS' own award and contract search, would name these
+// shops; it redirects to a login, and an authentication boundary is not
+// something this institution goes around.
 //
 // THE STANDARD IS ALSO ADVERSELY SELECTED, which the institution noticed when
 // it first narrowed the design and is worth repeating here: a shop with a

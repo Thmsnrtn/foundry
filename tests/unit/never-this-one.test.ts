@@ -185,13 +185,29 @@ describe('an owner exclusion is about the business, not one of its addresses', (
   it('a name mark too short to mean anything is refused', async () => {
     const id = (await exclusionsFor(OWNER))[0]!.id;
     await expect(query(
-      `INSERT INTO owner_exclusion_marks (id, exclusion_id, kind, value, source)
-       VALUES ('m_short', ?, 'name', 'inc', 'somebody')`, [id]))
+      `INSERT INTO owner_exclusion_marks (id, exclusion_id, founder_id, kind, value, source)
+       VALUES ('m_short', ?, ?, 'name', 'inc', 'somebody')`, [id, OWNER]))
       .rejects.toThrow(/name_too_broad/);
     await expect(query(
-      `INSERT INTO owner_exclusion_marks (id, exclusion_id, kind, value, source)
-       VALUES ('m_case', ?, 'email', 'MiXeD@Example.Test', 'somebody')`, [id]))
+      `INSERT INTO owner_exclusion_marks (id, exclusion_id, founder_id, kind, value, source)
+       VALUES ('m_case', ?, ?, 'email', 'MiXeD@Example.Test', 'somebody')`, [id, OWNER]))
       .rejects.toThrow(/not_normalised/);
+  });
+
+  it('a mark may not claim a founder its exclusion does not belong to', async () => {
+    // THE DENORMALISED COLUMN CANNOT BE ALLOWED TO LIE. Founder-scoped erasure
+    // deletes marks by founder_id; a mark carrying somebody else's id would
+    // survive the erasure of the person whose boundary it actually is, and be
+    // deleted by the erasure of a person it never belonged to.
+    const id = (await exclusionsFor(OWNER))[0]!.id;
+    await expect(query(
+      `INSERT INTO owner_exclusion_marks (id, exclusion_id, founder_id, kind, value, source)
+       VALUES ('m_wrong', ?, ?, 'name', 'somebody else entirely', 'somebody')`, [id, OTHER]))
+      .rejects.toThrow(/founder_must_match_the_exclusion/);
+    await expect(query(
+      `INSERT INTO owner_exclusion_marks (id, exclusion_id, kind, value, source)
+       VALUES ('m_none', ?, 'name', 'somebody else entirely', 'somebody')`, [id]))
+      .rejects.toThrow(/founder_must_match_the_exclusion/);
   });
 
   it('and when the owner lifts it himself, in words, the business can be reached again', async () => {

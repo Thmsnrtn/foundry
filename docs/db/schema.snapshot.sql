@@ -3162,7 +3162,7 @@ CREATE TABLE owner_exclusion_marks (
   -- Lower-cased and trimmed at the door, so a match is a comparison and not a
   -- hope. A name mark is matched as a substring; the rest are exact or suffix.
   value        TEXT NOT NULL,
-  source       TEXT NOT NULL,
+  source       TEXT NOT NULL, founder_id TEXT REFERENCES founders(id),
   UNIQUE(exclusion_id, kind, value)
 );
 CREATE TABLE owner_exclusions (
@@ -7911,16 +7911,24 @@ END;
 CREATE TRIGGER owner_exclusion_mark_guard
 BEFORE INSERT ON owner_exclusion_marks
 BEGIN
-  SELECT RAISE(ABORT,'owner_exclusion_mark:incomplete')
-    WHERE trim(NEW.value) = '' OR trim(NEW.source) = '';
+  -- A MARK IS ITS PARENT'S. Denormalised and therefore capable of lying, so
+  -- the row may not be written at all unless it agrees with the exclusion it
+  -- hangs from. An erasure that deletes by this column has to be able to trust
+  -- it completely; "usually correct" is not a property erasure can be built on.
+  SELECT RAISE(ABORT,'owner_exclusion_mark:founder_must_match_the_exclusion')
+    WHERE NEW.founder_id IS NULL
+       OR NEW.founder_id IS NOT (SELECT x.founder_id FROM owner_exclusions x WHERE x.id = NEW.exclusion_id);
+  -- A mark that was not normalised cannot be matched against, so it is not a
+  -- boundary — it is a boundary-shaped row that lets the business through.
   SELECT RAISE(ABORT,'owner_exclusion_mark:not_normalised')
-    WHERE NEW.value <> lower(trim(NEW.value));
-  -- A ONE-LETTER NAME MARK WOULD EXCLUDE THE WORLD. Substring matching earns
-  -- its power by refusing to be given a value too short to mean anything.
+    WHERE NEW.value <> trim(lower(NEW.value)) OR trim(NEW.value) = '';
+  SELECT RAISE(ABORT,'owner_exclusion_mark:source_required')
+    WHERE trim(coalesce(NEW.source,'')) = '';
+  -- A NAME TOO SHORT MATCHES BUSINESSES HE NEVER MEANT. Name marks are matched
+  -- as substrings, so "abc" would silently suppress every business whose name
+  -- happens to contain it.
   SELECT RAISE(ABORT,'owner_exclusion_mark:name_too_broad')
     WHERE NEW.kind = 'name' AND length(NEW.value) < 6;
-  SELECT RAISE(ABORT,'owner_exclusion_mark:no_such_exclusion')
-    WHERE NOT EXISTS (SELECT 1 FROM owner_exclusions x WHERE x.id = NEW.exclusion_id);
 END;
 CREATE TRIGGER owner_exclusion_mark_immutable
 BEFORE UPDATE ON owner_exclusion_marks

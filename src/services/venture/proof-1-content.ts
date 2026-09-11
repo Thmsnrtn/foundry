@@ -220,22 +220,6 @@ Read the bid documents at the source named in each notice — biddocs.com, Proje
 
 If anything here is wrong or out of date, reply to the email this arrived with. A correction goes out to every buyer of this edition.
 `;
-/**
- * A SHORT NOTE FROM A SMALL BUSINESS, NOT A MINIATURE LANDING PAGE.
- *
- * The first draft opened with two sentences about what kind of business Apex
- * Micro is; the second led with the bids but still read like copy — three
- * paragraphs of it, with the seller explaining his method. A shop owner reading
- * on a phone gives this fifteen or twenty seconds, and the whole of it should
- * fit in that.
- *
- * It also said "I screened them by hand", which is not true in the way a reader
- * would take it: software did most of that work. Claiming a person's attention
- * that was never spent is the one kind of warmth this workshop may not fake.
- *
- * The pull date is stated rather than "this week", because a message that ages
- * on the way out should not become untrue by being late.
- */
 export const OUTREACH_TEMPLATE_MD = `Hi,
 
 I run Apex Micro, a small digital workshop in Massachusetts. I've put together a short brief of the Massachusetts public bid notices that look like commercial cabinet, casework or millwork work — twenty-three of them, out of 726 that were open on COMMBUYS when I pulled it on 10 September. Each one with the bid number, when it opens, who to contact and a link to the notice.
@@ -246,7 +230,7 @@ It's $29, one-time. No subscription. What's in it, and what it doesn't cover:
 
 [APEX MICRO EXPERIMENT PAGE]
 
-Your shop came up because your own website shows public-sector work. I'm trying this with a small number of shops, and I only write once — if it isn't relevant, no reply needed and you won't hear from me again.
+Your shop came up because there is public-sector work on the public record for it — either named on your own site or in the state’s payment record. I'm trying this with a small number of shops, and I only write once — if it isn't relevant, no reply needed and you won't hear from me again.
 
 Thomas Norton
 Apex Micro

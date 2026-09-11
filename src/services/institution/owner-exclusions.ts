@@ -81,8 +81,8 @@ export async function excludeEntity(input: {
     if (!value) continue;
     try {
       await query(
-        `INSERT INTO owner_exclusion_marks (id, exclusion_id, kind, value, source)
-         VALUES (?,?,?,?,?)`, [nanoid(), id, m.kind, value, m.source.trim()]);
+        `INSERT INTO owner_exclusion_marks (id, exclusion_id, founder_id, kind, value, source)
+         VALUES (?,?,?,?,?,?)`, [nanoid(), id, input.founderId, m.kind, value, m.source.trim()]);
       n += 1;
     } catch { /* UNIQUE: the same mark twice is the same boundary */ }
   }

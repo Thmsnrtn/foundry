@@ -289,12 +289,25 @@ export interface StopReading { kind: StopKind; whatItIs: string; count: number; 
  * further exposure buys nothing and costs other people's attention.
  */
 /**
- * HOW MANY MUST HAVE BEEN TRIED before a proportion of them is a fact. Eight is
- * a judgment, not a law: small enough that a badly wrong list is caught inside
- * the first stage and the one after it, large enough that a single unlucky
- * address cannot read as a quarter of the cohort.
+ * HOW MANY MUST HAVE BEEN TRIED before a proportion of them is a fact.
+ *
+ * IT IS TIED TO THE FIRST STAGE, and that is the whole point. The first pass
+ * writes to five strangers precisely so that a wrong list is caught before the
+ * rest of the cohort is spent; a floor above five would mean the rate cannot be
+ * read at the only moment it could still prevent anything.
+ *
+ * This was eight, chosen when the cohort was expected to be thirty or forty and
+ * the first two stages together came to seventeen. Against the cohort that
+ * actually qualified — eight businesses — a floor of eight made the rate dead
+ * by construction: it could not be read until the last message had already
+ * gone. A stop condition that can only fire after the harm is a stop condition
+ * in name.
+ *
+ * Five is the smallest number that still deserves the word "proportion" here:
+ * one bad address in the first stage reads as twenty percent and does not
+ * stop anything; two reads as forty and does.
  */
-export const BOUNCE_RATE_FLOOR = 8;
+export const BOUNCE_RATE_FLOOR = 5;
 
 export async function readStopConditions(experimentId: string): Promise<StopReading[]> {
   const conditions = await rows(
