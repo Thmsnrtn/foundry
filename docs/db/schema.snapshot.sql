@@ -1763,7 +1763,8 @@ CREATE TABLE experiment_recipients (
   reviewed_by      TEXT,
   reviewed_at      TEXT,
   created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, qualified_at TEXT, qualified_because TEXT, qualified_source TEXT, authorised_act_id TEXT REFERENCES proposed_acts(id), contact_kind TEXT
-  CHECK (contact_kind IN ('role','named','general')), contact_source TEXT,
+  CHECK (contact_kind IN ('role','named','general')), contact_source TEXT, evidence_stratum TEXT
+  CHECK (evidence_stratum IN ('public_work_observed', 'commercial_institutional_capable')),
   UNIQUE(experiment_id, counterparty_ref)
 );
 CREATE TABLE experiment_variants (
@@ -6895,6 +6896,23 @@ BEGIN
   -- And only somebody the owner approved can be covered at all.
   SELECT RAISE(ABORT,'experiment_recipient:authority_needs_approval') WHERE
     NEW.authorised_act_id IS NOT NULL AND OLD.authorised_act_id IS NULL AND NEW.review_status <> 'approved';
+END;
+CREATE TRIGGER experiment_recipient_stratum_guard
+BEFORE UPDATE OF evidence_stratum ON experiment_recipients
+BEGIN
+  -- A STRATUM IS AN OBSERVATION ABOUT A QUALIFIED BUSINESS, so there must be a
+  -- qualification for it to be about. Recording which stratum a business is in
+  -- before recording why it is in the population at all would make the split
+  -- the reason rather than a description of the reason.
+  SELECT RAISE(ABORT,'experiment_recipient:stratum_needs_a_qualification')
+    WHERE NEW.evidence_stratum IS NOT NULL AND NEW.qualified_at IS NULL;
+  -- AND IT IS SETTLED BEFORE ANYBODY IS WRITTEN TO. If a stratum could be
+  -- revised after the results were in, the comparison between strata would be
+  -- unfalsifiable — whichever group paid could be relabelled the interesting
+  -- one. This is the same rule the contact kind lives under, for the same
+  -- reason.
+  SELECT RAISE(ABORT,'experiment_recipient:stratum_stands')
+    WHERE OLD.evidence_stratum IS NOT NULL AND NEW.evidence_stratum IS NOT OLD.evidence_stratum;
 END;
 CREATE TRIGGER exposure_classes_constitutional_delete
 BEFORE DELETE ON exposure_classes

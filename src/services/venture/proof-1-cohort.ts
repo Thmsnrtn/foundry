@@ -70,13 +70,23 @@
 
 export type ContactKind = 'role' | 'named' | 'general';
 
+/**
+ * WHICH KIND OF EVIDENCE PUT A BUSINESS IN THE POPULATION — and NOT how good
+ * the business is, how likely it is to buy, or how much anybody wants it here.
+ * Both strata are fully qualified and both get the same offer, at the same
+ * price, in the same words, once each.
+ */
+export type Stratum = 'public_work_observed' | 'commercial_institutional_capable';
+
 export interface CohortMember {
   counterpartyRef: string;
   email: string;
   /** How this address was chosen over the others the business publishes. */
   contactKind: ContactKind;
   contactSource: string;
-  /** Why this business is in the population the sealed design names. */
+  /** Which evidence put it in the population. Not a grade. */
+  stratum: Stratum;
+  /** Why this business is in the population the design names. */
   because: string;
   /** Where both of those can be checked. */
   source: string;
@@ -97,7 +107,7 @@ export const PROOF1_COHORT: CohortMember[] = [
   {
     counterpartyRef: 'General Woodworking, Lowell',
     email: 'info@genwood.com',
-    contactKind: 'general',
+    contactKind: 'general', stratum: 'public_work_observed',
     contactSource: 'the only address published on its own site — no estimating or bid mailbox is offered',
     because: 'Its own project gallery names Henry K. Oliver School (Lawrence), Tyngsborough Middle School, '
       + 'Cabot Elementary School and Stoughton High School, and it lists AWI QCP accreditation. The '
@@ -108,7 +118,7 @@ export const PROOF1_COHORT: CohortMember[] = [
   {
     counterpartyRef: 'Continental Woodcraft, Worcester',
     email: 'info@continentalwoodcraft.com',
-    contactKind: 'general',
+    contactKind: 'general', stratum: 'public_work_observed',
     contactSource: 'the only address published on its own site; its bid route is a web form, which this test does not use',
     because: 'Its own project list names Wareham Elementary School, Shrewsbury Police Station, Malden City '
       + 'Hall and Worcester State University under Education and Municipality headings, and the site says the '
@@ -120,7 +130,7 @@ export const PROOF1_COHORT: CohortMember[] = [
   {
     counterpartyRef: 'Woodcraft Millwork, Canton',
     email: 'estimating@woodcraftgroup.com',
-    contactKind: 'role',
+    contactKind: 'role', stratum: 'public_work_observed',
     contactSource: 'the estimating mailbox published on its own site — the route it asks commercial work to come through',
     because: 'Its own completed projects are indexed by sector, and the sectors include Education, Healthcare '
       + 'and Municipality alongside Office/Industrial and Retail. These are projects it has done, not markets '
@@ -130,7 +140,7 @@ export const PROOF1_COHORT: CohortMember[] = [
   {
     counterpartyRef: 'STEM Solutions, Wakefield',
     email: 'itb@labfitout.com',
-    contactKind: 'role',
+    contactKind: 'role', stratum: 'public_work_observed',
     contactSource: 'the invitation-to-bid mailbox published on its own site, chosen over the named estimator it also lists',
     because: 'Its own project highlights name the Phase 1 Walpole High School renovation and the '
       + 'Dennis-Yarmouth Intermediate Middle School — public school casework and fit-out.',
@@ -139,7 +149,7 @@ export const PROOF1_COHORT: CohortMember[] = [
   {
     counterpartyRef: 'New England Lab, Woburn',
     email: 'info@newenglandlab.com',
-    contactKind: 'general',
+    contactKind: 'general', stratum: 'public_work_observed',
     contactSource: 'the address published on its own contact page; its bid route is a quote request form, which this test does not use',
     because: 'Its own portfolio is indexed by industry and the industries include government, private K-12, '
       + "university teaching and university research. The Comptroller's record independently shows $72,993 "
@@ -152,7 +162,7 @@ export const PROOF1_COHORT: CohortMember[] = [
   {
     counterpartyRef: 'M.L. McDonald, Watertown',
     email: 'bidrequests@mlmcdonald.com',
-    contactKind: 'role',
+    contactKind: 'role', stratum: 'public_work_observed',
     contactSource: 'the address its contact page labels "Invitations To Bid", chosen over the general inbox beside it '
       + 'and over a near-identical singular spelling that appears on its services page',
     because: 'Its own site quotes the Facilities Manager of the J.F.K. Presidential Library & Museum by name '
@@ -162,7 +172,7 @@ export const PROOF1_COHORT: CohortMember[] = [
   {
     counterpartyRef: 'TrimBoard, Springfield',
     email: 'info@trimboard.net',
-    contactKind: 'general',
+    contactKind: 'general', stratum: 'public_work_observed',
     contactSource: 'the only address published across its site, where it appears six times',
     because: 'Its own site names the Centerville Public Library among completed projects and describes work '
       + 'for institutional buildings, including replicating classical moulding profiles for a university '
@@ -173,7 +183,7 @@ export const PROOF1_COHORT: CohortMember[] = [
   {
     counterpartyRef: 'South Shore Millwork, Norton',
     email: 'thamlin@southshoremillwork.com',
-    contactKind: 'named',
+    contactKind: 'named', stratum: 'public_work_observed',
     contactSource: 'the named contact published on its own site; no estimating or bid mailbox is published',
     because: "The Comptroller's spending record shows $51,148 across six payments from the Plymouth District "
       + 'Attorney and the Department of Workforce Development between 2010 and 2021 — a sustained public '
@@ -275,11 +285,13 @@ export const PROOF1_NEARLY: NearMiss[] = [
 export function cohortSummary(): {
   total: number;
   byContact: Record<ContactKind, number>;
+  byStratum: Record<Stratum, number>;
   nearly: number;
 } {
   const byContact: Record<ContactKind, number> = { role: 0, named: 0, general: 0 };
-  for (const m of PROOF1_COHORT) byContact[m.contactKind] += 1;
-  return { total: PROOF1_COHORT.length, byContact, nearly: PROOF1_NEARLY.length };
+  const byStratum: Record<Stratum, number> = { public_work_observed: 0, commercial_institutional_capable: 0 };
+  for (const m of PROOF1_COHORT) { byContact[m.contactKind] += 1; byStratum[m.stratum] += 1; }
+  return { total: PROOF1_COHORT.length, byContact, byStratum, nearly: PROOF1_NEARLY.length };
 }
 
 /**

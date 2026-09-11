@@ -8,7 +8,7 @@ It's $29, one-time. No subscription. What's in it, and what it doesn't cover:
 
 [APEX MICRO EXPERIMENT PAGE]
 
-Your shop came up because there is public-sector work on the public record for it — either named on your own site or in the state’s payment record. I'm trying this with a small number of shops, and I only write once — if it isn't relevant, no reply needed and you won't hear from me again.
+Your shop came up because its own public record shows commercial or institutional work in this trade — the kind of work the notices in this brief call for. I'm trying this with a small number of shops, and I only write once — if it isn't relevant, no reply needed and you won't hear from me again.
 
 Thomas Norton
 Apex Micro

@@ -120,7 +120,11 @@ export const PROOF1_PUBLIC = {
   // notices that look like work. Both were true; both sounded written. What a
   // shop owner needs in the first line is the thing itself and roughly how many.
   summary: 'A short brief of the Massachusetts public bid notices that look like cabinet, casework or millwork work — twenty-three of them, with the bid number, when it opens, who to contact and a link to the notice itself.',
-  who: 'Small commercial cabinet, casework and architectural millwork shops in Massachusetts that bid on public work, or would like to.',
+  // WHO IT IS ACTUALLY FOR, which is not who the first design said. Requiring
+  // a visible public-work history selected for shops that already know how to
+  // find these notices and therefore need the brief least. The shop this is
+  // written for is the one that could do the work and is not already watching.
+  who: 'Massachusetts shops doing commercial or institutional millwork, cabinetry, casework, architectural woodwork or countertops — whether or not you already bid public work.',
   // NOBODY'S HAND. "Screened by hand" implied Thomas sat and read 952 notices.
   // Software did most of that, and saying otherwise is the manufactured personal
   // attention this workshop is not allowed to fake — so the sentence says what
@@ -135,10 +139,13 @@ export const PROOF1_PUBLIC = {
   what: 'One brief, by email, within a business day of paying. It\'s a fixed edition rather than a live feed: this one was pulled from COMMBUYS on 10 September 2026. Each notice gives you the bid number, when it opens, who to contact, a line on why it might fit, and a link to the notice so you can read it yourself.\n\nYou can search COMMBUYS yourself — it\'s free, and if you bid public work you are probably on it already. This is for shops that would rather not read through hundreds of notices to find the few worth a look. This edition started with 726 open notices; twenty-three made the cut.',
   limits: 'It\'s a shortlist, not a database. It covers COMMBUYS only — not the Central Register, not DCAMM\'s e-bid room, not the town portals that don\'t post there — so something missing from it isn\'t necessarily missing from the market. Some entries name the cabinetry, countertops or carpentry outright. Others are there because the work described usually carries some, which is an inference and is labelled as one in the brief — it is worth a look, not a fact. And nothing in it tells you a job is winnable or worth your time. Read the bid documents before you commit to anything.',
   sources: 'COMMBUYS is the state\'s public procurement site — where Massachusetts agencies, housing authorities and a lot of towns post their bids. Every notice in the brief was read there in full, and each item links back to the original so you can check it.',
-  // ONLY WHAT THE RECORD SUPPORTS. The grounds actually written down for each
-  // qualifying shop are public-sector projects shown on the business's own site.
-  // That is what this says, and it does not claim anybody browsed it personally.
-  selection: 'Your shop came up because your own website shows public-sector work — schools, municipal buildings, that kind of thing. I\'m trying this brief with a small number of Massachusetts shops it might genuinely be useful to, writing to the address each one publishes. Nobody sold me your details, there\'s no list, and I only write once.',
+  // ONLY WHAT THE RECORD SUPPORTS, AND IT HAS TO BE TRUE OF EVERY RECIPIENT.
+  // This is one page and one message sent to every shop, so a ground that holds
+  // for most of them is a falsehood to the rest. Some of these businesses show
+  // public-sector projects; others show commercial and institutional work and no
+  // public job at all. The sentence that covers both is the one about the trade,
+  // and it does not claim anybody browsed anything personally.
+  selection: 'Your shop came up because its own public record shows commercial or institutional work in this trade — the kind of work the notices in this brief call for. I\'m trying this brief with a small number of Massachusetts shops it might genuinely be useful to, writing to the address each one publishes. Nobody sold me your details, there\'s no list, and I only write once.',
   note: 'I\'m Thomas Norton, and Apex Micro is my workshop. I build small, practical things, try them for real, and keep the ones that turn out to be useful. Software I\'ve built does a lot of the research and the running; the decisions and the responsibility are mine.\n\nThis is the first edition of this brief, so I\'m finding out whether it\'s worth $29 to the shops it\'s meant for. If it isn\'t, I\'d rather know.',
   // ONE ITEM, AS IT ARRIVES. Not a mock-up and not a description of one: the
   // first entry of the edition that is actually sent. The agency officer's name,
@@ -200,7 +207,9 @@ export async function seedProof1(founderId: string): Promise<Proof1Seed> {
      VALUES (?,?,?,?,?,?,?,?,?,?)`,
     [opportunityId, mandate.id, founderId,
       'A filtered brief of public bid notices for Massachusetts millwork shops',
-      'independent commercial cabinet and architectural millwork businesses in Massachusetts',
+      'Massachusetts businesses performing commercial or institutional millwork, cabinetry, casework, '
+      + 'architectural woodwork, countertops or closely related contract work, whether or not they already '
+      + 'bid public jobs',
       'public bid notices are scattered across COMMBUYS, the paid Central Register and agency portals, and shops say they lose work they never saw',
       'the authoritative listing is paid and the platform vendor already sells notification at $109 a month, so filtered discovery has a price somebody pays',
       'misread if 25 businesses receive a plain $29 offer and none pays: then the friction is real but not worth money at this price, or not to these businesses',

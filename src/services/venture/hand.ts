@@ -179,6 +179,27 @@ export async function recordContactChoice(input: {
   if ((r.rowsAffected ?? 0) === 0) throw new HandRefused('recipient_not_found');
 }
 
+/**
+ * WHICH EVIDENCE STRATUM A QUALIFIED BUSINESS FELL INTO.
+ *
+ * Not a grade. Both strata are fully qualified, both get the same offer at the
+ * same price in the same words, and the split is recorded only because it may
+ * turn out to be the interesting thing the experiment learns. It is written
+ * before anything is sent and the database refuses a second answer, because a
+ * stratum that could be revised once the results were in would let whichever
+ * group happened to pay be relabelled the one that was always expected to.
+ */
+export async function recordStratum(input: {
+  founderId: string; experimentId: string; recipientId: string;
+  stratum: 'public_work_observed' | 'commercial_institutional_capable';
+}): Promise<void> {
+  const r = await query(
+    `UPDATE experiment_recipients SET evidence_stratum = ?
+      WHERE id = ? AND experiment_id = ? AND founder_id = ? AND evidence_stratum IS NULL`,
+    [input.stratum, input.recipientId, input.experimentId, input.founderId]);
+  if ((r.rowsAffected ?? 0) === 0) throw new HandRefused('recipient_not_found');
+}
+
 /** The owner's review of one candidate. The database re-verifies the reviewer. */
 export async function reviewRecipient(input: {
   founderId: string; experimentId: string; recipientId: string; decision: 'approved' | 'struck'; reason?: string; email?: string;
