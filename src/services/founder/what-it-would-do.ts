@@ -197,6 +197,15 @@ export async function firstContactDecision(experimentId: string): Promise<{
       dedicated: null,
       alsoTrue: [
         `${price}, one time`,
+        // EXPECTED IS NOT THE CEILING, and the difference is the whole reason
+        // both numbers are shown. The $100 is a limit he set on how far this
+        // may go wrong; it is not a budget anybody intends to spend. Saying
+        // "at most $100" without saying "$0 expected" invites him to read a
+        // cheap test as an expensive one, which is the mirror of September's
+        // failure rather than a fix for it.
+        `nothing is expected to be spent to run this: the ${n} message${n === 1 ? '' : 's'} `
+          + 'cost nothing beyond the sending already paid for, and the payment provider charges '
+          + 'only when somebody buys',
         `one email each, ${n} in total, never a second`,
         'no follow-up, and an opt-out is honoured everywhere at once',
         'replies are recorded and shown to you; nothing answers them',
