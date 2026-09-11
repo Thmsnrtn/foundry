@@ -94,6 +94,35 @@ describe('a business is only sealed when the row says so', () => {
       .rejects.toThrow(/stratum_stands/);
   });
 
+  it('turns a write that changed nothing into a failure, not a silent success', async () => {
+    // THE SHAPE OF THE ORIGINAL BUG. recordStratum updates WHERE the stratum is
+    // still null; if it matches nothing it must say so. A writer that returns
+    // quietly on zero rows is indistinguishable from one that worked, and that
+    // is precisely how twenty-one businesses were sealed with no stratum while
+    // every gate reported clean.
+    const { recordStratum, recordContactChoice } = await import('../../src/services/venture/hand.js');
+    await expect(recordStratum({ founderId: OWNER, experimentId: X,
+      recipientId: 'rcpt_does_not_exist', stratum: 'public_work_observed' }))
+      .rejects.toThrow(/recipient_not_found/);
+    await expect(recordContactChoice({ founderId: OWNER, experimentId: X,
+      recipientId: 'rcpt_does_not_exist', kind: 'role', source: 'somewhere' }))
+      .rejects.toThrow(/recipient_not_found/);
+  });
+
+  it('does not swallow the stratum write inside the seal', async () => {
+    // The call was once wrapped in `try { ... } catch {}`, so even a refusal
+    // read as success. This asserts the source, because the behaviour it guards
+    // only shows up on a database that refuses -- which is the case nobody
+    // remembers to build a fixture for.
+    const { readFileSync } = await import('node:fs');
+    const src = readFileSync('src/services/venture/proof-1-cohort.ts', 'utf8');
+    const call = src.indexOf('await recordStratum(');
+    expect(call, 'the seal no longer records a stratum at all').toBeGreaterThan(-1);
+    const before = src.slice(Math.max(0, call - 400), call);
+    const swallowed = /try\s*\{[^}]*$/.test(before);
+    expect(swallowed, 'the stratum write is inside a try block that can swallow its failure').toBe(false);
+  });
+
   it('leaves an existing address alone rather than writing one the owner did not choose', async () => {
     // WHAT MADE A COHORT OF TWENTY-ONE BEHAVE LIKE NINETEEN. An older pass had
     // created rows from a shallower read that found no address, channel

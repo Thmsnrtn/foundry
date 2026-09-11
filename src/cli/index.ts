@@ -932,6 +932,29 @@ program.command('probe:screen-001 <founderIdOrEmail>').description('Apply the re
 
 program.command('probe:cohort-001 <founderIdOrEmail>').description('Apply the owner\'s standing exclusions, then seal the closed cohort onto Experiment 001 with its grounds and addresses; approves nobody and contacts nobody')
   .action(async (who: string) => { const { applyProof1Cohort } = await import('../services/venture/proof-1-cohort.js'); out(await applyProof1Cohort(await founderIdOf(who))); });
+program.command('probe:corrections-001 <founderIdOrEmail>').description('Every stratum correction ever made to Experiment 001, and what it says')
+  .action(async (who: string) => {
+    const founderId = await founderIdOf(who);
+    const { findProof1 } = await import('../services/venture/proof-1.js');
+    const { correctionsOf } = await import('../services/venture/stratum-correction.js');
+    const x = await findProof1(founderId);
+    out(x ? await correctionsOf(x) : { refused: 'experiment_001_not_found' });
+  });
+program.command('probe:correct-stratum <founderIdOrEmail> <recipientId> <mistaken> <correct> <because>')
+  .description('Correct one stratum written by an institution diagnostic, on the record; refuses once anything has happened to the business')
+  .action(async (who: string, recipientId: string, mistaken: string, correct: string, because: string) => {
+    const founderId = await founderIdOf(who);
+    const { findProof1 } = await import('../services/venture/proof-1.js');
+    const { correctStratumOnTheRecord } = await import('../services/venture/stratum-correction.js');
+    const x = await findProof1(founderId);
+    if (!x) { out({ refused: 'experiment_001_not_found' }); return; }
+    out(await correctStratumOnTheRecord({
+      founderId, experimentId: x, recipientId,
+      mistaken: mistaken as 'public_work_observed' | 'commercial_institutional_capable',
+      correct: correct as 'public_work_observed' | 'commercial_institutional_capable',
+      because, by: 'institution:diagnostic',
+    }));
+  });
 program.command('probe:amend-001 <founderIdOrEmail>').description('Rewrite Experiment 001\'s prediction so its ceiling names the cohort that exists; refuses once decided')
   .action(async (who: string) => { const { amendProof1ForTheCohort } = await import('../services/venture/proof-1-cohort.js'); out(await amendProof1ForTheCohort(await founderIdOf(who))); });
 program.command('owner:exclusions <founderIdOrEmail>').description('What the owner has said never to contact, and what he has lifted')
