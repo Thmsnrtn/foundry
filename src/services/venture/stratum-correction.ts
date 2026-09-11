@@ -83,22 +83,60 @@ export async function correctStratumOnTheRecord(input: {
   };
 }
 
-/** Every correction ever made to this experiment, for the owner and for an audit. */
+/**
+ * EVERY CORRECTION EVER MADE TO THIS EXPERIMENT, for the owner and for an audit.
+ *
+ * The attestation is read back here rather than only written. That is the whole
+ * reason those columns exist: a correction record that nobody can read is not a
+ * record, it is a comment in a table. Anyone asking later whether a stratum was
+ * moved — and whether anything had already happened under the old value when it
+ * was — gets the answer from this, in the words the row was written with.
+ */
 export async function correctionsOf(experimentId: string): Promise<Array<{
   recipient: string; mistaken: string; correct: string; origin: string;
   because: string; by: string; at: string; consumed: boolean;
+  /** What the correction attested was true when it was made. */
+  attested: {
+    nothingAuthorised: boolean; nothingSent: boolean; nobodyReplied: boolean;
+    nothingPaid: boolean; noEvidenceRestsOnIt: boolean;
+  };
+  /** The attestation as one sentence, for a page or a report. */
+  attestedInWords: string;
 }>> {
   return ((await query(
     `SELECT r.counterparty_ref AS who, c.mistaken, c.correct, c.origin, c.because,
-            c.corrected_by, c.corrected_at, c.consumed_at
+            c.corrected_by, c.corrected_at, c.consumed_at,
+            c.nothing_authorised, c.nothing_sent, c.nobody_replied,
+            c.nothing_paid, c.no_evidence_rests_on_it
        FROM recipient_stratum_corrections c
        JOIN experiment_recipients r ON r.id = c.recipient_id
       WHERE c.experiment_id = ? ORDER BY c.corrected_at`, [experimentId]))
-    .rows as unknown as Array<Record<string, unknown>>).map((x) => ({
-    recipient: String(x.who), mistaken: String(x.mistaken), correct: String(x.correct),
-    origin: String(x.origin), because: String(x.because), by: String(x.corrected_by),
-    at: String(x.corrected_at), consumed: x.consumed_at != null,
-  }));
+    .rows as unknown as Array<Record<string, unknown>>).map((x) => {
+    const attested = {
+      nothingAuthorised: Number(x.nothing_authorised) === 1,
+      nothingSent: Number(x.nothing_sent) === 1,
+      nobodyReplied: Number(x.nobody_replied) === 1,
+      nothingPaid: Number(x.nothing_paid) === 1,
+      noEvidenceRestsOnIt: Number(x.no_evidence_rests_on_it) === 1,
+    };
+    const missing = [
+      attested.nothingAuthorised ? null : 'something was authorised',
+      attested.nothingSent ? null : 'something was sent',
+      attested.nobodyReplied ? null : 'somebody replied',
+      attested.nothingPaid ? null : 'something was paid',
+      attested.noEvidenceRestsOnIt ? null : 'evidence rests on it',
+    ].filter((m): m is string => m !== null);
+    return {
+      recipient: String(x.who), mistaken: String(x.mistaken), correct: String(x.correct),
+      origin: String(x.origin), because: String(x.because), by: String(x.corrected_by),
+      at: String(x.corrected_at), consumed: x.consumed_at != null,
+      attested,
+      attestedInWords: missing.length === 0
+        ? 'Nothing had happened under the mistaken value: nothing authorised, nothing sent, '
+          + 'nobody replied, nothing paid, and no evidence rests on it.'
+        : `The attestation is incomplete — ${missing.join('; ')}.`,
+    };
+  });
 }
 
 /**

@@ -96,6 +96,15 @@ describe('2. a correction that is recorded, attested and consumed', () => {
     expect(rec.origin).toBe('institution_diagnostic');
     expect(rec.consumed).toBe(true);
     expect(rec.because.length).toBeGreaterThan(40);
+    // THE ATTESTATION IS READ BACK, not merely stored. A correction record
+    // nobody can read is a comment in a table, and the question it answers --
+    // had anything already happened under the wrong value? -- is exactly the
+    // one an audit asks afterwards.
+    expect(rec.attested).toEqual({
+      nothingAuthorised: true, nothingSent: true, nobodyReplied: true,
+      nothingPaid: true, noEvidenceRestsOnIt: true,
+    });
+    expect(rec.attestedInWords).toMatch(/Nothing had happened under the mistaken value/);
   });
 
   it('is one-shot: the same record cannot move the value back', async () => {
