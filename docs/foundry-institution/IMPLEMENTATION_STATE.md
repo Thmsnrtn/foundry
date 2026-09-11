@@ -2727,3 +2727,37 @@ tests live beside the 10 September session itself, which is now a regression
 fixture: the classification, the two labels, the bypass, the bounded allowance,
 the withdrawal, the retirement, and every lifecycle state proving a material
 offer term cannot vanish because an internal status changed.
+
+### Normalised in production (2026-09-11)
+
+Deployed at `f5e37feb` and run against the live database. Before: Experiment 001
+approved at 22:07:36 with a $100 allowance carrying no end date and a clock
+running to 24 September. After:
+
+| | |
+|---|---|
+| Experiment 001 | undecided — decision, stamp and clock all cleared |
+| The $100 allowance | withdrawn, *"written by a control that said only Go ahead — $100.00; the owner did not authorise this test"* |
+| Its experimental asset | archived; it existed for a test nobody had approved, and comes back on a real approval |
+| Recipients | 23, all pending; 2 qualified; **0 carrying authority** |
+| Proposed acts · contacts · offers · fulfilments | 0 · 0 · 0 · 0 |
+| Deliverable | the 10 September edition, digest `37470573f25f7025`, 20,664 bytes, untouched |
+| Last publication | 2026-09-10 18:07:43 — nothing published since, before or by this |
+| Correspondence | off |
+| External readiness | `ok: true`, 0 blocked (the page-state defect is gone) |
+| Live probes | 7 across **6 distinct opportunities** |
+| Retired | `tzMjxait89z7gGZhBvRTm`, superseded by `KOQA6GXsdniniO5kDUDiI` |
+
+The withdrawal is on the record rather than erased: one `owner_decision_reversals`
+row, naming the decision, its original timestamp, the founder who made it, and
+the words the button actually said.
+
+**Only one of the two duplicates was genuinely redundant.** The DV-tape pair asks
+the same question of the same population with the same evidence under two
+headlines, so one is retired and the survivor keeps the lineage. The settings-UI
+pair shares an opportunity and a test text but points at two different unknowns —
+*whether anybody would pay* and *whether this is a one-off gripe rather than a
+recurring task* — and retiring one would merge questions that are not the same.
+Both stand. What the pair actually exposes is a probe-design weakness: one
+boilerplate test was generated for two different questions. That is worth fixing
+in the designer, not by tidying a row.
