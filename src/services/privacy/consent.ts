@@ -961,6 +961,17 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
       + 'provider reports against',
     onAccountErasure: { op: 'delete' },
   },
+  // CHILD BEFORE PARENT: a correction names the recipient it corrected.
+  recipient_stratum_corrections: {
+    reason: 'the record of a stratum this institution wrote wrongly on one person\'s test and then '
+      + 'corrected, with what it attested was true at the time; the test was his',
+    onAccountErasure: { op: 'delete' },
+  },
+  recipient_stratum_history: {
+    reason: 'which evidence stratum each business was first put in on one person\'s test — the memory '
+      + 'that stops a business being relabelled by deleting its row and writing it again',
+    onAccountErasure: { op: 'delete' },
+  },
   experiment_recipients: {
     reason: 'whom one person\'s test may write to, as businesses publish themselves, with his own '
       + 'review of each; the review was his and goes with him',

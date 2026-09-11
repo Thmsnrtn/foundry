@@ -3900,7 +3900,7 @@ CREATE TABLE recipient_stratum_history (
   experiment_id   TEXT NOT NULL,
   counterparty    TEXT NOT NULL,
   stratum         TEXT NOT NULL,
-  first_set_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  first_set_at    TEXT NOT NULL DEFAULT (datetime('now')), founder_id TEXT REFERENCES founders(id),
   PRIMARY KEY (experiment_id, counterparty)
 );
 CREATE TABLE recommendation_outcomes (
@@ -6871,9 +6871,10 @@ CREATE TRIGGER experiment_recipient_no_delete_after_consequence
 BEFORE DELETE ON experiment_recipients
 BEGIN
   SELECT RAISE(ABORT,'experiment_recipient:something_happened_to_this_one')
-    WHERE OLD.authorised_act_id IS NOT NULL
-       OR OLD.review_status <> 'pending'
-       OR EXISTS (SELECT 1 FROM outbound_actions a WHERE a.recipient_id = OLD.id);
+  WHERE EXISTS (SELECT 1 FROM venture_experiments e WHERE e.id = OLD.experiment_id)
+    AND (OLD.authorised_act_id IS NOT NULL
+      OR OLD.review_status <> 'pending'
+      OR EXISTS (SELECT 1 FROM outbound_actions a WHERE a.recipient_id = OLD.id));
 END;
 CREATE TRIGGER experiment_recipient_owner_exclusion
 BEFORE INSERT ON experiment_recipients
@@ -8755,8 +8756,8 @@ CREATE TRIGGER recipient_stratum_remembered
 AFTER UPDATE OF evidence_stratum ON experiment_recipients
 WHEN NEW.evidence_stratum IS NOT NULL AND OLD.evidence_stratum IS NULL
 BEGIN
-  INSERT OR IGNORE INTO recipient_stratum_history (experiment_id, counterparty, stratum)
-  VALUES (NEW.experiment_id, trim(lower(NEW.counterparty_ref)), NEW.evidence_stratum);
+  INSERT OR IGNORE INTO recipient_stratum_history (experiment_id, counterparty, stratum, founder_id)
+  VALUES (NEW.experiment_id, trim(lower(NEW.counterparty_ref)), NEW.evidence_stratum, NEW.founder_id);
 END;
 CREATE TRIGGER reconstruction_claim_guard
 BEFORE INSERT ON reconstruction_claims
