@@ -2761,3 +2761,45 @@ recurring task* — and retiring one would merge questions that are not the same
 Both stand. What the pair actually exposes is a probe-design weakness: one
 boilerplate test was generated for two different questions. That is worth fixing
 in the designer, not by tidying a row.
+
+### What the launch-day pull and the cohort search actually found (2026-09-11)
+
+**The edition pipeline is proved on a complete corpus.** 972 solicitations
+exported from COMMBUYS' own CSV on 11 September; 739 open for bidding with an
+opening date still ahead; **every one of the 739 fetched and read in full**,
+none unreadable; 21 admitted — 7 explicit, 14 inferred. The first-pass title
+screen that preceded this would have missed the Dukes County notice that names
+kitchen cabinets and solid-surface countertops outright, so the title screen is
+gone: the notice's own words decide, and accessibility work counts only where it
+is building work. An ADA passenger van, a website modernisation and a golf-course
+food and beverage contract are no longer admitted.
+
+**Three sources are closed to this institution, and the reasons matter.**
+
+1. **COMMBUYS' Bid Holder List** — the vendors who took the documents for each
+   notice, which would be the authoritative way to enumerate shops actually
+   bidding Massachusetts public work — returns *"You are not authorized to
+   access this resource."* That is an authentication boundary and it is not to
+   be defeated. The sanctioned CSV export carries only a link to that page and
+   "Award in Process" in its awarded-vendor column.
+2. **Thomasnet** returns 403 to automated access; the AWI New England chapter
+   directory 404s.
+3. **A real browser cannot reach these sites from here.** The agent proxy blocks
+   browser navigation to external hosts, so a shop that publishes its address
+   only in JavaScript-rendered content reads as form-only to this environment
+   when it may not be. That is a limitation of the observer, not a fact about
+   the business, and the record says so rather than recording "no email".
+
+**What that leaves.** Qualification evidence comes from each shop's own site and
+from the Comptroller's payment records, one business at a time. Of the first 38
+candidates crawled, about 15 carry strong first-party evidence of commercial or
+institutional work — named schools, hospitals, police stations, libraries, or
+explicit education/healthcare/municipal practice areas — and roughly half of
+those publish no email at all.
+
+**And the contact-quality rule is already earning its place.** Reading each site
+rather than defaulting to `info@` found `estimating@woodcraftgroup.com`,
+`itb@labfitout.com` (invitation to bid), `estimating.specialtymillwork@…`,
+`sales@rgcmillwork.com` and named estimators. Generic versus role-specific
+routing is recorded per business, which is evidence about the channel and not
+only about the offer.
