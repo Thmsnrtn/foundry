@@ -26,7 +26,7 @@ export type Exchange = 'upfront_price' | 'value_first' | 'sample_then_paid' | 'd
   | 'subscription' | 'usage' | 'license' | 'free_with_role';
 export type CostLevel = 'none' | 'low' | 'material' | 'high';
 export type Recommendation = 'run' | 'reframe' | 'defer' | 'kill';
-export type StopKind = 'complaints' | 'bounces' | 'opt_outs' | 'declined_value' | 'unfulfillable';
+export type StopKind = 'complaints' | 'bounces' | 'opt_outs' | 'declined_value' | 'unfulfillable' | 'bounce_rate';
 
 type Row = Record<string, unknown>;
 const rows = async (sql: string, params: unknown[] = []): Promise<Row[]> => (await query(sql, params)).rows as unknown as Row[];
@@ -288,6 +288,14 @@ export interface StopReading { kind: StopKind; whatItIs: string; count: number; 
  * lists. A budget is a ceiling, not a target, and once the decision is clear
  * further exposure buys nothing and costs other people's attention.
  */
+/**
+ * HOW MANY MUST HAVE BEEN TRIED before a proportion of them is a fact. Eight is
+ * a judgment, not a law: small enough that a badly wrong list is caught inside
+ * the first stage and the one after it, large enough that a single unlucky
+ * address cannot read as a quarter of the cohort.
+ */
+export const BOUNCE_RATE_FLOOR = 8;
+
 export async function readStopConditions(experimentId: string): Promise<StopReading[]> {
   const conditions = await rows(
     `SELECT s.kind, s.threshold, s.because, k.what_it_is FROM probe_stop_conditions s
@@ -305,6 +313,16 @@ export async function readStopConditions(experimentId: string): Promise<StopRead
         return Number((await one(`SELECT COUNT(*) AS n FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'offer' AND outcome_status = 'verified_failure'`, [experimentId]))?.n ?? 0);
       case 'opt_outs':
         return Number((await one('SELECT COUNT(*) AS n FROM public_suppressions WHERE experiment_id = ?', [experimentId]))?.n ?? 0);
+      // A RATE, NOT A COUNT, AND ONLY ONCE IT MEANS SOMETHING. One bounce out
+      // of one attempt is a hundred percent and is not evidence of anything.
+      // Below the floor the reading is zero, so a rate can never stop a probe
+      // on arithmetic that has not earned the word "proportion" yet.
+      case 'bounce_rate': {
+        const attempted = Number((await one(`SELECT COUNT(*) AS n FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'offer' AND status = 'executed'`, [experimentId]))?.n ?? 0);
+        if (attempted < BOUNCE_RATE_FLOOR) return 0;
+        const failed = Number((await one(`SELECT COUNT(*) AS n FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'offer' AND outcome_status = 'verified_failure'`, [experimentId]))?.n ?? 0);
+        return Math.round((failed * 100) / attempted);
+      }
       case 'unfulfillable':
         // FAILED, NOT MERELY OWED. A purchase waiting for the next pass to
         // deliver it is the system working; counting it here would stop the

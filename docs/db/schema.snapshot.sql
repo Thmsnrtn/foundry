@@ -1762,7 +1762,8 @@ CREATE TABLE experiment_recipients (
   review_reason    TEXT,
   reviewed_by      TEXT,
   reviewed_at      TEXT,
-  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, qualified_at TEXT, qualified_because TEXT, qualified_source TEXT, authorised_act_id TEXT REFERENCES proposed_acts(id),
+  created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, qualified_at TEXT, qualified_because TEXT, qualified_source TEXT, authorised_act_id TEXT REFERENCES proposed_acts(id), contact_kind TEXT
+  CHECK (contact_kind IN ('role','named','general')), contact_source TEXT,
   UNIQUE(experiment_id, counterparty_ref)
 );
 CREATE TABLE experiment_variants (
@@ -6795,6 +6796,21 @@ BEGIN
     OR coalesce(NEW.payment_link_url, '') <> coalesce(OLD.payment_link_url, '')
     OR NEW.recorded_by <> OLD.recorded_by OR NEW.recorded_at <> OLD.recorded_at
     OR (OLD.superseded_at IS NOT NULL AND NEW.superseded_at IS NOT OLD.superseded_at);
+END;
+CREATE TRIGGER experiment_recipient_contact_kind_guard
+BEFORE UPDATE OF contact_kind, contact_source ON experiment_recipients
+BEGIN
+  -- AN ADDRESS WITH A KIND HAS SOMEWHERE IT CAME FROM. A classification with
+  -- no source is an opinion, and this column exists to hold a fact.
+  SELECT RAISE(ABORT,'experiment_recipient:contact_kind_needs_a_source')
+    WHERE NEW.contact_kind IS NOT NULL
+      AND trim(coalesce(NEW.contact_source,'')) = '';
+  -- AND IT IS SETTLED BEFORE ANYBODY IS WRITTEN TO, never revised afterwards
+  -- to make a result read better.
+  SELECT RAISE(ABORT,'experiment_recipient:contact_kind_stands')
+    WHERE OLD.contact_kind IS NOT NULL
+      AND (NEW.contact_kind IS NOT OLD.contact_kind
+        OR NEW.contact_source IS NOT OLD.contact_source);
 END;
 CREATE TRIGGER experiment_recipient_guard
 BEFORE INSERT ON experiment_recipients

@@ -341,19 +341,40 @@ export async function reconsiderProof1(founderId: string): Promise<Proof1Deliber
 
     // WHERE IT STOPS ITSELF, SET BEFORE IT STARTS. A budget is a ceiling, not a
     // target; these thresholds are all reached long before $100 is spent.
+    //
+    // RECALIBRATED FOR A LARGER SAMPLE, AND NOT BY MULTIPLICATION. The original
+    // envelope was designed around a cohort of two. Scaling every number by the
+    // new sample size would be the wrong correction in the other direction: it
+    // would let a list that is a quarter wrong run to the end because no
+    // absolute count was ever reached. So the counts stay where the harm is to
+    // a person, and a rate joins them for the failure only a rate can see.
+    //
+    // And ordinary commercial rejection is evidence, not an incident. "We
+    // already watch COMMBUYS" is the answer the experiment was built to hear.
+    // The opt-out inside it is honoured at once and globally either way; what
+    // moves the threshold is a PATTERN large enough to change what sending the
+    // rest would mean.
     stopConditions: [
       { kind: 'complaints', threshold: 1,
         because: 'One spam complaint on a domain with no sending history is not noise. It is the world saying '
-          + 'this approach was wrong, and it costs every later experiment.' },
-      { kind: 'bounces', threshold: 3,
-        because: 'Three undeliverable addresses mean the list was researched worse than it was believed to be, '
-          + 'and continuing damages the sending domain to learn nothing.' },
-      { kind: 'opt_outs', threshold: 2,
-        because: 'Two people asking not to be written to is a pattern, not a preference, and the remaining '
-          + 'twenty-three did not consent to be the control group for it.' },
-      { kind: 'declined_value', threshold: 3,
-        because: 'Three shops saying plainly that they want nothing further has already answered the question '
-          + 'the offer was asking, at a lower price than sending the rest would cost.' },
+          + 'this approach was wrong, and it costs every later experiment. A larger cohort does not make it '
+          + 'cheaper; it makes it more likely, which is a reason to keep the threshold at one.' },
+      { kind: 'bounces', threshold: 5,
+        because: 'Five undeliverable addresses inside a cohort this size mean the contact research was worse '
+          + 'than it was believed to be. It is an early-warning count, deliberately reachable inside the first '
+          + 'two stages, and it sits beside a rate rather than instead of one.' },
+      { kind: 'bounce_rate', threshold: 25,
+        because: 'A quarter of attempted messages not arriving says the list is wrong however few have been '
+          + 'sent, and a count alone cannot see that in a larger sample. The reading stays at zero until enough '
+          + 'have been attempted for a proportion to be a fact.' },
+      { kind: 'opt_outs', threshold: 4,
+        because: 'Two people asking not to be written to out of forty is ordinary; four is a pattern, and the '
+          + 'shops not yet written to did not consent to be the control group for it. Every opt-out is honoured '
+          + 'immediately and everywhere regardless of this number.' },
+      { kind: 'declined_value', threshold: 8,
+        because: 'Eight shops saying plainly that they want nothing further has answered the question the offer '
+          + 'was asking, at a lower price than sending the rest would cost. Fewer than that is the market '
+          + 'talking, which is what the experiment is for.' },
       { kind: 'unfulfillable', threshold: 1,
         because: 'One paid brief that cannot be delivered is an unmet obligation. Selling a second before that '
           + 'is fixed would be taking money for something known not to arrive.' },

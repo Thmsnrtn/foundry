@@ -2803,3 +2803,58 @@ rather than defaulting to `info@` found `estimating@woodcraftgroup.com`,
 `sales@rgcmillwork.com` and named estimators. Generic versus role-specific
 routing is recorded per business, which is evidence about the channel and not
 only about the offer.
+
+## The amendment: a bigger sample, a permanent exclusion, and a rate (2026-09-11)
+
+### The two-business authorization is obsolete, not deleted
+
+The decision surface built yesterday offered contact with exactly two
+businesses — General Woodworking and Continental Woodcraft — because those were
+the only two carrying recorded grounds. That proposal is **superseded and must
+not be executed**: it was never authorised, no act exists under it, no recipient
+carries `authorised_act_id`, and the owner's amendment replaces it with a larger
+closed cohort. Its history stays: the qualification grounds on those two rows are
+untouched and both remain in the new cohort on the same evidence.
+
+### Where the stop envelope moved, and why not by multiplication
+
+The original thresholds were set around a cohort of two. Three bounces out of two
+attempts is impossible; three out of forty is a Tuesday. Scaling every number by
+the sample size would be the opposite error — a list that is a quarter wrong
+would run to the end because no absolute count was ever reached.
+
+| Stop | Was | Now | Why |
+|---|---|---|---|
+| Spam complaint | 1 | **1** | A larger cohort makes it more likely, not cheaper |
+| Undeliverable | 3 | **5** | An early-warning count, reachable inside the first two stages |
+| Bounce **rate** | — | **25%** | New. A count cannot see a bad list in a larger sample |
+| Opt-outs | 2 | **4** | Two of forty is ordinary; four is a pattern |
+| Said it was not useful | 3 | **8** | Ordinary rejection is the evidence, not an incident |
+| Unfulfillable purchase | 1 | **1** | An unmet obligation is an unmet obligation |
+
+**A rate has a floor.** One bounce out of one attempt is a hundred per cent and
+means nothing, so the reading stays at zero until eight have been attempted —
+small enough to catch a badly wrong list inside the first two stages, large
+enough that one unlucky address cannot read as a quarter of the cohort.
+
+**Ordinary commercial rejection is not a safety incident.** "We already watch
+COMMBUYS" is the answer the experiment was built to hear. The opt-out inside it
+is honoured immediately and globally either way; what moves a threshold is a
+pattern large enough to change what sending the rest would mean.
+
+### Staged release was already there
+
+`FIRST_STAGE = 5`, `LATER_STAGE = 12`, an hourly tick, and stop conditions read
+before every stage — the experiment already releases in bounded stages and
+continues automatically under the same authorising act. The amendment asked for
+approximately 10–15 per stage after a first observation stage; that is what it
+does. Nothing new was built, which is the right answer.
+
+### How each address was chosen is now a recorded fact
+
+`contact_kind` is `role`, `named` or `general`, with the source beside it, set
+before anything is sent and never revised afterwards. The difference between a
+general inbox and an estimating mailbox is a fact about the CHANNEL, and the
+channel is half of what this experiment tests: "nobody replied" reads
+differently when every message went to a general inbox than when some went to an
+estimator who asks for bids for a living.
