@@ -7807,7 +7807,8 @@ END;
 CREATE TRIGGER owner_decision_reversal_no_delete
 BEFORE DELETE ON owner_decision_reversals
 BEGIN
-  SELECT RAISE(ABORT,'owner_decision_reversal:immutable');
+  SELECT RAISE(ABORT,'owner_decision_reversal:immutable')
+  WHERE EXISTS (SELECT 1 FROM venture_experiments e WHERE e.id = OLD.subject_id);
 END;
 CREATE TRIGGER owner_objective_needs_words
 BEFORE INSERT ON owner_objectives

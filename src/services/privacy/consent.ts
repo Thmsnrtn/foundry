@@ -991,6 +991,15 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
       + 'predicted before each one ran',
     onAccountErasure: { op: 'delete' },
   },
+  // AFTER THE TESTS, DELIBERATELY. The row guard refuses to delete a withdrawal
+  // record while the experiment it is about still exists — that refusal is what
+  // makes a decision impossible to quietly rewrite into never having happened.
+  // Once the test is gone the record has nothing left to be about.
+  owner_decision_reversals: {
+    reason: 'what one person decided and then unmade about his own tests, and '
+      + 'the words the control said when he decided it',
+    onAccountErasure: { op: 'delete' },
+  },
   // CHILD BEFORE PARENT: steps reference undertakings.
   undertaking_steps: {
     reason: 'every step of what the institution undertook for one person\'s companies — '
