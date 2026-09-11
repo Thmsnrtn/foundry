@@ -3154,6 +3154,29 @@ CREATE TABLE owner_decision_reversals (
   reversed_by TEXT NOT NULL,
   reversed_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE owner_exclusion_marks (
+  id           TEXT PRIMARY KEY,
+  exclusion_id TEXT NOT NULL REFERENCES owner_exclusions(id),
+  kind         TEXT NOT NULL CHECK (kind IN ('name','domain','email','phone','address')),
+  -- Lower-cased and trimmed at the door, so a match is a comparison and not a
+  -- hope. A name mark is matched as a substring; the rest are exact or suffix.
+  value        TEXT NOT NULL,
+  source       TEXT NOT NULL,
+  UNIQUE(exclusion_id, kind, value)
+);
+CREATE TABLE owner_exclusions (
+  id            TEXT PRIMARY KEY,
+  founder_id    TEXT NOT NULL REFERENCES founders(id),
+  -- The canonical business name, as the owner would say it.
+  entity        TEXT NOT NULL,
+  -- His reason, for him. Never leaves the institution.
+  because       TEXT NOT NULL,
+  set_by        TEXT NOT NULL,
+  set_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  lifted_at     TEXT,
+  lifted_by     TEXT,
+  lifted_reason TEXT
+);
 CREATE TABLE owner_objectives (
   id              TEXT PRIMARY KEY,
   product_id      TEXT NOT NULL REFERENCES products(id),
@@ -5761,6 +5784,7 @@ CREATE UNIQUE INDEX idx_workspace_grant_live
 CREATE INDEX idx_workspaces_live ON workspaces(founder_id) WHERE destroyed_at IS NULL;
 CREATE INDEX owner_decision_reversals_subject
   ON owner_decision_reversals (subject_kind, subject_id);
+CREATE INDEX owner_exclusion_marks_value ON owner_exclusion_marks (kind, value);
 CREATE TRIGGER acquisition_economics_guard
 BEFORE INSERT ON acquisition_economics
 BEGIN
@@ -6793,6 +6817,29 @@ BEGIN
   -- does, at the moment it is given, to the people it names.
   SELECT RAISE(ABORT,'experiment_recipient:authority_not_a_default') WHERE NEW.authorised_act_id IS NOT NULL;
 END;
+CREATE TRIGGER experiment_recipient_owner_exclusion
+BEFORE INSERT ON experiment_recipients
+BEGIN
+  SELECT RAISE(ABORT,'experiment_recipient:owner_excluded') WHERE EXISTS (
+    SELECT 1 FROM owner_exclusion_marks m
+      JOIN owner_exclusions x ON x.id = m.exclusion_id
+     WHERE x.founder_id = NEW.founder_id AND x.lifted_at IS NULL
+       AND ((m.kind = 'email'  AND lower(trim(coalesce(NEW.email,''))) = m.value)
+         OR (m.kind = 'domain' AND lower(coalesce(NEW.email,'')) LIKE '%@' || m.value)
+         OR (m.kind = 'domain' AND lower(coalesce(NEW.source_url,'')) LIKE '%' || m.value || '%')
+         OR (m.kind = 'name'   AND lower(NEW.counterparty_ref) LIKE '%' || m.value || '%')));
+END;
+CREATE TRIGGER experiment_recipient_owner_exclusion_update
+BEFORE UPDATE OF email, counterparty_ref, source_url ON experiment_recipients
+BEGIN
+  SELECT RAISE(ABORT,'experiment_recipient:owner_excluded') WHERE EXISTS (
+    SELECT 1 FROM owner_exclusion_marks m
+      JOIN owner_exclusions x ON x.id = m.exclusion_id
+     WHERE x.founder_id = NEW.founder_id AND x.lifted_at IS NULL
+       AND ((m.kind = 'email'  AND lower(trim(coalesce(NEW.email,''))) = m.value)
+         OR (m.kind = 'domain' AND lower(coalesce(NEW.email,'')) LIKE '%@' || m.value)
+         OR (m.kind = 'name'   AND lower(NEW.counterparty_ref) LIKE '%' || m.value || '%')));
+END;
 CREATE TRIGGER experiment_recipient_review_guard
 BEFORE UPDATE ON experiment_recipients
 BEGIN
@@ -7695,6 +7742,16 @@ BEGIN
   SELECT RAISE(ABORT,'outbound_action:born_approved')
   WHERE NEW.integration_name IN ('resend');
 END;
+CREATE TRIGGER outbound_action_owner_exclusion
+BEFORE INSERT ON outbound_actions
+BEGIN
+  SELECT RAISE(ABORT,'outbound_action:owner_excluded') WHERE EXISTS (
+    SELECT 1 FROM owner_exclusion_marks m
+      JOIN owner_exclusions x ON x.id = m.exclusion_id
+     WHERE x.lifted_at IS NULL
+       AND ((m.kind = 'email'  AND lower(coalesce(json_extract(NEW.parameters_json,'$.to[0]'),'')) = m.value)
+         OR (m.kind = 'domain' AND lower(coalesce(json_extract(NEW.parameters_json,'$.to[0]'),'')) LIKE '%@' || m.value)));
+END;
 CREATE TRIGGER owner_allowance_guard
 BEFORE INSERT ON owner_allowances
 BEGIN
@@ -7809,6 +7866,50 @@ BEFORE DELETE ON owner_decision_reversals
 BEGIN
   SELECT RAISE(ABORT,'owner_decision_reversal:immutable')
   WHERE EXISTS (SELECT 1 FROM venture_experiments e WHERE e.id = OLD.subject_id);
+END;
+CREATE TRIGGER owner_exclusion_guard
+BEFORE INSERT ON owner_exclusions
+BEGIN
+  SELECT RAISE(ABORT,'owner_exclusion:incomplete')
+    WHERE trim(NEW.entity) = '' OR trim(NEW.because) = '' OR trim(NEW.set_by) = '';
+  SELECT RAISE(ABORT,'owner_exclusion:cannot_arrive_lifted')
+    WHERE NEW.lifted_at IS NOT NULL;
+END;
+CREATE TRIGGER owner_exclusion_lift_is_the_owners
+BEFORE UPDATE ON owner_exclusions
+BEGIN
+  -- WHAT HE SAID IS WHAT HE SAID. Only the lifting fields move.
+  SELECT RAISE(ABORT,'owner_exclusion:immutable')
+    WHERE NEW.entity IS NOT OLD.entity OR NEW.because IS NOT OLD.because
+       OR NEW.founder_id IS NOT OLD.founder_id OR NEW.set_by IS NOT OLD.set_by
+       OR NEW.set_at IS NOT OLD.set_at;
+  SELECT RAISE(ABORT,'owner_exclusion:already_lifted')
+    WHERE OLD.lifted_at IS NOT NULL;
+  -- AND LIFTING IT IS A DECISION WITH A NAME AND A REASON ON IT. An exclusion
+  -- that could be lifted by the institution would not be an owner boundary.
+  SELECT RAISE(ABORT,'owner_exclusion:lift_needs_the_owner_and_a_reason')
+    WHERE NEW.lifted_at IS NOT NULL
+      AND (trim(coalesce(NEW.lifted_reason,'')) = ''
+        OR NEW.lifted_by IS NOT 'founder:' || OLD.founder_id);
+END;
+CREATE TRIGGER owner_exclusion_mark_guard
+BEFORE INSERT ON owner_exclusion_marks
+BEGIN
+  SELECT RAISE(ABORT,'owner_exclusion_mark:incomplete')
+    WHERE trim(NEW.value) = '' OR trim(NEW.source) = '';
+  SELECT RAISE(ABORT,'owner_exclusion_mark:not_normalised')
+    WHERE NEW.value <> lower(trim(NEW.value));
+  -- A ONE-LETTER NAME MARK WOULD EXCLUDE THE WORLD. Substring matching earns
+  -- its power by refusing to be given a value too short to mean anything.
+  SELECT RAISE(ABORT,'owner_exclusion_mark:name_too_broad')
+    WHERE NEW.kind = 'name' AND length(NEW.value) < 6;
+  SELECT RAISE(ABORT,'owner_exclusion_mark:no_such_exclusion')
+    WHERE NOT EXISTS (SELECT 1 FROM owner_exclusions x WHERE x.id = NEW.exclusion_id);
+END;
+CREATE TRIGGER owner_exclusion_mark_immutable
+BEFORE UPDATE ON owner_exclusion_marks
+BEGIN
+  SELECT RAISE(ABORT,'owner_exclusion_mark:immutable');
 END;
 CREATE TRIGGER owner_objective_needs_words
 BEFORE INSERT ON owner_objectives

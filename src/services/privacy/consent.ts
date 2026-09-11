@@ -1000,6 +1000,17 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
       + 'the words the control said when he decided it',
     onAccountErasure: { op: 'delete' },
   },
+  // CHILD BEFORE PARENT: marks reference the exclusion they belong to.
+  owner_exclusion_marks: {
+    reason: 'the public marks of a business one person said never to contact — '
+      + 'how the boundary is recognised, and nothing about the business itself',
+    onAccountErasure: { op: 'delete' },
+  },
+  owner_exclusions: {
+    reason: 'the businesses one person said his institution must never initiate '
+      + 'contact with, and his reason for saying so',
+    onAccountErasure: { op: 'delete' },
+  },
   // CHILD BEFORE PARENT: steps reference undertakings.
   undertaking_steps: {
     reason: 'every step of what the institution undertook for one person\'s companies — '

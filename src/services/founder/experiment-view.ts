@@ -177,6 +177,16 @@ export async function getExperimentView(founderId: string, experimentId: string,
       ['Settlement rule', e.settlesWhen ?? 'none'], ['Asset', e.productId ?? 'none yet'],
       // WHAT HE DECIDED AND THEN UNMADE. A withdrawal that left no trace on the
       // page would be the same erasure the reversal record exists to prevent.
+      // THE BOUNDARIES THAT SHAPED THIS COHORT, named where he can find them.
+      ['Never contact', await (async () => {
+        const { exclusionsFor, liftedExclusionsFor } = await import('../institution/owner-exclusions.js');
+        const live = await exclusionsFor(founderId);
+        const lifted = await liftedExclusionsFor(founderId);
+        const now = live.length === 0 ? 'none'
+          : live.map((x) => `${x.entity} (${x.marks.length} marks)`).join(' · ');
+        return lifted.length === 0 ? now
+          : `${now} — lifted: ${lifted.map((l) => `${l.entity} by ${l.liftedBy}, ${l.because}`).join('; ')}`;
+      })()],
       ['Withdrawn decisions', await (async () => {
         const { reversalsOfDecisions } = await import('../venture/validation.js');
         const back = await reversalsOfDecisions(experimentId);

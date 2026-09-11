@@ -98,9 +98,21 @@ const recipientId = (experimentId: string, counterpartyRef: string) =>
 export async function addRecipients(input: {
   founderId: string; experimentId: string;
   recipients: Array<{ counterpartyRef: string; email?: string | null; channel: 'email' | 'web_form'; sourceUrl?: string | null }>;
-}): Promise<number> {
+}): Promise<{ added: number; excluded: Array<{ who: string; entity: string; matched: string }> }> {
   let added = 0;
+  const excluded: Array<{ who: string; entity: string; matched: string }> = [];
+  const { whyExcluded } = await import('../institution/owner-exclusions.js');
   for (const r of input.recipients) {
+    // THE OWNER'S BOUNDARY, BEFORE THE ROW EXISTS. The database refuses an
+    // excluded business outright; asking first means the pass drops it quietly
+    // and can say the cohort is one smaller because of a decision he made,
+    // rather than failing on a constraint nobody was expecting.
+    const no = await whyExcluded({ founderId: input.founderId, name: r.counterpartyRef,
+      email: r.email ?? null, url: r.sourceUrl ?? null });
+    if (no.excluded) {
+      excluded.push({ who: r.counterpartyRef.trim(), entity: no.entity ?? '', matched: no.matched ?? '' });
+      continue;
+    }
     const id = recipientId(input.experimentId, r.counterpartyRef);
     const existing = await one('SELECT id FROM experiment_recipients WHERE id = ?', [id]);
     if (existing) continue;
@@ -110,7 +122,7 @@ export async function addRecipients(input: {
       [id, input.founderId, input.experimentId, r.counterpartyRef.trim(), r.email?.trim().toLowerCase() ?? null, r.channel, r.sourceUrl ?? null]);
     added += 1;
   }
-  return added;
+  return { added, excluded };
 }
 
 export async function recipientsOf(experimentId: string): Promise<Recipient[]> {

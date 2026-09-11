@@ -174,7 +174,7 @@ export async function seedProof1(founderId: string): Promise<Proof1Seed> {
   const existing = await findProof1(founderId);
   if (existing) {
     const e = (await query('SELECT opportunity_id FROM venture_experiments WHERE id = ?', [existing])).rows[0] as Record<string, unknown>;
-    const added = await addRecipients({ founderId, experimentId: existing, recipients: PROOF1_RECIPIENTS });
+    const added = (await addRecipients({ founderId, experimentId: existing, recipients: PROOF1_RECIPIENTS })).added;
     await refreshMaterials(founderId, existing);
     return { experimentId: existing, opportunityId: String(e.opportunity_id), recipientsAdded: added, alreadyExisted: true };
   }
@@ -224,7 +224,7 @@ export async function seedProof1(founderId: string): Promise<Proof1Seed> {
   });
   // The deliverable already exists; no computer is needed for this test.
   await query('UPDATE venture_experiments SET needs_workshop = 0 WHERE id = ?', [experimentId]);
-  const recipientsAdded = await addRecipients({ founderId, experimentId, recipients: PROOF1_RECIPIENTS });
+  const recipientsAdded = (await addRecipients({ founderId, experimentId, recipients: PROOF1_RECIPIENTS })).added;
   await refreshMaterials(founderId, experimentId);
   return { experimentId, opportunityId, recipientsAdded, alreadyExisted: false };
 }
