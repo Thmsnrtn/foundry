@@ -3127,7 +3127,9 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       // the owner did not approve; the plan guard on outbound_actions is the
       // authority, not this job.
       const { runHand } = await import('../services/venture/hand.js');
-      const reports = await runHand({ offersPerTick: 5 });
+      // No number here: the stage size is the experiment's own, small on the
+      // first pass and larger once the outbound has shown it behaves.
+      const reports = await runHand();
       for (const r of reports) {
         logger.info(`experiment_hand_tick: ${r.experimentId} offers ${r.offersSent}/${r.offersPlanned}, deliveries ${r.deliveriesSent}, reconciled ${r.reconciled}, refunds ${r.refundsIssued}, settled ${r.settled ?? 'not yet'}`,
           { jobName: 'experiment_hand_tick', exceptions: r.exceptions });

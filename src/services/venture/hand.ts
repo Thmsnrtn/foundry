@@ -940,9 +940,34 @@ export async function requestRefundByLink(fulfilmentId: string, token: string): 
 
 export interface HandReport { experimentId: string; offersPlanned: number; offersSent: number; deliveriesSent: number; reconciled: number; refundsIssued: number; settled: string | null; exceptions: string[] }
 
+/**
+ * HOW MANY GO OUT IN ONE PASS, AND WHY THE FIRST ONE IS SMALLER.
+ *
+ * A cohort of forty is not forty messages; it is a first stage that tells the
+ * institution whether its own outbound is behaving, and then the rest. The
+ * first pass is deliberately small because everything that can be wrong with a
+ * send — a provider rejecting the domain, a malformed link, a suppression that
+ * did not apply, a recipient resolved to the wrong address — shows up in the
+ * first handful and costs five strangers rather than forty.
+ *
+ * Nothing ceremonial follows it. Each pass reconciles the previous pass's
+ * receipts at the end of its own run and re-reads every stop condition before
+ * writing again, so stage two proceeds on evidence rather than on a timer, and
+ * the owner does not press anything to make it happen.
+ */
+export const FIRST_STAGE = 5;
+export const LATER_STAGE = 12;
+
+export async function stageSize(experimentId: string): Promise<number> {
+  const sent = Number((await one(
+    `SELECT COUNT(*) AS n FROM outbound_actions
+      WHERE experiment_id = ? AND experiment_act = 'offer' AND status = 'executed'`,
+    [experimentId]))?.n ?? 0);
+  return sent === 0 ? FIRST_STAGE : LATER_STAGE;
+}
+
 export async function runHand(input: { founderId?: string; now?: Date; offersPerTick?: number; deliveryStatus?: (productId: string, messageId: string) => Promise<DeliveryStatus> } = {}): Promise<HandReport[]> {
   const now = input.now ?? new Date();
-  const perTick = input.offersPerTick ?? 5;
   const live = await rows(
     `SELECT e.id FROM venture_experiments e
       WHERE e.decision = 'approved' AND e.ran_at IS NULL AND e.validity = 'valid' AND e.evidence_mode = 'real'
@@ -992,6 +1017,7 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
     // Offers, paced, one per approved business, never twice.
     if (mayWrite) {
       const done = new Set((await rows(`SELECT recipient_id FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'offer' AND recipient_id IS NOT NULL`, [experimentId])).map((r) => String(r.recipient_id)));
+      const perTick = input.offersPerTick ?? await stageSize(experimentId);
       const targets = (await recipientsOf(experimentId)).filter((r) => r.reviewStatus === 'approved' && r.channel === 'email' && r.email && !done.has(r.id)).slice(0, perTick);
       for (const recipient of targets) {
         try {

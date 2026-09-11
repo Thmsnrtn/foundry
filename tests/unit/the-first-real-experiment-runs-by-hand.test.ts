@@ -36,7 +36,7 @@ import { providerStubs, seedHandMadeLink } from '../helpers/provider-stubs.js';
 import { PROOF1_EDITION_PULLED_AT, PROOF1_PLAN, PROOF1_TITLE, seedProof1 } from '../../src/services/venture/proof-1.js';
 import { BRIEF_MD, OUTREACH_TEMPLATE_MD } from '../../src/services/venture/proof-1-content.js';
 import {
-  addRecipients, allowExperiment, attachPaymentLinkByUrl, campaignActOf, planDelivery, qualifyRecipient, readiness, recipientsOf, recordMaterial, reviewRecipient, runHand,
+  FIRST_STAGE, LATER_STAGE, addRecipients, allowExperiment, attachPaymentLinkByUrl, campaignActOf, planDelivery, qualifyRecipient, readiness, recipientsOf, recordMaterial, reviewRecipient, runHand, stageSize,
 } from '../../src/services/venture/hand.js';
 import { getExperimentView } from '../../src/services/founder/experiment-view.js';
 import { exposureOf, whatTheWorldSaid } from '../../src/services/venture/outcome.js';
@@ -266,7 +266,12 @@ describe('the owner\'s part is three acts on one page', () => {
 
 describe('Foundry operates: offers, receipts, exposures', () => {
   it('the hourly hand sends paced governed offers only to approved businesses, as the owner, once each', async () => {
-    const reports = await runHand({ now: NOW, offersPerTick: 5 });
+    // THE FIRST STAGE IS SMALL ON PURPOSE, and nobody passes it a number: the
+    // hand reads its own stage size, which is five until an offer has gone out
+    // and twelve afterwards. Everything that can be wrong with a send shows up
+    // in the first handful and costs five strangers rather than forty.
+    expect(await stageSize(X)).toBe(FIRST_STAGE);
+    const reports = await runHand({ now: NOW });
     expect(reports).toHaveLength(1);
     expect(reports[0]).toMatchObject({ experimentId: X, offersPlanned: 5, offersSent: 5, exceptions: [] });
     expect(state.sends).toHaveLength(5);
@@ -281,12 +286,14 @@ describe('Foundry operates: offers, receipts, exposures', () => {
       expect(s.idempotency).toMatch(new RegExp(`^experiment:${X}:offer:rcpt_`));
     }
     expect(state.sends.some((s) => s.to[0] === 'info@genwood.com')).toBe(false);
-    // The job wrapper is the same hand. Idempotent: the remaining six, then nothing.
+    // And the second stage is the larger one, still without anybody pressing
+    // anything: it proceeds on the receipts the first pass reconciled and the
+    // stop conditions it re-read, not on a timer.
+    expect(await stageSize(X)).toBe(LATER_STAGE);
+    // The job wrapper is the same hand, and passes it no number of its own.
     await experimentHandTick();
-    expect(state.sends).toHaveLength(10);
-    await runHand({ now: NOW, offersPerTick: 5 });
     expect(state.sends).toHaveLength(11);
-    await runHand({ now: NOW, offersPerTick: 5 });
+    await runHand({ now: NOW });
     expect(state.sends).toHaveLength(11);
     // Provider acknowledgment is not exposure: nothing is counted until delivery is confirmed.
     expect((await whatTheWorldSaid(x.id)).filter((s) => s.kind === 'offer_delivered')).toHaveLength(0);

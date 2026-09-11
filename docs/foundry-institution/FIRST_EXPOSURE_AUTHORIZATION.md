@@ -1,5 +1,25 @@
 # Experiment 001 — authorization for first external exposure
 
+> ## SUPERSEDED, 11 September 2026
+>
+> **This two-business authorization is obsolete and was never executed.** It is
+> kept whole because it is the record of what was prepared, what was presented,
+> and what the owner was asked — including the heading that had to be corrected
+> and the scope line that had to be rebuilt after the authority defect was found.
+>
+> It is superseded because two cold emails are too few to answer the commercial
+> question. A zero from two recipients cannot be told apart from ordinary channel
+> noise, so the exposure was too small to buy the evidence it cost. The
+> replacement is a larger closed cohort of qualified Massachusetts shops against
+> a launch-day edition, released automatically in bounded stages under one owner
+> act.
+>
+> **Nothing here can be executed by accident.** The decision surface recomputes
+> its recipient set from current state on every render and carries both lists in
+> the form; a press from a page drawn against the old two-business set is refused
+> with *"the businesses changed since this page was drawn"*. The supersession is
+> enforced by the mechanism, not only stated in this paragraph.
+
 **Prepared 10 September 2026 against production `cb652802`.** Every figure below
 was read from the live system, not from the code.
 
