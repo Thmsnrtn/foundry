@@ -89,6 +89,8 @@ export interface Recipient {
   sourceUrl: string | null; reviewStatus: 'pending' | 'approved' | 'struck'; reviewReason: string | null;
   /** Why this business belongs to the population the design named, and the record it was read from. */
   qualifiedAt: string | null; qualifiedBecause: string | null; qualifiedSource: string | null;
+  /** Which evidence put it in the population, once that has been observed. Never a grade. */
+  evidenceStratum: 'public_work_observed' | 'commercial_institutional_capable' | null;
 }
 
 const recipientId = (experimentId: string, counterpartyRef: string) =>
@@ -134,6 +136,8 @@ export async function recipientsOf(experimentId: string): Promise<Recipient[]> {
     qualifiedAt: r.qualified_at == null ? null : String(r.qualified_at),
     qualifiedBecause: r.qualified_because == null ? null : String(r.qualified_because),
     qualifiedSource: r.qualified_source == null ? null : String(r.qualified_source),
+    evidenceStratum: r.evidence_stratum == null ? null
+      : String(r.evidence_stratum) as Recipient['evidenceStratum'],
   }));
 }
 

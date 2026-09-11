@@ -407,9 +407,13 @@ export async function applyProof1Cohort(founderId: string): Promise<{
   addressed: string[];
   excluded: Array<{ who: string; entity: string; matched: string }>;
   notFound: string[];
+  /** In the cohort, with an address, but an older row without one stands in its place. */
+  shadowed: Array<{ who: string; has: string }>;
+  /** Already carries a stratum, and not the one this cohort says. Never silently overwritten. */
+  disagreed: Array<{ who: string; recorded: string; expected: string }>;
 }> {
   const { findProof1 } = await import('./proof-1.js');
-  const { addRecipients, qualifyRecipient, recipientsOf, recordContactChoice } = await import('./hand.js');
+  const { addRecipients, qualifyRecipient, recipientsOf, recordContactChoice, recordStratum } = await import('./hand.js');
   const { applyStandingExclusions } = await import('../institution/owner-exclusions.js');
   const experimentId = await findProof1(founderId);
   if (!experimentId) throw new Error('experiment_001_not_found');
@@ -431,6 +435,8 @@ export async function applyProof1Cohort(founderId: string): Promise<{
   const rows = await recipientsOf(experimentId);
   const qualified: string[] = []; const alreadyQualified: string[] = [];
   const addressed: string[] = []; const notFound: string[] = [];
+  const shadowed: Array<{ who: string; has: string }> = [];
+  const disagreed: Array<{ who: string; recorded: string; expected: string }> = [];
   for (const m of PROOF1_COHORT) {
     if (excluded.some((x) => x.who === m.counterpartyRef.trim())) continue;
     const r = rows.find((x) => x.counterpartyRef === m.counterpartyRef);
@@ -442,14 +448,43 @@ export async function applyProof1Cohort(founderId: string): Promise<{
       });
       qualified.push(m.counterpartyRef);
     }
+    // A ROW THAT CANNOT BE WRITTEN TO IS NOT IN THE COHORT, AND SAYS SO.
+    //
+    // `addRecipients` leaves an existing row alone, and an older pass may have
+    // created one for this business from a shallower read that found no address
+    // — channel `web_form`, email null. The cohort now has an address for it,
+    // and the institution may not write one onto a recipient: changing who gets
+    // contacted is the owner's act and the row guard enforces that.
+    //
+    // So the business is reported as shadowed rather than qualified. It was
+    // silently qualified-and-unreachable once, which looked like a cohort of
+    // twenty-one and behaved like nineteen.
+    if (!r.email || r.channel !== 'email') {
+      shadowed.push({ who: m.counterpartyRef, has: m.email });
+      continue;
+    }
     try {
       await recordContactChoice({
         founderId, experimentId, recipientId: r.id, kind: m.contactKind, source: m.contactSource,
       });
       addressed.push(m.counterpartyRef);
     } catch { /* already recorded: the first answer stands, which is the rule */ }
+    // THE STRATUM IS NOT OPTIONAL AND ITS FAILURE IS NOT SWALLOWED.
+    //
+    // This was wired once, lost to an edit that died before it wrote the file,
+    // and then written as a silent try/catch — so twenty-one businesses were
+    // sealed with no stratum at all and a full green chain said nothing. A
+    // stratum that fails to record is a seal that did not happen.
+    if (r.evidenceStratum == null) {
+      await recordStratum({ founderId, experimentId, recipientId: r.id, stratum: m.stratum });
+    } else if (r.evidenceStratum !== m.stratum) {
+      disagreed.push({ who: m.counterpartyRef, recorded: r.evidenceStratum, expected: m.stratum });
+    }
   }
-  return { added: PROOF1_COHORT.length - excluded.length - notFound.length, qualified, alreadyQualified, addressed, excluded, notFound };
+  return {
+    added: PROOF1_COHORT.length - excluded.length - notFound.length - shadowed.length,
+    qualified, alreadyQualified, addressed, excluded, notFound, shadowed, disagreed,
+  };
 }
 
 /**
