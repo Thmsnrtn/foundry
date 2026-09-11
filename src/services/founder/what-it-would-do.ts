@@ -137,7 +137,8 @@ export function labelFor(c: Consequence): string {
  */
 export async function firstContactDecision(experimentId: string): Promise<{
   consequence: Consequence;
-  include: Array<{ id: string; name: string; email: string; because: string; source: string }>;
+  include: Array<{ id: string; name: string; email: string; because: string; source: string;
+    addressedBecause: string }>;
   exclude: Array<{ id: string; name: string; email: string }>;
 } | { notNow: string[] }> {
   const e = (await query(
@@ -148,7 +149,7 @@ export async function firstContactDecision(experimentId: string): Promise<{
 
   const rs = (await query(
     `SELECT id, counterparty_ref, email, channel, review_status, qualified_at,
-            qualified_because, qualified_source
+            qualified_because, qualified_source, contact_kind, contact_source
        FROM experiment_recipients WHERE experiment_id = ? ORDER BY rowid`,
     [experimentId])).rows as unknown as Array<Record<string, unknown>>;
   const reachable = rs.filter((r) => r.channel === 'email' && r.email
@@ -156,6 +157,12 @@ export async function firstContactDecision(experimentId: string): Promise<{
   const include = reachable.filter((r) => r.qualified_at != null).map((r) => ({
     id: String(r.id), name: String(r.counterparty_ref), email: String(r.email),
     because: String(r.qualified_because ?? ''), source: String(r.qualified_source ?? ''),
+    // HOW THE ADDRESS WAS CHOSEN, in the sentence he is approving. A shop that
+    // publishes an invitation-to-bid mailbox asked to be approached there, and
+    // he should be able to see that the institution obeyed rather than taking
+    // the first address it found.
+    addressedBecause: r.contact_source == null ? 'no record of how this address was chosen'
+      : `${String(r.contact_kind ?? 'general')} address — ${String(r.contact_source)}`,
   }));
   const exclude = reachable.filter((r) => r.qualified_at == null).map((r) => ({
     id: String(r.id), name: String(r.counterparty_ref), email: String(r.email),

@@ -152,3 +152,54 @@ export async function whyExcluded(input: {
   }
   return { excluded: false, entity: null, matched: null };
 }
+
+/**
+ * THE BOUNDARIES THE OWNER HAS ALREADY DRAWN, written into a database that may
+ * not have them yet.
+ *
+ * An exclusion he stated once has to survive a fresh machine, a restored
+ * backup and a rebuilt cohort, so it lives here as a standing fact and is
+ * applied before any discovery pass runs rather than remembered by whoever
+ * happens to be assembling a list. Idempotent: re-applying changes nothing,
+ * and an exclusion he has since lifted is NOT reinstated by re-running this —
+ * `excludeEntity` only touches rows that are still standing, and a lift is his
+ * act to make and his to keep.
+ *
+ * THE REASON IS DELIBERATELY NOT HERE. He gave one and asked that it not be
+ * exposed; a reason written into a row is a reason that travels with every
+ * copy of the database and every page that renders it. What has to be true is
+ * that the business is never written to, and that is enforced by the marks
+ * below and by the triggers in migration 299 — not by the explanation.
+ */
+export const STANDING_EXCLUSIONS: Array<{ entity: string; because: string; marks: Mark[] }> = [
+  {
+    entity: 'Nirvana Upfitters, Leominster MA',
+    because: 'The owner excluded this business from anything Foundry initiates. He gave his reason privately '
+      + 'and asked that it not be exposed, so it is not recorded here. The exclusion stands until he lifts it '
+      + 'himself, and lifting it requires his own hand and a reason on the row.',
+    marks: [
+      { kind: 'name', value: 'nirvana upfitters', source: 'the owner named the business' },
+      { kind: 'domain', value: 'nirvanaupfitters.com', source: 'the business\'s own public website' },
+      { kind: 'email', value: 'info@nirvanaupfitters.com', source: 'the address published on the business\'s own public website' },
+    ],
+  },
+];
+
+/**
+ * Apply them. Returns what is now standing so a caller can say the cohort is
+ * one smaller because of a decision the owner made, rather than a miscount.
+ */
+export async function applyStandingExclusions(founderId: string): Promise<{
+  entity: string; marks: number; alreadyStood: boolean;
+}[]> {
+  const out: { entity: string; marks: number; alreadyStood: boolean }[] = [];
+  const before = await exclusionsFor(founderId);
+  for (const x of STANDING_EXCLUSIONS) {
+    const stood = before.some((b) => b.entity.toLowerCase() === x.entity.toLowerCase());
+    const r = await excludeEntity({
+      founderId, entity: x.entity, because: x.because, by: `founder:${founderId}`, marks: x.marks,
+    });
+    out.push({ entity: x.entity, marks: r.marks, alreadyStood: stood });
+  }
+  return out;
+}

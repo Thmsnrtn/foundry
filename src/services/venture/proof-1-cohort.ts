@@ -27,9 +27,14 @@
 //      among them either, so no shop appears in a filed sub-bid record.
 //   3. The Commonwealth's own spending record contains exactly three
 //      Massachusetts vendors with "millwork" in the name, and one is a
-//      condominium trust. The buyers in this market are municipalities and
-//      local housing authorities, and they pay from their own treasuries — not
-//      through the state ledger that record is drawn from.
+//      condominium trust. Swept again for "casework" and "cabinet" it yields
+//      seven more, and every one fails this design for a reason of its own: a
+//      garage-storage installer, a furniture maker, two spellings of one
+//      residential distributor, a sales outfit last paid in 2012, and a shop
+//      whose site will not answer this environment at all. The buyers in this
+//      market are municipalities and local housing authorities, and they pay
+//      from their own treasuries — not through the state ledger that record is
+//      drawn from.
 //
 // So the shops doing this work are real and numerous, and the public record
 // simply does not name them. The fourth door, COMMBUYS' own award and contract
@@ -264,4 +269,140 @@ export function cohortSummary(): {
   const byContact: Record<ContactKind, number> = { role: 0, named: 0, general: 0 };
   for (const m of PROOF1_COHORT) byContact[m.contactKind] += 1;
   return { total: PROOF1_COHORT.length, byContact, nearly: PROOF1_NEARLY.length };
+}
+
+/**
+ * SEAL THE COHORT ONTO THE TEST. Idempotent in every part: a business already
+ * present is not added twice, a qualification already written stands, and an
+ * address whose kind is already recorded keeps it.
+ *
+ * THE OWNER'S EXCLUSIONS ARE APPLIED FIRST, by `addRecipients`, which asks
+ * before it writes. So a business he has said never to is absent from the
+ * cohort rather than present and filtered later — and this returns what was
+ * dropped and why, because a cohort that is one smaller for a reason he chose
+ * should say so rather than look like a miscount.
+ *
+ * NOTHING HERE APPROVES ANYBODY. Qualification is the institution's observation
+ * that a business belongs to the population the design named. Approval is the
+ * owner's act, it happens on the decision surface, and it is the only thing
+ * that lets a message leave.
+ */
+export async function applyProof1Cohort(founderId: string): Promise<{
+  added: number;
+  qualified: string[];
+  alreadyQualified: string[];
+  addressed: string[];
+  excluded: Array<{ who: string; entity: string; matched: string }>;
+  notFound: string[];
+}> {
+  const { findProof1 } = await import('./proof-1.js');
+  const { addRecipients, qualifyRecipient, recipientsOf, recordContactChoice } = await import('./hand.js');
+  const { applyStandingExclusions } = await import('../institution/owner-exclusions.js');
+  const experimentId = await findProof1(founderId);
+  if (!experimentId) throw new Error('experiment_001_not_found');
+
+  // THE OWNER'S BOUNDARIES BEFORE THE COHORT, not alongside it. Applying them
+  // here rather than trusting whoever calls this means a business he has
+  // excluded cannot enter a cohort assembled on a machine that had not heard
+  // of the exclusion yet.
+  await applyStandingExclusions(founderId);
+
+  const { excluded } = await addRecipients({
+    founderId,
+    experimentId,
+    recipients: PROOF1_COHORT.map((m) => ({
+      counterpartyRef: m.counterpartyRef, email: m.email, channel: 'email' as const, sourceUrl: m.source,
+    })),
+  });
+
+  const rows = await recipientsOf(experimentId);
+  const qualified: string[] = []; const alreadyQualified: string[] = [];
+  const addressed: string[] = []; const notFound: string[] = [];
+  for (const m of PROOF1_COHORT) {
+    if (excluded.some((x) => x.who === m.counterpartyRef.trim())) continue;
+    const r = rows.find((x) => x.counterpartyRef === m.counterpartyRef);
+    if (!r) { notFound.push(m.counterpartyRef); continue; }
+    if (r.qualifiedAt) alreadyQualified.push(m.counterpartyRef);
+    else {
+      await qualifyRecipient({
+        founderId, experimentId, recipientId: r.id, because: m.because, source: m.source,
+      });
+      qualified.push(m.counterpartyRef);
+    }
+    try {
+      await recordContactChoice({
+        founderId, experimentId, recipientId: r.id, kind: m.contactKind, source: m.contactSource,
+      });
+      addressed.push(m.counterpartyRef);
+    } catch { /* already recorded: the first answer stands, which is the rule */ }
+  }
+  return { added: PROOF1_COHORT.length - excluded.length - notFound.length, qualified, alreadyQualified, addressed, excluded, notFound };
+}
+
+/**
+ * MAKE THE PREDICTION MATCH THE COHORT THAT WILL ACTUALLY BE WRITTEN TO.
+ *
+ * The sealed question was written for a cohort of twenty-five and says the
+ * test fails when "twenty-five businesses receive the offer and none pays".
+ * Against a cohort of eight that sentence describes a thing that cannot
+ * happen, and an unfalsifiable prediction is worse than a wrong one — it
+ * would leave the test settling only on the clock while appearing to have a
+ * second, stricter condition it could never meet.
+ *
+ * SO THE CEILING MOVES TO THE COHORT AND NOTHING ELSE MOVES. Same price, same
+ * seven days, same one-payment bar, same $100 ceiling. This is the prediction
+ * saying out loud how many businesses there are; it is not a softer test.
+ *
+ * The database seals a prediction the moment the owner decides, so this
+ * refuses outright on a decided test rather than trying and being refused —
+ * the rewrite belongs before his decision or not at all.
+ */
+export async function amendProof1ForTheCohort(founderId: string): Promise<{
+  amended: boolean; cohort: number; was: string; now: string; because: string;
+}> {
+  const { query } = await import('../../db/client.js');
+  const { findProof1 } = await import('./proof-1.js');
+  const experimentId = await findProof1(founderId);
+  if (!experimentId) throw new Error('experiment_001_not_found');
+
+  const e = (await query(
+    `SELECT decision, what_we_expect, would_disprove, settles_when
+       FROM venture_experiments WHERE id = ?`, [experimentId]))
+    .rows[0] as Record<string, unknown> | undefined;
+  if (!e) throw new Error('experiment_001_not_found');
+  if (e.decision != null) {
+    return {
+      amended: false, cohort: 0, was: String(e.would_disprove), now: String(e.would_disprove),
+      because: 'the test is already decided, and a decided prediction is sealed',
+    };
+  }
+
+  // The cohort as the database has it, not as this file hopes it is.
+  const n = Number((await query(
+    `SELECT count(*) AS n FROM experiment_recipients
+      WHERE experiment_id = ? AND qualified_at IS NOT NULL AND review_status <> 'struck'
+        AND channel = 'email' AND email IS NOT NULL`, [experimentId])).rows[0]?.n ?? 0);
+  if (n === 0) {
+    return {
+      amended: false, cohort: 0, was: String(e.would_disprove), now: String(e.would_disprove),
+      because: 'no business is qualified yet, so there is no cohort for the prediction to match',
+    };
+  }
+
+  const expect = `At least one business pays $29 and receives the brief before all ${n} have received `
+    + 'the offer, within seven days of the offer being placed';
+  const disprove = `All ${n} businesses receive the offer and none pays and receives the brief, or seven `
+    + 'days pass without one; a refunded or undelivered purchase does not count';
+  const { settlementRuleJson } = await import('./outcome.js');
+  const rule = settlementRuleJson({ event: 'delivery', atLeast: 1, outOf: 'offer_delivered', atMost: n, withinDays: 7 });
+
+  const was = String(e.would_disprove);
+  await query(
+    `UPDATE venture_experiments SET what_we_expect = ?, would_disprove = ?, settles_when = ?
+      WHERE id = ? AND decision IS NULL`,
+    [expect, disprove, rule, experimentId]);
+  return {
+    amended: true, cohort: n, was, now: disprove,
+    because: 'the ceiling now names the cohort that exists; price, window, bar and spend limit are unchanged',
+  };
 }

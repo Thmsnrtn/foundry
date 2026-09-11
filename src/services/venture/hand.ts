@@ -157,6 +157,28 @@ export async function qualifyRecipient(input: {
   if ((r.rowsAffected ?? 0) === 0) throw new HandRefused('recipient_not_found');
 }
 
+/**
+ * HOW THIS ADDRESS WAS CHOSEN, recorded before anybody is written to.
+ *
+ * The column exists because "nobody replied" means something different when
+ * every message went to a general inbox than when it went to an estimator who
+ * asks for bids for a living. Recording it afterwards would let the channel be
+ * re-described to suit the result, so the database refuses a second answer and
+ * this only ever writes the first.
+ */
+export async function recordContactChoice(input: {
+  founderId: string; experimentId: string; recipientId: string;
+  kind: 'role' | 'named' | 'general'; source: string;
+}): Promise<void> {
+  const source = input.source.trim();
+  if (!source) throw new HandRefused('contact_choice_needs_a_source');
+  const r = await query(
+    `UPDATE experiment_recipients SET contact_kind = ?, contact_source = ?
+      WHERE id = ? AND experiment_id = ? AND founder_id = ? AND contact_kind IS NULL`,
+    [input.kind, source, input.recipientId, input.experimentId, input.founderId]);
+  if ((r.rowsAffected ?? 0) === 0) throw new HandRefused('recipient_not_found');
+}
+
 /** The owner's review of one candidate. The database re-verifies the reviewer. */
 export async function reviewRecipient(input: {
   founderId: string; experimentId: string; recipientId: string; decision: 'approved' | 'struck'; reason?: string; email?: string;

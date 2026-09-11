@@ -102,7 +102,8 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
       <details class="who"><summary>${count(launch.include.length, 'business', 'businesses')} this contacts, and why</summary>
         <ul class="plain">${launch.include.map((r) => html`<li><strong>${r.name}</strong>
           <span class="quiet">${r.email}</span><br /><span class="quiet">${r.because}
-          &middot; <a href="${r.source}" rel="noopener">the record that says so</a></span></li>`)}</ul>
+          &middot; <a href="${r.source}" rel="noopener">the record that says so</a></span>
+          <br /><span class="quiet">Written there because it is the ${r.addressedBecause}.</span></li>`)}</ul>
         ${launch.exclude.length ? html`<p class="quiet">Excluded by this same press, because nothing on
           record says they belong to the population this test names:
           ${launch.exclude.map((r) => r.name).join(', ')}.</p>` : ''}

@@ -930,6 +930,18 @@ program.command('workshop:answer-post <founderIdOrEmail>').description('Answer e
 program.command('probe:screen-001 <founderIdOrEmail>').description('Apply the recorded public-record screening to Experiment 001 candidates; contacts nobody')
   .action(async (who: string) => { const { applyProof1Screening } = await import('../services/venture/proof-1-screening.js'); out(await applyProof1Screening(await founderIdOf(who))); });
 
+program.command('probe:cohort-001 <founderIdOrEmail>').description('Apply the owner\'s standing exclusions, then seal the closed cohort onto Experiment 001 with its grounds and addresses; approves nobody and contacts nobody')
+  .action(async (who: string) => { const { applyProof1Cohort } = await import('../services/venture/proof-1-cohort.js'); out(await applyProof1Cohort(await founderIdOf(who))); });
+program.command('probe:amend-001 <founderIdOrEmail>').description('Rewrite Experiment 001\'s prediction so its ceiling names the cohort that exists; refuses once decided')
+  .action(async (who: string) => { const { amendProof1ForTheCohort } = await import('../services/venture/proof-1-cohort.js'); out(await amendProof1ForTheCohort(await founderIdOf(who))); });
+program.command('owner:exclusions <founderIdOrEmail>').description('What the owner has said never to contact, and what he has lifted')
+  .action(async (who: string) => {
+    const founderId = await founderIdOf(who);
+    const { exclusionsFor, liftedExclusionsFor, applyStandingExclusions } = await import('../services/institution/owner-exclusions.js');
+    await applyStandingExclusions(founderId);
+    out({ standing: await exclusionsFor(founderId), lifted: await liftedExclusionsFor(founderId) });
+  });
+
 program.command('workshop:stand-up-ears <founderIdOrEmail>').description('Deploy the program that hears, give it a store of its own, and point the Workshop address at it; nothing is forwarded to a mailbox')
   .action(async (who: string) => { const { standUpTheEars } = await import('../services/public-workshop/infrastructure.js'); out(await standUpTheEars(await founderIdOf(who))); });
 program.command('workshop:retire-mailbox <founderIdOrEmail> <email>').description('Remove a mailbox the Workshop no longer delivers to from its provider account; refuses while anything still routes there')
