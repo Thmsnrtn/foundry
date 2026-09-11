@@ -193,7 +193,7 @@ describe('Proof 1, reconsidered from first principles before anyone is written t
 
     // Every stop condition is reached long before the $100 ceiling is.
     expect(d.stopConditions.map((s) => `${s.kind}:${s.threshold}`))
-      .toEqual(['complaints:1', 'bounces:3', 'opt_outs:2', 'declined_value:3', 'unfulfillable:1']);
+      .toEqual(['complaints:1', 'bounces:5', 'opt_outs:4', 'declined_value:8', 'unfulfillable:1', 'bounce_rate:25']);
     expect(d.recommendation).toBe('run');
     expect(d.sealedAt).toBeNull();
     expect(await designStandsInTheWay(X)).toEqual([]);
@@ -208,7 +208,7 @@ describe('Proof 1, reconsidered from first principles before anyone is written t
     expect(short.lines.join(' ')).toContain('I cannot tell “the screening work is not worth $29 up front, sight unseen, to shops of this size” from “a cold email from an unknown sender is not a thing these shops transact through');
     expect(short.lines[0]).toContain('It settles: Whether a sufficiently relevant Massachusetts millwork shop');
     expect(short.lines.join(' ')).toContain('What it really costs you');
-    expect(short.lines.join(' ')).toContain('It stops itself at 1 complaint, 3 messages that did not arrive, 2 people asking not to be contacted, 3 people saying it was not useful, or 1 purchase that could not be delivered.');
+    expect(short.lines.join(' ')).toContain('It stops itself at 1 complaint, 5 messages that did not arrive, 4 people asking not to be contacted, 8 people saying it was not useful, 1 purchase that could not be delivered, or 25 percent of messages not arriving.');
     // The summary is a summary: the first sentence of a stored reason, never a paraphrase.
     expect(short.lines.join(' ')).toContain('because money moved before delivery is the cleanest observation of pre-delivery willingness to pay');
     expect(short.lines.join(' ')).not.toContain('That is why the identity work came first');
@@ -394,24 +394,37 @@ describe('it stops itself before the budget stops it, and success is not a reaso
   });
 });
 
+  it('a rate reads zero until enough has been attempted for a proportion to be a fact', async () => {
+    // THE FLOOR IS THE POINT. One bounce out of one attempt is a hundred per
+    // cent and is evidence of nothing; a stop that fired on it would end a
+    // probe on arithmetic rather than on the world.
+    const rate = (await readStopConditions(X)).find((s) => s.kind === 'bounce_rate')!;
+    expect(rate).toMatchObject({ threshold: 25, count: 0, met: false });
+    const attempted = Number((await one(`SELECT COUNT(*) n FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'offer' AND status = 'executed'`, [X])).n);
+    expect(attempted).toBeLessThan(8);
+  });
+
   it('a stop condition ends new offers and leaves what is owed untouched', async () => {
     const before = (await readStopConditions(X)).find((s) => s.kind === 'opt_outs')!;
-    expect(before).toMatchObject({ count: 0, threshold: 2, met: false });
+    // RECALIBRATED FOR THE LARGER COHORT: two of forty is ordinary, four is a
+    // pattern. Every opt-out is honoured immediately either way.
+    expect(before).toMatchObject({ count: 0, threshold: 4, met: false });
     const { suppress } = await import('../../src/services/public-workshop/suppression.js');
-    await suppress({ founderId: OWNER, email: 'a@example.com', reason: 'they_asked', source: 'page_opt_out', experimentId: X });
-    await suppress({ founderId: OWNER, email: 'b@example.com', reason: 'they_asked', source: 'page_opt_out', experimentId: X });
+    for (const who of ['a', 'b', 'c', 'd']) {
+      await suppress({ founderId: OWNER, email: `${who}@example.com`, reason: 'they_asked', source: 'page_opt_out', experimentId: X });
+    }
     const met = await stopConditionsMet(X);
     expect(met.stop).toBe(true);
-    expect(met.because.join(' ')).toContain('2 of 2');
+    expect(met.because.join(' ')).toContain('4 of 4');
     // Triggered once, and recorded where the owner can read it.
     await stopConditionsMet(X);
     const triggered = await rowsOf(`SELECT kind, triggered_detail FROM probe_stop_conditions WHERE experiment_id = ? AND triggered_at IS NOT NULL`, [X]);
     expect(triggered).toHaveLength(1);
-    expect(String(triggered[0]!.triggered_detail)).toContain('2 of 2');
+    expect(String(triggered[0]!.triggered_detail)).toContain('4 of 4');
     const sentBefore = Number((await one(`SELECT COUNT(*) n FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'offer'`, [X])).n);
     const report = await runHand({ now: NOW, offersPerTick: 5 });
     expect(report[0]!.offersSent).toBe(0);
-    expect(report[0]!.exceptions.join(' ')).toContain('Two people asking not to be written to');
+    expect(report[0]!.exceptions.join(' ')).toContain('asking not to be written to');
     expect(Number((await one(`SELECT COUNT(*) n FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'offer'`, [X])).n)).toBe(sentBefore);
     // Left standing: a stop condition the world has met is not un-met by tidying up.
   });
