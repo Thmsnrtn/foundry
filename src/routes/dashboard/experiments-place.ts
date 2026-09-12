@@ -86,6 +86,11 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
   // decision rests on — behind a summary, because a wall of evidence at first
   // glance is how a page stops being read. Nothing is hidden; it is ordered.
   const decision = await firstContactDecision(id);
+  // WHAT THE INSTITUTION IS STOPPED ON, if anything. An authorised experiment
+  // that cannot proceed must say so on its own page rather than look idle.
+  const { runStateOf } = await import('../../services/venture/run-state.js');
+  const run = await runStateOf(id);
+  const blocked = run && (run.state === 'blocked' || run.state === 'failed') ? run : null;
   const launch = 'notNow' in decision ? null : decision;
   const body = html`
     <h1>${v.assetName ?? 'The test'} <span class="pill">${v.stateLabel}</span></h1>
@@ -110,6 +115,16 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
       </details>
       <p class="quiet"><a class="why" href="/foundry/experiments/${id}/decide">Everything this rests on</a>
         &middot; <a class="why" href="/foundry/experiments/${id}/recipients">The whole cohort</a></p>
+    </section>` : ''}
+    ${blocked ? html`<section class="know" id="blocked">
+      <h2>${v.title} — blocked</h2>
+      <p><strong>${blocked.attempting}</strong> could not proceed.</p>
+      <p>${blocked.because}</p>
+      ${blocked.dependency ? html`<p class="quiet">What is down: ${blocked.dependency}.</p>` : ''}
+      <p class="quiet">No external effect occurred. ${blocked.ownerAction
+    ? html`<strong>You need to: ${blocked.ownerAction}</strong>`
+    : 'Owner action: none — this is Foundry\'s to repair, and it is being repaired.'}</p>
+      <p class="quiet">Last checked ${blocked.checkedAt}.</p>
     </section>` : ''}
     <p class="lede">${v.stateDetail}</p>
     ${'notNow' in decision && v.state === 'needs_you' ? html`<section class="know" id="notyet">

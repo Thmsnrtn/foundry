@@ -144,6 +144,18 @@ export function registerToolHandler(tool: string, handler: ToolHandler, policy: 
   policies.set(tool, policy);
 }
 
+/**
+ * IS THE DOOR OPEN? Asked by the tests that exist because it was shut.
+ *
+ * A tool registers itself when its gateway module is imported. That makes
+ * "registered" a property of the import graph, which is exactly the kind of
+ * thing that is true in one process and false in another — and was false in
+ * every process that mattered while a direct credential test passed.
+ */
+export function toolIsRegistered(tool: string): boolean {
+  return policies.has(tool) && handlers.has(tool);
+}
+
 export function clearToolHandlers(): void {
   handlers.clear();
   policies.clear();

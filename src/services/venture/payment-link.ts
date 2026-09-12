@@ -13,6 +13,24 @@
 // (migration 278: "a checkout link id, opaque to the institution").
 // =============================================================================
 
+// THE GOVERNED DOOR ONLY EXISTS IF SOMEBODY OPENS IT.
+//
+// `stripe-gateway.ts` registers its tool handlers as a side effect of being
+// imported, and for a long time nothing imported it. The registry was therefore
+// empty in every process that mattered, and every call through the governed
+// door came back "no trusted policy registered for tool
+// 'stripe_create_payment_link'" — which is a correct refusal to an act that
+// should have been possible.
+//
+// It failed closed, which is the right direction, but it failed INVISIBLY: an
+// authorised experiment sat for hours unable to place its offer while the
+// hourly pass reported success. A direct call to Stripe with the credential
+// worked perfectly the whole time, which is exactly why that is not evidence
+// of anything. The institution's own path is the only path worth testing.
+//
+// This import is load-bearing. It is not a convenience and it is not unused:
+// removing it disarms every Stripe capability in this system.
+import '../integration/stripe-gateway.js';
 import { invoke } from '../outbound/gateway.js';
 import { withRetry } from '../resilience.js';
 import { pathSegment } from '../outbound/path-segment.js';

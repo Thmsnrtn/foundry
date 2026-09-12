@@ -1767,6 +1767,26 @@ CREATE TABLE experiment_recipients (
   CHECK (evidence_stratum IN ('public_work_observed', 'commercial_institutional_capable')),
   UNIQUE(experiment_id, counterparty_ref)
 );
+CREATE TABLE experiment_run_state (
+  experiment_id  TEXT PRIMARY KEY REFERENCES venture_experiments(id),
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  state          TEXT NOT NULL CHECK (state IN
+                   ('success','noop_expected','partial','degraded','blocked','failed')),
+  -- What the institution was trying to do, in the owner's words.
+  attempting     TEXT NOT NULL,
+  -- Why it did not happen. Required whenever the state is not a clean one: a
+  -- blocked run with no reason is the silent failure wearing a new label.
+  because        TEXT,
+  -- The dependency that is down, named so a person can tell whether it is
+  -- theirs to fix or the institution's.
+  dependency     TEXT,
+  -- Whether the owner has to do anything. Almost always no: an internal
+  -- dependency is the institution's to repair, and saying otherwise turns a
+  -- bug into homework.
+  owner_action   TEXT,
+  progressed     INTEGER NOT NULL DEFAULT 0,
+  checked_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE experiment_variants (
   id TEXT PRIMARY KEY,
   experiment_id TEXT NOT NULL,
@@ -6975,6 +6995,20 @@ BEGIN
          WHERE h.experiment_id = NEW.experiment_id
            AND h.counterparty = trim(lower(NEW.counterparty_ref))
            AND h.stratum <> NEW.evidence_stratum);
+END;
+CREATE TRIGGER experiment_run_state_says_why
+BEFORE INSERT ON experiment_run_state
+BEGIN
+  SELECT RAISE(ABORT,'experiment_run_state:a_bad_state_needs_a_reason')
+    WHERE NEW.state IN ('blocked','failed','partial','degraded')
+      AND trim(coalesce(NEW.because,'')) = '';
+END;
+CREATE TRIGGER experiment_run_state_says_why_on_update
+BEFORE UPDATE ON experiment_run_state
+BEGIN
+  SELECT RAISE(ABORT,'experiment_run_state:a_bad_state_needs_a_reason')
+    WHERE NEW.state IN ('blocked','failed','partial','degraded')
+      AND trim(coalesce(NEW.because,'')) = '';
 END;
 CREATE TRIGGER exposure_classes_constitutional_delete
 BEFORE DELETE ON exposure_classes

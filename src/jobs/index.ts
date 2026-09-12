@@ -3131,8 +3131,20 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       // first pass and larger once the outbound has shown it behaves.
       const reports = await runHand();
       for (const r of reports) {
-        logger.info(`experiment_hand_tick: ${r.experimentId} offers ${r.offersSent}/${r.offersPlanned}, deliveries ${r.deliveriesSent}, reconciled ${r.reconciled}, refunds ${r.refundsIssued}, settled ${r.settled ?? 'not yet'}`,
-          { jobName: 'experiment_hand_tick', exceptions: r.exceptions });
+        logger.info(`experiment_hand_tick: ${r.experimentId} ${r.state} — offers ${r.offersSent}/${r.offersPlanned}, deliveries ${r.deliveriesSent}, reconciled ${r.reconciled}, refunds ${r.refundsIssued}, settled ${r.settled ?? 'not yet'}`,
+          { jobName: 'experiment_hand_tick', state: r.state, because: r.because, exceptions: r.exceptions });
+      }
+      // A PASS THAT COULD NOT MOVE AN AUTHORISED ACT DID NOT SUCCEED.
+      //
+      // This job used to swallow everything and record a success, so an
+      // owner-authorised experiment that could not create its payment link
+      // looked identical to one with nothing to do — for as long as the
+      // dependency stayed down. Throwing here is what puts the failure in
+      // job_health, where the institution can see its own condition.
+      const stopped = reports.filter((r) => r.state === 'blocked' || r.state === 'failed');
+      if (stopped.length) {
+        throw new Error(`${stopped.length} authorised experiment(s) could not proceed: `
+          + stopped.map((r) => `${r.experimentId} ${r.state} (${r.because ?? 'no reason recorded'})`).join('; '));
       }
     },
     schedule: '20 * * * *',

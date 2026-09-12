@@ -985,7 +985,13 @@ export async function requestRefundByLink(fulfilmentId: string, token: string): 
 
 // ── The cycle ────────────────────────────────────────────────────────────────
 
-export interface HandReport { experimentId: string; offersPlanned: number; offersSent: number; deliveriesSent: number; reconciled: number; refundsIssued: number; settled: string | null; exceptions: string[] }
+export interface HandReport { experimentId: string; offersPlanned: number; offersSent: number;
+  deliveriesSent: number; reconciled: number; refundsIssued: number; settled: string | null;
+  exceptions: string[];
+  /** What this pass achieved against the authorised act. Never inferred from
+   *  the absence of a thrown error: see services/venture/run-state.ts. */
+  state: import('./run-state.js').RunState;
+  because: string | null }
 
 /**
  * HOW MANY GO OUT IN ONE PASS, AND WHY THE FIRST ONE IS SMALLER.
@@ -1025,7 +1031,7 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
   const reports: HandReport[] = [];
   for (const row of live) {
     const experimentId = String(row.id);
-    const report: HandReport = { experimentId, offersPlanned: 0, offersSent: 0, deliveriesSent: 0, reconciled: 0, refundsIssued: 0, settled: null, exceptions: [] };
+    const report: HandReport = { experimentId, offersPlanned: 0, offersSent: 0, deliveriesSent: 0, reconciled: 0, refundsIssued: 0, settled: null, exceptions: [], state: 'noop_expected', because: null };
     reports.push(report);
     const e = await experimentRow(experimentId);
     if (!e?.productId) { report.exceptions.push('no asset'); continue; }
@@ -1092,6 +1098,23 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
       if (!down.done && down.reason) report.exceptions.push(`offer not taken down: ${down.reason}`);
       await republishRecord(experimentId, report);
     }
+    // WHAT THIS PASS ACHIEVED, stated rather than inferred from the absence of a
+    // thrown error. An authorised experiment that moved nothing because a
+    // dependency refused is BLOCKED, and until this existed it was reported as
+    // a clean run — every hour, for as long as the dependency stayed down.
+    const { readRun, recordRun } = await import('./run-state.js');
+    const reading = readRun({
+      authorised: true,
+      intended: report.offersPlanned + report.deliveriesSent,
+      achieved: report.offersSent + report.deliveriesSent + report.reconciled + report.refundsIssued,
+      exceptions: report.exceptions,
+      attempting: report.offersPlanned > 0 || report.offersSent > 0
+        ? 'writing to the businesses you approved'
+        : 'carrying the test one step',
+    });
+    report.state = reading.state;
+    report.because = reading.because ?? null;
+    await recordRun(experimentId, e.founderId, reading).catch(() => undefined);
   }
 
   // WHAT IS OWED OUTLIVES THE TEST. A purchase that arrived as the test settled
@@ -1107,7 +1130,7 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
       ORDER BY e.decided_at, e.rowid`, [...(input.founderId ? [input.founderId] : []), ...live.map((r) => String(r.id))]);
   for (const row of aftermath) {
     const experimentId = String(row.id);
-    const report: HandReport = { experimentId, offersPlanned: 0, offersSent: 0, deliveriesSent: 0, reconciled: 0, refundsIssued: 0, settled: null, exceptions: [] };
+    const report: HandReport = { experimentId, offersPlanned: 0, offersSent: 0, deliveriesSent: 0, reconciled: 0, refundsIssued: 0, settled: null, exceptions: [], state: 'noop_expected', because: null };
     const x = await exposureOf(experimentId);
     if (x && x.withdrawnAt !== null) {
       const down = await takeDownExposure(experimentId).catch((err: unknown) => ({ done: false, reason: err instanceof Error ? err.message : String(err) }));

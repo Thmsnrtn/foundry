@@ -421,6 +421,41 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.code, r.output).toBe(0);
   });
 
+  it('check-reachability fails when the Stripe gateway loses its only importer', () => {
+    // THE REAL DEFECT, PLANTED. integration/stripe-gateway.ts registers four
+    // Stripe tool handlers when it is imported, and for a long time nothing
+    // imported it — so an owner-authorised experiment could not create its
+    // payment link, and every gate reported clean. The single bare
+    // `import '../integration/stripe-gateway.js';` in payment-link.ts is what
+    // holds that door open. Take it away and the gate must say so.
+    const link = resolve(ROOT, 'src/services/venture/payment-link.ts');
+    const original = readFileSync(link, 'utf8');
+    try {
+      writeFileSync(link, original.replace("import '../integration/stripe-gateway.js';", ''));
+      const r = run('check-reachability.mjs');
+      expect(r.code, r.output).toBe(1);
+      expect(r.output).toContain('stripe-gateway');
+      expect(r.output).toMatch(/registers handlers when it is imported/);
+    } finally {
+      writeFileSync(link, original);
+    }
+    // And with it restored the tree is clean again.
+    expect(run('check-reachability.mjs').code).toBe(0);
+  });
+
+  it('check-reachability refuses to let any import-time registrar hide in the baseline', () => {
+    // A module whose purpose is a side effect cannot be dormant debt: if
+    // nothing imports it, what it registers does not exist, and the system
+    // fails in production while every gate reports clean.
+    plant('src/services/_gate_fixture_registrar.ts',
+      j("import { registerToolHandler } from './outbound/gateway.js';\n",
+        "registerToolHandler('gate_fixture_tool', async () => ({ ok: true }), {});\n"));
+    const r = run('check-reachability.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_registrar');
+    expect(r.output).toMatch(/registers handlers when it is imported/);
+  });
+
   it('check-migration-order fails on a number that already exists', () => {
     // The case that reorders production: a fresh database applies this in
     // lexical position, an existing one applies it last. No other test in the

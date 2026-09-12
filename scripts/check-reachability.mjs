@@ -99,7 +99,13 @@ function importsOf(file) {
   source = stripComments(source, { lineComments: false })
     .split('\n').map((l) => (/^\s*\/\//.test(l) ? '' : l)).join('\n');
   const out = [];
-  const re = /(?:from\s*|import\s*\(\s*)['"](\.[^'"]+)['"]/g;
+  // SIDE-EFFECT IMPORTS ARE EDGES TOO. `import './x.js';` has no `from` and no
+  // parenthesis, and the first version of this pattern could not see one. That
+  // blindness is why `integration/stripe-gateway.ts` — whose entire purpose is
+  // to register Stripe tool handlers when loaded — could be wired to a live
+  // caller and still be reported unreachable. A gate that cannot see the edge
+  // that fixes the problem cannot tell you the problem is fixed.
+  const re = /(?:from\s*|import\s*\(\s*|import\s+)['"](\.[^'"]+)['"]/g;
   let m;
   while ((m = re.exec(source)) !== null) {
     const base = resolve(dirname(file), m[1].replace(/\.js$/, ''));
@@ -142,11 +148,40 @@ if (process.argv.includes('--write')) {
   process.exit(0);
 }
 
+// A MODULE THAT REGISTERS SOMETHING WHEN LOADED MAY NEVER SIT IN THE BASELINE.
+//
+// The baseline exists for modules that are dormant: a benchmark nothing runs, a
+// view nothing renders. Those are debt, and debt can wait. A module whose
+// PURPOSE is a side effect at import time is a different animal — if nothing
+// imports it, the thing it registers does not exist, and the system fails in
+// production while every gate reports clean.
+//
+// That is not hypothetical. `integration/stripe-gateway.ts` sat in this
+// baseline registering four Stripe tool handlers that were never registered,
+// and an owner-authorised experiment could not create its payment link for as
+// long as it sat there. The refusal was correct and invisible.
+//
+// So this class of module cannot be baselined at all. Wire it or delete it.
+const REGISTERS_ON_IMPORT = /\bregister(?:ToolHandler|Job|Capability|Handler)\s*\(/;
+const registrars = tsFiles(SRC)
+  .filter((f) => REGISTERS_ON_IMPORT.test(readFileSync(f, 'utf8')))
+  .map(rel);
+
 let baseline = [];
 try {
   baseline = readFileSync(BASELINE, 'utf8').split('\n').map((l) => l.trim()).filter(Boolean);
 } catch {
   console.error(`Missing baseline ${BASELINE}. Run with --write to create it.`);
+  process.exit(1);
+}
+
+const hidingRegistrars = unreachable.filter((f) => registrars.includes(f));
+if (hidingRegistrars.length) {
+  console.error(
+    'A module that registers handlers when it is imported is unreachable, so\n'
+    + 'nothing it registers exists at runtime. The baseline may not hold these:\n\n'
+    + hidingRegistrars.map((f) => `  ${f}`).join('\n')
+    + '\n\nImport it from a module that runs, or delete it.\n');
   process.exit(1);
 }
 

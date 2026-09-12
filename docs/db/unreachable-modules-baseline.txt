@@ -14,7 +14,6 @@ src/services/institution/responsibility-shadowing-benchmark.ts
 src/services/institution/responsibility-understanding-benchmark.ts
 src/services/institution/support-drafting-benchmark.ts
 src/services/institution/support-pilot-readiness.ts
-src/services/integration/stripe-gateway.ts
 src/services/integrations/stripe-sync.ts
 src/services/intelligence/benchmarks.ts
 src/services/intelligence/shippability.ts
