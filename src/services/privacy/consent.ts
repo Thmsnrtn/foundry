@@ -961,6 +961,11 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
       + 'provider reports against',
     onAccountErasure: { op: 'delete' },
   },
+  experiment_run_state: {
+    reason: 'whether one person\'s experiment is progressing or stopped, and on what — '
+      + 'a live reading of his test, replaced each pass rather than accumulated',
+    onAccountErasure: { op: 'delete' },
+  },
   // CHILD BEFORE PARENT: a correction names the recipient it corrected.
   recipient_stratum_corrections: {
     reason: 'the record of a stratum this institution wrote wrongly on one person\'s test and then '
