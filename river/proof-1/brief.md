@@ -2,6 +2,8 @@
 
 **Pulled:** September 10, 2026, from the COMMBUYS open solicitations · **Covers:** bid notices open for bidding on that date, with an opening date still ahead, that look relevant to cabinetmaking, casework, countertops, carpentry or architectural millwork.
 
+**Re-checked September 12, 2026, immediately before this edition was sent.** Every notice below was opened again on COMMBUYS that morning: all twenty-three were still open for bidding, none had been cancelled, and not one opening date, description or contact had changed. The day's export was also compared against the pull: seventeen notices had appeared since and nineteen were read in full, none of them millwork, casework, cabinetry or carpentry work. This is still the September 10 edition — it was verified, not rebuilt.
+
 ## What this is, and what it is not
 
 This is a shortlist, not a database. Every item below links to the public notice on COMMBUYS, the Commonwealth of Massachusetts procurement record. Dates, agencies and contacts are copied from those notices; nothing here is estimated.
