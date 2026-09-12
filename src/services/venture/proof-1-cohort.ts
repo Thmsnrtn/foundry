@@ -410,8 +410,11 @@ export async function applyProof1Cohort(founderId: string): Promise<{
   addressed: string[];
   excluded: Array<{ who: string; entity: string; matched: string }>;
   notFound: string[];
-  /** In the cohort, with an address, but an older row without one stands in its place. */
-  shadowed: Array<{ who: string; has: string }>;
+  /**
+   * In the cohort, but an older row stands in its place — holding no address at
+   * all (`instead: null`) or a different one from the address the cohort chose.
+   */
+  shadowed: Array<{ who: string; has: string; instead: string | null }>;
   /** Already carries a stratum, and not the one this cohort says. Never silently overwritten. */
   disagreed: Array<{ who: string; recorded: string; expected: string }>;
 }> {
@@ -438,7 +441,7 @@ export async function applyProof1Cohort(founderId: string): Promise<{
   const rows = await recipientsOf(experimentId);
   const qualified: string[] = []; const alreadyQualified: string[] = [];
   const addressed: string[] = []; const notFound: string[] = [];
-  const shadowed: Array<{ who: string; has: string }> = [];
+  const shadowed: Array<{ who: string; has: string; instead: string | null }> = [];
   const disagreed: Array<{ who: string; recorded: string; expected: string }> = [];
   for (const m of PROOF1_COHORT) {
     if (excluded.some((x) => x.who === m.counterpartyRef.trim())) continue;
@@ -463,7 +466,19 @@ export async function applyProof1Cohort(founderId: string): Promise<{
     // silently qualified-and-unreachable once, which looked like a cohort of
     // twenty-one and behaved like nineteen.
     if (!r.email || r.channel !== 'email') {
-      shadowed.push({ who: m.counterpartyRef, has: m.email });
+      shadowed.push({ who: m.counterpartyRef, has: m.email, instead: null });
+      continue;
+    }
+    // AND A ROW THAT WOULD BE WRITTEN TO AT A DIFFERENT ADDRESS IS SHADOWED TOO.
+    //
+    // The first version of this check only looked for a MISSING address, and a
+    // business slipped through with an older one: the cohort named its
+    // estimating mailbox and recorded `role` as the kind, while the row still
+    // held the general inbox an earlier pass had found. The record would have
+    // claimed a channel fact that was not true of the message actually sent —
+    // which is the one thing the contact kind exists to prevent.
+    if (r.email.trim().toLowerCase() !== m.email.trim().toLowerCase()) {
+      shadowed.push({ who: m.counterpartyRef, has: m.email, instead: r.email });
       continue;
     }
     try {

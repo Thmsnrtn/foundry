@@ -139,4 +139,20 @@ describe('a business is only sealed when the row says so', () => {
     expect(all[0].email, 'the institution wrote an address onto an existing recipient').toBeNull();
     expect(all[0].channel).toBe('web_form');
   });
+
+  it('also leaves a DIFFERENT existing address alone, which is the harder case to notice', async () => {
+    // THE ONE THAT GOT THROUGH. The first shadowing check looked only for a
+    // missing address, so a business kept the general inbox an earlier pass had
+    // found while the cohort named its estimating mailbox and recorded `role`
+    // as the kind. The row would then claim a channel fact that was not true of
+    // the message actually sent — the single thing contact_kind exists for.
+    const { addRecipients, recipientsOf } = await import('../../src/services/venture/hand.js');
+    await addRecipients({ founderId: OWNER, experimentId: X,
+      recipients: [{ counterpartyRef: 'E Shop, Fall River', email: 'info@e.example', channel: 'email', sourceUrl: 'https://e2.example/' }] });
+    await addRecipients({ founderId: OWNER, experimentId: X,
+      recipients: [{ counterpartyRef: 'E Shop, Fall River', email: 'estimating@e.example', channel: 'email', sourceUrl: 'https://e2.example/' }] });
+    const all = (await recipientsOf(X)).filter((x) => x.counterpartyRef === 'E Shop, Fall River');
+    expect(all, 'one business, one row').toHaveLength(1);
+    expect(all[0].email, 'the older address was silently replaced').toBe('info@e.example');
+  });
 });
