@@ -64,16 +64,21 @@ const CLASSIFICATION: Record<string, { status: string; why: string }> = {
   // an inventory whose entries differ only in a justification that turned out to
   // be false was telling itself a story about an event pipeline it does not
   // have.
+  //
+  // THREE OF THE TWELVE ARE NO LONGER ON DISK. `compass`, `prism` and `scribe`
+  // were classified here on the reason below and have been deleted: each was
+  // reachable only through the Commercial Foundry surface, and each read a
+  // table — `company_okrs`, `beta_intake`, `agent_wiki_entries` — left with no
+  // writer when the seventy-two routes went. A classification for a module that
+  // does not exist is what the phantom check below refuses, so the entries went
+  // with the files.
   atlas: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
   beacon: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
-  compass: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
   forge: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
   harbor: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
   ledger: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
   oracle: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
-  prism: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
   sentinel: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
-  scribe: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
   shield: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
   crucible: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
 

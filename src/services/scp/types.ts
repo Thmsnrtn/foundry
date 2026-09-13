@@ -18,13 +18,25 @@ export type SCPStatus = 'provisioning' | 'active' | 'paused' | 'archived';
 
 // ─── Agent Identity ───────────────────────────────────────────────────────────
 
-/** The 12 canonical agents in every SCP instance. */
+/**
+ * The nine canonical agents in every SCP instance.
+ *
+ * IT WAS TWELVE, AND THREE OF THEM COULD NOT BE LOADED.
+ *
+ * `compass`, `prism` and `scribe` were deleted: each was the sole reader of a
+ * table (`company_okrs`, `beta_intake`, `agent_wiki_entries`) that nothing had
+ * been able to write since the commercial routes went. Leaving their names
+ * here would have been worse than untidy. `isLoadableAgentName` below is the
+ * closed vocabulary three dynamic `import()` loaders narrow through, and one
+ * of those names arrives from an `agent_instances` ROW — so a stored row
+ * naming a deleted agent would have passed the vocabulary check and then
+ * imported a module that is not on disk, at runtime, in production.
+ *
+ * A vocabulary that admits a name with no implementation is not a guard.
+ */
 export type AgentName =
   | 'atlas'     // CTO — code quality, architecture, technical debt, security
-  | 'compass'   // PM — product roadmap, feature prioritization, lifecycle management
-  | 'prism'     // UX — user experience, onboarding, friction identification
   | 'beacon'    // CMO — marketing, acquisition, brand, positioning experiments
-  | 'scribe'    // Content — blog posts, docs, case studies, SEO content
   | 'forge'     // Revenue — pricing, conversion, sales enablement, expansion
   | 'harbor'    // CS — customer success, retention, health monitoring, outreach
   | 'sentinel'  // DevOps — infrastructure monitoring, deployment health, uptime
@@ -33,13 +45,10 @@ export type AgentName =
   | 'oracle'    // Analytics — data interpretation, stressor identification, trends
   | 'crucible'; // QA — test coverage, regression prevention, quality gates
 
-/** The 12 agent display names matching the design spec. */
+/** The nine agent display names matching the design spec. */
 export const AGENT_DISPLAY_NAMES: Record<AgentName, string> = {
   atlas:    'Atlas',
-  compass:  'Compass',
-  prism:    'Prism',
   beacon:   'Beacon',
-  scribe:   'Scribe',
   forge:    'Forge',
   harbor:   'Harbor',
   sentinel: 'Sentinel',
@@ -52,10 +61,7 @@ export const AGENT_DISPLAY_NAMES: Record<AgentName, string> = {
 /** Agent role titles. */
 export const AGENT_ROLES: Record<AgentName, string> = {
   atlas:    'CTO',
-  compass:  'Product Manager',
-  prism:    'UX Lead',
   beacon:   'CMO',
-  scribe:   'Content Director',
   forge:    'Revenue Lead',
   harbor:   'Customer Success',
   sentinel: 'DevOps',
@@ -65,9 +71,9 @@ export const AGENT_ROLES: Record<AgentName, string> = {
   crucible: 'QA Lead',
 };
 
-/** Ordered list of all 12 agents. */
+/** Ordered list of all nine agents. */
 export const ALL_AGENTS: AgentName[] = [
-  'atlas', 'compass', 'prism', 'beacon', 'scribe', 'forge',
+  'atlas', 'beacon', 'forge',
   'harbor', 'sentinel', 'ledger', 'shield', 'oracle', 'crucible',
 ];
 
@@ -102,10 +108,7 @@ export type AgentAuthorityLevel = 0 | 1 | 2;
 /** Default authority levels (conservative — trust is earned via evolution). */
 export const DEFAULT_AUTHORITY_LEVELS: Record<AgentName, AgentAuthorityLevel> = {
   atlas:    2, // Code changes always need approval
-  compass:  2, // Roadmap decisions need approval
-  prism:    2, // UX experiments need approval
   beacon:   2, // Marketing spend needs approval
-  scribe:   1, // Content drafts: notify + override window
   forge:    2, // Pricing changes need approval
   harbor:   1, // Retention emails: notify + override window
   sentinel: 1, // Infrastructure changes: notify + override
@@ -118,10 +121,7 @@ export const DEFAULT_AUTHORITY_LEVELS: Record<AgentName, AgentAuthorityLevel> = 
 /** Default activation cadence (hours between agent runs). */
 export const DEFAULT_CADENCE_HOURS: Record<AgentName, number> = {
   atlas:    24,
-  compass:  48,
-  prism:    48,
   beacon:   24,
-  scribe:   168, // Weekly
   forge:    24,
   harbor:   12,  // Twice daily for CS
   sentinel: 6,   // Every 6 hours
@@ -141,9 +141,6 @@ export const AGENT_HEALTH_WEIGHTS: Record<AgentName, number> = {
   forge:    0.10, // Revenue operations
   sentinel: 0.05, // Infrastructure reliability
   crucible: 0.05, // Quality assurance
-  compass:  0.00, // PM — qualitative, not scored
-  prism:    0.00, // UX — qualitative
-  scribe:   0.00, // Content — qualitative
   shield:   0.00, // Legal — qualitative
 };
 

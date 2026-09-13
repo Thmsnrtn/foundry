@@ -71,14 +71,6 @@ const MILESTONE_DEFINITIONS: Record<string, MilestoneDefinition> = {
       return ((r.rows[0] as Record<string, number>).c ?? 0) > 0;
     },
   },
-  first_beta_user: {
-    title: 'First Beta Intake Submitted',
-    description: 'Someone is waiting to use what you built.',
-    check: async (productId: string) => {
-      const r = await query('SELECT COUNT(*) as c FROM beta_intake WHERE product_id = ?', [productId]);
-      return ((r.rows[0] as Record<string, number>).c ?? 0) > 0;
-    },
-  },
   score_up_one_point: {
     title: 'Audit Score Improved 1+ Point',
     description: 'Measurable, documented progress. The methodology is working.',

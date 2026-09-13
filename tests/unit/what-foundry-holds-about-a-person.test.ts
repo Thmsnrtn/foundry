@@ -13,8 +13,8 @@ import {
 // A PERSON COULD BE ERASED AND COULD NOT ASK WHAT WAS HELD.
 //
 // Every export on the privacy page answered for a COMPANY. `FOUNDER_SCOPED`
-// names twelve tables that are the PERSON'S rather than any company's — their
-// voice, their devices, their peer profile, their referral history — and
+// names the tables that are the PERSON'S rather than any company's — their
+// voice, their portfolio credentials, their peer profile — and
 // `PERSON_ACROSS_COMPANIES` names their own activity inside companies they do
 // not own. Both maps existed only so an erasure could clear them; nothing read
 // either to answer "what do you have about me?"
@@ -37,35 +37,46 @@ beforeAll(async () => {
       [id, `clerk_${id}`, email, `Name ${id}`]);
   }
   // A table that is the person's, not any company's.
-  await query(
-    `INSERT INTO push_subscriptions (id, founder_id, endpoint, apns_device_token, platform)
-     VALUES ('wfh_ps', ?, 'https://push.example/abc', 'a-real-device-token', 'ios')`, [ME]);
-  await query(
-    `INSERT INTO push_subscriptions (id, founder_id, endpoint, apns_device_token, platform)
-     VALUES ('wfh_ps2', ?, 'https://push.example/zzz', 'another-token', 'ios')`, [SOMEBODY_ELSE]);
+  //
+  // THE SUBJECT MOVED; THE PROPERTY DID NOT. This was `push_subscriptions` —
+  // their devices — which had every shape this file needs: founder-scoped, and
+  // carrying a credential beside a visible identifier. The device-registration
+  // route was the only thing that could ever write it and went with the
+  // commercial product, so the table was dropped. `ecosystem_principals` is the
+  // same shape: a portfolio credential THIS PERSON issued, keyed on
+  // `created_by`, with `key_hash` beside a label they chose.
+  for (const [id, label, who] of [
+    ['wfh_ep', 'my-own-principal', ME],
+    ['wfh_ep2', 'somebody-elses-principal', SOMEBODY_ELSE],
+  ]) {
+    await query(
+      `INSERT INTO ecosystem_principals (id, label, key_hash, key_prefix, created_by, expires_at)
+       VALUES (?, ?, ?, ?, ?, datetime('now', '+30 days'))`,
+      [id, label, `hash-of-${id}`, `fp_${id}`, who]);
+  }
 });
 
 describe('a person asking what Foundry holds about them', () => {
   it('receives their own rows', async () => {
     const out = await exportFounderData(ME);
     expect(out.founders, 'the account row is theirs').toHaveLength(1);
-    expect(out.push_subscriptions).toHaveLength(1);
-    expect(JSON.stringify(out.push_subscriptions)).toContain('push.example/abc');
+    expect(out.ecosystem_principals).toHaveLength(1);
+    expect(JSON.stringify(out.ecosystem_principals)).toContain('my-own-principal');
   });
 
   it('receives nobody else’s', async () => {
     const out = await exportFounderData(ME);
-    expect(JSON.stringify(out)).not.toContain('push.example/zzz');
+    expect(JSON.stringify(out)).not.toContain('somebody-elses-principal');
     expect(JSON.stringify(out)).not.toContain('other@example.com');
   });
 
   it('is told a credential exists without being handed it', async () => {
     const out = await exportFounderData(ME);
-    const [row] = out.push_subscriptions as Array<Record<string, unknown>>;
-    expect(row.apns_device_token, 'a subject access request is not a key extraction')
+    const [row] = out.ecosystem_principals as Array<Record<string, unknown>>;
+    expect(row.key_hash, 'a subject access request is not a key extraction')
       .toBe('[redacted]');
-    expect(row.endpoint, 'and the row still shows that the device exists')
-      .toContain('push.example/abc');
+    expect(row.label, 'and the row still shows that the credential exists')
+      .toBe('my-own-principal');
   });
 });
 

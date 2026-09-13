@@ -25,7 +25,6 @@ call_transcripts.key_topics_json
 call_transcripts.processed_at
 causal_chains.effect_entity_id
 causal_chains.root_cause_entity_id
-cofounder_alignment_scores.score_date
 communication_budgets.last_sent_at
 company_observation_channels.evidence_signal_id
 competitors.incumbent_response_probability

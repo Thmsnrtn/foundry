@@ -129,13 +129,6 @@ export interface DeliverableEvent {
 export interface DeliveryResult {
   channel: Channel;
   delivered: boolean;
-  /**
-   * Whether a push actually left for the provider. `delivered` says a record
-   * the founder can find exists; this says their phone was reached. They are
-   * different facts and were the same field, which is how the policy's top rung
-   * came to mean nothing.
-   */
-  pushed?: boolean;
 }
 
 /** Route one detected event through the policy. `productId` anchors the
@@ -166,39 +159,22 @@ export async function deliver(
       // founder produced exactly the same effect as deciding it did not, and
       // the Attention Law's most urgent channel was decoration.
       //
-      // The push capability itself was built — the owner asked for it
-      // explicitly, through the gateway, with the kill switch, the entitlement
-      // pause, dedup and audit. It had one caller. This is the second.
+      // AND THEN THE PUSH CAPABILITY WENT THE SAME WAY.
       //
-      // The notification row is still written, because a push is a nudge and
-      // the record is the record: a founder who missed the buzz must still find
-      // it in the app. `delivered` therefore still means "a record exists",
-      // and whether the phone was actually reached is its own field rather
-      // than folded into that one.
+      // It was built properly — gateway, kill switch, entitlement pause, dedup,
+      // audit — and it looked up the founder's devices in `push_subscriptions`.
+      // The only thing that could ever have registered a device was the route
+      // deleted with the commercial product, so that lookup returned nothing on
+      // every call from the day it shipped. Wrapping a guaranteed-empty result
+      // in a try/catch and reporting `pushed: false` is not a degraded push, it
+      // is a decoration with a status field.
+      //
+      // The notification row was always the real delivery and still is: a
+      // founder who missed a buzz that never existed still finds the record in
+      // the app. So `delivered` keeps its meaning, and the field that reported
+      // on a phone nothing could reach is gone rather than permanently false.
       await createNotification(founderId, productId, 'system', event.title, event.body, event.actionUrl, event.actionLabel);
-      let pushed = false;
-      try {
-        const { notifyFounder } = await import('../notifications/push.js');
-        // `daily_briefing` rather than a new type: the type names a real
-        // preference COLUMN on `push_subscriptions`, so inventing one here
-        // would mean a migration and a preference the founder never chose.
-        const result = await notifyFounder({
-          productId, founderId, notificationType: 'daily_briefing',
-          payload: {
-            title: event.title, body: event.body,
-            // The action lives in `data`, which is where the payload carries
-            // anything that is not the two lines the phone shows.
-            ...(event.actionUrl ? { data: { url: event.actionUrl } } : {}),
-          },
-        });
-        pushed = result.sent > 0;
-      } catch (error) {
-        // A push that could not be sent must never cost the founder the record.
-        log.warn('interruption push failed', {
-          founderId, productId, error: error instanceof Error ? error.message : String(error),
-        });
-      }
-      return { channel, delivered: true, pushed };
+      return { channel, delivered: true };
     }
     case 'notification':
       await createNotification(founderId, productId, 'system', event.title, event.body, event.actionUrl, event.actionLabel);

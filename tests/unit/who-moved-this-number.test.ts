@@ -50,21 +50,20 @@ describe('there is no second, stored answer to disagree with', () => {
       .not.toMatch(/scp\/okr\.ts/);
   });
 
-  it('the stored copy of a derived number is gone', async () => {
-    const cols = ((await query('PRAGMA table_info(company_okrs)')).rows as unknown as
-      Array<Record<string, unknown>>).map((c) => String(c.name));
-    expect(cols, 'its only writer was in the unreachable module, so it read 0 forever')
-      .not.toContain('progress_pct');
-  });
-
-  it('and the key result keeps the two values progress is derived from', async () => {
-    // The other half of the same rule: deleting the stored copy is only safe
-    // while the inputs remain. Whatever reads these next computes from these.
-    const cols = ((await query('PRAGMA table_info(key_results)')).rows as unknown as
-      Array<Record<string, unknown>>).map((c) => String(c.name));
-    expect(cols).toContain('start_value');
-    expect(cols).toContain('current_value');
-    expect(cols).toContain('target_value');
-    expect(cols, 'no stored progress here either').not.toContain('progress_pct');
-  });
+  // AND THE TWO COLUMN RATCHETS WENT WITH THEIR TABLES.
+  //
+  // One asserted `company_okrs` no longer carries `progress_pct`, the stored
+  // copy of a derived number; the other asserted `key_results` still carries
+  // `start_value`, `current_value` and `target_value`, because deleting the
+  // stored copy is only safe while the inputs it was derived from remain.
+  //
+  // Migration 309 dropped both tables. The last readers of `company_okrs` were
+  // the Compass agent and the target forecaster, and both were deleted with the
+  // Commercial Foundry surface that was their only reachable caller — leaving
+  // the OKR tables with neither a writer nor a reader. A `PRAGMA table_info` on
+  // a table that does not exist returns no rows, so restating either assertion
+  // here would be a check that passes by describing nothing.
+  //
+  // The ratchet above survives both of them, and is the one that mattered: an
+  // unreachable module holding the rules for a live table may not come back.
 });

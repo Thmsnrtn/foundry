@@ -34,7 +34,6 @@ src/services/intelligence/benchmarks.ts
 src/services/intelligence/business-model.ts
 src/services/intelligence/competitive-v2.ts
 src/services/intelligence/expansion.ts
-src/services/intelligence/marketplace.ts
 src/services/intelligence/peer-signal.ts
 src/services/intelligence/psychology.ts
 src/services/intelligence/shippability.ts
@@ -53,11 +52,9 @@ src/services/scp/exit/acquirer-tracker.ts
 src/services/scp/exit/cap-table.ts
 src/services/scp/exit/ma-readiness.ts
 src/services/scp/exit/term-sheet.ts
-src/services/scp/forecasting/targets.ts
 src/services/scp/founder/decision-tracker.ts
 src/services/scp/investor/board-packet.ts
 src/services/scp/investor/fundraising-readiness.ts
-src/services/scp/investor/investor-update.ts
 src/services/scp/memory/archaeology.ts
 src/services/scp/memory/graph.ts
 src/services/scp/preferences/learner.ts
@@ -65,5 +62,4 @@ src/services/scp/roi/outcome-tracker.ts
 src/services/scp/transparency/run-history.ts
 src/services/truth/engine.ts
 src/services/voice/processor.ts
-src/services/wisdom/cofounder.ts
 src/views/numbers.ts

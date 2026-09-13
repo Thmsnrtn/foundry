@@ -99,7 +99,10 @@ describe('the handlers use it', () => {
       /\$\{GITHUB_API\}\/repos\/\$\{repoSlug\(/,
       /issues\/\$\{pathSegment\(/,
     ]],
-    ['src/services/notifications/push.ts', [/\/3\/device\/\$\{pathSegment\(/]],
+    // `notifications/push.ts` was the third: an APNs device token interpolated
+    // into `/3/device/${…}`. The notifier is gone — `push_subscriptions` had no
+    // writer once the device-registration route went — so there is no such
+    // fetch left to check.
   ];
 
   for (const [rel, patterns] of cases) {
@@ -107,7 +110,7 @@ describe('the handlers use it', () => {
       const source = readFileSync(resolve(__dirname, '../..', rel), 'utf8');
       for (const p of patterns) expect(source).toMatch(p);
       // And no unchecked interpolation is left in a fetch target.
-      const rawInterp = source.match(/fetch\(\s*`[^`]*\$\{(?!pathSegment|repoSlug|[A-Z_]+\}|apnsHost|baseUrl)[^}]*\}[^`]*`/g);
+      const rawInterp = source.match(/fetch\(\s*`[^`]*\$\{(?!pathSegment|repoSlug|[A-Z_]+\}|baseUrl)[^}]*\}[^`]*`/g);
       expect(rawInterp ?? [], `unchecked value in a URL:\n${(rawInterp ?? []).join('\n')}`).toEqual([]);
     });
   }

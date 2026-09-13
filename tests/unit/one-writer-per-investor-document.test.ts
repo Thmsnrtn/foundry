@@ -7,6 +7,10 @@
 // every section empty. Nothing raised: each half worked perfectly on its own
 // rows and reported the other's as a quiet quarter.
 //
+// `investor_updates` has since been dropped outright — both of its writers are
+// gone, the canonical one last — so what remains here is the board packet and
+// the rule it is still held to.
+//
 // The SCP surface is canonical because the navigation points at it — "Investor
 // Board" in the sidebar, "Investor Hub" in the tab bar — and at `/investors`
 // from nowhere. One is the product; the other is the projection left behind.
@@ -52,7 +56,14 @@ beforeAll(async () => {
 });
 
 describe('an investor document has exactly one source', () => {
-  for (const table of ['board_packets', 'investor_updates']) {
+  // `investor_updates` was the second table checked here, on the same rule.
+  // Both of its writers are gone: the `/investors` projection went with the
+  // Commercial Foundry surface, and `scp/investor/investor-update.ts` — the
+  // canonical one this test chose — had no caller left afterwards, so the
+  // module and the table were removed. "Exactly one writer" is not a statement
+  // that can be made about a table that no longer exists, and the rule is
+  // unchanged for the document that does.
+  for (const table of ['board_packets']) {
     it(`${table} is written in one place`, () => {
       const writers = writersOf(table);
       expect(writers, `${table} has ${writers.length} writers: ${writers.join(', ')}`)
@@ -86,9 +97,19 @@ describe('the rows the retired writers left behind are readable', () => {
     // Re-run the backfill exactly as the migration states it, split by the
     // same function the migrator uses — a test that hand-rolls its own SQL
     // splitter is testing its own splitter.
+    //
+    // The migration's other two statements carried `investor_updates` forward
+    // and are skipped by name, because that table was dropped by migration 309
+    // and replaying them here raises `no such table` before the packet is ever
+    // checked. The board-packet statement is replayed verbatim, which is the
+    // part this case is about.
     const migration = readFileSync(
       'src/db/migrations/164_one_writer_per_investor_document.sql', 'utf8');
-    for (const stmt of splitSqlStatements(migration)) await query(stmt);
+    const packetStatements = splitSqlStatements(migration)
+      .filter((stmt) => /\bboard_packets\b/.test(stmt));
+    expect(packetStatements, 'the board-packet backfill is no longer in this migration')
+      .toHaveLength(1);
+    for (const stmt of packetStatements) await query(stmt);
 
     const row = (await query(`SELECT narrative_json FROM board_packets WHERE id='ow_legacy'`))
       .rows[0] as Record<string, unknown>;
@@ -103,20 +124,8 @@ describe('the rows the retired writers left behind are readable', () => {
     expect(parsed.wins, 'prose must not be invented into structured wins').toEqual([]);
   });
 
-  it('gives an API-created investor update the month every reader keys on', async () => {
-    await query(
-      `INSERT INTO investor_updates (id, product_id, owner_id, period, subject, content, status)
-       VALUES ('ow_upd','ow_p','ow_f','2024-03','Subject','The update body.','draft')`);
-    await query(`UPDATE investor_updates SET month = period WHERE month IS NULL AND period IS NOT NULL`);
-    await query(
-      `UPDATE investor_updates SET draft_text = content
-        WHERE COALESCE(draft_text,'') = '' AND COALESCE(content,'') <> ''`);
-
-    const row = (await query(
-      `SELECT month, draft_text FROM investor_updates WHERE id='ow_upd'`))
-      .rows[0] as Record<string, unknown>;
-    expect(row.month, 'without this the dashboard cannot see it or dedup against it')
-      .toBe('2024-03');
-    expect(row.draft_text).toBe('The update body.');
-  });
+  // The investor-update half of the same backfill — giving an API-created row
+  // the `month` every reader keys on — went with `investor_updates` itself in
+  // migration 309. The legacy rows it carried forward are gone with the table,
+  // and the board packet above is the whole of what is left to carry.
 });

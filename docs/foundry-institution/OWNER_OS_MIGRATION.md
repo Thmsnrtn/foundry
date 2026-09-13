@@ -529,3 +529,196 @@ commercial product, and they belong with the forty-eight orphaned services in
 one pass.** Dropping a column is a migration against a production database
 holding a live experiment, which is not a thing to do in the same breath as
 deleting a route file.
+
+---
+
+## The data-side ghosts, dropped
+
+The section above ends by saying the data-side ghosts "belong with the
+forty-eight orphaned services in one pass." Running the gates after the route
+deletion made the first part of that pass compulsory rather than optional:
+`check-writerless-tables` went red on **eight tables read by live code and
+written by nothing**. Their only writers had been among the 72 deleted routes.
+
+The gate's own words are the standard applied here:
+
+> Either give it a writer, or remove the half that reads it. A surface showing
+> permanent emptiness is worse than an absent one — an integrator builds
+> against it, and a founder believes it.
+
+### What the reading halves were actually doing
+
+Nine modules read those eight tables. Seven were already unreachable from
+production. The other two, and one live call path, were doing real damage:
+
+- **`ux/milestones.ts`** offered a badge, *First Beta Intake Submitted*, whose
+  check counted rows of `beta_intake`. No founder could ever earn it.
+- **`lifecycle/monitor.ts`** gated phase `prompt_3` on ten processed
+  `beta_intake` rows. That is not a strict threshold, it is a lock: the phase
+  could never open however well a product did. Removing it leaves `prompt_3`
+  gated on `first_cohort_day_30`, which reads a table that is written.
+- **`notifications/push.ts`** looked the founder's devices up in
+  `push_subscriptions`. The only thing that could ever have registered a device
+  was a deleted route, so every call resolved to zero devices. Both callers —
+  `ux/interruption.ts` and `intelligence/risk-state.ts` — wrapped that in a
+  swallowed failure and reported `pushed: false`. `risk-state.ts` was the worse
+  of the two: it read the founder's `max_channel` ceiling and asked `mayPush`
+  whether Foundry was permitted to interrupt this person, all to guard a send
+  that could not happen. Careful governance over an impossible effect is the
+  most expensive kind of nothing — it reads as a kept promise both in the code
+  and on the founder's settings screen.
+
+In every case the in-app record was already written before the push was
+attempted, so removing the push half loses no delivery that was ever occurring.
+
+### Migration 309 — fourteen tables, in two rings
+
+The first ring is the eight the gate named, plus three tables that exist only
+to hang off them (`push_log`, `investor_annotations`, `key_results` — dropped
+children-first so the foreign keys never dangle).
+
+The second ring was **found by re-running the gates, not by guessing**.
+Dropping a table makes its siblings visible: `agent_wiki_entries`,
+`cofounder_alignment_scores`, `investor_updates` and `marketplace_trust_audit`
+were reachable only through the code in the first ring, so deleting it left
+them with neither a reader nor a writer. `check-unreferenced-tables` caught
+all four, and `check-reachability` caught `services/scp/wiki.ts` becoming
+unreachable the moment `scp/agents/scribe.ts` went — the wiki had frozen on
+its first five articles because nothing had been able to add a sixth since the
+route that called it was deleted. The cascade terminated after that ring.
+
+### Nine modules deleted, 3,494 lines
+
+`wisdom/cofounder.ts`, `scp/agents/compass.ts`, `scp/forecasting/targets.ts`,
+`scp/investor/investor-update.ts`, `intelligence/marketplace.ts`,
+`scp/agents/prism.ts`, `scp/agents/scribe.ts`, `notifications/push.ts`,
+`scp/wiki.ts`.
+
+### The ratchets, this time all tightened
+
+Unlike the route deletion, every baseline movement here is a removal:
+
+- `unreachable-modules-baseline`: **four entries removed** — the modules were
+  deleted, not made reachable.
+- `write-only-columns-baseline`: **one entry removed**,
+  `cofounder_alignment_scores.score_date`, whose table is gone.
+- `schema.snapshot.sql`: **232 lines removed, none added.** Verified as a pure
+  deletion before committing, because a snapshot regeneration is exactly where
+  an unnoticed addition would hide.
+- `writerless-tables`, `unread-tables`, `unreferenced-tables`: all now green
+  with **no baseline at all** — these gates are pinned at zero and stayed
+  there.
+
+The erasure graph lost the three rules that named dropped tables
+(`push_subscriptions`, `push_log`, `cofounder_dna_responses`). Its worked
+example in `childTablesOfErasure` had been the genuine three-level chain
+`okr_progress_updates → key_results → company_okrs`, and all three are now
+gone. The comment now states the rule without an example rather than inventing
+one, because a false worked example is worse than none.
+
+### What this pass deliberately did not do
+
+`unreachable-modules-baseline` still lists **78 production-dead modules,
+roughly 20,000 lines** — the rest of the orphaned service estate, of which 49
+are kept alive only by a test that proves a property of code nothing runs.
+That is the next deletion tranche, and it is a file-by-file judgement, not a
+sweep. It was not bundled into this one because this one had to ship: Phases 2
+and 3 and the route deletion were sitting unpushed behind a red gate, and a
+20,000-line deletion is not a rider on an overdue deploy.
+
+### One recorded owner decision this reverses
+
+`CONSEQUENTIAL_EFFECTS.json` carried this line against
+`src/services/notifications/push.ts`:
+
+> It was classified unreachable — registration routes live, no sender anywhere
+> — and the owner chose to wire it rather than remove the surface.
+
+That choice was made on a premise that no longer holds. The reason wiring was
+the better answer then is that the *registration* half was live: a founder
+could register a device, and only the sending half was missing. The device
+registration route was among the 72 deleted with Commercial Foundry, so the
+half the owner was preserving is gone and cannot be reached from his instance.
+Removing the sender now follows the owner's own reasoning rather than
+contradicting it — he wanted the promise kept, and the thing that made it
+keepable is what was deleted. It is recorded here, and reported to him,
+because a decision he made explicitly should not be undone silently.
+
+### One public claim the deletion made false
+
+`truth:audit` caught `All plans include 12 AI agents` on the landing and
+pricing copy. The gate derives that number from the agent roster on disk, and
+deleting `compass.ts`, `prism.ts` and `scribe.ts` took it to nine. The copy and
+the claims list both now say nine, in this commit, as the gate's contract
+requires.
+
+**This is the narrow fix, and the wider question is an owner question.** The
+public landing page still sells Commercial Foundry — plans, tiers, founding
+slots, an agent roster — and the product behind it has been unmounted and
+deleted from his instance. Nine is a true count of files; it is not evidence
+that a customer would get nine working agents, because all nine are in the
+unreachable-modules baseline. Correcting a number was in scope. Deciding what,
+if anything, `/` should offer the public now is not, and is flagged rather than
+answered.
+
+### The one that would have broken production, and the gate that now catches it
+
+The three table gates all agreed `agent_wiki_entries` could be dropped, and all
+three were right about what they measure. They read TypeScript.
+**`reconstruction_claim_guard` is not TypeScript.**
+
+Migration 106's trigger validates an evidence reference by UNIONing one arm per
+evidence kind, and one arm reads `agent_wiki_entries`. SQLite resolves a trigger
+body when the statement that fires it is **prepared**, not when the branch is
+taken — so after migration 309, *every* INSERT into `reconstruction_claims`
+would have failed with
+
+```
+no such table: main.agent_wiki_entries
+```
+
+whether or not the claim cited a wiki entry. `reconstruction_claims` is how the
+institution records what it believes about a company and on what evidence; ten
+modules under `services/institution/` write to it and it is on the live path.
+This would have taken production's reconstruction machinery down at the first
+claim after deploy, with an error naming a table the caller never mentioned.
+
+Migration 310 recreates the guard without the wiki arm and drops `'wiki_entry'`
+from the allowed-kinds vocabulary — an evidence kind whose backing table does
+not exist can only ever ABORT, which is a trap rather than a permission. The
+`ReconstructionEvidenceKind` union in `services/institution/reconstruction.ts`
+is the other half of that vocabulary and was narrowed in the same commit.
+
+**Then the general form of it.** Every trigger and view in the schema was
+checked for the same defect; this was the only one. But "checked once" is not a
+property, so `scripts/check-schema-object-references.mjs` now asserts that every
+table named by a trigger or view is a table the snapshot creates, and runs in
+`lint:columns` beside its siblings.
+
+Two things about that gate are worth recording:
+
+- **Its first version reported 130 tables that do not exist, all false.**
+  `UPDATE OF col ON tbl` is a trigger *header*, so a bare `/UPDATE\s+(\w+)/`
+  reports a table called `OF`; and these trigger bodies carry long English
+  comments in which "on", "from" and "a" appear. It now strips comments and
+  reads the header separately from the body. A gate that cries wolf on the whole
+  schema is one a future reader deletes rather than reads.
+- **It was watched failing on the real defect before being trusted.** The
+  pre-fix snapshot with the `CREATE TABLE agent_wiki_entries` removed — exactly
+  what would have shipped — makes it exit 1 naming `reconstruction_claim_guard`.
+  `check-gates-are-tested` then required the two cases now in
+  `gates-fail-when-they-should`: one that it fires, one that it does not fire on
+  a well-formed `UPDATE OF … ON …` header.
+
+### The agent registry, twelve to nine
+
+`compass`, `prism` and `scribe` were not only modules. `ALL_AGENTS` in
+`services/scp/types.ts` is the closed vocabulary that three dynamic `import()`
+loaders narrow through, and one of those names arrives from an `agent_instances`
+ROW. Leaving the three in the vocabulary would have meant a stored row naming a
+deleted agent passing the guard and then importing a module that is not on disk,
+at runtime, in production. The union, all five maps keyed by it, and the six
+`EVENT_AGENT_MAP` rows that routed to them were reduced together. Every event
+type still routes to at least one agent; `activation_failure` lost its
+first-listed agent and is now led by `harbor`, which is a change in who looks
+first, not a gap.

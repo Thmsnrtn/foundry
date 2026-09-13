@@ -148,12 +148,16 @@ describe('an investor is not told "none" by a read that failed', () => {
     // investor or a board. The fix is structural — the variable is not
     // pre-loaded with the answer it exists to go and find out — so this reads
     // the initialisers rather than simulating every way a query can fail.
+    //
+    // `investor-update.ts` carried the same initialisers and was the other file
+    // checked here. It went with the Commercial Foundry surface that was its
+    // only caller, so the board packet is now the whole of what leaves the
+    // building — and the rule it is held to is unchanged.
     const NEGATIVE = [
       /let \w+ = '(?:None active\.|No experiments this (?:month|quarter)\.)'/,
       /let \w+ = 'No briefings available[^']*'/,
     ];
     for (const file of [
-      'src/services/scp/investor/investor-update.ts',
       'src/services/scp/investor/board-packet.ts',
     ]) {
       const src = readFileSync(file, 'utf8');
@@ -171,7 +175,6 @@ describe('an investor is not told "none" by a read that failed', () => {
 
   it('says a read failed rather than that there was nothing to read', () => {
     for (const file of [
-      'src/services/scp/investor/investor-update.ts',
       'src/services/scp/investor/board-packet.ts',
     ]) {
       const src = readFileSync(file, 'utf8');

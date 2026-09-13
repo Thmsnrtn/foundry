@@ -106,7 +106,11 @@ const FOUNDRY_CHOSEN: Record<string, string> = {
   // the host, and the zone every mutating handler acts on is resolved from
   // the Workshop's own name rather than from the request.
   'src/services/integration/cloudflare-gateway.ts': 'CF_API constant; every id in a path is checked by pathSegment and the zone is the Workshop\'s own',
-  'src/services/notifications/push.ts': 'the APNs host is chosen by NODE_ENV; the device token in the path is checked by pathSegment',
+  // `src/services/notifications/push.ts` held an exemption here on the same
+  // terms — an APNs host chosen by NODE_ENV, with the device token in the path
+  // checked by `pathSegment`. It is gone, and the entry with it: the list below
+  // refuses to name a module that no longer fetches a dynamic URL, which is the
+  // check that caught this.
   // Newly visible for the same reason the MCP client was: `fullUrl` and
   // `baseUrl` contain the keyword but not as a whole word. Every caller passes
   // a compiled-in https://api.stripe.com/v1/... base; the only dynamic part is

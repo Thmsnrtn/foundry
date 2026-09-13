@@ -55,9 +55,13 @@ import { getSCPBoardSection } from '../../src/services/investor/board_packet.js'
 // data yet" and "parsing error", and each returned `domainHealthScore: 50`
 // outright. Twenty-two literal fifties, which OVERWRITE the score a real run
 // earned, in the column the investor board packet ranks its top three agents by.
+//
+// NINE NOW: `compass` and `prism` were on this list and have been deleted, with
+// the Commercial Foundry surface that was their only reachable caller. The rule
+// is unchanged for every agent that is still here.
 const AGENT_FILES = [
-  'atlas', 'beacon', 'compass', 'crucible', 'forge', 'harbor',
-  'ledger', 'oracle', 'prism', 'sentinel', 'shield',
+  'atlas', 'beacon', 'crucible', 'forge', 'harbor',
+  'ledger', 'oracle', 'sentinel', 'shield',
 ] as const;
 
 beforeAll(async () => {

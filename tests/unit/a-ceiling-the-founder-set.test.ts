@@ -28,7 +28,9 @@ import { beforeAll, beforeEach } from 'vitest';
 // Its comment said the send was "governed like every other outward effect",
 // and that was true and beside the point: THE GATEWAY GOVERNS WHETHER AN EFFECT
 // MAY LEAVE; THE CEILING GOVERNS HOW LOUDLY FOUNDRY MAY INTERRUPT THIS PERSON.
-// Passing the first says nothing about the second.
+// Passing the first says nothing about the second. (That path, and the notifier
+// at the end of it, have since been deleted outright — see the note below the
+// first describe.)
 //
 // Eleven more calls write in-app notifications directly, skipping both the
 // ceiling and the strain quieting. Those are not fixed here: each needs an
@@ -61,52 +63,26 @@ describe('the ceiling is a ceiling', () => {
   });
 });
 
-describe('the path that reached a phone directly', () => {
-  it('asks the ceiling before pushing', () => {
-    const src = stripComments(
-      readFileSync('src/services/intelligence/risk-state.ts', 'utf8'), { lineComments: true });
-    expect(src, 'it called notifyFounder with nothing between').toMatch(/mayPush\(/);
-    // The guard must come BEFORE the send, not after it.
-    const guardAt = src.indexOf('mayPush(');
-    const sendAt = src.indexOf('notifyFounder({');
-    expect(guardAt).toBeGreaterThan(-1);
-    expect(guardAt, 'a check after the send is not a check').toBeLessThan(sendAt);
-  });
-
-  it('keeps the push type the founder actually subscribed to', () => {
-    const src = readFileSync('src/services/intelligence/risk-state.ts', 'utf8');
-    expect(src, "deliver()'s push rung flattens every type to daily_briefing")
-      .toMatch(/notificationType: 'risk_state_change'/);
-  });
-});
-
-describe('every other path to a phone', () => {
-  function pushCallers(): string[] {
-    const out: string[] = [];
-    const walk = (d: string) => {
-      for (const e of readdirSync(d, { withFileTypes: true })) {
-        const p = join(d, e.name);
-        if (e.isDirectory()) walk(p);
-        else if (p.endsWith('.ts') && p !== 'src/services/notifications/push.ts'
-          && /\bnotifyFounder\b/.test(
-            stripComments(readFileSync(p, 'utf8'), { lineComments: true }))) out.push(p);
-      }
-    };
-    walk('src');
-    return out;
-  }
-
-  it('consults the interruption policy', () => {
-    const offenders = pushCallers().filter((f) => {
-      const src = stripComments(readFileSync(f, 'utf8'), { lineComments: true });
-      // `interruption.ts` IS the policy; everyone else must ask it.
-      return f !== 'src/services/ux/interruption.ts'
-        && !/mayPush|decideChannel/.test(src);
-    });
-    expect(offenders, 'a new path to somebody’s phone must ask the ceiling first')
-      .toEqual([]);
-  });
-});
+// THE PATH THAT REACHED A PHONE DIRECTLY NO LONGER REACHES ANYTHING.
+//
+// Two cases here read `intelligence/risk-state.ts` and proved it asked
+// `mayPush` before calling `notifyFounder`, with the guard textually ahead of
+// the send, and that it kept `risk_state_change` rather than letting the front
+// door flatten the type. A third walked all of `src` and required every caller
+// of `notifyFounder` to consult the ceiling.
+//
+// There is no `notifyFounder` anywhere now. `push_subscriptions` — the table
+// the sender looked the founder's devices up in — could only ever have been
+// written by the device-registration route deleted with the commercial
+// product, so the send resolved to zero devices on every call; the notifier and
+// the table went together, and the block in `risk-state.ts` went with them.
+//
+// The three cases are not moved or rewritten, because there is nothing left for
+// them to be about: a walk of `src` for `notifyFounder` now returns an empty
+// list on every run, and a gate that cannot fail is not a gate. The ceiling
+// itself is unchanged and is proved above and below — `decideChannel` still
+// bounds every rung including `push`, and `deliver` still records what it
+// quiets.
 
 describe('the quiet rungs leave a record — behaviourally', () => {
   beforeAll(async () => { await runMigrations(); });

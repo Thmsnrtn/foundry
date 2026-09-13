@@ -71,12 +71,19 @@ describe('the orphan readiness table is gone', () => {
     expect(writers, `still written by ${writers.join(', ')}`).toEqual([]);
   });
 
-  it('but the two readiness assessments that answer different questions both survive', async () => {
+  it('but the readiness assessment that still has a reader survives', async () => {
     // Guard against the over-correction. `fundraising_scores` scores readiness
-    // for a NAMED ROUND; `funding_readiness` answers whether the company is
-    // ready to raise at all. Both have readers. Collapsing them because their
-    // names rhyme would destroy a distinction, not remove a duplication.
-    for (const t of ['fundraising_scores', 'funding_readiness']) {
+    // for a NAMED ROUND, and `assessFundraisingReadiness` still writes and
+    // reads it. Collapsing it into a neighbour because their names rhyme would
+    // destroy a distinction rather than remove a duplication.
+    //
+    // `funding_readiness` was the other half of that pair — "is the company
+    // ready to raise at all" — and was checked here beside it. Its readers were
+    // Commercial Foundry pages; when they went, nothing in TypeScript named it,
+    // and migration 308 dropped it rather than adding the first exception to a
+    // ratchet pinned at zero. The distinction was real while both had readers;
+    // one of them no longer does.
+    for (const t of ['fundraising_scores']) {
       const r = await query(
         `SELECT name FROM sqlite_master WHERE type='table' AND name=?`, [t]);
       expect(r.rows, `${t} should still exist`).toHaveLength(1);

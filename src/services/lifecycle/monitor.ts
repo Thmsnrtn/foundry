@@ -30,15 +30,13 @@ export interface ConditionDef {
 }
 
 export const ACTIVATION_CONDITIONS: ConditionDef[] = [
-  // Prompt 3: 10+ beta intakes AND first cohort at day 30
-  {
-    prompt: 'prompt_3', name: 'beta_intake_count',
-    evaluate: async (pid) => {
-      const r = await query('SELECT COUNT(*) as c FROM beta_intake WHERE product_id = ? AND processed = 1', [pid]);
-      const count = (r.rows[0] as Record<string, number>)?.c ?? 0;
-      return { met: count >= 10, currentValue: String(count), threshold: '10' };
-    },
-  },
+  // Prompt 3: first cohort at day 30.
+  //
+  // It used to also require ten processed rows of `beta_intake`. Nothing has
+  // been able to write that table since the intake route was deleted, so the
+  // condition was not a threshold, it was a lock: prompt_3 could never open
+  // however well the product did. A gate that cannot be passed is not a
+  // stricter gate, it is a broken one, so it went with its table.
   {
     prompt: 'prompt_3', name: 'first_cohort_day_30',
     evaluate: async (pid) => {

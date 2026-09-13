@@ -19,22 +19,26 @@ import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 //
 // Prism was four jobs at once: rostered as UX, headed CFO, returning 'CFO' from
 // getRole() as Ledger also did, prompted as Chief Product Officer, and required
-// to answer in runway and burn. What is fixed here is every part that made a
-// claim; whether the file should be product-shaped throughout is recorded as a
-// design question, not answered by a test.
+// to answer in runway and burn. What was fixed here was every part that made a
+// claim; whether the file should be product-shaped throughout was recorded as a
+// design question rather than answered by a test — and the file has since been
+// deleted, which answers it a third way. See the note in the describe below.
 // =============================================================================
 
 const read = (f: string) => stripComments(
   readFileSync(resolve(import.meta.dirname, `../../src/services/scp/agents/${f}`), 'utf8'));
 
 describe('an agent does not alert on a domain it cannot see', () => {
-  it('prism neither asks for nor emits budget alerts', () => {
-    const src = read('prism.ts');
-    expect(src.includes('budget_alerts'),
-      'the field only gave the model somewhere to put an invention').toBe(false);
-    expect(src.includes("action_type: 'budget_alert'"),
-      'prism has no cost, burn or budget source to ground this').toBe(false);
-  });
+  // TWO CASES HERE READ PRISM, AND PRISM IS GONE. One proved it neither asked
+  // the model for `budget_alerts` nor emitted `action_type: 'budget_alert'`;
+  // the other proved it stopped promising the founder an analysis of unit
+  // economics and runway it had no source for. The agent was reachable only
+  // through the Commercial Foundry surface, and `beta_intake` — one of the
+  // three sources it was asked to answer product questions over — had no
+  // writer left, so the module was deleted.
+  //
+  // The rule survives in the two cases below: the alert belongs to the agent
+  // that has the data for it, and no two agents answer to the same role.
 
   it('ledger still does, and still has the data for it', () => {
     const src = read('ledger.ts');
@@ -44,17 +48,12 @@ describe('an agent does not alert on a domain it cannot see', () => {
   });
 
   it('no two agents answer to the same role', () => {
-    const roles = ['atlas', 'beacon', 'compass', 'crucible', 'forge', 'harbor',
-      'ledger', 'oracle', 'prism', 'scribe', 'sentinel', 'shield']
+    // Compass, Prism and Scribe were on this list and are no longer on disk.
+    const roles = ['atlas', 'beacon', 'crucible', 'forge', 'harbor',
+      'ledger', 'oracle', 'sentinel', 'shield']
       .map((a) => /getRole\(\): string \{ return '([^']+)'/.exec(read(`${a}.ts`))?.[1]);
     expect(roles.every(Boolean), 'every agent declares a role').toBe(true);
     expect(new Set(roles).size,
       `two agents share a role: ${roles.join(', ')}`).toBe(roles.length);
-  });
-
-  it('does not promise the founder an analysis it cannot perform', () => {
-    const src = read('prism.ts');
-    expect(/Prism will analy[sz]e unit economics and runway/.test(src),
-      'its three sources contain no unit economics and no runway').toBe(false);
   });
 });

@@ -35,7 +35,7 @@ function templateDay0(name: string | null): { subject: string; html: string } {
         <p>${greeting}</p>
         <p>Welcome to Foundry. You're set up — here's what happens next:</p>
         <ol>
-          <li><strong>Connect a GitHub repo</strong> if you haven't already. Foundry runs a 10-dimension audit and provisions 12 AI agents per product.</li>
+          <li><strong>Connect a GitHub repo</strong> if you haven't already. Foundry runs a 10-dimension audit and provisions 9 AI agents per product.</li>
           <li><strong>Read your first briefing.</strong> It lands within 30 seconds of your first audit completing. Top of the page: one number that matters this week, one decision to make today.</li>
           <li><strong>Approve or reject one decision</strong> from the queue. The agents earn trust by being right; the queue earns its keep when you act on it.</li>
         </ol>

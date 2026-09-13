@@ -519,10 +519,10 @@ export async function tablesToErase(): Promise<string[]> {
 // as "not company data" was wrong for three quarters of them:
 //
 //   • Eleven are CHILDREN of a table that is erased — chat_messages hangs off
-//     chat_sessions, webhook_deliveries off webhooks, key_results off
-//     company_okrs, and so on down two levels. Their parents were deleted and
+//     chat_sessions, webhook_deliveries off webhooks, experiment_variants off
+//     experiments, and so on down two levels. Their parents were deleted and
 //     they were not, so a founder's chat history, their webhook payloads and
-//     their OKR record all survived an erasure as orphans.
+//     their experiment arms all survived an erasure as orphans.
 //
 //     Worse than surviving: seven of those foreign keys are ON DELETE NO
 //     ACTION, and this database runs with foreign_keys=ON. So on any company
@@ -1084,10 +1084,6 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
     reason: 'the founder\'s own profile in the peer network',
     onAccountErasure: { op: 'delete' },
   },
-  push_subscriptions: {
-    reason: 'the founder\'s devices',
-    onAccountErasure: { op: 'delete' },
-  },
   referral_links: {
     reason: 'the founder\'s referral codes',
     // Their own conversions go with them: `referral_conversions.referral_link_id`
@@ -1232,11 +1228,16 @@ async function childTablesOfErasure(): Promise<TableRelation[]> {
       ORDER BY name`, [])).rows as unknown as Array<Record<string, unknown>>;
 
   const found: TableRelation[] = [];
-  // Erasable-by-descent grows as the walk goes deeper: a row under a key
-  // result reaches a product only through `key_results`, which reaches it
-  // through `company_okrs`. One pass per level, until a pass adds nothing.
-  // (The worked example used to be `okr_progress_updates`, dropped by
-  // migration 308 with the commercial pages that were its only readers.)
+  // Erasable-by-descent grows as the walk goes deeper: a table is reachable
+  // once its PARENT is, so a grandchild only becomes erasable on the pass
+  // after its parent did. One pass per level, until a pass adds nothing.
+  //
+  // The worked example here was `okr_progress_updates` under `key_results`
+  // under `company_okrs` — a genuine three-level chain, and all three tables
+  // are now gone (migrations 308 and 309) with the commercial pages that were
+  // their only readers and writers. The algorithm is unchanged; this comment
+  // names no live chain that deep because the schema no longer has one, and an
+  // invented example is worse than none.
   const reachable = new Set([...withProduct, ...Object.keys(ERASE_BY_NAMED_KEY)]);
   for (const rel of UNDECLARED_PARENTS) {
     if (reachable.has(rel.table) || !reachable.has(rel.parent)) continue;
@@ -1575,7 +1576,6 @@ const PERSON_ACROSS_COMPANIES: Record<string, PersonInOthersCompany> = {
   // and how loudly. It is addressed to them and it goes with them.
   quieted_events: { op: 'delete', columns: ['founder_id'], reason: 'what Foundry chose not to interrupt them for' },
   notification_preferences: { op: 'delete', columns: ['founder_id'], reason: 'how they wanted to be reached' },
-  push_log: { op: 'delete', columns: ['founder_id'], reason: 'what was pushed to their devices' },
   onboarding_checklist: { op: 'delete', columns: ['founder_id'], reason: 'their own onboarding progress' },
   onboarding_sessions: { op: 'delete', columns: ['founder_id'], reason: 'their own onboarding progress' },
   onboarding_tour: { op: 'delete', columns: ['founder_id'], reason: 'their own onboarding progress' },
@@ -1593,7 +1593,6 @@ const PERSON_ACROSS_COMPANIES: Record<string, PersonInOthersCompany> = {
   cloudflare_mutations: { op: 'delete', columns: ['founder_id'], reason: 'what was changed on one person\'s own public infrastructure, and how to put it back' },
   operator_attention: { op: 'delete', columns: ['founder_id'], reason: 'what was competing for their attention' },
   rejection_streaks: { op: 'delete', columns: ['founder_id'], reason: 'a behavioural counter about them' },
-  cofounder_dna_responses: { op: 'delete', columns: ['founder_id'], reason: 'their own questionnaire answers' },
   cofounder_profiles: { op: 'delete', columns: ['founder_id'], reason: 'their own co-founder profile' },
   privacy_consents: { op: 'delete', columns: ['founder_id'], reason: 'consents that can no longer be given or withdrawn' },
   autonomy_consents: { op: 'delete', columns: ['founder_id'], reason: 'authority they granted, which must not outlive them' },

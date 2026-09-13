@@ -98,7 +98,7 @@ landingRoutes.get('/', async (c) => {
       <!-- The 12 agents -->
       <div style="margin-bottom:2.5rem;">
         <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.14em;text-transform:uppercase;color:var(--text-dim);margin-bottom:0.75rem;text-align:center;">Your AI Team</div>
-        <p style="font-size:0.88rem;color:var(--text-dim);max-width:600px;margin:0 auto 1.25rem;text-align:center;line-height:1.5;">Each product gets its own team of 12 AI agents. They observe, recommend, and — once they've earned trust — act inside guardrails you set.</p>
+        <p style="font-size:0.88rem;color:var(--text-dim);max-width:600px;margin:0 auto 1.25rem;text-align:center;line-height:1.5;">Each product gets its own team of 9 AI agents. They observe, recommend, and — once they've earned trust — act inside guardrails you set.</p>
         <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:0.75rem;">
           ${[
             ['Atlas', 'Engineering', 'Code quality · architecture · technical debt'],
@@ -251,7 +251,7 @@ pricingRoutes.get('/pricing', async (c) => {
   return c.html(publicLayout('Pricing — Foundry', html`
     <div style="max-width:960px;margin:0 auto;padding:2rem 1rem;">
       <h1 style="text-align:center;margin-bottom:0.5rem;">Give your product a team.</h1>
-      <p style="text-align:center;color:var(--text-dim);margin-bottom:1.5rem;font-size:0.95rem;">All plans include 12 AI agents, CEO briefings, and the evolution engine.</p>
+      <p style="text-align:center;color:var(--text-dim);margin-bottom:1.5rem;font-size:0.95rem;">All plans include 9 AI agents, CEO briefings, and the evolution engine.</p>
 
       ${foundingSlotsRemaining !== null && foundingSlotsRemaining > 0 ? html`
       <div style="text-align:center;margin-bottom:1.5rem;padding:0.75rem 1.25rem;border-radius:8px;background:rgba(78,204,163,0.06);border:1px solid rgba(78,204,163,0.2);max-width:560px;margin-left:auto;margin-right:auto;">
@@ -275,7 +275,7 @@ pricingRoutes.get('/pricing', async (c) => {
           <div class="pricing-price">${fmt(79)}<span>${period(79)}</span></div>
           <p style="font-size:0.82rem;color:var(--text-dim);margin-bottom:1rem;">One company. Full agent team. For solo founders.</p>
           <ul class="pricing-features">
-            <li>1 company · 12 AI agents</li>
+            <li>1 company · 9 AI agents</li>
             <li>Daily CEO briefing</li>
             <li>Agent evolution — versioned configs and change history</li>
             <li>Signal score + risk state monitoring</li>

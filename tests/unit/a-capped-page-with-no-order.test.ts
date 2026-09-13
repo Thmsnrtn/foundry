@@ -17,7 +17,8 @@ import { query } from '../../src/db/client.js';
 //   redteam/council    handed a red team five arbitrary risks as the company's
 //                      risks.
 //   voice/processor    spoke three arbitrary stressors aloud in a briefing.
-//   agents/compass     gave an agent five arbitrary OKRs.
+//   agents/compass     gave an agent five arbitrary OKRs. (Deleted since, with
+//                      the OKR table it read — see the note in "the sources".)
 //
 // A biased sample nobody knows is a sample is worse than a short list, because
 // the reader has no way to tell it was truncated at all. Each is ordered by
@@ -85,14 +86,17 @@ describe('the five a red team is given', () => {
 });
 
 describe('the sources', () => {
-  it('all four order what they cap', async () => {
+  it('all of them order what they cap', async () => {
     const { readFileSync } = await import('node:fs');
     const { stripComments } = await import('../../scripts/lib/strip-comments.mjs');
     const expectations: Array<[string, RegExp]> = [
       ['src/services/ux/next-action.ts', /severity = 'critical' AND status = 'active'\s*\n\s*ORDER BY identified_at ASC/],
       ['src/services/redteam/council.ts', /status = 'active'\s*\n\s*ORDER BY CASE severity/],
       ['src/services/voice/processor.ts', /status = 'active'\s*\n\s*ORDER BY CASE severity/],
-      ['src/services/scp/agents/compass.ts', /ORDER BY CASE status WHEN 'off_track'/],
+      // The fourth was `scp/agents/compass.ts`, capping five OKRs with no
+      // ORDER BY. Compass and `company_okrs` are both gone — the agent had no
+      // reachable caller once the Commercial Foundry routes went, and the table
+      // had no writer left — so there is no query left to order.
     ];
     for (const [file, pattern] of expectations) {
       // Comments stripped: each of these files explains the defect above the

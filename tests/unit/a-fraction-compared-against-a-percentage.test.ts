@@ -37,8 +37,10 @@ import { ratePoints } from '../../src/services/ai/measured.js';
 // company — the library kept matching on its other criteria and simply never
 // fired on that one.
 //
-// And in the briefings and the investor update, a company churning 2% a month
-// was told, in writing, that its churn was 0.0%.
+// And in the briefings, a company churning 2% a month was told, in writing,
+// that its churn was 0.0%. The investor update said the same thing in the same
+// way and is no longer here to say it — see the note in "what a person is
+// shown" below.
 // =============================================================================
 
 beforeAll(async () => { await runMigrations(); });
@@ -169,13 +171,12 @@ describe('what a person is shown', () => {
     }
   });
 
-  it('does not send an investor update saying 0.0% churn', () => {
-    const src = stripComments(
-      readFileSync('src/services/scp/investor/investor-update.ts', 'utf8'),
-      { lineComments: true });
-    expect(src).toMatch(/Number\(metricsRow\.churn_rate\) \* 100/);
-    expect(src).toMatch(/Number\(metricsRow\.activation_rate\) \* 100/);
-  });
+  // THE INVESTOR UPDATE THAT SAID 0.0% CHURN IS GONE, NOT FIXED TWICE.
+  // `scp/investor/investor-update.ts` read the same two fractions and printed
+  // them unscaled, and it was checked here beside the briefings. Its only
+  // callers were Commercial Foundry routes; when they went it had none, so the
+  // module and `investor_updates` were removed. The rule it was held to is the
+  // one above, and the two live renderers still carry it.
 });
 
 describe('a failure pattern keyed on churn can fire', () => {

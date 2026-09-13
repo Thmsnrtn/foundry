@@ -278,9 +278,14 @@ describe('every gate refuses the defect it exists for', () => {
   });
 
   it('check-check-vocabularies fails on a status the column will not accept', () => {
+    // The fixture used to write to `push_log.status`, one of the three real
+    // defects this gate was built from. That table was dropped with the push
+    // notifier, and the gate reads its vocabularies from the LIVE schema — so a
+    // fixture naming a table that no longer exists would have proved nothing
+    // and passed. `integration_sync_log` is a live table with a closed status.
     plant('src/services/_gate_fixture_d.ts',
       'import { query } from "../db/client.js";\n'
-      + j('export const q = () => query(`UPDATE ', 'push_log SET status',
+      + j('export const q = () => query(`UPDATE ', 'integration_sync_log SET status',
         " = 'zz_not", "_a_status' WHERE id = ?`, []);\n"));
     const r = run('check-check-vocabularies.mjs');
     expect(r.code, r.output).toBe(1);
@@ -308,8 +313,8 @@ describe('every gate refuses the defect it exists for', () => {
     const padding = Array.from({ length: Math.ceil(window / line(0).length) + 50 }, (_, i) => line(i)).join('\n');
     plant('src/services/_gate_fixture_window.ts',
       'import { query } from "../db/client.js";\n'
-      + j('export const q = () => query(`UPDATE ', 'push_log SET status',
-        " = 'sent'\n", padding, '\n      WHERE id = ?`, []);\n'));
+      + j('export const q = () => query(`UPDATE ', 'integration_sync_log SET status',
+        " = 'success'\n", padding, '\n      WHERE id = ?`, []);\n'));
     const r = run('check-check-vocabularies.mjs');
     expect(r.code, r.output).toBe(1);
     expect(r.output).toContain('scan window');
@@ -573,6 +578,53 @@ describe('every gate refuses the defect it exists for', () => {
     const r = run('check-writerless-tables.mjs');
     expect(r.code, r.output).toBe(1);
     expect(r.output).toContain('deal_rooms');
+  });
+
+  it('check-schema-object-references fails on a trigger naming a dropped table', () => {
+    // THE OTHER TABLE GATES READ TYPESCRIPT. A TRIGGER BODY IS NOT TYPESCRIPT.
+    //
+    // Migration 309 dropped `agent_wiki_entries` and all three table gates were
+    // right that it could go: its only reader and writer was deleted in the
+    // same pass. `reconstruction_claim_guard` named it in one arm of a UNION,
+    // and SQLite resolves a trigger body at PREPARE time — so every INSERT into
+    // `reconstruction_claims`, on the live institution path, would have failed
+    // with `no such table: main.agent_wiki_entries` whether or not the claim
+    // cited a wiki entry. The failure lands nowhere near the dropped table.
+    //
+    // The fixture is that exact shape: a trigger on a table that exists,
+    // reading one that does not.
+    plant('docs/db/_gate_fixture_snapshot.sql',
+      j('CREATE TABLE kept_rows (id TEXT PRIMARY KEY, product_id TEXT);\n',
+        'CREATE TRIGGER kept_rows_guard\n',
+        'BEFORE INSERT ON kept_rows\n',
+        'BEGIN\n',
+        "  SELECT RAISE(ABORT,'nope') WHERE NOT EXISTS (\n",
+        '    SELECT 1 FROM ', 'gone_entirely', ' g WHERE g.id = NEW.id\n',
+        '  );\n',
+        'END;\n'));
+    const r = run('check-schema-object-references.mjs', ['docs/db/_gate_fixture_snapshot.sql']);
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('gone_entirely');
+    expect(r.output).toContain('kept_rows_guard');
+  });
+
+  it('check-schema-object-references does not mistake a trigger header for a table', () => {
+    // THE FIRST VERSION OF THIS GATE REPORTED A HUNDRED AND THIRTY TABLES THAT
+    // DO NOT EXIST, and every one was a false positive: `UPDATE OF col ON tbl`
+    // is a trigger HEADER, so a bare /UPDATE\s+(\w+)/ reports a table called
+    // "OF", and these trigger bodies carry English comments in which the words
+    // "on", "from" and "a" appear. A gate that cries wolf on the whole schema
+    // is one a future reader will delete rather than read.
+    plant('docs/db/_gate_fixture_snapshot2.sql',
+      j('CREATE TABLE kept_rows (id TEXT PRIMARY KEY, note TEXT);\n',
+        'CREATE TRIGGER kept_rows_note_guard\n',
+        'AFTER UPDATE OF note ON kept_rows\n',
+        'BEGIN\n',
+        '  -- A note arriving from a person is not a note from a job.\n',
+        "  UPDATE kept_rows SET note = trim(NEW.note) WHERE id = NEW.id;\n",
+        'END;\n'));
+    const r = run('check-schema-object-references.mjs', ['docs/db/_gate_fixture_snapshot2.sql']);
+    expect(r.code, r.output).toBe(0);
   });
 
   it('check-write-only-columns fails on a column written with no reader', () => {

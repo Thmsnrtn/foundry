@@ -35,18 +35,24 @@ import { query } from '../../../db/client.js';
 import { logger } from '../../logger.js';
 import { isLoadableAgentName } from '../types.js';
 
-// Maps event types to the agents best positioned to analyze them
+// Maps event types to the agents best positioned to analyze them.
+//
+// `compass` and `prism` were removed from six of these rows when those agents
+// were deleted. Every row they left still names at least one agent, so no event
+// type became unrouted — which is the thing to check when a name comes out of a
+// routing table. `activation_failure` lost its FIRST-listed agent and is now
+// led by `harbor`; that is a change in who looks at it first, not a gap.
 const EVENT_AGENT_MAP: Record<string, string[]> = {
   churn_detected:           ['harbor', 'forge', 'oracle'],
   expansion_signal:         ['forge', 'harbor'],
-  nps_drop:                 ['harbor', 'prism', 'oracle'],
-  activation_failure:       ['prism', 'harbor', 'atlas'],
-  revenue_milestone:        ['ledger', 'forge', 'compass'],
-  competitor_signal:        ['beacon', 'compass'],
-  support_spike:            ['harbor', 'sentinel', 'prism'],
+  nps_drop:                 ['harbor', 'oracle'],
+  activation_failure:       ['harbor', 'atlas'],
+  revenue_milestone:        ['ledger', 'forge'],
+  competitor_signal:        ['beacon'],
+  support_spike:            ['harbor', 'sentinel'],
   payment_failed:           ['ledger', 'forge'],
   performance_degradation:  ['sentinel', 'atlas'],
-  experiment_result:        ['oracle', 'compass'],
+  experiment_result:        ['oracle'],
 };
 
 // ─── emitSignalEvent ──────────────────────────────────────────────────────────

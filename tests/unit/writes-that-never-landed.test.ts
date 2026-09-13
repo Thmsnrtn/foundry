@@ -10,6 +10,8 @@
 //
 //   board_packets       omitted period_start / period_end
 //   investor_updates    omitted owner_id / period / subject / content
+//                       (the feature and the table are gone — see the note
+//                        where its case used to be)
 //   experiments         omitted hypothesis_id / type / control_description /
 //                       treatment_description / success_metric
 //   voice_sessions      omitted session_date
@@ -97,25 +99,13 @@ describe('a growth experiment is actually created', () => {
   });
 });
 
-describe('an investor update is actually created', () => {
-  it('writes both generations of the same columns', async () => {
-    const { generateInvestorUpdate } = await import(
-      '../../src/services/scp/investor/investor-update.js');
-    const id = await generateInvestorUpdate(P, '2026-03');
-
-    const row = (await query(
-      `SELECT owner_id, period, subject, content, month, draft_text, status
-         FROM investor_updates WHERE id = ?`, [id])).rows[0] as Record<string, unknown>;
-    expect(row, 'the money was spent before the write that raised').toBeTruthy();
-    expect(row.owner_id).toBe(OWNER);
-    expect(row.period).toBe('2026-03');
-    expect(String(row.subject)).toContain('2026-03');
-    // The table carries two names for the same fact because a redefinition was
-    // a no-op. Writing one and not the other would leave half the readers blind.
-    expect(row.content).toBe(row.draft_text);
-    expect(row.month).toBe(row.period);
-  });
-});
+// THE INVESTOR UPDATE CASE IS GONE WITH ITS FEATURE, NOT WITH ITS DEFECT.
+// `investor_updates` was the second of the four, and the case here proved the
+// row landed with both generations of its columns written. The generator was
+// reachable only from the Commercial Foundry routes; when they went it had no
+// caller, so `scp/investor/investor-update.ts` and the table itself were
+// removed. There is no write left to assert landed. The same NOT NULL shape is
+// still proved by the three cases around this note.
 
 describe('a voice session is actually started', () => {
   it('writes the conversation, linked to the chat session it opened', async () => {

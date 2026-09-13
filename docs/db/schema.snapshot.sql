@@ -334,23 +334,6 @@ CREATE TABLE agent_sessions (
   started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   completed_at DATETIME
 );
-CREATE TABLE agent_wiki_entries (
-  id           TEXT PRIMARY KEY,
-  product_id   TEXT NOT NULL,
-  section      TEXT NOT NULL CHECK (section IN (
-                 'customers','product','market','operations','team',
-                 'financial','technical','strategy','other'
-               )),
-  title        TEXT NOT NULL,
-  content      TEXT NOT NULL,
-  tags         TEXT NOT NULL DEFAULT '[]',    -- JSON array of tag strings
-  author       TEXT NOT NULL,                 -- 'founder' or agent name
-  last_editor  TEXT,                          -- updated on each revision
-  version      INTEGER NOT NULL DEFAULT 1,
-  is_pinned    INTEGER NOT NULL DEFAULT 0,    -- 1 = always included in agent context
-  created_at   TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
-, confidence_score REAL DEFAULT 0);
 CREATE TABLE ai_daily_spend (
   scope       TEXT NOT NULL,
   scope_id    TEXT NOT NULL,
@@ -531,20 +514,6 @@ CREATE TABLE benchmark_percentiles (
   p90              REAL,
   sample_count     INTEGER NOT NULL,
   computed_at      TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE TABLE beta_intake (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id),
-  participant_name TEXT,
-  interview_summary TEXT,
-  key_quotes TEXT, -- JSON: array of {quote, theme}
-  activation_outcome TEXT, -- JSON
-  testimonial_text TEXT,
-  testimonial_permitted BOOLEAN DEFAULT FALSE,
-  positioning_feedback TEXT,
-  hypothesis_signals TEXT, -- JSON: {h1: data, h2: data, ...}
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  processed BOOLEAN DEFAULT FALSE
 );
 CREATE TABLE board_decks (
   id TEXT PRIMARY KEY,
@@ -899,37 +868,6 @@ CREATE TABLE cloudflare_mutations (
   invocation_id     TEXT,
   recorded_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE TABLE cofounder_alignment_scores (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  score_date TEXT NOT NULL,
-  overall_alignment REAL,
-  vision_alignment REAL,
-  priority_alignment REAL,
-  risk_alignment REAL,
-  divergence_axis TEXT,
-  recommendations TEXT,
-  created_at TEXT DEFAULT (datetime('now'))
-);
-CREATE TABLE cofounder_dna_responses (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  founder_id TEXT NOT NULL,
-  dna_field TEXT NOT NULL,
-  response TEXT NOT NULL,
-  responded_at TEXT DEFAULT (datetime('now')),
-  UNIQUE(product_id, founder_id, dna_field)
-);
-CREATE TABLE cofounder_gate_agreements (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  decision_category TEXT NOT NULL,
-  gate_level INTEGER NOT NULL,
-  proposer_founder_id TEXT,
-  requires_unanimous INTEGER DEFAULT 0,
-  created_at TEXT DEFAULT (datetime('now')),
-  UNIQUE(product_id, decision_category)
-);
 CREATE TABLE cofounder_profiles (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL,
@@ -1039,17 +977,6 @@ CREATE TABLE company_observation_channels (
   revoked_at         TEXT,
   created_at         TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(product_id, channel_key)
-);
-CREATE TABLE company_okrs (
-  id               TEXT PRIMARY KEY,
-  product_id       TEXT NOT NULL,
-  period           TEXT NOT NULL,          -- e.g. '2024-Q1', '2024-H2'
-  objective_text   TEXT NOT NULL,
-  objective_owner  TEXT NOT NULL DEFAULT 'founder',
-  status           TEXT NOT NULL DEFAULT 'on_track'
-                     CHECK (status IN ('on_track','at_risk','off_track','completed','cancelled')),
-  created_at       TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at       TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE company_senses (
   id                TEXT PRIMARY KEY,
@@ -2422,41 +2349,6 @@ CREATE TABLE introductions (
   feedback_a TEXT,
   feedback_b TEXT
 );
-CREATE TABLE investor_updates (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  owner_id TEXT NOT NULL,
-  period TEXT NOT NULL,
-  subject TEXT NOT NULL,
-  content TEXT NOT NULL,
-  metrics_snapshot TEXT,
-  highlights TEXT,
-  lowlights TEXT,
-  asks TEXT,
-  status TEXT DEFAULT 'draft',
-  sent_at TEXT,
-  recipients TEXT,
-  created_at TEXT DEFAULT (datetime('now'))
-, month TEXT, draft_text TEXT, key_metrics_json TEXT DEFAULT '{}', generated_at TEXT);
-CREATE TABLE investors (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  email TEXT,
-  firm TEXT,
-  relationship TEXT CHECK(relationship IN (
-    'lead_investor', 'angel', 'advisor', 'board_member', 'observer'
-  )),
-  -- Access control
-  access_token TEXT UNIQUE NOT NULL,     -- URL-safe token for live dashboard
-  access_expires_at DATETIME,            -- null = no expiry
-  can_comment BOOLEAN DEFAULT FALSE,     -- can they annotate decisions?
-  notify_on_milestones BOOLEAN DEFAULT TRUE,
-  notify_on_risk_state_change BOOLEAN DEFAULT FALSE,
-  last_viewed_at DATETIME,
-  added_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  status TEXT DEFAULT 'active' CHECK(status IN ('active', 'paused', 'revoked'))
-);
 CREATE TABLE job_health (
   job_name             TEXT PRIMARY KEY,
   last_success_at      TEXT,
@@ -2471,21 +2363,6 @@ CREATE TABLE job_locks (
   locked_by TEXT NOT NULL,
   expires_at DATETIME NOT NULL
 );
-CREATE TABLE key_results (
-  id              TEXT PRIMARY KEY,
-  okr_id          TEXT NOT NULL REFERENCES company_okrs(id),
-  description     TEXT NOT NULL,
-  metric_name     TEXT,                    -- programmatic metric identifier
-  start_value     REAL NOT NULL DEFAULT 0,
-  target_value    REAL NOT NULL,
-  current_value   REAL NOT NULL DEFAULT 0,
-  unit            TEXT,                    -- e.g. '%', '$', 'count', 'days'
-  owner_agent     TEXT,                    -- agent name, or NULL for founder-owned
-  status          TEXT NOT NULL DEFAULT 'on_track'
-                    CHECK (status IN ('on_track','at_risk','off_track','completed')),
-  created_at      TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
-, progress REAL);
 CREATE TABLE legal_surfaces (
   id                 TEXT PRIMARY KEY,
   founder_id         TEXT NOT NULL REFERENCES founders(id),
@@ -2690,41 +2567,6 @@ CREATE TABLE market_unknowns (
   raised_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   answered_at    TEXT,
   answer         TEXT
-);
-CREATE TABLE marketplace_metrics (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  owner_id TEXT NOT NULL,
-  snapshot_date TEXT NOT NULL,
-  supply_count INTEGER,
-  demand_count INTEGER,
-  match_rate REAL,
-  time_to_match_hours REAL,
-  supply_demand_ratio REAL,
-  liquidity_score REAL,
-  disintermediation_risk REAL,
-  supply_churn_rate REAL,
-  demand_churn_rate REAL,
-  take_rate REAL,
-  gmv REAL,
-  net_revenue REAL,
-  avg_transaction_value REAL,
-  geographic_concentration REAL,
-  created_at TEXT DEFAULT (datetime('now'))
-);
-CREATE TABLE marketplace_trust_audit (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  owner_id TEXT NOT NULL,
-  has_ratings INTEGER DEFAULT 0,
-  has_identity_verification INTEGER DEFAULT 0,
-  has_dispute_resolution INTEGER DEFAULT 0,
-  has_payment_escrow INTEGER DEFAULT 0,
-  has_quality_standards INTEGER DEFAULT 0,
-  has_insurance_guarantee INTEGER DEFAULT 0,
-  trust_score REAL,
-  findings TEXT,
-  audited_at TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE mcp_grants (
   id           TEXT PRIMARY KEY,
@@ -3787,53 +3629,6 @@ CREATE TABLE public_workshop (
   created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 , mail_kv_namespace_id TEXT);
-CREATE TABLE "push_log" (
-  id TEXT PRIMARY KEY,
-  founder_id TEXT NOT NULL REFERENCES founders(id),
-  product_id TEXT REFERENCES products(id),
-  subscription_id TEXT REFERENCES push_subscriptions(id),
-  notification_type TEXT NOT NULL,
-  title TEXT NOT NULL,
-  body TEXT NOT NULL,
-  data TEXT,
-  status TEXT CHECK(status IN (
-    'sent', 'delivered', 'failed', 'clicked',
-    -- Never attempted: the platform's credentials are not configured. Not a
-    -- failure, and not a delivery.
-    'not_configured'
-  )),
-  error TEXT,
-  sent_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  delivered_at DATETIME,
-  clicked_at DATETIME
-);
-CREATE TABLE push_subscriptions (
-  id TEXT PRIMARY KEY,
-  founder_id TEXT NOT NULL REFERENCES founders(id),
-  -- Web Push
-  endpoint TEXT UNIQUE,
-  p256dh TEXT,                         -- client public key
-  auth TEXT,                           -- auth secret
-  -- APNs (iOS)
-  apns_device_token TEXT,
-  apns_bundle_id TEXT,
-  -- Shared
-  platform TEXT CHECK(platform IN ('web', 'ios', 'android')),
-  user_agent TEXT,
-  -- Preferences
-  notify_risk_state_change BOOLEAN DEFAULT TRUE,
-  notify_critical_stressor BOOLEAN DEFAULT TRUE,
-  notify_decision_deadline BOOLEAN DEFAULT TRUE,
-  notify_daily_briefing BOOLEAN DEFAULT TRUE,
-  notify_milestone BOOLEAN DEFAULT TRUE,
-  notify_integration_error BOOLEAN DEFAULT TRUE,
-  notify_weekly_digest BOOLEAN DEFAULT FALSE,
-  -- State
-  last_delivered_at DATETIME,
-  failure_count INTEGER DEFAULT 0,
-  active BOOLEAN DEFAULT TRUE,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-, last_active_at DATETIME DEFAULT CURRENT_TIMESTAMP);
 CREATE TABLE quieted_events (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -5311,8 +5106,6 @@ CREATE INDEX idx_benchmark_percentiles_segment
 CREATE UNIQUE INDEX idx_benchmark_percentiles_unique
   ON benchmark_percentiles(lifecycle_state, company_category, metric_name, computed_at);
 CREATE UNIQUE INDEX idx_benchmarks_metric_cohort ON intelligence_benchmarks(metric_name, cohort);
-CREATE INDEX idx_beta_intake_processed ON beta_intake(product_id, processed);
-CREATE INDEX idx_beta_intake_product ON beta_intake(product_id);
 CREATE INDEX idx_bmp_product ON business_model_profile(product_id);
 CREATE INDEX idx_board_decks ON board_decks(product_id);
 CREATE INDEX idx_board_packets_product ON board_packets(product_id, quarter DESC);
@@ -5337,9 +5130,6 @@ CREATE INDEX idx_capability_needs_open ON capability_needs(founder_id) WHERE met
 CREATE UNIQUE INDEX idx_capability_provider_one ON capability_providers(capability_key, provider);
 CREATE UNIQUE INDEX idx_capability_provider_tool ON capability_providers(tool) WHERE tool IS NOT NULL;
 CREATE INDEX idx_causal_chains ON causal_chains(product_id);
-CREATE INDEX idx_cf_alignment_product ON cofounder_alignment_scores(product_id);
-CREATE INDEX idx_cf_dna_product ON cofounder_dna_responses(product_id, founder_id);
-CREATE INDEX idx_cf_gates_product ON cofounder_gate_agreements(product_id);
 CREATE INDEX idx_cf_profiles_product ON cofounder_profiles(product_id);
 CREATE INDEX idx_chat_messages_session ON chat_messages(session_id, created_at);
 CREATE INDEX idx_chat_sessions_founder ON chat_sessions(founder_id);
@@ -5502,10 +5292,6 @@ CREATE INDEX idx_interpretations_founder
 CREATE INDEX idx_interpretations_observation
   ON observation_interpretations(observation_id);
 CREATE INDEX idx_introductions_founders ON introductions(founder_a_id);
-CREATE INDEX idx_investor_updates ON investor_updates(product_id, period);
-CREATE UNIQUE INDEX idx_investor_updates_month ON investor_updates(product_id, month);
-CREATE INDEX idx_investors_product ON investors(product_id, status);
-CREATE INDEX idx_investors_token ON investors(access_token);
 CREATE INDEX idx_job_signals_competitor ON competitor_job_signals(product_id, competitor_name);
 CREATE INDEX idx_job_signals_product ON competitor_job_signals(product_id, detected_at DESC);
 CREATE INDEX idx_journal_entries_product
@@ -5516,7 +5302,6 @@ CREATE UNIQUE INDEX idx_judgment_conflict_identity
 CREATE INDEX idx_judgment_dispositions ON institutional_judgment_dispositions(product_id,judgment_id,created_at);
 CREATE INDEX idx_judgment_evaluations ON institutional_judgment_evaluations(product_id,judgment_id,created_at);
 CREATE INDEX idx_judgment_patterns_product ON founder_judgment_patterns(product_id);
-CREATE INDEX idx_key_results_okr ON key_results(okr_id);
 CREATE UNIQUE INDEX idx_legal_surface_one_live
   ON legal_surfaces(subject_kind, subject_id, class) WHERE retired_at IS NULL;
 CREATE INDEX idx_legal_surfaces_live
@@ -5540,16 +5325,12 @@ CREATE INDEX idx_metrics_product ON metric_snapshots(product_id);
 CREATE INDEX idx_metrics_product_date ON metric_snapshots(product_id, snapshot_date);
 CREATE INDEX idx_milestones_founder ON milestone_events(founder_id, seen_at);
 CREATE UNIQUE INDEX idx_milestones_unique ON milestone_events(founder_id, product_id, milestone_key);
-CREATE INDEX idx_mp_metrics_date ON marketplace_metrics(product_id, snapshot_date);
-CREATE INDEX idx_mp_metrics_product ON marketplace_metrics(product_id);
-CREATE INDEX idx_mp_trust_product ON marketplace_trust_audit(product_id);
 CREATE INDEX idx_network_contrib_cell
   ON network_contributions(metric, lifecycle_stage, mrr_bracket);
 CREATE INDEX idx_network_profiles_founder ON network_profiles(founder_id);
 CREATE INDEX idx_network_profiles_sector ON network_profiles(sector, growth_stage);
 CREATE INDEX idx_notifications_founder ON notifications(founder_id, read_at);
 CREATE UNIQUE INDEX idx_offer_shape_live ON offer_shapes(experiment_id) WHERE superseded_at IS NULL;
-CREATE INDEX idx_okrs_product ON company_okrs(product_id, period);
 CREATE UNIQUE INDEX idx_onboarding_product ON onboarding_sessions(product_id);
 CREATE INDEX idx_operator_attention
   ON operator_attention(founder_id, product_id, created_at);
@@ -5637,15 +5418,6 @@ CREATE INDEX idx_psych_status ON founder_psychology_insights(status);
 CREATE INDEX idx_public_contacts_email ON public_contacts(founder_id, email, contacted_at);
 CREATE INDEX idx_public_publication_experiment ON public_publications(experiment_id, superseded_at);
 CREATE UNIQUE INDEX idx_public_publication_live ON public_publications(founder_id, path) WHERE superseded_at IS NULL;
-CREATE INDEX idx_push_log_founder ON push_log(founder_id, sent_at DESC);
-CREATE INDEX idx_push_log_type ON push_log(notification_type, sent_at DESC);
-CREATE UNIQUE INDEX idx_push_subscriptions_apns
-  ON push_subscriptions(founder_id, apns_device_token)
-  WHERE apns_device_token IS NOT NULL;
-CREATE INDEX idx_push_subscriptions_founder ON push_subscriptions(founder_id, active);
-CREATE UNIQUE INDEX idx_push_subscriptions_founder_token
-  ON push_subscriptions(founder_id, apns_device_token)
-  WHERE apns_device_token IS NOT NULL;
 CREATE INDEX idx_pwh_product
   ON product_webhooks(product_id, enabled);
 CREATE INDEX idx_quieted_events_product_day
@@ -5790,10 +5562,6 @@ CREATE INDEX idx_web_audit_product ON web_audit_results(product_id);
 CREATE INDEX idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id);
 CREATE INDEX idx_webhooks_founder ON webhooks(founder_id);
 CREATE INDEX idx_weekly_plans ON weekly_plans(product_id, week_of DESC);
-CREATE INDEX idx_wiki_entries_product_section
-  ON agent_wiki_entries(product_id, section, updated_at);
-CREATE UNIQUE INDEX idx_wiki_entries_unique
-  ON agent_wiki_entries(product_id, section, title);
 CREATE INDEX idx_wisdom_patterns_agent ON wisdom_patterns(product_id, agent_name);
 CREATE INDEX idx_wisdom_patterns_product ON wisdom_patterns(product_id, active);
 CREATE INDEX idx_workshop_continuations ON workshop_continuations(founder_id, email);
@@ -8781,14 +8549,12 @@ BEGIN
     WHERE NEW.epistemic_status='inferred' AND NEW.confidence IS NULL;
   SELECT RAISE(ABORT,'reconstruction_claim:evidence_invalid') WHERE EXISTS (
     SELECT 1 FROM json_each(NEW.evidence_refs_json) ref WHERE
-      json_extract(ref.value,'$.kind') NOT IN ('product','signal_event','wiki_entry','integration','responsibility','authority_consent','action_execution')
+      json_extract(ref.value,'$.kind') NOT IN ('product','signal_event','integration','responsibility','authority_consent','action_execution')
       OR NOT EXISTS (
         SELECT 1 FROM products p WHERE json_extract(ref.value,'$.kind')='product'
           AND p.id=json_extract(ref.value,'$.id') AND p.id=NEW.product_id
         UNION ALL SELECT 1 FROM signal_events e WHERE json_extract(ref.value,'$.kind')='signal_event'
           AND e.id=json_extract(ref.value,'$.id') AND e.product_id=NEW.product_id
-        UNION ALL SELECT 1 FROM agent_wiki_entries w WHERE json_extract(ref.value,'$.kind')='wiki_entry'
-          AND w.id=json_extract(ref.value,'$.id') AND w.product_id=NEW.product_id
         UNION ALL SELECT 1 FROM integrations i WHERE json_extract(ref.value,'$.kind')='integration'
           AND i.id=json_extract(ref.value,'$.id') AND i.product_id=NEW.product_id
         UNION ALL SELECT 1 FROM institutional_responsibilities r WHERE json_extract(ref.value,'$.kind')='responsibility'

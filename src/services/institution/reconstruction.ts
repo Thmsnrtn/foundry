@@ -2,8 +2,17 @@ import { nanoid } from 'nanoid';
 import { liveActGrant, query } from '../../db/client.js';
 
 export type EpistemicStatus = 'known' | 'inferred' | 'unknown' | 'conflicting' | 'stale';
+/**
+ * The kinds of thing a claim may cite as evidence.
+ *
+ * `wiki_entry` left with migration 310. Its backing table, `agent_wiki_entries`,
+ * was dropped in 309 — so the guard's arm for that kind could only ever ABORT,
+ * and a vocabulary entry that can never be satisfied is a trap rather than a
+ * permission. This union and the trigger's allowed-kinds list are two halves of
+ * one vocabulary and must be changed together.
+ */
 export type ReconstructionEvidenceKind =
-  'product' | 'signal_event' | 'wiki_entry' | 'integration' | 'responsibility' | 'authority_consent' | 'action_execution';
+  'product' | 'signal_event' | 'integration' | 'responsibility' | 'authority_consent' | 'action_execution';
 export interface ReconstructionEvidenceRef { kind: ReconstructionEvidenceKind; id: string }
 export interface ReconstructionClaim {
   id: string; productId: string; subject: string; predicate: string; value: unknown | null;

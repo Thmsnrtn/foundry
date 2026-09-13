@@ -381,16 +381,6 @@ export async function getStoryArtifacts(productId: string): Promise<ResultSet> {
 }
 
 /**
- * Get beta intake records for a product.
- */
-export async function getBetaIntakes(productId: string): Promise<ResultSet> {
-  return query(
-    'SELECT * FROM beta_intake WHERE product_id = ? ORDER BY created_at DESC',
-    [productId]
-  );
-}
-
-/**
  * Get lifecycle conditions for a product.
  */
 export async function getLifecycleConditions(productId: string): Promise<ResultSet> {

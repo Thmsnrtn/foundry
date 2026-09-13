@@ -52,26 +52,16 @@ describe('reconciled schema-drift SQL runs against real schema', () => {
     expect((r.rows[0] as Record<string, unknown>).status).toBe('succeeded');
   });
 
-  it('okr_progress_updates: manual update INSERT (new_value/source/source_id)', async () => {
-    await db.execute({ sql: "INSERT INTO key_results (id, objective_id, description, baseline_value, target_value) VALUES ('kr1','o1','x',0,100)", args: [] }).catch(() => {});
-    await db.execute({
-      sql: `INSERT INTO okr_progress_updates (id, key_result_id, new_value, source, source_id, note)
-            VALUES (?, ?, ?, 'founder_manual', ?, ?)`,
-      args: ['u1', 'kr1', 42, 'o1', 'progress'],
-    });
-    const r = await db.execute({ sql: "SELECT new_value FROM okr_progress_updates WHERE id='u1'", args: [] });
-    expect(Number((r.rows[0] as Record<string, unknown>).new_value)).toBe(42);
-  });
+  // `okr_progress_updates` was reconciled here — the manual-update INSERT
+  // naming new_value/source/source_id. The OKR pages that read and wrote it
+  // were Commercial Foundry; migration 308 dropped the table once nothing in
+  // TypeScript named it, and 309 dropped `key_results` and `company_okrs` above
+  // it. There is no statement left to run against the schema.
 
-  it('agent_wiki_entries: createWikiEntry writes confidence_score (column added by 084)', async () => {
-    await db.execute({
-      sql: `INSERT INTO agent_wiki_entries (id, product_id, section, title, content, tags, author, confidence_score)
-            VALUES (?, ?, 'strategy', ?, ?, '[]', 'founder', ?)`,
-      args: ['w1', 'p1', 'ICP', 'Solo SaaS founders', 0.8],
-    });
-    const r = await db.execute({ sql: "SELECT confidence_score FROM agent_wiki_entries WHERE id='w1'", args: [] });
-    expect(Number((r.rows[0] as Record<string, unknown>).confidence_score)).toBe(0.8);
-  });
+  // `agent_wiki_entries` was reconciled here for the `confidence_score` column
+  // migration 084 added. `scp/wiki.ts` was the table's only reader and writer,
+  // and the only module that reached `wiki.ts` was the Scribe agent; both went,
+  // and migration 309 dropped the table behind them.
 
   it('agent_initiative_queue: v1 API enqueue (initiative_type/description/context, status pending)', async () => {
     await db.execute({
@@ -199,13 +189,8 @@ describe('reconciled schema-drift SQL runs against real schema', () => {
 
   // ── UPDATE-path fixes ────────────────────────────────────────────────────────
 
-  it('key_results.progress: written by the OKR update and readable by AVG()', async () => {
-    await db.execute({ sql: "INSERT INTO key_results (id, okr_id, description, new_value) VALUES ('kr2','o1','x',0)", args: [] }).catch(() => {});
-    await db.execute({ sql: "UPDATE key_results SET current_value=?, progress=?, updated_at=CURRENT_TIMESTAMP WHERE id='kr2'", args: [50, 50] }).catch(() => {});
-    // The read that 500'd before the column existed:
-    const r = await db.execute({ sql: "SELECT AVG(progress) AS avg FROM key_results", args: [] });
-    expect(r.rows.length).toBe(1);
-  });
+  // `key_results.progress` was the UPDATE-path half of the OKR case above, and
+  // went with the same table in migration 309.
 
   it('experiments: interim results UPDATE (results_json, no invalid status) + conclude (completed)', async () => {
     // seed a valid experiment

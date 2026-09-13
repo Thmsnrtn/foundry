@@ -16,7 +16,7 @@ const CLAIMS = [
   'Solo plan costs $79/month',
   'Growth plan costs $199/month',
   'Investor-Ready plan costs $399/month',
-  'All plans include 12 AI agents',
+  'All plans include 9 AI agents',
   '14-day trial',
   '30 founding-rate slots locked at $79/mo for life',
   // CAPABILITY CLAIMS, not only prices. A wrong number is embarrassing; a

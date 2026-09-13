@@ -177,10 +177,9 @@ describe('Database tenant isolation', () => {
     expect(fn).toMatch(/WHERE.*product_id\s*=\s*\?/i);
   });
 
-  it('getBetaIntakes scopes by product_id', () => {
-    const fn = extractFunction(clientSource, 'getBetaIntakes');
-    expect(fn).toMatch(/WHERE.*product_id\s*=\s*\?/i);
-  });
+  // `getBetaIntakes` was checked here too. `beta_intake` had no writer left
+  // after the commercial routes went, so the reader and the table were both
+  // removed; there is no accessor to scope.
 
   it('getLifecycleConditions scopes by product_id', () => {
     const fn = extractFunction(clientSource, 'getLifecycleConditions');
