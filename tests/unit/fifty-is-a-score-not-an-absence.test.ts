@@ -153,16 +153,16 @@ describe('the company health score', () => {
 
 describe('an agent that never ran', () => {
   it('has no success rate rather than a rate of zero', async () => {
-    await agent('compass', 80, 0, 0);
+    await agent('oracle', 80, 0, 0);
     const overview = await new SCPInstance('p_h').getStatus();
-    const compass = overview.agents.find((a) => a.name === 'compass')!;
-    expect(compass.successRate, '0 means it ran and always failed').toBeNull();
+    const oracle = overview.agents.find((a) => a.name === 'oracle')!;
+    expect(oracle.successRate, '0 means it ran and always failed').toBeNull();
   });
 
   it('has no health score when the column is null', async () => {
-    await agent('compass', null, 3, 3);
+    await agent('oracle', null, 3, 3);
     const overview = await new SCPInstance('p_h').getStatus();
-    expect(overview.agents.find((a) => a.name === 'compass')!.domainHealthScore).toBeNull();
+    expect(overview.agents.find((a) => a.name === 'oracle')!.domainHealthScore).toBeNull();
   });
 
   it('and an agent with no row at all has neither', async () => {
@@ -174,9 +174,9 @@ describe('an agent that never ran', () => {
   });
 
   it('still reports a real rate when there is one', async () => {
-    await agent('compass', 80, 4, 3);
+    await agent('oracle', 80, 4, 3);
     const overview = await new SCPInstance('p_h').getStatus();
-    expect(overview.agents.find((a) => a.name === 'compass')!.successRate).toBe(0.75);
+    expect(overview.agents.find((a) => a.name === 'oracle')!.successRate).toBe(0.75);
   });
 });
 
@@ -264,7 +264,7 @@ describe("what other agents are told about a finding's confidence", () => {
     // the run did not score. Every other agent's prompt then read "50%
     // confidence" in this agent's position — a number nothing produced,
     // stated to a model that weighs the day's positions against each other.
-    await writeAgentFinding('p_h', 'compass', {
+    await writeAgentFinding('p_h', 'harbor', {
       position: 'Positioning is drifting towards enterprise.',
       confidence: null,
     });

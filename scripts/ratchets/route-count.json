@@ -4,6 +4,6 @@
   "pattern": "app\\.route\\(",
   "roots": ["src"],
   "includePath": "src/index\\.ts$",
-  "baseline": 16,
+  "baseline": 11,
   "direction": "down"
 }

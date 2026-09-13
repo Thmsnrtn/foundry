@@ -2,138 +2,115 @@
 // =============================================================================
 // FOUNDRY — Public-claims audit (Ascent A3 / Honesty Law)
 //
-// Verifies the landing/pricing page's factual claims against sources DERIVED
-// FROM CODE, so marketing copy cannot drift from what the product actually is.
-// Contract: when public copy changes, CLAIMS[] updates in the same commit.
-// Fails CI on any unverifiable claim. The engine is the floor, not the ceiling.
+// Verifies the public site's factual claims against sources DERIVED FROM CODE,
+// so copy cannot drift from what the institution actually does. Contract: when
+// public copy changes, CLAIMS[] updates in the same commit. Fails CI on any
+// unverifiable claim. The engine is the floor, not the ceiling.
+//
+// THE SURFACE THIS GUARDS CHANGED COMPLETELY ON 13 SEPTEMBER 2026.
+//
+// It used to read `routes/public/landing.ts`: three pricing tiers, a trial
+// length, thirty founding-rate slots, a twelve-agent roster. That page sold
+// Commercial Foundry, which was deleted, and the page was deleted with it —
+// the owner's instruction being that Private Foundry has no landing page of
+// its own and apexmicro.ai is the public face.
+//
+// So the claims here are now the ones the Apex Micro site actually makes, and
+// they are a different KIND of claim. The old page typed its facts: "$79" was
+// a string that had to be kept in step with a constant. The Apex Micro site
+// renders its facts from the experiment record — the price on a page comes
+// from the same row the payment link is minted from — so a price cannot drift
+// from what is charged without the data itself being wrong.
+//
+// What CAN still drift is a PROMISE. The About page makes three, in the
+// owner's own words, and each is a capability with a last step that either
+// runs or does not:
+//
+//   "If you buy something and it's no use to you, you can have your money back."
+//   "If you hear from me and would rather not, one line tells me so and I
+//    won't write again."
+//   "Every page stays up, whatever happened to it."
+//
+// Those are the dangerous ones. A refund policy nobody can act on, an opt-out
+// nothing consults before the next send, a closed experiment whose page
+// quietly disappears — each is fully built except for the part that makes it
+// true, described everywhere by its readers and called by nothing. That is the
+// failure mode this gate exists for, and it is why the sources below are
+// pinned to the LAST STEP of each pipeline rather than to its description.
 // =============================================================================
-import { readFileSync, readdirSync } from 'fs';
+import { readFileSync } from 'fs';
 import { globSync } from 'glob';
 import { tokenizeClaim } from './lib/claim-tokenizer.mjs';
 
-// The claims currently made on public surfaces (landing.ts / legal.ts).
+// The claims the public site makes, in the words it makes them in.
 const CLAIMS = [
-  'Solo plan costs $79/month',
-  'Growth plan costs $199/month',
-  'Investor-Ready plan costs $399/month',
-  'All plans include 9 AI agents',
-  '14-day trial',
-  '30 founding-rate slots locked at $79/mo for life',
-  // CAPABILITY CLAIMS, not only prices. A wrong number is embarrassing; a
-  // capability a customer pays for and does not get is selling maturity the
-  // product has not earned. Both of these were overclaims found by tracing the
-  // pipeline to its last step: the remediation engine generated fixes and
-  // never opened a pull request, and nothing anywhere wrote a golden lesson.
-  'Remediation Engine — AI-drafted fixes for blocking audit issues',
-  'Agent evolution — versioned configs and change history',
-  // The processors that actually receive prompt content. Named in the privacy
-  // copy and pinned to the endpoints the code calls.
-  'Prompts are sent to language models through OpenRouter and OpenAI',
-  'Live Signal share — a rotatable link to your Signal, history and decisions',
+  'If you buy something and it is no use to you, you can have your money back',
+  'One line tells me so and I will not write again',
+  'Every page stays up, whatever happened to it',
+  'The price on its page is the price you pay',
 ];
 
 // ── Sources derived from code (single source of truth) ───────────────────────
 const sources = [];
-
-// Tier pricing as the app computes MRR with it.
-const intel = readFileSync('src/services/founder/intelligence.ts', 'utf8');
-const pricingLine = intel.match(/tierPricing[^\n]*\{[^}]*\}/)?.[0] ?? '';
-sources.push({ name: 'src/services/founder/intelligence.ts tierPricing', content: pricingLine });
-
-// Trial length as billing enforces it.
-const stripe = readFileSync('src/services/billing/stripe.ts', 'utf8');
-const trialLine = stripe.match(/TRIAL_PERIOD_DAYS[^\n]*/)?.[0] ?? '';
-sources.push({ name: 'src/services/billing/stripe.ts TRIAL_PERIOD_DAYS', content: `${trialLine} trial day` });
-
-// Agent roster as the SCP actually ships it (concrete agents, not scaffolding).
-const scaffolding = new Set(['base.ts', 'challenger.ts', 'synthesizer.ts']);
-const agents = readdirSync('src/services/scp/agents').filter((f) => f.endsWith('.ts') && !scaffolding.has(f));
-sources.push({ name: 'src/services/scp/agents roster', content: `${agents.length} AI agents include plans: ${agents.join(' ')}` });
-
-// Founding-slot mechanics as the pricing page computes them.
-const landing = readFileSync('src/routes/public/landing.ts', 'utf8');
-const slotsLine = landing.match(/Math\.max\(0,\s*30[^\n]*/)?.[0] ?? '';
-sources.push({ name: 'src/routes/public/landing.ts founding slots', content: `${slotsLine} founding-rate slots locked life month cost` });
-
-// ── Capability sources: does the code that performs the claim have a caller ──
-//
-// A price is verified against a constant. A CAPABILITY has to be verified
-// against whether the last step of its pipeline actually runs, because the
-// failure mode is a feature that is fully built except for the part that makes
-// it happen — described everywhere by its readers, called by nothing.
-//
-// So the source's CONTENT depends on reality: restore a claim the code no
-// longer supports and its words stop matching anything here. Proven by doing
-// exactly that — "automated GitHub PRs" fails on `automated, github`.
 const srcFiles = globSync('src/**/*.ts', { nodir: true });
-const hasCallerOutside = (fnName, definedInSuffix) => srcFiles
+const site = readFileSync('src/services/public-workshop/site.ts', 'utf8');
+
+// A capability is verified against whether the last step of its pipeline
+// actually runs, not against whether something describes it.
+const calledOutside = (fnName, definedInSuffix) => srcFiles
   .filter((f) => !f.endsWith(definedInSuffix))
   .some((f) => readFileSync(f, 'utf8').includes(fnName));
 
-// `openRemediationPR` is the only code that creates a branch, commits files and
-// calls the GitHub PR API. `generateFix` runs, records the fix, and returns.
+// REFUNDS. The promise needs a page a buyer can read and a path the Worker
+// serves. `renderRefunds` is the page; `PUBLIC_PATHS` is what the Worker will
+// answer for. A policy that exists in a renderer nothing routes to is a policy
+// nobody can find.
+const refundsServed = site.includes("pages.set('/refunds'") && site.includes("'/refunds'");
 sources.push({
-  name: 'remediation: does anything open a pull request',
-  content: hasCallerOutside('openRemediationPR', 'audit/remediation.ts')
-    ? 'remediation engine automated github pull requests prs ai-drafted ai drafted fixes for blocking audit issues'
-    : 'remediation engine ai-drafted ai drafted fixes for blocking audit issues; no pull request is opened',
+  name: 'refunds: is the policy actually served',
+  content: refundsServed
+    ? 'if you buy something and it is no use to you you can have your money back refunds'
+    : 'nothing states how a purchase is put right',
 });
 
-// `addGoldenLesson` is the only writer of `golden_suite`, and the only thing
-// that increments `products.golden_suite_size`.
+// OPT-OUT. THE ONE THAT MATTERS MOST, because getting it wrong means writing
+// to somebody who asked not to hear from me. `suppress` records the request;
+// `isSuppressed` is the check, and it only counts if something asks it BEFORE
+// a send. `venture/hand.ts` is the send path and `public-workshop/mail.ts`
+// records the request off an inbound reply.
+const optOutRecorded = calledOutside('suppress', 'public-workshop/suppression.ts');
+const optOutConsulted = readFileSync('src/services/venture/hand.ts', 'utf8').includes('isSuppressed');
 sources.push({
-  name: 'agent evolution: does anything write a golden lesson',
-  content: hasCallerOutside('addGoldenLesson', 'agents/base.ts')
-    ? 'agent evolution golden lessons versioned configs and change history'
-    : 'agent evolution versioned configs and change history',
+  name: 'opt-out: recorded, and consulted before the next send',
+  content: optOutRecorded && optOutConsulted
+    ? 'one line tells me so and i will not write again opt out suppression'
+    : `a request to stop hearing from us is ${optOutRecorded ? 'stored but nothing consults it' : 'never stored'} before the next message leaves`,
 });
 
-// WHO RECEIVES A PROMPT, from the code that sends it.
-//
-// The privacy copy named Anthropic as the processor of every prompt and listed
-// it as the sole AI sub-processor. `api.anthropic.com` appears nowhere in the
-// repository: `client.ts` pins OpenRouter and `getBaseUrl()` returns it
-// unconditionally — its own comment says a direct Anthropic key "still routes
-// through OpenRouter" — and voice replies go to OpenAI. A privacy statement
-// naming the wrong recipient is the one kind of copy where being wrong is not
-// merely embarrassing.
-//
-// Pinned to the endpoints in the code, so the disclosure cannot name a vendor
-// the product does not call.
-const aiClient = readFileSync('src/services/ai/client.ts', 'utf8');
-const voiceReply = readFileSync('src/services/scp/briefing/voice-reply.ts', 'utf8');
-const endpoints = [];
-if (aiClient.includes('openrouter.ai') || voiceReply.includes('openrouter.ai')) endpoints.push('openrouter');
-if (voiceReply.includes('api.openai.com')) endpoints.push('openai');
-if (aiClient.includes('api.anthropic.com') || voiceReply.includes('api.anthropic.com')) endpoints.push('anthropic');
+// A CLOSED EXPERIMENT KEEPS ITS PAGE. The registry renders a 'closed' view and
+// the Worker serves `/closed`; an experiment page is built per experiment
+// rather than per LIVE experiment. If the closed view stopped being served,
+// "every page stays up" would be a page that quietly vanished on failure —
+// exactly the claim a reader would rely on and could not check.
+const closedServed = site.includes("pages.set('/closed'") && site.includes("'closed'");
 sources.push({
-  name: 'src/services/ai model endpoints actually called',
-  content: `prompts are sent to language models through ${endpoints.join(' and ')} `
-    + 'receives every prompt foundry sends to a language model voice replies',
+  name: 'closed experiments: is the page still served',
+  content: closedServed
+    ? 'every page stays up whatever happened to it closed'
+    : 'a shut experiment leaves nothing a reader can open',
 });
 
-// THE INVESTOR SHARE, and the feature beside it that does not exist.
-//
-// "Secure investor deal rooms with live Signal share" was a $399/month bullet.
-// `deal_rooms` is created by migration 011 and touched by nothing: no INSERT, no
-// SELECT, no service, no route. Its only mention in `src/` is the erasure
-// classifier, and the gate suite cites it BY NAME as the canonical example of a
-// table no code reaches — the repository knew, and the pricing page sold it.
-//
-// The other half was real, so the bullet now claims only that half. Pinned to
-// the route that serves it and the door that mints the token.
-const shareRoute = readFileSync('src/routes/share/index.ts', 'utf8');
-const settings = readFileSync('src/routes/dashboard/settings.ts', 'utf8');
-const dealRoomCode = srcFiles
-  .filter((f) => !f.endsWith('privacy/consent.ts'))
-  .some((f) => readFileSync(f, 'utf8').includes('deal_rooms'));
+// PRICE. The page and the payment link must read the same number. The site
+// renders from the experiment record's `amountCents`; if the payment link were
+// minted from a separate figure, the page could advertise one price and charge
+// another — the single drift this data-driven surface is still capable of.
+const paymentLink = readFileSync('src/services/venture/payment-link.ts', 'utf8');
+const oneNumber = site.includes('amountCents') && paymentLink.includes('amountCents');
 sources.push({
-  name: 'investor share: what is actually served',
-  content: [
-    shareRoute.includes("'/share/:token'") ? 'live signal share a rotatable link to your signal history and decisions' : '',
-    settings.includes('share_token = ?') ? 'rotatable link token' : '',
-    dealRoomCode ? 'secure investor deal rooms' : '',
-  ].join(' '),
+  name: 'price: page and payment link read one number',
+  content: oneNumber
+    ? 'the price on its page is the price you pay'
+    : 'the amount shown and the amount charged come from different records',
 });
 
 // ── Verify ───────────────────────────────────────────────────────────────────
@@ -151,7 +128,21 @@ sources.push({
 // The stop list stays specific to pricing copy — 'plan', 'costs' and 'month' are
 // connective words in these claims — and is PASSED IN rather than copied, so the
 // difference is a decision rather than an accident.
-const STOP = new Set(['the','a','an','and','or','for','with','that','this','all','plan','plans','costs','cost','month','monthly','include','includes']);
+// The stop list is PASSED IN rather than copied, so the difference from the
+// engine's own list is a decision rather than an accident.
+//
+// IT IS SHORT ON PURPOSE, AND THE FIRST VERSION OF IT WAS NOT.
+//
+// Written for prose rather than pricing copy, it grew to forty words — and
+// forty words of English connective tissue is most of a sentence. All four
+// claims tokenized to the EMPTY LIST, so every one of them was verified by
+// matching nothing at all. Caught by deleting the `isSuppressed` call from the
+// send path and watching the gate still pass: a green gate that cannot go red
+// is worse than no gate, because it is believed.
+//
+// So: connectives only. If a word carries any of the claim's meaning it stays
+// in, and the source content below is what decides whether the claim holds.
+const STOP = new Set(['the','a','an','and','or','for','with','that','this','to','of','is','it','its','be','i','me','my','you','your']);
 const tokenize = (claim) => tokenizeClaim(claim, STOP);
 let failures = 0;
 

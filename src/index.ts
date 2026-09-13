@@ -27,7 +27,7 @@ import { publicRateLimit, apiRateLimit, authRateLimit, webhookRateLimit, aiRateL
 import { internalMiddleware } from './middleware/internal.js';
 
 // Public routes (no auth)
-import { landingRoutes, pricingRoutes, caseStudyRoutes, legalRoutes, manifestoRoutes, helpRoutes } from './routes/public/landing.js';
+import { landingRoutes } from './routes/public/door.js';
 
 // Auth routes
 import { authRoutes } from './routes/auth/clerk.js';
@@ -137,12 +137,11 @@ app.get('/sw.js', (c) => {
 // ─── Public Routes ───────────────────────────────────────────────────────────
 
 app.use('/auth/*', authRateLimit);
+// Six mounts became one. `/` is a door to the owner's instance; the pricing,
+// case-study, manifesto, help, privacy-policy and terms pages sold and
+// documented Commercial Foundry, and apexmicro.ai is the public face now.
+// See `routes/public/door.ts` for what went and why.
 app.route('/', landingRoutes);
-app.route('/', pricingRoutes);
-app.route('/', caseStudyRoutes);
-app.route('/', legalRoutes);
-app.route('/', manifestoRoutes);
-app.route('/', helpRoutes);
 app.route('/', authRoutes);
 app.route('/', shareRoutes);
 app.route('/', ingestRoutes);

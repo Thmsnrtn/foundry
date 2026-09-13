@@ -722,3 +722,92 @@ at runtime, in production. The union, all five maps keyed by it, and the six
 type still routes to at least one agent; `activation_failure` lost its
 first-listed agent and is now led by `harbor`, which is a change in who looks
 first, not a gap.
+
+---
+
+## The public face — answered by the owner
+
+The section above flagged a question rather than answering it: the landing page
+still sold Commercial Foundry, and deciding what `/` should offer the public was
+not mine to make. The owner answered it the same day:
+
+> "The 'landing page' shouldn't be selling anything as the only applicable
+> landing page here is apex Micro for anyone that wants to learn more about
+> myself or private foundry. The only landing page private foundry should have
+> should be the whole public facing apex micro site."
+
+### What was there
+
+`routes/public/landing.ts`, 646 lines across six mounts: a hero, three pricing
+tiers, thirty founding-rate slots, case studies, a manifesto, a help page, and a
+privacy policy and terms describing a SaaS with Clerk sign-in, GitHub
+repositories and a team of twelve AI agents. The product was unmounted and then
+deleted; the page kept selling it.
+
+It was also a **duplicate of a site that already works**. apexmicro.ai is live,
+served by the Cloudflare Worker from `services/public-workshop/site.ts`, and
+already carries Home, About, What I've made, Contact, and its own Privacy,
+Terms, Refunds and email opt-out pages. Two public faces for one person is one
+too many, and the one that was lying had no customers.
+
+### What replaced it
+
+`routes/public/door.ts`. One route: `GET /` redirects to `/foundry`, and
+`authMiddleware` sends a visitor who is not signed in to `/auth/login`. One rule
+in one place, rather than a session check duplicated into a public route — and a
+stranger who finds the hostname sees a sign-in form and learns nothing, which is
+correct. What there is for them is at apexmicro.ai.
+
+Deleted with it: `/pricing`, `/case-studies`, `/case-studies/:id`, `/manifesto`,
+`/help`, and the public `/privacy-policy` and `/terms` — legal pages for a
+product that no longer operates, referenced by nothing in this codebase, and
+superseded by Apex Micro's, which cover the business that actually has
+customers. The **authenticated** `/privacy` dashboard — consent, export,
+deletion — is a different thing and stays. The `?ref=` referral capture went too;
+`distribution/referrals.ts` survives because `middleware/auth.ts` and
+`billing/stripe.ts` still call it, but nothing captures a click now, which is
+honest while there is nothing to refer anyone to.
+
+`route-count` fell **16 → 11** and is locked there.
+
+### The truth gate had to be rebuilt, and caught itself lying
+
+`audit-public-claims` verified landing copy — prices, trial length, founding
+slots, the agent roster. With the page gone it crashed on a missing file, so it
+was repointed at the copy that actually ships.
+
+The claims are now a **different kind**. The old page *typed* its facts: `$79`
+was a string that had to be kept in step with a constant. Apex Micro renders
+from the experiment record, so a price cannot drift from what is charged without
+the data itself being wrong. What can still drift is a **promise**, and the
+About page makes three in the owner's own words:
+
+> "If you buy something and it's no use to you, you can have your money back."
+> "If you hear from me and would rather not, one line tells me so and I won't
+> write again."
+> "Every page stays up, whatever happened to it."
+
+Each is pinned to the **last step** of its pipeline — the refunds page actually
+being routed, `isSuppressed` actually being called in the send path, the closed
+registry actually being served — plus a fourth claim that the page and the
+payment link read one `amountCents`. The failure mode these guard against is a
+capability fully built except for the part that makes it happen.
+
+**And the first version of that rewrite was green and vacuous.** Rewriting the
+stop-word list for prose instead of pricing copy grew it to forty words, which
+is most of an English sentence: all four claims tokenized to the **empty list**,
+so each was "verified" by matching nothing. It was caught by deleting the
+`isSuppressed` call from the send path and watching the gate still pass. A gate
+that cannot go red is worse than no gate, because it is believed.
+
+Fixed by cutting the stop list back to connectives and rewriting each failure
+string so it does not contain the words of the claim it denies. Then proved:
+each of the four capabilities was broken in turn and each claim went red. Two of
+those four break-tests were themselves wrong on the first attempt — `isSuppressed`
+occurs twice in the send path and only one was removed, and `amountCentsRenamed`
+still contains `amountCents` as a substring — which is the same lesson twice: a
+gate has not been watched fail until the thing you broke was actually broken.
+
+`gates-fail-when-they-should` now carries three cases for it: one per capability
+break, and one asserting directly that no claim survives the stop list as
+nothing at all.

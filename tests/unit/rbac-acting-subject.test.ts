@@ -130,15 +130,15 @@ describe('and the check still refuses everyone it should', () => {
     // writes and what these now ask.
     await query(
       `INSERT INTO team_members
-         (id, product_id, founder_id, role, status, can_view_decisions, can_manage_company)
-       VALUES ('rb_tm', ?, ?, 'investor_observer', 'active', 1, 0)`, [PRODUCT, MEMBER]);
+         (id, product_id, founder_id, role, status, can_vote_decisions, can_manage_company)
+       VALUES ('rb_tm', ?, ?, 'co_founder', 'active', 1, 0)`, [PRODUCT, MEMBER]);
     const res = await dashboardApp(MEMBER, requireCompanyCapability('can_manage_company'))
       .request('/x', withCompany);
     expect(res.status).toBe(403);
   });
 
   it('admits that member to a capability they do carry', async () => {
-    const res = await dashboardApp(MEMBER, requireCompanyCapability('can_view_decisions'))
+    const res = await dashboardApp(MEMBER, requireCompanyCapability('can_vote_decisions'))
       .request('/x', withCompany);
     expect(res.status).toBe(200);
   });
@@ -152,7 +152,7 @@ describe('and the check still refuses everyone it should', () => {
   });
 
   it('refuses an unauthenticated request', async () => {
-    const res = await dashboardApp(null, requireCompanyCapability('can_view_decisions')).request('/x', withCompany);
+    const res = await dashboardApp(null, requireCompanyCapability('can_vote_decisions')).request('/x', withCompany);
     expect(res.status).toBe(401);
   });
 
@@ -196,7 +196,7 @@ describe('one principal per request, and no borrowing between kinds', () => {
   it('refuses an ingest credential at a human role check', async () => {
     const res = await withPrincipal(
       { kind: 'ingest', credentialId: 'ic_1', productId: PRODUCT, purpose: 'metrics' },
-      requireCompanyCapability('can_view_decisions')).request('/x', withCompany);
+      requireCompanyCapability('can_vote_decisions')).request('/x', withCompany);
     expect(res.status).toBe(401);
   });
 
@@ -205,7 +205,7 @@ describe('one principal per request, and no borrowing between kinds', () => {
     // its declared capability, checked where that is checked.
     const res = await withPrincipal(
       { kind: 'service', service: 'scp_scheduler', capability: 'run_agents', productId: PRODUCT },
-      requireCompanyCapability('can_view_decisions')).request('/x', withCompany);
+      requireCompanyCapability('can_vote_decisions')).request('/x', withCompany);
     expect(res.status).toBe(401);
   });
 
@@ -264,7 +264,7 @@ describe('one principal per request, and no borrowing between kinds', () => {
   });
 
   it('fails closed on no principal at all', async () => {
-    const res = await withPrincipal(null, requireCompanyCapability('can_view_decisions')).request('/x', withCompany);
+    const res = await withPrincipal(null, requireCompanyCapability('can_vote_decisions')).request('/x', withCompany);
     expect(res.status).toBe(401);
   });
 });

@@ -51,12 +51,14 @@ beforeEach(async () => {
   await query('DELETE FROM team_members WHERE product_id = ?', [P]);
   await query(
     `INSERT INTO team_members (id, product_id, founder_id, role, status,
-       can_view_decisions, can_vote_decisions, can_view_financials, can_view_audit, can_trigger_actions)
-     VALUES ('mc_tm_cf', ?, ?, 'co_founder', 'active', 1, 1, 1, 1, 1)`, [P, COFOUNDER]);
+       can_view_decisions, can_vote_decisions, can_view_financials, can_view_audit,
+       can_trigger_actions, can_manage_company)
+     VALUES ('mc_tm_cf', ?, ?, 'co_founder', 'active', 1, 1, 1, 1, 1, 1)`, [P, COFOUNDER]);
   await query(
     `INSERT INTO team_members (id, product_id, founder_id, role, status,
-       can_view_decisions, can_vote_decisions, can_view_financials, can_view_audit, can_trigger_actions)
-     VALUES ('mc_tm_ob', ?, ?, 'investor_observer', 'active', 1, 0, 0, 0, 0)`, [P, OBSERVER]);
+       can_view_decisions, can_vote_decisions, can_view_financials, can_view_audit,
+       can_trigger_actions, can_manage_company)
+     VALUES ('mc_tm_ob', ?, ?, 'investor_observer', 'active', 1, 0, 0, 0, 0, 0)`, [P, OBSERVER]);
 });
 
 describe('the flags are asked', () => {
@@ -69,27 +71,50 @@ describe('the flags are asked', () => {
       'the whole defect: an observer’s vote fed the alignment score').toBe(false);
   });
 
-  it('still lets the observer read decisions, which is what they are for', async () => {
-    // A guard that refuses the legitimate principal is not extra secure.
-    expect(await memberMay(P, OBSERVER, 'can_view_decisions')).toBe(true);
-  });
-
   it('honours each flag independently', async () => {
-    expect(await memberMay(P, OBSERVER, 'can_view_financials')).toBe(false);
-    expect(await memberMay(P, OBSERVER, 'can_view_audit')).toBe(false);
     expect(await memberMay(P, OBSERVER, 'can_trigger_actions')).toBe(false);
     expect(await memberMay(P, COFOUNDER, 'can_trigger_actions')).toBe(true);
+    expect(await memberMay(P, OBSERVER, 'can_manage_company')).toBe(false);
+    expect(await memberMay(P, COFOUNDER, 'can_manage_company')).toBe(true);
   });
 
   it('always allows the owner, who has no membership row', async () => {
-    for (const cap of ['can_view_decisions', 'can_vote_decisions', 'can_view_financials',
-      'can_view_audit', 'can_trigger_actions'] as const) {
+    for (const cap of ['can_vote_decisions', 'can_trigger_actions', 'can_manage_company'] as const) {
       expect(await memberMay(P, OWNER, cap), `owner may ${cap}`).toBe(true);
     }
   });
 
   it('refuses somebody who is not on the team', async () => {
-    expect(await memberMay(P, STRANGER, 'can_view_decisions')).toBe(false);
+    expect(await memberMay(P, STRANGER, 'can_vote_decisions')).toBe(false);
+  });
+
+  it('refuses a capability that was retired, the owner included', async () => {
+    // THREE OF THE SIX NAMES ARE GONE AND THE COLUMNS ARE STILL THERE.
+    //
+    // `can_view_decisions`, `can_view_financials` and `can_view_audit` were
+    // read only by Commercial Foundry's decision queue, investor pages, ROI
+    // dashboard and audit log, all deleted on 13 September 2026. The union
+    // lost them; `team_members` still has the columns, because dropping them
+    // is a migration against a production database and the prior question is
+    // whether a single-owner institution has members at all.
+    //
+    // So the column says 1 and the answer must still be no. This is the
+    // dangerous half of the fail-closed rule: a name that LOOKS like a
+    // capability, backed by a real column holding a real 1, which nothing
+    // enforces anything with. Asking for it must be refused rather than
+    // answered from the column — including for the owner, whose blanket yes
+    // would otherwise make a retired capability look alive.
+    const rows = await query(
+      'SELECT can_view_decisions FROM team_members WHERE id = ?', ['mc_tm_ob']);
+    expect((rows.rows[0] as Record<string, number>).can_view_decisions,
+      'the fixture really does carry a 1 in the retired column').toBe(1);
+
+    for (const who of [OBSERVER, COFOUNDER, OWNER]) {
+      for (const retired of ['can_view_decisions', 'can_view_financials', 'can_view_audit']) {
+        expect(await memberMay(P, who, retired as never),
+          `${retired} is not a capability any more`).toBe(false);
+      }
+    }
   });
 
   it('fails closed on a capability it does not recognise, owner included', async () => {

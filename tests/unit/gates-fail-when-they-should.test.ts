@@ -80,6 +80,23 @@ function plant(relPath: string, contents: string): void {
   planted.push(abs);
 }
 
+/** Edit a file that already exists, and put it back afterwards.
+ *
+ *  `plant` writes a file the gate should object to and deletes it after. Some
+ *  defects are not an extra file but a MISSING CALL — a capability the copy
+ *  promises whose last step nobody invokes any more. Expressing that means
+ *  changing a real source file, which is safe here and only here: `ROOT` is a
+ *  throwaway copy of the repository, so the subject of the edit is the copy. */
+const edited: Array<[string, string]> = [];
+function unwrite(relPath: string, find: string | RegExp, replaceWith: string): void {
+  const abs = resolve(ROOT, relPath);
+  const before = readFileSync(abs, 'utf8');
+  edited.push([abs, before]);
+  const after = before.replace(find, replaceWith);
+  if (after === before) throw new Error(`unwrite matched nothing in ${relPath}`);
+  writeFileSync(abs, after);
+}
+
 function run(script: string, args: string[] = []): { code: number; output: string } {
   try {
     const output = execFileSync('node', [resolve(ROOT, 'scripts', script), ...args],
@@ -93,6 +110,7 @@ function run(script: string, args: string[] = []): { code: number; output: strin
 
 afterEach(() => {
   for (const p of planted.splice(0)) if (existsSync(p)) rmSync(p);
+  for (const [abs, before] of edited.splice(0).reverse()) writeFileSync(abs, before);
 });
 
 /**
@@ -833,17 +851,63 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('_gate_fixture_ratchet');
   });
 
-  it('audit-public-claims fails when the shipped agent roster stops matching the page', () => {
-    // "All plans include 12 AI agents" is verified against the files in
-    // `src/services/scp/agents`. THIS EXACT PLANT HAPPENED BY ACCIDENT ONCE:
-    // a fixture left behind by a killed run was read as a thirteenth agent and
-    // the audit caught it, which is this file's own header describing the
-    // system working. Deliberately, now.
-    plant('src/services/scp/agents/_gate_fixture_agent.ts',
-      'export const unusedAgent = () => null;\n');
+  it('audit-public-claims fails when nothing consults the opt-out before a send', () => {
+    // THE CLAIM THIS GATE GUARDS CHANGED WITH THE PUBLIC SURFACE.
+    //
+    // It used to verify "All plans include 12 AI agents" against the files in
+    // `src/services/scp/agents` — and that exact plant happened by accident
+    // once, when a fixture left behind by a killed run was read as a thirteenth
+    // agent and the audit caught it. The landing page it guarded was deleted
+    // on 13 September 2026; apexmicro.ai is the public face now, and its facts
+    // come from the experiment record rather than being typed.
+    //
+    // What can still drift is a PROMISE. The About page says, in the owner's
+    // words: "If you hear from me and would rather not, one line tells me so
+    // and I won't write again." That is the one where being wrong means
+    // writing to somebody who asked not to hear from you — so the gate pins it
+    // to the last step, `isSuppressed` in the send path, and this is that step
+    // going missing.
+    unwrite('src/services/venture/hand.ts', /isSuppressed/g, 'optOutCheckGone');
     const r = run('audit-public-claims.mjs');
     expect(r.code, r.output).toBe(1);
-    expect(r.output).toMatch(/12 AI agents/);
+    expect(r.output).toMatch(/won.t write again|will not write again/i);
+  });
+
+  it('audit-public-claims fails when the page and the payment link price differ', () => {
+    // The other half of the same idea. A typed price drifts from a constant; a
+    // RENDERED price drifts only if the page and the charge read different
+    // records. "The price on its page is the price you pay" is pinned to both
+    // reading `amountCents`, so this is the payment link reading something
+    // else.
+    unwrite('src/services/venture/payment-link.ts', /amountCents/g, 'amtInCents');
+    const r = run('audit-public-claims.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toMatch(/price/i);
+  });
+
+  it('audit-public-claims is not satisfied by a claim that tokenizes to nothing', () => {
+    // THE GATE WAS GREEN AND VACUOUS FOR ONE COMMIT, AND THIS IS WHY.
+    //
+    // When the claims moved from pricing copy to prose, the stop-word list was
+    // rewritten for prose and grew to forty words — which is most of an English
+    // sentence. All four claims tokenized to the EMPTY LIST, so each was
+    // "verified" by matching nothing, and removing the opt-out check from the
+    // send path left the gate green. A gate that cannot go red is worse than
+    // no gate, because it is believed.
+    //
+    // Every claim must therefore carry at least one word the stop list does not
+    // eat. This asserts the property directly rather than the symptom.
+    const gate = readFileSync(resolve(ROOT, 'scripts/audit-public-claims.mjs'), 'utf8');
+    const claims = [...gate.matchAll(/^\s{2}'([^']+)',$/gm)].map((m) => m[1]);
+    expect(claims.length, 'the CLAIMS list was not found').toBeGreaterThan(0);
+    const stopLine = gate.match(/const STOP = new Set\(\[([^\]]*)\]\)/);
+    expect(stopLine, 'the STOP list was not found').not.toBeNull();
+    const stop = new Set([...(stopLine as RegExpMatchArray)[1].matchAll(/'([^']*)'/g)].map((m) => m[1]));
+    for (const claim of claims) {
+      const words = claim.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/)
+        .filter((w) => w && !stop.has(w));
+      expect(words.length, `"${claim}" survives the stop list as nothing at all`).toBeGreaterThan(0);
+    }
   });
 
   it('audit-unauthorized-votes fails on a vote cast by a principal not entitled to cast it', () => {
