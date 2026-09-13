@@ -110,7 +110,13 @@ describe('the table is gone', () => {
     // one hundred and one.
     // And `workshop_correspondence_tick` — the Workshop answering its own post,
     // inside whatever envelope the owner set — makes one hundred and three.
-    expect(Object.keys(JOB_REGISTRY).length, 'ninety-seven before, one hundred and four now').toBe(104);
+    // And then ONE CAME OFF. `scp_roi_monthly` summarised
+    // `recommendation_outcomes`, which nothing could write, into
+    // `roi_monthly_summaries`, which only the deleted `/roi` page read — a
+    // round-trip per company per month to record that nothing had been
+    // measured. Both ends went, so the job went, and the census follows it
+    // down. This number may only move for a reason written here.
+    expect(Object.keys(JOB_REGISTRY).length, 'one hundred and four, less the ROI job that measured nothing').toBe(103);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

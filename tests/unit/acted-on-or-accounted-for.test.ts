@@ -59,11 +59,16 @@ describe('the two shadow claims', () => {
     // Matching the bare word would catch the table names
     // (`responsibility_shadow_expectations`) and the evidence-ref string
     // `shadow_comparison:<id>` in `responsibility-assisting.ts`, none of which
-    // are claim reads. `support-pilot-readiness.ts` quotes 'shadow_comparison'
-    // as a BENCHMARK DIMENSION NAME, which is also not a claim read.
+    // are claim reads.
+    //
+    // `support-pilot-readiness.ts` was excluded here too — it quotes
+    // 'shadow_comparison' as a BENCHMARK DIMENSION NAME rather than as a claim
+    // read. It is now in `tests/contracts/`, which `serviceSources()` does not
+    // walk, so the exclusion has nothing to exclude and an exclusion for a file
+    // that cannot appear is a rule nobody can check. It is gone rather than
+    // left standing.
     const readers = serviceSources().filter((f) => {
       if (f === 'src/services/institution/external-shadowing.ts') return false;
-      if (f === 'src/services/institution/support-pilot-readiness.ts') return false;
       const src = stripComments(readFileSync(f, 'utf8'), { lineComments: true });
       return PREDICATES.some((p) => new RegExp(`'${p}'`).test(src));
     });

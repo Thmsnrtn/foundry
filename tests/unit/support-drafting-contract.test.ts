@@ -220,7 +220,7 @@ describe('support-drafting-v1 contract', () => {
     const { readFileSync } = await import('node:fs');
     const { resolve } = await import('node:path');
     const contract = readFileSync(
-      resolve(process.cwd(), 'src/services/institution/support-drafting-benchmark.ts'), 'utf8');
+      resolve(process.cwd(), 'tests/contracts/support-drafting-benchmark.ts'), 'utf8');
     // No model dependency anywhere in the contract. The institutional cognition
     // gate enforces this for the whole kernel; this states the intent locally.
     expect(contract).not.toMatch(/from '.*\/ai\//);
@@ -297,7 +297,7 @@ describe('a boundary the owner stated', () => {
     // source so a twelfth kind added later fails here rather than silently
     // becoming unreachable.
     const source = readFileSync(
-      resolve(__dirname, '../../src/services/institution/support-drafting-benchmark.ts'), 'utf8');
+      resolve(__dirname, '../contracts/support-drafting-benchmark.ts'), 'utf8');
     const emitted = new Set(
       [...source.matchAll(/found\.push\('([a-z_]+)'\)/g)].map((m) => m[1]));
     expect([...CATASTROPHIC_FAILURES].filter((f) => !emitted.has(f))).toEqual([]);

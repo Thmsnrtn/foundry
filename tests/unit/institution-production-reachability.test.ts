@@ -41,19 +41,21 @@ const ENTRY_POINTS = ['src/index.ts', 'src/jobs/index.ts', 'src/cli/index.ts'];
  * architecture, and the answer is deletion until the consumer exists.
  */
 const DARK: Record<string, string> = {
-  // Benchmarks are gates. Being exercised only by the test suite is what they
-  // are for; a production caller would make the gate part of the thing it
-  // measures.
-  'development-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
-  'institutional-judgment-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
-  'production-reachability-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
-  'support-pilot-readiness.ts': 'prospective readiness contract — scored by its own gate, never by production',
-  'support-drafting-benchmark.ts': 'frozen prospective contract (E1) — no model exists to score against it yet',
-  'reconstruction-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
-  'responsibility-assisting-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
-  'responsibility-recognition-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
-  'responsibility-shadowing-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
-  'responsibility-understanding-benchmark.ts': 'frozen gate — exercised by its benchmark test by design',
+  // TEN BENCHMARK ENTRIES LEFT THIS LIST BY LEAVING `src`.
+  //
+  // They read: "Benchmarks are gates. Being exercised only by the test suite is
+  // what they are for; a production caller would make the gate part of the
+  // thing it measures." That reasoning was right, and it is the reason the ten
+  // frozen contracts now live in `tests/contracts/` — the development,
+  // institutional-judgment, production-reachability, reconstruction and four
+  // responsibility benchmarks, the support-drafting benchmark and support-pilot
+  // readiness.
+  //
+  // A module that is not production code does not need an exemption from being
+  // production-reachable; it needs to not be in `src`. The exemption and the
+  // relocation say the same thing, and the relocation says it where the
+  // reachability gate can see it, so the exemption is gone rather than
+  // duplicated.
 
   // `development-observation.ts` left this list when Foundry began observing
   // its own repository. That was always the honest blocker: development

@@ -109,12 +109,17 @@ describe('no scheduled job still swallows a per-subject failure', () => {
   });
 
   it('counts and reports failures in every job that loops over subjects', () => {
-    // Each of the eleven now declares a failure counter and closes with
-    // reportRun. If a twelfth job is added in the old shape, this notices.
+    // Each of the ten now declares a failure counter and closes with
+    // reportRun. If an eleventh job is added in the old shape, this notices.
+    //
+    // It was eleven. `scp_roi_monthly` was one of them — correctly shaped, and
+    // looping over every operating product to summarise a table nothing could
+    // write. Being well-formed is not the same as being worth running, and this
+    // count follows the registry rather than leading it.
     const reportRunCalls = (src.match(/reportRun\('/g) ?? []).length;
     const failureLogs = (src.match(/logSubjectFailure\('/g) ?? []).length;
-    expect(reportRunCalls).toBe(11);
-    expect(failureLogs).toBe(11);
+    expect(reportRunCalls).toBe(10);
+    expect(failureLogs).toBe(10);
   });
 });
 

@@ -347,8 +347,13 @@ describe('retained data stays restricted', () => {
       const p = join(d, e);
       return statSync(p).isDirectory() ? walk(p) : p.endsWith('.ts') ? [p] : [];
     });
+    // `services/conversation` was here. Both its modules — `context.ts` and
+    // `intent.ts` — were production-dead and deleted, and git does not track
+    // empty directories, so naming it here makes this scan throw ENOENT on a
+    // fresh clone rather than find nothing. The remaining five are the
+    // cognition surfaces that still exist.
     const cognition = ['services/wisdom', 'services/intelligence', 'services/chat',
-      'services/conversation', 'services/scp/agents', 'services/digest'];
+      'services/scp/agents', 'services/digest'];
     const offenders: string[] = [];
     for (const dir of cognition) {
       for (const f of walk(r(__dirname, '../../src', dir))) {

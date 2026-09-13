@@ -15,18 +15,14 @@ const ROOT = resolve(__dirname, '../..');
 
 let clientSource: string;
 let portfolioSource: string;
-let experimentSource: string;
 let voiceBriefingSource: string;
-let voiceProcessorSource: string;
 let schemaSource: string;
 let authMiddlewareSource: string;
 
 beforeAll(() => {
   clientSource = readFileSync(resolve(SRC, 'db/client.ts'), 'utf-8');
   portfolioSource = readFileSync(resolve(SRC, 'services/portfolio/manager.ts'), 'utf-8');
-  experimentSource = readFileSync(resolve(SRC, 'services/experiments/engine.ts'), 'utf-8');
   voiceBriefingSource = readFileSync(resolve(SRC, 'services/voice/briefing.ts'), 'utf-8');
-  voiceProcessorSource = readFileSync(resolve(SRC, 'services/voice/processor.ts'), 'utf-8');
   schemaSource = readFileSync(resolve(SRC, 'db/schema.sql'), 'utf-8');
   authMiddlewareSource = readFileSync(resolve(SRC, 'middleware/auth.ts'), 'utf-8');
 });
@@ -172,32 +168,17 @@ describe('Portfolio API has ownership checks', () => {
 // 3. Experiment API Has Ownership Checks
 // =============================================================================
 
-describe('Experiment API has ownership checks', () => {
-
-  it('createExperiment includes product_id and owner_id', () => {
-    const fn = extractFunction(experimentSource, 'createExperiment');
-    const sql = extractSQL(fn);
-    expect(sql).toMatch(/product_id/);
-    expect(sql).toMatch(/owner_id/);
-  });
-
-  it('getActiveExperiments scopes by product_id', () => {
-    const fn = extractFunction(experimentSource, 'getActiveExperiments');
-    const sql = extractSQL(fn);
-    expect(sql).toMatch(/WHERE.*product_id\s*=\s*\?/i);
-  });
-
-  it('designExperiment accepts productId parameter', () => {
-    const fn = extractFunction(experimentSource, 'designExperiment');
-    expect(fn).toMatch(/productId:\s*string/);
-  });
-
-  it('experiment events reference experiment_id (FK-chained to product)', () => {
-    const fn = extractFunction(experimentSource, 'recordExperimentEvent');
-    const sql = extractSQL(fn);
-    expect(sql).toMatch(/experiment_id/);
-  });
-});
+// TENANCY CHECKS FOR TWO MODULES THAT NO LONGER EXIST.
+//
+// `describe('Experiment API has ownership checks')` stood here, reading
+// `services/experiments/engine.ts`, and two cases in the Voice describe below
+// read `services/voice/processor.ts`. Both modules were reachable from no
+// entry point and were deleted with the rest of the commercial estate.
+//
+// A tenancy assertion about a module that is gone is not a weaker guarantee —
+// it is no guarantee at all, wearing a filename. `voice/briefing.ts` is live
+// and its three scoping cases remain below; the surfaces that still touch
+// company data are checked in the describes that stay.
 
 // =============================================================================
 // 4. Voice API Has Ownership Checks
@@ -223,21 +204,6 @@ describe('Voice API has ownership checks', () => {
     expect(sql).toMatch(/WHERE.*id\s*=\s*\?/i);
   });
 
-  it('processVoiceMemo scopes by founder_id and product_id', () => {
-    const fn = extractFunction(voiceProcessorSource, 'processVoiceMemo');
-    expect(fn).toMatch(/founderId:\s*string/);
-    expect(fn).toMatch(/productId:\s*string/);
-    const sql = extractSQL(fn);
-    expect(sql).toMatch(/founder_id/);
-    expect(sql).toMatch(/product_id/);
-  });
-
-  it('voice decisions are inserted scoped to product_id', () => {
-    const fn = extractFunction(voiceProcessorSource, 'processVoiceMemo');
-    const sql = extractSQL(fn);
-    // Decisions created from voice should include product_id
-    expect(sql).toMatch(/INSERT INTO decisions.*product_id/i);
-  });
 });
 
 // =============================================================================

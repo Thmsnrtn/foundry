@@ -67,7 +67,17 @@ describe('the tables nothing ever wrote are gone', () => {
     // 029 also created the competitor surface the weekly scan actually writes;
     // 035 the experiments the engine reads. Dropping neighbours would be the
     // other defect.
-    for (const table of ['competitors', 'competitive_signals', 'experiments', 'playbooks',
+    //
+    // `playbooks` LEFT THIS LIST, and the distinction is the point of the test.
+    // It belonged here because the code used it — `playbook/generator.ts` wrote
+    // it and the playbooks pages read it. Migration 215 was right to spare it
+    // and this case was right to insist. That module and those pages were then
+    // deleted as unreachable, so by migration 311 nothing used it at all and it
+    // moved from "neighbour" to "the same defect one release later". A survivor
+    // list is a claim about the present, not a promise about the future; when
+    // the claim stops being true the entry comes out rather than the table
+    // being kept to satisfy it.
+    for (const table of ['competitors', 'competitive_signals', 'experiments',
       'sector_scoring_overrides', 'agent_messages', 'product_webhooks']) {
       const r = await query("SELECT name FROM sqlite_master WHERE type='table' AND name = ?", [table]);
       expect(r.rows, `${table} should still exist`).toHaveLength(1);
