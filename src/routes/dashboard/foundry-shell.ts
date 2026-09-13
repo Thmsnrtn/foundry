@@ -1227,11 +1227,24 @@ export function theOneThing(a: Attention, extras: OneThingExtras = {}): HtmlEsca
   }
 
   if (a.kind === 'drifted') {
-    const name = CHECK_IN_PLAIN_WORDS[a.checks[0]]?.name ?? a.checks[0];
+    // THE SAME ROWS AS A STOPPED ROUTINE, because it is the same question: is
+    // anything of his affected, and is he needed. A check that no longer
+    // matches said only that it no longer matched.
+    const known = CHECK_IN_PLAIN_WORDS[a.checks[0]];
+    const h = extras.health;
     return html`<section id="the-one-thing" class="one alert"><div class="one-in">
-      <h2>${name}</h2>
+      <p class="act">Something drifted</p>
+      <h2>${known?.name ?? a.checks[0]}</h2>
       <p class="lead">This no longer matches. I have not changed anything — I only look.</p>
-    </div></section>`;
+      ${known ? html`<p>${known.why}</p>` : ''}
+    </div>
+    ${h ? html`<dl class="facts">
+      <dt>What drifted</dt><dd>${a.checks.map((ch) => CHECK_IN_PLAIN_WORDS[ch]?.name ?? ch).join('; ')}</dd>
+      <dt>Data loss</dt><dd>${h.dataLoss}</dd>
+      <dt>Customer effect</dt><dd>${h.customerEffect}</dd>
+      <dt>Money at risk</dt><dd>${h.moneyAtRisk}</dd>
+      <dt>Owner action</dt><dd>${h.ownerAction ?? 'none'}</dd>
+    </dl>` : ''}</section>`;
   }
 
   if (a.kind === 'grade') {
@@ -5370,8 +5383,24 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
       <p class="quiet"><a href="/foundry/public-workshop">The Workshop</a></p>
     </div>` : '';
 
+  // WHAT IS WRONG AND WHETHER HE IS NEEDED, in the place he comes to when
+  // something is. The Estate tile on Home shows the word; this shows the rows.
+  const { healthOf } = await import('../../services/founder/health.js');
+  const health = await healthOf(s.ownerId);
   const body = html`
     <h1>What I'm allowed to do</h1>
+    <div class="know"><h2>System health</h2>
+      <p><span class="state ${health.state === 'ok' ? 'ok' : health.state === 'degraded' ? 'watch' : 'bad'}">${health.word}</span></p>
+      <dl class="facts">
+        <dt>What failed</dt><dd>${health.failed.length ? health.failed.join('; ') : 'nothing'}</dd>
+        <dt>Recovering</dt><dd>${health.recovering}</dd>
+        <dt>Data loss</dt><dd>${health.dataLoss}</dd>
+        <dt>Customer effect</dt><dd>${health.customerEffect}</dd>
+        <dt>Money at risk</dt><dd>${health.moneyAtRisk}</dd>
+        <dt>Owner action</dt><dd>${health.ownerAction ?? 'none'}</dd>
+        <dt>Last healthy</dt><dd>${health.lastHealthy ? health.lastHealthy.slice(0, 16).replace('T', ' ') : 'not recorded'}</dd>
+      </dl>
+    </div>
 
     ${stopped ? html`<p class="lede">Stopped. I will not use it again. If you are
       paying for it, that has not stopped &mdash; end it in your account with them.</p>` : ''}

@@ -358,5 +358,11 @@ product: the stylesheet uppercases a label and `innerText` returns it that
 way, and the sixth glance tile legitimately sits below the fold on a phone. A
 test that pins the casing a stylesheet chose is testing the stylesheet.
 
-Still open in Phase 3: the drifted card rendering `healthOf` rows (the stopped
-one does); Controls showing the full health rows.
+Both cards that report trouble — a stopped routine and a drifted check — now
+carry the same rows, because they ask the same question: is anything of his
+affected, and is he needed. Controls carries the full health block, so the
+Estate tile shows the word and the place he goes when something is wrong shows
+the rows.
+
+**Phase 3 is done.** What remains of the Cockpit is content that needs Phase
+4's substrate: money that has actually moved.
