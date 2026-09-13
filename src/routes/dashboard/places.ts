@@ -524,7 +524,7 @@ placeRoutes.get('/foundry/decisions', async (c: any) => {
   const state = company ? null : await context(c);
   const attention = state ? whatNeedsHim(state) : null;
   const queue = state ? await theRestOfTheQueue(founderId, attention) : [];
-  const extras = state ? await extrasFor(attention) : {};
+  const extras = state ? await extrasFor(attention, founderId) : {};
   const openActs = company ? await rows(
     `SELECT a.id, a.summary, a.expires_at, p.id AS product_id, p.name FROM proposed_acts a
        JOIN products p ON p.id = a.product_id

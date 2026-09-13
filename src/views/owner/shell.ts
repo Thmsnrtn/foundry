@@ -206,7 +206,7 @@ export const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscape
 <link rel="stylesheet" href="/static/owner.css" />
 </head>
 <body>
-<main class="wrap">
+<main class="wrap" data-place="${active}">
 <div class="brand"><b>F</b> Private Foundry</div>
 ${crumbsOf(where)}
 ${body}

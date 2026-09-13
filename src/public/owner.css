@@ -390,6 +390,9 @@ footer a:hover,footer a:focus-visible{text-decoration:underline}
   main.wrap{display:flex;flex-direction:column}
   .crumbs{margin-bottom:var(--s3)}
   .local.rail{display:none}
+  /* ON THE DESK THE RAIL IS HOME'S NAVIGATION. The local row under the
+     greeting repeated it; a phone still needs it, a desk does not. */
+  main[data-place="foundry"] .local{display:none}
   .askwhere{max-width:none;margin:0 0 6px}
   nav.places .sub,nav.places .more{display:flex;flex-direction:column;gap:2px;margin:var(--s2) 0 0;padding:var(--s2) 0 0;border-top:1px solid var(--line)}
   nav.places .sub b{font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);padding:4px 12px 6px;font-weight:600;position:static;background:none;height:auto;line-height:1.4}

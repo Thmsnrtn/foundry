@@ -1169,8 +1169,13 @@ export function waitingList(queue: import('../../services/founder/attention.js')
 }
 
 /** What the card needs read for it before it can say where the act lands. */
-export async function extrasFor(a: Attention): Promise<OneThingExtras> {
-  return a && a.kind === 'spend' ? { consequence: await consequenceOfAct(a.actId) } : {};
+export async function extrasFor(a: Attention, ownerId?: string): Promise<OneThingExtras> {
+  if (a && a.kind === 'spend') return { consequence: await consequenceOfAct(a.actId) };
+  if (a && (a.kind === 'stopped' || a.kind === 'drifted') && ownerId) {
+    const { healthOf } = await import('../../services/founder/health.js');
+    return { health: await healthOf(ownerId) };
+  }
+  return {};
 }
 
 /** The queue Home shows under the one thing: everything waiting, minus the one thing itself. */
@@ -1182,18 +1187,36 @@ export async function theRestOfTheQueue(ownerId: string, attention: Attention): 
 }
 
 /** What a screen can hand the card that the attention itself does not carry. */
-export interface OneThingExtras { consequence?: import('../../services/founder/what-it-would-do.js').Consequence | import('../../services/founder/what-it-would-do.js').CannotSay }
+export interface OneThingExtras {
+  consequence?: import('../../services/founder/what-it-would-do.js').Consequence | import('../../services/founder/what-it-would-do.js').CannotSay;
+  health?: import('../../services/founder/health.js').EstateHealth;
+}
 
 export function theOneThing(a: Attention, extras: OneThingExtras = {}): HtmlEscapedString | Promise<HtmlEscapedString> {
   if (a === null) return html``;
 
   if (a.kind === 'stopped') {
+    // STATE, NOT A PARAGRAPH. The sentence stays as the lead; the rows are
+    // what he can check without reading to the end: what failed, whether it
+    // recovers on its own, whether anybody outside is affected, whether money
+    // is at risk, whether he is needed, when it was last healthy.
+    const h = extras.health;
     return html`<section id="the-one-thing" class="one alert"><div class="one-in">
+      <p class="act">System degraded</p>
       <h2>Part of me has stopped running</h2>
       <p class="lead">${count(a.routines.length, 'routine')} of mine
         ${a.routines.length === 1 ? 'has' : 'have'} failed, so what I tell you may be out of
         date. Nothing is lost, and nothing needs you — I am the one that has to recover.</p>
     </div>
+    ${h ? html`<dl class="facts">
+      <dt>What failed</dt><dd>${h.failed.length ? h.failed.join('; ') : a.routines.join(', ')}</dd>
+      <dt>Recovering</dt><dd>${h.recovering}</dd>
+      <dt>Data loss</dt><dd>${h.dataLoss}</dd>
+      <dt>Customer effect</dt><dd>${h.customerEffect}</dd>
+      <dt>Money at risk</dt><dd>${h.moneyAtRisk}</dd>
+      <dt>Owner action</dt><dd>${h.ownerAction ?? 'none'}</dd>
+      <dt>Last healthy</dt><dd>${h.lastHealthy ? h.lastHealthy.slice(0, 16).replace('T', ' ') : 'not recorded'}</dd>
+    </dl>` : ''}
     <details><summary>Technical details</summary><div class="inner">
       <p class="mono">${a.routines.join(', ')}</p>
     </div></details></section>`;
@@ -2247,7 +2270,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
     }
   }
   const attention = whatNeedsHim(s);
-  const extras = await extrasFor(attention);
+  const extras = await extrasFor(attention, s.ownerId);
 
   // Only when he TYPED a company's name. The chips below are institutional
   // questions and must not silently acquire a subject.
@@ -2673,7 +2696,7 @@ interface CompanyView {
   }>;
   /** Acts it has proposed and cannot take until he answers. */
   proposals: Array<{
-    id: string; summary: string; why: string; expectedEffect: string;
+    id: string; summary: string; why: string; expectedEffect: string; label: string;
     risk: string; consequence: string; expiresAt: string;
     /** The rung and what it means, or null where nobody classified this act. */
     kindOfAct: string | null;
@@ -2926,9 +2949,12 @@ export async function readCompany(productId: string, founderId: string): Promise
       amount: (formerAllowance.amountCents / 100).toFixed(2),
       withdrawnAt: formerAllowance.withdrawnAt, reason: formerAllowance.reason,
     } : null,
-    proposals: proposals.map((p) => ({
+    proposals: await Promise.all(proposals.map(async (p) => ({
       id: p.id, summary: p.summary, why: p.why, expectedEffect: p.expectedEffect,
       risk: p.risk, consequence: p.consequence, expiresAt: p.expiresAt.slice(0, 10),
+      // THE BUTTON NAMES THE CONSEQUENCE, here as everywhere. Read once, with
+      // the proposal, so the template cannot fall back to a generic label.
+      label: await (async () => { const c = await consequenceOfAct(p.id); return isCannotSay(c) ? `Approve — ${p.summary}` : labelFor(c); })(),
       // WHAT KIND OF ACT, WHAT IT COSTS, AND WHAT UNDOING IT WOULD INVOLVE.
       //
       // The card carried a low/medium/high consequence it never rendered, and
@@ -2944,7 +2970,7 @@ export async function readCompany(productId: string, founderId: string): Promise
       cost: p.costCents === null ? null
         : p.costCents === 0 ? 'nothing'
           : `$${(p.costCents / 100).toFixed(2)}`,
-    })),
+    }))),
     budgetMonthly: row.operating_budget_monthly_usd == null ? null
       : Number(row.operating_budget_monthly_usd),
     spent30d: Number(row.ai_cost_trailing_30d_usd ?? 0),
@@ -3500,7 +3526,7 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
           ${p.expiresAt}.</p>
         <p class="row"><a class="why" href="/foundry/why/proposal/${p.id}">Show your work</a></p>
         <form method="POST" action="/foundry/proposals/${p.id}/approve">
-          <button class="btn go" type="submit">Approve this one thing</button>
+          <button class="btn go" type="submit">${p.label}</button>
         </form>
         <form method="POST" action="/foundry/proposals/${p.id}/refuse">
           <button class="btn" type="submit">Do not do it</button>
