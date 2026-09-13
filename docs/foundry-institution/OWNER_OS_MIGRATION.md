@@ -811,3 +811,75 @@ gate has not been watched fail until the thing you broke was actually broken.
 `gates-fail-when-they-should` now carries three cases for it: one per capability
 break, and one asserting directly that no claim survives the stop list as
 nothing at all.
+
+---
+
+## Deployed and verified — 13 September 2026
+
+Production (`foundry-intel`) serves commit `2eaeac1f`. `/internal/health`:
+database ok, ai ok, clerk ok, scheduler ok, storage volume.
+
+### What CI caught that I had not
+
+The first push went red on two tests my own full chain had passed — 4,994
+passing locally, every gate green. The cause is worth keeping:
+
+`src/routes/api` held eighty-one routes until the commercial surface was
+deleted. **Git does not track empty directories.** The folder survives on the
+machine that did the deleting and is ABSENT from a fresh checkout. Two tests
+plant a fixture into it; `writeFileSync` had nowhere to write, and the runner
+answered with an ENOENT naming a FILE when the thing missing was the FOLDER.
+
+So the local run was against a tree no other machine has. **After a deletion,
+nothing local is evidence about the runner until the difference is named.** The
+fix is in `plant`, which now creates any missing parent directory and removes it
+with the file — so a fixture may name any path the gate walks whether or not the
+tree happens to have code there, and planting never leaves the untracked empty
+folder that hid this. Every other fixture directory was checked against the git
+index; `src/routes/api` was the only one.
+
+It was then verified the way it should have been the first time: a fresh
+`git clone --depth 1` of the pushed branch, `npm ci`, both files run there —
+75 tests passing, no directory left behind.
+
+The deploy job behaved correctly on the red run: the chain runs first, it
+failed, and the deploy was **skipped**. Nothing shipped on a red tree.
+
+### Verified against production, not inferred
+
+- **The door.** `/` → 302 `/foundry`; `/pricing`, `/case-studies`,
+  `/manifesto`, `/help`, `/privacy-policy`, `/terms` all **404**;
+  `/auth/login` 200.
+- **The fourteen tables are gone** from the production volume — all thirteen
+  checked by name return absent (the fourteenth, `investor_annotations`, was
+  never created).
+- **The trigger hazard is fixed, proven by doing it.**
+  `reconstruction_claim_guard` no longer names `agent_wiki_entries`, and an
+  INSERT into `reconstruction_claims` with a real `product_id` **succeeds**.
+  Before migration 310 that statement could not have been PREPARED at all.
+  (A first probe used a fake product id and failed on the FOREIGN KEY — the
+  right failure, but not proof, so it was repeated properly.)
+
+### Experiment 001, read from the volume — and one correction
+
+| | |
+|---|---|
+| Recipients screened | **34** — 21 approved, 10 pending, 3 struck |
+| Written to | **21**, all executed |
+| Delivered | **19** |
+| Bounced | **2** |
+| Purchases (`experiment_fulfilments`) | **0** |
+| Suppressions | **2, both `bounced`** |
+| Stop conditions | bounces, complaints, declined_value, opt_outs, unfulfillable — **none triggered** |
+
+**Two corrections to how this has been reported.** The cohort figure "21 of 21"
+is right, but it was drawn from **34 screened**, and saying only 21 hid the
+population the strata were cut from. And the two non-deliveries were described
+as "1 undeliverable, 1 unresolved"; the second has since resolved, and both are
+**bounces**.
+
+That second point is the earlier bounce/opt-out fix working in production
+exactly as intended: two dead mailboxes are recorded with reason `bounced`, the
+`opt_outs` stop condition counts only `they_asked`, and it therefore reads
+**zero**. Nobody has asked Thomas to stop writing. A dead mailbox is not a
+person saying no, and the stop envelope now agrees.
