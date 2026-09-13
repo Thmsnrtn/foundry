@@ -1041,6 +1041,8 @@ interface Decision {
   facts: Array<[string, string]>;
   primary: { label: string; action: string; fields?: Record<string, string> };
   secondary?: { label: string; action: string; fields?: Record<string, string> };
+  /** Where this decision's provenance lives. INSPECT, from the card itself. */
+  showWork?: string;
   /**
    * WHAT BECOMES POSSIBLE, BESIDE WHAT STILL DOES NOT.
    *
@@ -1093,6 +1095,8 @@ const decisionCard = (d: Decision): HtmlEscapedString | Promise<HtmlEscapedStrin
         <button class="btn" type="submit" style="width:auto">${d.secondary.label}</button>
       </form>` : ''}
     </div>
+    ${d.showWork ? html`<p class="row" style="padding:0 var(--s3) var(--s2)">
+      <a class="why" href="${d.showWork}">Show your work</a></p>` : ''}
     <details><summary>Technical details</summary><div class="inner">
       <p class="mono">${d.technical}</p>
     </div></details>
@@ -1315,6 +1319,7 @@ export function theOneThing(a: Attention, extras: OneThingExtras = {}): HtmlEsca
         action: `/foundry/proposals/${a.actId}/refuse`,
         fields: { return_to: 'foundry' },
       },
+      showWork: `/foundry/why/proposal/${a.actId}`,
       technical: `${a.summary} · rung ${a.rung ?? 'unclassified'} · act ${a.actId}`
         + ` · company ${a.productId}`,
     });
@@ -4600,8 +4605,13 @@ foundryShellRoutes.post('/foundry/proposals/:proposalId/:decision',
           ref: { kind: 'proposed_act', id: c.req.param('proposalId') }, actor: `founder:${String(founder.id)}` });
       }
     }
-    return c.redirect(
-      `/foundry/companies/${productId}?done=${decision === 'approve' ? 'approved' : 'refused'}`);
+    // BACK WHERE HE DECIDED. The card posts `return_to` and this handler
+    // ignored it, so deciding from the first screen dropped him on a company
+    // page he had not asked to visit — the context lost at the exact moment
+    // he had just used it.
+    const done = decision === 'approve' ? 'approved' : 'refused';
+    const back = String((await c.req.parseBody().catch(() => ({})) as Record<string, unknown>).return_to ?? '');
+    return c.redirect(back === 'foundry' ? `/foundry?done=${done}` : `/foundry/companies/${productId}?done=${done}`);
   });
 
 // ─── letting Foundry see something ──────────────────────────────────────────

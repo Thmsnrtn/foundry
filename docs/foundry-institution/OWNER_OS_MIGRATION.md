@@ -334,6 +334,29 @@ ahead" — the label that approved nine things in 137 seconds. It now reads
 - **Now / Next** under the glance when a test is live: what it is doing, and
   when the hand next passes — from its schedule, not a forecast.
 
-Still open in Phase 3: the company page's own "Approve this one thing"; the
-stopped/drifted card rendering `healthOf` rows; the desk local row; the twelve
-browser journeys.
+- **The card has a door to its own provenance.** Every queue item offered
+  "Show your work"; the one decision the owner is most likely to interrogate
+  offered none. INSPECT now opens from the card.
+- **Deciding no longer loses his place.** The decision form posts `return_to`
+  and the handler ignored it, so deciding from the first screen dropped him on
+  a company page he had not asked to visit — context lost at the moment he had
+  just used it. It now returns him where he decided.
+
+**The journeys, proven in a browser at 390px in dark mode** (§44), eight of
+twelve: healthy with nothing to do; degraded and recovering on its own, with
+the rows he can check; one consequential decision waiting, which stays the one
+thing with a stopped routine beside it, says where it lands, and carries a
+button naming the act; a test running with Now and Next from the records; a
+test blocked on a real dependency, naming what only he can do; a test stopped
+by its own rule, naming the rule; back after a day away; and WATCH → INSPECT →
+INTERVENE, ending with the decision recorded against the act and the owner
+back on the screen he decided from. Sale, refund and tax-reserve journeys wait
+for Phase 4's substrate rather than being faked.
+
+Three of those journeys failed first on my own assertions rather than on the
+product: the stylesheet uppercases a label and `innerText` returns it that
+way, and the sixth glance tile legitimately sits below the fold on a phone. A
+test that pins the casing a stylesheet chose is testing the stylesheet.
+
+Still open in Phase 3: the drifted card rendering `healthOf` rows (the stopped
+one does); Controls showing the full health rows.
