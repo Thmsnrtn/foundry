@@ -62,8 +62,27 @@ export async function submitBenchmark(
   for (const contrib of contributions) {
     const industry = contrib.industry ?? 'saas';
     const category = mapIndustryToCategory(industry);
-    const sizeBucket = '1'; // default bucket; caller should enrich if possible
-    const mrrBucket = '0-1k'; // default bucket
+    // PLACEHOLDERS, NOT MEASUREMENTS — AND NOTHING MAY SEGMENT ON THEM.
+    //
+    // `team_size_bucket` and `mrr_bucket` are NOT NULL with a CHECK listing
+    // five values each, and neither list has an "unknown" member, so this
+    // writer has to put SOMETHING there and no caller supplies the real
+    // figures. Every contribution is therefore filed as a one-person company
+    // earning under $1k — including this one.
+    //
+    // That is harmless only because nothing reads them. `refreshPercentiles`
+    // segments strictly by (lifecycle_state, company_category); their previous
+    // reader, `intelligence/benchmarks.ts`, was deleted with the commercial
+    // product. They are in `docs/db/write-only-columns-baseline.txt`
+    // deliberately, and the reason is this comment.
+    //
+    // ANYTHING THAT STARTS SEGMENTING ON THEM IS WRONG until a caller passes
+    // real values, because a peer band built from a fabricated dimension is a
+    // confident answer about companies that were never compared. If that day
+    // comes, the honest first step is a migration adding 'unknown' to both
+    // CHECK lists, so not-measured stops having to masquerade as measured.
+    const sizeBucket = '1';
+    const mrrBucket = '0-1k';
 
     await query(
       `INSERT INTO benchmark_contributions

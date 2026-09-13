@@ -10,44 +10,37 @@
 //
 //   board_packets       omitted period_start / period_end
 //   investor_updates    omitted owner_id / period / subject / content
-//                       (the feature and the table are gone — see the note
-//                        where its case used to be)
 //   experiments         omitted hypothesis_id / type / control_description /
 //                       treatment_description / success_metric
 //   voice_sessions      omitted session_date
 //   integration_sync_log omitted started_at
 //
-// Three of them make a PAID MODEL CALL FIRST. The founder pressed Generate, the
+// Three of them made a PAID MODEL CALL FIRST. The founder pressed Generate, the
 // money went, the narrative was written, and then the write raised. So the
-// board-packet, investor-update and growth-experiment features have never
-// produced anything, for anybody, since they shipped — and the failure is
-// invisible from outside because a button that does nothing looks like a button
-// nobody pressed.
+// board-packet, investor-update and growth-experiment features never produced
+// anything, for anybody, since they shipped — and the failure was invisible
+// from outside because a button that does nothing looks like a button nobody
+// pressed.
 //
-// These tests assert the ROW EXISTS afterwards. A test that only called the
-// function and checked it did not throw would have passed against the old code
-// on any fixture that built its own tables.
+// FOUR OF THE FIVE WRITERS ARE NOW GONE. `investor_updates` went first, with
+// the Commercial Foundry routes that were its only caller. `experiments/
+// engine.ts` and `voice/processor.ts` have now followed as reachable from no
+// entry point, and `scp/investor/board-packet.ts` with them — so the cases that
+// proved those rows landed have no write left to assert. What remains is the
+// sync log, whose writer is live, and it is asserted the same way: the ROW
+// EXISTS afterwards. A test that only called the function and checked it did
+// not throw would have passed against the old code on any fixture that built
+// its own tables.
 // =============================================================================
 
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { nanoid } from 'nanoid';
 
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-
-vi.mock('../../src/services/ai/client.js', async (orig) => {
-  const actual = await orig<Record<string, unknown>>();
-  return {
-    ...actual,
-    callSonnet: vi.fn(async () => ({
-      content: '## Update\n\nThings happened.',
-      usage: { input_tokens: 1, output_tokens: 1 },
-    })),
-  };
-});
 
 const OWNER = 'wn_owner';
 const P = 'wn_product';
@@ -59,75 +52,6 @@ beforeAll(async () => {
   await query(
     `INSERT INTO products (id, name, owner_id, status) VALUES (?, 'Landed Co', ?, 'active')`,
     [P, OWNER]);
-});
-
-describe('a growth experiment is actually created', () => {
-  it('writes the experiment and the hypothesis it tests', async () => {
-    const { createExperiment } = await import('../../src/services/experiments/engine.js');
-    const id = await createExperiment(P, OWNER, {
-      name: 'Annual plan pricing',
-      hypothesis: 'Annual billing lifts conversion',
-      experiment_type: 'pricing',
-      variants: [
-        { name: 'control', description: 'Monthly only', config: {} },
-        { name: 'variant_b', description: 'Monthly and annual', config: {} },
-      ],
-      primary_metric: 'conversion_rate',
-      secondary_metrics: ['activation_rate'],
-      traffic_split: { control: 50, variant_b: 50 },
-      sample_size_target: 100,
-    } as never);
-
-    const row = (await query(
-      `SELECT hypothesis_id, type, control_description, treatment_description,
-              success_metric, experiment_type, status
-         FROM experiments WHERE id = ?`, [id])).rows[0] as Record<string, unknown>;
-    expect(row, 'the growth experiment feature has never created an experiment').toBeTruthy();
-
-    // The study design and the subject are two different axes with confusingly
-    // close names. `type` is a closed vocabulary; `experiment_type` is not.
-    expect(row.type).toBe('ab_test');
-    expect(row.experiment_type).toBe('pricing');
-    expect(row.control_description).toBe('Monthly only');
-    expect(row.treatment_description).toBe('Monthly and annual');
-
-    const hypothesis = (await query(
-      `SELECT statement, proposed_by FROM hypotheses WHERE id = ?`, [row.hypothesis_id]))
-      .rows[0] as Record<string, unknown>;
-    expect(hypothesis, 'every experiment cites a hypothesis').toBeTruthy();
-    expect(hypothesis.statement).toBe('Annual billing lifts conversion');
-  });
-});
-
-// THE INVESTOR UPDATE CASE IS GONE WITH ITS FEATURE, NOT WITH ITS DEFECT.
-// `investor_updates` was the second of the four, and the case here proved the
-// row landed with both generations of its columns written. The generator was
-// reachable only from the Commercial Foundry routes; when they went it had no
-// caller, so `scp/investor/investor-update.ts` and the table itself were
-// removed. There is no write left to assert landed. The same NOT NULL shape is
-// still proved by the three cases around this note.
-
-describe('a voice session is actually started', () => {
-  it('writes the conversation, linked to the chat session it opened', async () => {
-    // THE PREMISE MOVED, AND THE SUBJECT DID NOT. This asserted a row in
-    // `voice_sessions` carrying `session_date`, because that is where a
-    // conversation used to be written — and supplying that date to satisfy a
-    // NOT NULL is what made every conversation collide with the day's briefing
-    // on `UNIQUE(product_id, session_date)`. Migration 218 gave the
-    // conversation its own table, where there is no date key because a
-    // conversation is not one-per-day.
-    //
-    // What this test is FOR is unchanged: starting a voice session used to raise
-    // before a word was recorded, and the write has to land. It lands here now.
-    const { startVoiceSession } = await import('../../src/services/voice/processor.js');
-    const { voice_session_id, chat_session_id } = await startVoiceSession(OWNER, P);
-    const row = (await query(
-      `SELECT chat_session_id, status FROM voice_conversations WHERE id = ?`,
-      [voice_session_id])).rows[0] as Record<string, unknown>;
-    expect(row, 'starting a voice session raised before a word was recorded').toBeTruthy();
-    expect(String(row.chat_session_id)).toBe(chat_session_id);
-    expect(String(row.status)).toBe('active');
-  });
 });
 
 describe('a sync is actually logged', () => {

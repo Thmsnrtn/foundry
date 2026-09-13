@@ -14,7 +14,7 @@ import {
   MEANING_ORDINARY, RECURSIVE_CATASTROPHIC, RECURSIVE_DIMENSIONS,
   RECURSIVE_OUTSTANDING_PROOF, evaluateRecursiveInstitution,
   type RecursiveDimension, type RecursiveObservation,
-} from '../../src/services/foundry/recursive-institution-contract.js';
+} from '../contracts/recursive-institution-contract.js';
 
 // =============================================================================
 // `recursive-institution-v1`, scored against the real path rather than asserted.
@@ -201,7 +201,6 @@ describe('recursive-institution-v1 contract', () => {
     const { planDevelopmentChange, executeDevelopmentChange } = await import(
       '../../src/services/institution/development-assisting.js');
     const { logCost } = await import('../../src/services/financial/economics.js');
-    const { getResponsibilityCost } = await import('../../src/services/financial/institutional-economics.js');
 
     const SNAP = 'docs/db/schema.snapshot.sql';
     const CONTENT = '-- generated\nCREATE TABLE x (id TEXT);\n';
@@ -311,11 +310,23 @@ describe('recursive-institution-v1 contract', () => {
       responsibilityId: 'ric_resp', capability: 'development',
       details: { duration_ms: durationMs, model_invocations: 0 },
     });
-    const cost = await getResponsibilityCost(P_FOUNDRY, 'ric_resp');
+    // Read from the ledger itself. `financial/institutional-economics.ts` was
+    // the reader that answered this — measured spend per responsibility, and the
+    // components nobody measures named rather than folded into the sum — and it
+    // was reachable from no entry point and has been deleted. The clause about
+    // named unmeasured components went with it: there is no longer any code that
+    // makes that claim, and asserting it here would be asserting nothing. What
+    // survives is the part the ledger itself carries, which is what the
+    // dimension asks for — the cost of this run is recorded against this
+    // responsibility rather than assumed free.
+    const cost = (await query(
+      `SELECT COUNT(*) AS events,
+              COALESCE(SUM(CASE WHEN cost_type='llm_tokens' THEN amount_usd ELSE 0 END),0) AS model_usd
+         FROM cost_events WHERE product_id=? AND responsibility_id='ric_resp'`,
+      [P_FOUNDRY])).rows[0] as unknown as { events: number; model_usd: number };
     observe('cost_observability',
-      cost.measured.events === 1 && cost.measured.modelUsd === 0
-      && durationMs >= 0 && cost.unmeasured.length > 0,
-      'model spend measured at zero, duration measured, and seven components still named unmeasured');
+      Number(cost.events) === 1 && Number(cost.model_usd) === 0 && durationMs >= 0,
+      'model spend measured at zero, duration measured, and the cost attributed to the responsibility');
   });
 
   it('scores the real recursive path, and reports what is not yet exercised', () => {

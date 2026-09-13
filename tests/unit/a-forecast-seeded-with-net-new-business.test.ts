@@ -6,7 +6,6 @@ import { nanoid } from 'nanoid';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { generateScenariosForProduct } from '../../src/services/scp/forecasting/runway.js';
-import { computeRunwayModel } from '../../src/services/financial/simulator.js';
 import { stateFinancialPosition } from '../../src/services/financial/position.js';
 
 // =============================================================================
@@ -43,6 +42,12 @@ import { stateFinancialPosition } from '../../src/services/financial/position.js
 // reconciliation at `routes/ingest/index.ts`: a projection of a LEVEL must not
 // be scored against a sum of MOVEMENTS. That was the consuming half. This is
 // the producing half of the same sentence.
+//
+// ONE OF THE TWO FORECASTERS IS GONE. `financial/simulator.ts` was deleted as
+// production-dead, so the three cases that held `computeRunwayModel` to the
+// level — including the going concern told ten months instead of sixty — went
+// with it. The account above is kept whole because the rule is one rule and the
+// runway forecaster below is still held to it.
 // =============================================================================
 
 async function company(): Promise<{ productId: string; founderId: string }> {
@@ -165,36 +170,5 @@ describe('the runway forecaster', () => {
 
     const base = await assumptionsOf(productId, 'Base Case');
     expect(base.current_mrr_cents).toBe(5_000_000);
-  });
-});
-
-describe('the financial simulator', () => {
-  it('reports the level as monthly revenue, not one period of movement', async () => {
-    const { productId, founderId } = await company();
-    await snapshot(productId, 0, { level: 5_000_000, newMrr: 200_000 });
-
-    const model = await computeRunwayModel(founderId, productId);
-
-    expect(model?.monthly_revenue).toBe(50_000);
-  });
-
-  it('does not read a placeholder row as zero revenue', async () => {
-    const { productId, founderId } = await company();
-    await snapshot(productId, 2, { level: 5_000_000 });
-    await query(`INSERT INTO metric_snapshots (id, product_id, snapshot_date)
-                 VALUES (?, ?, date('now'))`, [nanoid(), productId]);
-
-    const model = await computeRunwayModel(founderId, productId);
-
-    // $50k revenue against $60k burn on $600k cash is sixty months, not ten.
-    expect(model?.monthly_revenue).toBe(50_000);
-    expect(model?.runway_months).toBeCloseTo(60, 6);
-  });
-
-  it('refuses rather than modelling a company whose revenue it was never told', async () => {
-    const { productId, founderId } = await company();
-    await snapshot(productId, 0, { level: null, newMrr: 200_000 });
-
-    expect(await computeRunwayModel(founderId, productId)).toBeNull();
   });
 });

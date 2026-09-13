@@ -1833,34 +1833,24 @@ async function scpSignalEvents(): Promise<void> {
   }
 }
 
-// ─── SCP v7: Monthly ROI Computation — 1st of month 8:00 UTC ─────────────────
-
-async function scpROIMonthly(): Promise<void> {
-  logger.info('scp_roi_monthly starting', { jobName: 'scp_roi_monthly' });
-  try {
-    const { query: dbQuery } = await import('../db/client.js');
-    const { computeMonthlyROI } = await import('../services/scp/roi/calculator.js');
-    const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
-    const now = new Date();
-    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    let computed = 0;
-    let failed = 0;
-    for (const row of products.rows) {
-      const productId = (row as Record<string, unknown>).id as string;
-      try {
-        await computeMonthlyROI(productId, month);
-        computed++;
-      } catch (err) {
-        failed += 1;
-        logSubjectFailure('scp_roi_monthly', productId, err);
-      }
-    }
-    reportRun('scp_roi_monthly', `Computed ROI for ${computed} products`, failed);
-  } catch (err) {
-    logger.error('scp_roi_monthly: Error:', { jobName: 'scp_roi_monthly', error: String(err) });
-  }
-}
-
+// ─── SCP v7: Monthly ROI Computation — REMOVED ───────────────────────────────
+//
+// A MONTHLY JOB THAT SUMMARISED A TABLE NOTHING COULD FILL, INTO A TABLE
+// NOTHING COULD READ.
+//
+// `scp_roi_monthly` ran `computeMonthlyROI` over every operating product on the
+// 1st at 08:00 and wrote `roi_monthly_summaries`. Its source was
+// `recommendation_outcomes`, whose writers — `recordRecommendation` and
+// `markActedOn` in `scp/roi/outcome-tracker.ts` — were exported and called from
+// nowhere; and its only reader was the `/roi` page, deleted with the commercial
+// product. Both ends were gone, so the job spent a database round-trip per
+// company each month to record that nothing had been measured.
+//
+// The calculator's own header said the sharp version of this: `/roi` reported
+// "$0 delivered" to every founder, always, on no evidence — a product telling
+// its customer it was worthless because the measurement path was absent rather
+// than because the value was. That page is gone and this is the other half.
+//
 // ─── SCP v7: Founder State Assessment — Daily 7:00 UTC ───────────────────────
 
 async function scpFounderStateAssessment(): Promise<void> {
@@ -2569,7 +2559,6 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   scp_webhook_delivery_cleanup: { fn: scpWebhookDeliveryCleanup, schedule: '0 4 * * 0', description: 'Clean up old webhook delivery records (Sunday 4:00 UTC)' },
   // SCP v7: Event bus, ROI, founder intelligence, priority queue
   scp_signal_events:       { fn: scpSignalEvents,           schedule: '0 * * * *',   description: 'Process pending signal events and dispatch to target agents (hourly)' },
-  scp_roi_monthly:         { fn: scpROIMonthly,             schedule: '0 8 1 * *',   description: 'Compute monthly ROI summaries for all active products (1st of month 8:00 UTC)' },
   scp_founder_state:       { fn: scpFounderStateAssessment, schedule: '0 7 * * *',   description: 'Detect behavioral signals and assess founder state (daily 7:00 UTC)' },
   scp_priority_rebuild:    { fn: scpPriorityRebuild,        schedule: '*/30 * * * *', description: 'Rebuild priority action queue for One Thing banner (every 30 min)' },
   stage_detection:    { fn: stageDetection,    schedule: '30 5 * * *',  description: 'Auto-detect product growth stage (daily)' },

@@ -17,6 +17,7 @@ import { query } from '../../src/db/client.js';
 //   redteam/council    handed a red team five arbitrary risks as the company's
 //                      risks.
 //   voice/processor    spoke three arbitrary stressors aloud in a briefing.
+//                      (Deleted since — see the note in "the sources".)
 //   agents/compass     gave an agent five arbitrary OKRs. (Deleted since, with
 //                      the OKR table it read — see the note in "the sources".)
 //
@@ -92,7 +93,9 @@ describe('the sources', () => {
     const expectations: Array<[string, RegExp]> = [
       ['src/services/ux/next-action.ts', /severity = 'critical' AND status = 'active'\s*\n\s*ORDER BY identified_at ASC/],
       ['src/services/redteam/council.ts', /status = 'active'\s*\n\s*ORDER BY CASE severity/],
-      ['src/services/voice/processor.ts', /status = 'active'\s*\n\s*ORDER BY CASE severity/],
+      // The third was `voice/processor.ts`, ordering the three stressors it
+      // spoke aloud. The module was deleted as production-dead, so the query
+      // it ordered went with it.
       // The fourth was `scp/agents/compass.ts`, capping five OKRs with no
       // ORDER BY. Compass and `company_okrs` are both gone — the agent had no
       // reachable caller once the Commercial Foundry routes went, and the table
@@ -107,7 +110,7 @@ describe('the sources', () => {
   });
 });
 
-describe('two more pages the same scan found', () => {
+describe('the other page the same scan found', () => {
   it('the verifier takes the executions whose window elapsed first', async () => {
     const { readFileSync } = await import('node:fs');
     const { stripComments } = await import('../../scripts/lib/strip-comments.mjs');
@@ -116,18 +119,7 @@ describe('two more pages the same scan found', () => {
     expect(src).toMatch(/verify_after <= datetime\('now'\)\s*\n\s*ORDER BY verify_after ASC/);
   });
 
-  it('the matchmaker orders the shortlist its ranking can only see', async () => {
-    // The full score needs JSON overlap SQL cannot compute here, so the page is
-    // ordered by the part it can — and the residual is stated in the source
-    // rather than left in the shape of the query.
-    const { readFileSync } = await import('node:fs');
-    const { stripComments } = await import('../../scripts/lib/strip-comments.mjs');
-    const code = stripComments(
-      readFileSync('src/services/network/matchmaking.ts', 'utf8'), { lineComments: true });
-    expect(code).toMatch(/ORDER BY \(np\.sector = \?\) DESC, \(np\.growth_stage = \?\) DESC/);
-
-    const prose = readFileSync('src/services/network/matchmaking.ts', 'utf8');
-    expect(prose, 'the cap and its effect are said out loud')
-      .toContain('not the best matches in the network');
-  });
+  // The second was `network/matchmaking.ts`, whose shortlist was ordered by the
+  // part of the score SQL could compute. That module was deleted as
+  // production-dead, so there is no shortlist left to order.
 });

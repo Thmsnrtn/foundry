@@ -106,12 +106,13 @@ describe('the call sites', () => {
   it('escape the value and name the escape character', async () => {
     const { readFileSync } = await import('node:fs');
     const { stripComments } = await import('../../scripts/lib/strip-comments.mjs');
+    // `scp/memory/graph.ts` was the other call site and is gone — deleted as
+    // production-dead — so the tracker is the only one left to hold.
     for (const f of [
-      'src/services/scp/memory/graph.ts',
       'src/services/scp/accuracy/tracker.ts',
     ]) {
-      // Comments stripped: both of these files explain the defect in prose
-      // that contains the very pattern being forbidden.
+      // Comments stripped: this file explains the defect in prose that
+      // contains the very pattern being forbidden.
       const src = stripComments(readFileSync(f, 'utf8'), { lineComments: true });
       expect(src, `${f} builds a LIKE pattern by hand`).not.toMatch(/`%\$\{/);
       expect(src, `${f} does not name the escape character`).toContain("ESCAPE '\\\\'");

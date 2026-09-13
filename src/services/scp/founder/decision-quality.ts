@@ -205,7 +205,15 @@ export async function detectBehavioralSignals(productId: string): Promise<Behavi
 export async function assessFounderState(productId: string): Promise<FounderState> {
   const signals = await detectBehavioralSignals(productId);
 
-  // Save detected signals to DB
+  // Save detected signals to DB.
+  //
+  // `signal_description` is PROVENANCE: the sentence a person would read to
+  // understand why this signal fired, stored beside the structured
+  // `signal_type` and `severity` that code acts on. Its previous reader was a
+  // commercial page, deleted with that product, so it is in
+  // `docs/db/write-only-columns-baseline.txt` deliberately rather than removed
+  // — a row recording a judgement about a founder should say in words what the
+  // judgement was, whether or not anything currently renders it.
   for (const sig of signals) {
     await query(
       `INSERT INTO founder_behavioral_signals (id, product_id, signal_type, signal_description, severity, context_json)

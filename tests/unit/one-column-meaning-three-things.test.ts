@@ -129,7 +129,9 @@ describe('the writers', () => {
     for (const f of [
       'src/services/integration/fabric.ts',
       'src/routes/dashboard/connections.ts',
-      'src/services/integrations/stripe-sync.ts',
+      // `integrations/stripe-sync.ts` was the fourth writer checked here. It was
+      // reachable from no entry point and has been deleted; a file that does not
+      // exist cannot write a row without a direction.
       'src/services/integrations/framework.ts',
     ]) {
       const src = stripComments(readFileSync(f, 'utf8'), { lineComments: true });

@@ -9,7 +9,6 @@ import { getTrustLedger, TRUST_MIN_SAMPLE } from '../../src/services/trust/ledge
 import {
   foundryJudgementTestedSql, foundryJudgementWasTested,
 } from '../../src/services/decisions/foundry-proposed.js';
-import { getDecisionQualityTrends } from '../../src/services/scp/founder/decision-tracker.js';
 
 // =============================================================================
 // A TRACK RECORD THAT WAS NOT FOUNDRY'S.
@@ -37,11 +36,17 @@ import { getDecisionQualityTrends } from '../../src/services/scp/founder/decisio
 // other below rather than each against a constant.
 //
 // AND A RATE OVER AN EMPTY TABLE WAS BOTH A CRITICISM AND A COMPLIMENT.
-// `decision_quality_scores` has no writer — `recordDecisionContext` is called
+// `decision_quality_scores` had no writer — `recordDecisionContext` was called
 // from nowhere — so /founder-intelligence showed "Full Context 0%" in RED, a
 // finding about how carelessly the founder decides, beside "Override Rate 0%"
 // in GREEN, a compliment about how rarely they overrule their agents. One empty
-// table, two opposite verdicts, on one page.
+// table, two opposite verdicts, on one page. That half is settled rather than
+// asserted now: `scp/founder/decision-tracker.ts` held both the rates and the
+// table's only would-be writer and was deleted as production-dead, and
+// migration 311 drops `decision_quality_scores` itself, so the case that held
+// the three rates to null went with them. The rule outlived them in
+// `a-green-card-about-a-person-nobody-watched.test.ts`, which still refuses an
+// override count drawn from nothing.
 // =============================================================================
 
 const P = 'p_trust';
@@ -141,17 +146,5 @@ describe('one rule, one home', () => {
     // either form has to move both.
     expect(sqlCount).toBe(tsCount);
     expect(sqlCount).toBe(3);
-  });
-});
-
-describe('a rate over a table nothing writes', () => {
-  it('is neither a red finding nor a green one', async () => {
-    const trends = await getDecisionQualityTrends(P);
-
-    expect(trends.decisions_with_full_context_pct).toBeNull();
-    expect(trends.override_rate_30d).toBeNull();
-    expect(trends.override_rate_90d).toBeNull();
-    // The one field that was already honest, kept honest.
-    expect(trends.average_quality_score).toBeNull();
   });
 });

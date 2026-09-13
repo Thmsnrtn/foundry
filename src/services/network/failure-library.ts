@@ -46,7 +46,6 @@ interface MatchCriteria {
   mrr_growth_lt?: number;
   mrr_growth_lt_weeks?: number;
   runway_months_lt?: number;
-  no_fundraising_activity?: boolean;
   activation_declining_weeks?: number;
   active_stressor_count_gt?: number;
   risk_state?: string[];
@@ -144,11 +143,24 @@ export async function seedDefaultPatterns(): Promise<void> {
     {
       id: 'fp_runway_crisis',
       pattern_name: 'Runway Crisis',
-      description: 'Less than 6 months of runway with no active fundraising is among the most critical failure patterns. Companies in this position have limited ability to respond to unexpected headwinds.',
+      // A CRITERION THAT ALWAYS MATCHED, AND SAID SO TO THE FOUNDER.
+      //
+      // This also required `no_fundraising_activity`, read as a count of
+      // `fundraising_scores` rows in the last 90 days. The only writer of that
+      // table was `scp/investor/fundraising-readiness.ts`, deleted with the
+      // commercial product, so the count was permanently zero — which made the
+      // criterion permanently TRUE and put "No fundraising activity recorded in
+      // the last 90 days" in front of a founder as an observation.
+      //
+      // That is not a no-op, it is worse: an absence of MEASUREMENT reported as
+      // an absence of ACTIVITY, in the signal list of a pattern marked
+      // critical. The institution has no way to see whether this founder is
+      // raising money, so it may not say anything about it. The pattern is now
+      // what it can actually observe — runway — and the copy says only that.
+      description: 'Less than 6 months of runway is among the most critical failure patterns. Companies in this position have limited ability to respond to unexpected headwinds.',
       category: 'runway_crisis',
       warning_signals: [
         'Runway below 6 months',
-        'No fundraising scores or investor updates in 90 days',
         'Burn rate increasing quarter-over-quarter',
         'MRR growth insufficient to reach profitability',
       ],
@@ -159,7 +171,7 @@ export async function seedDefaultPatterns(): Promise<void> {
         'Prioritise revenue-generating experiments over product expansion',
         'Engage existing investors for bridge options',
       ],
-      match_criteria: { runway_months_lt: 6, no_fundraising_activity: true },
+      match_criteria: { runway_months_lt: 6 },
       severity: 'critical',
     },
     {
@@ -342,7 +354,6 @@ interface ProductState {
   mrr_growth_rate: number | null;
   mrr_growth_weeks: number; // weeks below threshold
   runway_months: number | null;
-  has_fundraising_activity: boolean;
   activation_declining_weeks: number;
   active_stressor_count: number;
   risk_state: string;
@@ -354,7 +365,7 @@ export async function __loadProductStateForTest(productId: string): Promise<Prod
 }
 
 async function loadProductState(productId: string): Promise<ProductState> {
-  const [snapshotsResult, stressorsResult, lifecycleResult, fundraisingResult] = await Promise.all([
+  const [snapshotsResult, stressorsResult, lifecycleResult] = await Promise.all([
     query(
       // A DATE WINDOW, NOT A ROW COUNT — see the note above the week counters.
       `SELECT mrr_cents, new_mrr_cents, churn_rate, activation_rate, nps_score, snapshot_date
@@ -369,10 +380,6 @@ async function loadProductState(productId: string): Promise<ProductState> {
     ),
     query(
       `SELECT risk_state FROM lifecycle_state WHERE product_id = ?`,
-      [productId],
-    ),
-    query(
-      `SELECT COUNT(*) as cnt FROM fundraising_scores WHERE product_id = ? AND generated_at > datetime('now', '-90 days')`,
       [productId],
     ),
   ]);
@@ -470,7 +477,6 @@ async function loadProductState(productId: string): Promise<ProductState> {
 
   const active_stressor_count = (stressorsResult.rows[0] as Record<string, number>)?.cnt ?? 0;
   const risk_state = (lifecycleResult.rows[0] as Record<string, string>)?.risk_state ?? 'green';
-  const has_fundraising_activity = ((fundraisingResult.rows[0] as Record<string, number>)?.cnt ?? 0) > 0;
 
   // PERCENTAGE POINTS, BECAUSE THE CRITERIA ARE WRITTEN IN THEM.
   // `match_criteria: { churn_rate_gt: 8 }` means eight per cent, and
@@ -486,7 +492,6 @@ async function loadProductState(productId: string): Promise<ProductState> {
     mrr_growth_rate,
     mrr_growth_weeks,
     runway_months,
-    has_fundraising_activity,
     activation_declining_weeks,
     active_stressor_count,
     risk_state,
@@ -532,13 +537,6 @@ function evaluatePattern(
     if (state.runway_months !== null && state.runway_months < criteria.runway_months_lt) {
       hits++;
       signals.push(`Estimated runway ${state.runway_months.toFixed(0)} months below ${criteria.runway_months_lt}-month threshold`);
-    }
-  }
-  if (criteria.no_fundraising_activity) {
-    total++;
-    if (!state.has_fundraising_activity) {
-      hits++;
-      signals.push('No fundraising activity recorded in the last 90 days');
     }
   }
   if (criteria.activation_declining_weeks !== undefined) {

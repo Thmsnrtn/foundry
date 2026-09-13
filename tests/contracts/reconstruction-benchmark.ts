@@ -1,4 +1,4 @@
-import type { CompanyReconstruction, ReconstructionClaim } from './reconstruction.js';
+import type { CompanyReconstruction, ReconstructionClaim } from '../../src/services/institution/reconstruction.js';
 
 export const RECONSTRUCTION_BENCHMARK_VERSION = '2026-08-v1';
 

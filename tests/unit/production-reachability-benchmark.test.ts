@@ -16,7 +16,7 @@ import { reportedObligation } from '../fixtures/responsibility-state.js';
 import {
   evaluateProductionReachabilityGate, scoreProductionReachability,
   type ReachabilityObservation, type ReachabilityTruth,
-} from '../../src/services/institution/production-reachability-benchmark.js';
+} from '../contracts/production-reachability-benchmark.js';
 
 // =============================================================================
 // Executable production-reachability corpus.

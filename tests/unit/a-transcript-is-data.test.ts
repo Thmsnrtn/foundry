@@ -16,6 +16,14 @@ import { wrapDataBlock, dataBlockInstruction, sanitizeForPrompt } from '../../sr
 // weekly competitive scan the same way, and its output becomes signals and
 // stressors.
 //
+// ONE OF THE TWO BOUNDARIES IS GONE. `voice/processor.ts` was deleted as
+// production-dead, so the two cases that counted its three wrapped transcripts
+// and its three data-block instructions went with it: there is no prompt left
+// putting a transcript anywhere. The competitive scan is still here and still
+// held. The instrument itself — the block, the instruction, and the difference
+// between wrapping and filtering — is what the rest of this file is about, and
+// it is what a new transcript boundary would have to reach for.
+//
 // The tooling already existed: `prompt-shield.ts` and `sanitize.ts` were
 // written for exactly this and used at three other boundaries. These two were
 // not among them.
@@ -76,23 +84,8 @@ describe('the instruction that makes the block mean something', () => {
   });
 });
 
-describe('the two boundaries the audit named', () => {
+describe('the boundary the audit named that is still here', () => {
   const read = (f: string) => stripComments(readFileSync(f, 'utf8'), { lineComments: true });
-
-  it('the voice processor wraps every transcript it puts in a prompt', () => {
-    const src = read('src/services/voice/processor.ts');
-    // Comments stripped: the paragraphs above these call sites quote the raw
-    // interpolation they replaced.
-    expect(src).not.toMatch(/Transcript:\s*\\n\$\{transcript/);
-    expect(src).not.toMatch(/\$\{transcript\}/);
-    expect(src).not.toMatch(/\$\{transcript\.slice/);
-    expect((src.match(/wrapDataBlock\('transcript'/g) ?? [])).toHaveLength(3);
-  });
-
-  it('and tells the model what a transcript block is, in the system prompt', () => {
-    const src = read('src/services/voice/processor.ts');
-    expect((src.match(/dataBlockInstruction\('transcript'\)/g) ?? []).length).toBeGreaterThanOrEqual(3);
-  });
 
   it('the competitive scan wraps the names somebody typed', () => {
     const src = read('src/services/intelligence/competitive.ts');

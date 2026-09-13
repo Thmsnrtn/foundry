@@ -8,7 +8,6 @@ import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { SCPInstance } from '../../src/services/scp/instance.js';
-import { getSCPBoardSection } from '../../src/services/investor/board_packet.js';
 
 // =============================================================================
 // FIFTY IS A SCORE, NOT AN ABSENCE.
@@ -28,7 +27,12 @@ import { getSCPBoardSection } from '../../src/services/investor/board_packet.js'
 //   the board packet                  `?? 0` for the company, and `?? 0` for an
 //                                     agent under the heading "Top Performing
 //                                     Agents" — "Health: 0", in red, about an
-//                                     agent nothing had measured.
+//                                     agent nothing had measured. That reader,
+//                                     `investor/board_packet.ts`, was reachable
+//                                     from no entry point and has been deleted;
+//                                     the three cases that held it to a null
+//                                     went with it. The producer's obligation
+//                                     is unchanged and is still checked below.
 //   the weekly brief                  a NOT NULL column, so it could not record
 //                                     that the health was unknown, and opened
 //                                     with "Health score is 50/100 this week."
@@ -177,32 +181,6 @@ describe('an agent that never ran', () => {
     await agent('oracle', 80, 4, 3);
     const overview = await new SCPInstance('p_h').getStatus();
     expect(overview.agents.find((a) => a.name === 'oracle')!.successRate).toBe(0.75);
-  });
-});
-
-describe('the investor packet', () => {
-  it('does not call an unscored agent a top performer', async () => {
-    await agent('oracle', 88);
-    await agent('harbor', null);
-    await agent('forge', null);
-
-    const section = await getSCPBoardSection('p_h');
-    expect(section.top_agents.map((a) => a.name)).toEqual(['oracle']);
-    expect(section.top_agents.every((a) => a.health > 0),
-      'an unscored agent used to appear as "Health: 0" in red').toBe(true);
-  });
-
-  it('reports company health as null rather than zero', async () => {
-    await agent('oracle', null);
-    const section = await getSCPBoardSection('p_h');
-    expect(section.health_score,
-      'zero is the worst health there is, not the absence of a measurement').toBeNull();
-  });
-
-  it('reports a real company health when there is one', async () => {
-    await agent('oracle', 90);
-    await new SCPInstance('p_h').computeHealthScore();
-    expect((await getSCPBoardSection('p_h')).health_score).toBe(90);
   });
 });
 

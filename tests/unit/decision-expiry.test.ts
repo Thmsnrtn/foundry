@@ -16,6 +16,13 @@
 // never built, and its absence did not merely leave a feature missing: it made
 // a report say something false about the founder's own week.
 //
+// THE REPORT THAT SAID IT IS GONE. `intelligence/weekly-outcome.ts` was
+// reachable from no entry point and has been deleted, taking with it the case
+// here that watched `expired_7d` go from a structural zero to two. The sweep is
+// not orphaned by that: what it fixes for the founder is the QUEUE — a decision
+// past its deadline stops being indistinguishable from one still worth making —
+// and that is what the cases below assert.
+//
 // ONLY DECISIONS THAT CARRY A DEADLINE EXPIRE. A decision with no deadline is
 // not late, it is unscheduled, and sweeping those would silently clear the
 // queue of everything the founder simply has not got to yet.
@@ -109,22 +116,6 @@ describe('a decision past its deadline expires', () => {
     const id = await decision({ deadline: yesterday, deleted: true });
     await sweep();
     expect(await statusOf(id)).toBe('pending');
-  });
-});
-
-describe('and the weekly report can finally say so', () => {
-  it('counts the lapse it used to report as zero', async () => {
-    const { computeWeeklyOutcome } = await import(
-      '../../src/services/intelligence/weekly-outcome.js');
-    await decision({ deadline: yesterday });
-    await decision({ deadline: yesterday });
-
-    const before = await computeWeeklyOutcome(P);
-    expect(before.expired_7d, 'structurally zero before anything wrote the value').toBe(0);
-
-    await sweep();
-    const after = await computeWeeklyOutcome(P);
-    expect(after.expired_7d).toBe(2);
   });
 });
 

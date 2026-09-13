@@ -144,8 +144,14 @@ describe('every surface that shows a Signal', () => {
   });
 
   it('covers every consumer that exists', () => {
+    // A CENSUS, NOT A TARGET: the number is here so that a new surface reading
+    // `computeSignal` cannot appear without somebody deciding it obeys the rule
+    // above. It was five until `conversation/context.ts` was deleted as
+    // production-dead; the four left are `jobs/index.ts`, `routes/share`,
+    // `services/team/members.ts` and `services/voice/briefing.ts`, and all four
+    // are asserted by name below or exempted by name above.
     expect(consumers().length, 'if this moves, a new surface appeared')
-      .toBeGreaterThanOrEqual(5);
+      .toBeGreaterThanOrEqual(4);
   });
 
   it('does not let a bare score reach the public share page or the voice', () => {
@@ -159,11 +165,11 @@ describe('every surface that shows a Signal', () => {
     expect(voice).toMatch(/signalText\(signal\)/);
   });
 
-  it('does not put an unmeasured Signal into a model prompt', () => {
-    const ctx = stripComments(readFileSync('src/services/conversation/context.ts', 'utf8'),
-      { lineComments: true });
-    expect(ctx).toMatch(/signal: signal\.hasData \? signal\.score : null/);
-  });
+  // The prompt case was `conversation/context.ts`, which passed
+  // `signal.hasData ? signal.score : null` so an unmeasured Signal never
+  // reached a model as a number. That module was deleted as production-dead, so
+  // there is no prompt left carrying it — and `consumers()` above is what
+  // catches the next one that appears.
 
   it('does not alert on a drop from a number nobody measured', () => {
     const src = stripComments(readFileSync('src/jobs/index.ts', 'utf8'), { lineComments: true });

@@ -104,7 +104,7 @@ describe('institutional cognition', () => {
     // relaxed without the other, the benchmark would be scoring a system that
     // no longer matches its own assumptions.
     const { DEVELOPMENT_BENCHMARK_THRESHOLDS } = await import(
-      '../../src/services/institution/development-benchmark.js');
+      '../contracts/development-benchmark.js');
     expect(DEVELOPMENT_BENCHMARK_THRESHOLDS.maxModelCostUsd).toBe(0);
   });
 });

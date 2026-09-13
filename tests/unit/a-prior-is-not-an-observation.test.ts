@@ -3,10 +3,7 @@ process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { beforeAll, describe, expect, it } from 'vitest';
-import { runMigrations } from '../../src/db/migrate.js';
-import { query } from '../../src/db/client.js';
-import { getCohortPatterns, seedDefaultCohortPatterns } from '../../src/services/network/cohort-patterns.js';
+import { describe, expect, it } from 'vitest';
 import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 
 // =============================================================================
@@ -33,43 +30,19 @@ import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 // apexmicro.ai is the public face — taking the example briefing and
 // `/case-studies` with it. The checks that read that file are gone rather than
 // pointed at a substitute: a claim cannot be made by a page that is not served.
-// What survives is the half that was never on the page — the seeded patterns,
-// which a paying reader still sees, and the tier-gate's timestamp copy.
+// What survived was the half that was never on the page — the seeded patterns,
+// which a paying reader still saw, and the tier-gate's timestamp copy.
+//
+// AND NOW THE THIRD SURFACE HAS GONE TOO. `network/cohort-patterns.ts` held
+// both the seed and `getCohortPatterns`, and was deleted as production-dead, so
+// the describe that held the seeded rows to "a prior, not an observation" went
+// with it — there is no seed left to label and no reader left to read it. What
+// remains is the sentence the tier-gate and the story engine were selling,
+// which is not about any one page: Foundry does not offer a cryptographic
+// timestamp it does not compute.
 // =============================================================================
 
 const ROOT = resolve(__dirname, '../..');
-
-beforeAll(async () => { await runMigrations(); });
-
-describe('a seeded cohort pattern', () => {
-  it('is labelled a prior and never claims companies were observed', async () => {
-    await seedDefaultCohortPatterns();
-    const rows = (await query(
-      "SELECT id, evidence_source FROM cohort_patterns")).rows as unknown as Array<Record<string, unknown>>;
-    expect(rows.length).toBeGreaterThan(0);
-    for (const row of rows) {
-      expect(row.evidence_source, `${String(row.id)} was seeded, not observed`).toBe('reference');
-    }
-
-    await query(`INSERT OR IGNORE INTO founders (id,clerk_user_id,email) VALUES ('pr_o','pr_c','o@example.com')`);
-    await query(`INSERT OR IGNORE INTO products (id,name,owner_id,status,market_category)
-                 VALUES ('pr_p','Co','pr_o','active','b2b_saas')`);
-    await query(`INSERT OR IGNORE INTO lifecycle_state (product_id,current_prompt)
-                 VALUES ('pr_p','prompt_2')`);
-    const patterns = await getCohortPatterns('pr_p');
-    expect(patterns.length).toBeGreaterThan(0);
-    for (const p of patterns) {
-      expect(p.insight).not.toContain('Observed across');
-      expect(p.insight).toContain('not something it observed');
-    }
-  });
-
-  it('refuses a source outside the vocabulary, in the database', async () => {
-    await expect(query(
-      "UPDATE cohort_patterns SET evidence_source='probably observed'"))
-      .rejects.toThrow();
-  });
-});
 
 describe('what is sold', () => {
   // Comments stripped: an explanatory note that QUOTES the old claim is not

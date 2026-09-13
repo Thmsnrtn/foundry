@@ -2,7 +2,8 @@ process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
 import { nanoid } from 'nanoid';
 import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { runMigrations } from '../../src/db/migrate.js';
@@ -215,6 +216,14 @@ describe('a metric nobody reported is not scored', () => {
   });
 });
 
+function sourceFiles(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const p = join(dir, e.name);
+    if (e.isDirectory()) return sourceFiles(p);
+    return e.isFile() && p.endsWith('.ts') ? [p] : [];
+  });
+}
+
 describe('the halves with nothing at the other end are gone', () => {
   it('portfolio_alerts', async () => {
     expect((await query(
@@ -225,9 +234,16 @@ describe('the halves with nothing at the other end are gone', () => {
   it('expansion_analysis, and the zero that was typed into it', async () => {
     expect((await query(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='expansion_analysis'")).rows.length).toBe(0);
-    const exp = stripComments(
-      readFileSync('src/services/intelligence/expansion.ts', 'utf8'), { lineComments: true });
-    expect(exp).not.toMatch(/INSERT INTO expansion_analysis/);
-    expect(exp).not.toMatch(/tam_penetration_rate/);
+    // The zero was typed into `intelligence/expansion.ts`, which used to be
+    // read here for the `INSERT INTO expansion_analysis` and the
+    // `tam_penetration_rate` it wrote. That module was deleted as
+    // production-dead, so the check is now that NOTHING in the tree names
+    // either — a stronger statement than one file not naming them, and one that
+    // does not have to be repointed the next time a writer moves.
+    const namers = sourceFiles('src').filter((f) => {
+      const src = stripComments(readFileSync(f, 'utf8'), { lineComments: true });
+      return /expansion_analysis|tam_penetration_rate/.test(src);
+    });
+    expect(namers, 'a writer for a table that is gone').toEqual([]);
   });
 });

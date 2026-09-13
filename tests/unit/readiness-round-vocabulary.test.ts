@@ -1,19 +1,18 @@
 // =============================================================================
-// Tests: a closed vocabulary, and the table that has to cover it.
+// Tests: the orphan readiness table is gone, and stays gone.
 //
-// The assessment indexes a multiplier table by the round it is asked about:
+// THE ASSESSMENT ITSELF IS GONE. `scp/investor/fundraising-readiness.ts` held
+// `ROUND_MULTIPLIERS`, a table indexed by the round the caller asked about, and
+// an unrecognised round yielded `undefined` and turned every score into NaN.
+// The API route that fed it a caller's `target_round` went with the Commercial
+// Foundry surface; the module has now followed it, reachable from no entry
+// point, so the case that pinned the multiplier table against the round
+// vocabulary went with the file it was reading. The NaN cannot be reached by
+// anything, because there is nothing left to reach it with.
 //
-//   const mult = ROUND_MULTIPLIERS[targetRound];
-//
-// An unrecognised round yields `undefined`, and every score computed from it
-// becomes NaN — a fundraising readiness report made of nothing. The API route
-// that took `target_round` from a caller's request body, and refused a round
-// this table cannot score, went with the Commercial Foundry surface; the table
-// itself did not, and it still has to cover every round in the vocabulary, or
-// the next caller inherits the NaN.
-//
-// Also proves the orphan is gone: `fundraise_readiness` had a live writer and
-// no reader anywhere, which is the class the owner already decided.
+// What remains is the orphan: `fundraise_readiness` had a live writer and no
+// reader anywhere, which is the class the owner already decided, and migration
+// 165 dropped it. These cases keep it dropped and keep it unwritten.
 // =============================================================================
 
 process.env.TURSO_DATABASE_URL = 'file::memory:';
@@ -26,8 +25,6 @@ import { join } from 'node:path';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 
-const ROUNDS = ['pre_seed', 'seed', 'series_a', 'series_b'];
-
 function sourceFiles(dir = 'src', out: string[] = []): string[] {
   for (const e of readdirSync(dir, { withFileTypes: true })) {
     const p = join(dir, e.name);
@@ -39,19 +36,6 @@ function sourceFiles(dir = 'src', out: string[] = []): string[] {
 
 beforeAll(async () => {
   await runMigrations();
-});
-
-describe('the round vocabulary the assessment can score', () => {
-  it('covers every round the vocabulary names', () => {
-    // A round in the vocabulary that the table lacks is the NaN case waiting
-    // for a caller.
-    const svc = readFileSync('src/services/scp/investor/fundraising-readiness.ts', 'utf8');
-    const table = svc.slice(svc.indexOf('const ROUND_MULTIPLIERS'));
-    for (const r of ROUNDS) {
-      expect(table.slice(0, table.indexOf('};')), `${r} has no multiplier`)
-        .toContain(r);
-    }
-  });
 });
 
 describe('the orphan readiness table is gone', () => {
@@ -69,24 +53,5 @@ describe('the orphan readiness table is gone', () => {
       return /INSERT\s+INTO\s+fundraise_readiness\b/i.test(src);
     });
     expect(writers, `still written by ${writers.join(', ')}`).toEqual([]);
-  });
-
-  it('but the readiness assessment that still has a reader survives', async () => {
-    // Guard against the over-correction. `fundraising_scores` scores readiness
-    // for a NAMED ROUND, and `assessFundraisingReadiness` still writes and
-    // reads it. Collapsing it into a neighbour because their names rhyme would
-    // destroy a distinction rather than remove a duplication.
-    //
-    // `funding_readiness` was the other half of that pair — "is the company
-    // ready to raise at all" — and was checked here beside it. Its readers were
-    // Commercial Foundry pages; when they went, nothing in TypeScript named it,
-    // and migration 308 dropped it rather than adding the first exception to a
-    // ratchet pinned at zero. The distinction was real while both had readers;
-    // one of them no longer does.
-    for (const t of ['fundraising_scores']) {
-      const r = await query(
-        `SELECT name FROM sqlite_master WHERE type='table' AND name=?`, [t]);
-      expect(r.rows, `${t} should still exist`).toHaveLength(1);
-    }
   });
 });

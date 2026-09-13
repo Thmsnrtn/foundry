@@ -10,7 +10,7 @@ import { beginResponsibilityShadowing,compareShadowObservation } from '../../src
 import { recordConsent,revokeConsent } from '../../src/services/autopilot/consent.js';
 import { enterResponsibilityAssisting } from '../../src/services/institution/responsibility-assisting.js';
 import { executeAssistedSupportEmail,planAssistedSupportEmail,reconcileAssistedSupportEmail } from '../../src/services/institution/responsibility-assisted-email.js';
-import { evaluateAssistingBenchmark,type AssistingBenchmarkActual } from '../../src/services/institution/responsibility-assisting-benchmark.js';
+import { evaluateAssistingBenchmark,type AssistingBenchmarkActual } from '../contracts/responsibility-assisting-benchmark.js';
 import { reportedObligation } from '../fixtures/responsibility-state.js';
 
 type Truth={name:string;transport:'accepted'|'ambiguous';observations:Array<'support_reply_effective'|'support_reply_failed'>;

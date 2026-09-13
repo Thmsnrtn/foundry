@@ -90,7 +90,11 @@ const FOUNDRY_CHOSEN: Record<string, string> = {
   // own tests in provider-path-injection.test.ts: the host boundary was never
   // the thing at risk here.
   'src/services/ai/client.ts': 'OPENROUTER_BASE_URL, an operator env var, with a constant path',
-  'src/services/scp/briefing/voice-reply.ts': 'the same operator-set transcription base URL',
+  // `src/services/scp/briefing/voice-reply.ts` held an exemption here on the
+  // same terms — the operator-set transcription base URL. The module was
+  // reachable from no entry point and has been deleted, and the entry went with
+  // it for the same reason the APNs one did: this list refuses to name a module
+  // that no longer fetches a dynamic URL.
   'src/services/integration/github-gateway.ts': 'GITHUB_API constant; the repo slug in the path is checked by repoSlug',
   // THE SENSE'S CREDENTIAL, and the three constants it talks to. Every URL in
   // that module is a literal — Stripe's OAuth token, deauthorize and balance
@@ -153,7 +157,10 @@ describe('posting to a URL somebody else chose', () => {
     const guarded = dynamicUrlSenders().filter((rel) => !(rel in FOUNDRY_CHOSEN)).sort();
     expect(guarded).toEqual([
       'src/lib/webhooks.ts',
-      'src/services/audit/intake-web.ts',
+      // `src/services/audit/intake-web.ts` was named here — it fetched a URL a
+      // founder gave it, and guarded it. It was reachable from no entry point
+      // and has been deleted; a sender that does not exist is not one this
+      // list may name.
       'src/services/distribution/outbound-webhooks.ts',
       'src/services/integration/mcp-client.ts',
       'src/services/integration/posthog.ts',

@@ -1,4 +1,4 @@
-import type { ResponsibilityUnderstanding,UnderstandingFact } from './responsibility-understanding.js';
+import type { ResponsibilityUnderstanding,UnderstandingFact } from '../../src/services/institution/responsibility-understanding.js';
 
 export const RESPONSIBILITY_UNDERSTANDING_BENCHMARK_VERSION='2026-08-v1';
 export interface UnderstandingTruth {

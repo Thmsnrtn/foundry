@@ -5,7 +5,7 @@ import { query } from '../../src/db/client.js';
 import { recordReconstructionClaim,reconstructCompany } from '../../src/services/institution/reconstruction.js';
 import { discoverCandidatesFromReconstruction,promoteResponsibilityCandidate } from '../../src/services/institution/responsibility-candidate.js';
 import { evaluateE3ResponsibilityRecognitionGate,scoreResponsibilityRecognition,
-  type RecognitionActual,type RecognitionTruth } from '../../src/services/institution/responsibility-recognition-benchmark.js';
+  type RecognitionActual,type RecognitionTruth } from '../contracts/responsibility-recognition-benchmark.js';
 
 const truths:RecognitionTruth[]=[
   {productId:'recognition_saas',expectedCandidates:['Restore deployment reliability'],expectedResponsibilities:['Restore deployment reliability'],shouldAbstain:false},

@@ -159,7 +159,8 @@ describe('no surface still shows the movement as MRR', () => {
     'src/services/voice/briefing.ts',
     'src/services/digest/delivery.ts',
     'src/services/chat/coo.ts',
-    'src/services/conversation/context.ts',
+    // `src/services/conversation/context.ts` was the sixth surface. It was
+    // deleted as production-dead, so there is no reader of it left to hold.
     'src/views/components.ts',
     'src/mcp/server.ts',
   ];

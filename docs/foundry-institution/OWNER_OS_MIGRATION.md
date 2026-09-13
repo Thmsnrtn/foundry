@@ -883,3 +883,136 @@ exactly as intended: two dead mailboxes are recorded with reason `bounced`, the
 `opt_outs` stop condition counts only `they_asked`, and it therefore reads
 **zero**. Nobody has asked Thomas to stop writing. A dead mailbox is not a
 person saying no, and the stop envelope now agrees.
+
+---
+
+## The estate, deleted — and the baseline that is now zero
+
+The previous section ends by naming what was left: 78 production-dead modules,
+about 20,000 lines. This is that pass. `check-reachability` now reports
+
+```
+✓ unreachable modules: 0 (baseline 0), 399 reached from 3 entry points,
+  3 reached by a declared mechanism
+```
+
+The baseline was 65 when this began. **It is empty, and pinned at zero.**
+
+### My own analysis was wrong, and the institution's gate caught it
+
+An ad-hoc import-graph script said 79 modules were production-dead. Fifteen of
+those were false positives, and ten of the fifteen were **the SCP agents** —
+`atlas`, `beacon`, `crucible`, `forge`, `harbor`, `ledger`, `oracle`,
+`sentinel`, `shield` and `base`. They are loaded by a **computed** specifier:
+
+```ts
+await import(`./agents/${agentName}.js`)   // scp/instance.ts
+await import(`../agents/${agentName}.js`)  // scp/events/dispatcher.ts
+```
+
+Both loaders are live. Deleting those modules would have broken production the
+first time an agent ran — the same failure that narrowing `ALL_AGENTS` was
+written to prevent, arrived at from the other direction.
+
+`check-reachability` already knew. It carries a `REACHED_BY` map declaring that
+directory reached by computed dynamic import, with a note that a previous run
+"named ~160KB of running agents as unreachable and would have been believed."
+So the deletion set was taken from **the gate's baseline, not my script**. The
+lesson is the gate's own: a declaration that something is reached by a
+mechanism the walker cannot follow is a different statement from "unreachable
+but allowed," and conflating them is how a gate starts lying in the reassuring
+direction.
+
+One entry was moved the other way for the same reason. `src/mcp/cli.ts` sat in
+the baseline — which asserts *nobody can run this* — while four npm scripts
+(`mcp:context`, `mcp:audit`, `mcp:issues`, `mcp:dna`) invoke it through `tsx`.
+A deletion pass reading the baseline as a to-do list would have taken it. It is
+now declared reached, with those scripts as the mechanism.
+
+### Eleven contracts moved, not deleted
+
+`tests/contracts/` now holds the frozen prospective specifications: the
+development, institutional-judgment, production-reachability, reconstruction and
+four responsibility benchmarks, the support-drafting benchmark, support-pilot
+readiness, and the recursive-institution contract.
+
+These are **not** production code and never were. Each was frozen *before* the
+behaviour it scores, so thresholds could not be tuned to whatever the
+implementation happened to do; each is consumed only by a test. The reachability
+gate's own words decide it — "a module that only its own test reaches is not
+covered by that test in any sense the evidence ladder recognises." Moving them
+makes the classification true rather than baselined, and deleting them would
+have destroyed the one property that gives them value.
+
+### Fifty-three modules, 13,843 lines
+
+The commercial estate: the investor and exit suites, the intelligence
+modules, the briefing and memory and coordination services, the fleet
+observatory, the truth engine, the demo composer. Every one of them
+unreachable from `src/index.ts`, the four doors, the CLI or the test runner.
+
+### Three live modules were still reading tables nothing could write
+
+These could not simply be deleted, because production reached them:
+
+- **`ai/calibration.ts`** read `founder_psychology_insights` to shape the
+  founder's system prompt. Its writer was `intelligence/psychology.ts`, so the
+  query returned nothing on every call and assigned an empty list over the
+  default — the same value, reached by a round-trip. Auto-calibration now
+  derives only the sector agreement, which it can observe. The field stays,
+  because `updateProfile` writes it directly and a genuinely known pattern can
+  still be recorded. What is gone is the pretence that Foundry *infers* it.
+
+- **`network/failure-library.ts`** — **the sharp one.** It counted
+  `fundraising_scores` rows to decide `no_fundraising_activity`, a criterion of
+  the **critical** Runway Crisis pattern. With no writer the count was
+  permanently zero, so the criterion permanently MATCHED, and the founder was
+  shown *"No fundraising activity recorded in the last 90 days"* as a warning
+  signal. **An absence of measurement reported as an absence of activity.** The
+  institution cannot see whether this founder is raising money, so it may not
+  say anything about it. The pattern now matches on runway alone and the
+  description no longer claims otherwise.
+
+- **`scp/roi/calculator.ts`** aggregated `recommendation_outcomes`, whose
+  writers were exported and called from nowhere, into `roi_monthly_summaries`,
+  whose only reader was the `/roi` page deleted with the commercial product.
+  The monthly job `scp_roi_monthly` ran it over every operating product. Both
+  ends gone: a round-trip per company per month to record that nothing had been
+  measured. Job and calculator removed; an epitaph stands where the job was.
+
+### Thirty-one tables (migration 311), in two rings
+
+The first ring is the twenty-nine the gates named, children first —
+`playbook_exports` holds the only foreign key into the set. The second ring was
+found by **running the gates again** rather than by guessing: `memory_nodes`
+was held up only by `memory_edges` and `decision_counterfactuals`, and became
+unreachable in both directions the moment they went.
+
+`business_model_profile` was the mirror image of the writerless case — written
+only by the demo seeder, read by a deleted module. The seed write went with it.
+
+### A fabrication found on the way past
+
+`benchmark_contributions.team_size_bucket` and `.mrr_bucket` are `NOT NULL`
+with CHECK lists of five values each, **neither of which has an "unknown"
+member**. No caller supplies the real figures, so the writer fills them with
+constants: every contribution is filed as a one-person company earning under
+$1k, including this one.
+
+It is harmless *only* because nothing reads them — `refreshPercentiles`
+segments strictly by `(lifecycle_state, company_category)`, and their previous
+reader was deleted here. They are in the write-only baseline deliberately, and
+the reason is now written at the write site, including the warning that
+anything which starts segmenting on them is wrong until a caller passes real
+values. If that day comes the honest first step is a migration adding
+`'unknown'` to both CHECK lists, so not-measured stops having to masquerade as
+measured.
+
+### The ratchets
+
+Almost entirely tightening. `write-only-columns` **net −17** (three deliberate
+additions, each with its reason written where the column is written; seventeen
+removals). `unread-tables` −2. `unreferenced-tables`, `writerless-tables`,
+`unreachable-modules` all at **zero with no baseline at all**. `console-in-src`
+187 → 183. `schema.snapshot.sql` **−471 lines, none added**.
+`CONSEQUENTIAL_EFFECTS.json` −14 lines, none added.

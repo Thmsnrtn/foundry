@@ -20,7 +20,7 @@ import {
 } from '../../src/services/institution/development-assisting.js';
 import {
   evaluateDevelopmentBenchmark, type DevelopmentBenchmarkActual,
-} from '../../src/services/institution/development-benchmark.js';
+} from '../contracts/development-benchmark.js';
 
 // =============================================================================
 // Independently specified companies. Expected truth is authored here, in the

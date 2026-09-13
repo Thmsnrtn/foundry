@@ -1,10 +1,6 @@
-process.env.TURSO_DATABASE_URL = 'file::memory:';
-
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { runMigrations } from '../../src/db/migrate.js';
-import { query } from '../../src/db/client.js';
-import { PEER_SIGNAL_MIN_SAMPLE } from '../../src/services/decisions/patterns.js';
-import { topPeerValidatedDecisionTypes } from '../../src/services/intelligence/peer-signal.js';
+import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 // =============================================================================
 // "FIVE FOUNDERS LIKE YOU" MUST MEAN FIVE COMPANIES.
@@ -22,65 +18,39 @@ import { topPeerValidatedDecisionTypes } from '../../src/services/intelligence/p
 // (`cross_company_patterns` is not in migration 041's CHECK, so it can never be
 // granted). The ungated readers are the ones a founder actually sees. That is
 // why counting correctly here mattered more than there.
+//
+// ONE OF THE TWO IS GONE. `intelligence/peer-signal.ts` was deleted as
+// production-dead, and the five cases that drove `topPeerValidatedDecisionTypes`
+// over real `decision_patterns` rows — a single company contributing five
+// times, an unattributable row, the floor being reached honestly — went with
+// it. There is no second implementation of the rule left to run against.
+//
+// What the rule needs from here is the thing that outlives any one reader:
+// `predictive.ts` must take the floor from `decisions/patterns.ts` rather than
+// keeping a third copy of the number, and must count contributors rather than
+// rows. Both are read off the source, because the defect was never visible in
+// the output — "five peers" reads the same either way.
 // =============================================================================
 
-const STAGE = 'growth';
-
-async function pattern(contributor: string, direction: string, type = 'pricing'): Promise<void> {
-  await query(
-    `INSERT INTO decision_patterns
-       (id, decision_type, product_lifecycle_stage, risk_state_at_decision,
-        key_metrics_context, option_chosen_category, outcome_direction,
-        outcome_timeframe_days, contributor_hash)
-     VALUES (?,?,?,'green','{}','raise_price',?,30,?)`,
-    [`dp_${Math.random().toString(36).slice(2)}`, type, STAGE, direction, contributor]);
-}
-
-beforeAll(async () => { await runMigrations(); });
-beforeEach(async () => { await query('DELETE FROM decision_patterns'); });
-
-describe('the peer card on the dashboard', () => {
-  it('says nothing when one company made every one of the decisions', async () => {
-    for (let i = 0; i < PEER_SIGNAL_MIN_SAMPLE + 3; i += 1) await pattern('company_a', 'positive');
-    expect(await topPeerValidatedDecisionTypes(STAGE)).toEqual([]);
+describe('the reader that is left', () => {
+  it('uses the one rule, not a third copy of it', () => {
+    const file = 'intelligence/predictive.ts';
+    const source = readFileSync(resolve(__dirname, `../../src/services/${file}`), 'utf8');
+    expect(source, `${file} should import the shared floor`)
+      .toContain('PEER_SIGNAL_MIN_SAMPLE');
+    expect(source, `${file} should count distinct contributors`)
+      .toContain('COUNT(DISTINCT contributor_hash)');
   });
 
-  it('speaks once enough different companies have', async () => {
-    for (let i = 0; i < PEER_SIGNAL_MIN_SAMPLE; i += 1) await pattern(`company_${i}`, 'positive');
-    const signals = await topPeerValidatedDecisionTypes(STAGE);
-    expect(signals).toHaveLength(1);
-    expect(signals[0].sample_size).toBe(PEER_SIGNAL_MIN_SAMPLE);
-  });
-
-  it('does not inflate the count when one company contributes repeatedly', async () => {
-    for (let i = 0; i < PEER_SIGNAL_MIN_SAMPLE; i += 1) await pattern(`company_${i}`, 'positive');
-    for (let i = 0; i < 20; i += 1) await pattern('company_0', 'positive');
-    const signals = await topPeerValidatedDecisionTypes(STAGE);
-    expect(signals[0].sample_size).toBe(PEER_SIGNAL_MIN_SAMPLE);
-  });
-
-  it('will not count a row that cannot be attributed to a company', async () => {
-    for (let i = 0; i < PEER_SIGNAL_MIN_SAMPLE; i += 1) {
-      await query(
-        `INSERT INTO decision_patterns
-           (id, decision_type, product_lifecycle_stage, risk_state_at_decision,
-            key_metrics_context, option_chosen_category, outcome_direction,
-            outcome_timeframe_days)
-         VALUES (?,'pricing',?,'green','{}','raise_price','positive',30)`,
-        [`dp_anon_${i}`, STAGE]);
-    }
-    expect(await topPeerValidatedDecisionTypes(STAGE)).toEqual([]);
-  });
-
-  it('uses the one rule, not a third copy of it', async () => {
-    const { readFileSync } = await import('node:fs');
-    const { resolve } = await import('node:path');
-    for (const file of ['intelligence/peer-signal.ts', 'intelligence/predictive.ts']) {
-      const source = readFileSync(resolve(__dirname, `../../src/services/${file}`), 'utf8');
-      expect(source, `${file} should import the shared floor`)
-        .toContain('PEER_SIGNAL_MIN_SAMPLE');
-      expect(source, `${file} should count distinct contributors`)
-        .toContain('COUNT(DISTINCT contributor_hash)');
-    }
+  it('and the rule is still exported from the one place that owns it', () => {
+    // `patterns.ts` re-exports the institution-wide contributor floor under
+    // this name rather than declaring a number of its own — which is the point:
+    // there is one floor, and every reader borrows it.
+    const patterns = readFileSync(
+      resolve(__dirname, '../../src/services/decisions/patterns.ts'), 'utf8');
+    expect(patterns, 'a floor nobody can import is a floor everybody re-types')
+      .toMatch(/export \{ PEER_SIGNAL_MIN_SAMPLE \}/);
+    expect(patterns, 'and it is the institution floor, not a local constant')
+      .toContain("from '../institution/contributor-floor.js'");
   });
 });

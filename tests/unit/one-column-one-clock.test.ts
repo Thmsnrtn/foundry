@@ -6,7 +6,6 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { upsertCustomer } from '../../src/services/customers/intelligence.js';
 import { disconnectIntegration } from '../../src/services/integration/fabric.js';
-import { recordIntegrationEvent } from '../../src/services/integrations/health-monitor.js';
 
 // =============================================================================
 // ONE COLUMN, ONE CLOCK.
@@ -18,6 +17,11 @@ import { recordIntegrationEvent } from '../../src/services/integrations/health-m
 // ordering by such a column interleaves the two paths wrongly, MAX() prefers
 // whichever row JavaScript wrote, and every range comparison splits on which
 // path happened to write the row.
+//
+// One of the eleven was `integration_health`, written by
+// `integrations/health-monitor.ts`. That module was reachable from no entry
+// point and has been deleted, so the case that held its two timestamps to one
+// clock went with it — the column is no longer written by anything.
 //
 // The rule this file holds: a timestamp reaches the database in the database's
 // format. Where the value is Foundry's own "now", that means `datetime('now')`;
@@ -38,7 +42,6 @@ beforeAll(async () => {
 beforeEach(async () => {
   await query('DELETE FROM customers');
   await query('DELETE FROM integrations');
-  await query('DELETE FROM integration_health');
   await query('DELETE FROM outbound_actions');
 });
 
@@ -97,27 +100,6 @@ describe('the integrations table', () => {
       .rows[0] as unknown as Record<string, unknown>;
     expect(row.status).toBe('disconnected');
     expect(String(row.updated_at)).toMatch(SQL_TIME);
-  });
-});
-
-describe('integration health', () => {
-  it('records both its timestamps in one format', async () => {
-    await recordIntegrationEvent(P, 'stripe', true);
-    const row = (await query(
-      'SELECT last_event_at, last_successful_sync, updated_at FROM integration_health WHERE product_id=?',
-      [P])).rows[0] as unknown as Record<string, unknown>;
-    for (const k of ['last_event_at', 'last_successful_sync', 'updated_at']) {
-      expect(String(row[k]), `${k} carries the wrong clock`).toMatch(SQL_TIME);
-    }
-
-    // And on the update branch, which was a second copy of the same statement.
-    await recordIntegrationEvent(P, 'stripe', false, 'it broke');
-    const after = (await query(
-      'SELECT last_event_at, updated_at, consecutive_failures FROM integration_health WHERE product_id=?',
-      [P])).rows[0] as unknown as Record<string, unknown>;
-    expect(after.consecutive_failures).toBe(1);
-    expect(String(after.last_event_at)).toMatch(SQL_TIME);
-    expect(String(after.updated_at)).toMatch(SQL_TIME);
   });
 });
 

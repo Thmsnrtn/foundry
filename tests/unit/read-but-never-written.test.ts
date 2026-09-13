@@ -14,7 +14,13 @@
 //                             of an investor update has always listed names
 //                             against a NULL outcome, and the model then wrote
 //                             about a quarter of experiments that apparently
-//                             concluded nothing.
+//                             concluded nothing. BOTH READERS ARE NOW GONE:
+//                             `investor-update.ts` went on 13 September 2026
+//                             and `scp/investor/board-packet.ts` went with the
+//                             unreachable estate, so the five cases here that
+//                             exercised its `experimentOutcome` wording have
+//                             been removed. The column keeps its lack of a
+//                             writer; nothing reads it any more either.
 //
 //   products.cadence_mode     migration 070 describes weekend mode — "drops
 //                             agent cadences for the side-project founder
@@ -39,7 +45,6 @@ import { nanoid } from 'nanoid';
 
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { experimentOutcome } from '../../src/services/scp/investor/board-packet.js';
 import { scheduleNextRun } from '../../src/services/scp/scheduler.js';
 
 const OWNER = 'rw_owner';
@@ -55,47 +60,6 @@ beforeAll(async () => {
   await query(
     `INSERT INTO agent_instances (id, product_id, agent_name, display_name, version)
      VALUES (?, ?, 'atlas', 'Atlas', 1)`, [nanoid(), P]);
-});
-
-describe('an experiment reports what it actually established', () => {
-  it('names the winner', () => {
-    expect(experimentOutcome({ status: 'completed', winner: 'treatment' }))
-      .toContain('treatment');
-  });
-
-  it('says inconclusive rather than picking a side', () => {
-    // An experiment whose arms did not separate says nothing about the
-    // statement. Telling an investor it won or lost is the same overclaim the
-    // hypothesis vocabulary was fixed to avoid.
-    const out = experimentOutcome({ status: 'completed', winner: 'inconclusive' });
-    expect(out).toContain('inconclusive');
-    expect(out).not.toMatch(/won/);
-  });
-
-  it('reports an early stop with its reason', () => {
-    expect(experimentOutcome({ status: 'stopped_early', early_stop_reason: 'guardrail breached' }))
-      .toContain('guardrail breached');
-  });
-
-  it('falls back to the status rather than inventing an outcome', () => {
-    expect(experimentOutcome({ status: 'running' })).toBe('running');
-  });
-
-  it('does not read a column nothing writes', async () => {
-    const { readFileSync } = await import('fs');
-    // `investor-update.ts` was the second file checked here. It was deleted on
-    // 13 September 2026 — its table, `investors`, had no writer left once the
-    // commercial routes went, so the reading half went with the writing half.
-    // Its absence is the stronger guarantee: a file cannot read a column that
-    // nothing writes if the file does not exist.
-    for (const file of ['board-packet.ts']) {
-      const src = readFileSync(
-        new URL(`../../src/services/scp/investor/${file}`, import.meta.url), 'utf8')
-        .replace(/\/\*[\s\S]*?\*\//g, '')
-        .split('\n').map((l) => l.replace(/^\s*\/\/.*$/, '')).join('\n');
-      expect(src, file).not.toMatch(/learnings\s+AS/);
-    }
-  });
 });
 
 describe('weekend mode can be reached', () => {

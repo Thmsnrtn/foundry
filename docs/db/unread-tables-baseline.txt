@@ -1,5 +1,3 @@
 alignment_snapshots
-board_decks
 founder_behavioral_signals
 geopolitical_signals
-web_audit_results

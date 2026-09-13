@@ -1,7 +1,6 @@
-process.env.TURSO_DATABASE_URL = 'file::memory:';
-process.env.ENCRYPTION_KEY = '0'.repeat(64);
-
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 
 // =============================================================================
 // A DAILY RATE SCORED AGAINST A MONTHLY THRESHOLD.
@@ -18,79 +17,33 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 //                            company's growth.
 //   `briefing/compressed.ts` named the older row `lastWeekMetrics` and built
 //                            every delta in the compressed briefing from it.
+//
+// TWO OF THE THREE CONSUMERS ARE GONE. `scp/investor/fundraising-readiness.ts`
+// was deleted as production-dead, and with it the three cases that drove a real
+// assessment and read the rate back out of the prompt. `voice/briefing.ts` is
+// still here but the daily-rate case for it never lived in this file. The
+// compressed briefing is what is left, and it is held by its source rather than
+// by a run, because nothing reachable calls it with two snapshots any more.
+//
+// The second `it` below arrived from `a-fundraising-verdict-about-nothing`,
+// which was deleted whole with `investor/board_packet.ts`. Its subject is the
+// same file and a neighbouring rule — a recorded zero is a report, not an
+// absence — so it is kept here rather than lost with the module it was filed
+// under.
 // =============================================================================
 
-const seen: { prompt: string } = { prompt: '' };
-
-vi.mock('../../src/services/ai/client.js', async (orig) => {
-  const actual = await orig<typeof import('../../src/services/ai/client.js')>();
-  return {
-    ...actual,
-    callSonnet: async (_system: string, user: string) => {
-      seen.prompt = user;
-      return { content: '{"gaps":[]}', input_tokens: 1, output_tokens: 1 };
-    },
-  };
-});
-
-const { runMigrations } = await import('../../src/db/migrate.js');
-const { query } = await import('../../src/db/client.js');
-const { assessFundraisingReadiness } = await import('../../src/services/scp/investor/fundraising-readiness.js');
-
-const P = 'p_rate';
-
-beforeAll(async () => {
-  await runMigrations();
-  await query("INSERT INTO founders (id, clerk_user_id, email) VALUES ('f_rate','c_rate','r@example.com')");
-  await query("INSERT INTO products (id, name, owner_id, status) VALUES (?,'Acme','f_rate','active')", [P]);
-});
-
-beforeEach(async () => { await query('DELETE FROM metric_snapshots'); });
-
-const daysAgo = (n: number) => new Date(Date.now() - n * 86_400_000).toISOString().slice(0, 10);
-
-async function snap(offset: number, mrrCents: number) {
-  await query(
-    `INSERT INTO metric_snapshots (id, product_id, snapshot_date, mrr_cents)
-     VALUES (?, ?, ?, ?)`,
-    [`ms_${offset}`, P, daysAgo(offset), mrrCents],
-  );
-}
-
-describe('the growth rate in an investor readiness assessment', () => {
-  it('reads a daily reporter’s 0.5%-a-day as about 16% a month', async () => {
-    await snap(1, 10_000_000);
-    await snap(0, 10_050_000);   // +0.5% in one day
-
-    await assessFundraisingReadiness(P, 'seed');
-    // The rate reaches the model — and the founder, through its narrative — in
-    // the traction line of this prompt.
-    expect(seen.prompt).toMatch(/growth: 1[5-7](\.\d+)?%\/mo/);
-    expect(seen.prompt, 'a daily rate was being stated as a monthly one')
-      .not.toMatch(/growth: 0\.5%\/mo/);
-  });
-
-  it('reads a monthly reporter unchanged', async () => {
-    await snap(30, 10_000_000);
-    await snap(0, 11_500_000);   // +15% in a month
-
-    await assessFundraisingReadiness(P, 'seed');
-    expect(seen.prompt).toMatch(/growth: 1[4-6](\.\d+)?%\/mo/);
-  });
-
-  it('says nothing when there is only one snapshot', async () => {
-    await snap(0, 10_000_000);
-    await assessFundraisingReadiness(P, 'seed');
-    expect(seen.prompt).toContain('growth: N/A%/mo');
-  });
-});
-
 describe('the compressed briefing', () => {
-  it('does not call the previous snapshot last week', async () => {
-    const { readFileSync } = await import('node:fs');
-    const { stripComments } = await import('../../scripts/lib/strip-comments.mjs');
+  it('does not call the previous snapshot last week', () => {
     const src = stripComments(readFileSync('src/services/scp/briefing/compressed.ts', 'utf8'));
     expect(src).not.toContain('lastWeekMetrics');
     expect(src).toContain('over_days');
+  });
+
+  it('does not report a recorded zero as unmeasured', () => {
+    const src = stripComments(
+      readFileSync('src/services/scp/briefing/compressed.ts', 'utf8'), { lineComments: true });
+    expect(src, 'truthiness reported a pre-revenue company as unmeasured')
+      .not.toMatch(/mrr_cents\s*\n?\s*\?\s*`\$/);
+    expect(src).toMatch(/mrr_cents != null/);
   });
 });

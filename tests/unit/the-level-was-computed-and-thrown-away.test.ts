@@ -34,9 +34,10 @@ import { syncStripeMetrics } from '../../src/services/integrations/stripe.js';
 // question.
 //
 // The dormant second Stripe path, `stripe-sync.ts`, had the same defect —
-// `currentMrr` computed and discarded. Nothing can reach it today, so fixing it
-// is not a live change; it is the defect removed before somebody wires that
-// module up and inherits it.
+// `currentMrr` computed and discarded — and was fixed alongside it so that
+// whoever wired the module up would not inherit it. Nobody ever did: it was
+// reachable from no entry point and has been deleted, and the case that held it
+// to the same rule went with it. The live path below is unaffected.
 // =============================================================================
 
 const P = 'p_stripe';
@@ -133,12 +134,5 @@ describe('the level has a writer that is not the company reporting it', () => {
       readFileSync('src/services/integrations/stripe.ts', 'utf8'), { lineComments: true });
     expect(code).toMatch(/const columns = \[\s*'mrr_cents',/);
     expect(code).toMatch(/const values = \[totalMrr,/);
-  });
-
-  it('and the dormant path no longer discards it either', () => {
-    const code = stripComments(
-      readFileSync('src/services/integrations/stripe-sync.ts', 'utf8'), { lineComments: true });
-    expect(code).toMatch(/mrr_cents = excluded\.mrr_cents/);
-    expect(code).toMatch(/today, currentMrr, newMrr, churnedMrr/);
   });
 });

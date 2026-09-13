@@ -30,10 +30,11 @@ import { getWellbeing } from '../../src/services/founder/intelligence.js';
 // "Would track from activity gaps" and rendered as "you had a break today".
 // `override_count_7d: 0` told a founder they had not overridden Foundry once
 // this week — drawn from nothing, and it would still be zero if it were wired
-// up, because `decision_quality_scores` has no writer at all:
-// `recordDecisionContext` is exported and called from nowhere, which is also
-// why the override rates in `scp/founder/decision-tracker.ts` are permanently
-// zero.
+// up, because `decision_quality_scores` has no writer at all. Its only writer
+// was `recordDecisionContext` in `scp/founder/decision-tracker.ts`, exported
+// and called from nowhere; that module has since been deleted as
+// production-dead, so the table now has no writer in the tree at all and the
+// count below is unanswerable for a stronger reason than before.
 // =============================================================================
 
 beforeAll(async () => { await runMigrations(); });
@@ -154,16 +155,15 @@ describe('what is not recorded at all', () => {
     const w = await getWellbeing(id);
     expect(w.override_count_7d).toBeNull();
 
-    const tracker = 'src/services/scp/founder/decision-tracker.ts';
-    expect(readFileSync(tracker, 'utf8'), 'the only writer')
-      .toMatch(/INSERT INTO decision_quality_scores/);
-
-    // Comments stripped: this file and that one both NAME the function while
-    // explaining why it is never called.
-    const callers = sourceFiles('src').filter((f) => f !== tracker
-      && /recordDecisionContext/.test(
+    // The scan used to EXEMPT `scp/founder/decision-tracker.ts`, which held the
+    // single `INSERT INTO decision_quality_scores` that nothing called. That
+    // module was deleted, so there is no exemption left to make: nothing in the
+    // tree writes the table and nothing names the function. Comments are
+    // stripped because this file's own explanation names both.
+    const writers = sourceFiles('src').filter((f) =>
+      /INSERT INTO decision_quality_scores|recordDecisionContext/.test(
         stripComments(readFileSync(f, 'utf8'), { lineComments: true })));
-    expect(callers, 'if a caller ever appears, this count becomes computable').toEqual([]);
+    expect(writers, 'if a writer ever appears, this count becomes computable').toEqual([]);
   });
 });
 

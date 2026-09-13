@@ -1,5 +1,5 @@
 import type { CompanyReconstruction } from '../../src/services/institution/reconstruction.js';
-import type { ReconstructionFixtureTruth } from '../../src/services/institution/reconstruction-benchmark.js';
+import type { ReconstructionFixtureTruth } from '../contracts/reconstruction-benchmark.js';
 
 type HeldOut={name:string;structure:string;truth:ReconstructionFixtureTruth;actual:CompanyReconstruction};
 const fixture=(name:string,structure:string,productId:string,claim:[string,string,unknown],unknowns:string[],system?:[string,'known'|'stale'|'unknown']):HeldOut => {

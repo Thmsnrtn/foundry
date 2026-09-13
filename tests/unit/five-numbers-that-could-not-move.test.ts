@@ -6,17 +6,12 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { detectValueDecline } from '../../src/services/intelligence/value-delivery.js';
 import { assessComplianceDebt } from '../../src/services/intelligence/regulatory.js';
 import { getMRRIntelligence } from '../../src/services/founder/intelligence.js';
 
 // =============================================================================
-// FIVE NUMBERS THAT COULD NOT MOVE — THE THREE OF THEM THAT ARE STILL HERE.
+// FIVE NUMBERS THAT COULD NOT MOVE — THE TWO OF THEM THAT ARE STILL HERE.
 //
-//   Value decline    every unreported component read as 0, so the same silence
-//                    was a decline in one line and no problem in the next —
-//                    latest missing against a prior of 60 gave `0 < 55`, and
-//                    prior missing against a latest of 60 gave `60 < -5`.
 //   Compliance debt  nothing in the repository writes
 //                    `regulatory_profile.compliance_requirements`, so the score
 //                    was 0 for every company — and 0 on that scale is the claim
@@ -29,8 +24,11 @@ import { getMRRIntelligence } from '../../src/services/founder/intelligence.js';
 //
 // The other two — a lifetime streak counter described as "this week", and a
 // mobile payload reading movement columns as a level — lived on Commercial
-// Foundry routes and went with them. The three above are services, and each is
-// exercised here by calling it rather than by reading it.
+// Foundry routes and went with them. Value decline has now followed: it lived
+// in `intelligence/value-delivery.ts`, which was reachable from no entry point
+// and has been deleted, so the three cases that held it to the difference
+// between a fall and a silence went with the file. The two above are services,
+// and each is exercised here by calling it rather than by reading it.
 // =============================================================================
 
 const P = 'p_five';
@@ -39,45 +37,6 @@ beforeAll(async () => {
   await runMigrations();
   await query("INSERT INTO founders (id, clerk_user_id, email) VALUES ('f_5','c_5','five@example.com')");
   await query("INSERT INTO products (id, name, owner_id, status) VALUES (?,'Acme','f_5','active')", [P]);
-});
-
-describe('value delivery decline', () => {
-  beforeEach(async () => { await query('DELETE FROM value_delivery_metrics'); });
-
-  const snap = (id: string, date: string, cols: Record<string, number | null>) => {
-    const keys = Object.keys(cols);
-    return query(
-      `INSERT INTO value_delivery_metrics (id, product_id, owner_id, snapshot_date${keys.length ? ', ' + keys.join(', ') : ''})
-       VALUES (?, ?, 'f_5', ?${keys.map(() => ', ?').join('')})`,
-      [id, P, date, ...keys.map((k) => cols[k])]);
-  };
-
-  it('does not read an unreported component as a collapse to zero', async () => {
-    await snap('v1', '2026-08-01', { core_workflow_completion_rate: 60, value_delivery_index: 70 });
-    await snap('v2', '2026-08-08', { core_workflow_completion_rate: null, value_delivery_index: 70 });
-
-    const result = await detectValueDecline(P);
-    expect(result.affected_components).not.toContain('core_workflow_completion');
-    expect(result.unassessable_components).toContain('core_workflow_completion');
-  });
-
-  it('reads a real fall as a real fall', async () => {
-    await snap('v3', '2026-08-01', { core_workflow_completion_rate: 60, value_delivery_index: 70 });
-    await snap('v4', '2026-08-08', { core_workflow_completion_rate: 40, value_delivery_index: 70 });
-
-    const result = await detectValueDecline(P);
-    expect(result.affected_components).toContain('core_workflow_completion');
-  });
-
-  it('says nothing about the index when a snapshot did not report one', async () => {
-    await snap('v5', '2026-08-01', { value_delivery_index: 72 });
-    await snap('v6', '2026-08-08', { value_delivery_index: null });
-
-    const result = await detectValueDecline(P);
-    // "VDI declined from 72 to 0" was the old sentence.
-    expect(result.declining).toBeNull();
-    expect(result.trend_description).not.toContain('to 0');
-  });
 });
 
 describe('compliance debt', () => {

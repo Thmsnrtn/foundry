@@ -244,14 +244,12 @@ export async function seedDemoFounder(): Promise<void> {
   );
   console.log('  ✓ Founder health: 4.5mo runway, declining engagement, motivation 52/100');
 
-  // ─── Business Model ───────────────────────────────────────────────────────
-
-  await query(
-    `INSERT OR REPLACE INTO business_model_profile (id, product_id, owner_id, revenue_model, avg_cogs_per_customer, avg_cac, is_seasonal, seasonal_peak_months, seasonal_baseline_factor, services_revenue_percentage)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [nanoid(), productId, founderId, 'subscription', 8, 250, 1, JSON.stringify([8, 9, 10, 11, 1, 2, 3, 4, 5]), 0.2, 15]
-  );
-  console.log('  ✓ Business model: subscription, seasonal (academic year), 15% services');
+  // ─── Business Model — REMOVED ─────────────────────────────────────────────
+  //
+  // This seeded `business_model_profile`. It was the table's ONLY writer, and
+  // its only reader — `intelligence/business-model.ts` — was deleted with the
+  // commercial product, so the demo filled a table nothing would ever read.
+  // The table went in migration 311.
 
   // ─── Competitive Signal ───────────────────────────────────────────────────
 

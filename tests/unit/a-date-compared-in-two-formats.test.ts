@@ -6,7 +6,6 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { computeWeeklyOutcome } from '../../src/services/intelligence/weekly-outcome.js';
 import { resolveDecision, recordOutcome } from '../../src/services/decisions/queue.js';
 
 // =============================================================================
@@ -26,6 +25,13 @@ import { resolveDecision, recordOutcome } from '../../src/services/decisions/que
 // Three windows and one column, found by scanning for bound comparisons on
 // columns whose values come from SQLite. The tracker's windows were checked and
 // cleared: they bind date-only strings, which sort correctly against both.
+//
+// ONE OF THE THREE WINDOWS IS GONE WITH ITS MODULE. The founder's weekly
+// outcome card lived in `intelligence/weekly-outcome.ts`, deleted as
+// production-dead, so the three cases that drove `computeWeeklyOutcome` over
+// the boundary date went with it. The other two windows — the playbook
+// execution budget and the tracker — and the column written two ways are still
+// here, and the column is the half that carries the repair migration.
 // =============================================================================
 
 const P = 'p_fmt';
@@ -48,46 +54,6 @@ async function decision(id: string, opts: { createdAt?: string; gate?: number } 
     [id, P, opts.gate ?? 1, opts.createdAt ?? null],
   );
 }
-
-describe('the founder’s weekly outcome card', () => {
-  it('counts a decision recorded on the oldest day of the window', async () => {
-    // Seven days back, late in the day: inside a seven-day window by any
-    // reading. The ISO bound excluded the whole of that date.
-    const boundaryDate = (await query("SELECT date('now', '-7 days') AS d"))
-      .rows[0] as unknown as Record<string, unknown>;
-    await decision('d_edge', { createdAt: `${String(boundaryDate.d)} 23:59:59` });
-
-    const outcome = await computeWeeklyOutcome(P);
-    expect(outcome.surfaced_7d).toBe(1);
-  });
-
-  it('still excludes what is genuinely outside the window', async () => {
-    await decision('d_old', { createdAt: '2020-01-01 12:00:00' });
-    const outcome = await computeWeeklyOutcome(P);
-    expect(outcome.surfaced_7d).toBe(0);
-  });
-
-  it('counts a decision the founder approved on the boundary date', async () => {
-    // BOTH STAMPS AT THE END OF THE BOUNDARY DATE, and that is not cosmetic:
-    // the window's edge is an INSTANT — `datetime('now','-7 days')` — while the
-    // defect this test is about excluded the whole DATE. Seeding 09:00 made the
-    // case pass only when the suite ran before 09:00 UTC, which is a flake I
-    // introduced and the 09:21 run found. 23:59:59 is inside the window for
-    // every clock time except the last second of a day, and it was outside it
-    // under the old text comparison whatever the hour.
-    const boundaryDate = (await query("SELECT date('now', '-7 days') AS d"))
-      .rows[0] as unknown as Record<string, unknown>;
-    await decision('d_acted', { createdAt: `${String(boundaryDate.d)} 23:59:59` });
-    await query(
-      `UPDATE decisions SET status='approved', decided_at=?, decided_by='founder' WHERE id='d_acted'`,
-      [`${String(boundaryDate.d)} 23:59:59`],
-    );
-
-    const outcome = await computeWeeklyOutcome(P);
-    expect(outcome.acted_on_7d).toBe(1);
-    expect(outcome.percent_acted).toBe(100);
-  });
-});
 
 describe('the column that was written two ways', () => {
   it('stores one format whichever path resolved the decision', async () => {

@@ -13,7 +13,7 @@ import { reportedObligation } from '../fixtures/responsibility-state.js';
 import {
   evaluateE3ResponsibilityRecognitionGate, scoreResponsibilityRecognition,
   type RecognitionActual, type RecognitionTruth,
-} from '../../src/services/institution/responsibility-recognition-benchmark.js';
+} from '../contracts/responsibility-recognition-benchmark.js';
 
 // =============================================================================
 // Unfamiliar-company generalization.

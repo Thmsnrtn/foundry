@@ -5,7 +5,7 @@ import { query } from '../../src/db/client.js';
 import { recordReconstructionClaim } from '../../src/services/institution/reconstruction.js';
 import { beginResponsibilityShadowing,compareShadowObservation } from '../../src/services/institution/responsibility-shadowing.js';
 import { evaluateE3ResponsibilityShadowingGate,scoreResponsibilityShadowing,
-  type ShadowActual,type ShadowClassification,type ShadowTruth } from '../../src/services/institution/responsibility-shadowing-benchmark.js';
+  type ShadowActual,type ShadowClassification,type ShadowTruth } from '../contracts/responsibility-shadowing-benchmark.js';
 
 const fixtures=[
   {id:'shadow_support',capability:'customer_support',expected:'support_restored',actual:'support_restored',classification:'matched' as const,expired:false},

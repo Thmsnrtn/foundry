@@ -6,7 +6,6 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { issueApiKey } from '../../src/services/api/api-key-issuance.js';
-import { experimentOutcome } from '../../src/services/scp/investor/board-packet.js';
 
 // =============================================================================
 // THE DOCUMENTED DOOR COULD NOT SAY THE ONE THING THE INSTITUTION READS.
@@ -24,9 +23,12 @@ import { experimentOutcome } from '../../src/services/scp/investor/board-packet.
 // caller CAN do is say it, in the vocabulary the column already has — and a
 // value outside that vocabulary is refused rather than stored and dropped.
 //
-// And "completed" is a STATE, not an outcome. The board packet fell through to
-// the status, so a concluded experiment whose winner nobody recorded appeared
-// in the outcome column as "completed", reading like a result.
+// The second half of this defect — the board packet reporting the STATE
+// "completed" in its outcome column, so that an experiment whose winner nobody
+// recorded read like a result — is no longer reachable. `experimentOutcome`
+// lived in `scp/investor/board-packet.ts`, which was reachable from no entry
+// point and has been deleted, taking the four cases that pinned its wording
+// with it. The half asserted below, the documented API door, is still live.
 // =============================================================================
 
 const P = 'p_exp';
@@ -99,25 +101,5 @@ describe('concluding through the documented door', () => {
       .rows[0] as unknown as { status: string; winner: string | null };
     expect(row.status).toBe('completed');
     expect(row.winner).toBeNull();
-  });
-});
-
-describe('what a board packet says about it', () => {
-  it('does not report a state as an outcome', () => {
-    expect(experimentOutcome({ status: 'completed', winner: null, early_stop_reason: null }))
-      .toBe('concluded — the winning arm was not recorded');
-  });
-
-  it('reports a winner as a winner', () => {
-    expect(experimentOutcome({ status: 'completed', winner: 'treatment' })).toBe('treatment won');
-  });
-
-  it('reports inconclusive as itself', () => {
-    expect(experimentOutcome({ status: 'completed', winner: 'inconclusive' }))
-      .toBe('inconclusive — the arms did not separate');
-  });
-
-  it('leaves a running experiment as running', () => {
-    expect(experimentOutcome({ status: 'running', winner: null })).toBe('running');
   });
 });

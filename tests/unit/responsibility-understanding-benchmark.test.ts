@@ -6,7 +6,7 @@ import { recordReconstructionClaim } from '../../src/services/institution/recons
 import { earnResponsibilityUnderstanding,projectResponsibilityUnderstanding,requiredUnderstandingFacts,
   type UnderstandingFact } from '../../src/services/institution/responsibility-understanding.js';
 import { evaluateE3ResponsibilityUnderstandingGate,scoreResponsibilityUnderstanding,
-  type UnderstandingTruth } from '../../src/services/institution/responsibility-understanding-benchmark.js';
+  type UnderstandingTruth } from '../contracts/responsibility-understanding-benchmark.js';
 
 const fixtures=[
   {id:'under_bench_support',capability:'customer_support'},

@@ -3,7 +3,7 @@ import { beforeAll,describe,expect,it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { reconstructCompany,recordReconstructionClaim } from '../../src/services/institution/reconstruction.js';
-import { evaluateE3ReconstructionGate,scoreReconstruction,type ReconstructionFixtureTruth } from '../../src/services/institution/reconstruction-benchmark.js';
+import { evaluateE3ReconstructionGate,scoreReconstruction,type ReconstructionFixtureTruth } from '../contracts/reconstruction-benchmark.js';
 
 const truths:ReconstructionFixtureTruth[]=[
   {productId:'exe_saas',supportedClaims:[],expectedUnknowns:['company_purpose'],expectedConflicts:[],staleSystems:['github'],expectedResponsibilities:['Investigate failed deployments'],authorityByCapability:{development:false}},

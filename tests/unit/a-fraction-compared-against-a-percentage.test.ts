@@ -3,7 +3,6 @@ process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { nanoid } from 'nanoid';
 import { execSync } from 'node:child_process';
 import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { runMigrations } from '../../src/db/migrate.js';
@@ -41,6 +40,13 @@ import { ratePoints } from '../../src/services/ai/measured.js';
 // that its churn was 0.0%. The investor update said the same thing in the same
 // way and is no longer here to say it — see the note in "what a person is
 // shown" below.
+//
+// THE READINESS SCORER ITSELF IS GONE. `scp/investor/fundraising-readiness.ts`
+// was deleted as production-dead, so the cases that scored a real company
+// through it went with it, and so did the one that pinned how it computed
+// growth and customers. The paragraph about it is kept because the SCHEMA check
+// below is what stops the next reader repeating it, and because it is the
+// clearest statement of why the failure was silent from both sides.
 // =============================================================================
 
 beforeAll(async () => { await runMigrations(); });
@@ -86,84 +92,21 @@ describe('the columns that were never there', () => {
     expect(cols.has('day_30_retention'), 'the real one, with the data in it').toBe(true);
   });
 
-  it('is no longer read from the snapshot row', () => {
-    const src = stripComments(
-      readFileSync('src/services/scp/investor/fundraising-readiness.ts', 'utf8'),
-      { lineComments: true });
-    expect(src).not.toMatch(/metricsRow\.mrr_growth_pct/);
-    expect(src).not.toMatch(/metricsRow\.customer_count/);
-    expect(src).not.toMatch(/metricsRow\.d30_retention/);
-    // The SUBJECT here is that growth comes from two snapshots of the LEVEL
-    // rather than from a column that does not exist. It used to pin the exact
-    // expression `((now - then) / then) * 100`, which turned red when the rate
-    // was made monthly-equivalent — a correction to a different defect in the
-    // same line. Pin the two levels and the fact that the gap between their
-    // dates is what the rate is expressed over.
-    expect(src, 'growth is computed from two snapshots of the level')
-      .toMatch(/mrrGrowthPct = \(\(now \/ then\)/);
-    expect(src, 'and over the interval those two snapshots actually span')
-      .toMatch(/30\.44 \/ gapDays/);
-    expect(src, 'and customers are counted where they live')
-      .toMatch(/getCompanyCustomers/);
-  });
-});
-
-describe('a company doing well is scored as doing well', () => {
-  async function score(opts: {
-    mrrCents: number; priorMrrCents?: number; churn: number; retention: number; activation: number;
-  }) {
-    const owner = `f_${nanoid(8)}`;
-    await query('INSERT INTO founders (id, clerk_user_id, email) VALUES (?,?,?)',
-      [owner, `c_${owner}`, `${owner}@example.com`]);
-    const pid = `p_${nanoid(8)}`;
-    await query("INSERT INTO products (id, name, owner_id, status) VALUES (?,?,?,'active')",
-      [pid, 'C', owner]);
-    if (opts.priorMrrCents !== undefined) {
-      await query(
-        `INSERT INTO metric_snapshots
-           (id, product_id, snapshot_date, mrr_cents) VALUES (?,?, date('now','-30 days'), ?)`,
-        [nanoid(), pid, opts.priorMrrCents]);
-    }
-    await query(
-      `INSERT INTO metric_snapshots
-         (id, product_id, snapshot_date, mrr_cents, churn_rate, day_30_retention, activation_rate)
-       VALUES (?,?, date('now'), ?,?,?,?)`,
-      [nanoid(), pid, opts.mrrCents, opts.churn, opts.retention, opts.activation]);
-
-    const { assessFundraisingReadiness } = await import(
-      '../../src/services/scp/investor/fundraising-readiness.js');
-    return assessFundraisingReadiness(pid, 'seed');
-  }
-
-  it('awards retention and growth points that were unreachable', async () => {
-    const strong = await score({
-      mrrCents: 3_000_000, priorMrrCents: 2_000_000,
-      churn: 0.01, retention: 0.68, activation: 0.45,
-    });
-    // 50% growth, 68% retention, 1% churn, $30k MRR — a strong seed profile.
-    expect(strong.scores.traction, 'six of ten points used to be unreachable')
-      .toBeGreaterThan(4);
-  });
-
-  it('does not award full churn marks to catastrophic churn', async () => {
-    const good = await score({ mrrCents: 3_000_000, churn: 0.01, retention: 0.6, activation: 0.4 });
-    const awful = await score({ mrrCents: 3_000_000, churn: 0.35, retention: 0.6, activation: 0.4 });
-    expect(awful.scores.traction, '35% monthly churn used to score the same as 1%')
-      .toBeLessThan(good.scores.traction);
-  });
-
-  it('separates a good activation rate from a poor one', async () => {
-    const good = await score({ mrrCents: 100, churn: 0.02, retention: 0.5, activation: 0.55 });
-    const poor = await score({ mrrCents: 100, churn: 0.02, retention: 0.5, activation: 0.05 });
-    expect(good.scores.unit_economics, 'every company used to score the same here')
-      .toBeGreaterThan(poor.scores.unit_economics);
-  });
+  // The second case here read the three phantom columns off
+  // `scp/investor/fundraising-readiness.ts` and pinned how growth and customers
+  // are computed instead. That module was deleted as production-dead, and the
+  // describe that followed — a strong seed profile scored end to end through
+  // `assessFundraisingReadiness` — went with it. The schema check above is what
+  // is left, and it is the half that survives any consumer: the ghost columns
+  // must stay absent so the next reader cannot read them.
 });
 
 describe('what a person is shown', () => {
   it('renders a fraction as the percentage it is', () => {
-    for (const f of ['src/services/scp/briefing/compressed.ts',
-                     'src/services/scp/briefing/email-digest.ts']) {
+    // `scp/briefing/email-digest.ts` was the second renderer held to this and
+    // was deleted as production-dead, so the compressed briefing is the one
+    // live renderer left carrying the rule.
+    for (const f of ['src/services/scp/briefing/compressed.ts']) {
       const src = stripComments(readFileSync(f, 'utf8'), { lineComments: true });
       expect(src, `${f}: 2% churn was reaching a founder as "0.0%"`)
         .toMatch(/churn_rate as number\) \* 100/);
@@ -176,7 +119,7 @@ describe('what a person is shown', () => {
   // them unscaled, and it was checked here beside the briefings. Its only
   // callers were Commercial Foundry routes; when they went it had none, so the
   // module and `investor_updates` were removed. The rule it was held to is the
-  // one above, and the two live renderers still carry it.
+  // one above, and the one live renderer left still carries it.
 });
 
 describe('a failure pattern keyed on churn can fire', () => {

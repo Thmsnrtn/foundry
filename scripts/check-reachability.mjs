@@ -70,8 +70,16 @@ const NOT_EXECUTABLE = ['src/types/', 'src/db/migrations/'];
  * lying in the reassuring direction.
  */
 const REACHED_BY = {
-  'src/services/scp/agents/': 'computed dynamic import — dispatcher.ts:162 and agents.ts:478 build the specifier from a name narrowed to a closed vocabulary',
+  'src/services/scp/agents/': 'computed dynamic import — scp/events/dispatcher.ts and scp/instance.ts build the specifier from a name narrowed to a closed vocabulary by isLoadableAgentName',
   'src/test/setup.ts': 'loaded by the test runner, not by the application',
+  // AN ENTRY POINT IS NOT ALWAYS AN HTTP ROUTE.
+  //
+  // `src/mcp/cli.ts` sat in the baseline below, which asserts that NOBODY CAN
+  // RUN THIS. Four npm scripts run it — `mcp:context`, `mcp:audit`,
+  // `mcp:issues`, `mcp:dna` — so the assertion was false in the reassuring
+  // direction, and a deletion pass reading the baseline as a to-do list would
+  // have taken it. It is reached; the walker just does not read package.json.
+  'src/mcp/cli.ts': 'npm scripts mcp:context, mcp:audit, mcp:issues and mcp:dna invoke it directly through tsx',
 };
 
 const rel = (f) => relative(ROOT, f).split('\\').join('/');

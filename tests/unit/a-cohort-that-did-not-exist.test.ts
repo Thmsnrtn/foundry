@@ -4,12 +4,19 @@ process.env.ENCRYPTION_KEY = '0'.repeat(64);
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { getCohortBenchmarks } from '../../src/services/network/cohort-patterns.js';
 import { lifecycleBandForPrompt, benchmarkSegment } from '../../src/services/benchmarking/pool.js';
 import { __loadProductStateForTest as loadProductState } from '../../src/services/network/failure-library.js';
 
 // =============================================================================
 // A COHORT THAT DID NOT EXIST, AND A RUNWAY THAT WAS THE CONSTANT 8.
+//
+// THE COHORT HALF OF THIS IS GONE WITH ITS SUBJECT. `network/cohort-patterns.ts`
+// was deleted as production-dead, so the two describes that held
+// `getCohortBenchmarks` to the published percentiles were removed with it. What
+// survives is the SEGMENT KEY it was looking up under — `benchmarking/pool.ts`
+// still writes and reads that vocabulary — and the runway, which lives in
+// `network/failure-library.ts`. The original account is kept because the key is
+// the thing still being asserted:
 //
 // `getCohortBenchmarks` looked up published percentiles with a lifecycle key of
 // 'prompt_1'..'prompt_4', derived from the company's FUNDING stage. The only
@@ -57,54 +64,6 @@ describe('the segment key', () => {
     const segment = await benchmarkSegment(P);
     expect(segment.lifecycleState).toBe('growth');
     expect(segment.companyCategory).toBe('b2b_saas');
-  });
-});
-
-describe('a company whose cohort has published nothing', () => {
-  beforeEach(async () => {
-    await query(
-      `INSERT INTO metric_snapshots (id, product_id, snapshot_date, churn_rate, activation_rate)
-       VALUES ('ms_ch', ?, date('now'), 0.05, 0.4)`, [P]);
-  });
-
-  it('is not ranked against invented bands', async () => {
-    const rows = await getCohortBenchmarks(P);
-    const churn = rows.find((r) => r.metric === 'churn_rate');
-    expect(churn?.your_value).toBe(0.05);
-    expect(churn?.your_percentile, 'no peers, no percentile').toBeNull();
-  });
-
-  it('is not shown a distribution nobody contributed to', async () => {
-    const rows = await getCohortBenchmarks(P);
-    for (const row of rows) {
-      expect(row.cohort_p25).toBeNull();
-      expect(row.cohort_median).toBeNull();
-      expect(row.cohort_p75).toBeNull();
-    }
-  });
-
-  it('is not told where it sits, either', async () => {
-    const rows = await getCohortBenchmarks(P);
-    // The insight is a sentence about the rank; with no rank it was handed 50.
-    expect(rows.every((r) => r.cohort_insight === null)).toBe(true);
-  });
-});
-
-describe('a company whose cohort has published percentiles', () => {
-  it('is ranked against them, found under the key the writer used', async () => {
-    await query(
-      `INSERT INTO metric_snapshots (id, product_id, snapshot_date, churn_rate)
-       VALUES ('ms_ch2', ?, date('now'), 0.05)`, [P]);
-    await query(
-      `INSERT INTO benchmark_percentiles
-         (id, lifecycle_state, company_category, metric_name, p25, p50, p75, p90, sample_count)
-       VALUES ('bp_1', 'growth', 'b2b_saas', 'churn_rate', 0.02, 0.06, 0.12, 0.2, 9)`);
-
-    const rows = await getCohortBenchmarks(P);
-    const churn = rows.find((r) => r.metric === 'churn_rate');
-    expect(churn?.cohort_median).toBe(0.06);
-    expect(churn?.your_percentile).not.toBeNull();
-    expect(churn?.cohort_insight).not.toBeNull();
   });
 });
 

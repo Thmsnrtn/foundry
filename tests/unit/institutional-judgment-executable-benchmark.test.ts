@@ -4,7 +4,7 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { recordReconstructionClaim } from '../../src/services/institution/reconstruction.js';
 import { createDeterministicCapacityJudgment } from '../../src/services/institution/institutional-judgment.js';
-import { evaluateJudgmentBenchmark,type JudgmentBenchmarkActual } from '../../src/services/institution/institutional-judgment-benchmark.js';
+import { evaluateJudgmentBenchmark,type JudgmentBenchmarkActual } from '../contracts/institutional-judgment-benchmark.js';
 
 const CASES=[
  {id:'capacity',capacity:1,demands:[1,1],commitment:null,constraint:null,economics:[],judgment:true},

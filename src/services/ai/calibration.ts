@@ -246,12 +246,19 @@ function buildCalibrationBlock(profile: FounderAIProfile): string {
 async function autoCalibrate(founderId: string): Promise<FounderAIProfile> {
   const profile = { ...DEFAULT_PROFILE };
 
-  // Check founder health for psychology patterns
-  const psych = await query(
-    `SELECT pattern_type FROM founder_psychology_insights WHERE founder_id = ? AND status = 'active'`,
-    [founderId]
-  );
-  profile.active_psychology_patterns = (psych.rows as unknown as Array<Record<string, string>>).map((r) => r.pattern_type);
+  // NO LONGER INFERRED, BECAUSE NOTHING CAN OBSERVE IT.
+  //
+  // This read `founder_psychology_insights` for active patterns. The only
+  // writer of that table was `intelligence/psychology.ts`, deleted with the
+  // commercial product, so the query returned nothing on every call and the
+  // line below it assigned an empty list over the default — the same value,
+  // reached by a database round-trip.
+  //
+  // `active_psychology_patterns` itself stays: the rules it drives are real,
+  // and `updateProfile` writes the field directly, so a pattern that is
+  // genuinely known can still be recorded. What is gone is the pretence that
+  // the institution INFERS it. Auto-calibration now derives only what it can
+  // actually see, which is the sector agreement below.
 
   // Check sector for jargon/tone.
   //

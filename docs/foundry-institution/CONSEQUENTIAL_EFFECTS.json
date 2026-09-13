@@ -233,13 +233,6 @@
       "capability": "GraphQL query: completed issues for ship-cadence metrics"
     },
     {
-      "file": "src/services/integrations/stripe-sync.ts",
-      "line": 32,
-      "detector": "stripe_sdk_mutation",
-      "status": "control_path",
-      "capability": "Stripe OAuth credential exchange"
-    },
-    {
       "file": "src/services/public-workshop/mail-worker-source.ts",
       "line": 91,
       "detector": "env_bound_post",
@@ -259,13 +252,6 @@
       "detector": "dynamic_webhook_post",
       "status": "governed",
       "capability": "approved custom webhook — kill-switch checked before dispatch, SSRF guard and durable receipt"
-    },
-    {
-      "file": "src/services/scp/briefing/voice-reply.ts",
-      "line": 143,
-      "detector": "templated_post",
-      "status": "control_path",
-      "capability": "Whisper transcription — reserves against the AI ceilings before dispatch, settles at a conservative bound, releases only on a definitive refusal"
     },
     {
       "file": "src/services/senses/providers/stripe.ts",

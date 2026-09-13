@@ -11,7 +11,6 @@ import {
   getFinancialPosition, stateFinancialPosition, isStale, STALE_AFTER_DAYS,
 } from '../../src/services/financial/position.js';
 import { generateScenariosForProduct } from '../../src/services/scp/forecasting/runway.js';
-import { computeRunwayModel, analyzeRunwayGap } from '../../src/services/financial/simulator.js';
 
 // =============================================================================
 // A RUNWAY FORECAST ABOUT NOBODY'S MONEY.
@@ -41,6 +40,14 @@ import { computeRunwayModel, analyzeRunwayGap } from '../../src/services/financi
 // A cash balance is a fact about a bank account. The only honest source is the
 // person who has one, so migration 181 lets them say, and both paths return
 // nothing until they do.
+//
+// ONE OF THE TWO PATHS IS GONE. `financial/simulator.ts` was deleted as
+// production-dead, so the cases that drove `computeRunwayModel` and
+// `analyzeRunwayGap` — the second answer, the "safe" gap with `gap_months: 0`,
+// the 999 — went with it, as did the source check that its two inventions had
+// been removed. A company can no longer get two different runways because there
+// is only one path left to ask. Everything below is that path and the stated
+// position it now reads.
 // =============================================================================
 
 beforeAll(async () => { await runMigrations(); });
@@ -77,18 +84,7 @@ describe('a company that has not said what it has', () => {
     expect(stored.rows.length, 'nothing modelled, nothing persisted').toBe(0);
   });
 
-  it('gets no runway model from the other implementation either', async () => {
-    const { productId, founderId } = await addCompany();
-    expect(await computeRunwayModel(founderId, productId)).toBeNull();
-  });
 
-  it('is told a gap is unknown rather than safe', async () => {
-    const { productId, founderId } = await addCompany();
-    const gap = await analyzeRunwayGap(founderId, productId);
-    expect(gap.severity, 'it used to answer "safe" with gap_months: 0').toBe('unknown');
-    expect(gap.gap_months).toBeNull();
-    expect(gap.recommendation).toMatch(/cash on hand and monthly burn/i);
-  });
 
   it('stands down scenarios computed from the old invented figures', async () => {
     const { productId } = await addCompany();
@@ -124,28 +120,7 @@ describe('a company that has said', () => {
     expect(assumptions.current_burn_cents).toBe(2_000_000);
   });
 
-  it('gets one answer, not two, from the two implementations', async () => {
-    const { productId, founderId } = await addCompany();
-    await stateFinancialPosition({
-      productId, cashOnHandDollars: 100_000, monthlyBurnDollars: 10_000,
-      asOfDate: new Date().toISOString().slice(0, 10), statedBy: founderId,
-    });
 
-    const model = await computeRunwayModel(founderId, productId);
-    expect(model!.cash_on_hand, 'was revenue x 6 here and burn x 12 over there').toBe(100_000);
-    expect(model!.monthly_burn).toBe(10_000);
-  });
-
-  it('is told the money is not running out rather than given 999 months', async () => {
-    const { productId, founderId } = await addCompany();
-    // Revenue $5,000/mo from the snapshot; burn $100/mo.
-    await stateFinancialPosition({
-      productId, cashOnHandDollars: 50_000, monthlyBurnDollars: 100,
-      asOfDate: new Date().toISOString().slice(0, 10), statedBy: founderId,
-    });
-    const model = await computeRunwayModel(founderId, productId);
-    expect(model!.runway_months, 'eighty-three years was being stored as a number').toBeNull();
-  });
 });
 
 describe('the position itself', () => {
@@ -273,13 +248,10 @@ describe('the invented inputs are gone from the source', () => {
       .not.toMatch(/monthlyBurnCents \* 12/);
   });
 
-  it('no longer estimates cash from revenue', () => {
-    const src = stripComments(
-      readFileSync('src/services/financial/simulator.ts', 'utf8'), { lineComments: true });
-    expect(src).not.toMatch(/monthlyRevenue \* 6/);
-    expect(src).not.toMatch(/monthlyRevenue \* 0\.3/);
-    expect(src, 'profitable is not eighty-three years of runway').not.toMatch(/999/);
-  });
+  // The second implementation's inventions — cash = revenue x 6, burn = 30% of
+  // revenue, and the 999 months it reported for a profitable company — were
+  // checked here too. `financial/simulator.ts` was deleted as production-dead,
+  // so there is no source left to hold.
 
   it('names the assumptions it does still make', () => {
     const src = readFileSync('src/services/scp/forecasting/runway.ts', 'utf8');

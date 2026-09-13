@@ -5,7 +5,6 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { selectedProductId } from '../../src/routes/dashboard/_shared.js';
-import { getFleetOverview } from '../../src/services/fleet/observatory.js';
 
 // =============================================================================
 // WHICHEVER COMPANY SORTED FIRST.
@@ -22,9 +21,14 @@ import { getFleetOverview } from '../../src/services/fleet/observatory.js';
 // Commercial Foundry pages and are gone; the resolver is what any new one has to
 // go through, so the resolver is what is exercised here.
 //
-// And the Fleet Observatory — "every agent's status across all of a founder's
-// products" — read `owner_id` alone, so an invited co-founder saw nothing while
-// every other page showed them the company they had been accepted into.
+// TWO OF THE READERS ARE NOW GONE TOO. The Fleet Observatory — "every agent's
+// status across all of a founder's products" — read `owner_id` alone, so an
+// invited co-founder saw nothing while every other page showed them the company
+// they had been accepted into; and `network/matchmaking.ts` described a founder
+// to every other founder from whichever of their companies sorted first. Both
+// modules were reachable from no entry point and have been deleted, and the
+// five cases that held them to a membership check and to "two sectors is not
+// one sector" went with them. The resolver below is the rule that survives.
 // =============================================================================
 
 const OWNER = 'f_own';
@@ -82,56 +86,5 @@ describe('the company a founder is acting on', () => {
   it('ignores a stale cookie and falls back to the single company', async () => {
     await product('p_a', 'Alpha');
     expect(await selectedProductId(ctx('p_deleted'), OWNER)).toBe('p_a');
-  });
-});
-
-describe('the fleet observatory', () => {
-  it('shows a company the founder was accepted into', async () => {
-    await product('p_a', 'Alpha');
-    await query(
-      `INSERT INTO team_members (id, product_id, founder_id, role, status)
-       VALUES ('tm_1', 'p_a', ?, 'co_founder', 'active')`, [MEMBER]);
-
-    const fleet = await getFleetOverview(MEMBER);
-    expect(fleet.products.map((p) => p.productId)).toEqual(['p_a']);
-  });
-
-  it('does not show a company they have no membership in', async () => {
-    await product('p_a', 'Alpha');
-    const fleet = await getFleetOverview(MEMBER);
-    expect(fleet.products).toHaveLength(0);
-    expect(fleet.totals.products).toBe(0);
-  });
-
-  it('still shows an owner their own companies, sorted by name', async () => {
-    await product('p_z', 'Zebra');
-    await product('p_a', 'Alpha');
-    const fleet = await getFleetOverview(OWNER);
-    expect(fleet.products.map((p) => p.productName)).toEqual(['Alpha', 'Zebra']);
-  });
-
-  it('leaves out an archived company', async () => {
-    await product('p_a', 'Alpha');
-    await product('p_old', 'Old', OWNER, 'archived');
-    const fleet = await getFleetOverview(OWNER);
-    expect(fleet.products.map((p) => p.productId)).toEqual(['p_a']);
-  });
-});
-
-describe('what the network is told about a founder', () => {
-  it('carries a sector only when their companies agree', async () => {
-    const { upsertNetworkProfile } = await import('../../src/services/network/matchmaking.js');
-    await query("UPDATE products SET sector_profile='education' WHERE id='none'");
-    await product('p_a', 'Alpha');
-    await product('p_b', 'Beta');
-    await query("UPDATE products SET sector_profile='education', growth_stage='seed' WHERE id='p_a'");
-    await query("UPDATE products SET sector_profile='developer_tools', growth_stage='seed' WHERE id='p_b'");
-
-    await upsertNetworkProfile(OWNER, { display_name: 'Owner' });
-    const row = (await query('SELECT sector, growth_stage FROM network_profiles WHERE founder_id=?', [OWNER]))
-      .rows[0] as unknown as Record<string, unknown>;
-    expect(row.sector, 'two sectors is not one sector').toBeNull();
-    // They agree on the stage, so that one is carried.
-    expect(row.growth_stage).toBe('seed');
   });
 });

@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   CATASTROPHIC_FAILURES, SUPPORT_DRAFTING_GATE, detectCatastrophicFailures,
   evaluateSupportDraftingGate, type SupportDraftingCase, type SupportDraftingScore,
-} from '../../src/services/institution/support-drafting-benchmark.js';
+} from '../contracts/support-drafting-benchmark.js';
 
 // =============================================================================
 // `support-drafting-v1` — frozen before any model writes customer text.

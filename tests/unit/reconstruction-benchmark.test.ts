@@ -1,5 +1,5 @@
 import { describe,expect,it } from 'vitest';
-import { E3_RECONSTRUCTION_GATE,evaluateE3ReconstructionGate,scoreReconstruction,type ReconstructionFixtureTruth } from '../../src/services/institution/reconstruction-benchmark.js';
+import { E3_RECONSTRUCTION_GATE,evaluateE3ReconstructionGate,scoreReconstruction,type ReconstructionFixtureTruth } from '../contracts/reconstruction-benchmark.js';
 import type { CompanyReconstruction } from '../../src/services/institution/reconstruction.js';
 import { HELD_OUT_RECONSTRUCTION_CASES } from '../fixtures/reconstruction-held-out.js';
 

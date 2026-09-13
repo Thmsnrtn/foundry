@@ -1,18 +1,23 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, unlinkSync, mkdirSync, rmdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { nanoid } from 'nanoid';
-import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { getBoardPacket } from '../../src/services/scp/investor/board-packet.js';
 
 // =============================================================================
 // A COMPANY IS NOT EVERYONE'S TO READ.
+//
+// THE PACKET READER ITSELF IS GONE. `scp/investor/board-packet.ts` was deleted
+// as production-dead along with the rest of its surface, so the three cases
+// that held `getBoardPacket` to the owning founder went with it. What remains
+// here is the part of the finding that outlived the module: the decision
+// vocabulary, the tenant-scope FLOOR that refuses the next unscoped route, and
+// the column default. The account is kept because the floor is what it argues
+// for.
 //
 // `getBoardPacket(id)` ran `SELECT * FROM board_packets WHERE id=?`, so whatever
 // asked for a packet got it: **any authenticated founder could read any
@@ -53,54 +58,7 @@ import { getBoardPacket } from '../../src/services/scp/investor/board-packet.js'
 // would have to show up.
 // =============================================================================
 
-const SERVICE = 'src/services/scp/investor/board-packet.ts';
-
-beforeAll(async () => {
-  await runMigrations();
-  for (const [f, p] of [['f_mine', 'p_mine'], ['f_theirs', 'p_theirs']]) {
-    await query('INSERT INTO founders (id, clerk_user_id, email) VALUES (?,?,?)',
-      [f, `c_${f}`, `${f}@example.com`]);
-    await query("INSERT INTO products (id, name, owner_id, status) VALUES (?,?,?,'active')",
-      [p, `Co ${p}`, f]);
-  }
-});
-beforeEach(async () => { await query('DELETE FROM board_packets'); });
-
-async function packet(productId: string): Promise<string> {
-  const id = nanoid();
-  await query(
-    `INSERT INTO board_packets (id, product_id, quarter, period_start, period_end,
-                                narrative_json, status)
-     VALUES (?, ?, '2026-Q3', '2026-07-01', '2026-09-30', ?, 'draft')`,
-    [id, productId, JSON.stringify({
-      executive_summary: 'Runway is nine months and churn is rising.',
-      key_metrics: [], wins: [], risks: [], asks: [], next_quarter_goals: [],
-      agent_insights: [],
-    })]);
-  return id;
-}
-
-describe('a board packet belongs to one company', () => {
-  it('its owner can read it', async () => {
-    const id = await packet('p_mine');
-    const data = await getBoardPacket(id, 'f_mine');
-    expect(data?.packet.executive_summary).toMatch(/Runway is nine months/);
-  });
-
-  it('another founder cannot, and cannot tell it apart from one that does not exist', async () => {
-    const id = await packet('p_theirs');
-    expect(await getBoardPacket(id, 'f_mine'),
-      'the most sensitive document Foundry produces about a company').toBeNull();
-    expect(await getBoardPacket('a_packet_that_never_existed', 'f_mine')).toBeNull();
-  });
-
-  it('and the query scopes on the owning product', () => {
-    const code = stripComments(readFileSync(SERVICE, 'utf8'), { lineComments: true });
-    expect(code).toMatch(/JOIN products p ON p\.id = bp\.product_id/);
-    expect(code, 'the unscoped read is what any id could reach')
-      .not.toMatch(/SELECT \* FROM board_packets WHERE id=\?/);
-  });
-});
+beforeAll(async () => { await runMigrations(); });
 
 describe('the operator does not decide for a company', () => {
   it('the vocabulary still has no value for the operator', async () => {

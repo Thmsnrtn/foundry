@@ -27,7 +27,7 @@ import { executeAssistedSupportEmail } from '../../src/services/institution/resp
 import {
   evaluateSupportPilotReadiness, OUTSTANDING_EXTERNAL_PROOF, READINESS_DIMENSIONS,
   type ReadinessDimension,
-} from '../../src/services/institution/support-pilot-readiness.js';
+} from '../contracts/support-pilot-readiness.js';
 
 // =============================================================================
 // `support-pilot-readiness-v1` — could we responsibly ATTEMPT a bounded pilot?

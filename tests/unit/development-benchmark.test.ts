@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   DEVELOPMENT_BENCHMARK_THRESHOLDS, DEVELOPMENT_BENCHMARK_VERSION,
   evaluateDevelopmentBenchmark, type DevelopmentBenchmarkActual,
-} from '../../src/services/institution/development-benchmark.js';
+} from '../contracts/development-benchmark.js';
 
 const METRICS = [
   'responsibilityCorrectness', 'proposalRelevance', 'scopeCorrectness', 'authorizationCorrectness',

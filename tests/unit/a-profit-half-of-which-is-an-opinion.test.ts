@@ -26,9 +26,10 @@ import { getExperimentSummary } from '../../src/services/scp/experiments.js';
 // Showing that to a founder, labelled, is fair. Subtracting it from a measured
 // cost and calling the difference "Profit", dividing and calling it "ROI", and
 // answering "Self-Funding: Yes" is Foundry stating that it pays for itself on
-// the strength of its own guess. The same ratio reaches an INVESTOR packet as
-// "AI ROI 2.4x", and the strategy prompt handed the model the numbers with no
-// indication that half of them were its own.
+// the strength of its own guess. The same ratio reached an INVESTOR packet as
+// "AI ROI 2.4x" — that packet has since been deleted as production-dead, see
+// the note further down — and the strategy prompt handed the model the numbers
+// with no indication that half of them were its own.
 // =============================================================================
 
 const P = 'p_pl';
@@ -179,17 +180,11 @@ describe('what the strategy prompt is told', () => {
   });
 });
 
-describe('the investor-facing ratio', () => {
-  const packet = stripComments(readFileSync('src/services/investor/board_packet.ts', 'utf8'));
-
-  it('is named for the half it inherits', () => {
-    // The name travels with the number: whatever renders the packet reads this
-    // key, so a reader cannot receive the ratio without receiving the word
-    // "attributed" attached to it.
-    expect(packet).toContain('attributed_roi');
-    expect(packet).not.toMatch(/^\s*roi,$/m);
-  });
-});
+// THE INVESTOR-FACING RATIO WENT WITH ITS PACKET. `investor/board_packet.ts`
+// carried the same number under the key `attributed_roi`, so a reader could not
+// receive the ratio without receiving the word "attributed" attached to it. The
+// module was deleted as production-dead, so there is no second surface left to
+// hold to the naming rule; the strategy prompt above is the one that remains.
 
 describe('the experiment summary', () => {
   async function experiment(id: string, opts: {

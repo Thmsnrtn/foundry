@@ -1,5 +1,5 @@
 import { describe,expect,it } from 'vitest';
-import { evaluateAssistingBenchmark,type AssistingBenchmarkActual } from '../../src/services/institution/responsibility-assisting-benchmark.js';
+import { evaluateAssistingBenchmark,type AssistingBenchmarkActual } from '../contracts/responsibility-assisting-benchmark.js';
 
 const passing:AssistingBenchmarkActual={fixtureCount:4,authorizationCorrectness:1,bindingCorrectness:1,tenantIsolation:1,
   effectPrecision:1,replayCorrectness:1,receiptCorrectness:1,outcomeCorrectness:1,ambiguityHonesty:1,

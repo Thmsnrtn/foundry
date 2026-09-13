@@ -4,7 +4,7 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { recordReconstructionClaim } from '../../src/services/institution/reconstruction.js';
 import { createDeterministicCapacityJudgment } from '../../src/services/institution/institutional-judgment.js';
-import { evaluateJudgmentBenchmark,type JudgmentBenchmarkActual } from '../../src/services/institution/institutional-judgment-benchmark.js';
+import { evaluateJudgmentBenchmark,type JudgmentBenchmarkActual } from '../contracts/institutional-judgment-benchmark.js';
 
 beforeAll(async()=>{await runMigrations();
   await query("INSERT INTO founders (id,clerk_user_id,email) VALUES ('judge_owner','judge_clerk','judge@example.com'),('judge_foreign_owner','jf_clerk','jf@example.com')",[]);
