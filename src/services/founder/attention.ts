@@ -24,6 +24,8 @@ export interface AttentionItem {
   href: string;
   /** When the answer is a place rather than a yes or no: the one link to open. */
   open?: { label: string; href: string };
+  /** Where an act lands, when it can be said. Rendered as a pill beside it. */
+  effect?: 'internal' | 'provider' | 'account' | 'public' | 'person';
 }
 
 type Row = Record<string, unknown>;
@@ -93,16 +95,27 @@ export async function waitingOn(founderId: string): Promise<AttentionItem[]> {
       });
     }
   }
+  // THE BUTTON NAMES THE CONSEQUENCE. "Approve this one thing" is the same
+  // label on an act that reads logs and an act that emails six customers. The
+  // act's own consequence — from the subject he asked to be consulted on and
+  // the rung it stands on — goes on the button and beside the summary.
+  const { consequenceOfAct, isCannotSay, labelFor } = await import('./what-it-would-do.js');
+  const actItems: AttentionItem[] = [];
+  for (const a of acts) {
+    const c = await consequenceOfAct(String(a.id));
+    actItems.push({
+      kind: 'act', id: String(a.id), productId: String(a.product_id), companyName: String(a.name),
+      summary: String(a.summary), detail: `An act I cannot take until you say yes. Expires ${String(a.expires_at).slice(0, 10)}.`,
+      yes: { label: isCannotSay(c) ? `Approve — ${String(a.summary)}` : labelFor(c), action: `/foundry/proposals/${String(a.id)}/approve` },
+      no: { label: 'Do not do it', action: `/foundry/proposals/${String(a.id)}/refuse` },
+      why: `/foundry/why/proposal/${String(a.id)}`, href: `/foundry/companies/${String(a.product_id)}#decide`,
+      ...(isCannotSay(c) ? {} : { effect: c.effect }),
+    });
+  }
   return [
     ...tests,
     ...workshop,
-    ...acts.map((a): AttentionItem => ({
-      kind: 'act', id: String(a.id), productId: String(a.product_id), companyName: String(a.name),
-      summary: String(a.summary), detail: `An act I cannot take until you say yes. Expires ${String(a.expires_at).slice(0, 10)}.`,
-      yes: { label: 'Approve this one thing', action: `/foundry/proposals/${String(a.id)}/approve` },
-      no: { label: 'Do not do it', action: `/foundry/proposals/${String(a.id)}/refuse` },
-      why: `/foundry/why/proposal/${String(a.id)}`, href: `/foundry/companies/${String(a.product_id)}#decide`,
-    })),
+    ...actItems,
     ...advice.map((r): AttentionItem => ({
       kind: 'advice', id: String(r.id), productId: String(r.product_id), companyName: String(r.name),
       summary: String(r.summary), detail: 'What I would do about the situation. Agreeing starts nothing.',

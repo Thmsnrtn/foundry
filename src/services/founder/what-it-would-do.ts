@@ -287,3 +287,79 @@ export async function consequenceOfApproving(experimentId: string): Promise<Cons
     dedicated: null,
   };
 }
+
+/**
+ * WHAT APPROVING AN ACT WOULD DO — read from what the act is about and the
+ * rung it stands on, never from its price.
+ *
+ * A proposed act cannot exist without a subject the owner asked to be consulted
+ * on — the row guard refuses one otherwise — and the subjects are a
+ * constitutional vocabulary: contact people, spend money, set prices, move
+ * money, change software, publish, commit on his behalf. That vocabulary says
+ * where an act lands more precisely than any rung could, because it was written
+ * by the owner about what he wanted to be asked. The rung then says how far it
+ * can be undone. Between them the five standing facts can be stated.
+ *
+ * An act with no rung gets `cannotSay`, and no button. The ladder is the
+ * institution's own vocabulary for consequence, and an act that has not been
+ * placed on it has not been described.
+ */
+export async function consequenceOfAct(actId: string): Promise<Consequence | CannotSay> {
+  const a = (await query(
+    `SELECT a.id, a.subject, a.summary, a.expires_at, a.rung, a.cost_cents,
+            r.what_it_means, r.putting_it_back, r.absorbable, p.name AS company
+       FROM proposed_acts a
+       JOIN products p ON p.id = a.product_id
+       LEFT JOIN consequence_rungs r ON r.rung = a.rung
+      WHERE a.id = ?`, [actId])).rows[0] as Record<string, unknown> | undefined;
+  if (!a) return { cannotSay: 'there is no such act' };
+  if (a.rung == null || a.what_it_means == null) {
+    return { cannotSay: 'this act has not been placed on the consequence ladder, so I cannot say what class of thing it is' };
+  }
+  const rung = String(a.rung);
+  const subject = String(a.subject);
+  const summary = String(a.summary);
+  const company = String(a.company);
+  const maxCents = Number(a.cost_cents ?? 0);
+  const named = /[\w.+-]+@[\w-]+\.[\w.]+/.exec(summary)?.[0] ?? null;
+
+  // WHERE IT LANDS, from the subject he asked to be consulted on.
+  const effect: EffectClass =
+    subject === 'contact_people' ? 'person'
+      : subject === 'publish' || subject === 'set_prices' ? 'public'
+        : subject === 'spend_money' ? 'provider'
+          : subject === 'move_money' || subject === 'commit_on_my_behalf' ? 'account'
+            : rung === 'destructive' || rung === 'legal' ? 'account'
+              : 'internal';
+  const touches =
+    subject === 'contact_people' ? (named ?? 'somebody outside')
+      : subject === 'publish' ? 'anybody who reads it'
+        : subject === 'set_prices' ? `${company}'s customers`
+          : subject === 'spend_money' ? `a provider, on ${company}'s account`
+            : subject === 'move_money' ? `${company}'s customers' money`
+              : subject === 'commit_on_my_behalf' ? 'you, and whoever it is promised to'
+                : effect === 'internal' ? 'nobody' : company;
+
+  // HOW FAR IT CAN BE UNDONE, from the rung.
+  const reversibility: HowReversible =
+    rung === 'destructive' || rung === 'legal' ? 'irreversible'
+      : rung === 'public' || rung === 'financial' || effect === 'person' || effect === 'public' ? 'partly_reversible'
+        : 'reversible';
+  const alsoTrue: string[] = [];
+  if (a.putting_it_back) alsoTrue.push(`Putting it back: ${String(a.putting_it_back)}`);
+  if (Number(a.absorbable) === 0) alsoTrue.push('Never covered by standing permission: you decide this one each time');
+  return {
+    what: summary,
+    effect,
+    touches,
+    expectedCents: maxCents,
+    maxCents,
+    expires: `it lapses on ${String(a.expires_at).slice(0, 10)} if you do nothing`,
+    reversibility,
+    doesNotAuthorise: effect === 'internal'
+      ? ['contacting anybody', 'publishing anything', 'spending outside Foundry', 'entering into a commitment']
+      : ['anything beyond this one act', 'doing it again without asking'],
+    dedicated: null,
+    alsoTrue,
+  };
+}

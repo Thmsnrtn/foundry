@@ -18,7 +18,7 @@ import { query, realCompany } from '../../db/client.js';
 import { money } from '../../services/founder/portfolio.js';
 import {
   LADDER_IN_PLAIN_WORDS, context, count, frameFor, page, placeHead, plainly, readCompany,
-  standingPermission, theOneThing, theRestOfTheQueue, waitingList, whatNeedsHim,
+  extrasFor, standingPermission, theOneThing, theRestOfTheQueue, waitingList, whatNeedsHim,
 } from './foundry-shell.js';
 import type { Where } from './foundry-shell.js';
 import { CUSTOMER_SENSES, placeOf } from '../../services/founder/place.js';
@@ -524,6 +524,7 @@ placeRoutes.get('/foundry/decisions', async (c: any) => {
   const state = company ? null : await context(c);
   const attention = state ? whatNeedsHim(state) : null;
   const queue = state ? await theRestOfTheQueue(founderId, attention) : [];
+  const extras = state ? await extrasFor(attention) : {};
   const openActs = company ? await rows(
     `SELECT a.id, a.summary, a.expires_at, p.id AS product_id, p.name FROM proposed_acts a
        JOIN products p ON p.id = a.product_id
@@ -579,7 +580,7 @@ placeRoutes.get('/foundry/decisions', async (c: any) => {
     ${company && String(company.reality) === 'reference' ? html`<p class="quiet"><strong>${String(company.name)} does not exist.</strong> I made it up; nothing decided here is about a real company.</p>` : ''}
     <p class="lede">${waiting === 0 ? 'Nothing is waiting on you.' : `${count(waiting, 'thing')} ${waiting === 1 ? 'waits' : 'wait'} on you.`}
       Everything you decide is kept here, with why I asked.</p>
-    ${state ? html`${standingPermission(state)}${theOneThing(attention)}${waitingList(queue, attention !== null)}` : ''}
+    ${state ? html`${standingPermission(state)}${theOneThing(attention, extras)}${waitingList(queue, attention !== null)}` : ''}
     ${company && waiting > 0 ? html`<div class="know"><h2>Waiting on you</h2>
       ${openActs.map((a) => html`<div class="noticed"><p><strong>${String(a.summary)}</strong></p>
         <p class="quiet">An act, for <a href="/foundry/companies/${String(a.product_id)}">${String(a.name)}</a>. Expires ${day(a.expires_at)}.</p>

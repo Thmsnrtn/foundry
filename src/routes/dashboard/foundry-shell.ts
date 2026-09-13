@@ -848,11 +848,17 @@ export function whatNeedsHim(s: OwnerState): Attention {
   // something is blocked on his answer, that answer is the one thing and the
   // stopped routine is said alongside it rather than instead of it.
   const stuckOnHim = s.acquisitions.find((a) => a.blocking);
-  if (s.routinesFailing.length && !stuckOnHim) {
+  // NEEDS-NOTHING DOES NOT OUTRANK NEEDS-HIM, whatever the needs-him is. Only a
+  // blocking acquisition used to count, so a stopped routine — whose card says
+  // in its own words that nothing needs him — stood in front of a company
+  // asking to write to six customers. An act waiting on him, or a test owed an
+  // answer, is needs-him exactly as an acquisition is.
+  const needsHim = Boolean(stuckOnHim) || s.asked.length > 0 || s.owed.length > 0;
+  if (s.routinesFailing.length && !needsHim) {
     return { kind: 'stopped', routines: s.routinesFailing };
   }
   const drifted = s.checks.filter((c) => c.result === 'failed');
-  if (drifted.length && !stuckOnHim) {
+  if (drifted.length && !needsHim) {
     return { kind: 'drifted', checks: drifted.map((d) => d.check) };
   }
   // AN UNACCOUNTED COMMITMENT OUTRANKS A NEW ONE.
@@ -975,6 +981,7 @@ export function whatNeedsHim(s: OwnerState): Attention {
 export { page, placeHead, frameFor } from '../../views/owner/shell.js';
 export type { Where, Place, DoorCounts } from '../../views/owner/shell.js';
 import type { Where } from '../../views/owner/shell.js';
+import { consequenceOfAct, effectInWords, labelFor } from '../../services/founder/what-it-would-do.js';
 import { page, placeHead, frameFor } from '../../views/owner/shell.js';
 type H = HtmlEscapedString | Promise<HtmlEscapedString>;
 
@@ -1148,7 +1155,7 @@ export function waitingList(queue: import('../../services/founder/attention.js')
     ${queue.map((item) => html`<div class="noticed qitem">
       <p class="quiet"><a href="${item.href}">${item.companyName}</a> · ${
     item.kind === 'act' ? 'an act' : item.kind === 'advice' ? 'advice' : item.kind === 'experiment' ? 'a real test' : 'something I noticed'}</p>
-      <p><strong>${item.summary}</strong></p>
+      <p><strong>${item.summary}</strong>${item.effect ? html` <span class="pill ${item.effect === 'internal' ? 'ok' : 'warn'}">${item.effect === 'internal' ? 'internal' : item.effect === 'person' ? 'person-facing' : item.effect === 'public' ? 'public' : item.effect === 'provider' ? 'provider-facing' : 'account-facing'}</span>` : ''}</p>
       <p class="quiet">${item.detail}</p>
       ${item.open ? html`<div class="pair"><a class="btn yes" href="${item.open.href}">${item.open.label}</a></div>` : html`<div class="pair">
         <form method="POST" action="${item.yes.action}">${Object.entries(item.yes.fields ?? {}).map(([k, v]) => html`<input type="hidden" name="${k}" value="${v}" />`)}
@@ -1161,6 +1168,11 @@ export function waitingList(queue: import('../../services/founder/attention.js')
   </section>` : '';
 }
 
+/** What the card needs read for it before it can say where the act lands. */
+export async function extrasFor(a: Attention): Promise<OneThingExtras> {
+  return a && a.kind === 'spend' ? { consequence: await consequenceOfAct(a.actId) } : {};
+}
+
 /** The queue Home shows under the one thing: everything waiting, minus the one thing itself. */
 export async function theRestOfTheQueue(ownerId: string, attention: Attention): Promise<import('../../services/founder/attention.js').AttentionItem[]> {
   const { waitingOn } = await import('../../services/founder/attention.js');
@@ -1169,7 +1181,10 @@ export async function theRestOfTheQueue(ownerId: string, attention: Attention): 
     .filter((item) => !(attention && attention.kind === 'recognise_company' && item.kind === 'noticed' && item.id === attention.candidateId));
 }
 
-export function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedString> {
+/** What a screen can hand the card that the attention itself does not carry. */
+export interface OneThingExtras { consequence?: import('../../services/founder/what-it-would-do.js').Consequence | import('../../services/founder/what-it-would-do.js').CannotSay }
+
+export function theOneThing(a: Attention, extras: OneThingExtras = {}): HtmlEscapedString | Promise<HtmlEscapedString> {
   if (a === null) return html``;
 
   if (a.kind === 'stopped') {
@@ -1231,6 +1246,7 @@ export function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscap
     // consequence ladder already stores and the first screen never showed: what
     // rung this stands on, and what it would take to put it back.
     const cost = a.costCents == null ? 'Not stated' : money(a.costCents);
+    const c = extras.consequence;
     return decisionCard({
       act: 'Authority',
       question: `${a.companyName} is asking for something.`,
@@ -1250,16 +1266,24 @@ export function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscap
         // into the place the act belongs to and decide it there, with the
         // company's situation around it, rather than only from the card.
         ['Company', `<a href="/foundry/companies/${a.productId}#decide">${a.companyName}</a>`],
+        // WHERE IT LANDS, BEFORE WHAT IT COSTS. Read from the act's rung and
+        // subject by `consequenceOfAct`, when the screen has read it; the
+        // cost never stands alone, because $0 is a statement about a budget.
+        ...(c && !isCannotSay(c) ? [
+          ['Where it lands', `<span class="pill ${c.effect === 'internal' ? 'ok' : 'warn'}">${effectInWords(c.effect)}</span> ${c.touches}`],
+          ['Afterwards', c.reversibility === 'reversible' ? 'Reversible' : c.reversibility === 'partly_reversible' ? 'Partly reversible' : 'Not reversible'],
+        ] as Array<[string, string]> : c && isCannotSay(c) ? [['Where it lands', `I cannot say — ${c.cannotSay}`]] as Array<[string, string]> : []),
         ['Cost', cost],
         ['Putting it back', a.puttingItBack ?? 'Not stated'],
         ['If you do nothing', `It lapses on ${a.expiresAt.slice(0, 10)} and I will not act`],
+        ...(c && !isCannotSay(c) && c.doesNotAuthorise.length ? [['Does not authorise', c.doesNotAuthorise.join(', ')]] as Array<[string, string]> : []),
       ],
       primary: {
         // THE BUTTON NAMES THE CONSEQUENCE. "Yes — go ahead" is the label that
         // approved nine things in a hundred and thirty-seven seconds; one of
-        // them wrote to strangers. What is approved and what it costs are on
-        // the button, so it cannot be mistaken for a different button.
-        label: `Approve — ${a.summary} · ${cost}`,
+        // them wrote to strangers. What is approved, where it lands and what
+        // it costs are on the button, so it cannot be mistaken for another.
+        label: c && !isCannotSay(c) ? labelFor(c) : `Approve — ${a.summary} · ${cost}`,
         action: `/foundry/proposals/${a.actId}/approve`,
         fields: { return_to: 'foundry' },
       },
@@ -2223,6 +2247,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
     }
   }
   const attention = whatNeedsHim(s);
+  const extras = await extrasFor(attention);
 
   // Only when he TYPED a company's name. The chips below are institutional
   // questions and must not silently acquire a subject.
@@ -2282,15 +2307,25 @@ foundryShellRoutes.get('/foundry', async (c) => {
   // where nothing has happened the tile says so, because a first screen that
   // only looks right once the numbers are large is a poster, not a control.
   const { listExperiments } = await import('../../services/founder/experiment-view.js');
-  const { whatIsBlocked } = await import('../../services/venture/run-state.js');
   const tests = await listExperiments(s.ownerId);
   const live = tests.find((t) => t.state === 'running' || t.state === 'needs_you' || t.state === 'ready') ?? null;
-  const blocked = await whatIsBlocked(s.ownerId);
   const paidCents = tests.reduce((acc, t) => acc + t.money.paidCents, 0);
+  // HEALTH AS A STATE. One reader answers what failed, whether it recovers on
+  // its own and whether he is needed; the tile shows the word and Controls
+  // shows the rows. The healthy line is about the estate, not about routines.
+  const { healthOf } = await import('../../services/founder/health.js');
+  const health = await healthOf(s.ownerId);
   const estate: { word: string; cls: 'ok' | 'watch' | 'bad'; detail: string } =
-    blocked.length ? { word: `${count(blocked.length, 'pass')} blocked`, cls: 'bad', detail: blocked[0]?.because ?? 'something it needs is missing' }
-      : s.routinesFailing.length ? { word: `${count(s.routinesFailing.length, 'routine')} stopped`, cls: 'watch', detail: 'nothing is lost; I am the one that has to recover' }
+    health.state === 'blocked' ? { word: health.word, cls: 'bad', detail: health.ownerAction ?? health.failed[0] ?? 'something it needs is missing' }
+      : health.state === 'degraded' ? { word: health.word, cls: 'watch', detail: health.recovering === 'automatically' ? 'nothing is lost; recovering on its own' : health.ownerAction ?? 'needs a look' }
         : { word: 'Healthy', cls: 'ok', detail: s.watching.real > 0 ? 'looking after what you own' : 'nothing to look after yet' };
+  // NOW AND NEXT, from the records. Now is what the live test is doing; Next is
+  // when the hand passes again. Neither is a forecast.
+  const nextPass = new Date(health.nextPass ?? Date.now());
+  const nowNext = live ? html`<dl class="nownext" aria-label="Now and next">
+      <div><dt class="k">Now</dt><dd>${live.stateDetail}</dd></div>
+      <div><dt class="k">Next</dt><dd>${live.state === 'running' ? `The hand passes again at ${String(nextPass.getUTCHours()).padStart(2, '0')}:${String(nextPass.getUTCMinutes()).padStart(2, '0')} UTC and reconciles what came back` : live.stateLabel}</dd></div>
+    </dl>` : '';
   const needsN = (attention === null ? 0 : 1) + queue.length;
   const portfolioState = html`<dl class="glance" aria-label="At a glance">
       <div class="tile door"><dt class="k">Estate</dt>
@@ -2371,12 +2406,13 @@ foundryShellRoutes.get('/foundry', async (c) => {
       : html`<p class="lede"><a href="#the-one-thing">${orientation}</a></p>`
     : ''}
     ${portfolioState}
+    ${nowNext}
     <!-- THE ONE THING HE CAME FOR, BEFORE ANYTHING HE DID NOT.
          This was rendered last: after what changed, after ninety lines of
          search block that can carry a whole opportunity's case. The screen said
          "One thing needs you" and then put everything else in front of it. -->
     ${standingPermission(s)}
-    ${theOneThing(attention)}
+    ${theOneThing(attention, extras)}
     ${alsoWaiting}
     ${/* SAID ALONGSIDE, NOT INSTEAD OF. Demoting a stopped routine below a
           decision that needs him must not make it disappear: what he is being

@@ -309,3 +309,31 @@ ahead" — the label that approved nine things in 137 seconds. It now reads
    stopped by a condition; owner returns after absence; WATCH → INSPECT →
    INTERVENE without losing place. Sale/refund/tax journeys wait for Phase 4's
    substrate rather than being faked.
+
+### Phase 3 — progress
+
+- **A consequence for every act** (`consequenceOfAct`): where it lands comes
+  from the subject the owner asked to be consulted on — the constitutional
+  boundary vocabulary (contact people, publish, set prices, spend money, move
+  money, change software, commit on his behalf) — and how far it can be undone
+  from the rung. An act never placed on the ladder gets `cannotSay` and no
+  button. Proven on every rung.
+- **The card renders it.** The one-thing card for an act shows Where it lands
+  (with the effect pill), Afterwards, Cost, Putting it back and Does not
+  authorise as rows, and its button is `labelFor(consequence)`. The queue's
+  act items carry the pill and the same label; "Approve this one thing" is
+  gone from the queue.
+- **Needs-nothing no longer outranks needs-him.** Only a blocking acquisition
+  counted as "stuck on him", so a stopped routine — whose card says nothing
+  needs him — stood in front of a company asking to write to six customers.
+  An act waiting, or a test owed an answer, now counts.
+- **Health as state** (`healthOf`): ok / degraded / blocked with what failed,
+  whether it recovers on its own, customer effect, money at risk, owner action,
+  last healthy, next pass. The Estate tile reads it; the healthy line is about
+  the estate, never about routines. Proven across all three states.
+- **Now / Next** under the glance when a test is live: what it is doing, and
+  when the hand next passes — from its schedule, not a forecast.
+
+Still open in Phase 3: the company page's own "Approve this one thing"; the
+stopped/drifted card rendering `healthOf` rows; the desk local row; the twelve
+browser journeys.

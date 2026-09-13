@@ -115,6 +115,13 @@ h1{font-family:var(--serif);font-size:2rem;line-height:1.15;font-weight:500;
 .numbers{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));gap:var(--s2);margin:0 0 var(--s2)}
 .numbers .tile dd.v{font-size:1.5rem}
 
+/* NOW / NEXT: two facts in one row, from the records. */
+.nownext{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s2);margin:calc(-1 * var(--s3)) 0 var(--s4);padding:0;border-top:0}
+.nownext>div{background:var(--card-2);border:1px solid var(--line);border-radius:var(--r2);padding:var(--s2)}
+.nownext dt.k{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:700;margin:0 0 4px}
+.nownext dd{margin:0;font-size:.93rem;color:var(--ink)}
+@media (max-width:359px){.nownext{grid-template-columns:minmax(0,1fr)}}
+
 /* ─── The River ───────────────────────────────────────────────────────────── */
 .layer{display:flex;align-items:center;gap:var(--s2);background:var(--card);
   border:1px solid var(--line);border-radius:var(--r2);padding:var(--s2) var(--s3);
