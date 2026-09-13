@@ -37,9 +37,13 @@ let app: Hono;
  * the owner pressing something and meeting machinery. What makes an ending dead
  * is that it is not a page he can read.
  */
-function deadEnd(res: Response): boolean {
-  if (res.status === 404 || res.status >= 500) return true;
-  if (res.status >= 400) return true;
+function deadEnd(res: Response, method: 'GET' | 'POST' = 'GET'): boolean {
+  if (res.status === 404 || res.status === 405 || res.status >= 500) return true;
+  // A HANDLER THAT REFUSES A BAD BODY IS THERE. This crawl posts `said=anything`
+  // to every form it finds, and a route that answers "say what needs handling"
+  // with a 400 has done exactly what a live handler should. Only a GET that
+  // answers 4xx is leading nowhere; a POST that answers 4xx is validating.
+  if (res.status >= 400) return method === 'GET';
   if (res.status < 300) {
     const type = res.headers.get('content-type') ?? '';
     return !type.includes('text/html');
@@ -81,6 +85,13 @@ beforeAll(async () => {
   // repository assumptions and deployed reality that this gate is for.
   const { foundryShellRoutes } = await import('../../src/routes/dashboard/foundry-shell.js');
   const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
+  // AND THE ROUTERS THE ADVANCED SURFACE LINKS INTO. Settings and privacy were
+  // left out of this composition, so every link across that boundary was
+  // filtered out of the crawl "because the test does not mount them" — which
+  // is the gate describing its own blind spot and calling it a rule. The
+  // owner's application mounts them; so does this.
+  const { settingsRoutes } = await import('../../src/routes/dashboard/settings.js');
+  const { privacySettings: privacyRoutes } = await import('../../src/routes/dashboard/privacy.js');
   app = new Hono();
   app.use('*', async (c, next) => {
     c.set('founder' as never,
@@ -90,6 +101,8 @@ beforeAll(async () => {
   });
   app.route('/', foundryShellRoutes);
   app.route('/', letterRoutes);
+  app.route('/', settingsRoutes);
+  app.route('/', privacyRoutes);
 });
 
 describe('the first screen, as he actually uses it', () => {
@@ -293,11 +306,16 @@ describe('the surfaces beyond the first screen', () => {
     expect(res.status, 'it must render for the crawl to mean anything').toBe(200);
     const body = await res.text();
     const { forms, links } = whatHeCanPress(body);
-    // Only the surfaces this composition mounts. The advanced page links into
-    // routers the full application registers and this test does not, and
-    // reporting those as dead ends would be the test describing itself rather
-    // than the product.
-    const mine = (p: string): boolean => p.startsWith('/foundry') || p === '/letter';
+    // EVERYTHING HE CAN REACH FROM HERE, not only the paths this file used to
+    // feel responsible for. The old filter kept `/foundry` and `/letter` and
+    // dropped every link to `/settings`, `/privacy`, `/decisions`, `/talk` and
+    // `/autopilot` — so a primary "Decide" button pointing at an unmounted
+    // `/decisions` stayed green here for as long as it was broken in
+    // production. The only things excluded now are the public site and static
+    // files, which are not owner surfaces.
+    const mine = (p: string): boolean =>
+      p.startsWith('/') && !p.startsWith('/static') && p !== '/' && p !== '/manifest.json' && p !== '/sw.js'
+      && !p.startsWith('/privacy/export');
     const dead: string[] = [];
     for (const href of links.filter(mine)) {
       const res = await app.request(href);
@@ -308,7 +326,7 @@ describe('the surfaces beyond the first screen', () => {
       const res = await app.request(action, { method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
         body: new URLSearchParams({ said: 'anything' }).toString() });
-      if (deadEnd(res)) dead.push(`POST ${action} (${whatCameBack(res)})`);
+      if (deadEnd(res, 'POST')) dead.push(`POST ${action} (${whatCameBack(res)})`);
     }
     expect(dead, `dead ends on the advanced surface: ${dead.join(', ')}`).toEqual([]);
   });

@@ -2,7 +2,7 @@
 // Tests: The Letter answers its own central question once.
 //
 // The headline card says "the one thing that needs you". It read the
-// highest-gate pending row of `decisions` and linked to /decisions.
+// highest-gate pending row of `decisions` and linked to /foundry/decisions.
 // Twenty-seven lines below, the same page rendered the institution's NEEDS_YOU
 // list, computed independently from `institutional_responsibilities`. Nothing
 // reconciled them.
@@ -117,7 +117,10 @@ describe('the one thing is chosen across all three canonical sources', () => {
     await pendingDecision(3, 'Pick a pricing page');
     const letter = await composeLetter(P);
     expect(letter.needsYou).toContain('Pick a pricing page');
-    expect(letter.needsYouHref).toBe('/decisions');
+    // THE QUEUE'S ADDRESS ON THE OWNER'S OWN SURFACE. `/decisions` was the
+    // commercial dashboard's page and the private instance never mounts it, so
+    // this test was pinning the primary "Decide" button to a 404.
+    expect(letter.needsYouHref).toBe('/foundry/decisions');
   });
 
   it('still speaks when the queue is empty but a responsibility needs them', async () => {

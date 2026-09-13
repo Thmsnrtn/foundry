@@ -164,7 +164,7 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
   const top = pending.rows[0] as Record<string, unknown> | undefined;
   const decisionAsk = top
     ? { text: `Gate-${top.gate}: ${top.what}${top.deadline ? ` (deadline ${top.deadline})` : ''}`,
-        href: '/decisions' }
+        href: '/foundry/decisions' }
     : null;
 
   const { getSevenDayResponsibilitySummary } = await import(
@@ -211,7 +211,7 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
               href: '/letter' }
           : null);
   const needsYou = chosen?.text ?? null;
-  const needsYouHref = chosen?.href ?? '/decisions';
+  const needsYouHref = chosen?.href ?? '/foundry/decisions';
 
   const learned: string[] = [
     ...expired.slice(0, 3).map(

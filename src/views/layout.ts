@@ -82,7 +82,7 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
   <a href="#main-content" class="skip-link">Skip to main content</a>
   <header class="site-header">
     <div class="header-left">
-      <a href="${founderName ? '/dashboard' : '/'}" class="logo">Foundry</a>
+      <a href="${founderName ? '/foundry' : '/'}" class="logo">Foundry</a>
       ${chamberMode
         ? (productName ? html`<span class="breadcrumb">/ ${productName}</span>` : '')
         : allProducts.length > 1
@@ -125,11 +125,6 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
     ? groupedSidebar(productId, activeNav, sidebarRiskClass, navBadges ?? null, canAccess ?? null, opts.founderEmail) : ''}
 
   <main id="main-content" class="${showNav && !chamberMode ? 'main-with-sidebar' : 'main-full'}">
-    ${showNav && !chamberMode ? html`<div id="one-thing-banner"
-      hx-get="/api/priority/one-thing"
-      hx-trigger="load"
-      hx-swap="innerHTML"
-      style="min-height:0"></div>` : ''}
     ${!chamberMode && showNav && opts.navExplainer
       ? html`<p style="color:var(--text-muted);font-size:0.8rem;margin:0 0 1rem;max-width:720px;">${opts.navExplainer}</p>`
       : ''}
@@ -210,8 +205,6 @@ export function layout(opts: LayoutOptions, content: HtmlContent): HtmlContent {
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js').catch(function() {});
     }
-    // DEFECT-0054: Minimal page view analytics (first-party, no third-party)
-    try { navigator.sendBeacon('/api/analytics/pageview', JSON.stringify({path:location.pathname,ts:Date.now()})); } catch(e) {}
   </script>
 </body>
 </html>`;
@@ -222,17 +215,14 @@ function riskBadgeSmall(state: string, reason: string | null): HtmlContent {
 }
 
 function productSwitcher(products: Array<{ id: string; name: string }>, currentId: string | null, _currentName: string | null): HtmlContent {
+  // A FORM THAT POSTED TO A ROUTE THIS INSTANCE DOES NOT MOUNT. `/switch-product`
+  // belonged to the commercial dashboard; on the private instance the select
+  // and its "Go" button rendered and every press was a 404. A company is a
+  // place with an address, so the switcher is now the list of those addresses.
   return html`
-  <div style="position:relative;display:inline-block;margin-left:0.5rem;">
-    <form id="product-switcher-form" method="POST" action="/switch-product" style="display:inline-flex;align-items:center;gap:0.35rem;">
-      <span class="breadcrumb" style="display:inline-flex;align-items:center;gap:0.25rem;">/
-        <select name="product_id" aria-label="Switch company" style="border:none;background:transparent;font-size:inherit;font-weight:600;color:inherit;cursor:pointer;padding:0.15rem 0.25rem;border-radius:4px;outline:none;">
-          ${products.map((p) => html`<option value="${p.id}" ${p.id === currentId ? 'selected' : ''}>${p.name}</option>`)}
-        </select>
-      </span>
-      <button type="submit" class="btn btn-sm btn-ghost" style="padding:0.15rem 0.5rem;font-size:0.75rem;">Go</button>
-    </form>
-  </div>`;
+  <span class="breadcrumb" style="display:inline-flex;align-items:center;gap:0.35rem;margin-left:0.5rem;">/
+    ${products.map((p, i) => html`${i > 0 ? html`<span aria-hidden="true">·</span>` : ''}<a href="/foundry/companies/${p.id}" ${p.id === currentId ? 'aria-current="page" style="font-weight:600;"' : ''}>${p.name}</a>`)}
+  </span>`;
 }
 
 // ─── Notification Bell ─────────────────────────────────────────────────────────────
