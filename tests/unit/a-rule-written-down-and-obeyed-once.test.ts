@@ -20,22 +20,22 @@ import { computeSignal, signalText, signalNumber } from '../../src/services/sign
 //      default, not a measurement. First-run surfaces must say 'not enough
 //      data yet' rather than present a falsely-confident number."
 //
-// Ten places compute a Signal. ONE honoured it — the main dashboard. The other
-// nine printed the default, so a company Foundry had never measured appeared as
-// a confident 85 out of 100:
+// Ten places computed a Signal. ONE honoured it. The rest printed the default,
+// so a company Foundry had never measured appeared as a confident 85 out of 100:
 //
 //   • on a PUBLIC share link, under a badge reading "LIVE SIGNAL"
 //   • SPOKEN ALOUD in the voice briefing, where there is no colour, no asterisk
 //     and no second glance
-//   • in the weekly-plan prompt and the conversation context — twice into a
-//     model, which then reasons from it and repeats it back
-//   • in Fleet Triage, where it sorted among real companies and pulled the
-//     fleet average, on a page whose whole purpose is choosing what to look at
-//   • over the mobile API
+//   • in the conversation context — into a model, which then reasons from it and
+//     repeats it back
 //   • and as the BASELINE FOR A DROP ALERT: the default was written into
 //     `signal_history` like any other score, so the first day a company
 //     actually reported something, the founder was told their Signal had fallen
 //     from a number their company was never at.
+//
+// Several of the offending surfaces were Commercial Foundry pages and are gone;
+// the ones named above are not, and the scan below is over whatever calls
+// `computeSignal` today rather than over a list written by hand.
 //
 // The rule did not need to be discovered. It needed one way to obey it, which
 // is `signalText`/`signalNumber`, and a test that notices when a consumer does
@@ -143,9 +143,9 @@ describe('every surface that shows a Signal', () => {
     expect(offenders, 'nine of ten used to be on this list').toEqual([]);
   });
 
-  it('covers the ten that exist', () => {
+  it('covers every consumer that exists', () => {
     expect(consumers().length, 'if this moves, a new surface appeared')
-      .toBeGreaterThanOrEqual(9);
+      .toBeGreaterThanOrEqual(5);
   });
 
   it('does not let a bare score reach the public share page or the voice', () => {
@@ -160,22 +160,9 @@ describe('every surface that shows a Signal', () => {
   });
 
   it('does not put an unmeasured Signal into a model prompt', () => {
-    const plan = stripComments(readFileSync('src/routes/dashboard/plan.ts', 'utf8'),
-      { lineComments: true });
-    expect(plan).toMatch(/Signal score: \$\{signalText\(signal\)\}/);
-
     const ctx = stripComments(readFileSync('src/services/conversation/context.ts', 'utf8'),
       { lineComments: true });
     expect(ctx).toMatch(/signal: signal\.hasData \? signal\.score : null/);
-  });
-
-  it('does not rank an unmeasured company among measured ones', () => {
-    const src = stripComments(readFileSync('src/routes/dashboard/portfolio.ts', 'utf8'),
-      { lineComments: true });
-    expect(src, 'it is not the most urgent, and not the calmest either')
-      .toMatch(/a\.signal\.hasData \? -1 : 1/);
-    expect(src, 'and it was pulling the fleet average toward its default')
-      .toMatch(/fleet\.filter\(\(f\) => f\.signal\.hasData\)/);
   });
 
   it('does not alert on a drop from a number nobody measured', () => {

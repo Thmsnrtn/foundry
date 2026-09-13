@@ -24,7 +24,7 @@ import { computeRunwayModel, analyzeRunwayGap } from '../../src/services/financi
 //   financial/simulator.ts      cash = monthly revenue x 6
 //                               burn = 30% of revenue, or $500
 //
-// So a company would get two different runways depending which page it opened.
+// So a company would get two different runways depending which one answered.
 //
 // The first is the worse of the two, and not only because cash = 12 x burn
 // makes the base runway exactly twelve months by construction.
@@ -32,12 +32,11 @@ import { computeRunwayModel, analyzeRunwayGap } from '../../src/services/financi
 // dollars a month (migration 017), so a founder who never touched it was shown
 // a business burning $50 a month against $600 of cash.
 //
-// Those five scenarios then went through a thousand-iteration Monte Carlo, and
-// /scenarios rendered a median, a P10–P90 band, and a probability of surviving
-// eighteen months. The statistics were real. Every input was invented — and
-// that is worse than the bare `runway_months: 999` found on the operator page
-// earlier, because nobody mistakes a constant for a finding, and everybody
-// reads a confidence interval as one.
+// Those five scenarios then went through a thousand-iteration Monte Carlo that
+// produced a median, a P10–P90 band, and a probability of surviving eighteen
+// months. The statistics were real. Every input was invented — and that is worse
+// than the bare `runway_months: 999` found elsewhere, because nobody mistakes a
+// constant for a finding, and everybody reads a confidence interval as one.
 //
 // A cash balance is a fact about a bank account. The only honest source is the
 // person who has one, so migration 181 lets them say, and both paths return
@@ -286,12 +285,5 @@ describe('the invented inputs are gone from the source', () => {
     const src = readFileSync('src/services/scp/forecasting/runway.ts', 'utf8');
     expect(src).toMatch(/export const DEFAULT_CHURN_ASSUMPTION = 0\.03;/);
     expect(src).toMatch(/export const DEFAULT_GROWTH_ASSUMPTION = 0\.05;/);
-  });
-
-  it('asks the founder on the page rather than guessing behind it', () => {
-    const src = readFileSync('src/routes/dashboard/scenarios.ts', 'utf8');
-    expect(src).toMatch(/Runway needs two numbers only you have/);
-    expect(src).toMatch(/it will not guess/);
-    expect(src).toMatch(/POST[\s\S]{0,200}scenarios\/financial-position/);
   });
 });

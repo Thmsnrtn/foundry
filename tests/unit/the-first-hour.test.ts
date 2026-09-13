@@ -11,20 +11,22 @@ import { query } from '../../src/db/client.js';
 //
 // Every previous read of this product was a repository proxy — inline-style
 // counts, uses of the `emptyState` component, nav-item totals — and the proxies
-// were wrong in both directions. The Letter's day-one empty state turned out to
-// be good and hand-written (so counting component uses measured nothing), while
-// the single most important link in the product pointed at the wrong page.
+// were wrong in both directions. Counting component uses measured nothing,
+// because the Letter's day-one empty state turned out to be good and
+// hand-written: it says WHY there is nothing on the page rather than leaving a
+// new founder looking at a blank one. That is the thing worth holding, and the
+// only way to see it is to render the page as a founder who signed up a minute
+// ago actually receives it.
 //
-// "Connect your tools →" sent a founder who had just signed up to
-// `/connections`, which asks for a "Tool server address (MCP)" and an access
-// token, and mentions Stripe in a footnote at the bottom. The page they wanted
-// was `/agents/integrations`. That is also the page that starts the
-// institution's loop: a provider sync records external observations, and an MCP
-// connection records none — so the first instruction a customer received led
-// away from the only door that makes Foundry begin to understand their company.
-//
-// This renders the product as a new founder receives it and asserts the journey
-// rather than the markup.
+// THIS FILE USED TO GO FURTHER AND FOLLOW THE DAY-ONE LINK. The single most
+// important link in the product pointed at `/connections` — the MCP server form
+// — rather than at the provider-integrations page, which is the door that
+// starts the institution's loop, because a provider sync records external
+// observations and an MCP connection records none. That integrations page was
+// part of the Commercial Foundry surface and has been removed, so there is no
+// longer a live provider-connect door for the link to be measured against and
+// those assertions went with it. What remains below is the half that still has
+// a live subject.
 // =============================================================================
 
 const F = 'f_hour', P = 'p_hour';
@@ -37,17 +39,10 @@ beforeAll(async () => {
   await query('INSERT INTO products (id,name,owner_id,status) VALUES (?,?,?,?)',
     [P, 'Newco', F, 'active']);
 
-  const mods = await Promise.all([
-    import('../../src/routes/dashboard/letter.js'),
-    import('../../src/routes/dashboard/agents-integrations.js'),
-  ]);
+  const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
   app = new Hono();
   app.use('*', async (c, next) => { c.set('founder', { id: F, email: 'hour@example.com' }); await next(); });
-  for (const m of mods) {
-    for (const v of Object.values(m)) {
-      if (v && typeof v === 'object' && 'routes' in (v as object)) app.route('/', v as never);
-    }
-  }
+  app.route('/', letterRoutes);
 });
 
 async function page(path: string): Promise<string> {
@@ -62,35 +57,11 @@ describe('a founder who just signed up', () => {
     expect(letter).toMatch(/no data yet|day one/i);
   });
 
-  it('is pointed at a door that can actually start the loop', async () => {
+  it('is given something to do about it, not only told to wait', async () => {
+    // An empty state that explains itself and then offers nothing is still a
+    // dead end. The day-one Letter has to hand the founder a next step.
     const letter = await page('/letter');
-    const cta = /href="([^"]+)"[^>]*class="btn btn-primary"[^>]*>\s*Connect/.exec(letter);
-    expect(cta, 'the day-one primary call to action is gone').not.toBeNull();
-
-    const href = cta![1];
-    // /connections is MCP-only: connecting there records no observation, so the
-    // institution learns nothing about the company from it.
-    expect(href, 'day one must not send a founder to the MCP server form')
-      .not.toBe('/connections');
-
-    const target = await page(href);
-    expect(target, `${href} does not offer a real provider to connect`)
-      .toMatch(/Stripe/);
-  });
-
-  it('finds named providers with a way to connect them', async () => {
-    const integrations = await page('/agents/integrations');
-    for (const provider of ['Stripe', 'PostHog', 'GitHub']) {
-      expect(integrations, `${provider} is not offered`).toContain(provider);
-    }
-    expect(integrations, 'a provider a founder cannot connect is a screenshot')
-      .toMatch(/Save &amp; Connect|Save & Connect/);
-  });
-
-  it('says what each provider would let Foundry see', async () => {
-    // A list of logos is not an explanation. The reason to connect Stripe is
-    // that Foundry then sees revenue reality, and the page has to say so.
-    const integrations = await page('/agents/integrations');
-    expect(integrations).toMatch(/MRR|churn|revenue/i);
+    expect(letter, 'the day-one primary call to action is gone')
+      .toMatch(/class="btn btn-primary"/);
   });
 });

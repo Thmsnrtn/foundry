@@ -16,16 +16,25 @@ process.env.ENCRYPTION_KEY = '0'.repeat(64);
 // it reads as evidence that tenancy is enforced in one place, and the reason it
 // stayed green is that nothing could ever change its behaviour.
 //
-// The middleware is gone and these tests now REQUEST a product somebody else
-// owns and read the answer. `check-tenant-scope.mjs` remains the ratchet over
-// every route; `outbound/kill-switch.ts` is where archived and paused actually
-// stop the company acting, and it runs.
+// The middleware is gone. Section 3 used to make the point by REQUESTING a
+// product somebody else owns through the platform API and reading the answer;
+// that API was part of the Commercial Foundry surface and has been removed, and
+// no live route takes a company id in its path any more. So the section asks
+// the question one level down, where the answer actually comes from:
+// `getProductByOwner` and `getVisibleProducts` in `db/client.ts` are what every
+// door consults, and they are run here rather than read. The 404-and-not-403
+// property survives as the thing that makes it possible — a stranger's result
+// for a real company is byte-for-byte a stranger's result for an invented one,
+// so no door built on these can leak the difference.
+//
+// `check-tenant-scope.mjs` remains the ratchet over every route;
+// `outbound/kill-switch.ts` is where archived and paused actually stop the
+// company acting, and it runs.
 // =============================================================================
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
-import { Hono } from 'hono';
 
 // ─── Source Code Loading ────────────────────────────────────────────────────
 // Read source files once for all tests. These are static analysis tests
@@ -319,17 +328,6 @@ describe('a company answers only to the founder who owns it', () => {
   const OWNER = { id: 'f_ten_owner', email: 'owner@example.com' };
   const STRANGER = { id: 'f_ten_stranger', email: 'stranger@example.com' };
 
-  async function request(as: { id: string; email: string }, path: string): Promise<Response> {
-    const { platformApiRoutes } = await import('../../src/routes/api/platform.js');
-    const app = new Hono();
-    app.use('*', async (c, next) => {
-      c.set('founder' as never, { ...as, preferences: {} } as never);
-      await next();
-    });
-    app.route('/', platformApiRoutes as unknown as Hono);
-    return app.request(path);
-  }
-
   beforeAll(async () => {
     const { runMigrations } = await import('../../src/db/migrate.js');
     const { query } = await import('../../src/db/client.js');
@@ -341,39 +339,50 @@ describe('a company answers only to the founder who owns it', () => {
       );
     }
     await query(
-      "INSERT OR IGNORE INTO products (id, name, owner_id, status) VALUES (?,'Confidential',?,'active')",
+      "INSERT OR IGNORE INTO products (id, name, owner_id, status, reality) VALUES (?,'Confidential',?,'active','real')",
       [MINE, OWNER.id],
-    );
-    await query(
-      `INSERT OR IGNORE INTO anomalies (id, product_id, metric_name, expected_value, actual_value,
-        deviation_sigma, description, status)
-       VALUES ('an_ten', ?, 'mrr', 1000, 400, 4.2, 'mrr collapsed to 400', 'active')`,
-      [MINE],
     );
   });
 
   it('the owner reads their own company', async () => {
-    const res = await request(OWNER, `/api/products/${MINE}/anomalies`);
-    expect(res.status).toBe(200);
-    expect(await res.text()).toContain('mrr collapsed to 400');
+    const { getProductByOwner } = await import('../../src/db/client.js');
+    const rows = (await getProductByOwner(MINE, OWNER.id)).rows as unknown as
+      Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.name).toBe('Confidential');
   });
 
-  it('a stranger is told the company is not found, and told nothing else', async () => {
-    const res = await request(STRANGER, `/api/products/${MINE}/anomalies`);
-    expect(res.status).toBe(404);
-    const body = await res.text();
-    expect(body).toMatch(/Not found/);
-    expect(body).not.toMatch(/Forbidden|Unauthorized/i);
-    expect(body).not.toContain('mrr collapsed to 400');
-    expect(body).not.toContain('Confidential');
+  it('a stranger naming it exactly gets nothing back', async () => {
+    // Not a refusal carrying the row, not the row with a flag on it. Nothing.
+    // Everything a door could accidentally print comes from this result set,
+    // so the isolation has to hold here or it holds nowhere.
+    const { getProductByOwner } = await import('../../src/db/client.js');
+    const result = await getProductByOwner(MINE, STRANGER.id);
+    expect(result.rows).toHaveLength(0);
+    expect(JSON.stringify(result.rows)).not.toContain('Confidential');
   });
 
-  it('404 and not 403 — a refusal that confirmed the company exists would enumerate it', async () => {
-    const real = await request(STRANGER, `/api/products/${MINE}/anomalies`);
-    const invented = await request(STRANGER, '/api/products/p_ten_no_such_company/anomalies');
-    expect(real.status).toBe(404);
-    expect(invented.status).toBe(404);
-    expect(await real.text()).toBe(await invented.text());
+  it('404 and not 403 — a stranger cannot tell a real company from an invented one', async () => {
+    // A refusal that confirmed the company exists would enumerate it. The
+    // reason a door can answer 404 rather than 403 is that the query hands it
+    // the SAME answer in both cases, so there is nothing to leak even by
+    // accident.
+    const { getProductByOwner } = await import('../../src/db/client.js');
+    const real = await getProductByOwner(MINE, STRANGER.id);
+    const invented = await getProductByOwner('p_ten_no_such_company', STRANGER.id);
+    expect(JSON.stringify(real.rows)).toBe(JSON.stringify(invented.rows));
+  });
+
+  it('and it does not appear in the list of companies a stranger may see', async () => {
+    // Membership is the other way in. A stranger holds none, so the company is
+    // absent from the visible set as well as from the direct lookup.
+    const { getVisibleProducts } = await import('../../src/db/client.js');
+    const mine = (await getVisibleProducts(OWNER.id)).rows as unknown as
+      Array<Record<string, unknown>>;
+    const theirs = (await getVisibleProducts(STRANGER.id)).rows as unknown as
+      Array<Record<string, unknown>>;
+    expect(mine.map((r) => r.id)).toContain(MINE);
+    expect(theirs.map((r) => r.id)).not.toContain(MINE);
   });
 });
 

@@ -14,9 +14,20 @@ import { readFileSync } from 'node:fs';
 // A reviewer found it once. This finds it every time: the tokens are read out
 // of the stylesheet the page actually serves, and the ratios are computed here
 // rather than trusted.
+//
+// It found the same failure again on 13 September 2026, in the other theme.
+// The surface was rebuilt dark-first and `--ink-3` came out at 4.47:1 on
+// `--card-2` — the tab bar labels, the section headings, the eyebrow on every
+// fact, a third of a point short. Nobody reading the screen would have called
+// it; the arithmetic did.
 // =============================================================================
 
-const CSS = readFileSync('src/routes/dashboard/foundry-shell.ts', 'utf8');
+// THE STYLESHEET THE PAGE ACTUALLY SERVES. It was a <style> block inside the
+// route file; it is now a file the browser caches, and this reads it there.
+// Dark is the ground now, so the bare :root is the dark palette and the light
+// one is the override — which is exactly the inversion that would hide a
+// contrast failure from anyone reading only the first block.
+const CSS = readFileSync('src/public/owner.css', 'utf8');
 
 function tokens(block: string): Record<string, string> {
   const out: Record<string, string> = {};
@@ -26,13 +37,21 @@ function tokens(block: string): Record<string, string> {
   return out;
 }
 
-/** The light palette is the bare :root; the dark one is the media override. */
+/** The dark palette is the bare :root; light is the override, twice over. */
 function palette(which: 'light' | 'dark'): Record<string, string> {
-  const light = /:root\{([\s\S]*?)\}/.exec(CSS)?.[1] ?? '';
-  if (which === 'light') return tokens(light);
-  const dark = /prefers-color-scheme:dark\)\{:root:not\(\[data-theme="light"\]\)\{([\s\S]*?)\}\}/
+  const dark = /:root\{([\s\S]*?)\}/.exec(CSS)?.[1] ?? '';
+  if (which === 'dark') return tokens(dark);
+  // The light palette is declared twice — once for the system preference and
+  // once for an explicit toggle — and BOTH are read, because a token defined
+  // in only one of them is a theme that changes when he presses the switch.
+  const media = /prefers-color-scheme:light\)\{:root:not\(\[data-theme="dark"\]\)\{([\s\S]*?)\}\}/
     .exec(CSS)?.[1] ?? '';
-  return { ...tokens(light), ...tokens(dark) };
+  const explicit = /:root\[data-theme="light"\]\{([\s\S]*?)\}/.exec(CSS)?.[1] ?? '';
+  const a = tokens(media); const b = tokens(explicit);
+  for (const k of Object.keys(a)) {
+    if (b[k] !== a[k]) throw new Error(`light token ${k} differs between the media query and the toggle: ${String(a[k])} vs ${String(b[k])}`);
+  }
+  return { ...tokens(dark), ...a };
 }
 
 function luminance(hex: string): number {

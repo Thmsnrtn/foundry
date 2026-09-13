@@ -390,26 +390,11 @@ describe('every way in leads to the owner surface', () => {
     expect(manifest.start_url).toBe('/foundry');
   });
 
-  it('sends an old bookmark to the owner surface on a private deployment', async () => {
-    process.env.FOUNDRY_INSTANCE_POSTURE = 'private_owner';
-    process.env.FOUNDRY_OWNER_EMAIL = 'owner@example.com';
-    try {
-      const { dashboardRoutes } = await import('../../src/routes/dashboard/index.js');
-      const backstop = new Hono();
-      backstop.use('*', async (c, next) => {
-        c.set('founder' as never,
-          { id: OWNER, email: 'owner@example.com', name: 'Thomas Norton' } as never);
-        c.set('csrfToken' as never, 'test' as never);
-        await next();
-      });
-      backstop.route('/', dashboardRoutes);
-      const res = await backstop.request('/dashboard',
-        { headers: { cookie: `foundry_product=${COMPANY}` } });
-      expect(res.status).toBe(302);
-      expect(res.headers.get('location')).toBe('/foundry');
-    } finally {
-      delete process.env.FOUNDRY_INSTANCE_POSTURE;
-      delete process.env.FOUNDRY_OWNER_EMAIL;
-    }
-  });
+  // A THIRD WAY IN IS GONE RATHER THAN UNGUARDED. An old `/dashboard` bookmark
+  // used to be caught by the dashboard index and redirected here on a private
+  // deployment. That router was the entry point of the Commercial Foundry
+  // surface and has been removed with it, so `/dashboard` is not mounted at all
+  // and there is no handler left to assert a redirect from. The two ways in
+  // that a person actually arrives by — signing in, and opening the installed
+  // app — are above, and both land on /foundry.
 });

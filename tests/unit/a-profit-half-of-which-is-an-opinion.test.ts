@@ -181,12 +181,13 @@ describe('what the strategy prompt is told', () => {
 
 describe('the investor-facing ratio', () => {
   const packet = stripComments(readFileSync('src/services/investor/board_packet.ts', 'utf8'));
-  const page = stripComments(readFileSync('src/routes/dashboard/investors.ts', 'utf8'));
 
   it('is named for the half it inherits', () => {
+    // The name travels with the number: whatever renders the packet reads this
+    // key, so a reader cannot receive the ratio without receiving the word
+    // "attributed" attached to it.
     expect(packet).toContain('attributed_roi');
     expect(packet).not.toMatch(/^\s*roi,$/m);
-    expect(page).toContain('Attributed AI ROI');
   });
 });
 

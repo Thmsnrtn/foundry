@@ -15,12 +15,14 @@ import { sendMessage, markAsRead, getMessageInbox } from '../../src/services/scp
 // agents. Nobody asked: `sendMessage` took `requiresResponse` and
 // `responseDeadlineHours` and no caller ever passed either. Nobody could
 // answer: `responded_at` and `response_id` had one writer, `replyToMessage`,
-// which had no caller anywhere. And the dashboard drew both — an "Unanswered"
-// card counting a state nothing could produce, and a "Response requested" badge
-// that could never render.
+// which had no caller anywhere. A dashboard drew both — an "Unanswered" card
+// counting a state nothing could produce, and a "Response requested" badge that
+// could never render — and that page has since gone with the rest of Commercial
+// Foundry.
 //
-// Migration 213 takes the four columns, the function and the two pieces of
-// interface together, because they were one unbuilt mechanism.
+// Migration 213 takes the four columns and the function together, because they
+// were one unbuilt mechanism; what is checked here is the schema and the service,
+// which is where the mechanism would have to come back.
 //
 // In the same file: `markAsRead` took message ids alone, so the company whose
 // messages were marked was decided by whoever assembled the list.
@@ -65,12 +67,6 @@ describe('the response protocol', () => {
     expect(src).not.toContain('replyToMessage');
     expect(src).not.toContain('requiresResponse');
     expect(src).not.toContain('responded_at');
-  });
-
-  it('is gone from the page that drew it', () => {
-    const page = stripComments(readFileSync('src/routes/dashboard/agents-messages.ts', 'utf8'));
-    expect(page).not.toContain('unresponded_count');
-    expect(page).not.toContain('Response requested');
   });
 
   it('and a message still sends and arrives', async () => {

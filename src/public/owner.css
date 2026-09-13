@@ -29,7 +29,7 @@
    in both directions: an explicit data-theme beats the system preference. */
 :root{
   --bg:#0B100E; --card:#121915; --card-2:#172019; --line:#243029; --line-2:#2E3C34;
-  --ink:#EAEFEA; --ink-2:#A8B2AA; --ink-3:#7C877E;
+  --ink:#EAEFEA; --ink-2:#A8B2AA; --ink-3:#7F8A81;
   --accent:#8FD1B8; --accent-ink:#0B100E; --accent-soft:#1B2A23;
   --good:#7FCBA8; --good-soft:#16261F;
   --alert:#D9A85E; --alert-soft:#2A2214;

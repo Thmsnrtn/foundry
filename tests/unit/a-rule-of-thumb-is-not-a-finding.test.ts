@@ -22,10 +22,11 @@ import { seedDefaultPatterns } from '../../src/services/network/failure-library.
 // B2B SaaS at the $10k-50k MRR range", "NPS captures the deterioration 60-90
 // days before it hits revenue".
 //
-// A founder reads those on a card headed by their own match score, beside
-// signals drawn from their own metrics — the context that turns a rule of thumb
-// into a finding about their company. The direction each describes is worth
-// saying; the number was never measured.
+// Wherever they are shown they arrive beside a match score and signals drawn
+// from a company's own metrics — the context that turns a rule of thumb into a
+// finding about that company. The direction each describes is worth saying; the
+// number was never measured, so it is not stated in the library the shipped
+// patterns are seeded from, which is the only place it could re-enter.
 //
 // And `leading_indicators` — the table migration 023 created for exactly this
 // idea, with `confidence` and `sample_size` columns — was never written to by
@@ -35,8 +36,6 @@ import { seedDefaultPatterns } from '../../src/services/network/failure-library.
 
 const LIB = stripComments(
   readFileSync('src/services/network/failure-library.ts', 'utf8'), { lineComments: true });
-const CARD = stripComments(
-  readFileSync('src/routes/dashboard/network-intelligence.ts', 'utf8'), { lineComments: true });
 
 beforeAll(async () => { await runMigrations(); });
 
@@ -63,16 +62,6 @@ describe('the shipped pattern library', () => {
     expect(row.pattern_name).toBe('Churn Precursor');
     expect(row.description).toContain('accelerating revenue loss');
     expect(JSON.parse(row.mitigation_actions_json)).toHaveLength(4);
-  });
-
-  it('keeps the lead time, labelled as the kind of number it is', () => {
-    expect(CARD).toContain('rule of thumb');
-    expect(CARD).not.toMatch(/>~\$\{match\.days_until_typical_failure\}d lead time</);
-  });
-
-  it('tells the founder which half of the card is theirs', () => {
-    expect(CARD).toContain('The pattern is one Foundry ships');
-    expect(CARD).toContain('not a\n          measurement of your company');
   });
 });
 
