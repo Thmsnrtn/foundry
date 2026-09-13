@@ -5,8 +5,7 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { nanoid } from 'nanoid';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { getIntegration } from '../../src/services/integration/fabric.js';
-import { saveConnectedIntegration } from '../../src/routes/dashboard/integrations.js';
+import { connectIntegration, getIntegration } from '../../src/services/integration/fabric.js';
 
 // =============================================================================
 // AN INTEGRATION CONNECTED FOR THE FIRST TIME.
@@ -16,8 +15,8 @@ import { saveConnectedIntegration } from '../../src/routes/dashboard/integration
 // state and only the READERS decide which ones mean anything. They agree
 // completely: `sync.ts` selects `status IN ('active','error')`, every adapter in
 // `services/integration/` guards on `status === 'active'`, `framework.ts`
-// selects `WHERE status = 'active'` for the due-sync sweep, and the
-// integrations page's own badge tests `status === 'active'`.
+// selects `WHERE status = 'active'` for the due-sync sweep, and every badge a
+// founder has ever been shown tested `status === 'active'`.
 //
 // Migration 074 retired 'connected' for exactly that reason and repaired the
 // rows, recording that the code "now standardizes on 'active' everywhere".
@@ -25,13 +24,16 @@ import { saveConnectedIntegration } from '../../src/routes/dashboard/integration
 //
 // TWO SITES WERE MISSED, and they were mirror images.
 //
-// `POST /integrations/:type/connect` wrote 'connected' on INSERT while its own
-// UPDATE branch four lines above wrote 'active'. So a founder connecting an
-// integration FOR THE FIRST TIME stored their credentials, was redirected to
-// `?connected=<type>`, and read "Not connected" over an integration nothing
-// would ever sync. Reconnecting took the UPDATE branch and worked — which is
-// why it was easy to miss, and why 074's repair was undone one founder at a
-// time on every first connect since.
+// A connect form wrote 'connected' on INSERT while its own UPDATE branch four
+// lines above wrote 'active'. So a founder connecting an integration FOR THE
+// FIRST TIME stored their credentials over an integration nothing would ever
+// sync, while reconnecting took the UPDATE branch and worked — which is why it
+// was easy to miss, and why 074's repair was undone one founder at a time on
+// every first connect since. That page was part of the Commercial Foundry
+// surface and is gone; `connectIntegration` in `services/integration/fabric.ts`
+// is the writer that remains, it has both branches, and it is the one exercised
+// below. The first-connect branch is the one that was wrong, so it is the one
+// worth holding.
 //
 // `executeLinearTicket` was the last adapter still REQUIRING 'connected', so
 // every Linear ticket Foundry tried to file came back "Linear integration not
@@ -53,12 +55,11 @@ beforeAll(async () => {
 
 beforeEach(async () => { await query('DELETE FROM integrations WHERE product_id = ?', [P]); });
 
-/** THE REAL WRITER the connect route calls, not a copy of it. A test that
- *  reproduces the INSERT stays green when the INSERT is wrong. */
+/** THE REAL WRITER, not a copy of it. A test that reproduces the INSERT stays
+ *  green when the INSERT is wrong. With no row present this takes
+ *  `connectIntegration`'s INSERT branch — the first connect. */
 async function firstConnect(type: string): Promise<string> {
-  await saveConnectedIntegration({
-    productId: P, type, credentialsCiphertext: 'ciphertext', config: {},
-  });
+  await connectIntegration(P, type, { credentials_json: 'secret', config_json: {} });
   const r = await query('SELECT id FROM integrations WHERE product_id = ? AND provider = ?', [P, type]);
   return String((r.rows[0] as Record<string, unknown>).id);
 }
@@ -97,7 +98,7 @@ describe("the value nothing reads", () => {
 
     expect(await wouldBeSynced(id)).toBe(true);
     expect(await inDueSweep(id)).toBe(true);
-    // And the page's own badge agrees.
+    // And the badge condition every reader uses agrees.
     const row = await query('SELECT status FROM integrations WHERE id = ?', [id]);
     expect((row.rows[0] as unknown as { status: string }).status === 'active').toBe(true);
   });

@@ -36,7 +36,6 @@ beforeAll(async () => {
   );
 
   const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
-  const { decisionRoutes } = await import('../../src/routes/dashboard/decisions.js');
   app = new Hono();
   app.use('*', async (c, next) => {
     c.set('founder' as never, currentFounder as never);
@@ -44,7 +43,6 @@ beforeAll(async () => {
     await next();
   });
   app.route('/', letterRoutes);
-  app.route('/', decisionRoutes);
 });
 
 describe('the dial', () => {
@@ -105,16 +103,20 @@ describe('plain-text premise extraction (no dropdowns, ever)', () => {
 });
 
 describe('the layout explainer strip', () => {
-  it('covers every expert page; silent at technical; never doubles in-page strips', () => {
-    for (const nav of ['agents', 'agents-debate', 'agents-accuracy', 'memory', 'network', 'roi', 'benchmarks']) {
-      expect(navExplain(nav, 'plain').length).toBeGreaterThan(40);
-      expect(navExplain(nav, 'balanced').length).toBeGreaterThan(20);
-      expect(navExplain(nav, 'technical')).toBe('');
-    }
-    // pages that render their own strip must be absent from the layout map:
-    for (const nav of ['dashboard', 'decisions', 'agents-briefings', 'letter', 'autopilot', 'talk']) {
+  // This used to walk the expert pages that took a strip from the layout —
+  // agents, memory, network, roi, benchmarks. All of them were Commercial
+  // Foundry pages and are gone, so there is no longer a live page whose strip
+  // this can assert. What is still a live rule is the other half: a page that
+  // writes its own explainer must not be in the layout map as well, or the
+  // founder reads the same paragraph twice on the same screen.
+  it('never doubles the strip on a page that writes its own', () => {
+    for (const nav of ['dashboard', 'letter', 'autopilot', 'talk']) {
       expect(navExplain(nav, 'plain')).toBe('');
     }
+  });
+
+  it('is silent for a nav nothing has an explainer for', () => {
+    expect(navExplain('a-page-that-does-not-exist', 'plain')).toBe('');
   });
 });
 
@@ -146,24 +148,5 @@ describe('same product, different voice', () => {
     expect(plain).toContain('daily letter');               // hand-holding intro
     expect(technical).toContain('Gate-3');
     expect(technical).not.toContain('daily letter');       // no hand-holding
-  });
-
-  it('the decision chamber: identical facts, translated instruments', async () => {
-    currentFounder = { id: 'fl_f', email: 'f@t.co', preferences: { fluency: 'plain' } };
-    const plain = await (await app.request('/decisions/fl_d1')).text();
-    currentFounder = { id: 'fl_f', email: 'f@t.co', preferences: { fluency: 'technical' } };
-    const technical = await (await app.request('/decisions/fl_d1')).text();
-
-    for (const doc of [plain, technical]) {
-      expect(doc).toContain('Enter enterprise');                 // the decision
-      expect(doc).toContain(`/decisions/fl_d1/redteam`);         // same instrument, both voices
-      expect(doc).toContain(`/decisions/fl_d1/ghost`);           // same instrument, both voices
-    }
-    expect(plain).toContain('Hear the devil');               // "devil's advocate" (apostrophe HTML-escaped)
-    expect(plain).toContain('Big decision (gate 3)');
-    expect(plain).toContain('See how each option could play out');
-    expect(technical).toContain('Summon the Red Team (adversarial pre-mortem)');
-    expect(technical).toContain('Gate-3');
-    expect(technical).toContain('1,000 runs on your real growth history');
   });
 });

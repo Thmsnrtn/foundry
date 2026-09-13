@@ -456,3 +456,36 @@ built now because they must exist before the first payment, not after; but no
 figure will be invented to populate a screen. Until a payment settles, the
 economic surfaces say what is true: nothing has been paid, and here is what
 would be shown when it is.
+
+---
+
+## The ghosts, deleted
+
+Seventy-two route modules and **22,463 lines** the owner could never reach,
+removed on 2026-09-13: the whole `agents-*` family (18 files, 6,362 lines),
+`agents.ts`, `agent-intelligence.ts`, the fleet, board, playbook, ROI,
+investor, ambient and network surfaces, and thirteen `routes/api/*` routers.
+Derived mechanically — every identifier mounted inside the
+`!isPrivateOwnerInstance()` block and nowhere else — so the list is the mount
+table's own answer, not a judgement call. Preserved on
+`archive/commercial-foundry` at `9049f60e`.
+
+`src/index.ts` compiles with the block and all seventy-two imports gone.
+
+**What kept them alive was CI, not the owner.** Two files:
+`tests/simulation/crawl.ts` hand-mirrored all eighty-three mounts with no
+posture gate and was the only importer of twenty-six of them, and
+`every-declared-route-is-registered` booted the app in the *commercial*
+posture, so unmounting a router without deleting its file failed there. The
+crawl's table now mirrors what `index.ts` actually serves, and the route gate
+asks its question about the instance that exists.
+
+**The cost, recorded rather than hidden.** Forty-eight services are now
+orphaned, because the only things that imported them were the deleted routes.
+The unreachable baseline goes from 21 to 69 — a worse number, deliberately.
+Deleting a service is a different decision from deleting a route, and the two
+halves of the old system share files. None of the forty-eight registers
+anything at import time; that was checked after the deletion, because it is
+the exact class the gate refuses to baseline and the exact way
+`stripe-gateway.ts` once hid. **Next pass: choose those forty-eight file by
+file.**

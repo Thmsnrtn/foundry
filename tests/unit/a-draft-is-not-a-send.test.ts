@@ -152,15 +152,4 @@ describe('the two arms that had no integration at all', () => {
     expect(row.status).toBe('failed');
     expect(row.effect_certainty).toBe('not_attempted');
   });
-
-  it('is not offered on the page where a founder builds a template', () => {
-    // The offer and the guard have to agree. Offering a type that will be
-    // refused is the same defect one step earlier.
-    const page = readFileSync('src/routes/dashboard/agents-actions.ts', 'utf8');
-    const picker = page.slice(page.indexOf('const ACTION_TYPES'));
-    const list = picker.slice(0, picker.indexOf('];'));
-    expect(list).toContain('send_email');
-    expect(list).not.toContain('schedule_call');
-    expect(list).not.toContain('update_crm');
-  });
 });

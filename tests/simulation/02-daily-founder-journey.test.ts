@@ -1,7 +1,15 @@
 // =============================================================================
 // Simulation 02: Daily Founder Journey
-// Verifies the critical daily-use paths: dashboard, decisions, agents,
-// signal computation, and settings. Static analysis of route handlers.
+//
+// What is left of it. Three of its six sections read the source of
+// `dashboard/index.ts`, `dashboard/decisions.ts` and `dashboard/agents.ts` —
+// commercial routes the private instance never served, deleted on 13 September
+// 2026. Their assertions went with them: there is no weaker test than one that
+// reads a file to confirm a product exists, and no test at all once the file
+// is gone.
+//
+// The three that remain are about code the owner's instance still runs: signal
+// computation, the settings page, and the shared layout context.
 // =============================================================================
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -10,18 +18,12 @@ import { resolve } from 'path';
 
 const SRC = resolve(__dirname, '../../src');
 
-let dashboardSource: string;
-let decisionSource: string;
-let agentSource: string;
 let signalSource: string;
 let settingsSource: string;
 let sharedSource: string;
 let indexSource: string;
 
 beforeAll(() => {
-  dashboardSource = readFileSync(resolve(SRC, 'routes/dashboard/index.ts'), 'utf-8');
-  decisionSource = readFileSync(resolve(SRC, 'routes/dashboard/decisions.ts'), 'utf-8');
-  agentSource = readFileSync(resolve(SRC, 'routes/dashboard/agents.ts'), 'utf-8');
   signalSource = readFileSync(resolve(SRC, 'services/signal.ts'), 'utf-8');
   settingsSource = readFileSync(resolve(SRC, 'routes/dashboard/settings.ts'), 'utf-8');
   sharedSource = readFileSync(resolve(SRC, 'routes/dashboard/_shared.ts'), 'utf-8');
@@ -30,94 +32,6 @@ beforeAll(() => {
 
 // =============================================================================
 // 1. Dashboard Route
-// =============================================================================
-
-describe('Dashboard loads without error', () => {
-
-  it('GET /dashboard route is defined', () => {
-    expect(dashboardSource).toMatch(
-      /dashboardRoutes\.get\(['"]\/dashboard['"]/
-    );
-  });
-
-  it('dashboard calls computeSignal for the active product', () => {
-    expect(dashboardSource).toMatch(/computeSignal\(productId\)/);
-  });
-
-  it('dashboard loads stressors, history, and daily insight in parallel', () => {
-    expect(dashboardSource).toMatch(/Promise\.all/);
-    expect(dashboardSource).toMatch(/getActiveStressors/);
-    expect(dashboardSource).toMatch(/getSignalHistory/);
-    expect(dashboardSource).toMatch(/getDailyInsight/);
-  });
-
-  it('dashboard redirects to /onboarding when no products exist', () => {
-    expect(dashboardSource).toMatch(
-      /rows\.length\s*===\s*0[\s\S]*?redirect.*onboarding/
-    );
-  });
-
-  it('dashboard renders an HTML response via dashboardLayout', () => {
-    expect(dashboardSource).toMatch(/c\.html\(dashboardLayout/);
-  });
-});
-
-// =============================================================================
-// 2. Decision Queue
-// =============================================================================
-
-describe('Decision queue renders', () => {
-
-  it('GET /decisions route is defined', () => {
-    expect(decisionSource).toMatch(
-      /decisionRoutes\.get\(['"]\/decisions['"]/
-    );
-  });
-
-  it('decision queue loads risk state for the product', () => {
-    expect(decisionSource).toMatch(/risk_state.*lifecycle_state.*product_id/i);
-  });
-
-  it('decision queue calls getLayoutContext with decisions nav marker', () => {
-    expect(decisionSource).toMatch(
-      /getLayoutContext\(founder,\s*['"]decisions['"]/
-    );
-  });
-
-  it('decisions route is mounted in the main app', () => {
-    expect(indexSource).toMatch(/decisionRoutes/);
-  });
-});
-
-// =============================================================================
-// 3. Agent Roster
-// =============================================================================
-
-describe('Agent roster page renders', () => {
-
-  it('agent roster route exists', () => {
-    // Route is mounted at /agents prefix, so the handler uses '/' or '/:name'
-    expect(agentSource).toMatch(
-      /\.get\(['"]\//
-    );
-  });
-
-  it('agent roster queries agent_instances for the product', () => {
-    expect(agentSource).toMatch(/agent_instances/);
-    expect(agentSource).toMatch(/product_id/);
-  });
-
-  it('agent roster renders HTML', () => {
-    expect(agentSource).toMatch(/c\.html/);
-  });
-
-  it('agent routes are mounted in the main app', () => {
-    expect(indexSource).toMatch(/agentRoutes/);
-  });
-});
-
-// =============================================================================
-// 4. Signal Computation
 // =============================================================================
 
 describe('Signal computation does not crash', () => {

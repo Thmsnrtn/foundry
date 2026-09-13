@@ -1,4 +1,4 @@
-# The twenty-one modules nothing imports
+# The modules nothing imports
 
 Classified 12 September 2026, after `integration/stripe-gateway.ts` was found
 hiding here. That module registered four Stripe tool handlers when imported,
@@ -65,3 +65,28 @@ this debt is paid.
 This list is not being emptied as part of a launch repair. Deleting or wiring
 nine modules is its own piece of work with its own blast radius, and doing it
 under time pressure is how the next defect gets in.
+
+---
+
+## The forty-eight that arrived on 13 September 2026
+
+Deleting the seventy-two commercial route modules orphaned forty-eight
+services: audit comparators, conversation intent, the fleet observatory,
+investor automation and board packets, the intelligence family, network
+matchmaking, the SCP memory and ROI trees, voice processing, the wisdom
+cofounder. Nothing imports them now because the only things that ever did were
+routes the owner could not reach.
+
+**This is recorded debt, not a resolution.** The baseline went from twenty-one
+to sixty-nine, and a bigger baseline is a worse number. It is here rather than
+resolved because deleting a service is a different decision from deleting a
+route: a route is a door that was never open, while a service may hold logic
+worth keeping, and the two halves of the old system share files. Choosing
+file by file is its own pass, named in `OWNER_OS_MIGRATION.md`.
+
+What makes recording it safe rather than hiding it: none of the forty-eight
+registers anything at import time, checked by scanning all sixty-nine for
+`registerToolHandler|registerJob|registerCapability|registerHandler` after the
+deletion. The gate refuses to baseline that class at all, which is the rule
+that exists because `stripe-gateway.ts` once hid here while an authorised
+experiment could not create its payment link.

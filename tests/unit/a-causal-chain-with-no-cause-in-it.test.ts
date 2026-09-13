@@ -4,16 +4,15 @@ process.env.ENCRYPTION_KEY = '0'.repeat(64);
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { nanoid } from 'nanoid';
-import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { discoverCausalChains, getStoredCausalChains } from '../../src/services/graph/engine.js';
 
 // The model is stubbed so the WRITE path can be exercised. Source-text
 // assertions were not enough here: the first version of this file asserted the
-// shape of the INSERT and both mutations survived it — restoring `null, null`
-// for the labels, and making the route always recompute. A test that reads code
-// rather than running it will believe anything the code says about itself.
+// shape of the INSERT, and restoring `null, null` for the labels survived it. A
+// test that reads code rather than running it will believe anything the code
+// says about itself.
 let modelChains: unknown = [];
 vi.mock('../../src/services/ai/client.js', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../src/services/ai/client.js')>()),
@@ -37,21 +36,21 @@ vi.mock('../../src/services/ai/client.js', async (importOriginal) => ({
 // disk.
 //
 // It did not matter, because nothing read the table — and that is the other
-// half. The weekly graph_rebuild job ran this for every active product and used
-// the answer for a log line: "3 causal chains discovered." Meanwhile the one
-// route that serves chains to a caller called Opus AGAIN on every request. The
-// institution paid twice for the same question and delivered one of the answers
-// to a log file.
+// half. The weekly graph_rebuild job runs this for every active product and used
+// the answer for a log line: "3 causal chains discovered."
 //
 // Now: the labels are stored, ids are resolved against `graph_entities` by exact
 // label and left NULL when nothing matches — a model may name something that is
 // not in the graph, and a chain that points at nothing should say so rather than
-// point at whatever was nearest — and the route reads the stored batch,
-// computing only when none has ever been stored.
+// point at whatever was nearest — and `getStoredCausalChains` reads a batch back
+// out, so what the weekly job paid for can be read instead of re-asked.
+//
+// The HTTP surface that served those chains was a Commercial Foundry route and
+// has been removed, taking its own defect with it: it called Opus AGAIN on every
+// request, so the institution paid twice for the same question. The guarantees
+// that outlived it are the writer's and the reader's, and they are asserted
+// against the service below.
 // =============================================================================
-
-const ENGINE = stripComments(readFileSync('src/services/graph/engine.ts', 'utf8'), { lineComments: true });
-const ROUTE = stripComments(readFileSync('src/routes/api/platform.ts', 'utf8'), { lineComments: true });
 
 beforeAll(async () => {
   await runMigrations();
@@ -184,50 +183,6 @@ describe('the reader returns one batch, not a pile', () => {
     const got = await getStoredCausalChains('p_cc');
     expect(got.discovered_at).toBeNull();
     expect(got.chains).toEqual([]);
-  });
-});
-
-describe('the route stops paying twice', () => {
-  async function get(): Promise<Record<string, unknown>> {
-    const { Hono } = await import('hono');
-    const { platformApiRoutes } = await import('../../src/routes/api/platform.js');
-    const app = new Hono();
-    app.use('*', async (c, next) => { c.set('founder', { id: 'f_cc' }); await next(); });
-    app.route('/', platformApiRoutes);
-    const res = await app.request('/api/products/p_cc/graph/causal-chains');
-    return await res.json() as Record<string, unknown>;
-  }
-
-  it('serves the stored batch without calling the model', async () => {
-    await chain({ at: '2026-08-01 00:00:00', desc: 'stored chain', root: 'a', effect: 'b' });
-    modelChains = [{ chain_description: 'FRESHLY INVENTED', hops: [], root_cause: 'x',
-                     effect: 'y', confidence: 1, actionable_insight: '' }];
-
-    const body = await get();
-    expect(body.computed_now).toBe(false);
-    expect(body.discovered_at).toBe('2026-08-01 00:00:00');
-    expect(JSON.stringify(body.causal_chains)).toContain('stored chain');
-    expect(JSON.stringify(body.causal_chains),
-      'the model must not have been consulted').not.toContain('FRESHLY INVENTED');
-  });
-
-  it('computes once when nothing has ever been stored', async () => {
-    await graph(['a', 'b', 'c']);
-    modelChains = [{ chain_description: 'first ever', hops: [], root_cause: 'a',
-                     effect: 'c', confidence: 0.6, actionable_insight: 'go' }];
-
-    const body = await get();
-    expect(body.computed_now).toBe(true);
-    expect(JSON.stringify(body.causal_chains)).toContain('first ever');
-    expect(body.discovered_at, 'and the batch it just stored is dated')
-      .not.toBeNull();
-
-    // And the next request reads it rather than paying again.
-    modelChains = [{ chain_description: 'SECOND CALL', hops: [], root_cause: 'a',
-                     effect: 'c', confidence: 0.6, actionable_insight: '' }];
-    const again = await get();
-    expect(again.computed_now).toBe(false);
-    expect(JSON.stringify(again.causal_chains)).not.toContain('SECOND CALL');
   });
 });
 

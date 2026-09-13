@@ -144,20 +144,3 @@ describe('runway', () => {
     expect(signals.runway_months).toBeNull();
   });
 });
-
-describe('the number on the page', () => {
-  it('does not print a 0–1 fraction as if it were already a percentage', async () => {
-    const { __fmtMetricForTest: fmt } = await import('../../src/routes/dashboard/network-intelligence.js');
-    // Five per cent monthly churn read "0.1%" — a figure a founder would take
-    // as extraordinary retention.
-    expect(fmt(0.05, 'churn_rate')).toBe('5.0%');
-    expect(fmt(0.4, 'activation_rate')).toBe('40.0%');
-  });
-
-  it('leaves the metrics that are already in points alone', async () => {
-    const { __fmtMetricForTest: fmt } = await import('../../src/routes/dashboard/network-intelligence.js');
-    expect(fmt(12.5, 'mrr_growth_rate')).toBe('12.5%');
-    expect(fmt(62, 'nps_score')).toBe('62');
-    expect(fmt(null, 'churn_rate')).toBe('—');
-  });
-});

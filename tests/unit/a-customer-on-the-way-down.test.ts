@@ -143,12 +143,10 @@ describe('who this changes things for', () => {
       .toEqual([]);
   });
 
-  it('reaches the founder’s page and Harbor’s prompt', () => {
-    const page = readFileSync('src/routes/dashboard/agents-customers.ts', 'utf8');
-    expect(page).toMatch(/Falling \(\$\{falling\.length\}\)/);
-    expect(page, 'the reason for showing them above the line')
-      .toMatch(/easier to keep than one already gone/);
-
+  it('reaches Harbor’s prompt', () => {
+    // The founder-facing page that listed the fallers was a Commercial Foundry
+    // route and is gone; the agent that is supposed to watch them is not, and
+    // it is the one that claimed churn is telegraphed in advance.
     const harbor = readFileSync('src/services/scp/agents/harbor.ts', 'utf8');
     expect(harbor).toMatch(/getFallingCustomers/);
     expect(harbor, 'and it is told nothing when there is nothing to tell')

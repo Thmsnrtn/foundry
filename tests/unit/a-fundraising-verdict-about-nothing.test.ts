@@ -176,14 +176,7 @@ describe('decision outcomes that were never measured', () => {
   });
 });
 
-describe('what reaches the page and the model', () => {
-  it('persists the unmeasured list rather than dropping it', () => {
-    const route = readFileSync('src/routes/dashboard/investors.ts', 'utf8');
-    expect(route).toMatch(/unmeasured = excluded\.unmeasured/);
-    expect(route).toMatch(/<strong>Not measured:<\/strong>/);
-    expect(route).toMatch(/not a\s*\n?\s*middling assessment/);
-  });
-
+describe('what reaches the model and the briefings', () => {
   it('tells the narrative model which components are unmeasured', () => {
     const src = readFileSync('src/services/investor/board_packet.ts', 'utf8');
     expect(src).toMatch(/Not measured at all:/);

@@ -8,11 +8,14 @@ import { addToPortfolio, getPortfolioOverview } from '../../src/services/portfol
 // =============================================================================
 // OWNING A PORTFOLIO IS NOT OWNING A COMPANY.
 //
-// The route checked that the caller owns the PORTFOLIO and then took
-// `product_id` straight from the request body. Anyone with a portfolio could
-// absorb any company by id — and membership is not decorative: it puts that
-// company's name, MRR, risk state, churn and activation on somebody else's
-// dashboard, and its metrics into a percentile against its peers.
+// `addToPortfolio` was told which portfolio and which company, checked that the
+// caller owns the PORTFOLIO, and took the company id on trust. Anyone with a
+// portfolio could absorb any company by id — and membership is not decorative:
+// it puts that company's name, MRR, risk state, churn and activation in front of
+// somebody else, and its metrics into a percentile against its peers. The refusal
+// lives in the service, which is the only place it cannot be forgotten: the route
+// that first called it has since been removed, and the next caller inherits the
+// check rather than having to remember it.
 //
 // The owner's own use case is the whole point of the allowance rather than an
 // exception to it: a portfolio of your own companies needs nobody's permission
@@ -59,14 +62,5 @@ describe('adding a company to a portfolio', () => {
   it('refuses a company id that names nothing', async () => {
     expect(await addToPortfolio('pf_book', 'pf_nothing', 'pf_owner'))
       .toEqual({ refused: 'company_unknown' });
-  });
-
-  it('is refused in the service, so the route cannot forget it', async () => {
-    const { readFileSync } = await import('node:fs');
-    const { resolve } = await import('node:path');
-    const route = readFileSync(
-      resolve(__dirname, '../../src/routes/api/platform.ts'), 'utf8');
-    // The route must consume the answer rather than discard it.
-    expect(route).toContain('if (refusal) return c.json');
   });
 });

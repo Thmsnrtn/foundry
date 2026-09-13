@@ -11,15 +11,22 @@
 // Most are ordinary company work an active member should be able to do. These
 // are the ones that are not:
 //
-//   granting authority   agent authority level, assisting-authority grants,
-//                        connection grants, and the autopilot dial — which,
-//                        raised to 'act', RECORDS A CONSENT in the founder's
-//                        name and is the single grant the whole autonomy stack
-//                        reads
-//   dispatching effects  the digest send, the letter reply send, the second
-//                        approval surface for integration actions
+//   granting authority   assisting-authority grants, connection grants, and the
+//                        autopilot dial — which, raised to 'act', RECORDS A
+//                        CONSENT in the founder's name and is the single grant
+//                        the whole autonomy stack reads
+//   dispatching effects  the letter reply send
+//   spending             any door that reaches a paid model call
 //   erasure              scheduling deletion of the selected company
-//   credentials          storing a third-party key against the company
+//
+// The Commercial Foundry surface is gone and took several of the doors this
+// file used to exercise with it — the agent authority dial, the digest send, the
+// agent-experiment start, the memory pages that each opened with a paid model
+// call. Their guards went with the handlers they guarded. Every category above
+// still has at least one live door, and each is asserted against that door
+// rather than against the deleted one, because the guarantee was never about
+// any single URL: it is that an observer cannot grant, dispatch, spend or
+// erase.
 //
 // The observer role exists to watch. It must not vote, must not affect
 // alignment, must not grant authority, must not execute effects.
@@ -86,18 +93,10 @@ beforeAll(async () => {
         can_view_decisions, can_vote_decisions, can_trigger_actions, can_manage_company)
      VALUES (?, ?, ?, 'investor_observer', 'active', 1, 0, 0, 0)`,
     [nanoid(), P, OBSERVER]);
-  await query(
-    `INSERT INTO agent_instances (id, product_id, agent_name, display_name, authority_level, version)
-     VALUES (?, ?, 'atlas', 'Atlas', 0, 1)`, [nanoid(), P]);
-
-  const [{ agentRoutes }, { letterRoutes }, { ambientRoutes }, { privacySettings },
-    { agentExperimentRoutes }, { memoryGraph }, { connectionRoutes }] = await Promise.all([
-      import('../../src/routes/dashboard/agents.js'),
+  const [{ letterRoutes }, { privacySettings }, { connectionRoutes }] =
+    await Promise.all([
       import('../../src/routes/dashboard/letter.js'),
-      import('../../src/routes/dashboard/ambient.js'),
       import('../../src/routes/dashboard/privacy.js'),
-      import('../../src/routes/dashboard/agents-experiments.js'),
-      import('../../src/routes/dashboard/memory.js'),
       import('../../src/routes/dashboard/connections.js'),
     ]);
 
@@ -107,12 +106,8 @@ beforeAll(async () => {
     c.set('csrfToken' as never, 'test' as never);
     await next();
   });
-  app.route('/agents', agentRoutes);
   app.route('/', letterRoutes);
-  app.route('/', ambientRoutes);
   app.route('/', privacySettings);
-  app.route('/', agentExperimentRoutes);
-  app.route('/', memoryGraph);
   app.route('/', connectionRoutes);
 });
 
@@ -122,24 +117,6 @@ beforeAll(async () => {
 const REFUSED = 403;
 
 describe('granting authority asks who is granting it', () => {
-  it('refuses an observer setting an agent authority level', async () => {
-    const res = await post('/agents/atlas/authority', OBSERVER, { level: '2' });
-    expect(res.status).toBe(REFUSED);
-    const row = (await query(
-      `SELECT authority_level FROM agent_instances WHERE product_id = ?`, [P]))
-      .rows[0] as Record<string, unknown>;
-    expect(Number(row.authority_level), 'and nothing moved').toBe(0);
-  });
-
-  it('admits the co-founder who holds can_manage_company', async () => {
-    const res = await post('/agents/atlas/authority', MANAGER, { level: '1' });
-    expect(res.status).not.toBe(REFUSED);
-    const row = (await query(
-      `SELECT authority_level FROM agent_instances WHERE product_id = ?`, [P]))
-      .rows[0] as Record<string, unknown>;
-    expect(Number(row.authority_level)).toBe(1);
-  });
-
   it('refuses an observer raising the autopilot dial', async () => {
     // The dial at 'act' records a consent in the acting founder's name. It is
     // the single grant the autopilot tick, the departments and the standing
@@ -169,14 +146,24 @@ describe('granting authority asks who is granting it', () => {
 });
 
 describe('dispatching an effect asks who is dispatching it', () => {
-  it('refuses an observer sending the company digest', async () => {
-    const res = await post('/ambient/email/send', OBSERVER, { email: 'anywhere@example.com' });
+  // The letter reply send is the door that puts a message in front of a real
+  // recipient. It is guarded, and then the handler checks ownership of the
+  // action itself — so both refusals are 403 and the BODY is what says which
+  // one answered. That distinction is the assertion: the observer is stopped by
+  // the guard, the co-founder is not.
+  const SEND = '/letter/replies/nonexistent/send';
+
+  it('refuses an observer sending a letter reply', async () => {
+    const res = await post(SEND, OBSERVER);
     expect(res.status).toBe(REFUSED);
+    expect(await res.text()).toContain('Not permitted for your access to this company');
   });
 
   it('admits a member who holds can_trigger_actions', async () => {
-    const res = await post('/ambient/email/send', MANAGER, { email: 'ok@example.com' });
-    expect(res.status).not.toBe(REFUSED);
+    const res = await post(SEND, MANAGER);
+    // Past the guard. The handler then refuses an action that is not theirs,
+    // which is a different refusal and the one this test is not about.
+    expect(await res.text()).toBe('Refused');
   });
 });
 
@@ -268,26 +255,6 @@ describe('the guard resolves the company the handler will act on', () => {
   });
 });
 
-describe('an experiment runs on real customers, so it asks too', () => {
-  it('refuses an observer starting one', async () => {
-    const res = await post(`/products/${P}/agents/experiments/exp_x/start`, OBSERVER);
-    expect(res.status).toBe(REFUSED);
-  });
-
-  it('admits a member who holds can_trigger_actions', async () => {
-    // And the guard reads the company from the PATH here, not the cookie —
-    // these handlers serve `:id`, so anything else would authorize one company
-    // and act on another.
-    const res = await post(`/products/${P}/agents/experiments/exp_x/start`, MANAGER);
-    expect(res.status).not.toBe(REFUSED);
-  });
-
-  it('refuses a member of a different company naming this one in the path', async () => {
-    const res = await post(`/products/${P}/agents/experiments/exp_x/start`, 'nobody_at_all');
-    expect(res.status).toBe(REFUSED);
-  });
-});
-
 // ── spending the company's money is not watching ────────────────────────────
 
 describe('a paid model run asks who may spend', () => {
@@ -295,16 +262,21 @@ describe('a paid model run asks who may spend', () => {
   // all: every /synthesize, /generate, /scan, /assess, the institution chat,
   // voice transcription, the weekly brief. Any active member — an investor
   // observer included — could spend the company's AI budget by pressing a
-  // button. Three representative doors, one per shape.
-  for (const path of ['/memory/archaeology', '/memory/counterfactuals', '/ambient/audio/generate']) {
-    it(`refuses an observer at ${path}`, async () => {
-      expect((await post(path, OBSERVER)).status).toBe(REFUSED);
-    });
+  // button. Most of those doors were on the Commercial Foundry pages and are
+  // gone. The institution chat is the one that remains, and it is the same
+  // shape: one POST, one model call, the company's money.
+  const SPEND = '/talk/message';
 
-    it(`admits a member who holds can_trigger_actions at ${path}`, async () => {
-      expect((await post(path, MANAGER)).status).not.toBe(REFUSED);
-    });
-  }
+  it('refuses an observer at the institution chat', async () => {
+    expect((await post(SPEND, OBSERVER)).status).toBe(REFUSED);
+  });
+
+  it('admits a member who holds can_trigger_actions', async () => {
+    // 400 for the malformed body, from the handler — which is the proof that
+    // the guard let them reach it. No model call is made on that path, so the
+    // test does not spend anything to assert who may.
+    expect((await post(SPEND, MANAGER)).status).not.toBe(REFUSED);
+  });
 });
 
 describe('and the brake stays easier to reach than the accelerator', () => {

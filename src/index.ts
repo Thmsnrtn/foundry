@@ -33,29 +33,13 @@ import { landingRoutes, pricingRoutes, caseStudyRoutes, legalRoutes, manifestoRo
 import { authRoutes } from './routes/auth/clerk.js';
 
 // Dashboard routes (auth required)
-import { dashboardRoutes } from './routes/dashboard/index.js';
 import { onboardingRoutes } from './routes/dashboard/onboarding.js';
-import { productRoutes } from './routes/dashboard/products.js';
-import { auditRoutes } from './routes/dashboard/audit.js';
-import { decisionRoutes } from './routes/dashboard/decisions.js';
-import { fleetRoutes } from './routes/dashboard/fleet.js';
 import { letterRoutes } from './routes/dashboard/letter.js';
 import { noteAllStopped, noteScheduled } from './lib/scheduler-standing.js';
 import { isPrivateOwnerInstance } from './lib/instance-posture.js';
 import { ownerFailurePage } from './routes/dashboard/foundry-shell.js';
 import { isOwnerSurface } from './lib/owner-surface-script.js';
-import { lifecycleRoutes } from './routes/dashboard/lifecycle.js';
-import { digestRoutes } from './routes/dashboard/digest.js';
-import { cohortRoutes } from './routes/dashboard/cohorts.js';
-import { competitiveRoutes } from './routes/dashboard/competitive.js';
-import { betaRoutes } from './routes/dashboard/beta.js';
-import { journeyRoutes } from './routes/dashboard/journey.js';
-import { koldlyRoutes } from './routes/dashboard/koldly.js';
 import { settingsRoutes } from './routes/dashboard/settings.js';
-import { revenueRoutes } from './routes/dashboard/revenue.js';
-import { portfolioRoutes } from './routes/dashboard/portfolio.js';
-import { founderOpsRoutes } from './routes/dashboard/founder-ops.js';
-import { founderIntelRoutes } from './routes/api/founder-intelligence.js';
 
 // Share routes (public, token-gated)
 import { shareRoutes } from './routes/share/index.js';
@@ -64,78 +48,22 @@ import { shareRoutes } from './routes/share/index.js';
 import { ingestRoutes } from './routes/ingest/index.js';
 
 // Signal Timeline
-import { timelineRoutes } from './routes/signal/timeline.js';
 
 // Weekly Operating Plan
-import { planRoutes } from './routes/dashboard/plan.js';
 
 // New routes: Integrations, Team, Investors, Playbooks
-import { integrationsRoutes } from './routes/dashboard/integrations.js';
-import { teamRoutes } from './routes/dashboard/team.js';
-import { investorRoutes } from './routes/dashboard/investors.js';
-import { playbookRoutes } from './routes/dashboard/playbooks.js';
 
 // SCP: Agent Roster + all SCP sub-routes
-import { agentRoutes } from './routes/dashboard/agents.js';
-import { agentWisdomRoutes } from './routes/dashboard/agents-wisdom.js';
-import { agentBriefingRoutes } from './routes/dashboard/agents-briefings.js';
-import { agentEvolveRoutes } from './routes/dashboard/agents-evolve.js';
-import { agentConstitutionRoutes } from './routes/dashboard/agents-constitution.js';
-import { agentRemediationRoutes } from './routes/dashboard/agents-remediations.js';
-import { agentTemporalRoutes } from './routes/dashboard/agents-temporal.js';
 // SCP v2/v3: New capability layers
-import { agentIntegrationRoutes } from './routes/dashboard/agents-integrations.js';
-import { agentCustomerRoutes } from './routes/dashboard/agents-customers.js';
-import { agentMessageRoutes } from './routes/dashboard/agents-messages.js';
-import { agentStrategyRoutes } from './routes/dashboard/agents-strategy.js';
-import { agentExperimentRoutes } from './routes/dashboard/agents-experiments.js';
 // SCP v4: New dashboard pages
-import { agentsInbox } from './routes/dashboard/agents-inbox.js';
-import { agentsOkr } from './routes/dashboard/agents-okr.js';
-import { agentsDecisions } from './routes/dashboard/agents-decisions.js';
-import { benchmarks } from './routes/dashboard/benchmarks.js';
-import { auditLog } from './routes/dashboard/audit-log.js';
 // SCP v5: Gap-closing — execution, forecasting, investor layer, accuracy, privacy
-import { agentsActions } from './routes/dashboard/agents-actions.js';
-import { agentsAccuracy } from './routes/dashboard/agents-accuracy.js';
-import { agentsTransparency } from './routes/dashboard/agents-transparency.js';
-import { scenarios } from './routes/dashboard/scenarios.js';
 import { privacySettings } from './routes/dashboard/privacy.js';
-import { boardPacket } from './routes/dashboard/board-packet.js';
-import { weeklyBrief } from './routes/dashboard/weekly-brief.js';
 // SCP v6: Full evolved platform
-import { agentsDebate } from './routes/dashboard/agents-debate.js';
-import { executionPlaybooks } from './routes/dashboard/execution-playbooks.js';
-import { memoryGraph } from './routes/dashboard/memory.js';
-import { agentIntelligence } from './routes/dashboard/agent-intelligence.js';
-import { multimodalSignals } from './routes/dashboard/signals-multimodal.js';
-import { ambientRoutes } from './routes/dashboard/ambient.js';
-import { networkIntelligence } from './routes/dashboard/network-intelligence.js';
-import { exitRoutes } from './routes/dashboard/exit.js';
-import { transcriptWebhooks } from './routes/api/webhooks/transcripts.js';
-import { voiceReplyWebhook } from './routes/api/webhooks/voice-reply.js';
 // SCP v7: ROI dashboard, founder intelligence, integration health, priority API
-import { roiDashboard } from './routes/dashboard/roi.js';
-import { founderIntelligence } from './routes/dashboard/founder-intelligence.js';
-import { integrationHealth } from './routes/dashboard/integration-health.js';
-import { priorityApi } from './routes/api/priority.js';
 // REST API v1 (API key auth)
 import { apiV1 } from './api/v1/index.js';
 
 // API routes (auth required)
-import { apiProductRoutes } from './routes/api/products.js';
-import { apiMetricRoutes } from './routes/api/metrics.js';
-import { apiAuditLogRoutes } from './routes/api/audit-log.js';
-import { apiUXRoutes } from './routes/api/ux.js';
-import { apiAskRoutes } from './routes/api/ask.js';
-import { feedbackRoutes } from './routes/api/feedback.js';
-import { mobileRoutes } from './routes/api/mobile.js';
-import { tier1ApiRoutes } from './routes/api/tier1.js';
-import { tier2ApiRoutes } from './routes/api/tier2.js';
-import { tier3ApiRoutes } from './routes/api/tier3.js';
-import { tier4ApiRoutes } from './routes/api/tier4.js';
-import { superchargeApiRoutes } from './routes/api/supercharge.js';
-import { platformApiRoutes } from './routes/api/platform.js';
 
 // Internal routes (ecosystem key required, except /health)
 import { healthRoutes } from './routes/internal/health.js';
@@ -539,96 +467,18 @@ app.route('/', privacySettings);
 // decision worth making when the commercial product is actually being built.
 // Unmounted is the honest state: the code exists, and his instance does not
 // serve it.
-if (!isPrivateOwnerInstance()) {
-  app.route('/', dashboardRoutes);
-  app.route('/', productRoutes);
-  app.route('/', auditRoutes);
-  app.route('/', decisionRoutes);
-  app.route('/', fleetRoutes);
-  app.route('/', lifecycleRoutes);
-  app.route('/', digestRoutes);
-  app.route('/', cohortRoutes);
-  app.route('/', competitiveRoutes);
-  app.route('/', betaRoutes);
-  app.route('/', journeyRoutes);
-  app.route('/', koldlyRoutes);
-  app.route('/', revenueRoutes);
-  app.route('/', portfolioRoutes);
-  app.route('/', founderOpsRoutes);
-  app.route('/', planRoutes);
-  app.route('/', timelineRoutes);
-  app.route('/', integrationsRoutes);
-  app.route('/', teamRoutes);
-  app.route('/', investorRoutes);
-  // executionPlaybooks must register before playbookRoutes: /playbooks/:type
-  // would otherwise capture /playbooks/execution and 404 it.
-  app.route('/', executionPlaybooks);
-  app.route('/', playbookRoutes);
-  app.route('/', agentWisdomRoutes);
-  app.route('/', agentBriefingRoutes);
-  app.route('/', agentEvolveRoutes);
-  app.route('/', agentConstitutionRoutes);
-  app.route('/', agentRemediationRoutes);
-  app.route('/', agentTemporalRoutes);
-  // SCP v2/v3: New capability layers
-  app.route('/', agentIntegrationRoutes);
-  app.route('/', agentCustomerRoutes);
-  app.route('/', agentMessageRoutes);
-  app.route('/', agentStrategyRoutes);
-  app.route('/', agentExperimentRoutes);
-  // SCP v4-v7 dashboard pages. These modules define their FULL public paths
-  // internally (e.g. agents-accuracy registers GET /agents/accuracy), so they
-  // mount at '/' — a path prefix here would double the path and 404 every
-  // sidebar link to them. The three exceptions (inbox/okr/decisions) were
-  // normalized to the same full-path convention.
-  app.route('/', agentsInbox);
-  // wiki removed — replaced by company memory graph (/memory)
-  app.route('/', agentsOkr);
-  app.route('/', agentsDecisions);
-  app.route('/', benchmarks);
-  app.route('/', auditLog);
-  // SCP v5: Gap-closing features
-  app.route('/', agentsActions);
-  app.route('/', agentsAccuracy);
-  app.route('/', agentsTransparency);
-  app.route('/', scenarios);
-  app.route('/board', boardPacket);
-  app.route('/', weeklyBrief);
-  // SCP v6: Full evolved platform
-  app.route('/', agentsDebate);
-  app.route('/', agentIntelligence);
-  app.route('/', memoryGraph);
-  app.route('/', multimodalSignals);
-  app.route('/', ambientRoutes);
-  app.route('/', networkIntelligence);
-  app.route('/', exitRoutes);
-  app.route('/', transcriptWebhooks);
-  app.route('/', voiceReplyWebhook);
-  // SCP v7: ROI, founder intelligence, integration health, priority API (HTMX)
-  app.route('/', roiDashboard);
-  app.route('/', founderIntelligence);
-  app.route('/', integrationHealth);
-  app.route('/', priorityApi);
-  // Agent roster + detail pages (/agents, /agents/:name, …). Mounted at
-  // /agents and LAST among the /agents/* modules so its /:name pattern can
-  // never shadow the specific pages (inbox, okr, actions, accuracy, …).
-  app.route('/agents', agentRoutes);
-  // API routes
-  app.route('/', apiProductRoutes);
-  app.route('/', apiMetricRoutes);
-  app.route('/', apiAuditLogRoutes);
-  app.route('/', apiUXRoutes);
-  app.route('/', apiAskRoutes);
-  app.route('/', feedbackRoutes);
-  app.route('/', mobileRoutes);
-  app.route('/', tier1ApiRoutes);
-  app.route('/', tier2ApiRoutes);
-  app.route('/', tier3ApiRoutes);
-  app.route('/', tier4ApiRoutes);
-  app.route('/', superchargeApiRoutes);
-  app.route('/', platformApiRoutes);
-  app.route('/', founderIntelRoutes);
-}
+// ── Commercial Foundry, deleted ──────────────────────────────────────────────
+//
+// Seventy-two route modules and twenty-two thousand lines the owner could not
+// reach: agents, boards, playbooks, fleet observatories, ambient layers, ROI
+// dashboards. They were unmounted on this instance and still imported,
+// type-checked and tested, which made them load-bearing for CI and for nothing
+// else. Deleted here on 2026-09-13; preserved in full on branch
+// `archive/commercial-foundry` at 9049f60e and in history.
+//
+// The services beneath them are shared and stay. Some are now reached only by
+// the tests that were written against those routes; separating those is its
+// own pass, and it is named in OWNER_OS_MIGRATION.md rather than started here.
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 

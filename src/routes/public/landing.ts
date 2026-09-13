@@ -493,7 +493,7 @@ helpRoutes.get('/help', (c) => {
       `)}
       <div style="display:flex;gap:1rem;margin-top:2rem;flex-wrap:wrap;">
         <a href="mailto:${SUPPORT_EMAIL}" class="btn btn-primary" style="padding:0.7rem 1.5rem;">Email support</a>
-        <a href="/dashboard" class="btn btn-ghost" style="padding:0.7rem 1.5rem;color:var(--text-dim);">Back to dashboard</a>
+        <a href="/foundry" class="btn btn-ghost" style="padding:0.7rem 1.5rem;color:var(--text-dim);">Back to Foundry</a>
       </div>
     </article>
   `));

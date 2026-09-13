@@ -15,9 +15,9 @@ import {
 // A RATE OVER NOTHING, PRINTED AS THE BEST POSSIBLE RESULT.
 //
 // `auto_execute_rate` fell back to **100** when no decision had been made in
-// the last day. The most reassuring number on the automation panel appeared
-// precisely when there was nothing to report — "Auto-Execute Rate: 100%" is
-// what an idle deployment showed, and what a broken one showed too.
+// the last day. The most reassuring number this function reports appeared
+// precisely when there was nothing to report — an idle deployment answered
+// "100%", and so did a broken one.
 //
 // `avg_health_score` fell the other way, to **0**: the WORST possible score,
 // printed for having scored nobody. Both are the same mistake — a quotient
@@ -25,7 +25,7 @@ import {
 // divide" — and it is worth seeing that the same mistake can look like good
 // news or bad news depending on which way the fallback was typed.
 //
-// And an action row whose `outcome` column was never written rendered as
+// And an action row whose `outcome` column was never written was reported as
 // 'completed'. An outcome nobody recorded is not a successful one.
 // =============================================================================
 
@@ -118,17 +118,5 @@ describe('an average over nobody', () => {
     const h = await getCustomerHealthOverview();
     expect(h.total_customers).toBe(1);
     expect(h.avg_health_score, 'one customer, no score').toBeNull();
-  });
-});
-
-describe('the page the operator reads', () => {
-  it('prints why each number is missing', () => {
-    const src = readFileSync('src/routes/dashboard/founder-ops.ts', 'utf8');
-    expect(src).toMatch(/no decisions yet/);
-    expect(src).toMatch(/nobody scored/);
-    const stripped = stripComments(src, { lineComments: true });
-    expect(stripped, 'the fallbacks that produced 100% and 0/100')
-      .not.toMatch(/auto_execute_rate:\s*0\b/);
-    expect(stripped).not.toMatch(/avg_health_score:\s*0\b/);
   });
 });

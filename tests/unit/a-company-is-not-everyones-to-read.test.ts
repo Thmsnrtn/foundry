@@ -13,11 +13,14 @@ import { getBoardPacket } from '../../src/services/scp/investor/board-packet.js'
 // =============================================================================
 // A COMPANY IS NOT EVERYONE'S TO READ.
 //
-// `GET /packet/:id` ran `SELECT * FROM board_packets WHERE id=?` and the route
-// loaded the founder and never used them. **Any authenticated founder could
-// read any company's board packet** — the executive summary, the key metrics,
-// the wins, the risks, the asks, the next-quarter goals. The most sensitive
-// document Foundry produces about a company.
+// `getBoardPacket(id)` ran `SELECT * FROM board_packets WHERE id=?`, so whatever
+// asked for a packet got it: **any authenticated founder could read any
+// company's board packet** — the executive summary, the key metrics, the wins,
+// the risks, the asks, the next-quarter goals. The most sensitive document
+// Foundry produces about a company. The reader now takes the founder and the
+// query joins `products` to scope on `owner_id`, which is where the rule has to
+// live: the route that first exposed it has since been removed with the rest of
+// Commercial Foundry, and the service must not depend on a caller to be safe.
 //
 // THE RULE WAS KNOWN AND APPLIED THREE TIMES BY ITS NEIGHBOURS.
 // `getInvestorUpdate(id, ownerId)` joins `products` and scopes on `owner_id`,
@@ -39,15 +42,16 @@ import { getBoardPacket } from '../../src/services/scp/investor/board-packet.js'
 // `UPDATE decisions SET status=…, decided_by='founder' WHERE id = ?` with no
 // scope at all. `isFounder` is FOUNDRY'S OWNER, not the company's founder — so
 // the operator could resolve any company's decision and the ledger recorded it
-// as the act of the person whose company it was. `decided_by` admits 'founder'
-// or 'second_self' and nothing else, because the operator resolving a company's
-// decisions is not a thing the boundary doctrine describes. Removed rather than
-// given a new vocabulary: adding an authority quietly is the one thing the
-// constitutional invariant names.
+// as the act of the person whose company it was. Those routes are gone, so
+// nothing here reads them; what survives them is the column vocabulary, which
+// admits 'founder' or 'second_self' and nothing else because the operator
+// resolving a company's decisions is not a thing the boundary doctrine
+// describes. That is the check kept below: adding an authority quietly is the
+// one thing the constitutional invariant names, and the vocabulary is where it
+// would have to show up.
 // =============================================================================
 
 const SERVICE = 'src/services/scp/investor/board-packet.ts';
-const ROUTE = 'src/routes/dashboard/board-packet.ts';
 
 beforeAll(async () => {
   await runMigrations();
@@ -88,11 +92,6 @@ describe('a board packet belongs to one company', () => {
     expect(await getBoardPacket('a_packet_that_never_existed', 'f_mine')).toBeNull();
   });
 
-  it('the route passes the founder rather than holding one unused', () => {
-    const code = stripComments(readFileSync(ROUTE, 'utf8'), { lineComments: true });
-    expect(code).toMatch(/getBoardPacket\(id, founder\.id\)/);
-  });
-
   it('and the query scopes on the owning product', () => {
     const code = stripComments(readFileSync(SERVICE, 'utf8'), { lineComments: true });
     expect(code).toMatch(/JOIN products p ON p\.id = bp\.product_id/);
@@ -102,15 +101,6 @@ describe('a board packet belongs to one company', () => {
 });
 
 describe('the operator does not decide for a company', () => {
-  it('the two routes are gone', () => {
-    const code = stripComments(
-      readFileSync('src/routes/api/founder-intelligence.ts', 'utf8'), { lineComments: true });
-    expect(code).not.toMatch(/decisions-inbox\/:id\/approve/);
-    expect(code).not.toMatch(/decisions-inbox\/:id\/reject/);
-    expect(code, "and with them the write that said 'founder' about somebody else")
-      .not.toMatch(/decided_by = 'founder' WHERE id = \?/);
-  });
-
   it('the vocabulary still has no value for the operator', async () => {
     // If one ever appears, it is because somebody added an authority, and this
     // is where they will find out that it was noticed.
@@ -122,20 +112,21 @@ describe('the operator does not decide for a company', () => {
 });
 
 describe('the floor under all of it', () => {
-  it('the gate passes and its baseline is two', () => {
+  it('admits nothing into its baseline beyond the two reasons ever allowed', () => {
     const baseline = readFileSync('docs/db/tenant-scope-baseline.txt', 'utf8')
       .split('\n').filter(Boolean);
-    expect(baseline).toEqual([
-      'GET /case-studies/:id',
-      'POST /api/webhooks/stripe/:productId',
-    ]);
+    // The Stripe webhook lived on a Commercial Foundry route that no longer
+    // exists, so whether its line has been swept out of the baseline yet is
+    // that cleanup's business. What must not happen either way is a THIRD
+    // entry: an exemption is not something a route can take for itself.
+    const EVER_ALLOWED = ['GET /case-studies/:id', 'POST /api/webhooks/stripe/:productId'];
+    expect(baseline.filter((l) => !EVER_ALLOWED.includes(l))).toEqual([]);
+    expect(baseline).toContain('GET /case-studies/:id');
   });
 
-  it('and both survivors say in the route why they are there', () => {
+  it('and the surviving one says in the route why it is there', () => {
     expect(readFileSync('src/routes/public/landing.ts', 'utf8'))
       .toMatch(/a case study is published marketing/);
-    expect(readFileSync('src/routes/api/supercharge.ts', 'utf8'))
-      .toMatch(/Stripe authenticates itself by/);
   });
 
   it('catches a planted route that takes a company id and never says whose', () => {

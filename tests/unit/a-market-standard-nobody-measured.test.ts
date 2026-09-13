@@ -108,13 +108,12 @@ describe('the source', () => {
   });
 
   it('no longer exports a market comparison nothing reached', () => {
-    // `compareToMarketTerms` was imported by the exit dashboard and never
-    // called. It built the same unsourced sentences — "below market range",
-    // "above market standard" — from the same fixed table, and it carried the
-    // same fallback to seed's numbers.
+    // `compareToMarketTerms` was imported by a dashboard that never called it.
+    // It built the same unsourced sentences — "below market range", "above
+    // market standard" — from the same fixed table, and it carried the same
+    // fallback to seed's numbers. The importer is gone now; the export being
+    // gone too is what stops the next caller from finding it.
     expect(src).not.toContain('compareToMarketTerms');
-    const page = stripComments(readFileSync('src/routes/dashboard/exit.ts', 'utf8'));
-    expect(page).not.toContain('compareToMarketTerms');
   });
 
   it('does not tell the model to supply market figures of its own', () => {

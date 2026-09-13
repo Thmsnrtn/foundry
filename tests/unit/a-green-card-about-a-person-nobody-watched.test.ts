@@ -13,11 +13,13 @@ import { getWellbeing } from '../../src/services/founder/intelligence.js';
 // =============================================================================
 // A GREEN CARD ABOUT A PERSON NOBODY WATCHED.
 //
-// The Founder Wellbeing card carries a coloured left border: green above 60,
-// amber above 35, red below. A founder with no `founder_health` row at all
-// took `motivation ?? 50` and `engagement ?? 'stable'`, which made
-// `energy_score: 70` — a GREEN card reading "70/100", "Trajectory: stable",
-// "Stress Signals: 0" — about a person this system had never observed once.
+// `getWellbeing` is what any wellbeing card is drawn from, and a founder with no
+// `founder_health` row at all took `motivation ?? 50` and `engagement ??
+// 'stable'`, which made `energy_score: 70` — a healthy score, a "stable"
+// trajectory and "Stress Signals: 0" — about a person this system had never
+// observed once. The card that rendered it in green has since gone with the
+// Commercial Foundry routes; the function that manufactured the number has not,
+// which is why the null-not-a-default rule belongs here and not in a template.
 //
 // Of every claim-without-evidence found in this file, this is the one that
 // matters most, and not because the number is large. It is about a person, a
@@ -165,19 +167,8 @@ describe('what is not recorded at all', () => {
   });
 });
 
-describe('the card the founder reads', () => {
-  it('is grey rather than green when nothing was observed', () => {
-    const src = readFileSync('src/routes/dashboard/founder-ops.ts', 'utf8');
-    expect(src).toMatch(/a green one would be a guess/);
-    expect(src).toMatch(/wellbeing\.energy_score == null \? '#9ca3af'/);
-    expect(src).toMatch(/wellbeing\.energy_score == null \? 'not observed'/);
-  });
-
+describe('the function any card is drawn from', () => {
   it('holds no default that scores an unobserved person', () => {
-    const ops = stripComments(
-      readFileSync('src/routes/dashboard/founder-ops.ts', 'utf8'), { lineComments: true });
-    expect(ops, 'the error fallback was a green 70 too').not.toMatch(/energy_score:\s*70/);
-
     const src = stripComments(
       readFileSync('src/services/founder/intelligence.ts', 'utf8'), { lineComments: true });
     const fn = src.slice(src.indexOf('export async function getWellbeing'));

@@ -199,7 +199,7 @@ connectionRoutes.get('/connections', async (c) => {
 
     <p style="font-size:0.8rem;color:var(--text-muted);">
       Looking for the built-in connections (Stripe, analytics, GitHub, Slack…)?
-      They live on <a href="/integrations" style="color:var(--accent);">Integrations</a> — same rules, pre-wired.
+      They were on the Integrations page, which the private instance never served and which no longer exists.
     </p>`;
   return c.html(dashboardLayout(ctx, content));
 });

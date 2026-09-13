@@ -5,8 +5,7 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { nanoid } from 'nanoid';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { getIntegration } from '../../src/services/integration/fabric.js';
-import { saveConnectedIntegration } from '../../src/routes/dashboard/integrations.js';
+import { connectIntegration, getIntegration } from '../../src/services/integration/fabric.js';
 
 // =============================================================================
 // WHICH PAGE THEY USED DECIDED WHETHER IT SYNCED.
@@ -18,19 +17,23 @@ import { saveConnectedIntegration } from '../../src/routes/dashboard/integration
 // `{ synced: 0 }` on its FIRST branch — silently, because "not connected" and
 // "connected but found nothing" are the same return value.
 //
-// `POST /integrations/:type/connect` never wrote it. `sync.ts`, the metrics
-// path, matches on `type` instead, so THE SAME ROW was visible to one sync and
-// invisible to the other. Foundry has two live connect pages, and the sibling
-// form at `/agents/integrations` goes through `connectIntegration`, which does
-// write `name` — so which page a founder happened to use decided whether their
-// integration ever produced a single event.
+// Foundry once had two connect forms. One never wrote `name`; `sync.ts`, the
+// metrics path, matches on the provider key instead, so THE SAME ROW was
+// visible to one sync and invisible to the other, and which page a founder
+// happened to use decided whether their integration ever produced a single
+// event. The form that omitted `name` was part of the Commercial Foundry
+// surface and has been removed. `connectIntegration` in
+// `services/integration/fabric.ts` is the writer that survived — it is the one
+// that always did write `name` — and it is what is exercised here, because a
+// writer that stops writing `name` puts every event sync back on its silent
+// first branch no matter which door called it.
 //
-// The two identities are the same string HERE, because this route's `:type`
-// param is the provider key. That is not true of every writer, which is why
-// migration 199's repair is restricted to the nine values this page can
-// produce: `fabric.ts` and `framework.ts` put a CATEGORY in `type`, and
-// `connections.ts` puts a direction there. A blanket `SET name = type` would
-// have invented integrations called "outbound".
+// The nameless state is still planted directly below, because that is what the
+// event syncs have to keep refusing to find.
+//
+// A blanket repair was never safe: `fabric.ts` and `framework.ts` put a
+// CATEGORY in the old `type` column and `connections.ts` put a DIRECTION there,
+// so `SET name = type` would have invented integrations called "outbound".
 // =============================================================================
 
 const P = 'p_name';
@@ -43,16 +46,13 @@ beforeAll(async () => {
 
 beforeEach(async () => { await query('DELETE FROM integrations WHERE product_id = ?', [P]); });
 
-/** THE ACTUAL WRITER `POST /integrations/:type/connect` calls.
+/** THE ACTUAL WRITER, run rather than reproduced.
  *
  *  The first version of this test built its own INSERT that looked like the
- *  route's. Removing the fix from the route left it green — a test that
- *  reproduces the writer proves only that the test agrees with itself. The
- *  writer is exported now so it can be RUN. */
-async function connectViaIntegrationsPage(type: string): Promise<void> {
-  await saveConnectedIntegration({
-    productId: P, type, credentialsCiphertext: 'ciphertext', config: {},
-  });
+ *  writer's. Removing the fix from the writer left it green — a test that
+ *  reproduces the writer proves only that the test agrees with itself. */
+async function connect(type: string): Promise<void> {
+  await connectIntegration(P, type, { credentials_json: 'secret', config_json: {} });
 }
 
 /** What it used to write. */
@@ -72,16 +72,16 @@ async function visibleToMetricsSync(provider: string): Promise<boolean> {
   return r.rows.length === 1;
 }
 
-describe('an integration connected on the integrations page', () => {
+describe('an integration connected through the surviving writer', () => {
   it('is findable by the event syncs', async () => {
-    await connectViaIntegrationsPage('posthog');
+    await connect('posthog');
 
     // This is the exact lookup all six event syncs perform.
     expect(await getIntegration(P, 'posthog')).not.toBeNull();
   });
 
   it('is findable by the metrics sync too, which it always was', async () => {
-    await connectViaIntegrationsPage('posthog');
+    await connect('posthog');
     expect(await visibleToMetricsSync('posthog')).toBe(true);
   });
 
@@ -109,8 +109,8 @@ describe('the repair that ran once, and what replaced it', () => {
   // statement whose column no longer exists — which is the stronger test, and
   // the only one still possible.
 
-  it('leaves no nameless row behind, from the page that used to', async () => {
-    await connectViaIntegrationsPage('posthog');
+  it('leaves no nameless row behind', async () => {
+    await connect('posthog');
 
     const row = (await query(
       "SELECT name, provider, direction FROM integrations WHERE product_id = ? AND provider = 'posthog'",

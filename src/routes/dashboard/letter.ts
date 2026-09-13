@@ -1177,7 +1177,7 @@ letterRoutes.get('/letter', async (c) => {
         : 'I raised this and you have not said which way to go'}`}</div>
             </div>
             ${n.kind === 'decision' ? html`
-            <a href="/decisions/${n.decisionId}" class="btn btn-primary" style="font-size:0.78rem;padding:0.3rem 0.7rem;"
+            <a href="/foundry/decisions" class="btn btn-primary" style="font-size:0.78rem;padding:0.3rem 0.7rem;"
               onclick="fetch('/letter/attention/${n.decisionId}',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({product_id:'${n.productId}',reaction:'acted'})})">Decide</a>
             <form method="POST" action="/letter/attention/${n.decisionId}" style="margin:0;">
               <input type="hidden" name="product_id" value="${n.productId}" />

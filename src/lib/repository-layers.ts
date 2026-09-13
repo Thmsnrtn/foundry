@@ -102,7 +102,10 @@ export const LAYER_OF: Record<string, Layer> = {
   // rule for all of `src/lib` keeps the exception the size of the fact.
   'src/lib/webhooks.ts': 'kernel',
   'src/lib/onboarding-emails.ts': 'kernel',
-  'src/lib/mcp-registry.ts': 'kernel',
+  // `src/lib/mcp-registry.ts` was named here and has not existed for some
+  // time — noticed on 13 September 2026 while removing entries for the deleted
+  // commercial routes. An exception carved for a file that is not there is not
+  // an exception; it is a sentence nobody reread.
   'src/db/seed.ts': 'composition',
 
   // ── composition ────────────────────────────────────────────────────────
@@ -152,17 +155,20 @@ export const LAYER_OF: Record<string, Layer> = {
   // private institution operates businesses that bill their own customers, and
   // one of those may one day be a commercial Foundry — but not developed, and
   // nothing new may be built on it.
+  //
+  // THE COMMERCIAL ROUTES ARE NO LONGER HERE BECAUSE THEY ARE NO LONGER
+  // ANYWHERE. Eight of these entries named dashboard pages — agents, beta,
+  // cohorts, koldly, investors, board-packet, journey, plan — that were
+  // deleted with the other sixty-four on 13 September 2026 and live on branch
+  // `archive/commercial-foundry`. A map that classifies files which do not
+  // exist is describing a repository that is not this one. What remains under
+  // this heading is billing and the public landing page, which are still here.
+  //
+  // `onboarding.ts` stays: it is commercial in character and still mounted,
+  // because the private instance redirects to it on first run.
   'src/services/billing': 'commercial',
   'src/routes/public/landing.ts': 'commercial',
-  'src/routes/dashboard/agents': 'commercial',
-  'src/routes/dashboard/beta.ts': 'commercial',
-  'src/routes/dashboard/cohorts.ts': 'commercial',
-  'src/routes/dashboard/koldly.ts': 'commercial',
-  'src/routes/dashboard/investors.ts': 'commercial',
-  'src/routes/dashboard/board-packet.ts': 'commercial',
-  'src/routes/dashboard/journey.ts': 'commercial',
   'src/routes/dashboard/onboarding.ts': 'commercial',
-  'src/routes/dashboard/plan.ts': 'commercial',
 
   // ── everything else is the shared institutional kernel ─────────────────
   'src/routes': 'kernel',

@@ -19,6 +19,14 @@
 // =============================================================================
 
 process.env.NODE_ENV = 'test';
+// THE POSTURE THE OWNER RUNS. Without this the crawl booted in the default
+// commercial posture, where `views/layout.ts` renders a twenty-five item
+// sidebar, a five-tab bar and a command palette that the private instance
+// gates off entirely — so the crawl was harvesting links from navigation the
+// owner has never seen, and reporting them against a mount table that no
+// longer carries them. It must drive the surface that is deployed.
+process.env.FOUNDRY_INSTANCE_POSTURE = 'private_owner';
+process.env.FOUNDRY_OWNER_EMAIL = 'owner@example.com';
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.CLERK_SECRET_KEY = 'sk_test_fake';
 process.env.CLERK_PUBLISHABLE_KEY = 'pk_test_fake';
@@ -38,7 +46,15 @@ const { Hono } = await import('hono');
 const { runMigrations } = await import('../../src/db/migrate.js');
 const { query } = await import('../../src/db/client.js');
 
-// ── Mount table: mirrors src/index.ts exactly (same modules, same prefixes) ──
+// ── Mount table: what the owner's instance actually serves ──────────────────
+//
+// THIS LIST IS HAND-MAINTAINED AND MUST TRACK src/index.ts. It used to mirror
+// every mount in that file including the seventy-two commercial routers the
+// private instance never served, which is how twenty-two thousand lines of
+// unreachable code stayed alive: this crawl was the only thing that imported
+// them, and it runs in `npm run check`. Those routers are deleted; what is
+// left is the surface the owner can reach, and `dashboard/letter` mounts the
+// four `*-place` routers and the shell beneath itself.
 const R = async (p: string) => (await import(`../../src/routes/${p}.js`)) as Record<string, any>;
 
 const mounts: Array<[string, any]> = [];
@@ -50,83 +66,11 @@ const mounts: Array<[string, any]> = [];
   mounts.push(['/', (await R('ingest/index')).ingestRoutes]);
   mounts.push(['/', (await R('internal/health')).healthRoutes]);
   mounts.push(['/', (await R('internal/ecosystem')).ecosystemRoutes]);
-  mounts.push(['/', (await R('dashboard/index')).dashboardRoutes]);
   mounts.push(['/', (await R('dashboard/onboarding')).onboardingRoutes]);
-  mounts.push(['/', (await R('dashboard/products')).productRoutes]);
-  mounts.push(['/', (await R('dashboard/audit')).auditRoutes]);
-  mounts.push(['/', (await R('dashboard/decisions')).decisionRoutes]);
-  mounts.push(['/', (await R('dashboard/fleet')).fleetRoutes]);
   mounts.push(['/', (await R('dashboard/letter')).letterRoutes]);
-  mounts.push(['/', (await R('dashboard/lifecycle')).lifecycleRoutes]);
-  mounts.push(['/', (await R('dashboard/digest')).digestRoutes]);
-  mounts.push(['/', (await R('dashboard/cohorts')).cohortRoutes]);
-  mounts.push(['/', (await R('dashboard/competitive')).competitiveRoutes]);
-  mounts.push(['/', (await R('dashboard/beta')).betaRoutes]);
-  mounts.push(['/', (await R('dashboard/journey')).journeyRoutes]);
-  mounts.push(['/', (await R('dashboard/koldly')).koldlyRoutes]);
   mounts.push(['/', (await R('dashboard/settings')).settingsRoutes]);
-  mounts.push(['/', (await R('dashboard/revenue')).revenueRoutes]);
-  mounts.push(['/', (await R('dashboard/portfolio')).portfolioRoutes]);
-  mounts.push(['/', (await R('dashboard/founder-ops')).founderOpsRoutes]);
-  mounts.push(['/', (await R('dashboard/plan')).planRoutes]);
-  mounts.push(['/', (await R('signal/timeline')).timelineRoutes]);
-  mounts.push(['/', (await R('dashboard/integrations')).integrationsRoutes]);
-  mounts.push(['/', (await R('dashboard/team')).teamRoutes]);
-  mounts.push(['/', (await R('dashboard/investors')).investorRoutes]);
-  mounts.push(['/', (await R('dashboard/execution-playbooks')).executionPlaybooks]);
-  mounts.push(['/', (await R('dashboard/playbooks')).playbookRoutes]);
-  mounts.push(['/', (await R('dashboard/agents-wisdom')).agentWisdomRoutes]);
-  mounts.push(['/', (await R('dashboard/agents-briefings')).agentBriefingRoutes]);
-  mounts.push(['/', (await R('dashboard/agents-evolve')).agentEvolveRoutes]);
-  mounts.push(['/', (await R('dashboard/agents-constitution')).agentConstitutionRoutes]);
-  mounts.push(['/', (await R('dashboard/agents-remediations')).agentRemediationRoutes]);
-  mounts.push(['/', (await R('dashboard/agents-temporal')).agentTemporalRoutes]);
-  mounts.push(['/', (await R('dashboard/agents-integrations')).agentIntegrationRoutes]);
-  mounts.push(['/', (await R('dashboard/agents-customers')).agentCustomerRoutes]);
-  mounts.push(['/', (await R('dashboard/agents-messages')).agentMessageRoutes]);
-  mounts.push(['/', (await R('dashboard/agents-strategy')).agentStrategyRoutes]);
-  mounts.push(['/', (await R('dashboard/agents-experiments')).agentExperimentRoutes]);
-  mounts.push(['/', (await R('dashboard/agents-inbox')).agentsInbox]);
-  mounts.push(['/', (await R('dashboard/agents-okr')).agentsOkr]);
-  mounts.push(['/', (await R('dashboard/agents-decisions')).agentsDecisions]);
-  mounts.push(['/', (await R('dashboard/benchmarks')).benchmarks]);
-  mounts.push(['/', (await R('dashboard/audit-log')).auditLog]);
-  mounts.push(['/', (await R('dashboard/agents-actions')).agentsActions]);
-  mounts.push(['/', (await R('dashboard/agents-accuracy')).agentsAccuracy]);
-  mounts.push(['/', (await R('dashboard/agents-transparency')).agentsTransparency]);
-  mounts.push(['/', (await R('dashboard/scenarios')).scenarios]);
   mounts.push(['/', (await R('dashboard/privacy')).privacySettings]);
-  mounts.push(['/board', (await R('dashboard/board-packet')).boardPacket]);
-  mounts.push(['/', (await R('dashboard/weekly-brief')).weeklyBrief]);
-  mounts.push(['/', (await R('dashboard/agents-debate')).agentsDebate]);
-  mounts.push(['/', (await R('dashboard/agent-intelligence')).agentIntelligence]);
-  mounts.push(['/', (await R('dashboard/memory')).memoryGraph]);
-  mounts.push(['/', (await R('dashboard/signals-multimodal')).multimodalSignals]);
-  mounts.push(['/', (await R('dashboard/ambient')).ambientRoutes]);
-  mounts.push(['/', (await R('dashboard/network-intelligence')).networkIntelligence]);
-  mounts.push(['/', (await R('dashboard/exit')).exitRoutes]);
-  mounts.push(['/', (await R('api/webhooks/transcripts')).transcriptWebhooks]);
-  mounts.push(['/', (await R('api/webhooks/voice-reply')).voiceReplyWebhook]);
-  mounts.push(['/', (await R('dashboard/roi')).roiDashboard]);
-  mounts.push(['/', (await R('dashboard/founder-intelligence')).founderIntelligence]);
-  mounts.push(['/', (await R('dashboard/integration-health')).integrationHealth]);
-  mounts.push(['/', (await R('api/priority')).priorityApi]);
-  mounts.push(['/agents', (await R('dashboard/agents')).agentRoutes]);
   mounts.push(['/api/v1', ((await import('../../src/api/v1/index.js')) as any).apiV1]);
-  mounts.push(['/', (await R('api/products')).apiProductRoutes]);
-  mounts.push(['/', (await R('api/metrics')).apiMetricRoutes]);
-  mounts.push(['/', (await R('api/audit-log')).apiAuditLogRoutes]);
-  mounts.push(['/', (await R('api/ux')).apiUXRoutes]);
-  mounts.push(['/', (await R('api/ask')).apiAskRoutes]);
-  mounts.push(['/', (await R('api/feedback')).feedbackRoutes]);
-  mounts.push(['/', (await R('api/mobile')).mobileRoutes]);
-  mounts.push(['/', (await R('api/tier1')).tier1ApiRoutes]);
-  mounts.push(['/', (await R('api/tier2')).tier2ApiRoutes]);
-  mounts.push(['/', (await R('api/tier3')).tier3ApiRoutes]);
-  mounts.push(['/', (await R('api/tier4')).tier4ApiRoutes]);
-  mounts.push(['/', (await R('api/supercharge')).superchargeApiRoutes]);
-  mounts.push(['/', (await R('api/platform')).platformApiRoutes]);
-  mounts.push(['/', (await R('api/founder-intelligence')).founderIntelRoutes]);
 }
 
 // ── App assembly with founder stub ───────────────────────────────────────────

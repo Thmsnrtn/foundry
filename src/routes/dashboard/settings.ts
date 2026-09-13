@@ -170,7 +170,7 @@ settingsRoutes.get('/settings', async (c) => {
             ${p.github_repo_url ? html`<span style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">${p.github_repo_url}</span>` : ''}
             ${p.website_url ? html`<span style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">${p.website_url}</span>` : ''}
           </div>
-          <a href="/products/${p.id}/audit" class="btn btn-secondary btn-sm" style="font-size:0.75rem;">View</a>
+          <a href="/foundry/companies/${p.id}" class="btn btn-secondary btn-sm" style="font-size:0.75rem;">View</a>
         </div>`)}
       <a href="/onboarding" class="btn btn-primary btn-sm" style="margin-top:0.75rem;">+ Add Product</a>
     </div>

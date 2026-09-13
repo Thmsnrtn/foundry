@@ -18,9 +18,10 @@ import { exportProductData } from '../../src/services/privacy/consent.js';
 // support message and have it evaluate when the founder opens their own data
 // export.
 //
-// Two escapers existed, in the privacy export and the audit-log export. Both
-// quoted correctly for RFC 4180 and neither neutralised a formula. One escaper
-// now, and a test that compares the two call sites against it.
+// Two escapers existed, in the privacy export and in an audit-log export that
+// has since gone with the Commercial Foundry routes. Both quoted correctly for
+// RFC 4180 and neither neutralised a formula. One escaper now, in `lib/csv.ts`,
+// and the surviving call site is held to it rather than hand-rolling its own.
 //
 // Neutralised in CSV, exact in JSON: an export is meant to be the data, so the
 // fidelity format keeps its fidelity and the spreadsheet format gets
@@ -98,11 +99,11 @@ describe('the export a customer can write into', () => {
   });
 });
 
-describe('one escaper, and both exports use it', () => {
+describe('one escaper, and the export uses it', () => {
   it('has no second copy left behind', () => {
     // Two copies of one rule is a defect unless something compares them. The
     // comparison is that there is only one.
-    for (const file of ['src/routes/dashboard/privacy.ts', 'src/routes/dashboard/audit-log.ts']) {
+    for (const file of ['src/routes/dashboard/privacy.ts']) {
       const src = readFileSync(resolve(__dirname, '../..', file), 'utf8');
       expect(src, `${file} still hand-rolls CSV quoting`).not.toContain(".replace(/\"/g, '\"\"')");
       expect(src).toContain("from '../../lib/csv.js'");

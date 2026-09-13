@@ -18,8 +18,10 @@ import { detectBehavioralSignals } from '../../src/services/scp/founder/decision
 // `status` stayed 'pending_approval' and no scheduler existed to execute it.
 // Three untruths in four lines: an approval that had not happened, a timestamp
 // for a moment that had not arrived, and a window nothing was counting down.
-// The dashboard said the same thing in words, badging every level-1 action
-// "1-hour window".
+// The founder-facing page said the same thing in words, badging every level-1
+// action "1-hour window". That page was part of the Commercial Foundry surface
+// and has been removed; the writer that made the claim true-looking is what is
+// held here, because it is the writer every other reader inherits from.
 //
 // `auto` has one meaning here — see `acting-principal.ts`: an action that
 // reached its notice window without anybody objecting. Nothing tells a founder
@@ -150,13 +152,6 @@ describe('the word `auto`', () => {
     });
     expect(writers).toEqual([]);
   });
-
-  it('is still rendered for the rows that already carry it, without claiming a window', async () => {
-    const { __approverTextForTest } = await import('../../src/routes/dashboard/agents-integrations.js');
-    const text = __approverTextForTest('auto', 'f_ap');
-    expect(text).not.toContain('notice window');
-    expect(text).toContain('no approver recorded');
-  });
 });
 
 describe('what a machine approved', () => {
@@ -185,13 +180,5 @@ describe('what a machine approved', () => {
 
     const signals = await detectBehavioralSignals(P);
     expect(signals.find((s) => s.signal_type === 'approval_without_reading')).toBeDefined();
-  });
-});
-
-describe('the badge a founder reads', () => {
-  it('does not promise a window that nothing counts', () => {
-    const src = stripComments(readFileSync('src/routes/dashboard/agents-integrations.ts', 'utf8'),
-      { lineComments: true });
-    expect(src).not.toContain('1-hour window');
   });
 });

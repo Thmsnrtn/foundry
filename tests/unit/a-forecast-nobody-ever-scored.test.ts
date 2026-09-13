@@ -31,8 +31,9 @@ import { stateFinancialPosition } from '../../src/services/financial/position.js
 // placeholders, six arguments — so there were no checkpoints to break.)
 //
 // A prediction that is never scored is very easy to keep making. Now: written
-// down at one, three and six months, reconciled where a company's real MRR
-// arrives, and reported to the founder above the forecasts it judges.
+// down at one, three and six months, reconciled at BOTH doors where a company's
+// real MRR arrives, and readable as an accuracy record — resolved, pending, and
+// the signed direction of the error — through `getForecastAccuracy`.
 // =============================================================================
 
 beforeAll(async () => { await runMigrations(); });
@@ -176,7 +177,7 @@ describe('reality is recorded against it', () => {
   });
 });
 
-describe('and the founder is told', () => {
+describe('and the record can be read back', () => {
   it('says nothing has come due rather than reporting perfect accuracy', async () => {
     const pid = await companyWithForecasts();
     const accuracy = await getForecastAccuracy(pid);
@@ -199,13 +200,6 @@ describe('and the founder is told', () => {
     expect(accuracy.median_signed_variance_pct, 'actuals above prediction: forecasts ran low')
       .toBeCloseTo(25, 1);
     expect(accuracy.most_recent.length).toBe(2);
-  });
-
-  it('reaches the page above the forecasts it judges', () => {
-    const src = readFileSync('src/routes/dashboard/scenarios.ts', 'utf8');
-    expect(src).toMatch(/No forecast has come due yet/);
-    expect(src).toMatch(/probably optimistic/);
-    expect(src).toMatch(/getForecastAccuracy/);
   });
 
   it('is off the write-only list', () => {

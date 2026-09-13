@@ -20,7 +20,6 @@
     "check": "npm run typecheck && npm run ratchet && npm run kernel:boundary && npm run guards:nullsafe && npm run truth:audit && npm run effects:audit && npm run lint:columns && npm run reality:scope && npm run lint:ai-attribution && npm run sim:crawl && npm run test:ci",
     "kernel:boundary": "node scripts/check-kernel-boundary.mjs && node scripts/check-layer-boundary.mjs",
     "truth:audit": "node scripts/audit-public-claims.mjs",
-    "sim:walkthrough": "TURSO_DATABASE_URL=file::memory: tsx tests/simulation/walkthrough.ts",
     "sim:golden": "TURSO_DATABASE_URL=file::memory: tsx tests/simulation/golden-output.ts",
     "sim:golden:ai": "TURSO_DATABASE_URL=file::memory: tsx tests/simulation/golden-output-ai.ts",
     "load:crons": "TURSO_DATABASE_URL=file::memory: tsx tests/load/cron-load.ts",

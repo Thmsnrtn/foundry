@@ -7,16 +7,13 @@ import { describe, expect, it } from 'vitest';
 import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 
 // =============================================================================
-// A BENCHMARK OVER A CONSTANT, AND A ZERO SHOWN TO INVESTORS.
+// A BENCHMARK OVER A CONSTANT.
 //
 // `addGoldenLesson` is the only thing that writes `golden_suite` or increments
 // `products.golden_suite_size`, and nothing calls it. So the counter is zero for
-// every company, forever — and three surfaces presented it:
-//
-//   • the investor board section, as a large number labelled "Golden Lessons";
-//   • the peer benchmark, where p25/p50/p75/p90 across every company were four
-//     zeroes published as a comparison a founder could read their standing from;
-//   • the evolution page, which now says in its own copy that nothing writes one.
+// every company, forever — and the peer benchmark in `scp/network.ts` published
+// p25/p50/p75/p90 across every company: four zeroes, offered as a comparison a
+// founder could read their standing from.
 //
 // A benchmark over a constant is not a weak signal. It is the shape of a signal
 // with nothing in it, and a percentile against it is false precision.
@@ -25,6 +22,11 @@ import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 // remedy for reporting something that is not there is to stop reporting it.
 // Wiring a writer is a feature decision with real failure modes — a lesson
 // injected into every future session — and it is not made by a cleanup.
+//
+// Two commercial surfaces also displayed the counter — an investor board section
+// and the evolution page — and those routes are gone with the rest of Commercial
+// Foundry, so the assertions about their markup went with them. What is checked
+// here is the part that still exists: the writer, the columns, and the benchmark.
 // =============================================================================
 
 const ROOT = resolve(__dirname, '../..');
@@ -76,12 +78,6 @@ describe('the counter nothing increments', () => {
     expect(network).not.toContain("positionFromBenchmark(goldSuiteSize");
   });
 
-  it('is not shown to investors as a number they could read meaning into', () => {
-    const investors = read('src/routes/dashboard/investors.ts');
-    expect(investors).not.toContain('Golden Lessons');
-    expect(investors).not.toContain('scpSection.total_evolution_cycles');
-  });
-
   it('has no writer for the evolution counter either', () => {
     // The premise for the second removal, asserted the same way as the first.
     // The two shapes a write to this column can take. An earlier version of
@@ -95,12 +91,5 @@ describe('the counter nothing increments', () => {
         { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
     } catch { anyWriter = []; }
     expect(anyWriter).toEqual([]);
-  });
-
-  it('is still explained where a founder might look for it', () => {
-    // Removing every trace would leave a founder who reads the evolution page
-    // wondering why the count never moves. That page says why.
-    expect(read('src/routes/dashboard/agents.ts'))
-      .toContain('Nothing writes one yet');
   });
 });

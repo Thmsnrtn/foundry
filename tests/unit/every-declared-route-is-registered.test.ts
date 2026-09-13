@@ -1,4 +1,12 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
+// THE POSTURE THE OWNER ACTUALLY RUNS. This suite used to boot the app in the
+// default commercial posture, where seventy-two routers the private instance
+// never served registered themselves — so the population it guarded was the
+// population of a product that is not deployed, and unmounting a router
+// without deleting its file failed here. Those routers are gone; this now
+// asks the question about the instance that exists.
+process.env.FOUNDRY_INSTANCE_POSTURE = 'private_owner';
+process.env.FOUNDRY_OWNER_EMAIL = 'owner@example.com';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { declaredRoutes } from '../helpers/declared-routes.js';
@@ -24,6 +32,8 @@ import { declaredRoutes } from '../helpers/declared-routes.js';
 // making other assertions vacuous.
 // =============================================================================
 
+const FLOOR = 150;
+
 type Registered = { method: string; path: string };
 
 let registered: Set<string>;
@@ -43,7 +53,10 @@ beforeAll(async () => {
 describe('the route table and the source agree', () => {
   it('resolved every mount prefix', () => {
     expect(declared.unresolved, 'a route could not be resolved to a path').toEqual([]);
-    expect(declared.routes.length).toBeGreaterThan(400);
+    // A FLOOR THAT CATCHES MASS LOSS, set just under the real count so a
+    // router silently falling out of the mount table is a failure rather than
+    // a quieter suite.
+    expect(declared.routes.length).toBeGreaterThan(FLOOR);
   });
 
   it('registers every route the source declares, at the path it is declared to have', () => {

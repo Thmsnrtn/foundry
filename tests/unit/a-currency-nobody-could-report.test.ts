@@ -15,13 +15,12 @@ import { query } from '../../src/db/client.js';
 // integration, no route, no job. A company had no way to tell Foundry what its
 // local-currency revenue was.
 //
-// One reader existed, `detectCurrencyErosion`, served live on
-// `GET /api/currency-health`. Because the columns are always NULL, its `?? 0`
-// fallbacks were the ENTIRE INPUT: zero minus zero is a flat local trend, and a
-// flat local trend against a declining USD one is exactly the erosion
-// condition. So the endpoint reported currency erosion whenever the other series
-// fell — and that series was `new_mrr_cents`, one period's new business,
-// compared against what would have been a level.
+// One reader existed, `detectCurrencyErosion` in the intelligence service.
+// Because the columns are always NULL, its `?? 0` fallbacks were the ENTIRE
+// INPUT: zero minus zero is a flat local trend, and a flat local trend against a
+// declining USD one is exactly the erosion condition. So it reported currency
+// erosion whenever the other series fell — and that series was `new_mrr_cents`,
+// one period's new business, compared against what would have been a level.
 //
 // Three faults, each sufficient on its own: an input nothing can supply, a
 // fallback standing in for it, and two quantities of different kinds compared.
@@ -43,7 +42,7 @@ describe('the columns nothing could write', () => {
 
   it('and no code still reads them', () => {
     const hits: string[] = [];
-    for (const f of ['src/services/intelligence/global.ts', 'src/routes/api/tier2.ts']) {
+    for (const f of ['src/services/intelligence/global.ts']) {
       const code = stripComments(readFileSync(f, 'utf8'), { lineComments: true });
       if (/local_currency_mrr|exchange_rate/.test(code)) hits.push(f);
     }
@@ -52,15 +51,13 @@ describe('the columns nothing could write', () => {
 });
 
 describe('the detector that could not detect', () => {
-  it('is gone, and so is its route', () => {
+  it('is gone from the intelligence service', async () => {
     const global_ = stripComments(
       readFileSync('src/services/intelligence/global.ts', 'utf8'), { lineComments: true });
     expect(global_).not.toMatch(/detectCurrencyErosion/);
-
-    const tier2 = stripComments(
-      readFileSync('src/routes/api/tier2.ts', 'utf8'), { lineComments: true });
-    expect(tier2).not.toMatch(/currency-health/);
-    expect(tier2).not.toMatch(/detectCurrencyErosion/);
+    // And not merely unexported: the module offers no such function at all.
+    const mod = await import('../../src/services/intelligence/global.js') as Record<string, unknown>;
+    expect(Object.keys(mod)).not.toContain('detectCurrencyErosion');
   });
 
   it('and the account of why survives in the source', () => {

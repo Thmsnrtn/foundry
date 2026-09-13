@@ -12,16 +12,17 @@ import { runMigrations } from '../../src/db/migrate.js';
 // Two defects in the agent debate, one structural and one a single word.
 //
 // THE WORD. When runDebateForProduct threw, its catch block wrote
-// `status = 'complete'`. The debate dashboard paints 'complete' as a green
-// "Complete" badge, and the list view puts it beside a conflict count that a
-// crashed run leaves at zero. So these two rows were identical on screen:
+// `status = 'complete'`. Anything reading the row back — the debate dashboard
+// of the day, since removed with the rest of Commercial Foundry, but equally
+// the next reader to be written — could not tell these two apart:
 //
-//   2026-08-21  [Complete]  —          the agents debated and agreed
-//   2026-08-21  [Complete]  —          the debate threw before synthesis
+//   2026-08-21  complete  0 conflicts   the agents debated and agreed
+//   2026-08-21  complete  0 conflicts   the debate threw before synthesis
 //
-// The failure text did exist — "Debate synthesis failed." — but it was rendered
-// as the executive summary, inside the card headed "Unified Synthesis", in the
-// green success styling, at the largest body size on the page.
+// The failure text did exist — "Debate synthesis failed." — but it was stored
+// as the executive summary, which is the field a reader presents as the result.
+// That is why the fix is in the record and not in a renderer: a status that
+// lies has to be fixed where it is written.
 //
 // The synthesizer had a second route to the same place: on a JSON parse failure
 // it returned a well-formed SynthesisOutput with an apologetic sentence and zero
@@ -46,7 +47,6 @@ beforeAll(async () => { await runMigrations(); });
 
 const ORCH = readFileSync('src/services/scp/debate/orchestrator.ts', 'utf8');
 const SYNTH = readFileSync('src/services/scp/agents/synthesizer.ts', 'utf8');
-const PAGE = readFileSync('src/routes/dashboard/agents-debate.ts', 'utf8');
 
 describe('a crashed debate is not marked complete', () => {
   it('the catch block records failure', () => {
@@ -84,25 +84,6 @@ describe('the synthesizer says when it did not synthesize', () => {
 
   it('a real synthesis carries failure_reason: null', () => {
     expect(SYNTH).toMatch(/failure_reason: null,/);
-  });
-});
-
-describe('the page shows the difference', () => {
-  it('has a Failed badge', () => {
-    expect(PAGE).toMatch(/status === 'failed'/);
-    expect(PAGE).toMatch(/>Failed</);
-  });
-
-  it('does not render a failure inside the green synthesis card', () => {
-    const idx = PAGE.indexOf('const synthesisSection');
-    expect(PAGE.slice(idx, idx + 900)).toMatch(/synthesis\?\.failure_reason \? html/);
-    expect(PAGE).toMatch(/This Debate Did Not Finish/);
-  });
-
-  it('does not show a failed run as having zero conflicts', () => {
-    // "—" and "0 conflicts" both read as "they agreed". A run that never got
-    // there says so.
-    expect(PAGE).toMatch(/not reached/);
   });
 });
 

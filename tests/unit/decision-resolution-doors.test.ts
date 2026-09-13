@@ -1,18 +1,23 @@
 // =============================================================================
-// Tests: three doors resolve a decision, and none of them asked who was asking
+// Tests: the doors that resolve a decision, and who they ask
 //
 // Resolving a decision is the institution's central act. `can_vote_decisions`
 // is the permission that exists to say who has a say in one. The two never met.
 //
-//   POST /decisions/:id/resolve   scoped `p.owner_id = ?`, no capability check.
-//                                 A co-founder holding the permission could not
-//                                 resolve; the permission answered nothing.
 //   foundry_resolve_decision      an MCP client through an API key. The
 //                                 transport proved the scope and that Foundry
 //                                 may act for the company — neither answers
 //                                 whether the key's ISSUER may decide for it.
 //   runAutopilotTick              governed by the ladder, the platform cap and
 //                                 the consent ledger. This one was fine.
+//
+// There was a third: `POST /decisions/:id/resolve`, which scoped `p.owner_id =
+// ?` and asked no capability at all, so a co-founder holding the permission
+// could not resolve and the permission answered nothing. That page was part of
+// the Commercial Foundry surface and is gone. Its guarantees are not: the MCP
+// tool is the human door that remains, it asks the same question of the key's
+// issuer, and it carries the same company scope — both asserted below, at the
+// door that still opens.
 //
 // And every human door wrote the same four letters. `decisions.decided_by`
 // holds a KIND — 'founder' or 'second_self' — and must keep holding one: the
@@ -27,7 +32,6 @@ process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { Hono } from 'hono';
 import { nanoid } from 'nanoid';
 
 import { runMigrations } from '../../src/db/migrate.js';
@@ -38,8 +42,6 @@ const OWNER = 'dr_owner';
 const VOTER = 'dr_voter';       // co-founder who has a say
 const OBSERVER = 'dr_observer'; // watches only
 const P = 'dr_product';
-
-let app: Hono;
 
 async function pendingDecision(): Promise<string> {
   const id = nanoid();
@@ -54,17 +56,6 @@ async function decisionRow(id: string): Promise<Record<string, unknown>> {
   return (await query(
     `SELECT status, decided_by, decided_by_founder_id FROM decisions WHERE id = ?`, [id]))
     .rows[0] as Record<string, unknown>;
-}
-
-function resolveAs(founder: string, id: string) {
-  return app.request(`/decisions/${id}/resolve`, {
-    method: 'POST',
-    headers: {
-      'x-founder': founder, cookie: `foundry_product=${P}`,
-      'content-type': 'application/json',
-    },
-    body: JSON.stringify({ chosen_option: 'Ship' }),
-  });
 }
 
 beforeAll(async () => {
@@ -84,65 +75,10 @@ beforeAll(async () => {
     `INSERT INTO team_members (id, product_id, founder_id, role, status,
        can_view_decisions, can_vote_decisions)
      VALUES (?, ?, ?, 'investor_observer', 'active', 1, 0)`, [nanoid(), P, OBSERVER]);
-
-  const { decisionRoutes } = await import('../../src/routes/dashboard/decisions.js');
-  app = new Hono();
-  app.use('*', async (c, next) => {
-    c.set('founder' as never, { id: c.req.header('x-founder') ?? OWNER } as never);
-    c.set('csrfToken' as never, 'test' as never);
-    await next();
-  });
-  app.route('/', decisionRoutes);
 });
 
 beforeEach(async () => {
   await query('DELETE FROM decisions WHERE product_id = ?', [P]);
-});
-
-describe('the dashboard door asks who has a say', () => {
-  it('refuses an observer', async () => {
-    const id = await pendingDecision();
-    const res = await resolveAs(OBSERVER, id);
-    expect(res.status).toBe(403);
-    expect((await decisionRow(id)).status, 'and nothing was decided').toBe('pending');
-  });
-
-  it('admits a co-founder who holds the vote', async () => {
-    // The defect this replaces: `p.owner_id = ?`. The permission that exists to
-    // say who has a say in a decision was not what decided who could resolve
-    // one — a guard that refuses the legitimate principal is not extra secure.
-    const id = await pendingDecision();
-    const res = await resolveAs(VOTER, id);
-    expect(res.status).toBe(200);
-    expect((await decisionRow(id)).status).toBe('approved');
-  });
-
-  it('records WHICH founder resolved it, beside the kind', async () => {
-    const id = await pendingDecision();
-    await resolveAs(VOTER, id);
-    const row = await decisionRow(id);
-    expect(row.decided_by, 'the kind stays a kind — the shadow ledger reads it').toBe('founder');
-    expect(row.decided_by_founder_id, 'and the person is on the record too').toBe(VOTER);
-  });
-
-  it('does not resolve a decision belonging to another company', async () => {
-    const stranger = nanoid();
-    await query(
-      `INSERT INTO founders (id, clerk_user_id, email) VALUES (?,?,?)`,
-      [stranger, `clerk_${stranger}`, `${stranger}@x.com`]);
-    await query(
-      `INSERT INTO products (id, name, owner_id, status) VALUES (?, 'Other', ?, 'active')`,
-      [`p_${stranger}`, stranger]);
-    const foreign = nanoid();
-    await query(
-      `INSERT INTO decisions (id, product_id, what, why_now, category, gate, status)
-       VALUES (?, ?, 'Theirs', 'Now', 'strategic', 1, 'pending')`,
-      [foreign, `p_${stranger}`]);
-
-    const res = await resolveAs(VOTER, foreign);
-    expect(res.status).toBe(404);
-    expect((await decisionRow(foreign)).status).toBe('pending');
-  });
 });
 
 describe('the MCP door asks the same question of the key issuer', () => {
@@ -168,6 +104,8 @@ describe('the MCP door asks the same question of the key issuer', () => {
   });
 
   it('admits a key issued by someone who does, and names them', async () => {
+    // And the kind stays a kind beside the person: the shadow ledger reads
+    // `decided_by`, so the identity goes in its own column rather than into it.
     const id = await pendingDecision();
     const result = await executeLoopTool(
       'foundry_resolve_decision',
@@ -176,7 +114,32 @@ describe('the MCP door asks the same question of the key issuer', () => {
     expect(result.content[0]?.text).not.toMatch(/^Error/);
     const row = await decisionRow(id);
     expect(row.status).toBe('approved');
-    expect(row.decided_by_founder_id).toBe(VOTER);
+    expect(row.decided_by, 'the kind stays a kind').toBe('founder');
+    expect(row.decided_by_founder_id, 'and the person is on the record too').toBe(VOTER);
+  });
+
+  it('does not resolve a decision belonging to another company', async () => {
+    // The key proves a scope for ONE company. A decision id from another one is
+    // not found, not refused — the caller learns nothing about it either way.
+    const stranger = nanoid();
+    await query(
+      `INSERT INTO founders (id, clerk_user_id, email) VALUES (?,?,?)`,
+      [stranger, `clerk_${stranger}`, `${stranger}@x.com`]);
+    await query(
+      `INSERT INTO products (id, name, owner_id, status) VALUES (?, 'Other', ?, 'active')`,
+      [`p_${stranger}`, stranger]);
+    const foreign = nanoid();
+    await query(
+      `INSERT INTO decisions (id, product_id, what, why_now, category, gate, status)
+       VALUES (?, ?, 'Theirs', 'Now', 'strategic', 1, 'pending')`,
+      [foreign, `p_${stranger}`]);
+
+    const result = await executeLoopTool(
+      'foundry_resolve_decision',
+      { decision_id: foreign, chosen_option: 'Ship' },
+      { productId: P, founderId: VOTER });
+    expect(result.content[0]?.text).toMatch(/^Error/);
+    expect((await decisionRow(foreign)).status).toBe('pending');
   });
 });
 
