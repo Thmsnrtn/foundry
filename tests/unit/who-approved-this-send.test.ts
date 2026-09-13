@@ -2,9 +2,9 @@ process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { beforeAll, describe, expect, it } from 'vitest';
-import { Hono } from 'hono';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
+import { approveAction, rejectAction } from '../../src/services/outbound/executor.js';
 
 // =============================================================================
 // AN OUTBOUND ACTION MAY NOT BE BORN APPROVED, AND ITS APPROVER IS A PERSON.
@@ -21,15 +21,21 @@ import { query } from '../../src/db/client.js';
 // deleted rather than guarded.
 //
 // SECOND: `approveAction(actionId, 'ceo')` recorded the literal string 'ceo' as
-// the approver for every approval by every founder of every company. The route
-// verifies ownership properly and then throws away who it verified. That is the
+// the approver for every approval by every founder of every company. The page
+// verified ownership properly and then threw away who it verified. That is the
 // same fiction as a consent ledger recording a mode nobody was ever in: the
 // field that exists to make an authorisation attributable, not attributed.
+//
+// That page was part of the Commercial Foundry surface and is gone, and its
+// rendering of the approver went with it. The fix did not live in the page: it
+// is that `approveAction` and `rejectAction` REFUSE an approver that is not a
+// principal reference, so no caller — a page, a job, a future door — can write
+// a role where a person belongs. That is what is asserted below, one level
+// under where the defect was found.
 // =============================================================================
 
 const P = 'wa_product';
 const OWNER = 'wa_owner';
-let app: Hono;
 
 beforeAll(async () => {
   await runMigrations();
@@ -70,46 +76,52 @@ describe('an outbound action for a real integration', () => {
   });
 });
 
-describe('the approver a person reads', () => {
-  it('says who in English, and does not guess at a principal it does not know', async () => {
-    const { __approverTextForTest } = await import(
-      '../../src/routes/dashboard/agents-integrations.js');
-    expect(__approverTextForTest(`founder:${OWNER}`, OWNER)).toBe('you');
-    expect(__approverTextForTest('founder:somebody-else', OWNER)).toBe('another owner');
-    // 'auto' is a legacy value now: it is read, never written. It used to
-    // render "automatically, after the notice window", and there was no window
-    // — every row carrying it was stamped either an hour before its own
-    // timestamp by a proposal, or at execution under a standing authority.
-    expect(__approverTextForTest('auto', OWNER)).toContain('no approver recorded');
-    expect(__approverTextForTest('institution:assisting', OWNER)).toContain('permission you gave');
-    expect(__approverTextForTest(null, OWNER)).toBe('-');
-    // Storing the truth made the old rendering unreadable; both halves matter.
-    expect(__approverTextForTest('something_new', OWNER)).toBe('something_new');
-  });
-});
-
 describe('approving an action', () => {
-  beforeAll(async () => {
-    const { agentIntegrationRoutes } = await import('../../src/routes/dashboard/agents-integrations.js');
-    app = new Hono();
-    app.use('*', async (c, next) => {
-      c.set('founder' as never,
-        { id: OWNER, email: 'o@example.com', tier: 'growth', preferences: {} } as never);
-      c.set('csrfToken' as never, 't' as never);
-      await next();
-    });
-    app.route('/', agentIntegrationRoutes);
-  });
-
-  it('records the person who rejected it too, and no invented reason', async () => {
+  async function pending(id: string): Promise<void> {
     await query(
       `INSERT INTO outbound_actions
          (id,product_id,agent_name,integration_name,action_type,authority_level,status,
           parameters_json,preview_text,rationale)
-       VALUES ('wa_reject',?,'beacon','slack','post_message',2,'pending_approval','{}','p','r')`,
-      [P]);
-    const res = await app.request('/agents/integrations/actions/wa_reject/reject', { method: 'POST' });
-    expect([200, 302]).toContain(res.status);
+       VALUES (?,?,'beacon','slack','post_message',2,'pending_approval','{}','p','r')`,
+      [id, P]);
+  }
+
+  it('records the person who approved it, not the word ceo', async () => {
+    await pending('wa_approve');
+    // Slack has no executor registered, so the dispatch itself refuses rather
+    // than claiming a post it did not make — that refusal is its own test
+    // elsewhere. WHO APPROVED is written before any of that and survives it,
+    // which is the point: the authorisation is attributable even when the thing
+    // it authorised could not be carried out.
+    await expect(approveAction('wa_approve', `founder:${OWNER}`))
+      .rejects.toThrow(/No executor registered/);
+
+    const row = (await query('SELECT status, approved_by FROM outbound_actions WHERE id=?', ['wa_approve']))
+      .rows[0] as Record<string, unknown>;
+    // A principal reference, in the same vocabulary as `institution:assisting`
+    // and `autopilot:<category>` — this column already held prefixed principals
+    // and a bare id would have been the odd one out.
+    expect(row.approved_by).toBe(`founder:${OWNER}`);
+    expect(row.status, 'and the record says it did not go out').toBe('failed');
+  });
+
+  it('refuses a role where a person belongs, rather than storing it', async () => {
+    // THE ORIGINAL DEFECT, ASSERTED AT THE DOOR THAT LET IT THROUGH. 'ceo' is
+    // not a principal: nobody can be held to it. The old code passed exactly
+    // this string and it was written for every founder of every company.
+    await pending('wa_ceo');
+    await expect(approveAction('wa_ceo', 'ceo'))
+      .rejects.toThrow(/not a principal reference/);
+    const row = (await query('SELECT status, approved_by FROM outbound_actions WHERE id=?', ['wa_ceo']))
+      .rows[0] as Record<string, unknown>;
+    expect(row.status, 'and the action did not go out anyway').toBe('pending_approval');
+    expect(row.approved_by).toBeNull();
+  });
+
+  it('records the person who rejected it too, and no invented reason', async () => {
+    await pending('wa_reject');
+    await rejectAction('wa_reject', `founder:${OWNER}`);
+
     const row = (await query(
       'SELECT approved_by,feedback_data_json FROM outbound_actions WHERE id=?', ['wa_reject']))
       .rows[0] as Record<string, unknown>;
@@ -119,22 +131,11 @@ describe('approving an action', () => {
     expect(String(row.feedback_data_json)).not.toContain('CEO');
   });
 
-  it('records the person who approved it, not the word ceo', async () => {
-    await query(
-      `INSERT INTO outbound_actions
-         (id,product_id,agent_name,integration_name,action_type,authority_level,status,
-          parameters_json,preview_text,rationale)
-       VALUES ('wa_approve',?,'beacon','slack','post_message',2,'pending_approval','{}','p','r')`,
-      [P]);
-
-    const res = await app.request('/agents/integrations/actions/wa_approve/approve', { method: 'POST' });
-    expect([200, 302]).toContain(res.status);
-
-    const row = (await query('SELECT approved_by FROM outbound_actions WHERE id=?', ['wa_approve']))
-      .rows[0] as Record<string, unknown>;
-    // A principal reference, in the same vocabulary as `institution:assisting`
-    // and `autopilot:<category>` — this column already held prefixed principals
-    // and a bare id would have been the odd one out.
-    expect(row.approved_by).toBe(`founder:${OWNER}`);
+  it('refuses a role on the rejection side as well', async () => {
+    await pending('wa_reject_ceo');
+    await expect(rejectAction('wa_reject_ceo', 'ceo'))
+      .rejects.toThrow(/not a principal reference/);
+    expect((await query('SELECT status FROM outbound_actions WHERE id=?', ['wa_reject_ceo']))
+      .rows[0] as Record<string, unknown>).toMatchObject({ status: 'pending_approval' });
   });
 });

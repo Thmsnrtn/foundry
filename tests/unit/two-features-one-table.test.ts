@@ -1,7 +1,6 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
-import { Hono } from 'hono';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../src/services/ai/client.js', async (orig) => ({
@@ -37,14 +36,19 @@ const { startVoiceSession, endVoiceSession, getVoiceConversations } = await impo
 // `SELECT *`, no discriminator, no ORDER BY — with `briefing_text` null.
 //
 // And `endVoiceSession` pays for a Sonnet call to extract decisions and action
-// items from every transcript, into a row no route could read back.
+// items from every transcript, into a row nothing could read back.
+// `getVoiceConversations` is that reader. The HTTP door that used to call it
+// belonged to the Commercial Foundry surface and has been removed, so what is
+// asserted below is the reader itself: it returns what the model was paid for,
+// it is scoped to one company, it does not hand back the transcript, and a
+// malformed stored value does not take the list down with it. The viewer check
+// that answered a stranger 404 lived in that route; the service takes a product
+// id and no viewer, and any future caller owes its own.
 // =============================================================================
 
 const P = 'p_voice';
 const OWNER = 'f_voice';
 const STRANGER = 'f_voice_other';
-
-let app: Hono;
 
 beforeAll(async () => {
   await runMigrations();
@@ -58,19 +62,6 @@ beforeEach(async () => {
   await query('DELETE FROM voice_conversations WHERE product_id = ?', [P]);
   await query('DELETE FROM voice_sessions WHERE product_id = ?', [P]);
 });
-
-function appAs(founderId: string): Promise<Hono> {
-  return (async () => {
-    const { platformApiRoutes } = await import('../../src/routes/api/platform.js');
-    const a = new Hono();
-    a.use('*', async (c, next) => {
-      c.set('founder' as never, { id: founderId, email: 'x@example.com', preferences: {} } as never);
-      await next();
-    });
-    a.route('/', platformApiRoutes as unknown as Hono);
-    return a;
-  })();
-}
 
 async function briefingExistsForToday(): Promise<void> {
   await query(
@@ -133,24 +124,30 @@ describe('what the model was paid to extract can be read back', () => {
     expect(conversations[0]!.status).toBe('completed');
   });
 
-  it('over the route, owner-verified — a stranger gets 404 and none of the words', async () => {
+  it('reads only the company it was asked for', async () => {
+    // A conversation is the most private thing in here. The product id is the
+    // boundary, and it holds in the query rather than in whoever calls it.
+    await query("INSERT INTO products (id,name,owner_id,status) VALUES ('p_voice_other','Other',?,'active')",
+      [STRANGER]);
     const { voice_session_id } = await startVoiceSession(OWNER, P);
     await endVoiceSession(voice_session_id, 'We talked about the raise.', 240);
+    await query(
+      `INSERT INTO voice_conversations (id, product_id, founder_id, summary, extracted_actions)
+       VALUES ('vc_other', 'p_voice_other', ?, 'Ines and the deck', '["Call Ines"]')`,
+      [STRANGER]);
 
-    const mine = await (await appAs(OWNER)).request(`/api/voice/conversations/${P}`);
-    expect(mine.status).toBe(200);
-    expect(await mine.text()).toContain('Send Ines the updated deck');
-
-    const theirs = await (await appAs(STRANGER)).request(`/api/voice/conversations/${P}`);
-    expect(theirs.status).toBe(404);
-    expect(await theirs.text()).not.toContain('Ines');
+    const mine = await getVoiceConversations(P);
+    expect(mine).toHaveLength(1);
+    expect(JSON.stringify(mine)).toContain('Send Ines the updated deck');
+    expect(JSON.stringify(mine), "another company's conversation is not in this list")
+      .not.toContain('Call Ines');
   });
 
   it('the list does not carry the transcript — a list is for choosing', async () => {
     const { voice_session_id } = await startVoiceSession(OWNER, P);
     await endVoiceSession(voice_session_id, 'A very long transcript indeed.', 240);
-    const res = await (await appAs(OWNER)).request(`/api/voice/conversations/${P}`);
-    expect(await res.text()).not.toContain('A very long transcript indeed');
+    const conversations = await getVoiceConversations(P);
+    expect(JSON.stringify(conversations)).not.toContain('A very long transcript indeed');
   });
 
   it('a malformed stored value yields an empty list, not a crash', async () => {

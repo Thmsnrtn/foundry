@@ -2,8 +2,6 @@ process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { nanoid } from 'nanoid';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query, getProductByOwner, getVisibleProducts } from '../../src/db/client.js';
@@ -11,14 +9,16 @@ import { query, getProductByOwner, getVisibleProducts } from '../../src/db/clien
 // =============================================================================
 // A SECOND DOOR ONTO ANOTHER COMPANY'S NUMBERS.
 //
-// `POST /api/voice/session/start` took `product_id` from the request body and
-// passed it straight to `startVoiceSession` with no ownership check. It sat
-// BETWEEN two routes that both check and both cite the ticket that made them —
-// `/api/voice/memo` (RT02-03) above it and `/api/voice/session/:id/end`
-// (RT02-02) below it. The audit that raised all three recorded this one as
-// RT02-04, with the remediation written out, and it was the one not applied.
+// A voice-session route took `product_id` from the request body and passed it
+// straight to `startVoiceSession` with no ownership check, sitting between two
+// neighbours that both checked. That route has since been removed with the rest
+// of Commercial Foundry, but `startVoiceSession` has not, and it still performs
+// no check of its own — so what is worth keeping is not the guard, which is
+// gone with its door, but the two facts that made the missing guard so
+// expensive. They are asserted here rather than described, because the next
+// caller of that function inherits both.
 //
-// IT WAS NOT ONLY A WRITE. `startVoiceSession` calls `startSession`, which
+// IT IS NOT ONLY A WRITE. `startVoiceSession` calls `startSession`, which
 // INSERTs a `chat_sessions` row carrying the CALLER as `founder_id` and the
 // named product as `product_id`, and the route returns that chat session id.
 // `sendMessage` then authorises on `(id, founder_id)` alone — which the
@@ -32,7 +32,8 @@ import { query, getProductByOwner, getVisibleProducts } from '../../src/db/clien
 // That gap between "can see it exists" and "owns it" is the whole attack
 // surface, and it is asserted below rather than described.
 //
-// The route-level guard is what closes it, so the guard is what these test.
+// The check that closes it is `getProductByOwner`, and whoever calls
+// `startVoiceSession` next has to make it before the call, not after.
 // =============================================================================
 
 const OWNER = 'f_owner';
@@ -97,34 +98,5 @@ describe('the shape of the chained read, held in place', () => {
     expect((asOutsider.rows[0] as unknown as { product_id: string }).product_id).toBe(P);
     // Which is why the guard has to be at the door that creates the row: by the
     // time sendMessage sees it, the row is the outsider's own and looks correct.
-  });
-});
-
-describe('the route itself', () => {
-  // COMMENTS STRIPPED FIRST. The first version of this asserted against the raw
-  // file, and the explanatory comment above the guard NAMES `getProductByOwner`
-  // and RT02-04 — so deleting the actual call left the assertions passing on the
-  // prose describing it. Both mutations survived. That is the seventh time this
-  // campaign that text about code has been read as code, and the first time it
-  // was in a test I had just written to prove a security fix.
-  const src = stripComments(readFileSync('src/routes/api/platform.ts', 'utf8'), { lineComments: true });
-
-  it('checks ownership before starting a voice session', () => {
-    const route = src.slice(src.indexOf("post('/api/voice/session/start'"));
-    const body = route.slice(0, route.indexOf('});'));
-    // The ticket reference stays in the comment above the guard, which is
-    // documentation; what is asserted here is the call and its position. A
-    // check that runs AFTER the thing it guards is decoration.
-    expect(body).toContain('getProductByOwner');
-    expect(body.indexOf('getProductByOwner')).toBeLessThan(body.indexOf('startVoiceSession('));
-  });
-
-  it('leaves all three voice routes guarded, not two of three', () => {
-    for (const route of ['/api/voice/memo', '/api/voice/session/start', '/api/voice/session/:id/end']) {
-      const at = src.indexOf(`'${route}'`);
-      expect(at, `${route} is missing`).toBeGreaterThan(-1);
-      const body = src.slice(at, at + 1400);
-      expect(body, `${route} has no ownership check`).toMatch(/getProductByOwner|p\.owner_id = \?/);
-    }
   });
 });

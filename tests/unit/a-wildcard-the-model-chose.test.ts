@@ -9,16 +9,21 @@ import { likeContains, escapeLikeValue } from '../../src/lib/sql-like.js';
 // =============================================================================
 // A WILDCARD THE MODEL CHOSE.
 //
-// `POST /api/ask` classifies a founder's message with a model, and a
-// `resolve_stressor` action took the `stressor_name` the model extracted
-// straight into `LIKE '%' || name || '%' LIMIT 1` — then marked the single row
-// it found resolved. The query is parameterised and there is no SQL injection
-// here; the injection is into the PATTERN, and the consequence is that the row
-// written to is not the row anybody meant.
+// A founder's message was classified by a model, and a `resolve_stressor`
+// action took the `stressor_name` the model extracted straight into
+// `LIKE '%' || name || '%' LIMIT 1` — then marked the single row it found
+// resolved. The query is parameterised and there is no SQL injection here; the
+// injection is into the PATTERN, and the consequence is that the row written to
+// is not the row anybody meant.
 //
 // `%` matches the company's FIRST ACTIVE STRESSOR, whatever it is. Nobody has
 // to intend that: "resolve the 20% churn stressor" carries one, and so does a
 // message that talks the classifier into answering with a bare wildcard.
+//
+// The route that classified those messages is gone with Commercial Foundry.
+// `lib/sql-like.ts` and the two services that still build LIKE patterns are
+// not, and the same wildcard reaches them from model output and from founder
+// text, so the rule is held where it can still be broken.
 // =============================================================================
 
 const P = 'p_like';
@@ -102,11 +107,10 @@ describe('the call sites', () => {
     const { readFileSync } = await import('node:fs');
     const { stripComments } = await import('../../scripts/lib/strip-comments.mjs');
     for (const f of [
-      'src/routes/api/ask.ts',
       'src/services/scp/memory/graph.ts',
       'src/services/scp/accuracy/tracker.ts',
     ]) {
-      // Comments stripped: three of these files explain the defect in prose
+      // Comments stripped: both of these files explain the defect in prose
       // that contains the very pattern being forbidden.
       const src = stripComments(readFileSync(f, 'utf8'), { lineComments: true });
       expect(src, `${f} builds a LIKE pattern by hand`).not.toMatch(/`%\$\{/);

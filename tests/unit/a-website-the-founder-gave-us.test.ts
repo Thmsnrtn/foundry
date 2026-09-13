@@ -18,10 +18,11 @@ import { query } from '../../src/db/client.js';
 // about their own company and the institution could not afterwards say what the
 // answer was.
 //
-// The audit that would fill those columns, `runWebAudit`, is reachable only
-// through `routes/api/tier2.ts` — the clientless API of frontier item 2 — so a
-// row written at onboarding was never going to become an audit either. A table
-// named for audit results held a URL and nothing else.
+// The audit that would fill those columns, `runWebAudit`, was reachable only
+// through the clientless API of frontier item 2 — a route that has since gone
+// with the rest of Commercial Foundry, leaving the function with no caller at
+// all — so a row written at onboarding was never going to become an audit
+// either. A table named for audit results held a URL and nothing else.
 //
 // This is the plainest kind of company-sense gap: not a number computed wrongly
 // but a fact volunteered and dropped. Found by following
@@ -87,7 +88,7 @@ describe('the audit table keeps its own purpose', () => {
   it('still exists, for real audit output', async () => {
     const rows = await query(
       "SELECT name FROM sqlite_master WHERE type='table' AND name='web_audit_results'");
-    expect(rows.rows.length, 'runWebAudit still writes analysis here').toBe(1);
+    expect(rows.rows.length, 'runWebAudit is what writes analysis here').toBe(1);
   });
 
   it('is still on the unread list, which is item 2’s decision not this one’s', () => {

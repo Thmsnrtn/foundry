@@ -11,8 +11,9 @@ import { getAICostData } from '../../src/services/founder/intelligence.js';
 // =============================================================================
 // AN ESTIMATE STANDING NEXT TO A LEDGER OF WHAT WAS ACTUALLY SPENT.
 //
-// The operator's "Cost (24h)" badge summed tokens from `chat_messages` — the
-// founder-chat path only — and multiplied by a hardcoded blended rate:
+// `getAICostData` is what any operator surface asks for spend, and it summed
+// tokens from `chat_messages` — the founder-chat path only — and multiplied by
+// a hardcoded blended rate:
 //
 //     const estimatedCost = totalTokens * 0.000005; // ~$5/M average
 //
@@ -22,9 +23,10 @@ import { getAICostData } from '../../src/services/founder/intelligence.js';
 // Two fields were worse than approximate. `avg_latency_ms: 0` and
 // `calls_by_model: { 'claude-opus-4-8': 0, ... }` are not measurements: nothing
 // records per-call latency, and NO CALLER RECORDS THE MODEL — `logCost` takes
-// `details` and the agent runner passes `{tokens, session}`. The dashboard
-// rendered the second as `Models: 3`, the key count of a hardcoded object,
-// which would have read 3 whatever had run.
+// `details` and the agent runner passes `{tokens, session}`. A reader counting
+// the keys of that hardcoded object printed "Models: 3", which would have read
+// 3 whatever had run. Both now come back null, so there is no zero for the next
+// reader to present as a measurement.
 //
 // The rule is this system's own, stated in `institutional-economics.ts`:
 // MEASURED-AND-ZERO IS NOT THE SAME FACT AS NOT-MEASURED.
@@ -120,13 +122,5 @@ describe('what the operator is NOT told, and is told so', () => {
       readFileSync('src/services/founder/intelligence.ts', 'utf8'), { lineComments: true });
     expect(src, 'a named model with a zero beside it is an invented measurement')
       .not.toMatch(/claude-[a-z0-9-]+'?\s*:\s*0/);
-  });
-
-  it('does not print a model count on the page when there is nothing to count', () => {
-    const page = stripComments(
-      readFileSync('src/routes/dashboard/founder-ops.ts', 'utf8'), { lineComments: true });
-    expect(page, 'the badge said 3 whatever had run')
-      .not.toMatch(/metricBadge\('Models',\s*Object\.keys\([^)]*\)\.length\)/);
-    expect(page).toContain('not recorded');
   });
 });

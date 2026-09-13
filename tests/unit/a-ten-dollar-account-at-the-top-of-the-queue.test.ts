@@ -1,7 +1,6 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
-import { readFileSync } from 'node:fs';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { nanoid } from 'nanoid';
 import { runMigrations } from '../../src/db/migrate.js';
@@ -28,14 +27,11 @@ import { rebuildPriorityQueue } from '../../src/services/scp/priority/ranker.js'
 // account scores 7 x 0.1 = 0.7 and ranks last, which is where a ten-dollar
 // account belongs when something is on fire.
 //
-// AND THE PORTFOLIO CARD PRINTED A SCORE NOBODY MEASURED. `signal.hasData` is a
-// contract `services/signal.ts` states in so many words — "a company Foundry
-// had never measured appearing as a confident 85 out of 100" is the failure it
-// exists to prevent — and the same file honours it three times: the fleet table
-// renders "no data", the average excludes unmeasured companies, the sort puts
-// them last. The card grid underneath printed `signal.score` raw, so the row
-// saying "no data" sat directly above a card showing 80 at 3.5rem in the green
-// tier colour.
+// The portfolio page that once printed an unmeasured Signal beside this ranking
+// is gone with the rest of Commercial Foundry; the `hasData` contract it broke
+// lives in `services/signal.ts` and is exercised where it is defined. What is
+// left here is the ranking itself, which is a service and still decides what a
+// founder is told to do first.
 // =============================================================================
 
 const P = 'p_rank';
@@ -130,16 +126,5 @@ describe('what a churning account is worth in the ranking', () => {
         ORDER BY priority_score DESC LIMIT 1`, [P]);
     const title = (top.rows[0] as unknown as { title: string }).title;
     expect(title).toContain('Checkout 500s');
-  });
-});
-
-describe('the portfolio card grid', () => {
-  const src = readFileSync('src/routes/dashboard/portfolio.ts', 'utf8');
-
-  it('honours the same hasData contract as the table beside it', () => {
-    // Rendered HTML, so the check is on the template. The contract itself is
-    // exercised where it is defined, in the signal tests.
-    const card = src.slice(src.indexOf('portfolio-signal-number'));
-    expect(card.slice(0, 120)).toContain('signal.hasData');
   });
 });
