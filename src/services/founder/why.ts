@@ -439,7 +439,14 @@ async function whyExperiment(founderId: string, experimentId: string): Promise<W
         // NARROW. The stamp sits on the page beside the words it changed.
         ...(d.amendedAt === null ? [] : [`Narrowed ${day(d.amendedAt)}, before you decided: ${String(d.amendedBecause)}`]),
         ...(d.fulfilmentCap === null ? [] : [`I stop taking new work at ${d.fulfilmentCap} — success is not a reason to promise more than one person can deliver.`]),
-        ...stops.map((x) => `Stops at ${x.threshold} ${x.whatItIs} (${x.count} so far)${x.met ? ' — reached; no more is being sent' : ''}: ${x.because}`)] : [])],
+        // THE THRESHOLD READ AS A SENTENCE. `whatItIs` is a plural description of
+        // the whole kind — "people said the thing was wrong" — and putting a
+        // number in front of it produced "Stops at 1 people said the thing was
+        // wrong", which is a database row with a number on it. The institution
+        // already keeps a name for one of them and for several, for this exact
+        // purpose; it had simply never been used here.
+        ...stops.map((x) => `Stops at ${x.threshold} ${x.threshold === 1 ? x.countedOne : x.countedMany}`
+          + ` (${x.count} so far)${x.met ? ' — reached; no more is being sent' : ''}: ${x.because}`)] : [])],
     technical: [['venture_experiments', experimentId], ['opportunity', String(e.opportunity_id)],
       ['validity', t.validity], ['evidence_mode', String(e.evidence_mode)],
       ...(d ? [['probe_designs.exchange', d.exchange.exchange] as [string, string],

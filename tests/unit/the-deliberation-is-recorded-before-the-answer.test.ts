@@ -415,12 +415,18 @@ describe('it stops itself before the budget stops it, and success is not a reaso
     }
     const met = await stopConditionsMet(X);
     expect(met.stop).toBe(true);
-    expect(met.because.join(' ')).toContain('4 of 4');
+    // IT SAYS WHAT HAPPENED, NOT JUST HOW MANY. "4 of 4" cannot tell an owner
+    // whether four people refused or four addresses failed, and those two
+    // findings would send the experiment in opposite directions.
+    expect(met.because.join(' ')).toContain('4 people asking not to be contacted');
+    expect(met.because.join(' ')).toContain('stops at 4');
     // Triggered once, and recorded where the owner can read it.
     await stopConditionsMet(X);
     const triggered = await rowsOf(`SELECT kind, triggered_detail FROM probe_stop_conditions WHERE experiment_id = ? AND triggered_at IS NOT NULL`, [X]);
     expect(triggered).toHaveLength(1);
-    expect(String(triggered[0]!.triggered_detail)).toContain('4 of 4');
+    // The stored record and the answer given are the same sentence.
+    expect(String(triggered[0]!.triggered_detail)).toBe(met.because[0]);
+    expect(String(triggered[0]!.triggered_detail)).toContain('4 people asking not to be contacted');
     const sentBefore = Number((await one(`SELECT COUNT(*) n FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'offer'`, [X])).n);
     const report = await runHand({ now: NOW, offersPerTick: 5 });
     expect(report[0]!.offersSent).toBe(0);

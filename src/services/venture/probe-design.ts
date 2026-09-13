@@ -280,7 +280,29 @@ export async function designStandsInTheWay(experimentId: string): Promise<string
 
 // ─── Stopping before the budget is spent ─────────────────────────────────────
 
-export interface StopReading { kind: StopKind; whatItIs: string; count: number; threshold: number; because: string; met: boolean }
+export interface StopReading {
+  kind: StopKind; whatItIs: string; count: number; threshold: number; because: string; met: boolean;
+  /** What one of the counted things is called, so a reading can be read as a sentence. */
+  countedOne: string; countedMany: string;
+}
+
+/**
+ * WHAT HAPPENED, THEN WHY IT MATTERS — in that order.
+ *
+ * A stop condition used to explain itself with its own rationale and two bare
+ * numbers: "...four is a pattern... (2 of 2)". The rationale is an argument
+ * written before the experiment ran, and two of something is not a fact until
+ * the sentence says two of WHAT. An owner reading that could not tell whether
+ * two people had written back or two addresses had failed, which is the whole
+ * of the difference between "they do not want this" and "the list was wrong".
+ *
+ * So the fact leads, in the vocabulary the institution already keeps for it,
+ * and the argument follows it as the reason the number was chosen.
+ */
+export function saysWhatHappened(r: StopReading): string {
+  const noun = r.count === 1 ? r.countedOne : r.countedMany;
+  return `${r.count} ${noun} — this experiment stops at ${r.threshold}. ${r.because}`;
+}
 
 /**
  * WHAT THE WORLD HAS DONE AGAINST WHAT WOULD STOP IT. Counted from the same
@@ -311,7 +333,7 @@ export const BOUNCE_RATE_FLOOR = 5;
 
 export async function readStopConditions(experimentId: string): Promise<StopReading[]> {
   const conditions = await rows(
-    `SELECT s.kind, s.threshold, s.because, k.what_it_is FROM probe_stop_conditions s
+    `SELECT s.kind, s.threshold, s.because, k.what_it_is, k.counted_one, k.counted_many FROM probe_stop_conditions s
        JOIN probe_stop_kinds k ON k.kind = s.kind WHERE s.experiment_id = ? ORDER BY k.sort_order`, [experimentId]);
   if (conditions.length === 0) return [];
   const exposure = await one('SELECT id FROM experiment_exposures WHERE experiment_id = ? ORDER BY placed_at DESC, rowid DESC LIMIT 1', [experimentId]);
@@ -324,8 +346,28 @@ export async function readStopConditions(experimentId: string): Promise<StopRead
         return exposureId ? Number((await one(`SELECT COUNT(*) AS n FROM business_outcome_events WHERE exposure_id = ? AND kind = 'declined_value'`, [exposureId]))?.n ?? 0) : 0;
       case 'bounces':
         return Number((await one(`SELECT COUNT(*) AS n FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'offer' AND outcome_status = 'verified_failure'`, [experimentId]))?.n ?? 0);
+      // A DEAD MAILBOX IS NOT A PERSON SAYING NO.
+      //
+      // This counted every suppression row for the experiment, whatever put it
+      // there. A bounce is recorded as a suppression — correctly, because the
+      // address must not be written to again — and was therefore counted a
+      // second time here, as though somebody had asked to be left alone.
+      //
+      // Experiment 001 found it: one dead mailbox at RGC Millwork read as one
+      // bounce AND one opt-out, and two dead mailboxes would have stopped the
+      // test against a threshold of two while reporting "two people asking not
+      // to be written to is a pattern". That sentence would have been false,
+      // and the experiment would have concluded something about the market
+      // that the market had not said.
+      //
+      // The vocabulary already knew the difference: `they_asked` is a person
+      // asking, `bounced` is a delivery failure, `complained` has its own stop
+      // condition, and `founder` is the owner's own hand. Only the first is an
+      // opt-out.
       case 'opt_outs':
-        return Number((await one('SELECT COUNT(*) AS n FROM public_suppressions WHERE experiment_id = ?', [experimentId]))?.n ?? 0);
+        return Number((await one(
+          `SELECT COUNT(*) AS n FROM public_suppressions
+            WHERE experiment_id = ? AND reason = 'they_asked'`, [experimentId]))?.n ?? 0);
       // A RATE, NOT A COUNT, AND ONLY ONCE IT MEANS SOMETHING. One bounce out
       // of one attempt is a hundred percent and is not evidence of anything.
       // Below the floor the reading is zero, so a rate can never stop a probe
@@ -349,7 +391,10 @@ export async function readStopConditions(experimentId: string): Promise<StopRead
     const kind = String(c.kind) as StopKind;
     const count = await countOf(kind);
     const threshold = Number(c.threshold);
-    out.push({ kind, whatItIs: String(c.what_it_is), count, threshold, because: String(c.because), met: count >= threshold });
+    out.push({
+      kind, whatItIs: String(c.what_it_is), count, threshold, because: String(c.because), met: count >= threshold,
+      countedOne: String(c.counted_one), countedMany: String(c.counted_many),
+    });
   }
   return out;
 }
@@ -365,9 +410,12 @@ export async function stopConditionsMet(experimentId: string): Promise<{ stop: b
     await query(
       `UPDATE probe_stop_conditions SET triggered_at = datetime('now'), triggered_detail = ?
         WHERE experiment_id = ? AND kind = ? AND triggered_at IS NULL`,
-      [`${r.count} of ${r.threshold}: ${r.because}`, experimentId, r.kind]);
+      [saysWhatHappened(r), experimentId, r.kind]);
   }
-  return { stop: met.length > 0, because: met.map((r) => `${r.because} (${r.count} of ${r.threshold})`) };
+  // THE RECORD AND THE ANSWER SAY THE SAME THING. They were two different
+  // strings built from the same reading, which is how a stored explanation and
+  // a reported one drift apart without anybody editing either.
+  return { stop: met.length > 0, because: met.map(saysWhatHappened) };
 }
 
 /** The circuit breaker: more owed than the institution said it could carry. */

@@ -2095,3 +2095,43 @@ than fixed because the cheap fix — comparing an integer in prose against a
 count of the deliverable's items — would be a gate that only appears to read the
 message. The real answer, when a second experiment needs it, is for the offer
 text to derive its counts from the deliverable rather than restate them.
+
+### A bounce was counted as a refusal (2026-09-13)
+
+`opt_outs` counted every suppression row belonging to an experiment, whatever
+put it there. Suppression is not a kind of evidence — it is what the Workshop
+DOES with four different kinds. A person asks to be left alone; a provider
+reports a mailbox dead; a complaint is filed; the owner strikes an address out.
+All four are correct suppressions, and only the first is anybody saying no.
+
+So RGC Millwork's dead mailbox arrived in Experiment 001 as one bounce AND one
+opt-out. The opt-out threshold on this experiment is two. One more undeliverable
+address would have stopped the experiment and reported that two people had asked
+not to be written to. Nobody had asked. The four shops not yet contacted —
+Kitchen Encounters, Classic Millwork Design, Grain, Specialty Millwork — would
+have been withheld from on the strength of a sentence the market never said.
+
+Fixed at the counter (`reason = 'they_asked'` only), in the constitutional
+vocabulary that described itself as counting suppressions (migration 307), and
+in the explanations, which reported `(2 of 2)` — a number that cannot tell a
+refusal from a dead mailbox — and now name what was counted. The stored
+`triggered_detail` and the reported reason are now built from one function, so
+the record and the answer cannot drift apart.
+
+The suppressions themselves are untouched. RGC's address stays suppressed: why
+it must not be written to again does not depend on which of the two facts put it
+there.
+
+### A reporting error about Experiment 001's stop envelope (2026-09-13)
+
+I previously reported Experiment 001 as carrying a recalibrated envelope —
+bounces 5, bounce rate 25, opt-outs 4. That was wrong. The recalibration
+(migration 300 and the reconsidered deliberation) changed the DEFAULTS that a
+future experiment is designed with. Experiment 001's stop conditions were
+written into its own rows when it was designed, before that change, and rows
+already recorded are not rewritten by a later default.
+
+What Experiment 001 actually carries, and what it is being run under: bounces 3,
+opt-outs 2, declined value 3, unfulfillable 1, complaints 1, and no bounce-rate
+condition at all. These are tighter than the later defaults. They stay as they
+are; loosening them would be an owner decision, not a repair.
