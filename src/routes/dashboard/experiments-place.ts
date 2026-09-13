@@ -64,7 +64,7 @@ experimentRoutes.get('/foundry/experiments', async (c: any) => {
       <p><strong>${v.assetName ?? v.title}</strong> <span class="pill">${stateWord[v.state]}</span></p>
       <p class="quiet">${v.stateDetail}</p>
     </a>`)}`;
-  return c.html(page('Experiments', body, 'foundry', where(null, 'list')));
+  return c.html(page('Experiments', body, 'experiments', where(null, 'list')));
 });
 
 // ─── The test ────────────────────────────────────────────────────────────────
@@ -244,7 +244,7 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
       .launch .who summary{cursor:pointer}
       @media (max-width:480px){.launch{padding:.85rem;border-radius:12px}}
     </style>`;
-  return c.html(page(`${v.assetName ?? 'Experiment'} — ${v.stateLabel}`, body, 'foundry', where(v, 'test')));
+  return c.html(page(`${v.assetName ?? 'Experiment'} — ${v.stateLabel}`, body, 'experiments', where(v, 'test')));
 });
 
 // ─── Before you decide ───────────────────────────────────────────────────────
@@ -343,7 +343,7 @@ experimentRoutes.get('/foundry/experiments/:id/decide', async (c: any) => {
       .facts{display:grid;grid-template-columns:minmax(8rem,auto) 1fr;gap:.25rem .75rem;margin:0}.facts dd{margin:0}
       .plain{list-style:none;padding:0;margin:0}.plain li{margin:.4rem 0}
     </style>`;
-  return c.html(page('Before you decide', body, 'foundry', where(v, 'decide')));
+  return c.html(page('Before you decide', body, 'experiments', where(v, 'decide')));
 });
 
 // ─── Who may be contacted ────────────────────────────────────────────────────
@@ -385,7 +385,7 @@ experimentRoutes.get('/foundry/experiments/:id/recipients', async (c: any) => {
     ${pending.map(row)}
     ${decided.length ? html`<h2 class="section">Reviewed</h2>${decided.map(row)}` : ''}
     <p class="row"><a class="btn go" href="/foundry/experiments/${id}">Back to the test</a></p>`;
-  return c.html(page('Who may be contacted', body, 'foundry', where(v, 'recipients')));
+  return c.html(page('Who may be contacted', body, 'experiments', where(v, 'recipients')));
 });
 
 // ─── Acts ────────────────────────────────────────────────────────────────────

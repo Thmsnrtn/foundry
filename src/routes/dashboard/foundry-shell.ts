@@ -146,7 +146,7 @@ export function count(n: number, singular: string, plural = singular + 's'): str
 
 // ─── state ──────────────────────────────────────────────────────────────────
 
-interface OwnerState {
+export interface OwnerState {
   productId: string;
   /** Whose institution this is. Read here so no surface re-derives it. */
   ownerId: string;
@@ -809,7 +809,7 @@ async function readOwnerState(
  * concerns has made the owner decide which matters, which is precisely the work
  * the institution exists to absorb.
  */
-type Attention =
+export type Attention =
   | { kind: 'grade'; experimentId: string; about: string; expected: string;
       wouldDisprove: string | null; dueAt: string | null; record: string }
   | { kind: 'spend'; actId: string; productId: string; companyName: string;
@@ -833,7 +833,7 @@ type Attention =
   | { kind: 'drifted'; checks: string[] }
   | null;
 
-function whatNeedsHim(s: OwnerState): Attention {
+export function whatNeedsHim(s: OwnerState): Attention {
   // BROKEN OUTRANKS OFFERED, AND NEEDS-NOTHING DOES NOT OUTRANK NEEDS-HIM.
   //
   // A stopped routine used to come first unconditionally, and the card it
@@ -968,145 +968,15 @@ function whatNeedsHim(s: OwnerState): Attention {
 }
 
 // ─── one visual system ──────────────────────────────────────────────────────
-
-// THREE PLACES, BECAUSE PLACES WERE NEVER THE PROBLEM.
-//
-// The old product had thirty destinations and they were bad because they
-// exposed MACHINERY — Ambient, Roster, Multi-Modal, Standing Orders. Reading
-// "too technical" as "too much interface" was my error, and it left the owner
-// with a chat box and nowhere to do anything. His companies, his money and what
-// Foundry may do are his world, not the institution's internals, and each is
-// worth being able to walk to.
-type Place = 'foundry' | 'companies' | 'controls';
-
-/**
- * WHERE HE IS. Every owner screen can say it: the trail that got him here, the
- * object under his feet, what Ask will take as its subject, and the addresses
- * inside this object. Rendered by `page()` in the same slots on every screen,
- * so the geography is stable even where the content is not.
- */
+// The document, the geography and the stylesheet live in `views/owner/shell.ts`
+// now and every place consumes them from there. Re-exported here so the five
+// consumers that imported them from this file keep working; the removal path
+// is to point them at the shell and delete these lines.
+export { page, placeHead, frameFor } from '../../views/owner/shell.js';
+export type { Where, Place, DoorCounts } from '../../views/owner/shell.js';
+import type { Where } from '../../views/owner/shell.js';
+import { page, placeHead, frameFor } from '../../views/owner/shell.js';
 type H = HtmlEscapedString | Promise<HtmlEscapedString>;
-
-export interface Where {
-  eyebrow?: string;
-  crumbs: Array<{ href: string; label: string }>;
-  scope: {
-    kind: 'foundry' | 'portfolio' | 'company' | 'decisions' | 'searching';
-    id: string | null; name: string;
-  };
-  local: Array<{ href: string; label: string; count: number | null; on: boolean }>;
-  chips: string[];
-}
-
-/** The frame for one company, with one of its dimensions underfoot. */
-export function frameFor(place: CompanyPlace, on: DimensionKey): Where {
-  const here = place.dimensions.find((d) => d.key === on) ?? place.dimensions[0];
-  return {
-    eyebrow: 'Company',
-    crumbs: [
-      { href: '/foundry', label: 'Foundry' }, { href: '/foundry/companies', label: 'Portfolio' },
-      { href: `/foundry/companies/${place.id}`, label: place.name },
-      ...(on !== 'overview' && here ? [{ href: here.href, label: here.label }] : []),
-    ],
-    scope: { kind: 'company', id: place.id, name: place.name },
-    local: place.dimensions.map((d) => ({ href: d.href, label: d.label, count: d.count, on: d.key === on })),
-    chips: place.chips,
-  };
-}
-
-/**
- * THE HEAD OF A PLACE: the title, what this object is in chips, and the
- * addresses inside it. Always in this order, so once a dimension exists its
- * position never moves.
- */
-export function placeHead(where: Where | null, title: string): H {
-  if (!where) return html`<h1>${title}</h1>`;
-  const up = where.crumbs.length >= 2 ? where.crumbs[where.crumbs.length - 2] : null;
-  const here = where.crumbs[where.crumbs.length - 1];
-  return html`${up && where.crumbs.length > 3
-    ? html`<p class="crumbline"><a href="${up.href}">← ${up.label}</a></p>` : ''}
-    ${title ? html`<h1>${where.crumbs.length > 3 && here ? html`${title} <span class="dim">· ${here.label}</span>` : title}</h1>` : ''}
-    ${where.chips.length ? html`<p class="chips">${where.chips.map((ch) => html`<span class="chip">${ch}</span>`)}</p>` : ''}
-    ${where.local.length ? html`<nav class="local${where.scope.kind === 'company' ? ' rail' : ''}" id="places" aria-label="Within ${where.scope.name}">${where.local.map((l) =>
-      html`<a href="${l.href}"${l.on ? raw(' class="on" aria-current="page"') : ''}>${l.label}${
-        l.count !== null && l.count > 0 ? html` <b>${String(l.count)}</b>` : ''}</a>`)}</nav>` : ''}`;
-}
-
-/** The trail, for every screen below the first. */
-function crumbsOf(where: Where | null): H | '' {
-  if (!where || where.crumbs.length < 2) return '';
-  return html`<p class="crumbs" aria-label="Where you are">${where.crumbs.map((cr, i) =>
-    i === where.crumbs.length - 1
-      ? html`<span aria-current="location">${cr.label}</span>`
-      : html`<a href="${cr.href}">${cr.label}</a><i>›</i>`)}</p>`;
-}
-
-/**
- * ON A WIDE SCREEN THE RAIL CARRIES THE OBJECT. Under the three doors: the
- * object he is inside and its addresses, and the two places that are reached
- * from context rather than owning a door.
- */
-function railExtra(where: Where | null): H {
-  const object = where && where.scope.kind === 'company' && where.local.length
-    ? html`<section class="sub" aria-label="Within ${where.scope.name}"><b>${where.scope.name}</b>${where.local.map((l) =>
-      html`<a href="${l.href}"${l.on ? raw(' class="on"') : ''}>${l.label}${
-        l.count !== null && l.count > 0 ? html` <span>${String(l.count)}</span>` : ''}</a>`)}</section>`
-    : '';
-  return html`${object}<section class="more" aria-label="Also here">
-    <a href="/foundry/decisions"${where?.scope.kind === 'decisions' ? raw(' class="on"') : ''}>Decisions</a>
-    <a href="/foundry/searching"${where?.scope.kind === 'searching' ? raw(' class="on"') : ''}>Searching</a>
-  </section>`;
-}
-
-/**
- * INSIDE A COMPANY, THE BAR IS THE COMPANY'S. On a phone the three doors give
- * way to the places inside the object he is standing in — Portfolio to go up,
- * then Overview, Work and the rest in their fixed order — so moving between
- * what a company is, what is happening to it and what it earns is one thumb
- * away, the way it is in the products he finds easy. The doors are still one
- * tap away through Portfolio; the trail above the title still says where he
- * is. On a wide screen the rail carries all of this and the bar stays hidden.
- */
-function companyBar(where: Where | null): H | '' {
-  if (!where || where.scope.kind !== 'company' || !where.local.length) return '';
-  const ICON: Record<string, string> = {
-    overview: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>',
-    work: '<svg viewBox="0 0 24 24"><path d="M4 7h16v11H4z"/><path d="M9 7V5h6v2M4 12h16"/></svg>',
-    authority: '<svg viewBox="0 0 24 24"><path d="M4 16a8 8 0 0 1 16 0"/><path d="M12 16l4-5"/><circle cx="12" cy="16" r="1.5"/></svg>',
-    economics: '<svg viewBox="0 0 24 24"><path d="M4 18 10 11l4 4 6-8"/><path d="M4 21h16"/></svg>',
-    customers: '<svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="10" r="2.5"/><path d="M3 19c0-3 3-5 6-5s6 2 6 5M14 19c0-2 1.5-3.5 3-3.5s4 1.5 4 3.5"/></svg>',
-    experiments: '<svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6L4 19h16l-6-10V3"/></svg>',
-    evidence: '<svg viewBox="0 0 24 24"><path d="M6 3h9l5 5v13H6z"/><path d="M14 3v6h6M9 13h6M9 17h6"/></svg>',
-  };
-  const keyOf = (href: string): string => href.split('/').pop() ?? 'overview';
-  const places = where.local.map((l) => ({ ...l, key: l.href.endsWith(where.scope.id ?? '') ? 'overview' : keyOf(l.href) }));
-  const shown = places.slice(0, 4);
-  const more = places.length > 4;
-  return html`<nav class="places company" aria-label="Within ${where.scope.name}"><div>
-    <a href="/foundry/companies"><svg viewBox="0 0 24 24"><path d="M3 17c3-4 6 0 9-3s6 1 9-3"/><path d="M3 12c3-4 6 0 9-3s6 1 9-3"/></svg>Portfolio</a>
-    ${shown.map((l) => html`<a href="${l.href}"${l.on ? raw(' class="on" aria-current="page"') : ''}>${raw(ICON[l.key] ?? ICON.overview ?? '')}${l.label}${
-      l.count !== null && l.count > 0 ? html`<b>${String(l.count)}</b>` : ''}</a>`)}
-    ${more ? html`<a href="/foundry/companies/${where.scope.id ?? ''}#places"><svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="18" cy="12" r="1.5"/></svg>More</a>` : ''}
-  </div></nav>`;
-}
-
-/** What Ask will take as its subject, said where he types. */
-function askScope(where: Where | null): { placeholder: string; hidden: string; line: H | '' } {
-  if (!where || where.scope.kind === 'foundry') {
-    return { placeholder: 'Ask Foundry anything…', hidden: '', line: '' };
-  }
-  if (where.scope.kind === 'company' && where.scope.id) {
-    return {
-      placeholder: `Ask about ${where.scope.name}…`,
-      hidden: `company:${where.scope.id}`,
-      line: html`<p class="askwhere">Asking about <b>${where.scope.name}</b> · <a href="/foundry">everything instead</a></p>`,
-    };
-  }
-  return {
-    placeholder: `Ask about ${where.scope.name}…`, hidden: '',
-    line: html`<p class="askwhere">Asking about <b>${where.scope.name}</b> · <a href="/foundry">everything instead</a></p>`,
-  };
-}
 
 /**
  * WHAT A SITUATION WAS, IN HIS WORDS RATHER THAN THE COLUMN'S.
@@ -1132,502 +1002,6 @@ const SITUATION_IN_PLAIN_WORDS: Record<string, string> = {
 export function plainly(situation: string): string {
   return SITUATION_IN_PLAIN_WORDS[situation] ?? situation.replaceAll('_', ' ');
 }
-
-export const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString>,
-  active: Place = 'foundry', where: Where | null = null,
-) => html`<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-<title>${title}</title>
-<!-- ON THE HOME SCREEN, IT IS HIS PRODUCT. The owner's surface was the one
-     place not wired to the installable app: no manifest, no icon, no theme
-     colour — so adding it to a phone gave a browser chrome bar in the wrong
-     colour and a generic icon, while the manifest it would have used described
-     the commercial product and its dark palette. -->
-<link rel="manifest" href="/manifest.json" />
-<link rel="apple-touch-icon" href="/static/icon-192.png" />
-<meta name="apple-mobile-web-app-capable" content="yes" />
-<meta name="apple-mobile-web-app-title" content="Foundry" />
-<meta name="theme-color" content="#F3F4F1" media="(prefers-color-scheme: light)" />
-<meta name="theme-color" content="#0D1310" media="(prefers-color-scheme: dark)" />
-<style>
-  /* Two families and one scale: a serif for the sentences that matter, the
-     system sans for everything else. Colour carries meaning or it is absent:
-     --good and --alert are the only two hues, and they mean direction. */
-  :root{
-    --bg:#F3F4F1; --card:#FFFFFF; --card-2:#F8F9F6; --line:#E2E6DE;
-    --ink:#151C18; --ink-2:#4C554E; --ink-3:#68716A;
-    --accent:#256454; --accent-ink:#FFFFFF; --accent-soft:#DDEBE4;
-    --good:#2E7D5B; --alert:#96601A; --alert-soft:#F6EBDD;
-    --s1:6px; --s2:12px; --s3:18px; --s4:28px; --s5:44px;
-    --r:18px; --r2:12px;
-    /* CATEGORIES ARE NOT MEANINGS. The revenue mix painted its series with
-       --accent, --good, --alert, --ink-3 and --line — so one series was the
-       colour of "this is good", another the colour of "look at this", and the
-       fifth was the bar's own empty track, rendering as a hole. These four are
-       one hue at four separations, none of which means anything. */
-    --c1:#123D33; --c2:#2F7D68; --c3:#7FB8A2; --c4:#CADED6;
-    --serif:"Iowan Old Style","Palatino Linotype",Palatino,"Book Antiqua",Georgia,serif;
-  }
-  @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-    --bg:#0D1310; --card:#151C18; --card-2:#1A231E; --line:#243029;
-    --ink:#EAEFEA; --ink-2:#A8B2AA; --ink-3:#848F86;
-    --accent:#8FD1B8; --accent-ink:#0C1512; --accent-soft:#1E2E27;
-    --good:#7FCBA8; --alert:#D9A85E; --alert-soft:#2C2416;
-    --c1:#B7E4D0; --c2:#7FC3A8; --c3:#4A8570; --c4:#2A4C40;
-  }}
-  *,*::before,*::after{box-sizing:border-box}
-  /* REM AND BODY AGREE. The body was 17px while rem stayed 16px, so every size
-     expressed in rem — which is all of them — was 6% smaller than the scale it
-     was written against, and a .93rem "slightly smaller" was actually 15.8px
-     beside 17px body text. */
-  html{font-size:17px}
-  html,body{max-width:100%;overflow-x:hidden}
-  body{
-    margin:0;background:var(--bg);color:var(--ink);
-    font:400 1rem/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
-    -webkit-text-size-adjust:100%;-webkit-font-smoothing:antialiased;
-  }
-  /* ENOUGH ROOM FOR BOTH BARS AND THE HOME INDICATOR. The reserve was a flat
-     10.5rem that did not know about the inset, so on a notched phone the last
-     lines of every page sat underneath the composer. */
-  .wrap{max-width:34rem;margin:0 auto;
-    padding:var(--s3) var(--s3)
-      calc(var(--chrome,calc(11rem + env(safe-area-inset-bottom))) + var(--s3) + 8px)}
-  h1{font-family:var(--serif);font-size:2rem;line-height:1.15;font-weight:500;
-    letter-spacing:-.01em;margin:0 0 var(--s2)}
-  .brand{display:flex;align-items:center;gap:10px;margin:0 0 var(--s4);color:var(--ink-2);
-    font-size:.95rem}
-  .brand b{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;
-    border-radius:50%;background:var(--card);border:1px solid var(--line);
-    font-family:var(--serif);font-weight:500;color:var(--ink);font-size:1.05rem}
-
-  /* THE GLANCE. THREE ACROSS WAS A DESKTOP GRID THAT HAPPENED TO FIT.
-     At 390px, three equal tracks are about 104px each, and into each of them
-     went a label, a serif number and a sentence — so the sentence broke into
-     fragments and the whole row read as cramped columns rather than as three
-     facts. Nothing about a phone wanted three columns; the layout simply never
-     said otherwise, and a zero-floor track let it shrink without complaint.
-
-     One fact per row on a phone: the number reads at its real size, the
-     sentence beside it has the width of the screen, and the eye goes down the
-     column instead of across three cramped ones. Three across returns when
-     there is genuinely room for it. */
-  .glance{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s2);margin:0 0 var(--s4)}
-  .glance .tile{display:grid;grid-template-columns:minmax(0,1fr) auto;
-    align-items:baseline;column-gap:var(--s3)}
-  .glance .tile dt.k{grid-column:1;grid-row:1}
-  .glance .tile dd.v{grid-column:2;grid-row:1;text-align:right}
-  .glance .tile dd.d{grid-column:1/-1;grid-row:2}
-  .tile{background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
-    padding:var(--s2) var(--s2) 10px;min-width:0}
-  .tile dt.k{font-size:.78rem;color:var(--ink-3);margin:0 0 4px;line-height:1.25}
-  .tile dd.v{font-family:var(--serif);font-size:1.35rem;line-height:1.1;font-weight:500;
-    margin:0 0 4px;overflow-wrap:break-word}
-  .tile dd.d{font-size:.78rem;color:var(--ink-2);margin:0;line-height:1.3}
-  .tile .d.up{color:var(--good)} .tile .d.down{color:var(--alert)}
-
-  /* THE NUMBERS. Two across on a phone, each with its trend. */
-  .numbers{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));
-    gap:var(--s2);margin:0 0 var(--s2)}
-  .numbers .tile dd.v{font-size:1.5rem}
-
-  /* THE RIVER. One row per layer: name, what it is, what it carries. */
-  .layer{display:flex;align-items:center;gap:var(--s2);background:var(--card);
-    border:1px solid var(--line);border-radius:var(--r2);padding:var(--s2) var(--s3);
-    margin:0 0 var(--s2);text-decoration:none;color:inherit}
-  .layer .t{flex:1 1 auto;min-width:0}
-  .layer .t b{display:block;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;
-    color:var(--ink-3);font-weight:700}
-  .layer .t span{font-size:.93rem;color:var(--ink-2)}
-  .layer .n{font-family:var(--serif);font-size:1.3rem;color:var(--ink);flex:0 0 auto}
-  .bar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--line);margin:var(--s2) 0 var(--s1)}
-  /* A SEAM BETWEEN SEGMENTS. Four steps of one hue cannot reach the 3:1
-     separation that would make them distinguishable on their own, and a
-     multi-hue ramp would make each series look like it meant something.
-     A boundary settles it without colour carrying meaning it does not have. */
-  .bar i{display:block;height:100%;box-shadow:inset 1px 0 0 var(--card)}
-  .bar i:first-child{box-shadow:none}
-  .legend{display:flex;flex-wrap:wrap;gap:6px var(--s3);font-size:.85rem;color:var(--ink-2);margin:0}
-  .legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;
-    vertical-align:baseline;box-shadow:inset 0 0 0 1px rgba(0,0,0,.16)}
-
-  /* THE DECISION. A labelled row grid, then the buttons. */
-  /* A DEFINITION LIST, because that is what it is. It was <b>/<span> pairs in
-     a grid: visually paired, and to a screen reader eighteen loose fragments in
-     a row with nothing saying which label belonged to which value — on the
-     densest and most consequential card in the product. */
-  /* A LABEL COLUMN THAT SIZES TO ITS CONTENT WILL EVENTUALLY STARVE THE VALUE.
-     A label track sized to content gives the labels whatever they ask for and
-     lets the values have what is left — which on a 390px phone, with a label
-     like "Every month, from the day you say yes", was ZERO. The values did
-     not overflow visibly; wrapping was set to break anywhere, so they broke
-     one character per line and a 141-character sentence rendered as a
-     2,728-pixel column of
-     single letters. That is where the split words came from, and it was a
-     layout
-     failure quietly converted into unreadable text rather than a visible one.
-
-     So a phone gets one column: label, then value under it. The two-column
-     pairing is a nicety for a wide screen and it is the wide screen that has
-     the room for it. */
-  .facts{display:grid;grid-template-columns:minmax(0,1fr);gap:2px var(--s3);
-    margin:0;
-    padding:var(--s3);border-top:1px solid var(--line);font-size:.95rem}
-  .facts dt{color:var(--ink-3);font-weight:500;font-size:.85rem;padding-top:2px}
-  .facts dt+dd{margin-bottom:var(--s2)}
-  .facts dd:last-child{margin-bottom:0}
-  .facts dd{margin:0;min-width:0;overflow-wrap:break-word;color:var(--ink)}
-  .facts dd.quiet{color:var(--ink-2)}
-  .facts span.quiet{color:var(--ink-2)}
-  .pill{display:inline-block;font-size:.78rem;padding:3px 9px;border-radius:999px;
-    background:var(--card-2);border:1px solid var(--line);color:var(--ink-2);margin-left:6px}
-  .pill.warn{background:var(--alert-soft);color:var(--alert);border-color:transparent}
-  .pill.ok{background:var(--accent-soft);color:var(--accent);border-color:transparent}
-  .hero{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
-    padding:var(--s3);margin:0 0 var(--s3)}
-  .hero h2{font-family:var(--serif);font-size:1.45rem;line-height:1.2;font-weight:500;margin:0 0 var(--s1)}
-  .hero p{margin:0;color:var(--ink-2)}
-  .hero.alert{border-color:var(--alert)}
-  .quiet{color:var(--ink-2);font-size:.93rem}
-  /* FOLDED, NOT HIDDEN. Each section is one line that says what is in it,
-     and opens in place. The page is understood at a glance and explored when
-     wanted, which is the difference between a company and a report. */
-  details.fold{border-top:1px solid var(--line);margin:0}
-  .fold>summary{padding:var(--s2) 0;min-height:48px;gap:var(--s3);flex-wrap:wrap}
-  .fold>summary h3{margin:0;flex:0 0 auto}
-  .fold .gist{flex:1 1 8rem;min-width:0;text-align:right;color:var(--ink-2);font-size:.93rem;
-    overflow-wrap:break-word}
-  .fold[open]>summary{padding-bottom:var(--s2)}
-  .fold>ul,.fold>p,.fold>div,.fold>form{margin-bottom:var(--s3)}
-
-
-  p{margin:0 0 var(--s2);overflow-wrap:break-word}
-  .lede{color:var(--ink-2);font-size:1.06rem;margin-bottom:var(--s4)}
-  .lede a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line);
-    padding-bottom:1px}
-  .lede a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
-
-  /* The one thing. There is never more than one of these on the page. */
-  /* THE ONLY ACCENT BORDER ON THE PAGE. Everything else is --line, so the
-     thing that needs him is the thing the eye lands on. */
-  .one{background:var(--card);border:1px solid var(--accent);border-radius:var(--r);
-    margin:0 0 var(--s4);overflow:hidden}
-  .one.alert{border-color:var(--alert)}
-  .one-in{padding:var(--s3)}
-  .one h2{font-family:var(--serif);font-size:1.45rem;line-height:1.2;font-weight:500;margin:0 0 var(--s1)}
-  .act{font-size:.7rem;letter-spacing:.13em;text-transform:uppercase;font-weight:700;
-    color:var(--ink-3);margin:0 0 var(--s1)}
-  .one .lead{font-size:1.02rem;margin:0 0 var(--s2)}
-  .standing{background:var(--card);border:1px solid var(--accent);border-radius:var(--r);
-    padding:var(--s3);margin:0 0 var(--s4);display:flex;flex-wrap:wrap;gap:var(--s2);
-    align-items:center;justify-content:space-between}
-  .standing>div{flex:1 1 12rem;min-width:0}
-  .standing p{margin:0;color:var(--ink-2);font-size:.95rem}
-  .standing .caveat{margin-top:var(--s2);color:var(--alert)}
-  .standing strong{color:var(--ink)}
-  .done{background:var(--card);border:1px solid var(--line);border-radius:var(--r);
-    padding:var(--s3);margin:0 0 var(--s4)}
-  .done p{color:var(--ink-2);font-size:.98rem}
-  .done p:last-child{margin-bottom:0}
-  .done strong{color:var(--ink)}
-  .one p{color:var(--ink-2);font-size:.98rem}
-  .one p:last-child{margin-bottom:0}
-  .lead{color:var(--ink)}
-  dl{display:grid;grid-template-columns:minmax(0,1fr);gap:2px var(--s3);
-    margin:0;padding:var(--s2) var(--s3);border-top:1px solid var(--line);font-size:.93rem}
-  dt{color:var(--ink-3)}
-  dt+dd{margin-bottom:var(--s2)}
-  dd:last-child{margin-bottom:0}
-  dd{margin:0;min-width:0;overflow-wrap:break-word}
-  .do{padding:var(--s3);border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:var(--s2)}
-  .do form{flex:1 1 auto;min-width:0}
-  .btn{font:inherit;font-size:1rem;font-weight:500;cursor:pointer;text-decoration:none;width:100%;
-    display:inline-flex;align-items:center;justify-content:center;
-    border-radius:12px;padding:13px 20px;min-height:48px;
-    border:1px solid var(--line);background:var(--card);color:var(--ink)}
-  .btn.go{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
-  .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-  .btn:active{transform:translateY(1px)}
-  @media (prefers-reduced-motion:reduce){.btn:active{transform:none}}
-
-  details{border-top:1px solid var(--line)}
-  summary{cursor:pointer;list-style:none;padding:var(--s2) var(--s3);min-height:48px;
-    display:flex;align-items:center;justify-content:space-between;gap:var(--s2);
-    font-size:.93rem;color:var(--ink-2)}
-  summary::-webkit-details-marker{display:none}
-  summary::after{content:"+";color:var(--ink-3);font-size:1.1rem}
-  details[open] summary::after{content:"\\2212"}
-  .inner{padding:0 var(--s3) var(--s3);font-size:.93rem;color:var(--ink-2)}
-  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.8rem;
-    color:var(--ink-3);overflow-wrap:break-word}
-
-  /* A question and its answer read as an exchange, not as more cards. */
-  .asked{color:var(--ink-3);font-size:.93rem;margin:var(--s4) 0 var(--s1)}
-  .said{font-size:1.02rem;margin:0 0 var(--s4)}
-  .said p{margin:0 0 var(--s2)}
-  .said p:last-child{margin-bottom:0}
-  .said ul{margin:0 0 var(--s2);padding-left:1.1rem;color:var(--ink-2)}
-  .said li{margin:0 0 var(--s1)}
-  .said a{color:var(--accent)}
-
-  .maybe{display:flex;flex-wrap:wrap;gap:var(--s2)}
-  .maybe a{font-size:.93rem;text-decoration:none;color:var(--ink-2);
-    border:1px solid var(--line);border-radius:999px;padding:10px 15px;min-height:44px;
-    display:inline-flex;align-items:center}
-  .maybe a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-
-  .ask{position:fixed;left:0;right:0;bottom:var(--kb,0px);background:var(--bg);
-    border-top:1px solid var(--line);
-    /* THE INSET IS COUNTED ONCE. The tab bar below already reserves the home
-       indicator, and the composer sits on top of the tab bar — adding it again
-       here pushed the composer up by the height of the indicator a second time
-       and took that much off the bottom of every page. */
-    padding:var(--s2) var(--s3)}
-  .ask-in{max-width:34rem;margin:0 auto;display:flex;gap:var(--s2)}
-  .ask input{flex:1;min-width:0;font:inherit;font-size:max(16px,1rem);padding:13px 15px;min-height:48px;
-    border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink)}
-  .ask input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-  .ask button{font:inherit;font-size:1rem;font-weight:500;border:0;border-radius:12px;
-    padding:0 18px;min-height:48px;background:var(--accent);color:var(--accent-ink);cursor:pointer}
-  .ask button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
-  .sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
-    clip:rect(0,0,0,0);white-space:nowrap;border:0}
-
-  /* THREE PLACES, UNDER THE THUMB. The tab bar is the whole navigation: what
-     matters, what he owns, what he has told me. Everything else is reached
-     from inside one of those, never from a fourth tab. */
-  nav.places{position:fixed;left:0;right:0;bottom:0;z-index:2;background:var(--bg);
-    border-top:1px solid var(--line);padding:6px 0 calc(6px + env(safe-area-inset-bottom))}
-  nav.places div{max-width:34rem;margin:0 auto;display:flex}
-  nav.places a{flex:1 1 0;min-width:0;text-decoration:none;color:var(--ink-3);font-size:.72rem;
-    display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;min-height:44px}
-  nav.places a svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.6;
-    stroke-linecap:round;stroke-linejoin:round}
-  nav.places a.on{color:var(--accent)}
-  nav.places a:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:8px}
-  .ask{bottom:calc(58px + env(safe-area-inset-bottom) + var(--kb,0px));border-top:0;
-    background:linear-gradient(to top,var(--bg) 70%,transparent)}
-  .item{display:block;text-decoration:none;color:inherit;background:var(--card);
-    border:1px solid var(--line);border-radius:var(--r);padding:var(--s3);margin:0 0 var(--s2)}
-  .item:hover{border-color:var(--ink-3)}
-  /* THE FOCUS RING WAS TURNED OFF. Keyboard focus had nothing to show for
-     itself on the only link that repeats down the whole portfolio. */
-  .item:focus-visible{border-color:var(--ink-3);outline:2px solid var(--accent);
-    outline-offset:2px}
-  .item h3{margin:0 0 var(--s1);font-size:1.08rem;font-weight:600}
-  .item p{margin:0;color:var(--ink-2);font-size:.93rem}
-  .know{margin:0 0 var(--s4)}
-  /* The section headings on the top-level places are h2 — one level under the
-     page's h1 — and the company page's stay h3 under its own h2. Same size
-     either way: the outline is for the screen reader, not the eye. */
-  .pill{display:inline-block;font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;
-    font-weight:700;color:var(--ink-2);background:var(--card-2);border:1px solid var(--line);
-    border-radius:999px;padding:2px 8px;vertical-align:middle;margin-left:6px}
-  h2.section{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;
-    color:var(--ink-3);font-weight:700;margin:var(--s4) 0 var(--s2)}
-  .know h2,.know h3{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);
-    font-weight:700;margin:0 0 var(--s2)}
-  .know ul{margin:0;padding-left:1.1rem;color:var(--ink-2);font-size:.97rem}
-  .know li{margin:0 0 var(--s1)}
-  .gap{color:var(--alert)}
-  /* A revenue collapse should not be the same weight as twelve healthy metrics.
-     One class, used once per page, on the single sentence that says so. */
-  .alarm{color:var(--alert);font-weight:600}
-  /* WHERE HE IS: the same slots on every screen. */
-  .crumbs{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin:0 0 var(--s2);
-    font-size:.82rem;color:var(--ink-3)}
-  .crumbs a{color:var(--ink-2);text-decoration:none;padding:6px 0;min-height:32px;display:inline-flex;align-items:center}
-  .crumbs a:hover{text-decoration:underline}
-  .crumbs i{font-style:normal;color:var(--ink-3)}
-  .crumbs span{color:var(--ink)}
-  .crumbline{margin:0 0 var(--s2);font-size:.9rem}
-  .crumbline a{color:var(--ink-2);text-decoration:none;display:inline-flex;align-items:center;min-height:44px}
-  h1 .dim{color:var(--ink-3);font-weight:400}
-  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:calc(-1 * var(--s2)) 0 var(--s3)}
-  .chip{display:inline-block;font-size:.8rem;padding:4px 10px;border-radius:999px;border:1px solid var(--line);
-    background:var(--card);color:var(--ink-2)}
-  .local{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;margin:0 calc(-1 * var(--s3)) var(--s4);
-    padding:0 var(--s3);border-bottom:1px solid var(--line)}
-  .local::-webkit-scrollbar{display:none}
-  .local a{flex:0 0 auto;text-decoration:none;color:var(--ink-2);font-size:.95rem;padding:10px 12px;min-height:44px;
-    display:inline-flex;align-items:center;gap:6px;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
-  .local a b{font-weight:600;font-size:.8rem;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:1px 7px}
-  .local a.on{color:var(--ink);border-bottom-color:var(--ink)}
-  .local a:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:6px}
-  .why{color:var(--accent);font-size:.9rem;text-decoration:none;display:inline-flex;align-items:center;min-height:44px}
-  .why::before{content:"?";display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;
-    border-radius:50%;border:1px solid currentColor;font-size:.72rem;margin-right:6px}
-  .why:hover{text-decoration:underline}
-  .row{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s3);align-items:center;margin:var(--s1) 0 0}
-  .row .btn{width:auto}
-  .askwhere{max-width:34rem;margin:0 auto 6px;font-size:.8rem;color:var(--ink-3)}
-  .askwhere b{color:var(--ink-2);font-weight:500}
-  .askwhere a{color:var(--accent)}
-  .said-here{border:1px solid var(--accent-soft);border-radius:var(--r);padding:var(--s3);background:var(--card)}
-  .said-here h2{margin-top:0}
-  .level>summary h3{font-size:1rem}
-  .tech{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px var(--s3);font-size:.85rem;
-    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--ink-2);margin:0 0 var(--s3)}
-  .tech dt,.tech dd{margin:0;overflow-wrap:anywhere}
-  .mapfind{display:flex;gap:var(--s2);margin:0 0 var(--s2)}
-  .mapfind input{flex:1;min-width:0;font:inherit;font-size:max(16px,1rem);padding:11px 13px;min-height:44px;
-    border:1px solid var(--line);border-radius:12px;background:var(--card);color:var(--ink)}
-  .mapfind button{font:inherit;border:1px solid var(--line);background:var(--card);border-radius:12px;padding:0 14px;min-height:44px;color:var(--ink)}
-  .filters{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 0 var(--s3);padding-bottom:2px}
-  .filters a{flex:0 0 auto;text-decoration:none;font-size:.85rem;color:var(--ink-2);border:1px solid var(--line);
-    border-radius:999px;padding:7px 12px;min-height:36px;display:inline-flex;align-items:center;white-space:nowrap}
-  .filters a.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
-  .item .where{display:flex;flex-wrap:wrap;gap:4px;margin-top:var(--s1)}
-  .item .where span{font-size:.75rem;color:var(--ink-3);border:1px solid var(--line);border-radius:999px;padding:2px 8px}
-  .item .where span.need{color:var(--alert);border-color:var(--alert)}
-  .thread .pill{margin-left:6px;vertical-align:middle}
-  .steps{list-style:none;margin:var(--s2) 0;padding:0 0 0 12px;border-left:2px solid var(--line)}
-  .steps li{display:grid;grid-template-columns:5.2rem minmax(0,1fr);gap:4px var(--s2);align-items:baseline;
-    margin:0 0 var(--s2);position:relative}
-  .steps li::before{content:"";position:absolute;left:-17px;top:.45em;width:8px;height:8px;border-radius:50%;
-    background:var(--ink-3)}
-  .steps li:last-child::before{background:var(--accent)}
-  .steps .k{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
-  .steps time{grid-column:2;font-size:.78rem}
-  .steps a{color:var(--accent)}
-  nav.places .sub,nav.places .more{display:none}
-  nav.places.behind{display:none}
-  .queue .btn.yes{border-color:currentColor;font-weight:600}
-  .dial{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
-  .dial form{flex:1 1 7rem;display:flex;margin:0}
-  .dial .mark{flex:1 1 7rem;display:block;text-align:center;padding:10px 6px;border:1px solid var(--line,#d9d4cc);
-    border-radius:10px;background:var(--card,#fff);color:inherit;font:inherit;font-size:.9rem;line-height:1.25;text-decoration:none;cursor:pointer}
-  .dial .mark.on{border-color:currentColor;font-weight:600;box-shadow:inset 0 0 0 1px currentColor}
-  form.inline{display:inline;margin:0}
-  form.inline .btn{display:inline-block;padding:4px 10px;margin:0 0 0 6px;font-size:.85rem;vertical-align:baseline}
-  form.say{display:flex;gap:6px;margin:6px 0;flex-wrap:wrap}
-  form.say input[type=text]{flex:1 1 14rem;padding:10px 12px;border:1px solid var(--line,#d9d4cc);border-radius:10px;font:inherit;background:var(--card,#fff)}
-  nav.places.company a{position:relative}
-  nav.places.company a b{position:absolute;top:2px;right:calc(50% - 22px);font-size:.62rem;font-weight:600;
-    color:var(--bg);background:var(--accent);border-radius:999px;min-width:16px;height:16px;line-height:16px;
-    text-align:center;padding:0 4px}
-  /* Deliberately not named ask: that class is the fixed bar at the bottom of
-     every page, and reusing it would pin every question to the floor. */
-  .noticed{border:1px solid var(--line);border-radius:var(--r);padding:var(--s3);
-    margin:0 0 var(--s3);background:var(--card)}
-  .noticed h4{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;
-    color:var(--ink-3);font-weight:700;margin:0 0 var(--s2)}
-  .noticed p{margin:0 0 var(--s2);color:var(--ink-2);font-size:.97rem}
-  .noticed form{margin:0 0 var(--s2)}
-  .noticed form:last-child{margin:0}
-  .pair{display:flex;gap:var(--s2);margin-top:var(--s1)}
-  .pair form{flex:0 1 auto;min-width:0;margin:0}
-  .pair form:first-child{flex:1 1 auto}
-  .pair .btn{white-space:nowrap}
-  form.inline{display:flex;flex-wrap:wrap;gap:var(--s2);margin:0 0 var(--s3)}
-  /* THE TEXTAREA HAD NO RULE AT ALL, so it fell to the browser default —
-     below the 16px floor, which makes iOS zoom in on focus and never zoom back
-     out. It is the field he types a whole mandate into. */
-  form.inline input[type=text],textarea{flex:1 1 12rem;min-width:0;font:inherit;font-size:max(16px,1rem);
-    padding:13px 15px;min-height:48px;border:1px solid var(--line);border-radius:12px;
-    background:var(--card);color:var(--ink)}
-  form.inline input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
-  form.inline button{flex:0 0 auto}
-  form.inline .btn{width:auto}
-  footer{margin-top:var(--s5);padding-top:var(--s3);border-top:1px solid var(--line)}
-  footer a{color:var(--ink-3);font-size:.85rem;text-decoration:none}
-  footer a:hover,footer a:focus-visible{text-decoration:underline}
-
-  /* TWO CANVASES, NEITHER A VERSION OF THE OTHER. Under 900px the places sit
-     under the thumb and the ask bar is fixed above them. From 900px the places
-     become a rail on the left, the ask box sits at the top of the column where
-     the eye starts, the column widens, and sections that were a single scroll
-     flow into two columns. Nothing is hidden on either; what changes is where
-     the hand and the eye are. */
-  @media (min-width:900px){
-    body{font-size:max(16px,1rem)}
-    .wrap{max-width:68rem;margin:0 0 0 15rem;padding:var(--s4) var(--s5) var(--s5)}
-    /* A LINE OF PROSE HAS A LENGTH. The cards were capped and the paragraphs
-       between them were not, so on a wide screen the sentences ran to a
-       hundred and forty characters — unreadable, and beside cards that stopped
-       at half that. */
-    .wrap>*{max-width:44rem}
-    h1{font-size:2.4rem}
-    nav.places{top:0;bottom:0;right:auto;width:15rem;border-top:0;border-right:1px solid var(--line);
-      padding:var(--s4) var(--s3);background:var(--card-2)}
-    nav.places div{flex-direction:column;gap:4px;max-width:none;margin:0}
-    nav.places a{flex:0 0 auto;flex-direction:row;justify-content:flex-start;gap:10px;
-      font-size:.98rem;padding:10px 12px;border-radius:10px;min-height:44px}
-    nav.places a.on{background:var(--accent-soft)}
-    nav.places div::before{content:"Private Foundry";display:block;font-family:var(--serif);
-      font-size:1.1rem;color:var(--ink);margin:4px 12px var(--s4)}
-    .brand{display:none}
-    .ask{position:static;background:none;padding:0;margin:0 0 var(--s4);order:-1}
-    .ask-in{max-width:none;margin:0}
-    main.wrap{display:flex;flex-direction:column}
-    .crumbs{margin-bottom:var(--s3)}
-    .local.rail{display:none}
-    .askwhere{max-width:none;margin:0 0 6px}
-    nav.places .sub,nav.places .more{display:flex;flex-direction:column;gap:2px;margin:var(--s2) 0 0;padding:var(--s2) 0 0;
-      border-top:1px solid var(--line)}
-    nav.places .sub b{font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);
-      padding:4px 12px 6px;font-weight:600}
-    nav.places .sub a,nav.places .more a{font-size:.92rem;min-height:36px;padding:6px 12px 6px 24px;color:var(--ink-2)}
-    nav.places .sub a span{margin-left:auto;font-size:.78rem;color:var(--accent);background:var(--accent-soft);
-      border-radius:999px;padding:1px 7px}
-    nav.places .sub a.on,nav.places .more a.on{color:var(--ink);background:var(--accent-soft)}
-    nav.places .more a{padding-left:12px}
-    nav.places.company{display:none}
-    nav.places.behind{display:block}
-    .glance{grid-template-columns:repeat(3,minmax(0,1fr));max-width:44rem}
-    .glance .tile{display:block}
-    .glance .tile dd.v{text-align:left}
-    .numbers{grid-template-columns:repeat(4,minmax(0,1fr))}
-    /* THE PAIRED LABEL AND VALUE COME BACK WHEN THERE IS ROOM FOR BOTH. The
-       label track is capped so a long one can no longer take the value's
-       width — the failure it caused on a phone is the same failure here, just
-       further away. */
-    dl,.facts{grid-template-columns:minmax(0,14rem) minmax(0,1fr)}
-    dl{gap:var(--s1) var(--s3)}
-    .facts{gap:var(--s2) var(--s3)}
-    dt+dd,.facts dt+dd{margin-bottom:0}
-    .cols{column-count:2;column-gap:var(--s4)}
-    .cols>*{break-inside:avoid;-webkit-column-break-inside:avoid}
-    .one,.hero{max-width:44rem}
-    .layer{max-width:44rem}
-  }
-  @media (min-width:1280px){.wrap{max-width:76rem}}
-</style>
-</head>
-<body>
-<main class="wrap">
-<div class="brand"><b>F</b> Private Foundry</div>
-${crumbsOf(where)}
-${body}
-<footer><a href="/letter">Advanced — inspect the system</a></footer>
-<form class="ask" method="GET" action="/foundry">
-  ${askScope(where).line}
-  ${askScope(where).hidden ? html`<input type="hidden" name="scope" value="${askScope(where).hidden}" />` : ''}
-  <div class="ask-in">
-    <label for="q" class="sr">${askScope(where).placeholder}</label>
-    <input id="q" name="q" type="search" enterkeyhint="search" autocorrect="on"
-      autocapitalize="sentences" spellcheck="true" placeholder="${askScope(where).placeholder}" />
-    <button type="submit">Ask</button>
-  </div>
-</form>
-</main>
-${companyBar(where)}
-<nav class="places${where && where.scope.kind === 'company' && where.local.length ? ' behind' : ''}" aria-label="Places"><div>
-  <a href="/foundry"${active === 'foundry' ? ' class="on" aria-current="page"' : ''}>
-    <svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/></svg>Foundry</a>
-  <a href="/foundry/companies"${active === 'companies' ? ' class="on" aria-current="page"' : ''}>
-    <svg viewBox="0 0 24 24"><path d="M3 17c3-4 6 0 9-3s6 1 9-3"/><path d="M3 12c3-4 6 0 9-3s6 1 9-3"/></svg>Portfolio</a>
-  <a href="/foundry/controls"${active === 'controls' ? ' class="on" aria-current="page"' : ''}>
-    <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="var(--bg)"/><circle cx="15" cy="12" r="2" fill="var(--bg)"/><circle cx="8" cy="17" r="2" fill="var(--bg)"/></svg>Controls</a>
-  ${railExtra(where)}
-</div></nav>
-<script>${raw(OWNER_SURFACE_SCRIPT)}</script>
-</body>
-</html>`;
-
 
 // ─── the owner decision, as one reusable shape ──────────────────────────────
 
@@ -1763,7 +1137,39 @@ const ROUTE_WORDS: Record<string, string> = {
 
 // ─── the one thing, rendered ────────────────────────────────────────────────
 
-function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedString> {
+/**
+ * EVERYTHING ELSE WAITING ON HIM, rendered once, for every screen that shows
+ * the queue. Home shows it under the one thing; Decisions shows it as the
+ * whole page. Two renderings of one queue would drift, and did.
+ */
+export function waitingList(queue: import('../../services/founder/attention.js').AttentionItem[], afterTheOneThing: boolean): HtmlEscapedString | Promise<HtmlEscapedString> | '' {
+  return queue.length ? html`<section class="know queue" id="waiting">
+    <h2>${afterTheOneThing ? 'Also waiting on you' : 'Waiting on you'} <span class="pill">${String(queue.length)}</span></h2>
+    ${queue.map((item) => html`<div class="noticed qitem">
+      <p class="quiet"><a href="${item.href}">${item.companyName}</a> · ${
+    item.kind === 'act' ? 'an act' : item.kind === 'advice' ? 'advice' : item.kind === 'experiment' ? 'a real test' : 'something I noticed'}</p>
+      <p><strong>${item.summary}</strong></p>
+      <p class="quiet">${item.detail}</p>
+      ${item.open ? html`<div class="pair"><a class="btn yes" href="${item.open.href}">${item.open.label}</a></div>` : html`<div class="pair">
+        <form method="POST" action="${item.yes.action}">${Object.entries(item.yes.fields ?? {}).map(([k, v]) => html`<input type="hidden" name="${k}" value="${v}" />`)}
+          <button class="btn yes" type="submit">${item.yes.label}</button></form>
+        <form method="POST" action="${item.no.action}">${Object.entries(item.no.fields ?? {}).map(([k, v]) => html`<input type="hidden" name="${k}" value="${v}" />`)}
+          <button class="btn" type="submit">${item.no.label}</button></form>
+      </div>`}
+      ${item.why ? html`<p class="row"><a class="why" href="${item.why}">Show your work</a></p>` : ''}
+    </div>`)}
+  </section>` : '';
+}
+
+/** The queue Home shows under the one thing: everything waiting, minus the one thing itself. */
+export async function theRestOfTheQueue(ownerId: string, attention: Attention): Promise<import('../../services/founder/attention.js').AttentionItem[]> {
+  const { waitingOn } = await import('../../services/founder/attention.js');
+  return (await waitingOn(ownerId))
+    .filter((item) => !(attention && attention.kind === 'spend' && item.kind === 'act' && item.id === attention.actId))
+    .filter((item) => !(attention && attention.kind === 'recognise_company' && item.kind === 'noticed' && item.id === attention.candidateId));
+}
+
+export function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedString> {
   if (a === null) return html``;
 
   if (a.kind === 'stopped') {
@@ -1840,13 +1246,20 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
           : 'If you have allowed money for this company, this comes out of it.',
       ],
       facts: [
-        ['Company', a.companyName],
+        // THE COMPANY IS AN ADDRESS. From the queue he should be able to step
+        // into the place the act belongs to and decide it there, with the
+        // company's situation around it, rather than only from the card.
+        ['Company', `<a href="/foundry/companies/${a.productId}#decide">${a.companyName}</a>`],
         ['Cost', cost],
         ['Putting it back', a.puttingItBack ?? 'Not stated'],
         ['If you do nothing', `It lapses on ${a.expiresAt.slice(0, 10)} and I will not act`],
       ],
       primary: {
-        label: 'Yes — go ahead',
+        // THE BUTTON NAMES THE CONSEQUENCE. "Yes — go ahead" is the label that
+        // approved nine things in a hundred and thirty-seven seconds; one of
+        // them wrote to strangers. What is approved and what it costs are on
+        // the button, so it cannot be mistaken for a different button.
+        label: `Approve — ${a.summary} · ${cost}`,
         action: `/foundry/proposals/${a.actId}/approve`,
         fields: { return_to: 'foundry' },
       },
@@ -2148,7 +1561,7 @@ function theOneThing(a: Attention): HtmlEscapedString | Promise<HtmlEscapedStrin
  * itself, and offering the way out — not as a card that needs him, because it
  * does not, but as a standing fact about his institution.
  */
-function standingPermission(s: OwnerState): HtmlEscapedString | Promise<HtmlEscapedString> {
+export function standingPermission(s: OwnerState): HtmlEscapedString | Promise<HtmlEscapedString> {
   const live = s.permissions[0];
   if (!live) return html``;
   // A PERMISSION IT CANNOT USE MUST SAY SO, IN THE SAME BREATH.
@@ -2742,7 +2155,7 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
 // ─── the surface ────────────────────────────────────────────────────────────
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-async function context(c: any): Promise<OwnerState | null> {
+export async function context(c: any): Promise<OwnerState | null> {
   const founder = c.get('founder') as { id?: string; name?: string; email?: string } | undefined;
   if (!founder?.id) return null;
   // Foundry itself, by name. `selectedProductId` remains the fallback for a
@@ -2859,37 +2272,51 @@ foundryShellRoutes.get('/foundry', async (c) => {
   // needed him this month, and the largest thing his businesses share. Not a
   // health grade and not a resilience score - the named thing a grade would
   // be hiding.
+  const queue = await theRestOfTheQueue(s.ownerId, attention);
   const { glanceFor } = await import('../../services/founder/portfolio.js');
   const glance = await glanceFor(s.ownerId);
-
-  // PORTFOLIO STATE IS NOT WHAT HE OPENED THIS FOR WHEN SOMETHING NEEDS HIM.
+  // THE GLANCE: WHAT HE READS BEFORE ANY SENTENCE.
   //
-  // These three facts rendered ABOVE the decision, so a screen that said "one
-  // thing needs you" then put three tiles of context in front of the thing.
-  // That is the inversion this product exists to remove: the machinery knew
-  // what mattered and the layout made him scroll past it to find out.
-  //
-  // So the order follows the answer. Something needs him: greeting, what it
-  // is, the decision, and then the state of the portfolio underneath it.
-  // Nothing needs him: the state of the portfolio is the news, and it goes
-  // where it always did.
-  const portfolioState = glance.cashFlowCents !== null || glance.interruptions > 0
-    || glance.concentration
-    ? html`<dl class="glance">
-      <div class="tile"><dt class="k">Monthly cash flow</dt>
-        <dd class="v">${glance.cashFlowCents === null ? '—' : money(glance.cashFlowCents)}</dd>
-        <dd class="d">${glance.cashFlowCents === null ? 'nothing reports revenue yet'
-    : `across ${String(glance.seen)} of ${String(glance.companies)} I can see`}</dd></div>
-      <div class="tile"><dt class="k">Needed you</dt>
-        <dd class="v">${glance.interruptions === 0 ? '0'
-    : html`<a href="/foundry/decisions">${String(glance.interruptions)}</a>`}</dd>
-        <dd class="d">${glance.interruptions === 0 ? 'not once this month' : 'times this month'}</dd></div>
-      <div class="tile"><dt class="k">Most shared</dt>
-        <dd class="v">${glance.concentration ? glance.concentration.split(' share ')[0] : 'nothing'}</dd>
-        <dd class="d">${glance.concentration ? `share ${glance.concentration.split(' share ')[1]}`
-    : 'no two depend on the same thing'}</dd></div>
-    </dl>`
-    : '';
+  // Six facts, each from a reader the institution already keeps, each a tile
+  // that is also a door. None of them is prose and none of them is invented:
+  // where nothing has happened the tile says so, because a first screen that
+  // only looks right once the numbers are large is a poster, not a control.
+  const { listExperiments } = await import('../../services/founder/experiment-view.js');
+  const { whatIsBlocked } = await import('../../services/venture/run-state.js');
+  const tests = await listExperiments(s.ownerId);
+  const live = tests.find((t) => t.state === 'running' || t.state === 'needs_you' || t.state === 'ready') ?? null;
+  const blocked = await whatIsBlocked(s.ownerId);
+  const paidCents = tests.reduce((acc, t) => acc + t.money.paidCents, 0);
+  const estate: { word: string; cls: 'ok' | 'watch' | 'bad'; detail: string } =
+    blocked.length ? { word: `${count(blocked.length, 'pass')} blocked`, cls: 'bad', detail: blocked[0]?.because ?? 'something it needs is missing' }
+      : s.routinesFailing.length ? { word: `${count(s.routinesFailing.length, 'routine')} stopped`, cls: 'watch', detail: 'nothing is lost; I am the one that has to recover' }
+        : { word: 'Healthy', cls: 'ok', detail: s.watching.real > 0 ? 'looking after what you own' : 'nothing to look after yet' };
+  const needsN = (attention === null ? 0 : 1) + queue.length;
+  const portfolioState = html`<dl class="glance" aria-label="At a glance">
+      <div class="tile door"><dt class="k">Estate</dt>
+        <dd class="v"><span class="state ${estate.cls}">${estate.word}</span></dd>
+        <dd class="d">${estate.detail}</dd><a class="door" href="/foundry/controls" aria-label="Controls"></a></div>
+      <div class="tile door"><dt class="k">Needs you</dt>
+        <dd class="v">${needsN === 0 ? html`<span class="state quiet none">None</span>` : html`<span class="state watch">${String(needsN)}</span>`}</dd>
+        <dd class="d">${needsN === 0 ? 'nothing is waiting on you' : needsN === 1 ? 'one decision is yours' : 'decisions are yours'}</dd>
+        <a class="door" href="${needsN === 0 ? '/foundry/decisions' : '#the-one-thing'}" aria-label="Decisions"></a></div>
+      <div class="tile door"><dt class="k">${live ? live.assetName ?? 'Experiment' : 'Experiments'}</dt>
+        <dd class="v">${live ? html`<span class="state ${live.state === 'running' ? 'ok' : 'watch'}">${live.stateLabel}</span>` : html`<span class="state quiet none">None running</span>`}</dd>
+        <dd class="d">${live ? `${String(live.exposure.sent)} of ${String(live.exposure.approved)} written to · ${String(live.exposure.delivered)} delivered · ${String(live.money.payments)} paid` : 'nothing is being tested'}</dd>
+        <a class="door" href="${live ? `/foundry/experiments/${live.id}` : '/foundry/experiments'}" aria-label="${live ? live.title : 'Experiments'}"></a></div>
+      <div class="tile"><dt class="k">Settled</dt>
+        <dd class="v">${paidCents > 0 ? money(paidCents) : glance.cashFlowCents !== null ? money(glance.cashFlowCents) : '$0'}</dd>
+        <dd class="d">${paidCents > 0 ? `paid for tests${glance.cashFlowCents !== null ? `; ${money(glance.cashFlowCents)} a month from companies` : ''}`
+    : glance.cashFlowCents !== null ? `a month across ${String(glance.seen)} of ${String(glance.companies)} I can see` : 'nothing has been paid for yet'}</dd></div>
+      <div class="tile door"><dt class="k">Watching</dt>
+        <dd class="v">${String(s.watching.real)} <span class="dim">${s.watching.real === 1 ? 'company' : 'companies'}</span></dd>
+        <dd class="d">${s.watching.real === 0 ? 'name one and I will start'
+    : glance.concentration ?? (s.watching.real > 1 ? 'no two depend on the same thing' : s.watching.itself ? 'and myself' : 'all of my attention is on it')}</dd>
+        <a class="door" href="/foundry/companies" aria-label="Portfolio"></a></div>
+      <div class="${s.changed.changes.length ? 'tile door' : 'tile'}"><dt class="k">Since you looked</dt>
+        <dd class="v">${s.changed.changes.length === 0 ? html`<span class="state quiet none">Nothing</span>` : String(s.changed.changes.length + s.changed.more)}</dd>
+        <dd class="d">${s.changed.changes[0]?.said ?? 'nothing has changed'}</dd>${s.changed.changes.length ? html`<a class="door" href="#away" aria-label="While you were away"></a>` : ''}</div>
+    </dl>`;
 
   // WHERE THINGS ARE, FROM THE FIRST SCREEN. Not doors: addresses, reached
   // from here and from context, with a count only where one is honest.
@@ -2929,26 +2356,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
   // rest used to be a count on a chip and a page away. Now each is one tap,
   // through the same forms its own page posts, so a morning's decisions are
   // made on the first screen rather than found one company at a time.
-  const { waitingOn } = await import('../../services/founder/attention.js');
-  const queue = (await waitingOn(s.ownerId))
-    .filter((item) => !(attention && attention.kind === 'spend' && item.kind === 'act' && item.id === attention.actId))
-    .filter((item) => !(attention && attention.kind === 'recognise_company' && item.kind === 'noticed' && item.id === attention.candidateId));
-  const alsoWaiting = queue.length ? html`<section class="know queue" id="waiting">
-    <h2>${attention ? 'Also waiting on you' : 'Waiting on you'} <span class="pill">${String(queue.length)}</span></h2>
-    ${queue.map((item) => html`<div class="noticed qitem">
-      <p class="quiet"><a href="${item.kind === 'experiment' ? item.href : `/foundry/companies/${item.productId}`}">${item.companyName}</a> · ${
-    item.kind === 'act' ? 'an act' : item.kind === 'advice' ? 'advice' : item.kind === 'experiment' ? 'a real test' : 'something I noticed'}</p>
-      <p><strong>${item.summary}</strong></p>
-      <p class="quiet">${item.detail}</p>
-      ${item.open ? html`<div class="pair"><a class="btn yes" href="${item.open.href}">${item.open.label}</a></div>` : html`<div class="pair">
-        <form method="POST" action="${item.yes.action}">${Object.entries(item.yes.fields ?? {}).map(([k, v]) => html`<input type="hidden" name="${k}" value="${v}" />`)}
-          <button class="btn yes" type="submit">${item.yes.label}</button></form>
-        <form method="POST" action="${item.no.action}">${Object.entries(item.no.fields ?? {}).map(([k, v]) => html`<input type="hidden" name="${k}" value="${v}" />`)}
-          <button class="btn" type="submit">${item.no.label}</button></form>
-      </div>`}
-      ${item.why ? html`<p class="row"><a class="why" href="${item.why}">Show your work</a></p>` : ''}
-    </div>`)}
-  </section>` : '';
+  const alsoWaiting = waitingList(queue, attention !== null);
 
   const body = html`
     <h1><span id="greet">Hello</span>${s.firstName ? `, ${s.firstName}` : ''}.</h1>
@@ -2962,7 +2370,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
       // on a long page or with the text at 200% it is not short at all.
       : html`<p class="lede"><a href="#the-one-thing">${orientation}</a></p>`
     : ''}
-    ${attention === null ? portfolioState : ''}
+    ${portfolioState}
     <!-- THE ONE THING HE CAME FOR, BEFORE ANYTHING HE DID NOT.
          This was rendered last: after what changed, after ninety lines of
          search block that can carry a whole opportunity's case. The screen said
@@ -2980,7 +2388,6 @@ foundryShellRoutes.get('/foundry', async (c) => {
       mine ${s.routinesFailing.length === 1 ? 'has' : 'have'} stopped, so some of what I
       tell you elsewhere may be out of date. Nothing is lost and I am the one that has to
       recover.</p>` : ''}
-    ${attention === null ? '' : portfolioState}
 
     ${done === 'looking' ? html`<div class="done"><p><strong>I am looking.</strong>
       I will bring you very few, and telling you none of them are worth it is a real
@@ -3011,7 +2418,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
     ${done === 'alreadylooking' ? html`<div class="done"><p><strong>Already looking.</strong>
       Stop that search first, or steer it instead — two at once would compete for the same
       attention.</p></div>` : ''}
-    ${s.changed.changes.length > 0 ? html`<div class="know">
+    ${s.changed.changes.length > 0 ? html`<div class="know" id="away">
       <h2>While you were away</h2>
       <ul>${s.changed.changes.map((ch) => html`<li>${ch.said}</li>`)}</ul>
       ${s.changed.more > 0 ? html`<p class="quiet">And ${String(s.changed.more)} other
@@ -3055,7 +2462,9 @@ foundryShellRoutes.get('/foundry', async (c) => {
     : html`<p class="gap">I would be starting blind &mdash; I have nothing
         to look through yet.</p>`}
     </div>` : ''}
-    ${s.search ? html`<div class="know">
+    ${s.search ? html`<details class="fold" id="search"><summary><h2>${s.search.invented ? 'A search I made up' : 'What I am looking for'}</h2>
+      <span class="gist">${s.search.blocked ? 'stuck' : `${String(s.search.looked)} looked at · ${String(s.search.candidates.filter((cand) => cand.earnedAttention).length)} worth your attention`}</span></summary>
+      <div class="know">
       <h2>${s.search.invented ? 'A search I made up' : 'What I am looking for'}</h2>
       ${s.search.invented ? html`<p class="quiet">You did not ask for this one. I invented
         it so you could see what I do with a search before handing me a real one. Nothing
@@ -3147,7 +2556,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
           </form>
         </div>
       </div>`)}
-    </div>` : ''}
+    </div></details>` : ''}
 
     ${!s.search && s.pastSearches.length ? html`<div class="know">
       <h2>What you have looked for before</h2>

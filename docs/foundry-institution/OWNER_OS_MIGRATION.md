@@ -211,3 +211,68 @@ Extract System A's tokens and the `Where`/`page()` contract out of
 `foundry-shell.ts:970–1632` into a shell module every place consumes. Re-skin it
 dark-first to the direction board. Give the canonical set its doors. Then absorb
 `/letter` and delete System B. The one-script CSP invariant survives untouched.
+
+---
+
+## Phase 2 — one shell (in progress)
+
+**Done, browser-verified at 390px and 1280px in dark mode:**
+
+- The shell is a module: `src/views/owner/shell.ts` carries `page()`, `Where`,
+  `placeHead`, `frameFor`, the doors and the Ask composer. The 443-line inline
+  `<style>` is `src/public/owner.css`, served once and cached. The route file
+  re-exports the contract so its five consumers did not churn; the removal path
+  is to point them at the shell and delete the re-export.
+- Dark is the ground. Newsreader for the sentences that matter, Inter for the
+  operational text, both bundled under the OFL (licences ship beside the files).
+  Mint is state; gold is owner attention and nothing else. Light is the
+  alternate and the toggle wins both ways.
+- The doors are the canonical set that actually opens: Home, Decisions,
+  Experiments, Inbox, Controls under the thumb; Portfolio, Discover and Workshop
+  on the desk rail. Activity and Economics get doors when their surfaces exist.
+  Each place lights its own door — Decisions, Experiments and Inbox were all
+  lighting "Home".
+- The one-script CSP invariant is untouched. The manifest's shortcut pointed at
+  the commercial `/decisions`; now `/foundry/decisions`, and its colours agree
+  with the ground.
+- The geometry test serves the stylesheet the way `index.ts` does. A browser
+  test that measured an unstyled page would have passed on nothing.
+
+**Home, migrated.** The first screen now opens with a glance: six tiles of
+state, each from a reader the institution already keeps, each a door —
+Estate (loop health and blocked passes), Needs you (the one queue), the live
+Experiment (written to / delivered / paid), Settled (what has actually been
+paid), Watching, and Since you looked. None is prose and none is invented: on
+the current estate they read Healthy · None · 21 of 21 written to · $0 ·
+1 company · Nothing, and that is the truth. The search block — Discover's
+content — folds to one line with a gist. The one thing sits directly under
+the glance, still in the first viewport on a 390px phone (the geometry test
+holds it there).
+
+**One queue, one derivation.** `/foundry/decisions` computed its own list of
+what waits (acts + advice + candidates) while Home computed another; on the
+same rows Home said "one thing needs you" and Decisions said "nothing is
+waiting on you." Decisions now renders exactly what Home renders — the one
+thing through `whatNeedsHim`, the rest through `waitingOn`, both through one
+`waitingList` — and every queue item links to where its answer lives (the
+act's `#decide` section, the advice, the notice, the test). The company-scoped
+view keeps its per-company list.
+
+**The button names the consequence.** The act card's primary said "Yes — go
+ahead" — the label that approved nine things in 137 seconds. It now reads
+`Approve — <the act> · <the cost>`. Two generic labels remain and are Phase
+3's: "Approve this one thing" on the company page and in the attention queue.
+
+**Carried into Phase 3:**
+
+- On the desk, the local row under the greeting duplicates the rail. The rail
+  is the navigation there; the local row should carry only what is *inside*
+  the object underfoot.
+- The one-thing card body is still prose-heavy; the Consequence descriptor
+  (what / effect / touches / cost / reversibility / does-not-authorise) exists
+  in `what-it-would-do.ts` and the card should render it as rows.
+- Three tests that pinned the old shape were corrected with their intent kept:
+  the accent-border test reads the stylesheet file and asserts gold on `.one`
+  and `--line` on everything that merely contains information; the "not a
+  dossier" prose count excludes the glance and the doors, because state tiles
+  and navigation are not prose; the geometry test serves the stylesheet.

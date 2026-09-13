@@ -4,8 +4,8 @@
   "description": "Your portfolio, and what needs you.",
   "start_url": "/foundry",
   "display": "standalone",
-  "background_color": "#F3F4F1",
-  "theme_color": "#F3F4F1",
+  "background_color": "#0B100E",
+  "theme_color": "#0B100E",
   "orientation": "portrait-primary",
   "icons": [
     {
@@ -27,13 +27,13 @@
   ],
   "shortcuts": [
     {
-      "name": "Dashboard",
+      "name": "Home",
       "url": "/foundry",
-      "description": "View your Signal"
+      "description": "The estate at a glance"
     },
     {
       "name": "Decisions",
-      "url": "/decisions",
+      "url": "/foundry/decisions",
       "description": "Open decision queue"
     }
   ]

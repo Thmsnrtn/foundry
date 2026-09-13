@@ -81,7 +81,7 @@ inboxRoutes.get('/foundry/inbox', async (c: any) => {
         <p class="quiet"><a href="/foundry/inbox/${m.threadKeyHref}">Read the whole thread</a></p>
       </div>`)}
     </section>`}`;
-  return c.html(page('Inbox', body, 'foundry', where('inbox')));
+  return c.html(page('Inbox', body, 'inbox', where('inbox')));
 });
 
 // HOW MUCH THE WORKSHOP MAY SAY FOR ITSELF. One control, three states, and
@@ -145,7 +145,7 @@ inboxRoutes.get('/foundry/inbox/:thread', async (c: any) => {
       .stack{display:grid;gap:.5rem;max-width:26rem}.stack label{display:grid;gap:.25rem}
       .answered{border-left:3px solid var(--accent,#888);padding-left:.75rem;margin-top:.75rem}
     </style>`;
-  return c.html(page('Thread', body, 'foundry', where('thread')));
+  return c.html(page('Thread', body, 'inbox', where('thread')));
 });
 
 inboxRoutes.post('/foundry/inbox/:id/settle', requireInstitutionOwner(), async (c: any) => {

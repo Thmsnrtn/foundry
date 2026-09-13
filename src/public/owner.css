@@ -1,0 +1,405 @@
+/* =============================================================================
+   FOUNDRY — the owner surface, one stylesheet.
+
+   This was a 443-line <style> block inside a route file, consumed by five
+   modules and re-sent with every page. It is the same system, moved where a
+   browser can cache it and a test can read it, and re-grounded dark-first:
+   a private institution is read at night on a phone as often as at a desk.
+
+   Two families and one scale: a serif for the sentences that matter — the
+   greeting, a number, a decision — and a sans for everything operational.
+   Colour carries meaning or it is absent. Mint is state and direction; gold
+   is owner attention and consequence, and appears nowhere else.
+   ============================================================================= */
+
+@font-face{font-family:"Newsreader";font-style:normal;font-weight:400;font-display:swap;
+  src:url(/static/newsreader-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:"Newsreader";font-style:normal;font-weight:600;font-display:swap;
+  src:url(/static/newsreader-latin-600-normal.woff2) format("woff2")}
+@font-face{font-family:"Newsreader";font-style:italic;font-weight:400;font-display:swap;
+  src:url(/static/newsreader-latin-400-italic.woff2) format("woff2")}
+@font-face{font-family:"Inter";font-style:normal;font-weight:400;font-display:swap;
+  src:url(/static/inter-latin-400-normal.woff2) format("woff2")}
+@font-face{font-family:"Inter";font-style:normal;font-weight:500;font-display:swap;
+  src:url(/static/inter-latin-500-normal.woff2) format("woff2")}
+@font-face{font-family:"Inter";font-style:normal;font-weight:600;font-display:swap;
+  src:url(/static/inter-latin-600-normal.woff2) format("woff2")}
+
+/* DARK IS THE GROUND. The light palette is the alternate, and the toggle wins
+   in both directions: an explicit data-theme beats the system preference. */
+:root{
+  --bg:#0B100E; --card:#121915; --card-2:#172019; --line:#243029; --line-2:#2E3C34;
+  --ink:#EAEFEA; --ink-2:#A8B2AA; --ink-3:#7C877E;
+  --accent:#8FD1B8; --accent-ink:#0B100E; --accent-soft:#1B2A23;
+  --good:#7FCBA8; --good-soft:#16261F;
+  --alert:#D9A85E; --alert-soft:#2A2214;
+  --bad:#E08A7A; --bad-soft:#2C1B18;
+  --s1:6px; --s2:12px; --s3:18px; --s4:28px; --s5:44px;
+  --r:18px; --r2:12px;
+  /* CATEGORIES ARE NOT MEANINGS: one hue at four separations, none of which
+     says good or bad. */
+  --c1:#B7E4D0; --c2:#7FC3A8; --c3:#4A8570; --c4:#2A4C40;
+  --serif:"Newsreader","Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --sans:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){
+  --bg:#F3F4F1; --card:#FFFFFF; --card-2:#F8F9F6; --line:#E2E6DE; --line-2:#CFD6CD;
+  --ink:#151C18; --ink-2:#4C554E; --ink-3:#68716A;
+  --accent:#256454; --accent-ink:#FFFFFF; --accent-soft:#DDEBE4;
+  --good:#2E7D5B; --good-soft:#E3F1EA;
+  --alert:#96601A; --alert-soft:#F6EBDD;
+  --bad:#A8412F; --bad-soft:#F7E4E0;
+  --c1:#123D33; --c2:#2F7D68; --c3:#7FB8A2; --c4:#CADED6;
+  color-scheme:light;
+}}
+:root[data-theme="light"]{
+  --bg:#F3F4F1; --card:#FFFFFF; --card-2:#F8F9F6; --line:#E2E6DE; --line-2:#CFD6CD;
+  --ink:#151C18; --ink-2:#4C554E; --ink-3:#68716A;
+  --accent:#256454; --accent-ink:#FFFFFF; --accent-soft:#DDEBE4;
+  --good:#2E7D5B; --good-soft:#E3F1EA;
+  --alert:#96601A; --alert-soft:#F6EBDD;
+  --bad:#A8412F; --bad-soft:#F7E4E0;
+  --c1:#123D33; --c2:#2F7D68; --c3:#7FB8A2; --c4:#CADED6;
+  color-scheme:light;
+}
+
+*,*::before,*::after{box-sizing:border-box}
+/* REM AND BODY AGREE: every size is written in rem against a 17px scale. */
+html{font-size:17px}
+html,body{max-width:100%;overflow-x:hidden}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:400 1rem/1.5 var(--sans);
+  -webkit-text-size-adjust:100%;-webkit-font-smoothing:antialiased}
+/* ENOUGH ROOM FOR BOTH BARS AND THE HOME INDICATOR. --chrome is measured by
+   the one owner script from the bars that are actually there. */
+.wrap{max-width:34rem;margin:0 auto;
+  padding:var(--s3) var(--s3)
+    calc(var(--chrome,calc(11rem + env(safe-area-inset-bottom))) + var(--s3) + 8px)}
+h1{font-family:var(--serif);font-size:2rem;line-height:1.15;font-weight:500;
+  letter-spacing:-.01em;margin:0 0 var(--s2)}
+.brand{display:flex;align-items:center;gap:10px;margin:0 0 var(--s4);color:var(--ink-2);font-size:.95rem}
+.brand b{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;
+  border-radius:50%;background:var(--card);border:1px solid var(--line);
+  font-family:var(--serif);font-weight:500;color:var(--ink);font-size:1.05rem}
+
+/* ─── WATCH: the glance ───────────────────────────────────────────────────── */
+/* One fact per row on a phone; two across when there is room; three on a
+   desk. A zero-floor track let three columns shrink until sentences broke
+   into fragments, so every track has a floor. */
+.glance{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--s2);margin:0 0 var(--s4);
+  padding:0;border-top:0}
+@media (max-width:359px){.glance{grid-template-columns:minmax(0,1fr)}}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
+  padding:var(--s2) var(--s2) 10px;min-width:0;position:relative}
+.tile dt.k{font-size:.78rem;color:var(--ink-3);margin:0 0 4px;line-height:1.25}
+.tile dd.v{font-family:var(--serif);font-size:1.35rem;line-height:1.1;font-weight:500;
+  margin:0 0 4px;overflow-wrap:break-word}
+.tile dd.d{font-size:.78rem;color:var(--ink-2);margin:0;line-height:1.3}
+.tile .d.up{color:var(--good)} .tile .d.down{color:var(--alert)}
+/* A TILE THAT IS A DOOR. The whole tile is the link; the chevron says so. */
+.tile a.door{position:absolute;inset:0;border-radius:inherit}
+.tile a.door:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.tile.door::after{content:"›";position:absolute;top:8px;right:11px;color:var(--ink-3);font-size:1rem}
+/* A STATE, NOT A SENTENCE. Six words the whole surface uses for state, each
+   with one colour, so the eye reads the state before the word. */
+.state{display:inline-flex;align-items:center;gap:6px;font-size:.85rem;font-weight:500;
+  padding:3px 10px;border-radius:999px;border:1px solid transparent;line-height:1.3}
+.state::before{content:"";width:7px;height:7px;border-radius:50%;background:currentColor}
+.state.ok{color:var(--good);background:var(--good-soft)}
+.state.watch{color:var(--alert);background:var(--alert-soft)}
+.state.bad{color:var(--bad);background:var(--bad-soft)}
+.state.quiet{color:var(--ink-2);background:var(--card-2);border-color:var(--line)}
+.state.none::before{display:none}
+.numbers{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));gap:var(--s2);margin:0 0 var(--s2)}
+.numbers .tile dd.v{font-size:1.5rem}
+
+/* ─── The River ───────────────────────────────────────────────────────────── */
+.layer{display:flex;align-items:center;gap:var(--s2);background:var(--card);
+  border:1px solid var(--line);border-radius:var(--r2);padding:var(--s2) var(--s3);
+  margin:0 0 var(--s2);text-decoration:none;color:inherit}
+.layer .t{flex:1 1 auto;min-width:0}
+.layer .t b{display:block;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
+.layer .t span{font-size:.93rem;color:var(--ink-2)}
+.layer .n{font-family:var(--serif);font-size:1.3rem;color:var(--ink);flex:0 0 auto}
+.bar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--line);margin:var(--s2) 0 var(--s1)}
+/* A SEAM BETWEEN SEGMENTS: four steps of one hue cannot reach 3:1 alone. */
+.bar i{display:block;height:100%;box-shadow:inset 1px 0 0 var(--card)}
+.bar i:first-child{box-shadow:none}
+.legend{display:flex;flex-wrap:wrap;gap:6px var(--s3);font-size:.85rem;color:var(--ink-2);margin:0}
+.legend i{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;
+  vertical-align:baseline;box-shadow:inset 0 0 0 1px rgba(0,0,0,.16)}
+
+/* ─── The decision ────────────────────────────────────────────────────────── */
+/* A DEFINITION LIST, because that is what it is. One column on a phone: a
+   label track sized to content once starved the value to zero width and a
+   141-character sentence rendered one letter per line. */
+.facts{display:grid;grid-template-columns:minmax(0,1fr);gap:2px var(--s3);margin:0;
+  padding:var(--s3);border-top:1px solid var(--line);font-size:.95rem}
+.facts dt{color:var(--ink-3);font-weight:500;font-size:.85rem;padding-top:2px}
+.facts dt+dd{margin-bottom:var(--s2)}
+.facts dd:last-child{margin-bottom:0}
+.facts dd{margin:0;min-width:0;overflow-wrap:break-word;color:var(--ink)}
+.facts dd.quiet,.facts span.quiet{color:var(--ink-2)}
+.pill{display:inline-block;font-size:.68rem;letter-spacing:.08em;text-transform:uppercase;
+  font-weight:700;color:var(--ink-2);background:var(--card-2);border:1px solid var(--line);
+  border-radius:999px;padding:2px 8px;vertical-align:middle;margin-left:6px}
+.pill.warn{background:var(--alert-soft);color:var(--alert);border-color:transparent}
+.pill.ok{background:var(--accent-soft);color:var(--accent);border-color:transparent}
+.hero{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:var(--s3);margin:0 0 var(--s3)}
+.hero h2{font-family:var(--serif);font-size:1.45rem;line-height:1.2;font-weight:500;margin:0 0 var(--s1)}
+.hero p{margin:0;color:var(--ink-2)}
+.hero.alert{border-color:var(--alert)}
+.quiet{color:var(--ink-2);font-size:.93rem}
+/* FOLDED, NOT HIDDEN: one line that says what is in it, opening in place. */
+details.fold{border-top:1px solid var(--line);margin:0}
+.fold>summary{padding:var(--s2) 0;min-height:48px;gap:var(--s3);flex-wrap:wrap}
+.fold>summary h2,.fold>summary h3{margin:0;flex:0 0 auto;font-size:1rem;font-weight:600;letter-spacing:0;text-transform:none;color:var(--ink)}
+.fold .gist{flex:1 1 8rem;min-width:0;text-align:right;color:var(--ink-2);font-size:.93rem;overflow-wrap:break-word}
+.fold[open]>summary{padding-bottom:var(--s2)}
+.fold>ul,.fold>p,.fold>div,.fold>form{margin-bottom:var(--s3)}
+
+p{margin:0 0 var(--s2);overflow-wrap:break-word}
+.lede{color:var(--ink-2);font-size:1.06rem;margin-bottom:var(--s4)}
+.lede a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line);padding-bottom:1px}
+.lede a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
+
+/* THE ONE THING. Never more than one on a page, and the only gold border on
+   it: everything else is --line, so the thing that needs him is where the eye
+   lands. */
+.one{background:var(--card);border:1px solid var(--alert);border-radius:var(--r);margin:0 0 var(--s4);overflow:hidden}
+.one.alert{border-color:var(--alert)}
+.one-in{padding:var(--s3)}
+.one h2{font-family:var(--serif);font-size:1.45rem;line-height:1.2;font-weight:500;margin:0 0 var(--s1)}
+.act{font-size:.7rem;letter-spacing:.13em;text-transform:uppercase;font-weight:700;color:var(--alert);margin:0 0 var(--s1)}
+.one .lead{font-size:1.02rem;margin:0 0 var(--s2)}
+.standing{background:var(--card);border:1px solid var(--accent);border-radius:var(--r);
+  padding:var(--s3);margin:0 0 var(--s4);display:flex;flex-wrap:wrap;gap:var(--s2);
+  align-items:center;justify-content:space-between}
+.standing>div{flex:1 1 12rem;min-width:0}
+.standing p{margin:0;color:var(--ink-2);font-size:.95rem}
+.standing .caveat{margin-top:var(--s2);color:var(--alert)}
+.standing strong{color:var(--ink)}
+.done{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:var(--s3);margin:0 0 var(--s4)}
+.done p{color:var(--ink-2);font-size:.98rem}
+.done p:last-child{margin-bottom:0}
+.done strong{color:var(--ink)}
+.one p{color:var(--ink-2);font-size:.98rem}
+.one p:last-child{margin-bottom:0}
+.lead{color:var(--ink)}
+dl{display:grid;grid-template-columns:minmax(0,1fr);gap:2px var(--s3);margin:0;
+  padding:var(--s2) var(--s3);border-top:1px solid var(--line);font-size:.93rem}
+dt{color:var(--ink-3)}
+dt+dd{margin-bottom:var(--s2)}
+dd:last-child{margin-bottom:0}
+dd{margin:0;min-width:0;overflow-wrap:break-word}
+.do{padding:var(--s3);border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:var(--s2)}
+.do form{flex:1 1 auto;min-width:0}
+.btn{font:inherit;font-size:1rem;font-weight:500;cursor:pointer;text-decoration:none;width:100%;
+  display:inline-flex;align-items:center;justify-content:center;
+  border-radius:12px;padding:13px 20px;min-height:48px;
+  border:1px solid var(--line-2);background:var(--card);color:var(--ink)}
+.btn.go{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.btn:active{transform:translateY(1px)}
+@media (prefers-reduced-motion:reduce){.btn:active{transform:none}}
+
+details{border-top:1px solid var(--line)}
+summary{cursor:pointer;list-style:none;padding:var(--s2) var(--s3);min-height:48px;
+  display:flex;align-items:center;justify-content:space-between;gap:var(--s2);font-size:.93rem;color:var(--ink-2)}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";color:var(--ink-3);font-size:1.1rem}
+details[open] summary::after{content:"\2212"}
+.inner{padding:0 var(--s3) var(--s3);font-size:.93rem;color:var(--ink-2)}
+.mono{font-family:var(--mono);font-size:.8rem;color:var(--ink-3);overflow-wrap:break-word}
+
+/* A question and its answer read as an exchange, not as more cards. */
+.asked{color:var(--ink-3);font-size:.93rem;margin:var(--s4) 0 var(--s1)}
+.said{font-size:1.02rem;margin:0 0 var(--s4)}
+.said p{margin:0 0 var(--s2)}
+.said p:last-child{margin-bottom:0}
+.said ul{margin:0 0 var(--s2);padding-left:1.1rem;color:var(--ink-2)}
+.said li{margin:0 0 var(--s1)}
+.said a{color:var(--accent)}
+.maybe{display:flex;flex-wrap:wrap;gap:var(--s2)}
+.maybe a{font-size:.93rem;text-decoration:none;color:var(--ink-2);border:1px solid var(--line);
+  border-radius:999px;padding:10px 15px;min-height:44px;display:inline-flex;align-items:center}
+.maybe a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ─── Ask: the composer ───────────────────────────────────────────────────── */
+.ask{position:fixed;left:0;right:0;bottom:var(--kb,0px);background:var(--bg);
+  border-top:1px solid var(--line);padding:var(--s2) var(--s3)}
+.ask-in{max-width:34rem;margin:0 auto;display:flex;gap:var(--s2)}
+.ask input{flex:1;min-width:0;font:inherit;font-size:max(16px,1rem);padding:13px 15px;min-height:48px;
+  border:1px solid var(--line-2);border-radius:12px;background:var(--card);color:var(--ink)}
+.ask input::placeholder{color:var(--ink-3)}
+.ask input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.ask button{font:inherit;font-size:1rem;font-weight:500;border:0;border-radius:12px;
+  padding:0 18px;min-height:48px;background:var(--accent);color:var(--accent-ink);cursor:pointer}
+.ask button:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.sr{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+/* ─── The doors ───────────────────────────────────────────────────────────── */
+/* UNDER THE THUMB ON A PHONE, A RAIL ON A DESK. Five doors fit a thumb; the
+   rest of the canonical set lives in the rail and is reached from inside a
+   door. Nine tabs at 375px is forty pixels each, which is not a door. */
+nav.places{position:fixed;left:0;right:0;bottom:0;z-index:2;background:var(--bg);
+  border-top:1px solid var(--line);padding:6px 0 calc(6px + env(safe-area-inset-bottom))}
+nav.places div{max-width:34rem;margin:0 auto;display:flex}
+nav.places a{flex:1 1 0;min-width:0;text-decoration:none;color:var(--ink-3);font-size:.7rem;
+  display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;min-height:44px;position:relative}
+nav.places a svg{width:22px;height:22px;stroke:currentColor;fill:none;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+nav.places a.on{color:var(--accent)}
+nav.places a:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:8px}
+/* A COUNT ON A DOOR: how many things wait behind it. */
+nav.places a b{position:absolute;top:2px;right:calc(50% - 22px);font-size:.62rem;font-weight:600;
+  color:var(--accent-ink);background:var(--alert);border-radius:999px;min-width:16px;height:16px;line-height:16px;
+  text-align:center;padding:0 4px}
+nav.places a.on b{background:var(--accent)}
+nav.places .desk{display:none}
+.ask{bottom:calc(58px + env(safe-area-inset-bottom) + var(--kb,0px));border-top:0;padding-top:var(--s3);
+  background:linear-gradient(to top,var(--bg) 84%,transparent)}
+.item{display:block;text-decoration:none;color:inherit;background:var(--card);
+  border:1px solid var(--line);border-radius:var(--r);padding:var(--s3);margin:0 0 var(--s2)}
+.item:hover{border-color:var(--ink-3)}
+.item:focus-visible{border-color:var(--ink-3);outline:2px solid var(--accent);outline-offset:2px}
+.item h3{margin:0 0 var(--s1);font-size:1.08rem;font-weight:600}
+.item p{margin:0;color:var(--ink-2);font-size:.93rem}
+.know{margin:0 0 var(--s4)}
+h2.section{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:700;margin:var(--s4) 0 var(--s2)}
+.know h2,.know h3{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:700;margin:0 0 var(--s2)}
+.know ul{margin:0;padding-left:1.1rem;color:var(--ink-2);font-size:.97rem}
+.know li{margin:0 0 var(--s1)}
+.gap{color:var(--alert)}
+.alarm{color:var(--alert);font-weight:600}
+/* WHERE HE IS: the same slots on every screen. */
+.crumbs{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin:0 0 var(--s2);font-size:.82rem;color:var(--ink-3)}
+.crumbs a{color:var(--ink-2);text-decoration:none;padding:6px 0;min-height:32px;display:inline-flex;align-items:center}
+.crumbs a:hover{text-decoration:underline}
+.crumbs i{font-style:normal;color:var(--ink-3)}
+.crumbs span{color:var(--ink)}
+.crumbline{margin:0 0 var(--s2);font-size:.9rem}
+.crumbline a{color:var(--ink-2);text-decoration:none;display:inline-flex;align-items:center;min-height:44px}
+h1 .dim{color:var(--ink-3);font-weight:400}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin:calc(-1 * var(--s2)) 0 var(--s3)}
+.chip{display:inline-block;font-size:.8rem;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink-2)}
+.local{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;margin:0 calc(-1 * var(--s3)) var(--s4);
+  padding:0 var(--s3);border-bottom:1px solid var(--line)}
+.local::-webkit-scrollbar{display:none}
+.local a{flex:0 0 auto;text-decoration:none;color:var(--ink-2);font-size:.95rem;padding:10px 12px;min-height:44px;
+  display:inline-flex;align-items:center;gap:6px;border-bottom:2px solid transparent;margin-bottom:-1px;white-space:nowrap}
+.local a b{font-weight:600;font-size:.8rem;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:1px 7px}
+.local a.on{color:var(--ink);border-bottom-color:var(--accent)}
+.local a:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:6px}
+.why{color:var(--accent);font-size:.9rem;text-decoration:none;display:inline-flex;align-items:center;min-height:44px}
+.why::before{content:"?";display:inline-flex;align-items:center;justify-content:center;width:18px;height:18px;
+  border-radius:50%;border:1px solid currentColor;font-size:.72rem;margin-right:6px}
+.why:hover{text-decoration:underline}
+.row{display:flex;flex-wrap:wrap;gap:var(--s2) var(--s3);align-items:center;margin:var(--s1) 0 0}
+.row .btn{width:auto}
+.askwhere{max-width:34rem;margin:0 auto 6px;font-size:.8rem;color:var(--ink-3)}
+.askwhere b{color:var(--ink-2);font-weight:500}
+.askwhere a{color:var(--accent)}
+.said-here{border:1px solid var(--accent-soft);border-radius:var(--r);padding:var(--s3);background:var(--card)}
+.said-here h2{margin-top:0}
+.level>summary h3{font-size:1rem}
+.tech{display:grid;grid-template-columns:max-content minmax(0,1fr);gap:4px var(--s3);font-size:.85rem;
+  font-family:var(--mono);color:var(--ink-2);margin:0 0 var(--s3)}
+.tech dt,.tech dd{margin:0;overflow-wrap:anywhere}
+.mapfind{display:flex;gap:var(--s2);margin:0 0 var(--s2)}
+.mapfind input{flex:1;min-width:0;font:inherit;font-size:max(16px,1rem);padding:11px 13px;min-height:44px;
+  border:1px solid var(--line-2);border-radius:12px;background:var(--card);color:var(--ink)}
+.mapfind button{font:inherit;border:1px solid var(--line-2);background:var(--card);border-radius:12px;padding:0 14px;min-height:44px;color:var(--ink)}
+.filters{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none;margin:0 0 var(--s3);padding-bottom:2px}
+.filters a{flex:0 0 auto;text-decoration:none;font-size:.85rem;color:var(--ink-2);border:1px solid var(--line);
+  border-radius:999px;padding:7px 12px;min-height:36px;display:inline-flex;align-items:center;white-space:nowrap}
+.filters a.on{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.item .where{display:flex;flex-wrap:wrap;gap:4px;margin-top:var(--s1)}
+.item .where span{font-size:.75rem;color:var(--ink-3);border:1px solid var(--line);border-radius:999px;padding:2px 8px}
+.item .where span.need{color:var(--alert);border-color:var(--alert)}
+.thread .pill{margin-left:6px;vertical-align:middle}
+/* CAUSALITY IS A LINE. Time on the left, what happened on the right. */
+.steps{list-style:none;margin:var(--s2) 0;padding:0 0 0 12px;border-left:2px solid var(--line)}
+.steps li{display:grid;grid-template-columns:5.2rem minmax(0,1fr);gap:4px var(--s2);align-items:baseline;margin:0 0 var(--s2);position:relative}
+.steps li::before{content:"";position:absolute;left:-17px;top:.45em;width:8px;height:8px;border-radius:50%;background:var(--ink-3)}
+.steps li:last-child::before{background:var(--accent)}
+.steps .k{font-size:.72rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:600}
+.steps time{grid-column:2;font-size:.78rem}
+.steps a{color:var(--accent)}
+nav.places .sub,nav.places .more{display:none}
+nav.places.behind{display:none}
+.queue .btn.yes{border-color:currentColor;font-weight:600}
+.dial{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 4px}
+.dial form{flex:1 1 7rem;display:flex;margin:0}
+.dial .mark{flex:1 1 7rem;display:block;text-align:center;padding:10px 6px;border:1px solid var(--line-2);
+  border-radius:10px;background:var(--card);color:inherit;font:inherit;font-size:.9rem;line-height:1.25;text-decoration:none;cursor:pointer}
+.dial .mark.on{border-color:currentColor;font-weight:600;box-shadow:inset 0 0 0 1px currentColor}
+form.say{display:flex;gap:6px;margin:6px 0;flex-wrap:wrap}
+form.say input[type=text]{flex:1 1 14rem;padding:10px 12px;border:1px solid var(--line-2);border-radius:10px;font:inherit;background:var(--card);color:var(--ink)}
+nav.places.company a{position:relative}
+.noticed{border:1px solid var(--line);border-radius:var(--r);padding:var(--s3);margin:0 0 var(--s3);background:var(--card)}
+.noticed h4{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:700;margin:0 0 var(--s2)}
+.noticed p{margin:0 0 var(--s2);color:var(--ink-2);font-size:.97rem}
+.noticed form{margin:0 0 var(--s2)}
+.noticed form:last-child{margin:0}
+.pair{display:flex;gap:var(--s2);margin-top:var(--s1)}
+.pair form{flex:0 1 auto;min-width:0;margin:0}
+.pair form:first-child{flex:1 1 auto}
+.pair .btn{white-space:nowrap}
+form.inline{display:flex;flex-wrap:wrap;gap:var(--s2);margin:0 0 var(--s3)}
+form.inline .btn{width:auto}
+/* THE TEXTAREA HAD NO RULE, fell below 16px, and iOS zoomed in and never out. */
+form.inline input[type=text],textarea{flex:1 1 12rem;min-width:0;font:inherit;font-size:max(16px,1rem);
+  padding:13px 15px;min-height:48px;border:1px solid var(--line-2);border-radius:12px;background:var(--card);color:var(--ink)}
+form.inline input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+form.inline button{flex:0 0 auto}
+footer{margin-top:var(--s5);padding-top:var(--s3);border-top:1px solid var(--line)}
+footer a{color:var(--ink-3);font-size:.85rem;text-decoration:none}
+footer a:hover,footer a:focus-visible{text-decoration:underline}
+
+/* TWO CANVASES, NEITHER A VERSION OF THE OTHER. Under 900px the doors sit
+   under the thumb and the composer is fixed above them. From 900px the doors
+   become a rail on the left with the whole canonical set, the composer sits
+   at the top where the eye starts, and sections flow into columns. */
+@media (min-width:900px){
+  body{font-size:max(16px,1rem)}
+  .wrap{max-width:68rem;margin:0 0 0 15rem;padding:var(--s4) var(--s5) var(--s5)}
+  .wrap>*{max-width:44rem}
+  h1{font-size:2.4rem}
+  nav.places{top:0;bottom:0;right:auto;width:15rem;border-top:0;border-right:1px solid var(--line);
+    padding:var(--s4) var(--s3);background:var(--card-2);overflow-y:auto}
+  nav.places div{flex-direction:column;gap:4px;max-width:none;margin:0}
+  nav.places a{flex:0 0 auto;flex-direction:row;justify-content:flex-start;gap:10px;
+    font-size:.98rem;padding:10px 12px;border-radius:10px;min-height:44px}
+  nav.places a.on{background:var(--accent-soft);color:var(--ink)}
+  nav.places a b{position:static;margin-left:auto;font-size:.78rem;height:auto;line-height:1.4;padding:1px 7px}
+  nav.places .desk{display:flex}
+  nav.places div::before{content:"Private Foundry";display:block;font-family:var(--serif);
+    font-size:1.1rem;color:var(--ink);margin:4px 12px var(--s4)}
+  .brand{display:none}
+  .ask{position:static;background:none;padding:0;margin:0 0 var(--s4);order:-1}
+  .ask-in{max-width:none;margin:0}
+  main.wrap{display:flex;flex-direction:column}
+  .crumbs{margin-bottom:var(--s3)}
+  .local.rail{display:none}
+  .askwhere{max-width:none;margin:0 0 6px}
+  nav.places .sub,nav.places .more{display:flex;flex-direction:column;gap:2px;margin:var(--s2) 0 0;padding:var(--s2) 0 0;border-top:1px solid var(--line)}
+  nav.places .sub b{font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);padding:4px 12px 6px;font-weight:600;position:static;background:none;height:auto;line-height:1.4}
+  nav.places .sub a,nav.places .more a{font-size:.92rem;min-height:36px;padding:6px 12px 6px 24px;color:var(--ink-2)}
+  nav.places .sub a span{margin-left:auto;font-size:.78rem;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:1px 7px}
+  nav.places .sub a.on,nav.places .more a.on{color:var(--ink);background:var(--accent-soft)}
+  nav.places .more a{padding-left:12px}
+  nav.places.company{display:none}
+  nav.places.behind{display:block}
+  .glance{grid-template-columns:repeat(3,minmax(0,1fr));max-width:44rem}
+  .numbers{grid-template-columns:repeat(4,minmax(0,1fr))}
+  dl,.facts{grid-template-columns:minmax(0,14rem) minmax(0,1fr)}
+  dl{gap:var(--s1) var(--s3)}
+  .facts{gap:var(--s2) var(--s3)}
+  dt+dd,.facts dt+dd{margin-bottom:0}
+  .cols{column-count:2;column-gap:var(--s4)}
+  .cols>*{break-inside:avoid;-webkit-column-break-inside:avoid}
+  .one,.hero,.layer{max-width:44rem}
+}
+@media (min-width:1280px){.wrap{max-width:76rem}}

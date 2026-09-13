@@ -77,8 +77,20 @@ describe('the busiest screen he can reach', () => {
     expect(decision, 'the decision comes first').toBeLessThan(search);
   });
 
-  it('gives the accent border to the thing that needs him and nothing else', async () => {
-    const css = await (await app.request('/foundry')).text();
-    expect(css).toContain('.one{background:var(--card);border:1px solid var(--accent)');
+  it('gives the attention border to the thing that needs him and nothing else', async () => {
+    // THE STYLESHEET IS A FILE NOW, so the rule is read where it lives rather
+    // than scraped out of the page. And the border is gold: the one colour the
+    // surface reserves for owner attention and consequence, used here and on
+    // nothing that merely contains information.
+    const { readFileSync } = await import('node:fs');
+    const css = readFileSync('src/public/owner.css', 'utf8');
+    const rule = (sel: string): string => css.slice(css.indexOf(`\n${sel}{`), css.indexOf('}', css.indexOf(`\n${sel}{`)));
+    expect(rule('.one')).toContain('border:1px solid var(--alert)');
+    for (const quiet of ['.tile', '.item', '.hero', '.noticed', '.done', '.layer']) {
+      expect(rule(quiet), `${quiet} carries no attention border`).toContain('border:1px solid var(--line)');
+    }
+    // And the page links the file it depends on.
+    const body = await (await app.request('/foundry')).text();
+    expect(body).toContain('href="/static/owner.css"');
   });
 });

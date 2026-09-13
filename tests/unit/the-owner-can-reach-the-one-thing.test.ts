@@ -75,6 +75,13 @@ beforeAll(async () => {
   });
   const shell = await import('../../src/routes/dashboard/foundry-shell.js');
   app.route('/', shell.foundryShellRoutes);
+  // THE STYLESHEET IS A FILE NOW, AND A BROWSER TEST WITHOUT IT MEASURES AN
+  // UNSTYLED PAGE. The geometry this test exists to check — fixed bars,
+  // the reserve under them, tracks that do not starve — is all in that file,
+  // so the composition serves it exactly the way index.ts does.
+  const { staticAssetHandler } = await import('../../src/routes/public/static-assets.js');
+  const { resolve } = await import('node:path');
+  app.get('/static/:file', staticAssetHandler(resolve('src')));
   const server = serve({ fetch: app.fetch, port: 0 });
   port = (server.address() as { port: number }).port;
   stop = () => { server.close(); };

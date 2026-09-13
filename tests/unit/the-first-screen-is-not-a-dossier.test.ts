@@ -31,7 +31,16 @@ const OWNER = 'dossier_owner';
 let app: Hono;
 
 function lines(html: string): number {
+  // THE INSTRUMENT PANEL IS NOT PROSE. The glance is six tiles of state —
+  // a label, a value, a phrase each — and this count exists to catch the
+  // screen turning into a filing cabinet of cases, not to punish it for
+  // saying "Healthy" in a tile. What is left after the glance is the prose,
+  // and the prose is what has to stay short.
   return html.replace(/<script[\s\S]*?<\/script>/g, '').replace(/<style[\s\S]*?<\/style>/g, '')
+    .replace(/<dl class="glance"[\s\S]*?<\/dl>/g, '')
+    // Nor are the doors: the shell's navigation is the same on every screen
+    // and grows with the canonical set, not with what this page has to say.
+    .replace(/<nav class="places[\s\S]*?<\/nav>/g, '')
     .replace(/<[^>]+>/g, '\n').split('\n').map((l) => l.trim()).filter(Boolean).length;
 }
 

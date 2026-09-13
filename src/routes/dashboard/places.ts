@@ -17,7 +17,8 @@ import type { HtmlEscapedString } from 'hono/utils/html';
 import { query, realCompany } from '../../db/client.js';
 import { money } from '../../services/founder/portfolio.js';
 import {
-  LADDER_IN_PLAIN_WORDS, count, frameFor, page, placeHead, plainly, readCompany,
+  LADDER_IN_PLAIN_WORDS, context, count, frameFor, page, placeHead, plainly, readCompany,
+  standingPermission, theOneThing, theRestOfTheQueue, waitingList, whatNeedsHim,
 } from './foundry-shell.js';
 import type { Where } from './foundry-shell.js';
 import { CUSTOMER_SENSES, placeOf } from '../../services/founder/place.js';
@@ -514,19 +515,28 @@ placeRoutes.get('/foundry/decisions', async (c: any) => {
   // boundary applies, and invented companies keep their decisions on their own
   // pages.
   const params = company ? [founderId, String(company.id)] : [founderId];
-  const openActs = await rows(
+  // ONE QUEUE, ONE DERIVATION. This page computed its own list of what waits
+  // on him — acts, advice, candidates — while Home computed a different one,
+  // and on the same rows Home said "one thing needs you" and this page said
+  // "nothing is waiting on you". A second owner queue is a second truth. The
+  // whole institution's queue is read here through exactly the readers Home
+  // uses; a company-scoped view still lists that company's open items.
+  const state = company ? null : await context(c);
+  const attention = state ? whatNeedsHim(state) : null;
+  const queue = state ? await theRestOfTheQueue(founderId, attention) : [];
+  const openActs = company ? await rows(
     `SELECT a.id, a.summary, a.expires_at, p.id AS product_id, p.name FROM proposed_acts a
        JOIN products p ON p.id = a.product_id
-      WHERE p.owner_id = ? AND ${company ? 'p.id = ?' : realCompany('p')} AND a.decision IS NULL AND a.revoked_at IS NULL
-        AND a.expires_at > CURRENT_TIMESTAMP ORDER BY a.expires_at`, params);
-  const openAdvice = await rows(
+      WHERE p.owner_id = ? AND p.id = ? AND a.decision IS NULL AND a.revoked_at IS NULL
+        AND a.expires_at > CURRENT_TIMESTAMP ORDER BY a.expires_at`, params) : [];
+  const openAdvice = company ? await rows(
     `SELECT r.id, r.summary, p.id AS product_id, p.name FROM situation_recommendations r
        JOIN products p ON p.id = r.product_id
-      WHERE p.owner_id = ? AND ${company ? 'p.id = ?' : realCompany('p')} AND r.decided_at IS NULL ORDER BY r.raised_at`, params);
-  const openAsks = await rows(
+      WHERE p.owner_id = ? AND p.id = ? AND r.decided_at IS NULL ORDER BY r.raised_at`, params) : [];
+  const openAsks = company ? await rows(
     `SELECT rc.id, rc.proposed_responsibility, p.id AS product_id, p.name FROM responsibility_candidates rc
        JOIN products p ON p.id = rc.product_id
-      WHERE p.owner_id = ? AND ${company ? 'p.id = ?' : realCompany('p')} AND rc.status = 'pending' ORDER BY rc.rowid`, params);
+      WHERE p.owner_id = ? AND p.id = ? AND rc.status = 'pending' ORDER BY rc.rowid`, params) : [];
   const decidedActs = await rows(
     `SELECT a.id, a.summary, a.decision, a.decided_at, a.revoked_at, a.consumed_at, p.id AS product_id, p.name
        FROM proposed_acts a JOIN products p ON p.id = a.product_id
@@ -542,7 +552,7 @@ placeRoutes.get('/foundry/decisions', async (c: any) => {
   const decidedTests = company ? [] : await rows(
     `SELECT e.id, e.what_we_do, e.decision, e.decided_at FROM venture_experiments e
       WHERE e.founder_id = ? AND e.decision IS NOT NULL ORDER BY e.decided_at DESC LIMIT 40`, [founderId]);
-  const waiting = openActs.length + openAdvice.length + openAsks.length;
+  const waiting = company ? openActs.length + openAdvice.length + openAsks.length : (attention === null ? 0 : 1) + queue.length;
   const decidedAll = [
     ...decidedActs.map((a) => ({ at: String(a.revoked_at ?? a.decided_at), what: String(a.summary),
       how: a.revoked_at ? 'taken back' : `${String(a.decision)}${a.consumed_at ? ', done' : ''}`,
@@ -569,7 +579,8 @@ placeRoutes.get('/foundry/decisions', async (c: any) => {
     ${company && String(company.reality) === 'reference' ? html`<p class="quiet"><strong>${String(company.name)} does not exist.</strong> I made it up; nothing decided here is about a real company.</p>` : ''}
     <p class="lede">${waiting === 0 ? 'Nothing is waiting on you.' : `${count(waiting, 'thing')} ${waiting === 1 ? 'waits' : 'wait'} on you.`}
       Everything you decide is kept here, with why I asked.</p>
-    ${waiting > 0 ? html`<div class="know"><h2>Waiting on you</h2>
+    ${state ? html`${standingPermission(state)}${theOneThing(attention)}${waitingList(queue, attention !== null)}` : ''}
+    ${company && waiting > 0 ? html`<div class="know"><h2>Waiting on you</h2>
       ${openActs.map((a) => html`<div class="noticed"><p><strong>${String(a.summary)}</strong></p>
         <p class="quiet">An act, for <a href="/foundry/companies/${String(a.product_id)}">${String(a.name)}</a>. Expires ${day(a.expires_at)}.</p>
         <p class="row"><a class="btn go" href="/foundry/companies/${String(a.product_id)}#decide">Decide</a>
@@ -587,7 +598,7 @@ placeRoutes.get('/foundry/decisions', async (c: any) => {
         at <a href="${d.whereHref}">${d.where}</a>. <a class="why" href="${d.href}">Why I asked</a></li>`)}</ul>`
     : html`<p class="quiet">Nothing yet. When you approve, refuse, agree or bury something, it is kept here.</p>`}
     </div>`;
-  return c.html(page('Decisions', body, company ? 'companies' : 'foundry', frame));
+  return c.html(page('Decisions', body, company ? 'companies' : 'decisions', frame));
 });
 
 // ─── Searching: the one search, its candidates, and what was buried ─────────
