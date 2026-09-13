@@ -384,3 +384,75 @@ written to, **19 delivered**, 1 undeliverable (RGC), 1 unresolved, 0 purchases,
 0 opt-outs, no stop condition triggered, run state `noop_expected` — which is
 the correct state for an experiment that has written to everybody it was
 authorised to write to and is now waiting on the world.
+
+---
+
+## Phase 4 — the economic nervous system, designed against what exists
+
+### What the institution already has
+
+A constitutional vocabulary of what the world does with an offer
+(`business_outcome_event_kinds`, immutable): `arrival`, `offer_viewed`,
+`checkout_started`, `payment` (the only `is_payment`), `delivery` (the only
+`is_delivery`), `delivery_failed`, `refund`, `dispute`, `complaint`,
+`declined_value`, `continuation_requested`, `offer_delivered`. Every event
+carries an amount, a currency, a provider, a provider event reference and an
+evidence mode, and arrives through `settlement-intake` from a Stripe webhook —
+so payment is already source-event-backed and idempotent.
+
+Obligations exist as `experiment_fulfilments`: `owed → sent → delivered`, with
+`failed` and `refunded`, bound to the payment event that created them by a row
+guard. Spend exists in three places: `asset_money_spent` (per act, per tool,
+with a provider reference), `cost_events` and `ai_daily_spend` (model and API
+cost), and `probe_costs` (what a test was budgeted).
+
+### What is missing, and is therefore Phase 4
+
+Nothing between a payment and what the owner may actually take out:
+
+1. **Provider fees.** A `payment` of $29 is not $29 of cash. Stripe's fee is
+   on the balance transaction and is never read, so gross is being treated as
+   net at the only point where the difference is the whole margin.
+2. **Cash.** No table says what has actually settled into an account, as
+   distinct from what was charged. `payout` and `balance_transaction` are the
+   source events and neither is ingested.
+3. **Refund exposure.** A delivered brief inside its refund window is a
+   liability, not surplus. Nothing models the window.
+4. **Tax reserve.** Nothing. This must be an estimate that says it is an
+   estimate, with its assumptions and their provenance on the row, and it must
+   never present itself as a filing.
+5. **Contribution.** Revenue minus the variable cost of the thing sold —
+   provider fee, fulfilment cost, the model spend attributable to that unit.
+   The parts exist; nothing joins them to a unit.
+6. **Owner-distributable surplus.** Settled cash, less obligations, less tax
+   reserve, less refund exposure, less a minimum operating reserve, less
+   already-authorised capital. The directive is explicit that this is not a
+   bank balance and not revenue.
+7. **Distributions.** Owner contributions and owner distributions, so basis
+   and what has actually been taken out are both recorded.
+
+### The shape it will take
+
+One **economic event ledger**, append-only, every row carrying its source
+event and provider reference, with a deterministic projection over it — never
+an LLM in the ledger. The projections are read the way `healthOf` is read:
+plain functions over canonical rows, cheap enough for WATCH.
+
+Deliberately **not** double-entry with debits and credits: this is a
+single-owner institution with one Stripe account and no payroll, and the
+rigour that matters here is source-event provenance and reconciliation against
+the provider, not a general accounting engine. If a second account or an
+entity change ever makes that false, the ledger's shape is what changes.
+
+Every economic figure the owner sees will carry its claim quality —
+**measured** (a provider event), **estimated** (a tax reserve), or
+**unavailable** — because the directive forbids hiding uncertainty behind
+precision, and because $0 measured and $0 unknown are different facts.
+
+### What will not be built on speculation
+
+Foundry has taken no money. The ledger, the projections and their tests are
+built now because they must exist before the first payment, not after; but no
+figure will be invented to populate a screen. Until a payment settles, the
+economic surfaces say what is true: nothing has been paid, and here is what
+would be shown when it is.
