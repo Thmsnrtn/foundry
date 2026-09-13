@@ -276,3 +276,36 @@ ahead" — the label that approved nine things in 137 seconds. It now reads
   and `--line` on everything that merely contains information; the "not a
   dossier" prose count excludes the glance and the doors, because state tiles
   and navigation are not prose; the geometry test serves the stylesheet.
+
+---
+
+## Phase 3 — plan (written before the work, so it can be checked against it)
+
+1. **A consequence for every act.** `what-it-would-do.ts` derives a
+   `Consequence` for a test (`consequenceOfApproving`) and for first contact
+   (`firstContactDecision`) but not for a `proposed_act`. Add
+   `consequenceOfAct(actId)`: effect class from the constitutional rung
+   (observe/prepare/reversible → internal; public → person when the subject
+   names someone, else public; financial → provider; legal → account;
+   destructive → account) and the act's own `subject`; reversibility from the
+   rung with `putting_it_back`; cost from the ladder; `expires` from the act.
+   `cannotSay` where the rung is missing — no button on a blank page.
+2. **The one-thing card renders the consequence.** Route the `spend` and
+   `acquire` kinds through `renderDecision` (effect pill, where it lands, cash,
+   afterwards, does-not-authorise, `labelFor` on the button). Retire the two
+   remaining generic labels ("Approve this one thing").
+3. **System health as state, not prose.** A `healthOf(founderId)` reader over
+   `getFailingInstitutionLoops` + `whatIsBlocked` + workshop health, returning
+   `{ state: ok|degraded|blocked, failed, recovering, dataLoss, customerEffect,
+   moneyAtRisk, ownerAction, lastHealthy }`; the Estate tile and Controls read
+   it; the "stopped" attention card renders its rows.
+4. **Now / Next.** Now = the live experiment's `stateDetail`; Next = the next
+   hand pass (cron `20 * * * *` against `job_health.last_success_at`). One
+   strip under the glance. No invented "results in ~18 hours".
+5. **The desk's local row** carries only what is inside the object underfoot.
+6. **Twelve journeys** from directive §44, as browser tests at 390 and 1280 —
+   at least: healthy/no action; degraded/recovering; one consequential
+   decision waiting; experiment running; experiment blocked; experiment
+   stopped by a condition; owner returns after absence; WATCH → INSPECT →
+   INTERVENE without losing place. Sale/refund/tax journeys wait for Phase 4's
+   substrate rather than being faked.
