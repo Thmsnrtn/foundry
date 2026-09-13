@@ -11,9 +11,8 @@ import { getGrowthSignals } from '../../src/services/founder/intelligence.js';
 // =============================================================================
 // TWO LABELS, ONE NUMBER.
 //
-// The operator's Growth Signals card printed "Activation Rate" and
-// "Trial → Paid" beside each other as two measurements. They were the same
-// expression:
+// `getGrowthSignals` answered "Activation Rate" and "Trial → Paid" as two
+// separate measurements. They were the same expression:
 //
 //     activation_rate:    total > 0 ? Math.round((paid / total) * 100) : 0,
 //     trial_to_paid_rate: total > 0 ? Math.round((paid / total) * 100) : 0,
@@ -148,15 +147,5 @@ describe('acquisition channels report the one fact signup records', () => {
     await addFounder({ referred: true });
     const g = await getGrowthSignals();
     expect(g.top_acquisition_channels).toEqual([{ channel: 'referral', count: 1 }]);
-  });
-});
-
-describe('the page the operator reads', () => {
-  it('prints why a rate is missing instead of printing 0%', () => {
-    const src = readFileSync('src/routes/dashboard/founder-ops.ts', 'utf8');
-    expect(src).toMatch(/no founders yet/);
-    expect(src).toMatch(/nobody has trialed/);
-    expect(stripComments(src, { lineComments: true }),
-      'the badge that was always equal to the one beside it').not.toMatch(/Activation Rate/);
   });
 });

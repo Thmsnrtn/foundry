@@ -13,11 +13,10 @@ import { validateApiKey } from '../../src/services/rbac/permissions.js';
 // =============================================================================
 // The public API becomes reachable — owner decision, on evidence.
 //
-// `/api/v1` and the Fathom/Fireflies transcript webhooks were mounted,
-// authenticated, and unusable by anyone: both `createApiKey` helpers had zero
-// callers, and `POST /api/v1/settings/api-keys` — advertised on the revenue
-// dashboard — did not exist and could not have, because that namespace is
-// behind API-key authentication.
+// `/api/v1` and the transcript webhooks of the day were mounted, authenticated,
+// and unusable by anyone: both `createApiKey` helpers had zero callers, and the
+// settings route that was supposed to mint a key did not exist and could not
+// have, because that namespace is itself behind API-key authentication.
 //
 // Turning it on meant fixing what would otherwise have shipped with it:
 //
@@ -200,23 +199,34 @@ describe('the scope vocabulary is exactly what the routes enforce', () => {
 
   it('every API-key-authenticated door asks what the key is for', async () => {
     const { stripComments } = await import('../../scripts/lib/strip-comments.mjs');
-    // THE BIDIRECTIONAL TEST BELOW SCANS `src/api/v1/` AND THE KEY OPENS MORE
-    // DOORS THAN THAT. `routes/api/webhooks/transcripts.ts` authenticated the
-    // key, read its product, and checked NO SCOPE — so any valid key posted
-    // call transcripts, whatever the founder had ticked, and Foundry analysed
-    // them with a model at the company's cost. A key issued `metrics:write`,
-    // whose label says it "may not read anything else", could do it.
+    const { statSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    // THE BIDIRECTIONAL TEST BELOW SCANS `src/api/v1/` AND A KEY CAN OPEN DOORS
+    // OUTSIDE THAT DIRECTORY. Transcript webhooks once did exactly that: they
+    // authenticated the key, read its product, and checked NO SCOPE — so any
+    // valid key posted call transcripts, whatever the founder had ticked, and
+    // Foundry analysed them with a model at the company's cost. Those webhooks
+    // are gone, and the point of this test is not the two files: it is that a
+    // scan bounded by a directory cannot see the next door someone opens.
     //
-    // The test below asserts no route demands a scope a founder cannot grant.
-    // That is one of the two failures. A door that demands NOTHING is the
-    // other, and it was outside the horizon of a scan bounded by a directory.
-    const doors = [
-      'src/routes/api/webhooks/transcripts.ts',
-      'src/routes/api/webhooks/voice-reply.ts',
-    ];
+    // So the search is for the mechanism rather than for a filename. Anything
+    // that calls `validateApiKey` itself, other than its definition and the v1
+    // middleware that pairs it with `requireScope`, is a door of its own and
+    // must ask what the key is for.
+    const walk = (dir: string): string[] => readdirSync(dir).flatMap((e) => {
+      const p = join(dir, e);
+      return statSync(p).isDirectory() ? walk(p) : p.endsWith('.ts') ? [p] : [];
+    });
+    const SANCTIONED = new Set([
+      'src/services/rbac/permissions.ts',   // where it is defined
+      'src/api/middleware/auth.ts',         // resolves the key; requireScope guards each route
+    ]);
+    const doors = walk('src').filter((f) => !SANCTIONED.has(f)
+      && /validateApiKey\s*\(/.test(
+        stripComments(readFileSync(f, 'utf8'), { lineComments: true })));
+
     for (const door of doors) {
       const source = stripComments(readFileSync(resolve(ROOT, door), 'utf8'), { lineComments: true });
-      expect(source, `${door} authenticates a key`).toMatch(/validateApiKey/);
       const scopes = [...source.matchAll(/scopes\.includes\('([^']+)'\)/g)].map((m) => m[1]);
       expect(scopes.length, `${door} authenticates a key and never asks its scope`)
         .toBeGreaterThan(0);

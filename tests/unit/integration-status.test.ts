@@ -6,8 +6,11 @@
 // schema's status CHECK permits — so every scheduled sync silently no-op'd and
 // agents reasoned over zero telemetry.
 //
-// The invariant, pinned here: the value the connect paths WRITE == the value
+// The invariant, pinned here: the value `connectIntegration` WRITES == the value
 // the adapters CHECK == a value the schema CHECK constraint allows ('active').
+// An OAuth connect route used to be a second writer of that column and is gone
+// with the Commercial Foundry surface; the service is the writer that remains,
+// and the agreement is between it, the adapters and the schema.
 // =============================================================================
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -30,12 +33,10 @@ const SYNC_ADAPTERS = [
 
 let fabricSrc: string;
 let resendSrc: string;
-let oauthRouteSrc: string;
 
 beforeAll(() => {
   fabricSrc = read('services/integration/fabric.ts');
   resendSrc = read('services/integration/resend.ts');
-  oauthRouteSrc = read('routes/dashboard/integrations.ts');
 });
 
 describe('Integration status consistency', () => {
@@ -45,11 +46,6 @@ describe('Integration status consistency', () => {
     // 'connected' fails the schema CHECK constraint — must never be written.
     expect(fabricSrc).not.toMatch(/status\s*=\s*'connected'/);
     expect(fabricSrc).not.toMatch(/VALUES\s*\([^)]*'connected'/s);
-  });
-
-  it("the OAuth connect route writes status = 'active', never 'connected'", () => {
-    expect(oauthRouteSrc).toMatch(/status\s*=\s*'active'/);
-    expect(oauthRouteSrc).not.toMatch(/SET[^;]*status\s*=\s*'connected'/s);
   });
 
   it('every sync adapter guards on the same value the connect paths write', () => {

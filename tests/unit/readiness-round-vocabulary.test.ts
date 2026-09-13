@@ -1,16 +1,16 @@
 // =============================================================================
-// Tests: a closed vocabulary at an open boundary.
+// Tests: a closed vocabulary, and the table that has to cover it.
 //
-// `POST /api/products/:id/fundraise-readiness` takes `target_round` from an
-// API caller's request body. The canonical assessment indexes a multiplier
-// table by that value:
+// The assessment indexes a multiplier table by the round it is asked about:
 //
 //   const mult = ROUND_MULTIPLIERS[targetRound];
 //
 // An unrecognised round yields `undefined`, and every score computed from it
-// becomes NaN — a fundraising readiness report made of nothing, returned with
-// a 200 and persisted. The caller is outside; the vocabulary is closed; the
-// boundary is where that gets checked.
+// becomes NaN — a fundraising readiness report made of nothing. The API route
+// that took `target_round` from a caller's request body, and refused a round
+// this table cannot score, went with the Commercial Foundry surface; the table
+// itself did not, and it still has to cover every round in the vocabulary, or
+// the next caller inherits the NaN.
 //
 // Also proves the orphan is gone: `fundraise_readiness` had a live writer and
 // no reader anywhere, which is the class the owner already decided.
@@ -41,29 +41,16 @@ beforeAll(async () => {
   await runMigrations();
 });
 
-describe('the round vocabulary is checked where it arrives', () => {
-  it('is the same set the assessment can actually score', () => {
-    // The route's list and the multiplier table must not drift apart: a round
-    // the route accepts and the table lacks is the NaN case with extra steps.
+describe('the round vocabulary the assessment can score', () => {
+  it('covers every round the vocabulary names', () => {
+    // A round in the vocabulary that the table lacks is the NaN case waiting
+    // for a caller.
     const svc = readFileSync('src/services/scp/investor/fundraising-readiness.ts', 'utf8');
     const table = svc.slice(svc.indexOf('const ROUND_MULTIPLIERS'));
     for (const r of ROUNDS) {
-      expect(table.slice(0, table.indexOf('};')), `${r} is accepted but has no multiplier`)
+      expect(table.slice(0, table.indexOf('};')), `${r} has no multiplier`)
         .toContain(r);
     }
-    const route = readFileSync('src/routes/api/platform.ts', 'utf8');
-    for (const r of ROUNDS) expect(route).toContain(`'${r}'`);
-  });
-
-  it('rejects a round the assessment cannot score, rather than computing NaN', () => {
-    // The guard is at the boundary and reads as a refusal, not a default. A
-    // silent fallback to 'seed' would answer a question nobody asked.
-    const route = readFileSync('src/routes/api/platform.ts', 'utf8');
-    const handler = route.slice(route.indexOf("'/api/products/:id/fundraise-readiness'"));
-    const body = handler.slice(0, handler.indexOf('});'));
-    expect(body).toMatch(/return c\.json\(\s*\{\s*error:/);
-    expect(body, 'an unrecognised round must not be coerced into a valid one')
-      .toContain('must be one of');
   });
 });
 

@@ -25,8 +25,6 @@ import { getSCPBoardSection } from '../../src/services/investor/board_packet.js'
 //                                     that had never run — the worst score on
 //                                     the page, for the one nobody had asked to
 //                                     do anything.
-//   the agents dashboard              `?? 50`, then drew a bar at 50% width in
-//                                     amber.
 //   the board packet                  `?? 0` for the company, and `?? 0` for an
 //                                     agent under the heading "Top Performing
 //                                     Agents" — "Health: 0", in red, about an
@@ -40,8 +38,10 @@ import { getSCPBoardSection } from '../../src/services/investor/board_packet.js'
 //
 // THE READER WAS RIGHT AND THE PRODUCER COULD NOT REACH IT. `SCPBriefing
 // .health_score` has always been `number | null`, and the briefing renders
-// "N/A". `fleet.ts` has always written `${a.healthScore ?? '—'}`. Both were
-// waiting for a null that could not arrive.
+// "N/A" — it was waiting for a null that could not arrive. Several pages that
+// read the same figure have since gone with Commercial Foundry, which changes
+// nothing about the producer: the null has to be able to leave the agent, the
+// instance and the column, and that is what is checked here.
 //
 // NOT AN AUTHORITY DEFECT, and the distinction is worth keeping.
 // `updateLifecycleState` only PROMOTES on `healthScore >= 75`, so the invented
@@ -244,11 +244,6 @@ describe('the weekly brief can record that it does not know', () => {
       Array<Record<string, unknown>>);
     const health = cols.find((c) => String(c.name) === 'health_score')!;
     expect(Number(health.notnull), 'NOT NULL meant it always had a number').toBe(0);
-  });
-
-  it('and the page says so instead of drawing a bar', () => {
-    expect(readFileSync('src/routes/dashboard/weekly-brief.ts', 'utf8'))
-      .toMatch(/brief\.health_score == null \? 'not scored'/);
   });
 });
 

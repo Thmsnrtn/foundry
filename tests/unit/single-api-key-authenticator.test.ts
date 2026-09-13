@@ -91,7 +91,7 @@ describe('api key authentication', () => {
   });
 
   it('the surfaces behind that credential are the ones we think they are', () => {
-    // Both live consumers, named. If a third appears it should be a visible
+    // Every live consumer, named. If another appears it should be a visible
     // edit here rather than an inherited consequence of importing a helper.
     // Comments are stripped first. A module that MENTIONS the authenticator in
     // prose is not a consumer of it, and counting one as such would make this
@@ -104,10 +104,11 @@ describe('api key authentication', () => {
       .map((f) => f.slice(ROOT.length + 1))
       .filter((f) => f !== 'src/services/rbac/permissions.ts')
       .sort();
+    // The two transcript webhooks that used to be on this list were Commercial
+    // Foundry routes and are gone, which is the list doing its job: a consumer
+    // appearing or disappearing is an edit here, not a silent change.
     expect(consumers).toEqual([
       'src/api/middleware/auth.ts',
-      'src/routes/api/webhooks/transcripts.ts',
-      'src/routes/api/webhooks/voice-reply.ts',
     ]);
   });
 });

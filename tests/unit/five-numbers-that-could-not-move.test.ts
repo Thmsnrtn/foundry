@@ -11,7 +11,7 @@ import { assessComplianceDebt } from '../../src/services/intelligence/regulatory
 import { getMRRIntelligence } from '../../src/services/founder/intelligence.js';
 
 // =============================================================================
-// FIVE NUMBERS THAT COULD NOT MOVE.
+// FIVE NUMBERS THAT COULD NOT MOVE — THE THREE OF THEM THAT ARE STILL HERE.
 //
 //   Value decline    every unreported component read as 0, so the same silence
 //                    was a decline in one line and no problem in the next —
@@ -26,8 +26,11 @@ import { getMRRIntelligence } from '../../src/services/founder/intelligence.js';
 //                    always held and the growth rate could not be negative.
 //   Activation drop  a 0–1 fraction measured against a threshold of ten
 //                    PERCENTAGE POINTS: the stressor could never fire.
-//   The streak card  a lifetime counter with no date predicate anywhere, stated
-//                    as "your agents have been off-target this week".
+//
+// The other two — a lifetime streak counter described as "this week", and a
+// mobile payload reading movement columns as a level — lived on Commercial
+// Foundry routes and went with them. The three above are services, and each is
+// exercised here by calling it rather than by reading it.
 // =============================================================================
 
 const P = 'p_five';
@@ -124,21 +127,5 @@ describe('the source', () => {
       { lineComments: true });
     expect(src).toContain('dropPoints');
     expect(src).not.toMatch(/const drop = inputs\.priorMetrics\.activation_rate/);
-  });
-
-  it('no longer tells a founder a lifetime streak happened this week', () => {
-    const src = stripComments(readFileSync('src/routes/dashboard/index.ts', 'utf8'),
-      { lineComments: true });
-    expect(src).not.toContain('off-target this week');
-    expect(src).toContain('streakDays');
-  });
-
-  it('no longer reads the movement columns for the mobile dashboard', () => {
-    const src = stripComments(readFileSync('src/routes/api/mobile.ts', 'utf8'),
-      { lineComments: true });
-    expect(src).toContain('getMRRDecomposition');
-    // The dashboard payload's own query is gone; what remains is the briefing's
-    // 'New MRR' line, which is labelled as the movement it reads.
-    expect(src).not.toMatch(/SELECT new_mrr_cents, churned_mrr_cents/);
   });
 });

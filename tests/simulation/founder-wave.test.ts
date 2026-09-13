@@ -3,7 +3,18 @@
 //
 // The walkthrough sim proved the SURFACES; this wave proves the LOOP. ~20
 // simulated founders live with the system across a compressed 90 days, driving
-// REAL routes against REAL migrations (model mocked, deterministic):
+// REAL doors against REAL migrations (model mocked, deterministic).
+//
+// THE DOORS CHANGED AND THE LOOP DID NOT. The decision chamber and the
+// strategic-decisions form were Commercial Foundry pages and have been removed.
+// Every stage below that used to press one of those buttons now goes through
+// the door that survived it — `executeLoopTool`, the live MCP transport, which
+// calls the same `runPreMortem`, `runGhostFork`, `resolveDecision` and
+// `recordPremise` those pages called. The Letter is still a route and is still
+// driven as one. What is asserted is unchanged: the LEDGER each stage leaves
+// behind, not the markup it left it through.
+//
+// The stages:
 //
 //   • the Overruler — red-teamed, overrules dissent, telemetry proves the
 //     Red Team right → belief expires, review vindicated, banner shows
@@ -13,8 +24,8 @@
 //   • the Radar-warned founder — churn in the peer danger tail → tap + Letter
 //   • the Trusted founder — 9/10 positive outcomes → graduation proposal
 //   • the Quiet founder — a letter that says "nothing needs you"
-//   • the Adversary — tries to run the loop against a victim's tenant → 404s
-//   • + a background wave of steady founders exercising every page
+//   • the Adversary — tries to run the loop against a victim's tenant → refused
+//   • + a background wave of steady founders driving the loop end to end
 //
 // Every stage asserts its LEDGER, not just its status code.
 // =============================================================================
@@ -62,6 +73,7 @@ vi.mock('../../src/services/ai/client.js', async (importOriginal) => {
 import { Hono } from 'hono';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
+import { executeLoopTool } from '../../src/mcp/loop-tools.js';
 
 // ── Harness: real route modules behind an auth stub (walkthrough pattern) ─────
 let currentFounder: Record<string, unknown> | null = null;
@@ -130,12 +142,22 @@ function actAs(f: { founder: Record<string, unknown>; pid: string }): void {
   currentProductId = f.pid;
 }
 
+/** The loop, through the transport that still carries it. `ctx` is what an API
+ *  key resolves to: the company it is scoped for, and the person who issued it.
+ *  Every tool re-checks both — which is why the Adversary stage can use the
+ *  same helper to prove the seal. */
+async function loop(
+  tool: string, args: Record<string, unknown>, f: { fid: string; pid: string },
+): Promise<string> {
+  requests++;
+  const res = await executeLoopTool(tool, args, { productId: f.pid, founderId: f.fid });
+  return res.content[0]?.text ?? '';
+}
+
 beforeAll(async () => {
   await runMigrations();
   await query('PRAGMA foreign_keys=OFF', []);
 
-  const { decisionRoutes } = await import('../../src/routes/dashboard/decisions.js');
-  const { agentsDecisions } = await import('../../src/routes/dashboard/agents-decisions.js');
   const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
 
   app = new Hono();
@@ -152,37 +174,33 @@ beforeAll(async () => {
     }
     await next();
   });
-  app.route('/', decisionRoutes);
-  app.route('/', agentsDecisions);
   app.route('/', letterRoutes);
 });
 
 // ─── The wave ─────────────────────────────────────────────────────────────────
 
 describe('the Overruler — dissent, overruled, vindicated', () => {
-  it('lives the full contest→commit→observe→learn arc through real routes', async () => {
+  it('lives the full contest→commit→observe→learn arc through real doors', async () => {
     const f = await founderWith('Overruler', { snapshots: [10000, 10600, 11200, 11900] });
     actAs(f);
     const d = await decision(f.pid, 'Raise Solo price to $99');
 
-    // Summon the Red Team via the real route.
-    const rt = await hit('POST', `/decisions/${d}/redteam`);
-    expect([302, 303]).toContain(rt.status);
+    // Summon the Red Team through the live door.
+    const rt = await loop('foundry_red_team', { decision_id: d }, f);
     const review = await query('SELECT verdict FROM red_team_reviews WHERE decision_id = ?', [d]);
     expect((review.rows[0] as Record<string, unknown>).verdict).toBe('do_not_proceed');
 
-    // The chamber renders the dissent.
-    const chamber = await hit('GET', `/decisions/${d}`);
-    expect(chamber.status).toBe(200);
-    const chamberHtml = await chamber.text();
-    expect(chamberHtml).toContain('verdict: do not proceed'); // fact, not label (labels vary by fluency)
-    expect(chamberHtml).toContain('Churn breaches 8%');
+    // And the dissent comes back to the caller, not only to the table — the
+    // founder has to be able to READ what was argued before overruling it.
+    expect(rt).toContain('do_not_proceed');
+    expect(rt).toContain('Churn breaches 8%');
 
     // Overrule: resolve past the dissent (gate-3 needs reasoning).
-    const res = await hit('POST', `/decisions/${d}/resolve`,
-      { chosen_option: 'Raise price', resolution_reasoning: 'Margin matters more' }, true);
-    expect(res.status).toBe(200);
-    await new Promise((r) => setTimeout(r, 50)); // fire-and-forget premise write
+    const res = await loop('foundry_resolve_decision',
+      { decision_id: d, chosen_option: 'Raise price', reasoning: 'Margin matters more' }, f);
+    expect(res).not.toMatch(/^Error/);
+    expect(res, 'the overruling says what it now owes')
+      .toContain('monitored premises');
 
     const premise = await query(
       "SELECT * FROM decision_premises WHERE decision_id = ? AND origin = 'red_team'", [d]);
@@ -204,22 +222,25 @@ describe('the Overruler — dissent, overruled, vindicated', () => {
 });
 
 describe('the Forker — reality forked, idempotently', () => {
-  it('gets ordered scenario bands from its own history via the real route', async () => {
+  it('gets ordered scenario bands from its own history via the real door', async () => {
     const f = await founderWith('Forker', { snapshots: [20000, 21000, 22100, 23200, 24400] });
     actAs(f);
     const d = await decision(f.pid, 'Launch annual plans');
-    expect([302, 303]).toContain((await hit('POST', `/decisions/${d}/ghost`)).status);
+    const forked = await loop('foundry_fork_reality', { decision_id: d }, f);
+    expect(forked).not.toMatch(/^Abstained/);
 
     const rows = await query('SELECT option_label, base_case FROM scenario_models WHERE decision_id = ?', [d]);
     expect(rows.rows.length).toBe(3); // ghost + 2 options
     expect((rows.rows as Array<Record<string, string>>).some((r) => r.option_label.includes('Ghost'))).toBe(true);
 
-    await hit('POST', `/decisions/${d}/ghost`); // second fork must not duplicate
+    await loop('foundry_fork_reality', { decision_id: d }, f); // second fork must not duplicate
     const again = await query('SELECT COUNT(*) AS n FROM scenario_models WHERE decision_id = ?', [d]);
     expect(Number((again.rows[0] as Record<string, unknown>).n)).toBe(3);
 
-    const chamber = await hit('GET', `/decisions/${d}`);
-    expect((await chamber.text())).toContain('Ghost (do nothing)'); // the fork data itself
+    // And the second call hands back what was already stored rather than
+    // silence — the fork data itself, including the do-nothing baseline.
+    const second = await loop('foundry_fork_reality', { decision_id: d }, f);
+    expect(second).toContain('Ghost (do nothing)');
   });
 });
 
@@ -228,7 +249,9 @@ describe('the Thin founder — honesty under thin data', () => {
     const f = await founderWith('Thin', { snapshots: [5000, 5200] });
     actAs(f);
     const d = await decision(f.pid, 'Big bet on outbound');
-    await hit('POST', `/decisions/${d}/ghost`);
+    const answer = await loop('foundry_fork_reality', { decision_id: d }, f);
+    expect(answer, 'it says it abstained rather than inventing a band')
+      .toMatch(/^Abstained/);
     const rows = await query('SELECT COUNT(*) AS n FROM scenario_models WHERE decision_id = ?', [d]);
     expect(Number((rows.rows[0] as Record<string, unknown>).n)).toBe(0); // abstained
 
@@ -318,32 +341,42 @@ describe('the Adversary — the loop is tenant-sealed', () => {
     const victimDecision = await decision(victim.pid, 'Victim decision');
     const attacker = await founderWith('Attacker');
     actAs(attacker);
-    expect((await hit('POST', `/decisions/${victimDecision}/redteam`)).status).toBe(404);
-    expect((await hit('POST', `/decisions/${victimDecision}/ghost`)).status).toBe(404);
-    expect((await hit('POST', `/decisions/${victimDecision}/resolve`,
-      { chosen_option: 'hijack', resolution_reasoning: 'x' }, true)).status).toBe(404);
+    // A key scoped for the attacker's company, pointed at the victim's decision
+    // id. Every tool resolves the decision WITHIN its own company first, so the
+    // id buys nothing.
+    expect(await loop('foundry_red_team', { decision_id: victimDecision }, attacker))
+      .toMatch(/not found in this company/);
+    expect(await loop('foundry_fork_reality', { decision_id: victimDecision }, attacker))
+      .toMatch(/^Abstained/);
+    expect(await loop('foundry_resolve_decision',
+      { decision_id: victimDecision, chosen_option: 'hijack', reasoning: 'x' }, attacker))
+      .toMatch(/not found in this company/);
+
     const untouched = await query('SELECT status FROM decisions WHERE id = ?', [victimDecision]);
     expect((untouched.rows[0] as Record<string, unknown>).status).toBe('pending');
+    // Nothing of the victim's was written on the way past, either.
+    expect((await query('SELECT id FROM red_team_reviews WHERE decision_id = ?', [victimDecision])).rows)
+      .toHaveLength(0);
+    expect((await query('SELECT id FROM scenario_models WHERE decision_id = ?', [victimDecision])).rows)
+      .toHaveLength(0);
   });
 });
 
-describe('the background wave — a dozen steady founders exercise every surface', () => {
-  it('all pages render, all premises record, zero 5xx across the wave', async () => {
+describe('the background wave — a dozen steady founders drive the loop', () => {
+  it('the Letter renders, all premises record, nothing fails across the wave', async () => {
     for (let i = 0; i < 12; i++) {
       const f = await founderWith(`Steady${i}`, { snapshots: [8000 + i * 500, 8400 + i * 500, 8900 + i * 500, 9500 + i * 500] });
       actAs(f);
-      // Record a strategic decision WITH a belief through the real form.
-      const create = await hit('POST', '/agents/decisions', {
-        title: `Bet ${i}`, decision_made: 'Chose the narrow ICP',
+      // Record a strategic decision WITH a belief through the live door.
+      const create = await loop('foundry_record_decision', {
+        title: `Bet ${i}`, decision: 'Chose the narrow ICP',
         rationale: 'Focus', premise: 'Churn stays under 6%',
-        premise_metric: 'churn_rate', premise_comparator: '<', premise_threshold: '0.06',
-      });
-      expect([302, 303]).toContain(create.status);
+        premise_metric: 'churn_rate', premise_comparator: '<', premise_threshold: 0.06,
+      }, f);
+      expect(create, `Steady${i} recorded no decision`).toContain('Premise recorded');
 
-      for (const path of ['/agents/decisions', '/letter']) {
-        const res = await hit('GET', path);
-        expect(res.status, `${path} for Steady${i}`).toBe(200);
-      }
+      const res = await hit('GET', '/letter');
+      expect(res.status, `/letter for Steady${i}`).toBe(200);
     }
     const premises = await query(
       "SELECT COUNT(*) AS n FROM decision_premises WHERE premise = 'Churn stays under 6%'", []);

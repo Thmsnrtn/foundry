@@ -6,11 +6,13 @@ import { ALL_AGENTS, isLoadableAgentName } from '../../src/services/scp/types.js
 // =============================================================================
 // The dynamic-loader blind spot.
 //
-// The static reachability gate resolves literal relative imports. Three places
+// The static reachability gate resolves literal relative imports. Two places
 // load an agent with `` import(`.../${name}.js`) ``, so that gate sees the whole
 // agent family as unreachable while it is live — an orphan report built on it
 // confidently named ~160KB of running code as dead, and deleting it would have
-// been a production outage.
+// been a production outage. (There were three; the roster route that was the
+// third went with the Commercial Foundry surface, which is exactly the kind of
+// change that must move the evidence below rather than be absorbed silently.)
 //
 // The fix is not to exempt the directory. It is to make the ACTUAL architecture
 // checkable: names come from a closed vocabulary, and the vocabulary and the
@@ -53,25 +55,27 @@ const CLASSIFICATION: Record<string, { status: string; why: string }> = {
   // by an event. `discovery-is-not-reachable-from-integrations.test.ts` asserts
   // that, derived from the map rather than listed here.
   //
-  // The conclusion survives on OTHER evidence: the roster route's
-  // `POST /agents/:name/run` and `agent_instances` scheduling both load any
-  // vocabulary name on demand, and that is a live path a founder can take.
-  // Every one of these twelve is reachable the same way, which is why they now
-  // carry the same reason — an inventory whose entries differ only in a
-  // justification that turned out to be false was telling itself a story about
-  // an event pipeline it does not have.
-  atlas: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
-  beacon: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
-  compass: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
-  forge: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
-  harbor: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
-  ledger: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
-  oracle: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
-  prism: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
-  sentinel: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
-  scribe: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
-  shield: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
-  crucible: { status: 'production-reachable', why: 'roster route POST /agents/:name/run and agent_instances scheduling both load it by name; no event selects it' },
+  // The conclusion survives on OTHER evidence: `agent_instances` scheduling
+  // loads any vocabulary name on demand through `scp/instance.ts`, which the
+  // nightly scheduler in `jobs/index.ts` calls. That was one of two such paths
+  // — the roster route was the other, and it is gone — so the remaining reason
+  // is narrower than it was and is written out as such. Every one of these
+  // twelve is reachable the same way, which is why they carry the same reason:
+  // an inventory whose entries differ only in a justification that turned out to
+  // be false was telling itself a story about an event pipeline it does not
+  // have.
+  atlas: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
+  beacon: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
+  compass: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
+  forge: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
+  harbor: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
+  ledger: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
+  oracle: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
+  prism: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
+  sentinel: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
+  scribe: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
+  shield: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
+  crucible: { status: 'production-reachable', why: 'agent_instances scheduling loads it by name via scp/instance.ts, called from the nightly scheduler; no event and no route selects it' },
 
   // Not a loadable agent — the shared base class every agent extends. It is
   // reached by ordinary static import from the agents themselves.
@@ -81,8 +85,7 @@ const CLASSIFICATION: Record<string, { status: string; why: string }> = {
   // "NOT a BaseAgent subclass — runs on demand during debate orchestration."
   // They export standalone functions with no `run(productId)`, so no loader
   // could instantiate them even if the vocabulary named them — and the debate
-  // orchestrator reaches both by ordinary static import, from the scheduler and
-  // from a dashboard route.
+  // orchestrator reaches both by ordinary static import, from the scheduler.
   //
   // They were first classified `evidence-insufficient` on the reasoning "outside
   // ALL_AGENTS, so no loader can select it". That was true and irrelevant: it
@@ -90,8 +93,8 @@ const CLASSIFICATION: Record<string, { status: string; why: string }> = {
   // the same category error the orphan report made when it named live
   // dynamically-loaded code as dead. Being in `agents/` is not what makes
   // something an agent.
-  challenger: { status: 'production-reachable', why: 'standalone debate function, statically imported by debate/orchestrator.ts which the scheduler and a dashboard route both call' },
-  synthesizer: { status: 'production-reachable', why: 'standalone debate function, statically imported by debate/orchestrator.ts which the scheduler and a dashboard route both call' },
+  challenger: { status: 'production-reachable', why: 'standalone debate function, statically imported by debate/orchestrator.ts, which the nightly scheduler in jobs/index.ts calls' },
+  synthesizer: { status: 'production-reachable', why: 'standalone debate function, statically imported by debate/orchestrator.ts, which the nightly scheduler in jobs/index.ts calls' },
 };
 
 const VALID_STATUSES = [
@@ -165,7 +168,6 @@ describe('dynamic agent reachability', () => {
     const loaders = [
       'src/services/scp/events/dispatcher.ts',
       'src/services/scp/instance.ts',
-      'src/routes/dashboard/agents.ts',
     ];
     for (const rel of loaders) {
       const source = readFileSync(resolve(__dirname, '../..', rel), 'utf8');
@@ -210,7 +212,6 @@ describe('dynamic agent reachability', () => {
       .filter((f) => /import\s*\(\s*`[^`]*agents\/\$\{/.test(readFileSync(f, 'utf8')))
       .map((f) => f.replace(resolve(__dirname, '../..') + '/', ''));
     expect(sites.sort()).toEqual([
-      'src/routes/dashboard/agents.ts',
       'src/services/scp/events/dispatcher.ts',
       'src/services/scp/instance.ts',
     ]);

@@ -27,13 +27,15 @@ import { getSyncHealth } from '../../src/services/integrations/health.js';
 // nights in five showed a green badge, a recent sync time and no error at all.
 // Every one of those attempts was in `integration_sync_log`, which nothing read.
 //
-// And the page's whole distinction between working and broken was `badge-green`
-// against `badge-red` — two class names that were not defined in any
-// stylesheet, so both rendered as the same grey pill.
-//
 // Now: errored integrations are retried to a stated limit; crossing that limit
-// is a decision, announced once as a signal; the page shows the trailing week of
-// attempts and says plainly when Foundry has given up.
+// is a decision, announced once through the interruption ceiling; and the
+// trailing week of attempts is readable from `integration_sync_log` through
+// `getSyncHealth`, which returns no entry at all rather than a clean bill of
+// health for an integration nothing has tried.
+//
+// The Integrations page that displayed all this was a Commercial Foundry route
+// and is gone. Every guarantee below is in the service, which is where the
+// retrying, the giving up and the counting actually happen.
 //
 // ONE TABLE, TWO WRITERS. `sync.ts` writes `status` and `error_message`;
 // `framework.ts` writes `errors` and leaves `status` NULL. Migration 056
@@ -43,8 +45,6 @@ import { getSyncHealth } from '../../src/services/integrations/health.js';
 // =============================================================================
 
 const SYNC = readFileSync('src/services/integrations/sync.ts', 'utf8');
-const PAGE = readFileSync('src/routes/dashboard/integrations.ts', 'utf8');
-const CSS = readFileSync('src/public/styles.css', 'utf8');
 
 beforeAll(async () => {
   await runMigrations();
@@ -178,29 +178,10 @@ describe('the trailing week of attempts is readable', () => {
   });
 
   it('returns no entry rather than a clean bill of health', async () => {
+    // Absent, not zeroed: a reader has to be able to tell "nothing has been
+    // tried" from "everything succeeded", and a row of zeroes cannot.
     const id = await integration('active', 0);
     expect((await getSyncHealth('p_sync')).get(id)).toBeUndefined();
-    expect(PAGE, 'and the page has to say that, not stay silent')
-      .toMatch(/No sync has been attempted in the last/);
-  });
-});
-
-describe('the page shows it', () => {
-  it('reads the history', () => {
-    expect(PAGE).toMatch(/getSyncHealth/);
-    expect(PAGE).toMatch(/syncs failed in the last/);
-  });
-
-  it('distinguishes "failing" from "no longer being tried"', () => {
-    expect(PAGE).toMatch(/const givenUp = /);
-    expect(PAGE).toMatch(/Foundry has stopped syncing this/);
-  });
-
-  it('has the colours its badges have always asked for', () => {
-    for (const cls of ['.badge-green', '.badge-red', '.badge-gray']) {
-      expect(CSS, `${cls} was named on the page and defined nowhere`).toContain(cls);
-    }
-    expect(CSS).toContain('.integration-sync-history-warn');
   });
 });
 

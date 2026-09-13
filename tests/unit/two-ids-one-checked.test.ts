@@ -2,8 +2,6 @@ process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { runSync } from '../../src/services/integrations/framework.js';
@@ -11,10 +9,10 @@ import { runSync } from '../../src/services/integrations/framework.js';
 // =============================================================================
 // TWO IDS, ONE CHECKED.
 //
-// `POST /api/products/:id/integrations/:integrationId/sync` verified that the
-// founder owned `:id` — and then passed `:integrationId` to `runSync`, which
-// resolved the integration by id alone and synced whatever product and
-// credentials that row named.
+// A sync route verified that the founder owned the product id in its path — and
+// then passed the integration id straight to `runSync`, which resolved the
+// integration by id alone and synced whatever product and credentials that row
+// named.
 //
 // So the checked identifier decided nothing and the unchecked one decided
 // everything. Any founder with a product of their own could name another
@@ -25,7 +23,10 @@ import { runSync } from '../../src/services/integrations/framework.js';
 //
 // AN INTEGRATION ID IS NOT A CAPABILITY. The ownership rule lived in the route
 // while the row it governed was fetched two files away, so the scope now
-// travels with the call and is applied to the query that loads the row.
+// travels with the call and is applied to the query that loads the row. That
+// route has since gone with the Commercial Foundry surface, and this is exactly
+// why the check belongs in `runSync`: a caller cannot be relied on to exist, let
+// alone to remember.
 // =============================================================================
 
 const MINE = 'p_mine';
@@ -109,23 +110,5 @@ describe('the owner of the integration', () => {
     watchTheWire();
     const result = await runSync('int_theirs', 'scheduled');
     expect(result).not.toBeNull();
-  });
-});
-
-describe('the route', () => {
-  const src = stripComments(readFileSync('src/routes/api/supercharge.ts', 'utf8'), { lineComments: true });
-
-  it('passes the product id it checked, not the one it did not', () => {
-    // Comments stripped: the paragraph above the call names both identifiers,
-    // and a test that greps source must not read its own explanation as code.
-    expect(src).toContain("runSync(integrationId, { onBehalfOfProduct: productId })");
-    expect(src).not.toMatch(/runSync\(integrationId\)/);
-  });
-
-  it('checks ownership before the sync, not after', () => {
-    const check = src.indexOf('getProductByOwner(productId, founder.id)', src.indexOf("integrations/:integrationId/sync"));
-    const call = src.indexOf('runSync(integrationId', check);
-    expect(check).toBeGreaterThan(-1);
-    expect(call).toBeGreaterThan(check);
   });
 });

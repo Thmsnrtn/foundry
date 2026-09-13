@@ -1,2 +1,1 @@
 GET /case-studies/:id
-POST /api/webhooks/stripe/:productId

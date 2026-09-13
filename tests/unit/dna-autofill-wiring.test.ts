@@ -4,6 +4,10 @@
 // The extractor (extractDNAFromAssets) was built in Wave 2 but never wired to
 // anything. Phase 1.6 gathers assets, drafts, and persists — and must never
 // overwrite a founder's own words.
+//
+// The "Draft with AI" button that offered this on demand was a Commercial
+// Foundry page and is gone; onboarding still calls the auto-fill, so the wiring
+// checked here is the one that still runs.
 // =============================================================================
 
 import { describe, it, expect } from 'vitest';
@@ -39,15 +43,9 @@ describe('pickEmptyFieldUpdates (clobber-guard)', () => {
   });
 });
 
-describe('DNA auto-fill is wired into onboarding and the DNA page', () => {
+describe('DNA auto-fill is wired into onboarding', () => {
   it('onboarding auto-drafts DNA after the audit', () => {
     expect(read('routes/dashboard/onboarding.ts')).toMatch(/autofillProductDNA\(/);
-  });
-
-  it('the DNA page exposes a "Draft with AI" endpoint and button', () => {
-    const products = read('routes/dashboard/products.ts');
-    expect(products).toMatch(/dna\/autodraft/);
-    expect(products).toMatch(/Draft with AI/);
   });
 
   it('external assets are run through the prompt shield before the model', () => {

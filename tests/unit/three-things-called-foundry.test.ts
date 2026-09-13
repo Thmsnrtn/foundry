@@ -38,10 +38,11 @@ describe('the classification', () => {
   });
 
   it('classifies by longest prefix, so one file can differ from its folder', () => {
-    // How `foundry-shell.ts` is the private product while fifty pages beside
-    // it are not.
+    // How `foundry-shell.ts` is the private product while the pages beside it
+    // in the same folder are not — `onboarding.ts` is commercial in character
+    // and sits in that same directory.
     expect(layerOf('src/routes/dashboard/foundry-shell.ts')).toBe('private');
-    expect(layerOf('src/routes/dashboard/agents-okr.ts')).toBe('commercial');
+    expect(layerOf('src/routes/dashboard/onboarding.ts')).toBe('commercial');
     // SURFACES, NOT CAPABILITIES. Diagnosing a company's situation is something
     // any Foundry would want; only the shell that renders it is this owner's.
     // The gate taught this by refusing a kernel service that needed the

@@ -17,10 +17,11 @@ import { getChurnIntelligence } from '../../src/services/founder/intelligence.js
 // the rate, whose denominator was the uncapped count of active companies. So
 // was `rescue_opportunities`.
 //
-// The headline card on the operator's page therefore read "At Risk: 20" for
-// any portfolio with twenty or more at-risk companies, and the rate it sat
-// beside fell as the real problem grew. The cap that existed so a table would
-// fit had become the measurement.
+// So the function reported "at risk: 20" for any portfolio with twenty or more
+// at-risk companies, and the rate beside it fell as the real problem grew. The
+// cap that existed so a table would fit had become the measurement — which is
+// why the count and the list are now two different things in the answer itself,
+// rather than being told apart by whoever renders them.
 //
 // Two more claims in the same shape:
 //
@@ -136,13 +137,5 @@ describe('churn itself', () => {
     const churn = await getChurnIntelligence();
     expect(churn.churned_this_month,
       'a person exercising a deletion right is not a customer leaving').toBeNull();
-  });
-});
-
-describe('the page the operator reads', () => {
-  it('says the table is capped when it is', () => {
-    const src = readFileSync('src/routes/dashboard/founder-ops.ts', 'utf8');
-    expect(src).toMatch(/this table is capped, the count above is not/);
-    expect(src).toMatch(/churn\.at_risk_count > churn\.at_risk_products\.length/);
   });
 });

@@ -5,9 +5,9 @@
 //
 //   isFounder(founder.email)  →  the platform-operator surface
 //
-// and that surface performs deliberately unscoped writes across every tenant
-// (`/api/founder/intelligence/decisions-inbox/:id/approve` updates a decision
-// row by id with no product scope, by design — it is cross-tenant triage).
+// and that surface has historically carried deliberately unscoped, cross-tenant
+// writes — operator triage that updates a row by id with no product scope. What
+// hangs on this column is therefore an authority, not a label.
 //
 // Both provisioning paths wrote that column from `emailAddresses[0]` — the
 // first entry in an array, which is neither necessarily the PRIMARY address
@@ -116,17 +116,5 @@ describe('the stripe webhook service checks the company itself', () => {
     const body = fn.slice(0, fn.indexOf('\n}'));
     expect(body).toMatch(/SELECT id FROM products WHERE id = \?/);
     expect(body).toMatch(/throw new Error\(`stripe_webhook: unknown product/);
-  });
-});
-
-describe('acting on a priority action does not depend on row order', () => {
-  it('scopes by ownership across all the founder\'s companies', () => {
-    // It resolved `products.rows[0]` — one arbitrary company — so a founder
-    // with more than one could only act on whichever the database returned
-    // first, and every other action silently did nothing and returned 200.
-    const src = readFileSync('src/routes/api/priority.ts', 'utf8');
-    const guards = src.match(/JOIN products p ON p\.id = a\.product_id/g) ?? [];
-    expect(guards.length, 'both dismiss and complete must scope by owner')
-      .toBeGreaterThanOrEqual(2);
   });
 });

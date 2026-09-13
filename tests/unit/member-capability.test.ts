@@ -138,16 +138,21 @@ describe('membership and permission stay different questions', () => {
     expect(await memberMay(P, OBSERVER, 'can_vote_decisions')).toBe(false);
   });
 
-  it('every route that admits a team member names the capability it needs', () => {
-    // The two reachable surfaces for a team member. A route added later that
-    // reaches for `hasProductAccess` to decide whether somebody MAY do
-    // something is the defect coming back.
-    const routes = readFileSync(
-      resolve(__dirname, '../../src/routes/dashboard/team.ts'), 'utf8');
-    const vote = routes.slice(routes.indexOf("post('/api/decisions/:id/vote'"));
-    expect(vote.slice(0, 1200)).toMatch(/memberMay\([^)]*'can_vote_decisions'/);
-    const read = routes.slice(routes.indexOf("get('/api/decisions/:id/votes'"));
-    expect(read.slice(0, 1200)).toMatch(/memberMay\([^)]*'can_view_decisions'/);
+  it('the guard a route reaches for asks the capability, not the membership', () => {
+    // The decision routes that first demonstrated this were Commercial Foundry
+    // pages and are gone. The guard they went through is not: a route added
+    // later that reaches for `hasProductAccess` to decide whether somebody MAY
+    // do something is the defect coming back, and `requireCompanyCapability` is
+    // what it should reach for instead.
+    const rbac = readFileSync(
+      resolve(__dirname, '../../src/middleware/rbac.ts'), 'utf8');
+    const guard = rbac.slice(rbac.indexOf('export function requireCompanyCapability'));
+    const body = guard.slice(0, 1200);
+    expect(body, 'the guard takes the capability as its argument')
+      .toMatch(/requireCompanyCapability\(capability: MemberCapability\)/);
+    expect(body).toMatch(/memberMay\(productId, userId, capability\)/);
+    expect(body, 'membership is not the question this guard asks')
+      .not.toMatch(/hasProductAccess/);
   });
 });
 

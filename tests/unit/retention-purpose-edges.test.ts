@@ -54,7 +54,10 @@ const PERMITTED_READERS: Record<string, { purpose: string; modules: string[] }> 
   agent_audit_log: {
     purpose: 'compliance evidence only',
     modules: [
-      'routes/dashboard/audit-log.ts',   // the founder reading their own trail
+      // The founder-facing audit-log page was a Commercial Foundry route and is
+      // gone; a page that shows a founder their own trail is compliance
+      // evidence and would be permitted again, but it has to be listed to be
+      // permitted rather than inherit the old entry.
       'services/audit/log.ts',           // the trail itself
       'services/privacy/consent.ts',     // the erasure that writes the evidence
     ],

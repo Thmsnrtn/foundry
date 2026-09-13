@@ -489,3 +489,43 @@ anything at import time; that was checked after the deletion, because it is
 the exact class the gate refuses to baseline and the exact way
 `stripe-gateway.ts` once hid. **Next pass: choose those forty-eight file by
 file.**
+
+### The ratchets, retightened — and what the deletion loosened
+
+Five baselines had to be rewritten because the code they described is gone.
+Four of the five are the honest kind of rewrite and one class is not, so they
+are separated here rather than run through `--write` in one go.
+
+**Tightened, no new debt:**
+
+- `unguarded-route-baseline`: **113 → 20**. Ninety-three routes that had been
+  permitted to go unguarded were commercial and no longer exist. The ratchet
+  is now ninety-three notches tighter and cannot slip back.
+- `tenant-scope-baseline`: **2 → 1**. `POST /api/webhooks/stripe/:productId`
+  lived in the deleted `api/supercharge.ts`. Only `GET /case-studies/:id`
+  remains, with its written reason.
+
+**Loosened, because the deletion orphaned data the deleted surface read.**
+These are recorded rather than buried, because a `--write` that silently adds
+entries is exactly how a ratchet stops being one:
+
+- `unread-tables-baseline`: 2 → 5. Newly written-but-never-read:
+  `alignment_snapshots`, `founder_behavioral_signals`, `geopolitical_signals`.
+- `unreferenced-tables-baseline`: 1 → 2, net. Added `funding_readiness` and
+  `okr_progress_updates`.
+- `write-only-columns-baseline`: 63 → 80. Seventeen columns whose only reader
+  was a deleted page — the call-transcript analysis fields, the business-model
+  seasonality pair, several `processed_at` stamps, `weekly_plans.items_json`.
+
+One of those seventeen was checked by hand rather than trusted, because it
+looked alive: `stripe_webhook_events.processed_at`, on a table the live
+billing path still writes. It is genuinely write-only — the at-most-once check
+reads `event_id` and never the timestamp — so the column records when
+something happened and nothing has ever asked. That is true now and was true
+before; the deletion only removed whatever used to read it.
+
+**These twenty-two tables and columns are the data-side ghosts of the
+commercial product, and they belong with the forty-eight orphaned services in
+one pass.** Dropping a column is a migration against a production database
+holding a live experiment, which is not a thing to do in the same breath as
+deleting a route file.

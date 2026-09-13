@@ -14,12 +14,15 @@ import {
 // =============================================================================
 // Two forms, one question, opposite answers — and the wrong one worked.
 //
-//   /integrations/:type/connect         split the form, encrypting everything
-//                                       that was not one of five named config
-//                                       keys into `credentials_json`.
-//   /agents/integrations/:name/connect  put EVERY submitted field into
-//                                       `config_json` in the clear — api keys,
-//                                       bot tokens and auth tokens included.
+//   one connect form   split the submission, encrypting everything that was not
+//                      one of five named config keys into `credentials_json`.
+//   the other          put EVERY submitted field into `config_json` in the
+//                      clear — api keys, bot tokens and auth tokens included.
+//
+// Both forms were Commercial Foundry routes and are gone. The rule they
+// disagreed about is not: `splitIntegrationFields` is where the question is
+// answered now, and it answers it once, for whatever connects an integration
+// next. That is what is asserted below, by calling it.
 //
 // And all four sync adapters — Slack, Sentry, PostHog, Linear — read their
 // credential from `config_json`. So the path that stored provider secrets in
@@ -146,18 +149,21 @@ describe('no adapter reads a credential from the plaintext blob', () => {
       + offenders.join('\n')).toEqual([]);
   });
 
-  it('is true of both founder-facing connect forms', () => {
-    // Both now route through the same split rather than each deciding.
-    for (const rel of [
-      'src/routes/dashboard/integrations.ts',
-      'src/routes/dashboard/agents-integrations.ts',
-    ]) {
-      const source = readFileSync(resolve(ROOT, rel), 'utf8');
-      expect(source, `${rel} must use the shared split`).toContain('splitIntegrationFields');
-    }
-    // And the old literal list must not come back as a second opinion.
-    expect(readFileSync(resolve(ROOT, 'src/routes/dashboard/integrations.ts'), 'utf8'))
-      .not.toContain("['activation_event', 'active_user_event', 'team_id', 'host', 'account_id']");
+  it('is decided in one place, so no caller can hold a second opinion', () => {
+    // The old defect was two callers each deciding for themselves. The
+    // vocabulary is exported from one module and the literal list must not
+    // reappear anywhere else in src as somebody's private copy.
+    const walk = (dir: string): string[] => readdirSync(dir, { withFileTypes: true })
+      .flatMap((e) => {
+        const p = resolve(dir, e.name);
+        return e.isDirectory() ? walk(p) : p.endsWith('.ts') ? [p] : [];
+      });
+    const LITERAL = "'activation_event', 'active_user_event', 'team_id', 'host', 'account_id'";
+    const copies = walk(resolve(ROOT, 'src'))
+      .filter((f) => readFileSync(f, 'utf8').includes(LITERAL))
+      .map((f) => f.replace(`${ROOT}/`, ''));
+    expect(copies, 'the classification belongs to fabric.ts alone')
+      .toEqual(['src/services/integration/fabric.ts']);
   });
 });
 

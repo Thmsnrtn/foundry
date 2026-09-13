@@ -9,10 +9,10 @@ import { directionOf, DIRECTION_BY_PROVIDER } from '../../src/services/integrati
 // =============================================================================
 // ONE COLUMN MEANING THREE THINGS.
 //
-// `integrations.type` held a PROVIDER KEY from the connect form, a DIRECTION
-// from the fabric and the MCP connect page, and a CATEGORY from the framework
-// path. Every reader had to guess which, and three live defects came out of the
-// guessing — most visibly an outbound MCP connection dragged into the inbound
+// `integrations.type` held a PROVIDER KEY from one connect path, a DIRECTION
+// from the fabric and from the MCP connect page, and a CATEGORY from the
+// framework path. Every reader had to guess which, and three live defects came
+// out of the guessing — most visibly an outbound MCP connection dragged into the inbound
 // sync until Foundry told the founder it had "stopped syncing outbound": a
 // sentence about a direction, announcing that it had given up on something it
 // was never meant to pull from.
@@ -128,7 +128,6 @@ describe('the writers', () => {
     const { stripComments } = await import('../../scripts/lib/strip-comments.mjs');
     for (const f of [
       'src/services/integration/fabric.ts',
-      'src/routes/dashboard/integrations.ts',
       'src/routes/dashboard/connections.ts',
       'src/services/integrations/stripe-sync.ts',
       'src/services/integrations/framework.ts',

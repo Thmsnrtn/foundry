@@ -13,19 +13,21 @@ import { computeMonthlyROI, getROISummary } from '../../src/services/scp/roi/cal
 // =============================================================================
 // A PRODUCT TELLING ITS CUSTOMER IT DELIVERED NOTHING.
 //
-// `/roi` is a mounted, authenticated page headlined "Value Delivered This
-// Month". It reported **$0**, an action rate of **0%** and positive outcomes of
-// **0%** for every company, always — because `recommendation_outcomes` has no
-// writer. `recordRecommendation` and `markActedOn` are exported from
+// `computeMonthlyROI` answers "Value Delivered This Month". It answered **$0**,
+// an action rate of **0%** and positive outcomes of **0%** for every company,
+// always — because `recommendation_outcomes` has no writer.
+// `recordRecommendation` and `markActedOn` are exported from
 // `roi/outcome-tracker.ts` and called from nowhere.
 //
-// A founder reading that concludes Foundry delivered nothing. It is a claim
-// about Foundry's own performance drawn from an absent measurement path, and
-// commercially it is the sharpest version of this defect in the repository.
+// A founder shown that concludes Foundry delivered nothing. It is a claim about
+// Foundry's own performance drawn from an absent measurement path, and
+// commercially it is the sharpest version of this defect in the repository. The
+// page that displayed it has since gone with Commercial Foundry; the figures it
+// displayed are computed here, so this is where the blank has to be a blank.
 //
-// The headline underneath said "Foundry is tracking recommendations — value
-// will appear as outcomes are measured". Nothing was tracking anything, and the
-// sentence promised a measurement that was not coming.
+// The headline the summary carried said "Foundry is tracking recommendations —
+// value will appear as outcomes are measured". Nothing was tracking anything,
+// and the sentence promised a measurement that was not coming.
 //
 // NOT HALF-WIRED, DELIBERATELY. The obvious move is to call
 // `recordRecommendation` from every agent run. That would be worse than doing
@@ -173,13 +175,5 @@ describe('why it is blank rather than half-wired', () => {
       // unmeasured blank — which is the failure this test guards against.
       expect(callers, `${fn} is still uncalled`).toEqual([]);
     }
-  });
-
-  it('says so on the page rather than showing a zero', () => {
-    const src = readFileSync('src/routes/dashboard/roi.ts', 'utf8');
-    expect(src).toMatch(/this is a\s*\n?\s*blank, not a zero/);
-    expect(src).toMatch(/as an assumption rather than a measurement/);
-    expect(stripComments(src, { lineComments: true }),
-      'null must not format as $0').toMatch(/if \(v === null\) return 'not measured'/);
   });
 });
