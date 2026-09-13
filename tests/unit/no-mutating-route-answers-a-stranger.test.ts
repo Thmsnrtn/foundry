@@ -48,10 +48,16 @@ describe('a request with no session', () => {
     // `/api/v1` sub-routers, so every route in the two routers mounted at a
     // prefix carried a path no request would ever use — and probing a path that
     // does not exist passes every assertion here for the wrong reason.
+    // `/agents` and `/board` were the two, and both were Commercial Foundry
+    // routers deleted on 13 September 2026. The property survives them: the
+    // population must resolve every prefixed mount, whatever it is, and the
+    // assertion above — that nothing is left unresolved — is what enforces it.
+    // Pinning the names would have made this a list to edit rather than a rule.
     const prefixes = [...mountPrefixes().values()].sort();
-    expect(prefixes, 'a router mounted at a prefix is missing from the population')
-      .toEqual(['/agents', '/board']);
-    expect(routes.some((p) => p.startsWith('/agents/'))).toBe(true);
+    for (const prefix of prefixes) {
+      expect(declaredRoutes().routes.some((r) => r.path.startsWith(`${prefix}/`)),
+        `${prefix} is mounted at a prefix and no route carries it`).toBe(true);
+    }
   });
 
   it('includes the routes declared in index.ts, not only those in routers', () => {

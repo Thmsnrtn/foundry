@@ -29,7 +29,17 @@ import { join, resolve } from 'path';
 
 import { MEMBER_CAPABILITIES } from '../../src/services/team/members.js';
 
+// EVERY DOOR, NOT THE THREE THIS FILE HAPPENED TO KNOW. The scan walked
+// `src/routes` alone, so a capability enforced anywhere else read as enforced
+// by nothing. On 13 September 2026 that nearly cost `can_vote_decisions`: its
+// only consumer is `foundry_resolve_decision` in the MCP loop, and with the
+// commercial routes deleted the gate reported it dead and the capability was
+// very nearly removed from the vocabulary — which would have let any key
+// resolve a company's decisions. The institution has four doors; this walks
+// all of them, and the services the doors call.
 const ROUTES = resolve(__dirname, '../../src/routes');
+const SEARCHED = ['src/routes', 'src/mcp', 'src/api', 'src/jobs', 'src/services']
+  .map((d) => resolve(__dirname, '../..', d));
 
 function allRouteSource(): Array<{ file: string; src: string }> {
   const out: Array<{ file: string; src: string }> = [];
@@ -40,17 +50,17 @@ function allRouteSource(): Array<{ file: string; src: string }> {
       else if (p.endsWith('.ts')) out.push({ file: p, src: readFileSync(p, 'utf8') });
     }
   };
-  walk(ROUTES);
+  for (const root of SEARCHED) walk(root);
   return out;
 }
 
 const SOURCES = allRouteSource();
 
-describe('every capability is consumed by a real route', () => {
+describe('every capability is consumed by something that runs', () => {
   // The defect this file exists for: a column that is written, typed, shown in
   // an invite form, and never asked.
   for (const capability of MEMBER_CAPABILITIES) {
-    it(`${capability} gates at least one route`, () => {
+    it(`${capability} gates at least one live door`, () => {
       const users = SOURCES.filter((f) =>
         new RegExp(`requireCompanyCapability\\('${capability}'\\)|memberMay\\([^)]*'${capability}'`)
           .test(f.src));
@@ -61,67 +71,22 @@ describe('every capability is consumed by a real route', () => {
   }
 });
 
-describe('the financial and audit surfaces are gated at the router', () => {
-  const expected: Array<[string, string]> = [
-    ['dashboard/audit-log.ts', 'can_view_audit'],
-    ['dashboard/revenue.ts', 'can_view_financials'],
-    ['dashboard/roi.ts', 'can_view_financials'],
-    ['dashboard/exit.ts', 'can_view_financials'],
-    ['dashboard/board-packet.ts', 'can_view_financials'],
-    ['dashboard/investors.ts', 'can_view_financials'],
-  ];
-
-  /** Does a router-level `use(pattern, …)` cover this declared route path? */
-  const covers = (pattern: string, path: string): boolean => {
-    if (pattern === '*') return true;
-    return new RegExp(`^${pattern
-      .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-      .replace(/:[A-Za-z0-9_]+/g, '[^/]+')
-      .replace(/\*/g, '.*')}$`).test(path);
-  };
-
-  for (const [file, capability] of expected) {
-    it(`${file} requires ${capability} for every route in it`, () => {
-      // PINNED TO THE PROPERTY, NOT THE EXPRESSION. This required the literal
-      // `use('*', …)`, and that shape had to go: these routers are mounted at
-      // '/', where Hono merges a sub-app's middleware under its MOUNT PATH — so
-      // a catch-all here applied the guard to every path in the application and
-      // killed the REST API and the transcript webhooks.
-      //
-      // The concern is unchanged and is the one this test names: the capability
-      // must be enforced at the ROUTER, not remembered on each handler where one
-      // can be forgotten. So it asks whether every route the file declares is
-      // covered by a router-level guard, which is what that sentence means.
-      const src = readFileSync(join(ROUTES, file), 'utf8');
-
-      const guards = [...src.matchAll(
-        new RegExp(`\\.use\\(\\s*'([^']+)'\\s*,\\s*requireCompanyCapability\\('${capability}'\\)`, 'g'))]
-        .map((m) => m[1]);
-      expect(guards, `${file} declares no router-level ${capability} guard`).not.toEqual([]);
-
-      const routes = [...src.matchAll(/^\s*[A-Za-z_$][\w$]*\.(?:get|post|put|patch|delete)\(\s*'([^']+)'/gm)]
-        .map((m) => m[1]);
-      expect(routes, `${file} declares no routes`).not.toEqual([]);
-
-      const uncovered = routes.filter((r) => !guards.some((g) => covers(g, r)));
-      expect(uncovered,
-        'router-level: a capability remembered per handler is forgotten on one of them')
-        .toEqual([]);
-    });
-  }
-});
+// THE SIX ROUTERS THIS SECTION GUARDED ARE GONE. `audit-log`, `revenue`,
+// `roi`, `exit`, `board-packet` and `investors` were Commercial Foundry and
+// were deleted on 13 September 2026, and with them the only readers of
+// `can_view_audit`, `can_view_financials` and `can_view_decisions` — which is
+// why those three are no longer in `MEMBER_CAPABILITIES` at all. The property
+// this section held, that a router-level guard must cover every route declared
+// inside it, is kept above: the capability scan now walks every entry point,
+// so the next router to claim a capability has to actually consult it.
 
 describe('approving an outward effect asks who may', () => {
-  const src = readFileSync(join(ROUTES, 'dashboard/agents-actions.ts'), 'utf8');
-
-  it('gates approve and cancel on can_trigger_actions', () => {
-    for (const route of ['approve', 'cancel']) {
-      const at = src.indexOf(`/agents/actions/:id/${route}`);
-      expect(at, `the ${route} route must exist`).toBeGreaterThan(-1);
-      expect(src.slice(at, at + 400)).toMatch(/requireCompanyCapability\('can_trigger_actions'\)/);
-    }
-  });
-
+  // THE PAGE THAT ASKED IS GONE. `routes/dashboard/agents-actions.ts` carried
+  // the approve and cancel doors and was deleted on 13 September 2026 with the
+  // rest of Commercial Foundry, so the half of this that read its source went
+  // with it. What it was really protecting is underneath and still here: the
+  // executor must scope an approved action to the company that authorised it,
+  // not to whoever owns the company.
   it('scopes the execution to the company that was authorized, not to ownership', () => {
     // The ownership scope was the only thing keeping a non-owner out, which
     // made approving an outward effect owner-only by accident rather than by

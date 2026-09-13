@@ -99,8 +99,13 @@ beforeAll(async () => {
 
 describe('a reader with no account', () => {
   it('finds a substantial readable surface to check', () => {
-    // A regex that matched nothing would make everything below vacuous.
-    expect(seen.length).toBeGreaterThan(200);
+    // A regex that matched nothing would make everything below vacuous, which
+    // is the only thing this floor is for. It was 200 when the app also served
+    // seventy-two commercial routers; deleting them took the owner-reachable
+    // GET surface to eighty-one, and a floor that outlives its population
+    // stops being a guard against vacuity and becomes a guard against
+    // deleting anything.
+    expect(seen.length).toBeGreaterThan(60);
   });
 
   it('breaks nothing by looking', () => {

@@ -1232,9 +1232,11 @@ async function childTablesOfErasure(): Promise<TableRelation[]> {
       ORDER BY name`, [])).rows as unknown as Array<Record<string, unknown>>;
 
   const found: TableRelation[] = [];
-  // Erasable-by-descent grows as the walk goes deeper: okr_progress_updates
-  // reaches a product only through key_results, which reaches it through
-  // company_okrs. One pass per level, until a pass adds nothing.
+  // Erasable-by-descent grows as the walk goes deeper: a row under a key
+  // result reaches a product only through `key_results`, which reaches it
+  // through `company_okrs`. One pass per level, until a pass adds nothing.
+  // (The worked example used to be `okr_progress_updates`, dropped by
+  // migration 308 with the commercial pages that were its only readers.)
   const reachable = new Set([...withProduct, ...Object.keys(ERASE_BY_NAMED_KEY)]);
   for (const rel of UNDECLARED_PARENTS) {
     if (reachable.has(rel.table) || !reachable.has(rel.parent)) continue;

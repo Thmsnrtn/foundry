@@ -2103,24 +2103,6 @@ CREATE TABLE freeze_periods (
   ended_by TEXT,                              -- 'founder' | 'expired' | 'override'
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE TABLE funding_readiness (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  score INTEGER NOT NULL,              -- 0-100
-  -- Component scores
-  mrr_trajectory_score INTEGER,       -- Is revenue trending right?
-  churn_score INTEGER,                 -- Is churn acceptable for stage?
-  activation_score INTEGER,            -- Is activation rate above baseline?
-  technical_debt_score INTEGER,        -- Derived from latest audit composite
-  decision_track_record_score INTEGER, -- Outcome valence from decision history
-  team_completeness_score INTEGER,     -- Co-founder mode: is team whole?
-  market_clarity_score INTEGER,        -- DNA completion: do you know your market?
-  -- Narrative
-  verdict TEXT CHECK(verdict IN ('raise_ready', 'almost_ready', 'not_ready')),
-  key_gaps TEXT,                       -- JSON: string[] — what's blocking raise readiness
-  narrative TEXT,                      -- AI-generated 3-sentence assessment
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-, unmeasured TEXT, measured_components INTEGER);
 CREATE TABLE fundraising_scores (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL,
@@ -2963,16 +2945,6 @@ CREATE TABLE offer_shapes (
   stated_by      TEXT NOT NULL,
   stated_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   superseded_at  TEXT
-);
-CREATE TABLE okr_progress_updates (
-  id              TEXT PRIMARY KEY,
-  key_result_id   TEXT NOT NULL REFERENCES key_results(id),
-  previous_value  REAL,
-  new_value       REAL NOT NULL,
-  source          TEXT NOT NULL CHECK (source IN ('agent_session','founder_manual')),
-  source_id       TEXT,   -- agent_sessions.id when source = 'agent_session'
-  note            TEXT,
-  created_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE onboarding_audit_progress (
   product_id    TEXT PRIMARY KEY,
@@ -5495,9 +5467,6 @@ CREATE INDEX idx_freeze_periods_product_active
   ON freeze_periods(product_id, ended_at);
 CREATE INDEX idx_freeze_periods_started
   ON freeze_periods(product_id, started_at DESC);
-CREATE INDEX idx_funding_readiness_product ON funding_readiness(product_id, created_at DESC);
-CREATE UNIQUE INDEX idx_funding_readiness_product_day
-  ON funding_readiness(product_id, date(created_at));
 CREATE INDEX idx_fundraising_product ON fundraising_scores(product_id, target_round, generated_at);
 CREATE INDEX idx_funnel_events_step ON funnel_events(step, created_at);
 CREATE INDEX idx_gate_events_founder ON gate_events(founder_id);
@@ -5580,7 +5549,6 @@ CREATE INDEX idx_network_profiles_founder ON network_profiles(founder_id);
 CREATE INDEX idx_network_profiles_sector ON network_profiles(sector, growth_stage);
 CREATE INDEX idx_notifications_founder ON notifications(founder_id, read_at);
 CREATE UNIQUE INDEX idx_offer_shape_live ON offer_shapes(experiment_id) WHERE superseded_at IS NULL;
-CREATE INDEX idx_okr_updates_kr ON okr_progress_updates(key_result_id);
 CREATE INDEX idx_okrs_product ON company_okrs(product_id, period);
 CREATE UNIQUE INDEX idx_onboarding_product ON onboarding_sessions(product_id);
 CREATE INDEX idx_operator_attention

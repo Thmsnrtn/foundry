@@ -115,12 +115,18 @@ describe('the plan deletes children before their parents', () => {
   });
 
   it('reaches two levels down', async () => {
+    // THE EXAMPLE MOVED; THE GUARANTEE DID NOT. This used to walk
+    // `okr_progress_updates` through `key_results` and `company_okrs` — a
+    // commercial table dropped by migration 308 with the pages that were its
+    // only readers. A paid obligation is the better subject anyway: it is the
+    // deepest thing the live institution owns, and if erasure stopped short of
+    // it the company's own money rows would survive the company.
     const { erasurePlan } = await import('../../src/services/privacy/consent.js');
     const plan = await erasurePlan();
-    const deep = plan.find((s) => s.table === 'okr_progress_updates');
+    const deep = plan.find((s) => s.table === 'experiment_fulfilments');
     expect(deep, 'a grandchild is still the company’s data').toBeDefined();
-    expect(deep!.sql).toMatch(/key_results/);
-    expect(deep!.sql).toMatch(/company_okrs/);
+    expect(deep!.sql).toMatch(/business_outcome_events/);
+    expect(deep!.sql).toMatch(/experiment_exposures/);
     expect(deep!.depth).toBe(2);
   });
 });

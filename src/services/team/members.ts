@@ -281,11 +281,33 @@ export async function computeAlignmentScore(productId: string): Promise<Alignmen
  *
  * The owner is always allowed: they are not a member and have no row here.
  */
+/**
+ * WHAT THE INSTITUTION ACTUALLY ENFORCES.
+ *
+ * This union carried six names. Three of them — `can_view_decisions`,
+ * `can_view_financials`, `can_view_audit` — were read only by Commercial
+ * Foundry's decision queue, investor pages, ROI dashboard and audit log, all
+ * deleted on 13 September 2026. A capability stored on a row and consulted by
+ * nothing is not governance; it is a checkbox that reassures whoever set it
+ * and stops nobody, and `permission-edges` exists to say so. So the three left
+ * with their routes.
+ *
+ * `can_vote_decisions` nearly left with them, and would have been wrong to:
+ * its consumer is `foundry_resolve_decision` in the MCP loop, which is a live
+ * entry point that the gate checking this vocabulary was not looking at. A key
+ * acting for a founder who may not decide for a company is exactly what it
+ * stops, and it very nearly lost that because the gate's search path had three
+ * directories in it and the institution has four doors.
+ *
+ * THE COLUMNS STAY FOR NOW. Dropping them is a migration against a production
+ * database, and the prior question is whether a single-owner institution has
+ * "members" at all — the same question as the forty-eight services orphaned by
+ * the same deletion. Until that is decided the columns are inert data with no
+ * reader, which is a smaller and more honest thing than a vocabulary that
+ * claims to gate what it does not.
+ */
 export type MemberCapability =
-  | 'can_view_decisions'
   | 'can_vote_decisions'
-  | 'can_view_financials'
-  | 'can_view_audit'
   | 'can_trigger_actions'
   /** Ordinary company management: credentials, integrations, share links, the
    * sending address, inviting colleagues. NOT ownership — cancelling the
@@ -296,8 +318,7 @@ export type MemberCapability =
 /** Every capability, so a gate can iterate them rather than a list going stale
  * beside the union. */
 export const MEMBER_CAPABILITIES: readonly MemberCapability[] = [
-  'can_view_decisions', 'can_vote_decisions', 'can_view_financials',
-  'can_view_audit', 'can_trigger_actions', 'can_manage_company',
+  'can_vote_decisions', 'can_trigger_actions', 'can_manage_company',
 ] as const;
 
 export async function memberMay(

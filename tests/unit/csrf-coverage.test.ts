@@ -64,22 +64,13 @@ const NON_COOKIE_SURFACES: Record<string, { why: string; proof: RegExp }> = {
     why: 'ecosystem service key, applied to /internal/* in the composition root',
     proof: /internalMiddleware\(c, next\)/,
   },
-  '/webhooks/integrations/stripe': {
-    why: 'Stripe webhook, verified against the per-product webhook secret',
-    proof: /c\.req\.header\('stripe-signature'\)/,
-  },
-  '/webhooks/transcripts/fathom': {
-    why: 'API key in the request, validated with revocation and expiry',
-    proof: /validateApiKey\(apiKey\)/,
-  },
-  '/webhooks/transcripts/fireflies': {
-    why: 'API key in the request, validated with revocation and expiry',
-    proof: /validateApiKey\(apiKey\)/,
-  },
-  '/webhooks/voice-reply': {
-    why: 'API key in the request body, validated with revocation and expiry',
-    proof: /validateApiKey\(body\.api_key\)/,
-  },
+  // FOUR EXEMPTIONS LEFT WITH THEIR ROUTES on 13 September 2026 — the
+  // per-product Stripe webhook, the two transcript intakes and the voice-reply
+  // intake, all of which lived in Commercial Foundry routers that were deleted.
+  // An exemption outliving its route is the most dangerous entry this table can
+  // hold: it is a standing permission for a path, and the next thing to claim
+  // that path would inherit it silently. The test below refuses to let one sit
+  // here unclaimed, which is how these were found.
   '/share/refund/:fulfilmentId/:token': {
     why: 'the buyer has no session; the HMAC-signed token in the delivery link is the whole credential, verified before anything is read or refunded',
     proof: /requestRefundByLink\(c\.req\.param\('fulfilmentId'\), c\.req\.param\('token'\)\)/,

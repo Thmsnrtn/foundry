@@ -23,6 +23,14 @@ import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 // transcript in payload" to a valid key, and through the real app it answered
 // 401 to the same request.
 //
+// All five of those routers, and both transcript webhooks, were Commercial
+// Foundry and were deleted on 13 September 2026. The defect they caused did
+// not go with them: the next router mounted at '/' with a `use('*')` inside it
+// would do the same thing to the owner's own surface. So the behavioural half
+// of this file now rests on the REST API, the one shadowed surface still here,
+// and the structural half — which is the part that prevents the next one —
+// reads the composition root and is unchanged.
+//
 // Owners never saw it — `memberMay` short-circuits for the owner, and
 // `can_view_financials` defaults TRUE for members — so the damage landed exactly
 // where there is no session at all: machine-facing callers.
@@ -46,41 +54,23 @@ beforeAll(async () => {
   await query(`INSERT INTO products (id,name,owner_id,status,scp_status)
     VALUES (?,?,?,'active','active')`, [PRODUCT, 'Co', OWNER]);
   key = (await issueApiKey({
-    productId: PRODUCT, founderId: OWNER, label: 'webhook', scopes: ['agents:write'],
+    productId: PRODUCT, founderId: OWNER, label: 'webhook', scopes: ['agents:read'],
   }) as { key: string }).key;
   app = (await import('../../src/index.js')).default as typeof app;
 }, 180_000);
 
 describe('a surface with no session', () => {
-  it('reaches the transcript webhook it was shadowed out of', async () => {
-    // 400 is this endpoint reading an empty body — which means it authenticated
-    // and ran. Through the real app it used to answer 401 to this exact request.
-    const res = await app.request('/webhooks/transcripts/fathom', {
-      method: 'POST',
-      headers: { 'x-api-key': key, 'Content-Type': 'application/json' },
-      body: '{}',
-    });
-    expect(res.status).toBe(400);
-    expect(await res.text()).toContain('No transcript');
-  });
-
-  it('reaches the voice-reply webhook, which is a different router again', async () => {
-    // A second sessionless surface, in its own router, mounted in the same
-    // region. 400 is this endpoint reading a body it cannot parse — which means
-    // it ran. Through the real app it used to answer 401 to the same request.
-    const res = await app.request('/webhooks/voice-reply', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: 'not json',
-    });
-    expect(res.status).toBe(400);
-    expect(await res.text()).toContain('Invalid JSON');
-  });
-});
-
-describe('the guards still guard', () => {
-  it('refuses their own pages to a stranger', async () => {
-    for (const path of ['/roi', '/investors', '/exit', '/audit-log']) {
-      expect((await app.request(path)).status, `${path} stopped refusing`).toBe(401);
-    }
+  it('still reaches the API the guard was shadowing', async () => {
+    // WHAT IS LEFT TO PROVE IT WITH. The two transcript webhooks and the
+    // voice-reply intake were the other surfaces this guard killed, and all
+    // three were Commercial Foundry routers deleted on 13 September 2026. The
+    // REST API is the one shadowed surface that is still here, so it carries
+    // the behavioural half of this file on its own.
+    // The key is issued with `agents:read`, and `/api/v1/agents` is the route
+    // that honours it — a 401 here would mean the credential was refused
+    // before its own scope was ever consulted, which is exactly the failure.
+    const res = await app.request('/api/v1/agents', { headers: { Authorization: `Bearer ${key}` } });
+    expect(res.status, 'a valid key must not be answered 401').not.toBe(401);
   });
 });
 
