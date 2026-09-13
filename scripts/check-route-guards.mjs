@@ -80,8 +80,13 @@ const DIR = join(ROOT, 'src/routes');
 
 /** Surfaces where no member is present, so member capability is not the
  *  question. Reasoned in the header; listed here so a new one is a decision. */
+//
+// `src/routes/api/webhooks` was here and has been removed: the directory went
+// with the commercial surface, and the Stripe webhook it held is mounted from
+// `index.ts` now. An exemption for a path that does not exist grants nothing
+// today and would silently exempt whatever is put there next, which is the
+// opposite of "a new one is a decision".
 const NOT_A_MEMBER_SURFACE = [
-  'src/routes/api/webhooks',
   'src/routes/ingest',
   'src/routes/internal',
   'src/routes/auth',

@@ -3,7 +3,8 @@ process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, unlinkSync } from 'node:fs';
+import { readFileSync, writeFileSync, unlinkSync, mkdirSync, rmdirSync } from 'node:fs';
+import { dirname } from 'node:path';
 import { nanoid } from 'nanoid';
 import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { runMigrations } from '../../src/db/migrate.js';
@@ -134,6 +135,20 @@ describe('the floor under all of it', () => {
 
   it('catches a planted route that takes a company id and never says whose', () => {
     const planted = 'src/routes/api/_gate_fixture_tenant.ts';
+    // THE DIRECTORY IS NOT GUARANTEED TO EXIST, AND CI FOUND THAT OUT.
+    //
+    // `src/routes/api` held eighty-one routes until the commercial surface was
+    // deleted. Git does not track empty directories, so it survives on a
+    // machine that did the deleting and is ABSENT from a fresh clone — which is
+    // why this passed locally and failed on the runner with an ENOENT naming a
+    // file, when the thing missing was the folder.
+    //
+    // The fixture path is still right: both gates this exercises walk
+    // `src/routes` recursively, and the defect being planted is an API route
+    // that takes a company id without saying whose. So the directory is created
+    // and removed again, rather than the test being moved somewhere that
+    // happens to exist today.
+    mkdirSync(dirname(planted), { recursive: true });
     writeFileSync(planted, [
       "import { Hono } from 'hono';",
       "export const fixtureRoutes = new Hono();",
@@ -155,6 +170,9 @@ describe('the floor under all of it', () => {
       expect(failed, 'a gate that cannot fail is decoration').toBe(true);
     } finally {
       unlinkSync(planted);
+      // Leave no empty directory behind: an untracked empty folder is exactly
+      // the state that hid this bug, and it would hide it again.
+      try { rmdirSync(dirname(planted)); } catch { /* not empty: something real lives there */ }
     }
   });
 

@@ -29,11 +29,11 @@ process.env.TURSO_DATABASE_URL = 'file::memory:';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { execFileSync } from 'child_process';
 import {
-  cpSync, existsSync, mkdtempSync, readdirSync, readFileSync, rmSync,
+  cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync,
   symlinkSync, writeFileSync,
 } from 'fs';
 import { tmpdir } from 'os';
-import { join, resolve } from 'path';
+import { dirname, join, resolve } from 'path';
 
 const REPO = resolve(__dirname, '../..');
 
@@ -64,6 +64,7 @@ const REPO = resolve(__dirname, '../..');
 let ROOT = REPO;
 let sandbox: string | null = null;
 const planted: string[] = [];
+const plantedDirs: string[] = [];
 
 /** THIS FILE MUST NOT LOOK LIKE THE THING IT PLANTS. Several gates scan
  *  `tests/` as well as `src/`, so a forbidden status literal or a fabricated
@@ -76,8 +77,28 @@ const j = (...parts: string[]): string => parts.join('');
  *  the suite collects it: the fabrication gate scans tests/ too. */
 function plant(relPath: string, contents: string): void {
   const abs = resolve(ROOT, relPath);
+  // THE DIRECTORY IS NOT GUARANTEED TO EXIST, AND CI FOUND THAT OUT.
+  //
+  // `src/routes/api` held eighty-one routes until the commercial surface was
+  // deleted. Git does not track empty directories, so it survives on a machine
+  // that did the deleting and is ABSENT from a fresh clone. `plant` wrote
+  // straight into it and the runner answered with an ENOENT naming a FILE,
+  // when the thing missing was the folder — which is why this suite was green
+  // locally and red on the first push.
+  //
+  // A fixture should be able to name any path the gate under test walks,
+  // whether or not the tree currently happens to have code there. Directories
+  // created here are recorded and removed with the file, so planting never
+  // leaves behind the untracked empty folder that hid this in the first place.
+  let made: string | null = null;
+  const dir = dirname(abs);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+    made = dir;
+  }
   writeFileSync(abs, contents);
   planted.push(abs);
+  if (made) plantedDirs.push(made);
 }
 
 /** Edit a file that already exists, and put it back afterwards.
@@ -110,6 +131,9 @@ function run(script: string, args: string[] = []): { code: number; output: strin
 
 afterEach(() => {
   for (const p of planted.splice(0)) if (existsSync(p)) rmSync(p);
+  for (const d of plantedDirs.splice(0).reverse()) {
+    try { rmSync(d, { recursive: false }); } catch { /* something real lives there now */ }
+  }
   for (const [abs, before] of edited.splice(0).reverse()) writeFileSync(abs, before);
 });
 
