@@ -366,3 +366,21 @@ the rows.
 
 **Phase 3 is done.** What remains of the Cockpit is content that needs Phase
 4's substrate: money that has actually moved.
+
+---
+
+## Deploying Phases 2 and 3
+
+The shell, the glance, the one queue, the consequence on every act, health as
+state, Now/Next, and the eight browser journeys go to production together.
+
+No migrations are added by this tranche, so Experiment 001's rows are
+untouched by it. The hand runs on its own cron and does not depend on the
+owner surface; the only write path this changes is the proposal decision
+handler, which now honours the `return_to` its own form has always posted.
+
+Live at the time of this deploy, read from the production volume: 21 of 21
+written to, **19 delivered**, 1 undeliverable (RGC), 1 unresolved, 0 purchases,
+0 opt-outs, no stop condition triggered, run state `noop_expected` — which is
+the correct state for an experiment that has written to everybody it was
+authorised to write to and is now waiting on the world.
