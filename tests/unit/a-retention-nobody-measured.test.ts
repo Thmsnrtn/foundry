@@ -154,7 +154,6 @@ describe('what the agents are told', () => {
 
 describe('what is sold', () => {
   const gate = readFileSync('src/middleware/tier-gate.ts', 'utf8');
-  const landing = readFileSync('src/routes/public/landing.ts', 'utf8');
 
   it('no longer promises retention curves nothing can produce', () => {
     expect(gate).not.toContain('Day 7, 14, 30, 60, 90 retention by acquisition period and channel');
@@ -162,7 +161,9 @@ describe('what is sold', () => {
     expect(gate).toContain('Foundry has no path for reporting cohort retention today');
   });
 
-  it('and the pricing page does not list it as a capability', () => {
-    expect(landing).not.toContain('Cohort analysis + competitive intelligence');
-  });
+  // The companion check — that the pricing page did not list "Cohort analysis +
+  // competitive intelligence" as a capability — went with the page. Private
+  // Foundry has no pricing page: `routes/public/landing.ts` was deleted and its
+  // root is a redirect to `/foundry`. The tier-gate copy above is the only
+  // place left that can promise this, so it is the only place still guarded.
 });

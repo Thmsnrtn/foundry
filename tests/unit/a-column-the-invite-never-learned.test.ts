@@ -73,9 +73,25 @@ describe('the people migration 151 said should not', () => {
     expect(await memberMay(P, 'inv_observer', 'can_manage_company')).toBe(false);
   });
 
-  it('still lets them see what they were invited to see', async () => {
+  it('still grants an advisor the capabilities their invitation carried', async () => {
+    // A guard that refuses the legitimate principal is not extra secure, which
+    // is what this case is for. It used to ask about `can_view_decisions`,
+    // retired with Commercial Foundry's decision queue — the column is still on
+    // `team_members` but no code consults it, so `memberMay` refuses the name
+    // and the question no longer distinguishes an advisor from a stranger.
+    //
+    // Of the three surviving capabilities, `can_vote_decisions` is the one an
+    // advisor actually carries. The accept path sets `can_trigger_actions` and
+    // `can_manage_company` only for a co-founder, so an advisor takes the
+    // column default for the third — TRUE, per migration 010, which defaulted
+    // everything except `can_trigger_actions` that way. That is the considered
+    // position, and this checks the guard still honours it rather than
+    // refusing everyone who is not the owner.
     await joins('inv_advisor2', 'advisor');
-    expect(await memberMay(P, 'inv_advisor2', 'can_view_decisions')).toBe(true);
+    expect(await memberMay(P, 'inv_advisor2', 'can_vote_decisions'),
+      'the invitation said so and something must honour it').toBe(true);
+    expect(await memberMay(P, 'inv_advisor2', 'can_trigger_actions'),
+      'and the one an advisor is deliberately not given stays refused').toBe(false);
   });
 });
 

@@ -83,7 +83,12 @@ describe('an experiment reports what it actually established', () => {
 
   it('does not read a column nothing writes', async () => {
     const { readFileSync } = await import('fs');
-    for (const file of ['board-packet.ts', 'investor-update.ts']) {
+    // `investor-update.ts` was the second file checked here. It was deleted on
+    // 13 September 2026 — its table, `investors`, had no writer left once the
+    // commercial routes went, so the reading half went with the writing half.
+    // Its absence is the stronger guarantee: a file cannot read a column that
+    // nothing writes if the file does not exist.
+    for (const file of ['board-packet.ts']) {
       const src = readFileSync(
         new URL(`../../src/services/scp/investor/${file}`, import.meta.url), 'utf8')
         .replace(/\/\*[\s\S]*?\*\//g, '')

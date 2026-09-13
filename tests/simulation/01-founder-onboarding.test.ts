@@ -5,7 +5,7 @@
 // =============================================================================
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { resolve } from 'path';
 
 const SRC = resolve(__dirname, '../../src');
@@ -151,16 +151,39 @@ describe('SCP provisioning during onboarding', () => {
     expect(onboardingRouteSource).toMatch(/ensureProvisioned/);
   });
 
-  it('provisioner creates exactly 12 agent instances', () => {
+  it('provisions one agent for every agent that exists, and no others', () => {
+    // THIS USED TO ASSERT THE NUMBER 24 — twelve agents times two quote
+    // characters each — and it broke the day the roster became nine.
+    //
+    // A hardcoded count is not the invariant. `ALL_AGENTS` is the closed
+    // vocabulary three dynamic `import()` loaders narrow through, and one of
+    // those names arrives from an `agent_instances` ROW, so the thing that
+    // actually matters is that every name the provisioner writes has a MODULE
+    // ON DISK to load. A name without a file is a row that resolves to a
+    // missing module at runtime, in production; a file without a name is an
+    // agent nobody is ever given.
+    //
+    // So the two sets are compared directly. The count follows from them and
+    // never needs editing again.
     expect(provisionerSource).toMatch(/ALL_AGENTS/);
-    // ALL_AGENTS should have 12 entries
+
     const agentList = typesSource.match(
       /ALL_AGENTS:\s*AgentName\[\]\s*=\s*\[([\s\S]*?)\]/
     );
-    expect(agentList).toBeTruthy();
-    const agents = agentList![1].match(/'/g);
-    expect(agents).toBeTruthy();
-    expect(agents!.length).toBe(24); // 12 agents × 2 quotes each
+    expect(agentList, 'ALL_AGENTS is no longer an array literal').toBeTruthy();
+    const provisioned = [...agentList![1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
+
+    // `base`, `challenger` and `synthesizer` are scaffolding, not agents: they
+    // are never provisioned and never loaded by name.
+    const SCAFFOLDING = new Set(['base.ts', 'challenger.ts', 'synthesizer.ts']);
+    const onDisk = readdirSync(resolve(SRC, 'services/scp/agents'))
+      .filter((f) => f.endsWith('.ts') && !SCAFFOLDING.has(f))
+      .map((f) => f.replace(/\.ts$/, '')).sort();
+
+    expect(provisioned,
+      'every provisioned agent must have a module, and every module an agent')
+      .toEqual(onDisk);
+    expect(provisioned.length).toBeGreaterThan(0);
   });
 
   it('provisioner creates SCP constitution', () => {

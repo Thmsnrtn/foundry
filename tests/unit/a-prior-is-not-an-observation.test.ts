@@ -27,6 +27,14 @@ import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 // The patterns and the example briefing are worth keeping — a prior and an
 // illustration are legitimate. What is not legitimate is presenting either as
 // something that happened.
+//
+// TWO OF THE THREE SURFACES NO LONGER EXIST. `routes/public/landing.ts` was
+// deleted on 13 September 2026 — Private Foundry has no page of its own and
+// apexmicro.ai is the public face — taking the example briefing and
+// `/case-studies` with it. The checks that read that file are gone rather than
+// pointed at a substitute: a claim cannot be made by a page that is not served.
+// What survives is the half that was never on the page — the seeded patterns,
+// which a paying reader still sees, and the tier-gate's timestamp copy.
 // =============================================================================
 
 const ROOT = resolve(__dirname, '../..');
@@ -63,24 +71,10 @@ describe('a seeded cohort pattern', () => {
   });
 });
 
-describe('public surfaces', () => {
+describe('what is sold', () => {
   // Comments stripped: an explanatory note that QUOTES the old claim is not
   // the old claim, and a grep cannot tell them apart. Same instrument the
   // gates use.
-  const landing = (): string => stripComments(
-    readFileSync(resolve(ROOT, 'src/routes/public/landing.ts'), 'utf8'));
-
-  it('does not call an invented company a real briefing', () => {
-    const page = landing();
-    expect(page).not.toContain('A Real Briefing');
-    expect(page).not.toContain('MailDeck');
-    expect(page).toContain('an illustration, not a customer');
-  });
-
-  it('does not call founder-published artifacts verified evidence', () => {
-    expect(landing()).not.toContain('Documented evidence from real products');
-  });
-
   it('does not sell a cryptographic timestamp it does not compute', () => {
     const gate = stripComments(readFileSync(resolve(ROOT, 'src/middleware/tier-gate.ts'), 'utf8'));
     const story = stripComments(readFileSync(resolve(ROOT, 'src/services/story/engine.ts'), 'utf8'));

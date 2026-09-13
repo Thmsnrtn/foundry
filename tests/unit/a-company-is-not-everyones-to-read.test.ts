@@ -35,7 +35,8 @@ import { getBoardPacket } from '../../src/services/scp/investor/board-packet.js'
 // implementations has no floor: the seventh route has nothing. So the fix is
 // not only this route. `check-tenant-scope.mjs` is the floor, and its baseline
 // is two entries, each of which had to earn a written reason on the route
-// itself.
+// itself. Both of those routes have since been deleted, so the reasons went
+// with them; what the floor still has to do is refuse a THIRD.
 //
 // AND THE OPERATOR APPROVED A COMPANY'S DECISION AS THE FOUNDER. Two routes on
 // the `isFounder`-gated operator surface ran
@@ -115,18 +116,20 @@ describe('the floor under all of it', () => {
   it('admits nothing into its baseline beyond the two reasons ever allowed', () => {
     const baseline = readFileSync('docs/db/tenant-scope-baseline.txt', 'utf8')
       .split('\n').filter(Boolean);
-    // The Stripe webhook lived on a Commercial Foundry route that no longer
-    // exists, so whether its line has been swept out of the baseline yet is
-    // that cleanup's business. What must not happen either way is a THIRD
-    // entry: an exemption is not something a route can take for itself.
+    // BOTH of the ever-allowed entries are now routes that no longer exist. The
+    // Stripe webhook went with Commercial Foundry; `GET /case-studies/:id` went
+    // with `routes/public/landing.ts`, deleted on 13 September 2026 because
+    // Private Foundry has no marketing surface of its own. Whether their lines
+    // have been swept out of the baseline yet is that cleanup's business —
+    // `check-tenant-scope.mjs` already reports the stale entry and says to
+    // remove it — so neither is asserted PRESENT here any more.
+    //
+    // What must not happen either way is a THIRD entry: an exemption is not
+    // something a route can take for itself. Note that once the file is swept
+    // clean this check scans an empty list and proves nothing on its own; the
+    // planted-route test below is what keeps the floor real.
     const EVER_ALLOWED = ['GET /case-studies/:id', 'POST /api/webhooks/stripe/:productId'];
     expect(baseline.filter((l) => !EVER_ALLOWED.includes(l))).toEqual([]);
-    expect(baseline).toContain('GET /case-studies/:id');
-  });
-
-  it('and the surviving one says in the route why it is there', () => {
-    expect(readFileSync('src/routes/public/landing.ts', 'utf8'))
-      .toMatch(/a case study is published marketing/);
   });
 
   it('catches a planted route that takes a company id and never says whose', () => {

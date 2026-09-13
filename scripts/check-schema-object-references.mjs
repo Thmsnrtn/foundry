@@ -34,6 +34,7 @@
 // read. It asks one question with one answer: can this object be prepared?
 // =============================================================================
 import { readFileSync } from 'fs';
+import { stripComments } from './lib/strip-comments.mjs';
 
 // The snapshot to check. An argument overrides it so the gate can be pointed at
 // a planted fixture — a gate nobody has watched fail is a gate nobody has
@@ -98,8 +99,19 @@ for (let i = 0; i < lines.length; i++) {
 //     therefore read separately from the body.
 //   • Trigger bodies here carry long `--` comments, and English contains the
 //     words "on", "from" and "a". Comments are stripped before anything else.
-const stripComments = (t) => t
-  .replace(/\/\*[\s\S]*?\*\//g, ' ')
+//
+// The block-comment half uses the SHARED stripper in `lib/strip-comments.mjs`
+// rather than a local regex. Ten gates once opened with a one-line non-greedy
+// block-comment replace, which reads the slash-star inside a ROUTE GLOB as the
+// start of a comment and blanks everything up to the next real terminator —
+// 715 lines of code across 7 files, measured. `a-route-glob-is-not-a-comment`
+// fails any gate that rolls its own, and it failed this one on its first
+// version. (It scans for the literal pattern, so this note describes it rather
+// than quoting it; a comment that spells it out fails the same guard.)
+//
+// SQL's `--` comments are this file's own business and are stripped here, line
+// by line, which cannot swallow anything.
+const stripSql = (t) => stripComments(t)
   .split('\n').map((l) => l.replace(/--.*$/, '')).join('\n');
 
 const BODY_REFS = [
@@ -116,7 +128,7 @@ const NOT_A_TABLE = /^(new|old|select|values|set|where|when|of|on|begin|end)$/i;
 
 const findings = [];
 for (const obj of objects) {
-  const text = stripComments(obj.body);
+  const text = stripSql(obj.body);
   const missing = new Set();
   const note = (t) => {
     if (created.has(t) || BUILTIN.has(t) || NOT_A_TABLE.test(t)) return;

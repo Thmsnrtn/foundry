@@ -59,8 +59,11 @@ const R = async (p: string) => (await import(`../../src/routes/${p}.js`)) as Rec
 
 const mounts: Array<[string, any]> = [];
 {
-  const pub = await R('public/landing');
-  for (const k of ['landingRoutes', 'pricingRoutes', 'caseStudyRoutes', 'legalRoutes', 'manifestoRoutes', 'helpRoutes']) mounts.push(['/', pub[k]]);
+  // `public/landing` served six routers — the hero, pricing, case studies, the
+  // manifesto, help, and a privacy policy and terms. It was deleted: Private
+  // Foundry has no landing page of its own, apexmicro.ai is the public face,
+  // and what is left at the root is a door. One router, one route.
+  mounts.push(['/', (await R('public/door')).landingRoutes]);
   mounts.push(['/', (await R('auth/clerk')).authRoutes]);
   mounts.push(['/', (await R('share/index')).shareRoutes]);
   mounts.push(['/', (await R('ingest/index')).ingestRoutes]);
@@ -338,7 +341,11 @@ function checkMiddlewareCoverage(): void {
 
   // Surfaces that are public BY DESIGN.
   const PUBLIC = [
-    /^\/$/, /^\/pricing/, /^\/case-stud/, /^\/privacy-policy/, /^\/terms/, /^\/manifesto/, /^\/help/, /^\/auth\//,
+    // `/` is the door: it redirects to `/foundry`, which authMiddleware guards.
+    // The marketing paths that used to sit beside it here — /pricing,
+    // /case-studies, /manifesto, /help, /privacy-policy, /terms — are gone with
+    // the page that served them, so they are not exempted from anything any more.
+    /^\/$/, /^\/auth\//,
     /^\/share\//, /^\/ingest\//, /^\/webhooks\//, /^\/internal\//, /^\/health/, /^\/static\//, /^\/api\/v1\//,
     /^\/beta$/, /^\/beta\/intake/, /^\/legal/, /^\/refer\//, /^\/r\//, /^\/manifest\.json$/, /^\/sw\.js$/, /^\/robots\.txt$/, /^\/sitemap/,
     /^\/llms\.txt$/, /^\/security\.txt$/, /^\/\.well-known\//, /^\/api\/webhooks\//, /^\/api\/transcripts\//, /^\/api\/voice/,

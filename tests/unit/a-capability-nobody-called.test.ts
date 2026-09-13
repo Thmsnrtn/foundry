@@ -22,90 +22,70 @@ import { describe, expect, it } from 'vitest';
 //
 // This is the same shape as the cohort-analysis defect already recorded against
 // this page: a capability described by its READER is a capability nobody has
-// checked. The claims gate verified prices and counts; it verifies these now,
-// against whether the code that performs them has a caller.
+// checked.
+//
+// THE PAGE THAT MADE THOSE CLAIMS NO LONGER EXISTS. `routes/public/landing.ts`
+// was deleted on 13 September 2026 — Private Foundry has no marketing surface
+// of its own and apexmicro.ai is the only public face — so the bullets went
+// with it, and with them every check here that read the page for a promise it
+// should not be making. They are DELETED rather than pointed at a substitute:
+// there is no substitute, because there is no page.
+//
+// What went, and where its guard lives now:
+//
+//   • The claims-gate checks. `audit-public-claims.mjs` no longer verifies
+//     pricing bullets against `hasCallerOutside('openRemediationPR')` — it
+//     verifies the Apex Micro site's three promises against the last step of
+//     each pipeline. Whether that gate can still go red is asserted directly,
+//     three ways, in `gates-fail-when-they-should.test.ts`.
+//   • "does not promise a golden lesson". `addGoldenLesson` having no caller is
+//     still asserted, on the function rather than the copy, in
+//     `a-benchmark-over-a-constant.test.ts`.
+//   • "does not promise automated pull requests". Nothing replaces this one.
+//     `openRemediationPR` is still uncalled, and that fact is now recorded in
+//     `docs/` and enforced nowhere — worth knowing before anyone wires it.
+//
+// What survives below is the half that was never copy: the table no code
+// reaches, the share link that really does compute a Signal, and the one
+// processor that really does receive the prompts.
 // =============================================================================
 
 const ROOT = resolve(__dirname, '../..');
 
-function runClaimsAudit(): { code: number; output: string } {
-  try {
-    return { code: 0, output: execFileSync('node', [resolve(ROOT, 'scripts/audit-public-claims.mjs')],
-      { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }) };
-  } catch (err) {
-    const e = err as { status?: number; stdout?: string; stderr?: string };
-    return { code: e.status ?? 1, output: `${e.stdout ?? ''}${e.stderr ?? ''}` };
-  }
-}
-
-describe('the claims gate covers capabilities, not only prices', () => {
-  it('passes on the copy the code actually supports', () => {
-    const r = runClaimsAudit();
-    expect(r.code, r.output).toBe(0);
-    expect(r.output).toContain('Remediation Engine');
-    expect(r.output).toContain('Agent evolution');
-  });
-
-  it('still says nothing opens a pull request, so the claim cannot come back', () => {
-    // The gate's source is conditional on reality. If a caller is ever wired,
-    // this expectation is what tells the next reader the claim may widen.
-    const audit = readFileSync(resolve(ROOT, 'scripts/audit-public-claims.mjs'), 'utf8');
-    expect(audit).toContain("hasCallerOutside('openRemediationPR'");
-    expect(audit).toContain("hasCallerOutside('addGoldenLesson'");
-  });
-});
-
-describe('the privacy copy names the services that actually receive prompts', () => {
-  const landing = readFileSync(resolve(ROOT, 'src/routes/public/landing.ts'), 'utf8');
+describe('the service that actually receives the prompts', () => {
   const client = readFileSync(resolve(ROOT, 'src/services/ai/client.ts'), 'utf8');
 
-  it('does not name a processor the code never calls', () => {
-    // `api.anthropic.com` appears nowhere in the repository, and `getBaseUrl()`
-    // returns OpenRouter unconditionally — its own comment says a direct
-    // Anthropic key "still routes through OpenRouter". The disclosure named the
-    // one service that was not in the path.
+  it('is OpenRouter, and there is no second path to a processor', () => {
+    // The deleted privacy copy named Anthropic. `api.anthropic.com` appears
+    // nowhere in the repository, and `getBaseUrl()` returns OpenRouter
+    // unconditionally — its own comment says a direct Anthropic key "still
+    // routes through OpenRouter". The disclosure named the one service that was
+    // not in the path. The disclosure is gone; the fact it got wrong is still
+    // true, and this is where a second path would show up.
     expect(client).not.toContain('api.anthropic.com');
-    expect(landing).not.toContain('Anthropic');
-  });
-
-  it('names the ones it does', () => {
     expect(client).toContain('https://openrouter.ai/api/v1');
-    expect(landing).toContain('OpenRouter');
-    expect(landing).toContain('OpenAI');
-  });
-
-  it('asserts no contractual term Foundry holds no evidence of', () => {
-    // Foundry sends no data-policy header, so it cannot attest to a no-training
-    // term with either vendor. Restating that promise under a different name
-    // would have repeated the original defect at a higher cost.
-    expect(landing).not.toContain('contractually forbid');
-    expect(landing).not.toContain('no-training');
-    expect(landing).toContain('state no term here on their behalf');
   });
 });
 
-describe('the investor tier does not sell a table nothing touches', () => {
-  const landing = readFileSync(resolve(ROOT, 'src/routes/public/landing.ts'), 'utf8');
-
-  it('does not offer deal rooms', () => {
+describe('a table nothing touches', () => {
+  it('is reached by no TypeScript, only by the migrations that create and erase it', () => {
     // `deal_rooms` is created by migration 011 and touched by nothing: no
     // INSERT, no SELECT, no service, no route. Its only mention in src/ is the
     // erasure classifier — and the gate suite cites it BY NAME as the canonical
-    // example of a table no code reaches. The repository knew; the page sold it.
-    expect(landing).not.toContain('deal room');
-    // Code only. The migrations legitimately create the table and erase it;
-    // what matters is that no TypeScript reads or writes it.
+    // example of a table no code reaches. The repository knew; the investor
+    // tier sold it. The page is gone, so nothing sells it now; what has to stay
+    // true is that nothing started using it either, which would make the next
+    // person to read the table think it had always been real.
     const codeMentions = execFileSync('grep',
       ['-rl', '--include=*.ts', 'deal_rooms', resolve(ROOT, 'src')], { encoding: 'utf8' })
       .trim().split('\n').filter(Boolean);
     expect(codeMentions.map((f) => f.split('/src/')[1]))
       .toEqual(['services/privacy/consent.ts']);
   });
+});
 
-  it('claims the half that is real, and that half works', () => {
-    expect(landing).toContain('Live Signal share');
-    // A public unauthenticated page that computes the Signal for a token the
-    // owner can rotate.
+describe('the half of that tier that was real', () => {
+  it('still works: a public page computes the Signal for a token the owner can rotate', () => {
     const share = readFileSync(resolve(ROOT, 'src/routes/share/index.ts'), 'utf8');
     expect(share).toContain("'/share/:token'");
     expect(share).toContain('computeSignal');
@@ -114,27 +94,47 @@ describe('the investor tier does not sell a table nothing touches', () => {
   });
 });
 
-describe('the public page does not sell either of them', () => {
-  const landing = readFileSync(resolve(ROOT, 'src/routes/public/landing.ts'), 'utf8');
+describe('the last step that still has no caller', () => {
+  it('openRemediationPR is defined, reachable, and invoked by nothing', () => {
+    // THE PAGE WENT AND TOOK THE GUARD WITH IT.
+    //
+    // This file's own header records that `openRemediationPR` is the only code
+    // that creates a branch, commits files and calls the GitHub PR API, and
+    // that nothing calls it. The thing ASSERTING that was
+    // `hasCallerOutside('openRemediationPR')` inside `audit-public-claims.mjs`,
+    // which existed to stop a pricing bullet claiming automated PRs. The bullet
+    // and the page are gone, so the assertion went with them — and the defect
+    // did not.
+    //
+    // `addGoldenLesson`, the other half of the pair, kept its guard because
+    // `a-benchmark-over-a-constant.test.ts` asserts the no-caller status on the
+    // FUNCTION rather than on the copy that sold it. That is the durable shape,
+    // and this is the same shape for the one that lost its.
+    //
+    // `services/audit/remediation.ts` is NOT in the unreachable-modules
+    // baseline, so this is not a dead file whose contents stopped mattering:
+    // the module is reachable from production and one function inside it is
+    // the end of a pipeline that never runs.
+    const ROOT = resolve(__dirname, '../..');
+    const defined = readFileSync(resolve(ROOT, 'src/services/audit/remediation.ts'), 'utf8');
+    expect(defined, 'the function still exists to be called')
+      .toContain('export async function openRemediationPR');
 
-  it('does not promise automated pull requests', () => {
-    expect(landing).not.toContain('automated GitHub PRs');
-  });
+    const baseline = readFileSync(resolve(ROOT, 'docs/db/unreachable-modules-baseline.txt'), 'utf8');
+    expect(baseline.split('\n').map((l) => l.trim()),
+      'if the module became unreachable this test is measuring a corpse')
+      .not.toContain('src/services/audit/remediation.ts');
 
-  it('does not promise a golden lesson, and does promise what corrections do reach', () => {
-    // Corrections genuinely do shape future sessions — through the versioned
-    // config, which `recordFounderCorrection` writes and which is injected into
-    // every prompt. The page says that now instead.
-    expect(landing).not.toContain('golden lesson');
-    expect(landing).toContain('versioned config');
-  });
+    const callers = execFileSync('grep', [
+      '-rl', 'openRemediationPR', resolve(ROOT, 'src'), '--include=*.ts',
+    ], { encoding: 'utf8' }).trim().split('\n')
+      .filter((f) => f && !f.endsWith('services/audit/remediation.ts'));
 
-  it('does not claim an agent promotes itself on a record nothing computes', () => {
-    // The only writer of `agent_instances.authority_level` is a founder POST.
-    // The page named a specific mechanism — 50 sessions, 91% — that exists
-    // nowhere: the nearest real threshold moves the COMPANY lifecycle state at
-    // a different number, and touches no agent's authority.
-    expect(landing).not.toContain('91% success rate');
-    expect(landing).toContain('nothing promotes itself');
+    // Deliberately asserted as the CURRENT TRUTH rather than as a desire. If
+    // somebody wires it up, this fails and they delete the test — which is the
+    // correct outcome and the point of writing it this way round. What must not
+    // happen is the promise coming back with nothing behind it and no gate
+    // noticing, which is what the last month of this repository was about.
+    expect(callers, 'nothing calls it; if that changed, say so here').toEqual([]);
   });
 });
