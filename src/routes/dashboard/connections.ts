@@ -13,7 +13,25 @@ import { Hono } from 'hono';
 import { html } from 'hono/html';
 import { nanoid } from 'nanoid';
 import type { AuthEnv } from '../../middleware/auth.js';
-import { dashboardLayout } from '../../views/layout.js';
+import { page } from '../../views/owner/shell.js';
+import type { Where } from '../../views/owner/shell.js';
+
+/** Connections is the tool-server door, which is a Controls question. */
+function controlsWhere(ctx: { title: string }): Where {
+  return {
+    eyebrow: 'Controls',
+    crumbs: [
+      { href: '/foundry', label: 'Foundry' },
+      { href: '/foundry/controls', label: 'Controls' },
+      { href: '/connections', label: ctx.title },
+    ],
+    scope: { kind: 'foundry', id: null, name: 'the estate' },
+    local: [], chips: [],
+  };
+}
+
+const controlsPage = (ctx: { title: string }, body: Parameters<typeof page>[1]): ReturnType<typeof page> =>
+  page(ctx.title, body, 'controls', controlsWhere(ctx));
 import { getLayoutContext } from './_shared.js';
 import { query } from '../../db/client.js';
 import { encryptToken } from '../../lib/crypto.js';
@@ -146,7 +164,7 @@ connectionRoutes.get('/connections', async (c) => {
   const auditRows = (recentCalls.rows as unknown as Array<Record<string, string>>).map((r) => {
     let action = '';
     try { action = (JSON.parse(r.input_context ?? '{}') as { action?: string }).action ?? ''; } catch { /* leave blank */ }
-    const color = r.outcome === 'allowed' || r.outcome === 'cached' ? 'var(--accent)' : '#ff6b6b';
+    const color = r.outcome === 'allowed' || r.outcome === 'cached' ? 'var(--accent)' : 'var(--bad)';
     return html`
       <div style="display:flex;gap:0.75rem;font-size:0.8rem;padding:0.35rem 0;border-top:1px solid rgba(255,255,255,0.05);">
         <span style="color:${color};min-width:60px;">${r.outcome}</span>
@@ -201,7 +219,7 @@ connectionRoutes.get('/connections', async (c) => {
       Looking for the built-in connections (Stripe, analytics, GitHub, Slack…)?
       They were on the Integrations page, which the private instance never served and which no longer exists.
     </p>`;
-  return c.html(dashboardLayout(ctx, content));
+  return c.html(controlsPage(ctx, content));
 });
 
 // Stores a credential for the company. Revoking and disconnecting stay open

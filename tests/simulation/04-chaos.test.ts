@@ -151,12 +151,16 @@ describe('Resilience utility handles timeout correctly', () => {
 
 describe('SCP provisioning failure is non-fatal', () => {
 
-  it('onboarding wraps ensureProvisioned in try/catch', () => {
-    const blocks = onboardingSource.match(
-      /try\s*\{[\s\S]*?ensureProvisioned[\s\S]*?\}\s*catch/g
-    );
-    expect(blocks).toBeTruthy();
-    expect(blocks!.length).toBeGreaterThanOrEqual(1);
+  it('the establishment act does not provision, so it cannot fail that way', () => {
+    // This asserted that onboarding wrapped `ensureProvisioned` in a try/catch,
+    // so a failed agent roster did not cost a founder the company they had just
+    // created. Onboarding no longer provisions anything: establishing the
+    // institution's first company writes a product row, a lifecycle row and an
+    // identity binding, and starts nothing. The guarantee did not disappear —
+    // it moved to the provisioner, which is checked below and is where
+    // provisioning actually happens now.
+    expect(onboardingSource).not.toMatch(/ensureProvisioned/);
+    expect(onboardingSource).toMatch(/INSERT INTO products/);
   });
 
   it('provisionSCP returns a result object instead of throwing', () => {

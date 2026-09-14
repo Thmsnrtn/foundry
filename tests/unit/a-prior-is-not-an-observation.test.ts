@@ -33,13 +33,21 @@ import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 // What survived was the half that was never on the page — the seeded patterns,
 // which a paying reader still saw, and the tier-gate's timestamp copy.
 //
-// AND NOW THE THIRD SURFACE HAS GONE TOO. `network/cohort-patterns.ts` held
+// AND THE THIRD SURFACE HAS GONE TOO. `network/cohort-patterns.ts` held
 // both the seed and `getCohortPatterns`, and was deleted as production-dead, so
 // the describe that held the seeded rows to "a prior, not an observation" went
 // with it — there is no seed left to label and no reader left to read it. What
 // remains is the sentence the tier-gate and the story engine were selling,
 // which is not about any one page: Foundry does not offer a cryptographic
 // timestamp it does not compute.
+//
+// THE TIER-GATE IS NOW GONE AS WELL. `middleware/tier-gate.ts` held sixteen
+// feature gates at three subscription prices, and one of them sold the
+// timestamp. It was deleted with the rest of the commercial surface — the
+// private owner is not on a plan and there is nothing to admit him to. So the
+// check reads only the story engine, which still composes the artifact and is
+// still the place the claim could reappear. The gate is not replaced by a
+// substitute file: a claim cannot be made by code that is not there.
 // =============================================================================
 
 const ROOT = resolve(__dirname, '../..');
@@ -49,9 +57,7 @@ describe('what is sold', () => {
   // the old claim, and a grep cannot tell them apart. Same instrument the
   // gates use.
   it('does not sell a cryptographic timestamp it does not compute', () => {
-    const gate = stripComments(readFileSync(resolve(ROOT, 'src/middleware/tier-gate.ts'), 'utf8'));
     const story = stripComments(readFileSync(resolve(ROOT, 'src/services/story/engine.ts'), 'utf8'));
-    expect(gate).not.toContain('cryptographic timestamp');
     expect(story).not.toContain('Cryptographic timestamp');
   });
 });

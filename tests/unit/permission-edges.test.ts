@@ -106,10 +106,15 @@ describe('ownership stays separate from capability', () => {
   const settings = readFileSync(join(ROUTES, 'dashboard/settings.ts'), 'utf8');
 
   it('keeps the owner-only acts behind an ownership check', () => {
-    // Ending the subscription, pausing the company, archiving the product.
-    // These are not capabilities anybody can be granted.
-    for (const route of ['/checkout', '/settings/manage-subscription',
-      '/settings/pause-company', '/settings/resume-company',
+    // Pausing the company, resuming it, archiving the product. These are not
+    // capabilities anybody can be granted.
+    //
+    // `/checkout` and `/settings/manage-subscription` were on this list and are
+    // deleted: they opened a Stripe session for one of three plans and sent the
+    // founder to the billing portal. There is no plan to be on here. The acts
+    // below are the ones that remain owner-only, and they are about the
+    // company's life rather than about its bill.
+    for (const route of ['/settings/pause-company', '/settings/resume-company',
       '/settings/toggle-product-status']) {
       const at = settings.indexOf(`'${route}'`);
       expect(at, `${route} must exist`).toBeGreaterThan(-1);
@@ -119,8 +124,13 @@ describe('ownership stays separate from capability', () => {
   });
 
   it('puts ordinary company management behind a capability, not ownership', () => {
+    // `/settings/wisdom-toggle` was here too. The Wisdom Network it joined —
+    // anonymised decision patterns pooled across contributing businesses —
+    // needs other businesses; both benchmark tables are empty and the
+    // percentile floor wants five contributors. `/settings/cadence-mode`, the
+    // pace control that shared its card, was real and stands in its place.
     for (const route of ['/settings/api-keys', '/settings/sending-identity',
-      '/settings/generate-ingest', '/settings/wisdom-toggle']) {
+      '/settings/generate-ingest', '/settings/cadence-mode']) {
       const at = settings.indexOf(`'${route}'`);
       expect(at, `${route} must exist`).toBeGreaterThan(-1);
       expect(settings.slice(at, at + 200))

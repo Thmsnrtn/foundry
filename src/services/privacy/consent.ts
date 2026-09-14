@@ -1062,10 +1062,6 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
     reason: 'the founder\'s writing preferences',
     onAccountErasure: { op: 'delete' },
   },
-  gate_events: {
-    reason: 'which features the founder hit a tier wall on',
-    onAccountErasure: { op: 'delete' },
-  },
   introductions: {
     reason: 'introductions between founders, involving a second person who did not ask for anything',
     // The second person is the reason this is severed rather than deleted.
@@ -1108,12 +1104,26 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
   },
   rate_limit_counters: {
     reason: 'request counters bucketed per founder and per product, keyed by a composite string rather than by a column',
-    // CLASSIFIED AS "AN OPAQUE BUCKET". The buckets are `audit:founder:<id>`
-    // and `apimodel:<product_id>` — the key names exactly who is being
+    // CLASSIFIED AS "AN OPAQUE BUCKET". The buckets name exactly who is being
     // counted. The residue is short-lived (a sweep expires old windows) but
     // the written reason was false, and a reason nobody can check is how
     // `network_contributions` stayed misclassified too.
-    onAccountErasure: { op: 'delete', by: 'key', where: "key LIKE 'audit:founder:%'", match: 'suffix' },
+    //
+    // AND IT NAMED ONLY ONE OF THE TWO FOUNDER BUCKETS. `ai:founder:<id>` has
+    // existed as long as `audit:founder:<id>` did, and an erasure that deleted
+    // the audit bucket left the AI bucket standing with the same id in it. The
+    // audit limiter is now deleted — its route went with the commercial
+    // onboarding wizard — so `ai:founder:` is the live one, but the old prefix
+    // stays in this clause because rows written before that deletion are still
+    // in production and are exactly what an erasure has to reach.
+    //
+    // Parenthesised on purpose: the executor composes this as
+    // `<subject> AND <where>`, and an unbracketed OR here would bind the
+    // founder-id match to only the first arm.
+    onAccountErasure: {
+      op: 'delete', by: 'key', match: 'suffix',
+      where: "(key LIKE 'ai:founder:%' OR key LIKE 'audit:founder:%')",
+    },
   },
   ecosystem_principals: {
     reason: 'a portfolio credential this person issued over companies they own',

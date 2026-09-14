@@ -9,10 +9,34 @@ import { getCookie } from 'hono/cookie';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
 import { createBillingPortalSession, createCheckoutSession } from '../../services/billing/stripe.js';
-import { dashboardLayout } from '../../views/layout.js';
-import { settingsPage } from '../../views/components.js';
+import { page } from '../../views/owner/shell.js';
+import type { Where } from '../../views/owner/shell.js';
+
+/**
+ * SETTINGS IS CONTROLS, SO IT LIGHTS THE CONTROLS DOOR.
+ *
+ * These pages govern what Foundry may do and who holds a key to it — the
+ * question Controls exists to answer — but they rendered in the other visual
+ * system, reached only from inside the Letter. They are the same place, so
+ * they say so: the door lights, the trail reads Foundry › Controls › Settings,
+ * and the way back is the rail rather than a Back link unique to this page.
+ */
+function controlsWhere(ctx: { title: string }): Where {
+  return {
+    eyebrow: 'Controls',
+    crumbs: [
+      { href: '/foundry', label: 'Foundry' },
+      { href: '/foundry/controls', label: 'Controls' },
+      { href: '/settings', label: ctx.title },
+    ],
+    scope: { kind: 'foundry', id: null, name: 'the estate' },
+    local: [], chips: [],
+  };
+}
+
+const controlsPage = (ctx: { title: string }, body: Parameters<typeof page>[1]): ReturnType<typeof page> =>
+  page(ctx.title, body, 'controls', controlsWhere(ctx));
 import { getLayoutContext, selectedProductId } from './_shared.js';
-import { getTierBadge, getTierCapabilities } from '../../middleware/tier-gate.js';
 import { requireCompanyCapability, requireOwner } from '../../middleware/rbac.js';
 import { nanoid } from 'nanoid';
 import { randomBytes } from 'crypto';
@@ -21,43 +45,12 @@ export const settingsRoutes = new Hono<AuthEnv>();
 
 // ─── Checkout → Stripe ──────────────────────────────────────────────────────
 
-settingsRoutes.post('/checkout', requireOwner(), async (c) => {
-  const founder = c.get('founder');
-  const body = await c.req.parseBody() as Record<string, string>;
-  const tier = body.tier as 'solo' | 'growth' | 'investor_ready';
-  const validTiers = ['solo', 'growth', 'investor_ready'];
-  if (!tier || !validTiers.includes(tier)) return c.redirect('/settings');
-
-  // Stripe calls can fail (outage, bad key, network). Degrade gracefully to an
-  // error redirect rather than 500ing the founder mid-upgrade.
-  try {
-    let customerId = founder.stripe_customer_id;
-    if (!customerId) {
-      const { createCustomer } = await import('../../services/billing/stripe.js');
-      customerId = await createCustomer(founder.email, founder.name);
-      await query('UPDATE founders SET stripe_customer_id = ? WHERE id = ?', [customerId, founder.id]);
-    }
-
-    const appUrl = process.env.APP_URL ?? 'http://localhost:8080';
-    const checkoutUrl = await createCheckoutSession(
-      customerId, tier,
-      `${appUrl}/settings?checkout=success`,
-      `${appUrl}/settings?checkout=cancelled`
-    );
-    if (!checkoutUrl) return c.redirect('/settings?checkout=error');
-    return c.redirect(checkoutUrl);
-  } catch (err) {
-    const { logger } = await import('../../services/logger.js');
-    logger.error('checkout failed', { founderId: founder.id, tier, error: String(err) });
-    return c.redirect('/settings?checkout=error');
-  }
-});
 
 settingsRoutes.get('/settings', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
 
-  const products = await query('SELECT id, name, github_repo_url, website_url, share_token, ingest_token, status, scp_status FROM products WHERE owner_id = ?', [founder.id]);
+  const products = await query('SELECT id, name, github_repo_url, website_url, ingest_token, status, scp_status FROM products WHERE owner_id = ?', [founder.id]);
 
   // Use the cookie-selected product (consistent with ctx.productId), fall back to first
   const cookieProductId = getCookie(c, 'foundry_product');
@@ -66,7 +59,6 @@ settingsRoutes.get('/settings', async (c) => {
     : undefined;
   const firstProduct = selectedProduct ?? (products.rows.length > 0 ? (products.rows[0] as Record<string, string>) : null);
   const productId = firstProduct?.id ?? null;
-  const shareToken = firstProduct?.share_token ?? null;
   const ingestToken = firstProduct?.ingest_token ?? null;
   // Read without the credential: nothing that renders a page has a reason to
   // decrypt an API key.
@@ -121,9 +113,6 @@ settingsRoutes.get('/settings', async (c) => {
     '../../services/api/api-key-issuance.js');
   const apiKeys = productId ? await getApiKeys(productId) : [];
 
-  const tierLabel = getTierBadge(founder.tier);
-  const capabilities = getTierCapabilities(founder.tier);
-
   // Success banner for settings actions
   const successParam = c.req.query('success');
   const successMessages: Record<string, string> = {
@@ -134,41 +123,35 @@ settingsRoutes.get('/settings', async (c) => {
   const successBannerMsg = successParam ? successMessages[successParam] ?? null : null;
 
   const content = html`
-    ${successBannerMsg ? html`<div style="background:#4ecca322;border:1px solid #4ecca344;border-radius:8px;padding:0.75rem 1.25rem;margin-bottom:1.5rem;color:#4ecca3;font-size:0.875rem;font-weight:500;">${successBannerMsg}</div>` : ''}
+    ${successBannerMsg ? html`<div class="state ok" style="display:block;padding:0.75rem 1.25rem;margin-bottom:1.5rem;font-size:0.875rem;font-weight:500;">${successBannerMsg}</div>` : ''}
     <h1>Settings</h1>
-    ${settingsPage(
-      { id: founder.id, email: founder.email, name: founder.name, tier: founder.tier },
-      products.rows as Array<Record<string, unknown>>,
-      comps.rows as Array<Record<string, unknown>>,
-    )}
-    ${isPrivateOwnerInstance() ? '' : html`<div class="card">
-      <h3>Subscription</h3>
-      <p><strong>Current Plan:</strong> <span class="badge badge-watch">${tierLabel}</span></p>
-      <p style="font-size:0.87rem;color:#6b7280;">You have access to ${capabilities.length} features.</p>
-      <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.75rem;">
-        ${!founder.tier ? html`
-          <form method="POST" action="/checkout"><input type="hidden" name="tier" value="solo" /><button type="submit" class="btn btn-secondary btn-sm">Solo — $79/mo</button></form>
-          <form method="POST" action="/checkout"><input type="hidden" name="tier" value="growth" /><button type="submit" class="btn btn-secondary btn-sm">Growth — $199/mo</button></form>
-          <form method="POST" action="/checkout"><input type="hidden" name="tier" value="investor_ready" /><button type="submit" class="btn btn-primary btn-sm">Investor Ready — $399/mo</button></form>
-        ` : ''}
-        ${founder.tier && founder.tier !== 'investor_ready' ? html`
-          <form method="POST" action="/checkout"><input type="hidden" name="tier" value="investor_ready" /><button type="submit" class="btn btn-primary btn-sm">Upgrade to Investor Ready</button></form>
-        ` : ''}
-        ${founder.stripe_customer_id ? html`
-          <form method="POST" action="/settings/manage-subscription"><button type="submit" class="btn btn-secondary btn-sm">Manage Subscription</button></form>
-        ` : ''}
-      </div>
-    </div>`}
+    <!-- PROFILE, CONNECTED REPOSITORIES, COMPETITORS AND BETA INFRASTRUCTURE,
+         DELETED with the settingsPage component. Three of the four were Commercial
+         Foundry's audit product: repositories it scanned, competitors it
+         tracked, and a beta-intake surface whose table was dropped in
+         migration 309. In this instance the repositories table does not exist
+         at all and competitors holds zero rows.
+         The fourth was Profile — name, email and TIER, read-only. The
+         identity belongs to the auth provider and cannot be edited here, and
+         the tier is the subscription that went with the product. A card that
+         shows three facts you cannot change, one of which is about a plan
+         nobody is on, is not a setting. -->
+    <!-- SUBSCRIPTION, DELETED. Three price buttons and a Stripe customer
+         portal for Commercial Foundry's tiers. It was already hidden on this
+         instance by the posture check, which is a different thing from being
+         gone: the code, the /checkout routes and the tier vocabulary were all
+         still here, one environment variable away from rendering. Private
+         Foundry has one owner who does not bill himself. -->
 
     <div class="card">
       <h3>Products</h3>
-      <p style="font-size:0.87rem;color:#6b7280;margin-bottom:0.75rem;">You have ${products.rows.length} product(s) connected.</p>
+      <p style="font-size:0.87rem;color:var(--ink-3);margin-bottom:0.75rem;">You have ${products.rows.length} product(s) connected.</p>
       ${(products.rows as unknown as Array<Record<string, string>>).map((p) => html`
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid #f3f4f6;">
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--line);">
           <div>
             <strong>${p.name}</strong>
-            ${p.github_repo_url ? html`<span style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">${p.github_repo_url}</span>` : ''}
-            ${p.website_url ? html`<span style="font-size:0.75rem;color:#6b7280;margin-left:0.5rem;">${p.website_url}</span>` : ''}
+            ${p.github_repo_url ? html`<span style="font-size:0.75rem;color:var(--ink-3);margin-left:0.5rem;">${p.github_repo_url}</span>` : ''}
+            ${p.website_url ? html`<span style="font-size:0.75rem;color:var(--ink-3);margin-left:0.5rem;">${p.website_url}</span>` : ''}
           </div>
           <a href="/foundry/companies/${p.id}" class="btn btn-secondary btn-sm" style="font-size:0.75rem;">View</a>
         </div>`)}
@@ -213,10 +196,10 @@ settingsRoutes.get('/settings', async (c) => {
         <!-- Delete -->
         <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;background:rgba(255,107,107,0.04);border-radius:8px;border:1px solid rgba(255,107,107,0.12);">
           <div>
-            <div style="font-size:0.875rem;font-weight:600;color:#ff6b6b;">Delete Product</div>
+            <div style="font-size:0.875rem;font-weight:600;color:var(--bad);">Delete Product</div>
             <div style="font-size:0.78rem;color:var(--text-dim);">Permanently remove this product and all data after a 30-day grace period.</div>
           </div>
-          <a href="/privacy" class="btn btn-sm" style="color:#ff6b6b;border-color:#ff6b6b44;" aria-label="Go to privacy settings to delete product">Delete</a>
+          <a href="/privacy" class="btn btn-sm" style="color:var(--bad);border-color:var(--bad);" aria-label="Go to privacy settings to delete product">Delete</a>
         </div>
 
         ${products.rows.length > 1 ? html`
@@ -225,7 +208,7 @@ settingsRoutes.get('/settings', async (c) => {
           <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.5rem;">Fleet-wide</div>
           <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
             <a href="/settings/export-all" class="btn btn-ghost btn-sm" aria-label="Export all products data">Export All Products</a>
-            <a href="/settings/delete-all-products" class="btn btn-ghost btn-sm" style="color:#ff6b6b;" aria-label="Delete all products">Delete All Products</a>
+            <a href="/settings/delete-all-products" class="btn btn-ghost btn-sm" style="color:var(--bad);" aria-label="Delete all products">Delete All Products</a>
           </div>
         </div>
         ` : ''}
@@ -266,18 +249,25 @@ settingsRoutes.get('/settings', async (c) => {
     </div>
 
     <div class="card">
-      <h3>Wisdom Network</h3>
-      <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
-        When enabled, Foundry contributes anonymized decision patterns from your business to
-        the cross-product wisdom layer. No identifying information, revenue figures, or product
-        names are ever shared — only aggregated shapes and outcomes. In return, your AI
-        recommendations benefit from patterns across all contributing businesses.
-      </p>
+      <h3>How often I run</h3>
+      <!-- THIS CARD WAS CALLED "WISDOM NETWORK" AND MOSTLY WAS NOT ONE.
+           Its framing offered to contribute anonymised decision patterns to a
+           cross-product wisdom layer so that "your AI recommendations benefit
+           from patterns across all contributing businesses" — a promise that
+           needs other businesses. There is one owner here, the two benchmark
+           tables are both empty, and the percentile floor requires five
+           distinct contributors, so the toggle offered to join a network of
+           one. (No backticks in this comment on purpose: it sits inside a
+           template literal, and check-backticks-in-embedded-comments exists
+           because one of them ends the string early.)
+           What was real in it is the pace control, which decides how often the
+           institution acts on his behalf. That is an Attention Law question,
+           so it keeps the card and the card gets its actual name. -->
       ${productId ? html`
-      <div class="wisdom-toggle-row">
+      <div class="row" style="justify-content:space-between;flex-wrap:nowrap;gap:var(--s3);">
         <div>
-          <div class="wisdom-toggle-label">Weekend pace</div>
-          <div class="wisdom-toggle-desc">This is a side project — run the agents weekly, not daily</div>
+          <div style="font-weight:500;">Weekend pace</div>
+          <div style="font-size:0.85rem;color:var(--ink-2);">This is a side project — run the agents weekly, not daily</div>
         </div>
         <form method="POST" action="/settings/cadence-mode" style="display:flex;align-items:center;">
           <input type="hidden" name="mode" value="${weekendMode ? 'standard' : 'weekend'}" />
@@ -289,62 +279,15 @@ settingsRoutes.get('/settings', async (c) => {
           </label>
         </form>
       </div>` : ''}
-
-      <div class="wisdom-toggle-row">
-        <div>
-          <div class="wisdom-toggle-label">Contribute anonymously</div>
-          <div class="wisdom-toggle-desc">Share decision outcomes to improve AI for everyone</div>
-        </div>
-        <form method="POST" action="/settings/wisdom-toggle" style="display:flex;align-items:center;">
-          <label class="toggle" title="${wisdomOptIn ? 'Click to opt out' : 'Click to opt in'}">
-            <input
-              type="checkbox"
-              name="opted_in"
-              value="1"
-              ${wisdomOptIn ? 'checked' : ''}
-              onchange="this.closest('form').submit()"
-            />
-            <span class="toggle-track"></span>
-            <span class="toggle-thumb"></span>
-          </label>
-        </form>
-      </div>
     </div>
 
-    ${productId ? html`
-    <div class="card">
-      <h3>Investor / Advisor Access</h3>
-      <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
-        Generate a private link to share a live read-only view of your Signal score,
-        metrics, and recent decisions with investors or advisors. No login required.
-        Revoke it at any time by regenerating.
-      </p>
-      ${shareToken ? html`
-      <div style="margin-bottom:0.75rem;">
-        <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:0.35rem;">Your share link</div>
-        <div style="display:flex;align-items:center;gap:0.5rem;">
-          <input
-            type="text"
-            id="share-link-input"
-            value="${appUrl}/share/${shareToken}"
-            readonly
-            style="flex:1;font-size:0.82rem;font-family:monospace;cursor:pointer;"
-            onclick="this.select()"
-          />
-          <button
-            class="btn btn-secondary btn-sm"
-            onclick="navigator.clipboard.writeText(document.getElementById('share-link-input').value).then(()=>{this.textContent='Copied!';setTimeout(()=>{this.textContent='Copy'},1500)})"
-          >Copy</button>
-        </div>
-      </div>
-      <form method="POST" action="/settings/generate-share" style="display:inline;">
-        <button type="submit" class="btn btn-ghost btn-sm">Regenerate link</button>
-      </form>
-      ` : html`
-      <form method="POST" action="/settings/generate-share">
-        <button type="submit" class="btn btn-secondary btn-sm">Generate share link</button>
-      </form>`}
-    </div>` : ''}
+    <!-- INVESTOR / ADVISOR ACCESS, DELETED. A generated link giving a
+         read-only view of Signal score, metrics and recent decisions to
+         "investors or advisors". Private Foundry has neither, and zero of the
+         thirteen products in this instance had ever had a share token
+         generated, so the control offered to revoke an access nobody held.
+         /share stays mounted because it also carries the refund links an
+         Apex Micro buyer uses, which is a different thing entirely. -->
 
     ${productId ? html`
     <div class="card">
@@ -374,7 +317,7 @@ settingsRoutes.get('/settings', async (c) => {
       </div>
       <details style="margin-bottom:0.75rem;">
         <summary style="font-size:0.82rem;color:var(--text-dim);cursor:pointer;">Example payload</summary>
-        <pre class="ingest-example">{
+        <pre>{
   "mrr": 52000,
   "new_mrr": 4500,
   "churned_mrr": 200,
@@ -437,7 +380,7 @@ settingsRoutes.get('/settings', async (c) => {
         Not connected — mail to your customers is refused until it is.
       </p>`}
       ${sendingError ? html`
-      <p style="font-size:0.82rem;color:#ff6b6b;margin:0 0 0.75rem;">${sendingError}</p>` : ''}
+      <p style="font-size:0.82rem;color:var(--bad);margin:0 0 0.75rem;">${sendingError}</p>` : ''}
       <form method="POST" action="/settings/sending-identity" style="margin-top:0.75rem;display:grid;gap:0.5rem;max-width:26rem;">
         <input type="email" name="from_email" required placeholder="you@yourdomain.com"
                value="${sendingIdentity?.fromEmail ?? ''}" />
@@ -462,7 +405,7 @@ settingsRoutes.get('/settings', async (c) => {
       </p>
 
       ${mintedSecret ? html`
-      <div style="margin-bottom:1rem;padding:0.75rem;border:1px solid var(--border);border-radius:6px;">
+      <div style="margin-bottom:1rem;padding:0.75rem;border:1px solid var(--line);border-radius:6px;">
         <div style="font-size:0.8rem;color:var(--text-dim);margin-bottom:0.35rem;">
           Copy this now — it is shown once here, and afterwards only on this page.
         </div>
@@ -482,7 +425,7 @@ settingsRoutes.get('/settings', async (c) => {
                 may ${cred.purposes.map((p) => INGEST_PURPOSE_LABELS[p].may).join('; ')}
               </div>
               ${cred.refusalCount > 0 && !cred.revoked ? html`
-              <div style="color:#ffb347;font-size:0.76rem;margin-top:0.2rem;">
+              <div style="color:var(--alert);font-size:0.76rem;margin-top:0.2rem;">
                 I have turned this away ${String(cred.refusalCount)} ${cred.refusalCount === 1 ? 'time' : 'times'} since it last got through — ${INGEST_REFUSAL_LABELS[cred.lastRefusalReason as keyof typeof INGEST_REFUSAL_LABELS] ?? 'I could not use what it sent'}.
               </div>` : ''}
             </td>
@@ -566,60 +509,14 @@ settingsRoutes.get('/settings', async (c) => {
       </form>
     </div>` : ''}
   `;
-  return c.html(dashboardLayout(ctx, content));
+  return c.html(controlsPage(ctx, content));
 });
 
 // ─── Stripe Checkout ─────────────────────────────────────────────────────────
 
-settingsRoutes.get('/checkout', async (c) => {
-  const founder = c.get('founder');
-  const tier = c.req.query('tier') as 'solo' | 'growth' | 'investor_ready' | undefined;
-
-  if (!tier || !['solo', 'growth', 'investor_ready'].includes(tier)) {
-    return c.redirect('/pricing');
-  }
-
-  // Ensure founder has a Stripe customer record
-  let customerId = founder.stripe_customer_id;
-  if (!customerId) {
-    const { createCustomer } = await import('../../services/billing/stripe.js');
-    customerId = await createCustomer(founder.email, founder.name ?? null);
-    await query('UPDATE founders SET stripe_customer_id = ? WHERE id = ?', [customerId, founder.id]);
-  }
-
-  const appUrl = process.env.APP_URL ?? 'http://localhost:8080';
-  try {
-    const checkoutUrl = await createCheckoutSession(
-      customerId,
-      tier,
-      `${appUrl}/dashboard?subscribed=1`,
-      `${appUrl}/pricing`,
-    );
-    return c.redirect(checkoutUrl);
-  } catch (err) {
-    console.error('[CHECKOUT] Stripe session creation failed:', err);
-    return c.redirect('/pricing?error=checkout_failed');
-  }
-});
 
 // ─── Share Token Generation ───────────────────────────────────────────────────
 
-settingsRoutes.post('/settings/generate-share', requireCompanyCapability('can_manage_company'), async (c) => {
-  const founder = c.get('founder');
-  // Use current product from cookie, not LIMIT 1 (FRICTION: settings targeting wrong product)
-  const { getCookie } = await import('hono/cookie');
-  // THE FALLBACK WAS COMPUTED AND THROWN AWAY. When the cookie was unset or
-  // stale, this ran a second query, ignored its result, and set `productId` to
-  // the cookie value it had just failed to resolve — so the UPDATE matched
-  // nothing, and the founder was redirected to a page that looked like it had
-  // generated them a public share link.
-  const productId = await selectedProductId(c, founder.id);
-  if (!productId) return c.redirect('/settings?error=no_company_selected');
-
-  const token = randomBytes(24).toString('hex');
-  await query('UPDATE products SET share_token = ? WHERE id = ? AND owner_id = ?', [token, productId, founder.id]);
-  return c.redirect('/settings');
-});
 
 // ─── Ingest Token Generation ──────────────────────────────────────────────────
 
@@ -751,7 +648,7 @@ settingsRoutes.post('/settings/api-keys', requireCompanyCapability('can_manage_c
     days: Number.isFinite(days) ? days : undefined,
   });
   if ('refused' in issued) {
-    return c.html(dashboardLayout(ctx, html`
+    return c.html(controlsPage(ctx, html`
       <div class="card">
         <h3>Key not issued</h3>
         <p>${issued.refused === 'scopes_required'
@@ -763,7 +660,7 @@ settingsRoutes.post('/settings/api-keys', requireCompanyCapability('can_manage_c
       </div>`));
   }
 
-  return c.html(dashboardLayout(ctx, html`
+  return c.html(controlsPage(ctx, html`
     <div class="card">
       <h3>Copy this key now</h3>
       <p style="font-size:0.87rem;color:var(--text-muted);">
@@ -818,7 +715,7 @@ settingsRoutes.post('/settings/portfolio-principals', requireOwner(), async (c) 
   });
 
   if ('refused' in issued) {
-    return c.html(dashboardLayout(ctx, html`
+    return c.html(controlsPage(ctx, html`
       <div class="card">
         <h3>Principal not issued</h3>
         <p>${issued.refused === 'companies_required'
@@ -830,7 +727,7 @@ settingsRoutes.post('/settings/portfolio-principals', requireOwner(), async (c) 
       </div>`));
   }
 
-  return c.html(dashboardLayout(ctx, html`
+  return c.html(controlsPage(ctx, html`
     <div class="card">
       <h3>Copy this key now</h3>
       <p style="font-size:0.87rem;color:var(--text-muted);">
@@ -875,37 +772,9 @@ settingsRoutes.get('/settings/add-product', async (c) => {
 
 // ─── Subscription Management (Stripe Customer Portal) ───────────────────────
 
-settingsRoutes.post('/settings/manage-subscription', requireOwner(), async (c) => {
-  const founder = c.get('founder');
-  if (!founder.stripe_customer_id) return c.redirect('/settings?error=no_subscription');
-
-  const stripeKey = process.env.STRIPE_SECRET_KEY;
-  if (!stripeKey) return c.redirect('/settings?error=billing_unavailable');
-
-  try {
-    const appUrl = process.env.APP_URL ?? 'http://localhost:8080';
-    const portalUrl = await createBillingPortalSession(founder.stripe_customer_id, `${appUrl}/settings`);
-    return c.redirect(portalUrl);
-  } catch (err) {
-    console.error('[BILLING] Portal session failed:', err);
-    return c.redirect('/settings?error=billing_error');
-  }
-});
 
 // ─── Wisdom Toggle ────────────────────────────────────────────────────────────
 
-settingsRoutes.post('/settings/wisdom-toggle', requireCompanyCapability('can_manage_company'), async (c) => {
-  const founder = c.get('founder');
-  const body = await c.req.parseBody() as Record<string, string>;
-  const optedIn = body.opted_in === '1' ? 1 : 0;
-
-  await query(
-    'UPDATE founders SET wisdom_network_opted_in = ? WHERE id = ?',
-    [optedIn, founder.id]
-  );
-
-  return c.redirect('/settings');
-});
 
 // ─── Cadence mode ───────────────────────────────────────────────────────────
 //

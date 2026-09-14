@@ -190,7 +190,7 @@ const judgmentSection = (
         ${j.uncertainties.length ? html`
           <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem;">Still uncertain: ${j.uncertainties.join('; ')}</div>` : ''}
         ${j.evaluationState === 'contradicted' || j.evaluationState === 'conflicting' ? html`
-          <div style="font-size:0.72rem;color:#ffb347;margin-top:0.3rem;">What happened since ${j.evaluationState === 'contradicted' ? 'contradicts this' : 'conflicts with this'}.</div>` : ''}
+          <div style="font-size:0.72rem;color:var(--alert);margin-top:0.3rem;">What happened since ${j.evaluationState === 'contradicted' ? 'contradicts this' : 'conflicts with this'}.</div>` : ''}
         ${j.disposition ? html`
           <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.3rem;">Your current direction: ${j.disposition.replaceAll('_', ' ')}${j.selectedAlternative ? html` — ${j.selectedAlternative}` : ''}. You can change it below.</div>` : ''}
         <form method="POST" action="/letter/judgments/${j.id}/disposition"
@@ -477,7 +477,7 @@ const supportChannelSection = (
             I read this from ${c.fedBy}.</span>` : ''}
         </form>
         ${c.refusalCount > 0 ? html`
-        <div style="font-size:0.74rem;color:#ffb347;margin-top:0.25rem;">
+        <div style="font-size:0.74rem;color:var(--alert);margin-top:0.25rem;">
           I have turned away ${String(c.refusalCount)} ${c.refusalCount === 1 ? 'message' : 'messages'} on this since one last got through — ${refusalLabels[c.lastRefusalReason ?? ''] ?? 'I could not use what was sent'}. Somebody wrote and I did not keep it.
         </div>` : ''}
         <form method="POST" action="/letter/channels/${c.id}/revoke" style="margin-top:0.25rem;">
@@ -621,8 +621,8 @@ const stepAwaySection = (h: {
 const failingSelfChecksSection = (
   items: Array<{ check: string; detail: string; observedAt: string }>,
 ) => items.length === 0 ? '' : html`
-  <div class="card" style="padding:1.25rem;margin-bottom:1rem;border-left:2px solid #ffb347;">
-    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#ffb347;margin-bottom:0.5rem;">Something I keep for you has drifted</div>
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;border-left:2px solid var(--alert);">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--alert);margin-bottom:0.5rem;">Something I keep for you has drifted</div>
     ${items.map((item) => {
     const plain = CHECK_IN_PLAIN_WORDS[item.check];
     return html`
@@ -745,8 +745,8 @@ const loopsStoppedSection = (
   items: Array<{ label: string; consecutiveFailures: number; stoppedRunning: boolean;
     lastSuccessAt: string | null }>,
 ) => items.length === 0 ? '' : html`
-  <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid #ffb34755;">
-    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#ffb347;margin-bottom:0.6rem;">Part of me has stopped</div>
+  <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid var(--alert);">
+    <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--alert);margin-bottom:0.6rem;">Part of me has stopped</div>
     <div style="font-size:0.82rem;color:var(--text-primary);">Some of what I do runs on a schedule. Some of it is failing, so what you read below may be out of date — not because nothing happened, but because I have not been able to look.</div>
     ${items.map((item) => html`
       <div style="padding:0.45rem 0;border-top:1px solid rgba(255,255,255,0.05);font-size:0.8rem;color:var(--text-muted);">
@@ -1075,7 +1075,7 @@ const permissionSection = (
         <div style="font-size:0.9rem;color:var(--text-primary);">${item.title}</div>
         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">I've been watching this and have ${item.comparisons === 1 ? 'one check' : `${item.comparisons} checks`} to show for it.${item.deviations > 0 ? ` I got ${item.deviations === 1 ? 'one of them' : `${item.deviations} of them`} wrong.` : ''}${item.lastWatchedAt ? ` The last thing I actually saw about this arrived ${item.lastWatchedAt.slice(0, 10)}.` : ''}</div>
         ${item.verifiedFailures > 0 ? html`
-        <div style="font-size:0.78rem;color:var(--danger, #ff6b6b);margin-top:0.15rem;">${item.lastVerifiedOutcome === 'verified_failure'
+        <div style="font-size:0.78rem;color:var(--bad);margin-top:0.15rem;">${item.lastVerifiedOutcome === 'verified_failure'
           ? `Last time I acted here it didn't work — ${item.verifiedFailures === 1 ? 'one attempt was' : `${item.verifiedFailures} attempts were`} checked afterwards and failed.`
           : `${item.verifiedFailures === 1 ? 'One attempt' : `${item.verifiedFailures} attempts`} here ${item.verifiedFailures === 1 ? 'was' : 'were'} checked afterwards and failed, though the most recent one worked.`} Worth knowing before you decide.</div>` : ''}
         <a href="/letter/responsibilities/${item.responsibilityId}/understanding"
@@ -1089,7 +1089,7 @@ const permissionSection = (
                read exactly like one it accepted: the founder allowed something,
                saw the same words back, and Foundry was not helping. -->
           ${item.assisting ? '' : html`
-          <div style="font-size:0.72rem;color:#ffb347;margin-top:0.2rem;">I have not been able to start on it yet, so your permission is recorded and unused. It stays yours — nothing here takes it back.</div>`}
+          <div style="font-size:0.72rem;color:var(--alert);margin-top:0.2rem;">I have not been able to start on it yet, so your permission is recorded and unused. It stays yours — nothing here takes it back.</div>`}
           <form method="POST" action="/letter/responsibilities/${item.responsibilityId}/permission/revoke" style="margin-top:0.35rem;">
             <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Stop allowing this</button>
           </form>` : html`
@@ -1240,7 +1240,7 @@ letterRoutes.get('/letter', async (c) => {
 
         ${fleet.system.length > 0 ? html`
         <div class="card" style="padding:1.1rem 1.25rem;margin-bottom:0.9rem;border:1px solid rgba(255,179,71,0.35);">
-          <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#ffb347;margin-bottom:0.4rem;">Your machine</div>
+          <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--alert);margin-bottom:0.4rem;">Your machine</div>
           ${fleet.system.map((s) => html`<div style="font-size:0.85rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid rgba(255,255,255,0.05);">${s}</div>`)}
         </div>` : ''}
 
@@ -1466,8 +1466,8 @@ letterRoutes.get('/letter', async (c) => {
     ${stepAwaySection(stepAway)}
 
     ${stopped ? html`
-    <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid #ffb347;">
-      <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#ffb347;margin-bottom:0.4rem;">I have stopped</div>
+    <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid var(--alert);">
+      <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--alert);margin-bottom:0.4rem;">I have stopped</div>
       <div style="font-size:0.95rem;color:var(--text-primary);">${stopped.axis === 'entitlement'
     ? html`I am not doing anything for ${ctx.productName} at the moment — the subscription is not active.`
     : stopped.axis === 'paused'
@@ -1478,8 +1478,8 @@ letterRoutes.get('/letter', async (c) => {
       <a href="/settings" class="btn btn-primary" style="margin-top:0.6rem;font-size:0.82rem;display:inline-block;">${stopped.axis === 'entitlement' ? 'Fix the subscription' : 'Start me again'}</a>`}
     </div>` : ''}
     ${deletion ? html`
-    <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid var(--danger, #ff6b6b);">
-      <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--danger, #ff6b6b);margin-bottom:0.4rem;">This company is being deleted</div>
+    <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid var(--bad);">
+      <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--bad);margin-bottom:0.4rem;">This company is being deleted</div>
       ${deletion.overdue ? html`
       <div style="font-size:0.95rem;color:var(--text-primary);">${ctx.productName} was due to be removed on ${String(deletion.deletesOn).slice(0, 10)}, and I have no record that it was.</div>
       <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.3rem;">I am not going to tell you why — I do not know. What I can tell you is that the day has passed and the removal is not recorded as done. You can still stop it.</div>`
@@ -1915,7 +1915,7 @@ letterRoutes.get('/autopilot', async (c) => {
             <div style="font-size:0.8rem;color:var(--accent);">${MODE_LABELS[p.mode as AutopilotMode]}</div>
             <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.25rem;">
               Shadow record: ${agreement} · ${p.clean_cycles}/${PROMOTION_THRESHOLD} clean cycles banked
-              ${calLine ? html`<br/><span style="color:${cal!.verdict === 'overconfident' ? '#ffb347' : 'var(--text-muted)'};">${calLine}</span>` : ''}
+              ${calLine ? html`<br/><span style="color:${cal!.verdict === 'overconfident' ? 'var(--alert)' : 'var(--text-muted)'};">${calLine}</span>` : ''}
               ${p.last_demotion_reason ? html`<br/>Last pulled back: ${p.last_demotion_reason}` : ''}
             </div>
           </div>
@@ -1926,7 +1926,7 @@ letterRoutes.get('/autopilot', async (c) => {
               // The platform ceiling can't be exceeded — show it instead of an
               // ungrantable button (autonomy = min(setting, cap, trust)).
               if (isCappedBelow(nextMode as never, p.category)) {
-                return html`<span style="font-size:0.72rem;color:#ffb347;align-self:center;" title="Operator-set ceiling for this capability">Platform cap: ${cap}</span>`;
+                return html`<span style="font-size:0.72rem;color:var(--alert);align-self:center;" title="Operator-set ceiling for this capability">Platform cap: ${cap}</span>`;
               }
               const grantingAct = nextMode === 'act';
               return p.mode !== 'act' ? html`
@@ -1955,7 +1955,7 @@ letterRoutes.get('/autopilot', async (c) => {
       <h1 style="margin:0;">Controls</h1>
       <form method="POST" action="/autopilot/panic"
         onsubmit="return confirm('Stop the autopilot everywhere? All categories return to Watching only. Trust records are kept.')">
-        <button type="submit" class="btn" style="font-size:0.8rem;background:#c0392b;color:#fff;border:none;padding:0.45rem 1rem;border-radius:6px;">■ Stop the autopilot</button>
+        <button type="submit" class="btn" style="font-size:0.8rem;background:var(--bad);color:var(--bg);border:none;padding:0.45rem 1rem;border-radius:6px;">■ Stop the autopilot</button>
       </form>
     </div>
     <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1.5rem;">

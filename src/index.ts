@@ -23,7 +23,7 @@ import { logger } from './services/logger.js';
 
 // Middleware
 import { authMiddleware, sessionAuthForApiRoutes } from './middleware/auth.js';
-import { publicRateLimit, apiRateLimit, authRateLimit, webhookRateLimit, aiRateLimit, auditRateLimit } from './middleware/rate-limit.js';
+import { publicRateLimit, apiRateLimit, authRateLimit, webhookRateLimit, aiRateLimit } from './middleware/rate-limit.js';
 import { internalMiddleware } from './middleware/internal.js';
 
 // Public routes (no auth)
@@ -271,70 +271,17 @@ app.route('/', ecosystemRoutes);
 // ─── Authenticated Routes ────────────────────────────────────────────────────
 
 // Apply auth middleware to all dashboard and API routes
-app.use('/dashboard/*', authMiddleware);
 app.use('/onboarding/*', authMiddleware);
-app.use('/products/*', authMiddleware);
-app.use('/decisions/*', authMiddleware);
-app.use('/fleet', authMiddleware);
-app.use('/api/decisions/*', authMiddleware);
-app.use('/api/feedback/*', authMiddleware);
-app.use('/digest/*', authMiddleware);
-app.use('/beta/*', authMiddleware);
-app.use('/koldly/*', authMiddleware);
 app.use('/settings', authMiddleware);
 app.use('/settings/*', authMiddleware);
-app.use('/plan', authMiddleware);
-app.use('/plan/*', authMiddleware);
-app.use('/signal/*', authMiddleware);
-app.use('/checkout', authMiddleware);
-app.use('/switch-product', authMiddleware);
-app.use('/portfolio', authMiddleware);
-app.use('/checkout', authMiddleware);
-app.use('/integrations', authMiddleware);
-app.use('/integrations/*', authMiddleware);
-app.use('/team', authMiddleware);
-app.use('/team/*', authMiddleware);
-app.use('/investors', authMiddleware);
-app.use('/investors/*', authMiddleware);
-app.use('/playbooks', authMiddleware);
-app.use('/playbooks/*', authMiddleware);
-app.use('/agents', authMiddleware);
-app.use('/agents/*', authMiddleware);
-app.use('/products/*/agents/*', authMiddleware);
 // Cookie/session APIs use Clerk. Machine-facing REST API v1 owns its bearer
 // API-key authentication in apiV1 and must not have that credential consumed
 // as a Clerk token first.
 app.use('/api/*', sessionAuthForApiRoutes);
-app.use('/benchmarks', authMiddleware);
-app.use('/benchmarks/*', authMiddleware);
-app.use('/audit-log', authMiddleware);
-app.use('/audit-log/*', authMiddleware);
-app.use('/scenarios', authMiddleware);
-app.use('/scenarios/*', authMiddleware);
-app.use('/board', authMiddleware);
-app.use('/board/*', authMiddleware);
-app.use('/brief', authMiddleware);
-app.use('/brief/*', authMiddleware);
 app.use('/privacy', authMiddleware);
 app.use('/privacy/*', authMiddleware);
 // SCP v7 auth
-app.use('/roi', authMiddleware);
-app.use('/roi/*', authMiddleware);
-app.use('/founder', authMiddleware);
-app.use('/founder/*', authMiddleware);
-app.use('/integrations/health', authMiddleware);
-app.use('/integrations/health/*', authMiddleware);
 // SCP v6 auth
-app.use('/memory', authMiddleware);
-app.use('/memory/*', authMiddleware);
-app.use('/signals/multimodal', authMiddleware);
-app.use('/signals/multimodal/*', authMiddleware);
-app.use('/ambient', authMiddleware);
-app.use('/ambient/*', authMiddleware);
-app.use('/network', authMiddleware);
-app.use('/network/*', authMiddleware);
-app.use('/exit', authMiddleware);
-app.use('/exit/*', authMiddleware);
 // Ascent surfaces (the Letter, Controls, Talk) + Hands Law connections
 app.use('/letter', authMiddleware);
 app.use('/letter/*', authMiddleware);
@@ -355,6 +302,30 @@ app.use('/talk/*', authMiddleware);
 app.use('/connections', authMiddleware);
 app.use('/connections/*', authMiddleware);
 app.use('/api/*', apiRateLimit);
+
+// ─── EIGHTY-NINE MOUNTS THAT GUARDED NOTHING ─────────────────────────────────
+//
+// Auth, CSRF and rate-limit middleware were registered on fifty-nine path
+// prefixes with no route behind any of them: /investors, /board, /benchmarks,
+// /playbooks, /roi, /team, /memory, /network, /exit, /scenarios, /ambient,
+// /integrations, /agents, /dashboard, /plan, /checkout and the rest. Those were
+// Commercial Foundry's surfaces. The routers are deleted; the guards on their
+// doors outlived the doors by about a hundred lines.
+//
+// Harmless at runtime and misleading to read, which is the reason to remove
+// them: a reader checking whether a surface is protected finds a mount and
+// stops there, and the mount says nothing about whether the route exists. What
+// remains is the list of prefixes this application actually serves. The crawl
+// (`tests/simulation/crawl.ts`) checks the other direction on every run — a
+// route with no auth in front of it is a defect there — so the two halves are
+// held from both ends rather than by this list being carefully maintained.
+//
+// THE ONE THING THAT WAS NOT DEAD: the per-user AI rate limit. It was mounted
+// on /api/ask, /api/chat, /decisions, /validate and /plan — all deleted — which
+// left the two paths that DO call a model from a user's request with no cap but
+// the AI client's per-product daily ceiling. They are named here instead.
+app.use('/foundry/ask', aiRateLimit);
+app.use('/talk/message', aiRateLimit);
 
 // ─── REST API v1, MOUNTED BEFORE ANY ROUTER THAT SITS AT THE ROOT ────────────
 //
@@ -381,38 +352,13 @@ app.route('/api/v1', apiV1);
 // per-product daily cost ceiling. Mounted AFTER auth so the founder
 // id is available on the context for the keyFn. Routes covered: any
 // path that issues an LLM call directly from a user-driven request.
-app.use('/api/ask/*', aiRateLimit);
-app.use('/api/chat/*', aiRateLimit);
-app.use('/decisions/*', aiRateLimit);          // action-draft generation triggers Sonnet
-app.use('/validate', aiRateLimit);
-app.use('/validate/*', aiRateLimit);
-app.use('/plan/*', aiRateLimit);                // weekly plan generation
-app.use('/onboarding/run-audit', auditRateLimit); // the most expensive op — stricter cap (6/hr)
-app.use('/founder-ops', authMiddleware);
-app.use('/founder-ops/*', authMiddleware);
 
 // CSRF protection on all authenticated routes (SEC-03)
 import { csrfMiddleware } from './middleware/csrf.js';
-app.use('/dashboard/*', csrfMiddleware);
 app.use('/onboarding/*', csrfMiddleware);
 app.use('/settings', csrfMiddleware);
 app.use('/settings/*', csrfMiddleware);
-app.use('/products/*', csrfMiddleware);
-app.use('/decisions/*', csrfMiddleware);
-app.use('/switch-product', csrfMiddleware);
-app.use('/checkout', csrfMiddleware);
-app.use('/investors/*', csrfMiddleware);
-app.use('/team/*', csrfMiddleware);
 app.use('/privacy/*', csrfMiddleware);
-app.use('/agents/*', csrfMiddleware);
-app.use('/playbooks/*', csrfMiddleware);
-app.use('/scenarios/*', csrfMiddleware);
-app.use('/board/*', csrfMiddleware);
-app.use('/memory/*', csrfMiddleware);
-app.use('/ambient/*', csrfMiddleware);
-app.use('/network/*', csrfMiddleware);
-app.use('/exit/*', csrfMiddleware);
-app.use('/founder-ops/*', csrfMiddleware);
 app.use('/autopilot/*', csrfMiddleware);
 app.use('/letter/*', csrfMiddleware);
 // Origin proof is a separate question from who may. Nothing on the owner
@@ -427,17 +373,6 @@ app.use('/connections/*', csrfMiddleware);
 // cookie-authenticated state-changing surface gets it too. Bearer-auth
 // API calls and Origin-less webhook/CLI callers pass through untouched.
 app.use('/api/*', csrfMiddleware);
-app.use('/integrations/*', csrfMiddleware);
-app.use('/plan/*', csrfMiddleware);
-app.use('/roi/*', csrfMiddleware);
-app.use('/brief/*', csrfMiddleware);
-app.use('/beta/*', csrfMiddleware);
-app.use('/koldly/*', csrfMiddleware);
-app.use('/founder/*', csrfMiddleware);
-app.use('/signals/multimodal/*', csrfMiddleware);
-app.use('/digest/*', csrfMiddleware);
-app.use('/benchmarks/*', csrfMiddleware);
-app.use('/audit-log/*', csrfMiddleware);
 
 // Dashboard routes
 // ── The owner's instance ─────────────────────────────────────────────────────

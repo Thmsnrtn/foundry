@@ -95,7 +95,6 @@ describe('a milestone belongs to the company that earned it', () => {
 });
 
 describe('the badges that are not drawn', () => {
-  const layout = stripComments(readFileSync('src/views/layout.ts', 'utf8'));
   const shared = stripComments(readFileSync('src/routes/dashboard/_shared.ts', 'utf8'));
   const jobs = stripComments(readFileSync('src/jobs/index.ts', 'utf8'));
   const types = stripComments(readFileSync('src/types/index.ts', 'utf8'));
@@ -112,7 +111,9 @@ describe('the badges that are not drawn', () => {
     // One COUNT per dashboard page, for a badge that does not exist.
     expect(shared).not.toContain('remediation_prs');
     expect(shared).not.toContain('openPRCount');
-    expect(layout).not.toContain('openPRCount');
+    // `views/layout.ts` was read here too. It is deleted — every page that
+    // rendered through it moved to the owner shell — so the badge it ignored
+    // cannot be drawn by a file that does not exist.
   });
 
   it('are no longer swept for every product every six hours', () => {

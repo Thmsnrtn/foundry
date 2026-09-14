@@ -1339,13 +1339,6 @@ CREATE TABLE development_change_plans (
   learned_claim_id      TEXT REFERENCES reconstruction_claims(id),
   created_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 , disposition TEXT, disposition_evidence_json TEXT);
-CREATE TABLE dimension_hints (
-  id TEXT PRIMARY KEY,
-  audit_score_id TEXT NOT NULL REFERENCES audit_scores(id),
-  dimension TEXT NOT NULL,
-  hint_text TEXT NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
 CREATE TABLE ecosystem_principal_companies (
   id TEXT PRIMARY KEY,
   principal_id TEXT NOT NULL REFERENCES ecosystem_principals(id) ON DELETE CASCADE,
@@ -1820,14 +1813,6 @@ CREATE TABLE funnel_events (
   step        TEXT NOT NULL,
   created_at  TEXT NOT NULL,
   UNIQUE(founder_id, product_id, step)
-);
-CREATE TABLE gate_events (
-  id TEXT PRIMARY KEY,
-  founder_id TEXT NOT NULL REFERENCES founders(id),
-  feature_key TEXT NOT NULL,
-  tier_required TEXT NOT NULL,
-  tier_actual TEXT,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE geopolitical_signals (
   id TEXT PRIMARY KEY,
@@ -2510,16 +2495,6 @@ CREATE TABLE offer_shapes (
   stated_by      TEXT NOT NULL,
   stated_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   superseded_at  TEXT
-);
-CREATE TABLE onboarding_audit_progress (
-  product_id    TEXT PRIMARY KEY,
-  status        TEXT NOT NULL DEFAULT 'running',
-  current_step  INTEGER NOT NULL DEFAULT 0,
-  total_steps   INTEGER NOT NULL DEFAULT 9,
-  step_label    TEXT NOT NULL DEFAULT 'Starting…',
-  error         TEXT,
-  started_at    TEXT NOT NULL,
-  updated_at    TEXT NOT NULL
 );
 CREATE TABLE onboarding_checklist (
   founder_id TEXT NOT NULL REFERENCES founders(id),
@@ -4755,7 +4730,6 @@ CREATE INDEX idx_delegation_breakers ON delegation_breakers(delegation_id, tripp
 CREATE INDEX idx_delegations_live ON delegations(founder_id, product_id, revoked_at);
 CREATE UNIQUE INDEX idx_development_change_identity ON development_change_plans(product_id,change_id);
 CREATE INDEX idx_development_change_responsibility ON development_change_plans(product_id,responsibility_id,created_at);
-CREATE UNIQUE INDEX idx_dimension_hints_unique ON dimension_hints(audit_score_id, dimension);
 CREATE INDEX idx_ecosystem_principal_companies_lookup
   ON ecosystem_principal_companies(principal_id, product_id);
 CREATE INDEX idx_ecosystem_principals_hash
@@ -4802,7 +4776,6 @@ CREATE INDEX idx_freeze_periods_product_active
 CREATE INDEX idx_freeze_periods_started
   ON freeze_periods(product_id, started_at DESC);
 CREATE INDEX idx_funnel_events_step ON funnel_events(step, created_at);
-CREATE INDEX idx_gate_events_founder ON gate_events(founder_id);
 CREATE INDEX idx_geo_signals_product ON geopolitical_signals(product_id);
 CREATE INDEX idx_geo_signals_status ON geopolitical_signals(status);
 CREATE INDEX idx_golden_suite_agent ON golden_suite(product_id, agent_name, active);

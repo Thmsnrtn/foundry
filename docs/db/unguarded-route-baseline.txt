@@ -10,9 +10,6 @@ POST /letter/responsibilities/:responsibilityId/disposition
 POST /letter/responsibility-candidates/:candidateId/promote
 POST /letter/responsibility-candidates/:candidateId/reconsider
 POST /letter/responsibility-candidates/:candidateId/reject
-POST /onboarding/competitors
-POST /onboarding/create-product
-POST /onboarding/select-repo
 POST /settings/delete-all-products
 POST /settings/fluency
 POST /settings/interruption-ceiling

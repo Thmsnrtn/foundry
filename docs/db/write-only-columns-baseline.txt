@@ -32,9 +32,6 @@ forecast_checkpoints.scenario_id
 forecast_scenarios.generated_by
 founder_behavioral_signals.signal_description
 founder_evidence_requests.answer_signal_id
-gate_events.feature_key
-gate_events.tier_actual
-gate_events.tier_required
 idempotency_keys.agent_id
 inbound_customer_messages.evidence_signal_id
 ingest_credentials.evidence_signal_id

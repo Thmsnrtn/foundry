@@ -1,32 +1,16 @@
 // =============================================================================
-// Tests: Wave 2 — rejection-streak / dna-autofill
+// Tests: Wave 2 — rejection-streak
 //
-// Two of the four subjects are gone. `founder/feedback.ts` (NPS and rejection
+// Three of the four subjects are gone. `founder/feedback.ts` (NPS and rejection
 // reasons) and `intelligence/shippability.ts` were reachable from no entry
 // point and have been deleted, and the ten cases that called them went with
 // them. The two below still have live services.
 // =============================================================================
 
-import { describe, it, expect, beforeAll, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import { nanoid } from 'nanoid';
-
-// Mock the AI client so dna-autofill tests don't hit the network.
-let mockResponse = JSON.stringify({
-  icp_description: 'Solo SaaS founders running 1-5 products',
-  icp_pain: 'Operating-task drain consumes hours per week',
-  icp_trigger: 'Adding a second product without doubling workload',
-  positioning_statement: 'Autonomous AI operations layer for solo SaaS founders',
-  what_we_are_not: 'Not a fleet control plane',
-  primary_objection: 'Another tool to learn',
-  objection_response: 'Foundry runs in the background; daily 90-second briefing only',
-  market_insight: 'AI commoditizes; per-founder calibration is the moat',
-});
-vi.mock('../../src/services/ai/client.js', () => ({
-  callSonnet: vi.fn(async () => ({ content: mockResponse, usage: { input_tokens: 10, output_tokens: 10 } })),
-  parseJSONResponse: <T>(s: string): T => JSON.parse(s) as T,
-}));
 
 import { query, executeRaw } from '../../src/db/client.js';
 import { runMigrations } from '../../src/db/migrate.js';
@@ -35,7 +19,6 @@ import {
   recordApproval,
   getStreak,
 } from '../../src/services/founder/rejection-streak.js';
-import { extractDNAFromAssets } from '../../src/services/wisdom/dna-autofill.js';
 
 let founderId: string;
 let productId: string;
@@ -104,40 +87,21 @@ describe('rejection-streak', () => {
   });
 });
 
-// ─── DNA auto-fill ────────────────────────────────────────────────────────────
-
-describe('dna-autofill', () => {
-  it('returns empty draft when no source material', async () => {
-    const r = await extractDNAFromAssets({}, productId);
-    expect(r.icp_description).toBeNull();
-    expect(r.positioning_statement).toBeNull();
-  });
-
-  it('extracts and clamps fields from source material', async () => {
-    const r = await extractDNAFromAssets(
-      { readme: 'Foundry helps solo SaaS founders.' },
-      productId
-    );
-    expect(r.icp_description).toBeTruthy();
-    expect(r.positioning_statement).toBeTruthy();
-    // 250-char clamp
-    expect((r.icp_description ?? '').length).toBeLessThanOrEqual(250);
-  });
-
-  it('returns nulls when LLM returns invalid JSON', async () => {
-    mockResponse = 'not-json';
-    const r = await extractDNAFromAssets(
-      { readme: 'something' },
-      productId
-    );
-    expect(r.icp_description).toBeNull();
-    // Reset for other tests
-    mockResponse = JSON.stringify({
-      icp_description: 'X',
-      positioning_statement: 'Y',
-      icp_pain: null, icp_trigger: null,
-      what_we_are_not: null, primary_objection: null,
-      objection_response: null, market_insight: null,
-    });
-  });
-});
+// ─── DNA AUTO-FILL, GONE WITH WHAT CALLED IT ─────────────────────────────────
+//
+// `services/wisdom/dna-autofill.ts` read a founder's GitHub README, landing
+// page and Stripe product descriptions, asked a model to extract an ICP,
+// positioning statement and primary objection from them, and pre-filled the
+// Product DNA so nobody typed from blank. Its one caller was the onboarding
+// wizard's audit step.
+//
+// That wizard is deleted — nine commercial routes, including the GitHub OAuth
+// exchange and repository picker that supplied the README. The owner's instance
+// holds no repositories and no competitors, so the module had no source
+// material to read and nothing left to call it. `check-reachability` found it
+// the moment its caller went, which is what that gate is for.
+//
+// The four checks here exercised the extractor directly, and the wiring test
+// next door asserted the wizard still called it. Both went with the module. The
+// rejection-streak checks above are untouched — a different faculty, still
+// reachable, still running.

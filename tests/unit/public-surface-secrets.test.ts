@@ -1,15 +1,20 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 
 // =============================================================================
 // Public surfaces must not reach for rows that carry secrets.
 //
-// Two routes answer without any authentication at all — the share page and the
-// ingest endpoints — and the `products` row carries `ingest_token` and
+// Two routes answered without any authentication at all — the share page and
+// the ingest endpoints — and the `products` row carries `ingest_token` and
 // `share_token`. The share page selected `p.*` and rendered only `id` and
 // `name`, so nothing leaked; it was one added field away from handing an
 // investor the credential their tools post metrics with.
+//
+// THE SHARE PAGE IS NOW DELETED, and what replaced that check is below. The
+// rule it stood for is unchanged and still has unauthenticated surfaces to
+// hold: the ingest endpoints, and the refund link a buyer is sent.
 //
 // This gate is about REACH, not about rendering. Asserting "no secret is
 // printed" would pass right up until somebody printed one. Asserting the row
@@ -82,12 +87,26 @@ describe('public, unauthenticated surfaces', () => {
       .toEqual([]);
   });
 
-  it('the share page reads only what it renders', () => {
-    // Named explicitly, so widening it is a visible edit rather than a silent
-    // consequence of a `*`.
-    const source = readFileSync(resolve(ROOT, 'src/routes/share/index.ts'), 'utf8');
-    expect(source).toContain('SELECT p.id, p.name, f.name as founder_name');
-    const rendered = [...source.matchAll(/product\.(\w+)/g)].map((m) => m[1]);
-    expect([...new Set(rendered)].sort()).toEqual(['id', 'name']);
+  it('the share page reads no product row at all now', () => {
+    // It used to read one, and the check was that the SELECT named its three
+    // columns explicitly — `p.id, p.name, f.name` — so that widening it was a
+    // visible edit rather than a silent consequence of a `*`. The reason was
+    // sharp: the `products` row carries `ingest_token` and `share_token`, and
+    // this handler is public and unauthenticated, so a `SELECT *` here put the
+    // credential a founder's tools post metrics with one line away from an
+    // investor's browser.
+    //
+    // `GET /share/:token` is deleted — nothing writes `share_token` since the
+    // control that minted it went with the subscription tiers, so the page
+    // could only answer 404. The file now serves one thing, the refund link an
+    // Apex Micro buyer is sent, and it reads no product row. The check that
+    // matters is that it has not started reading one again.
+    // Comments stripped, because the epitaph in that file names the column it
+    // no longer reads, and a grep cannot tell an explanation from the thing it
+    // explains. Same instrument the gates use.
+    const source = stripComments(
+      readFileSync(resolve(ROOT, 'src/routes/share/index.ts'), 'utf8'), { lineComments: true });
+    expect(source).not.toMatch(/FROM products/i);
+    expect(source).not.toMatch(/share_token/);
   });
 });

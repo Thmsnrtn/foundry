@@ -1016,3 +1016,156 @@ removals). `unread-tables` −2. `unreferenced-tables`, `writerless-tables`,
 `unreachable-modules` all at **zero with no baseline at all**. `console-in-src`
 187 → 183. `schema.snapshot.sql` **−471 lines, none added**.
 `CONSEQUENTIAL_EFFECTS.json` −14 lines, none added.
+
+## System B, retired — 14 September 2026
+
+The second visual system is gone. Until this tranche the application shipped
+**two** of them: `views/layout.ts` served `public/styles.css` — 1,728 lines, a
+twenty-five item sidebar, a five-tab bar, a command palette — to Commercial
+Foundry's pages, and `views/owner/shell.ts` served `public/owner.css` to the
+owner's six doors. The commercial pages were deleted in the previous tranche.
+The stylesheet, the layout, the component library and the markup that named
+them survived it by a week.
+
+### What moved, and onto what
+
+- **`/settings` and `/privacy` are Controls now.** Both rendered through
+  `settingsPage`/`dashboardLayout`; both now render through `page()` under the
+  Controls door, with a breadcrumb that says where they are. Four sections of
+  `/settings` were deleted rather than moved — Profile, Repositories,
+  Competitors and Beta (all `settingsPage`, all reading tables empty in this
+  instance), **Subscription** (three plan tiers and a card), the **Wisdom
+  Network** framing (an offer to contribute anonymised patterns to a network of
+  one — the two benchmark tables are empty and the percentile floor needs five
+  contributors), and **Investor/Advisor Access** (a share link for people this
+  institution does not have; zero of thirteen products had ever generated one).
+  The pace control inside the Wisdom card was real and kept, under its own name.
+- **`/letter` became a place.** Five renders moved to `page(..., 'advanced')`,
+  a depth the shell now knows about: it draws no lit door and no footer link
+  back to itself, because it is not one of the six.
+- **`views/layout.ts` and `views/components.ts` are deleted.** `LayoutOptions`
+  moved to `routes/dashboard/_shared.ts`, trimmed to the fields the context
+  actually carries.
+- **`views/error-page.ts` is self-contained.** It deliberately does not use
+  `page()`: a 404 is not a place, half the people seeing it are not signed in,
+  and offering the estate's navigation would be offering doors that refuse them.
+- **The auth pages** (`routes/auth/clerk.ts`) came off `styles.css` and off
+  `#0f172a`, Commercial Foundry's slate, which had been hard-coded in three
+  inline style blocks. Signing out now lands on `/auth/login` rather than
+  bouncing through `/` to a protected route.
+- **The service worker** had two offline pages: the owner's, and a second one
+  built on the deleted stylesheet with two custom properties nothing declares.
+  One surface, so one page — and it carries its own style rather than linking
+  one, because a cached stylesheet is exactly the asset most likely to be
+  missing at the moment that page is needed.
+
+### The vocabulary the markup was still speaking
+
+Deleting a stylesheet does not fail loudly. A class that matches no rule draws
+unstyled; an undefined custom property makes the **whole declaration invalid**,
+so the property is dropped and the value inherits. `--text-primary` was used
+fifty-five times and declared in neither sheet — every one of those
+declarations had always done nothing, and it looked right because what it
+inherited was the body colour.
+
+So: an alias layer in `owner.css` (each alias resolving through a real token, so
+the light block and the explicit toggle carry them for free), the switch moved
+into the stylesheet as one rule instead of forty inline declarations carrying a
+green (`#4ecca3`) from no palette this deployment ships, `<pre>` and `<code>`
+given rules at last, and **56 hard-coded colours** across the Letter, Controls,
+Privacy and Connections replaced with palette tokens.
+
+`tests/unit/one-stylesheet-one-vocabulary.test.ts` holds all three claims and
+was watched failing on each: a planted class, a planted property, a planted hex.
+
+### The button that could be wider than the phone
+
+`a-button-wider-than-the-phone.test.ts` measured the OTHER stylesheet — `.btn`
+carried `white-space:nowrap`, so a 468px call to action sat in a 390px phone.
+That sheet is gone; the invariant is not, because `owner.css` has three rules
+that set `width:auto` on a button inside a flex row, which is the same shape.
+The test moved rather than being deleted, rewritten for a mobile-first sheet:
+`.btn` is now bounded by `max-width:100%`, the pair's `nowrap` moved to the desk
+where there is room for it, and the only elements left refusing to wrap on a
+phone are two that sit inside `overflow-x:auto` rows that scroll themselves.
+
+### Eighty-nine middleware mounts that guarded nothing
+
+`src/index.ts` registered auth, CSRF and rate-limit middleware on **fifty-nine
+path prefixes with no route behind any of them**: `/investors`, `/board`,
+`/benchmarks`, `/playbooks`, `/roi`, `/team`, `/memory`, `/network`, `/exit`,
+`/scenarios`, `/ambient`, `/integrations`, `/agents`, `/dashboard`, `/plan`,
+`/checkout`. Harmless at runtime and misleading to read: a reader checking
+whether a surface is protected finds a mount and stops there.
+
+**The one thing in that list that was not dead** was the per-user AI rate limit,
+mounted on `/api/ask`, `/api/chat`, `/decisions`, `/validate` and `/plan` — all
+deleted — which left the two paths that actually call a model from a user's
+request (`POST /foundry/ask`, `POST /talk/message`) with no cap but the AI
+client's per-product daily ceiling. They are named directly now.
+
+The crawl checks the other direction on every run — a route with no auth in
+front of it is a defect there — so the two halves are held from both ends. It
+reports 188 mounted routes, 0 findings.
+
+### What else the deletion orphaned
+
+`check-reachability` named them as their callers went; each was deleted rather
+than re-wired, and the tables underneath went with them (migration 312):
+
+- **`middleware/tier-gate.ts`** — sixteen feature gates at three subscription
+  prices ($79/$199/$399), most naming features whose tables were dropped in
+  migrations 309 and 311. With it went `requireTier`, its upgrade page, the
+  `ux:gate` CLI command, `FeatureGateConfig`, and `canAccess` from the page
+  context, where nothing had read it. `services/billing/entitlement.ts` is the
+  live mechanism and is a different question: whether a commercial instance has
+  lapsed into read-only, which is about payment rather than plan.
+- **`services/wisdom/dna-autofill.ts`** — read a founder's README, landing page
+  and Stripe descriptions and asked a model to extract an ICP. Its only caller
+  was the onboarding wizard's audit step.
+- **`lib/validation.ts`, `middleware/validate.ts`** — body schemas and the
+  validator for the nine deleted wizard routes.
+- **`services/audit/progress.ts`** (+ `onboarding_audit_progress`) — the
+  step counter behind "Analyzing your product… step 4 of 9". The page polling it
+  was still in the tree after its route was deleted, HTMX-refreshing a 404 four
+  times a minute for as long as anyone left it open.
+- **`services/ux/hints.ts`** (+ `dimension_hints`) — a model-written tooltip per
+  audit dimension, generated at the end of that same first audit.
+- **`auditRateLimit`** — six an hour on the most expensive thing a stranger
+  could make this deployment do. There is no longer a route that does it.
+- **`gate_events`** — which feature a founder hit a paywall on, and which plan
+  they were on when they hit it. Written only by `requireTier`; never read. It
+  survived `check-unreferenced-tables` because the privacy erasure map named
+  it, which is a promise to delete on request rather than a use — and with the
+  writer gone there is nothing left to delete. Its erasure entry went with it.
+
+`routes/dashboard/onboarding.ts` is 697 → 148 lines and holds one act: naming
+the first company and binding it to the `foundry` identity.
+
+### And the page whose token nothing could mint
+
+`GET /share/:token` showed a company's Signal score, its latest metrics and its
+last five approved decisions to anyone holding the token — the read-only view an
+Investor-Ready subscriber gave to investors and advisors. The control that
+generated and rotated that token was the Investor/Advisor Access section of
+`/settings`, deleted above. With nothing left writing `products.share_token` the
+page could only answer 404: a public, unauthenticated surface reading a
+company's decisions, standing open for a credential that can no longer exist.
+Deleting the control and keeping the page would have been the worse half to
+keep. `/share/refund/:fulfilmentId/:token` stays and is a different thing
+entirely — its token is minted per fulfilment when an Apex Micro buyer is sent
+their delivery, and the page is how they get their money back without writing to
+anyone.
+
+### One defect found by the tests rather than by reading
+
+`services/privacy/consent.ts` erased rate-limit buckets matching
+`audit:founder:%` and nothing else. `ai:founder:<id>` has existed exactly as
+long, and an erasure deleted the audit bucket while leaving a bucket with the
+same person's id in it. The written reason named only the one prefix, which is
+how it survived: **a reason nobody can check is how a misclassification lasts.**
+Both prefixes are now matched — the old one because rows written before this
+deletion are still in production, and are exactly what an erasure has to reach.
+The clause is parenthesised because the executor composes it as
+`<subject> AND <where>`, and an unbracketed OR would bind the founder-id match
+to only the first arm. Watched failing with the new arm removed.

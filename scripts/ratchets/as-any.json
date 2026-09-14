@@ -7,6 +7,6 @@
   ],
   "includePath": "\\.ts$",
   "excludePath": "\\.test\\.ts$",
-  "baseline": 12,
+  "baseline": 4,
   "direction": "down"
 }

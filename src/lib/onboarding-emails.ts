@@ -51,54 +51,16 @@ async function sendOnboardingEmail(opts: {
   return true;
 }
 
-/**
- * Day 1: Send audit results email after first audit completes.
- */
-export async function sendAuditResultsEmail(
-  email: string,
-  productName: string,
-  composite: number,
-  verdict: string,
-  blockingCount: number,
-  productId: string,
-): Promise<void> {
-  const appUrl = process.env.APP_URL ?? 'http://localhost:8080';
-  const scoreColor = composite >= 7 ? '#059669' : composite >= 5 ? '#d97706' : '#dc2626';
-  const verdictText = verdict === 'READY' ? 'Launch Ready' : verdict === 'READY_WITH_CONDITIONS' ? 'Ready with Conditions' : 'Not Yet Ready';
-
-  try {
-    const ok = await sendOnboardingEmail({
-      productId,
-      email,
-      subject: `${productName} scored ${composite.toFixed(1)}/10 — Your Audit Results`,
-      dedupKey: `onboarding_audit:${productId}`,
-      action: `day-1 audit results → ${email}`,
-      html: `
-      <div style="text-align:center;margin:24px 0;">
-        <div style="font-size:56px;font-weight:800;color:${scoreColor};">${composite.toFixed(1)}</div>
-        <div style="font-size:14px;color:#6b7280;text-transform:uppercase;letter-spacing:1px;">Composite Score</div>
-        <div style="display:inline-block;padding:4px 12px;border-radius:4px;background:${scoreColor}20;color:${scoreColor};font-weight:600;font-size:13px;margin-top:8px;">${verdictText}</div>
-      </div>
-
-      <p>Foundry analyzed ${productName} across <strong>10 dimensions</strong> — functional completeness, trust density, operational readiness, competitive defensibility, and more.</p>
-
-      ${blockingCount > 0 ? `<p><strong>${blockingCount} blocking issue${blockingCount > 1 ? 's' : ''} found.</strong> These must be resolved before your product is launch-ready. <a href="${appUrl}/products/${productId}/audit" style="color:#2563eb;">View blocking issues →</a></p>` : ''}
-
-      <h3>What to do next:</h3>
-      <ol style="line-height:1.8;">
-        <li><strong>Review your audit</strong> — see per-dimension scores and findings. <a href="${appUrl}/products/${productId}/audit">View audit →</a></li>
-        <li><strong>Enter your metrics</strong> — so Foundry can monitor revenue health and identify risks. <a href="${appUrl}/products/${productId}/revenue">Enter metrics →</a></li>
-        <li><strong>Start Product DNA</strong> — teach Foundry about your ICP and positioning. <a href="${appUrl}/products/${productId}/dna">Edit DNA →</a></li>
-      </ol>
-
-      <p style="color:#6b7280;font-size:13px;margin-top:24px;">Your first weekly digest arrives Monday. It'll include stressor reports, revenue analysis, and competitive intelligence — but only if you've entered metrics.</p>
-    `,
-    });
-    if (ok) log.info('Sent audit results email', { email, productName, composite });
-  } catch (err) {
-    log.error('Failed to send audit results email', err, { email });
-  }
-}
+// DAY 1: THE AUDIT RESULTS EMAIL, DELETED WITH THE AUDIT THAT TRIGGERED IT.
+//
+// `sendAuditResultsEmail` wrote to a founder the moment their first audit
+// finished — a composite score, the weakest dimension, a link back into the
+// product. Its one trigger site was `POST /onboarding/run-audit`, the last step
+// of the commercial wizard, and that route is deleted. An email about the
+// results of an audit nobody can start is a send that can never be correct.
+//
+// The Day-3 metrics nudge below still has a caller — the `behavioral_triggers`
+// job — and is left exactly as it was.
 
 /**
  * Day 3: Send metrics setup guide if no metrics recorded yet.
@@ -122,10 +84,16 @@ export async function sendMetricsGuideEmail(
 
       <h3>Two ways to add metrics:</h3>
 
+      <!-- THE FIRST BUTTON POINTED AT A PAGE THAT NO LONGER EXISTS.
+           /products/:id/revenue was Commercial Foundry's manual metric entry
+           form; the whole /products/ surface is deleted. An activation email
+           whose call to action is a 404 is worse than no email, and this one is
+           sent to someone who has just arrived. It points at the ingest URL in
+           Controls instead — the thing that actually accepts a number today. -->
       <div style="background:#f8fafc;border:1px solid #e2e5ea;border-radius:8px;padding:16px;margin:16px 0;">
-        <h4 style="margin:0 0 8px;">Option 1: Enter manually (2 minutes)</h4>
-        <p style="margin:0;font-size:13px;color:#4b5563;">Visit the Revenue page and fill in this week's numbers — MRR, signups, retention.</p>
-        <a href="${appUrl}/products/${productId}/revenue" style="display:inline-block;margin-top:8px;padding:6px 16px;background:#2563eb;color:#fff;border-radius:6px;font-size:13px;text-decoration:none;">Enter Metrics →</a>
+        <h4 style="margin:0 0 8px;">Option 1: Post them yourself (2 minutes)</h4>
+        <p style="margin:0;font-size:13px;color:#4b5563;">Controls carries a secret ingest URL. POST this week's numbers to it — MRR, signups, retention — from anything that can make a request.</p>
+        <a href="${appUrl}/settings" style="display:inline-block;margin-top:8px;padding:6px 16px;background:#2563eb;color:#fff;border-radius:6px;font-size:13px;text-decoration:none;">Get the ingest URL →</a>
       </div>
 
       <div style="background:#f8fafc;border:1px solid #e2e5ea;border-radius:8px;padding:16px;margin:16px 0;">

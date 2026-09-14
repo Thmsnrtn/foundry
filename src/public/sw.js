@@ -7,7 +7,7 @@ const CACHE_NAME = 'foundry-shell-v1';
 
 // Static assets to cache immediately on install
 const SHELL_ASSETS = [
-  '/static/styles.css',
+  '/static/owner.css',
   '/manifest.json',
 ];
 
@@ -75,40 +75,40 @@ self.addEventListener('fetch', (event) => {
   if (request.mode === 'navigate') {
     event.respondWith(
       fetch(request).catch(() => {
-        // THE OWNER'S SURFACE HAS ITS OWN OFFLINE PAGE.
+        // ONE SURFACE, SO ONE OFFLINE PAGE.
         //
-        // This worker registers at the root from the commercial layout, and the
-        // owner's footer links to a page that uses that layout — so visiting it
-        // once put this worker in charge of /foundry too. Losing signal on his
-        // own product then showed him the other product's dark stylesheet and
-        // its em-dash, in a typeface and palette that are not his.
-        const url = new URL(request.url);
-        if (url.pathname === '/foundry' || url.pathname.startsWith('/foundry/')) {
-          return new Response(
-            `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">`
-            + `<meta name="viewport" content="width=device-width,initial-scale=1">`
-            + `<title>Foundry</title><style>`
-            + `:root{color-scheme:light dark}`
-            + `body{margin:0;min-height:100vh;display:flex;align-items:center;`
-            + `justify-content:center;background:#F3F4F1;color:#151C18;`
-            + `font:400 17px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif}`
-            + `main{max-width:22rem;padding:24px;text-align:left}`
-            + `h1{font-family:"Iowan Old Style",Palatino,Georgia,serif;`
-            + `font-size:1.5rem;font-weight:500;margin:0 0 12px}`
-            + `p{color:#4C554E;margin:0}`
-            + `@media (prefers-color-scheme:dark){body{background:#0D1310;color:#EAEFEA}`
-            + `p{color:#A8B2AA}}`
-            + `</style></head><body><main>`
-            + `<h1>You are offline.</h1>`
-            + `<p>Nothing of yours has changed, and I have not acted on anything. `
-            + `This page will work again when you have a connection.</p>`
-            + `</main></body></html>`,
-            { headers: { 'Content-Type': 'text/html' } }
-          );
-        }
-        // On network failure for navigation, serve a minimal offline indicator
+        // This branched: `/foundry` got the owner's offline page, and every
+        // other path got a second one built on the commercial layout's
+        // stylesheet — an em-dash on a dark ground, in a typeface and palette
+        // that were never his. That branch made sense while two products
+        // shared a hostname. They no longer do: the commercial pages are
+        // deleted, the root is a redirect into the owner's instance, and the
+        // only other thing a browser can navigate to here is the sign-in form.
+        //
+        // So there is one page, and it carries its own style rather than
+        // linking one. A cached stylesheet is exactly the asset most likely to
+        // be missing in the moment this page is needed, and the fallback for a
+        // missing stylesheet was two undefined custom properties — grey text
+        // on whatever ground the browser chose.
         return new Response(
-          `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Foundry — Offline</title><link rel="stylesheet" href="/static/styles.css"></head><body><div style="display:flex;align-items:center;justify-content:center;min-height:100vh;flex-direction:column;gap:1rem;"><div style="font-size:3rem;font-weight:800;color:var(--text-dim)">—</div><p style="color:var(--text-muted)">No connection. Foundry will resume when you're back online.</p></div></body></html>`,
+          `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">`
+          + `<meta name="viewport" content="width=device-width,initial-scale=1">`
+          + `<title>Foundry</title><style>`
+          + `:root{color-scheme:light dark}`
+          + `body{margin:0;min-height:100vh;display:flex;align-items:center;`
+          + `justify-content:center;background:#F3F4F1;color:#151C18;`
+          + `font:400 17px/1.5 ui-sans-serif,system-ui,-apple-system,sans-serif}`
+          + `main{max-width:22rem;padding:24px;text-align:left}`
+          + `h1{font-family:"Iowan Old Style",Palatino,Georgia,serif;`
+          + `font-size:1.5rem;font-weight:500;margin:0 0 12px}`
+          + `p{color:#4C554E;margin:0}`
+          + `@media (prefers-color-scheme:dark){body{background:#0D1310;color:#EAEFEA}`
+          + `p{color:#A8B2AA}}`
+          + `</style></head><body><main>`
+          + `<h1>You are offline.</h1>`
+          + `<p>Nothing of yours has changed, and I have not acted on anything. `
+          + `This page will work again when you have a connection.</p>`
+          + `</main></body></html>`,
           { headers: { 'Content-Type': 'text/html' } }
         );
       })

@@ -74,8 +74,12 @@ export const DEGRADED_ENV: EnvRequirement[] = [
   { names: ['RESEND_API_KEY'], consequence: 'all outbound email is logged rather than sent' },
   { names: ['RESEND_FROM_ADDRESS'], consequence: 'outbound email has no from address' },
   { names: ['APP_URL'], consequence: 'links in email and OAuth redirects point at localhost' },
-  { names: ['GITHUB_CLIENT_ID'], consequence: 'the GitHub OAuth app cannot be used' },
-  { names: ['GITHUB_CLIENT_SECRET'], consequence: 'the GitHub OAuth app cannot be used' },
+  // GITHUB_CLIENT_ID AND GITHUB_CLIENT_SECRET WENT WITH THE OAUTH ROUND TRIP.
+  // Their only reader was the onboarding wizard's `/onboarding/github/callback`
+  // — the step that exchanged a code for a token so a stranger's repository
+  // could be audited. That wizard is deleted. A name listed here that nothing
+  // reads is a startup check reporting on a capability the process does not
+  // have, which is the exact failure this file was written to end.
   { names: ['ECOSYSTEM_SERVICE_KEY'], consequence: 'internal ecosystem endpoints refuse every caller' },
   { names: ['SENTRY_DSN'], consequence: 'error tracking falls back to stderr only' },
 ];

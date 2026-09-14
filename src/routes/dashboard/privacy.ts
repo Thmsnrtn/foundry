@@ -8,7 +8,33 @@ import { csvCell, csvRow } from '../../lib/csv.js';
 import { clientIp } from '../../middleware/rate-limit.js';
 import { html } from 'hono/html';
 import type { AuthEnv } from '../../middleware/auth.js';
-import { dashboardLayout } from '../../views/layout.js';
+import { page } from '../../views/owner/shell.js';
+import type { Where } from '../../views/owner/shell.js';
+
+/**
+ * PRIVACY IS CONTROLS TOO.
+ *
+ * Consent, residency, export and deletion are the four things the owner can do
+ * about his own data, and they were reachable only from a link inside the
+ * Letter, rendered in the other visual system. They are governance, so they
+ * belong behind the Controls door with everything else that decides what
+ * Foundry may do.
+ */
+function controlsWhere(ctx: { title: string }): Where {
+  return {
+    eyebrow: 'Controls',
+    crumbs: [
+      { href: '/foundry', label: 'Foundry' },
+      { href: '/foundry/controls', label: 'Controls' },
+      { href: '/privacy', label: ctx.title },
+    ],
+    scope: { kind: 'foundry', id: null, name: 'the estate' },
+    local: [], chips: [],
+  };
+}
+
+const controlsPage = (ctx: { title: string }, body: Parameters<typeof page>[1]): ReturnType<typeof page> =>
+  page(ctx.title, body, 'controls', controlsWhere(ctx));
 import { getLayoutContext } from './_shared.js';
 import {
   recordConsent,
@@ -63,10 +89,14 @@ function logRetentionLabel(days: number): string {
 // ─── Toggle Component ─────────────────────────────────────────────────────────
 
 function toggle(name: string, checked: boolean, id: string): string {
-  return `<label class="toggle-switch" for="${id}" style="position:relative;display:inline-block;width:44px;height:24px;cursor:pointer;flex-shrink:0;">
-    <input type="checkbox" id="${id}" name="${name}" value="1"${checked ? ' checked' : ''} style="opacity:0;width:0;height:0;position:absolute;" onchange="this.closest('form').submit()">
-    <span style="position:absolute;inset:0;border-radius:24px;background:${checked ? '#4ecca3' : 'rgba(255,255,255,0.12)'};transition:background 0.2s;"></span>
-    <span style="position:absolute;top:3px;left:${checked ? '23px' : '3px'};width:18px;height:18px;border-radius:50%;background:#fff;transition:left 0.2s;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></span>
+  // The switch lives in `public/owner.css` now — one rule for this page and the
+  // pace control in Controls. What stood here was forty inline declarations
+  // drawing the same thing, with an ON colour of #4ecca3 that appears in no
+  // palette this deployment ships.
+  return `<label class="toggle" for="${id}">
+    <input type="checkbox" id="${id}" name="${name}" value="1"${checked ? ' checked' : ''} onchange="this.closest('form').submit()">
+    <span class="toggle-track"></span>
+    <span class="toggle-thumb"></span>
   </label>`;
 }
 
@@ -82,7 +112,7 @@ privacySettings.get('/privacy', async (c) => {
       <h1 style="margin:0 0 0.5rem;">Privacy &amp; Data</h1>
       <p style="color:var(--text-dim);">No product selected.</p>
     `;
-    return c.html(dashboardLayout(ctx, content));
+    return c.html(controlsPage(ctx, content));
   }
 
   const productId = ctx.productId;
@@ -110,8 +140,8 @@ privacySettings.get('/privacy', async (c) => {
   // thirty days.
   const pending = await pendingDeletion(productId);
   const pendingBanner = pending
-    ? html`<div style="background:#ff6b6b22;border:1px solid #ff6b6b66;border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.5rem;">
-        <div style="color:#ff6b6b;font-weight:600;font-size:0.9rem;margin-bottom:0.35rem;">Deletion scheduled</div>
+    ? html`<div style="background:var(--bad-soft);border:1px solid var(--bad);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.5rem;">
+        <div style="color:var(--bad);font-weight:600;font-size:0.9rem;margin-bottom:0.35rem;">Deletion scheduled</div>
         <div style="color:var(--text-dim);font-size:0.82rem;line-height:1.5;">
           ${pending.overdue
             ? html`All data for ${ctx.productName} was due to be permanently deleted on
@@ -127,7 +157,7 @@ privacySettings.get('/privacy', async (c) => {
     : '';
 
   const successBanner = successBannerText
-    ? html`<div style="background:${successMsg?.includes('deletion') ? '#ff6b6b22' : '#4ecca322'};border:1px solid ${successMsg?.includes('deletion') ? '#ff6b6b44' : '#4ecca344'};border-radius:8px;padding:0.75rem 1.25rem;margin-bottom:1.5rem;color:${successMsg?.includes('deletion') ? '#ff6b6b' : '#4ecca3'};font-size:0.875rem;font-weight:500;">
+    ? html`<div class="state ${successMsg?.includes('deletion') ? 'bad' : 'ok'}" style="display:block;padding:0.75rem 1.25rem;margin-bottom:1.5rem;font-size:0.875rem;font-weight:500;">
         ${successBannerText}
       </div>`
     : '';
@@ -278,9 +308,9 @@ privacySettings.get('/privacy', async (c) => {
             <div>
               <label style="display:block;font-size:0.8rem;font-weight:600;color:var(--text-primary);margin-bottom:0.5rem;" for="preferred_region">
                 Preferred Region
-                <span style="font-size:0.72rem;font-weight:400;color:#ffb347;margin-left:0.5rem;">&#9432; Data residency enforcement coming soon</span>
+                <span style="font-size:0.72rem;font-weight:400;color:var(--alert);margin-left:0.5rem;">&#9432; Data residency enforcement coming soon</span>
               </label>
-              <select id="preferred_region" name="preferred_region" class="input" style="max-width:320px;">
+              <select id="preferred_region" name="preferred_region" style="max-width:320px;">
                 ${''}${html([regionSelect] as unknown as TemplateStringsArray)}
               </select>
               <p style="margin:0.35rem 0 0;font-size:0.75rem;color:var(--text-muted);">Current: ${regionLabel(residency.preferred_region)}</p>
@@ -290,7 +320,7 @@ privacySettings.get('/privacy', async (c) => {
               <label style="display:block;font-size:0.8rem;font-weight:600;color:var(--text-primary);margin-bottom:0.5rem;" for="data_retention_days">
                 Data Retention Period
               </label>
-              <select id="data_retention_days" name="data_retention_days" class="input" style="max-width:200px;">
+              <select id="data_retention_days" name="data_retention_days" style="max-width:200px;">
                 ${''}${html([retentionSelect] as unknown as TemplateStringsArray)}
               </select>
               <!-- THIS SAID "How long Foundry retains your product data" AND
@@ -309,7 +339,7 @@ privacySettings.get('/privacy', async (c) => {
               <label style="display:block;font-size:0.8rem;font-weight:600;color:var(--text-primary);margin-bottom:0.5rem;" for="delete_agent_logs_after_days">
                 Agent Log Retention
               </label>
-              <select id="delete_agent_logs_after_days" name="delete_agent_logs_after_days" class="input" style="max-width:200px;">
+              <select id="delete_agent_logs_after_days" name="delete_agent_logs_after_days" style="max-width:200px;">
                 ${''}${html([logRetentionSelect] as unknown as TemplateStringsArray)}
               </select>
               <!-- Same correction, narrower scope. This governs agent chatter
@@ -375,13 +405,13 @@ privacySettings.get('/privacy', async (c) => {
 
         <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:1.25rem;display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
           <div style="flex:1;min-width:200px;">
-            <div style="font-size:0.875rem;font-weight:600;color:#ff6b6b;margin-bottom:0.25rem;">Request Product Deletion</div>
+            <div style="font-size:0.875rem;font-weight:600;color:var(--bad);margin-bottom:0.25rem;">Request Product Deletion</div>
             <p style="margin:0;font-size:0.8rem;color:var(--text-dim);line-height:1.5;">Permanently delete this product and all associated data, after a 30-day grace period. You can stop it during those 30 days; once it runs it cannot be undone. Please export your data first.</p>
           </div>
           <button
             type="button"
             class="btn"
-            style="white-space:nowrap;flex-shrink:0;color:#ff6b6b;border-color:#ff6b6b44;background:transparent;"
+            style="white-space:nowrap;flex-shrink:0;color:var(--bad);border-color:var(--bad);background:transparent;"
             onclick="document.getElementById('delete-modal').style.display='flex'"
             aria-label="Delete current product data"
           >
@@ -392,13 +422,13 @@ privacySettings.get('/privacy', async (c) => {
         ${ctx.allProducts.length > 1 ? html`
         <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:1.25rem;display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
           <div style="flex:1;min-width:200px;">
-            <div style="font-size:0.875rem;font-weight:600;color:#ff6b6b;margin-bottom:0.25rem;">Delete All Products (Fleet)</div>
+            <div style="font-size:0.875rem;font-weight:600;color:var(--bad);margin-bottom:0.25rem;">Delete All Products (Fleet)</div>
             <p style="margin:0;font-size:0.8rem;color:var(--text-dim);line-height:1.5;">Schedule deletion for all ${ctx.allProducts.length} products and all associated data. You will see a confirmation listing every product before proceeding.</p>
           </div>
           <a
             href="/settings/delete-all-products"
             class="btn"
-            style="white-space:nowrap;flex-shrink:0;color:#ff6b6b;border-color:#ff6b6b44;background:transparent;"
+            style="white-space:nowrap;flex-shrink:0;color:var(--bad);border-color:var(--bad);background:transparent;"
             aria-label="Delete all products"
           >
             Delete All Products
@@ -411,8 +441,8 @@ privacySettings.get('/privacy', async (c) => {
 
     <!-- Delete Confirmation Modal -->
     <div id="delete-modal" role="dialog" aria-modal="true" aria-label="Confirm product deletion" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;padding:1rem;">
-      <div style="background:var(--bg-card);border:1px solid rgba(255,107,107,0.3);border-radius:12px;padding:2rem;max-width:440px;width:100%;">
-        <h2 style="margin:0 0 0.75rem;color:#ff6b6b;font-size:1.1rem;">Delete all data for ${ctx.productName}?</h2>
+      <div style="background:var(--card);border:1px solid var(--bad);border-radius:12px;padding:2rem;max-width:440px;width:100%;">
+        <h2 style="margin:0 0 0.75rem;color:var(--bad);font-size:1.1rem;">Delete all data for ${ctx.productName}?</h2>
         <p style="margin:0 0 1rem;font-size:0.875rem;color:var(--text-dim);line-height:1.55;">
           This will permanently schedule deletion of all data for <strong>${ctx.productName}</strong> including metrics, briefings, decisions, and agent logs.
           You have 30 days to stop it. After that it cannot be undone.
@@ -423,7 +453,7 @@ privacySettings.get('/privacy', async (c) => {
         <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
           <button type="button" class="btn btn-ghost" onclick="document.getElementById('delete-modal').style.display='none'">Cancel</button>
           <form method="POST" action="/privacy/delete" style="display:inline;">
-            <button type="submit" class="btn" style="color:#ff6b6b;border-color:#ff6b6b44;background:rgba(255,107,107,0.1);">
+            <button type="submit" class="btn" style="color:var(--bad);border-color:var(--bad);background:rgba(255,107,107,0.1);">
               Yes, Delete ${ctx.productName}
             </button>
           </form>
@@ -442,7 +472,7 @@ privacySettings.get('/privacy', async (c) => {
     </script>
   `;
 
-  return c.html(dashboardLayout(ctx, content));
+  return c.html(controlsPage(ctx, content));
 });
 
 // ─── POST /privacy/consent ─────────────────────────────────────────────────────
@@ -732,7 +762,7 @@ privacySettings.get('/settings/delete-all-products', async (c) => {
 
   const content = html`
     <div style="max-width:600px;margin:0 auto;">
-      <h1 style="color:#ff6b6b;margin:0 0 0.5rem;">Delete All Products</h1>
+      <h1 style="color:var(--bad);margin:0 0 0.5rem;">Delete All Products</h1>
       <p style="color:var(--text-dim);margin:0 0 1.5rem;font-size:0.875rem;line-height:1.55;">
         This will schedule deletion for <strong>all ${productList.length} product${productList.length > 1 ? 's' : ''}</strong>
         and their associated data. Deletion occurs after a 30-day grace period, and can be stopped
@@ -741,11 +771,11 @@ privacySettings.get('/settings/delete-all-products', async (c) => {
 
       <div class="card" style="margin-bottom:1.5rem;padding:0;overflow:hidden;">
         <div style="padding:0.75rem 1rem;background:rgba(255,107,107,0.08);border-bottom:1px solid rgba(255,107,107,0.15);">
-          <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:#ff6b6b;">Products to be deleted</div>
+          <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--bad);">Products to be deleted</div>
         </div>
         ${productList.map((p) => html`
           <div style="padding:0.75rem 1rem;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;gap:0.75rem;">
-            <span style="width:8px;height:8px;border-radius:50%;background:#ff6b6b;flex-shrink:0;"></span>
+            <span style="width:8px;height:8px;border-radius:50%;background:var(--bad);flex-shrink:0;"></span>
             <span style="font-size:0.875rem;color:var(--text-primary);">${p.name}</span>
             <span style="font-size:0.72rem;color:var(--text-muted);font-family:monospace;">${p.id}</span>
           </div>
@@ -759,7 +789,7 @@ privacySettings.get('/settings/delete-all-products', async (c) => {
       <div style="display:flex;gap:0.75rem;">
         <a href="/privacy" class="btn btn-ghost">Cancel</a>
         <form method="POST" action="/settings/delete-all-products">
-          <button type="submit" class="btn" style="color:#ff6b6b;border-color:#ff6b6b44;background:rgba(255,107,107,0.1);">
+          <button type="submit" class="btn" style="color:var(--bad);border-color:var(--bad);background:rgba(255,107,107,0.1);">
             Yes, Delete All ${productList.length} Product${productList.length > 1 ? 's' : ''}
           </button>
         </form>
@@ -767,7 +797,7 @@ privacySettings.get('/settings/delete-all-products', async (c) => {
     </div>
   `;
 
-  return c.html(dashboardLayout(ctx, content));
+  return c.html(controlsPage(ctx, content));
 });
 
 // ─── POST /settings/delete-all-products — Execute fleet-wide deletion (F-063-A) ──

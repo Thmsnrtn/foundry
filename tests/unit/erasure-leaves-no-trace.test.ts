@@ -299,14 +299,16 @@ describe('a company named inside a key it does not have a column for', () => {
 
   it('does not keep the founder in a rate-limit bucket keyed by their id', async () => {
     // Classified as "request counters keyed by an opaque bucket". The buckets
-    // are `audit:founder:<id>` and `apimodel:<product_id>`.
+    // are `ai:founder:<id>` and `apimodel:<product_id>`. (It was
+    // `audit:founder:<id>` until the onboarding audit route was deleted with
+    // the commercial wizard, taking its limiter with it.)
     const SOLO = 'ZZRATELIMITEDZZ';
     await query(
       `INSERT INTO founders (id, clerk_user_id, email) VALUES (?,?,?)`,
       [SOLO, 'clerk_rl', 'rl@example.com']);
     await query(
       `INSERT OR REPLACE INTO rate_limit_counters (key, window_start, window_ms, count)
-       VALUES (?, 0, 60000, 1)`, [`audit:founder:${SOLO}`]);
+       VALUES (?, 0, 60000, 1)`, [`ai:founder:${SOLO}`]);
     const { eraseFounderAccount } = await import('../../src/services/privacy/consent.js');
     await eraseFounderAccount(SOLO);
     const left = await query(

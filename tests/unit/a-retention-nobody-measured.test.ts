@@ -152,18 +152,19 @@ describe('what the agents are told', () => {
   });
 });
 
-describe('what is sold', () => {
-  const gate = readFileSync('src/middleware/tier-gate.ts', 'utf8');
-
-  it('no longer promises retention curves nothing can produce', () => {
-    expect(gate).not.toContain('Day 7, 14, 30, 60, 90 retention by acquisition period and channel');
-    expect(gate).not.toContain('Which acquisition source retains best?');
-    expect(gate).toContain('Foundry has no path for reporting cohort retention today');
-  });
-
-  // The companion check — that the pricing page did not list "Cohort analysis +
-  // competitive intelligence" as a capability — went with the page. Private
-  // Foundry has no pricing page: `routes/public/landing.ts` was deleted and its
-  // root is a redirect to `/foundry`. The tier-gate copy above is the only
-  // place left that can promise this, so it is the only place still guarded.
-});
+// WHAT WAS SOLD, AND WHERE IT WAS SOLD FROM.
+//
+// A describe here read `middleware/tier-gate.ts` and held its Cohort Analysis
+// copy to three things: that it no longer promised "Day 7, 14, 30, 60, 90
+// retention by acquisition period and channel", no longer asked "Which
+// acquisition source retains best?", and DID say "Foundry has no path for
+// reporting cohort retention today" — a capability described by its reader,
+// corrected to say so.
+//
+// The file is deleted. Sixteen feature gates at three subscription prices were
+// Commercial Foundry's, and the private owner is not on a plan. The companion
+// check on the pricing page went the same way when `routes/public/landing.ts`
+// was deleted. There is now nowhere left in this codebase that offers cohort
+// retention to anyone, so there is nothing left to hold to honesty about it —
+// and a check pointed at a substitute file would be inventing a surface to
+// guard. The measurement checks above, which exercise the real code, stand.

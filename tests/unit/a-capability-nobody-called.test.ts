@@ -84,13 +84,32 @@ describe('a table nothing touches', () => {
   });
 });
 
-describe('the half of that tier that was real', () => {
-  it('still works: a public page computes the Signal for a token the owner can rotate', () => {
+describe('the half of that tier that was real, and what became of it', () => {
+  it('no longer serves a Signal page whose token nothing can mint', () => {
+    // This checked the other direction: that `GET /share/:token` still computed
+    // a Signal for anyone holding the token, and that `/settings` still carried
+    // the `share_token = ?` rotation. Both are deleted.
+    //
+    // The generator was "Investor / Advisor Access", and Private Foundry has
+    // neither; zero of the thirteen products in this instance had ever had a
+    // token made. With nothing writing `products.share_token`, the page could
+    // only answer 404 — a public, unauthenticated surface reading a company's
+    // metrics and decisions, standing open for a credential that can no longer
+    // exist. Deleting the control and keeping the page would have been the
+    // worse half of the pair to keep.
     const share = readFileSync(resolve(ROOT, 'src/routes/share/index.ts'), 'utf8');
-    expect(share).toContain("'/share/:token'");
-    expect(share).toContain('computeSignal');
+    expect(share).not.toContain("shareRoutes.get('/share/:token'");
     expect(readFileSync(resolve(ROOT, 'src/routes/dashboard/settings.ts'), 'utf8'))
-      .toContain('share_token = ?');
+      .not.toContain('share_token');
+  });
+
+  it('still serves the refund link an Apex Micro buyer is actually sent', () => {
+    // The token here is minted per fulfilment when a delivery goes out, so this
+    // is a public token-gated page whose tokens exist. It is how someone gets
+    // their money back without having to write to anybody.
+    const share = readFileSync(resolve(ROOT, 'src/routes/share/index.ts'), 'utf8');
+    expect(share).toContain("'/share/refund/:fulfilmentId/:token'");
+    expect(share).toContain('requestRefundByLink');
   });
 });
 

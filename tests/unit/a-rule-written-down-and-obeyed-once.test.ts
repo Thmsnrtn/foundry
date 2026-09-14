@@ -147,18 +147,27 @@ describe('every surface that shows a Signal', () => {
     // A CENSUS, NOT A TARGET: the number is here so that a new surface reading
     // `computeSignal` cannot appear without somebody deciding it obeys the rule
     // above. It was five until `conversation/context.ts` was deleted as
-    // production-dead; the four left are `jobs/index.ts`, `routes/share`,
-    // `services/team/members.ts` and `services/voice/briefing.ts`, and all four
-    // are asserted by name below or exempted by name above.
+    // production-dead, then four until `GET /share/:token` went — the investor
+    // read-only view, whose token nothing can mint now that the control that
+    // generated it is deleted. The three left are `jobs/index.ts`,
+    // `services/team/members.ts` and `services/voice/briefing.ts`, each
+    // asserted by name below or exempted by name above.
     expect(consumers().length, 'if this moves, a new surface appeared')
-      .toBeGreaterThanOrEqual(4);
+      .toBeGreaterThanOrEqual(3);
   });
 
-  it('does not let a bare score reach the public share page or the voice', () => {
+  it('does not let a bare score reach the voice', () => {
+    // THE PUBLIC SHARE PAGE WAS THE OTHER HALF OF THIS. It drew the score under
+    // a badge reading LIVE SIGNAL, and the rule was that it had to go through
+    // `signalNumber(signal)` so an unmeasured Signal reached an investor as a
+    // dash rather than as a zero. The page is deleted — nothing writes
+    // `products.share_token` since the control that minted it went with the
+    // subscription tiers — so the surface that had to obey the rule no longer
+    // exists. What remains is the check that it has not come back: no Signal is
+    // computed in that file at all.
     const share = stripComments(readFileSync('src/routes/share/index.ts', 'utf8'),
       { lineComments: true });
-    expect(share, 'under a badge reading LIVE SIGNAL').toMatch(/signalNumber\(signal\)/);
-    expect(share).not.toMatch(/share-number">\$\{signal\.score\}/);
+    expect(share).not.toMatch(/computeSignal/);
 
     const voice = stripComments(readFileSync('src/services/voice/briefing.ts', 'utf8'),
       { lineComments: true });

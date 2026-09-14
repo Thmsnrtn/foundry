@@ -1,7 +1,15 @@
 // =============================================================================
-// Simulation 01: Founder Onboarding Journey
-// Verifies the critical path from signup to first product + SCP provisioning.
-// Uses static analysis to verify route handlers, schemas, and service wiring.
+// Simulation 01: the path from signing in to a first company
+//
+// This verified "signup to first product + SCP provisioning" through a
+// nine-route commercial wizard: GitHub OAuth, repository selection, five
+// competitors, a first audit, a subscription plan deciding how many companies
+// you were allowed. That wizard is deleted. What remains is one act — naming
+// the institution's first company and binding it to the canonical identity —
+// and the parts of the old path that were never about selling: the Clerk
+// webhook, lifecycle-state initialisation, and the agent roster.
+//
+// Static analysis of route handlers, schemas and service wiring.
 // =============================================================================
 
 import { describe, it, expect, beforeAll } from 'vitest';
@@ -76,37 +84,56 @@ describe('Signup flow (Clerk webhook → founder record)', () => {
 // 2. Product Creation — No-code path (form-based)
 // =============================================================================
 
-describe('Product creation (no-code path)', () => {
+// PRODUCT CREATION WAS A WIZARD STEP. IT IS AN ESTABLISHMENT ACT NOW.
+//
+// Five checks here read the deleted `POST /onboarding/create-product`: that it
+// existed, that it validated a `createProductSchema`, that a name was at least
+// one character, that `build_platform` admitted Bubble, Webflow and Shopify,
+// and that `productLimits` refused a second company to anyone on Solo. That
+// last one is the shape of the whole section: a company was something a
+// SUBSCRIPTION entitled you to, and the wizard counted yours against your plan.
+//
+// There is one owner here and he is not on a plan. The act that creates the
+// first company is `POST /onboarding/establish`, and it writes the smallest
+// true thing — a company named Foundry, owned by him, bound to the canonical
+// identity so self-observation can resolve it. That is what is checked now.
 
-  it('POST /onboarding/create-product route exists', () => {
+describe('Establishing the institution\'s first company', () => {
+
+  it('POST /onboarding/establish exists and is owner-guarded', () => {
     expect(onboardingRouteSource).toMatch(
-      /onboardingRoutes\.post\(['"]\/onboarding\/create-product['"]/
+      /onboardingRoutes\.post\(['"]\/onboarding\/establish['"],\s*requireInstitutionOwner\(\)/
     );
   });
 
-  it('validates input with Zod schema (createProductSchema)', () => {
-    expect(onboardingRouteSource).toMatch(/createProductSchema/);
-    expect(onboardingRouteSource).toMatch(/z\.object/);
+  it('refuses to establish anything in a commercial deployment', () => {
+    // The posture check and the ownership check answer different questions —
+    // "is this deployment private" and "may this caller found a company" — and
+    // neither stands in for the other.
+    expect(onboardingRouteSource).toMatch(/if\s*\(!isPrivateOwnerInstance\(\)\)\s*return/);
   });
 
-  it('requires product name (min 1 char)', () => {
-    expect(onboardingRouteSource).toMatch(/name:\s*z\.string\(\)\.min\(1/);
+  it('is idempotent: an identity already bound does not move', () => {
+    const handler = onboardingRouteSource.slice(
+      onboardingRouteSource.indexOf("onboardingRoutes.post('/onboarding/establish'"));
+    expect(handler).toMatch(/resolveFoundryProductId\(\)/);
+    expect(handler.indexOf('existing')).toBeLessThan(handler.indexOf('INSERT INTO products'));
   });
 
-  it('supports multiple build platforms (Bubble, Webflow, etc.)', () => {
-    const platformEnum = onboardingRouteSource.match(/build_platform:\s*z\.enum\(\[([^\]]+)\]/);
-    expect(platformEnum).toBeTruthy();
-    const platforms = platformEnum![1];
-    expect(platforms).toMatch(/bubble/);
-    expect(platforms).toMatch(/webflow/);
-    expect(platforms).toMatch(/shopify/);
+  it('binds the new company to the canonical foundry identity', () => {
+    expect(onboardingRouteSource).toMatch(/establishSystemIdentity\(FOUNDRY_IDENTITY_KEY/);
   });
 
-  it('enforces per-tier product limits', () => {
-    expect(onboardingRouteSource).toMatch(/productLimits/);
-    expect(onboardingRouteSource).toMatch(/solo.*1|1.*solo/);
-    expect(onboardingRouteSource).toMatch(/growth.*3|3.*growth/);
-    expect(onboardingRouteSource).toMatch(/investor_ready/);
+  it('sits under /onboarding, which is where auth and CSRF are registered', () => {
+    // It first lived at `/establish`, a new top-level path, and top-level paths
+    // in this app inherit nothing: `c.get('founder')` was undefined and the
+    // owner pressing the only button on his first screen was told he was not
+    // the owner. The guard failed closed correctly; the route was never
+    // authenticated.
+    const index = readFileSync(resolve(SRC, 'index.ts'), 'utf-8');
+    expect(index).toMatch(/app\.use\('\/onboarding\/\*', authMiddleware\)/);
+    expect(index).toMatch(/app\.use\('\/onboarding\/\*', csrfMiddleware\)/);
+    expect(onboardingRouteSource).not.toMatch(/\.post\(['"]\/establish['"]/);
   });
 });
 
@@ -147,8 +174,15 @@ describe('Lifecycle state initialization', () => {
 
 describe('SCP provisioning during onboarding', () => {
 
-  it('onboarding calls ensureProvisioned after product creation', () => {
-    expect(onboardingRouteSource).toMatch(/ensureProvisioned/);
+  it('establishment provisions NOTHING, and that is the point', () => {
+    // The wizard called `ensureProvisioned` the moment a company existed, so a
+    // founder who had typed a name and a URL had nine agents running against
+    // it. Establishment writes three true things and stops: this company is
+    // Foundry, you own it, it may begin observing itself. The page says so in
+    // as many words — "No agents are started, nothing is audited and no model
+    // is called" — and a page that says that must be telling the truth.
+    expect(onboardingRouteSource).not.toMatch(/ensureProvisioned/);
+    expect(onboardingRouteSource).toMatch(/No agents are started, nothing is audited/);
   });
 
   it('provisions one agent for every agent that exists, and no others', () => {
@@ -196,12 +230,13 @@ describe('SCP provisioning during onboarding', () => {
     );
   });
 
-  it('provisioning failure is non-fatal (caught in try/catch)', () => {
-    // In the onboarding route, ensureProvisioned is wrapped in try/catch
-    const provisionBlock = onboardingRouteSource.match(
-      /try\s*\{[\s\S]*?ensureProvisioned[\s\S]*?\}\s*catch/
-    );
-    expect(provisionBlock).toBeTruthy();
+  it('provisioning failure is non-fatal where provisioning happens', () => {
+    // This read the onboarding route, where `ensureProvisioned` was wrapped in
+    // a try/catch so a failed agent roster did not cost a founder the company
+    // they had just created. Onboarding no longer provisions; the guarantee
+    // belongs to the provisioner, which swallows a per-agent failure rather
+    // than abandoning the roster half-written.
+    expect(provisionerSource).toMatch(/catch/);
   });
 
   it('provisioner sets SCP status to active on success', () => {
@@ -210,40 +245,16 @@ describe('SCP provisioning during onboarding', () => {
 });
 
 // =============================================================================
-// 5. Competitor Addition
+// 5. COMPETITOR ADDITION — THE SECTION THAT WENT WITH THE FUNNEL.
+//
+// Five checks read `GET` and `POST /onboarding/competitors`: that the form
+// existed, that it inserted into `competitors`, that the insert carried
+// `product_id` for tenant scoping, that ownership was verified first, and that
+// it redirected on to the audit step.
+//
+// Asking a founder to name five competitors was step four of bringing a product
+// in to be audited. The owner's instance holds no competitors and no
+// repositories, the wizard is deleted, and the audit it led to was a paid model
+// run on a stranger's codebase. The `competitors` table still stands and is
+// still read — what is gone is the funnel that filled it.
 // =============================================================================
-
-describe('Competitor identification step', () => {
-
-  it('GET /onboarding/competitors route exists', () => {
-    expect(onboardingRouteSource).toMatch(
-      /onboardingRoutes\.get\(['"]\/onboarding\/competitors['"]/
-    );
-  });
-
-  it('POST /onboarding/competitors inserts competitor records', () => {
-    expect(onboardingRouteSource).toMatch(/INSERT INTO competitors/i);
-  });
-
-  it('competitor insertion includes product_id for tenant scoping', () => {
-    const competitorInsert = onboardingRouteSource.match(
-      /INSERT INTO competitors[^;]+/
-    );
-    expect(competitorInsert).toBeTruthy();
-    expect(competitorInsert![0]).toMatch(/product_id/);
-  });
-
-  it('verifies product ownership before adding competitors', () => {
-    // After POST /onboarding/competitors, there should be an ownership check
-    const competitorPost = onboardingRouteSource.slice(
-      onboardingRouteSource.indexOf("onboardingRoutes.post('/onboarding/competitors'")
-    );
-    expect(competitorPost).toMatch(/owner_id\s*=\s*\?/);
-  });
-
-  it('redirects to audit step after competitor addition', () => {
-    expect(onboardingRouteSource).toMatch(
-      /redirect.*\/onboarding\/audit\?product_id=/
-    );
-  });
-});

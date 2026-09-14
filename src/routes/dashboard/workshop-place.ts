@@ -162,7 +162,6 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
     <style>
       .facts{display:grid;grid-template-columns:minmax(8rem,auto) 1fr;gap:.25rem .75rem;margin:0}.facts dd{margin:0}
       .stack{display:grid;gap:.5rem;max-width:30rem;margin-top:.5rem}.stack label{display:grid;gap:.25rem}.stack input,.stack textarea{max-width:100%;box-sizing:border-box;font:inherit}
-      .qitem p{overflow-wrap:anywhere}
     </style>`;
   return c.html(page('Workshop', body, 'foundry', frame));
 });

@@ -132,7 +132,13 @@ const covered = (path: string, prefixes: string[]): boolean =>
 describe('CSRF covers every cookie-authenticated write', () => {
   it('leaves no mutating route both uncovered and unexplained', () => {
     const prefixes = csrfPrefixes();
-    expect(prefixes.length).toBeGreaterThan(20);
+    // A floor, not a target: it exists so a parser that silently matches
+    // nothing cannot pass this test by finding no routes to check. It was 20
+    // when `src/index.ts` registered CSRF on thirty-odd prefixes, most of them
+    // Commercial Foundry's — /investors, /board, /playbooks, /team, /agents —
+    // with no route behind any of them. Those mounts are deleted; eleven
+    // prefixes is what this application actually serves.
+    expect(prefixes.length).toBeGreaterThan(8);
 
     const unexplained = mutatingRoutes()
       .filter(({ path }) => !covered(path, prefixes))

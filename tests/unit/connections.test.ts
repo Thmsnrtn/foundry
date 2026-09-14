@@ -99,14 +99,23 @@ describe('the connector fabric', () => {
   });
 });
 
-describe('five doors (Attention Law nav)', () => {
-  it('sidebar leads with Today/Signal/Decide/Talk/Actions; groups auto-open where you are', async () => {
+describe('the shell this page is now inside', () => {
+  it('renders in the owner shell, under the Controls door, not in the old sidebar', async () => {
     const page = await (await app.request('/connections')).text();
-    for (const s of ['href="/letter"', 'href="/talk"', 'href="/autopilot"', 'href="/connections"', '>Today<', '>Signal<', '>Decide<']) {
-      expect(page).toContain(s);
-    }
-    expect(page).toMatch(/<details\s+open\s*>[\s\S]{0,200}AUTOPILOT/); // active group open
-    expect(page).toMatch(/<details\s*>[\s\S]{0,200}INVESTOR/);        // inactive group closed
+
+    // WHAT THIS USED TO ASSERT: a sidebar leading with Today, Signal, Decide,
+    // Talk and Actions, with `<details>` groups that opened where you were and
+    // an INVESTOR group that stayed shut. That was `views/layout.ts` — the
+    // other visual system's twenty-five item navigation — and it is deleted.
+    // Connections renders through `page()` now, which draws the owner's six
+    // doors and nothing else.
+    expect(page).toContain('data-place="controls"');
+    expect(page).toContain('/static/owner.css');
+    expect(page).not.toContain('/static/styles.css');
+
+    // The door you are behind is lit, and only that one.
+    expect(page).toMatch(/<a href="\/foundry\/controls" class="on"/);
+    expect(page).not.toMatch(/<details/);
   });
 });
 

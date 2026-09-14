@@ -9,32 +9,49 @@ import { resolve } from 'node:path';
 // wrong readings that are worth recording.
 //
 // Reading the repository said "5 media queries for 126 pages — effectively not
-// responsive". False: the sidebar collapses, a bottom tab bar appears, safe-area
-// insets and reduced-motion are handled. Looking at a screenshot then said the
-// whole page overflowed. Also false — headless Chromium laid the page out at
-// 500px while cropping the image to 390, so everything merely LOOKED cut off.
+// responsive". False: the sidebar collapsed, a bottom tab bar appeared,
+// safe-area insets and reduced-motion were handled. Looking at a screenshot
+// then said the whole page overflowed. Also false — headless Chromium laid the
+// page out at 500px while cropping the image to 390, so everything merely
+// LOOKED cut off.
 //
-// The measurement settled it. With the original stylesheet the document
-// reported clientWidth 495 against scrollWidth 504, and named the widest
-// offending element itself: `A.btn.btn-primary`, 468px. `.btn` carried
-// `white-space: nowrap`, so a button is as wide as its label refuses to wrap —
-// and the day-one call to action is a sentence. One primitive, every long
-// button on every page, off the side of the screen.
+// The measurement settled it. The document reported clientWidth 495 against
+// scrollWidth 504, and named the widest offending element itself:
+// `A.btn.btn-primary`, 468px. `.btn` carried `white-space: nowrap`, so a button
+// is as wide as its label refuses to wrap — and the day-one call to action was
+// a sentence. One primitive, every long button on every page, off the side of
+// the screen.
+//
+// THE STYLESHEET THIS MEASURED IS GONE. `public/styles.css` was the other
+// visual system's, and it went with the commercial pages; there is one
+// stylesheet now, and it is `public/owner.css`. The invariant did not go with
+// it — the same mistake is available in any stylesheet, and this one has three
+// rules that set `width:auto` on a button inside a flex row, which is exactly
+// the shape that overflows. So the test moved rather than being deleted, and it
+// is written against how THIS sheet is built: mobile-first, with the desk as
+// the `min-width:900px` exception rather than the phone as a breakpoint.
 //
 // The browser probe is the instrument, not the gate: CI has no Chromium. What
-// runs everywhere is this — the two properties that make the primitive unable
-// to exceed its container.
+// runs everywhere is this.
 // =============================================================================
 
-const css = () => readFileSync(
-  resolve(import.meta.dirname, '../../src/public/styles.css'), 'utf8');
+const SHEET = resolve(import.meta.dirname, '../../src/public/owner.css');
+const css = () => readFileSync(SHEET, 'utf8');
+
+/** Everything outside the desk breakpoint: the stylesheet a phone gets. */
+function phoneOnly(source: string): string {
+  const desk = source.indexOf('@media (min-width:900px){');
+  if (desk === -1) return source;
+  // The desk block runs to the closing brace on its own line at column 0.
+  const end = source.indexOf('\n}\n', desk);
+  return source.slice(0, desk) + source.slice(end === -1 ? source.length : end + 3);
+}
 
 /** The body of a rule, so a property is read from the rule it belongs to. */
-function rule(source: string, selector: string, within?: string): string {
-  const scope = within
-    ? (new RegExp(`@media[^{]*${within}[^{]*\\{([\\s\\S]*?)\\n\\}`).exec(source)?.[1] ?? '')
-    : source;
-  const m = new RegExp(`(?:^|\\n)\\s*${selector.replace('.', '\\.')}\\s*\\{([^}]*)\\}`).exec(scope);
+function rule(source: string, selector: string): string {
+  const m = new RegExp(
+    `(?:^|\\n)\\s*${selector.replace(/\./g, '\\.')}\\s*\\{([\\s\\S]*?)\\}`,
+  ).exec(source);
   return m?.[1] ?? '';
 }
 
@@ -47,15 +64,33 @@ describe('a button cannot be wider than what contains it', () => {
   });
 
   it('wraps its label rather than the page on a narrow screen', () => {
-    const mobile = rule(css(), '.btn', 'max-width: 768px');
-    expect(mobile, 'no .btn rule inside the 768px breakpoint').not.toBe('');
-    expect(/white-space:\s*normal/.test(mobile),
-      'nowrap at phone width is what pushed the call to action off screen').toBe(true);
+    // Not "has white-space:normal" — this sheet never sets nowrap on the
+    // primitive, so the default IS wrapping. The thing to hold is that nobody
+    // reintroduces nowrap for a button on the surface a phone gets.
+    const phone = phoneOnly(css());
+    const offenders = phone
+      .split('\n')
+      .filter((l) => /\.btn[^{]*\{[^}]*white-space:\s*nowrap/.test(l));
+    expect(offenders,
+      'a button that refuses to wrap at phone width is what left the screen').toEqual([]);
   });
 
-  it('still refuses to break short labels on wide screens', () => {
-    // The default is deliberate: "Save & Connect" reading across two lines is
-    // worse than one long button on a desktop that has room for it.
-    expect(/white-space:\s*nowrap/.test(rule(css(), '.btn'))).toBe(true);
+  it('still refuses to break short labels where there is room for it', () => {
+    // The desk keeps the two-button row on one line: "Yes" and "Not now"
+    // reading across two lines each is worse than one wide row on a screen
+    // that has the width for it.
+    const css_ = css();
+    expect(css_.slice(css_.indexOf('@media (min-width:900px){')))
+      .toMatch(/\.pair\s+\.btn\{white-space:nowrap\}/);
+  });
+
+  it('only lets other elements refuse to wrap inside something that scrolls', () => {
+    // `.local a` and `.filters a` are nowrap on purpose: both sit in a row
+    // with `overflow-x:auto`, which scrolls ITSELF rather than the document.
+    // `.sr` is the screen-reader-only class, one pixel square and clipped.
+    const named = [...phoneOnly(css()).matchAll(/(?:^|\n)([^\n{]*)\{[^}]*white-space:\s*nowrap/g)]
+      .map((m) => m[1].trim())
+      .filter((s) => !s.startsWith('@'));
+    expect(named.sort()).toEqual(['.filters a', '.local a', '.sr'].sort());
   });
 });

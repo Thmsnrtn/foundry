@@ -9,13 +9,6 @@
       "capability": "customer webhook fan-out — kill-switch checked before dispatch, per-delivery receipt after"
     },
     {
-      "file": "src/routes/dashboard/onboarding.ts",
-      "line": 312,
-      "detector": "external_post",
-      "status": "control_path",
-      "capability": "GitHub OAuth credential exchange"
-    },
-    {
       "file": "src/services/ai/client.ts",
       "line": 442,
       "detector": "templated_post",

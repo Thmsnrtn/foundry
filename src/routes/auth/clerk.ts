@@ -20,12 +20,12 @@ authRoutes.get('/auth/signup', (c) => {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Sign Up — Foundry</title>
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/owner.css" />
   <style>
-    body { display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #0f172a; margin: 0; }
+    body { display: flex; justify-content: center; align-items: center; min-height: 100vh; background: var(--bg); margin: 0; }
     .auth-container { text-align: center; }
-    .auth-container h1 { color: white; margin-bottom: 1.5rem; font-size: 1.5rem; }
-    .auth-container a { color: #94a3b8; font-size: 0.87rem; }
+    .auth-container h1 { color: var(--ink); font-family: var(--serif); font-weight: 500; margin-bottom: 1.5rem; font-size: 1.5rem; }
+    .auth-container a { color: var(--ink-2); font-size: 0.87rem; }
     #sign-up { min-height: 400px; }
   </style>
 </head>
@@ -56,10 +56,10 @@ authRoutes.get('/auth/signup', (c) => {
       const box = document.getElementById("sign-up");
       box.textContent = "";
       const headline = document.createElement("p");
-      headline.style.color = "#ef4444";
+      headline.style.color = "var(--bad)";
       headline.textContent = "Failed to load authentication. Please refresh the page.";
       const detail = document.createElement("p");
-      detail.style.color = "#64748b";
+      detail.style.color = "var(--ink-3)";
       detail.style.fontSize = "0.8rem";
       detail.textContent = String(e && e.message ? e.message : e);
       box.appendChild(headline);
@@ -78,12 +78,12 @@ authRoutes.get('/auth/login', (c) => {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Log In — Foundry</title>
-  <link rel="stylesheet" href="/static/styles.css" />
+  <link rel="stylesheet" href="/static/owner.css" />
   <style>
-    body { display: flex; justify-content: center; align-items: center; min-height: 100vh; background: #0f172a; margin: 0; }
+    body { display: flex; justify-content: center; align-items: center; min-height: 100vh; background: var(--bg); margin: 0; }
     .auth-container { text-align: center; }
-    .auth-container h1 { color: white; margin-bottom: 1.5rem; font-size: 1.5rem; }
-    .auth-container a { color: #94a3b8; font-size: 0.87rem; }
+    .auth-container h1 { color: var(--ink); font-family: var(--serif); font-weight: 500; margin-bottom: 1.5rem; font-size: 1.5rem; }
+    .auth-container a { color: var(--ink-2); font-size: 0.87rem; }
     #sign-in { min-height: 400px; }
   </style>
 </head>
@@ -114,10 +114,10 @@ authRoutes.get('/auth/login', (c) => {
       const box = document.getElementById("sign-in");
       box.textContent = "";
       const headline = document.createElement("p");
-      headline.style.color = "#ef4444";
+      headline.style.color = "var(--bad)";
       headline.textContent = "Failed to load authentication. Please refresh the page.";
       const detail = document.createElement("p");
-      detail.style.color = "#64748b";
+      detail.style.color = "var(--ink-3)";
       detail.style.fontSize = "0.8rem";
       detail.textContent = String(e && e.message ? e.message : e);
       box.appendChild(headline);
@@ -136,8 +136,9 @@ authRoutes.get('/auth/logout', (c) => {
   c.header('Set-Cookie', 'foundry_csrf=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax', { append: true });
   return c.html(`<!DOCTYPE html>
 <html lang="en">
-<head><meta charset="utf-8" /><title>Signing out — Foundry</title></head>
-<body style="background:#0f172a;color:#94a3b8;display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;margin:0;">
+<head><meta charset="utf-8" /><title>Signing out — Foundry</title>
+<link rel="stylesheet" href="/static/owner.css" /></head>
+<body style="color:var(--ink-2);display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;">
   <p>Signing out…</p>
   <script>
     const pk = "${publishableKey}";
@@ -148,7 +149,7 @@ authRoutes.get('/auth/logout', (c) => {
         await clerk.load();
         await clerk.signOut();
       } catch (e) { /* cookie already cleared server-side */ }
-      window.location.href = "/";
+      window.location.href = "/auth/login";
     })();
   </script>
 </body>

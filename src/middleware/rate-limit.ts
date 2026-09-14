@@ -172,13 +172,6 @@ export const aiRateLimit = sharedRateLimit(30, 60 * 60 * 1000, (c) => {
 });
 
 /**
- * Audit rate limit — the onboarding audit is the single most expensive
- * operation (a full repo scrape + multi-call Opus scoring, minutes long and
- * real dollars each). 6/hour per founder is far more than any legitimate use
- * (you audit a product once, occasionally re-run) while stopping a stranger
- * from cost-bombing us by hammering run-audit. Keys on founder id, IP fallback.
- */
-/**
  * The public API, limited by the CREDENTIAL rather than by the source address.
  *
  * `/api/*` already carries an IP-keyed flood guard, and that is the right shape
@@ -189,8 +182,8 @@ export const aiRateLimit = sharedRateLimit(30, 60 * 60 * 1000, (c) => {
  * which is why it is applied inside the v1 router rather than beside the flood
  * guard in the composition root.
  *
- * The AI and audit limits have always keyed by founder. This is the same rule
- * reaching the surface the owner has just made live.
+ * The AI limit has always keyed by founder. This is the same rule reaching the
+ * surface the owner has just made live.
  */
 export const apiKeyRateLimit = rateLimit(600, 60 * 60 * 1000, (c) => {
   const productId = c.get('productId' as never) as string | undefined;
@@ -215,11 +208,16 @@ export const apiModelRateLimit = sharedRateLimit(60, 60 * 60 * 1000, (c) => {
   return `apimodel:${productId ?? 'unattributed'}`;
 });
 
-export const auditRateLimit = sharedRateLimit(6, 60 * 60 * 1000, (c) => {
-  const founder = c.get('founder' as never) as { id?: string } | undefined;
-  if (founder?.id) return `audit:founder:${founder.id}`;
-  return `audit:ip:${clientIp(c)}`;
-});
+/*
+ * `auditRateLimit` GUARDED THE ONBOARDING AUDIT, AND THE AUDIT WAS A FUNNEL STEP.
+ *
+ * Six an hour, per founder, on POST /onboarding/run-audit — the most expensive
+ * thing a stranger could make this deployment do on the way to asking for a
+ * card. That route is deleted with the rest of the commercial wizard, and the
+ * audit engine now runs from jobs rather than from a request, where the spend
+ * ceiling is the right instrument. Removed rather than left mounted on nothing:
+ * a rate limit nobody can hit is a claim about a door that is not there.
+ */
 
 // ─── Shared counters, for the limits that guard money ────────────────────────
 //

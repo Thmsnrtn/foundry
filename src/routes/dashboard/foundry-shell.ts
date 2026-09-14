@@ -5474,6 +5474,25 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
         <input type="hidden" name="return_to" value="foundry" />
         <button class="btn" type="submit" style="width:auto">Stop everything</button>
       </form>
+    </div>
+
+    <div class="card">
+      <h2>The rest of the controls</h2>
+      <!-- THESE WERE REACHABLE ONLY FROM INSIDE THE LETTER.
+           Settings and Privacy govern what Foundry may do and what happens to
+           his data — the question this door exists to answer — but the only way
+           to either was a link in the middle of the Advanced depth, in the
+           other visual system. They render in this shell now and light this
+           door, so the geography matches what they are. -->
+      <p>Settings holds how I speak to you, how loudly I may interrupt, how
+        often I run, the address your customers hear from, and the keys that let
+        anything act on this institution.</p>
+      <p>Privacy holds consent, where the data lives, taking a copy, and
+        deleting it.</p>
+      <div style="display:flex;gap:var(--s2);flex-wrap:wrap;margin-top:var(--s2)">
+        <a class="btn" href="/settings" style="width:auto">Settings</a>
+        <a class="btn" href="/privacy" style="width:auto">Privacy and data</a>
+      </div>
     </div>`;
 
   const controlsFrame: Where = {

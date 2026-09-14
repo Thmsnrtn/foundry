@@ -15,8 +15,6 @@ let clientSource: string;
 let aiClientSource: string;
 let spendLedgerSource: string;
 let provisonerSource: string;
-let onboardingSource: string;
-let tierGateSource: string;
 
 beforeAll(() => {
   schedulerSource = readFileSync(resolve(SRC, 'services/scp/scheduler.ts'), 'utf-8');
@@ -24,8 +22,6 @@ beforeAll(() => {
   aiClientSource = readFileSync(resolve(SRC, 'services/ai/client.ts'), 'utf-8');
   spendLedgerSource = readFileSync(resolve(SRC, 'services/ai/spend-ledger.ts'), 'utf-8');
   provisonerSource = readFileSync(resolve(SRC, 'services/scp/provisioner.ts'), 'utf-8');
-  onboardingSource = readFileSync(resolve(SRC, 'routes/dashboard/onboarding.ts'), 'utf-8');
-  tierGateSource = readFileSync(resolve(SRC, 'middleware/tier-gate.ts'), 'utf-8');
 });
 
 // =============================================================================
@@ -176,29 +172,19 @@ describe('AI cost ceiling is persisted and multi-scoped', () => {
 });
 
 // =============================================================================
-// 4. Tier-Gated Product Limits (Billing Enforcement)
+// 4. TIER-GATED PRODUCT LIMITS — THE SECTION THAT WENT WITH THE BILLING.
+//
+// Five checks lived here: that onboarding held a `productLimits` map, that Solo
+// allowed one company, Growth three and Investor-Ready `Infinity`, and that a
+// tier-gate middleware existed to enforce it all. Every one of them read a
+// source file for a shape rather than exercising a behaviour, which is why they
+// kept passing long after they meant anything.
+//
+// They describe Commercial Foundry. The onboarding wizard that counted a
+// founder's companies against their plan is deleted, `middleware/tier-gate.ts`
+// is deleted, and this instance has one owner who is not on a plan. A fleet
+// still has limits worth checking — the scheduler's, the spend ceiling's, the
+// connection pool's — and those sections above are untouched. What is gone is
+// the limit that was a price.
 // =============================================================================
 
-describe('Product limits enforced via tier, not hardcoded caps', () => {
-
-  it('onboarding enforces per-tier product limits', () => {
-    expect(onboardingSource).toMatch(/productLimits/);
-  });
-
-  it('solo tier allows 1 product', () => {
-    expect(onboardingSource).toMatch(/solo:\s*1/);
-  });
-
-  it('growth tier allows 3 products', () => {
-    expect(onboardingSource).toMatch(/growth:\s*3/);
-  });
-
-  it('investor_ready tier allows unlimited products', () => {
-    expect(onboardingSource).toMatch(/investor_ready/);
-    expect(onboardingSource).toMatch(/Infinity/);
-  });
-
-  it('tier-gate middleware exists for feature access control', () => {
-    expect(tierGateSource).toMatch(/canAccess|tierGate|createMiddleware/i);
-  });
-});

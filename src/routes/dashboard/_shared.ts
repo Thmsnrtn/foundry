@@ -6,14 +6,38 @@
 import { isPrivateOwnerInstance } from '../../lib/instance-posture.js';
 import { query, getProductsByOwner,
   getVisibleProducts, getLifecycleState } from '../../db/client.js';
-import type { LayoutOptions } from '../../views/layout.js';
+/**
+ * WHAT A DASHBOARD PAGE NEEDS TO RENDER, now that there is one renderer.
+ *
+ * This was imported from `views/layout.ts`, the other visual system's entry
+ * point. Every page that used that system has moved to the owner shell, so the
+ * module is gone and the shape it declared lives with the only code that still
+ * builds one. Only the fields this context actually carries are kept — the
+ * rest described a twenty-five item navigation, a command palette and a nav
+ * badge struct that no longer exist.
+ */
+export interface LayoutOptions {
+  title: string;
+  founderName?: string | null;
+  productName?: string | null;
+  productId?: string | null;
+  activeNav?: string;
+  riskState?: string | null;
+  riskReason?: string | null;
+  founderEmail?: string | null;
+  navBadges?: { decisions_count: number } | null;
+  navExplainer?: string | null;
+  showNav?: boolean;
+  nextAction?: unknown;
+  sidebarRiskClass?: string | null;
+  chamberMode?: boolean;
+}
 import type { RiskStateValue, NextAction, AppNotification, MilestoneEvent, OnboardingTour, NavBadges, Founder } from '../../types/index.js';
 import { getProductDNA } from '../../services/wisdom/dna.js';
 import { getNextAction } from '../../services/ux/next-action.js';
 import { getUnreadNotifications, getUnreadCount } from '../../services/ux/notifications.js';
 import { getUnseenMilestones } from '../../services/ux/milestones.js';
 import { getTourState } from '../../services/ux/tour.js';
-import { canAccess as canAccessFn } from '../../middleware/tier-gate.js';
 import { getTrialStatus, type TrialStatus } from '../../services/billing/trial.js';
 import { getFluency, navExplain } from '../../services/ux/fluency.js';
 import { getCookie } from 'hono/cookie';
@@ -37,7 +61,6 @@ export interface UXContext {
   unseenMilestones: MilestoneEvent[];
   tourState: OnboardingTour | null;
   navBadges: NavBadges;
-  canAccess: (featureKey: string) => boolean;
 }
 
 export interface LayoutContext extends Required<Pick<LayoutOptions, 'title' | 'founderName' | 'productName' | 'productId' | 'activeNav' | 'riskState' | 'riskReason'>> {
@@ -114,7 +137,6 @@ export async function getLayoutContext(
     unseenMilestones: [],
     tourState: null,
     navBadges: { decisions_count: 0 },
-    canAccess: (featureKey: string) => canAccessFn(founder, featureKey),
   };
 
   // Extract CSRF token from Hono context
@@ -186,7 +208,6 @@ export async function getLayoutContext(
     unseenMilestones,
     tourState,
     navBadges,
-    canAccess: (featureKey: string) => canAccessFn(founder, featureKey),
   };
 
   return {

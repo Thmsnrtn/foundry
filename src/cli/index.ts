@@ -341,22 +341,18 @@ program
     }
   });
 
-program
-  .command('ux:gate <founderId> <featureKey>')
-  .description('Check if a founder can access a feature')
-  .action(async (founderId: string, featureKey: string) => {
-    const { canAccess, getTierBadge, FEATURE_GATES } = await import('../middleware/tier-gate.js');
-    const founderResult = await query('SELECT * FROM founders WHERE id = ?', [founderId]);
-    if (founderResult.rows.length === 0) { console.error('Founder not found'); return; }
-    const founder = founderResult.rows[0] as unknown as import('../types/index.js').Founder;
-    const gate = FEATURE_GATES[featureKey];
-    const hasAccess = canAccess(founder, featureKey);
-    console.log(`\nFeature Gate Check:`);
-    console.log(`  Feature: ${gate?.name ?? featureKey}`);
-    console.log(`  Founder Tier: ${getTierBadge(founder.tier)}`);
-    console.log(`  Required Tiers: ${gate?.requiredTier.join(', ') ?? 'unknown'}`);
-    console.log(`  Access: ${hasAccess ? '✓ ALLOWED' : '✗ DENIED'}`);
-  });
+// `ux:gate` WENT WITH THE TIERS IT CHECKED.
+//
+// It printed whether a founder's SUBSCRIPTION PLAN admitted them to a feature —
+// Solo, Growth, Investor-Ready, at three prices. There is one founder here and
+// he owns the institution; there is no plan to be on and nothing to be admitted
+// to. Every feature the sixteen gates named has either been deleted outright
+// (the investor layer, playbooks, cohorts, team mode, benchmarks — their tables
+// went in migrations 309 and 311) or belongs to him already.
+//
+// `services/billing/entitlement.ts` is the live mechanism and is a different
+// thing: it decides whether a COMMERCIAL instance has lapsed into read-only,
+// which is a question about payment, not about plan.
 
 program
   .command('ux:notifications <founderId>')

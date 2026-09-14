@@ -1053,15 +1053,15 @@ export interface NextAction {
   urgency: 'critical' | 'elevated' | 'normal' | 'positive';
 }
 
-export interface PageHint {
-  id: string;
-  type: 'empty_state' | 'contextual' | 'warning' | 'tip';
-  headline: string;
-  body: string;
-  action_label?: string;
-  action_url?: string;
-  dismissible: boolean;
-}
+/**
+ * `PageHint` AND `DimensionHint` WENT WITH `services/ux/hints.ts`.
+ *
+ * That module wrote per-page guidance, intelligent empty states and a
+ * model-written tooltip for each audit dimension. Its only caller was the
+ * onboarding wizard's audit step, which is deleted; `dimension_hints`, the one
+ * table it wrote, goes in migration 312. The owner's surface says what it means
+ * in the page itself rather than in a tip layered over it.
+ */
 
 export interface MilestoneEvent {
   id: string;
@@ -1116,18 +1116,16 @@ export interface NavBadges {
   decisions_count: number;
 }
 
-export interface FeatureGateConfig {
-  requiredTier: SubscriptionTier[];
-  name: string;
-  description: string;
-  upgradeMessage: string;
-}
-
-export interface DimensionHint {
-  audit_score_id: string;
-  dimension: string;
-  hint_text: string;
-}
+/**
+ * `FeatureGateConfig` WAS THE SHAPE OF A PRICE LIST.
+ *
+ * Sixteen of them lived in `middleware/tier-gate.ts`, each naming a feature, the
+ * plans that admitted it, and the sentence shown to someone who had not paid
+ * for it. The middleware is deleted and so is the CLI command that read it.
+ * `SubscriptionTier` stays: `founders.tier` is a real column with a real value
+ * in commercial deployments, and `services/billing/entitlement.ts` still asks
+ * whether it is null.
+ */
 
 // ─── Integrations ────────────────────────────────────────────────────────────
 
