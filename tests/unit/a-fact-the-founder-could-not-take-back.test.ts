@@ -1,4 +1,7 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
+// The doors answer the institution's owner, so the fixture has to be him for
+// these to measure the page rather than the guard.
+process.env.FOUNDRY_OWNER_EMAIL = 'f@test.local';
 
 import { Hono } from 'hono';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
@@ -239,36 +242,60 @@ describe('correcting a fact that is already grounded', () => {
 });
 
 describe('the founder can reach it', () => {
+  // IT USED TO BE REACHABLE ONLY FROM THE ADVANCED DEPTH. The page lived under
+  // `/letter`, one of thirty-odd endpoints behind a door labelled "inspect the
+  // system", which is not where anybody is standing when they notice that
+  // something they said has stopped being true. It is now inside the company,
+  // under the list of what Foundry looks after, and these ask the page he
+  // actually opens.
   async function page(path: string): Promise<{ status: number; body: string }> {
-    const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
+    const { foundryShellRoutes } = await import('../../src/routes/dashboard/foundry-shell.js');
     const app = new Hono();
     app.use('*', async (c, next) => {
       c.set('founder' as never, { id: F, email: 'f@test.local', preferences: {} } as never);
       c.set('csrfToken' as never, 't' as never);
       await next();
     });
-    app.route('/', letterRoutes as unknown as Hono);
+    app.route('/', foundryShellRoutes as unknown as Hono);
     const res = await app.request(path);
     return { status: res.status, body: await res.text() };
   }
+
+  it('still lands anyone holding the old address on the new page', async () => {
+    const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
+    const app = new Hono();
+    app.route('/', letterRoutes as unknown as Hono);
+    const res = await app.request(`/letter/responsibilities/${R}/understanding`);
+    // The old address carried no company, so the redirect resolves it from the
+    // responsibility itself rather than guessing.
+    expect(res.status).toBe(308);
+    expect(res.headers.get('location')).toBe(`/foundry/companies/${P}/understanding/${R}`);
+  });
 
   it('says what it believes, when it was told, and offers the correction', async () => {
     await submitFounderFact({
       productId: P, founderId: F, fact: 'purpose', scope: 'responsibility',
       responsibilityId: R, statement: 'Customers waiting is what loses them',
     });
-    const { status, body } = await page(`/letter/responsibilities/${R}/understanding`);
+    const { status, body } = await page(`/foundry/companies/${P}/understanding/${R}`);
     expect(status).toBe(200);
     expect(body).toContain('Customers waiting is what loses them');
     expect(body).toContain('You told me this');
     expect(body).toContain('Correct it');
-    // It does not decide that anything has gone stale.
-    expect(body).toContain('I do not decide when any of them stops being true');
+    // It does not decide that anything has gone stale. Matched on the text
+    // rather than the source, because the sentence is wrapped in the template
+    // and a reader sees one line either way.
+    expect(body.replace(/\s+/g, ' '))
+      .toContain('I do not decide when any of them stops being true');
   });
 
   it('says it does not know, rather than guessing, for a fact nobody stated', async () => {
-    const { body } = await page(`/letter/responsibilities/${R}/understanding`);
-    expect(body).toContain('You have not told me this yet, so I do not know it');
+    const { body } = await page(`/foundry/companies/${P}/understanding/${R}`);
+    // ONE SENTENCE FOR ALL OF THEM, NOT ONE EACH. Eleven near-identical
+    // refusals with the single answer buried among them is the same defect as
+    // a queue that asks one question twenty-two times.
+    expect(body).toContain('Nobody has told me');
+    expect(body).toContain('I am not guessing at any of it');
     // And offers no way to state it here: telling Foundry a fact for the first
     // time is answering a question, and that path already asks one at a time in
     // the order that unblocks the most. A form the correction guard refuses
@@ -277,6 +304,6 @@ describe('the founder can reach it', () => {
   });
 
   it('answers a responsibility that is not this company\'s the same as one that does not exist', async () => {
-    expect((await page('/letter/responsibilities/no_such_thing/understanding')).status).toBe(404);
+    expect((await page(`/foundry/companies/${P}/understanding/no_such_thing`)).status).toBe(404);
   });
 });

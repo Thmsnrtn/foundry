@@ -1,5 +1,8 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
+// The doors answer the institution's owner and nobody else, so the fixture has
+// to BE him for this to measure the page rather than the guard.
+process.env.FOUNDRY_OWNER_EMAIL = 'dh@example.com';
 
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
@@ -154,33 +157,54 @@ describe('the handle is attached to the door', () => {
   // THE WHOLE FINDING WAS A CAPABILITY NOTHING COULD REACH. A test proving the
   // grant function works, without proving a person can reach it, would rebuild
   // exactly that defect one layer up.
-  it('renders the offer on Controls, where authority belongs', async () => {
-    await grantDeclaredScope().catch(() => { /* offer shows either way */ });
+  //
+  // THIS ASKED THE WRONG DOOR UNTIL THE WRONG DOOR WAS RETIRED. The offer was
+  // rendered at `/autopilot`, which also carried a per-category autonomy ladder
+  // that governed nothing and is now gone. The offer itself was never only
+  // there: the first screen has carried it as an Authority act — one named
+  // piece of maintenance, for a week, with what it could and could not change
+  // beside it — and that is where the owner meets it. So the question this
+  // test exists to ask is asked of the page he actually opens.
+  const doors = async () => {
     const { Hono } = await import('hono');
-    const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
+    const { foundryShellRoutes } = await import('../../src/routes/dashboard/foundry-shell.js');
     const app = new Hono();
-    app.use('*', async (c, next) => { c.set('founder', { id: OWNER, email: 'dh@example.com' }); await next(); });
-    app.route('/', letterRoutes as never);
+    app.use('*', async (c, next) => {
+      c.set('founder' as never, { id: OWNER, email: 'dh@example.com' } as never);
+      await next();
+    });
+    app.route('/', foundryShellRoutes as never);
+    return app;
+  };
 
-    const res = await app.request('/autopilot');
-    expect(res.status, 'Controls did not render').toBe(200);
+  it('renders the offer on the first screen, where authority belongs', async () => {
+    const res = await (await doors()).request('/foundry');
+    expect(res.status, 'the first screen did not render').toBe(200);
     const body = await res.text();
 
-    expect(body, 'the offer never reaches the page').toContain("Foundry's own upkeep");
-    expect(body, 'the owner is not told what Foundry would actually do')
-      .toContain(SELF_MAINTENANCE_SCOPES[SCHEMA_SNAPSHOT_CHECK].plainly);
-    expect(body, 'the scope the grant is bounded to is not shown').toContain(SNAPSHOT_PATH);
-    expect(/action="\/autopilot\/development\/(grant|revoke)"/.test(body),
+    expect(/action="\/autopilot\/development\/grant"/.test(body),
       'there is no form to act on the offer').toBe(true);
+    expect(body, 'the scope the grant is bounded to is not shown').toContain(SNAPSHOT_PATH);
+    // WHAT IT COULD CHANGE AND WHAT IT COULD NOT, both, in his words. An offer
+    // that says only what it may do is a request for trust without its limit.
+    expect(body, 'the limit is not stated beside the grant').toContain('and only that one');
+  });
+
+  it('replaces the offer with a way to take it back, once it is granted', async () => {
+    // AUTHORITY THE OWNER CANNOT SEE IS AUTHORITY HE CANNOT WITHDRAW. Granting
+    // it must not leave the same page still asking: what he needs from the
+    // screen changes the moment he says yes, and the one control that must
+    // never be hard to find is the one that ends it.
+    await grantDeclaredScope();
+    const body = await (await (await doors()).request('/foundry')).text();
+    expect(/action="\/autopilot\/development\/revoke"/.test(body),
+      'there is no way to take it back').toBe(true);
+    expect(/action="\/autopilot\/development\/grant"/.test(body),
+      'it is still asking for something he has already given').toBe(false);
   });
 
   it('asks the owner for intent, never for a path scope', async () => {
-    const { Hono } = await import('hono');
-    const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
-    const app = new Hono();
-    app.use('*', async (c, next) => { c.set('founder', { id: OWNER, email: 'dh@example.com' }); await next(); });
-    app.route('/', letterRoutes as never);
-    const body = await (await app.request('/autopilot')).text();
+    const body = await (await (await doors()).request('/foundry')).text();
 
     // Controls express intent and limits. A text input here would mean the
     // owner types the boundary of Foundry's authority over its own repository.
@@ -188,5 +212,18 @@ describe('the handle is attached to the door', () => {
     expect(form, 'the grant form is gone').not.toBeNull();
     expect(/type="text"|<textarea|<select/.test(form![0]),
       'the scope must come from the module that declared it, not from a form').toBe(false);
+  });
+
+  it('sends him back where he was, rather than to the retired page', async () => {
+    // `/autopilot` is a 308 to Controls now. A grant form still posting to a
+    // handler that redirects to a page nobody can reach would leave him on a
+    // door he did not open.
+    const { Hono } = await import('hono');
+    const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
+    const app = new Hono();
+    app.route('/', letterRoutes as never);
+    const res = await app.request('/autopilot');
+    expect(res.status).toBe(308);
+    expect(res.headers.get('location')).toBe('/foundry/controls');
   });
 });

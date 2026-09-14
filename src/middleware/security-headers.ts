@@ -38,10 +38,17 @@ export const securityHeaders = createMiddleware(async (c, next) => {
   // and the hardening — and the dead one was the one that looked more correct.
   // It is deleted; its `object-src` and `base-uri` are here.
   //
-  // `'unsafe-inline'` stays for now and is not a shrug: RT02-14 asks for
-  // nonces, and there are 14 inline `<script>` blocks plus 37 inline event
-  // handlers, which a nonce does not cover. That is a whole piece of work with
-  // its own verification, not a directive edit.
+  // `'unsafe-inline'` now covers exactly the sign-in pages, and it took doing
+  // the work rather than editing the directive. There were fourteen inline
+  // script blocks and thirty-seven inline handlers when this comment was first
+  // written; the cutover to the six doors removed most of them as a side
+  // effect, and the remainder — a retired chat surface, a hand-rolled modal,
+  // and fifteen on-attribute handlers across Controls, privacy, connections
+  // and the Letter — were migrated into the one hashed script deliberately.
+  //
+  // What is left is three blocks on the Clerk pages, which load a vendor SDK
+  // from a CDN and render nothing written by a stranger. They are the only
+  // paths this branch still describes.
   //
   // THE OWNER'S SURFACE GETS A STRICTER ONE, AND IT IS NOT A COSMETIC CHANGE.
   //

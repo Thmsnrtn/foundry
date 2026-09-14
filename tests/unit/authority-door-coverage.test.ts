@@ -117,31 +117,42 @@ beforeAll(async () => {
 const REFUSED = 403;
 
 describe('granting authority asks who is granting it', () => {
-  it('refuses an observer raising the autopilot dial', async () => {
-    // The dial at 'act' records a consent in the acting founder's name. It is
-    // the single grant the autopilot tick, the departments and the standing
-    // orders all read.
-    const res = await post('/autopilot/policy', OBSERVER,
-      { category: 'customer_success', mode: 'act' });
+  // THE DOOR THIS USED TO ASK ABOUT IS RETIRED, AND THE CATEGORY IS NOT.
+  //
+  // It was the per-category autopilot dial, which at 'act' recorded a consent
+  // in the acting founder's name. Every one of its twelve policy rows in
+  // production sits at watching, no owner ever moved one, and the only code
+  // that reads such a grant is off the timer — so the page and its POST are
+  // gone. The guarantee was never about that URL: it is that an observer
+  // cannot grant. The live granting doors are a standing permission on a
+  // responsibility and a grant to a connected provider, and both are asked
+  // here.
+  it('refuses an observer granting a standing permission on a responsibility', async () => {
+    const res = await post('/letter/responsibilities/nonexistent/permission/grant',
+      OBSERVER, { days: '7' });
     expect(res.status).toBe(REFUSED);
-    const rows = await query(
-      `SELECT mode FROM autopilot_policies WHERE product_id = ? AND category = ?`,
-      [P, 'customer_success']);
-    expect(rows.rows, 'no policy row, and no consent behind it').toHaveLength(0);
-    const consents = await query(
-      `SELECT id FROM autonomy_consents WHERE product_id = ?`, [P]);
-    expect(consents.rows).toHaveLength(0);
+    // Stopped by the guard, before the handler ever looked at what was asked.
+    expect(await res.text()).toContain('Not permitted for your access to this company');
   });
 
-  it('admits the co-founder raising it, and records the consent behind it', async () => {
-    const res = await post('/autopilot/policy', MANAGER,
-      { category: 'customer_success', mode: 'act' });
-    expect(res.status).not.toBe(REFUSED);
-    const consents = (await query(
-      `SELECT founder_id, to_mode FROM autonomy_consents WHERE product_id = ?`, [P]))
-      .rows as unknown as Array<Record<string, unknown>>;
-    expect(consents).toHaveLength(1);
-    expect(consents[0].founder_id, 'the consent names who actually gave it').toBe(MANAGER);
+  it('refuses an observer granting a connected provider something to do', async () => {
+    const res = await post('/connections/grant', OBSERVER,
+      { service: 'mailer', capability: 'send' });
+    expect(res.status).toBe(REFUSED);
+  });
+
+  it('admits the co-founder at both', async () => {
+    // Past the guard at each. What the handler then says about a
+    // responsibility that does not exist, or a provider that is not connected,
+    // is a different refusal and not what this test is about.
+    // The permission door refuses a responsibility that does not exist, and
+    // that refusal is also a 403 — so the BODY is what says which one answered.
+    // The guard's refusal names the access; the handler's does not.
+    const granted = await post('/letter/responsibilities/nonexistent/permission/grant',
+      MANAGER, { days: '7' });
+    expect(await granted.text()).toBe('Refused');
+    expect((await post('/connections/grant', MANAGER,
+      { service: 'mailer', capability: 'send' })).status).not.toBe(REFUSED);
   });
 });
 
@@ -262,20 +273,31 @@ describe('a paid model run asks who may spend', () => {
   // all: every /synthesize, /generate, /scan, /assess, the institution chat,
   // voice transcription, the weekly brief. Any active member — an investor
   // observer included — could spend the company's AI budget by pressing a
-  // button. Most of those doors were on the Commercial Foundry pages and are
-  // gone. The institution chat is the one that remains, and it is the same
-  // shape: one POST, one model call, the company's money.
-  const SPEND = '/talk/message';
-
-  it('refuses an observer at the institution chat', async () => {
-    expect((await post(SPEND, OBSERVER)).status).toBe(REFUSED);
-  });
-
-  it('admits a member who holds can_trigger_actions', async () => {
-    // 400 for the malformed body, from the handler — which is the proof that
-    // the guard let them reach it. No model call is made on that path, so the
-    // test does not spend anything to assert who may.
-    expect((await post(SPEND, MANAGER)).status).not.toBe(REFUSED);
+  // button.
+  //
+  // THERE IS NOW NO SUCH DOOR, WHICH IS A STRONGER GUARANTEE THAN GUARDING ONE.
+  // The Commercial pages took most of them; the institution chat at `/talk` was
+  // the last, and it is retired. Every model call this institution makes now
+  // happens in a scheduled routine, under the ceilings, where no request from a
+  // browser can start one.
+  //
+  // So the question moves from "who may press the button" to "is there a
+  // button", asserted from the source rather than by guarding a URL — because
+  // the failure to catch is somebody adding the fifty-fifth one, and a test
+  // against a door that no longer exists could never see it.
+  it('leaves no mutating route that reaches a model call at all', async () => {
+    const { readFileSync, readdirSync } = await import('node:fs');
+    const { join, resolve } = await import('node:path');
+    const dir = resolve(import.meta.dirname, '../../src/routes');
+    const walk = (d: string): string[] => readdirSync(d, { withFileTypes: true })
+      .flatMap((e) => e.isDirectory() ? walk(join(d, e.name)) : [join(d, e.name)]);
+    const spenders = walk(dir)
+      .filter((f) => f.endsWith('.ts'))
+      .filter((f) => /\bcall(Opus|Sonnet|Haiku|Claude|ClaudeMultiTurn)\s*\(/
+        .test(readFileSync(f, 'utf8')))
+      .map((f) => f.slice(dir.length + 1));
+    expect(spenders, 'a route spends on a model — it needs a capability guard')
+      .toEqual([]);
   });
 });
 

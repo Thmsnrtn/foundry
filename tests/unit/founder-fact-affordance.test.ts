@@ -1,7 +1,7 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 
-import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, relative, resolve } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
@@ -248,16 +248,29 @@ describe('explicit founder fact affordance', () => {
       .toBeUndefined();
   });
 
-  it('does not treat chat as evidence', () => {
-    // The conversational surface writes no canonical company fact, and no model
-    // interprets prose into one. The affordance above is the only founder-
-    // initiated path into evidence.
-    const chat = readFileSyncSafe('src/services/chat/institution.ts');
-    expect(chat).not.toMatch(/recordReconstructionClaim|founder_assertion|submitFounderFact/);
+  it('leaves no model-written path into canonical evidence', () => {
+    // WHAT THIS USED TO ASSERT. The conversational surface at `/talk` let a
+    // model read prose and write a premise, and this held the line that it
+    // could never write a canonical company fact. That surface is retired and
+    // its service deleted, so the assertion had nothing left to read — and a
+    // source check against a file that no longer exists passes by reading an
+    // empty string, which is the most confident way a test can say nothing.
+    //
+    // The line it protected still matters, so it is asserted where it can
+    // still fail: no module anywhere writes a reconstruction claim from model
+    // output. The affordance above remains the only founder-initiated path.
+    const writers = readdirSyncDeep(resolve(process.cwd(), 'src'))
+      .filter((f) => f.endsWith('.ts'))
+      .filter((f) => /recordReconstructionClaim\s*\(/.test(readFileSync(f, 'utf8')))
+      .map((f) => relative(resolve(process.cwd(), 'src'), f));
+    for (const w of writers) {
+      const src = readFileSync(resolve(process.cwd(), 'src', w), 'utf8');
+      expect(src, `${w} writes a canonical fact`).not.toMatch(/callOpus|callSonnet|callHaiku/);
+    }
   });
 });
 
-function readFileSyncSafe(relative: string): string {
-  const path = resolve(process.cwd(), relative);
-  return existsSync(path) ? readFileSync(path, 'utf8') : '';
+function readdirSyncDeep(dir: string): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+    e.isDirectory() ? readdirSyncDeep(join(dir, e.name)) : [join(dir, e.name)]);
 }

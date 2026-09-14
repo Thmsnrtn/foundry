@@ -464,8 +464,7 @@ const supportChannelSection = (
           <span style="color:var(--text-muted);font-size:0.72rem;"> — ${c.responsibilityTitle}</span>
         </div>
         <input type="text" readonly value="${appUrl}/ingest/customer-message/${c.intakeKey}"
-          style="width:100%;font-size:0.72rem;font-family:monospace;margin-top:0.25rem;cursor:pointer;"
-          onclick="this.select()" />
+          style="width:100%;font-size:0.72rem;font-family:monospace;margin-top:0.25rem;cursor:pointer;" data-select />
         <form method="POST" action="/letter/channels/${c.id}/feed" style="margin-top:0.3rem;">
           <input type="hidden" name="provider" value="${c.fedBy ? '' : 'intercom'}" />
           <button type="submit" class="btn btn-ghost" style="font-size:0.7rem;padding:0.2rem 0.45rem;">
@@ -1220,8 +1219,19 @@ letterRoutes.get('/letter', async (c) => {
         : 'I raised this and you have not said which way to go'}`}</div>
             </div>
             ${n.kind === 'decision' ? html`
-            <a href="/foundry/decisions" class="btn btn-primary" style="font-size:0.78rem;padding:0.3rem 0.7rem;"
-              onclick="fetch('/letter/attention/${n.decisionId}',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({product_id:'${n.productId}',reaction:'acted'})})">Decide</a>
+            <!-- THE REACTION USED TO RACE THE NAVIGATION IT RECORDED. This was
+                 a link that fired a POST from an inline handler and then left
+                 the page; a browser is entitled to cancel an in-flight request
+                 on navigation, and on a slow connection — the one case where
+                 the ranking most wants to learn that he acted — it usually
+                 does. A form records the reaction on the server and the server
+                 sends him on, so the two cannot come apart. -->
+            <form method="POST" action="/letter/attention/${n.decisionId}" style="margin:0;">
+              <input type="hidden" name="product_id" value="${n.productId}" />
+              <input type="hidden" name="reaction" value="acted" />
+              <input type="hidden" name="next" value="decisions" />
+              <button type="submit" class="btn btn-primary" style="font-size:0.78rem;padding:0.3rem 0.7rem;">Decide</button>
+            </form>
             <form method="POST" action="/letter/attention/${n.decisionId}" style="margin:0;">
               <input type="hidden" name="product_id" value="${n.productId}" />
               <input type="hidden" name="reaction" value="dismissed" />
@@ -1807,7 +1817,7 @@ letterRoutes.post('/letter/judgments/:judgmentId/disposition', async (c) => {
 letterRoutes.post('/letter/attention/:decisionId', async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('decisionId');
-  let productId = '', reaction = '';
+  let productId = '', reaction = '', next = '';
   const ct = c.req.header('content-type') ?? '';
   if (ct.includes('application/json')) {
     const body = await c.req.json().catch(() => ({})) as Record<string, string>;
@@ -1817,209 +1827,56 @@ letterRoutes.post('/letter/attention/:decisionId', async (c) => {
     const body = await c.req.parseBody();
     productId = String(body.product_id ?? '');
     reaction = String(body.reaction ?? '');
+    next = String(body.next ?? '');
   }
   if (['opened', 'acted', 'dismissed'].includes(reaction) && productId) {
     const { recordAttention } = await import('../../services/letter/fleet.js');
     await recordAttention(founder.id as string, productId, decisionId, reaction as 'opened' | 'acted' | 'dismissed');
   }
-  return ct.includes('application/json') ? c.json({ ok: true }) : c.redirect('/letter');
+  // WHERE HE GOES NEXT IS A CHOICE FROM A LIST, NEVER A PATH HE SENT.
+  // "Decide" records that he acted and then takes him to the decisions door.
+  // Accepting a URL here would make this an open redirect on an authenticated
+  // POST, so the field names one of two destinations and nothing else.
+  if (ct.includes('application/json')) return c.json({ ok: true });
+  return c.redirect(next === 'decisions' ? '/foundry/decisions' : '/letter');
 });
 
 // ─── Controls (Ascent B6 / Trust Law) — the autopilot's cockpit ───────────────
 // Per-category dials in plain language, the evidence behind each level, and the
 // big red button. Granting 'act' is the founder's explicit consent moment.
 
-// ─── Development authority (recursive operation) ──────────────────────────────
+// THE LADDER IS RETIRED, AND THE EVIDENCE IS WHY RATHER THAN A PREFERENCE.
 //
-// THE ONE ACT THAT WAS MISSING. Foundry observes its own repository on a
-// schedule, climbs the identical responsibility ladder it makes every company
-// climb, and can plan, apply, verify, record and roll back a change to itself.
-// Every rung of that was built and reachable except granting the authority,
-// which had no caller anywhere — so the capability existed and could not start.
+// This page offered a per-category autonomy ladder — Watching, then Suggests
+// at a threshold of clean cycles, then Acts on an explicit grant — over
+// marketing, outreach, product_evolution and customer_success. It read well
+// and it governed nothing:
 //
-// What the owner is asked is not which paths or which change class. It is
-// whether Foundry may do one named piece of maintenance, for a week. The scope
-// is declared by the module that owns the observation, the constitutional ring
-// is refused by the database whatever this page sends, and every change is
-// verified and reversible.
-const developmentAuthoritySection = (
-  items: Array<{
-    responsibilityId: string; title: string; plainly: string; path: string;
-    current: { consentId: string; expiresAt: string; allowedPathPrefixes: string[] } | null;
-  }>,
-): HtmlEscapedString | Promise<HtmlEscapedString> => items.length === 0 ? html`` : html`
-  <section style="margin-top:1.75rem;">
-    <h2 style="font-size:0.95rem;margin:0 0 0.35rem;">Foundry's own upkeep</h2>
-    <p style="color:var(--text-dim);font-size:0.8rem;margin:0 0 0.85rem;">
-      Foundry has been watching these in its own repository and predicting them correctly
-      long enough to ask. A grant lasts seven days, touches only what is named, and can be
-      withdrawn at any moment.
-    </p>
-    ${items.map((item) => html`
-      <div class="card" style="padding:1rem;margin-bottom:0.6rem;">
-        <div style="font-size:0.9rem;color:var(--text-primary);font-weight:600;">${item.title}</div>
-        <div style="font-size:0.82rem;color:var(--text-muted);margin-top:0.3rem;line-height:1.5;">
-          Foundry would ${item.plainly}.
-        </div>
-        <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.5rem;">
-          It may change <code>${item.path}</code> and nothing else. It may never touch the
-          migrations, the institution, the checks that enforce it, or its own instructions —
-          the database refuses those regardless of what this page asks for.
-        </div>
-        ${item.current ? html`
-          <div style="font-size:0.78rem;color:var(--signal-high);margin-top:0.6rem;">
-            Allowed until ${item.current.expiresAt.slice(0, 16).replace('T', ' ')}.
-          </div>
-          <form method="POST" action="/autopilot/development/revoke" style="margin-top:0.5rem;">
-            <input type="hidden" name="consent_id" value="${item.current.consentId}" />
-            <button type="submit" class="btn btn-secondary" style="font-size:0.78rem;">Withdraw this</button>
-          </form>
-        ` : html`
-          <form method="POST" action="/autopilot/development/grant" style="margin-top:0.6rem;">
-            <input type="hidden" name="responsibility_id" value="${item.responsibilityId}" />
-            <button type="submit" class="btn btn-primary" style="font-size:0.78rem;">Allow this for 7 days</button>
-          </form>
-        `}
-      </div>`)}
-  </section>`;
+//   every one of the twelve policy rows in production sits at 'shadow', each
+//     written by a seed at a round hour on consecutive days, so no owner ever
+//     moved one;
+//   `decisions`, the table the ladder counts clean cycles from, is empty, so
+//     nothing could have been promoted even in principle;
+//   the tables its evidence would live in — a trust ledger, a shadow log — do
+//     not exist in this schema at all;
+//   and the only code that reads a grant is the SCP playbook engine, whose
+//     loop is in RETIRED_LOOPS.
+//
+// So granting 'act' here would have authorised nothing, on the one page whose
+// whole job is to say truthfully what Foundry may do. A control that does
+// nothing is worse than an absent one: it is a promise about autonomy that
+// nobody can check.
+//
+// Foundry's own upkeep — the seven-day development authority, which IS real
+// and IS live — was rendered here too, and is already offered by the Controls
+// door and the first screen, which post to the same two endpoints below. Those
+// stay exactly as they are.
+//
+// Nothing is deleted: `autopilot_policies`, `setPolicy` and `getEffectiveMode`
+// are untouched, so putting the playbook loop back on a timer would bring the
+// ladder back with it.
+letterRoutes.get('/autopilot', (c) => c.redirect('/foundry/controls', 308));
 
-letterRoutes.get('/autopilot', async (c) => {
-  const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'autopilot', 'Controls', undefined, c);
-  if (!ctx.productId) return c.redirect('/dashboard');
-
-  const { getAllCalibrations } = await import('../../services/autopilot/calibration.js');
-  const { platformCap, isCappedBelow } = await import('../../services/autopilot/platform-cap.js');
-  const { DISCLOSURE_TEXT } = await import('../../services/autopilot/consent.js');
-  const [policies, shadow, calibrations] = await Promise.all([
-    getAllPolicies(ctx.productId),
-    getShadowStats(ctx.productId),
-    getAllCalibrations(ctx.productId),
-  ]);
-  const developmentItems = await loadDevelopmentAuthorityItems(ctx.productId);
-  const shadowByCat = new Map(shadow.map((s) => [s.category, s]));
-  const calByCat = new Map(calibrations.map((c) => [c.category, c]));
-
-  const rows = policies.map((p) => {
-    const s = shadowByCat.get(p.category);
-    const cal = calByCat.get(p.category);
-    const agreement = s?.agreementRate != null ? `${Math.round(s.agreementRate * 100)}% agreement (${s.agreed}/${s.sampled})` : 'not enough shadow data yet';
-    const calLine = cal && cal.score != null
-      ? `Calibration: ${Math.round(cal.score * 100)}% of its acts/beliefs held — ${cal.verdict === 'overconfident' ? 'overconfident, promotion held' : 'well-calibrated'}`
-      : null;
-    return html`
-      <div class="card" style="padding:1rem 1.25rem;margin-bottom:0.75rem;">
-        <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
-          <div style="flex:1;min-width:180px;">
-            <div style="font-weight:600;color:var(--text-primary);text-transform:capitalize;">${p.category}</div>
-            <div style="font-size:0.8rem;color:var(--accent);">${MODE_LABELS[p.mode as AutopilotMode]}</div>
-            <div style="font-size:0.75rem;color:var(--text-muted);margin-top:0.25rem;">
-              Shadow record: ${agreement} · ${p.clean_cycles}/${PROMOTION_THRESHOLD} clean cycles banked
-              ${calLine ? html`<br/><span style="color:${cal!.verdict === 'overconfident' ? 'var(--alert)' : 'var(--text-muted)'};">${calLine}</span>` : ''}
-              ${p.last_demotion_reason ? html`<br/>Last pulled back: ${p.last_demotion_reason}` : ''}
-            </div>
-          </div>
-          <div style="display:flex;gap:0.4rem;flex-shrink:0;">
-            ${(() => {
-              const nextMode = p.mode === 'shadow' ? 'suggest' : 'act';
-              const cap = platformCap(p.category);
-              // The platform ceiling can't be exceeded — show it instead of an
-              // ungrantable button (autonomy = min(setting, cap, trust)).
-              if (isCappedBelow(nextMode as never, p.category)) {
-                return html`<span style="font-size:0.72rem;color:var(--alert);align-self:center;" title="Operator-set ceiling for this capability">Platform cap: ${cap}</span>`;
-              }
-              const grantingAct = nextMode === 'act';
-              return p.mode !== 'act' ? html`
-              <form method="POST" action="/autopilot/policy"
-                ${grantingAct ? html`onsubmit="return confirm(${JSON.stringify(DISCLOSURE_TEXT + '\n\nGrant this?')})"` : ''}>
-                <input type="hidden" name="category" value="${p.category}" />
-                <input type="hidden" name="mode" value="${nextMode}" />
-                <button type="submit" class="btn btn-secondary" style="font-size:0.78rem;padding:0.3rem 0.75rem;">
-                  Grant ${nextMode}
-                </button>
-              </form>` : '';
-            })()}
-            ${p.mode !== 'shadow' ? html`
-            <form method="POST" action="/autopilot/policy">
-              <input type="hidden" name="category" value="${p.category}" />
-              <input type="hidden" name="mode" value="shadow" />
-              <button type="submit" class="btn btn-ghost" style="font-size:0.78rem;padding:0.3rem 0.75rem;">Pause</button>
-            </form>` : ''}
-          </div>
-        </div>
-      </div>`;
-  });
-
-  const content = html`
-    <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:0.5rem;flex-wrap:wrap;gap:0.5rem;">
-      <h1 style="margin:0;">Controls</h1>
-      <form method="POST" action="/autopilot/panic"
-        onsubmit="return confirm('Stop the autopilot everywhere? All categories return to Watching only. Trust records are kept.')">
-        <button type="submit" class="btn" style="font-size:0.8rem;background:var(--bad);color:var(--bg);border:none;padding:0.45rem 1rem;border-radius:6px;">■ Stop the autopilot</button>
-      </form>
-    </div>
-    <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1.5rem;">
-      ${explain('controls', getFluency(founder)) || 'Autonomy is earned, never assumed. Watch → suggest → act (your explicit grant); every act undoable and logged; an undo pulls the category back.'}
-    </p>
-    ${policies.length === 0 ? html`
-      <div class="card" style="padding:1.25rem;color:var(--text-muted);">No decision categories yet — the ladder starts with your first decision.</div>
-    ` : rows}
-    <p style="font-size:0.72rem;color:var(--text-muted);margin-top:1rem;">
-      Ladder: Watching only → Suggests (earned at ${PROMOTION_THRESHOLD} clean cycles, quality-held) → Acts (your explicit grant, gate-≤1 only, ${12}h grace, 24h undo).
-    </p>
-    ${developmentAuthoritySection(developmentItems)}`;
-  return c.html(page(ctx.title, content, 'advanced', advancedWhere(ctx)));
-});
-
-// THIS IS THE DIAL, AND RAISING IT TO 'act' RECORDS A CONSENT IN THE
-// FOUNDER'S NAME. It is the single grant the whole autonomy stack reads,
-// and it was reachable by anyone who could select the company. Lowering it
-// is not separately gated — see /autopilot/panic below, which only ever
-// reduces autonomy and must stay reachable by everyone who can see it.
-letterRoutes.post('/autopilot/policy',
-  requireCompanyCapability('can_manage_company'), async (c) => {
-  const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'autopilot', 'Controls', undefined, c);
-  if (!ctx.productId) return c.redirect('/dashboard');
-  const body = await c.req.parseBody();
-  const category = (body.category as string)?.trim();
-  const mode = (body.mode as string)?.trim() as AutopilotMode;
-  if (category && ['shadow', 'suggest', 'act'].includes(mode)) {
-    await setPolicy(ctx.productId, category, mode, founder.id as string);
-  }
-  return c.redirect('/autopilot');
-});
-
-/** The grantable items with their declared scope and any live grant. */
-async function loadDevelopmentAuthorityItems(productId: string): Promise<Array<{
-  responsibilityId: string; title: string; plainly: string; path: string;
-  current: { consentId: string; expiresAt: string; allowedPathPrefixes: string[] } | null;
-}>> {
-  const { listGrantableDevelopmentResponsibilities, getCurrentDevelopmentAuthority } =
-    await import('../../services/institution/development-authority.js');
-  const { SELF_MAINTENANCE_SCOPES } = await import('../../services/foundry/self-observation.js');
-  const grantable = await listGrantableDevelopmentResponsibilities(productId);
-  const out = [];
-  for (const g of grantable) {
-    const scope = SELF_MAINTENANCE_SCOPES[g.check];
-    if (!scope) continue;
-    const current = await getCurrentDevelopmentAuthority(productId, g.responsibilityId);
-    out.push({
-      responsibilityId: g.responsibilityId, title: g.title,
-      plainly: scope.plainly, path: scope.path,
-      current: current ? {
-        consentId: current.consentId, expiresAt: current.expiresAt,
-        allowedPathPrefixes: current.allowedPathPrefixes,
-      } : null,
-    });
-  }
-  return out;
-}
-
-// SEVEN DAYS, AND THE SCOPE IS NOT THE OWNER'S TO TYPE. The route sends only a
-// responsibility id; the paths, change class and required verification come
-// from the module that declared the check. An owner cannot widen a grant by
-// editing a form, and the database refuses the constitutional ring regardless.
 letterRoutes.post('/autopilot/development/grant', requireOwner(), async (c) => {
   const founder = c.get('founder');
   const back = backTo((await c.req.parseBody()).return_to);
@@ -2081,71 +1938,27 @@ letterRoutes.post('/autopilot/panic', async (c) => {
 // Conversation IS capture: decisions and beliefs stated here land in the ledger
 // with their premises monitored. The reply cites the trust record.
 
-letterRoutes.get('/talk', async (c) => {
-  const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'talk', 'Talk to the company', undefined, c);
-  if (!ctx.productId) return c.redirect('/dashboard');
-  const content = html`
-    <h1 style="margin-bottom:0.25rem;">Talk to the company</h1>
-    <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1.25rem;">
-      ${explain('talk', getFluency(founder)) || 'State a decision or a belief and it lands in the ledger, monitored. Ask anything — answers come from your real ledgers and carry the trust record.'}
-    </p>
-    <div id="talk-log" style="min-height:180px;margin-bottom:1rem;"></div>
-    <div style="display:flex;gap:0.5rem;">
-      <input id="talk-input" type="text" placeholder="State a decision or ask anything…"
-        style="flex:1;padding:0.6rem 0.85rem;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text-primary);font-size:0.9rem;" />
-      <button class="btn btn-primary" onclick="sendTalk()" style="font-size:0.85rem;">Send</button>
-    </div>
-    <script>
-      let talkThread = null;
-      function addMsg(role, text) {
-        const log = document.getElementById('talk-log');
-        const div = document.createElement('div');
-        div.style.cssText = 'padding:0.6rem 0.9rem;margin-bottom:0.5rem;border-radius:8px;font-size:0.88rem;line-height:1.5;' +
-          (role === 'you' ? 'background:rgba(78,204,163,0.08);border:1px solid rgba(78,204,163,0.2);' : 'background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);');
-        div.textContent = (role === 'you' ? 'You: ' : 'Foundry: ') + text;
-        log.appendChild(div);
-      }
-      async function sendTalk() {
-        const input = document.getElementById('talk-input');
-        const text = input.value.trim();
-        if (!text) return;
-        input.value = '';
-        addMsg('you', text);
-        try {
-          const res = await fetch('/talk/message', {
-            method: 'POST', headers: { 'content-type': 'application/json' },
-            body: JSON.stringify({ text, thread_id: talkThread }),
-          });
-          const data = await res.json();
-          if (data.error) { addMsg('foundry', 'Error: ' + data.error); return; }
-          talkThread = data.threadId;
-          addMsg('foundry', data.reply + (data.captured ? ' 📒' : ''));
-        } catch { addMsg('foundry', 'The company is unreachable right now.'); }
-      }
-      document.getElementById('talk-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendTalk(); });
-    </script>
-    ${adviceStrip(getFluency(founder))}`;
-  return c.html(page(ctx.title, content, 'advanced', advancedWhere(ctx)));
-});
-
-letterRoutes.post('/talk/message',
-  requireCompanyCapability('can_trigger_actions'), async (c) => {
-  const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'talk', 'Talk to the company', undefined, c);
-  if (!ctx.productId) return c.json({ error: 'No product' }, 400);
-  const body = await c.req.json().catch(() => null) as { text?: string; thread_id?: string } | null;
-  if (!body) return c.json({ error: 'Invalid JSON body' }, 400);
-  const text = body.text?.trim();
-  if (!text || text.length > 2000) return c.json({ error: 'Say something (under 2000 chars)' }, 400);
-  try {
-    const { handleUtterance } = await import('../../services/chat/institution.js');
-    const turn = await handleUtterance(ctx.productId, founder.id as string, text, body.thread_id);
-    return c.json(turn);
-  } catch {
-    return c.json({ error: 'The company could not respond (AI unavailable)' }, 503);
-  }
-});
+// THE CONVERSATIONAL SURFACE IS RETIRED, AND IT WAS NOT REPLACED BY SILENCE.
+//
+// `/talk` was a free-form chat: the owner typed prose, a model read the
+// ledgers and replied, and a claim it recognised became a monitored premise.
+// It was linked from no navigation anywhere in this product — the six doors
+// went in around it during the cutover and nothing ever pointed at it again,
+// so the only way to reach it was to type the URL.
+//
+// What took its place is the composer at the foot of every page, and the
+// difference is the whole doctrine: it matches what he typed against a set of
+// questions this institution can answer FROM ROWS, and answers on the page
+// where the subject already is. A model that reads the ledgers and writes a
+// paragraph is the deepest kind of interface and the shallowest kind of
+// institution — it is the one surface here where being wrong costs nothing to
+// produce and everything to trust.
+//
+// The service behind it is deleted rather than kept dormant. Nothing else
+// reached it, so keeping it would have meant an unreachable module and a
+// reachability baseline growing to accommodate a page nobody could find. Its
+// dependencies — the memory kernel, the fleet letter, the shadow statistics —
+// all have other callers and are untouched.
 
 // The founder answers one question about their own company. The authenticated
 // session is the only identity source: the product, the responsibility, and the
@@ -2430,20 +2243,6 @@ letterRoutes.post('/letter/responsibilities/:responsibilityId/watch',
   return c.redirect('/letter');
 });
 
-const FACT_LABELS: Record<string, string> = {
-  purpose: 'Why this matters',
-  desired_outcome: 'What good looks like',
-  success_conditions: 'How you would know it is going well',
-  operating_constraints: 'What I must not do while helping',
-  dependencies: 'What this depends on',
-  risks: 'What could go wrong',
-  systems: 'What it runs on',
-  failure_modes: 'How it usually fails',
-  current_carrier: 'Who carries it today',
-  failure_conditions: 'What counts as failing',
-  stakeholder_obligations: 'Who is owed what',
-  financial_consequence: 'What it costs when it goes wrong',
-};
 
 // WHAT I UNDERSTAND ABOUT THIS, AND HOW TO CORRECT IT.
 //
@@ -2455,73 +2254,22 @@ const FACT_LABELS: Record<string, string> = {
 // A date rather than a verdict, for the same reason as everywhere else: how old
 // a company fact may be is the owner's judgement, not Foundry's. Purpose ages
 // slowly and dependencies quickly, and Foundry has no way to tell which.
-letterRoutes.get('/letter/responsibilities/:responsibilityId/understanding', async (c) => {
-  const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
-  if (!ctx.productId) return c.redirect('/dashboard');
-
-  const { getFounderUnderstandingView } = await import('../../services/institution/founder-evidence.js');
-  const view = await getFounderUnderstandingView({
-    productId: ctx.productId, responsibilityId: c.req.param('responsibilityId'),
-    founderId: founder.id as string,
-  });
-  // A responsibility of another company and one that does not exist answer the
-  // same way, so asking cannot reveal which.
-  if (!view) return c.text('Not found', 404);
-
-  const content = html`
-    <div class="card" style="padding:1.5rem;max-width:720px;">
-      <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);">What I understand about this</div>
-      <h2 style="font-size:1.05rem;margin:0.4rem 0 0.2rem;">${view.title}</h2>
-      <div style="font-size:0.78rem;color:var(--text-muted);margin-bottom:1rem;">${view.state} · ${view.capability.replaceAll('_', ' ')}</div>
-      <p style="font-size:0.8rem;color:var(--text-muted);margin-bottom:1rem;">${view.mayCorrect
-        ? 'These are the things you have told me. I do not decide when any of them stops being true — if one is wrong or has changed, correct it here and I will use the new one from now on. Correcting a fact does not let me do anything on your behalf.'
-        : 'These are the things this company has told me. I do not decide when any of them stops being true. Changing what the company says it is belongs to whoever owns it, so I do not take a correction from anyone else — but you can see all of it.'}</p>
-      ${view.facts.map((f) => html`
-        <div style="padding:0.7rem 0;border-top:1px solid rgba(255,255,255,0.06);">
-          <div style="font-size:0.86rem;color:var(--text-primary);">${FACT_LABELS[f.fact] ?? f.fact.replaceAll('_', ' ')}</div>
-          ${f.statement ? html`
-            <div style="font-size:0.86rem;color:var(--text-primary);margin-top:0.2rem;">${f.statement}</div>
-            <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.15rem;">You told me this ${f.observedAt ? f.observedAt.slice(0, 10) : 'at some point I did not record'}.</div>
-            ${view.mayCorrect ? html`
-            <form method="POST" action="/letter/responsibilities/${view.responsibilityId}/understanding"
-              style="display:flex;gap:0.4rem;margin-top:0.4rem;align-items:center;flex-wrap:wrap;">
-              <input type="hidden" name="fact" value="${f.fact}" />
-              <input name="statement" required maxlength="2000"
-                placeholder="Say it differently" style="flex:1;min-width:220px;" />
-              <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Correct it</button>
-            </form>` : ''}`
-          : html`
-            <!-- NO FORM HERE, ON PURPOSE. Telling Foundry a fact for the first
-                 time is answering a question, and the question path already
-                 asks one at a time, in the order that unblocks the most.
-                 Offering a second way in would fight it, and offering a form
-                 that the correction guard refuses would be worse. -->
-            <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.2rem;">You have not told me this yet, so I do not know it. I am not guessing, and I will ask you for it.</div>`}
-        </div>`)}
-      <a href="/letter" class="btn btn-ghost" style="font-size:0.78rem;margin-top:1rem;display:inline-block;">Back</a>
-    </div>`;
-  return c.html(page(ctx.title, content, 'advanced', advancedWhere(ctx)));
-});
-
-letterRoutes.post('/letter/responsibilities/:responsibilityId/understanding',
-  requireCompanyCapability('can_trigger_actions'), async (c) => {
-  const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
-  if (!ctx.productId) return c.text('No product', 400);
-  const body = await c.req.parseBody();
-
-  const { reviseFounderFact } = await import('../../services/institution/founder-evidence.js');
-  const recorded = await reviseFounderFact({
-    productId: ctx.productId, founderId: founder.id as string,
-    responsibilityId: c.req.param('responsibilityId'),
-    fact: String(body.fact ?? ''), statement: String(body.statement ?? ''),
-  });
-  // Ownership, the responsibility and the predicate are all re-resolved
-  // server-side, so a hand-edited submission fails here rather than recording
-  // a fact about somebody else's company or one nothing consumes.
-  if (!recorded) return c.text('I could not use that', 403);
-  return c.redirect(`/letter/responsibilities/${c.req.param('responsibilityId')}/understanding`);
+// THE UNDERSTANDING PAGE AND ITS CORRECTION MOVED INTO THE COMPANY.
+//
+// Both now live at /foundry/companies/:id/understanding/:responsibilityId,
+// under the list of what Foundry looks after, which is where the owner is when
+// he notices that a fact has stopped being true. These two redirects exist so
+// a bookmark or a link in an old briefing still lands on the page rather than
+// on a 404 — they resolve the company from the responsibility itself, because
+// the old addresses never carried one.
+letterRoutes.all('/letter/responsibilities/:responsibilityId/understanding', async (c) => {
+  const id = c.req.param('responsibilityId');
+  const owning = (await query(
+    'SELECT product_id FROM institutional_responsibilities WHERE id = ?', [id]))
+    .rows[0] as Record<string, unknown> | undefined;
+  if (!owning) return c.notFound();
+  return c.redirect(
+    `/foundry/companies/${String(owning.product_id)}/understanding/${id}`, 308);
 });
 
 // Stage one of the founder-initiated fact path: show, do not store. This route

@@ -2708,7 +2708,7 @@ interface CompanyView {
   id: string; name: string; established: string | null;
   budgetMonthly: number | null; spent30d: number;
   knows: string[]; gaps: Array<{ missing: string; unlocks: string; connect: string | null }>;
-  responsibilities: Array<{ title: string; state: string }>;
+  responsibilities: Array<{ id: string; title: string; state: string }>;
   numbers: CompanyNumbers;
   /** Non-null only for a reference company: what it is, said before anything else. */
   reference: { situation: string; premise: string } | null;
@@ -2875,7 +2875,7 @@ export async function readCompany(productId: string, founderId: string): Promise
   const checks = await getSelfCheckStanding(productId);
 
   const responsibilities = (await query(
-    `SELECT title, state FROM institutional_responsibilities
+    `SELECT id, title, state FROM institutional_responsibilities
       WHERE product_id = ? AND disposition = 'active' ORDER BY created_at`, [productId]))
     .rows as unknown as Array<Record<string, unknown>>;
 
@@ -3018,7 +3018,7 @@ export async function readCompany(productId: string, founderId: string): Promise
     spent30d: Number(row.ai_cost_trailing_30d_usd ?? 0),
     knows, gaps,
     responsibilities: responsibilities.map((r) => ({
-      title: String(r.title), state: String(r.state),
+      id: String(r.id), title: String(r.title), state: String(r.state),
     })),
     numbers, reference, asks,
   };
@@ -3666,10 +3666,19 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
         separate question.</p>
     </details>
 
+    <!-- WHAT IT UNDERSTANDS ABOUT EACH OF THESE WAS A FLOOR DOWN.
+         The list said what Foundry looks after and at which rung; the page
+         that says what it UNDERSTANDS the thing to be — and lets the owner
+         correct a fact that has stopped being true — lived at /letter, inside
+         the Advanced depth, in a list of thirty other endpoints. A correction
+         belongs one tap from the thing being corrected, in the company it is
+         about, which is here. -->
     ${view.responsibilities.length ? html`<details class="know fold"><summary><h3>What I look after</h3><span class="gist">${count(view.responsibilities.length, 'responsibility', 'responsibilities')}</span></summary>
       <ul>${raw(view.responsibilities.map((r) =>
-    `<li>${CHECK_IN_PLAIN_WORDS['schema-snapshot-freshness']?.name === r.title ? r.title : r.title}
+    `<li><a href="/foundry/companies/${view.id}/understanding/${r.id}">${r.title}</a>
        — ${LADDER_IN_PLAIN_WORDS[r.state] ?? r.state}</li>`).join(''))}</ul>
+      <p class="quiet">Open one to read what I understand it to be, and correct
+        anything that has stopped being true.</p>
     </details>` : ''}
 
     <details class="know fold" id="matters"><summary><h3>What matters here</h3><span class="gist">${view.said ? 'you have told me' : 'you have not told me'}</span></summary>
@@ -5350,6 +5359,138 @@ foundryShellRoutes.post('/foundry/companies/:id/boundaries/:boundaryId/lift',
     return c.redirect(`/foundry/companies/${productId}?done=lifted`);
   });
 
+/**
+ * WHAT I UNDERSTAND THIS TO BE, AND WHERE A CORRECTION GOES.
+ *
+ * A responsibility is a thing Foundry carries on the owner's behalf, and every
+ * rung it climbs rests on facts he told it. Those facts go stale: the person
+ * who carries it changes, the constraint relaxes, what counts as failing turns
+ * out to be something else. Nothing here detects that — Foundry does not get to
+ * decide when a thing he said stopped being true — so the correction has to be
+ * his, and it has to be somewhere he would find it.
+ *
+ * It was at `/letter/responsibilities/:id/understanding`: the right page, in
+ * the Advanced depth, one of thirty-odd endpoints under a door labelled
+ * "inspect the system". It is now inside the company, under the list of what
+ * Foundry looks after, which is where he is when the question occurs to him.
+ *
+ * Ownership is not checked here and that is deliberate: the view resolves the
+ * viewer against the product itself — owner or an accepted team member may
+ * read, only the owner may correct — and a responsibility belonging to another
+ * company answers exactly as one that does not exist.
+ */
+const UNDERSTANDING_FACTS: Record<string, string> = {
+  purpose: 'Why this matters',
+  desired_outcome: 'What good looks like',
+  success_conditions: 'How you would know it is going well',
+  operating_constraints: 'What I must not do while helping',
+  dependencies: 'What this depends on',
+  risks: 'What could go wrong',
+  systems: 'What it runs on',
+  failure_modes: 'How it usually fails',
+  current_carrier: 'Who carries it today',
+  failure_conditions: 'What counts as failing',
+  stakeholder_obligations: 'Who is owed what',
+  financial_consequence: 'What it costs when it goes wrong',
+};
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.get('/foundry/companies/:id/understanding/:responsibilityId', async (c: any) => {
+  const founder = c.get('founder') as { id?: string } | undefined;
+  if (!founder?.id) return c.redirect('/onboarding');
+  const productId = c.req.param('id');
+
+  const { getFounderUnderstandingView } = await import(
+    '../../services/institution/founder-evidence.js');
+  const view = await getFounderUnderstandingView({
+    productId, responsibilityId: c.req.param('responsibilityId'), founderId: String(founder.id),
+  });
+  if (!view) return c.notFound();
+
+  const { placeOf } = await import('../../services/founder/place.js');
+  const place = await placeOf(String(founder.id), productId);
+  const frame = place ? frameFor(place, 'overview') : null;
+
+  // Only the first letter. `toLowerCase()` on the whole label turned "What I
+  // must not do while helping" into "what i must not do while helping".
+  const uncapitalised = (label: string): string => label.slice(0, 1).toLowerCase() + label.slice(1);
+  const known = view.facts.filter((f) => f.statement);
+  const unknown = view.facts.filter((f) => !f.statement);
+
+  const body = html`
+    <h1>${view.title}</h1>
+    <p class="lede">${LADDER_IN_PLAIN_WORDS[view.state] ?? view.state}</p>
+    <div class="know">
+      <h2>What I understand about this</h2>
+      <p>${view.mayCorrect
+    ? html`These are things you told me. I do not decide when any of them stops
+        being true &mdash; if one is wrong or has changed, say it differently and
+        I will use the new one from now on. Correcting a fact does not let me do
+        anything on your behalf.`
+    : html`These are things this company told me. Changing what a company says it
+        is belongs to whoever owns it, so I do not take a correction from anyone
+        else &mdash; but you can see all of it.`}</p>
+      ${known.map((f) => html`<div class="fact">
+        <p class="quiet">${UNDERSTANDING_FACTS[f.fact] ?? f.fact.replaceAll('_', ' ')}</p>
+        <p>${f.statement}</p>
+        <p class="quiet">You told me this ${f.observedAt
+    ? f.observedAt.slice(0, 10) : 'at some point I did not record'}.</p>
+        ${view.mayCorrect ? html`<form method="POST"
+          action="/foundry/companies/${productId}/understanding/${view.responsibilityId}">
+          <input type="hidden" name="fact" value="${f.fact}" />
+          <label class="sr" for="say-${f.fact}">Say it differently</label>
+          <input id="say-${f.fact}" name="statement" required maxlength="2000"
+            placeholder="Say it differently" />
+          <button class="btn" type="submit" style="width:auto">Correct it</button>
+        </form>` : ''}
+      </div>`)}
+      <!-- THE SAME SENTENCE, NINE TIMES, WAS THE WHOLE PAGE.
+           Each fact nobody has stated rendered its own paragraph saying it had
+           not been stated, so a responsibility with one answer and eleven gaps
+           read as eleven near-identical refusals with an answer buried in them.
+           The gaps are one fact about this responsibility — which things I do
+           not know — so they are one sentence, and the things I DO know get the
+           page.
+           No form here either, on purpose: telling Foundry something for the
+           first time is answering a question, and the question path already
+           asks one at a time in the order that unblocks the most. A second way
+           in would fight it, and a form the correction guard refuses would be
+           worse than none. -->
+      ${unknown.length === 0 ? '' : html`<div class="fact">
+        <p class="quiet">What I do not know</p>
+        <p>Nobody has told me ${unknown.length === 1
+    ? uncapitalised(UNDERSTANDING_FACTS[unknown[0].fact] ?? unknown[0].fact.replaceAll('_', ' '))
+    : `${count(unknown.length, 'thing')} about this`}${unknown.length === 1 ? '' : html`:
+          ${unknown.map((f, i) => html`${i === 0 ? '' : i === unknown.length - 1 ? ', or ' : ', '}${uncapitalised(UNDERSTANDING_FACTS[f.fact] ?? f.fact.replaceAll('_', ' '))}`)}`}.
+          I am not guessing at any of it, and I will ask you for them one at a time.</p>
+      </div>`}
+    </div>
+    <p><a href="/foundry/companies/${productId}">Back to ${place?.name ?? 'the company'}</a></p>`;
+
+  return c.html(page(view.title, body, 'companies', frame));
+});
+
+foundryShellRoutes.post('/foundry/companies/:id/understanding/:responsibilityId',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const productId = c.req.param('id');
+    const responsibilityId = c.req.param('responsibilityId');
+    const body = await c.req.parseBody();
+
+    const { reviseFounderFact } = await import(
+      '../../services/institution/founder-evidence.js');
+    // Ownership, the responsibility and the predicate are all re-resolved
+    // inside, so a hand-edited submission fails here rather than recording a
+    // fact about somebody else's company or one nothing consumes.
+    const recorded = await reviseFounderFact({
+      productId, founderId: String(founder.id), responsibilityId,
+      fact: String(body.fact ?? ''), statement: String(body.statement ?? ''),
+    });
+    if (!recorded) return c.text('I could not use that', 403);
+    return c.redirect(`/foundry/companies/${productId}/understanding/${responsibilityId}`);
+  });
+
 // ─── controls ───────────────────────────────────────────────────────────────
 
 /**
@@ -5394,6 +5535,39 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
   // have. Answering it here is the difference between a control he trusts and
   // one he checks his bank statement about.
   const stopped = String(c.req.query('done') ?? '') === 'stopped';
+
+  // ACTING ON ITS OWN, COUNTED FROM THE ROWS RATHER THAN DESCRIBED.
+  //
+  // A per-category autonomy ladder used to live at `/autopilot`, offering to
+  // promote marketing, outreach, product evolution and customer success from
+  // watching to suggesting to acting. Every row is still at watching, no owner
+  // ever moved one, and the engine a grant would have driven is no longer on a
+  // timer — so the page is retired and what it was about is stated here, read
+  // from the same table, so this can never say something the database does not.
+  //
+  // It is deliberately not a control. Offering the grant would authorise
+  // nothing, which is the one thing a page about authority must never do.
+  // REAL COMPANIES ONLY. A reference company is synthetic, and this is a
+  // sentence about what the owner has actually allowed — counting a rehearsal's
+  // policy rows here would put a number he cannot act on into the one place
+  // that tells him what Foundry may do without asking.
+  //
+  // STANDING DELIBERATELY DOES NOT APPLY, and the two boundaries differ here
+  // for a reason. A reference company is a rehearsal and its grants are
+  // theatre. An EXPERIMENTAL asset is a real thing the owner owns that has not
+  // yet earned its place — and a permission to act on it is a real permission.
+  // Filtering to earned companies would hide a live grant from the one page
+  // whose job is to show every one of them.
+  const ladder = (await query(
+    `SELECT a.mode, COUNT(*) AS n FROM autopilot_policies a
+       JOIN products p ON p.id = a.product_id
+      WHERE p.owner_id = ? AND p.deleted_at IS NULL AND ${realCompany('p')}
+      GROUP BY a.mode`, [s.ownerId]))
+    .rows as unknown as Array<Record<string, unknown>>;
+  const watching = Number(ladder.find((r) => String(r.mode) === 'shadow')?.n ?? 0);
+  const beyondWatching = ladder
+    .filter((r) => String(r.mode) !== 'shadow')
+    .reduce((t, r) => t + Number(r.n), 0);
 
   // THE PUBLIC WORKSHOP is the one place I reach the world under his name, so
   // what I may do to its infrastructure is listed here with everything else I
@@ -5514,6 +5688,22 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
     </div>`}
 
     ${workshopBlock}
+
+    ${watching + beyondWatching === 0 ? '' : html`<div class="know">
+      <h2>Acting on its own</h2>
+      ${beyondWatching === 0
+    ? html`<p>Nothing. There ${watching === 1 ? 'is one kind' : `are ${count(watching, 'kind')}`}
+        of work I could in principle be allowed to do without asking &mdash; marketing,
+        reaching out, changing a product, answering a customer &mdash; and every one of
+        them is set to watching only. None has ever been anything else.</p>
+      <p class="quiet">There is no button here to change that, because changing it would
+        not do anything: the part of me that would act on such a grant is no longer
+        running. If that comes back, this becomes a real choice and I will ask you for it
+        properly, one kind of work at a time.</p>`
+    : html`<p><strong>${count(beyondWatching, 'kind')} of work</strong> ${beyondWatching === 1 ? 'is' : 'are'}
+        set above watching only, and ${count(watching, 'other')} ${watching === 1 ? 'is' : 'are'} not.
+        This is worth reading closely &mdash; it says I may do something without asking.</p>`}
+    </div>`}
 
     <div class="know">
       <h2>Stopping me</h2>

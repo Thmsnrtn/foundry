@@ -272,8 +272,7 @@ settingsRoutes.get('/settings', async (c) => {
         <form method="POST" action="/settings/cadence-mode" style="display:flex;align-items:center;">
           <input type="hidden" name="mode" value="${weekendMode ? 'standard' : 'weekend'}" />
           <label class="toggle" title="${weekendMode ? 'Back to the standard pace' : 'Slow every agent to weekly'}">
-            <input type="checkbox" ${weekendMode ? 'checked' : ''}
-              onchange="this.closest('form').submit()" />
+            <input type="checkbox" ${weekendMode ? 'checked' : ''} data-submits />
             <span class="toggle-track"></span>
             <span class="toggle-thumb"></span>
           </label>
@@ -307,11 +306,11 @@ settingsRoutes.get('/settings', async (c) => {
             value="${appUrl}/ingest/${ingestToken}"
             readonly
             style="flex:1;font-size:0.78rem;font-family:monospace;cursor:pointer;"
-            onclick="this.select()"
+            data-select
           />
           <button
             class="btn btn-secondary btn-sm"
-            onclick="navigator.clipboard.writeText(document.getElementById('ingest-url-input').value).then(()=>{this.textContent='Copied!';setTimeout(()=>{this.textContent='Copy'},1500)})"
+            data-copy="ingest-url-input"
           >Copy</button>
         </div>
       </div>
@@ -410,8 +409,7 @@ settingsRoutes.get('/settings', async (c) => {
           Copy this now — it is shown once here, and afterwards only on this page.
         </div>
         <input type="text" readonly value="${mintedSecret}"
-          style="width:100%;font-size:0.78rem;font-family:monospace;cursor:pointer;"
-          onclick="this.select()" />
+          style="width:100%;font-size:0.78rem;font-family:monospace;cursor:pointer;" data-select />
       </div>` : ''}
 
       ${credentials.length ? html`
@@ -669,8 +667,7 @@ settingsRoutes.post('/settings/api-keys', requireCompanyCapability('can_manage_c
         another.
       </p>
       <input type="text" readonly value="${issued.key}"
-        style="width:100%;font-family:monospace;font-size:0.8rem;cursor:pointer;"
-        onclick="this.select()" />
+        style="width:100%;font-family:monospace;font-size:0.8rem;cursor:pointer;" data-select />
       <p style="font-size:0.8rem;color:var(--text-dim);margin-top:0.75rem;">
         <strong>${issued.label}</strong> — ${issued.scopes.join(', ')} ·
         expires ${issued.expiresAt.slice(0, 10)}
@@ -735,8 +732,7 @@ settingsRoutes.post('/settings/portfolio-principals', requireOwner(), async (c) 
         can show it again. It reads the companies listed below and no others.
       </p>
       <input type="text" readonly value="${issued.key}"
-        style="width:100%;font-family:monospace;font-size:0.8rem;cursor:pointer;"
-        onclick="this.select()" />
+        style="width:100%;font-family:monospace;font-size:0.8rem;cursor:pointer;" data-select />
       <p style="font-size:0.8rem;color:var(--text-dim);margin-top:0.75rem;">
         <strong>${issued.label}</strong> — ${issued.companyIds.length} ${issued.companyIds.length === 1 ? 'company' : 'companies'} ·
         expires ${issued.expiresAt.slice(0, 10)}

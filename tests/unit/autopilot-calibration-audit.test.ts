@@ -101,29 +101,50 @@ describe('calibration = truthfulness of confidence', () => {
 });
 
 describe('self-audit catches over-deference', () => {
+  // THE CHAT WAS ONE OF ITS TWO SOURCES, AND IT IS GONE.
+  //
+  // This seeded assistant turns in `conversation_messages`, because the audit
+  // sampled them alongside notifications. The conversational surface is retired
+  // and its service deleted, so that table takes no new rows and the audit no
+  // longer reads it — reading it would score today's deference from last
+  // fortnight's conversations, which is the failure this file exists to catch,
+  // committed by the instrument.
+  //
+  // The behaviour under test never was chat-specific: it is whether the
+  // institution asks permission, or hands over a menu, instead of saying what
+  // it thinks. Notifications are what it says to the owner unprompted, and are
+  // now the one live source — so the same three sentences are put there.
   beforeAll(async () => {
-    await query("INSERT INTO conversation_threads (id, product_id, founder_id) VALUES ('ca_t','ca_p','ca_f')", []);
-    const msgs = [
-      ['assistant', 'Churn crossed 8%. Do you want me to pause the campaign?'], // permission_seeking
-      ['assistant', 'You could either raise prices or hold. Which would you prefer?'], // menu_handing
-      ['assistant', 'I paused the campaign and drafted the win-back email. It is in your queue.'], // clean
-      ['user', 'should I be worried?'], // founder's own words — never flagged
+    const notes: Array<[string, string]> = [
+      ['Churn', 'Churn crossed 8%. Do you want me to pause the campaign?'],
+      ['Pricing', 'You could either raise prices or hold. Which would you prefer?'],
+      ['Done', 'I paused the campaign and drafted the win-back email. It is in your queue.'],
     ];
-    for (const [role, content] of msgs) {
+    for (const [title, body] of notes) {
       await query(
-        `INSERT INTO conversation_messages (id, thread_id, role, content) VALUES (?, 'ca_t', ?, ?)`,
-        [nanoid(), role, content],
-      );
+        `INSERT INTO notifications (id, founder_id, product_id, type, title, body)
+         VALUES (?, 'ca_f', 'ca_p', 'digest', ?, ?)`, [nanoid(), title, body]);
     }
   });
 
-  it('flags permission-seeking and menu-handing in system output only', async () => {
+  it('flags permission-seeking and menu-handing in what it says unprompted', async () => {
     const audit = await runFleetSelfAudit();
     const kinds = audit.findings.map((f) => f.kind).sort();
     expect(kinds).toContain('permission_seeking');
     expect(kinds).toContain('menu_handing');
-    // The founder's own "should I be worried?" is role=user → not sampled/flagged.
-    expect(audit.findings.every((f) => f.source !== 'chat' || !f.excerpt.includes('be worried'))).toBe(true);
+    // And the one that states what it did is not drift. A detector that flags
+    // everything says nothing.
+    expect(audit.findings.every((f) => !f.excerpt.includes('drafted the win-back'))).toBe(true);
+  });
+
+  it('samples what it actually has, and says how narrow that is', async () => {
+    // WHAT THE RETIREMENT COST, WRITTEN DOWN. One source, not two. A rate over
+    // a handful of notifications is a thinner reading than it was, and
+    // `sampled` is the number that says so — so an operator can tell a low
+    // deference rate from a small sample.
+    const audit = await runFleetSelfAudit();
+    expect(audit.sampled).toBeGreaterThan(0);
+    expect(audit.findings.every((f) => f.source === 'notification')).toBe(true);
   });
 
   it('produces an operator letter line when drift exists', async () => {

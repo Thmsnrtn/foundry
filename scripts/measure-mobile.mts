@@ -36,6 +36,7 @@ import { serve } from '@hono/node-server';
 import { Hono } from 'hono';
 import { chromium } from 'playwright-core';
 import { existsSync, mkdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { runMigrations } from '../src/db/migrate.js';
 import { query } from '../src/db/client.js';
 
@@ -49,6 +50,7 @@ const OWNER = 'mm_owner';
 const COMPANY = 'mm_company';
 let REFERENCE_COMPANY = '';
 let PROOF1 = '';
+let RESPONSIBILITY = '';
 
 /** Production's shape, so the measurement is of what the owner actually sees. */
 async function seed(): Promise<void> {
@@ -138,6 +140,30 @@ async function seed(): Promise<void> {
     authorityRequired: true, observedAt: new Date(),
   });
 
+  // AND ONE PROMOTED RESPONSIBILITY WITH A FACT ON IT, because the page that
+  // says what Foundry understands a responsibility to be — and lets the owner
+  // correct a fact that has stopped being true — moved out of the Advanced
+  // depth and into the company, and it is a list of twelve labelled facts each
+  // with a correction form, which is exactly the shape that breaks on a phone.
+  const candidates = await import('../src/services/institution/responsibility-candidate.js');
+  const pending = await candidates.getPendingResponsibilityCandidates(COMPANY);
+  if (pending[0]) {
+    RESPONSIBILITY = await candidates.promoteResponsibilityCandidate({
+      productId: COMPANY, candidateId: pending[0].id,
+      mechanism: 'authenticated_owner', ownerId: OWNER,
+    });
+    const evidence = await import('../src/services/institution/founder-evidence.js');
+    for (const o of (await evidence.listFounderFactOpportunities(COMPANY)).slice(0, 2)) {
+      await evidence.submitFounderFact({
+        productId: COMPANY, founderId: OWNER, fact: o.fact, scope: o.scope,
+        responsibilityId: o.responsibilityId,
+        statement: 'The person who has always done this by hand is leaving at the end of the quarter, '
+          + 'and nobody else has ever run it end to end',
+        resource: o.resource,
+      });
+    }
+  }
+
   // THE FIRST REAL EXPERIMENT, READY TO ALLOW. Its page is the widest thing
   // the owner will open on his phone: the three steps, the allowance
   // sentence, the offer, a reach table, the sealed rule, a timeline. Measured
@@ -170,6 +196,21 @@ async function main(): Promise<void> {
     c.set('csrfToken' as never, 'measure' as never);
     await next();
   });
+  // THE STYLESHEET, WHICH THIS GATE HAD NEVER SERVED.
+  //
+  // Every screenshot this harness has ever produced was of an unstyled
+  // document, and every "no horizontal overflow" it has ever reported was
+  // measured on one. That is close to vacuous: an unstyled page is a column of
+  // block elements, which is the one layout that cannot overflow sideways. The
+  // things that DO overflow — a grid with a fixed column, a table, a fixed
+  // composer, a nav rail, a long token in a monospace field — are all created
+  // by the stylesheet that was missing.
+  //
+  // It is served here exactly as the application serves it, from the same
+  // handler, so the gate measures the page the owner actually opens.
+  const { staticAssetHandler } = await import('../src/routes/public/static-assets.js');
+  app.get('/static/:file', staticAssetHandler(
+    resolve(import.meta.dirname, '../src')) as never);
   app.route('/', foundryShellRoutes as never);
   const { experimentRoutes } = await import('../src/routes/dashboard/experiments-place.js');
   app.route('/', experimentRoutes as never);
@@ -208,6 +249,7 @@ async function main(): Promise<void> {
     // a phone layout actually breaks.
     '/foundry/decisions', '/foundry/inbox', '/foundry/money', '/foundry/roadmap',
     '/foundry/searching', '/foundry/experiments/next', '/foundry/absence',
+    `/foundry/companies/${COMPANY}/understanding/${RESPONSIBILITY}`,
     // Asked about a company by name: the answer is the widest structured block
     // the ask box can produce, and it renders inside the same page.
     '/foundry?q=' + encodeURIComponent('How is Foundry doing?'),
@@ -270,6 +312,20 @@ async function main(): Promise<void> {
         const response = await page.goto(base + path, { waitUntil: 'load' });
         status = response?.status() ?? 0;
       }
+      // LET THE BARS FINISH MEASURING THEMSELVES.
+      //
+      // The reserve at the foot of every page is the measured height of the
+      // composer and the tab bar, set by a ResizeObserver rather than guessed
+      // by a constant. In a real browser the reader's text size applies to the
+      // first layout, so that observation is correct before anything paints.
+      // Here the 200% run raises the root font size on DOMContentLoaded, after
+      // the bars have already measured themselves small — so without this the
+      // gate reports content hidden behind a bar that has, by the time anyone
+      // could look, moved. Two frames is what the observer needs, and waiting
+      // them makes this measure the page rather than the harness.
+      await page.evaluate(() => new Promise<void>((done) => {
+        requestAnimationFrame(() => requestAnimationFrame(() => { done(); }));
+      }));
       const m = await page.evaluate(() => ({
         scrollWidth: document.documentElement.scrollWidth,
         innerWidth: window.innerWidth,
@@ -362,6 +418,7 @@ async function main(): Promise<void> {
           ['/foundry/controls', 'controls'], ['/foundry/money', 'money'],
           ['/foundry/roadmap', 'roadmap'], ['/foundry/decisions', 'decisions'],
           ['/foundry/experiments/next', 'forge'], ['/foundry/absence', 'absence'],
+          [`/foundry/companies/${COMPANY}/understanding/${RESPONSIBILITY}`, 'understanding'],
         ] as Array<[string, string]>) {
           if (path === p) await page.screenshot({ path: `${dir}/${name}-390.png`, fullPage: true });
         }

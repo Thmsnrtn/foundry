@@ -297,8 +297,6 @@ app.use('/foundry', authMiddleware);
 app.use('/foundry/*', authMiddleware);
 app.use('/autopilot', authMiddleware);
 app.use('/autopilot/*', authMiddleware);
-app.use('/talk', authMiddleware);
-app.use('/talk/*', authMiddleware);
 app.use('/connections', authMiddleware);
 app.use('/connections/*', authMiddleware);
 app.use('/api/*', apiRateLimit);
@@ -325,7 +323,6 @@ app.use('/api/*', apiRateLimit);
 // left the two paths that DO call a model from a user's request with no cap but
 // the AI client's per-product daily ceiling. They are named here instead.
 app.use('/foundry/ask', aiRateLimit);
-app.use('/talk/message', aiRateLimit);
 
 // ─── REST API v1, MOUNTED BEFORE ANY ROUTER THAT SITS AT THE ROOT ────────────
 //
@@ -367,7 +364,6 @@ app.use('/letter/*', csrfMiddleware);
 // is covered by construction rather than by whoever remembers.
 app.use('/foundry', csrfMiddleware);
 app.use('/foundry/*', csrfMiddleware);
-app.use('/talk/*', csrfMiddleware);
 app.use('/connections/*', csrfMiddleware);
 // Origin-verified CSRF is cheap and token-free, so every remaining
 // cookie-authenticated state-changing surface gets it too. Bearer-auth

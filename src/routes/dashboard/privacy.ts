@@ -94,7 +94,7 @@ function toggle(name: string, checked: boolean, id: string): string {
   // drawing the same thing, with an ON colour of #4ecca3 that appears in no
   // palette this deployment ships.
   return `<label class="toggle" for="${id}">
-    <input type="checkbox" id="${id}" name="${name}" value="1"${checked ? ' checked' : ''} onchange="this.closest('form').submit()">
+    <input type="checkbox" id="${id}" name="${name}" value="1"${checked ? ' checked' : ''} data-submits>
     <span class="toggle-track"></span>
     <span class="toggle-thumb"></span>
   </label>`;
@@ -412,7 +412,7 @@ privacySettings.get('/privacy', async (c) => {
             type="button"
             class="btn"
             style="white-space:nowrap;flex-shrink:0;color:var(--bad);border-color:var(--bad);background:transparent;"
-            onclick="document.getElementById('delete-modal').style.display='flex'"
+            data-open="delete-modal"
             aria-label="Delete current product data"
           >
             Delete This Product
@@ -439,9 +439,17 @@ privacySettings.get('/privacy', async (c) => {
       </div>
     </div>
 
-    <!-- Delete Confirmation Modal -->
-    <div id="delete-modal" role="dialog" aria-modal="true" aria-label="Confirm product deletion" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1000;align-items:center;justify-content:center;padding:1rem;">
-      <div style="background:var(--card);border:1px solid var(--bad);border-radius:12px;padding:2rem;max-width:440px;width:100%;">
+    <!-- THE DIALOG IS A DIALOG NOW. What stood here was a fixed-position div
+         toggled between display:none and display:flex, with an inline script
+         listening for Escape. It announced itself as a dialog to a screen
+         reader and behaved as none: the page behind it stayed focusable, so a
+         keyboard user could tab straight past "Cancel" into the page and press
+         the delete button they had just been warned about. A dialog element with
+         showModal() makes the rest of the page inert, puts focus inside, and
+         closes on Escape — which is why the inline script is gone rather than
+         moved. -->
+    <dialog id="delete-modal" class="sheet" aria-label="Confirm product deletion">
+      <div style="background:var(--card);border:1px solid var(--bad);border-radius:12px;padding:2rem;">
         <h2 style="margin:0 0 0.75rem;color:var(--bad);font-size:1.1rem;">Delete all data for ${ctx.productName}?</h2>
         <p style="margin:0 0 1rem;font-size:0.875rem;color:var(--text-dim);line-height:1.55;">
           This will permanently schedule deletion of all data for <strong>${ctx.productName}</strong> including metrics, briefings, decisions, and agent logs.
@@ -451,7 +459,7 @@ privacySettings.get('/privacy', async (c) => {
           We recommend <a href="/privacy/export" style="color:var(--accent);">exporting your data</a> before proceeding.
         </p>
         <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
-          <button type="button" class="btn btn-ghost" onclick="document.getElementById('delete-modal').style.display='none'">Cancel</button>
+          <button type="button" class="btn btn-ghost" data-close>Cancel</button>
           <form method="POST" action="/privacy/delete" style="display:inline;">
             <button type="submit" class="btn" style="color:var(--bad);border-color:var(--bad);background:rgba(255,107,107,0.1);">
               Yes, Delete ${ctx.productName}
@@ -459,17 +467,7 @@ privacySettings.get('/privacy', async (c) => {
           </form>
         </div>
       </div>
-    </div>
-    <script>
-      document.addEventListener('keydown', function(e) {
-        if (e.key === 'Escape') {
-          var modal = document.getElementById('delete-modal');
-          if (modal && modal.style.display === 'flex') {
-            modal.style.display = 'none';
-          }
-        }
-      });
-    </script>
+    </dialog>
   `;
 
   return c.html(controlsPage(ctx, content));

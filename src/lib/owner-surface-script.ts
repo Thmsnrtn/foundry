@@ -78,19 +78,81 @@ export const OWNER_SURFACE_SCRIPT =
   + `    m();window.addEventListener('resize',m);\n`
   + `    if(window.ResizeObserver){var o=new ResizeObserver(m);`
   + `if(a)o.observe(a);if(n)o.observe(n);}})();\n`
-  + `  document.addEventListener('submit',function(e){`
-  + `var f=e.target;if(!f||f.dataset.busy)return;f.dataset.busy='1';\n`
+  // AND A FORM THAT ASKS FIRST STILL ASKS.
+  //
+  // Three forms here confirm before they submit — disconnecting a credential,
+  // granting the autopilot the right to act, and stopping it everywhere. Each
+  // said so through an `onsubmit` attribute, which is the precise construct
+  // `'unsafe-inline'` exists to permit and an injected tag would use. The
+  // question moves onto the form as data and is asked here.
+  //
+  // The confirm runs BEFORE the busy marking, in the same listener rather than
+  // a second one, because a cancelled submission that has already disabled its
+  // own button is a dead page.
+  + `  document.addEventListener('submit',function(e){var f=e.target;if(!f)return;\n`
+  + `    var q=f.getAttribute&&f.getAttribute('data-confirm');`
+  + `if(q&&!window.confirm(q)){e.preventDefault();return;}\n`
+  + `    if(f.dataset.busy)return;f.dataset.busy='1';\n`
   + `    var b=f.querySelector('button[type=submit],button:not([type])');if(!b)return;\n`
-  + `    setTimeout(function(){b.disabled=true;b.textContent='Working…';},120);},true);\n`;
+  + `    setTimeout(function(){b.disabled=true;b.textContent='Working…';},120);},true);\n`
+  // FOUR SMALL BEHAVIOURS THAT WERE FIFTEEN INLINE HANDLERS.
+  //
+  // A toggle that submits its own form; a read-only field that selects itself
+  // so a long token can be copied on a phone; a Copy button; and a dialog that
+  // opens and closes. Every one was an `on…=` attribute on the element, and
+  // every one is the same shape as the attack: markup that arrives as content
+  // and executes because the policy cannot tell the difference between a
+  // handler the author wrote and one a stranger's comment carried in.
+  //
+  // Written as delegated listeners over data attributes, they are behaviour in
+  // one hashed place and intent in the markup — and they keep working for
+  // anything rendered after load, which the attributes also did.
+  + `  document.addEventListener('change',function(e){var t=e.target;\n`
+  + `    if(!t||!t.hasAttribute||!t.hasAttribute('data-submits'))return;\n`
+  + `    var f=t.closest('form');if(!f)return;`
+  + `if(f.requestSubmit)f.requestSubmit();else f.submit();});\n`
+  + `  document.addEventListener('click',function(e){\n`
+  + `    var t=e.target&&e.target.closest&&e.target.closest(`
+  + `'[data-select],[data-copy],[data-open],[data-close]');if(!t)return;\n`
+  + `    if(t.hasAttribute('data-select')){if(t.select)t.select();return;}\n`
+  + `    var o=t.getAttribute('data-open');`
+  + `if(o){var d=document.getElementById(o);if(d&&d.showModal)d.showModal();return;}\n`
+  + `    if(t.getAttribute('data-close')!==null){`
+  + `var p=t.closest('dialog');if(p&&p.close)p.close();return;}\n`
+  + `    var g=document.getElementById(t.getAttribute('data-copy'));\n`
+  + `    if(!g||!navigator.clipboard)return;\n`
+  + `    navigator.clipboard.writeText(g.value).then(function(){var w=t.textContent;\n`
+  + `      t.textContent='Copied';setTimeout(function(){t.textContent=w;},1500);});});\n`;
 
 /** Its CSP source expression. Recomputed from the constant, never hand-written. */
 export const OWNER_SURFACE_SCRIPT_HASH =
   `'sha256-${createHash('sha256').update(OWNER_SURFACE_SCRIPT, 'utf8').digest('base64')}'`;
 
 /**
- * Whether a request is for the owner's own product rather than the older
- * commercial surfaces, which still carry inline scripts a hash cannot cover.
+ * EVERY PLACE THE OWNER SIGNS IN TO.
+ *
+ * This was `/foundry` alone, because the other authenticated paths still
+ * carried inline handlers a hash cannot cover and a strict policy would have
+ * broken them silently — a toggle that stops toggling, with nothing in the
+ * page to say why.
+ *
+ * They do not carry them any more. `/talk` is retired; the fifteen handlers on
+ * Controls, privacy, connections and the Letter are delegated listeners inside
+ * the hashed script; the one remaining inline block, the dialog's Escape key,
+ * is the browser's own behaviour now that the dialog is a `<dialog>`. So the
+ * whole owner product gets the policy its first screen has had, and the
+ * `'unsafe-inline'` that remains covers exactly the sign-in pages, which load
+ * a vendor's SDK from a CDN and render nothing written by a stranger.
+ *
+ * Each entry is a mount point in `src/index.ts`, and a test holds them to each
+ * other so a new owner surface cannot be added to one list and forgotten in
+ * the other.
  */
+export const OWNER_SURFACES = [
+  '/foundry', '/letter', '/settings', '/privacy',
+  '/autopilot', '/connections', '/onboarding',
+] as const;
+
 export function isOwnerSurface(path: string): boolean {
-  return path === '/foundry' || path.startsWith('/foundry/');
+  return OWNER_SURFACES.some((p) => path === p || path.startsWith(`${p}/`));
 }

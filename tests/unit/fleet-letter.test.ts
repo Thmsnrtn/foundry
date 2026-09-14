@@ -282,18 +282,6 @@ describe('the operator pack — same letter, plus the machine (no fork)', () => 
   });
 });
 
-describe('conversational presence — "what needs me?" answers from the verified ranking', () => {
-  it('the fast path replies deterministically (no AI), citing real decisions', async () => {
-    const { handleUtterance } = await import('../../src/services/chat/institution.js');
-    // No AI key in tests: if this hit the model it would throw — the fast
-    // path proves itself by answering at all.
-    const turn = await handleUtterance('jl_p1', 'jl_f', 'What needs me today?');
-    expect(turn.reply).toContain('ranked');
-    expect(turn.reply).toContain('Sign the enterprise deal');
-    expect(turn.captured).toBeNull();
-  });
-});
-
 describe('operator attention memory — explicit, admission-controlled, ranking-visible', () => {
   it('reactions are stored only for real owned items, and shift the ranking', async () => {
     // Rejected: a reference the founder does not own stores nothing.

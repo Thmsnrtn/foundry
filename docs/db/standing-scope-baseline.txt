@@ -1,8 +1,7 @@
 src/cli/index.ts 1
 src/jobs/index.ts 3
-src/lib/onboarding-emails.ts 1
 src/routes/auth/clerk.ts 1
-src/routes/dashboard/foundry-shell.ts 8
+src/routes/dashboard/foundry-shell.ts 9
 src/routes/dashboard/roadmap-place.ts 1
 src/routes/dashboard/settings.ts 1
 src/routes/ingest/index.ts 1
@@ -27,4 +26,3 @@ src/services/reference/world.ts 1
 src/services/senses/credentials.ts 1
 src/services/senses/read.ts 1
 src/services/team/members.ts 2
-src/services/triggers/behavioral.ts 3

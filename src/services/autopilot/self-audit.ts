@@ -46,7 +46,7 @@ const MENU_HANDING = [
 ];
 
 export interface DeferenceFinding {
-  source: 'chat' | 'notification';
+  source: 'notification';
   ref: string;
   excerpt: string;
   kind: 'permission_seeking' | 'menu_handing';
@@ -77,18 +77,25 @@ export async function runFleetSelfAudit(sampleSize = 100): Promise<SelfAuditResu
   const findings: DeferenceFinding[] = [];
   let sampled = 0;
 
-  // Assistant chat turns (the institution speaking).
-  const chat = await query(
-    `SELECT id, content FROM conversation_messages
-      WHERE role = 'assistant' AND created_at >= datetime('now', '-7 days')
-      ORDER BY created_at DESC LIMIT ?`,
-    [sampleSize],
-  );
-  for (const row of chat.rows as unknown as Array<Record<string, string>>) {
-    sampled++;
-    const kind = detect(row.content ?? '');
-    if (kind) findings.push({ source: 'chat', ref: String(row.id), excerpt: excerpt(row.content), kind });
-  }
+  // THE CHAT WAS ONE OF THE TWO THINGS THIS LISTENED TO, AND IT IS GONE.
+  //
+  // This sampled assistant turns from `conversation_messages` alongside the
+  // notifications below, looking for the institution asking permission or
+  // handing over a menu instead of saying what it thinks. The conversational
+  // surface is retired and its service deleted, so that table takes no new
+  // rows — and a reader of a table nothing writes reports a clean audit of
+  // nothing, which is the failure this whole file exists to catch, committed
+  // by the instrument.
+  //
+  // Reading the old rows would be worse than reading none: seven days of an
+  // empty window is an honest zero, and a sample of turns from a surface that
+  // no longer exists would score today's deference from last fortnight's
+  // conversations.
+  //
+  // What the institution says to the owner now, it says on a rendered page,
+  // and those sentences are written in the route files rather than stored —
+  // so they are not sampleable here at all. The notifications below remain the
+  // one live source, and `sampled` says how narrow the sample is.
 
   // Notifications the system generated.
   const notes = await query(

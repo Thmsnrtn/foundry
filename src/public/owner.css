@@ -294,6 +294,18 @@ dd{margin:0;min-width:0;overflow-wrap:break-word}
 .toggle input:focus-visible~.toggle-track{outline:2px solid var(--accent);outline-offset:2px}
 @media (prefers-reduced-motion:reduce){.toggle-track,.toggle-thumb{transition:none}}
 
+/* ── A DIALOG THAT IS ACTUALLY MODAL ─────────────────────────────────────────
+   The deletion confirmation was a fixed div toggled between display:none and
+   display:flex, announcing role="dialog" aria-modal="true" while behaving as
+   neither: the page behind it stayed in the tab order, so a keyboard user
+   could tab past Cancel into the page and reach the button they had just been
+   warned about. A dialog element opened with showModal() makes the rest of the
+   page inert, moves focus inside, and closes on Escape with no script at all.
+   Only the frame is styled here — the card inside keeps its own rules. */
+dialog.sheet{border:0;padding:var(--s3);background:transparent;color:inherit;
+  width:min(28rem,100%);max-height:100%;overflow:auto}
+dialog.sheet::backdrop{background:rgba(0,0,0,.6)}
+
 /* ── MACHINE TEXT ────────────────────────────────────────────────────────────
    A JSON example, an API scope, a tool pattern, a message as it arrived. None
    of these had a rule: the other stylesheet drew them, so `<pre>` on the ingest

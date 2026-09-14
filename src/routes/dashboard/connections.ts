@@ -110,7 +110,7 @@ connectionRoutes.get('/connections', async (c) => {
           <span style="font-size:0.75rem;color:var(--text-muted);margin-left:0.5rem;">${url}</span>
         </div>
         <form method="POST" action="/connections/${s.name}/disconnect"
-          onsubmit="return confirm('Disconnect ${s.name}? Its grants stop working immediately.')">
+          data-confirm="Disconnect ${s.name}? Its grants stop working immediately.">
           <button type="submit" class="btn btn-ghost" style="font-size:0.75rem;padding:0.25rem 0.6rem;">Disconnect</button>
         </form>
       </div>

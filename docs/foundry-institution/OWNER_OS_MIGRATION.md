@@ -1721,3 +1721,102 @@ eventually answer by shortening a ladder or widening a grant. Rebuilt as
 `deployment/self-check` — five readings, no product id resolved anywhere,
 asserted from the source, each able to say "I cannot tell". Foundry stays an
 ordinary company with nothing connected to it.
+
+## The clean cutover — what the owner's surface runs, and where
+
+The doors went in around three surfaces during the phases and nothing ever
+pointed at them again. Closing them out is the last of the cutover.
+
+### The conversational surface is retired
+
+`/talk` was a free-form chat: the owner typed prose, a model read the ledgers
+and replied, and a claim it recognised became a monitored premise. **No
+navigation anywhere linked to it** — the only way in was to type the URL.
+
+What stands in its place is the composer at the foot of every page, and the
+difference is the doctrine: it matches what was typed against questions this
+institution can answer FROM ROWS, and answers on the page where the subject
+already is. A model that reads the ledgers and writes a paragraph is the
+deepest interface and the shallowest institution — the one surface where being
+wrong costs nothing to produce and everything to trust.
+
+The service is deleted rather than kept dormant: nothing else reached it, so
+keeping it meant an unreachable module and a baseline growing to accommodate a
+page nobody could find. Its dependencies all have other callers.
+
+It cost two things, both recorded rather than absorbed. The self-audit for
+over-deference sampled chat turns and notifications; it now has one source, and
+says how narrow the sample is. And `conversation_messages` became a table read
+by live code and written by nothing, which the gate caught in the same run.
+
+### The autonomy ladder governed nothing
+
+`/autopilot` offered per-category promotion — watching, then suggesting, then
+acting on an explicit grant — over marketing, outreach, product evolution and
+customer success. Every one of the twelve policy rows in production sits at
+`shadow`, each written by a seed at a round hour on consecutive days. `decisions`,
+the table it counts clean cycles from, is empty. The tables its evidence would
+live in do not exist in this schema. And the only code that reads a grant is the
+SCP playbook engine, whose loop is retired.
+
+Granting `act` there would have authorised nothing, on the page whose whole job
+is to say truthfully what Foundry may do. **A control that does nothing is worse
+than an absent one: it is a promise about autonomy nobody can check.** The page
+redirects to Controls, which states the position from the same table — every
+kind of work at watching only, and no button, because the part that would act on
+such a grant is not running.
+
+### A correction belongs beside the thing corrected
+
+"What I understand about this" — what Foundry believes a responsibility to be,
+and the owner's correction of a fact that has stopped being true — lived at
+`/letter/responsibilities/:id/understanding`, one of thirty-odd endpoints behind
+a door labelled *inspect the system*. It is now inside the company, under the
+list of what Foundry looks after. The old address 308s, resolving the company
+from the responsibility, because it never carried one.
+
+It printed the same sentence nine times: a fact nobody had stated got its own
+paragraph saying so, so one answer sat buried among eleven near-identical
+refusals. The gaps are one fact — which things I do not know — and read as one
+sentence now. The same defect as a queue asking one question twenty-two times.
+
+### `'unsafe-inline'` now covers only the sign-in pages
+
+The private surface renders text written by strangers, and a quoted comment once
+reached the owner's first screen as live markup. The policy could not help
+because `script-src` carried `'unsafe-inline'`, which permits exactly the inline
+handler an injected tag uses.
+
+When that was written there were fourteen inline script blocks and thirty-seven
+handlers. The cutover removed most as a side effect; what remained — a retired
+chat, a hand-rolled modal, and fifteen `on…=` attributes across Controls,
+privacy, connections and the Letter — is migrated into the one hashed script as
+a delegated vocabulary: `data-confirm`, `data-submits`, `data-select`,
+`data-copy`, `data-open`, `data-close`. Intent in the markup, behaviour in one
+hashed place.
+
+So every path the owner signs in to is strict, held to the mount list by a test
+so a new surface cannot be added to one and forgotten in the other. Three blocks
+remain, all on the Clerk pages, which load a vendor SDK and render nothing a
+stranger wrote.
+
+Two real defects fell out of doing it rather than describing it. The deletion
+confirmation announced `role="dialog" aria-modal="true"` and behaved as neither
+— the page behind stayed focusable, so a keyboard user could tab past Cancel to
+the delete button they had just been warned about; it is a `<dialog>` now, and
+the Escape handler is the browser's. And the "Decide" button fired a POST from
+an inline handler and then navigated away, which a browser may cancel — on a
+slow connection, the one case where the ranking most wants to learn he acted, it
+usually did. It is a form; the server records and then redirects.
+
+### And the visual gate had never loaded the stylesheet
+
+Every screenshot this harness had produced was of an unstyled document, and
+every "no horizontal overflow" it had reported was measured on one — which is
+close to vacuous, since an unstyled page is a column of block elements, the one
+layout that cannot overflow sideways. Everything that *does* overflow is created
+by the stylesheet that was missing.
+
+Serving it, from the same handler the application uses, immediately found real
+failures at 200% text on the company page — a defect that predates this work and
+that three hundred passing measurements had never seen.
