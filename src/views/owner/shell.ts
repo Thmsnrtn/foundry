@@ -130,6 +130,7 @@ function railExtra(where: Where | null): H {
     <a href="/foundry/searching"${where?.scope.kind === 'searching' ? raw(' class="on"') : ''}>Discover</a>
     <a href="/foundry/public-workshop">Workshop</a>
     <a href="/foundry/money">Money</a>
+    <a href="/foundry/roadmap">Roadmap</a>
   </section>`;
 }
 

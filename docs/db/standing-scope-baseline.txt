@@ -3,11 +3,13 @@ src/jobs/index.ts 3
 src/lib/onboarding-emails.ts 1
 src/routes/auth/clerk.ts 1
 src/routes/dashboard/foundry-shell.ts 8
+src/routes/dashboard/roadmap-place.ts 1
 src/routes/dashboard/settings.ts 1
 src/routes/ingest/index.ts 1
 src/services/billing/entitlement.ts 2
 src/services/economy/projection.ts 2
 src/services/founder/attention.ts 3
+src/services/founder/autonomy-map.ts 1
 src/services/founder/intelligence.ts 1
 src/services/founder/portfolio.ts 1
 src/services/founder/selected-company.ts 1

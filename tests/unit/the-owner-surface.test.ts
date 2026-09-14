@@ -292,11 +292,31 @@ describe('places he can walk to', () => {
   });
 
   it('states permissions, money and the stop in one place', async () => {
+    // IT SAID "None." AND SAID IT ONLY WHILE THERE WERE NONE. The Permissions
+    // block was written `permissions.length === 0 ? ... : ''`, so the page
+    // titled "What I'm allowed to do" went silent the moment anything was
+    // granted — the exact state where the answer matters. It is a map now, in
+    // both states, and what is held to is the CLAIM rather than the old
+    // wording: that this page says what the institution may do without him.
     const said = await reads('/foundry/controls');
-    expect(said).toContain('None.');
-    expect(said).toContain('cannot change anything, spend anything, or contact anyone');
+    expect(said).toContain('What I may do on my own');
+    expect(said).toMatch(/cannot act or spend/i);
     expect(said).toContain('Stop everything');
     expect(said).toContain('a month is the limit you set');
+  });
+
+  it('keeps saying what it may do once something has been allowed', async () => {
+    // The regression the map exists to prevent, driven rather than asserted
+    // about: grant money here, and the section must still be on the page.
+    await query(
+      `INSERT INTO owner_allowances (id, product_id, purpose, statement, amount_cents, until)
+       VALUES ('os_allow', ?, 'testing this idea', 'up to $100 for the test', 10000,
+               datetime('now','+30 days'))`, [COMPANY]);
+    const said = await reads('/foundry/controls');
+    expect(said).toContain('What I may do on my own');
+    expect(said).toMatch(/\$100\.00 left/);
+    expect(said).toContain('up to $100 for the test');
+    await query("UPDATE owner_allowances SET withdrawn_at = datetime('now'), withdraw_reason = 'test over' WHERE id = 'os_allow'");
   });
 });
 

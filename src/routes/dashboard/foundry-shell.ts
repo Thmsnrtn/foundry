@@ -2354,6 +2354,9 @@ foundryShellRoutes.get('/foundry', async (c) => {
   // HEALTH AS A STATE. One reader answers what failed, whether it recovers on
   // its own and whether he is needed; the tile shows the word and Controls
   // shows the rows. The healthy line is about the estate, not about routines.
+  // WHAT ELSE I AM CARRYING, for the Now/Next strip and the way to the record.
+  const { underWayFor } = await import('../../services/institution/undertaking.js');
+  const carrying = await underWayFor(s.ownerId);
   const { healthOf } = await import('../../services/founder/health.js');
   const health = await healthOf(s.ownerId);
   const estate: { word: string; cls: 'ok' | 'watch' | 'bad'; detail: string } =
@@ -2363,9 +2366,15 @@ foundryShellRoutes.get('/foundry', async (c) => {
   // NOW AND NEXT, from the records. Now is what the live test is doing; Next is
   // when the hand passes again. Neither is a forecast.
   const nextPass = new Date(health.nextPass ?? Date.now());
+  // NOW AND NEXT ARE ABOUT THE LIVE TEST; THE ROADMAP IS ABOUT EVERYTHING ELSE
+  // I am carrying. One is a state, the other a load, and the owner asking
+  // "what are you doing" means both — so the way to the second is here, where
+  // he asks.
   const nowNext = live ? html`<dl class="nownext" aria-label="Now and next">
       <div><dt class="k">Now</dt><dd>${live.stateDetail}</dd></div>
       <div><dt class="k">Next</dt><dd>${live.state === 'running' ? `The hand passes again at ${String(nextPass.getUTCHours()).padStart(2, '0')}:${String(nextPass.getUTCMinutes()).padStart(2, '0')} UTC and reconciles what came back` : live.stateLabel}</dd></div>
+      <div><dt class="k">Carrying</dt><dd>${carrying.length === 0 ? html`nothing else · <a href="/foundry/roadmap">the record</a>`
+    : html`${String(carrying.length)} ${carrying.length === 1 ? 'thing' : 'things'} · <a href="/foundry/roadmap">what they are</a>`}</dd></div>
     </dl>` : '';
   // WHAT IS ACTUALLY HIS, for the tile below. The whole subtraction runs here
   // — it is six small reads over indexed rows — because a first screen that
@@ -5400,6 +5409,10 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
 
   // WHAT IS WRONG AND WHETHER HE IS NEEDED, in the place he comes to when
   // something is. The Estate tile on Home shows the word; this shows the rows.
+  // WHAT I MAY DO ON MY OWN, ACROSS EVERYTHING — the question this page's
+  // title asks and could not answer once anything had been granted.
+  const { autonomyAcross } = await import('../../services/founder/autonomy-map.js');
+  const autonomy = await autonomyAcross(s.ownerId);
   const { healthOf } = await import('../../services/founder/health.js');
   const health = await healthOf(s.ownerId);
   const body = html`
@@ -5422,14 +5435,30 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
 
     ${standingPermission(s)}
 
-    ${s.permissions.length === 0 ? html`<div class="know">
-      <h2>Permissions</h2>
-      <p><strong>None.</strong> I can look at things and tell you what I find. I cannot change
-        anything, spend anything, or contact anyone.</p>
-      <p class="quiet">Each of those would be something you allow separately, for a set time,
-        and could take back whenever you wanted. I ask on the front page when I have earned
-        the right to.</p>
-    </div>` : ''}
+    <!-- THIS SECTION RENDERED ONLY WHEN THERE WERE NO PERMISSIONS.
+         The moment he granted one it disappeared, so the page titled "What I'm
+         allowed to do" said nothing about permissions in exactly the state
+         where the answer matters. It is a map now, in both states, led by its
+         loosest point — an estate's autonomy is not an average. -->
+    <div class="know">
+      <h2>What I may do on my own</h2>
+      <p>${autonomy.sentence}</p>
+      ${autonomy.nothingWithoutHim ? html`<p class="quiet">Each of those would be something you
+        allow separately, for a set time, and could take back whenever you wanted. I ask on the
+        front page when I have earned the right to.</p>` : ''}
+      ${autonomy.companies.length === 0 ? '' : html`<ul class="reach">${autonomy.companies.map((r) => html`<li>
+        <b>${r.name}</b> — ${r.sentence}
+        ${r.allowance ? html`<span class="quiet">$${(r.allowance.remainingCents / 100).toFixed(2)} of
+          $${(r.allowance.amountCents / 100).toFixed(2)} left: “${r.allowance.statement}”</span>` : ''}
+        ${r.shut.length === 0 ? '' : html`<p class="quiet">Shut: ${r.shut.map((d) =>
+    `${d.ownerWords}${d.mode === 'ask_first' ? ' (ask first)' : ''}${d.everywhere ? ' everywhere' : ''}`).join('; ')}.</p>`}
+        ${r.grants.length === 0 ? '' : html`<p class="quiet">Standing: ${r.grants.map((g) =>
+    `${g.what}${g.until ? ` until ${g.until}` : ''}`).join('; ')}.</p>`}
+        <p class="quiet">Thirty days: ${String(r.last30.proposed)} proposed, ${String(r.last30.approved)} approved,
+          ${String(r.last30.refused)} refused${r.last30.pendingOutbound > 0 ? `, ${String(r.last30.pendingOutbound)} waiting on you` : ''}.
+          <a href="/foundry/companies/${r.productId}/authority">Change what I may do here</a></p>
+      </li>`)}</ul>`}
+    </div>
 
     <div class="know">
       <h2>Money</h2>

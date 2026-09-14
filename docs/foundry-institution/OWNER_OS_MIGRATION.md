@@ -94,11 +94,11 @@ done when the acceptance line beside it is true.
 | # | Phase | State |
 |---|---|---|
 | 0 | Execution gate — Experiment 001 across the boundary | **DONE**, verified above |
-| 1 | Reconstruct the lived owner surface; classify every route | in progress |
-| 2 | One shell, one nav, WATCH/INSPECT/INTERVENE; migrate Home | not started |
-| 3 | Founder Cockpit: health, owner action, Now/Next, live experiment, mobile proof | not started |
-| 4 | Economic nervous system: events, accounting, reconciliation, reserves, tax | not started |
-| 5 | Portfolio / Discover / Autonomy / Roadmap | not started |
+| 1 | Reconstruct the lived owner surface; classify every route | **DONE** |
+| 2 | One shell, one nav, WATCH/INSPECT/INTERVENE; migrate Home | **DONE** — and System B retired: one stylesheet, one layout, 14 Sept |
+| 3 | Founder Cockpit: health, owner action, Now/Next, live experiment, mobile proof | **DONE** |
+| 4 | Economic nervous system: events, accounting, reconciliation, reserves, tax | **DONE**, 14 Sept — see "the economic nervous system, built" below |
+| 5 | Portfolio / Discover / Autonomy / Roadmap | **DONE**, 14 Sept |
 | 6 | Experiment Forge, and Experiment 001 as curriculum | not started |
 | 7 | Quiet maturity, absence tests, cognition economics | not started |
 
@@ -1289,3 +1289,72 @@ the way it is permitted to point.
 Foundry has taken no money. Every surface above says so in words rather than in
 zeros, and the Home tile that used to read "Settled — $0" now reads "Yours",
 which is a different question and the one that was always being asked.
+
+## Phase 5 — Portfolio, Discover, the autonomy map, the roadmap — 14 September 2026
+
+Portfolio (`/foundry/companies`) and Discover (`/foundry/searching`) already
+existed and were built in earlier phases. What was missing was the pair of
+questions an owner of several things actually asks, neither of which had a
+surface: **what can this thing do without me**, and **what is it carrying**.
+
+### The autonomy map — and the section that vanished when it mattered
+
+Controls is titled *"What I'm allowed to do"*. Its Permissions section was
+written `s.permissions.length === 0 ? html\`…\` : ''` — so it rendered the words
+"**None.** I can look at things and tell you what I find" when nothing was
+granted, and **rendered nothing at all the moment anything was**. The one screen
+whose job is to answer that question went silent in exactly the state where the
+answer matters.
+
+`services/founder/autonomy-map.ts` reads the estate through the per-company
+`authorityOf` that already existed, and adds the thing a per-company reading
+cannot have: **an estate's autonomy is its loosest point, not an average**. One
+company set to carry with money left is the answer to "what can it do without
+me", whatever the other four say — so the list sorts by reach and the sentence
+leads with it.
+
+Money is counted as what is LEFT rather than what was granted, the doors the
+owner shut are shown in his own words, and every widening or narrowing still
+happens on the company's own page, one sentence at a time, because that is where
+the confirmation and the fingerprint live. Reading the map changes nothing, and
+a test asserts that by reading it twice and comparing the rows.
+
+A reference company never appears. Telling the owner that the institution may
+act on its own somewhere, on the strength of a company that does not exist, is
+the one answer this page must never give — and the test plants exactly that.
+
+The **existence** boundary deliberately does not apply here, which is the
+opposite call from the usual one: an experimental asset is where this
+institution's authority actually bites — the money is authorised for experiments
+and the acts that reach strangers are placed from them. A map that showed only
+earned companies would omit the companies things happen at.
+
+### The roadmap, which is a record rather than a plan
+
+Every product has a roadmap page and almost all of them are the same lie: a list
+somebody typed once, never closed, true only on the day it was written.
+
+`/foundry/roadmap` has **no table of its own**. It reads `undertakings` — what
+the institution took on for a company, the owner's words kept verbatim where he
+said them, what it was understood as before anything bound, and the steps
+recorded against each — plus what has actually been spent through the acts
+proposed inside each thread. So it shows: what is under way, what was last done
+about each, what it cost, what it is waiting on, and what was dropped and why.
+
+**It has no writer, and that is the design.** No route under it opens an
+undertaking; the only form it offers stops one. Taking something on binds what a
+sentence was understood as, and that belongs where the owner says it — in Ask or
+on a company page, with the understanding shown before it holds. A roadmap you
+can type into is a wish list; this is a record of load. The test asserts the
+absence: no POST, no `openUndertaking`, no INSERT, and every form action ending
+in `/stop`.
+
+Home's Now/Next strip gains a third line — *Carrying: n things · what they are*
+— because "what are you doing" means both the live test's state and everything
+else, and only one of them was answerable.
+
+### Still six doors
+
+Money and the Roadmap sit in "Also here" beside Discover and the Workshop. Nine
+tabs at 375px is forty pixels a tab, which is not a door; a test now pins the
+six by name so a seventh cannot arrive quietly.
