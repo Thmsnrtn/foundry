@@ -12,6 +12,49 @@ import { isPrivateOwnerInstance } from '../../lib/instance-posture.js';
 import { logger } from '../../services/logger.js';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { page } from '../../views/owner/shell.js';
+import type { Where } from '../../views/owner/shell.js';
+
+/**
+ * WHERE HE IS WHEN HE IS INSIDE THE MACHINERY.
+ *
+ * The Letter is per-company, and the layout it used to render through put the
+ * company's name in its chrome. The shell does not — it carries the object
+ * underfoot in `Where` instead, which is the same fact in the place every other
+ * owner screen keeps it. Without this the page said which SYSTEM you were
+ * inspecting and not which COMPANY, which is the one thing a per-company page
+ * may not leave out.
+ *
+ * The trail is Foundry › Portfolio › <company> › Advanced, so the way back is
+ * the same three taps as everywhere else rather than a Back button unique to
+ * this page.
+ */
+function advancedWhere(ctx: { productId: string | null; productName: string | null }): Where {
+  // A FOUNDER WITH NO COMPANY IS A REAL STATE, not a missing value to paper
+  // over. `productId` is nullable on this context, and inventing a link to
+  // `/foundry/companies/null` would be the kind of dead-end this shell exists
+  // to remove — so the trail simply stops at Foundry, and the scope says the
+  // estate rather than naming a company that is not there.
+  const name = ctx.productName;
+  if (!ctx.productId || !name) {
+    return {
+      eyebrow: 'Advanced',
+      crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: '/letter', label: 'Advanced' }],
+      scope: { kind: 'foundry', id: null, name: 'the estate' },
+      local: [], chips: [],
+    };
+  }
+  return {
+    eyebrow: 'Advanced',
+    crumbs: [
+      { href: '/foundry', label: 'Foundry' },
+      { href: '/foundry/companies', label: 'Portfolio' },
+      { href: `/foundry/companies/${ctx.productId}`, label: name },
+      { href: '/letter', label: 'Advanced' },
+    ],
+    scope: { kind: 'company', id: ctx.productId, name },
+    local: [], chips: [],
+  };
+}
 import { getLayoutContext } from './_shared.js';
 import { query } from '../../db/client.js';
 import { composeLetter } from '../../services/letter/composer.js';
@@ -1582,7 +1625,7 @@ letterRoutes.get('/letter', async (c) => {
     ${await whatItCanDoNow()}
     ${adviceStrip(fluency)}
   `;
-  return c.html(page(ctx.title, content, 'advanced'));
+  return c.html(page(ctx.title, content, 'advanced', advancedWhere(ctx)));
 });
 
 
@@ -1925,7 +1968,7 @@ letterRoutes.get('/autopilot', async (c) => {
       Ladder: Watching only → Suggests (earned at ${PROMOTION_THRESHOLD} clean cycles, quality-held) → Acts (your explicit grant, gate-≤1 only, ${12}h grace, 24h undo).
     </p>
     ${developmentAuthoritySection(developmentItems)}`;
-  return c.html(page(ctx.title, content, 'advanced'));
+  return c.html(page(ctx.title, content, 'advanced', advancedWhere(ctx)));
 });
 
 // THIS IS THE DIAL, AND RAISING IT TO 'act' RECORDS A CONSENT IN THE
@@ -2083,7 +2126,7 @@ letterRoutes.get('/talk', async (c) => {
       document.getElementById('talk-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendTalk(); });
     </script>
     ${adviceStrip(getFluency(founder))}`;
-  return c.html(page(ctx.title, content, 'advanced'));
+  return c.html(page(ctx.title, content, 'advanced', advancedWhere(ctx)));
 });
 
 letterRoutes.post('/talk/message',
@@ -2458,7 +2501,7 @@ letterRoutes.get('/letter/responsibilities/:responsibilityId/understanding', asy
         </div>`)}
       <a href="/letter" class="btn btn-ghost" style="font-size:0.78rem;margin-top:1rem;display:inline-block;">Back</a>
     </div>`;
-  return c.html(page(ctx.title, content, 'advanced'));
+  return c.html(page(ctx.title, content, 'advanced', advancedWhere(ctx)));
 });
 
 letterRoutes.post('/letter/responsibilities/:responsibilityId/understanding',
@@ -2527,7 +2570,7 @@ letterRoutes.post('/letter/facts/preview',
       </form>
       <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.5rem;">This tells me how your company works. It does not let me do anything on your behalf.</div>
     </div>`;
-  return c.html(page(ctx.title, content, 'advanced'));
+  return c.html(page(ctx.title, content, 'advanced', advancedWhere(ctx)));
 });
 
 // Stage two: explicit authenticated confirmation. The product, the fact, and
