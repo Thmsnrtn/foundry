@@ -125,10 +125,16 @@ describe('the table is gone', () => {
     // address, which he has ruled out of Foundry operations. A broken job was
     // the only thing between that rule and forty-nine breaches of it. One
     // hundred and two.
+    // AND THEN TWENTY-SEVEN CAME OFF AT ONCE: the agent society's scheduled
+    // loops. Twelve agents, ninety sessions and eleven proposals in a
+    // fortnight, none of them ever approved, and nothing the owner can open
+    // reading any of it. The schedules are retired; the code is preserved and
+    // listed in `RETIRED_LOOPS` with what each used to do, which is why the
+    // functions are all still referenced. Seventy-five.
     // This number may only move for a reason written here.
     expect(Object.keys(JOB_REGISTRY).length,
-      'one hundred and four, less the ROI job that measured nothing and the funnel that could not run')
-      .toBe(102);
+      'one hundred and four, less the ROI job, the funnel that could not run, and the society on a timer')
+      .toBe(75);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

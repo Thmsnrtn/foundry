@@ -1641,3 +1641,83 @@ as well as the width: **a page that did not render is not a page that fits.**
 With the routers mounted: 299 measurements, every one 200 and inside its
 viewport, at 375/390/393/414/430 px at 100% and 200% text and at 1024/1280/1440
 on a desktop.
+
+## Closeout — truth, owner burden, recoverability — 14 September 2026
+
+The tranche was substantially complete and several things in the final proof
+were wrong. This closes them rather than opening anything.
+
+### Experiment 001, reconciled from the rows
+
+The report said "21 of 25 written to, 4 questions back, 1 opt-out", and
+separately "11 pending". Every number was a real count of a real table.
+Together they described an experiment that does not exist.
+
+| | | |
+|---|---|---|
+| authorised cohort | **21** | one act, `AEk3lSzEsRiJBCz1ggwk2`, decided by the founder 12 Sep 18:33, consumed 23:20 |
+| sent / provider-accepted | **21 / 21** | every one carries a Resend receipt |
+| delivered | **19** | verified afterwards |
+| bounced | **2** | both real, both suppressed |
+| **replies from the 21** | **0** | no mail from any approved recipient |
+| opted out | **0** | the one suppression is a `.test` address, two days *before* the send |
+| purchased | **0** | no fulfilment, no economic event |
+| proposed, never approved | **10** | candidates; no act, nothing sent, nothing may be |
+| struck | **3** | with reasons on the rows |
+| **remaining authority** | **none** | the act is consumed |
+
+The act never grew: every approval predates it, there is exactly one, and its
+own summary names the number. The "four questions" were rehearsal traffic —
+`.test` addresses, the SES simulator, a DMARC report, the owner's own mailbox.
+The "eleven pending" were internal agent proposals belonging to no experiment.
+
+`reconcileExperiment` computes all of it from source rows, each count carrying
+what it is and what it excludes, and it immediately caught a defect in itself:
+replies were matched on address across *all* mail rather than scoped to the
+founder.
+
+### An undesigned test is not a decision
+
+Twenty-two rows sat in the owner's queue across twenty unrelated opportunities,
+each the identical boilerplate stamped once per opportunity by a scheduled job.
+None said who, at what price, through which channel, or what would stop it. A
+`probe_designs` row is now the line — its columns *are* the design, and all of
+them are NOT NULL.
+
+### The society is no longer on a timer
+
+Twelve agents, twenty-seven scheduled loops, a fortnight: ninety sessions,
+thirty-six briefings, eighteen messages to each other, **eleven proposals and
+not one ever approved** — ten already expired unread. Every row in
+`agent_evolution_versions` is an initial provision; `evolved_prompts`,
+`agent_accuracy_scores`, `agent_remediations` and `agent_audit_log` are empty.
+**Nothing behind the six doors reads any of it.**
+
+They assess MRR, OKRs, churn and the sales/product/CS functions of a SaaS
+company — Commercial Foundry's shape, describing the absence of a business that
+does not exist here. The schedules are retired into `RETIRED_LOOPS`, each with
+what it used to do; the code is preserved, because it is reached at boot and by
+two live routes and deleting thirty-nine modules to stop a cron is a larger
+change than the noise it removes. Two hygiene loops stay: expiring overdue
+decisions, which the Decisions door reads, and webhook retention.
+
+### Recoverability, with restoration evidence
+
+Fourteen flat days answered the seven-day question and none of the others. Now
+a ladder — dailies for a fortnight, Mondays for three months, firsts for a year
+— compressed, about 95 MB of a 974 MB volume, no new provider and no owner
+decision. Thinned by the **date in the name**, because a restore or volume move
+touches every mtime at once. `restoreTheInstitution` refuses to write over the
+live database, and a test restores a real compressed copy and reads the
+institution out of it. Until that passed, no horizon was a claim worth making.
+
+### And the codebase corrected me
+
+Self-observability was first built inside `services/institution`, resolving
+which product row is Foundry so the estate reading could exempt it from being
+called blind. `recursive-institution` refused it: the kernel must not be *able*
+to ask whether it is operating Foundry, because a kernel that can ask will
+eventually answer by shortening a ladder or widening a grant. Rebuilt as
+`deployment/self-check` — five readings, no product id resolved anywhere,
+asserted from the source, each able to say "I cannot tell". Foundry stays an
+ordinary company with nothing connected to it.

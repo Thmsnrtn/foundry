@@ -2510,6 +2510,81 @@ const STOP = new Set(['that', 'this', 'with', 'from', 'would', 'will', 'have', '
   'what', 'which', 'while', 'also', 'more', 'most', 'some', 'such', 'only', 'other',
   'nobody', 'anybody', 'somebody', 'space', 'itself']);
 
+
+// =============================================================================
+// THE SOCIETY IS NO LONGER ON A TIMER.
+//
+// WHAT THE EVIDENCE SAID. Twelve agents across three companies, provisioned on
+// 1 September, ran for a fortnight under twenty-seven scheduled loops. In that
+// time they completed ninety sessions, wrote thirty-six briefings, twenty-seven
+// scratchpad notes and eighteen messages to each other, and produced ELEVEN
+// proposals for the owner. Not one was ever approved — `approved_at` is null on
+// every row — and ten of the eleven had already expired unread. Every row in
+// `agent_evolution_versions` is an initial provision from the day they were
+// created; `evolved_prompts`, `agent_accuracy_scores`, `agent_remediations`,
+// `agent_initiative_queue` and `agent_audit_log` are all empty. The one thing
+// that reached the world in that fortnight — twenty-one messages to millwork
+// businesses — was done by the hand, not by an agent.
+//
+// AND NOTHING THE OWNER CAN SEE DEPENDS ON ANY OF IT. No surface behind the six
+// doors, and nothing in `services/founder` or `services/institution`, reads
+// `agent_sessions`, `scp_briefings`, `agent_configs` or any sibling. The
+// society was talking to itself on a schedule.
+//
+// WHY, STRUCTURALLY. These agents assess MRR, OKRs, churn, activation and the
+// sales/product/CS functions of a SaaS company. Their proposals in production
+// say so plainly — "Before I can flag drift or validate direction…", "With no
+// active OKRs, there is no basis for evaluation…". They are describing the
+// absence of a business that does not exist here. Private Foundry has one owner
+// and no funnel; the shape they were built for is Commercial Foundry's.
+//
+// WHAT IS RETIRED AND WHAT IS NOT. The SCHEDULES are retired: nothing here runs
+// on a timer any more. The CODE is preserved, exactly as the commercial surface
+// is preserved — it is reached at boot by the provisioner and by two live
+// routes, and deleting thirty-nine modules to stop a cron would be a much
+// larger change than the noise it removes. Listing them here rather than
+// deleting the entries keeps each function referenced, keeps the reason beside
+// the name, and makes a silent reinstatement impossible to do by accident.
+//
+// TWO LOOPS STAY IN THE REGISTRY, and they are not cognition:
+//   `scp_expire_overdue_decisions`  expires overdue rows in `decisions`, which
+//                                   the owner's Decisions door reads;
+//   `scp_webhook_delivery_cleanup`  deletes delivery records over thirty days
+//                                   old. Retention hygiene, no model, no cost.
+//
+// ANYTHING HERE MAY COME BACK — by being put in `JOB_REGISTRY` deliberately,
+// with a reason, by somebody who has read what a fortnight of it produced.
+// =============================================================================
+export const RETIRED_LOOPS: Record<string, { fn: () => Promise<void>; was: string }> = {
+  scp_agent_runner: { fn: scpAgentRunner, was: 'Run due agents for all active SCP companies (every hour)' },
+  scp_daily_briefing: { fn: scpDailyBriefing, was: 'Generate CEO briefings for all SCP companies (daily 5:30 UTC)' },
+  scp_evolution_cycle: { fn: scpEvolutionCycle, was: 'Run evolution synthesis for all SCP agents (daily 4:00 UTC)' },
+  scp_lifecycle_transition: { fn: scpLifecycleTransition, was: 'Evaluate company lifecycle state transitions (daily 6:00 UTC)' },
+  scp_wisdom_synthesis: { fn: scpWisdomSynthesis, was: 'Synthesize wisdom patterns for all active SCP products (Sunday 3:00 UTC)' },
+  scp_intelligence_benchmarks: { fn: scpIntelligenceBenchmarks, was: 'Recompute intelligence benchmarks across all products (daily 2:00 UTC)' },
+  scp_remediation_sync: { fn: scpRemediationSync, was: 'Daily agent remediation sync and health logging (daily 8:00 UTC)' },
+  scp_temporal_analysis: { fn: scpTemporalAnalysis, was: 'Weekly temporal trend analysis for all SCP companies (Monday 5:00 UTC)' },
+  scp_dna_nudge: { fn: scpDNANudge, was: 'Nudge early-lifecycle SCP founders to complete DNA context (daily 10:00 UTC)' },
+  scp_cost_report: { fn: scpCostReport, was: 'Monthly 30d AI cost rollup for all products (1st of month)' },
+  scp_lifecycle_rules: { fn: scpLifecycleRules, was: 'Evaluate customer lifecycle rules for all SCP products (every 4h)' },
+  scp_pl_update: { fn: scpPLUpdate, was: 'Update AI Company P&L attribution for all products (daily 1:00 UTC)' },
+  scp_strategy_synthesis: { fn: scpStrategySynthesis, was: 'Generate monthly strategic synthesis for all products (1st of month)' },
+  scp_integration_fabric_sync: { fn: scpIntegrationFabricSync, was: 'Sync PostHog and GitHub into integration fabric (every hour)' },
+  scp_extended_integrations_sync: { fn: scpExtendedIntegrationsSync, was: 'Sync Sentry, Linear, Intercom, Slack integrations (every 2h)' },
+  scp_prediction_accuracy: { fn: scpPredictionAccuracyCheck, was: 'Measure pending agent predictions against actual outcomes (daily 6:00 UTC)' },
+  scp_compressed_brief: { fn: scpCompressedBrief, was: 'Generate compressed weekly brief for all SCP products (Monday 7:00 UTC)' },
+  scp_scenario_refresh: { fn: scpScenarioRefresh, was: 'Refresh Monte Carlo runway scenarios for all SCP products (Monday 5:00 UTC)' },
+  scp_debate_run: { fn: scpDebateRun, was: 'Run challenger/synthesizer debate pass after daily agent runs (daily 8:00 UTC)' },
+  scp_failure_pattern_scan: { fn: scpFailurePatternScan, was: 'Scan all products for failure pattern matches (daily 9:00 UTC)' },
+  scp_prompt_evolution: { fn: scpPromptEvolution, was: 'Generate prompt mutation suggestions for underperforming agents (Sunday 4:00 UTC)' },
+  scp_playbook_eval: { fn: scpExecutionPlaybookEval, was: 'Evaluate execution playbook conditions for all active products (hourly)' },
+  scp_benchmark_refresh: { fn: scpBenchmarkRefresh, was: 'Refresh anonymous benchmark percentiles (Sunday 3:00 UTC)' },
+  scp_decision_retrospectives: { fn: scpDecisionRetrospectives, was: 'Notify founders of decisions due for 90-day retrospective (Monday)' },
+  scp_signal_events: { fn: scpSignalEvents, was: 'Process pending signal events and dispatch to target agents (hourly)' },
+  scp_founder_state: { fn: scpFounderStateAssessment, was: 'Detect behavioral signals and assess founder state (daily 7:00 UTC)' },
+  scp_priority_rebuild: { fn: scpPriorityRebuild, was: 'Rebuild priority action queue for One Thing banner (every 30 min)' },
+};
+
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
   memory_premise_check: { fn: memoryPremiseCheck,   schedule: '0 7 * * *',       description: 'Re-check decision premises against live telemetry; flag expired beliefs (daily)' },
   red_team_sweep:       { fn: redTeamSweep,         schedule: '30 */2 * * *',    description: 'Adversarial pre-mortem for uncontested gate-3+ pending decisions (every 2h)' },
@@ -2550,37 +2625,10 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   network_contribution:   { fn: networkContribution,   schedule: '0 3 * * 0',   description: 'Contribute anonymized metrics to Intelligence Network (Sunday)' },
   prediction_accuracy:    { fn: predictionAccuracyJob, schedule: '0 11 * * *',  description: 'Compute prediction accuracy for recent decision outcomes (daily)' },
   // ─── SCP Jobs ─────────────────────────────────────────────────────────────
-  scp_agent_runner:        { fn: scpAgentRunner,        schedule: '0 * * * *',    description: 'Run due agents for all active SCP companies (every hour)' },
-  scp_daily_briefing:      { fn: scpDailyBriefing,      schedule: '30 5 * * *',   description: 'Generate CEO briefings for all SCP companies (daily 5:30 UTC)' },
-  scp_evolution_cycle:     { fn: scpEvolutionCycle,     schedule: '0 4 * * *',    description: 'Run evolution synthesis for all SCP agents (daily 4:00 UTC)' },
-  scp_lifecycle_transition:{ fn: scpLifecycleTransition,schedule: '0 6 * * *',    description: 'Evaluate company lifecycle state transitions (daily 6:00 UTC)' },
-  scp_wisdom_synthesis:    { fn: scpWisdomSynthesis,    schedule: '0 3 * * 0',    description: 'Synthesize wisdom patterns for all active SCP products (Sunday 3:00 UTC)' },
-  scp_intelligence_benchmarks: { fn: scpIntelligenceBenchmarks, schedule: '0 2 * * *', description: 'Recompute intelligence benchmarks across all products (daily 2:00 UTC)' },
-  scp_remediation_sync:    { fn: scpRemediationSync,   schedule: '0 8 * * *',    description: 'Daily agent remediation sync and health logging (daily 8:00 UTC)' },
-  scp_temporal_analysis:   { fn: scpTemporalAnalysis,  schedule: '0 5 * * 1',    description: 'Weekly temporal trend analysis for all SCP companies (Monday 5:00 UTC)' },
-  scp_dna_nudge:           { fn: scpDNANudge,          schedule: '0 10 * * *',   description: 'Nudge early-lifecycle SCP founders to complete DNA context (daily 10:00 UTC)' },
-  scp_cost_report:         { fn: scpCostReport,        schedule: '0 0 1 * *',    description: 'Monthly 30d AI cost rollup for all products (1st of month)' },
   // SCP v3: New capability layer jobs
-  scp_lifecycle_rules:     { fn: scpLifecycleRules,    schedule: '0 */4 * * *',  description: 'Evaluate customer lifecycle rules for all SCP products (every 4h)' },
-  scp_pl_update:           { fn: scpPLUpdate,          schedule: '0 1 * * *',    description: 'Update AI Company P&L attribution for all products (daily 1:00 UTC)' },
-  scp_strategy_synthesis:  { fn: scpStrategySynthesis, schedule: '0 6 1 * *',    description: 'Generate monthly strategic synthesis for all products (1st of month)' },
-  scp_integration_fabric_sync: { fn: scpIntegrationFabricSync, schedule: '0 * * * *', description: 'Sync PostHog and GitHub into integration fabric (every hour)' },
-  scp_extended_integrations_sync: { fn: scpExtendedIntegrationsSync, schedule: '0 */2 * * *', description: 'Sync Sentry, Linear, Intercom, Slack integrations (every 2h)' },
-  scp_prediction_accuracy: { fn: scpPredictionAccuracyCheck, schedule: '0 6 * * *', description: 'Measure pending agent predictions against actual outcomes (daily 6:00 UTC)' },
-  scp_compressed_brief: { fn: scpCompressedBrief, schedule: '0 7 * * 1', description: 'Generate compressed weekly brief for all SCP products (Monday 7:00 UTC)' },
-  scp_scenario_refresh: { fn: scpScenarioRefresh, schedule: '0 5 * * 1', description: 'Refresh Monte Carlo runway scenarios for all SCP products (Monday 5:00 UTC)' },
-  scp_debate_run: { fn: scpDebateRun, schedule: '0 8 * * *', description: 'Run challenger/synthesizer debate pass after daily agent runs (daily 8:00 UTC)' },
-  scp_failure_pattern_scan: { fn: scpFailurePatternScan, schedule: '0 9 * * *', description: 'Scan all products for failure pattern matches (daily 9:00 UTC)' },
-  scp_prompt_evolution: { fn: scpPromptEvolution, schedule: '0 4 * * 0', description: 'Generate prompt mutation suggestions for underperforming agents (Sunday 4:00 UTC)' },
-  scp_playbook_eval: { fn: scpExecutionPlaybookEval, schedule: '0 * * * *', description: 'Evaluate execution playbook conditions for all active products (hourly)' },
-  scp_benchmark_refresh: { fn: scpBenchmarkRefresh, schedule: '0 3 * * 0', description: 'Refresh anonymous benchmark percentiles (Sunday 3:00 UTC)' },
-  scp_decision_retrospectives: { fn: scpDecisionRetrospectives, schedule: '0 9 * * 1', description: 'Notify founders of decisions due for 90-day retrospective (Monday)' },
   scp_expire_overdue_decisions: { fn: scpExpireOverdueDecisions, schedule: '5 0 * * *', description: 'Mark pending decisions past their deadline as expired (daily)' },
   scp_webhook_delivery_cleanup: { fn: scpWebhookDeliveryCleanup, schedule: '0 4 * * 0', description: 'Clean up old webhook delivery records (Sunday 4:00 UTC)' },
   // SCP v7: Event bus, ROI, founder intelligence, priority queue
-  scp_signal_events:       { fn: scpSignalEvents,           schedule: '0 * * * *',   description: 'Process pending signal events and dispatch to target agents (hourly)' },
-  scp_founder_state:       { fn: scpFounderStateAssessment, schedule: '0 7 * * *',   description: 'Detect behavioral signals and assess founder state (daily 7:00 UTC)' },
-  scp_priority_rebuild:    { fn: scpPriorityRebuild,        schedule: '*/30 * * * *', description: 'Rebuild priority action queue for One Thing banner (every 30 min)' },
   stage_detection:    { fn: stageDetection,    schedule: '30 5 * * *',  description: 'Auto-detect product growth stage (daily)' },
   founder_health_refresh: { fn: founderHealthRefresh, schedule: '30 6 * * *', description: 'Refresh founder health metrics (daily)' },
   geopolitical_scan: { fn: geopoliticalScan, schedule: '0 8 * * 0', description: 'Scan geopolitical risks (Sunday)' },
