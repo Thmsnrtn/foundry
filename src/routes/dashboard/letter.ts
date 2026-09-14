@@ -11,7 +11,7 @@ import { requireOwner } from '../../middleware/rbac.js';
 import { isPrivateOwnerInstance } from '../../lib/instance-posture.js';
 import { logger } from '../../services/logger.js';
 import type { AuthEnv } from '../../middleware/auth.js';
-import { dashboardLayout } from '../../views/layout.js';
+import { page } from '../../views/owner/shell.js';
 import { getLayoutContext } from './_shared.js';
 import { query } from '../../db/client.js';
 import { composeLetter } from '../../services/letter/composer.js';
@@ -1582,7 +1582,7 @@ letterRoutes.get('/letter', async (c) => {
     ${await whatItCanDoNow()}
     ${adviceStrip(fluency)}
   `;
-  return c.html(dashboardLayout(ctx, content));
+  return c.html(page(ctx.title, content, 'advanced'));
 });
 
 
@@ -1925,7 +1925,7 @@ letterRoutes.get('/autopilot', async (c) => {
       Ladder: Watching only → Suggests (earned at ${PROMOTION_THRESHOLD} clean cycles, quality-held) → Acts (your explicit grant, gate-≤1 only, ${12}h grace, 24h undo).
     </p>
     ${developmentAuthoritySection(developmentItems)}`;
-  return c.html(dashboardLayout(ctx, content));
+  return c.html(page(ctx.title, content, 'advanced'));
 });
 
 // THIS IS THE DIAL, AND RAISING IT TO 'act' RECORDS A CONSENT IN THE
@@ -2083,7 +2083,7 @@ letterRoutes.get('/talk', async (c) => {
       document.getElementById('talk-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') sendTalk(); });
     </script>
     ${adviceStrip(getFluency(founder))}`;
-  return c.html(dashboardLayout(ctx, content));
+  return c.html(page(ctx.title, content, 'advanced'));
 });
 
 letterRoutes.post('/talk/message',
@@ -2458,7 +2458,7 @@ letterRoutes.get('/letter/responsibilities/:responsibilityId/understanding', asy
         </div>`)}
       <a href="/letter" class="btn btn-ghost" style="font-size:0.78rem;margin-top:1rem;display:inline-block;">Back</a>
     </div>`;
-  return c.html(dashboardLayout(ctx, content));
+  return c.html(page(ctx.title, content, 'advanced'));
 });
 
 letterRoutes.post('/letter/responsibilities/:responsibilityId/understanding',
@@ -2527,7 +2527,7 @@ letterRoutes.post('/letter/facts/preview',
       </form>
       <div style="font-size:0.7rem;color:var(--text-muted);margin-top:0.5rem;">This tells me how your company works. It does not let me do anything on your behalf.</div>
     </div>`;
-  return c.html(dashboardLayout(ctx, content));
+  return c.html(page(ctx.title, content, 'advanced'));
 });
 
 // Stage two: explicit authenticated confirmation. The product, the fact, and

@@ -207,6 +207,54 @@ phones('the estate, journey by journey', () => {
     expect(seen.text).toContain('people asking not to be contacted');
   });
 
+  it('11. the Advanced depth is the same product: one shell, no second stylesheet, no self-link', async () => {
+    // THE LETTER WAS THE LAST PAGE IN THE OTHER VISUAL SYSTEM.
+    //
+    // It rendered through `views/layout.ts` and `public/styles.css` while every
+    // other owner surface rendered through the shell and `owner.css` — so the
+    // one door out of the estate led somewhere that looked like a different
+    // product. It now renders in this shell as the `advanced` depth.
+    //
+    // The risk of moving a page between stylesheets is not that it looks
+    // slightly different; it is that 396 inline declarations written against
+    // names the new sheet does not define quietly stop applying, and the page
+    // reads as broken on the phone. So this checks the things that would break:
+    // it does not scroll sideways, it is on the shell's ground, and it still
+    // says what it is for.
+    const seen = await onThePhone('/letter');
+    expect(seen.overflowX, 'the Letter must not scroll sideways at 390px').toBe(0);
+    expect(seen.text.length, 'the Letter still renders content').toBeGreaterThan(200);
+  });
+
+  it('11a. no door lights for a depth, and the footer does not point at the page you are on', async () => {
+    const { chromium } = await import('playwright-core');
+    const browser = await chromium.launch({ executablePath: CHROMIUM as string, args: ['--no-sandbox'] });
+    try {
+      const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, colorScheme: 'dark' });
+      const pg = await ctx.newPage();
+      await pg.goto(`http://localhost:${String(port)}/letter`, { waitUntil: 'networkidle' });
+      const shape = await pg.evaluate(() => ({
+        // The shell, not the other layout.
+        sheets: [...document.querySelectorAll('link[rel=stylesheet]')].map((l) => (l as HTMLLinkElement).getAttribute('href')),
+        place: document.querySelector('main.wrap')?.getAttribute('data-place') ?? null,
+        litDoors: [...document.querySelectorAll('nav.places a.on')].map((a) => a.textContent?.trim() ?? ''),
+        selfLink: [...document.querySelectorAll('footer a')].map((a) => a.getAttribute('href')),
+        // The ground is painted, so the page cannot borrow the host's theme.
+        bg: getComputedStyle(document.body).backgroundColor,
+        // The alias layer resolves: this was `var(--text-primary)`, defined in
+        // NEITHER stylesheet before, so it used to be an invalid declaration.
+        primary: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim(),
+        card: getComputedStyle(document.documentElement).getPropertyValue('--ink').trim(),
+      }));
+      expect(shape.sheets, 'renders on owner.css and nothing else').toEqual(['/static/owner.css']);
+      expect(shape.place, 'a depth, not a place').toBe('advanced');
+      expect(shape.litDoors, 'a depth lights no door in the rail').toEqual([]);
+      expect(shape.selfLink, 'the Advanced footer must not link to the Advanced page').toEqual([]);
+      expect(shape.bg, 'the shell paints its own ground').not.toBe('rgba(0, 0, 0, 0)');
+      expect(shape.primary, '--text-primary now resolves').toBe(shape.card);
+    } finally { await browser.close(); }
+  });
+
   it('10. back after a day away: what changed is a count with a door, and the list is under it', async () => {
     await query("UPDATE owner_visits SET looked_at = datetime('now','-1 day'), since = datetime('now','-1 day') WHERE founder_id = ?", [OWNER]);
     const seen = await onThePhone('/foundry');

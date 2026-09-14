@@ -25,7 +25,17 @@ import type { CompanyPlace, DimensionKey } from '../../services/founder/place.js
 import { OWNER_SURFACE_SCRIPT } from '../../lib/owner-surface-script.js';
 
 /** Which door is lit. `foundry` is Home; `companies` is Portfolio. */
-export type Place = 'foundry' | 'decisions' | 'companies' | 'experiments' | 'inbox' | 'controls';
+/**
+ * The six doors — and one depth that is not a door.
+ *
+ * `advanced` is the Letter, reached from the footer as "Advanced — inspect the
+ * system". It renders in this shell so there is ONE visual system, but it must
+ * not light a door: it is a depth beneath all of them, not a seventh place. It
+ * matches no key in the rail, so nothing lights, and the footer that points at
+ * it is suppressed there rather than linking a page to itself.
+ */
+export type Place = 'foundry' | 'decisions' | 'companies' | 'experiments' | 'inbox' | 'controls'
+  | 'advanced';
 
 type H = HtmlEscapedString | Promise<HtmlEscapedString>;
 
@@ -210,7 +220,7 @@ export const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscape
 <div class="brand"><b>F</b> Private Foundry</div>
 ${crumbsOf(where)}
 ${body}
-<footer><a href="/letter">Advanced — inspect the system</a></footer>
+${active === 'advanced' ? '' : html`<footer><a href="/letter">Advanced — inspect the system</a></footer>`}
 <form class="ask" method="GET" action="/foundry">
   ${askScope(where).line}
   ${askScope(where).hidden ? html`<input type="hidden" name="scope" value="${askScope(where).hidden}" />` : ''}

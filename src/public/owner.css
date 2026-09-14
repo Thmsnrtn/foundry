@@ -42,6 +42,34 @@
   --serif:"Newsreader","Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
   --sans:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
   --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
+
+  /* ── THE NAMES THE INSPECT DEPTH ALREADY USES ────────────────────────────
+     The Letter — reached from this shell's footer as "Advanced — inspect the
+     system" — is 2,787 lines of markup written against the OTHER stylesheet's
+     vocabulary, in 396 inline declarations. Rewriting all of it to move one
+     page into one visual system would be the expensive way to do a rename.
+     These are ALIASES, not a second palette: each resolves through a token
+     above, so the light block and the explicit toggle carry them for free and
+     the two can never drift apart. A second set of literal colours here is
+     exactly the thing this file exists to stop.
+
+     `--text-primary` IS NOT A RENAME. It was defined in NEITHER stylesheet and
+     used FIFTY-FIVE times across the Letter, the components and settings, so
+     every `color:var(--text-primary)` was an invalid declaration that did
+     nothing and inherited instead. It happened to look right because what it
+     inherited was the body colour, which is what it meant. Now it says so.
+
+     Dim and muted keep their order rather than their hex: on the old ground
+     `--text-muted` was the brighter of the two, so it takes `--ink-2` and
+     `--text-dim` takes `--ink-3` — which is also the token the contrast gate
+     already holds to AA, so the dimmest text on this page gets more readable
+     rather than less. `--signal-high` was a green meaning healthy, not a red
+     meaning loud; it is `--good`. */
+  --text-primary:var(--ink);
+  --text-dim:var(--ink-3);
+  --text-muted:var(--ink-2);
+  --signal-high:var(--good);
+
   color-scheme:dark;
 }
 @media (prefers-color-scheme:light){:root:not([data-theme="dark"]){
@@ -203,6 +231,16 @@ dd:last-child{margin-bottom:0}
 dd{margin:0;min-width:0;overflow-wrap:break-word}
 .do{padding:var(--s3);border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:var(--s2)}
 .do form{flex:1 1 auto;min-width:0}
+/* THE OTHER SYSTEM'S SURFACE, IN THIS SYSTEM'S MATERIALS.
+   `.card` wraps forty-two blocks of the Letter and has no definition here.
+   Built from the same tokens as `.tile` rather than copied from the old
+   stylesheet, so it inherits the theme and the radius scale; the old one used
+   a fixed padding in rem and a surface this palette does not have. */
+.card{background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
+  padding:var(--s3);margin-bottom:var(--s3)}
+.card > :first-child{margin-top:0}
+.card > :last-child{margin-bottom:0}
+
 .btn{font:inherit;font-size:1rem;font-weight:500;cursor:pointer;text-decoration:none;width:100%;
   display:inline-flex;align-items:center;justify-content:center;
   border-radius:12px;padding:13px 20px;min-height:48px;
