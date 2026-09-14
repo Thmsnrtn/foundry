@@ -21,7 +21,7 @@ import { synthesizeJudgmentPatterns } from '../services/wisdom/patterns.js';
 import { getProductDNA } from '../services/wisdom/dna.js';
 import { isPRMerged, isPROpen } from '../services/audit/github.js';
 import { triggerDimensionReAudit } from '../services/audit/remediation.js';
-import { callOpus, parseJSONResponse } from '../services/ai/client.js';
+import { callOpus, callSonnet, parseJSONResponse } from '../services/ai/client.js';
 import { checkAndAwardMilestones } from '../services/ux/milestones.js';
 import { detectGrowthStage, updateGrowthStage } from '../services/lifecycle/stage-detection.js';
 import { refreshFounderHealthMetrics } from '../services/intelligence/founder-health.js';
@@ -865,7 +865,16 @@ Return JSON only, no markdown:
   "action": "The one concrete thing to do today, ≤80 chars, or null if none"
 }`;
 
-      const raw = await callOpus('You are Foundry, an intelligence layer for early-stage founders.', prompt, 400, p.id);
+      // NOT THE FRONTIER MODEL, AND THE REASON IS WRITTEN IN
+      // `src/lib/frontier-warrant.ts`. The frontier is warranted when being
+      // wrong is expensive AND the occasion is rare. This is neither: the
+      // context above has already been gathered by the queries, the job asks
+      // for a hundred and twenty characters of it back, and it asks every day
+      // for every company. Four hundred tokens of compression at five times
+      // the price, three hundred and sixty-five times a year, was the whole
+      // of this institution's frontier spending — sixteen calls and thirty-one
+      // cents between 1 and 14 September 2026.
+      const raw = await callSonnet('You are Foundry, an intelligence layer for early-stage founders.', prompt, 400, p.id);
       const insight = parseJSONResponse<{ headline: string; context: string; action: string | null }>(raw.content);
 
       if (insight?.headline) {

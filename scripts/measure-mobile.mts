@@ -175,6 +175,23 @@ async function main(): Promise<void> {
   app.route('/', experimentRoutes as never);
   const { workshopRoutes } = await import('../src/routes/dashboard/workshop-place.js');
   app.route('/', workshopRoutes as never);
+  // THE DEEPER SURFACES, MOUNTED SO THE GATE CAN ACTUALLY MEASURE THEM.
+  //
+  // Adding their paths to the list below without mounting their routers gave
+  // six clean-looking 404s: scrollWidth equal to innerWidth on a bare error
+  // page, which overflows nothing because there is nothing on it. The gate
+  // caught it because it checks the STATUS as well as the width — a page that
+  // did not render is not a page that fits.
+  const { placeRoutes } = await import('../src/routes/dashboard/places.js');
+  app.route('/', placeRoutes as never);
+  const { inboxRoutes } = await import('../src/routes/dashboard/inbox-place.js');
+  app.route('/', inboxRoutes as never);
+  const { moneyRoutes } = await import('../src/routes/dashboard/money-place.js');
+  app.route('/', moneyRoutes as never);
+  const { roadmapRoutes } = await import('../src/routes/dashboard/roadmap-place.js');
+  app.route('/', roadmapRoutes as never);
+  const { absenceRoutes } = await import('../src/routes/dashboard/absence-place.js');
+  app.route('/', absenceRoutes as never);
 
   const server = serve({ fetch: app.fetch, port: 4317 });
   const base = 'http://127.0.0.1:4317';
@@ -183,6 +200,14 @@ async function main(): Promise<void> {
     `/foundry/companies/${REFERENCE_COMPANY}`, '/foundry/controls',
     '/foundry/experiments', `/foundry/experiments/${PROOF1}`, `/foundry/experiments/${PROOF1}/recipients`,
     '/foundry/public-workshop',
+    // THE DEEPER SURFACES, because a gate that only measures the front page
+    // measures the page that was designed most carefully. These are where the
+    // owner goes when he wants the subtraction, the load, the queue, the
+    // search, what to test next, and whether he could leave — and every one of
+    // them renders a list, a table, or a set of nested details, which is where
+    // a phone layout actually breaks.
+    '/foundry/decisions', '/foundry/inbox', '/foundry/money', '/foundry/roadmap',
+    '/foundry/searching', '/foundry/experiments/next', '/foundry/absence',
     // Asked about a company by name: the answer is the widest structured block
     // the ask box can produce, and it renders inside the same page.
     '/foundry?q=' + encodeURIComponent('How is Foundry doing?'),
@@ -330,6 +355,16 @@ async function main(): Promise<void> {
         if (path === '/foundry/public-workshop') {
           await page.screenshot({ path: `${dir}/public-workshop-390.png`, fullPage: true });
         }
+        // THE DEEPER SURFACES ON THE PHONE HE ACTUALLY CARRIES. Measuring them
+        // without keeping a picture leaves the proof as a number nobody can
+        // check; these are the pages a reader of the tranche would ask to see.
+        for (const [p, name] of [
+          ['/foundry/controls', 'controls'], ['/foundry/money', 'money'],
+          ['/foundry/roadmap', 'roadmap'], ['/foundry/decisions', 'decisions'],
+          ['/foundry/experiments/next', 'forge'], ['/foundry/absence', 'absence'],
+        ] as Array<[string, string]>) {
+          if (path === p) await page.screenshot({ path: `${dir}/${name}-390.png`, fullPage: true });
+        }
       }
       if (path === '/foundry' && scale === 1 && width !== 390 && !desktop) {
         await page.screenshot({ path: `${dir}/foundry-${String(width)}.png`, fullPage: true });
@@ -341,7 +376,11 @@ async function main(): Promise<void> {
         const name = path === '/foundry' ? 'foundry'
           : path === '/foundry/companies' ? 'portfolio'
             : path === `/foundry/companies/${REFERENCE_COMPANY}` ? 'reference-company'
-              : path === `/foundry/experiments/${PROOF1}` ? 'experiment' : '';
+              : path === `/foundry/experiments/${PROOF1}` ? 'experiment'
+                : path === '/foundry/money' ? 'money'
+                  : path === '/foundry/controls' ? 'controls'
+                    : path === '/foundry/absence' ? 'absence'
+                      : path === '/foundry/experiments/next' ? 'forge' : '';
         if (name) await page.screenshot({ path: `${desk}/${name}-1280.png`, fullPage: true });
       }
     }

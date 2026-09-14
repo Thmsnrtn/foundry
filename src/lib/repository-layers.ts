@@ -149,6 +149,11 @@ export const LAYER_OF: Record<string, Layer> = {
   // The roadmap: what the institution is carrying, read from undertakings. The
   // reading is the kernel's; this is his screen onto it.
   'src/routes/dashboard/roadmap-place.ts': 'private',
+  // "If you stepped away": the five properties an absence tests, at three
+  // horizons, beside what thinking costs. The readings are the kernel's —
+  // `institution/absence-test.ts` and `ai/cognition.ts` — and any Foundry
+  // would want both; this page is the one his estate is asked through.
+  'src/routes/dashboard/absence-place.ts': 'private',
   // THE DOOR THE SHELL LIVES BEHIND, and therefore part of the same product.
   // The Attention Law forbids a new top-level mount, so the shell is mounted
   // inside the Letter — which makes `letter.ts` the composition root for the

@@ -1426,3 +1426,190 @@ Its design carries the limit that makes it teachable, written before it ran:
 That sentence is what the next design has to answer to, and the forge puts it in
 front of whoever writes one. Nothing about Experiment 001's cohort, price,
 message, strata, rollout or stop envelope is touched by any of this.
+
+## Phase 7 — quiet maturity, absence, and what thinking costs — 14 September 2026
+
+### The measurement that started it
+
+Nothing in this repository asked whether a model call was worth making. A loop
+was scheduled, the loop ran, the bill arrived. Reading `ai_spend_reservations`
+in production for the fortnight to 14 September 2026:
+
+| model | calls | cost |
+|---|---|---|
+| sonnet | 1,030 | $14.53 |
+| opus (the frontier) | 16 | $0.31 |
+| haiku | 53 | $0.04 |
+
+Two facts in that table are worth more than the total. **The frontier model is
+not where the money goes** — sixteen calls, two per cent — so the optimisation
+everyone reaches for first was not available here, and saying so is more useful
+than inventing one. And **878 of the 1,099 calls carry no purpose at all**: the
+institution spent $10.10 of $14.88 without being able to say what it was
+thinking about.
+
+Daily spend over the same fortnight: 21¢ on 1 September, 169¢ on 14 September.
+**Eight times, in fourteen days.** A healthy mature Engine is supposed to get
+quieter.
+
+### Where it actually went
+
+752 of the 878 anonymous calls land in the 04:00 hour, scoped to one company.
+`job_health` puts `scp_evolution_cycle` at 04:00:00 to 04:06:47, and the
+arithmetic closes exactly: three operating companies × nine agents × two calls
+per synthesis = 54 a night, which is what the timeline shows.
+
+What eleven nights of it produced:
+
+- `agent_evolution_versions` — 36 rows, **every one** `initial_provision`, all
+  dated 3 September 2026, the day the agents were created.
+- `evolved_prompts` — **empty**.
+
+About six hundred calls, roughly $8.30, and not one of them changed anything.
+Most nights it re-read *the same five sessions*, because no new session had
+completed since the night before. The institution was paying to re-read an
+unchanged document and ask an unchanged question.
+
+### Three reasons to sleep
+
+`src/services/ai/cognition.ts` and **migration 315** (`cognition_occasions`) let
+a loop answer, before it spends anything:
+
+1. **There is nothing to consider** — no material at all.
+2. **Nothing has changed** — the input digest is identical to last time, so the
+   answer would be too, and paying for it again buys a copy.
+3. **It has never once mattered** — the question has been asked five times over
+   *changing* material and has not once changed anything.
+
+The third is the crystallisation: a question asked repeatedly with the same
+answer has become a fact, and a fact is cheaper than a question. It is
+deliberately a **backoff to weekly, not a deletion** — a question that has never
+mattered may come to matter, and an institution that can never be surprised is
+not cheap, it is blind.
+
+Two failures are guarded by name, because they are how a sleeping institution
+lies to itself:
+
+- **A sleep is never evidence that thinking would have been fruitless.** Only
+  occasions that actually thought can testify. Otherwise a loop that slept five
+  nights for want of new material concludes the question never mattered — from
+  five nights in which it never asked it. `changed_something` is NULL on a
+  slept occasion rather than 0, in the schema, for exactly this reason.
+- **An occasion that DID change something outvotes any run of fruitless ones.**
+
+A third failure was found by reading the code back rather than by a test: the
+counts were first taken from a window of the last fifteen rows. Once the backoff
+engages the rows are mostly *sleeps* — six a week against one thought — so within
+a fortnight the thoughts scroll out of any fixed window, the fruitless count
+collapses below the threshold, and **the settled question quietly resumes asking
+itself every night**. A settled question that un-settles itself on a technicality
+is worse than one that never settled, because nobody would ever notice. The
+counts are now two indexed aggregates over the whole history, and a test walks a
+fortnight of the settled rhythm and asserts it stays settled.
+
+Wired at the one site the evidence points at: `runEvolutionSynthesis` digests
+the five sessions it would read, by identity and completion time, and puts the
+question to `shouldThink`. The loop is not deleted and the agents are not
+disbanded — cheapening a loop is a decision the evidence supports; deciding
+whether the agents should exist is the owner's.
+
+The erasure classifier caught it, as it caught the economic ledger in Phase 4:
+`cognition_occasions` was the single UNCLASSIFIED table in a schema whose
+classification is meant to be total. It is `not_company_data`, and the tension
+is written down rather than glossed — `about` is an opaque key the caller
+chooses, and today's one caller composes it from a product id, so a company's id
+can appear in it. Nothing else about the company does: no content, no numbers,
+no person, only whether a question was asked and whether asking changed
+anything. That is a fact about what this institution chose to spend money
+thinking about.
+
+The retention gate caught a second thing on the way. `cognitionEconomics` read
+`ai_spend_reservations` directly, and that table survives an erasure **for
+accounting and ceiling enforcement only** — a disposition that lets a table
+outlive an erasure is a promise about what will be done with it afterwards, and
+a reader somewhere else is exactly the later use the promise excludes. The
+reader moved into `spend-ledger.ts`, where the promise is kept, rather than the
+promise being widened to reach it.
+
+### What the most expensive model has to say for itself
+
+`src/lib/frontier-warrant.ts` names every file that reaches the frontier model,
+what it asks, and why. The test has two halves and **both must hold**:
+
+1. **Being wrong is expensive** — the output changes what the institution does
+   or what it tells the owner about money, law, or a company in trouble. Not
+   "the answer is better": better answers are always available for more money,
+   and that is not an argument for anything.
+2. **The occasion is rare** — a thing that happens nightly has, by the end of a
+   year, spent 365 times whatever it costs.
+
+Most frontier use fails the second half, and it is the half nobody checks.
+Twelve call sites were audited; eleven kept their warrant, two of those are
+marked `watched` because they run on a cadence rather than an occasion and
+survive on the first half alone. One failed outright and was moved to the
+operational model: `dailyInsightGenerate` asked for 120 characters of
+already-gathered context, 400 tokens, every company every day — and it was
+essentially the whole of this institution's frontier spending.
+
+`scripts/check-frontier-warrant.mjs` runs in `npm run check` and fails four
+ways: a file at the frontier with no entry, more call sites than the entry
+claims, an entry for code that no longer reaches it, and a warrant too short to
+be an argument. Two tests deliberately break the table and assert the gate
+fails — a gate nobody has watched fail is a gate nobody has tested.
+
+### If you stepped away — seven, thirty, ninety days
+
+`src/services/institution/absence-test.ts` and `/foundry/absence`. Five
+properties, three horizons, and **no number that averages them**: an institution
+that is truthful and unrecoverable is not seventy per cent fine.
+
+- **TRUTHFUL** — would silence be mistaken for calm? A company with nothing
+  connected and a routine that has stopped both produce a screen saying nothing
+  is wrong, from an institution that would say the same if everything were.
+  Built first on the two named `INSTITUTION_LOOPS`, and that was not enough:
+  production had `behavioral_triggers` failing **forty-nine times in a row**
+  since 1 September with nothing the owner could open saying so. It fails
+  closed — no mail is sent — which is the right failure and is exactly why
+  nobody noticed. The reading now names any routine that has failed three
+  consecutive times.
+- **BOUNDED** — a ceiling per day is a *rate*, not a ceiling, so it is
+  multiplied out to the horizon. Any authority with no end date fails outright,
+  whatever its size: the question is not how much, it is whether it stops on
+  its own.
+- **UNDERSTANDABLE** — every step from a payment to what is his, each carrying
+  how it was arrived at, and the chain is never stronger than its worst link.
+- **RECOVERABLE** — copies are kept for fourteen days, read from the volume
+  rather than from the policy constant. That covers a week. It does **not**
+  cover ninety days: a bad migration on the second day of a three-month absence
+  would have had its last clean copy deleted seventy-six days before he opened
+  his laptop.
+- **ONLY GENUINE DECISIONS** — will what is waiting still be waiting? A
+  proposal that lapses on day twenty of a ninety-day absence was not deferred to
+  him; it was **decided by the calendar**, and he comes back to a screen showing
+  nothing waiting because everything waiting already timed out.
+
+The point of the whole file is that the answer is allowed to change with the
+length of the absence, and where the horizon outruns the evidence the finding is
+**CANNOT ESTABLISH** rather than a pass by default. One row, two horizons, two
+answers — and the longer one is the truthful one.
+
+The reading is a read. Nothing in it schedules, alerts, acts or spends: the test
+for a quiet institution must itself be quiet.
+
+### The gate that had only been measuring the front page
+
+`measure-mobile.mts` covered Home, Portfolio, a company, Controls, the
+experiments and the Workshop — and not Money, the Roadmap, Decisions, the Inbox,
+Discover, the Forge or this new page. A gate that measures only the pages
+designed most carefully measures the wrong thing: lists, tables and nested
+details are where a phone layout actually breaks. All seven are in it now, and
+the desktop screenshots with them.
+
+Adding their paths was not enough, and the gate said so. The harness mounted
+only three routers, so the seven new paths returned clean-looking **404s** —
+scrollWidth equal to innerWidth on a bare error page, which overflows nothing
+because there is nothing on it. It failed anyway, because it checks the status
+as well as the width: **a page that did not render is not a page that fits.**
+With the routers mounted: 299 measurements, every one 200 and inside its
+viewport, at 375/390/393/414/430 px at 100% and 200% text and at 1024/1280/1440
+on a desktop.

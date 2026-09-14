@@ -1231,6 +1231,20 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   search_emphasis: 'the words people use when describing the work each kind of owner preference points at, so his steering reaches where the search looks; constitutional, naming nobody',
   undertaking_kinds: 'the verbs the institution can be asked to take on, and what each means; constitutional, naming nobody',
   business_outcome_event_kinds: 'the kinds of thing a provider can report happened at an offer, and which of them is money leaving somebody\'s hands; constitutional, naming nobody',
+  // NOT A VOCABULARY — A RECORD OF THE INSTITUTION'S OWN SPENDING DECISIONS,
+  // and the one entry here that is not constitutional. The classifier found it
+  // as the single UNCLASSIFIED table in the schema, which is the gate working.
+  //
+  // The honest tension, written rather than glossed: `about` is an opaque key
+  // the caller chooses, and today's one caller composes it from a product id.
+  // So a company's id can appear in it. Nothing else about the company does —
+  // no content, no numbers, no person — only whether a question was asked
+  // about it and whether asking changed anything. That is a fact about what
+  // this institution chose to spend money thinking about, not a fact about the
+  // company, and it is what makes the next sleep decidable.
+  cognition_occasions: 'what the institution decided was worth thinking about and what it cost, '
+    + 'keyed by an opaque subject; holds no person, no company content and no money of anyone\'s '
+    + 'but its own',
   economic_event_kinds: 'the twelve things that can happen to money, which way each moves it, whether it reaches an account a person can draw on and whether it belongs to the cost of one thing sold; constitutional, naming nobody',
   experiment_invalidity_kinds: 'the ways a test can fail to measure what it was for, as distinct from the market saying no; constitutional, naming nobody',
   probe_exchanges: 'the ways a probe can ask somebody to pay, what each reveals and what each confounds, and which of them the institution can actually run; constitutional, naming nobody',

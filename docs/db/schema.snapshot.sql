@@ -776,6 +776,41 @@ CREATE TABLE cofounder_profiles (
   joined_at TEXT,
   created_at TEXT DEFAULT (datetime('now'))
 );
+CREATE TABLE cognition_occasions (
+  id                TEXT PRIMARY KEY,
+
+  -- WHAT KIND OF THINKING. A stable name, chosen by the caller, that groups
+  -- occasions of the same question: 'agent_evolution_synthesis'. Never a
+  -- model name and never a prompt — the question, not how it was asked.
+  cognition         TEXT NOT NULL CHECK (trim(cognition) <> ''),
+
+  -- WHAT IT WAS ABOUT. The subject that makes two occasions comparable: a
+  -- product and an agent, an experiment, a company. Opaque here.
+  about             TEXT NOT NULL CHECK (trim(about) <> ''),
+
+  -- WHAT IT WAS OVER. A digest of the inputs, computed by the caller from the
+  -- records it would read. Two occasions with the same digest were asked the
+  -- same question about the same material, and the second one could not have
+  -- learned anything the first did not.
+  over_digest       TEXT NOT NULL CHECK (trim(over_digest) <> ''),
+
+  at                TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+  -- DID IT ACTUALLY THINK. 0 means it slept, and `because` says why in words
+  -- the owner can read. A slept occasion still records its digest, so the next
+  -- one can tell whether the material has moved since.
+  thought           INTEGER NOT NULL CHECK (thought IN (0, 1)),
+  because           TEXT,
+
+  -- DID IT CHANGE ANYTHING. NULL when it slept — an occasion that did not
+  -- happen neither changed nor failed to change anything, and recording a 0
+  -- there would poison the very count that decides whether to sleep again.
+  changed_something INTEGER CHECK (changed_something IN (0, 1)),
+
+  -- WHAT IT COST, in cents, when it thought. Settled where the caller knows
+  -- it; NULL where it does not, which is honest rather than a zero.
+  cents             REAL
+);
 CREATE TABLE cohort_groups (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -4742,6 +4777,10 @@ CREATE INDEX idx_chat_sessions_founder ON chat_sessions(founder_id);
 CREATE INDEX idx_chat_sessions_product ON chat_sessions(product_id, status);
 CREATE INDEX idx_checkpoints_product ON forecast_checkpoints(product_id, metric_name, checkpoint_date);
 CREATE INDEX idx_cloudflare_mutations_resource ON cloudflare_mutations(founder_id, resource, recorded_at);
+CREATE INDEX idx_cognition_occasions_kind
+  ON cognition_occasions(cognition, at DESC);
+CREATE INDEX idx_cognition_occasions_subject
+  ON cognition_occasions(cognition, about, at DESC);
 CREATE INDEX idx_cohort_members ON cohort_memberships(cohort_group_id);
 CREATE INDEX idx_cohorts_channel ON cohorts(acquisition_channel);
 CREATE INDEX idx_cohorts_product ON cohorts(product_id);

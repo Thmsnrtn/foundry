@@ -5428,6 +5428,11 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
         <dt>Owner action</dt><dd>${health.ownerAction ?? 'none'}</dd>
         <dt>Last healthy</dt><dd>${health.lastHealthy ? health.lastHealthy.slice(0, 16).replace('T', ' ') : 'not recorded'}</dd>
       </dl>
+      <!-- THE SAME QUESTION ASKED ABOUT TIME RATHER THAN AUTHORITY. This page
+           says what I may do; that one says what would still be true if you
+           did not come back for three months, and what thinking costs. -->
+      <p class="quiet"><a href="/foundry/absence">If you stepped away &mdash; seven,
+        thirty and ninety days</a></p>
     </div>
 
     ${stopped ? html`<p class="lede">Stopped. I will not use it again. If you are

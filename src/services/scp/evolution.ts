@@ -723,34 +723,91 @@ export async function recordFounderCorrection(
  * @deprecated Use evolveAgent() instead.
  * Kept for backward compatibility with scheduler.ts and agents-evolve route.
  */
+/**
+ * THE NIGHTLY QUESTION, AND WHETHER IT IS WORTH ASKING TONIGHT.
+ *
+ * WHAT PRODUCTION SHOWED. Between 3 and 14 September 2026 this ran every night
+ * for nine agents across three operating companies — about fifty-four model
+ * calls a night, over half of everything the institution spent thinking — and
+ * changed nothing. Every row in agent_evolution_versions is an initial
+ * provision from the day the agents were created; evolved_prompts is empty.
+ * Most nights it re-read the same five sessions, because no new session had
+ * completed since the night before.
+ *
+ * Asking a model to improve a prompt from material it has already seen, and
+ * from which it already concluded there was nothing to improve, is not
+ * diligence. It is a bill.
+ *
+ * So the material is digested first — the five sessions this would actually
+ * read, by identity and completion time — and the question is put to
+ * `shouldThink`, which sleeps when there is nothing to read, when nothing has
+ * moved since last time, and when the question has been asked five times
+ * without ever once changing anything. The last of those backs off to weekly
+ * rather than stopping, because a question that has never mattered may still
+ * come to matter; what it may not do is cost eighty-three cents a night to
+ * find that out.
+ *
+ * WHAT IS DELIBERATELY NOT DONE HERE. The loop is not deleted and the agents
+ * are not disbanded. Cheapening a loop is a decision this can make on the
+ * evidence; deciding whether the agents should exist is the owner's.
+ */
 export async function runEvolutionSynthesis(
   productId: string,
   agentName: string
 ): Promise<{ evolved: boolean; newVersion: number | null; description: string }> {
-  try {
-    // Synthesize over the agent's actual recent sessions, not a synthetic
-    // prompt (Phase 2.5). Fall back to the generic instruction only when there
-    // are no completed sessions yet.
-    const realTranscript = await buildRecentSessionsTranscript(productId, agentName, 5);
-    const result = await evolveAgent({
-      productId,
-      agentName: agentName as AgentName,
-      sessionTranscript: realTranscript
-        ? `Scheduled evolution synthesis — review these recent sessions and propose improvements:\n\n${realTranscript}`
-        : 'Scheduled evolution synthesis — review recent sessions and propose improvements.',
-      isCorrection: false,
-    });
-    const appliedCount = result.changes?.filter(c => c.approved).length ?? 0;
-    return {
-      evolved: result.evolved,
-      newVersion: result.evolved ? appliedCount : null,
-      description: result.reason,
-    };
-  } catch (err) {
-    return {
+  const { consider, digestOf } = await import('../ai/cognition.js');
+
+  // THE MATERIAL, AS THE TRANSCRIPT BUILDER WOULD READ IT: the same table, the
+  // same filter, the same five, the same order. Identity and completion time
+  // are enough — a completed session is not edited afterwards, and reading the
+  // whole body here would cost more than the call it is trying to avoid.
+  const material = (await query(
+    `SELECT id, completed_at FROM agent_sessions
+      WHERE product_id = ? AND agent_name = ? AND status = 'completed'
+      ORDER BY completed_at DESC LIMIT 5`, [productId, agentName]))
+    .rows as unknown as Array<Record<string, unknown>>;
+  const over = digestOf(material.map((r) => `${String(r.id)}@${String(r.completed_at)}`));
+
+  const outcome = await consider(
+    { cognition: 'agent_evolution_synthesis', about: `${productId}/${agentName}` },
+    over,
+    async () => {
+      const realTranscript = await buildRecentSessionsTranscript(productId, agentName, 5);
+      const result = await evolveAgent({
+        productId,
+        agentName: agentName as AgentName,
+        sessionTranscript: realTranscript
+          ? `Scheduled evolution synthesis — review these recent sessions and propose improvements:\n\n${realTranscript}`
+          : 'Scheduled evolution synthesis — review recent sessions and propose improvements.',
+        isCorrection: false,
+      });
+      const appliedCount = result.changes?.filter(c => c.approved).length ?? 0;
+      return {
+        // WHETHER IT CHANGED ANYTHING IS WHAT DECIDES FUTURE NIGHTS, so it is
+        // the applied change that counts, not the model's willingness to
+        // propose one. A proposal nobody applied left the agent as it was.
+        changedSomething: result.evolved && appliedCount > 0,
+        value: {
+          evolved: result.evolved,
+          newVersion: result.evolved ? appliedCount : null,
+          description: result.reason,
+        },
+      };
+    },
+  ).catch((err: unknown) => ({
+    thought: true, because: 'failed',
+    value: {
       evolved: false,
       newVersion: null,
       description: `Evolution synthesis failed: ${err instanceof Error ? err.message : String(err)}`,
-    };
-  }
+    },
+  }));
+
+  return outcome.value ?? {
+    evolved: false,
+    newVersion: null,
+    // THE SLEEP, IN ITS OWN WORDS, so a caller logging this says what happened
+    // rather than reporting a silent no-op as an evolution that found nothing.
+    description: `Did not consider it: ${outcome.because}`,
+  };
 }

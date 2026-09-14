@@ -104,6 +104,38 @@ export async function spentThinkingAbout(productId: string, days: number): Promi
   return Math.round(Number(row?.cents ?? 0));
 }
 
+/**
+ * WHAT EACH MODEL COST OVER A WINDOW, settled cents only.
+ *
+ * ACCOUNTING, AND IT LIVES HERE FOR THE REASON THE HEADER GIVES. This was
+ * first written inside `ai/cognition.ts`, which reads better and is wrong: the
+ * reservations table survives an erasure for accounting and ceiling
+ * enforcement only, and `retention-purpose-edges` refused the new reader by
+ * name. A disposition that permits a table to outlive an erasure is a promise
+ * about what will be done with it afterwards, and a reader somewhere else is
+ * exactly the later use the promise excludes — so the reader moves to where
+ * the promise is kept rather than the promise being widened to reach it.
+ *
+ * "What did thinking cost, by model" is accounting in the plain sense: it is
+ * the bill, grouped. It names no person and reads no purpose.
+ */
+export async function settledByModel(
+  days: number,
+): Promise<Array<{ model: string; calls: number; cents: number }>> {
+  const since = `-${String(Math.max(1, Math.floor(days)))} day`;
+  const rows = (await query(
+    `SELECT model, COUNT(*) AS calls, COALESCE(SUM(actual_cents), 0) AS cents
+       FROM ai_spend_reservations
+      WHERE status = 'settled' AND created_at >= datetime('now', ?)
+      GROUP BY model ORDER BY cents DESC`, [since]))
+    .rows as unknown as Array<Record<string, unknown>>;
+  return rows.map((r) => ({
+    model: String(r.model),
+    calls: Number(r.calls),
+    cents: Math.round(Number(r.cents) * 100) / 100,
+  }));
+}
+
 export async function finishReservation(
   reservation: SpendReservation,
   outcome: { kind: 'settled'; actualCents: number } | { kind: 'released' | 'ambiguous' },
