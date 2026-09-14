@@ -71,8 +71,12 @@ describe('truthful — would silence be mistaken for calm', () => {
          (id, product_id, sense_key, provider, mode, disclosure, connected_at)
        VALUES (?,?,'revenue','stripe','real','what it earns', datetime('now'))`,
       [nanoid(), COMPANY]);
+    // ASSERTED ON THE COMPANY COMPLAINT, not on the overall finding. The
+    // reading also carries the DEPLOYMENT's own signals, and in this harness
+    // the deployment genuinely has no copies and no routine history — which is
+    // true, and is not what this test is about.
     const t = find(await readingAt(7), 'truthful');
-    expect(t.finding).toBe('HOLDS');
+    expect(t.evidence.join(' ')).not.toContain('nothing connected');
   });
 
   it('does not hold when a sense is erroring, because the page would look the same', async () => {
@@ -112,7 +116,10 @@ describe('truthful — would silence be mistaken for calm', () => {
       `INSERT INTO job_health (job_name, last_success_at, last_failure_at, consecutive_failures)
        VALUES ('some_sweep', '2026-09-13 18:00:00', '2026-09-14 12:00:00', 2)`);
     const t = find(await readingAt(7), 'truthful');
-    expect(t.finding).toBe('HOLDS');
+    // Two failures in a row is a blip, so the routine is not named. Asserted on
+    // its absence from the evidence rather than on the overall finding, which
+    // also carries the deployment's own readings.
+    expect(t.evidence.join(' ')).not.toContain('some sweep');
     await query(`DELETE FROM job_health WHERE job_name = 'some_sweep'`);
   });
 
@@ -251,6 +258,20 @@ describe('only real decisions — will what is waiting still be waiting', () => 
     expect(d.sentence).toContain('5 things are waiting');
   });
 
+  it('does not count an experiment nobody has designed a test for', async () => {
+    // WHAT PRODUCTION SHOWED. Twenty-two rows sat in the owner's queue across
+    // twenty unrelated opportunities, every one carrying the identical
+    // boilerplate — "showing a price to somebody who has the problem", cost
+    // zero — stamped once per opportunity by a scheduled job. None said who
+    // would be contacted, at what price, through which channel, or what would
+    // stop it. Saying yes to one would have authorised nothing in particular,
+    // and twenty-two of them is how an owner learns to stop reading the queue.
+    await test('a question nobody has designed a test for', false);
+    const d = find(await readingAt(7), 'only_real_decisions');
+    expect(d.finding).toBe('HOLDS');
+    expect(d.sentence).toContain('Nothing is waiting');
+  });
+
   it('counts a dated commitment falling inside the absence as going to be late', async () => {
     await query(
       `INSERT INTO institutional_responsibilities
@@ -294,7 +315,7 @@ describe('the reading as a whole', () => {
 /** A test awaiting his go-ahead: a mandate, something found, a question, and
  *  the experiment that would settle it. Written out rather than reached
  *  through the services, which refuse a second open search per founder. */
-async function test(whatWeDo: string): Promise<void> {
+async function test(whatWeDo: string, designed = true): Promise<void> {
   const mandate = `m_${OWNER}`;
   const opp = `o_${OWNER}`;
   const unknown = `u_${OWNER}`;
@@ -310,12 +331,32 @@ async function test(whatWeDo: string): Promise<void> {
   await query(
     `INSERT OR IGNORE INTO market_unknowns (id, founder_id, opportunity_id, question)
      VALUES (?,?,?,'whether anybody would pay for it')`, [unknown, OWNER, opp]);
+  const id = nanoid();
   await query(
     `INSERT INTO venture_experiments
        (id, founder_id, opportunity_id, unknown_id, what_we_do, what_we_expect,
         would_disprove, evidence_mode)
      VALUES (?,?,?,?,?,'somebody pays','nobody pays','real')`,
-    [nanoid(), OWNER, opp, unknown, whatWeDo]);
+    [id, OWNER, opp, unknown, whatWeDo]);
+  if (designed) await design(id);
+}
+
+/** The deliberation that turns a row into something there is anything to say
+ *  yes to: what it decides, what it can and cannot prove, why now, how it
+ *  reaches people, and what happens if it works. */
+async function design(experimentId: string): Promise<void> {
+  await query(
+    `INSERT INTO probe_designs
+       (experiment_id, founder_id, decides, decides_because, exchange, exchange_because,
+        can_prove, cannot_prove, rather_than_waiting, distribution, if_it_succeeds,
+        recommendation, recommendation_because, designed_by)
+     VALUES (?,?,'whether anybody pays at this price','nothing read so far answers it',
+             'upfront_price','it is the only instrument that produces money',
+             'that at least one person will pay','that the price is right, or that it repeats',
+             'waiting produces no evidence at all','one email each, once',
+             'the brief is written by hand until there is a reason not to',
+             'run','the question is blocking and the test is cheap','founder:test')`,
+    [experimentId, OWNER]);
 }
 
 async function proposal(expiresAt: string): Promise<void> {

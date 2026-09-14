@@ -60,12 +60,8 @@ export async function sendDigestEmail(
   await sendGovernedEmail({ productId, to, subject, html, kind: `digest:${digest.digest_type}` });
 }
 
-export async function sendTriggerEmail(
-  productId: string, to: string, triggerName: string, subject: string, body: string,
-): Promise<void> {
-  await sendGovernedEmail({
-    productId, to, subject,
-    html: `<div style="font-family: system-ui, sans-serif;">${body}</div>`,
-    kind: `trigger:${triggerName}`,
-  });
-}
+// `sendTriggerEmail` stood here and is gone with its only caller, the
+// behavioural-trigger funnel. A send helper with nothing to send is a loaded
+// gun in a drawer: the next person needing to mail a founder would have found
+// it and used it, and it addressed `founders.email` directly rather than
+// through a door that knows what the owner has ruled out.

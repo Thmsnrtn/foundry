@@ -163,6 +163,12 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
   const decision = await firstContactDecision(id);
   // WHAT THE INSTITUTION IS STOPPED ON, if anything. An authorised experiment
   // that cannot proceed must say so on its own page rather than look idle.
+  // WHAT ACTUALLY HAPPENED, COUNTED FROM THE ROWS. Behind a summary, because
+  // it is evidence rather than a decision — but on the page, because a tranche
+  // report once described this experiment out of four true counts from four
+  // different tables that together described an experiment that did not exist.
+  const { reconcileExperiment } = await import('../../services/venture/reconcile.js');
+  const reconciled = await reconcileExperiment(id);
   const { runStateOf } = await import('../../services/venture/run-state.js');
   const run = await runStateOf(id);
   const blocked = run && (run.state === 'blocked' || run.state === 'failed') ? run : null;
@@ -220,6 +226,25 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
       <p><strong>Prediction, sealed</strong> — ${v.why.whatWeExpect}</p>
       <p><strong>Would disprove it</strong> — ${v.why.wouldDisprove}</p>
       <p class="row"><a class="why" href="/foundry/why/experiment/${id}">Show your work</a></p>
+    </section>
+
+    <section class="know" id="reconciled"><h2>What actually happened</h2>
+      <p class="quiet">Counted from the rows, not remembered. Each line says what it is and
+        what it deliberately leaves out.</p>
+      ${reconciled.acts.length === 0 ? html`<p>No act has authorised writing to anybody for
+        this test.</p>` : html`<ul class="plain">${reconciled.acts.map((a) => html`<li>
+          <b>${a.summary}</b>
+          <p class="quiet">${a.decidedBy ? `Decided by ${a.decidedBy} on ${a.decidedAt ?? ''}.` : 'Not decided.'}
+            ${a.revokedAt ? `Withdrawn ${a.revokedAt}.` : a.consumedAt ? `Used ${a.consumedAt}.` : `Unused, expires ${a.expiresAt}.`}</p>
+        </li>`)}</ul>`}
+      <p><strong>${reconciled.remainingAuthority}</strong></p>
+      ${[['Who', reconciled.cohort], ['What reached them', reconciled.reached],
+    ['What came back', reconciled.cameBack],
+    ['Not evidence about this test', reconciled.notEvidence]].map(([label, counts]) => html`
+        <details><summary class="quiet">${label as string}</summary>
+          <ul class="plain">${(counts as Array<{ what: string; n: number; because: string }>)
+    .map((x) => html`<li><b>${String(x.n)}</b> ${x.what}<p class="quiet">${x.because}</p></li>`)}</ul>
+        </details>`)}
     </section>
 
     <section class="know" id="steps"><h2>Before it runs</h2>

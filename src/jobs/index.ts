@@ -14,14 +14,13 @@ import { getLatestCohortSummary, getHistoricalAverage } from '../services/intell
 import { generateRecoveryProtocol } from '../services/intelligence/recovery.js';
 import { generateDigest } from '../services/digest/generator.js';
 import { sendDigestEmail } from '../services/digest/delivery.js';
-import { evaluateTriggers } from '../services/triggers/behavioral.js';
 import { enforceActivationWindow } from '../services/billing/cohort.js';
 import { generatePatternFromOutcome } from '../services/decisions/patterns.js';
 import { synthesizeJudgmentPatterns } from '../services/wisdom/patterns.js';
 import { getProductDNA } from '../services/wisdom/dna.js';
 import { isPRMerged, isPROpen } from '../services/audit/github.js';
 import { triggerDimensionReAudit } from '../services/audit/remediation.js';
-import { callOpus, callSonnet, parseJSONResponse } from '../services/ai/client.js';
+import { callSonnet, parseJSONResponse } from '../services/ai/client.js';
 import { checkAndAwardMilestones } from '../services/ux/milestones.js';
 import { detectGrowthStage, updateGrowthStage } from '../services/lifecycle/stage-detection.js';
 import { refreshFounderHealthMetrics } from '../services/intelligence/founder-health.js';
@@ -204,18 +203,26 @@ export async function digestGenerate(): Promise<void> {
 }
 
 // ─── 5. Behavioral Triggers — Every 6 hours ──────────────────────────────────
-export async function behavioralTriggers(): Promise<void> {
-  logger.info('behavioral_triggers starting', { jobName: 'behavioral_triggers' });
-  await evaluateTriggers();
-  // Day-3 onboarding activation: nudge founders who haven't entered metrics.
-  try {
-    const { evaluateOnboardingSequence } = await import('../lib/onboarding-emails.js');
-    await evaluateOnboardingSequence();
-  } catch (err) {
-    logger.warn('onboarding_sequence evaluation failed', { error: String(err) });
-  }
-  logger.info('behavioral_triggers complete', { jobName: 'behavioral_triggers' });
-}
+// BEHAVIOURAL TRIGGERS IS RETIRED, AND THE RESPONSIBILITY WITH IT.
+//
+// It was Commercial Foundry's activation funnel: four nudges — connect your
+// GitHub, select a repository, act on your audit, your decisions are piling up
+// — plus a day-three "you have not entered metrics yet" sequence, addressed to
+// founders who signed up in the last seven days. Private Foundry has one owner
+// and no funnel; there is no seventh day after his signup and no audit wizard
+// to return to. The responsibility it served does not exist here.
+//
+// It had failed FORTY-NINE consecutive times since 1 September and nothing the
+// owner could open said so. It failed closed, which is the only reason this is
+// a tidy-up rather than an incident: every one of those sends was addressed to
+// `founders.email`, which on this instance is the owner's personal address —
+// the one he has ruled out of Foundry operations. A broken job was the only
+// thing standing between that rule and forty-nine violations of it.
+//
+// Retired rather than repaired: repairing it would mean deciding who to write
+// to about an onboarding that does not happen. `job_health` keeps the history;
+// the row is cleared so the institution stops expecting a routine that no
+// longer exists.
 
 // ─── SLO / degradation check — hourly ────────────────────────────────────────
 export async function sloCheck(): Promise<void> {
@@ -948,7 +955,12 @@ Return JSON only:
   ]
 }`;
 
-      const raw = await callOpus('You are Foundry. Generate a weekly operating plan for a founder.', prompt, 600, p.id);
+      // NOT THE FRONTIER MODEL, and its warrant admitted why: fifty-two
+      // occasions a year is not rare, and six hundred tokens of framing is not
+      // the frontier's best argument for itself. Demoted in the closeout
+      // rather than left as a standing question for the owner — which model
+      // answers a routine internal question is not his decision to make.
+      const raw = await callSonnet('You are Foundry. Generate a weekly operating plan for a founder.', prompt, 600, p.id);
       const plan = parseJSONResponse<{ synthesis: string; items: Array<{ id: string; text: string; category: string; impact: string }> }>(raw.content);
 
       if (plan?.items) {
@@ -2514,7 +2526,6 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   competitive_scan:     { fn: competitiveScan,     schedule: '0 6 * * 0',       description: 'Scan competitors for all products (Sunday)' },
   weekly_synthesis:     { fn: weeklySynthesis,      schedule: '0 6 * * 5',       description: 'Weekly intelligence synthesis (Friday)' },
   digest_generate:      { fn: digestGenerate,       schedule: '0 7 * * 1',       description: 'Generate and send weekly digests (Monday)' },
-  behavioral_triggers:  { fn: behavioralTriggers,   schedule: '0 */6 * * *',     description: 'Evaluate behavioral trigger emails (every 6h)' },
   slo_check:            { fn: sloCheck,             schedule: '15 * * * *',      description: 'Check SLOs (AI spend vs cap) and alert operator on breach (hourly)' },
   slot_enforcement:     { fn: slotEnforcement,      schedule: '0 9 * * *',       description: 'Enforce founding cohort activation window' },
   cold_start_check:     { fn: coldStartCheck,       schedule: '0 5 * * *',       description: 'Check cold start exit conditions' },

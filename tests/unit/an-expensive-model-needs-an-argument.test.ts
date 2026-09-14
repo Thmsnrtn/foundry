@@ -77,11 +77,28 @@ describe('the warrants are arguments rather than adjectives', () => {
     }
   });
 
-  it('admits its own weakness where the occasion is not rare', () => {
-    const watched = FRONTIER_WARRANTS.filter((w) => w.watched);
-    expect(watched.length).toBeGreaterThan(0);
-    for (const w of watched) {
+  it('admits its own weakness wherever the occasion is not rare', () => {
+    // CONDITIONAL, AND IT HAD TO BECOME SO. This asserted that at least one
+    // entry must be marked `watched`, which was true of the day it was written
+    // and is not an invariant: at the closeout both watched entries — Oracle's
+    // cadence briefing and the weekly plan — were demoted to the operational
+    // model, and an empty watched set is the BETTER state, not a broken one. A
+    // test that fails when the thing it is watching for gets fixed is a test
+    // that argues for the defect.
+    //
+    // What does hold in every state: a warrant that admits doubt must say what
+    // the doubt is, so the marker cannot become decoration.
+    for (const w of FRONTIER_WARRANTS.filter((x) => x.watched)) {
       expect(w.warrant.toLowerCase()).toMatch(/not clearly pass|weaker|not rare/);
+    }
+  });
+
+  it('demoted both cadence-driven sites rather than asking the owner', () => {
+    // Which model answers a routine internal question is a routing decision.
+    for (const f of ['src/services/scp/agents/oracle.ts', 'src/jobs/index.ts']) {
+      expect(FRONTIER_WARRANTS.map((w) => w.file)).not.toContain(f);
+      expect(readFileSync(join(ROOT, f), 'utf8'))
+        .not.toMatch(/(?<![A-Za-z0-9_.])callOpus\s*\(/);
     }
   });
 });

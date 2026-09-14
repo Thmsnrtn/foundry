@@ -13,7 +13,7 @@ import type {
   AgentName, AgentRunContext, AgentAnalysisResult, AgentAction,
   AgentMessageSignal, HypothesisSignal,
 } from '../types.js';
-import { callOpus, parseJSONResponse } from '../../ai/client.js';
+import { callSonnet, parseJSONResponse } from '../../ai/client.js';
 import { query } from '../../../db/client.js';
 import { pctOfFraction, measured, money } from '../../ai/measured.js';
 
@@ -257,9 +257,16 @@ Return JSON only (no markdown fences):
   "briefing_priority": "high" | "normal" | "low"
 }`;
 
-    const response = await callOpus(systemPrompt, userPrompt, 4096, context.productId);
+    // NOT THE FRONTIER MODEL. The warrant for this was the weaker sort and
+    // said so: the output becomes a briefing the owner reads, which passes the
+    // half about cost, but it runs on a CADENCE rather than on an occasion,
+    // which is the shape that quietly becomes the bill. Its own agent has
+    // produced nothing an owner acted on; see the retirement note in
+    // `src/lib/frontier-warrant.ts`.
+    const response = await callSonnet(systemPrompt, userPrompt, 4096, context.productId);
     const tokensUsed = (response.usage.input_tokens ?? 0) + (response.usage.output_tokens ?? 0);
-    const costUsd = (response.usage.input_tokens ?? 0) * 0.000015 + (response.usage.output_tokens ?? 0) * 0.000075;
+    // Operational-model rates: $3 / $15 per million.
+    const costUsd = (response.usage.input_tokens ?? 0) * 0.000003 + (response.usage.output_tokens ?? 0) * 0.000015;
 
     let parsed: OracleClaudeResponse;
     try {

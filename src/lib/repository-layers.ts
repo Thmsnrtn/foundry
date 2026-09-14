@@ -101,7 +101,6 @@ export const LAYER_OF: Record<string, Layer> = {
   // identity, or send account mail. Naming them here rather than loosening the
   // rule for all of `src/lib` keeps the exception the size of the fact.
   'src/lib/webhooks.ts': 'kernel',
-  'src/lib/onboarding-emails.ts': 'kernel',
   // `src/lib/mcp-registry.ts` was named here and has not existed for some
   // time — noticed on 13 September 2026 while removing entries for the deleted
   // commercial routes. An exception carved for a file that is not there is not

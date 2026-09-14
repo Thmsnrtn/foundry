@@ -51,6 +51,18 @@ export interface FrontierWarrant {
   watched?: true;
 }
 
+/**
+ * THE TWO THAT WERE MARKED `watched` ARE GONE, AND THAT IS WHAT THE MARKER WAS
+ * FOR.
+ *
+ * Oracle's cadence briefing and the weekly operating plan both passed the half
+ * about cost and failed the half about frequency, and each entry said so in
+ * its own words. A warrant that admits its own weakness is not a warrant that
+ * gets to keep it forever: at the closeout both were demoted to the
+ * operational model, which is a routing decision on routine internal
+ * cognition — not something to put to the owner. If either is ever restored to
+ * the frontier it needs a new argument, and the gate will ask for one.
+ */
 export const FRONTIER_WARRANTS: readonly FrontierWarrant[] = [
   {
     file: 'src/services/audit/remediation.ts',
@@ -122,24 +134,5 @@ export const FRONTIER_WARRANTS: readonly FrontierWarrant[] = [
       + 'function calls the operational model at gate 1 and below and the '
       + 'frontier above it, so the stake chooses the price rather than the '
       + 'author. Rare because high-gate decisions are rare.',
-  },
-  {
-    file: 'src/services/scp/agents/oracle.ts',
-    sites: 1,
-    question: 'One agent’s reading of its domain, on its cadence.',
-    warrant: 'Passes the first half — the output becomes a briefing the owner '
-      + 'reads. Does not clearly pass the second: it runs on a cadence rather '
-      + 'than on an occasion, which is the shape that quietly becomes the bill.',
-    watched: true,
-  },
-  {
-    file: 'src/jobs/index.ts',
-    sites: 1,
-    question: 'A week’s operating plan for a founder.',
-    warrant: 'Weekly rather than daily, and the output is a plan someone acts '
-      + 'on. Still the weaker sort of warrant: fifty-two occasions a year is '
-      + 'not rare, and six hundred tokens of framing is not the frontier’s '
-      + 'best argument for itself.',
-    watched: true,
   },
 ];

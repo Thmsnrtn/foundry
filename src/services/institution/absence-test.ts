@@ -127,7 +127,31 @@ async function truthful(founderId: string, days: number): Promise<PropertyReadin
         AND p.deleted_at IS NULL AND ${realCompany('p')}`, [founderId]))
     .rows as unknown as Array<Record<string, unknown>>;
 
+  // FOUNDRY IS AN ORDINARY COMPANY AND STAYS ONE.
+  //
+  // This first exempted it: it resolved which product row is Foundry and left
+  // that one out of the blind list, on the argument that it earns nothing and
+  // has no provider to connect. `recursive-institution` refused the module that
+  // made that possible, and the refusal was right. The institutional kernel
+  // must not be ABLE to ask whether it is operating Foundry — a kernel that can
+  // ask will eventually answer by shortening a ladder or widening a grant — and
+  // "this company is exempt from the honesty rule because of which company it
+  // is" is precisely the shape of the answer nobody wants.
+  //
+  // So a company with nothing connected is blind, whichever company it is. What
+  // does NOT depend on any company is whether the deployment itself is running,
+  // and that is read below from `deployment/self-check`, where no product id
+  // appears at all.
   const blind = companies.filter((c) => Number(c.senses) === 0).map((c) => String(c.name));
+
+  const { observeSelf } = await import('../deployment/self-check.js');
+  const self = await observeSelf();
+  for (const sig of self.signals.filter((x) => x.state !== 'current')) {
+    evidence.push(`the deployment — ${sig.about}: ${sig.says}`);
+    wouldFixIt.push(`look at ${sig.about}`);
+  }
+  if (self.allCurrent) evidence.push(`the deployment: ${self.sentence}`);
+
   const erroring = companies.filter((c) => Number(c.failing) > 0).map((c) => String(c.name));
 
   const { getFailingInstitutionLoops, INSTITUTION_LOOPS } = await import('./loop-health.js');
@@ -185,7 +209,8 @@ async function truthful(founderId: string, days: number): Promise<PropertyReadin
   evidence.push('the ledger refuses an estimate with no written policy behind it, '
     + 'and refuses a measurement that carries one');
 
-  const broken = blind.length + erroring.length + loops.length + alsoFailing;
+  const selfStale = self.signals.filter((x) => x.state !== 'current').length;
+  const broken = blind.length + erroring.length + loops.length + alsoFailing + selfStale;
   return {
     property: 'truthful',
     question: `After ${String(days)} days, would anything I show you assert more than I actually know?`,
@@ -353,7 +378,7 @@ async function understandable(founderId: string, days: number): Promise<Property
  * constant, because a policy nobody has checked is a belief.
  */
 async function recoverable(days: number): Promise<PropertyReading> {
-  const { whatIsKept } = await import('./keeping.js');
+  const { whatIsKept, howFarBackCopiesReach } = await import('./keeping.js');
   const kept = await whatIsKept();
   const evidence: string[] = [];
   const wouldFixIt: string[] = [];
@@ -369,16 +394,22 @@ async function recoverable(days: number): Promise<PropertyReading> {
     };
   }
 
+  // FROM THE DATES IN THE NAMES, NOT THE FILE TIMES. This measured the span
+  // between the oldest and newest mtime, and a restore, a volume move or a
+  // container rebuild touches every file at once — after which it would have
+  // reported a year of history as a single afternoon, or an afternoon as a
+  // year. The name is what a copy is a copy OF.
+  const spanDays = (await howFarBackCopiesReach()) ?? 0;
   const newest = kept[0];
-  const oldest = kept[kept.length - 1];
-  const spanDays = Math.floor(
-    (Date.parse(newest.at) - Date.parse(oldest.at)) / DAY_MS);
   const newestAgeHours = Math.floor((Date.now() - Date.parse(newest.at)) / 3_600_000);
   evidence.push(`${plural(kept.length, 'copy', 'copies')} on the volume, the newest `
     + `${plural(newestAgeHours, 'hour', 'hours')} old`);
-  evidence.push(`the oldest reaches back ${plural(spanDays, 'day', 'days')}`);
-  evidence.push(`each is an ordinary database file that can simply be opened; the volume's own `
-    + `snapshots are what covers losing the volume, and that is not something I can read from in here`);
+  evidence.push(`the oldest is dated ${plural(spanDays, 'day', 'days')} ago`);
+  evidence.push('they thin rather than expiring: every day for a fortnight, then Mondays for '
+    + 'three months, then the first of each month for a year');
+  evidence.push('each is a compressed copy that has been restored and read back in test, not '
+    + 'merely written; what this does NOT cover is losing the volume or the account, which is '
+    + 'the volume\'s own snapshots and not something I can read from in here');
 
   // THE HONEST COMPARISON. Not "do backups exist" but "does the window reach
   // back as far as the absence", which is the question an owner returning
@@ -454,10 +485,28 @@ async function onlyRealDecisions(
   // Grouped by what the test actually DOES, which is the only thing he would
   // be deciding. The count stays visible because twenty-two people is a fact
   // about the size of the decision, not a repetition of it.
+  // AN UNDESIGNED TEST IS NOT A DECISION, AND COUNTING IT AS ONE IS THE
+  // CHEAPEST WAY TO TEACH HIM TO STOP READING THIS.
+  //
+  // Production held TWENTY-TWO rows here, across twenty unrelated
+  // opportunities, every one carrying the identical boilerplate — "showing a
+  // price to somebody who has the problem and seeing what they do", cost zero
+  // — stamped once per opportunity by a scheduled job. None of them says who
+  // would be contacted, at what price, through which channel, or what would
+  // stop it. There is nothing in them to approve: saying yes would authorise
+  // nothing in particular.
+  //
+  // `probe_designs` is the line. Its columns are the design — what this
+  // decides, why this instrument, what it can and cannot prove, why now rather
+  // than waiting, how it reaches people, what happens if it works — and every
+  // one of them is NOT NULL. A test with that row is a decision. A test
+  // without it is an opportunity nobody has designed a test for yet, and it
+  // belongs in the forge, where it already is.
   const tests = (await query(
-    `SELECT what_we_do, COUNT(*) AS n FROM venture_experiments
-      WHERE founder_id = ? AND decision IS NULL AND evidence_mode = 'real'
-      GROUP BY what_we_do ORDER BY n DESC`, [founderId]))
+    `SELECT e.what_we_do, COUNT(*) AS n FROM venture_experiments e
+      JOIN probe_designs d ON d.experiment_id = e.id
+      WHERE e.founder_id = ? AND e.decision IS NULL AND e.evidence_mode = 'real'
+      GROUP BY e.what_we_do ORDER BY n DESC`, [founderId]))
     .rows as unknown as Array<Record<string, unknown>>;
   let waitingTests = 0;
   for (const t of tests) {

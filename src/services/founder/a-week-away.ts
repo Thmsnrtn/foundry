@@ -117,7 +117,14 @@ export async function canIDisappear(founderId: string): Promise<WeekAwayView> {
   const frontier = (await query(
     `SELECT
        (SELECT COUNT(*) FROM venture_mandates WHERE founder_id = ? AND closed_at IS NULL AND evidence_mode = 'real') AS searching,
-       (SELECT COUNT(*) FROM venture_experiments WHERE founder_id = ? AND decision IS NULL AND evidence_mode = 'real') AS tests,
+       -- ONLY DESIGNED TESTS WAIT FOR HIM. An experiment with no design row
+       -- says nothing about who, at what price, through which channel or
+       -- what would stop it, so there is nothing in it to approve. Twenty-two
+       -- of these sat in the queue as identical boilerplate across twenty
+       -- unrelated opportunities.
+       (SELECT COUNT(*) FROM venture_experiments e
+          JOIN probe_designs d ON d.experiment_id = e.id
+         WHERE e.founder_id = ? AND e.decision IS NULL AND e.evidence_mode = 'real') AS tests,
        (SELECT COUNT(*) FROM venture_opportunities WHERE founder_id = ? AND verdict IS NULL AND evidence_mode = 'real') AS candidates`,
     [founderId, founderId, founderId])).rows[0] as Record<string, unknown>;
   if (Number(frontier.searching) > 0) {
@@ -267,9 +274,11 @@ export async function whileYouWereAway(founderId: string, days = 7): Promise<Ret
     learned.push(`buried ${String(b.headline)}: ${String(b.verdict_why)}`
       + `${b.revisit_if ? `; worth another look if ${String(b.revisit_if)}` : ''}`);
   }
+  // DESIGNED TESTS ONLY, for the reason given in the frontier count above.
   for (const e of (await query(
-    `SELECT what_we_do FROM venture_experiments
-      WHERE founder_id = ? AND evidence_mode = 'real' AND decision IS NULL`, [founderId]))
+    `SELECT e.what_we_do FROM venture_experiments e
+       JOIN probe_designs d ON d.experiment_id = e.id
+      WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.decision IS NULL`, [founderId]))
     .rows as unknown as Array<Record<string, unknown>>) {
     needsYou.push(`a test waiting for your go-ahead: ${String(e.what_we_do)}`);
   }

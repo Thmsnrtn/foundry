@@ -115,8 +115,20 @@ describe('the table is gone', () => {
     // `roi_monthly_summaries`, which only the deleted `/roi` page read — a
     // round-trip per company per month to record that nothing had been
     // measured. Both ends went, so the job went, and the census follows it
-    // down. This number may only move for a reason written here.
-    expect(Object.keys(JOB_REGISTRY).length, 'one hundred and four, less the ROI job that measured nothing').toBe(103);
+    // down.
+    // AND A SECOND CAME OFF at the closeout: `behavioral_triggers`, the
+    // Commercial Foundry activation funnel — connect your GitHub, select a
+    // repository, act on your audit — which had failed forty-nine consecutive
+    // times since 1 September while nothing the owner could open said so. It
+    // failed CLOSED, which is the only reason that was a tidy-up: every send
+    // was addressed to `founders.email`, on this instance the owner's personal
+    // address, which he has ruled out of Foundry operations. A broken job was
+    // the only thing between that rule and forty-nine breaches of it. One
+    // hundred and two.
+    // This number may only move for a reason written here.
+    expect(Object.keys(JOB_REGISTRY).length,
+      'one hundred and four, less the ROI job that measured nothing and the funnel that could not run')
+      .toBe(102);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {
