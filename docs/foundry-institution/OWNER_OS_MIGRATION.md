@@ -1169,3 +1169,123 @@ deletion are still in production, and are exactly what an erasure has to reach.
 The clause is parenthesised because the executor composes it as
 `<subject> AND <where>`, and an unbracketed OR would bind the founder-id match
 to only the first arm. Watched failing with the new arm removed.
+
+## Phase 4 — the economic nervous system, built — 14 September 2026
+
+The plan above was written before the work. What follows is what the work found,
+which differs from the plan in three places, each because reality did.
+
+### What was built
+
+**One append-only ledger** (`economic_events`, migration 313) with a closed
+vocabulary of twelve kinds, each row carrying the provider statement it came
+from, a `claim_quality` of measured or estimated, and a sentence saying why it
+exists. Append-only in the SCHEMA — two triggers refuse UPDATE and DELETE — so a
+correction is a new row that says what it corrects, the way a provider's own
+ledger works.
+
+Four guards at the write site, each watched failing:
+
+- an estimate cannot exist without the assumption that produced it;
+- a measured figure cannot quietly name one (the moment an assumption touches
+  it, it is an estimate, and the column must say so);
+- a cost that belongs to one unit must name the unit, or it silently vanishes
+  from contribution;
+- a `charge` must point at the outcome event that recorded it, so gross can
+  never be asserted without the provider's own statement behind it.
+
+**One assumptions table** (`economic_policies`), scoped to a founder, holding
+the tax rate and the operating floor. Supersession rather than update: what the
+institution believed in March is part of why it held back what it held back.
+Every policy must say where the number came from, in the owner's words.
+
+**Deterministic projections** (`services/economy/projection.ts`): money held,
+obligations outstanding, refund exposure, the tax reserve, the operating floor,
+already-authorised capital, per-unit contribution, the ledger itself, and what
+running this has cost. Plain functions over canonical rows, no model anywhere
+near them, cheap enough to run on the Home screen — which they now do.
+
+**One place** (`/foundry/money`, in "Also here" beside Discover and the
+Workshop, not a seventh door) that shows the whole subtraction and offers
+exactly the three things that turn a "not known" into a number: record what you
+assume about tax, set the floor you want kept, record money you actually moved.
+
+### The first finding: the Stripe account is shared, so "cash" is two questions
+
+`docs/stripe-shared-account.md` is explicit — one live account serves the
+personal land sales, AcreOS and Foundry, and the land sales are "the only live
+money in the account". A charge is attributable because it carries an `app`
+tag. **A payout is not**: it is a lump of the shared balance moving to a bank,
+mixed by construction.
+
+So the plan's "Cash — no table says what has actually settled into an account"
+could not be answered the way it was framed. Reading `payout.paid` as Foundry's
+cash would report somebody else's money as this institution's, which is the
+worst error available on this surface. The projection splits the question:
+
+- **Held** — what is ours inside the provider's balance, measured.
+- **Banked** — NOT KNOWN, and the page says why in one sentence. The owner can
+  record what he actually moves, and then it is measured.
+
+Surplus is computed from HELD, which is the conservative choice: it treats money
+as available before it has cleared, so every deduction comes off the larger of
+the two numbers.
+
+### The second finding: the refund promise has no time limit
+
+The plan said "a delivered brief inside its refund window is a liability" and
+"nothing models the window". **There is no window.** Apex Micro's refunds page
+says, in these words: *"No form, no time limit, and you don't have to explain."*
+
+So refund exposure does not decay. Every delivered unit that has not been
+refunded stays a liability for as long as the promise stands, and the projection
+is written that way — with a test that ages a sale eight hundred days and
+asserts it is still fully exposed. A ninety-day tail would have made surplus look
+larger on the strength of a promise nobody made. Changing that means changing a
+public page, which is the owner's to do and not something to assume in a query.
+
+### The third finding: the fee is not in the webhook
+
+Stripe sends `balance_transaction` as an id, not as an object, so what the
+provider took requires one API read. When that read is unavailable — no key, an
+outage, a refusal — **no fee row is written**, and the unit's contribution reports
+itself as not known. It does not assume 2.9% + 30¢.
+
+That choice is the whole discipline of this phase in miniature: on a $29 sale
+the fee is the largest single deduction, so a guessed fee reports almost the
+whole price as margin. "$0.00" and "not known" are different facts, they are
+drawn differently on the page, and the not-known spreads — a unit with no fee has
+no contribution, a total with one such unit has no total, and a tax reserve whose
+basis is unknown is unavailable rather than zero.
+
+**One refinement in the other direction**, found by a test: a fraction of nothing
+is nothing whatever the rate, and an unset floor keeps back nothing. So an
+institution that has earned nothing knows exactly what is the owner's: none of
+it. Answering "not known" there was a shrug dressed as rigour.
+
+### Two boundaries the gates found
+
+- `owner_allowances` joined `products` with no reality boundary, so an allowance
+  standing against a **reference** company would have quietly reduced the surplus
+  the owner is told is his, on the strength of a company that does not exist.
+  `realCompany` now scopes it.
+- The **existence** boundary deliberately does not apply: an allowance against an
+  experimental asset is money the institution may spend today, and most of this
+  owner's money is authorised for experiments. Scoping it away would report a
+  surplus that is already committed. Recorded in the baseline with that reason.
+
+### One layer moved
+
+The economic ledger has to ask Stripe what it took, and `services/billing/
+stripe.ts` is classified `commercial`. A kernel importing it would be the shared
+institution assuming there is something to sell — the assumption
+`instance-posture` exists to undo. The Stripe CLIENT moved to
+`services/economy/provider-stripe.ts` (kernel) and billing borrows it, which is
+the direction the boundary allows. One client, one key, a dependency pointing
+the way it is permitted to point.
+
+### What was not built on speculation
+
+Foundry has taken no money. Every surface above says so in words rather than in
+zeros, and the Home tile that used to read "Settled — $0" now reads "Yours",
+which is a different question and the one that was always being asked.

@@ -9,10 +9,16 @@
 // shares and a browser caches once.
 //
 // THE DOORS ARE THE CANONICAL SET, AND ONLY THE ONES THAT OPEN. A door onto a
-// page that does not exist yet is a dead end with a nice icon, so Activity and
-// Economics get theirs when their surfaces ship, not before. On a phone five
+// page that does not exist yet is a dead end with a nice icon. On a phone five
 // doors sit under the thumb; on a desk the rail carries the whole set. Nine
 // tabs at 375px is forty pixels a tab, which is not a door.
+//
+// MONEY SHIPPED AND IS STILL NOT A DOOR. This note used to say Economics would
+// get one when its surface existed. The surface exists — /foundry/money, the
+// whole subtraction from what a buyer paid to what the owner may take — and it
+// sits in "Also here" beside Discover and the Workshop, because a seventh tab
+// costs every other door forty pixels and money is not a thing he needs under
+// his thumb. It is one tap from Home, which is where the question starts.
 //
 // ONE SCRIPT, HASHED. The owner surface runs exactly the script in
 // `owner-surface-script.ts`, so CSP can refuse every inline handler. Nothing
@@ -123,6 +129,7 @@ function railExtra(where: Where | null): H {
   return html`${object}<section class="more" aria-label="Also here">
     <a href="/foundry/searching"${where?.scope.kind === 'searching' ? raw(' class="on"') : ''}>Discover</a>
     <a href="/foundry/public-workshop">Workshop</a>
+    <a href="/foundry/money">Money</a>
   </section>`;
 }
 

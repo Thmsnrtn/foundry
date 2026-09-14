@@ -84,13 +84,25 @@ describe('a button cannot be wider than what contains it', () => {
       .toMatch(/\.pair\s+\.btn\{white-space:nowrap\}/);
   });
 
-  it('only lets other elements refuse to wrap inside something that scrolls', () => {
-    // `.local a` and `.filters a` are nowrap on purpose: both sit in a row
-    // with `overflow-x:auto`, which scrolls ITSELF rather than the document.
-    // `.sr` is the screen-reader-only class, one pixel square and clipped.
+  it('only lets an element refuse to wrap for a reason written down here', () => {
+    // A list, and deliberately a short one, because there are only two reasons
+    // a thing may refuse to wrap on a phone:
+    //
+    //   IT SCROLLS ITSELF. `.local a` and `.filters a` sit in rows with
+    //   `overflow-x:auto`, so the row moves and the document does not.
+    //
+    //   IT CANNOT BE LONG. `.mline dd` is one money figure in the right-hand
+    //   column of the subtraction on Money — "$2,786.00", "not known" — and a
+    //   currency amount broken across two lines is harder to read than one that
+    //   sets the column's width. The longest thing it can hold is a negative
+    //   figure with the word "estimated" after it, and the column is `auto`.
+    //
+    //   `.sr` is the screen-reader-only class: one pixel square and clipped.
+    //
+    // Anything else added to this list needs one of those two sentences.
     const named = [...phoneOnly(css()).matchAll(/(?:^|\n)([^\n{]*)\{[^}]*white-space:\s*nowrap/g)]
       .map((m) => m[1].trim())
       .filter((s) => !s.startsWith('@'));
-    expect(named.sort()).toEqual(['.filters a', '.local a', '.sr'].sort());
+    expect(named.sort()).toEqual(['.filters a', '.local a', '.mline dd', '.sr'].sort());
   });
 });

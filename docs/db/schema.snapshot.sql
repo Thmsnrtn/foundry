@@ -1339,6 +1339,84 @@ CREATE TABLE development_change_plans (
   learned_claim_id      TEXT REFERENCES reconstruction_claims(id),
   created_at            TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 , disposition TEXT, disposition_evidence_json TEXT);
+CREATE TABLE economic_event_kinds (
+  kind          TEXT PRIMARY KEY,
+  what_it_is    TEXT NOT NULL,
+  -- Which way the money moves from the institution's point of view.
+  direction     TEXT NOT NULL CHECK (direction IN ('in','out')),
+  -- Whether this kind moves money that has actually settled into an account a
+  -- human could draw on, as distinct from a Stripe balance or a promise.
+  affects_cash  INTEGER NOT NULL DEFAULT 0,
+  -- Whether this kind belongs in the variable cost of one unit sold.
+  is_unit_cost  INTEGER NOT NULL DEFAULT 0,
+  sort_order    INTEGER NOT NULL
+);
+CREATE TABLE economic_events (
+  id              TEXT PRIMARY KEY,
+  founder_id      TEXT NOT NULL REFERENCES founders(id),
+  kind            TEXT NOT NULL REFERENCES economic_event_kinds(kind),
+  -- ALWAYS A MAGNITUDE. Direction lives in the kind, so a sign here could only
+  -- ever contradict it. A zero-amount row is a statement that something
+  -- happened and cost nothing, which is a different fact from no row at all.
+  amount_cents    INTEGER NOT NULL CHECK (amount_cents >= 0),
+  currency        TEXT NOT NULL DEFAULT 'usd',
+  -- The source's clock, not ours.
+  occurred_at     TEXT NOT NULL,
+  provider        TEXT NOT NULL,
+  -- The provider's own id for the thing this row describes. With `kind` and
+  -- `provider` this is what makes intake idempotent and what a reconciler
+  -- would ask the other side about.
+  provider_ref    TEXT NOT NULL,
+  -- The outcome event this came from, when it came from one. A `charge` row
+  -- always has one; a `payout` never does, because a payout is about the
+  -- balance rather than about any single sale.
+  source_event_id TEXT REFERENCES business_outcome_events(id),
+  -- The fulfilment this is attributable to, for the kinds that belong to one
+  -- unit. `is_unit_cost` says which kinds those are; the guard below enforces
+  -- that a unit cost names its unit.
+  fulfilment_id   TEXT REFERENCES experiment_fulfilments(id),
+  -- MEASURED is a provider's own statement or arithmetic over one. ESTIMATED
+  -- is a number the institution worked out from an assumption it is holding,
+  -- and every estimated row must name the policy it came from.
+  claim_quality   TEXT NOT NULL CHECK (claim_quality IN ('measured','estimated')),
+  policy_id       TEXT REFERENCES economic_policies(id),
+  -- Real money, a provider's test mode, or a row that exists to illustrate.
+  -- The projections refuse to mix them, so a sandbox charge can never turn
+  -- into surplus the owner is told he may take.
+  evidence_mode   TEXT NOT NULL CHECK (evidence_mode IN ('real','sandbox','reference')),
+  -- Why this row exists, in words, for the person reading the ledger later.
+  because         TEXT NOT NULL CHECK (trim(because) <> ''),
+  recorded_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(provider, provider_ref, kind)
+);
+CREATE TABLE economic_policies (
+  id            TEXT PRIMARY KEY,
+  -- WHOSE ASSUMPTION. A single-owner institution has one set of these, but a
+  -- policy with no owner is a policy that would apply to everybody in a
+  -- deployment that ever has two — and a tax rate silently inherited from
+  -- somebody else is the worst possible kind of shared default.
+  founder_id    TEXT NOT NULL REFERENCES founders(id),
+  kind          TEXT NOT NULL CHECK (kind IN ('tax_reserve','operating_reserve')),
+  -- For a tax reserve: the fraction of the basis to hold back, in basis
+  -- points. For an operating reserve: unused.
+  rate_bps      INTEGER CHECK (rate_bps IS NULL OR (rate_bps >= 0 AND rate_bps <= 10000)),
+  -- For an operating reserve: the floor, in cents. For a tax reserve: unused.
+  amount_cents  INTEGER CHECK (amount_cents IS NULL OR amount_cents >= 0),
+  -- What the rate applies to. Contribution, not gross receipts, unless the
+  -- owner says otherwise: tax on money that was never margin is a worse
+  -- estimate, not a more careful one.
+  basis         TEXT CHECK (basis IS NULL OR basis IN ('contribution','gross_receipts')),
+  -- WHERE THE NUMBER CAME FROM. Not a citation the institution invented — the
+  -- owner's own statement of what he is assuming and why. An estimate whose
+  -- provenance is blank is a number nobody can check, which is the failure
+  -- this column exists to prevent.
+  source        TEXT NOT NULL CHECK (trim(source) <> ''),
+  because       TEXT NOT NULL CHECK (trim(because) <> ''),
+  set_by        TEXT NOT NULL,
+  set_at        TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  superseded_at TEXT,
+  superseded_by TEXT REFERENCES economic_policies(id)
+);
 CREATE TABLE ecosystem_principal_companies (
   id TEXT PRIMARY KEY,
   principal_id TEXT NOT NULL REFERENCES ecosystem_principals(id) ON DELETE CASCADE,
@@ -4730,6 +4808,10 @@ CREATE INDEX idx_delegation_breakers ON delegation_breakers(delegation_id, tripp
 CREATE INDEX idx_delegations_live ON delegations(founder_id, product_id, revoked_at);
 CREATE UNIQUE INDEX idx_development_change_identity ON development_change_plans(product_id,change_id);
 CREATE INDEX idx_development_change_responsibility ON development_change_plans(product_id,responsibility_id,created_at);
+CREATE INDEX idx_economic_events_founder ON economic_events(founder_id, occurred_at);
+CREATE INDEX idx_economic_events_fulfilment ON economic_events(fulfilment_id);
+CREATE INDEX idx_economic_events_kind ON economic_events(kind, occurred_at);
+CREATE INDEX idx_economic_policies_live ON economic_policies(founder_id, kind, superseded_at);
 CREATE INDEX idx_ecosystem_principal_companies_lookup
   ON ecosystem_principal_companies(principal_id, product_id);
 CREATE INDEX idx_ecosystem_principals_hash
@@ -5874,6 +5956,45 @@ BEGIN
     json_extract(NEW.payload_json,'$.expectation_id') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.expected_event_type') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.responsibility_id') IS NOT NULL;
+END;
+CREATE TRIGGER economic_event_guard
+BEFORE INSERT ON economic_events
+BEGIN
+  -- An estimate with no assumption behind it is a number nobody can check.
+  SELECT RAISE(ABORT,'economic_event:estimate_needs_policy')
+    WHERE NEW.claim_quality = 'estimated' AND NEW.policy_id IS NULL;
+  -- And a measured figure must NOT name a policy: the moment an assumption
+  -- touches it, it is an estimate, and the column that says so must say so.
+  SELECT RAISE(ABORT,'economic_event:measured_cannot_assume')
+    WHERE NEW.claim_quality = 'measured' AND NEW.policy_id IS NOT NULL;
+  -- A cost that belongs to one unit has to name the unit, or it cannot be
+  -- subtracted from that unit's revenue and will silently vanish from
+  -- contribution.
+  SELECT RAISE(ABORT,'economic_event:unit_cost_needs_unit')
+    WHERE NEW.fulfilment_id IS NULL AND EXISTS (
+      SELECT 1 FROM economic_event_kinds k WHERE k.kind = NEW.kind AND k.is_unit_cost = 1);
+  -- A charge is the one kind that must point back at the outcome event that
+  -- recorded it, so gross can never be asserted without the provider's own
+  -- statement standing behind it.
+  SELECT RAISE(ABORT,'economic_event:charge_needs_source')
+    WHERE NEW.kind = 'charge' AND NEW.source_event_id IS NULL;
+  -- The evidence mode of a derived row must match the event it derives from.
+  -- Without this a real fee could be attached to a sandbox charge, and the
+  -- projections' refusal to mix worlds would be defeated one row at a time.
+  SELECT RAISE(ABORT,'economic_event:evidence_mode_mismatch')
+    WHERE NEW.source_event_id IS NOT NULL AND EXISTS (
+      SELECT 1 FROM business_outcome_events e
+       WHERE e.id = NEW.source_event_id AND e.evidence_mode <> NEW.evidence_mode);
+END;
+CREATE TRIGGER economic_events_append_only_delete
+BEFORE DELETE ON economic_events
+BEGIN
+  SELECT RAISE(ABORT,'economic_event:append_only');
+END;
+CREATE TRIGGER economic_events_append_only_update
+BEFORE UPDATE ON economic_events
+BEGIN
+  SELECT RAISE(ABORT,'economic_event:append_only');
 END;
 CREATE TRIGGER ecosystem_scope_stays_inside_the_portfolio
 BEFORE INSERT ON ecosystem_principal_companies

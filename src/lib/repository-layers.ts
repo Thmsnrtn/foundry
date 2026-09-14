@@ -142,6 +142,10 @@ export const LAYER_OF: Record<string, Layer> = {
   'src/routes/dashboard/experiments-place.ts': 'private',
   'src/routes/dashboard/workshop-place.ts': 'private',
   'src/routes/dashboard/inbox-place.ts': 'private',
+  // Money: the whole subtraction from what a buyer paid to what the owner may
+  // take. The SURFACE is his — `services/economy/*` is the capability, and any
+  // Foundry would want to know what a payment is not.
+  'src/routes/dashboard/money-place.ts': 'private',
   // THE DOOR THE SHELL LIVES BEHIND, and therefore part of the same product.
   // The Attention Law forbids a new top-level mount, so the shell is mounted
   // inside the Letter — which makes `letter.ts` the composition root for the

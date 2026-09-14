@@ -2367,6 +2367,11 @@ foundryShellRoutes.get('/foundry', async (c) => {
       <div><dt class="k">Now</dt><dd>${live.stateDetail}</dd></div>
       <div><dt class="k">Next</dt><dd>${live.state === 'running' ? `The hand passes again at ${String(nextPass.getUTCHours()).padStart(2, '0')}:${String(nextPass.getUTCMinutes()).padStart(2, '0')} UTC and reconciles what came back` : live.stateLabel}</dd></div>
     </dl>` : '';
+  // WHAT IS ACTUALLY HIS, for the tile below. The whole subtraction runs here
+  // — it is six small reads over indexed rows — because a first screen that
+  // shows revenue instead of surplus teaches the owner the wrong number.
+  const { distributableSurplus } = await import('../../services/economy/projection.js');
+  const yours = await distributableSurplus(s.ownerId);
   const needsN = (attention === null ? 0 : 1) + queue.length;
   const portfolioState = html`<dl class="glance" aria-label="At a glance">
       <div class="tile door"><dt class="k">Estate</dt>
@@ -2380,10 +2385,20 @@ foundryShellRoutes.get('/foundry', async (c) => {
         <dd class="v">${live ? html`<span class="state ${live.state === 'running' ? 'ok' : 'watch'}">${live.stateLabel}</span>` : html`<span class="state quiet none">None running</span>`}</dd>
         <dd class="d">${live ? `${String(live.exposure.sent)} of ${String(live.exposure.approved)} written to · ${String(live.exposure.delivered)} delivered · ${String(live.money.payments)} paid` : 'nothing is being tested'}</dd>
         <a class="door" href="${live ? `/foundry/experiments/${live.id}` : '/foundry/experiments'}" aria-label="${live ? live.title : 'Experiments'}"></a></div>
-      <div class="tile"><dt class="k">Settled</dt>
-        <dd class="v">${paidCents > 0 ? money(paidCents) : glance.cashFlowCents !== null ? money(glance.cashFlowCents) : '$0'}</dd>
-        <dd class="d">${paidCents > 0 ? `paid for tests${glance.cashFlowCents !== null ? `; ${money(glance.cashFlowCents)} a month from companies` : ''}`
-    : glance.cashFlowCents !== null ? `a month across ${String(glance.seen)} of ${String(glance.companies)} I can see` : 'nothing has been paid for yet'}</dd></div>
+      <!-- THIS TILE SHOWED GROSS AND CALLED IT "Settled".
+           The figure it drew is what buyers were charged for tests. It is not what is
+           settled and it is not the owner's: Stripe takes a fee at the moment
+           of the charge, the work may be owed and not yet delivered, and the
+           refunds page promises no time limit on asking for it back. Showing
+           gross on the first screen is exactly the gross-as-net conflation the
+           economic ledger was built to end, so the tile now shows the end of
+           the subtraction and keeps the gross in the line beneath it, where it
+           can be checked rather than mistaken for the answer. -->
+      <div class="tile door"><dt class="k">Yours</dt>
+        <dd class="v">${yours.figure.cents === null ? html`<span class="unknown">not known</span>`
+    : html`${money(yours.figure.cents)}${yours.figure.quality === 'estimated' ? html` <span class="dim">est.</span>` : ''}`}</dd>
+        <dd class="d">${paidCents > 0 ? `of ${money(paidCents)} charged` : 'nothing has been paid for yet'}</dd>
+        <a class="door" href="/foundry/money" aria-label="Money"></a></div>
       <div class="tile door"><dt class="k">Watching</dt>
         <dd class="v">${String(s.watching.real)} <span class="dim">${s.watching.real === 1 ? 'company' : 'companies'}</span></dd>
         <dd class="d">${s.watching.real === 0 ? 'name one and I will start'

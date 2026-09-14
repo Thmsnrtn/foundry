@@ -11,7 +11,6 @@ ai_spend_reservations.founder_cap_cents
 ai_spend_reservations.global_cap_cents
 ai_spend_reservations.product_cap_cents
 ai_spend_reservations.reserved_cents
-asset_money_spent.provider_ref
 autonomy_consents.from_mode
 benchmark_contributions.mrr_bucket
 benchmark_contributions.team_size_bucket

@@ -311,6 +311,29 @@ pre{max-width:100%;overflow-x:auto;font-size:.8rem;line-height:1.5;
   background:var(--card-2);border:1px solid var(--line);border-radius:var(--r2);
   padding:var(--s2);margin:var(--s1) 0;color:var(--ink-2)}
 .qitem p{overflow-wrap:anywhere}
+
+/* ── THE SUBTRACTION ─────────────────────────────────────────────────────────
+   Money's one screen is a list of deductions ending in a total, and it has to
+   read as arithmetic on a phone. Each line is a label, a figure and the reason
+   the figure is what it is; the total rules off above itself.
+
+   `.unknown` is the important one. A figure the institution does not know is
+   drawn differently from one that is zero — italic, dimmer, and never with a
+   currency sign — because "$0.00" and "not known" are different facts and
+   drawing them the same way is how a surface starts lying by accident. */
+.mline{display:grid;grid-template-columns:1fr auto;gap:2px var(--s2);
+  padding:var(--s2) 0;border-bottom:1px solid var(--line);margin:0}
+.mline dt{color:var(--ink);margin:0}
+.mline dd{margin:0;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.mline p{grid-column:1/-1;margin:0;font-size:.82rem}
+.mline.total{border-bottom:0;border-top:2px solid var(--line-2);margin-top:var(--s1)}
+.mline.total dt,.mline.total dd{font-weight:600;font-size:1.1rem}
+.unknown{font-style:italic;color:var(--ink-3)}
+dl.money{display:block;margin:0}
+.sales{list-style:none;padding:0;margin:var(--s2) 0 0}
+.sales li{padding:var(--s2) 0;border-bottom:1px solid var(--line)}
+.sales li:last-child{border-bottom:0}
+.sales b{font-variant-numeric:tabular-nums}
 .btn:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .btn:active{transform:translateY(1px)}
 @media (prefers-reduced-motion:reduce){.btn:active{transform:none}}

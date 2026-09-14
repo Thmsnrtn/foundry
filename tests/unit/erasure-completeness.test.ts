@@ -90,8 +90,18 @@ describe('every table holding a company is erased or explains itself', () => {
     // stripe_webhook_events and ai_daily_spend carry no product_id, so an
     // erasure never reached them. Recording a retention decision for a table
     // that was never at risk is a legal conclusion attached to a table name.
+    //
+    // `economic_events` is the fifth, and it is a retention rather than an
+    // omission: it carries `founder_id`, so an account erasure reaches it, and
+    // the decision is to keep it. What is in it is amounts, currencies, clock
+    // readings and a provider's own references — the outcome-event design
+    // refuses to store a payer's identity, so there is no personal data in the
+    // table to erase. It is also append-only in the schema, which is what
+    // raised the question: a ledger that cannot be cleared has to be one that
+    // does not need clearing.
     for (const table of Object.keys(RETAINED_ON_ERASURE_REASONS)) {
-      expect(['agent_audit_log', 'products', 'ai_spend_reservations', 'idempotency_keys'])
+      expect(['agent_audit_log', 'products', 'ai_spend_reservations', 'idempotency_keys',
+        'economic_events'])
         .toContain(table);
     }
   });

@@ -463,6 +463,34 @@ const RETAINED_ON_ERASURE: Record<string, RetentionDisposition> = {
     ],
     redactToMarker: ['name'],
   },
+  economic_events: {
+    category: 'financial_record',
+    // APPEND-ONLY AND RETAINED, AND THE SECOND FOLLOWS FROM WHAT IS IN IT.
+    //
+    // The erasure classifier found this table and asked the right question: a
+    // ledger whose schema refuses DELETE cannot be cleared, so either it must
+    // not need clearing or the ledger is broken. It does not need clearing.
+    //
+    // There is no personal data here to erase. No name, no email, no address,
+    // no payer identity — the outcome-event design refuses to store one and
+    // this reads from it. What a row holds is an amount, a currency, a clock
+    // reading, a provider's own opaque reference and a sentence about why the
+    // row exists. The one identifier is `founder_id`, which names the
+    // institution's owner rather than a customer, and it stays for the same
+    // reason the archived `products` row stays: every foreign key must remain
+    // resolvable or the ledger stops being one.
+    //
+    // And a money ledger is the archetype of a record an institution keeps
+    // after a relationship ends. Erasing it would erase the evidence of what
+    // was charged and what was returned — including the refunds, which are the
+    // part a person would most want provable.
+    basis: 'an append-only record of money charged, taken, returned and moved, holding no personal data: amounts, currencies, clock readings and the provider\'s own references',
+    processing: 'accounting and reconciliation against the provider only — never product cognition, model context, network insight or analytics',
+    // Seven years, the ordinary horizon for financial records, rather than
+    // never: the decision to keep money records should be revisited by a person
+    // rather than inherited forever by default.
+    reviewAfterDays: 2555,
+  },
   ai_spend_reservations: {
     category: 'financial_record',
     basis: 'cost accounting, including reservations still holding a ceiling; dropping them would release limits that are live',
@@ -1098,6 +1126,16 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
     reason: 'the founder\'s workspace connection',
     onAccountErasure: { op: 'delete' },
   },
+  economic_policies: {
+    reason: 'what the owner assumed about tax and about the floor he wanted kept, in his own words',
+    // THE ASSUMPTIONS GO EVEN THOUGH THE LEDGER STAYS, and the pair is the
+    // point. The ledger holds what happened, which is a financial record. These
+    // hold what one person believed about what he would owe — a statement about
+    // him, in his own sentences, and nothing that happened. A reserve computed
+    // under a rate that is now deleted stops being explicable, which is the
+    // honest cost of erasing somebody's reasoning at their request.
+    onAccountErasure: { op: 'delete' },
+  },
   usage_limits: {
     reason: 'the founder\'s plan counters',
     onAccountErasure: { op: 'delete' },
@@ -1193,6 +1231,7 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   search_emphasis: 'the words people use when describing the work each kind of owner preference points at, so his steering reaches where the search looks; constitutional, naming nobody',
   undertaking_kinds: 'the verbs the institution can be asked to take on, and what each means; constitutional, naming nobody',
   business_outcome_event_kinds: 'the kinds of thing a provider can report happened at an offer, and which of them is money leaving somebody\'s hands; constitutional, naming nobody',
+  economic_event_kinds: 'the twelve things that can happen to money, which way each moves it, whether it reaches an account a person can draw on and whether it belongs to the cost of one thing sold; constitutional, naming nobody',
   experiment_invalidity_kinds: 'the ways a test can fail to measure what it was for, as distinct from the market saying no; constitutional, naming nobody',
   probe_exchanges: 'the ways a probe can ask somebody to pay, what each reveals and what each confounds, and which of them the institution can actually run; constitutional, naming nobody',
   probe_cost_dimensions: 'the axes a probe spends on beyond cash, so a cheap-sounding number never stands alone; constitutional, naming nobody',

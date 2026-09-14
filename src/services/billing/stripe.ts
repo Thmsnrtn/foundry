@@ -4,22 +4,22 @@
 // =============================================================================
 
 import Stripe from 'stripe';
+import { stripeClient } from '../economy/provider-stripe.js';
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { createNotification } from '../ux/notifications.js';
 import { withRetry } from '../resilience.js';
 import { log } from '../../lib/logger.js';
 
-let _stripe: Stripe | null = null;
-
-function getStripe(): Stripe {
-  if (!_stripe) {
-    const key = process.env.STRIPE_SECRET_KEY;
-    if (!key) throw new Error('STRIPE_SECRET_KEY required');
-    _stripe = new Stripe(key, { apiVersion: '2023-10-16' });
-  }
-  return _stripe;
-}
+// THE CLIENT LIVES IN THE KERNEL NOW, and this file borrows it.
+//
+// The economic ledger has to ask Stripe what it took out of a charge, and a
+// kernel that imported this file to do so would be the shared institution
+// depending on the commercial surface — the one direction the layer boundary
+// forbids. Moving the client to `services/economy/provider-stripe.ts` and
+// borrowing it here keeps one client, one key, and a dependency that points
+// the way it is allowed to point.
+const getStripe = stripeClient;
 
 // ─── Shared-account namespace (see docs/stripe-shared-account.md) ──────────────
 // This account is shared with AcreOS and the personal land sales. Every object we
@@ -208,11 +208,27 @@ export async function handleWebhook(payload: string, signature: string): Promise
   // the world reporting to that experiment's exposure; they never touch
   // Foundry's own subscription rows below, and a failure here never hides the
   // event from the intake's own log.
+  const asPayload = event as unknown as { id?: string; type: string; created?: number; data?: { object?: unknown } };
   try {
     const { intakeStripeSettlement } = await import('../venture/settlement-intake.js');
-    await intakeStripeSettlement(event as unknown as { id?: string; type: string; created?: number; data?: { object?: unknown } });
+    await intakeStripeSettlement(asPayload);
   } catch (err) {
     log.warn('experiment settlement intake failed', { eventId: event.id, error: String(err) });
+  }
+
+  // AND THE SAME EVENT READ AS MONEY, AFTER the sale reading and never before.
+  // The economic ledger's `charge` row points at the outcome event and the
+  // fulfilment that the intake above creates, so running this first would find
+  // no sale to attach to and would record nothing at all.
+  //
+  // Its own try/catch for the same reason as the one above: a failure to
+  // account for money must not stop the institution from knowing a sale
+  // happened, and it must not hide the event from the ledger's own log.
+  try {
+    const { intakeStripeEconomics } = await import('../economy/stripe-economics.js');
+    await intakeStripeEconomics(asPayload);
+  } catch (err) {
+    log.warn('economic intake failed', { eventId: event.id, error: String(err) });
   }
 
   switch (event.type) {
