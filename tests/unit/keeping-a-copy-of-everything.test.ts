@@ -1,5 +1,5 @@
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
-import { mkdtemp, readdir, stat, utimes, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { beforeAll, describe, expect, it } from 'vitest';
@@ -20,6 +20,14 @@ let dir = '';
 beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), 'foundry-keep-'));
   process.env.TURSO_DATABASE_URL = `file:${join(dir, 'foundry.db')}`;
+  // THE DIRECTORY IS SETUP, NOT AN ASSERTION. Three of the tests below write a
+  // file into `backups/` before calling anything, and relied on the FIRST test
+  // having created it. When that one timed out on a CI runner the other three
+  // failed on ENOENT — one slow test reported as four broken ones, and the
+  // real cause four screens up. Creating it here costs nothing and proves
+  // nothing either way: what the first test asserts is that a real, openable
+  // copy lands in it.
+  await mkdir(join(dir, 'backups'), { recursive: true });
 });
 
 describe('the daily copy', () => {
@@ -45,7 +53,15 @@ describe('the daily copy', () => {
     const tables = await copy.execute(
       "SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'");
     expect(Number((tables.rows[0] as Record<string, unknown>).n)).toBeGreaterThan(100);
-  });
+    // A MINUTE, BECAUSE THE WORK IS THE POINT. This applies three hundred and
+    // fifty migrations to a real file on disk and then VACUUMs the result into
+    // a second one — that is what makes the copy worth believing, and it is
+    // not something a mock could stand in for. It took 7.5s here against a
+    // 10s default, which is a twenty-five per cent margin on a machine nobody
+    // else is using; on a shared runner it went over and took three other
+    // tests down with it. The timeout now describes the work rather than
+    // hoping the work stays small.
+  }, 60_000);
 
   it('ages out old copies so the volume is not filled by them', async () => {
     const backups = join(dir, 'backups');
