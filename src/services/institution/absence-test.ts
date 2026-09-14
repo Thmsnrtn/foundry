@@ -443,12 +443,30 @@ async function onlyRealDecisions(
       + 'let them lapse knowing that the lapse is the decision');
   }
 
+  // ONE QUESTION ASKED TWENTY-TWO TIMES IS ONE DECISION, NOT TWENTY-TWO.
+  //
+  // Run against production this listed the same sentence twenty-two times —
+  // twenty-two `venture_experiments` rows, one per person the offer would be
+  // shown to, all of them the identical question. A property whose whole job
+  // is to say whether what is waiting is genuinely his to decide cannot itself
+  // be the noise that teaches him to stop reading it.
+  //
+  // Grouped by what the test actually DOES, which is the only thing he would
+  // be deciding. The count stays visible because twenty-two people is a fact
+  // about the size of the decision, not a repetition of it.
   const tests = (await query(
-    `SELECT what_we_do FROM venture_experiments
-      WHERE founder_id = ? AND decision IS NULL AND evidence_mode = 'real'`, [founderId]))
+    `SELECT what_we_do, COUNT(*) AS n FROM venture_experiments
+      WHERE founder_id = ? AND decision IS NULL AND evidence_mode = 'real'
+      GROUP BY what_we_do ORDER BY n DESC`, [founderId]))
     .rows as unknown as Array<Record<string, unknown>>;
+  let waitingTests = 0;
   for (const t of tests) {
-    evidence.push(`a test waiting for your go-ahead: ${String(t.what_we_do)} — no expiry, so it waits`);
+    const n = Number(t.n);
+    waitingTests += n;
+    evidence.push(n === 1
+      ? `a test waiting for your go-ahead: ${String(t.what_we_do)} — no expiry, so it waits`
+      : `${String(n)} tests waiting for your go-ahead, all the same question: `
+        + `${String(t.what_we_do)} — no expiry, so they wait`);
   }
 
   // THINGS THAT NEED HIM AND HAVE A DATE ON THEM. A responsibility due inside
@@ -469,7 +487,7 @@ async function onlyRealDecisions(
       + 'that fall inside the absence');
   }
 
-  const waiting = proposals.length + tests.length;
+  const waiting = proposals.length + waitingTests;
   const compromised = lapsing.length + overdue.length;
   return {
     property: 'only_real_decisions',

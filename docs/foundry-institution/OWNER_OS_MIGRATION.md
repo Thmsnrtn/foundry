@@ -1596,6 +1596,34 @@ answers — and the longer one is the truthful one.
 The reading is a read. Nothing in it schedules, alerts, acts or spends: the test
 for a quiet institution must itself be quiet.
 
+### What running it against production said, and the defect that found
+
+Deployed and run against the live estate, the three horizons answer:
+
+| | 7 days | 30 days | 90 days |
+|---|---|---|---|
+| truthful | does not hold | does not hold | does not hold |
+| bounded | holds | holds | holds |
+| understandable | holds | holds | holds |
+| recoverable | **holds** | **does not hold** | **does not hold** |
+| only genuine decisions | holds | holds | holds |
+
+Two things are quiet for a reason that is not calm: **Foundry itself has nothing
+connected to it**, so silence from the one real earned company means nothing;
+and `behavioral_triggers` has failed forty-nine times in a row. Bounded is a
+real number — at most $35 over a week and $450 over ninety days, every
+permission ending by itself. Recoverable changes with the horizon exactly as
+designed: eleven copies reaching back ten days covers a week, and a fault in the
+first eighty days of a ninety-day absence would have no clean copy left.
+
+And it exposed a defect in this tranche's own work. `only genuine decisions`
+printed the *same sentence twenty-two times* — twenty-two `venture_experiments`
+rows, one per person the offer would be shown to, all carrying the identical
+question. A property whose whole job is to say whether what is waiting is
+genuinely his cannot itself be the noise that teaches him to stop reading it.
+They are grouped by what the test actually does, with the count kept: twenty-two
+people is a fact about the size of one decision, not twenty-two decisions.
+
 ### The gate that had only been measuring the front page
 
 `measure-mobile.mts` covered Home, Portfolio, a company, Controls, the

@@ -234,6 +234,23 @@ describe('only real decisions — will what is waiting still be waiting', () => 
     expect(d.wouldFixIt.join(' ')).toContain('the lapse is the decision');
   });
 
+  it('is one decision asked many times, not many decisions', async () => {
+    // WHAT PRODUCTION SHOWED. The live estate holds twenty-two experiment rows
+    // — one per person the offer would be shown to — carrying the identical
+    // question, and this listed the same sentence twenty-two times. A property
+    // whose job is to say whether what is waiting is genuinely his cannot
+    // itself be the noise that teaches him to stop reading it.
+    const same = 'showing a price to somebody who has the problem';
+    for (let i = 0; i < 4; i++) await test(same);
+    await test('a different question entirely');
+    const d = find(await readingAt(7), 'only_real_decisions');
+    const lines = d.evidence.filter((e) => e.includes(same));
+    expect(lines).toHaveLength(1);
+    expect(lines[0]).toContain('4 tests waiting for your go-ahead, all the same question');
+    // The count is a fact about the SIZE of the decision, so it survives.
+    expect(d.sentence).toContain('5 things are waiting');
+  });
+
   it('counts a dated commitment falling inside the absence as going to be late', async () => {
     await query(
       `INSERT INTO institutional_responsibilities
@@ -273,6 +290,33 @@ describe('the reading as a whole', () => {
     }
   });
 });
+
+/** A test awaiting his go-ahead: a mandate, something found, a question, and
+ *  the experiment that would settle it. Written out rather than reached
+ *  through the services, which refuse a second open search per founder. */
+async function test(whatWeDo: string): Promise<void> {
+  const mandate = `m_${OWNER}`;
+  const opp = `o_${OWNER}`;
+  const unknown = `u_${OWNER}`;
+  await query(
+    `INSERT OR IGNORE INTO venture_mandates (id, founder_id, statement, shape, evidence_mode)
+     VALUES (?,?,?,NULL,'real')`, [mandate, OWNER, 'A search for another income stream']);
+  await query(
+    `INSERT OR IGNORE INTO venture_opportunities
+       (id, mandate_id, founder_id, headline, who_has_it, the_problem, why_it_might,
+        kill_thesis, sources_json, evidence_mode)
+     VALUES (?,?,?,'Shops with a scattered notice problem','shops','scattered notices',
+             'somebody pays','nobody pays','[]','real')`, [opp, mandate, OWNER]);
+  await query(
+    `INSERT OR IGNORE INTO market_unknowns (id, founder_id, opportunity_id, question)
+     VALUES (?,?,?,'whether anybody would pay for it')`, [unknown, OWNER, opp]);
+  await query(
+    `INSERT INTO venture_experiments
+       (id, founder_id, opportunity_id, unknown_id, what_we_do, what_we_expect,
+        would_disprove, evidence_mode)
+     VALUES (?,?,?,?,?,'somebody pays','nobody pays','real')`,
+    [nanoid(), OWNER, opp, unknown, whatWeDo]);
+}
 
 async function proposal(expiresAt: string): Promise<void> {
   // A PROPOSAL ONLY EXISTS AGAINST A STANDING ASK-FIRST. Without one Foundry
