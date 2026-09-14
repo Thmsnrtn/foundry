@@ -142,7 +142,11 @@ export async function whatItWouldTakeToBelieve(seedId: string): Promise<WhatItWo
  */
 export async function promote(input: {
   seedId: string; headline: string; whoHasIt: string; theProblem: string;
-  whyItMight: string; killThesis: string; unknowns: string[]; sources: string[];
+  whyItMight: string; killThesis: string;
+  /** A question about the world, or a note about how a source could be misread.
+   *  A plain string is a question, which is what every earlier caller meant. */
+  unknowns: Array<string | { question: string; kind: 'question' | 'source_ambiguity' | 'alternative_reading' }>;
+  sources: string[];
 }): Promise<{ opportunityId: string } | { refused: string }> {
   const seed = (await query(
     `SELECT founder_id, mandate_id, evidence_mode, promoted_to, buried_at
@@ -195,16 +199,24 @@ export async function promote(input: {
       args: [opportunityId, String(seed.mandate_id), String(seed.founder_id),
         input.headline.trim(), input.whoHasIt.trim(), input.theProblem.trim(),
         input.whyItMight.trim(), input.killThesis.trim(),
-        JSON.stringify(input.unknowns), JSON.stringify(input.sources),
+        JSON.stringify(input.unknowns.map((u) => typeof u === 'string' ? u : u.question)),
+        JSON.stringify(input.sources),
         String(seed.evidence_mode), input.seedId] },
-    ...input.unknowns.map((question) => {
-      const hit = matchRealityOnly(question, patterns);
+    // A QUESTION ABOUT THE WORLD, OR A NOTE ABOUT A SOURCE — the caller says
+    // which, because only it knows. A note about how a reading could be wrong
+    // belongs in the record and cannot be settled by any experiment, so it is
+    // never blocking however its phrasing matches: no amount of contacting
+    // strangers establishes what a forum post meant.
+    ...input.unknowns.map((u) => {
+      const question = typeof u === 'string' ? u : u.question;
+      const kind = typeof u === 'string' ? 'question' : u.kind;
+      const hit = kind === 'question' ? matchRealityOnly(question, patterns) : null;
       return {
         sql: `INSERT INTO market_unknowns
-                (id, founder_id, opportunity_id, claim_id, question, blocking,
+                (id, founder_id, opportunity_id, claim_id, question, kind, blocking,
                  cheapest_test)
-              VALUES (?,?,?,NULL,?,?,?)`,
-        args: [nanoid(), String(seed.founder_id), opportunityId, question.trim(),
+              VALUES (?,?,?,NULL,?,?,?,?)`,
+        args: [nanoid(), String(seed.founder_id), opportunityId, question.trim(), kind,
           hit === null ? 0 : 1, hit === null ? null : hit.onlySettledBy],
       };
     }),

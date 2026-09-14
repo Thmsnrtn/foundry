@@ -63,8 +63,83 @@ experimentRoutes.get('/foundry/experiments', async (c: any) => {
     ${views.map((v) => html`<a class="item" href="/foundry/experiments/${v.id}">
       <p><strong>${v.assetName ?? v.title}</strong> <span class="pill">${stateWord[v.state]}</span></p>
       <p class="quiet">${v.stateDetail}</p>
-    </a>`)}`;
+    </a>`)}
+    <p class="quiet"><a href="/foundry/experiments/next">What to test next</a> — the questions
+      nobody has answered, and what the tests so far could not establish.</p>`;
   return c.html(page('Experiments', body, 'experiments', where(null, 'list')));
+});
+
+// ─── The forge: what is worth testing next ───────────────────────────────────
+//
+// MOUNTED BEFORE `/foundry/experiments/:id`, because `next` would otherwise be
+// read as an experiment id and answer 404. Hono matches in registration order.
+//
+// WHAT THIS PAGE IS FOR. An experiment is the most expensive thing the
+// institution does — it reaches strangers, spends money, and produces a claim
+// the rest of the estate leans on. So the question "what should we test next"
+// is not answered here by anything that can invent. It is read: the questions
+// somebody wrote down as unanswered, what the last test established, and — the
+// useful half — what that test said IN ADVANCE it could not establish.
+//
+// There is no button that composes a design. `recordDesign` takes judgement
+// sentences — what this decides, what it can and cannot prove, what would stop
+// it — and those are the owner's or they are nobody's. This lays out what is
+// known so he is not writing them from a blank page.
+experimentRoutes.get('/foundry/experiments/next', async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return c.redirect('/onboarding');
+  const { forgeFor } = await import('../../services/venture/forge.js');
+  const f = await forgeFor(founderId);
+
+  const body = html`
+    <h1>What to test next</h1>
+    <p class="lede">${f.sentence}</p>
+    <p class="quiet">Read, not suggested. Every line below is a row somebody wrote —
+      a question marked unanswered, or a limit a finished test recorded before it ran.</p>
+
+    <div class="know">
+      <h2>Questions nobody has answered</h2>
+      ${f.open.length === 0 ? html`<p class="quiet">None are written down. They arrive from what I
+        notice about a company and from what you ask me to find out.</p>`
+    : html`<ul class="sales">${f.open.map((q) => html`<li>
+          <b>${q.blocking ? 'Blocking' : 'Untidy'}</b> · ${q.question}
+          ${q.opportunityHeadline ? html`<p class="quiet">About: ${q.opportunityHeadline}</p>` : ''}
+          <p class="quiet">${q.cheapestTest
+      ? `Cheapest way to answer it: ${q.cheapestTest}.`
+      : 'No cheapest test is written down, which is the first thing to work out — a question nobody knows how to settle is not yet a test.'}
+            ${q.alreadyTesting
+      ? html` <a href="/foundry/experiments/${q.alreadyTesting.experimentId}">Already being tested (${q.alreadyTesting.state})</a>.`
+      : ''}</p>
+        </li>`)}</ul>`}
+    </div>
+
+    <div class="know">
+      <h2>What the tests so far established — and what they did not</h2>
+      ${f.lessons.length === 0 ? html`<p class="quiet">Nothing has run yet. When something has, what it
+        proved and what it could not will be here, because the second half is what the next design
+        has to answer to.</p>`
+    : html`<ul class="sales">${f.lessons.map((l) => html`<li>
+          <b>${l.decided ?? l.whatWeDid}</b>
+          <p class="quiet">${l.verdict
+      ? `The world said: ${l.verdict}.`
+      : 'The world has not answered yet.'}</p>
+          ${l.couldNotEstablish ? html`<p><strong>It could not establish:</strong> ${l.couldNotEstablish}
+            <span class="quiet">— written before it ran, which is what makes it evidence rather than
+            a rationalisation afterwards.</span></p>` : ''}
+          <p class="quiet"><a href="/foundry/experiments/${l.experimentId}">The test</a>
+            · <a href="/foundry/why/experiment/${l.experimentId}">Show its work</a></p>
+        </li>`)}</ul>`}
+    </div>
+
+    <div class="know">
+      <h2>Why there is no button here</h2>
+      <p class="quiet">Designing a test means saying what it decides, what it would prove, what it
+        would not, what would stop it and what each answer would mean. Those sentences are yours or
+        they are nobody's — a design I composed would be me marking my own homework, and the
+        deliberation is the only thing standing between a test and an expensive opinion. Say what
+        you want to find out in Ask, and I will lay out the design for you to approve.</p>
+    </div>`;
+  return c.html(page('What to test next', body, 'experiments', where(null, 'list')));
 });
 
 // ─── The test ────────────────────────────────────────────────────────────────

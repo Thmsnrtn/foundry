@@ -2374,7 +2374,8 @@ CREATE TABLE market_unknowns (
   raised_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   answered_at    TEXT,
   answer         TEXT
-);
+, kind TEXT NOT NULL DEFAULT 'question'
+  CHECK (kind IN ('question','source_ambiguity','alternative_reading')));
 CREATE TABLE mcp_grants (
   id           TEXT PRIMARY KEY,
   product_id   TEXT NOT NULL,

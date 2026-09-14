@@ -99,7 +99,7 @@ done when the acceptance line beside it is true.
 | 3 | Founder Cockpit: health, owner action, Now/Next, live experiment, mobile proof | **DONE** |
 | 4 | Economic nervous system: events, accounting, reconciliation, reserves, tax | **DONE**, 14 Sept — see "the economic nervous system, built" below |
 | 5 | Portfolio / Discover / Autonomy / Roadmap | **DONE**, 14 Sept |
-| 6 | Experiment Forge, and Experiment 001 as curriculum | not started |
+| 6 | Experiment Forge, and Experiment 001 as curriculum | **DONE**, 14 Sept |
 | 7 | Quiet maturity, absence tests, cognition economics | not started |
 
 ---
@@ -1358,3 +1358,71 @@ else, and only one of them was answerable.
 Money and the Roadmap sit in "Also here" beside Discover and the Workshop. Nine
 tabs at 375px is forty pixels a tab, which is not a door; a test now pins the
 six by name so a seventh cannot arrive quietly.
+
+## Phase 6 — the forge, and what Experiment 001 taught — 14 September 2026
+
+### The forge reads rather than invents
+
+An experiment is the most expensive thing this institution does: it reaches
+strangers, spends money, and produces a claim the rest of the estate leans on.
+"What should we test next" is therefore the question where a fabricated answer
+costs the most — so `/foundry/experiments/next` does not answer it. It reads:
+
+- **The questions nobody has answered**, from `market_unknowns`, blocking
+  before untidy and oldest first — the only ordering the institution has
+  honestly written down. A question with no cheapest test says so, because a
+  question nobody knows how to settle is not yet a test.
+- **What earlier tests established, and what they explicitly did not.** The
+  second half is the useful one: `cannot_prove` is recorded at DESIGN time,
+  before the test runs, which is what makes it evidence rather than a
+  rationalisation composed afterwards.
+
+**There is no button that composes a design**, and a test asserts the absence:
+no form, no `recordDesign`, no `designExperiment` in that section. Designing a
+test means saying what it decides, what it would prove, what it would not, what
+would stop it and what each answer would mean. Those sentences are the owner's
+or they are nobody's — a design the institution composed would be it marking its
+own homework, and the deliberation is the only thing standing between a test and
+an expensive opinion.
+
+### What production showed: a table holding two different kinds of thing
+
+Reading the live `market_unknowns` while building this surface found it holding
+questions and **readings of a source** under one column, told apart only by a
+prefix the writer happened to use:
+
+```
+whether anybody would pay for it, which nothing read so far can answer
+unclear from the source: It's unclear whether this is a one-off annoyance …
+it could instead mean: This could just be a passing technical question …
+```
+
+The first is a question you can put to the world. The other two are what a text
+might have meant and how it might have been misread — they belong in the record,
+because a candidate built on a reading should carry the ways that reading could
+be wrong, and **no amount of contacting strangers settles either of them**.
+
+It was not merely untidy. `matchRealityOnly` marks an unknown BLOCKING by
+phrase, and several source notes in production were marked blocking because the
+ambiguity they describe happens to be about whether somebody would pay. A forge
+that ranked by blocking would have put *"it could instead mean: this could just
+be a passing technical question"* at the top of what to test next.
+
+**Migration 314** gives them their own kind (`question`, `source_ambiguity`,
+`alternative_reading`), backfills by exactly reversing the one writer that
+composes those two prefixes, and clears `blocking` on the notes — a note that no
+test can settle cannot be what stops a decision. `discovery.ts` now records the
+kind rather than leaving it to a prefix somebody might grep, and a row matching
+neither prefix stays a question, which is the safe direction.
+
+### Experiment 001 as curriculum
+
+Its design carries the limit that makes it teachable, written before it ran:
+
+> *"Twenty-five hand-picked shops reached by cold email inside seven days cannot
+> establish a market, a price, a channel that repeats, or a second purchase —
+> and at one payment I cannot tell a buyer from a well-wisher."*
+
+That sentence is what the next design has to answer to, and the forge puts it in
+front of whoever writes one. Nothing about Experiment 001's cohort, price,
+message, strata, rollout or stop envelope is touched by any of this.

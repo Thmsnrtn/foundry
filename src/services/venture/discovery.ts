@@ -676,14 +676,22 @@ export async function promoteWhatEarnedIt(input: {
         WHERE c.seed_id = ? AND o.evidence_mode <> 'reference' LIMIT 8`, [seedId]))
       .rows as unknown as Array<Record<string, unknown>>).map((r) => String(r.source));
 
-    const unknowns = [
-      row.ambiguity == null ? null : `unclear from the source: ${String(row.ambiguity)}`,
-      row.or_it_could_be == null
-        ? null : `it could instead mean: ${String(row.or_it_could_be)}`,
+    // TWO OF THESE THREE ARE NOT QUESTIONS. The first two are readings of a
+    // SOURCE — what the text might have meant, and how it might have been
+    // misread — and they belong in the record because a candidate built on a
+    // reading should carry the ways that reading could be wrong. They are not
+    // things you can put to the world: no amount of contacting strangers
+    // establishes what a forum post from last year meant. Only the third is a
+    // question, and the column now says so rather than leaving it to a prefix.
+    const unknowns: Array<{ question: string; kind: 'question' | 'source_ambiguity' | 'alternative_reading' }> = [
+      row.ambiguity == null ? null
+        : { question: `unclear from the source: ${String(row.ambiguity)}`, kind: 'source_ambiguity' as const },
+      row.or_it_could_be == null ? null
+        : { question: `it could instead mean: ${String(row.or_it_could_be)}`, kind: 'alternative_reading' as const },
       // The thing no amount of reading settles, named as unsettled rather than
       // quietly assumed by a candidate that reads confident.
-      'whether anybody would pay for it, which nothing read so far can answer',
-    ].filter((u): u is string => u !== null);
+      { question: 'whether anybody would pay for it, which nothing read so far can answer', kind: 'question' as const },
+    ].filter((u): u is { question: string; kind: 'question' | 'source_ambiguity' | 'alternative_reading' } => u !== null);
 
     const result = await promote({
       seedId,
