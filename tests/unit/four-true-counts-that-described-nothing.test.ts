@@ -289,3 +289,55 @@ describe('sent, accepted and delivered are three different things', () => {
     expect(n((await reconcileExperiment(EXPERIMENT)).cameBack, 'paid')).toBe(0);
   });
 });
+
+describe('a declined test keeps its review and gets none of the authority', () => {
+  // PRODUCTION HAS A REAL INSTANCE OF THIS, WHICH IS WHY IT IS WRITTEN DOWN.
+  //
+  // `SkQeFRIbU9SR6oMNC3MSX` was declined on 9 September and superseded, because
+  // its design pointed a raw payment link from a fresh domain and carried more
+  // identity and reputation cost than it counted. It still holds twenty-two
+  // approved recipients: twenty-two real businesses the owner looked at and said
+  // yes to.
+  //
+  // Zero of them carry an act, and no act names that experiment at all. So
+  // nothing can be sent to any of them, and the reason is structural rather than
+  // anybody having remembered: APPROVING A RECIPIENT IS A REVIEW OF THE
+  // POPULATION, NEVER AUTHORITY TO WRITE TO IT. The outbound door reads the act
+  // stamped on the row; the review is what makes a row eligible to be covered by
+  // one, and the two are different events with different actors.
+  //
+  // A report that counted "22 approved" as "22 people we may write to" would be
+  // the same class of mistake as the four true counts above.
+  it('can hold a full approved cohort that no act covers', async () => {
+    for (let i = 0; i < 22; i++) await recipient(`declined${String(i)}@example.test`, 'approved', null);
+
+    const r = await reconcileExperiment(EXPERIMENT);
+    const approved = r.cohort.find((c) => c.what === 'approved to be written to');
+    const covered = r.cohort.find((c) => c.what === 'carrying an authorising act');
+    expect(approved?.n).toBe(22);
+    expect(covered?.n).toBe(0);
+  });
+
+  it('says plainly that nothing ever authorised writing to anybody', async () => {
+    for (let i = 0; i < 22; i++) await recipient(`declined${String(i)}@example.test`, 'approved', null);
+    const r = await reconcileExperiment(EXPERIMENT);
+    expect(r.acts).toEqual([]);
+    expect(r.remainingAuthority).toContain('No act has ever authorised');
+  });
+
+  it('counts nothing reached, nothing back, and nothing paid', async () => {
+    for (let i = 0; i < 22; i++) await recipient(`declined${String(i)}@example.test`, 'approved', null);
+    const r = await reconcileExperiment(EXPERIMENT);
+    expect(r.reached.every((c) => c.n === 0)).toBe(true);
+    expect(r.cameBack.every((c) => c.n === 0)).toBe(true);
+  });
+
+  it('marks the mismatch as the failure the act exists to prevent', async () => {
+    // The reading does not merely report 22 and 0 side by side and leave the
+    // reader to notice. When the two disagree it says which disagreement it is.
+    for (let i = 0; i < 22; i++) await recipient(`declined${String(i)}@example.test`, 'approved', null);
+    const covered = (await reconcileExperiment(EXPERIMENT)).cohort
+      .find((c) => c.what === 'carrying an authorising act');
+    expect(covered?.because).toContain('THIS SHOULD EQUAL THE APPROVED COUNT');
+  });
+});

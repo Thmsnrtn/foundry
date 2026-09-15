@@ -22,10 +22,40 @@ of something, and says what it counts.*
 | proposed, never approved | **10** | candidates; no act covers them, nothing was sent, nothing may be |
 | struck | **3** | with reasons on the rows |
 
-**Remaining person-facing authority: none.** The act is consumed, and it never
-grew — every approval predates it, there is exactly one, and its own summary
-names the number. Nothing may be sent to anybody under it. Reaching anyone else
-needs its own authority over its own named set.
+### What authority remains — stated exactly, because "none" was wrong
+
+An earlier draft of this report said *no authority remains*. Re-read from
+`proposed_acts` estate-wide, that is not true, and the difference matters more
+than the tidier sentence did.
+
+**The writing act is consumed.** `AEk3lSzEsRiJBCz1ggwk2` was used at 23:20 on
+12 September and nothing further may be sent under it. It never grew: every
+approval predates it, there is exactly one, and its own summary names the
+number. Reaching anyone else needs its own authority over its own named set.
+
+**Two acts are live**, both decided 12 September, both expiring 3 October,
+**neither of which writes to a stranger**:
+
+| act | what it may do | can it reach a person? |
+|---|---|---|
+| `8mzBurxvcgsQWsZmGCiVm` | create the $29 one-time payment link | No. It reaches Stripe. |
+| `-hpOKK8k605ESrGozy3Yp` | refund, in full, any purchase that could not be delivered | Only a buyer, only to return their money — and there are no purchases, so it cannot fire. |
+
+**And the declined experiment is the strongest evidence the boundary holds.**
+`SkQeFRIbU9SR6oMNC3MSX` was declined on 9 September and superseded by
+Experiment 001, because its design pointed a raw payment link from a fresh
+domain and carried more identity and reputation cost than it counted. It still
+holds **22 approved recipients** — real businesses, reviewed and said yes to.
+
+Zero of them carry an authorising act, and **zero acts name that experiment at
+all**. Nothing can be sent to any of them. That is the invariant doing its job:
+approving a recipient is a review of the population, never authority to write to
+it, and the outbound door reads the act on the row rather than the review. A
+declined experiment keeps the review and gets none of the authority.
+
+Eleven outbound proposals sit `pending_approval` against no experiment. They are
+internal agent proposals about the institution itself; they reach nobody
+outside, and the society that wrote them is off the timer.
 
 The earlier report's "4 questions back, 1 opt-out, 11 pending" were each a true
 count of a real table and together described an experiment that does not exist:
@@ -85,11 +115,29 @@ purpose**. Every call site now declares what work it is, from a closed
 vocabulary of 31 kinds, enforced by the type system. No new instrumentation: the
 row was already written and gains a field.
 
+### The economy, and tax
+
+Both were audited against production rows rather than described.
+
+**Nothing has been manufactured.** `economic_events`, `experiment_fulfilments`
+and `stripe_events` are all empty. No money has moved, so the surfaces say
+nobody has paid for anything yet — which is what honest maturity looks like when
+an institution is this young, and is the reason there is nothing to take out.
+
+**Nothing about tax has been invented.** `economic_policies` is empty: no rate,
+no entity type, no jurisdiction, no filing obligation, no deadline. Nor could
+one appear by accident — the ledger refuses a tax reserve that does not carry
+both a rate and a basis, refuses any policy that does not say where it came from
+and why, and falls back to nothing. An institution with no stated tax assumption
+has not made one, and the surface says so rather than quietly holding back
+thirty per cent of something. A policy is superseded rather than updated, so a
+reserve computed under an old rate stays explicable.
+
 ---
 
 ## PROOF — what was actually checked
 
-- **The chain**, green: 546 test files, 4,696 tests, exit 0.
+- **The chain**, green: 547 test files, 4,702 tests, exit 0.
 - **The retirement, in production**: five loops that had run every hour last ran
   at 21:00; the deploy landed 21:29; 22:00, 23:00 and 00:00 passed with none of
   them running, while four other jobs ran at 00:00. The scheduler is alive; it
