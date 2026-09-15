@@ -170,9 +170,17 @@ async function truthful(founderId: string, days: number): Promise<PropertyReadin
   // is not a blip and the interval is the job's own business. The named loops
   // are excluded here: they are reported above with their labels and what they
   // are for, which is more than a job name.
+  //
+  // AND ONLY ROUTINES SOMETHING STILL SCHEDULES. This read every row, and the
+  // day `behavioral_triggers` was retired it went on reporting its fifty
+  // failures — telling the owner to fix a job nobody runs, in the one list that
+  // has to be worth reading line by line. The composition root stamps
+  // `retired_at` from the registry at boot, so the filter is a fact about what
+  // this process schedules rather than a list kept somewhere else.
   const otherFailing = (await query(
     `SELECT job_name, consecutive_failures, last_success_at FROM job_health
-      WHERE consecutive_failures >= 3 ORDER BY consecutive_failures DESC`))
+      WHERE consecutive_failures >= 3 AND retired_at IS NULL
+      ORDER BY consecutive_failures DESC`))
     .rows as unknown as Array<Record<string, unknown>>;
 
   for (const name of blind) {

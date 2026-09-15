@@ -1,0 +1,31 @@
+-- =============================================================================
+-- A JOB NOBODY SCHEDULES CANNOT BE FAILING
+--
+-- `job_health` is the record of what ran and what did not, keyed by job name,
+-- and nothing in it says whether anybody still schedules that name. That was
+-- harmless while every name in it was live. It stopped being harmless the day
+-- twenty-seven loops were retired: their rows stayed, with their last success
+-- and their failure counts, and the absence reading — whose whole job is to say
+-- whether silence would be mistaken for calm — read one of them and reported
+-- `behavioral_triggers` as fifty failures in a row on an institution that had
+-- already stopped scheduling it.
+--
+-- That is the reading being honest about the row and wrong about the world,
+-- which is the worst of both: the owner is told to go and fix something that
+-- does not exist, and the next true finding in the same list reads like more of
+-- the same.
+--
+-- THE FIX IS NOT TO DELETE THE ROW. Fifty failures and a last success on
+-- 1 September are the history of a real thing that really broke, and a
+-- retirement that erases the evidence for it is how the reason for a decision
+-- gets lost. The row keeps everything and gains the one fact it was missing:
+-- the date somebody stopped scheduling this.
+--
+-- DERIVED, NOT MAINTAINED. The composition root stamps this at boot from the
+-- job registry itself — every name in `job_health` that the registry does not
+-- contain is not scheduled, and every name it does contain is. So there is no
+-- second list to keep true, and a loop that comes back has this cleared by the
+-- act of being scheduled again.
+-- =============================================================================
+
+ALTER TABLE job_health ADD COLUMN retired_at TEXT;

@@ -469,8 +469,48 @@ app.onError((err, c) => {
  */
 const scheduledJobs: CronJob[] = [];
 
+/**
+ * WHAT THIS PROCESS ACTUALLY SCHEDULES, WRITTEN DOWN WHERE THE READINGS LOOK.
+ *
+ * `job_health` is keyed by job name and says nothing about whether anybody
+ * still schedules that name. Harmless while every name in it was live; not
+ * harmless the day twenty-seven loops were retired. Their rows stayed, and the
+ * absence reading — whose whole job is to say whether silence would be mistaken
+ * for calm — read one and told the owner `behavioral_triggers` had failed fifty
+ * times in a row on an institution that had already stopped scheduling it.
+ *
+ * Honest about the row, wrong about the world, which is the worst of both: he
+ * is sent to fix something that does not exist, and the next true finding in
+ * the same list reads like more of the same.
+ *
+ * DERIVED FROM THE REGISTRY, so there is no second list to keep true. Every
+ * name `job_health` holds that the registry does not is stamped as retired;
+ * every name it does hold is cleared, so a loop that comes back has this undone
+ * by the act of being scheduled again. The row keeps its failures and its last
+ * success either way — the history of a real thing that really broke is not
+ * something a retirement gets to erase.
+ *
+ * Failure here is never a gate: an institution that will not start because it
+ * could not annotate a health table is worse than one whose annotation is a day
+ * stale.
+ */
+async function recordWhatIsScheduled(): Promise<void> {
+  const names = Object.keys(JOB_REGISTRY);
+  const marks = names.map(() => '?').join(',');
+  const { query } = await import('./db/client.js');
+  await query(
+    `UPDATE job_health SET retired_at = COALESCE(retired_at, CURRENT_TIMESTAMP)
+      WHERE job_name NOT IN (${marks})`, names);
+  await query(
+    `UPDATE job_health SET retired_at = NULL
+      WHERE retired_at IS NOT NULL AND job_name IN (${marks})`, names);
+}
+
 function startScheduler(): void {
   logger.info('Starting job scheduler...');
+  void recordWhatIsScheduled().catch((err: unknown) => {
+    logger.warn('Could not record which routines are scheduled', { error: String(err) });
+  });
   for (const [name, job] of Object.entries(JOB_REGISTRY)) {
     try {
       const handle = new CronJob(job.schedule, async () => {

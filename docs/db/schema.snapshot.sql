@@ -2215,7 +2215,7 @@ CREATE TABLE job_health (
   consecutive_failures INTEGER NOT NULL DEFAULT 0,
   last_error_name      TEXT,
   updated_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+, retired_at TEXT);
 CREATE TABLE job_locks (
   job_name TEXT PRIMARY KEY,
   locked_at DATETIME NOT NULL,
