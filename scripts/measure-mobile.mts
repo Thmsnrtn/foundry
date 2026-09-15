@@ -278,6 +278,8 @@ async function main(): Promise<void> {
   app.route('/', roadmapRoutes as never);
   const { absenceRoutes } = await import('../src/routes/dashboard/absence-place.js');
   app.route('/', absenceRoutes as never);
+  const { activityRoutes } = await import('../src/routes/dashboard/activity-place.js');
+  app.route('/', activityRoutes as never);
 
   const server = serve({ fetch: app.fetch, port: 4317 });
   const base = 'http://127.0.0.1:4317';
@@ -293,6 +295,9 @@ async function main(): Promise<void> {
     // them renders a list, a table, or a set of nested details, which is where
     // a phone layout actually breaks.
     '/foundry/decisions', '/foundry/inbox', '/foundry/money', '/foundry/roadmap',
+    // The stream, and the stream filtered — the filter chips wrap, and a day
+    // heading over rows with a coloured strip is a new shape on the phone.
+    '/foundry/activity', '/foundry/activity?kind=authority',
     '/foundry/searching', '/foundry/experiments/next', '/foundry/absence',
     `/foundry/companies/${COMPANY}/understanding/${RESPONSIBILITY}`,
     // Asked about a company by name: the answer is the widest structured block
@@ -364,7 +369,12 @@ async function main(): Promise<void> {
       posted.set(label, await res.text());
     }
 
-    for (const path of quiet ? ['/foundry'] : [...paths, ...posted.keys()]) {
+    // AND THE STREAM, HERE RATHER THAN ABOVE, because quietening the estate is
+    // the only thing in this harness that actually decides anything: an act
+    // refused, an experiment declined, a candidate answered. Measured in the
+    // loaded pass the page is correct and empty, which measures a page that
+    // rendered nothing — the same mistake as a clean-looking 404.
+    for (const path of quiet ? ['/foundry', '/foundry/activity'] : [...paths, ...posted.keys()]) {
       let status = 200;
       if (posted.has(path)) {
         await page.setContent(posted.get(path) ?? '', { waitUntil: 'load' });
@@ -453,7 +463,10 @@ async function main(): Promise<void> {
           + `${String(m.covered)}px of content sits underneath the fixed bars`);
       }
       if (quiet && scale === 1) {
-        await page.screenshot({ path: `${dir}/foundry-quiet-390.png`, fullPage: true });
+        await page.screenshot({
+          path: `${dir}/${path === '/foundry' ? 'foundry-quiet' : 'activity-quiet'}-390.png`,
+          fullPage: true,
+        });
       }
       if (!quiet && scale === 1 && width === 390) {
         // The home page, and the reference company's — the two the owner
@@ -481,6 +494,7 @@ async function main(): Promise<void> {
           ['/foundry/controls', 'controls'], ['/foundry/money', 'money'],
           ['/foundry/roadmap', 'roadmap'], ['/foundry/decisions', 'decisions'],
           ['/foundry/experiments/next', 'forge'], ['/foundry/absence', 'absence'],
+          ['/foundry/activity', 'activity'],
           [`/foundry/companies/${COMPANY}/understanding/${RESPONSIBILITY}`, 'understanding'],
         ] as Array<[string, string]>) {
           if (path === p) await page.screenshot({ path: `${dir}/${name}-390.png`, fullPage: true });

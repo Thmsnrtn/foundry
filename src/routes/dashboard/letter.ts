@@ -2581,8 +2581,13 @@ const { roadmapRoutes } = await import('./roadmap-place.js');
 // do on my own already lives; leaving the estate alone is the same question
 // asked about time rather than authority.
 const { absenceRoutes } = await import('./absence-place.js');
+// WHAT ACTUALLY HAPPENED, as the estate's stream rather than one company's.
+// Every row on it was already recorded somewhere; until now it could only be
+// read on the page of the thing it happened to.
+const { activityRoutes } = await import('./activity-place.js');
 letterRoutes.route('/', workshopRoutes);
 letterRoutes.route('/', inboxRoutes);
 letterRoutes.route('/', moneyRoutes);
 letterRoutes.route('/', roadmapRoutes);
 letterRoutes.route('/', absenceRoutes);
+letterRoutes.route('/', activityRoutes);

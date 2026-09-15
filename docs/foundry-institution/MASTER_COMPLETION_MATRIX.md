@@ -42,11 +42,11 @@ honoured against pressure, not when nothing violated it by accident.
 | **5** | Who this interface is for | **SATISFIED** | absence of machinery | No RBAC UX, no dashboard builder, no widget marketplace, no multi-user admin, no enterprise wizard, no settings tree for hypothetical teams. One owner, six doors |
 | **6** | Owner comprehension targets | **SATISFIED** | `foundry-shell.ts`, `money-place.ts` | 5s: Home answers health / autonomy / owner-need / now / next above the fold at 390px. 30s: the subtraction now reads as a column of figures ending in a total, so cash, obligations, refund exposure, reserve and surplus are one glance rather than seven paragraphs. 5min: every claim drills to its evidence |
 | **7** | Watch / inspect / intervene | **SATISFIED** | `views/owner/shell.ts` | The three depths are structural, not stylistic: WATCH carries almost no prose, INSPECT is behind disclosure, INTERVENE is a named consequence on a form. Measured across 300 layout readings |
-| **8** | Canonical information architecture | **PARTIALLY SATISFIED** | `/foundry/*` | Home, Portfolio, Discover (`/searching`), Experiments, Inbox, Economics (`/money`), Controls, Ask and Decisions all exist as canonical surfaces, each with one responsibility and no duplicate queue. **ACTIVITY has no door** — meaningful institutional events are readable only per-company or per-experiment, never as the estate's stream |
+| **8** | Canonical information architecture | **SATISFIED** | `/foundry/*` | All nine canonical surfaces exist, each with one responsibility and no duplicate queue: Home, Portfolio, Discover (`/searching`), Experiments, Inbox, **Activity**, Economics (`/money`), Controls, Ask — plus Decisions, which repository reality supports. Activity was the last one missing and was built in this pass |
 | **9** | Home — founder cockpit | **SATISFIED** | `routes/dashboard/foundry-shell.ts` | Estate status, autonomy, owner action defaulting to none, NOW, portfolio, system health, RECENT, NEXT and OWNER all render from canonical state. Quiet is a successful state and says so |
 | **10** | Status must not be an essay | **SATISFIED** | `foundry-shell.ts`, `money-place.ts`, `attention.ts` | Experiment state is structured — running / contacted / offer / purchases / complaints / opt-outs / owner action. System health is structured. Money is now arithmetic with its reasons one tap under it, and a blocked experiment lists what is in the way as rows rather than joining them with semicolons |
 | **11** | Visual language | **SATISFIED** | `lib/sparkline.ts`, `owner.css` | Numbers for quantities, badges for state, deltas for change, timelines for causality, event rows for activity, disclosure for depth. `sparkline.ts` refuses to draw a line from fewer than three readings, baselines to the series' own range, and colours only where direction has meaning. Not cardified; motion is absent rather than decorative |
-| **12** | Mobile first | **SATISFIED** | `scripts/measure-mobile.mts` | 375 / 390 / 393 / 414 / 430 px at 100% and 200% text, plus 1024 / 1280 / 1440: no horizontal overflow, nothing under the fixed bars, no clipped tab bar, no fixed Ask eating the viewport. Desktop recomposes rather than widens. **Every picture is now of the dark ground** — see the visual finding |
+| **12** | Mobile first | **SATISFIED** | `scripts/measure-mobile.mts`, `owner.css` | 375 / 390 / 393 / 414 / 430 px at 100% and 200% text, plus 1024 / 1280 / 1440: no horizontal overflow, nothing under the fixed bars, no clipped tab bar, no fixed Ask eating the viewport. **Every picture is now of the dark ground.** *"Desktop should become richer, not simply wider"* was the part that did not hold — Home was the phone's page with a rail beside it and 300px of gutter doing nothing. The decision and the queue behind it now sit side by side above 1100px, which is 860px less scrolling and both of the things he came for on one screen |
 
 ## 13–23 — decisions, portfolio, experiments, communications
 
@@ -61,7 +61,7 @@ honoured against pressure, not when nothing violated it by accident.
 | **19** | Experiment genome | **FAILED / NEEDS WORK** | — | Prediction and outcome are compared (`what_we_expect`, `would_disprove`, `what_happened`, `verdict`), but the structured comparative fingerprint this section asks for — customer type, pain, value mechanism, offer type, contact type, trust level, acquisition mode, fulfilment mode, recurrence, risk class, cost class, authority class, evidence target — **does not exist**. 001's facts are all known and could be recorded today |
 | **20** | Experiment 001 as curriculum | **SATISFIED** | tests, gates, schema | The lessons are crystallised as enforcement, not retrospective: authority binds the exact recipient set; a declined experiment's 22 approved recipients carry **zero** acts; read-after-write proves consequential state; a job that swallows a blocking exception is FAILED; `$0` is not inconsequential; owner exclusions outrank score |
 | **21** | Inbox — communications membrane | **SATISFIED** | `services/public-workshop/mail.ts` | Inbound is untrusted and gains no authority by being written. The chain holds through to verification. The owner view separates needs-owner from auto-resolved from suppressed. No thought-stream, no macro execution. No silence-triggered sequence exists anywhere |
-| **22** | Activity | **FAILED / NEEDS WORK** | — | `signal_events`, `strategic_decisions_log`, `outbound_actions` and `proposed_acts` all carry meaningful institutional events with evidence behind them, and **nothing assembles them into the estate's stream.** The owner can read what happened to one company or one experiment, never what happened |
+| **22** | Activity | **SATISFIED** | `services/founder/activity.ts`, `routes/dashboard/activity-place.ts` | Six canonical sources assembled into one stream, grouped by day, each row drilling to its evidence: authority granted or taken back, experiments crossing a lifecycle boundary, anything that actually reached a person, money from a source event, promises opened and discharged, and candidates the owner's boundaries refused. **What it refuses is the point** and is held by tests: an action not executed never appears (intent to write is not a write), fifty passed self-checks never appear, a reference company's rehearsal never appears, and the page carries no event counter — the concept board's "48 events today, +12%" is exactly what §22 and §1 forbid |
 | **23** | Live state architecture | **SATISFIED** | `foundry-shell.ts` | WATCH reaches no model. `authority-door-coverage.test.ts` asserts it from the source, not from behaviour: no owner route reaches a model call. INSPECT performs bounded retrieval; strong cognition happens where consequence justifies it |
 
 ## 24–35 — money, capital, tax, governance, cognition
@@ -106,11 +106,11 @@ trigger that will move it.
 | **45** | Performance | **SATISFIED** | `foundry-shell.ts` | WATCH renders from materialized truth and waits on no model to say whether the estate is healthy — asserted from the source, so it cannot regress silently |
 | **46** | Implementation sequence | **SATISFIED** | seven phases, in order | Reality crossing finished first (001 sent before the redesign began); then shell, cockpit, economic system, portfolio/discover/autonomy/roadmap, Forge, quiet maturity. Nothing was parallelised across a real dependency |
 | **47** | Clean cutover rules | **SATISFIED** | the `/letter` absorption | Shadow → compare → cutover → delete was followed literally: `/letter` ran beside `/foundry`, was compared, was cut over, and System B was **deleted** rather than quarantined. Nine tests that encoded the old shape were repointed at the live doors rather than kept alive to protect dead code |
-| **48** | Design system | **PARTIALLY SATISFIED** | `src/public/owner.css` | One stylesheet, consolidated after the semantics were proven rather than before. Typography, spacing, state colour, cards, owner-attention and degraded states, event rows, decision cards, evidence panels and empty states all encode meaning. **Chart grammar is one renderer** — `sparkline.ts` — with no comparative or distributional form, which is the right amount for an estate with no series in it and a gap the moment there is one |
+| **48** | Design system | **PARTIALLY SATISFIED** | `src/public/owner.css` | One stylesheet, consolidated after the semantics were proven rather than before. Typography, spacing, state colour, cards, owner-attention and degraded states, event rows, decision cards, evidence panels and empty states all encode meaning. Two gaps, one now closed: **there was no default link rule at all** — every surface styled its own, so the first new page to carry a link rendered it in browser blue, and a system whose rules are all exceptions has no system in it. **Chart grammar is still one renderer**, `sparkline.ts`, with no comparative or distributional form: the right amount for an estate with no series in it, and a gap the moment there is one |
 | **49** | Owner interruption policy | **SATISFIED** *(constraint honoured under pressure)* | the withdrawn escalation | No implementation question was put to the owner across the whole tranche. One escalation was raised — *connect something to Foundry, or accept that quiet means nothing* — and then **withdrawn** on investigation, because it was a modelling gap rather than an owner decision. Escalating it would have been the easier, and wrong, outcome |
 | **50** | Reporting | **SATISFIED** | `CLOSEOUT_ACCEPTANCE.md`, this file | NOW / PROOF / OWNER / WATCH / NEXT, with owner decisions returned first and never buried under implementation detail |
 | **51** | Acceptance standard | **PARTIALLY SATISFIED** | — | See the A–N table below. **Twelve of fourteen hold.** E and F are architecture waiting on the first dollar; M waits on a second experiment. A, I and J held only after this pass |
-| **52** | End state | **PARTIALLY SATISFIED** | — | Of the twenty-two capabilities this section names, the institution demonstrably does nineteen. It does **not** yet distribute surplus (no surplus), and it garbage-collects dead infrastructure only under a bounded observation window rather than as a habit. "Foundry thinks deeply, the owner understands quickly" holds everywhere except where §10 says it does not |
+| **52** | End state | **PARTIALLY SATISFIED** | — | Of the twenty-two capabilities this section names, the institution demonstrably does nineteen. It does **not** yet distribute surplus (there is no surplus), it garbage-collects dead infrastructure only under a bounded observation window rather than as a habit, and it has run one experiment rather than a portfolio of them. Everything else — observe, discover, reason, challenge itself, forge, run, record obligations, understand money, reserve for tax, protect liquidity, fulfil promises, handle communications within authority, learn from outcomes, reduce cognition, maintain boundaries, recover from failure, surface only the owner's own decisions — is doing rather than described |
 
 ---
 
@@ -176,6 +176,51 @@ database refused the first attempt at this too, because a decision recorded as
 
 What is left is one screen: a single honest sentence, six tiles, no prose.
 Estate *Healthy*. Needs you *None*. `docs/design/mobile/foundry-quiet-390.png`.
+
+### Desktop was the phone's page, wider
+
+§12's last sentence — *"Desktop should become richer, not simply wider"* — was
+the one requirement in it that did not hold, and it was invisible until the
+concept board was there to compare against. The board composes the cockpit in
+three columns. Production stacked everything in one, with a nav rail beside it
+and about three hundred pixels of gutter doing nothing, so the owner scrolled
+past a decision to find out how many more were behind it.
+
+The two things he opens the page for — the decision that needs him, and what
+else is waiting — are now side by side above 1100px, the decision keeping the
+larger share because it carries the consequence and the button. 860px less page.
+Below that width they stack, which is right on a phone and was never the problem.
+
+The board's other two columns are charts of cash and of activity volume. Neither
+is built, and neither should be: there is no cash, and an activity-volume chart
+is the thing §1 and §22 both forbid.
+
+### The last missing surface, and what it refuses to be
+
+§8 lists nine canonical owner surfaces. Eight existed. ACTIVITY did not — and
+every row it needed was already written, in `outbound_actions`, `proposed_acts`,
+`venture_experiments`, `economic_events`, `undertakings` and
+`experiment_recipients`. The owner could read what happened to a company, or to
+an experiment. He could not read what happened.
+
+The risk in building it was never that it would be empty. It was that it would
+be **full**: the institution writes dozens of rows a day saying a check passed
+and a job ran, and a stream carrying those buries the four rows a fortnight that
+matter under a hundred that do not — while looking, to anyone glancing, like a
+healthy busy system. The concept board makes exactly that mistake, leading with
+*"48 events today, +12% vs yesterday"* over a row reading *"system health check
+completed — no action required"*.
+
+So most of what is tested is what does **not** appear: an action never executed
+(intent to write is not a write), fifty passed self-checks, a reference
+company's rehearsal. And the page carries no counter, held from the source,
+because the way a counter arrives is somebody adding a helpful summary line
+later.
+
+Building it also found a design-system hole older than this page: **there was no
+default `a` rule in the stylesheet.** Every surface styled its own links, so
+nobody had noticed that a new one would render them in the browser's blue and
+purple. It did, immediately.
 
 ### What was deliberately **not** taken from the boards
 

@@ -148,6 +148,12 @@ export const LAYER_OF: Record<string, Layer> = {
   // The roadmap: what the institution is carrying, read from undertakings. The
   // reading is the kernel's; this is his screen onto it.
   'src/routes/dashboard/roadmap-place.ts': 'private',
+  // Activity: the estate's own stream, assembled from six canonical sources.
+  // The ASSEMBLY is the kernel's — `services/founder/activity.ts` reads rows
+  // any Foundry would write, and a commercial one would want the same stream.
+  // This page is the shape his estate is read in: which classes matter, what
+  // order they scan in, and the refusal to put a number on how much happened.
+  'src/routes/dashboard/activity-place.ts': 'private',
   // "If you stepped away": the five properties an absence tests, at three
   // horizons, beside what thinking costs. The readings are the kernel's —
   // `institution/absence-test.ts` and `ai/cognition.ts` — and any Foundry

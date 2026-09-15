@@ -2459,6 +2459,13 @@ foundryShellRoutes.get('/foundry', async (c) => {
       { href: '/foundry/searching', label: s.search ? 'Searching' : 'Not searching', count: null, on: false },
       { href: '/foundry/public-workshop', label: 'Workshop', count: null, on: false },
       { href: '/foundry/inbox', label: 'Inbox', count: mail.waiting || null, on: false },
+      // WHAT HAPPENED HAS A DOOR TOO. Everything on it was already recorded and
+      // none of it was reachable except one company at a time, which meant the
+      // question "what did you do while I was away" had no page — only an
+      // absence report, which answers whether he could leave rather than what
+      // happened while he had. No count: the number of things that happened is
+      // not a number he should be taught to watch.
+      { href: '/foundry/activity', label: 'Activity', count: null, on: false },
     ],
     chips: [],
   };
@@ -2487,8 +2494,19 @@ foundryShellRoutes.get('/foundry', async (c) => {
          search block that can carry a whole opportunity's case. The screen said
          "One thing needs you" and then put everything else in front of it. -->
     ${standingPermission(s)}
-    ${theOneThing(attention, extras)}
-    ${alsoWaiting}
+    ${/* THE DECISION AND THE QUEUE, SIDE BY SIDE WHERE THERE IS ROOM.
+          Desktop should become richer, not simply wider, and this page was the
+          phone's page with a rail beside it and three hundred pixels of gutter
+          doing nothing. The two things the owner came for are the one decision
+          that needs him and what else is waiting behind it; on a phone they can
+          only be stacked, and stacking them on a 1440px screen means scrolling
+          past a decision to find out how many more there are.
+          Only gridded when there are both. One of them alone belongs in the
+          column, at the width the rest of the page reads at. */
+    ''}
+    ${attention !== null && alsoWaiting !== ''
+    ? html`<div class="decide">${theOneThing(attention, extras)}<div>${alsoWaiting}</div></div>`
+    : html`${theOneThing(attention, extras)}${alsoWaiting}`}
     ${/* SAID ALONGSIDE, NOT INSTEAD OF. Demoting a stopped routine below a
           decision that needs him must not make it disappear: what he is being
           told may genuinely be out of date, and that is his to weigh. It is one

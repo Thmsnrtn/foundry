@@ -266,8 +266,14 @@ describe('the app resumed', () => {
     const { status, html } = await get('/foundry');
     expect(status).toBe(200);
     const o = orient(html);
-    expect(o.local.map((l) => l.label)).toEqual(['Portfolio', 'Decisions', 'Searching', 'Workshop', 'Inbox']);
+    expect(o.local.map((l) => l.label)).toEqual(
+      ['Portfolio', 'Decisions', 'Searching', 'Workshop', 'Inbox', 'Activity']);
     expect(html).toMatch(new RegExp(`href="/foundry/decisions"[^>]*>Decisions <b>${String(waiting)}</b>`));
+    // AND ACTIVITY CARRIES NO NUMBER, which is this test's whole point said
+    // about the one door most likely to grow one. How many things happened is
+    // not a figure the owner should be taught to watch: a stream that reports
+    // its own volume makes a busy fortnight look like a productive one.
+    expect(html).toMatch(/href="\/foundry\/activity"[^>]*>Activity<\/a>/);
     expect(o.placeholder).toBe('Ask Foundry anything…');
     expect(o.scope).toBeNull();
     expect(o.crumbs).toBe('');

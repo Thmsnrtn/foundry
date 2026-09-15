@@ -200,6 +200,16 @@ details.fold{border-top:1px solid var(--line);margin:0}
 
 p{margin:0 0 var(--s2);overflow-wrap:break-word}
 .lede{color:var(--ink-2);font-size:1.06rem;margin-bottom:var(--s4)}
+/* THE DEFAULT LINK, WHICH DID NOT EXIST.
+   Every surface in this product styled its own links — .said a, .steps a,
+   .askwhere a, .crumbs a — and there was no base rule under them, so a link on
+   any surface that had not thought about it rendered in the browser's own blue
+   and purple. Nobody noticed because every existing surface had thought about
+   it; the first new page to carry a link found out immediately. A design system
+   whose rules are all exceptions has no system in it, so the default is stated
+   here and the specific rules below still win. */
+a{color:var(--accent)}
+a:visited{color:var(--accent)}
 .lede a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line);padding-bottom:1px}
 .lede a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
 
@@ -454,6 +464,32 @@ h2.section{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:
 h1 .dim{color:var(--ink-3);font-weight:400}
 .chips{display:flex;flex-wrap:wrap;gap:6px;margin:calc(-1 * var(--s2)) 0 var(--s3)}
 .chip{display:inline-block;font-size:.8rem;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--card);color:var(--ink-2)}
+/* A CHIP THAT FILTERS RATHER THAN LABELS. The shell's chips say what a place
+   is; Activity's say what it is showing, so they are links, and the one in
+   force is marked rather than merely darker — a difference of shade is not a
+   state anyone can be sure of. Tall enough for a thumb. */
+a.chip{text-decoration:none;min-height:32px;line-height:22px}
+a.chip.on{border-color:var(--accent);color:var(--accent)}
+
+/* ── THE STREAM ───────────────────────────────────────────────────────────────
+   Event rows, under the day they happened on. Three lines at most: when and
+   what class, what happened, and the ground under it. A row that needs a fourth
+   is not a state transition and does not belong here.
+
+   The class strip on the left is the only colour: gold where the owner's own
+   authority or his boundaries were involved, mint where something reached the
+   world, and nothing at all otherwise — because most of what happens is
+   ordinary and a stream that shouts at every row cannot emphasise anything. */
+.stream{list-style:none;padding:0;margin:0}
+.ev{padding:var(--s2) 0 var(--s2) var(--s3);border-bottom:1px solid var(--line);
+  border-left:2px solid transparent;margin:0}
+.ev:last-child{border-bottom:0}
+.ev p{margin:0}
+.ev .when{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  font-size:.78rem;color:var(--ink-3);margin-bottom:2px}
+.ev .when time{font-variant-numeric:tabular-nums}
+.ev.authority,.ev.boundary{border-left-color:var(--alert)}
+.ev.outward,.ev.money{border-left-color:var(--accent)}
 .local{display:flex;gap:4px;overflow-x:auto;scrollbar-width:none;margin:0 calc(-1 * var(--s3)) var(--s4);
   padding:0 var(--s3);border-bottom:1px solid var(--line)}
 .local::-webkit-scrollbar{display:none}
@@ -577,3 +613,23 @@ footer a:hover,footer a:focus-visible{text-decoration:underline}
   .one,.hero,.layer{max-width:44rem}
 }
 @media (min-width:1280px){.wrap{max-width:76rem}}
+/* THE ONE DECISION, AND WHAT IS BEHIND IT, TOGETHER.
+   Below this the two stack, which is right on a phone and is what the page did
+   everywhere. Above it the decision keeps the larger share — it is the thing he
+   came for and it carries the consequence, the cost and the button — and the
+   queue sits beside it so its length is a fact he can see rather than one he
+   has to scroll to. `align-items:start` so a short queue does not stretch to
+   match a tall decision and pretend to be longer than it is. */
+@media (min-width:1100px){
+  .decide{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);
+    gap:var(--s3);align-items:start}
+  .decide>div>h2:first-child{margin-top:0}
+  /* AND THE FACT LIST GOES BACK TO ONE COLUMN INSIDE IT. At full width a
+     label-beside-value pair reads as a table; in three-fifths of it the value
+     column is narrow enough that a sentence like "this act has not been placed
+     on the consequence ladder" becomes six ragged lines beside a two-word
+     label. The page is wide; this part of it is not, and the rule that should
+     decide is the width of the container rather than the width of the screen. */
+  .decide .facts{grid-template-columns:minmax(0,1fr)}
+  .decide .facts dt+dd{margin-bottom:var(--s2)}
+}
