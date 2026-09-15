@@ -152,6 +152,12 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
   const id = v.id;
   const { theShortVersion } = await import('../../services/venture/probe-design.js');
   const short = await theShortVersion(id);
+  // WHAT KIND OF TEST THIS IS, on the page of the test itself and behind a
+  // fold. §19's fingerprint, read from rows: unknowns left unknown, and
+  // refusing to compare at all until two experiments have settled.
+  const { genomeOf, likeness, DIMENSIONS } = await import('../../services/venture/genome.js');
+  const genome = await genomeOf(id);
+  const alike = genome === null ? null : await likeness(founderId, genome);
   const step = (s: ExperimentView['steps'][number]) => html`<li class="${s.status}">
     <p><strong>${s.status === 'done' ? '✓ ' : s.status === 'todo' ? '○ ' : '· '}${s.label}</strong>${s.status === 'todo' && s.key === 'recipients' ? html` — <a href="${s.href}">open</a>` : ''}</p>
     <p class="quiet">${s.detail}</p></li>`;
@@ -331,6 +337,17 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
     <details id="details"><summary>Details</summary>
       <dl class="facts">${v.details.map(([k, val]) => html`<dt>${k}</dt><dd>${val}</dd>`)}</dl>
     </details>
+
+    ${genome === null ? '' : html`<details id="kind"><summary>What kind of test this is</summary>
+      <dl class="facts">${DIMENSIONS.map((d) => html`<dt>${d.replace(/_/g, ' ')}</dt>
+        <dd>${genome.traits[d].value === null
+    ? html`<span class="unknown">not recorded</span>`
+    : genome.traits[d].value}</dd>`)}</dl>
+      ${alike === null ? '' : html`<p class="quiet">${alike.because}</p>`}
+      ${alike === null || alike.against === null ? '' : html`<p class="quiet">Same:
+        ${alike.shared.join(', ') || 'nothing'}. Different:
+        ${alike.differs.join(', ') || 'nothing'}.</p>`}
+    </details>`}
     <style>
       .steps{padding-left:1rem}.steps li{margin:.5rem 0}.steps li.done>p:first-child{opacity:.75}
       .facts{display:grid;grid-template-columns:minmax(8rem,auto) 1fr;gap:.25rem .75rem;margin:0}.facts dd{margin:0}

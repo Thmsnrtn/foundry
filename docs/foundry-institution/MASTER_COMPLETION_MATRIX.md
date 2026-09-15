@@ -58,7 +58,7 @@ honoured against pressure, not when nothing violated it by accident.
 | **16** | Experiments | **SATISFIED** | `experiments-place.ts`, migrations 238/262/278/297 | Lifecycle is schema, not prose: decision, ran_at, verdict, validity, `invalid_because`, `rerun_of`, `retired_because`, `superseded_by`. Detail exposes question, population, offer, price, channel, sample, strata, authority, staging, stop conditions, exposure, what it can and cannot prove, prediction and outcome |
 | **17** | Experiment Forge | **SATISFIED** *(architecture)* | `services/venture/` | Not a society of named agents: persistent responsibilities with ephemeral cognition. The lenses exist as modules — market evidence, probe design, falsification, legal pass, commercial readiness, economic disposition — and READY / REVISE / KILL are all reachable outputs |
 | **18** | Forge output contract | **SATISFIED** | `probe-design.ts`, `proof-1-deliberation.ts` | The seventeen questions are answered before an experiment reaches the owner, and the deliberation is recorded **before** the answer (migration 286), so the reasoning cannot be written to fit the outcome |
-| **19** | Experiment genome | **FAILED / NEEDS WORK** | — | Prediction and outcome are compared (`what_we_expect`, `would_disprove`, `what_happened`, `verdict`), but the structured comparative fingerprint this section asks for — customer type, pain, value mechanism, offer type, contact type, trust level, acquisition mode, fulfilment mode, recurrence, risk class, cost class, authority class, evidence target — **does not exist**. 001's facts are all known and could be recorded today |
+| **19** | Experiment genome | **SATISFIED** | `services/venture/genome.ts` | Sixteen dimensions, read from the rows that already held them — `contact_kind`, `evidence_stratum`, `act_classifications.reversibility` and `audience`, the offer material, the recipient rows, the unknown, the verdict — surfaced on the experiment's own page behind a fold. **What it refuses is the requirement.** §19's own caveat is *"without overfitting tiny history"*, and the history is one experiment that sold nothing to twenty-one businesses: `likeness` returns *"nothing to compare this to; one result is an observation and not a rate"* until two have settled, two unknowns are never counted as a match, a mixed population is its own value, and the module contains no scoring vocabulary at all — held from the source, because the way a score arrives is somebody adding one helpfully later |
 | **20** | Experiment 001 as curriculum | **SATISFIED** | tests, gates, schema | The lessons are crystallised as enforcement, not retrospective: authority binds the exact recipient set; a declined experiment's 22 approved recipients carry **zero** acts; read-after-write proves consequential state; a job that swallows a blocking exception is FAILED; `$0` is not inconsequential; owner exclusions outrank score |
 | **21** | Inbox — communications membrane | **SATISFIED** | `services/public-workshop/mail.ts` | Inbound is untrusted and gains no authority by being written. The chain holds through to verification. The owner view separates needs-owner from auto-resolved from suppressed. No thought-stream, no macro execution. No silence-triggered sequence exists anywhere |
 | **22** | Activity | **SATISFIED** | `services/founder/activity.ts`, `routes/dashboard/activity-place.ts` | Six canonical sources assembled into one stream, grouped by day, each row drilling to its evidence: authority granted or taken back, experiments crossing a lifecycle boundary, anything that actually reached a person, money from a source event, promises opened and discharged, and candidates the owner's boundaries refused. **What it refuses is the point** and is held by tests: an action not executed never appears (intent to write is not a write), fifty passed self-checks never appear, a reference company's rehearsal never appears, and the page carries no event counter — the concept board's "48 events today, +12%" is exactly what §22 and §1 forbid |
@@ -176,6 +176,38 @@ database refused the first attempt at this too, because a decision recorded as
 
 What is left is one screen: a single honest sentence, six tiles, no prose.
 Estate *Healthy*. Needs you *None*. `docs/design/mobile/foundry-quiet-390.png`.
+
+### The fingerprint that will not tell you a rate
+
+§19 asks for a structured fingerprint so experiments can be compared, and every
+one of its dimensions was already written down somewhere: `contact_kind` says
+whether an address was a role, a named person or a general inbox;
+`evidence_stratum` says which kind of shop; `act_classifications` carries
+reversibility, audience and the consequence rung; the price is on the offer, the
+sample on the recipients, the authority on the act. What did not exist was any
+way to see them as one shape.
+
+The hard part was never assembling it. It was refusing to do arithmetic on it.
+A fingerprint invites a score, a score invites a ranking, and a ranking built on
+one settled experiment would tell the owner that cold email to millwork shops
+*does not work* — which the evidence cannot support. One null result at one
+price through one channel to one population is an observation. It is not a rate.
+The institution has already made the opposite version of this mistake: two
+recipients were safe, and taught nothing.
+
+So the comparison refuses to speak until two experiments have settled, exactly
+as `sparkline.ts` refuses to draw a line from fewer than three readings. Two
+unknowns are never a match — two experiments that both failed to record a price
+are not two experiments at the same price. A population contacted partly at
+named people and partly at general inboxes reads *mixed*, because that is a
+third shape and collapsing it hides the confound most likely to explain the
+result. And a dimension nobody recorded reads *not recorded* rather than blank
+or zero: a test whose shape is half unknown should look half unknown.
+
+Writing the fixture for it took four tries, and each refusal was the schema
+being right: an experiment cannot arrive already run; a recipient cannot be
+attached to one that has; a recipient is never born approved; and a review that
+does not name `founder:<id>` is not the owner reviewing.
 
 ### Desktop was the phone's page, wider
 
