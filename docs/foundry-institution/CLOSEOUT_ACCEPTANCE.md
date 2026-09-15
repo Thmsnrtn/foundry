@@ -133,6 +133,38 @@ has not made one, and the surface says so rather than quietly holding back
 thirty per cent of something. A policy is superseded rather than updated, so a
 reserve computed under an old rate stays explicable.
 
+### Could he leave? The five questions at three lengths
+
+Read against the live estate on 15 September, after the fixes, at 02:12 UTC.
+**Reported separately and never averaged** — a property that holds for a week and
+fails at ninety days is not a property that holds; it is one nobody had asked
+the longer question.
+
+| | 7 days | 30 days | 90 days |
+|---|---|---|---|
+| truthful | ✗ | ✗ | ✗ |
+| bounded | ✓ $35 | ✓ $150 | ✓ $450 |
+| understandable | ✓ | ✓ | ✓ |
+| recoverable | ✓ | ✗ | ✗ |
+| only real decisions | ✓ | ✓ | ✓ |
+
+**truthful** fails for exactly one reason at every horizon: *Foundry has nothing
+connected to it, so I observe nothing about it.* It used to fail for two — the
+second was `behavioral_triggers`, a job already retired whose gravestone in
+`job_health` was being read as a fire. The other two lines in that reading are
+now positive: the deployment can see itself, and the ledger refuses an estimate
+with no written policy behind it.
+
+**recoverable** holds at 7 and fails at 30 and 90 because the ladder started
+eleven days ago, not because it is misconfigured. Copies reach back 11 days,
+which covers the whole of a seven-day absence; a fault in the first 19 days of a
+thirty-day one would have no clean copy left by the time he noticed. It will
+hold at 30 around 4 October and at 90 around 3 December, with no intervention.
+Until then the claim is not made.
+
+**bounded** is a real number rather than a promise: at most $5 a day of thinking,
+and every permission ends by itself whether or not he comes back.
+
 ---
 
 ## PROOF — what was actually checked
