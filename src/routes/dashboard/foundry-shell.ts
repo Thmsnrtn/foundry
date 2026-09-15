@@ -1160,7 +1160,9 @@ export function waitingList(queue: import('../../services/founder/attention.js')
       <p class="quiet"><a href="${item.href}">${item.companyName}</a> · ${
     item.kind === 'act' ? 'an act' : item.kind === 'advice' ? 'advice' : item.kind === 'experiment' ? 'a real test' : 'something I noticed'}</p>
       <p><strong>${item.summary}</strong>${item.effect ? html` <span class="pill ${item.effect === 'internal' ? 'ok' : 'warn'}">${item.effect === 'internal' ? 'internal' : item.effect === 'person' ? 'person-facing' : item.effect === 'public' ? 'public' : item.effect === 'provider' ? 'provider-facing' : 'account-facing'}</span>` : ''}</p>
-      <p class="quiet">${item.detail}</p>
+      ${item.points && item.points.length > 1
+    ? html`<ul class="blocking quiet">${item.points.map((b) => html`<li>${b}</li>`)}</ul>`
+    : html`<p class="quiet">${item.detail}</p>`}
       ${item.open ? html`<div class="pair"><a class="btn yes" href="${item.open.href}">${item.open.label}</a></div>` : html`<div class="pair">
         <form method="POST" action="${item.yes.action}">${Object.entries(item.yes.fields ?? {}).map(([k, v]) => html`<input type="hidden" name="${k}" value="${v}" />`)}
           <button class="btn yes" type="submit">${item.yes.label}</button></form>
@@ -2371,7 +2373,15 @@ foundryShellRoutes.get('/foundry', async (c) => {
   // "what are you doing" means both — so the way to the second is here, where
   // he asks.
   const nowNext = live ? html`<dl class="nownext" aria-label="Now and next">
-      <div><dt class="k">Now</dt><dd>${live.stateDetail}</dd></div>
+      <div${live.blocking.length > 1 ? raw(' class="wide"') : ''}><dt class="k">Now</dt><dd>${live.blocking.length > 1
+    // FOUR THINGS IN THE WAY ARE FOUR THINGS, NOT ONE SENTENCE ABOUT FOUR
+    // THINGS. Joined with semicolons this ran to sixty words in the one slot
+    // on the first screen that answers "what are you doing", and the owner had
+    // to take it apart again every time he opened the page. The readiness
+    // check already produces them separately; only the prose put them back
+    // together. One blocker stays a line, because a list of one is furniture.
+    ? html`<ul class="blocking">${live.blocking.map((b) => html`<li>${b}</li>`)}</ul>`
+    : live.stateDetail}</dd></div>
       <div><dt class="k">Next</dt><dd>${live.state === 'running' ? `The hand passes again at ${String(nextPass.getUTCHours()).padStart(2, '0')}:${String(nextPass.getUTCMinutes()).padStart(2, '0')} UTC and reconciles what came back` : live.stateLabel}</dd></div>
       <div><dt class="k">Carrying</dt><dd>${carrying.length === 0 ? html`nothing else · <a href="/foundry/roadmap">the record</a>`
     : html`${String(carrying.length)} ${carrying.length === 1 ? 'thing' : 'things'} · <a href="/foundry/roadmap">what they are</a>`}</dd></div>

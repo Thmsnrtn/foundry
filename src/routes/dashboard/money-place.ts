@@ -53,12 +53,32 @@ const fig = (f: Figure): H => f.cents === null
   ? html`<span class="unknown">not known</span>`
   : html`<span>${dollars(f.cents)}${f.quality === 'estimated' ? html` <span class="quiet">estimated</span>` : ''}</span>`;
 
+// A LINE OF THE SUBTRACTION IS A NUMBER, NOT A PARAGRAPH.
+//
+// Every figure here knows why it is what it is, and for a long time every one
+// of them said so on the same screen: seven rows, seven reasons, six hundred
+// words to carry six zeroes. The arithmetic — the thing the page exists to show
+// — was the smallest part of it.
+//
+// The reason is not dropped, because a figure that cannot say where it came
+// from is worse than no figure. It moves one tap down, with the others, so
+// this surface answers "what is mine" at a glance and "why" on request. That
+// is the difference between watching and inspecting, and it is the whole
+// argument for keeping them apart.
 const line = (label: string, f: Figure, negative = false): H => html`
   <div class="mline">
     <dt>${negative ? '− ' : ''}${label}</dt>
     <dd>${fig(f)}</dd>
-    <p class="quiet">${f.because}</p>
   </div>`;
+
+/** The reasons, together, behind one disclosure rather than seven. */
+const reasons = (rows: Array<[string, Figure]>): H => html`
+  <details class="why-money">
+    <summary>Why each line is what it is</summary>
+    <dl class="facts">
+      ${rows.map(([label, f]) => html`<div><dt>${label}</dt><dd>${f.because}</dd></div>`)}
+    </dl>
+  </details>`;
 
 moneyRoutes.get('/foundry/money', async (c: any) => {
   const founderId = await founderOf(c);
@@ -105,9 +125,17 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
         <div class="mline total">
           <dt>Yours to take</dt>
           <dd>${fig(s.figure)}</dd>
-          <p class="quiet">${s.figure.because}</p>
         </div>
       </dl>
+      ${reasons([
+    ['In Stripe, ours', s.held],
+    ['Paid for, not delivered', s.obligations],
+    ['Could be asked back', s.refundExposure],
+    ['Held for tax', s.taxReserve],
+    ['Kept to keep running', s.operatingReserve],
+    ['Already authorised to spend', s.authorisedCapital],
+    ['Yours to take', s.figure],
+  ])}
     </div>
 
     <div class="know">

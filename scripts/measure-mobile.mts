@@ -282,9 +282,16 @@ async function main(): Promise<void> {
     ...DESKTOP_WIDTHS.map((width) => ({ width, scale: 1, desktop: true })),
   ];
   for (const { width, scale, desktop } of runs) {
+    // THE GROUND IS DARK, AND EVERY SCREENSHOT THIS HARNESS EVER TOOK WAS OF
+    // THE ALTERNATE. The stylesheet is dark-first — the palette lives on bare
+    // :root and light is an override under prefers-color-scheme:light. A
+    // browser started with Playwright's default asks for light, gets the
+    // override, and photographs a product nobody designed. Every picture in
+    // docs/design was of that. Asking for dark here is not a preference: it
+    // makes the proof a picture of the thing.
     const context = await browser.newContext(desktop
-      ? { viewport: { width, height: 900 }, deviceScaleFactor: 2 }
-      : { viewport: { width, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true });
+      ? { viewport: { width, height: 900 }, deviceScaleFactor: 2, colorScheme: 'dark' }
+      : { viewport: { width, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark' });
     const page = await context.newPage();
     if (scale !== 1) {
       await page.addInitScript(`document.addEventListener('DOMContentLoaded',function(){

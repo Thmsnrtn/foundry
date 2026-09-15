@@ -17,6 +17,13 @@ export interface AttentionItem {
   companyName: string;
   summary: string;
   detail: string;
+  /**
+   * THE SAME FACT, STILL IN PIECES. When what is in the way is several things,
+   * `detail` joins them into a sentence and this keeps them apart. A card with
+   * room shows the rows; one without falls back to the sentence, so nothing
+   * has to be said twice in two shapes on one screen.
+   */
+  points?: string[];
   /** The routes its own page posts to: yes, and no. */
   yes: { label: string; action: string; fields?: Record<string, string> };
   no: { label: string; action: string; fields?: Record<string, string> };
@@ -70,6 +77,7 @@ export async function waitingOn(founderId: string): Promise<AttentionItem[]> {
         kind: 'experiment', id: v.id, productId: v.productId ?? '', companyName: v.assetName ?? 'A real test',
         summary: v.state === 'ready' ? `Allow the test: ${v.title}` : `The test needs you: ${open?.label.toLowerCase() ?? v.stateDetail}`,
         detail: v.state === 'ready' ? v.allow.explanation[0] : v.stateDetail,
+        ...(v.blocking.length > 1 ? { points: v.blocking } : {}),
         yes: { label: 'Allow', action: `/foundry/experiments/${v.id}/allow` },
         no: { label: 'Do not run it', action: `/foundry/experiments/${v.id}/decline` },
         why: `/foundry/why/experiment/${v.id}`, href: `/foundry/experiments/${v.id}`,
@@ -90,6 +98,7 @@ export async function waitingOn(founderId: string): Promise<AttentionItem[]> {
       workshop.push({
         kind: 'experiment', id: 'workshop', productId: String(w.product_id), companyName: String(w.public_name),
         summary: `The Workshop needs you: ${needs[0]}`, detail: needs.length > 1 ? `Also: ${needs.slice(1).join('; ')}.` : 'Everything else is in place.',
+        ...(needs.length > 2 ? { points: needs.slice(1) } : {}),
         yes: { label: 'Open the Workshop', action: '/foundry/public-workshop' }, no: { label: 'Later', action: '/foundry/public-workshop' },
         why: null, href: '/foundry/public-workshop', open: { label: 'Open the Workshop', href: '/foundry/public-workshop' },
       });

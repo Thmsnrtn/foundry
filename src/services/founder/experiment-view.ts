@@ -35,6 +35,18 @@ export interface TimelineEvent {
 export interface ExperimentView {
   id: string; founderId: string; title: string; productId: string | null; assetName: string | null;
   state: ExperimentState; stateLabel: string; stateDetail: string;
+  /**
+   * WHAT IS IN THE WAY, STILL IN PIECES.
+   *
+   * `stateDetail` joins these with semicolons into one sentence because a
+   * sentence is what a card with one line of room can hold. Four blockers read
+   * that way become sixty words the owner has to parse back apart, and he has
+   * to do it every time he opens the page. The list is what the readiness check
+   * actually produced; anywhere with room to show rows should show rows.
+   *
+   * Empty whenever nothing is blocking, which is not the same as unknown.
+   */
+  blocking: string[];
   why: { whatWeDo: string; whatWeExpect: string; wouldDisprove: string; question: string };
   steps: Step[];
   allow: { possible: boolean; reason: string | null; explanation: string[] };
@@ -163,6 +175,7 @@ export async function getExperimentView(founderId: string, experimentId: string,
   return {
     id: experimentId, founderId, title: e.whatWeDo, productId: e.productId, assetName: asset ? String(asset.name) : null,
     state, stateLabel, stateDetail,
+    blocking: state === 'needs_you' ? ready.missing : [],
     why: { whatWeDo: e.whatWeDo, whatWeExpect: e.whatWeExpect, wouldDisprove: e.wouldDisprove, question: unknown ? String(unknown.question) : '' },
     steps, allow, exposure, money: moneyView, offer: offerView,
     rules: { success: rule ? `Success means ${describeRule(rule)}.` : 'No machine rule; the owner would settle it.', stop: stopRules(e, rule), windowClosesAt: windowClosesAt ? windowClosesAt.toISOString().slice(0, 10) : null, daysLeft },

@@ -148,6 +148,9 @@ h1{font-family:var(--serif);font-size:2rem;line-height:1.15;font-weight:500;
 .nownext>div{background:var(--card-2);border:1px solid var(--line);border-radius:var(--r2);padding:var(--s2)}
 .nownext dt.k{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:700;margin:0 0 4px}
 .nownext dd{margin:0;font-size:.93rem;color:var(--ink)}
+/* A LIST NEEDS THE WHOLE ROW. Half a phone is four words a line, which turns
+   four countable blockers back into the paragraph they were rescued from. */
+.nownext>div.wide{grid-column:1/-1}
 @media (max-width:359px){.nownext{grid-template-columns:minmax(0,1fr)}}
 
 /* ─── The River ───────────────────────────────────────────────────────────── */
@@ -326,8 +329,10 @@ pre{max-width:100%;overflow-x:auto;font-size:.8rem;line-height:1.5;
 
 /* ── THE SUBTRACTION ─────────────────────────────────────────────────────────
    Money's one screen is a list of deductions ending in a total, and it has to
-   read as arithmetic on a phone. Each line is a label, a figure and the reason
-   the figure is what it is; the total rules off above itself.
+   read as arithmetic on a phone. Each line is a label and a figure, nothing
+   else, and the total rules off above itself; the reasons live together in one
+   disclosure below, because seven paragraphs between seven numbers is a page
+   about money rather than a page of it.
 
    `.unknown` is the important one. A figure the institution does not know is
    drawn differently from one that is zero — italic, dimmer, and never with a
@@ -337,10 +342,25 @@ pre{max-width:100%;overflow-x:auto;font-size:.8rem;line-height:1.5;
   padding:var(--s2) 0;border-bottom:1px solid var(--line);margin:0}
 .mline dt{color:var(--ink);margin:0}
 .mline dd{margin:0;font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
-.mline p{grid-column:1/-1;margin:0;font-size:.82rem}
 .mline.total{border-bottom:0;border-top:2px solid var(--line-2);margin-top:var(--s1)}
 .mline.total dt,.mline.total dd{font-weight:600;font-size:1.1rem}
 .unknown{font-style:italic;color:var(--ink-3)}
+/* WHAT IS IN THE WAY, AS THINGS RATHER THAN AS A SENTENCE. Small, marked, and
+   still a list at 200% text — the point is that four blockers can be counted
+   at a glance, so they must not reflow into a paragraph when the type grows. */
+.blocking{list-style:none;padding:0;margin:0;display:grid;gap:4px}
+.blocking li{position:relative;padding-left:var(--s3)}
+.blocking li::before{content:"";position:absolute;left:4px;top:.55em;
+  width:4px;height:4px;border-radius:50%;background:var(--ink-3)}
+
+/* The reasons, one tap under the arithmetic rather than between its rows. The
+   figures stay a column of numbers that can be read down; the sentences that
+   ground them keep their labels, so an opened panel still says which line it
+   is talking about. */
+.why-money{border-top:0;margin-top:var(--s2)}
+.why-money .facts{padding:0 0 var(--s2)}
+.why-money summary{padding-left:0;padding-right:0;font-size:.9rem;color:var(--ink-2)}
+.why-money dd{font-size:.9rem;color:var(--ink-2)}
 dl.money{display:block;margin:0}
 .sales{list-style:none;padding:0;margin:var(--s2) 0 0}
 .sales li{padding:var(--s2) 0;border-bottom:1px solid var(--line)}
