@@ -7,6 +7,7 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { callSonnet } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import { buildBriefingHeadlinePrompt } from '../../prompts/briefing-headline.js';
 import { buildDestinationContext } from '../destination/briefing-context.js';
 import type {
@@ -253,7 +254,7 @@ export async function generateDailyBriefing(
         prompt.system,
         prompt.user,
         prompt.maxTokens,
-        productId
+        companySpend(productId, 'the morning briefing')
       );
       headline = headlineResponse.content.trim().slice(0, 120);
       tokensUsed = headlineResponse.usage.input_tokens + headlineResponse.usage.output_tokens;

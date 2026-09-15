@@ -4,6 +4,7 @@
 // =============================================================================
 
 import { callSonnet, parseJSONResponse } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import { query, insertAuditLog } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 import type { CompetitiveSignal, CompetitiveSignalType, CompetitiveSignificance } from '../../types/index.js';
@@ -64,7 +65,7 @@ Identify any competitive changes worth noting. Be conservative — only flag gen
 
   const response = await callSonnet(
     `${systemPrompt}\n\n${dataBlockInstruction('product')} ${dataBlockInstruction('competitors')}`,
-    userPrompt, 4096, productId);
+    userPrompt, 4096, companySpend(productId, 'competitive read'));
   const signals = parseJSONResponse<ScanResult[]>(response.content);
 
   const persisted: CompetitiveSignal[] = [];

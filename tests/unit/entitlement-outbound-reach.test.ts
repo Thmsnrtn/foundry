@@ -181,19 +181,22 @@ describe('the pause reaches model spend', () => {
   it('refuses to reserve spend for a paused company', async () => {
     await query(`UPDATE products SET scp_status='paused' WHERE id=?`, [productId]);
     const { callSonnet, NotEntitledError } = await import('../../src/services/ai/client.js');
-    await expect(callSonnet('sys', 'user', 16, productId)).rejects.toThrow(NotEntitledError);
+    const { companySpend } = await import('../../src/services/ai/what-it-is-for.js');
+    await expect(callSonnet('sys', 'user', 16, companySpend(productId, 'a gate'))).rejects.toThrow(NotEntitledError);
   });
 
   it('refuses for an archived record too', async () => {
     await query(`UPDATE products SET status='archived' WHERE id=?`, [productId]);
     const { callSonnet } = await import('../../src/services/ai/client.js');
-    await expect(callSonnet('sys', 'user', 16, productId)).rejects.toThrow(/refused/i);
+    const { companySpend } = await import('../../src/services/ai/what-it-is-for.js');
+    await expect(callSonnet('sys', 'user', 16, companySpend(productId, 'a gate'))).rejects.toThrow(/refused/i);
   });
 
   it('does not refuse an id that names no company', async () => {
     // An entitlement check, not an authorization check. Turning a missing row
     // into a refusal would make a bad id look like a billing decision.
     const { callSonnet, NotEntitledError } = await import('../../src/services/ai/client.js');
+    const { companySpend } = await import('../../src/services/ai/what-it-is-for.js');
     await expect(callSonnet('sys', 'user', 16, 'no-such-product'))
       .rejects.not.toThrow(NotEntitledError);
   });
@@ -205,7 +208,7 @@ describe('the pause reaches model spend', () => {
 // amount of money.
 describe('a model call names its subject', () => {
   it('charges an institutional call to nobody, deliberately and with a reason', async () => {
-    const { institutionSpend } = await import('../../src/services/ai/client.js');
+    const { institutionSpend } = await import('../../src/services/ai/what-it-is-for.js');
     const declared = institutionSpend('cross-company aggregation has no single payer');
     expect(declared.institutionReason.length).toBeGreaterThan(20);
   });
@@ -231,15 +234,17 @@ describe('the spend gate reads all three axes', () => {
     await query(
       `UPDATE products SET entitlement_paused_at = datetime('now') WHERE id=?`, [productId]);
     const { callSonnet, NotEntitledError } = await import('../../src/services/ai/client.js');
-    await expect(callSonnet('sys', 'user', 16, productId)).rejects.toThrow(NotEntitledError);
+    const { companySpend } = await import('../../src/services/ai/what-it-is-for.js');
+    await expect(callSonnet('sys', 'user', 16, companySpend(productId, 'a gate'))).rejects.toThrow(NotEntitledError);
   });
 
   it('and allows it again once the account is entitled', async () => {
     await query(`UPDATE products SET entitlement_paused_at = NULL WHERE id=?`, [productId]);
     const { callSonnet, NotEntitledError } = await import('../../src/services/ai/client.js');
+    const { companySpend } = await import('../../src/services/ai/what-it-is-for.js');
     // No API key in tests, so the provider call fails — what matters is that it
     // got past the entitlement check to fail for that reason instead.
-    await expect(callSonnet('sys', 'user', 16, productId))
+    await expect(callSonnet('sys', 'user', 16, companySpend(productId, 'a gate')))
       .rejects.not.toThrow(NotEntitledError);
   });
 });

@@ -5,6 +5,7 @@
 
 import { query } from '../../db/client.js';
 import { callSonnet, parseJSONResponse } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import { nanoid } from 'nanoid';
 
 // PPP factors relative to USD (approximate, updated periodically)
@@ -110,7 +111,7 @@ Only include real, current risks. Return empty array if none are relevant.`;
   const response = await callSonnet(
     'You are a geopolitical risk analyst for SaaS businesses. Only flag real, current risks.',
     prompt,
-    2048, productId
+    2048, companySpend(productId, 'global intelligence')
   );
 
   const signals = parseJSONResponse<Array<{

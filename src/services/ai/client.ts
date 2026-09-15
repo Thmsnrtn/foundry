@@ -10,6 +10,21 @@ import { log } from '../../lib/logger.js';
 import { reportError } from '../../lib/error-reporter.js';
 import { operatingProduct, query } from '../../db/client.js';
 import { finishReservation, reserveSpend, type SpendReservation } from './spend-ledger.js';
+import {
+  subjectPurpose, subjectWork,
+  type SpendPurpose, type SpendSubject, type Work,
+} from './what-it-is-for.js';
+
+// RE-EXPORTED SO ONE IMPORT STILL REACHES BOTH. What a call is FOR is declared
+// in `what-it-is-for.ts` rather than here, because eighteen test files replace
+// this module wholesale with a stub of `callSonnet` — and a call site that
+// imported its own declaration helper from a mocked module got `undefined` and
+// threw inside the thing under test. Declaring a subject is not making a call.
+export {
+  institutionSpend, companySpend, subjectPurpose, subjectWork,
+  type SpendPurpose, type SpendPurposeKind, type SpendSubject,
+  type InstitutionSpend, type CompanySpend, type Work,
+} from './what-it-is-for.js';
 
 const OPENROUTER_BASE_URL = 'https://openrouter.ai/api/v1';
 
@@ -115,68 +130,10 @@ export function computeCostCents(model: AIModel | string, inputTokens: number, o
   return inputCostCents + outputCostCents;
 }
 
-/**
- * WHO IS THIS CALL FOR?
- *
- * A model call is either work for one company or work for the institution
- * itself. There is no third case, and there is no "we did not say".
- *
- * `productId` used to be the fourth, optional argument, so omitting it meant
- * BOTH "this is institutional" and "somebody forgot" — fifty-five of a hundred
- * and four call sites had forgotten, and the resulting spend was bounded only
- * by the global ceiling. Omission cannot be allowed to carry meaning when the
- * two meanings differ by an unbounded amount of money.
- *
- * The subject is now required at the type boundary, and institutional calls say
- * so out loud with a reason a reader can check.
- */
-/**
- * WHAT THE THINKING IS FOR. The same (kind, id) shape prediction_resolutions
- * uses, so what a question cost to reason about can later sit beside what it
- * cost to test and how the test came out. Optional: a call without one is
- * still attributed; it simply cannot be compared.
- */
-export type SpendPurposeKind =
-  'observation' | 'candidate' | 'experiment' | 'unknown' | 'undertaking' | 'responsibility' | 'workspace' | 'mandate';
-export interface SpendPurpose { readonly kind: SpendPurposeKind; readonly id: string }
-
-export interface InstitutionSpend {
-  readonly institutionReason: string;
-  readonly purpose?: SpendPurpose;
-}
-
-/** A company's call that also names what it was for. */
-export interface CompanySpend {
-  readonly productId: string;
-  readonly purpose: SpendPurpose;
-}
-
-/** Declare a model call as the institution's own, with the reason it has no
- * company to charge. The reason is not decoration: it is what a reviewer reads
- * to decide whether this really is institutional or just unattributed. */
-export function institutionSpend(reason: string, purpose?: SpendPurpose): InstitutionSpend {
-  return purpose ? { institutionReason: reason, purpose } : { institutionReason: reason };
-}
-
-/** A company's call with its purpose named. */
-export function companySpend(productId: string, purpose: SpendPurpose): CompanySpend {
-  return { productId, purpose };
-}
-
-/** A company id, an explicit institutional declaration, or a company call with
- * a purpose. Never undefined. */
-export type SpendSubject = string | InstitutionSpend | CompanySpend;
-
 function subjectProductId(subject: SpendSubject | undefined): string | undefined {
-  if (typeof subject === 'string') return subject;
   return subject && 'productId' in subject ? subject.productId : undefined;
 }
 
-/** The purpose a subject names, if it names one. */
-export function subjectPurpose(subject: SpendSubject | undefined): SpendPurpose | null {
-  if (!subject || typeof subject === 'string') return null;
-  return subject.purpose ?? null;
-}
 
 /** Refuse before anything is reserved or dispatched. */
 async function refuseIfNotEntitled(productId: string | undefined): Promise<void> {
@@ -292,6 +249,7 @@ async function authorizeSpend(
   prompt: string,
   maxOutputTokens: number,
   purpose: SpendPurpose | null = null,
+  work: Work | null = null,
 ): Promise<SpendReservation> {
   const founderId = productId ? await resolveFounderId(productId) : null;
   if (productId && !founderId) {
@@ -305,7 +263,7 @@ async function authorizeSpend(
   return reserveSpend({
     productId, founderId: founderId ?? undefined, model, amountCents,
     caps: { global: GLOBAL_COST_CEILING_CENTS, product: DAILY_COST_CEILING_CENTS, founder: FOUNDER_COST_CEILING_CENTS },
-    purpose,
+    purpose, work,
   });
 }
 
@@ -429,7 +387,7 @@ export async function callClaude(
   const baseUrl = getBaseUrl();
   const reservation = await authorizeSpend(
     productId, config.model, `${config.systemPrompt}\n${config.userPrompt}`, config.maxTokens,
-    subjectPurpose(config.subject),
+    subjectPurpose(config.subject), subjectWork(config.subject),
   );
   const startedAt = Date.now();
   let lastError: Error | null = null;

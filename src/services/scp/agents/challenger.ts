@@ -5,6 +5,7 @@
 // =============================================================================
 
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
+import { companySpend } from '../../ai/what-it-is-for.js';;
 
 export interface AgentAssertion {
   agentName: string;
@@ -68,7 +69,7 @@ Return JSON only (no markdown fences):
 
 Return exactly 3 challenges, ordered by severity (highest first).`;
 
-  const response = await callSonnet(systemPrompt, userPrompt, 2048, productId);
+  const response = await callSonnet(systemPrompt, userPrompt, 2048, companySpend(productId, 'an agent session'));
 
   let parsed: ChallengerResponse;
   try {

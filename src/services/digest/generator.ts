@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { callOpus, callSonnet } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import { getMRRDecomposition, computeHealthRatio } from '../intelligence/revenue.js';
 import { getLatestCohortSummary } from '../intelligence/cohort.js';
 import { getFounderHealthSummary, generateFounderHealthDigestSection } from '../intelligence/founder-health.js';
@@ -165,6 +166,7 @@ Active stressors: ${stressors.length > 0 ? stressors.map((s) => s.name).join(', 
 
   prompt += '\nBe direct and specific. What happened and what it means.';
 
-  const response = await model(systemInstruction, prompt, 512, productId);
+  const response = await model(systemInstruction, prompt, 512,
+    companySpend(productId, 'the daily insight'));
   return response.content;
 }

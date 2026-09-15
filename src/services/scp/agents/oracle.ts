@@ -14,6 +14,7 @@ import type {
   AgentMessageSignal, HypothesisSignal,
 } from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
+import { companySpend } from '../../ai/what-it-is-for.js';;
 import { query } from '../../../db/client.js';
 import { pctOfFraction, measured, money } from '../../ai/measured.js';
 
@@ -263,7 +264,7 @@ Return JSON only (no markdown fences):
     // which is the shape that quietly becomes the bill. Its own agent has
     // produced nothing an owner acted on; see the retirement note in
     // `src/lib/frontier-warrant.ts`.
-    const response = await callSonnet(systemPrompt, userPrompt, 4096, context.productId);
+    const response = await callSonnet(systemPrompt, userPrompt, 4096, companySpend(context.productId, 'an agent session'));
     const tokensUsed = (response.usage.input_tokens ?? 0) + (response.usage.output_tokens ?? 0);
     // Operational-model rates: $3 / $15 per million.
     const costUsd = (response.usage.input_tokens ?? 0) * 0.000003 + (response.usage.output_tokens ?? 0) * 0.000015;

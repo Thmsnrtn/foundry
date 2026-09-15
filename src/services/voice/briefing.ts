@@ -8,6 +8,7 @@ import { query, getActiveStressors, getPendingDecisions } from '../../db/client.
 import { computeSignal } from '../signal.js';
 import { getMRRDecomposition } from '../intelligence/revenue.js';
 import { callOpus, callSonnet } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import { nanoid } from 'nanoid';
 import type { VoiceSession, VoiceUpdate } from '../../types/index.js';
 import { signalText } from '../signal.js';
@@ -116,7 +117,7 @@ Rules:
   let headline = '';
 
   try {
-    const r = await callSonnet(systemPrompt, userPrompt, 512, productId);
+    const r = await callSonnet(systemPrompt, userPrompt, 512, companySpend(productId, 'the spoken briefing'));
     briefingText = r.content.trim();
     // Extract the headline (first sentence)
     const firstSentence = briefingText.split('.')[0];
@@ -181,7 +182,7 @@ Return JSON:
   let summary = '';
 
   try {
-    const r = await callSonnet(systemPrompt, `Transcript: "${transcript}"`, 512, productId);
+    const r = await callSonnet(systemPrompt, `Transcript: "${transcript}"`, 512, companySpend(productId, 'the spoken briefing'));
     const parsed = JSON.parse(r.content) as { updates: VoiceUpdate[]; summary: string };
     updates.push(...(parsed.updates ?? []));
     summary = parsed.summary ?? '';

@@ -11,6 +11,7 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { callSonnet } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import { buildVoiceJudgePrompt } from '../../prompts/voice-judge.js';
 import { logger } from '../logger.js';
 
@@ -393,7 +394,7 @@ export async function scoreArtifactAgainstVoice(
 
   let response;
   try {
-    response = await callSonnet(systemPrompt, userPrompt, 600, productId);
+    response = await callSonnet(systemPrompt, userPrompt, 600, companySpend(productId, 'voice'));
   } catch (err) {
     // The judge was asked and could not answer. That is not a score.
     logger.error(

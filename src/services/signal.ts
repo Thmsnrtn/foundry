@@ -12,6 +12,7 @@ import {
   getLifecycleState,
 } from '../db/client.js';
 import { callSonnet } from './ai/client.js';
+import { companySpend } from './ai/what-it-is-for.js';;
 import { nanoid } from 'nanoid';
 import { logger } from './logger.js';
 
@@ -271,7 +272,7 @@ Pending Decisions: ${decisions.length}${decisions.length > 0 ? `, oldest is ${ol
 3 sentences only. No formatting. No line breaks between sentences.`;
 
   try {
-    const response = await callSonnet(systemPrompt, userPrompt, 256, productId);
+    const response = await callSonnet(systemPrompt, userPrompt, 256, companySpend(productId, 'a signal'));
     const text = response.content.trim();
     // Ensure we have something sensible
     if (text.length < 20) return buildFallbackProse(score, ctx);

@@ -6,6 +6,7 @@
 
 import { query, insertAuditLog } from '../../db/client.js';
 import { callSonnet } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import { nanoid } from 'nanoid';
 import { runAllGates } from './gates.js';
 import { applyConfigChange, rollbackConfig, isConfigType, type ConfigType } from './agent-config.js';
@@ -113,7 +114,7 @@ ${session.sessionTranscript}
 What behavioral observations can you extract? What specific config changes would improve this agent's performance?`;
 
   try {
-    const response = await callSonnet(systemPrompt, userPrompt, 2048, session.productId);
+    const response = await callSonnet(systemPrompt, userPrompt, 2048, companySpend(session.productId, 'agent evolution'));
     const content = response.content.trim();
 
     let cleaned = content;
@@ -180,7 +181,7 @@ ${initialObservations.observations.join('\n')}
 As an independent critic: what additional specific, minimal changes would improve this agent's performance?`;
 
   try {
-    const response = await callSonnet(systemPrompt, userPrompt, 2048, session.productId);
+    const response = await callSonnet(systemPrompt, userPrompt, 2048, companySpend(session.productId, 'agent evolution'));
     const content = response.content.trim();
 
     let cleaned = content;

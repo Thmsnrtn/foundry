@@ -26,7 +26,8 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
-import { callSonnet, institutionSpend } from '../ai/client.js';
+import { callSonnet } from '../ai/client.js';
+import { institutionSpend } from '../ai/what-it-is-for.js';;
 import { shieldUntrustedContent } from '../ai/prompt-shield.js';
 import { dataBlockInstruction, wrapDataBlock } from '../ai/sanitize.js';
 
@@ -229,7 +230,7 @@ export async function interpret(input: {
     reply = await callSonnet(SYSTEM, user, 1200, institutionSpend(
       // eslint-disable-next-line max-len
       'reading one real market signal for the owner\'s own portfolio search; there is no company to charge because no venture exists yet',
-      { kind: 'observation', id: input.observationId }));
+      'reading an observation', { kind: 'observation', id: input.observationId }));
   } catch (err) {
     return { refused: `could not read it: ${err instanceof Error ? err.message : 'unknown'}` };
   }
@@ -263,7 +264,7 @@ export async function interpret(input: {
     ].join('\n'), 1200, institutionSpend(
       // eslint-disable-next-line max-len
       'a second attempt at getting the reader to quote the sentence it read; the owner\'s portfolio search, which has no company to charge',
-      { kind: 'observation', id: input.observationId })).catch(() => null);
+      'a second reading', { kind: 'observation', id: input.observationId })).catch(() => null);
     const second = again === null ? null : parse(again.content);
     if (second === null || second.abstain !== null || !quoteIsInTheText(second, saw)) {
       return record({

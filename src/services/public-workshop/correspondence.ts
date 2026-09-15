@@ -36,6 +36,7 @@ import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import { query } from '../../db/client.js';
 import { callHaiku, parseJSONResponse } from '../ai/client.js';
+import { institutionSpend } from '../ai/what-it-is-for.js';;
 import { shieldUntrustedContent } from '../ai/prompt-shield.js';
 import { invoke } from '../outbound/gateway.js';
 import { publicWorkshopOf } from './settings.js';
@@ -116,9 +117,10 @@ export async function interpret(subject: string, body: string): Promise<Understa
   const shielded = shieldUntrustedContent(`Subject: ${subject}\n\n${body}`.slice(0, 8000));
   const fallback: Understanding = Understanding.parse({ intent: 'unclear' });
   try {
-    const r = await callHaiku(INTERPRETER, `<message>\n${shielded.sanitized}\n</message>`, 700, {
-      institutionReason: 'reading a message somebody sent the Workshop, to decide what it is',
-    });
+    const r = await callHaiku(INTERPRETER, `<message>\n${shielded.sanitized}\n</message>`, 700,
+      institutionSpend(
+        'reading a message somebody sent the Workshop, to decide what it is',
+        'reading the post'));
     const parsed = Understanding.parse(parseJSONResponse<unknown>(r.content));
     return shielded.triggered ? { ...parsed, attempts_instruction: true } : parsed;
   } catch {

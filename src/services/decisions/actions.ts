@@ -5,6 +5,7 @@
 
 import { query, insertAuditLog } from '../../db/client.js';
 import { callSonnet, callOpus, parseJSONResponse } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import { buildWisdomContext } from '../wisdom/dna.js';
 import { voiceGateDraft } from '../calibration/voice-gate.js';
 import { recordDecisionActed } from '../intelligence/briefing-telemetry.js';
@@ -83,10 +84,10 @@ Return JSON:
 
   const response = gate <= 1 ? await callSonnet(
     'You are a COO generating ready-to-execute business artifacts. Be specific and complete.',
-    prompt, 4096, productId
+    prompt, 4096, companySpend(productId, 'a decision')
   ) : await callOpus(
     'You are a COO generating high-stakes business artifacts. Be thorough and strategic.',
-    prompt, 4096, productId
+    prompt, 4096, companySpend(productId, 'a decision')
   );
 
   const result = parseJSONResponse<{

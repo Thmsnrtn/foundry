@@ -5,6 +5,7 @@
 // =============================================================================
 
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
+import { companySpend } from '../../ai/what-it-is-for.js';;
 import type { AgentAssertion, Challenge } from './challenger.js';
 
 export interface SynthesisOutput {
@@ -103,7 +104,7 @@ Return JSON only (no markdown fences):
 
 Include up to 3 key_conflicts and up to 5 confidence_weighted_recommendations, ordered by weight descending.`;
 
-  const response = await callSonnet(systemPrompt, userPrompt, 2048, productId);
+  const response = await callSonnet(systemPrompt, userPrompt, 2048, companySpend(productId, 'synthesis'));
 
   let parsed: SynthesizerResponse;
   try {

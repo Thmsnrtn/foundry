@@ -5,6 +5,7 @@
 // =============================================================================
 
 import { callOpus, parseJSONResponse } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import { query, getRelevantPatterns } from '../../db/client.js';
 import { buildWisdomContext } from '../wisdom/dna.js';
 import { nanoid } from 'nanoid';
@@ -88,7 +89,7 @@ Historical metrics: ${input.historicalMetrics}
 Cohort data: ${input.cohortData}
 Stressor history: ${input.stressorHistory}`;
 
-  const response = await callOpus(systemPrompt, userPrompt, 8192, input.productId);
+  const response = await callOpus(systemPrompt, userPrompt, 8192, companySpend(input.productId, 'a scenario'));
   const scenarios = parseJSONResponse<ScenarioOutput[]>(response.content);
 
   const models: ScenarioModel[] = [];

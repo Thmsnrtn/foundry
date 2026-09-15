@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { callOpus, parseJSONResponse } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import { query, insertAuditLog } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 import type { RecoveryProtocol } from '../../types/index.js';
@@ -37,7 +38,7 @@ Competitive signals: ${input.competitiveSignals}
 Active decisions: ${input.activeDecisions}
 Stressor trajectory: ${input.stressorTrajectory}`;
 
-  const response = await callOpus(systemPrompt, userPrompt, 4096, input.productId);
+  const response = await callOpus(systemPrompt, userPrompt, 4096, companySpend(input.productId, 'recovering a company'));
   const protocol = parseJSONResponse<RecoveryProtocol>(response.content);
 
   // Create pinned decision

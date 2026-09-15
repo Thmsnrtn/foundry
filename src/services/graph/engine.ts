@@ -5,6 +5,7 @@
 
 import { query } from '../../db/client.js';
 import { callOpus, parseJSONResponse } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import { nanoid } from 'nanoid';
 
 export type EntityType = 'customer' | 'competitor' | 'decision' | 'stressor' | 'metric' | 'feature' | 'channel' | 'cohort' | 'experiment';
@@ -200,7 +201,7 @@ Return JSON:
   const response = await callOpus(
     'You are a causal reasoning analyst. Find non-obvious multi-hop causal chains in business data.',
     prompt,
-    4096, productId
+    4096, companySpend(productId, 'the graph')
   );
 
   const chains = parseJSONResponse<Array<{

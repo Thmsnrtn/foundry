@@ -21,6 +21,7 @@ import { getProductDNA } from '../services/wisdom/dna.js';
 import { isPRMerged, isPROpen } from '../services/audit/github.js';
 import { triggerDimensionReAudit } from '../services/audit/remediation.js';
 import { callSonnet, parseJSONResponse } from '../services/ai/client.js';
+import { companySpend } from '../services/ai/what-it-is-for.js';;
 import { checkAndAwardMilestones } from '../services/ux/milestones.js';
 import { detectGrowthStage, updateGrowthStage } from '../services/lifecycle/stage-detection.js';
 import { refreshFounderHealthMetrics } from '../services/intelligence/founder-health.js';
@@ -881,7 +882,7 @@ Return JSON only, no markdown:
       // the price, three hundred and sixty-five times a year, was the whole
       // of this institution's frontier spending — sixteen calls and thirty-one
       // cents between 1 and 14 September 2026.
-      const raw = await callSonnet('You are Foundry, an intelligence layer for early-stage founders.', prompt, 400, p.id);
+      const raw = await callSonnet('You are Foundry, an intelligence layer for early-stage founders.', prompt, 400, companySpend(p.id, 'the daily insight'));
       const insight = parseJSONResponse<{ headline: string; context: string; action: string | null }>(raw.content);
 
       if (insight?.headline) {
@@ -960,7 +961,7 @@ Return JSON only:
       // the frontier's best argument for itself. Demoted in the closeout
       // rather than left as a standing question for the owner — which model
       // answers a routine internal question is not his decision to make.
-      const raw = await callSonnet('You are Foundry. Generate a weekly operating plan for a founder.', prompt, 600, p.id);
+      const raw = await callSonnet('You are Foundry. Generate a weekly operating plan for a founder.', prompt, 600, companySpend(p.id, 'the weekly plan'));
       const plan = parseJSONResponse<{ synthesis: string; items: Array<{ id: string; text: string; category: string; impact: string }> }>(raw.content);
 
       if (plan?.items) {

@@ -29,6 +29,7 @@ import {
   absenceHorizons, type AbsenceReading, type Finding, type PropertyReading,
 } from '../../services/institution/absence-test.js';
 import { cognitionEconomics } from '../../services/ai/cognition.js';
+import { whatThatWorkIs } from '../../services/ai/what-it-is-for.js';
 import { FRONTIER_WARRANTS } from '../../lib/frontier-warrant.js';
 
 export const absenceRoutes = new Hono();
@@ -106,6 +107,21 @@ absenceRoutes.get('/foundry/absence', async (c: any) => {
         ${thinking.byModel.map((m) => html`<li>${m.model.replace('anthropic/claude-', '')} —
           ${String(m.calls)} ${m.calls === 1 ? 'call' : 'calls'}, ${dollars(m.cents)}</li>`)}
       </ul>`}
+      <!-- THE SAME MONEY, BY WHAT IT WAS FOR. The list above answers the
+           question about the provider; this answers the one about the
+           institution, which is the one he is actually asking. It was
+           unanswerable for seventy per cent of the spend until every call site
+           had to name its work. Rows written before that say so rather than
+           being folded into an "other", because a total that disagrees with
+           the ledger is how a summary stops being worth reading. -->
+      ${thinking.byWork.length === 0 ? '' : html`<details>
+        <summary class="quiet">What the thinking was for</summary>
+        <ul>${thinking.byWork.map((w) => html`<li>${w.work === null
+    ? html`<span class="quiet">not recorded — spent before every call had to say</span>`
+    : html`${w.work}`} —
+          ${String(w.calls)} ${w.calls === 1 ? 'call' : 'calls'}, ${dollars(w.cents)}${w.work === null
+    ? '' : html`<br /><span class="quiet">${whatThatWorkIs(w.work) ?? ''}</span>`}</li>`)}</ul>
+      </details>`}
       ${thinking.considered.length === 0 ? html`<p class="quiet">Nothing yet asks itself whether
         it is worth thinking about. The machinery for that exists; one loop uses it.</p>`
     : html`<ul class="sales">${thinking.considered.map((l) => html`<li>

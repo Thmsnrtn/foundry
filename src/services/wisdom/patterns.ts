@@ -5,6 +5,7 @@
 
 import { query, insertAuditLog } from '../../db/client.js';
 import { callOpus, parseJSONResponse } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import { nanoid } from 'nanoid';
 import type { FounderJudgmentPattern } from '../../types/index.js';
 
@@ -88,7 +89,7 @@ Rules:
     const userPrompt = `Category: ${category}\nDecisions:\n${JSON.stringify(decisionSummaries, null, 2)}`;
 
     try {
-      const response = await callOpus(systemPrompt, userPrompt, 4096, productId);
+      const response = await callOpus(systemPrompt, userPrompt, 4096, companySpend(productId, 'wisdom'));
       const synthesized = parseJSONResponse<SynthesizedPattern[]>(response.content);
 
       for (const pattern of synthesized) {

@@ -5,6 +5,7 @@
 
 import { query } from '../../db/client.js';
 import { callSonnet } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import { logger } from '../logger.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -109,7 +110,7 @@ Rationale for change: ${rationale}
 
 Does this proposed change comply with the SCP constitution?`;
 
-    const response = await callSonnet(systemPrompt, userPrompt, 1024, productId);
+    const response = await callSonnet(systemPrompt, userPrompt, 1024, companySpend(productId, 'a gate'));
     const content = response.content.trim();
 
     // Parse JSON response
@@ -184,7 +185,7 @@ ${proposedContent}
 
 Does this proposed change CONTRADICT any of these golden lessons? Answer YES or NO with the specific lesson if YES.`;
 
-    const response = await callSonnet(systemPrompt, userPrompt, 1024, productId);
+    const response = await callSonnet(systemPrompt, userPrompt, 1024, companySpend(productId, 'a gate'));
     const content = response.content.trim();
 
     let cleaned = content;
@@ -383,7 +384,7 @@ Rationale: ${rationale}
 
 Is this change safe?`;
 
-    const response = await callSonnet(systemPrompt, userPrompt, 512, productId);
+    const response = await callSonnet(systemPrompt, userPrompt, 512, companySpend(productId, 'a gate'));
     const content = response.content.trim();
 
     let cleaned = content;

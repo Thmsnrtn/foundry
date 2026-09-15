@@ -237,6 +237,15 @@ export interface CognitionEconomics {
   days: number;
   /** Every model call the ledger settled in the window, by model. */
   byModel: Array<{ model: string; calls: number; cents: number }>;
+  /**
+   * The same money, grouped by WHAT IT WAS FOR.
+   *
+   * `byModel` answers the question about the provider; this answers the one
+   * about the institution. A `work` of null is spend from before every call
+   * site had to say, reported as unattributed rather than dropped — a reading
+   * that omitted it would disagree with the ledger's own total.
+   */
+  byWork: Array<{ work: string | null; calls: number; cents: number }>;
   /** Everything that was asked whether it was worth thinking about. */
   considered: CognitionLine[];
   totalCents: number;
@@ -264,8 +273,8 @@ export async function cognitionEconomics(days = 30): Promise<CognitionEconomics>
   // that lets a table outlive an erasure is a promise about what will be done
   // with it afterwards, and a reader somewhere else is the later use the
   // promise excludes.
-  const { settledByModel } = await import('./spend-ledger.js');
-  const byModel = await settledByModel(days);
+  const { settledByModel, settledByWork } = await import('./spend-ledger.js');
+  const [byModel, byWork] = await Promise.all([settledByModel(days), settledByWork(days)]);
 
   const considered = (await query(
     `SELECT cognition,
@@ -315,5 +324,5 @@ export async function cognitionEconomics(days = 30): Promise<CognitionEconomics>
           + 'worth thinking about and did not spend it.'
         : ', and nothing slept.');
 
-  return { days, byModel, considered: lines, totalCents, notSpentCents: notSpent, sentence };
+  return { days, byModel, byWork, considered: lines, totalCents, notSpentCents: notSpent, sentence };
 }

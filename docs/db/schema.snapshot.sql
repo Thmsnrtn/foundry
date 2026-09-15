@@ -360,7 +360,7 @@ CREATE TABLE ai_spend_reservations (
   expires_at TEXT NOT NULL
 , purpose_kind TEXT
   CHECK (purpose_kind IS NULL OR purpose_kind IN (
-    'observation','candidate','experiment','unknown','undertaking','responsibility','workspace','mandate')), purpose_id TEXT);
+    'observation','candidate','experiment','unknown','undertaking','responsibility','workspace','mandate')), purpose_id TEXT, work TEXT);
 CREATE TABLE alignment_snapshots (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -4714,6 +4714,7 @@ CREATE INDEX idx_ai_spend_purpose ON ai_spend_reservations(purpose_kind, purpose
   WHERE purpose_id IS NOT NULL;
 CREATE INDEX idx_ai_spend_reservations_open
   ON ai_spend_reservations(status, expires_at);
+CREATE INDEX idx_ai_spend_work ON ai_spend_reservations(date, work);
 CREATE INDEX idx_alignment_product ON alignment_snapshots(product_id, snapshot_date DESC);
 CREATE INDEX idx_api_keys_founder ON api_keys(founder_id);
 CREATE INDEX idx_api_keys_hash ON api_keys(key_hash);

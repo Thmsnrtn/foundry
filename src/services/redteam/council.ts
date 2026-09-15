@@ -18,6 +18,7 @@ import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import { query } from '../../db/client.js';
 import { callSonnet, parseJSONResponse } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import { buildInsert } from '../../db/schema/kernel.js';
 import { recordPremise, CHECKABLE_METRIC_KEYS } from '../memory/kernel.js';
 import {
@@ -111,7 +112,7 @@ ACTIVE STRESSORS: ${stressors.rows.map((r) => { const s = r as Record<string, un
 
 Run the pre-mortem.`;
 
-  const response = await callSonnet(SYSTEM_PROMPT, userPrompt, 1500, productId);
+  const response = await callSonnet(SYSTEM_PROMPT, userPrompt, 1500, companySpend(productId, 'red team'));
   const parsed = parseJSONResponse(response.content, verdictSchema);
 
   const row: RedTeamReviewInsert = {

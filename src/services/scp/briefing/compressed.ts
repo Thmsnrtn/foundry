@@ -6,6 +6,7 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
+import { companySpend } from '../../ai/what-it-is-for.js';;
 
 // ─── ISO Week Helper ──────────────────────────────────────────────────────────
 
@@ -234,7 +235,7 @@ Be specific: use actual numbers when available.`,
   "one_decision_to_make": "..."
 }`,
       512,
-      productId
+      companySpend(productId, 'the compressed brief')
     );
 
     interface BriefAIResponse {

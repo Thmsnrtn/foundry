@@ -32,7 +32,8 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
-import { callSonnet, institutionSpend } from '../ai/client.js';
+import { callSonnet } from '../ai/client.js';
+import { institutionSpend } from '../ai/what-it-is-for.js';;
 import { shieldUntrustedContent } from '../ai/prompt-shield.js';
 import { dataBlockInstruction, wrapDataBlock } from '../ai/sanitize.js';
 import { answerLighter, noteLegalSurface, type Severity } from './legal-surface.js';
@@ -266,6 +267,7 @@ export async function recogniseExposure(input: {
     reply = await callSonnet(SYSTEM, user, 2000, institutionSpend(
       // eslint-disable-next-line max-len
       'recognising legal exposure on a candidate for the owner\'s own portfolio search; there is no operating company to charge because no venture exists yet',
+      'legal exposure',
       input.subjectKind === 'opportunity' ? { kind: 'candidate', id: input.subjectId } : undefined));
   } catch (err) {
     return { refused: `could not read it: ${err instanceof Error ? err.message : 'unknown'}` };

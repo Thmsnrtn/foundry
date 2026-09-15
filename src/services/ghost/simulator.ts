@@ -23,6 +23,7 @@ import { nanoid } from 'nanoid';
 import { z } from 'zod';
 import { query } from '../../db/client.js';
 import { callSonnet, parseJSONResponse } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import { buildInsert } from '../../db/schema/kernel.js';
 import { log } from '../../lib/logger.js';
 
@@ -209,7 +210,7 @@ export async function runGhostFork(decisionId: string, productId: string): Promi
   const userPrompt = `DECISION: ${decision.what}\nWHY NOW: ${decision.why_now ?? 'n/a'}\n\nCOMPANY BASELINE (from its own history: ${base.nSnapshots} snapshots spanning ${Math.round(base.historySpanDays)} days): MRR ${fmt(base.currentMrrCents)}, monthly growth mean ${(base.monthlyGrowthMean * 100).toFixed(1)}% ± ${(base.monthlyGrowthStd * 100).toFixed(1)}%.\n\nOPTIONS:\n${options.map((o, i) => `${i + 1}. ${o.label}${o.description ? ` — ${o.description}` : ''}`).join('\n')}\n\nFor EACH option, estimate the shift it makes to MONTHLY MRR growth in percentage points over the next 90 days, as a conservative point estimate. Respond ONLY JSON: {"options":[{"label","growth_delta_pp","rationale"}]}`;
   const response = await callSonnet(
     'You translate a business decision\'s options into conservative monthly-growth deltas (percentage points). You are an estimator, not a cheerleader: when in doubt, estimate closer to 0. Your numbers are labeled as judgment-priors and combined with the company\'s real variance — do not inflate.',
-    userPrompt, 800, productId,
+    userPrompt, 800, companySpend(productId, 'a simulation'),
   );
   const priors = parseJSONResponse(response.content, priorSchema);
 

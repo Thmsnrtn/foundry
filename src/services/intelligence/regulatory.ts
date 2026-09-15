@@ -5,6 +5,7 @@
 
 import { query } from '../../db/client.js';
 import { callOpus, callSonnet, parseJSONResponse } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import { nanoid } from 'nanoid';
 import type { StressorReportItem } from '../../types/index.js';
 
@@ -60,7 +61,7 @@ Only include genuinely relevant regulations for this specific sector. Don't over
   const response = await callOpus(
     'You are a SaaS regulatory analyst. Only flag genuinely applicable regulations.',
     prompt,
-    2048, productId
+    2048, companySpend(productId, 'regulatory read')
   );
 
   const result = parseJSONResponse<RegulatoryExposure>(response.content);
@@ -154,7 +155,7 @@ Only include real, significant changes. Return empty array if none.`;
   const response = await callSonnet(
     'You are a regulatory intelligence analyst. Only flag real, verified regulatory changes.',
     prompt,
-    2048, productId
+    2048, companySpend(productId, 'regulatory read')
   );
 
   const changes = parseJSONResponse<Array<{
@@ -197,7 +198,7 @@ Return JSON: {"cost": "$X-$Y", "timeline": "N months", "alternatives": ["alterna
   const response = await callSonnet(
     'You are a compliance pathway advisor. Be practical and cost-conscious.',
     prompt,
-    1024, productId
+    1024, companySpend(productId, 'regulatory read')
   );
 
   return parseJSONResponse<{ cost: string; timeline: string; alternatives: string[] }>(response.content);

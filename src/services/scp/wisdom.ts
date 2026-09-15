@@ -6,6 +6,7 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { callSonnet, parseJSONResponse } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import type { AgentName } from './types.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -187,7 +188,7 @@ Notes:
     'You are a decision pattern synthesizer for a SaaS company. Analyze decision outcomes to find patterns. Return valid JSON only.',
     userPrompt,
     2048,
-    productId
+    companySpend(productId, 'wisdom')
   );
 
   let synthesis: SynthesisResponse;

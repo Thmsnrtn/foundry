@@ -5,6 +5,7 @@
 
 import { query } from '../../db/client.js';
 import { callOpus, callSonnet } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import { buildWisdomContext } from '../wisdom/dna.js';
 import { getMRRDecomposition, computeHealthRatio } from '../intelligence/revenue.js';
 import { getFounderHealthSummary } from '../intelligence/founder-health.js';
@@ -107,7 +108,8 @@ export async function sendMessage(
   const model = isStrategic ? callOpus : callSonnet;
   const maxTokens = isStrategic ? 4096 : 2048;
 
-  const response = await model(systemPrompt, userPrompt, maxTokens, productId);
+  const response = await model(systemPrompt, userPrompt, maxTokens,
+    companySpend(productId, 'a decision'));
 
   // Parse any action proposals from the response
   const actions = extractActionProposals(response.content);

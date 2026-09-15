@@ -6,6 +6,7 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
+import { companySpend } from '../../ai/what-it-is-for.js';;
 import { createHash } from 'crypto';
 
 export interface PromptMutation {
@@ -87,7 +88,7 @@ Return JSON only:
 }`;
 
     try {
-      const response = await callSonnet(systemPrompt, userPrompt, 512, productId);
+      const response = await callSonnet(systemPrompt, userPrompt, 512, companySpend(productId, 'agent evolution'));
       const parsed = parseJSONResponse<{
         mutationType: 'emphasis_shift' | 'context_addition' | 'framing_change';
         deltaInstructions: string;

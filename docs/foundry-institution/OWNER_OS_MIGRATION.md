@@ -1820,3 +1820,70 @@ by the stylesheet that was missing.
 Serving it, from the same handler the application uses, immediately found real
 failures at 200% text on the company page — a defect that predates this work and
 that three hundred passing measurements had never seen.
+
+## What the thinking was for
+
+The spend ledger recorded who pays for every model call — product, founder,
+model, cents. Read against production it said:
+
+| | calls | spend |
+|---|---|---|
+| naming no purpose | 947 | **$10.45** |
+| `candidate` | 113 | $3.74 |
+| `observation` | 39 | $0.68 |
+| | **1,099** | **$14.88** |
+
+Seventy per cent of the money said nothing about what it was for. "What is
+Foundry thinking about, and is it worth it" is the question the whole
+cognition-economics discipline exists to answer, and the ledger could answer it
+for fourteen per cent of the calls.
+
+`purpose_kind`/`purpose_id` were never meant to be that answer: they link a call
+to an OBJECT, so what an opportunity cost to reason about can sit beside what it
+cost to test. Most calls have no such object, and forcing a made-up one onto
+them would add nothing over `product_id` while looking like it had solved
+something.
+
+So one column, `work`, from a closed vocabulary of thirty-one kinds — each
+carrying the sentence a person reads rather than a slug to decode. **Closed**,
+because a free string drifts into six spellings of the same work and the
+grouping that was the point stops grouping; and because a closed set means
+adding a model call does not compile until somebody says what it is for. All
+fifty-one call sites now do, and the build refuses a name the vocabulary does
+not define.
+
+Not derived from the call stack, though a stack frame is cheap next to a model
+call: the module a call sits in is not what it is FOR, it renames itself when a
+file moves, and it would make the ledger's vocabulary an accident of the
+directory tree.
+
+**No new instrumentation.** The row was already being written; it gains a field.
+
+### Two things doing it found
+
+Declaring a subject had lived in the module that makes the call. Eighteen test
+files replace that module wholesale with a stub of `callSonnet`, so a call site
+importing its own declaration helper got `undefined` and threw *inside the thing
+under test* — which surfaced as "unscored" voice-gate verdicts four screens from
+the cause. Declaring who pays and what for is not making a call; it lives in
+`what-it-is-for.ts`, which has no network, no database and no side effects, so
+nothing has a reason to mock it.
+
+And all three windowed readings asked `created_at >= datetime('now', ?)`.
+`created_at` is an ISO instant — `2026-09-14T04:00:00.000Z` — while `datetime()`
+returns `2026-08-15 04:00:00` with a space. SQLite compares them as text, and at
+position eleven `T` (0x54) sorts above ` ` (0x20): every row on the boundary day
+passed regardless of its hour, so the window was hours wider at one end than it
+claimed. It never produced a wild number, which is exactly why it survived — **an
+accounting reading that is quietly a little wrong is worse than one that is
+obviously broken, because the first gets quoted.** They compare `date` now, the
+column that exists for it, which is also the leading column of the index.
+
+### And the society is quiet, in production
+
+The twenty-seven retired loops were verified stopped rather than assumed. Five
+of them had run every hour; their last run is 21:00 on 14 September, the deploy
+landed at 21:29, and 22:00, 23:00 and 00:00 passed with none of them running —
+while `nav_badge_refresh`, `signal_alert_check`, `integration_sync` and
+`welcome_sequence_tick` all ran at 00:00. The scheduler is alive; it is
+specifically the society that is quiet.

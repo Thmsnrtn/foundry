@@ -40,6 +40,10 @@ export async function reserveSpend(input: {
   caps: { global: number; product: number; founder: number }; ttlMs?: number;
   /** What the thinking is for, when the caller names it. Both halves or neither. */
   purpose?: { kind: string; id: string } | null;
+  /** WHICH PIECE OF WORK SPENT THIS, from the closed vocabulary. Required at
+   *  the call boundary above; typed nullable here only because eleven hundred
+   *  rows written before it existed cannot be attributed after the fact. */
+  work?: string | null;
 }): Promise<SpendReservation> {
   const now = new Date().toISOString();
   const date = now.slice(0, 10);
@@ -55,13 +59,13 @@ export async function reserveSpend(input: {
       `INSERT INTO ai_spend_reservations
        (id, product_id, founder_id, date, model, reserved_cents, global_cap_cents,
         product_cap_cents, founder_cap_cents, status, created_at, updated_at, expires_at,
-        purpose_kind, purpose_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'reserved', ?, ?, ?, ?, ?)`,
+        purpose_kind, purpose_id, work)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'reserved', ?, ?, ?, ?, ?, ?)`,
       [id, input.productId ?? null, input.founderId ?? null, date, input.model, input.amountCents,
         input.caps.global, input.productId ? input.caps.product : null,
         input.founderId ? input.caps.founder : null, now, now,
         new Date(Date.now() + (input.ttlMs ?? 15 * 60_000)).toISOString(),
-        input.purpose?.kind ?? null, input.purpose?.id ?? null]);
+        input.purpose?.kind ?? null, input.purpose?.id ?? null, input.work ?? null]);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     const match = message.match(/ai_spend_ceiling:(global|product|founder)/);
@@ -90,6 +94,28 @@ export async function spentThinkingOn(purpose: { kind: string; id: string }): Pr
 }
 
 /**
+ * THE WINDOW, COMPARED AGAINST THE COLUMN BUILT FOR IT.
+ *
+ * All three readings below asked `created_at >= datetime('now', ?)`, and that
+ * comparison is wrong in a way no test noticed and no total made obvious.
+ * `created_at` is written as an ISO instant — `2026-09-14T04:00:00.000Z` —
+ * while `datetime('now','-30 day')` returns `2026-08-15 04:00:00`, with a
+ * space. SQLite compares the two as text, and at position eleven 'T' (0x54)
+ * sorts above ' ' (0x20): so on the boundary day every row passes regardless
+ * of its hour, and the window is a few hours wider at one end than it says.
+ *
+ * It never produced a wild number, which is why it survived — an accounting
+ * reading that is quietly a little wrong is worse than one that is obviously
+ * broken, because the first gets quoted.
+ *
+ * `date` is the column that exists for exactly this: 'YYYY-MM-DD' on both
+ * sides, so the comparison is between two things of the same shape. It is also
+ * the leading column of the index, so the reading gets faster as well as
+ * right.
+ */
+const within = (days: number): string => `-${String(Math.max(1, Math.floor(days)))} day`;
+
+/**
  * WHAT THE INSTITUTION SPENT THINKING ABOUT ONE COMPANY, over the last N days.
  * Accounting, read here and nowhere else: the reservations table survives an
  * erasure for accounting and ceiling enforcement only, so every reader of it
@@ -98,8 +124,8 @@ export async function spentThinkingOn(purpose: { kind: string; id: string }): Pr
 export async function spentThinkingAbout(productId: string, days: number): Promise<number> {
   const row = (await query(
     `SELECT COALESCE(SUM(actual_cents), 0) AS cents FROM ai_spend_reservations
-      WHERE product_id = ? AND status = 'settled' AND created_at >= datetime('now', ?)`,
-    [productId, `-${String(Math.max(1, Math.floor(days)))} day`]))
+      WHERE product_id = ? AND status = 'settled' AND date >= date('now', ?)`,
+    [productId, within(days)]))
     .rows[0] as Record<string, unknown> | undefined;
   return Math.round(Number(row?.cents ?? 0));
 }
@@ -122,15 +148,44 @@ export async function spentThinkingAbout(productId: string, days: number): Promi
 export async function settledByModel(
   days: number,
 ): Promise<Array<{ model: string; calls: number; cents: number }>> {
-  const since = `-${String(Math.max(1, Math.floor(days)))} day`;
   const rows = (await query(
     `SELECT model, COUNT(*) AS calls, COALESCE(SUM(actual_cents), 0) AS cents
        FROM ai_spend_reservations
-      WHERE status = 'settled' AND created_at >= datetime('now', ?)
-      GROUP BY model ORDER BY cents DESC`, [since]))
+      WHERE status = 'settled' AND date >= date('now', ?)
+      GROUP BY model ORDER BY cents DESC`, [within(days)]))
     .rows as unknown as Array<Record<string, unknown>>;
   return rows.map((r) => ({
     model: String(r.model),
+    calls: Number(r.calls),
+    cents: Math.round(Number(r.cents) * 100) / 100,
+  }));
+}
+
+/**
+ * THE BILL, GROUPED BY WHAT THE THINKING WAS FOR.
+ *
+ * `settledByModel` answers "what did it cost", which is the question about the
+ * provider. This answers "what was it for", which is the question about the
+ * institution — and it was unanswerable for seventy per cent of the spend until
+ * every call site had to say.
+ *
+ * Unattributed rows are reported AS unattributed rather than dropped or
+ * folded into an "other". Eleven hundred of them predate the column and cannot
+ * be attributed after the fact; a reading that quietly omitted them would make
+ * the total disagree with the ledger, which is the specific way a summary stops
+ * being worth reading.
+ */
+export async function settledByWork(
+  days: number,
+): Promise<Array<{ work: string | null; calls: number; cents: number }>> {
+  const rows = (await query(
+    `SELECT work, COUNT(*) AS calls, COALESCE(SUM(actual_cents), 0) AS cents
+       FROM ai_spend_reservations
+      WHERE status = 'settled' AND date >= date('now', ?)
+      GROUP BY work ORDER BY cents DESC`, [within(days)]))
+    .rows as unknown as Array<Record<string, unknown>>;
+  return rows.map((r) => ({
+    work: r.work == null ? null : String(r.work),
     calls: Number(r.calls),
     cents: Math.round(Number(r.cents) * 100) / 100,
   }));

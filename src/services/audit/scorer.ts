@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { callOpus, parseJSONResponse } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import { sanitizeForPrompt } from '../ai/sanitize.js';
 import { AUDIT_DIMENSION_WEIGHTS, AUDIT_DIMENSION_NAMES } from '../../types/index.js';
 import type { AuditScoringRequest, ScoringOutput, Finding } from '../../types/ai.js';
@@ -70,7 +71,7 @@ export async function scoreAudit(
     systemPrompt += `\n\nSECTOR: ${sector}. Adjust scoring expectations for this sector's norms.`;
   }
 
-  const response = await callOpus(systemPrompt, userPrompt, 8192, productId);
+  const response = await callOpus(systemPrompt, userPrompt, 8192, companySpend(productId, 'scoring an audit'));
   const output = parseJSONResponse<ScoringOutput>(response.content);
 
   // Filter out sector-irrelevant findings

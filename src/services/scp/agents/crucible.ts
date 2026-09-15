@@ -13,6 +13,7 @@ import type {
   OutboundActionSignal, AgentMessageSignal, HypothesisSignal,
 } from '../types.js';
 import { callSonnet, parseJSONResponse } from '../../ai/client.js';
+import { companySpend } from '../../ai/what-it-is-for.js';;
 import { query } from '../../../db/client.js';
 import { createRemediation } from '../remediation.js';
 import { measured } from '../../ai/measured.js';
@@ -255,7 +256,7 @@ Return JSON only (no markdown fences):
   "briefing_priority": "high" | "normal" | "low"
 }`;
 
-    const response = await callSonnet(systemPrompt, userPrompt, 2048, context.productId);
+    const response = await callSonnet(systemPrompt, userPrompt, 2048, companySpend(context.productId, 'an agent session'));
     const tokensUsed = (response.usage.input_tokens ?? 0) + (response.usage.output_tokens ?? 0);
     const costUsd = tokensUsed * 0.000003;
 

@@ -49,12 +49,23 @@ describe('a reservation names what the thinking was for', () => {
   });
 
   it('the subject helpers name a purpose for a company or the institution, and read it back', async () => {
-    const { companySpend, institutionSpend, subjectPurpose } = await import('../../src/services/ai/client.js');
-    expect(subjectPurpose('p_purpose')).toBeNull();
-    expect(subjectPurpose(institutionSpend('reading the market'))).toBeNull();
-    expect(subjectPurpose(institutionSpend('reading one signal', { kind: 'observation', id: 'obs_1' })))
+    // THE HELPERS MOVED, AND GAINED A REQUIRED ARGUMENT. What a call is FOR is
+    // declared in `what-it-is-for.ts` rather than in the module that makes the
+    // call — eighteen test files replace that module wholesale, and a call site
+    // importing its own declaration helper from a stub got `undefined`. The
+    // second argument is the work, from a closed vocabulary, and it is required
+    // because seventy per cent of this institution's spend named no purpose
+    // while it was optional.
+    const { companySpend, institutionSpend, subjectPurpose } =
+      await import('../../src/services/ai/what-it-is-for.js');
+    // The object purpose stays optional: most calls point at no row, and
+    // inventing one would add nothing over `product_id`.
+    expect(subjectPurpose(institutionSpend('reading the market', 'reading an observation'))).toBeNull();
+    expect(subjectPurpose(companySpend('p_purpose', 'a gate'))).toBeNull();
+    expect(subjectPurpose(institutionSpend(
+      'reading one signal', 'reading an observation', { kind: 'observation', id: 'obs_1' })))
       .toEqual({ kind: 'observation', id: 'obs_1' });
-    expect(subjectPurpose(companySpend('p_purpose', { kind: 'undertaking', id: 'u_1' })))
+    expect(subjectPurpose(companySpend('p_purpose', 'a gate', { kind: 'undertaking', id: 'u_1' })))
       .toEqual({ kind: 'undertaking', id: 'u_1' });
   });
 

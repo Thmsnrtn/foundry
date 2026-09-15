@@ -19,6 +19,17 @@
 // The check is exact rather than textual — it uses the TypeScript parser, so a
 // call split across lines or nested in a ternary is read the same as any other.
 //
+// AND WHO PAYS IS NOT WHAT FOR. Once every call named a company, the ledger
+// could say that $14.88 had gone through 1,099 calls and that $10.45 of it was
+// Sonnet, on 878 calls that named no purpose. "What is Foundry thinking about,
+// and is it worth it" is the question the cognition-economics discipline exists
+// to answer, and the ledger could answer it for fourteen per cent of the calls.
+//
+// So the subject also carries `work`, from the closed vocabulary in
+// `src/services/ai/what-it-is-for.ts`. The type system enforces its presence;
+// this gate enforces that the name is one the vocabulary actually defines, so a
+// typo becomes a failed build rather than a category of one in the ledger.
+//
 // Run: node scripts/check-ai-attribution.mjs   (CI, beside lint:columns)
 // =============================================================================
 import ts from 'typescript';
@@ -42,6 +53,13 @@ const CONFIG_CALLERS = new Set(['callClaude']);
 // that the declaration exists and carries a reason worth reading.
 const MIN_REASON = 20;
 
+/** The vocabulary, read from the file that defines it rather than restated. */
+const VOCABULARY = (() => {
+  const src = readFileSync(join(ROOT, 'src/services/ai/what-it-is-for.ts'), 'utf8');
+  const body = src.slice(src.indexOf('WORK_THE_MODEL_DOES = {'), src.indexOf('} as const;'));
+  return new Set([...body.matchAll(/^\s*'([^']+)':/gm)].map((m) => m[1]));
+})();
+
 function walk(dir) {
   return readdirSync(dir).flatMap((e) => {
     const p = join(dir, e);
@@ -52,6 +70,7 @@ function walk(dir) {
 const offenders = [];
 let total = 0;
 let institutional = 0;
+const used = new Set();
 
 for (const file of walk(join(ROOT, 'src'))) {
   if (file.endsWith('/ai/client.ts')) continue;          // where the helpers live
@@ -88,6 +107,23 @@ for (const file of walk(join(ROOT, 'src'))) {
           `${rel}:${line + 1} → institutionSpend needs a written reason, not a label`);
       }
     }
+    // WHAT THE MONEY WAS FOR, from the vocabulary rather than invented here.
+    // The type system already refuses an unknown name; this catches the case
+    // it cannot see — a name spelled correctly in the union and never used, or
+    // a call built somewhere the compiler widens to `string`.
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression)
+        && (node.expression.text === 'companySpend'
+          || node.expression.text === 'institutionSpend')) {
+      const work = node.arguments[1];
+      const name = work && ts.isStringLiteral(work) ? work.text : null;
+      if (name !== null) {
+        used.add(name);
+        if (!VOCABULARY.has(name)) {
+          const { line } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
+          offenders.push(`${rel}:${line + 1} → "${name}" is not work this institution declares`);
+        }
+      }
+    }
     ts.forEachChild(node, visit);
   };
   visit(sf);
@@ -108,6 +144,17 @@ if (offenders.length) {
 // invisible to any AST match on the callee's name. Five such calls existed and
 // were found only when `SpendSubject` became a required parameter. This gate is
 // defence in depth; the required argument is the enforcement.
+// A NAME NOTHING CLAIMS IS A CATEGORY THAT WILL NEVER APPEAR IN THE LEDGER,
+// which is how a vocabulary rots into a list of things somebody once meant to
+// do. Retiring work means deleting its entry, and this says which are unclaimed
+// rather than failing: a name may legitimately outlive its only call site for
+// one commit, and the list makes that visible instead of silent.
+const unclaimed = [...VOCABULARY].filter((w) => !used.has(w));
+
 console.log(
-  `✓ every model call declares its subject (${total} direct call sites, `
-  + `${institutional} declared institutional)`);
+  `✓ every model call declares its subject and what it is for `
+  + `(${total} direct call sites, ${institutional} declared institutional, `
+  + `${VOCABULARY.size} kinds of work, ${used.size} claimed)`);
+if (unclaimed.length) {
+  console.log(`  no call site claims: ${unclaimed.join(', ')}`);
+}

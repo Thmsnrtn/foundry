@@ -5,6 +5,7 @@
 
 import { query, insertAuditLog } from '../../db/client.js';
 import { callOpus, parseJSONResponse } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import { shieldOrLog } from '../ai/prompt-shield.js';
 import { getDefaultBranchSha, createBranch, commitFiles } from './github.js';
 import { scoreAudit } from './scorer.js';
@@ -176,7 +177,7 @@ RELEVANT FILES:
 ${fileContext}`;
 
   try {
-    const response = await callOpus(systemPrompt, userPrompt, 16384, productId);
+    const response = await callOpus(systemPrompt, userPrompt, 16384, companySpend(productId, 'planning a remedy'));
     const fix = parseJSONResponse<FixGenerationOutput>(response.content);
 
     // Confidence check — non-negotiable

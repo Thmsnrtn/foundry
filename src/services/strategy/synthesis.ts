@@ -5,6 +5,7 @@
 
 import { query } from '../../db/client.js';
 import { callSonnet, parseJSONResponse } from '../ai/client.js';
+import { companySpend } from '../ai/what-it-is-for.js';;
 import { nanoid } from 'nanoid';
 import { getExperimentSummary } from '../scp/experiments.js';
 import { getROISummary } from '../financial/economics.js';
@@ -166,7 +167,7 @@ Rules:
 
   const userPrompt = `Product ID: ${productId}\nPeriod: ${periodStart} to ${periodEnd}\n\nContext:\n${contextBlock}`;
 
-  const response = await callSonnet(systemPrompt, userPrompt, 4096, productId);
+  const response = await callSonnet(systemPrompt, userPrompt, 4096, companySpend(productId, 'strategy'));
   const parsed = parseJSONResponse<SynthesisAIOutput>(response.content);
 
   const tokensUsed = (response.usage?.input_tokens ?? 0) + (response.usage?.output_tokens ?? 0);

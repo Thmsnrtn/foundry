@@ -9,6 +9,7 @@ import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
 import { logger } from '../../logger.js';
 import { callHaiku, parseJSONResponse } from '../../ai/client.js';
+import { companySpend } from '../../ai/what-it-is-for.js';;
 import { sanitizeForPrompt } from '../../ai/sanitize.js';
 
 export interface AgentFinding {
@@ -241,7 +242,7 @@ Return ONLY JSON: {"consensus_points": string[], "conflict_points": string[]}`;
   const userPrompt = `Agent findings for today:\n\n${findingsBlock}\n\nReturn the JSON now.`;
 
   try {
-    const response = await callHaiku(systemPrompt, userPrompt, 600, productId);
+    const response = await callHaiku(systemPrompt, userPrompt, 600, companySpend(productId, 'agent coordination'));
     const parsed = parseJSONResponse(response.content, ConsensusConflictSchema);
     return {
       consensus_points: parsed.consensus_points.map((p) => p.trim()).filter(Boolean).slice(0, 5),
