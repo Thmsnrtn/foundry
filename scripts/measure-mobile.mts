@@ -47,6 +47,50 @@ const WIDTHS = [375, 390, 393, 414, 430];
 // the screenshots go beside the phone ones so the two can be compared.
 const DESKTOP_WIDTHS = [1024, 1280, 1440];
 const OWNER = 'mm_owner';
+/**
+ * THE ESTATE WITH NOTHING WRONG WITH IT.
+ *
+ * §51-N says Foundry can truthfully display estate healthy / autonomy normal /
+ * no owner action required, and there was no picture of that anywhere: this
+ * harness seeds everything waiting, because everything waiting is what stresses
+ * a layout. Quiet is the state the owner will spend most of his life in, and a
+ * first screen nobody has ever seen empty is a first screen nobody has checked.
+ *
+ * It cannot be a second founder. A private Foundry admits one address and
+ * `requireInstitutionOwner` refuses every other, which is the boundary working;
+ * measuring around it by inventing a second owner would measure a deployment
+ * that does not exist. So this answers every open question instead, as the
+ * owner would, and photographs what is left.
+ *
+ * Decided rather than deleted: an act is withdrawn, advice is declined, a
+ * candidate is answered, the experiment is declined, the Workshop is given its
+ * address. Deleting the rows would leave a page that renders empty because its
+ * queries found nothing, which is a different thing from a page that is empty
+ * because the owner is finished.
+ */
+async function quieten(): Promise<void> {
+  // `founder:` prefixed, because the database resolves the principal through
+  // the product and refuses a decision by anyone else — including another
+  // authenticated founder. Passing the bare id is refused, correctly.
+  await query(`UPDATE proposed_acts SET decided_at = datetime('now'), decided_by = ?, decision = 'refused'
+                WHERE decided_at IS NULL`, [`founder:${OWNER}`]);
+  await query(`UPDATE situation_recommendations SET decided_at = datetime('now'), decided_by = ?, decision = 'declined'
+                WHERE decided_at IS NULL`, [`founder:${OWNER}`]);
+  await query(`UPDATE venture_experiments SET decision = 'declined', decided_at = datetime('now'), decided_by = ?
+                WHERE founder_id = ? AND decision IS NULL`, [OWNER, OWNER]);
+  const { decideResponsibilityCandidate } = await import(
+    '../src/services/institution/responsibility-candidate.js');
+  const pending = await query(
+    "SELECT id, product_id FROM responsibility_candidates WHERE status = 'pending'");
+  for (const r of pending.rows as Array<Record<string, unknown>>) {
+    await decideResponsibilityCandidate({
+      productId: String(r.product_id), candidateId: String(r.id), decision: 'rejected',
+      ownerId: OWNER, reason: 'measuring the estate with nothing waiting on him',
+    });
+  }
+  const { setPostalAddress } = await import('../src/services/public-workshop/settings.js');
+  await setPostalAddress(OWNER, '1 Measurement Way, Suite 0, Nowhere, MA 00000');
+}
 const COMPANY = 'mm_company';
 let REFERENCE_COMPANY = '';
 let PROOF1 = '';
@@ -183,6 +227,7 @@ async function seed(): Promise<void> {
   // its prerequisites unmet, which is the state that shows the most.
   const { establishPublicWorkshop } = await import('../src/services/public-workshop/settings.js');
   await establishPublicWorkshop({ founderId: OWNER });
+
 }
 
 async function main(): Promise<void> {
@@ -277,11 +322,18 @@ async function main(): Promise<void> {
   // ACCESSIBILITY IS PART OF THE MEASUREMENT, not a later pass. A layout that
   // holds at 17px and breaks at 34px is a layout that breaks for anyone who has
   // turned text up, which on a phone is a great many people.
-  const runs = [
+  const runs: Array<{ width: number; scale: number; desktop: boolean; quiet?: boolean }> = [
     ...WIDTHS.flatMap((width) => [{ width, scale: 1, desktop: false }, { width, scale: 2, desktop: false }]),
     ...DESKTOP_WIDTHS.map((width) => ({ width, scale: 1, desktop: true })),
+    // The quiet estate, on the phone, at both text sizes, LAST — because
+    // getting there consumes the queue every run above it needs. One path,
+    // because the whole question is what the first screen says when there is
+    // nothing to say, and an empty page is exactly where a layout built around
+    // content quietly collapses.
+    { width: 390, scale: 1, desktop: false, quiet: true },
+    { width: 390, scale: 2, desktop: false, quiet: true },
   ];
-  for (const { width, scale, desktop } of runs) {
+  for (const { width, scale, desktop, quiet } of runs) {
     // THE GROUND IS DARK, AND EVERY SCREENSHOT THIS HARNESS EVER TOOK WAS OF
     // THE ALTERNATE. The stylesheet is dark-first — the palette lives on bare
     // :root and light is an override under prefers-color-scheme:light. A
@@ -289,6 +341,7 @@ async function main(): Promise<void> {
     // override, and photographs a product nobody designed. Every picture in
     // docs/design was of that. Asking for dark here is not a preference: it
     // makes the proof a picture of the thing.
+    if (quiet) await quieten();
     const context = await browser.newContext(desktop
       ? { viewport: { width, height: 900 }, deviceScaleFactor: 2, colorScheme: 'dark' }
       : { viewport: { width, height: 844 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, colorScheme: 'dark' });
@@ -304,14 +357,14 @@ async function main(): Promise<void> {
     // with their styles inline, so setting the response as the document is a
     // faithful measurement of what he would see.
     const posted = new Map<string, string>();
-    for (const [label, path, body] of POSTS) {
+    for (const [label, path, body] of (quiet ? [] : POSTS)) {
       const res = await fetch(base + path, {
         method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body,
       });
       posted.set(label, await res.text());
     }
 
-    for (const path of [...paths, ...posted.keys()]) {
+    for (const path of quiet ? ['/foundry'] : [...paths, ...posted.keys()]) {
       let status = 200;
       if (posted.has(path)) {
         await page.setContent(posted.get(path) ?? '', { waitUntil: 'load' });
@@ -399,7 +452,10 @@ async function main(): Promise<void> {
         failures.push(`${path} at ${String(width)}px ${String(scale * 100)}% text: `
           + `${String(m.covered)}px of content sits underneath the fixed bars`);
       }
-      if (scale === 1 && width === 390) {
+      if (quiet && scale === 1) {
+        await page.screenshot({ path: `${dir}/foundry-quiet-390.png`, fullPage: true });
+      }
+      if (!quiet && scale === 1 && width === 390) {
         // The home page, and the reference company's — the two the owner
         // actually looks at, and the second is the one whose disclosure has to
         // land before anything else on it does.
@@ -430,7 +486,7 @@ async function main(): Promise<void> {
           if (path === p) await page.screenshot({ path: `${dir}/${name}-390.png`, fullPage: true });
         }
       }
-      if (path === '/foundry' && scale === 1 && width !== 390 && !desktop) {
+      if (!quiet && path === '/foundry' && scale === 1 && width !== 390 && !desktop) {
         await page.screenshot({ path: `${dir}/foundry-${String(width)}.png`, fullPage: true });
       }
       // THE DESKTOP, AT ONE WIDTH, FOR THE THREE PAGES HE LIVES IN - so the two

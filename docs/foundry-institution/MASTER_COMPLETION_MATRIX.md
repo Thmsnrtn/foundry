@@ -102,7 +102,7 @@ trigger that will move it.
 | **41** | System health / failure experience | **SATISFIED** | `services/institution/carrying.ts`, `job_health` | Failure says what failed, whether reality is affected, whether data is lost, whether money is at risk, whether customers are affected, what Foundry is doing and whether the owner is needed. Execution states are machine-readable and a job that swallows a blocking exception is not SUCCESS. Migration 317 added `retired_at`, because a job nobody schedules cannot be failing |
 | **42** | Security / privacy / data rights | **SATISFIED** | `privacy.ts`, `suppression.ts` | Suppression, erasure, retention and provenance are all real and enforced at the schema. Access to data is not a right to commercialize it; trust is bound to customer, provider, purpose and experiment. Nothing was weakened for UI convenience — the strict CSP on every owner surface is the opposite trade |
 | **43** | Absence tests | **PARTIALLY SATISFIED** | `services/institution/absence-test.ts` | 7 days holds and is read from the live estate. The `truthful()` property was a **modelling gap, now closed** — see the finding below. 30 and 90 days cannot hold yet: the recovery ladder is 11 days old, so those are **WAITING ON REALITY, ≈ 4 October and ≈ 3 December** |
-| **44** | Browser / experience proof | **PARTIALLY SATISFIED** | `scripts/measure-mobile.mts` | Real journeys in a real browser at 375–1440px, 100% and 200% text, with the stylesheet served **and the canonical dark ground**. Of the twelve required journeys the harness proves **six**: 1 (healthy, no action), 3 (a consequential decision waiting), 4 (an experiment running), 10 (return after absence), 11 (asking why, answered from evidence) and 12 (watch → inspect → intervene through a company to a posted boundary, without losing context). **Journeys 2, 5 and 6 are stageable and unstaged**; 7, 8 and 9 need a sale, a refund and a tax event that have not happened |
+| **44** | Browser / experience proof | **PARTIALLY SATISFIED** | `scripts/measure-mobile.mts` | Real journeys in a real browser at 375–1440px, 100% and 200% text, with the stylesheet served **and the canonical dark ground**. Of the twelve required journeys the harness proves **six**: 1 (healthy, nothing waiting — added in this pass), 3 (a consequential decision waiting), 5 (an experiment blocked by real dependencies), 10 (return after absence), 11 (asking why, answered from evidence) and 12 (watch → inspect → intervene through a company to a posted boundary, without losing context). **Journeys 2, 4 and 6 are stageable and unstaged** — degraded-but-recovering, running autonomously, stopped by a governed condition. 7, 8 and 9 need a sale, a refund and a tax event that have not happened |
 | **45** | Performance | **SATISFIED** | `foundry-shell.ts` | WATCH renders from materialized truth and waits on no model to say whether the estate is healthy — asserted from the source, so it cannot regress silently |
 | **46** | Implementation sequence | **SATISFIED** | seven phases, in order | Reality crossing finished first (001 sent before the redesign began); then shell, cockpit, economic system, portfolio/discover/autonomy/roadmap, Forge, quiet maturity. Nothing was parallelised across a real dependency |
 | **47** | Clean cutover rules | **SATISFIED** | the `/letter` absorption | Shadow → compare → cutover → delete was followed literally: `/letter` ran beside `/foundry`, was compared, was cut over, and System B was **deleted** rather than quarantined. Nine tests that encoded the old shape were repointed at the live doors rather than kept alive to protect dead code |
@@ -156,6 +156,26 @@ the defect §2 and §10 name:
 Nothing was deleted. In both cases the grounding a figure or a state needs to be
 trustworthy is still there — one tap down instead of in the way. That is the
 difference between WATCH and INSPECT, and it is the whole argument for §7.
+
+### The quiet estate now has a picture
+
+§51-N is the master prompt's central claim about Home: that Foundry can
+truthfully display estate healthy, autonomy normal, no owner action required.
+Nothing had ever photographed it. This harness seeds everything waiting, because
+everything waiting is what stresses a layout — so the one state the owner will
+spend most of his life in was the one state never checked.
+
+It could not be done with a second founder: a private Foundry admits one address
+and `requireInstitutionOwner` returns 403 to every other, which is the boundary
+working. Measuring around it would have measured a deployment that does not
+exist. So the final pass **answers every open question as the owner would** —
+withdraws the act, declines the advice, answers the candidate, declines the
+experiment, gives the Workshop its address — and photographs what is left. The
+database refused the first attempt at this too, because a decision recorded as
+`mm_owner` rather than `founder:mm_owner` is not the owner deciding.
+
+What is left is one screen: a single honest sentence, six tiles, no prose.
+Estate *Healthy*. Needs you *None*. `docs/design/mobile/foundry-quiet-390.png`.
 
 ### What was deliberately **not** taken from the boards
 
@@ -260,6 +280,7 @@ These cannot honestly be proven yet. Each names the evidence that will resolve i
 | 43 | Recoverability at 90 days | the ladder reaching back 90 days | **≈ 3 December 2026** |
 | 35 | Cognition paying rent | `work` × `changed_something` over real production cycles | weeks |
 | 44 | Journeys 7, 8, 9 | a sale, a refund, a tax reserve change | after the first payment |
+| 44 | Journeys 2, 4, 6 | staging a degraded responsibility, a running experiment and a governed stop in the harness | not blocked — engineering, named in WATCH |
 
 None of these is blocked on architecture. Each is blocked on time or on somebody
 else's behaviour, and the observation mechanism for each is already built and
@@ -277,6 +298,11 @@ running.
   decision. The reachability gate and `RETIRED_LOOPS` are the evidence.
 - **Recoverability at the long horizons** will start holding on its own. Failing
   rows before those dates are the ladder's age, not a regression.
+- **§44's three stageable journeys.** Degraded-but-recovering, running
+  autonomously and stopped by a governed condition are all states the system
+  genuinely has; none is staged in the browser gate yet. Nothing is blocking
+  them but the fixture work, and they are named here rather than counted as
+  proven.
 - **§25's single-entry ledger.** Adequate for an estate with no money. The first
   settled payment is when the question of whether it stays adequate becomes real,
   and it should be asked then rather than answered now.
