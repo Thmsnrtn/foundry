@@ -42,6 +42,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
+import { madeAtRuntime } from '../../db/runtime-objects.js';
 import { log as logger } from '../../lib/logger.js';
 import { WorkshopError } from '../workshop/contract.js';
 import type { Economics as AcqEconomics } from './acquisition.js';
@@ -423,8 +424,11 @@ export async function carrySchemaDescription(
   // responsibility would then have produced was to write that probe table into
   // the committed description. A detector whose first real finding is false
   // teaches everybody downstream to ignore it.
-  const madeAtRuntime = new Set(['health_write_probe']);
-  const missing = live.filter((n) => !madeAtRuntime.has(n) && !described.includes(n));
+  // The list moved to `db/runtime-objects.ts` so the canonical observation in
+  // `foundry/self-observation.ts` reads the same one. It had this exclusion and
+  // that one did not, so this page said no drift while the institution's own
+  // evidence reported a failing responsibility every six hours.
+  const missing = live.filter((n) => !madeAtRuntime(n) && !described.includes(n));
   if (missing.length === 0) {
     return { responsibility: SNAPSHOT_RESPONSIBILITY, drifted: false,
       standing: null, needsHim: null };

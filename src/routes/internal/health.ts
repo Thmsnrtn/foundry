@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { query } from '../../db/client.js';
+import { WRITE_PROBE } from '../../db/runtime-objects.js';
 
 export const healthRoutes = new Hono();
 
@@ -22,9 +23,12 @@ healthRoutes.get('/internal/health', async (c) => {
       .rows[0] as Record<string, unknown> | undefined;
     if (Number(migrated?.n ?? 0) < 50) throw new Error('the schema is not applied');
     // A real write, on a table that exists for this, immediately undone.
-    await query("CREATE TABLE IF NOT EXISTS health_write_probe (at TEXT NOT NULL)");
-    await query("INSERT INTO health_write_probe (at) VALUES (datetime('now'))");
-    await query('DELETE FROM health_write_probe');
+    // NAMED FROM THE ONE LIST THAT KNOWS IT IS MADE AT RUNTIME, so the table
+    // this creates and the table the schema comparison forgives can never drift
+    // apart. They already had, in opposite directions, for eleven days.
+    await query(`CREATE TABLE IF NOT EXISTS ${WRITE_PROBE} (at TEXT NOT NULL)`);
+    await query(`INSERT INTO ${WRITE_PROBE} (at) VALUES (datetime('now'))`);
+    await query(`DELETE FROM ${WRITE_PROBE}`);
     checks.database = 'ok';
   } catch {
     checks.database = 'error';

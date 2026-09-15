@@ -115,13 +115,45 @@ async function truthful(founderId: string, days: number): Promise<PropertyReadin
   const evidence: string[] = [];
   const wouldFixIt: string[] = [];
 
+  // WHAT WOULD TELL ME IF THIS COMPANY WENT WRONG — ALL OF IT, NOT ONE KIND.
+  //
+  // This counted rows in `company_senses` and nothing else, and read against
+  // production it said Foundry observes nothing about itself. In the same
+  // thirty days Foundry had recorded 116 verifications of its own repository
+  // and 53 comparisons of a responsibility's expectations against what actually
+  // happened — the most closely watched company in the estate — while the two
+  // it called sighted were synthetic rehearsals with four connected senses
+  // each. The reading was not wrong about `company_senses`. It was wrong about
+  // the world, because it asked "is a provider connected" when the question is
+  // "is there anything here that would speak up".
+  //
+  // THREE WAYS, AND NONE OF THEM NAMES A COMPANY. A provider reporting on the
+  // business; a check of how the thing is BUILT, verified rather than asserted;
+  // an expectation registered in advance and compared against a real event. Any
+  // company can be observed by any of them — a customer's company with a
+  // connected repository produces exactly the same verification rows. This does
+  // not resolve which product row is Foundry, and it must never: a kernel that
+  // can ask will eventually answer by exempting the one company it likes.
+  //
+  // SEVEN DAYS IS WHAT MAKES A STREAM LIVE. Not the horizon — the reading is
+  // taken at the moment he leaves, and what matters is whether anything is
+  // watching then. A week of total silence from every mechanism means the
+  // stream is dead and silence really would mean nothing; a stream that dies
+  // while he is away shows up as stale routines in the deployment reading.
   const companies = (await query(
     `SELECT p.id, p.name,
             (SELECT COUNT(*) FROM company_senses s
               WHERE s.product_id = p.id AND s.disconnected_at IS NULL) AS senses,
             (SELECT COUNT(*) FROM company_senses s
               WHERE s.product_id = p.id AND s.disconnected_at IS NULL
-                AND s.last_error IS NOT NULL) AS failing
+                AND s.last_error IS NOT NULL) AS failing,
+            (SELECT COUNT(*) FROM signal_events e
+              WHERE e.product_id = p.id AND e.source = 'development_verification'
+                AND e.created_at >= datetime('now','-7 days')) AS verified,
+            (SELECT COUNT(*) FROM responsibility_shadow_comparisons c
+               JOIN responsibility_shadow_expectations x ON x.id = c.expectation_id
+              WHERE x.product_id = p.id
+                AND c.created_at >= datetime('now','-7 days')) AS compared
        FROM products p
       WHERE p.owner_id = ? AND p.status = 'active' AND p.standing = 'earned'
         AND p.deleted_at IS NULL AND ${realCompany('p')}`, [founderId]))
@@ -142,7 +174,18 @@ async function truthful(founderId: string, days: number): Promise<PropertyReadin
   // does NOT depend on any company is whether the deployment itself is running,
   // and that is read below from `deployment/self-check`, where no product id
   // appears at all.
-  const blind = companies.filter((c) => Number(c.senses) === 0).map((c) => String(c.name));
+  const watching = (c: Record<string, unknown>): string[] => {
+    const how: string[] = [];
+    if (Number(c.senses) > 0) how.push(`${plural(Number(c.senses), 'sense', 'senses')} connected`);
+    if (Number(c.verified) > 0) {
+      how.push(`${plural(Number(c.verified), 'check', 'checks')} of how it is built, verified this week`);
+    }
+    if (Number(c.compared) > 0) {
+      how.push(`${plural(Number(c.compared), 'comparison', 'comparisons')} against what I expected`);
+    }
+    return how;
+  };
+  const blind = companies.filter((c) => watching(c).length === 0).map((c) => String(c.name));
 
   const { observeSelf } = await import('../deployment/self-check.js');
   const self = await observeSelf();
@@ -184,12 +227,38 @@ async function truthful(founderId: string, days: number): Promise<PropertyReadin
     .rows as unknown as Array<Record<string, unknown>>;
 
   for (const name of blind) {
-    evidence.push(`${name}: nothing connected, so I observe nothing about it`);
+    evidence.push(`${name}: nothing watches it at all, so I observe nothing about it`);
     wouldFixIt.push(`connect something that reports on ${name}, or say on its page that quiet from it means nothing`);
+  }
+  // WHAT IS WATCHING, NAMED, SO "NOT BLIND" IS NEVER A BARE CLAIM.
+  //
+  // A company watched only by checks of how it is built is watched about how it
+  // is built. That is a real answer to "would silence be mistaken for calm" —
+  // something would speak up — and it is not the same as seeing whether anybody
+  // is buying. Saying which it is lets a reader disagree with the finding
+  // instead of taking it.
+  for (const c of companies.filter((x) => watching(x).length > 0)) {
+    evidence.push(`${String(c.name)}: ${watching(c).join(', ')}`);
   }
   for (const name of erroring) {
     evidence.push(`${name}: something I watch is returning an error`);
     wouldFixIt.push(`fix or disconnect the failing sense on ${name}`);
+  }
+  // AND A CHECK THAT REPORTS A FAILURE IS TROUBLE, NOT SIGHT.
+  //
+  // The asymmetry this closes: once a verification of how a company is built
+  // counts as something watching it, a verification REPORTING A FAILURE has to
+  // count as something wrong — or the reading would take credit for watching
+  // and then ignore what the watching said, which is the cosmetic version of
+  // passing this test.
+  const { getFailingSelfChecks } = await import('./development-observation.js');
+  let checksFailing = 0;
+  for (const c of companies) {
+    for (const failed of await getFailingSelfChecks(String(c.id))) {
+      checksFailing += 1;
+      evidence.push(`${String(c.name)}: ${failed.check} is failing — ${failed.detail}`);
+      wouldFixIt.push(`put ${failed.check} right on ${String(c.name)}, or stop checking it`);
+    }
   }
   for (const loop of loops) {
     evidence.push(loop.stoppedRunning
@@ -218,7 +287,8 @@ async function truthful(founderId: string, days: number): Promise<PropertyReadin
     + 'and refuses a measurement that carries one');
 
   const selfStale = self.signals.filter((x) => x.state !== 'current').length;
-  const broken = blind.length + erroring.length + loops.length + alsoFailing + selfStale;
+  const broken = blind.length + erroring.length + loops.length + alsoFailing + selfStale
+    + checksFailing;
   return {
     property: 'truthful',
     question: `After ${String(days)} days, would anything I show you assert more than I actually know?`,

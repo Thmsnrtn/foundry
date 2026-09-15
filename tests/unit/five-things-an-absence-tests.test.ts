@@ -3,6 +3,8 @@ process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { nanoid } from 'nanoid';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import {
@@ -61,7 +63,7 @@ describe('truthful — would silence be mistaken for calm', () => {
   it('does not hold while a company has nothing connected to it', async () => {
     const t = find(await readingAt(7), 'truthful');
     expect(t.finding).toBe('DOES_NOT_HOLD');
-    expect(t.evidence.join(' ')).toContain('nothing connected');
+    expect(t.evidence.join(' ')).toContain('nothing watches it at all');
     expect(t.wouldFixIt.join(' ')).toContain('quiet from it means nothing');
   });
 
@@ -76,7 +78,79 @@ describe('truthful — would silence be mistaken for calm', () => {
     // the deployment genuinely has no copies and no routine history — which is
     // true, and is not what this test is about.
     const t = find(await readingAt(7), 'truthful');
-    expect(t.evidence.join(' ')).not.toContain('nothing connected');
+    expect(t.evidence.join(' ')).not.toContain('nothing watches it at all');
+  });
+
+  it('counts a check of how the company is built as something watching it', async () => {
+    // THE MODELLING GAP THIS CLOSES. The reading counted rows in
+    // `company_senses` and nothing else, and against production it said Foundry
+    // observed nothing about itself — in a month when Foundry had recorded 116
+    // verifications of its own repository and 53 comparisons of a
+    // responsibility against what actually happened, while the two companies it
+    // called sighted were synthetic rehearsals with four senses each.
+    //
+    // It was not wrong about `company_senses`. It was asking "is a provider
+    // connected" when the question is "is there anything here that would speak
+    // up". A verified check of how the thing is built is such a thing, for ANY
+    // company — nothing here knows or asks which company it is looking at.
+    // Through the real writer, because the database refuses a hand-made one:
+    // a verification must carry the check that ran and the result it produced,
+    // and may not cite the expectation it will be compared against.
+    const { recordDevelopmentObservation } = await import(
+      '../../src/services/institution/development-observation.js');
+    await recordDevelopmentObservation({
+      productId: COMPANY, check: 'schema-snapshot-freshness', result: 'passed',
+      detail: 'the snapshot matches the migrations that produce it',
+    });
+    const t = find(await readingAt(7), 'truthful');
+    expect(t.evidence.join(' ')).not.toContain('nothing watches it at all');
+    // And says WHAT is watching, so the claim can be disagreed with rather than
+    // taken. A company watched only by build checks is watched about how it is
+    // built, which is not the same as seeing whether anybody is buying.
+    expect(t.evidence.join(' ')).toContain('how it is built');
+  });
+
+  it('stops counting it once the stream goes quiet for a week', async () => {
+    // A DEAD STREAM IS BLINDNESS AGAIN, and this is what stops the change being
+    // a way to pass the test once and coast. Seven days of total silence from
+    // every mechanism means nothing is watching now, whatever was watching in
+    // August.
+    const { recordDevelopmentObservation } = await import(
+      '../../src/services/institution/development-observation.js');
+    await recordDevelopmentObservation({
+      productId: COMPANY, check: 'schema-snapshot-freshness', result: 'passed',
+      detail: 'the snapshot matched, nine days ago',
+      observedAt: new Date(Date.now() - 9 * 86_400_000),
+    });
+    const t = find(await readingAt(7), 'truthful');
+    expect(t.evidence.join(' ')).toContain('nothing watches it at all');
+  });
+
+  it('will not take credit for watching and then ignore what the watching said', async () => {
+    // THE COSMETIC VERSION OF PASSING THIS TEST, refused. Once a verification
+    // counts as sight, a verification REPORTING A FAILURE has to count as
+    // something wrong — otherwise the reading banks the credit for looking and
+    // discards the finding.
+    const { recordDevelopmentObservation } = await import(
+      '../../src/services/institution/development-observation.js');
+    await recordDevelopmentObservation({
+      productId: COMPANY, check: 'schema-snapshot-freshness', result: 'failed',
+      detail: 'the snapshot no longer matches the migrations that produce it',
+    });
+    const t = find(await readingAt(7), 'truthful');
+    expect(t.finding).toBe('DOES_NOT_HOLD');
+    expect(t.evidence.join(' ')).toContain('is failing');
+  });
+
+  it('never asks which company it is looking at', async () => {
+    // THE REFUSAL THAT SHAPED THIS. An earlier version resolved which product
+    // row is Foundry so the estate reading could exempt that one from being
+    // called blind. `recursive-institution` refused it and was right: a kernel
+    // that can ask will eventually answer by exempting the company it likes.
+    // The mechanisms above are generic, and this holds them to it.
+    const src = readFileSync(
+      resolve(import.meta.dirname, '../../src/services/institution/absence-test.ts'), 'utf8');
+    expect(src).not.toMatch(/system_identities|resolveFoundryProductId/);
   });
 
   it('does not hold when a sense is erroring, because the page would look the same', async () => {

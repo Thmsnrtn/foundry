@@ -41,6 +41,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { query } from '../../db/client.js';
+import { madeAtRuntime } from '../../db/runtime-objects.js';
 import { resolveFoundryProductId } from '../system-identity.js';
 import {
   recordDevelopmentObservation, type DevelopmentObservation,
@@ -340,7 +341,19 @@ export function snapshotObjectNames(snapshotSql: string): Set<string> {
 export function compareSchemaToSnapshot(input: {
   liveObjectNames: Iterable<string>; snapshotSql: string;
 }): { result: 'passed' | 'failed'; detail: string } {
-  const live = new Set(input.liveObjectNames);
+  // WHAT THE MIGRATIONS CREATE, NOT WHATEVER HAPPENS TO BE LIVE.
+  //
+  // This compared against everything in `sqlite_master`, so a correctly built
+  // deployment reported drift every six hours for eleven days over
+  // `health_write_probe` — a table the health check creates to prove the volume
+  // is writable. The owner-facing reading in `carrying.ts` already excluded it
+  // and correctly said there was no drift, so the institution's canonical
+  // evidence and the page the owner reads disagreed, and nothing compared them.
+  //
+  // The exclusion now lives in the layer that owns the schema and both readers
+  // take it from there, because the same fact known in two places is a fact
+  // that will be acted on in one.
+  const live = new Set([...input.liveObjectNames].filter((n) => !madeAtRuntime(n)));
   const described = snapshotObjectNames(input.snapshotSql);
   const undescribed = [...live].filter((n) => !described.has(n)).sort();
   const phantom = [...described].filter((n) => !live.has(n)).sort();
