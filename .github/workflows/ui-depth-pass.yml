@@ -1,0 +1,149 @@
+name: Owner OS Depth Pass
+
+on:
+  push:
+    branches:
+      - 'claude/owner-os-visual-reconstruction'
+
+permissions:
+  contents: write
+
+jobs:
+  deepen:
+    if: ${{ !contains(github.event.head_commit.message, '[owner-depth-pass]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/owner-os-visual-reconstruction
+          fetch-depth: 0
+      - name: Give the deep owner surfaces their own visual grammar
+        shell: bash
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+
+          absence=Path('src/routes/dashboard/absence-place.ts')
+          s=absence.read_text()
+          s=s.replace('return html`<div class="know">\n    <h2>${String(r.days)} days', 'return html`<div class="know horizon horizon-${String(r.days)}">\n    <h2>${String(r.days)} days')
+          s=s.replace('    ${readings.map(horizon)}\n\n    <div class="know">\n      <h2>What thinking costs</h2>', '    <div class="absence-horizons">${readings.map(horizon)}</div>\n\n    <div class="know cognition-economics">\n      <h2>What thinking costs</h2>')
+          absence.write_text(s)
+
+          roadmap=Path('src/routes/dashboard/roadmap-place.ts')
+          s=roadmap.read_text()
+          s=s.replace('${open.length === 0 ? \'\' : html`<div class="know">\n      <h2>Under way</h2>', '${open.length === 0 ? \'\' : html`<div class="know roadmap-open">\n      <h2>Under way</h2>')
+          s=s.replace('${closed.length === 0 ? \'\' : html`<div class="know">\n      <h2>Finished, and what came of it</h2>', '${closed.length === 0 ? \'\' : html`<div class="know roadmap-closed">\n      <h2>Finished, and what came of it</h2>')
+          s=s.replace('    <div class="know">\n      <h2>Why you cannot add to this</h2>', '    <div class="know roadmap-note">\n      <h2>Why you cannot add to this</h2>')
+          roadmap.write_text(s)
+
+          experiments=Path('src/routes/dashboard/experiments-place.ts')
+          s=experiments.read_text()
+          s=s.replace('html`<a class="item" href="/foundry/experiments/${v.id}">', 'html`<a class="item experiment-index-item" href="/foundry/experiments/${v.id}">', 1)
+          experiments.write_text(s)
+
+          css=Path('src/public/owner.css')
+          source=css.read_text()
+          if 'OWNER OS DEPTH PASS' not in source:
+            source += r'''
+
+/* =============================================================================
+   OWNER OS DEPTH PASS
+   The shell is settled. These rules give the deeper constitutional surfaces a
+   visual grammar appropriate to the question each one answers without adding
+   another dashboard vocabulary or inventing any new state.
+   ============================================================================= */
+
+/* Absence is a comparison across horizons, not three essays in sequence. */
+.absence-horizons{display:grid;gap:12px;margin-top:1.2rem}
+.absence-horizons .horizon{
+  margin:0;padding:1rem;
+  border:1px solid var(--os-line);
+  border-radius:16px;
+  background:linear-gradient(180deg,var(--os-sheen),transparent 45%),var(--os-panel)
+}
+.absence-horizons .horizon>h2:first-child{
+  margin:0 0 .45rem;padding:0 0 .7rem;
+  font-family:var(--serif);font-size:1.25rem;letter-spacing:-.015em;
+  border-bottom:1px solid var(--os-line)
+}
+.absence-horizons .horizon>.lede{font-size:.92rem;line-height:1.45;margin:.6rem 0 .8rem}
+.absence-horizons .horizon .sales{margin:0}
+.absence-horizons .horizon .sales>li{padding:.8rem 0}
+.absence-horizons .horizon .sales>li>b{display:inline;font-size:.86rem}
+.absence-horizons .horizon .sales>li>p{font-size:.82rem;line-height:1.42;color:var(--ink-2);margin:.35rem 0 0}
+.absence-horizons .horizon .state{margin-left:.25rem}
+.cognition-economics{max-width:62rem}
+
+/* Roadmap is load: open work carries weight, closed work recedes. */
+.roadmap-open .sales,.roadmap-closed .sales{list-style:none;padding:0;display:grid;gap:10px}
+.roadmap-open .sales>li{
+  padding:1rem 1.05rem;border:1px solid var(--os-line);border-radius:14px;
+  background:var(--os-panel)
+}
+.roadmap-open .sales>li>b{font-family:var(--serif);font-size:1.08rem;font-weight:500}
+.roadmap-open .sales>li>p:nth-of-type(1){font-size:1rem;color:var(--ink);margin:.4rem 0}
+.roadmap-closed{opacity:.86}
+.roadmap-closed .sales>li{padding:.8rem 0}
+.roadmap-note{max-width:var(--os-reading);opacity:.78}
+
+/* Experiments read as a small portfolio of questions put to the world. */
+.experiment-index-item{position:relative;overflow:hidden}
+.experiment-index-item::before{
+  content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--accent);opacity:.55
+}
+.experiment-index-item .pill{font-size:.68rem}
+
+/* Honest trends earn a little more visual weight, never a fabricated axis. */
+.spark{display:block;margin-top:.8rem;max-width:100%;height:34px;overflow:visible}
+.numbers .tile .spark{margin-top:auto;padding-top:.55rem}
+
+/* Authority is a bounded reach map. The dial says mode; the rows say where. */
+.reach{border-top:1px solid var(--os-line)}
+.reach li{display:grid;grid-template-columns:minmax(9rem,.8fr) minmax(0,1.6fr);gap:.4rem 1rem;align-items:start;padding:.9rem 0}
+.reach li>p{grid-column:2}
+.dial{padding:4px;border:1px solid var(--os-line);border-radius:13px;background:var(--os-command-fill)}
+.dial .mark{border-color:transparent;background:transparent}
+.dial .mark.on{background:var(--os-panel-raised);border-color:var(--os-line-strong);box-shadow:var(--os-shadow-soft)}
+
+/* The River should feel like an estate cross-section rather than a generic
+   list. A left rule gives layers continuity; Frontier keeps the consequence
+   color because it is still unresolved capital and attention. */
+.layer{position:relative;margin-left:.55rem;border-left:2px solid var(--os-mint-line);border-radius:0 13px 13px 0}
+.layer:last-of-type{border-left-color:var(--os-gold)}
+.legend{display:flex;flex-wrap:wrap;gap:.55rem 1rem;color:var(--ink-3);font-size:.75rem}
+.legend span{display:inline-flex;align-items:center;gap:.35rem}
+.legend i{width:8px;height:8px;border-radius:50%;display:inline-block}
+
+@media (max-width:699px){
+  .reach li{grid-template-columns:1fr}.reach li>p{grid-column:1}
+}
+@media (min-width:900px){
+  .absence-horizons{grid-template-columns:repeat(3,minmax(0,1fr));max-width:72rem}
+  .roadmap-open .sales{grid-template-columns:repeat(2,minmax(0,1fr));max-width:68rem}
+  main[data-place="experiments"]>.experiment-index-item{max-width:62rem}
+}
+@media (min-width:1180px){
+  main[data-place="experiments"]>.experiment-index-item{max-width:62rem}
+}
+'''
+            css.write_text(source)
+          PY
+      - name: Verify the depth pass
+        run: |
+          npm ci
+          npm run typecheck
+          npx vitest --run \
+            tests/unit/the-owner-os-is-a-cockpit-not-a-second-institution.test.ts \
+            tests/unit/a-button-wider-than-the-phone.test.ts \
+            tests/unit/one-stylesheet-one-vocabulary.test.ts \
+            tests/unit/twelve-journeys-on-the-phone-he-holds.test.ts
+      - name: Commit depth pass
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'OpenAI UI Reconstruction'
+          git config user.email 'noreply@openai.com'
+          git add src/public/owner.css src/routes/dashboard/absence-place.ts src/routes/dashboard/roadmap-place.ts src/routes/dashboard/experiments-place.ts
+          git commit -m 'Give the deep owner surfaces their own visual grammar [owner-depth-pass]'
+          git push origin HEAD:claude/owner-os-visual-reconstruction
