@@ -1,57 +1,151 @@
-/* PRIVATE FOUNDRY — Owner OS reconstruction, live cutover layer.
-   Presentation only. owner-base.css remains the compatibility floor while
-   canonical surfaces are migrated and then deleted from beneath this layer. */
+/* =============================================================================
+   PRIVATE FOUNDRY — OWNER OS VISUAL RECONSTRUCTION
+
+   Loaded after owner.css. This is a presentation cutover only: canonical state,
+   money, evidence, authority and consequences still come from the existing
+   services and routes. No visual treatment may manufacture a fact.
+
+   The target is an owner cockpit, not a stretched phone and not a generic SaaS
+   dashboard: editorial hierarchy, quiet institutional materials, dense numbers,
+   visible causality and warm emphasis reserved for consequence.
+   ============================================================================= */
 
 :root{
   --os-bg:#090d0b;
   --os-rail:#0d1310;
   --os-panel:#101713;
   --os-panel-raised:#141d18;
+  --os-panel-soft:#17211b;
+  --os-command:rgba(18,25,21,.92);
+  --os-mobile-chrome:rgba(9,13,11,.94);
+  --os-fade:rgba(9,13,11,.99);
   --os-line:rgba(181,211,195,.12);
   --os-line-strong:rgba(181,211,195,.22);
+  --os-sheen:rgba(255,255,255,.018);
+  --os-sheen-strong:rgba(255,255,255,.035);
+  --os-dim-fill:rgba(255,255,255,.025);
+  --os-command-fill:rgba(0,0,0,.08);
   --os-shadow:0 20px 60px rgba(0,0,0,.22);
   --os-shadow-soft:0 8px 24px rgba(0,0,0,.16);
   --os-max:88rem;
   --os-reading:48rem;
+  --os-gold:rgba(217,168,94,.55);
+  --os-gold-soft:rgba(217,168,94,.065);
+  --os-mint-soft:rgba(143,209,184,.105);
+  --os-mint-line:rgba(143,209,184,.16);
+}
+
+/* The explicit theme selector wins exactly as it does in owner.css. */
+@media (prefers-color-scheme:light){
+  :root:not([data-theme="dark"]){
+    --os-bg:#f3f4f1;
+    --os-rail:#ecefe9;
+    --os-panel:#ffffff;
+    --os-panel-raised:#f8faf7;
+    --os-panel-soft:#f1f5f0;
+    --os-command:rgba(255,255,255,.96);
+    --os-mobile-chrome:rgba(243,244,241,.95);
+    --os-fade:rgba(243,244,241,.99);
+    --os-line:rgba(21,28,24,.10);
+    --os-line-strong:rgba(21,28,24,.18);
+    --os-sheen:rgba(255,255,255,.58);
+    --os-sheen-strong:rgba(255,255,255,.78);
+    --os-dim-fill:rgba(21,28,24,.025);
+    --os-command-fill:rgba(21,28,24,.035);
+    --os-shadow:0 20px 55px rgba(30,45,36,.08);
+    --os-shadow-soft:0 8px 22px rgba(30,45,36,.07);
+    --os-gold:rgba(150,96,26,.42);
+    --os-gold-soft:rgba(150,96,26,.055);
+    --os-mint-soft:rgba(37,100,84,.075);
+    --os-mint-line:rgba(37,100,84,.14);
+  }
+}
+:root[data-theme="light"]{
+  --os-bg:#f3f4f1;
+  --os-rail:#ecefe9;
+  --os-panel:#ffffff;
+  --os-panel-raised:#f8faf7;
+  --os-panel-soft:#f1f5f0;
+  --os-command:rgba(255,255,255,.96);
+  --os-mobile-chrome:rgba(243,244,241,.95);
+  --os-fade:rgba(243,244,241,.99);
+  --os-line:rgba(21,28,24,.10);
+  --os-line-strong:rgba(21,28,24,.18);
+  --os-sheen:rgba(255,255,255,.58);
+  --os-sheen-strong:rgba(255,255,255,.78);
+  --os-dim-fill:rgba(21,28,24,.025);
+  --os-command-fill:rgba(21,28,24,.035);
+  --os-shadow:0 20px 55px rgba(30,45,36,.08);
+  --os-shadow-soft:0 8px 22px rgba(30,45,36,.07);
+  --os-gold:rgba(150,96,26,.42);
+  --os-gold-soft:rgba(150,96,26,.055);
+  --os-mint-soft:rgba(37,100,84,.075);
+  --os-mint-line:rgba(37,100,84,.14);
 }
 
 body{
   background:
-    radial-gradient(circle at 78% -10%,rgba(68,111,91,.11),transparent 34rem),
-    linear-gradient(180deg,#0a0f0c 0%,var(--os-bg) 34rem);
+    radial-gradient(circle at 78% -10%,var(--os-mint-soft),transparent 34rem),
+    linear-gradient(180deg,var(--os-panel-raised) 0%,var(--os-bg) 34rem);
   min-height:100vh;
 }
 .wrap{position:relative}
 .brand{gap:.65rem;color:var(--ink-2);letter-spacing:.01em}
-.brand b{background:linear-gradient(145deg,var(--card-2),var(--card));border-color:var(--os-line-strong);box-shadow:inset 0 1px 0 rgba(255,255,255,.035),var(--os-shadow-soft)}
+.brand b{
+  background:linear-gradient(145deg,var(--card-2),var(--card));
+  border-color:var(--os-line-strong);
+  box-shadow:inset 0 1px 0 var(--os-sheen-strong),var(--os-shadow-soft)
+}
 h1{text-wrap:balance;letter-spacing:-.028em}
 h2,h3{text-wrap:balance}
 .lede{max-width:var(--os-reading);color:var(--ink-2);line-height:1.62}
 .crumbs{letter-spacing:.01em}.crumbs i{opacity:.45}
 
-/* Ask is an institutional command surface, not a chat widget covering content. */
+/* --------------------------------------------------------------------------
+   COMMAND SURFACE
+   -------------------------------------------------------------------------- */
 .ask{backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
-.ask-in{border:1px solid var(--os-line-strong);background:rgba(18,25,21,.92);border-radius:16px;padding:4px;box-shadow:0 16px 50px rgba(0,0,0,.28),inset 0 1px 0 rgba(255,255,255,.025)}
+.ask-in{
+  border:1px solid var(--os-line-strong);
+  background:var(--os-command);
+  border-radius:16px;
+  padding:4px;
+  box-shadow:0 16px 50px rgba(0,0,0,.18),inset 0 1px 0 var(--os-sheen-strong)
+}
 .ask input{border:0;background:transparent;min-height:46px;box-shadow:none}
 .ask input:focus-visible{outline:0}
 .ask button{min-height:42px;margin:2px;border-radius:11px;padding-inline:1rem}
+.askwhere{font-size:.76rem;letter-spacing:.01em}
 
-/* One material family across the owner surface. */
+/* --------------------------------------------------------------------------
+   MATERIALS
+   -------------------------------------------------------------------------- */
 .tile,.hero,.one,.standing,.done,.noticed,.item,.card,.said-here{
-  background:linear-gradient(180deg,rgba(255,255,255,.018),transparent 55%),var(--os-panel);
+  background:linear-gradient(180deg,var(--os-sheen),transparent 55%),var(--os-panel);
   border-color:var(--os-line);
-  box-shadow:inset 0 1px 0 rgba(255,255,255,.022)
+  box-shadow:inset 0 1px 0 var(--os-sheen)
 }
 .tile,.item,.card{transition:border-color .18s ease,background .18s ease,transform .18s ease}
-@media (hover:hover){.tile.door:hover,.item:hover{background:var(--os-panel-raised);border-color:var(--os-line-strong);transform:translateY(-1px)}}
-.one{border-color:rgba(217,168,94,.55);box-shadow:0 0 0 1px rgba(217,168,94,.06),var(--os-shadow-soft)}
-.one:not(.alert){background:radial-gradient(circle at 100% 0,rgba(217,168,94,.065),transparent 24rem),var(--os-panel)}
+@media (hover:hover){
+  .tile.door:hover,.item:hover{
+    background:var(--os-panel-raised);
+    border-color:var(--os-line-strong);
+    transform:translateY(-1px)
+  }
+}
+.one{
+  border-color:var(--os-gold);
+  box-shadow:0 0 0 1px var(--os-gold-soft),var(--os-shadow-soft)
+}
+.one:not(.alert){background:radial-gradient(circle at 100% 0,var(--os-gold-soft),transparent 24rem),var(--os-panel)}
 .standing{border-color:rgba(143,209,184,.34)}
 details{border-color:var(--os-line)}
 summary{transition:background .16s ease,color .16s ease}
-@media (hover:hover){summary:hover{background:rgba(255,255,255,.018);color:var(--ink)}}
+@media (hover:hover){summary:hover{background:var(--os-dim-fill);color:var(--ink)}}
 
-/* Estate glance: instrument panel first, prose second. */
+/* --------------------------------------------------------------------------
+   ESTATE GLANCE
+   -------------------------------------------------------------------------- */
 .glance{gap:10px}
 .tile{min-height:8.4rem;padding:1rem;overflow:hidden}
 .tile dt.k{text-transform:uppercase;letter-spacing:.105em;font-weight:600;font-size:.68rem}
@@ -60,33 +154,155 @@ summary{transition:background .16s ease,color .16s ease}
 .tile.door{display:flex;flex-direction:column}
 .tile.door::after{top:10px;right:12px;opacity:.5}
 .state{font-family:var(--sans);font-size:.76rem;letter-spacing:.015em;padding:4px 9px}
-.state::before{width:6px;height:6px;box-shadow:0 0 0 3px currentColor;opacity:.82}.state.none::before{box-shadow:none}
+.state::before{width:6px;height:6px;box-shadow:0 0 0 3px currentColor;opacity:.82}
+.state.none::before{box-shadow:none}
 .nownext{margin-top:-.6rem;gap:8px}
-.nownext>div{background:rgba(23,32,25,.62);border-color:var(--os-line);padding:.85rem 1rem}
-.nownext dt.k{color:var(--ink-3);font-size:.64rem}.nownext dd{line-height:1.42}
+.nownext>div{background:var(--os-panel-soft);border-color:var(--os-line);padding:.85rem 1rem}
+.nownext dt.k{color:var(--ink-3);font-size:.64rem}
+.nownext dd{line-height:1.42}
 
-/* Consequential work stays visually singular. */
+/* Home reads like an estate report, not a stack of cards. */
+main[data-place="foundry"]>.brand{margin-bottom:1.4rem}
+main[data-place="foundry"]>h1{margin-bottom:.45rem}
+main[data-place="foundry"]>.lede:first-of-type{font-size:1rem;margin-bottom:1.8rem}
+main[data-place="foundry"]>.glance{position:relative}
+main[data-place="foundry"]>.glance::before{
+  content:"ESTATE AT A GLANCE";
+  position:absolute;
+  top:-1.3rem;left:1px;
+  font:600 .58rem/1 var(--sans);
+  letter-spacing:.16em;
+  color:var(--ink-3)
+}
+
+/* --------------------------------------------------------------------------
+   DECISIONS / AUTHORITY
+   -------------------------------------------------------------------------- */
 .one-in{padding:1.25rem 1.35rem}
 .one h2{font-size:clamp(1.45rem,2.2vw,1.9rem);letter-spacing:-.02em}
 .act{letter-spacing:.16em;font-size:.64rem}
-.facts{background:rgba(0,0,0,.08);border-color:var(--os-line)}
-.do{background:rgba(0,0,0,.06);border-color:var(--os-line)}
-.btn{border-color:var(--os-line-strong);background:var(--os-panel-raised);box-shadow:inset 0 1px 0 rgba(255,255,255,.025)}
-.btn.go,.btn.btn-primary{background:var(--accent);color:var(--accent-ink);box-shadow:0 8px 24px rgba(74,133,112,.14)}
+.facts{background:var(--os-command-fill);border-color:var(--os-line)}
+.facts dt{letter-spacing:.01em}
+.do{background:var(--os-command-fill);border-color:var(--os-line)}
+.btn{
+  border-color:var(--os-line-strong);
+  background:var(--os-panel-raised);
+  box-shadow:inset 0 1px 0 var(--os-sheen)
+}
+.btn.go,.btn.btn-primary{
+  background:var(--accent);
+  color:var(--accent-ink);
+  box-shadow:0 8px 24px rgba(74,133,112,.14)
+}
+.queue .qitem{margin-bottom:.65rem}
+.queue .qitem:last-child{margin-bottom:0}
 
-/* River, money and causality share the same visual grammar. */
-.layer{background:var(--os-panel);border-color:var(--os-line);padding:.9rem 1rem}
-.bar{height:7px;background:rgba(255,255,255,.055)}
+/* --------------------------------------------------------------------------
+   EXPERIMENTS
+   -------------------------------------------------------------------------- */
+a.item{
+  display:block;
+  text-decoration:none;
+  color:inherit;
+  border:1px solid var(--os-line);
+  border-radius:14px;
+  padding:1rem 1.05rem;
+  margin:.65rem 0
+}
+a.item>p:first-child{display:flex;align-items:center;gap:.55rem;justify-content:space-between;margin-bottom:.35rem}
+a.item .pill{flex:0 0 auto}
+.launch{
+  border:1px solid var(--os-gold);
+  border-radius:18px;
+  overflow:hidden;
+  background:radial-gradient(circle at 100% 0,var(--os-gold-soft),transparent 24rem),var(--os-panel);
+  box-shadow:var(--os-shadow-soft)
+}
+.launch>.act{padding:1rem 1.15rem 0}
+.who summary{font-weight:500}
+
+/* --------------------------------------------------------------------------
+   MONEY — the subtraction is the hero, not seven explanations
+   -------------------------------------------------------------------------- */
+.facts.money{
+  display:block;
+  background:transparent;
+  border:1px solid var(--os-line);
+  border-radius:16px;
+  padding:.25rem 1.15rem;
+  box-shadow:inset 0 1px 0 var(--os-sheen)
+}
 .mline{border-color:var(--os-line);padding:.85rem .15rem}
-.mline.total{padding-top:1.05rem;border-color:var(--os-line-strong)}
-.mline.total dd,.mline.total dt{font-family:var(--serif);font-size:1.25rem;letter-spacing:-.015em}
-.stream{border-top:1px solid var(--os-line)}
-.ev{border-color:var(--os-line);padding-top:.9rem;padding-bottom:.9rem}
-.steps{border-color:var(--os-line-strong)}.steps li::before{box-shadow:0 0 0 4px var(--os-bg)}
-.local{border-color:var(--os-line)}.local a{font-size:.88rem;color:var(--ink-3)}.local a.on{color:var(--ink)}
-.chip,.filters a{background:rgba(20,29,24,.72);border-color:var(--os-line)}
-.filters a.on{background:var(--ink);color:var(--bg)}
+.mline dt{font-size:.86rem;color:var(--ink-2)}
+.mline dd{font-family:var(--serif);font-size:1.15rem;letter-spacing:-.01em}
+.mline.total{padding:1.1rem .15rem;border-color:var(--os-line-strong)}
+.mline.total dd,.mline.total dt{font-family:var(--serif);font-size:1.35rem;letter-spacing:-.02em;color:var(--ink)}
+.unknown{font-family:var(--serif);font-style:italic;color:var(--ink-3)}
+.why-money{margin-top:.7rem}
 
+/* --------------------------------------------------------------------------
+   RIVER / PORTFOLIO
+   -------------------------------------------------------------------------- */
+.layer{background:var(--os-panel);border-color:var(--os-line);padding:.9rem 1rem}
+.bar{height:7px;background:var(--os-dim-fill)}
+.layer .n{font-size:1.45rem;letter-spacing:-.02em}
+.layer .t b{letter-spacing:.14em}
+.numbers .tile{min-height:7.6rem}
+
+/* --------------------------------------------------------------------------
+   ACTIVITY — a causality stream, not logs
+   -------------------------------------------------------------------------- */
+.stream{border-top:1px solid var(--os-line)}
+.ev{
+  position:relative;
+  border-color:var(--os-line);
+  padding:1rem .2rem 1rem 1.45rem
+}
+.ev::before{
+  content:"";
+  position:absolute;
+  left:.2rem;top:1.42rem;
+  width:7px;height:7px;border-radius:50%;
+  background:var(--ink-3);
+  box-shadow:0 0 0 4px var(--os-panel)
+}
+.ev.authority::before,.ev.money::before{background:var(--accent)}
+.ev.boundary::before,.ev.obligation::before{background:var(--alert)}
+.ev .when{font-size:.76rem;letter-spacing:.02em;margin-bottom:.25rem}
+.ev>p:nth-child(2){font-weight:500;margin-bottom:.25rem}
+.steps{border-color:var(--os-line-strong)}
+.steps li::before{box-shadow:0 0 0 4px var(--os-bg)}
+
+/* --------------------------------------------------------------------------
+   FORMS / LOCAL NAV / DETAILS
+   -------------------------------------------------------------------------- */
+.local{border-color:var(--os-line)}
+.local a{font-size:.88rem;color:var(--ink-3)}
+.local a.on{color:var(--ink)}
+.chip,.filters a{background:var(--os-panel-raised);border-color:var(--os-line)}
+.chip.on,.filters a.on{background:var(--ink);color:var(--bg)}
+.inline input,.inline select,textarea{
+  background:var(--os-panel);
+  border-color:var(--os-line-strong)
+}
+.inline input:focus,.inline select:focus,textarea:focus{border-color:var(--accent)}
+
+/* Dense sections become calm report sections instead of repeated visual boxes. */
+.know{margin-top:2.25rem}
+.know>h2:first-child{
+  font-family:var(--serif);
+  font-size:1.4rem;
+  letter-spacing:-.015em;
+  padding-bottom:.55rem;
+  margin-bottom:.8rem;
+  border-bottom:1px solid var(--os-line)
+}
+.know .sales{margin-top:.8rem}
+.sales>li{border-color:var(--os-line)}
+
+/* --------------------------------------------------------------------------
+   MOBILE — calm, tactile, one-thumb usable
+   -------------------------------------------------------------------------- */
 @media (max-width:899px){
   .wrap{padding-left:16px;padding-right:16px;padding-top:16px}
   h1{font-size:2.12rem;margin-bottom:.45rem}
@@ -94,45 +310,130 @@ summary{transition:background .16s ease,color .16s ease}
   .brand b{width:30px;height:30px;font-size:.95rem}
   .glance{grid-template-columns:repeat(2,minmax(0,1fr))}
   .tile{min-height:7.6rem}
-  nav.places{background:rgba(9,13,11,.94);border-color:var(--os-line-strong);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px)}
-  nav.places a{color:#7f8a81}nav.places a.on{color:var(--accent)}
-  .ask{background:linear-gradient(to top,rgba(9,13,11,.99) 76%,rgba(9,13,11,0))}
+  nav.places{
+    background:var(--os-mobile-chrome);
+    border-color:var(--os-line-strong);
+    backdrop-filter:blur(18px);
+    -webkit-backdrop-filter:blur(18px)
+  }
+  nav.places a{color:var(--ink-3)}
+  nav.places a.on{color:var(--accent)}
+  .ask{background:linear-gradient(to top,var(--os-fade) 76%,transparent)}
+  .know{margin-top:1.8rem}
+  .facts.money{padding:.2rem .9rem}
 }
 
+/* --------------------------------------------------------------------------
+   DESKTOP — a cockpit, not a widened phone
+   -------------------------------------------------------------------------- */
 @media (min-width:900px){
-  body{background:radial-gradient(circle at 72% -8%,rgba(79,129,106,.13),transparent 40rem),linear-gradient(180deg,#0a0f0c 0%,var(--os-bg) 42rem)}
-  .wrap{max-width:var(--os-max);margin-left:17.5rem;padding:2.35rem clamp(2rem,4vw,4.5rem) 5rem}
+  body{
+    background:
+      radial-gradient(circle at 72% -8%,var(--os-mint-soft),transparent 40rem),
+      linear-gradient(180deg,var(--os-panel-raised) 0%,var(--os-bg) 42rem)
+  }
+  .wrap{
+    max-width:var(--os-max);
+    margin-left:17.5rem;
+    padding:2.35rem clamp(2rem,4vw,4.5rem) 5rem
+  }
   .wrap>*{max-width:none}
   h1{font-size:clamp(2.65rem,4vw,4.1rem);line-height:1.01;margin-bottom:.7rem}
   .lede,.said,.know:not(.wide),.done>p{max-width:var(--os-reading)}
 
-  nav.places{width:17.5rem;background:linear-gradient(180deg,rgba(255,255,255,.014),transparent 16rem),var(--os-rail);border-color:var(--os-line);padding:1.6rem 1rem 1.4rem}
-  nav.places div::before{content:"PRIVATE FOUNDRY\A OWNER OS";white-space:pre;font-family:var(--serif);font-size:1.18rem;line-height:1.2;letter-spacing:-.015em;color:var(--ink);padding:.55rem .75rem 1.3rem;margin:0 0 .8rem;border-bottom:1px solid var(--os-line)}
-  nav.places div::after{content:"OWNER CONTROLLED";display:block;order:99;margin:auto .75rem 0;padding-top:1.25rem;color:var(--ink-3);font-size:.58rem;letter-spacing:.16em;border-top:1px solid var(--os-line)}
-  nav.places a{min-height:42px;border:1px solid transparent;padding:8px 10px;font-size:.91rem;color:var(--ink-3)}
+  /* Stable owner rail. */
+  nav.places{
+    width:17.5rem;
+    background:linear-gradient(180deg,var(--os-sheen),transparent 16rem),var(--os-rail);
+    border-color:var(--os-line);
+    padding:1.6rem 1rem 1.4rem
+  }
+  nav.places div::before{
+    content:"PRIVATE FOUNDRY\A OWNER OS";
+    white-space:pre;
+    font-family:var(--serif);
+    font-size:1.18rem;
+    line-height:1.2;
+    letter-spacing:-.015em;
+    color:var(--ink);
+    padding:.55rem .75rem 1.3rem;
+    margin:0 0 .8rem;
+    border-bottom:1px solid var(--os-line)
+  }
+  nav.places div::after{
+    content:"OWNER CONTROLLED";
+    display:block;
+    order:99;
+    margin:auto .75rem 0;
+    padding-top:1.25rem;
+    color:var(--ink-3);
+    font-size:.58rem;
+    letter-spacing:.16em;
+    border-top:1px solid var(--os-line)
+  }
+  nav.places a{
+    min-height:42px;
+    border:1px solid transparent;
+    padding:8px 10px;
+    font-size:.91rem;
+    color:var(--ink-3)
+  }
   nav.places a svg{width:19px;height:19px;stroke-width:1.55}
-  nav.places a.on{background:linear-gradient(90deg,rgba(143,209,184,.105),rgba(143,209,184,.035));border-color:rgba(143,209,184,.13);color:var(--ink)}
+  nav.places a.on{
+    background:linear-gradient(90deg,var(--os-mint-soft),transparent);
+    border-color:var(--os-mint-line);
+    color:var(--ink)
+  }
   nav.places .sub,nav.places .more{border-color:var(--os-line)}
   nav.places .sub a,nav.places .more a{min-height:34px;font-size:.84rem}
 
+  /* Ask sits above the estate as a command line rather than fixed footer. */
   .ask{width:min(50rem,100%);margin:0 0 2.4rem}
-  .ask-in{box-shadow:var(--os-shadow-soft),inset 0 1px 0 rgba(255,255,255,.025)}
+  .ask-in{box-shadow:var(--os-shadow-soft),inset 0 1px 0 var(--os-sheen)}
 
   .glance{grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin-bottom:2.1rem}
-  .tile{min-height:9.25rem;padding:1.05rem 1.1rem}.tile dd.v{font-size:1.8rem}
-  .nownext{grid-template-columns:repeat(3,minmax(0,1fr));margin:-.65rem 0 2.2rem}.nownext>div.wide{grid-column:auto}
-  .decide{grid-template-columns:minmax(0,1.65fr) minmax(18rem,1fr);gap:1rem}.decide .one{margin:0}
+  .tile{min-height:9.25rem;padding:1.05rem 1.1rem}
+  .tile dd.v{font-size:1.8rem}
+  .nownext{grid-template-columns:repeat(3,minmax(0,1fr));margin:-.65rem 0 2.2rem}
+  .nownext>div.wide{grid-column:auto}
+  .decide{grid-template-columns:minmax(0,1.65fr) minmax(18rem,1fr);gap:1rem}
+  .decide .one{margin:0}
   .one,.hero,.layer{max-width:none}
   .numbers{grid-template-columns:repeat(4,minmax(0,1fr))}
   .item{padding:1rem 1.1rem}
   footer{margin-top:5rem}
+
+  /* Experiment index becomes a portfolio of probes rather than a prose list. */
+  main[data-place="experiments"]>a.item{
+    max-width:min(56rem,100%);
+  }
+  main[data-place="experiments"]>a.item p:first-child strong{font-family:var(--serif);font-size:1.2rem;font-weight:500}
+
+  /* Money is allowed to use width for arithmetic, while explanations remain
+     readable. */
+  .facts.money{max-width:54rem}
+  .why-money{max-width:54rem}
+
+  /* Activity's day groups can occupy the full reading canvas without turning
+     individual sentences into 120-character lines. */
+  .stream{max-width:62rem}
+  .ev>p{max-width:52rem}
+}
+
+@media (min-width:1180px){
+  /* On dense evidence pages, lists can become two-column collections while the
+     prose and decisions remain one readable measure. */
+  main[data-place="experiments"]>a.item{display:grid;grid-template-columns:minmax(0,1fr);}
 }
 
 @media (min-width:1280px){
   .wrap{margin-left:18.5rem;padding-left:4.5rem;padding-right:4.5rem}
   nav.places{width:18.5rem}
   .glance{grid-template-columns:repeat(6,minmax(0,1fr))}
-  .tile{min-height:10.1rem}.tile dd.v{font-size:1.68rem}
+  .tile{min-height:10.1rem}
+  .tile dd.v{font-size:1.68rem}
 }
 
-@media (prefers-reduced-motion:reduce){.tile,.item,.card,summary{transition:none}}
+@media (prefers-reduced-motion:reduce){
+  .tile,.item,.card,summary{transition:none}
+}
