@@ -3192,6 +3192,12 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
         logger.info(`experiment_hand_tick: ${r.experimentId} ${r.state} — offers ${r.offersSent}/${r.offersPlanned}, deliveries ${r.deliveriesSent}, reconciled ${r.reconciled}, refunds ${r.refundsIssued}, settled ${r.settled ?? 'not yet'}`,
           { jobName: 'experiment_hand_tick', state: r.state, because: r.because, exceptions: r.exceptions });
       }
+      // A listing the owner placed himself has no act for the hand to carry;
+      // the sealed rule still reads what the venue reported, on the same pass.
+      const { settleListings } = await import('../services/venture/proof-2.js');
+      for (const r of await settleListings()) {
+        logger.info(`experiment_hand_tick: listing ${r.experimentId} settled ${r.settled ?? 'not yet'} — ${r.because}`, { jobName: 'experiment_hand_tick', earned: r.earned });
+      }
       // A PASS THAT COULD NOT MOVE AN AUTHORISED ACT DID NOT SUCCEED.
       //
       // This job used to swallow everything and record a success, so an

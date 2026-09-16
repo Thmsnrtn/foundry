@@ -16,13 +16,14 @@ import { count, page } from './foundry-shell.js';
 import type { Where } from './foundry-shell.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
 import { renderDecision } from './decision-control.js';
-import { firstContactDecision } from '../../services/founder/what-it-would-do.js';
+import { consequenceOfApproving, firstContactDecision } from '../../services/founder/what-it-would-do.js';
 import { getExperimentView, listExperiments } from '../../services/founder/experiment-view.js';
 import type { ExperimentView } from '../../services/founder/experiment-view.js';
 import {
-  HandRefused, allowExperiment, approveRemaining, attachPaymentLinkByUrl, declineExperiment, prepareExposure,
+  HandRefused, allowExperiment, approveRemaining, attachPaymentLinkByUrl, declineExperiment, markdownToHtml, offerShapePlanOf, prepareExposure,
   reviewRecipient, senderCompanyOf, stopExperiment,
 } from '../../services/venture/hand.js';
+import { approveListing, ownerActsForListing, recordListing, recordVenueOrder, recordVenueReading, recordVenueRefund } from '../../services/venture/proof-2.js';
 
 export const experimentRoutes = new Hono();
 
@@ -49,7 +50,12 @@ const notice = (done: string, error: string): HtmlEscapedString | Promise<HtmlEs
     : done === 'declined' ? html`<p class="noticed">Declined. Nothing was made.</p>`
       : done === 'stopped' ? html`<p class="noticed"><strong>Stopped.</strong> Permission is withdrawn; nothing more will be sent.</p>`
         : done === 'sending' ? html`<p class="noticed">Sending address connected.</p>`
-          : done === 'reviewed' ? html`<p class="noticed">Recorded.</p>` : done === 'placed' ? html`<p class="noticed">The offer is placed.</p>` : '';
+          : done === 'reviewed' ? html`<p class="noticed">Recorded.</p>` : done === 'placed' ? html`<p class="noticed">The offer is placed.</p>`
+            : done === 'approved' ? html`<p class="noticed"><strong>Approved.</strong> The design is sealed and the allowance is set. Foundry writes to nobody and publishes nothing for this test; the next acts are yours, and they are listed on this page.</p>`
+              : done === 'listed' ? html`<p class="noticed"><strong>Listed.</strong> The address is recorded and the window has started.</p>`
+                : done === 'reading' ? html`<p class="noticed">Reading recorded as the venue reported it.</p>`
+                  : done === 'order' ? html`<p class="noticed">Order recorded: the payment, the delivery the venue made, and the ledger rows.</p>`
+                    : done === 'refund' ? html`<p class="noticed">Refund recorded.</p>` : '';
 
 // ─── The list ────────────────────────────────────────────────────────────────
 experimentRoutes.get('/foundry/experiments', async (c: any) => {
@@ -179,6 +185,13 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
   const run = await runStateOf(id);
   const blocked = run && (run.state === 'blocked' || run.state === 'failed') ? run : null;
   const launch = 'notNow' in decision ? null : decision;
+  // A LISTING THE OWNER PLACES HIMSELF. Its decision is the general control's,
+  // and the general control says so: no business is named, no page is written
+  // for strangers, so approving builds something to test with and nothing
+  // else. The consequence is computed before the button exists.
+  const listing = (await offerShapePlanOf(id))?.listing ?? null;
+  const approve = listing && v.state === 'ready' ? await consequenceOfApproving(id) : null;
+  const liveListing = listing && v.state === 'running' && v.offer.paymentLinkUrl ? v.offer.paymentLinkUrl : null;
   const body = html`
     <h1>${v.assetName ?? 'The test'} <span class="pill">${v.stateLabel}</span></h1>
     ${notice(done, error)}
@@ -202,6 +215,12 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
       </details>
       <p class="quiet"><a class="why" href="/foundry/experiments/${id}/decide">Everything this rests on</a>
         &middot; <a class="why" href="/foundry/experiments/${id}/recipients">The whole cohort</a></p>
+    </section>` : ''}
+    ${approve ? html`<section class="launch" id="authorise">
+      <p class="act">Second real market test — a listing you place yourself</p>
+      ${renderDecision({ consequence: approve, action: `/foundry/experiments/${id}/allow`, hidden: {}, primary: true })}
+      <p class="quiet">Approving seals the design and sets the allowance. It contacts nobody and publishes nothing; opening the shop and listing it are your own acts, below.
+        <a class="why" href="/foundry/experiments/${id}/decide">Everything this rests on</a></p>
     </section>` : ''}
     ${blocked ? html`<section class="know" id="blocked">
       <h2>${v.title} — blocked</h2>
@@ -253,11 +272,48 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
         </details>`)}
     </section>
 
+    ${listing ? html`<section class="know" id="acts"><h2>Your acts</h2>
+      <p class="quiet">Only what you must do yourself. Foundry cannot open the shop, attach a bank account, opt out of the venue's advertising, accept its terms, or publish the listing on your behalf.</p>
+      ${html([markdownToHtml(ownerActsForListing())] as unknown as TemplateStringsArray)}
+    </section>` : ''}
+    ${listing && v.state === 'running' && !liveListing ? html`<section class="know" id="listing"><h2>Where it is listed</h2>
+      <p>When the listing is live on ${listing.venueName}, paste its address. That records the exposure and starts the ${v.rules.windowClosesAt ? '' : `${String((v.rules.daysLeft ?? 30))}-day `}window.</p>
+      <form method="POST" action="/foundry/experiments/${id}/listing" class="stack">
+        <label>Listing address <input type="url" name="url" required placeholder="https://www.etsy.com/listing/..." /></label>
+        <button class="btn yes" type="submit">It is listed here</button></form>
+    </section>` : ''}
+    ${listing && liveListing && v.state === 'running' ? html`<section class="know" id="readings"><h2>What the venue reports</h2>
+      <p class="quiet">Enter the venue's own numbers at day ${listing.readingsAtDays.join(', ')}, from Stats and Search Analytics. A reading is recorded as the venue reported it; a day with no order is recorded as an absence, never as evidence either way.</p>
+      <form method="POST" action="/foundry/experiments/${id}/reading" class="stack">
+        <label>Date of the reading <input type="date" name="date" required /></label>
+        <label>Impressions (Search Analytics) <input type="number" name="impressions" min="0" step="1" /></label>
+        <label>Views <input type="number" name="views" min="0" step="1" /></label>
+        <label>Visits <input type="number" name="visits" min="0" step="1" /></label>
+        <label>Favourites <input type="number" name="favourites" min="0" step="1" /></label>
+        <label>Orders <input type="number" name="orders" min="0" step="1" /></label>
+        <label>Traffic sources, as shown <input type="text" name="sources" placeholder="Etsy search 12, Etsy app &amp; other pages 3, Etsy marketing &amp; SEO 1" /></label>
+        <label>Top search queries, as shown <input type="text" name="queries" placeholder="bid tracker (position 18), contractor spreadsheet (position 41)" /></label>
+        <button class="btn" type="submit">Record this reading</button></form>
+      <h3>An order</h3>
+      <p class="quiet">From the venue's statement: the order number, the day it was paid, the gross charged and the fees taken. Never the buyer.</p>
+      <form method="POST" action="/foundry/experiments/${id}/order" class="stack">
+        <label>Order number <input type="text" name="order_ref" required /></label>
+        <label>Paid on <input type="date" name="paid_at" required /></label>
+        <label>Gross charged, in cents <input type="number" name="gross_cents" min="1" step="1" required placeholder="1400" /></label>
+        <label>Fees taken, in cents (leave blank if not yet on the statement) <input type="number" name="fee_cents" min="0" step="1" /></label>
+        <button class="btn" type="submit">Record this order</button></form>
+      <h3>A refund</h3>
+      <form method="POST" action="/foundry/experiments/${id}/refund" class="stack">
+        <label>Order number <input type="text" name="order_ref" required /></label>
+        <label>Refunded on <input type="date" name="refunded_at" required /></label>
+        <label>Amount, in cents <input type="number" name="amount_cents" min="1" step="1" required placeholder="1400" /></label>
+        <button class="btn" type="submit">Record this refund</button></form>
+    </section>` : ''}
     <section class="know" id="steps"><h2>Before it runs</h2>
       <ol class="steps">${v.steps.map(step)}</ol>
     </section>
 
-    ${v.readiness.sending.status !== 'ready' && v.state !== 'declined' ? html`<section class="know" id="sending"><h2>Email sending</h2>
+    ${listing ? '' : v.readiness.sending.status !== 'ready' && v.state !== 'declined' ? html`<section class="know" id="sending"><h2>Email sending</h2>
       <p>${v.readiness.sending.detail}</p>
       ${v.readiness.sending.status === 'not_connected' ? html`<form method="POST" action="/foundry/experiments/${id}/sending" class="stack">
         <label>From address, on your own domain <input type="email" name="from_email" required placeholder="you@yourcompany.com" /></label>
@@ -275,9 +331,9 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
 
     <section class="know" id="offer"><h2>The offer</h2>
       <p><strong>${v.offer.price}</strong>${v.offer.limits ? html` · <span class="quiet">${v.offer.limits}</span>` : ''}</p>
-      ${v.offer.paymentLinkUrl ? html`<p>Payment link: <a href="${v.offer.paymentLinkUrl}" rel="noopener">${v.offer.paymentLinkUrl}</a></p>` : html`<p class="quiet">${v.state === 'running' ? 'Foundry has not placed the link yet; it tries on every pass.' : 'The link is created by Foundry after you allow the test.'}</p>`}
-      ${v.offer.deliverable ? html`<p>What a buyer receives: <strong>${v.offer.deliverable.title}</strong>${v.offer.deliverable.pulledAt ? ` (data pulled ${v.offer.deliverable.pulledAt})` : ''}${v.offer.deliverable.quality.ok ? '' : html` — <span class="quiet">would not pass the quality check: ${v.offer.deliverable.quality.failures.join('; ')}</span>`}</p>` : html`<p class="quiet">Nothing to deliver is attached yet.</p>`}
-      ${v.state === 'running' && !v.offer.paymentLinkUrl ? html`<div class="pair">
+      ${v.offer.paymentLinkUrl ? html`<p>${listing ? 'Listed at' : 'Payment link'}: <a href="${v.offer.paymentLinkUrl}" rel="noopener">${v.offer.paymentLinkUrl}</a></p>` : listing ? html`<p class="quiet">${v.state === 'running' ? 'Not listed yet; paste the address above when it is live.' : `Listed by you on ${listing.venueName} after you approve the test.`}</p>` : html`<p class="quiet">${v.state === 'running' ? 'Foundry has not placed the link yet; it tries on every pass.' : 'The link is created by Foundry after you allow the test.'}</p>`}
+      ${v.offer.deliverable ? html`<p>What a buyer receives: <strong>${v.offer.deliverable.title}</strong>${v.offer.deliverable.pulledAt ? ` (data pulled ${v.offer.deliverable.pulledAt})` : ''}${v.offer.deliverable.quality.ok || listing ? '' : html` — <span class="quiet">would not pass the quality check: ${v.offer.deliverable.quality.failures.join('; ')}</span>`}</p>` : html`<p class="quiet">Nothing to deliver is attached yet.</p>`}
+      ${v.state === 'running' && !v.offer.paymentLinkUrl && !listing ? html`<div class="pair">
         <form method="POST" action="/foundry/experiments/${id}/place"><button class="btn" type="submit">Try placing it now</button></form>
         <form method="POST" action="/foundry/experiments/${id}/payment" class="stack"><label>Or a Stripe link you made, tagged for this test <input type="url" name="url" required placeholder="https://buy.stripe.com/..." /></label><button class="btn" type="submit">Use this link</button></form></div>` : ''}
     </section>
@@ -289,7 +345,7 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
       ${v.publicPage.gate.length ? html`<p><strong>Before anyone is written to:</strong></p><ul>${v.publicPage.gate.map((g) => html`<li>${g}</li>`)}</ul>` : ''}
     </section>` : ''}
 
-    <section class="know" id="reach"><h2>Reach</h2>
+    ${listing ? '' : html`<section class="know" id="reach"><h2>Reach</h2>
       <dl class="facts">
         <dt>Approved to contact</dt><dd>${String(v.exposure.approved)}</dd>
         <dt>Excluded</dt><dd>${String(v.exposure.excluded)}</dd>
@@ -299,7 +355,7 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
         <dt>Bounced</dt><dd>${String(v.exposure.bounced)}</dd>
       </dl>
       <p class="quiet"><a href="/foundry/experiments/${id}/recipients">Who may be contacted</a></p>
-    </section>
+    </section>`}
 
     <section class="know" id="money"><h2>Money</h2>
       <dl class="facts">
@@ -550,6 +606,14 @@ experimentRoutes.post('/foundry/experiments/:id/sending', requireInstitutionOwne
 experimentRoutes.post('/foundry/experiments/:id/allow', requireInstitutionOwner(), async (c: any) => {
   const founderId = await founderOf(c); if (!founderId) return c.redirect('/onboarding');
   const id = String(c.req.param('id'));
+  // A LISTING THE OWNER PLACES HIMSELF is approved, not allowed: the design
+  // seals, the allowance is set, and Foundry records that it writes to nobody
+  // and publishes nothing. Nothing is placed; the next acts are his.
+  const listing = (await offerShapePlanOf(id))?.listing ?? null;
+  if (listing) {
+    try { await approveListing({ founderId, experimentId: id }); return back(c, id, 'test', 'approved'); }
+    catch (e) { return back(c, id, 'test', null, said(e)); }
+  }
   try {
     await allowExperiment({ founderId, experimentId: id });
   } catch (e) { return back(c, id, 'test', null, said(e)); }
@@ -557,6 +621,56 @@ experimentRoutes.post('/foundry/experiments/:id/allow', requireInstitutionOwner(
   // exception on the page and a retry on the next pass, never a failed Allow.
   try { await prepareExposure(id); } catch { /* shown as an exception by the view */ }
   return back(c, id, 'test', 'allowed');
+});
+
+// ─── The listing the owner placed, and what the venue reports ────────────────
+//
+// Four writers, all his: where it is listed, a reading of the venue's own
+// statistics, an order from its statement, a refund from its statement. Each
+// is recorded as the provider's fact with its reference; none stores a buyer.
+const int = (v: unknown): number | null => { const s = String(v ?? '').trim(); if (s === '') return null; const n = Number(s); return Number.isInteger(n) && n >= 0 ? n : null; };
+
+experimentRoutes.post('/foundry/experiments/:id/listing', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c); if (!founderId) return c.redirect('/onboarding');
+  const id = String(c.req.param('id'));
+  const form = await c.req.parseBody();
+  try { await recordListing({ founderId, experimentId: id, url: String(form.url ?? '') }); return back(c, id, 'test', 'listed'); }
+  catch (e) { return back(c, id, 'test', null, said(e)); }
+});
+
+experimentRoutes.post('/foundry/experiments/:id/reading', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c); if (!founderId) return c.redirect('/onboarding');
+  const id = String(c.req.param('id'));
+  const form = await c.req.parseBody();
+  try {
+    await recordVenueReading({ founderId, experimentId: id, reading: {
+      date: String(form.date ?? ''), impressions: int(form.impressions), views: int(form.views), visits: int(form.visits), favourites: int(form.favourites), orders: int(form.orders),
+      sources: String(form.sources ?? ''), queries: String(form.queries ?? ''),
+    } });
+    return back(c, id, 'test', 'reading');
+  } catch (e) { return back(c, id, 'test', null, said(e)); }
+});
+
+experimentRoutes.post('/foundry/experiments/:id/order', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c); if (!founderId) return c.redirect('/onboarding');
+  const id = String(c.req.param('id'));
+  const form = await c.req.parseBody();
+  try {
+    await recordVenueOrder({ founderId, experimentId: id, order: {
+      orderRef: String(form.order_ref ?? ''), paidAt: String(form.paid_at ?? ''), grossCents: int(form.gross_cents) ?? 0, feeCents: int(form.fee_cents),
+    } });
+    return back(c, id, 'test', 'order');
+  } catch (e) { return back(c, id, 'test', null, said(e)); }
+});
+
+experimentRoutes.post('/foundry/experiments/:id/refund', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c); if (!founderId) return c.redirect('/onboarding');
+  const id = String(c.req.param('id'));
+  const form = await c.req.parseBody();
+  try {
+    await recordVenueRefund({ founderId, experimentId: id, orderRef: String(form.order_ref ?? ''), refundedAt: String(form.refunded_at ?? ''), amountCents: int(form.amount_cents) ?? 0 });
+    return back(c, id, 'test', 'refund');
+  } catch (e) { return back(c, id, 'test', null, said(e)); }
 });
 
 /**

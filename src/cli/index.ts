@@ -842,6 +842,17 @@ program
   });
 
 program
+  .command('experiment:seed-proof2 <founderIdOrEmail>')
+  .description('Seed Proof 2 (the bid-decision workbook, listed by the owner on Etsy) for one owner. Idempotent; spends, permits, publishes and contacts nothing.')
+  .action(async (who: string) => {
+    const f = (await query('SELECT id FROM founders WHERE id = ? OR lower(email) = lower(?)', [who, who])).rows[0] as Record<string, unknown> | undefined;
+    if (!f) { process.stderr.write(`no founder ${who}\n`); process.exit(1); }
+    const { seedProof2 } = await import('../services/venture/proof-2.js');
+    const r = await seedProof2(String(f.id));
+    process.stdout.write(`${JSON.stringify({ ...r, open: `/foundry/experiments/${r.experimentId}` }, null, 2)}\n`);
+  });
+
+program
   .command('experiment:tick')
   .description('Run one pass of the hand over every live real experiment (what the hourly job does)')
   .option('--offers <n>', 'offers per pass', '5')

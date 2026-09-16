@@ -23,7 +23,7 @@ const rows = async (sql: string, params: unknown[]): Promise<Row[]> => (await qu
 
 export type ExperimentState = 'needs_you' | 'ready' | 'running' | 'completed' | 'stopped' | 'declined' | 'invalid';
 
-export interface Step { key: 'recipients' | 'sending' | 'allow' | 'placing'; label: string; status: 'done' | 'todo' | 'foundry'; detail: string; href: string }
+export interface Step { key: 'recipients' | 'sending' | 'allow' | 'placing' | 'listing' | 'readings'; label: string; status: 'done' | 'todo' | 'foundry'; detail: string; href: string }
 
 export interface TimelineEvent {
   at: string;
@@ -95,7 +95,28 @@ export async function getExperimentView(founderId: string, experimentId: string,
   const cohort = recipients.length === 0 ? ''
     : ` Foundry screened ${plural(recipients.length, 'candidate', 'candidates')} against the evidence this design requires: `
       + `${screened} qualify, ${recipients.length - screened} have no such record and cannot be written to whatever you decide here.`;
-  const steps: Step[] = [
+  // A LISTING THE OWNER PLACES HIMSELF has different acts: approve; open the
+  // shop and list it, on the venue, outside Foundry; paste the address; enter
+  // the venue's readings. Nobody is reviewed and nothing is sent, so the
+  // steps that exist for the emailed offer would be lies here.
+  const listing = plan?.listing ?? null;
+  const readingsTaken = listing ? Number((await rows(
+    `SELECT COUNT(*) AS n FROM market_observations WHERE claim_id = (SELECT claim_id FROM venture_experiments WHERE id = ?) AND source LIKE ?`,
+    [experimentId, `${listing.venue}:stats:%`]))[0]?.n ?? 0) : 0;
+  const steps: Step[] = listing ? [
+    { key: 'allow', label: 'Approve this test', status: e.decision === 'approved' ? 'done' : 'todo',
+      detail: e.decision === 'approved' ? `Approved ${String(e.decidedAt).slice(0, 10)}. The design is sealed and the allowance is set; Foundry writes to nobody and publishes nothing for it.` : 'One decision: the test may run within its allowance. It contacts nobody and publishes nothing; listing it is your own act on the venue.',
+      href: `/foundry/experiments/${experimentId}#allow` },
+    { key: 'listing', label: `Open the shop, list it on ${listing.venueName}, and paste the address (you)`, status: x && !withdrawn ? 'done' : 'todo',
+      detail: x && !withdrawn ? `Listed at ${x.exposureRef} since ${x.placedAt.slice(0, 10)}. The window runs ${rule?.withinDays ?? '?'} days from then.` : 'Your acts, in order, are on this page. Foundry cannot open the shop, attach a bank account, opt out of the venue\'s advertising or publish the listing for you; when it is live, paste its address here and the clock starts.',
+      href: `/foundry/experiments/${experimentId}#listing` },
+    { key: 'readings', label: `Enter the venue's readings at day ${listing.readingsAtDays.join(', ')} (you)`, status: e.ranAt !== null ? 'done' : readingsTaken > 0 ? 'todo' : 'todo',
+      detail: `${readingsTaken} of ${listing.readingsAtDays.length} readings entered: impressions, views, visits, favourites, orders and the source split, from the venue's own statistics. Orders are entered as they appear, from the statement.`,
+      href: `/foundry/experiments/${experimentId}#readings` },
+    { key: 'placing', label: 'Settle by the sealed rule (Foundry)', status: e.ranAt !== null ? 'done' : 'foundry',
+      detail: e.ranAt !== null ? 'Settled.' : 'When the window closes, or an order that counts arrives, Foundry settles the prediction from the recorded events and says what changes next. Nothing for you to do.',
+      href: `/foundry/experiments/${experimentId}#rules` },
+  ] : [
     { key: 'recipients', label: 'Review who may be contacted',
       status: recipients.length === 0 || ready.pending > 0 || ready.reachable === 0 ? 'todo' : 'done',
       detail: recipients.length === 0 ? 'No candidate businesses are loaded yet.'
@@ -128,7 +149,11 @@ export async function getExperimentView(founderId: string, experimentId: string,
     state = held ? 'completed' : 'stopped'; stateLabel = held ? 'Completed' : 'Stopped by its own rule';
     stateDetail = e.whatHappened ?? (held ? 'As predicted.' : 'Not as predicted.');
   } else if (e.decision === 'approved' && (withdrawn || (act && !actLive))) { state = 'stopped'; stateLabel = 'Stopped by you'; stateDetail = 'Nothing more is sent; what the world already did stays on record.'; }
-  else if (e.decision === 'approved') {
+  else if (e.decision === 'approved' && listing) {
+    state = 'running'; stateLabel = x && !withdrawn ? 'Listed' : 'Approved';
+    stateDetail = !x || withdrawn ? `Approved. Waiting on you: open the shop, list it on ${listing.venueName}, and paste the listing address here; the window starts then.`
+      : `Listed at ${x.exposureRef}; ${readingsTaken} of ${listing.readingsAtDays.length} readings entered; ${payments.length === 0 ? 'no one has paid yet' : `${plural(payments.length, 'buyer has', 'buyers have')} paid`}.${daysLeft != null ? ` ${daysLeft} day${daysLeft === 1 ? '' : 's'} left in the window.` : ''}`;
+  } else if (e.decision === 'approved') {
     state = 'running'; stateLabel = 'Running';
     stateDetail = `${delivered === 0 ? 'No businesses have received the offer yet' : `${plural(delivered, 'business has', 'businesses have')} received the offer`}; ${payments.length === 0 ? 'no one has paid yet' : `${plural(payments.length, 'customer has', 'customers have')} paid`}.${daysLeft != null ? ` ${daysLeft} day${daysLeft === 1 ? '' : 's'} left in the window.` : ' The window opens when the offer is placed.'}`;
   } else if (!ready.ok) { state = 'needs_you'; stateLabel = 'Needs you'; stateDetail = `Before it can run: ${ready.missing.join('; ')}.`; }
@@ -136,7 +161,13 @@ export async function getExperimentView(founderId: string, experimentId: string,
 
   const allow = {
     possible: state === 'ready', reason: state === 'needs_you' ? stateDetail : null,
-    explanation: [
+    explanation: listing ? [
+      `Foundry may spend up to ${money(e.costCents)} on this test. It has no permission beyond that, and nothing here needs it to spend anything.`,
+      `It writes to nobody and publishes nothing. The listing on ${listing.venueName} is your own act, under Apex Micro, at ${price}. No subscription, no promotion, no email.`,
+      'What the venue reports — impressions, views, favourites, orders, refunds — is entered by you from its own statistics and statement, and recorded as the provider\'s facts.',
+      rule ? `It settles itself: ${describeRule(rule)}.` : 'No settlement rule is sealed, so only you could settle it.',
+      'You can stop it at any time from this page; taking the listing down is yours to do on the venue. Approving it permits this test only; it creates no standing permission.',
+    ] : [
       `Foundry may spend up to ${money(e.costCents)} on this test. It has no permission beyond that.`,
       `It writes once to each of the ${ready.reachable} approved businesses it can reach, in your name, offering the ${price} brief. No subscription, no follow-ups.`,
       'When someone pays, Foundry delivers the brief by email after its quality check, and records the delivery only when the mail provider confirms it.',
@@ -175,7 +206,7 @@ export async function getExperimentView(founderId: string, experimentId: string,
   return {
     id: experimentId, founderId, title: e.whatWeDo, productId: e.productId, assetName: asset ? String(asset.name) : null,
     state, stateLabel, stateDetail,
-    blocking: state === 'needs_you' ? ready.missing : [],
+    blocking: state === 'needs_you' ? ready.missing : listing && e.decision === 'approved' && (!x || withdrawn) && e.ranAt === null ? ['open the shop and list it', 'paste the listing address'] : [],
     why: { whatWeDo: e.whatWeDo, whatWeExpect: e.whatWeExpect, wouldDisprove: e.wouldDisprove, question: unknown ? String(unknown.question) : '' },
     steps, allow, exposure, money: moneyView, offer: offerView,
     rules: { success: rule ? `Success means ${describeRule(rule)}.` : 'No machine rule; the owner would settle it.', stop: stopRules(e, rule), windowClosesAt: windowClosesAt ? windowClosesAt.toISOString().slice(0, 10) : null, daysLeft },
@@ -271,7 +302,7 @@ export async function getExperimentTimeline(founderId: string, experimentId: str
   }
   const x = await exposureOf(experimentId);
   if (x) {
-    events.push({ at: x.placedAt, kind: 'Planned', text: `The offer was placed: a ${x.provider} payment link, tagged for this test.`, source: `experiment_exposures/${x.id}` });
+    events.push({ at: x.placedAt, kind: x.provider === 'stripe' ? 'Planned' : 'Authorized', text: x.provider === 'stripe' ? `The offer was placed: a ${x.provider} payment link, tagged for this test.` : `You listed it at ${x.exposureRef}; the window starts here.`, source: `experiment_exposures/${x.id}` });
     if (x.withdrawnAt) events.push({ at: x.withdrawnAt, kind: 'Authorized', text: 'The offer was withdrawn.', source: `experiment_exposures/${x.id}` });
   }
   for (const a of await rows(
@@ -288,9 +319,16 @@ export async function getExperimentTimeline(founderId: string, experimentId: str
       const amount = s.amountCents == null ? '' : ` ${money(s.amountCents, s.currency)}`;
       const text = s.kind === 'offer_delivered' ? 'An offer reached its business (delivery confirmed by the mail provider).'
         : s.kind === 'payment' ? `A customer paid${amount}${s.counterparty === 'unmatched_external' ? '' : ` (${s.counterparty.replace('_', ' ')}; does not count)`}.`
-          : s.kind === 'delivery' ? 'The brief reached the buyer; delivery confirmed by the mail provider.'
+          : s.kind === 'delivery' ? (x.provider === 'stripe' ? 'The brief reached the buyer; delivery confirmed by the mail provider.' : 'The venue made the file available to the buyer at payment.')
             : s.kind === 'delivery_failed' ? 'A message bounced.' : s.kind === 'refund' ? `A payment of${amount} was refunded.` : `${s.whatItIs}.`;
       events.push({ at: s.observedAt, kind: s.kind === 'offer_delivered' || s.kind === 'delivery' ? 'Verified' : 'Observed', text, source: `business_outcome_events/${s.kind}` });
+    }
+  }
+  // THE VENUE'S READINGS, as the owner entered them from its statistics.
+  const readingPlan = (await offerShapePlanOf(experimentId))?.listing;
+  if (readingPlan) {
+    for (const o of await rows(`SELECT observed_at, saw FROM market_observations WHERE claim_id = (SELECT claim_id FROM venture_experiments WHERE id = ?) AND source LIKE ? ORDER BY observed_at`, [experimentId, `${readingPlan.venue}:stats:%`])) {
+      events.push({ at: String(o.observed_at), kind: 'Observed', text: String(o.saw), source: 'market_observations' });
     }
   }
   for (const f of await rows(`SELECT payment_ref, status, refund_requested_at, refund_ref, updated_at FROM experiment_fulfilments WHERE experiment_id = ?`, [experimentId])) {

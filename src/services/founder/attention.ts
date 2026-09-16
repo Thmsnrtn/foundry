@@ -85,6 +85,30 @@ export async function waitingOn(founderId: string): Promise<AttentionItem[]> {
       });
     }
   }
+  // AN APPROVED LISTING WAITS ON HIS OWN ACT: the shop, the listing, the
+  // address pasted back. Foundry cannot do any of it, so the queue says so
+  // rather than showing an approved test as quiet.
+  const listed = await rows(
+    `SELECT e.id FROM venture_experiments e
+      WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.decision = 'approved' AND e.ran_at IS NULL AND e.validity = 'valid'
+        AND EXISTS (SELECT 1 FROM experiment_materials m WHERE m.experiment_id = e.id AND m.kind = 'offer_shape' AND m.superseded_at IS NULL AND m.body LIKE '%"listing":%')
+        AND NOT EXISTS (SELECT 1 FROM experiment_exposures x WHERE x.experiment_id = e.id AND x.withdrawn_at IS NULL)
+      ORDER BY e.decided_at`, [founderId]);
+  if (listed.length) {
+    const { getExperimentView } = await import('./experiment-view.js');
+    for (const t of listed) {
+      const v = await getExperimentView(founderId, String(t.id));
+      if (!v) continue;
+      const open = v.steps.find((s) => s.key === 'listing');
+      tests.push({
+        kind: 'experiment', id: v.id, productId: v.productId ?? '', companyName: v.assetName ?? 'A real test',
+        summary: `The test needs you: ${open?.label.toLowerCase() ?? 'list it and paste the address'}`, detail: v.stateDetail,
+        yes: { label: 'Open the test', action: `/foundry/experiments/${v.id}` }, no: { label: 'Stop it', action: `/foundry/experiments/${v.id}#stop` },
+        why: `/foundry/why/experiment/${v.id}`, href: `/foundry/experiments/${v.id}`,
+        open: { label: open?.label ?? 'Open the test', href: `/foundry/experiments/${v.id}#listing` },
+      });
+    }
+  }
   // THE WORKSHOP NEEDS HIM when something only he can supply is missing or
   // the world stopped carrying what was put up. One item, one place to go.
   const workshop: AttentionItem[] = [];

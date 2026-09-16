@@ -26,7 +26,7 @@ export type Exchange = 'upfront_price' | 'value_first' | 'sample_then_paid' | 'd
   | 'subscription' | 'usage' | 'license' | 'free_with_role';
 export type CostLevel = 'none' | 'low' | 'material' | 'high';
 export type Recommendation = 'run' | 'reframe' | 'defer' | 'kill';
-export type StopKind = 'complaints' | 'bounces' | 'opt_outs' | 'declined_value' | 'unfulfillable' | 'bounce_rate';
+export type StopKind = 'complaints' | 'bounces' | 'opt_outs' | 'declined_value' | 'unfulfillable' | 'bounce_rate' | 'refunds';
 
 type Row = Record<string, unknown>;
 const rows = async (sql: string, params: unknown[] = []): Promise<Row[]> => (await query(sql, params)).rows as unknown as Row[];
@@ -378,6 +378,13 @@ export async function readStopConditions(experimentId: string): Promise<StopRead
         const failed = Number((await one(`SELECT COUNT(*) AS n FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'offer' AND outcome_status = 'verified_failure'`, [experimentId]))?.n ?? 0);
         return Math.round((failed * 100) / attempted);
       }
+      // A BUYER WHO PAID AND THEN WANTED THE MONEY BACK is the venue's own
+      // signal that the listing promised what the file did not deliver
+      // (migration 318). Counted at the exposure, like complaints; a refund
+      // Foundry itself issued for a failed delivery is a refund too, and is
+      // counted, because the buyer did not get what they paid for either way.
+      case 'refunds':
+        return exposureId ? Number((await one(`SELECT COUNT(*) AS n FROM business_outcome_events WHERE exposure_id = ? AND kind = 'refund'`, [exposureId]))?.n ?? 0) : 0;
       case 'unfulfillable':
         // FAILED, NOT MERELY OWED. A purchase waiting for the next pass to
         // deliver it is the system working; counting it here would stop the

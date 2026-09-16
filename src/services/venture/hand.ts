@@ -335,6 +335,15 @@ export function markdownToHtml(md: string): string {
 export interface OfferShapePlan {
   shape: { sells: string; claimsMade: string; collects: string; deliversBy: string; sellsTo: string; chargesHow: string };
   lighter: string;
+  /**
+   * A LISTING THE OWNER PLACES HIMSELF, on a venue that carries the offer,
+   * takes the money and delivers the file. Present only for that shape of
+   * experiment; absent for one whose offer Foundry's hand carries. The hand
+   * never runs for a listing: nobody is written to, nothing is published by
+   * the institution, and the exposure is the listing's own address, pasted in
+   * by the owner. Readings are the venue's statistics, entered by him.
+   */
+  listing?: { venue: string; venueName: string; readingsAtDays: number[] };
   /** structural_fact_kinds.fact → present, with grounds; written as the pass would, basis offer_shape. */
   facts: Record<string, { present: 0 | 1; grounds: string }>;
   price: OfferPrice;
@@ -347,7 +356,13 @@ export async function offerShapePlanOf(experimentId: string): Promise<OfferShape
   try { return JSON.parse(m.body) as OfferShapePlan; } catch { return null; }
 }
 
-async function statedShapeAndFacts(e: ExperimentRow, productId: string, plan: OfferShapePlan): Promise<void> {
+/**
+ * STATE THE OFFER'S SHAPE AND THE FACTS THE FIRST-PROOF POLICY READS, as the
+ * pass would. Shared by every real experiment's approval: the emailed brief's
+ * Allow and the marketplace listing's approval both have to leave the asset
+ * with a shape the legal picture can read before an exposure may be placed.
+ */
+export async function statedShapeAndFacts(e: ExperimentRow, productId: string, plan: OfferShapePlan): Promise<void> {
   const shaped = await stateOfferShape({ productId, by: HAND, shape: plan.shape });
   if ('refused' in shaped) throw new HandRefused('shape_refused', shaped.refused);
   await answerLighter({ opportunityId: e.opportunityId, answer: plan.lighter });
@@ -566,6 +581,19 @@ export async function sendingReadiness(founderId: string): Promise<SendingReadin
 export async function readiness(experimentId: string): Promise<Readiness> {
   const e = await experimentRow(experimentId);
   if (!e) throw new HandRefused('experiment_not_found');
+  // A LISTING THE OWNER PLACES HIMSELF needs no cohort and no sender: nobody
+  // is written to. What it needs before he can approve it is the file, the
+  // listing text, the offer's shape and a recorded design.
+  const plan = await offerShapePlanOf(experimentId);
+  if (plan?.listing) {
+    const missing: string[] = [];
+    if (!(await materialOf(experimentId, 'deliverable'))) missing.push('nothing to deliver is attached');
+    if (!(await materialOf(experimentId, 'offer_template'))) missing.push('the listing text is not written');
+    const { designOf } = await import('./probe-design.js');
+    if (!(await designOf(experimentId))) missing.push('the design has not been recorded');
+    return { ok: missing.length === 0, missing, reachable: 0, pending: 0, pendingWebForm: 0, struck: 0,
+      sending: { status: 'ready', fromLine: null, detail: 'Nobody is written to for this test; there is nothing to send.', identityProductId: null } };
+  }
   const rs = await recipientsOf(experimentId);
   const reachable = rs.filter((r) => r.reviewStatus === 'approved' && r.channel === 'email' && r.email).length;
   const pendingAll = rs.filter((r) => r.reviewStatus === 'pending');
