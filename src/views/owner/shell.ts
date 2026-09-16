@@ -221,7 +221,6 @@ export const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscape
 <meta name="theme-color" content="#0B100E" media="(prefers-color-scheme: dark)" />
 <meta name="theme-color" content="#F3F4F1" media="(prefers-color-scheme: light)" />
 <link rel="stylesheet" href="/static/owner.css" />
-<link rel="stylesheet" href="/static/owner-live.css" />
 </head>
 <body>
 <main class="wrap" data-place="${active}">
