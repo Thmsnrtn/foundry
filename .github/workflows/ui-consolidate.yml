@@ -28,6 +28,15 @@ jobs:
           printf '\n\n/* =============================================================================\n   OWNER OS VISUAL RECONSTRUCTION — CANONICAL CUTOVER\n   Proven first as a separate cascade layer, then folded here so the owner has\n   one stylesheet, one vocabulary and one visual system.\n   ============================================================================= */\n\n' >> src/public/owner.css
           cat src/public/owner-live.css >> src/public/owner.css
           rm src/public/owner-live.css
+          cat >> src/public/owner.css <<'CSS'
+
+/* Journey-rehearsal invariants. `background` above carries the atmospheric
+   gradients; the explicit color keeps the document itself opaque to browsers
+   and to screenshots. Glance labels retain the words the institution wrote
+   rather than being transformed into a different visible sentence. */
+body{background-color:var(--bg)}
+.glance .tile .k{text-transform:none}
+CSS
           python - <<'PY'
           from pathlib import Path
           shell=Path('src/views/owner/shell.ts')
@@ -52,6 +61,6 @@ jobs:
           if git diff --quiet; then exit 0; fi
           git config user.name 'OpenAI UI Reconstruction'
           git config user.email 'noreply@openai.com'
-          git add src/public/owner.css src/public/owner-live.css src/views/owner/shell.ts tests/unit/the-owner-os-is-a-cockpit-not-a-second-institution.test.ts
+          git add -A src/public/owner.css src/public/owner-live.css src/views/owner/shell.ts tests/unit/the-owner-os-is-a-cockpit-not-a-second-institution.test.ts
           git commit -m 'Make the reconstructed Owner OS the one visual system [owner-css-consolidated]'
           git push origin HEAD:claude/owner-os-visual-reconstruction
