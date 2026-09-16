@@ -28,15 +28,7 @@ jobs:
           printf '\n\n/* =============================================================================\n   OWNER OS VISUAL RECONSTRUCTION — CANONICAL CUTOVER\n   Proven first as a separate cascade layer, then folded here so the owner has\n   one stylesheet, one vocabulary and one visual system.\n   ============================================================================= */\n\n' >> src/public/owner.css
           cat src/public/owner-live.css >> src/public/owner.css
           rm src/public/owner-live.css
-          cat >> src/public/owner.css <<'CSS'
-
-/* Journey-rehearsal invariants. `background` above carries the atmospheric
-   gradients; the explicit color keeps the document itself opaque to browsers
-   and to screenshots. Glance labels retain the words the institution wrote
-   rather than being transformed into a different visible sentence. */
-body{background-color:var(--bg)}
-.glance .tile .k{text-transform:none}
-CSS
+          printf '\n/* Journey-rehearsal invariants. The gradients above retain an explicit ground, and glance labels keep the words the institution wrote. */\nbody{background-color:var(--bg)}\n.glance .tile .k{text-transform:none}\n' >> src/public/owner.css
           python - <<'PY'
           from pathlib import Path
           shell=Path('src/views/owner/shell.ts')
