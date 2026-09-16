@@ -1,0 +1,57 @@
+name: Consolidate Owner OS Styles
+
+on:
+  push:
+    branches:
+      - 'claude/owner-os-visual-reconstruction'
+
+permissions:
+  contents: write
+
+jobs:
+  consolidate:
+    if: ${{ !contains(github.event.head_commit.message, '[owner-css-consolidated]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/owner-os-visual-reconstruction
+          fetch-depth: 0
+      - name: Fold the proven visual layer into the canonical stylesheet
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ ! -f src/public/owner-live.css ]; then
+            echo 'Already consolidated.'
+            exit 0
+          fi
+          printf '\n\n/* =============================================================================\n   OWNER OS VISUAL RECONSTRUCTION — CANONICAL CUTOVER\n   Proven first as a separate cascade layer, then folded here so the owner has\n   one stylesheet, one vocabulary and one visual system.\n   ============================================================================= */\n\n' >> src/public/owner.css
+          cat src/public/owner-live.css >> src/public/owner.css
+          rm src/public/owner-live.css
+          python - <<'PY'
+          from pathlib import Path
+          shell=Path('src/views/owner/shell.ts')
+          text=shell.read_text()
+          text=text.replace('\n<link rel="stylesheet" href="/static/owner-live.css" />','')
+          shell.write_text(text)
+
+          test=Path('tests/unit/the-owner-os-is-a-cockpit-not-a-second-institution.test.ts')
+          test.write_text('''import { describe, expect, it } from 'vitest';\nimport { readFileSync } from 'node:fs';\nimport { resolve } from 'node:path';\n\n// The reconstruction has crossed the visual cutover: there is one canonical\n// stylesheet again. These boundaries hold the cockpit qualities that justified\n// the migration without permitting a second visual system to grow beside it.\nconst ROOT = resolve(import.meta.dirname, '../..');\nconst shell = () => readFileSync(resolve(ROOT, 'src/views/owner/shell.ts'), 'utf8');\nconst css = () => readFileSync(resolve(ROOT, 'src/public/owner.css'), 'utf8');\n\ndescribe('the reconstructed owner cockpit', () => {\n  it('has one canonical stylesheet and no migration layer', () => {\n    const source = shell();\n    expect(source).toContain('/static/owner.css');\n    expect(source).not.toContain('owner-live.css');\n    expect(css()).toContain('OWNER OS VISUAL RECONSTRUCTION — CANONICAL CUTOVER');\n    expect(css()).toMatch(/\\.btn\\{[^}]*max-width:100%/);\n  });\n\n  it('uses desktop width as information space instead of stretching the phone', () => {\n    const source = css();\n    expect(source).toContain('--os-max:88rem');\n    expect(source).toMatch(/@media \\(min-width:900px\\)[\\s\\S]*\\.glance\\{grid-template-columns:repeat\\(3,minmax\\(0,1fr\\)\\)/);\n    expect(source).toMatch(/@media \\(min-width:1280px\\)[\\s\\S]*\\.glance\\{grid-template-columns:repeat\\(6,minmax\\(0,1fr\\)\\)/);\n    expect(source).toMatch(/nav\\.places\\{[^}]*width:17\\.5rem/);\n  });\n\n  it('keeps explicit light mode and reduced motion first-class', () => {\n    const source = css();\n    expect(source).toContain(':root[data-theme="light"]');\n    expect(source).toContain('@media (prefers-color-scheme:light)');\n    expect(source).toContain('@media (prefers-reduced-motion:reduce)');\n  });\n\n  it('reserves warm consequence treatment for the owner decision surface', () => {\n    const source = css();\n    expect(source).toContain('--os-gold:');\n    expect(source).toMatch(/\\.one\\{\\s*border-color:var\\(--os-gold\\)/);\n    expect(source).toMatch(/\\.one:not\\(\\.alert\\)\\{background:/);\n  });\n});\n''')
+          PY
+      - name: Verify the cutover before committing it
+        run: |
+          npm ci
+          npm run typecheck
+          npx vitest --run \
+            tests/unit/the-owner-os-is-a-cockpit-not-a-second-institution.test.ts \
+            tests/unit/a-button-wider-than-the-phone.test.ts \
+            tests/unit/one-stylesheet-one-vocabulary.test.ts \
+            tests/unit/twelve-journeys-on-the-phone-he-holds.test.ts
+      - name: Commit the canonical cutover
+        run: |
+          if git diff --quiet; then exit 0; fi
+          git config user.name 'OpenAI UI Reconstruction'
+          git config user.email 'noreply@openai.com'
+          git add src/public/owner.css src/public/owner-live.css src/views/owner/shell.ts tests/unit/the-owner-os-is-a-cockpit-not-a-second-institution.test.ts
+          git commit -m 'Make the reconstructed Owner OS the one visual system [owner-css-consolidated]'
+          git push origin HEAD:claude/owner-os-visual-reconstruction
