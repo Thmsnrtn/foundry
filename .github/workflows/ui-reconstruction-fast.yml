@@ -1,0 +1,48 @@
+name: UI Reconstruction Fast Check
+
+on:
+  push:
+    branches:
+      - 'claude/owner-os-visual-reconstruction'
+
+jobs:
+  ui-fast:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Capture owner-surface test references
+        run: |
+          grep -RInE "owner\.css|owner-live\.css|views/owner/shell|static/owner" tests scripts > ui-test-references.txt || true
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Static UI invariants
+        run: |
+          set +e
+          npx vitest --run \
+            tests/unit/the-owner-os-is-a-cockpit-not-a-second-institution.test.ts \
+            tests/unit/a-button-wider-than-the-phone.test.ts \
+            > ui-fast.log 2>&1
+          code=$?
+          cat ui-fast.log
+          echo "$code" > ui-fast-exit.txt
+          exit $code
+      - name: Build
+        if: always()
+        run: npm run build > ui-build.log 2>&1 || true
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-reconstruction-fast-diagnostics
+          path: |
+            ui-fast.log
+            ui-fast-exit.txt
+            ui-build.log
+            ui-test-references.txt
+          retention-days: 3
