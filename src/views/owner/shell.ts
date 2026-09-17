@@ -26,6 +26,7 @@
 // =============================================================================
 
 import { html, raw } from 'hono/html';
+import { OWNER_STYLESHEET } from '../../lib/owner-stylesheet.js';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import type { CompanyPlace, DimensionKey } from '../../services/founder/place.js';
 import { OWNER_SURFACE_SCRIPT } from '../../lib/owner-surface-script.js';
@@ -272,7 +273,7 @@ export const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscape
 <meta name="apple-mobile-web-app-title" content="Foundry" />
 <meta name="theme-color" content="#0B100E" media="(prefers-color-scheme: dark)" />
 <meta name="theme-color" content="#F3F4F1" media="(prefers-color-scheme: light)" />
-<link rel="stylesheet" href="/static/owner.css" />
+<link rel="stylesheet" href="${OWNER_STYLESHEET}" />
 </head>
 <body>
 <main class="wrap" data-place="${active}">

@@ -24,6 +24,7 @@
 // =============================================================================
 
 import { html } from 'hono/html';
+import { OWNER_STYLESHEET } from '../lib/owner-stylesheet.js';
 import type { HtmlEscapedString } from 'hono/utils/html';
 
 export type HtmlContent = HtmlEscapedString | Promise<HtmlEscapedString>;
@@ -41,7 +42,7 @@ export function errorPage(
 <title>${String(status)} — ${heading}</title>
 <meta name="theme-color" content="#0B100E" media="(prefers-color-scheme: dark)" />
 <meta name="theme-color" content="#F3F4F1" media="(prefers-color-scheme: light)" />
-<link rel="stylesheet" href="/static/owner.css" />
+<link rel="stylesheet" href="${OWNER_STYLESHEET}" />
 </head>
 <body>
 <main class="wrap">

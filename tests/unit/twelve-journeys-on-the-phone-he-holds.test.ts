@@ -246,7 +246,8 @@ phones('the estate, journey by journey', () => {
         primary: getComputedStyle(document.documentElement).getPropertyValue('--text-primary').trim(),
         card: getComputedStyle(document.documentElement).getPropertyValue('--ink').trim(),
       }));
-      expect(shape.sheets, 'renders on owner.css and nothing else').toEqual(['/static/owner.css']);
+      expect(shape.sheets, 'renders on owner.css and nothing else').toHaveLength(1);
+      expect(shape.sheets[0], 'owner.css, addressed by its fingerprint').toMatch(/^\/static\/owner\.css(\?v=[0-9a-f]{12})?$/);
       expect(shape.place, 'a depth, not a place').toBe('advanced');
       expect(shape.litDoors, 'a depth lights no door in the rail').toEqual([]);
       expect(shape.selfLink, 'the Advanced footer must not link to the Advanced page').toEqual([]);

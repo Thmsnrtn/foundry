@@ -3,6 +3,7 @@
 // =============================================================================
 
 import { Hono } from 'hono';
+import { OWNER_STYLESHEET } from '../../lib/owner-stylesheet.js';
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 import { verifiedPrimaryEmail } from '../../middleware/auth.js';
@@ -20,7 +21,7 @@ authRoutes.get('/auth/signup', (c) => {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Sign Up — Foundry</title>
-  <link rel="stylesheet" href="/static/owner.css" />
+  <link rel="stylesheet" href="${OWNER_STYLESHEET}" />
   <style>
     body { display: flex; justify-content: center; align-items: center; min-height: 100vh; background: var(--bg); margin: 0; }
     .auth-container { text-align: center; }
@@ -78,7 +79,7 @@ authRoutes.get('/auth/login', (c) => {
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Log In — Foundry</title>
-  <link rel="stylesheet" href="/static/owner.css" />
+  <link rel="stylesheet" href="${OWNER_STYLESHEET}" />
   <style>
     body { display: flex; justify-content: center; align-items: center; min-height: 100vh; background: var(--bg); margin: 0; }
     .auth-container { text-align: center; }
@@ -137,7 +138,7 @@ authRoutes.get('/auth/logout', (c) => {
   return c.html(`<!DOCTYPE html>
 <html lang="en">
 <head><meta charset="utf-8" /><title>Signing out — Foundry</title>
-<link rel="stylesheet" href="/static/owner.css" /></head>
+<link rel="stylesheet" href="${OWNER_STYLESHEET}" /></head>
 <body style="color:var(--ink-2);display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;">
   <p>Signing out…</p>
   <script>

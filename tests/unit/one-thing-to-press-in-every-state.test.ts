@@ -91,6 +91,6 @@ describe('the busiest screen he can reach', () => {
     }
     // And the page links the file it depends on.
     const body = await (await app.request('/foundry')).text();
-    expect(body).toContain('href="/static/owner.css"');
+    expect(body).toMatch(/href="\/static\/owner\.css(\?v=[0-9a-f]{12})?"/);
   });
 });

@@ -166,6 +166,24 @@ describe('what the surface refuses', () => {
     expect(shell).toContain('${raw(OWNER_SURFACE_SCRIPT)}');
   });
 
+  it('links the stylesheet by what it contains, so a deploy is never behind a cache', async () => {
+    // The old stylesheet under the new markup, for an hour after a deploy, is
+    // the first thing the owner would meet on his phone. The address carries
+    // the fingerprint of the bytes, computed from the file that is served.
+    const { OWNER_STYLESHEET } = await import('../../src/lib/owner-stylesheet.js');
+    const { createHash } = await import('node:crypto');
+    const css = readFileSync(resolve(ROOT, 'src/public/owner.css'));
+    const v = createHash('sha256').update(css).digest('hex').slice(0, 12);
+    expect(OWNER_STYLESHEET).toBe(`/static/owner.css?v=${v}`);
+    const body = await read('/foundry');
+    expect(body).toContain(`href="/static/owner.css?v=${v}"`);
+    // And nothing links it by the bare name, which would be a second address.
+    const literal = walk(resolve(ROOT, 'src')).filter((f) => f.endsWith('.ts'))
+      .filter((f) => /href="\/static\/owner\.css"/.test(readFileSync(f, 'utf8')))
+      .map((f) => f.slice(ROOT.length + 1));
+    expect(literal).toEqual([]);
+  });
+
   it('encodes no navigation meaning as DOM position', () => {
     const css = readFileSync(resolve(ROOT, 'src/public/owner.css'), 'utf8');
     expect(css).not.toMatch(/nav\.places[^{]*:nth-(child|of-type)/);
