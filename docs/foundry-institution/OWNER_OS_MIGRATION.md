@@ -2022,3 +2022,52 @@ needs standing authority that is his, bounded, and ends on a date he can see.
   environment's ceilings remain the hard stop beneath it.
 - No autopilot category moves to `act`; no boundary is opened. The charter
   widens who may say yes to a proposed act, and nothing else.
+
+## More ways of looking — 17 September 2026
+
+### Why
+
+Two real eyes (a package registry and one forum) and no real candidate ever
+survived: a candidate takes two genuinely different ways of knowing, and a
+registry read fifteen times is one. The Forge (Tranche 4) has nothing to
+deliberate on until the frontier holds candidates with independent evidence.
+
+### What was built (Tranche 3 of the River of Nickels plan)
+
+- **Six public eyes**, none needing a credential, an account or money, each
+  in the shape the first two set (`safeFetch` through the SSRF door, a named
+  user agent, what it can and cannot see, an address for every item, failure
+  thrown rather than hidden): Apple's App Store search (`app_store`,
+  substitute), App Store reviews (`review`, satisfaction), DuckDuckGo
+  autocomplete (`search_evidence`, demand signal), Remotive's jobs feed
+  (`job_posting`, procurement labour), GitHub's public issue search
+  (`community`, problem pain) and Wikipedia pageviews (`public_dataset`,
+  usage). Migration 321 registers them declared, adds the two capabilities the
+  constitution did not yet name, and says on what basis each is looked
+  through.
+- **Askers.** `sources/askers.ts` is the registry: each eye asks its source the
+  question that source can answer, forms a claim for that question, keeps what
+  came back whole (`market_retrievals`), writes observations under its own
+  source type, raises what it cannot see, and says what it found in a
+  sentence. What a finding bears on a seed is still read from the
+  constitutional bearings table, and a missing row still means the source
+  says nothing. Seven bearings are added for the three stances that had none.
+- **Weeding asks every reachable stance.** After the registry, the first two
+  stances not yet asked that could settle what the seed asserts, so a day's
+  pass is bounded and the next day asks the next. A contradiction buries;
+  support or narrowing survives; an eye that does not answer is said so and
+  the seed lives.
+- **Discovery sows from issue trackers too**, and passes a silent tracker
+  over out loud rather than letting it end the pass.
+- **The sense check asks each provider its own dull question** and opens the
+  eyes it has just proven the same day.
+- Proven in miniature by `more-ways-of-looking.test.ts`: one seed, five
+  stances, promoted on rows rather than a story.
+
+### Not here, and why
+
+Reddit refuses unauthenticated search; Gumroad and Etsy have no public search
+without a key; SAM.gov needs a key; the Wikimedia API rate-limits an
+unnamed caller. Solicited eyes (owner-stated ideas, an ask-you page) belong
+with the owner surface. Each will be proposed as a capability acquisition when
+its key or page exists.

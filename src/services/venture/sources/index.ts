@@ -36,7 +36,7 @@ import {
  * on. The rejected items are the important half - they are how somebody checks
  * that the relevance judgement was reasonable rather than convenient.
  */
-async function recordRetrieval(input: {
+export async function recordRetrieval(input: {
   founderId: string; sourceType: string; source: string; terms: string;
   returnedCount: number; canSee: string; cannotSee: string; wouldMostHelp: string;
   notAlsoTried: string[] | null; evidenceMode: 'real' | 'sandbox' | 'reference';
@@ -379,10 +379,11 @@ export async function askWhatPeopleSay(q: PainQuestion): Promise<PainFinding> {
  * Idempotent by the question text, so looking twice does not accumulate the
  * same doubt twice — but looking once is enough to put it on the record.
  */
-async function raiseWhatItCannotSettle(
+export async function raiseWhatItCannotSettle(
   founderId: string, opportunityId: string | null, claimId: string,
+  gaps: Array<{ question: string; wouldNeed: string }> = CANNOT_TELL_US,
 ): Promise<void> {
-  for (const gap of CANNOT_TELL_US) {
+  for (const gap of gaps) {
     const already = (await query(
       `SELECT id FROM market_unknowns
         WHERE founder_id = ? AND question = ? AND answered_at IS NULL

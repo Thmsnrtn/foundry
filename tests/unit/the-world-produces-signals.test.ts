@@ -242,8 +242,10 @@ describe('and then kills what the evidence actually contradicts', () => {
       `SELECT q.stance, q.found, q.bearing FROM seed_questionings q
          JOIN opportunity_seeds s ON s.id = q.seed_id
         WHERE q.founder_id = ? AND s.seed LIKE '%certificate expiry%'
-        ORDER BY q.rowid DESC LIMIT 1`, [OWNER]))
+        ORDER BY q.rowid ASC LIMIT 1`, [OWNER]))
       .rows[0] as Record<string, unknown> | undefined;
+    // The registry's questioning is the first on record; the other eyes are
+    // asked after it and each says what it can and cannot bear on its own.
     expect(String(asked?.stance)).toBe('substitute');
     expect(String(asked?.bearing)).toBe('says_nothing');
   });

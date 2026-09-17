@@ -112,6 +112,7 @@ export async function whatItWouldTakeToBelieve(seedId: string): Promise<WhatItWo
        JOIN epistemic_stances s ON s.stance = t.epistemic_stance
       WHERE c.seed_id = ? AND o.evidence_mode <> 'reference'
         AND t.epistemic_stance <> 'rehearsal'
+        AND (o.from_absence = 0 OR o.bearing = 'supports')
       GROUP BY t.epistemic_stance
       ORDER BY s.sort_order`, [seedId]))
     .rows as unknown as Array<Record<string, unknown>>).map((r) => ({

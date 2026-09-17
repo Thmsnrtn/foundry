@@ -54,8 +54,50 @@ const WORKING = new Set(['available', 'controlled_proven', 'reality_proven', 're
  * whose terms looked like a market question would be a market question, and
  * would end up quoted somewhere as though somebody had asked it.
  */
-async function ask(sourceType: string): Promise<{ ok: boolean; because: string }> {
+const usable = (items: Array<{ url: string }>): { ok: boolean; because: string } => {
+  const visitable = items.filter((f) => f.url.startsWith('https://'));
+  return visitable.length === 0
+    ? { ok: false, because: 'it answered but nothing it returned could be visited' }
+    : { ok: true, because: `it answered with ${String(visitable.length)} item(s), each `
+      + 'naming an address that can be visited' };
+};
+
+/** EACH PROVIDER IS ASKED ITS OWN DULL QUESTION. Two providers can supply one
+ *  source type — a forum and an issue tracker are both community — and asking
+ *  the forum's question about the tracker would prove the wrong instrument. */
+async function ask(provider: string, sourceType: string): Promise<{ ok: boolean; because: string }> {
   try {
+    if (provider === 'github_issues') {
+      const { whatIsReportedBroken } = await import('../venture/sources/issue-trackers.js');
+      return usable((await whatIsReportedBroken('crash', 3)).found);
+    }
+    if (provider === 'apple_app_store') {
+      const { whatAppsExist } = await import('../venture/sources/app-store.js');
+      return usable((await whatAppsExist('notes', 3)).found);
+    }
+    if (provider === 'apple_app_reviews') {
+      const { whatUsersSay } = await import('../venture/sources/app-store.js');
+      // Apple's own Pages app: it exists, it has reviews, and it is not going anywhere.
+      return usable((await whatUsersSay(361309726, 3)).found);
+    }
+    if (provider === 'duckduckgo_autocomplete') {
+      const { whatPeopleSearchFor } = await import('../venture/sources/search-demand.js');
+      const demand = await whatPeopleSearchFor('spreadsheet');
+      return demand.found.length === 0
+        ? { ok: false, because: 'it answered, but with no completion at all for a word everybody types' }
+        : { ok: true, because: `it answered with ${String(demand.found.length)} completion(s)` };
+    }
+    if (provider === 'remotive') {
+      const { whoIsHiringFor } = await import('../venture/sources/job-postings.js');
+      return usable((await whoIsHiringFor('engineer', 3)).found);
+    }
+    if (provider === 'wikipedia_pageviews') {
+      const { howOftenLookedUp } = await import('../venture/sources/pageviews.js');
+      const looked = await howOftenLookedUp('Spreadsheet');
+      return looked.months.length === 0
+        ? { ok: false, because: 'it answered, but with no monthly count for an article that certainly exists' }
+        : { ok: true, because: `it answered with ${String(looked.months.length)} month(s) of counts` };
+    }
     if (sourceType === 'community') {
       const { whatPeopleSaid } = await import('../venture/sources/community.js');
       const said = await whatPeopleSaid('software', 3);
@@ -108,7 +150,7 @@ export async function checkTheSenses(): Promise<SenseCheck[]> {
   for (const row of providers) {
     const was = String(row.maturity);
     const sourceType = String(row.supplies_source_type);
-    const answer = await ask(sourceType);
+    const answer = await ask(String(row.provider), sourceType);
 
     let movedTo: SenseCheck['movedTo'] = null;
     if (answer.ok && (was === 'declared' || was === 'unavailable' || was === 'degraded')) {

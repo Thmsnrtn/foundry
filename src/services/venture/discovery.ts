@@ -27,7 +27,7 @@ import { whatPeopleSaid } from './sources/community.js';
 import { formClaim, observe } from './market-evidence.js';
 import { openSeeds, sow } from './seeds.js';
 import { abstained, alreadySetAside, interpret } from './interpretation.js';
-import { recordQuestioning, whatItBears, whoCouldSettle } from './falsification.js';
+import { recordQuestioning, whatItBears, whatWasAsked, whoCouldSettle } from './falsification.js';
 
 export interface Brief {
   id: string; lookingFor: string; heldTo: string | null;
@@ -283,6 +283,23 @@ export async function discover(input: {
   for (const terms of brief.terms) {
     if (sown.length >= MOST_SEEDS_PER_PASS || read >= MOST_READINGS_PER_PASS) break;
     const talk = await whatPeopleSaid(terms, 10);
+    // A SECOND PLACE PEOPLE WRITE THINGS DOWN. Public issue trackers are the
+    // same kind of knowing — somebody said something, in public, at a date —
+    // and the same reader sows from them. An eye that does not answer is
+    // passed over out loud rather than allowed to end the whole pass: one
+    // rate-limited tracker must not blind the forum beside it.
+    const { askersFor } = await import('./sources/askers.js');
+    if ((await askersFor(['problem_pain'], input.world)).some((a) => a.provider === 'github_issues')) {
+      const { whatIsReportedBroken } = await import('./sources/issue-trackers.js');
+      try {
+        const issues = await whatIsReportedBroken(terms, 5);
+        talk.found.push(...issues.found);
+        talk.total += issues.total;
+      } catch (err) {
+        passedOver.push({ what: `public issue trackers for "${terms}"`,
+          because: `did not answer: ${err instanceof Error ? err.message.slice(0, 120) : 'unknown'}` });
+      }
+    }
     looked += talk.found.length;
 
     for (const said of talk.found) {
@@ -603,11 +620,70 @@ export async function weedOut(input: {
         because: `${toTheSeed.because} It did establish something else: `
           + `${toTheQuestion.because}. ${found.sentence}`,
         wouldNeed: settle.outOfReach.map((s) => s.whatItSays) });
-      continue;
+    } else {
+      survived.push({ seed,
+        nowKnows: `${toTheSeed.bearing === 'supports' ? 'supported' : 'narrowed'}: `
+          + `${toTheSeed.because}. ${found.sentence}` });
     }
-    survived.push({ seed,
-      nowKnows: `${toTheSeed.bearing === 'supports' ? 'supported' : 'narrowed'}: `
-        + `${toTheSeed.because}. ${found.sentence}` });
+
+    // THE OTHER WAYS OF KNOWING, ONE OR TWO A PASS. A seed becomes a candidate
+    // on independent stances, and a registry read fifteen times is one stance.
+    // Every stance that could settle what this asserts and that Foundry can
+    // reach is asked in turn — the ones not yet asked first, at most two a
+    // pass, so a day's pass is bounded and the next day asks the next. What
+    // each answer bears is read from the same constitutional table, so a
+    // source incapable of the question says nothing rather than burying.
+    const { askersFor } = await import('./sources/askers.js');
+    const before = await whatWasAsked(seedId);
+    const askedBefore = new Set(before.map((q) => q.asked));
+    const stancesHeard = new Set(before.map((q) => q.stance));
+    // A STANCE NOT YET HEARD COMES FIRST. Two eyes of one stance in one pass
+    // would spend the day's two questions learning one thing twice.
+    const candidates = (await askersFor(settle.canReach, input.world))
+      .filter((a) => a.provider !== 'npm_registry' && !askedBefore.has(a.question(words)))
+      .map((a, i) => ({ a, i }))
+      .sort((x, y) => Number(stancesHeard.has(x.a.stance)) - Number(stancesHeard.has(y.a.stance)) || x.i - y.i)
+      .map((x) => x.a);
+    const others: typeof candidates = [];
+    for (const a of candidates) {
+      if (others.length >= 2) break;
+      if (!others.some((o) => o.stance === a.stance)) others.push(a);
+    }
+    for (const a of candidates) {
+      if (others.length >= 2) break;
+      if (!others.includes(a)) others.push(a);
+    }
+    let buriedNow = false;
+    for (const asker of others) {
+      const stance = asker.stance;
+      let answer: Awaited<ReturnType<typeof asker.ask>>;
+      try {
+        answer = await asker.ask({ founderId: input.founderId, seedId, seed, words });
+      } catch (err) {
+        saidNothing.push({ seed,
+          because: `${asker.provider} did not answer: ${err instanceof Error ? err.message.slice(0, 120) : 'unknown'}`,
+          wouldNeed: [] });
+        continue;
+      }
+      asked += 1;
+      const bears = await whatItBears({ stance, about, found: answer.found });
+      await recordQuestioning({
+        founderId: input.founderId, seedId, stance, asked: answer.asked, found: answer.found,
+        bears, world: input.world });
+      if (bears.bearing === 'contradicts') {
+        await bury({ seedId, because: `${answer.asked}: ${bears.because}. ${answer.sentence}` });
+        buried.push({ seed, because: bears.because });
+        buriedNow = true;
+        break;
+      }
+      if (bears.bearing === 'says_nothing') {
+        saidNothing.push({ seed, because: `${bears.because} ${answer.sentence}`,
+          wouldNeed: settle.outOfReach.map((s) => s.whatItSays) });
+      } else {
+        survived.push({ seed, nowKnows: `${bears.bearing === 'supports' ? 'supported' : 'narrowed'}: ${bears.because}. ${answer.sentence}` });
+      }
+    }
+    if (buriedNow) continue;
   }
   return { asked, buried, survived, saidNothing };
 }

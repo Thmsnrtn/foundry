@@ -3270,6 +3270,18 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
         `sense_check_tick: ${String(answering)} of ${String(checked.length)} ways of `
         + 'looking answered',
         { jobName: 'sense_check_tick' });
+      // AN EYE PROVEN TODAY IS LOOKED THROUGH TODAY, for everyone with a
+      // search open, rather than on the next pass of a different job.
+      const { openTheEyesThatAreProven } = await import('../services/venture/research-sources.js');
+      const searching = await query(
+        'SELECT DISTINCT founder_id FROM venture_mandates WHERE closed_at IS NULL', []);
+      for (const row of searching.rows as unknown as Array<Record<string, unknown>>) {
+        const opened = await openTheEyesThatAreProven(String(row.founder_id));
+        if (opened.length > 0) {
+          logger.info(`sense_check_tick: ${String(row.founder_id)} can now look through ${opened.join(', ')}`,
+            { jobName: 'sense_check_tick' });
+        }
+      }
     },
     // BEFORE dependency health at 05:45, which is what opens the eyes for
     // whatever is available by then. Running after it would mean a sense
