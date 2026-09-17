@@ -1,0 +1,44 @@
+name: Foundry UI North Star
+
+on:
+  push:
+    branches:
+      - gpt/ui-handoff-v3-north-star
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  implement-and-verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gpt/ui-handoff-v3-north-star
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Apply the supplied UI handoff
+        run: python scripts/apply-ui-handoff-v3.py
+      - name: Install dependencies
+        run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Owner-surface invariants
+        run: npx vitest --run tests/unit/the-owner-os-is-a-cockpit-not-a-second-institution.test.ts tests/unit/a-button-wider-than-the-phone.test.ts tests/unit/one-stylesheet-one-vocabulary.test.ts tests/unit/twelve-journeys-on-the-phone-he-holds.test.ts
+      - name: Build
+        run: npm run build
+      - name: Commit verified North Star cutover
+        run: |
+          if git diff --quiet; then
+            exit 0
+          fi
+          git config user.name 'OpenAI UI Reconstruction'
+          git config user.email 'noreply@openai.com'
+          git add src/views/owner/shell.ts src/public/owner.css src/routes/dashboard/activity-place.ts src/routes/dashboard/money-place.ts src/routes/dashboard/absence-place.ts src/routes/dashboard/roadmap-place.ts src/routes/dashboard/experiments-place.ts
+          git commit -m 'Implement supplied UI handoff North Star [ui-north-star]'
+          git push origin HEAD:gpt/ui-handoff-v3-north-star
