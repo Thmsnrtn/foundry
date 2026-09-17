@@ -1256,15 +1256,9 @@ main[data-place="money"] .mline.total{margin:.25rem -.65rem 0;padding:.95rem .65
   .reach li{grid-template-columns:1fr}.reach li>p{grid-column:1}
 }
 
-/* 375–390px-class phones keep the North Star's core five destinations under
-   the thumb, while the full owner map remains available through the page/menu
-   and appears directly on wider phones. */
+/* Membership of the mobile doors is page-aware and is applied by the hashed
+   owner script. CSS only supplies compact sizing before that script runs. */
 @media (max-width:410px){
-  nav.places div{grid-template-columns:repeat(5,minmax(0,1fr))}
-  nav.places a:nth-of-type(2),
-  nav.places a:nth-of-type(6),
-  nav.places a:nth-of-type(7),
-  nav.places a:nth-of-type(8){display:none}
   nav.places a{font-size:.62rem}
   nav.places a svg{width:20px;height:20px}
 }
@@ -1331,17 +1325,6 @@ main[data-place="money"] .mline.total{margin:.25rem -.65rem 0;padding:.95rem .65
    ============================================================================= */
 .ask-door{color:inherit}
 
-/* On the smallest phones the handoff resolves to the five high-frequency owner
-   destinations: Home, Portfolio, Experiments, Inbox, Ask. The full institutional
-   map returns as soon as width permits and is always present in the desktop rail. */
-@media (max-width:410px){
-  nav.places div{grid-template-columns:repeat(5,minmax(0,1fr))}
-  nav.places a:nth-of-type(2),
-  nav.places a:nth-of-type(4),
-  nav.places a:nth-of-type(7),
-  nav.places a:nth-of-type(8),
-  nav.places a:nth-of-type(9){display:none}
-  nav.places a:nth-of-type(6){display:flex}
-  nav.places a{font-size:.62rem}
-  nav.places a svg{width:20px;height:20px}
-}
+/* Mobile door membership is intentionally absent here. The owner script derives
+   it from page context, preserving the handoff's five/six/nine-door compositions
+   without coupling navigation meaning to DOM position. */
