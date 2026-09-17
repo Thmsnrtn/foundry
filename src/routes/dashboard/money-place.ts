@@ -234,7 +234,7 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
         <button class="btn" type="submit">Record it</button>
       </form>
     </div>`;
-  return c.html(page('Money', body, 'foundry', frame));
+  return c.html(page('Money', body, 'money', frame));
 });
 
 // ─── What the owner sets ─────────────────────────────────────────────────────

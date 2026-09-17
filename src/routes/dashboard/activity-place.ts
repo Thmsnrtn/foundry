@@ -130,5 +130,5 @@ activityRoutes.get('/foundry/activity', async (c: any) => {
         </ul>
       </div>`)}`;
 
-  return c.html(page('Activity', body, 'foundry', frame));
+  return c.html(page('Activity', body, 'activity', frame));
 });

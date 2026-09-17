@@ -66,7 +66,7 @@ experimentRoutes.get('/foundry/experiments', async (c: any) => {
     <h1>Experiments</h1>
     <p class="lede">${views.length === 0 ? 'No real test is set up yet. When one is, it appears here with what it needs from you.'
     : `${count(views.length, 'real test')}. Each is one question put to the world, with the prediction sealed before it runs.`}</p>
-    ${views.map((v) => html`<a class="item" href="/foundry/experiments/${v.id}">
+    ${views.map((v) => html`<a class="item experiment-index-item" href="/foundry/experiments/${v.id}">
       <p><strong>${v.assetName ?? v.title}</strong> <span class="pill">${stateWord[v.state]}</span></p>
       <p class="quiet">${v.stateDetail}</p>
     </a>`)}

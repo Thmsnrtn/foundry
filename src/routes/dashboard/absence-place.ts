@@ -68,7 +68,7 @@ function property(p: PropertyReading) {
 
 function horizon(r: AbsenceReading) {
   const failing = r.properties.filter((p) => p.finding === 'DOES_NOT_HOLD').length;
-  return html`<div class="know">
+  return html`<div class="know horizon horizon-${String(r.days)}">
     <h2>${String(r.days)} days — back on ${r.returnsOn}</h2>
     <p class="lede">${r.verdict}</p>
     <ul class="sales">${r.properties.map(property)}</ul>
@@ -97,9 +97,9 @@ absenceRoutes.get('/foundry/absence', async (c: any) => {
     <h1>If you stepped away</h1>
     <p class="lede">${lede}</p>
 
-    ${readings.map(horizon)}
+    <div class="absence-horizons">${readings.map(horizon)}</div>
 
-    <div class="know">
+    <div class="know cognition-economics">
       <h2>What thinking costs</h2>
       <p class="lede">${thinking.sentence}</p>
       ${thinking.byModel.length === 0 ? html`<p class="quiet">Nothing settled in the last

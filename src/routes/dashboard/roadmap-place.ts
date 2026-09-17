@@ -88,7 +88,7 @@ roadmapRoutes.get('/foundry/roadmap', async (c: any) => {
     <p class="quiet">Not a plan — a record. Nothing appears here because somebody intended it;
       it appears because it was taken on, and every line under it rests on a row.</p>
 
-    ${open.length === 0 ? '' : html`<div class="know">
+    ${open.length === 0 ? '' : html`<div class="know roadmap-open">
       <h2>Under way</h2>
       <ul class="sales">${open.map((u) => {
     const t = threads.get(u.id);
@@ -109,7 +109,7 @@ roadmapRoutes.get('/foundry/roadmap', async (c: any) => {
   })}</ul>
     </div>`}
 
-    ${closed.length === 0 ? '' : html`<div class="know">
+    ${closed.length === 0 ? '' : html`<div class="know roadmap-closed">
       <h2>Finished, and what came of it</h2>
       <ul class="sales">${closed.slice(0, 10).map((u) => html`<li>
         <b>${u.kindInWords}</b> for ${u.companyName} — ${u.closedAs === 'done' ? 'done'
@@ -119,7 +119,7 @@ roadmapRoutes.get('/foundry/roadmap', async (c: any) => {
       </li>`)}</ul>
     </div>`}
 
-    <div class="know">
+    <div class="know roadmap-note">
       <h2>Why you cannot add to this</h2>
       <p class="quiet">Taking something on binds what your sentence was understood as, before
         anything acts on it — so it happens where you say it, in Ask or on a company page, and

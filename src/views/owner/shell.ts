@@ -40,8 +40,8 @@ import { OWNER_SURFACE_SCRIPT } from '../../lib/owner-surface-script.js';
  * matches no key in the rail, so nothing lights, and the footer that points at
  * it is suppressed there rather than linking a page to itself.
  */
-export type Place = 'foundry' | 'decisions' | 'companies' | 'experiments' | 'inbox' | 'controls'
-  | 'advanced';
+export type Place = 'foundry' | 'decisions' | 'companies' | 'discover' | 'experiments' | 'inbox'
+  | 'activity' | 'money' | 'controls' | 'advanced';
 
 type H = HtmlEscapedString | Promise<HtmlEscapedString>;
 
@@ -126,10 +126,9 @@ function railExtra(where: Where | null): H {
         l.count !== null && l.count > 0 ? html` <span>${String(l.count)}</span>` : ''}</a>`)}</section>`
     : '';
   return html`${object}<section class="more" aria-label="Also here">
-    <a href="/foundry/searching"${where?.scope.kind === 'searching' ? raw(' class="on"') : ''}>Discover</a>
     <a href="/foundry/public-workshop">Workshop</a>
-    <a href="/foundry/money">Money</a>
     <a href="/foundry/roadmap">Roadmap</a>
+    <a href="/foundry/absence">Absence test</a>
   </section>`;
 }
 
@@ -193,6 +192,10 @@ const ICONS = {
   inbox: '<svg viewBox="0 0 24 24"><path d="M3 12v6h18v-6"/><path d="M3 12l3-7h12l3 7"/><path d="M3 12h5l2 3h4l2-3h5"/></svg>',
   controls: '<svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/><circle cx="9" cy="7" r="2" fill="var(--bg)"/><circle cx="15" cy="12" r="2" fill="var(--bg)"/><circle cx="8" cy="17" r="2" fill="var(--bg)"/></svg>',
   portfolio: '<svg viewBox="0 0 24 24"><path d="M3 17c3-4 6 0 9-3s6 1 9-3"/><path d="M3 12c3-4 6 0 9-3s6 1 9-3"/></svg>',
+  discover: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4M11 8v6M8 11h6"/></svg>',
+  activity: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>',
+  money: '<svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"/><path d="M8 10h8M8 14h5"/></svg>',
+  ask: '<svg viewBox="0 0 24 24"><path d="M5 5h14v11H9l-4 3z"/><path d="M9 9h6M9 12h4"/></svg>',
 };
 
 /** One door. `deskOnly` doors render only where the rail has room. */
@@ -224,11 +227,11 @@ export const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscape
 </head>
 <body>
 <main class="wrap" data-place="${active}">
-<div class="brand"><b>F</b> Private Foundry</div>
+<div class="brand"><span class="forge-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M16 3v26M7 10c5 0 9 6 9 6s-4 6-9 6c0-6 4-12 9-12Zm18 0c-5 0-9 6-9 6s4 6 9 6c0-6-4-12-9-12Z"/></svg></span><span class="brand-copy"><b>Foundry</b><small>Private Lab for Digital Income Streams</small></span></div>
 ${crumbsOf(where)}
 ${body}
 ${active === 'advanced' ? '' : html`<footer><a href="/letter">Advanced — inspect the system</a></footer>`}
-<form class="ask" method="GET" action="/foundry">
+<form class="ask" id="ask-foundry" method="GET" action="/foundry">
   ${askScope(where).line}
   ${askScope(where).hidden ? html`<input type="hidden" name="scope" value="${askScope(where).hidden}" />` : ''}
   <div class="ask-in">
@@ -241,12 +244,17 @@ ${active === 'advanced' ? '' : html`<footer><a href="/letter">Advanced — inspe
 </main>
 ${companyBar(where)}
 <nav class="places${where && where.scope.kind === 'company' && where.local.length ? ' behind' : ''}" aria-label="Places"><div>
+  <header class="rail-brand"><span class="forge-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M16 3v26M7 10c5 0 9 6 9 6s-4 6-9 6c0-6 4-12 9-12Zm18 0c-5 0-9 6-9 6s4 6 9 6c0-6-4-12-9-12Z"/></svg></span><span><b>Foundry</b><small>Private Lab for Digital Income Streams</small></span></header>
   ${door('/foundry', 'foundry', 'Home', ICONS.home, active, counts)}
   ${door('/foundry/decisions', 'decisions', 'Decisions', ICONS.decisions, active, counts)}
+  ${door('/foundry/companies', 'companies', 'Portfolio', ICONS.portfolio, active, counts)}
+  ${door('/foundry/searching', 'discover', 'Discover', ICONS.discover, where?.scope.kind === 'searching' ? 'discover' : active, counts, true)}
   ${door('/foundry/experiments', 'experiments', 'Experiments', ICONS.experiments, active, counts)}
   ${door('/foundry/inbox', 'inbox', 'Inbox', ICONS.inbox, active, counts)}
+  ${door('/foundry/activity', 'activity', 'Activity', ICONS.activity, active, counts)}
+  ${door('/foundry/money', 'money', 'Economics', ICONS.money, active, counts)}
   ${door('/foundry/controls', 'controls', 'Controls', ICONS.controls, active, counts)}
-  ${door('/foundry/companies', 'companies', 'Portfolio', ICONS.portfolio, active, counts, true)}
+  <a class="ask-door" href="/foundry#ask-foundry">${raw(ICONS.ask)}Ask</a>
   ${railExtra(where)}
 </div></nav>
 <script>${raw(OWNER_SURFACE_SCRIPT)}</script>
