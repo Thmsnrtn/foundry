@@ -1575,7 +1575,7 @@ main[data-place="experiments"] h1 .state{font-size:.72rem;vertical-align:middle;
 /* Rules that used to live in <style> blocks on the experiment pages. */
 .stack{display:grid;gap:.5rem;max-width:26rem}
 .stack label{display:grid;gap:.25rem;font-size:.88rem;color:var(--ink-2)}
-.stack input{max-width:100%;box-sizing:border-box;font:inherit;font-size:max(16px,1rem);padding:11px 13px;min-height:44px;border:1px solid var(--line-2);border-radius:10px;background:var(--card);color:var(--ink)}
+.stack input,.stack textarea{max-width:100%;box-sizing:border-box;font:inherit;font-size:max(16px,1rem);padding:11px 13px;min-height:44px;border:1px solid var(--line-2);border-radius:10px;background:var(--card);color:var(--ink)}
 .stack .btn{width:auto;justify-self:start}
 .plain{list-style:none;padding:0;margin:0}
 .plain li{margin:.4rem 0}
@@ -1742,4 +1742,19 @@ main[data-place="foundry"]:has(.ask-surface)>.glance{margin-top:1.4rem}
 }
 @media (min-width:900px){
   .ask-surface{max-width:54rem}
+}
+
+/* ── A tablet is not a wide phone: the column widens and the cockpit pairs ── */
+@media (min-width:600px) and (max-width:899px){
+  .wrap{max-width:46rem}
+  .cockpit{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .cockpit>.one,.cockpit>.panel.calm{grid-column:1/-1}
+  .nownext.panel{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .nownext.panel>div{border-bottom:0;border-right:1px solid var(--v3-line)}
+  .nownext.panel>div:last-child{border-right:0}
+  .exp-numbers{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .exp-thesis{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .ctl-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .eco-glance{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .eco-glance .tile.yours{grid-column:auto}
 }

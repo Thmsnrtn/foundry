@@ -42,6 +42,7 @@ jobs:
             tests/unit/twelve-journeys-on-the-phone-he-holds.test.ts \
             tests/unit/mobile-owner-navigation-follows-v3-context.test.ts \
             tests/unit/a-roadmap-nobody-can-wish-into.test.ts \
-            tests/unit/the-owner-can-reach-the-one-thing.test.ts
+            tests/unit/the-owner-can-reach-the-one-thing.test.ts \
+            tests/unit/the-north-star-composition-holds.test.ts
       - name: Build
         run: npm run build

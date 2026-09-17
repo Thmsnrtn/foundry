@@ -159,10 +159,7 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
       <form method="POST" action="/foundry/public-workshop/postal" class="stack"><label>Postal address for commercial mail (a business or mailbox address, not your home) <textarea name="address" rows="4" placeholder="Street, Suite …&#10;Town, MA 0xxxx">${w.postalAddress ?? ''}</textarea></label><button class="btn" type="submit">Save</button></form>
       <form method="POST" action="/foundry/public-workshop/about" class="stack"><label>About you, for the public About page (only what you want published) <textarea name="about" rows="4">${w.about}</textarea></label><button class="btn" type="submit">Save</button></form>
     </section>
-    <style>
-      .facts{display:grid;grid-template-columns:minmax(8rem,auto) 1fr;gap:.25rem .75rem;margin:0}.facts dd{margin:0}
-      .stack{display:grid;gap:.5rem;max-width:30rem;margin-top:.5rem}.stack label{display:grid;gap:.25rem}.stack input,.stack textarea{max-width:100%;box-sizing:border-box;font:inherit}
-    </style>`;
+`;
   return c.html(page('Workshop', body, 'foundry', frame));
 });
 
