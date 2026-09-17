@@ -506,6 +506,21 @@ describe('the whole external chain, checked against the world', () => {
     process.env.APP_URL = 'https://foundry-intel.fly.dev';
     await standUpTheEars(OWNER);
     process.env.APP_URL = appUrl;
+    // THE EDITION ON SALE HAS A DATE, AND THE DATE AGES. `seedProof1` records
+    // the real pilot edition with the day it was actually pulled, and the
+    // freshness leg below measures that day against the clock — which is the
+    // right thing for readiness to do and the wrong thing for this test to
+    // depend on: seven days after the pull it went red on every branch, in an
+    // empty room, about a calendar. What this test proves is the MECHANISM —
+    // fresh is ready, stale is blocked, the edge is blocked a day early — so it
+    // records an edition pulled today first and the clock reads it. The real
+    // edition's age is still reported to the owner by readiness itself, on the
+    // experiment page, which is where a stale brief belongs.
+    const { recordMaterial } = await import('../../src/services/venture/hand.js');
+    const { BRIEF_MD } = await import('../../src/services/venture/proof-1-content.js');
+    await recordMaterial({ founderId: OWNER, experimentId: X, kind: 'deliverable',
+      title: 'Massachusetts Commercial Millwork Bid Brief, pilot edition',
+      body: BRIEF_MD, pulledAt: new Date(), by: 'test' });
     const r = await externalReadiness(OWNER, X);
     const by = Object.fromEntries(r.legs.map((l) => [l.leg, l]));
     // Nothing is blocked, and the surfaces a stranger needs were actually read.
@@ -522,7 +537,6 @@ describe('the whole external chain, checked against the world', () => {
     // A material cannot be edited — that is the point of them — so an older
     // edition is RECORDED rather than backdated, which is also how staleness
     // would actually arise: the brief that is current is the last one pulled.
-    const { recordMaterial } = await import('../../src/services/venture/hand.js');
     await recordMaterial({ founderId: OWNER, experimentId: X, kind: 'deliverable',
       title: 'Massachusetts Commercial Millwork Bid Brief, pilot edition',
       body: 'an edition assembled a month ago', pulledAt: new Date(Date.now() - 30 * 86_400_000),

@@ -118,14 +118,20 @@ describe('it is one of the places, drawn by the one shell', () => {
     expect(shell).toContain('href="/foundry/roadmap"');
   });
 
-  it('adds no seventh door', () => {
-    // Nine tabs at 375px is forty pixels a tab, which is not a door. Money and
-    // the Roadmap sit in "Also here" with Discover and the Workshop.
+  it('adds no door of its own', () => {
+    // THE DOORS ARE THE V3 CANONICAL SET, AND THE ROADMAP IS NOT ONE OF THEM.
+    // The supplied handoff fixes the owner map at Home, Decisions, Portfolio,
+    // Discover, Experiments, Inbox, Activity, Economics, Controls and Ask; on
+    // a phone the hashed owner script narrows that by context rather than by
+    // position. The Roadmap stays in "Also here" beside the Workshop and the
+    // absence test: it is one tap from Home, not a place under the thumb.
     const shell = readFileSync(resolve(ROOT, 'src/views/owner/shell.ts'), 'utf8');
     const doors = [...shell.matchAll(/\$\{door\('([^']+)'/g)].map((m) => m[1]);
     expect(doors).toEqual([
-      '/foundry', '/foundry/decisions', '/foundry/experiments',
-      '/foundry/inbox', '/foundry/controls', '/foundry/companies',
+      '/foundry', '/foundry/decisions', '/foundry/companies', '/foundry/searching',
+      '/foundry/experiments', '/foundry/inbox', '/foundry/activity', '/foundry/money',
+      '/foundry/controls',
     ]);
+    expect(doors).not.toContain('/foundry/roadmap');
   });
 });

@@ -48,6 +48,11 @@ on:
       # currently deployed private lineage. Its own North Star workflow proves
       # owner-surface invariants before this production gate runs the full chain.
       - 'gpt/ui-handoff-v3-north-star'
+      # The session that finished the V3 North Star reconstruction: a direct
+      # descendant of gpt/ui-handoff-v3-north-star, continued on its own
+      # designated branch because each session may push that branch and nothing
+      # else.
+      - 'claude/foundry-v3-north-star-finish-vxq2ea'
 
 jobs:
   # NOTHING DEPLOYS THAT HAS NOT PASSED THE CHAIN.

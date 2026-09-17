@@ -155,13 +155,19 @@ phones('the first screen, on the phone he actually holds', () => {
           const buried = [...document.querySelectorAll('.do .btn')]
             .filter((e) => e.getBoundingClientRect().bottom > chromeTop)
             .map((e) => e.textContent!.trim());
-          return { buried, reserved: getComputedStyle(document.querySelector('.wrap')!).paddingBottom };
+          return { buried, covered: H - chromeTop,
+            reserved: getComputedStyle(document.querySelector('.wrap')!).paddingBottom };
         });
       });
       expect(seen.buried).toEqual([]);
       // Reserved from measurement rather than from a constant that cannot be
-      // right for every text size.
-      expect(parseFloat(seen.reserved)).toBeGreaterThan(100);
+      // right for every text size. THE MEASUREMENT IS THE INVARIANT: the page
+      // reserves at least what the fixed bars cover. This used to be a floor
+      // of 100px, which was the composer and the doors added together — and
+      // the V3 handoff puts Ask behind a door on a phone, so one bar sits on
+      // the page and the honest reserve is smaller than the old floor.
+      expect(seen.covered).toBeGreaterThan(40);
+      expect(parseFloat(seen.reserved)).toBeGreaterThanOrEqual(seen.covered);
     }, 120_000);
   }
 
