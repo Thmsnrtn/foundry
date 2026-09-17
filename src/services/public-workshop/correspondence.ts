@@ -206,8 +206,8 @@ export interface Plan {
  * Two short sentences: it said the same thing in thirty words, and a footer
  * that explains itself at length reads as a disclaimer rather than a courtesy.
  */
-const SIGN_OFF = (operator: string, workshop: string) =>
-  `\n\n— ${workshop}\n\nAutomated reply from ${workshop}. ${operator} runs the workshop and handles anything that needs a person.`;
+const SIGN_OFF = (workshop: string) =>
+  `\n\n— ${workshop}\n\nAutomated reply from ${workshop}. A person at ${workshop} reads every message and handles anything that needs one.`;
 
 /**
  * WHAT FOUNDRY WILL SAY, ASSEMBLED FROM WHAT IS ALREADY PUBLIC. Every branch
@@ -393,7 +393,7 @@ export async function answer(founderId: string, mailId: string): Promise<Answere
   const plan = decide(u, ctx);
 
   const id = nanoid();
-  const says = plan.says ? plan.says + SIGN_OFF(w.operatorName, w.publicName) : null;
+  const says = plan.says ? plan.says + SIGN_OFF(w.publicName) : null;
   // The effect's name is settled before anything is attempted, because it is
   // what the contact constraint reads to tell answering somebody apart from
   // approaching them. Naming it here does not mean anything was sent: that

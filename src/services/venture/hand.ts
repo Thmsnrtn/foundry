@@ -402,10 +402,29 @@ function campaignParams(experimentId: string, approved: Recipient[], template: M
  * Foundry states the offer's shape and the facts the first-proof policy reads,
  * as the pass would, so the exposure can be placed.
  */
-export async function allowExperiment(input: { founderId: string; experimentId: string; within?: Date }): Promise<{ productId: string; actId: string }> {
+export async function allowExperiment(input: {
+  founderId: string; experimentId: string; within?: Date;
+  /**
+   * UNDER THE CHARTER, NOT BY HIS HAND. When the owner has signed a standing
+   * envelope on Controls, a probe inside it is let in and its acts are decided
+   * as `charter:<id>` — a principal the row guard accepts only while the
+   * envelope is live. Outside the envelope this refuses with the reasons, and
+   * the test waits for him on Decisions exactly as before.
+   */
+  under?: 'the charter';
+}): Promise<{ productId: string; actId: string }> {
   const e = await experimentRow(input.experimentId);
   if (!e || e.founderId !== input.founderId) throw new HandRefused('experiment_not_found');
   if (e.decision !== null) throw new HandRefused('already_decided', e.decision);
+  // THE CHARTER IS READ BEFORE ANYTHING IS DECIDED. The three acts below stand
+  // on the public and financial rungs; a probe whose cost is not left in the
+  // month, or that would be the fourth in flight, is not inside, and the row
+  // guard on the carve refuses again below in case this reading is skipped.
+  const { chartered, charterPrincipal, carve } = await import('../institution/charter.js');
+  const charter = input.under === 'the charter'
+    ? await chartered({ founderId: input.founderId, experimentId: input.experimentId, costCents: e.costCents, rungs: ['public', 'financial'] })
+    : null;
+  if (charter && !charter.inside) throw new HandRefused('outside_the_charter', charter.because.join('; '));
   // THE THINKING COMES BEFORE THE DECISION — before the sending address, before
   // the postal line, before anything a checklist could supply. What the
   // deliberation says it is not ready for is refused here rather than
@@ -420,10 +439,13 @@ export async function allowExperiment(input: { founderId: string; experimentId: 
   const { publicWorkshopOf } = await import('../public-workshop/settings.js');
   const paused = (await publicWorkshopOf(input.founderId))?.economicPause;
   if (paused) throw new HandRefused('workshop_paused', paused.reason);
-  const by = `founder:${input.founderId}`;
+  const by = charter?.inside ? charterPrincipal(charter.charter.id) : `founder:${input.founderId}`;
   await decideExperiment({ experimentId: input.experimentId, decision: 'approved', by, via: 'its own authorisation' });
   const after = await experimentRow(input.experimentId);
   if (!after?.productId) throw new HandRefused('asset_missing');
+  // LET IN, AS A ROW. The carve is what the envelope's arithmetic reads, and
+  // its guard is the one that cannot be talked past.
+  if (charter?.inside) await carve({ charterId: charter.charter.id, experimentId: input.experimentId, productId: after.productId, cents: e.costCents });
   await statedShapeAndFacts(after, after.productId, plan);
   // WHO THIS APPROVAL COVERS, decided here and never again. Approval is the
   // owner's consent and screening is the institution's evidence; an offer needs
@@ -572,7 +594,7 @@ export async function sendingReadiness(founderId: string): Promise<SendingReadin
   const { publicWorkshopOf } = await import('../public-workshop/settings.js');
   const w = await publicWorkshopOf(founderId);
   if (w && (!identity.fromEmail.endsWith(`@${w.zoneName}`) || !(identity.fromName ?? '').includes(w.publicName))) {
-    return { status: 'not_connected', fromLine: null, detail: `Tests write as ${w.operatorName} — ${w.publicName} <${w.contactEmail}>; the connected address is ${identity.fromEmail}. Connect the Workshop's sending from the Workshop page.`, identityProductId };
+    return { status: 'not_connected', fromLine: null, detail: `Tests write as ${w.publicName} <${w.contactEmail}>; the connected address is ${identity.fromEmail}. Connect the Workshop's sending from the Workshop page.`, identityProductId };
   }
   const fromLine = identity.fromName ? `${identity.fromName} <${identity.fromEmail}>` : identity.fromEmail;
   return { status: 'ready', fromLine, detail: `Ready. Messages go out as ${fromLine}${identity.lastAcceptedAt ? '; the provider has accepted mail from it before' : '; not yet used'}.`, identityProductId };
@@ -786,7 +808,7 @@ export async function planOffer(input: { experimentId: string; recipientId: stri
   if (!quality.ok) throw new HandRefused('offer_quality', quality.failures.join('; '));
   const replyTo = await replyAddressFor(e.productId, e.founderId);
   // Every message carries who is writing, from where, and how to stop it.
-  const footer = w ? `\n\n—\n${w.publicName} is a small digital workshop run by ${w.operatorName}.${w.postalAddress ? ` ${postalLines(w.postalAddress).join(', ')}.` : ''}\nTo hear nothing further from ${w.publicName}: ${w.origin}/email` : '';
+  const footer = w ? `\n\n—\n${w.publicName} is a small digital workshop.${w.postalAddress ? ` ${postalLines(w.postalAddress).join(', ')}.` : ''}\nTo hear nothing further from ${w.publicName}: ${w.origin}/email` : '';
   const body = offer.body.replace(/\{Business name\}/g, recipient.counterpartyRef.split(',')[0].trim()) + footer;
   const id = nanoid();
   await query(

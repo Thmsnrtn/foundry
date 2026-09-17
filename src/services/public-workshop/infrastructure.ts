@@ -139,7 +139,9 @@ export async function connectWorkshopSending(founderId: string, fetchImpl: typeo
   const after = await resend<ResendDomain>(key, `/domains/${pathSegment(domain.id, 'resend_domain_id')}`, {}, fetchImpl);
   let identity: string | null = null;
   if (after.status === 'verified') {
-    const fromName = `${w.operatorName} — ${w.publicName}`;
+    // THE WORKSHOP WRITES IN ITS OWN NAME. The owner is not a public figure;
+    // the sender line carries the Workshop and nothing else.
+    const fromName = w.publicName;
     const current = await getSendingIdentity(w.productId);
     if (!current || current.fromEmail !== w.contactEmail || current.fromName !== fromName) {
       await setSendingIdentity({ productId: w.productId, provider: 'resend', credential: key, fromEmail: w.contactEmail, fromName });

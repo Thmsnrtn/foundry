@@ -363,8 +363,8 @@ describe('a redundant test is retired in favour of the one it duplicates', () =>
 // ── A lifecycle state cannot delete a material term ──────────────────────────
 
 const FACTS: PublicWorkshopFacts = {
-  name: 'Apex Micro', operator: 'Thomas Norton', origin: 'a workshop',
-  tagline: 'a small digital workshop run by Thomas Norton', statement: 'statement',
+  name: 'Apex Micro', legalOperator: 'Thomas Norton', origin: 'a workshop',
+  tagline: 'a small digital workshop in Massachusetts', statement: 'statement',
   about: 'about', contactEmail: 'thomas@example.test', postalAddress: null,
   region: 'Massachusetts',
 };

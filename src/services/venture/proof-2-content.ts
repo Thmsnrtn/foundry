@@ -28,7 +28,7 @@ If it is no use to you, you can have your money back. Message me through Etsy or
 
 **Who made this**
 
-Apex Micro is a small digital workshop run by Thomas Norton in Massachusetts. This workbook was designed by Apex Micro with AI assistance in building the formulas and layout, and every formula was checked by hand before listing. Questions are welcome through Etsy messages and are answered by a person.
+Apex Micro is a small digital workshop in Massachusetts. This workbook was designed by Apex Micro with AI assistance in building the formulas and layout, and every formula was checked by hand before listing. Questions are welcome through Etsy messages and are answered by a person.
 
 **Tags:** bid tracker, contractor spreadsheet, construction bid tracker, estimate log, win rate, small business template, excel template, google sheets template, contractor bid log, job pipeline, remodeling contractor, trade business
 `;
@@ -64,7 +64,7 @@ File → Import → Upload → choose this file → "Replace spreadsheet". Drop-
 
 Reply through Etsy messages and a person answers. If the workbook is no use to you, you can have your money back: message me through Etsy, or use the refunds page at apexmicro.ai/refunds. No form, no time limit, and you don't have to explain.
 
-Apex Micro, a small digital workshop run by Thomas Norton. Designed with AI assistance in building the formulas and layout, checked by hand.
+Apex Micro, a small digital workshop in Massachusetts. Designed with AI assistance in building the formulas and layout, checked by hand.
 `;
 export const PRIVACY_POLICY_MD = `# Apex Micro on Etsy — privacy policy
 

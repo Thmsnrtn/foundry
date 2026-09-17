@@ -758,6 +758,24 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('_gate_fixture_status');
   });
 
+  it('check-the-owner-is-not-a-public-figure fails when a public template says his name', () => {
+    // He is not hiding, and he is not a public figure: the Workshop is the
+    // voice, and his name is on the terms page and nowhere else. A template
+    // that interpolates the operator into a sender line or a footer is the way
+    // that rule decays, one string at a time.
+    plant('src/services/public-workshop/_gate_fixture_voice.ts',
+      j('export const from = (w: { operatorName: string; publicName: string }) =>\n',
+        '  `${w.operator', 'Name} — ${w.publicName}`;\n'));
+    const r = run('check-the-owner-is-not-a-public-figure.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_voice');
+  });
+
+  it('check-the-owner-is-not-a-public-figure passes on the tree as it stands', () => {
+    const r = run('check-the-owner-is-not-a-public-figure.mjs');
+    expect(r.code, r.output).toBe(0);
+  });
+
   it('check-integration-status-vocabulary does not read its own explanation as a breach', () => {
     // The rule is explained in comments in three places, including the gate's
     // own header. Prose about a literal is not the literal.

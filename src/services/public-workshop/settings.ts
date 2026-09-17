@@ -38,16 +38,20 @@ export const APEX_MICRO = {
   operatorName: 'Thomas Norton',
   zoneName: 'apexmicro.ai',
   contactLocalPart: 'thomas',
-  tagline: 'a small digital workshop run by Thomas Norton',
+  tagline: 'a small digital workshop in Massachusetts',
   // SAID THE WAY A PERSON SAYS IT. The first version explained the business
   // model — what an experiment is, what happens to one, why some are closed —
   // before a visitor knew what was made here. It was accurate and it read like
   // a prospectus. Every fact in it survives: it is his, it is small, the things
   // are tried for real, software does much of the work, the responsibility is
   // his, and what does not work is closed and says so.
+  // THE WORKSHOP SPEAKS FOR ITSELF. The owner is not a public figure: the
+  // assets and products carry the name, a person carries the responsibility,
+  // and the person's name is on the terms page and nowhere else. Migration 320
+  // brings a Workshop founded under the earlier, first-person text into line.
   statement: [
-    'Apex Micro is my small digital workshop. I build practical, niche things, try them out in the real world, and keep working on the ones that turn out to be useful.',
-    'I\'m Thomas Norton. Software I\'ve built does a lot of the research and the day-to-day running, but everything here is mine and so is the responsibility. Each thing says what it costs, what you get and what it doesn\'t cover. The ones that don\'t work get closed, and their page stays up saying so.',
+    'Apex Micro is a small digital workshop in Massachusetts. It builds practical, niche things, tries them out in the real world, and keeps working on the ones that turn out to be useful.',
+    'Software built here does a lot of the research and the day-to-day running. A person is responsible for all of it and answers every message. Each thing says what it costs, what you get and what it doesn\'t cover. The ones that don\'t work get closed, and their page stays up saying so.',
   ].join('\n\n'),
 } as const;
 

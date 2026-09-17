@@ -145,13 +145,20 @@ export async function projectRegistry(founderId: string): Promise<PublicExperime
 }
 
 export interface PublicWorkshopFacts {
-  name: string; operator: string; origin: string; tagline: string; statement: string; about: string;
+  name: string;
+  /**
+   * THE OWNER IS NOT A PUBLIC FIGURE. Assets speak for themselves and the
+   * Workshop is the voice; this name appears on exactly one public surface,
+   * the terms page, where the law wants to know who is behind a trading name.
+   * Nothing else renders it, and a gate holds that.
+   */
+  legalOperator: string; origin: string; tagline: string; statement: string; about: string;
   contactEmail: string; postalAddress: string | null; region: string;
 }
 
 export function workshopFacts(w: PublicWorkshop): PublicWorkshopFacts {
   return {
-    name: w.publicName, operator: w.operatorName, origin: w.origin, tagline: `a small digital workshop run by ${w.operatorName}`,
+    name: w.publicName, legalOperator: w.operatorName, origin: w.origin, tagline: 'a small digital workshop in Massachusetts',
     statement: w.statement, about: w.about, contactEmail: w.contactEmail, postalAddress: w.postalAddress,
     region: 'Massachusetts',
   };

@@ -139,8 +139,11 @@ describe('the Workshop stands up through the door, and the world is read back', 
     expect(r.site.unverified).toEqual([]);
     expect(r.site.verified).toBe(14);
     // The world: the site answers, www redirects, the trust surface is there, the private institution is not.
-    expect((await publicGet('/')).text).toContain('small digital workshop run by Thomas Norton');
-    expect((await publicGet('/about')).text).toContain('I\'m Thomas Norton');
+    // THE OWNER IS NOT A PUBLIC FIGURE: the home page names the Workshop, not him.
+    expect((await publicGet('/')).text).toContain('small digital workshop in Massachusetts');
+    expect((await publicGet('/')).text).not.toContain('Thomas Norton');
+    expect((await publicGet('/about')).text).toContain('A person is responsible for all of it');
+    expect((await publicGet('/about')).text).not.toContain('Thomas Norton');
     expect((await publicGet('/privacy')).text).toContain('no tracking pixels');
     expect((await publicGet('/email')).text).toContain("Don't contact me");
     expect((await publicGet('/refunds')).text).toContain('you get your money back');
@@ -276,10 +279,10 @@ describe('Proof 1 is reframed under the Workshop without rewriting its history',
     expect(redirectedTo(await post('/foundry/public-workshop/sending'))).toMatch(/error=.*pending/);
     state.nextDomainStatus = 'verified';
     const second = await connectWorkshopSending(OWNER);
-    expect(second).toMatchObject({ status: 'verified', verified: true, identity: 'Thomas Norton — Apex Micro <thomas@apexmicro.ai>' });
+    expect(second).toMatchObject({ status: 'verified', verified: true, identity: 'Apex Micro <thomas@apexmicro.ai>' });
     // Written once: the same records asked for again change nothing.
     expect(state.cf.dns.filter((r) => r.name === 'send.apexmicro.ai')).toHaveLength(2);
-    expect((await getExperimentView(OWNER, X, NOW))!.readiness.sending).toMatchObject({ status: 'ready', fromLine: 'Thomas Norton — Apex Micro <thomas@apexmicro.ai>' });
+    expect((await getExperimentView(OWNER, X, NOW))!.readiness.sending).toMatchObject({ status: 'ready', fromLine: 'Apex Micro <thomas@apexmicro.ai>' });
     // THE WORKSHOP'S POST GOES TO THE WORKSHOP. Standing up the ears deploys
     // the program that hears, gives it a store of its own, and points the
     // Workshop's address at the program — no mailbox anywhere, private or
@@ -409,15 +412,19 @@ describe('Allow publishes the page; offers point at it and go out as the Worksho
       decision: 'struck', reason: 'added only to prove that a later approval carries no authority from an earlier one' });
   });
 
-  it('the hand writes as Thomas Norton — Apex Micro, pointing at the page, with the Workshop\'s footer; the contact is on the Workshop\'s record', async () => {
+  it('the hand writes as Apex Micro, never as a person, pointing at the page, with the Workshop\'s footer; the contact is on the Workshop\'s record', async () => {
     const reports = await runHand({ now: NOW, offersPerTick: 3 });
     expect(reports[0]).toMatchObject({ experimentId: X, offersSent: 3, exceptions: [] });
     for (const s of state.sends) {
-      expect(s.from).toBe('Thomas Norton — Apex Micro <thomas@apexmicro.ai>');
+      expect(s.from).toBe('Apex Micro <thomas@apexmicro.ai>');
       expect(s.reply_to).toBe('thomas@apexmicro.ai');
       expect(s.text).toContain(`https://apexmicro.ai/experiments/${PROOF1_SLUG}`);
       expect(s.text).not.toContain('buy.stripe.com');
-      expect(s.text).toContain('Apex Micro is a small digital workshop run by Thomas Norton. PO Box 123, Example, MA 01000.');
+      expect(s.text).toContain('Apex Micro is a small digital workshop. PO Box 123, Example, MA 01000.');
+      // Experiment 001's offer template is sealed material and signs as it was
+      // recorded; the Workshop's own footer, which every later test inherits,
+      // names nobody.
+      expect(s.text.slice(s.text.indexOf('\n—\n'))).not.toContain('Thomas Norton');
       expect(s.text).toContain('To hear nothing further from Apex Micro: https://apexmicro.ai/email');
       expect(s.text).not.toMatch(/\[[A-Z ]+\]|\{Business name\}/);
     }

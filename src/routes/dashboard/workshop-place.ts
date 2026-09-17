@@ -78,7 +78,7 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
   const body = html`
     <h1>${w.publicName} <span class="pill">${w.economicPause ? 'Paused' : 'Operating'}</span></h1>
     ${notice}
-    <p class="lede"><a href="${w.origin}" rel="noopener">${w.zoneName}</a> — ${w.publicName} is an independent digital workshop operated by ${w.operatorName}. Every test that reaches a stranger does so as ${w.operatorName} — ${w.publicName}, from ${w.contactEmail}, with a page at ${w.zoneName}.</p>
+    <p class="lede"><a href="${w.origin}" rel="noopener">${w.zoneName}</a> — ${w.publicName} is an independent digital workshop. Every test that reaches a stranger does so as ${w.publicName}, from ${w.contactEmail}, with a page at ${w.zoneName}. You are not a public figure here: your name appears only on the terms page, where the law wants to know who is behind a trading name.</p>
 
     <section class="know" id="health"><h2>Health</h2>
       ${health ? html`<dl class="facts">
@@ -151,8 +151,8 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
     <section class="know" id="identity"><h2>Identity</h2>
       <dl class="facts">
         <dt>Public name</dt><dd>${w.publicName}</dd>
-        <dt>Operator</dt><dd>${w.operatorName}</dd>
-        <dt>Sends as</dt><dd>${w.operatorName} — ${w.publicName} &lt;${w.contactEmail}&gt;</dd>
+        <dt>Operator</dt><dd>${w.operatorName} <span class="quiet">(on the terms page only)</span></dd>
+        <dt>Sends as</dt><dd>${w.publicName} &lt;${w.contactEmail}&gt;</dd>
         <dt>Postal address</dt><dd>${w.postalAddress ?? html`<span class="quiet">none recorded — commercial email must carry one, so no offer goes out until it does</span>`}</dd>
         <dt>Contact spacing</dt><dd>${String(w.contactGapDays)} days between tests to one address; at most ${String(w.contactCeilingPerYear)} a year</dd>
       </dl>

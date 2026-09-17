@@ -76,7 +76,7 @@ function shell(f: PublicWorkshopFacts, title: string, current: string, body: str
 ${body}
 </main>
 <footer>
-  <p><strong>${esc(f.name)}</strong> is a small digital workshop run by ${esc(f.operator)} in ${esc(f.region)}.</p>
+  <p><strong>${esc(f.name)}</strong> is a small digital workshop in ${esc(f.region)}.</p>
   <p><a href="/contact">Contact</a> · <a href="/privacy">Privacy</a> · <a href="/email">Email &amp; opt-out</a> · <a href="/refunds">Refunds</a> · <a href="/terms">Terms</a></p>
   ${f.postalAddress ? `<p>${postalLines(f.postalAddress).map(esc).join('<br />')}</p>` : ''}
 </footer>
@@ -117,19 +117,19 @@ export function renderAbout(f: PublicWorkshopFacts): string {
 <h1>About</h1>
 ${paras(f.statement)}
 ${f.about ? `<h2>A little more</h2>${paras(f.about)}` : ''}
-<h2>How I work</h2>
-<p>I look for small, specific problems where a modest, well-made thing would help — a shortlist somebody would otherwise put together by hand, a deadline that's easy to miss, a set of facts scattered across public sources. Before building anything bigger I try a small version for real: a proper offer, at a proper price, to a handful of people it might actually suit.</p>
-<p>Everything here says what you get, what it costs, whether it repeats (it doesn't, unless a page says so), what it doesn't cover, and where its information comes from. If you buy something and it's no use to you, you can have your money back. If you hear from me and would rather not, one line tells me so and I won't write again.</p>
+<h2>How the workshop works</h2>
+<p>It looks for small, specific problems where a modest, well-made thing would help — a shortlist somebody would otherwise put together by hand, a deadline that's easy to miss, a set of facts scattered across public sources. Before building anything bigger it tries a small version for real: a proper offer, at a proper price, to a handful of people it might actually suit.</p>
+<p>Everything here says what you get, what it costs, whether it repeats (it doesn't, unless a page says so), what it doesn't cover, and where its information comes from. If you buy something and it's no use to you, you can have your money back. If you hear from the workshop and would rather not, one line says so and it won't write again.</p>
 <h2>Where the software fits</h2>
-<p>Software I've built does a lot of the research and the day-to-day running. The decisions, the offers and the responsibility are mine. If something here is wrong, <a href="/contact">tell me</a> and I'll fix it.</p>
-<h2>What happens to things I try</h2>
+<p>Software built here does a lot of the research and the day-to-day running. A person makes the decisions, stands behind the offers and carries the responsibility. If something here is wrong, <a href="/contact">say so</a> and it will be fixed.</p>
+<h2>What happens to things it tries</h2>
 <dl>
   <dt>Open</dt><dd>You can buy it now, at the price on its page.</dd>
-  <dt>Pilot</dt><dd>The first run of something, so I don't know yet whether it will carry on.</dd>
+  <dt>Pilot</dt><dd>The first run of something, so nobody knows yet whether it will carry on.</dd>
   <dt>On its own now</dt><dd>It grew into a business of its own; its page here links to where it lives.</dd>
   <dt>Closed</dt><dd>It wasn't worth carrying on with. The page stays, with a short honest note of why.</dd>
 </dl>`;
-  return shell(f, 'About', '/about', body, `Who is behind ${f.name}.`);
+  return shell(f, 'About', '/about', body, `What ${f.name} is and how it works.`);
 }
 
 export function renderRegistry(f: PublicWorkshopFacts, registry: PublicExperiment[], which: 'all' | 'operating' | 'graduated' | 'closed'): string {
@@ -193,7 +193,7 @@ ${paras(x.sample)}
   const body = `
 <h1>${esc(x.title)}</h1>
 <p class="lede">${esc(x.summary)}</p>
-<p class="quiet">${x.status === 'testing' ? `A small pilot from ${esc(f.name)}. ` : `<span class="pill">${esc(x.statusLabel)}</span> ${esc(x.statusLine)} `}${esc(f.operator)}, ${esc(f.region)}.</p>
+<p class="quiet">${x.status === 'testing' ? `A small pilot from ${esc(f.name)}. ` : `<span class="pill">${esc(x.statusLabel)}</span> ${esc(x.statusLine)} `}${esc(f.name)}, ${esc(f.region)}.</p>
 ${x.graduatedTo ? `<p>It now lives at <a href="${esc(x.graduatedTo)}">${esc(x.graduatedTo.replace(/^https?:\/\//, ''))}</a>.</p>` : ''}
 ${x.successor ? `<p>It was reframed as <a href="/experiments/${x.successor.slug}">${esc(x.successor.title)}</a>.</p>` : ''}
 ${x.supersedes ? `<p class="quiet">This continues an earlier design, <a href="/experiments/${x.supersedes.slug}">${esc(x.supersedes.title)}</a>.</p>` : ''}
@@ -243,11 +243,11 @@ ${refundLine ? `<p>${esc(refundLine)}</p>` : ''}
 export function renderContact(f: PublicWorkshopFacts): string {
   const body = `
 <h1>Contact</h1>
-<p class="lede">Email <a href="mailto:${esc(f.contactEmail)}">${esc(f.contactEmail)}</a>. It comes straight to me.</p>
-<p>Replies to anything I send arrive at the same place. If you bought something and want your money back, there's a link in the delivery email — replying works just as well.</p>
-<p>If you'd rather not hear from me again, use the <a href="/email">opt-out page</a> or just say so in a reply.</p>
+<p class="lede">Email <a href="mailto:${esc(f.contactEmail)}">${esc(f.contactEmail)}</a>. A person reads it.</p>
+<p>Replies to anything the workshop sends arrive at the same place. If you bought something and want your money back, there's a link in the delivery email — replying works just as well.</p>
+<p>If you'd rather not hear from the workshop again, use the <a href="/email">opt-out page</a> or just say so in a reply.</p>
 ${f.postalAddress ? `<p>Post: ${postalLines(f.postalAddress).map(esc).join('<br />')}</p>` : ''}`;
-  return shell(f, 'Contact', '/contact', body, `How to reach ${f.operator} at ${f.name}.`);
+  return shell(f, 'Contact', '/contact', body, `How to reach ${f.name}.`);
 }
 
 export function renderPrivacy(f: PublicWorkshopFacts): string {
@@ -311,7 +311,7 @@ export function renderTerms(f: PublicWorkshopFacts): string {
   const body = `
 <h1>Terms</h1>
 <p class="lede">Short, because the work is.</p>
-<p><strong>Who you're dealing with.</strong> ${esc(f.name)} is a small digital workshop run by ${esc(f.operator)} in ${esc(f.region)}. It isn't a company and doesn't claim to be one.</p>
+<p><strong>Who you're dealing with.</strong> ${esc(f.name)} is a small digital workshop run by ${esc(f.legalOperator)} in ${esc(f.region)}. It isn't a company and doesn't claim to be one.</p>
 <p><strong>What you're buying.</strong> Exactly what the page describes, with the limits it states. These are small, early things: made carefully and described honestly, and claiming nothing beyond what their page says.</p>
 <p><strong>Price and renewal.</strong> The price on the page, once. Nothing renews unless a page says so, and none does.</p>
 <p><strong>Refunds.</strong> In full, on request, as described on the <a href="/refunds">refunds page</a>.</p>

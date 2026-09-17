@@ -1758,3 +1758,18 @@ main[data-place="foundry"]:has(.ask-surface)>.glance{margin-top:1.4rem}
   .eco-glance{grid-template-columns:repeat(3,minmax(0,1fr))}
   .eco-glance .tile.yours{grid-column:auto}
 }
+
+/* ── THE CHARTER (Tranche 1). One card on Controls: the owner's standing word,
+   read as facts, signed once with three numbers and a sentence. The form is
+   the only one on the owner surface that asks for numbers, so its inputs are
+   sized for a thumb and never narrower than the card. ── */
+.anchor{scroll-margin-top:72px}
+.ctl form.charter{display:grid;gap:var(--s2);margin-top:var(--s2)}
+.ctl form.charter label{display:grid;gap:4px;font-size:.84rem;color:var(--ink-2)}
+.ctl form.charter input,.ctl form.charter textarea{width:100%;max-width:100%;min-width:0;font:inherit;font-size:max(16px,1rem);
+  padding:11px 13px;min-height:44px;border:1px solid var(--line-2);border-radius:10px;background:var(--card-2);color:var(--ink)}
+.ctl form.charter textarea{min-height:88px;resize:vertical}
+.ctl form.charter input:focus-visible,.ctl form.charter textarea:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.ctl p.row form{margin:0}
+.ctl .rules{margin:.5rem 0 0;line-height:1.5}
+.ctl .rules b{color:var(--ink-2);font-weight:600}

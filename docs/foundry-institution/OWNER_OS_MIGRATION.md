@@ -1963,3 +1963,62 @@ from Home's "Also here" row on a phone.
   Resend as live probes) are not drawn: what is connected is listed, and the
   Workshop card says what may be touched, but no per-provider health probe
   exists to read.
+
+## The charter the owner signs once — 17 September 2026
+
+### Why
+
+Every real experiment so far was allowed by the owner pressing a button on its
+own page, and every act it needed was proposed and approved in that one press,
+as `founder:<id>`. That is the right shape for a first test and the wrong shape
+for a studio. The owner's brief for what Foundry is to become — a river of
+nickels, dozens of small sturdy things, none of which makes a new job for him —
+needs standing authority that is his, bounded, and ends on a date he can see.
+
+### What was built (Tranche 1 of the River of Nickels plan)
+
+- **`portfolio_envelopes`** (migration 319). One live charter per owner, signed
+  `founder:<id>` and refused for any other principal at the row; a month's
+  money, probes in flight (1–12), thinking a day, the sealed contact rules, the
+  public voice, his words, and an expiry no later than 92 days out. Immutable
+  once signed; withdrawn one way with a reason; never deleted.
+- **`portfolio_envelope_carves`**. A probe let in is a row: the envelope's
+  remainder is arithmetic over carves this calendar month plus thinking bought
+  at his scope, and the row guard refuses the carve over the month, the probe
+  beyond the places in flight, a second carve for the same test, and any carve
+  under a charter that has ended.
+- **The act-decision guard, widened by one clause.** `proposed_acts` may now be
+  decided by `charter:<envelope id>` at a company the envelope's owner owns,
+  only while the envelope is live. Migration 228's guard is rewritten in full
+  with the clause; the proposer still cannot approve its own proposal; the
+  legal and destructive rungs are untouched, on purpose — `chartered()` refuses
+  them before anything is decided, and `consequenceAllows` never consulted an
+  allowance for them.
+- **The hand.** `allowExperiment({ under: 'the charter' })` reads the charter
+  before the decision, decides the test and its three acts as the charter's
+  principal, and carves the test's cost from the envelope. Nothing calls it
+  under the charter yet: the Forge that will (Tranche 4) does not exist, and
+  the owner's own button still decides as `founder:<id>`.
+- **Controls: "The charter" card.** Sign with three numbers and a sentence;
+  renew as it stands; withdraw with the reason on record. The card says who
+  signed it and reads the envelope back as facts. **Home's Autonomy tile** says
+  "Chartered" with what is left while one stands. **The queue** asks once, from
+  the front page, when the charter is seven days from ending.
+- **The owner is not a public figure.** The Workshop is the only public voice:
+  the sender line is the Workshop's name; the site's tagline, home page,
+  experiment pages, contact page and the Workshop's own statement speak as the
+  Workshop (migration 320 brings the founding statement in production into
+  line); the hand's footer and the correspondence sign-off name nobody; the
+  Etsy listing copy names nobody. His name stays on exactly two surfaces where
+  the law wants to know who is behind a trading name — the terms page and the
+  listing's privacy policy. `scripts/check-the-owner-is-not-a-public-figure.mjs`
+  holds it and has a planted-defect test. Experiment 001's sealed offer
+  template is a record and is not rewritten.
+
+### What is deliberately not here
+
+- Production cognition ceilings are unchanged ($2 per company, $5 per owner,
+  $5 global a day): the charter's "thinking a day" is his number and the
+  environment's ceilings remain the hard stop beneath it.
+- No autopilot category moves to `act`; no boundary is opened. The charter
+  widens who may say yes to a proposed act, and nothing else.

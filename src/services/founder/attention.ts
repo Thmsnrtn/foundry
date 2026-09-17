@@ -11,7 +11,7 @@
 import { query } from '../../db/client.js';
 
 export interface AttentionItem {
-  kind: 'act' | 'advice' | 'noticed' | 'experiment';
+  kind: 'act' | 'advice' | 'noticed' | 'experiment' | 'charter';
   id: string;
   productId: string;
   companyName: string;
@@ -145,6 +145,21 @@ export async function waitingOn(founderId: string): Promise<AttentionItem[]> {
       ...(isCannotSay(c) ? {} : { effect: c.effect }),
     });
   }
+  // THE CHARTER ENDS ON A DATE HE CAN SEE. Seven days out it asks once, from
+  // the front page, to be renewed as it stands or let lapse; nothing else
+  // about it is a decision, and until then it asks nothing.
+  const { envelopeReading } = await import('../institution/charter.js');
+  const envelope = await envelopeReading(founderId);
+  const charterItems: AttentionItem[] = envelope && envelope.charter.daysLeft <= 7 ? [{
+    kind: 'charter', id: envelope.charter.id, productId: '', companyName: envelope.charter.publicVoice,
+    summary: envelope.charter.daysLeft === 0 ? 'The charter ends today' : `The charter ends in ${String(envelope.charter.daysLeft)} ${envelope.charter.daysLeft === 1 ? 'day' : 'days'}`,
+    detail: `Renewed, it stands as signed for another 90 days: $${(envelope.charter.monthlyCents / 100).toFixed(0)} a month, ${String(envelope.charter.probesInFlight)} probes in flight, $${(envelope.charter.cognitionCentsPerDay / 100).toFixed(2)} a day of thinking. Lapsed, every real test waits for you again.`,
+    yes: { label: 'Renew for 90 days', action: '/foundry/controls/charter', fields: {
+      monthly_dollars: (envelope.charter.monthlyCents / 100).toFixed(0), probes: String(envelope.charter.probesInFlight),
+      thinking_dollars: (envelope.charter.cognitionCentsPerDay / 100).toFixed(2), statement: envelope.charter.statement, return_to: 'foundry' } },
+    no: { label: 'Let it lapse', action: '/foundry/controls/charter/withdraw', fields: { reason: 'let lapse from the front page', return_to: 'foundry' } },
+    why: null, href: '/foundry/controls#charter',
+  }] : [];
   return [
     ...tests,
     ...workshop,
@@ -156,6 +171,7 @@ export async function waitingOn(founderId: string): Promise<AttentionItem[]> {
       no: { label: 'Not that', action: `/foundry/advice/${String(r.id)}/decline` },
       why: `/foundry/why/advice/${String(r.id)}`, href: `/foundry/companies/${String(r.product_id)}#advice`,
     })),
+    ...charterItems,
     ...noticed.map((n): AttentionItem => ({
       kind: 'noticed', id: String(n.id), productId: String(n.product_id), companyName: String(n.name),
       summary: String(n.proposed_responsibility), detail: String(n.rationale ?? 'Something I noticed and would look after, if you say so.'),

@@ -30,4 +30,4 @@ File → Import → Upload → choose this file → "Replace spreadsheet". Drop-
 
 Reply through Etsy messages and a person answers. If the workbook is no use to you, you can have your money back: message me through Etsy, or use the refunds page at apexmicro.ai/refunds. No form, no time limit, and you don't have to explain.
 
-Apex Micro, a small digital workshop run by Thomas Norton. Designed with AI assistance in building the formulas and layout, checked by hand.
+Apex Micro, a small digital workshop in Massachusetts. Designed with AI assistance in building the formulas and layout, checked by hand.
