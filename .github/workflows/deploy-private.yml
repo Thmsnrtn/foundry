@@ -33,9 +33,9 @@ name: Deploy Private Foundry
 # THE BRANCH NAME IS PER-SESSION, AND THAT IS WHY THERE IS MORE THAN ONE.
 # Each session may push its own designated branch and nothing else, so a
 # trigger naming only the branch that existed when this file was written stops
-# deploying the moment the campaign continues in a new session. Both are listed
-# rather than a `claude/**` glob: a deploy of the private institution should
-# name the branches it will accept, not accept whatever gets created.
+# deploying the moment the campaign continues in a new session. Each accepted
+# branch is named explicitly rather than using a broad glob: a deploy of the
+# private institution should say exactly which lineages may ship.
 on:
   push:
     branches:
@@ -44,6 +44,10 @@ on:
       # The River port session (Option A, 2026-09-08): the same lineage,
       # continued on this session's designated branch.
       - 'claude/foundry-river-constitution-rvd0mx'
+      # The supplied UI handoff V3 reconstruction is a direct descendant of the
+      # currently deployed private lineage. Its own North Star workflow proves
+      # owner-surface invariants before this production gate runs the full chain.
+      - 'gpt/ui-handoff-v3-north-star'
 
 jobs:
   # NOTHING DEPLOYS THAT HAS NOT PASSED THE CHAIN.
