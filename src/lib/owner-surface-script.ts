@@ -90,7 +90,7 @@ export const OWNER_SURFACE_SCRIPT =
   + `  (function(){var n=document.querySelector('nav.places');if(!n)return;`
   + `var row=n.firstElementChild;if(!row)return;\n`
   + `    var core={'/foundry':1,'/foundry/companies':1,'/foundry/experiments':1,`
-  + `'/foundry/inbox':1,'#ask-foundry':1};\n`
+  + `'/foundry/inbox':1,'/foundry#ask-foundry':1};\n`
   + `    function doors(){return Array.prototype.filter.call(row.children,function(e){`
   + `return e&&e.tagName==='A';});}\n`
   + `    function reset(){row.style.removeProperty('grid-template-columns');`
