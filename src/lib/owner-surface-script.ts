@@ -94,7 +94,7 @@ export const OWNER_SURFACE_SCRIPT =
   + `    function doors(){return Array.prototype.filter.call(row.children,function(e){`
   + `return e&&e.tagName==='A';});}\n`
   + `    function reset(){row.style.removeProperty('grid-template-columns');`
-  + `doors().forEach(function(a){a.style.removeProperty('display');`
+  + `doors().forEach(function(a){a.style.removeProperty('display');a.style.removeProperty('order');`
   + `a.style.removeProperty('font-size');var i=a.querySelector('svg');`
   + `if(i){i.style.removeProperty('width');i.style.removeProperty('height');}});}\n`
   + `    function apply(){if(!window.matchMedia('(max-width: 899px)').matches){reset();return;}\n`
@@ -109,7 +109,14 @@ export const OWNER_SURFACE_SCRIPT =
   + `      all.forEach(function(a){var href=a.getAttribute('href')||'';`
   + `var show=full?!a.classList.contains('desk'):(!!core[href]||(contextual&&a===active));`
   + `a.style.setProperty('display',show?'flex':'none','important');`
-  + `if(show)a.style.setProperty('font-size',full?'.51rem':'.62rem','important');\n`
+  + `if(show)a.style.setProperty('font-size',full?'.51rem':'.62rem','important');`
+  + `if(full){a.style.removeProperty('order');}else{var order=0;`
+  + `if(href==='/foundry')order=1;else if(href==='/foundry/companies')order=2;`
+  + `else if(contextual&&a===active)order=activeHref==='/foundry/decisions'?3:4;`
+  + `else if(href==='/foundry/experiments')order=contextual&&activeHref==='/foundry/decisions'?4:3;`
+  + `else if(href==='/foundry/inbox')order=contextual?5:4;`
+  + `else if(href==='/foundry#ask-foundry')order=contextual?6:5;`
+  + `if(order)a.style.setProperty('order',String(order),'important');else a.style.removeProperty('order');}\n`
   + `        var i=a.querySelector('svg');if(i&&show){i.style.width=full?'18px':'20px';`
   + `i.style.height=full?'18px':'20px';}});}\n`
   + `    apply();window.addEventListener('resize',apply,{passive:true});`
