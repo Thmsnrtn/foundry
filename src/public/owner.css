@@ -1513,3 +1513,89 @@ h2.rank .dim{margin-left:auto;font-family:var(--sans);font-size:.74rem;color:var
 .queue .qitem>p:nth-child(2){font-size:.98rem;line-height:1.35;margin-bottom:.3rem}
 .queue .qitem .pair{margin-top:.6rem}
 .queue .qitem .pair .btn{min-height:42px;font-size:.9rem}
+
+/* ── Experiments: probes with a stage, a bound, an exposure and a thesis ─── */
+.exp-hero{padding:.95rem .95rem .9rem}
+.exp-hero>header h2{font-size:1.25rem;display:flex;align-items:center;gap:.5rem;flex-wrap:wrap}
+.exp-hero>header h2 .state{font-size:.7rem}
+.exp-q{font-size:.92rem;color:var(--ink-2);line-height:1.45;margin:0 0 .8rem;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.exp-prog{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.2rem .9rem;align-items:end;margin:0 0 .8rem}
+.exp-prog .big{margin:0;font-family:var(--serif);font-size:1.7rem;line-height:1;color:var(--ink)}
+.exp-prog .big .quiet{font-family:var(--sans);font-size:.8rem}
+.exp-prog .prog{grid-column:1;height:8px;margin:0}
+.exp-prog .exp-n{grid-column:2;grid-row:1/3;margin:0;text-align:right;font-family:var(--serif);font-size:1.25rem;color:var(--ink);line-height:1.1;align-self:center;padding-left:.9rem;border-left:1px solid var(--v3-line)}
+.exp-prog .exp-n .quiet{display:block;font-family:var(--sans);font-size:.72rem}
+.exp-numbers{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:0 0 .7rem}
+.exp-numbers .tile{min-height:0;padding:.55rem .6rem}
+.exp-numbers .tile dd.v{font-size:1.25rem;margin-top:.25rem}
+.exp-numbers .tile dd.d{padding-top:.3rem;-webkit-line-clamp:2}
+.exp-numbers .tile dd.d .prog{margin-top:.2rem}
+.exp-stops{display:flex;flex-wrap:wrap;align-items:center;gap:.35rem;margin:0 0 .7rem}
+.exp-stops .quiet{font-size:.74rem;margin-right:.15rem}
+.exp-stops .chip{font-size:.72rem;padding:4px 9px;color:var(--ink-2)}
+.exp-stops .chip b{color:var(--ink);font-variant-numeric:tabular-nums;margin-left:.2rem}
+.exp-stops .chip.hit{border-color:var(--v3-red);color:var(--v3-red)}
+.exp-thesis{display:grid;grid-template-columns:minmax(0,1fr);gap:6px;margin:0 0 .8rem}
+.exp-thesis>div{border:1px solid var(--v3-line);border-radius:8px;padding:.6rem .7rem;background:rgba(0,0,0,.12)}
+.exp-thesis .k{display:flex;align-items:center;gap:.35rem;font-size:.72rem;font-weight:600;color:var(--ink-2);margin:0 0 .3rem}
+.exp-thesis .k.ok{color:var(--v3-mint)}.exp-thesis .k.bad{color:var(--v3-red)}
+.exp-thesis .k.bad .mk{color:var(--v3-red)}
+.exp-thesis p{margin:0;font-size:.84rem;line-height:1.42;color:var(--ink);display:-webkit-box;-webkit-line-clamp:4;-webkit-box-orient:vertical;overflow:hidden}
+.exp-links{display:flex;flex-wrap:wrap;gap:.5rem .9rem;align-items:center;margin:0}
+.exp-links .btn{width:auto;min-height:42px;font-size:.9rem}
+.exp-row .prog{margin-top:.55rem}
+.exp-row{padding:.85rem .95rem}
+.exp-eyebrow{display:flex;align-items:center;gap:.4rem;color:var(--v3-gold);margin-bottom:.2rem}
+.exp-eyebrow a{color:var(--ink-2);text-transform:none;letter-spacing:0;font-weight:500}
+main[data-place="experiments"] h1 .state{font-size:.72rem;vertical-align:middle;font-family:var(--sans);letter-spacing:0;font-weight:500}
+.exp-watch{padding:.8rem .8rem .5rem}
+.exp-watch .exp-numbers{margin-bottom:.6rem}
+.exp-watch>.quiet{margin-bottom:.35rem}
+.exp-steps>header{margin-bottom:.35rem}
+.stepper{list-style:none;margin:0;padding:0;display:grid;gap:0}
+.stepper li{display:grid;grid-template-columns:1.6rem minmax(0,1fr);gap:.1rem .6rem;padding:.55rem 0;border-top:1px solid var(--v3-line);position:relative}
+.stepper li:first-child{border-top:0}
+.stepper li i{grid-row:1/3;width:1.5rem;height:1.5rem;border-radius:50%;border:1px solid var(--v3-line-strong);display:inline-flex;align-items:center;justify-content:center;font:600 .7rem/1 var(--sans);font-style:normal;color:var(--ink-2);margin-top:.1rem}
+.stepper li.done i{background:var(--v3-mint);border-color:var(--v3-mint);color:#07100d}
+.stepper li.foundry i{border-style:dashed}
+.stepper li b{font-size:.9rem;font-weight:500;color:var(--ink)}
+.stepper li.done b{color:var(--ink-2)}
+.stepper li span{font-size:.78rem;color:var(--ink-3);line-height:1.4}
+.stepper li a{font-size:.8rem}
+.inspect{margin:1rem 0 0;border-top:1px solid var(--v3-line)}
+.inspect details.fold{border-top:0;border-bottom:1px solid var(--v3-line)}
+.inspect .fold>summary{padding:.75rem 0}
+.inspect .fold>summary h2{font-size:.98rem;font-weight:500}
+.inspect .fold>.know,.inspect .fold>dl,.inspect .fold>p,.inspect .fold>ul,.inspect .fold>form,.inspect .fold>details,.inspect .fold>div{margin-bottom:var(--s3)}
+.inspect .fold .facts{padding:0;border-top:0;font-size:.88rem}
+.inspect .fold>ul{padding-left:1.1rem;color:var(--ink-2);font-size:.92rem}
+.stop-panel{margin-top:1rem;border-color:rgba(236,118,108,.3)}
+.stop-panel h2 .mk{color:var(--v3-red)}
+.stop-panel .stack{margin-top:.5rem}
+/* Rules that used to live in <style> blocks on the experiment pages. */
+.stack{display:grid;gap:.5rem;max-width:26rem}
+.stack label{display:grid;gap:.25rem;font-size:.88rem;color:var(--ink-2)}
+.stack input{max-width:100%;box-sizing:border-box;font:inherit;font-size:max(16px,1rem);padding:11px 13px;min-height:44px;border:1px solid var(--line-2);border-radius:10px;background:var(--card);color:var(--ink)}
+.stack .btn{width:auto;justify-self:start}
+.plain{list-style:none;padding:0;margin:0}
+.plain li{margin:.4rem 0}
+.timeline{padding-left:1rem}
+.timeline li{margin:.5rem 0;overflow-wrap:anywhere}
+.launch{padding:1rem;margin:1rem 0 1.25rem}
+.launch>.act{margin:0 0 .35rem;padding:0}
+.launch .who{margin-top:.5rem}
+.launch .who summary{cursor:pointer}
+.launch .decision .btn{white-space:normal;text-align:left}
+.alsotrue{list-style:none;padding:0;margin:0}
+.alsotrue li{margin:.15rem 0}
+@media (max-width:480px){.launch{padding:.85rem}}
+@media (min-width:900px){
+  .exp-numbers{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .exp-thesis{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .exp-hero{max-width:64rem}
+  .exp-row{max-width:64rem}
+  .exp-watch,.exp-steps,.inspect,.stop-panel{max-width:64rem}
+  .stepper{grid-template-columns:repeat(auto-fit,minmax(11rem,1fr));gap:.6rem}
+  .stepper li{border-top:0;border-left:1px solid var(--v3-line);padding:.2rem 0 .2rem .7rem}
+  .stepper li:first-child{border-left:0;padding-left:0}
+}

@@ -10,9 +10,10 @@
 // sending address, allow the test. Foundry does the rest and shows its work.
 // =============================================================================
 import { Hono } from 'hono';
-import { html } from 'hono/html';
+import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import { count, page } from './foundry-shell.js';
+import { mark } from '../../views/owner/shell.js';
 import type { Where } from './foundry-shell.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
 import { renderDecision } from './decision-control.js';
@@ -62,13 +63,52 @@ experimentRoutes.get('/foundry/experiments', async (c: any) => {
   const founderId = await founderOf(c);
   if (!founderId) return c.redirect('/onboarding');
   const views = await listExperiments(founderId);
+  // THE ONE THAT IS ALIVE LEADS. A running test, or one waiting on him, is the
+  // instrument the page exists for; the rest are rows beneath it. Nothing here
+  // is a project card: stage, exposure, money, stop conditions and what the
+  // evidence can and cannot establish are all read from the rows that govern.
+  const featured = views.find((t) => t.state === 'running' || t.state === 'needs_you' || t.state === 'ready') ?? views[0] ?? null;
+  const rest = views.filter((t) => t !== featured);
+  const { designOf, readStopConditions } = await import('../../services/venture/probe-design.js');
+  const design = featured ? await designOf(featured.id) : null;
+  const stops = featured ? await readStopConditions(featured.id) : [];
+  const cls = (state: ExperimentView['state']): string => state === 'running' ? 'ok' : state === 'needs_you' || state === 'ready' ? 'watch' : state === 'completed' ? 'ok' : state === 'stopped' || state === 'invalid' ? 'bad' : 'quiet';
+  const pct = (v: ExperimentView): number | null => v.exposure.approved > 0 ? Math.round((100 * v.exposure.sent) / v.exposure.approved) : null;
+  const hero = featured ? html`<section class="panel exp-hero" aria-label="${featured.assetName ?? featured.title}">
+      <header><h2>${mark('experiment')}${featured.assetName ?? 'Experiment'} <span class="state ${cls(featured.state)}">${stateWord[featured.state]}</span></h2>
+        <a class="more-link" href="/foundry/experiments/${featured.id}">Open ${mark('arrow')}</a></header>
+      <p class="exp-q">${featured.why.question || featured.title}</p>
+      ${pct(featured) !== null ? html`<div class="exp-prog">
+        <p class="big"><b>${String(pct(featured))}%</b> <span class="quiet">written to</span></p>
+        <span class="prog"><i style="width:${String(Math.max(2, Math.min(100, pct(featured) ?? 0)))}%"></i></span>
+        <p class="exp-n"><b>${String(featured.exposure.sent)} / ${String(featured.exposure.approved)}</b> <span class="quiet">recipients</span></p>
+      </div>` : html`<p class="quiet">${featured.stateDetail}</p>`}
+      <dl class="numbers exp-numbers">
+        <div class="tile"><dt class="k">${mark('sent')}Delivered</dt><dd class="v">${String(featured.exposure.delivered)}</dd><dd class="d">${featured.exposure.killAt ? `of ${String(featured.exposure.killAt)} before it stops itself` : 'confirmed received'}</dd></div>
+        <div class="tile"><dt class="k">${mark('money')}Purchases</dt><dd class="v">${String(featured.money.payments)}</dd><dd class="d">${featured.money.payments ? `${cents(featured.money.paidCents, featured.money.currency)} paid` : 'so far'}</dd></div>
+        <div class="tile"><dt class="k">${mark('cash')}Spent</dt><dd class="v">${cents(featured.money.spentCents)}</dd><dd class="d">of ${cents(featured.money.allowanceCents)} allowed</dd></div>
+        <div class="tile"><dt class="k">${mark('changed')}Window</dt><dd class="v">${featured.rules.daysLeft != null ? html`${String(featured.rules.daysLeft)} <span class="dim">days</span>` : html`<span class="dim">—</span>`}</dd><dd class="d">${featured.rules.windowClosesAt ? `closes ${featured.rules.windowClosesAt.slice(0, 10)}` : 'opens when the offer is placed'}</dd></div>
+      </dl>
+      ${stops.length ? html`<p class="exp-stops"><span class="quiet">Stops itself at</span>${stops.map((x) => html`<span class="chip${x.met ? ' hit' : ''}">${x.whatItIs} <b>${String(x.count)} / ${String(x.threshold)}</b></span>`)}</p>`
+    : featured.rules.stop.length ? html`<p class="exp-stops"><span class="quiet">Stops when</span>${featured.rules.stop.map((x) => html`<span class="chip">${x}</span>`)}</p>` : ''}
+      <div class="exp-thesis">
+        <div><b class="k">${mark('spark')}Prediction</b><p>${featured.why.whatWeExpect}</p></div>
+        <div><b class="k ok">${mark('check')}What this can prove</b><p>${design?.canProve ?? 'Not recorded.'}</p></div>
+        <div><b class="k bad">${mark('stop')}What it cannot prove</b><p>${design?.cannotProve ?? 'Not recorded.'}</p></div>
+      </div>
+      <p class="exp-links"><a class="btn go" href="/foundry/experiments/${featured.id}">${featured.state === 'needs_you' ? 'What it needs from you' : featured.state === 'ready' ? 'Decide' : 'Open the test'}</a>
+        <a class="why" href="/foundry/experiments/${featured.id}/decide">Everything it rests on</a></p>
+    </section>` : '';
   const body = html`
     <h1>Experiments</h1>
     <p class="lede">${views.length === 0 ? 'No real test is set up yet. When one is, it appears here with what it needs from you.'
     : `${count(views.length, 'real test')}. Each is one question put to the world, with the prediction sealed before it runs.`}</p>
-    ${views.map((v) => html`<a class="item experiment-index-item" href="/foundry/experiments/${v.id}">
+    ${hero}
+    ${rest.length ? html`<h2 class="rank">Other tests<span class="dim">${String(rest.length)}</span></h2>` : ''}
+    ${rest.map((v) => html`<a class="item experiment-index-item exp-row" href="/foundry/experiments/${v.id}">
       <p><strong>${v.assetName ?? v.title}</strong> <span class="pill">${stateWord[v.state]}</span></p>
       <p class="quiet">${v.stateDetail}</p>
+      ${pct(v) !== null ? html`<span class="prog"><i style="width:${String(Math.max(2, Math.min(100, pct(v) ?? 0)))}%"></i></span>` : ''}
     </a>`)}
     <p class="quiet"><a href="/foundry/experiments/next">What to test next</a> — the questions
       nobody has answered, and what the tests so far could not establish.</p>`;
@@ -192,9 +232,38 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
   const listing = (await offerShapePlanOf(id))?.listing ?? null;
   const approve = listing && v.state === 'ready' ? await consequenceOfApproving(id) : null;
   const liveListing = listing && v.state === 'running' && v.offer.paymentLinkUrl ? v.offer.paymentLinkUrl : null;
+  // WHAT THE OWNER READS FIRST: a state, four numbers, where it stops, what
+  // happens next. Everything the decision rests on is one fold down, and every
+  // form is where the act belongs. Nothing is hidden; it is ordered.
+  const pctDone = v.exposure.approved > 0 ? Math.round((100 * v.exposure.sent) / v.exposure.approved) : null;
+  const { readStopConditions } = await import('../../services/venture/probe-design.js');
+  const stopReadings = await readStopConditions(id);
+  const stateCls = v.state === 'running' || v.state === 'completed' ? 'ok' : v.state === 'needs_you' || v.state === 'ready' ? 'watch' : v.state === 'stopped' || v.state === 'invalid' ? 'bad' : 'quiet';
+  const watch = html`<section class="panel exp-watch" aria-label="Where it stands">
+      <dl class="numbers exp-numbers">
+        <div class="tile"><dt class="k">${mark('sent')}Written to</dt><dd class="v">${String(v.exposure.sent)}${v.exposure.approved ? html` <span class="dim">/ ${String(v.exposure.approved)}</span>` : ''}</dd><dd class="d">${pctDone !== null ? html`<span class="prog"><i style="width:${String(Math.max(2, Math.min(100, pctDone)))}%"></i></span>` : `${String(v.exposure.pending)} still to review`}</dd></div>
+        <div class="tile"><dt class="k">${mark('check')}Delivered</dt><dd class="v">${String(v.exposure.delivered)}</dd><dd class="d">${v.exposure.bounced ? `${String(v.exposure.bounced)} bounced` : v.exposure.killAt ? `of ${String(v.exposure.killAt)} before it stops itself` : 'confirmed received'}</dd></div>
+        <div class="tile"><dt class="k">${mark('money')}Paid</dt><dd class="v">${String(v.money.payments)}</dd><dd class="d">${v.money.payments ? `${cents(v.money.paidCents, v.money.currency)}${v.money.refunds ? ` · ${String(v.money.refunds)} refunded` : ''}` : 'no purchases yet'}</dd></div>
+        <div class="tile"><dt class="k">${mark('cash')}Spent</dt><dd class="v">${cents(v.money.spentCents)}</dd><dd class="d">of ${cents(v.money.allowanceCents)} allowed</dd></div>
+      </dl>
+      ${stopReadings.length ? html`<p class="exp-stops"><span class="quiet">Stops itself at</span>${stopReadings.map((x) => html`<span class="chip${x.met ? ' hit' : ''}">${x.whatItIs} <b>${String(x.count)} / ${String(x.threshold)}</b></span>`)}</p>`
+    : v.rules.stop.length ? html`<p class="exp-stops"><span class="quiet">Stops when</span>${v.rules.stop.map((x) => html`<span class="chip">${x}</span>`)}</p>` : ''}
+      ${v.rules.windowClosesAt ? html`<p class="quiet">Window closes ${v.rules.windowClosesAt}${v.rules.daysLeft != null ? ` · ${count(v.rules.daysLeft, 'day')} left` : ''}.</p>` : ''}
+    </section>`;
+  const stepper = html`<section class="panel exp-steps" id="steps" aria-label="What happens next">
+      <header><h2>${mark('changed')}What happens next</h2><span class="dim">${String(v.steps.filter((x) => x.status === 'done').length)} of ${String(v.steps.length)} done</span></header>
+      <ol class="stepper">${v.steps.map((x, i) => html`<li class="${x.status}">
+        <i>${x.status === 'done' ? '✓' : String(i + 1)}</i>
+        <b>${x.label}${x.status === 'todo' && x.key === 'recipients' ? html` <a href="${x.href}">open</a>` : ''}</b>
+        <span>${x.detail}</span></li>`)}</ol>
+    </section>`;
+  const fold = (id2: string, title: string, gist: string, inner: HtmlEscapedString | Promise<HtmlEscapedString>, open = false) =>
+    html`<details class="fold" id="${id2}"${open ? raw(' open') : ''}><summary><h2>${title}</h2><span class="gist">${gist}</span></summary>${inner}</details>`;
   const body = html`
-    <h1>${v.assetName ?? 'The test'} <span class="pill">${v.stateLabel}</span></h1>
+    <p class="act exp-eyebrow">${mark('experiment')}Experiment${v.publicPage ? html` · <a href="${v.publicPage.url}" rel="noopener">public page</a>` : ''}</p>
+    <h1>${v.assetName ?? 'The test'} <span class="state ${stateCls}">${v.stateLabel}</span></h1>
     ${notice(done, error)}
+    <p class="lede">${v.stateDetail}</p>
     ${launch ? html`<section class="launch" id="authorise">
       <p class="act">First real market test</p>
       ${renderDecision({
@@ -222,55 +291,24 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
       <p class="quiet">Approving seals the design and sets the allowance. It contacts nobody and publishes nothing; opening the shop and listing it are your own acts, below.
         <a class="why" href="/foundry/experiments/${id}/decide">Everything this rests on</a></p>
     </section>` : ''}
-    ${blocked ? html`<section class="know" id="blocked">
-      <h2>${v.title} — blocked</h2>
-      <p><strong>${blocked.attempting}</strong> could not proceed.</p>
-      <p>${blocked.because}</p>
-      ${blocked.dependency ? html`<p class="quiet">What is down: ${blocked.dependency}.</p>` : ''}
-      <p class="quiet">No external effect occurred. ${blocked.ownerAction
-    ? html`<strong>You need to: ${blocked.ownerAction}</strong>`
-    : 'Owner action: none — this is Foundry\'s to repair, and it is being repaired.'}</p>
-      <p class="quiet">Last checked ${blocked.checkedAt}.</p>
+    ${blocked ? html`<section class="one alert" id="blocked"><div class="one-in">
+      <p class="act">Blocked</p>
+      <h2>${blocked.attempting} could not proceed</h2>
+      <p class="lead">${blocked.because}</p>
+      </div><dl class="facts">
+      ${blocked.dependency ? html`<dt>What is down</dt><dd>${blocked.dependency}</dd>` : ''}
+      <dt>External effect</dt><dd>none occurred</dd>
+      <dt>Owner action</dt><dd>${blocked.ownerAction ? html`<strong>${blocked.ownerAction}</strong>` : 'none — this is Foundry\'s to repair, and it is being repaired'}</dd>
+      <dt>Last checked</dt><dd>${blocked.checkedAt}</dd></dl>
     </section>` : ''}
-    <p class="lede">${v.stateDetail}</p>
     ${'notNow' in decision && v.state === 'needs_you' ? html`<section class="know" id="notyet">
       <h2>Not yet</h2><ul>${decision.notNow.map((m) => html`<li>${m}</li>`)}</ul>
       <p class="quiet">Authorising is refused until then by the rows themselves, not only by this page.</p>
     </section>` : ''}
     ${v.exceptions.length ? html`<section class="know" id="exceptions"><h2>Needs your attention</h2>
       <ul>${v.exceptions.map((x) => html`<li>${x}</li>`)}</ul></section>` : ''}
-
-    ${short ? html`<section class="know said" id="short"><h2>${short.headline}</h2>
-      <ul class="plain">${short.lines.map((l) => html`<li>${l}</li>`)}</ul>
-      <p class="quiet">${short.sealed ? 'This was written before you decided and sealed when you did, so it cannot be edited to match the result.' : 'Written before this runs. It seals when you decide.'} <a class="why" href="/foundry/experiments/${id}/decide">Before you decide</a> · <a class="why" href="/foundry/why/experiment/${id}">Show your work</a></p>
-    </section>` : ''}
-
-    <section class="know" id="what"><h2>What this tests</h2>
-      <p><strong>Question</strong> — ${v.why.question || v.title}</p>
-      <p><strong>What Foundry does</strong> — ${v.why.whatWeDo}</p>
-      <p><strong>Prediction, sealed</strong> — ${v.why.whatWeExpect}</p>
-      <p><strong>Would disprove it</strong> — ${v.why.wouldDisprove}</p>
-      <p class="row"><a class="why" href="/foundry/why/experiment/${id}">Show your work</a></p>
-    </section>
-
-    <section class="know" id="reconciled"><h2>What actually happened</h2>
-      <p class="quiet">Counted from the rows, not remembered. Each line says what it is and
-        what it deliberately leaves out.</p>
-      ${reconciled.acts.length === 0 ? html`<p>No act has authorised writing to anybody for
-        this test.</p>` : html`<ul class="plain">${reconciled.acts.map((a) => html`<li>
-          <b>${a.summary}</b>
-          <p class="quiet">${a.decidedBy ? `Decided by ${a.decidedBy} on ${a.decidedAt ?? ''}.` : 'Not decided.'}
-            ${a.revokedAt ? `Withdrawn ${a.revokedAt}.` : a.consumedAt ? `Used ${a.consumedAt}.` : `Unused, expires ${a.expiresAt}.`}</p>
-        </li>`)}</ul>`}
-      <p><strong>${reconciled.remainingAuthority}</strong></p>
-      ${[['Who', reconciled.cohort], ['What reached them', reconciled.reached],
-    ['What came back', reconciled.cameBack],
-    ['Not evidence about this test', reconciled.notEvidence]].map(([label, counts]) => html`
-        <details><summary class="quiet">${label as string}</summary>
-          <ul class="plain">${(counts as Array<{ what: string; n: number; because: string }>)
-    .map((x) => html`<li><b>${String(x.n)}</b> ${x.what}<p class="quiet">${x.because}</p></li>`)}</ul>
-        </details>`)}
-    </section>
+    ${watch}
+    ${stepper}
 
     ${listing ? html`<section class="know" id="acts"><h2>Your acts</h2>
       <p class="quiet">Only what you must do yourself. Foundry cannot open the shop, attach a bank account, opt out of the venue's advertising, accept its terms, or publish the listing on your behalf.</p>
@@ -309,9 +347,6 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
         <label>Amount, in cents <input type="number" name="amount_cents" min="1" step="1" required placeholder="1400" /></label>
         <button class="btn" type="submit">Record this refund</button></form>
     </section>` : ''}
-    <section class="know" id="steps"><h2>Before it runs</h2>
-      <ol class="steps">${v.steps.map(step)}</ol>
-    </section>
 
     ${listing ? '' : v.readiness.sending.status !== 'ready' && v.state !== 'declined' ? html`<section class="know" id="sending"><h2>Email sending</h2>
       <p>${v.readiness.sending.detail}</p>
@@ -321,31 +356,59 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
         <label>Resend API key for that domain <input type="password" name="credential" required autocomplete="off" /></label>
         <p class="quiet">The key is stored encrypted and used only to send. Foundry checks with the provider that the domain is verified before accepting it.</p>
         <button class="btn yes" type="submit">Connect</button></form>` : ''}
-    </section>` : html`<section class="know" id="sending"><h2>Email sending</h2><p>${v.readiness.sending.detail}</p></section>`}
+    </section>` : ''}
 
-    <section class="know" id="allow"><h2>${launch ? 'What authorising means' : 'What you allowed'}</h2>
+    <div class="inspect" id="inspect">
+    ${short ? fold('short', short.headline, short.sealed ? 'sealed' : 'not yet sealed', html`<div class="know said">
+      <ul class="plain">${short.lines.map((l) => html`<li>${l}</li>`)}</ul>
+      <p class="quiet">${short.sealed ? 'This was written before you decided and sealed when you did, so it cannot be edited to match the result.' : 'Written before this runs. It seals when you decide.'} <a class="why" href="/foundry/experiments/${id}/decide">Before you decide</a> · <a class="why" href="/foundry/why/experiment/${id}">Show your work</a></p>
+    </div>`, v.state === 'needs_you' || v.state === 'ready') : ''}
+
+    ${fold('what', 'What this tests', v.why.question ? 'the question, the act, the prediction' : '', html`<dl class="facts">
+      <dt>Question</dt><dd>${v.why.question || v.title}</dd>
+      <dt>What Foundry does</dt><dd>${v.why.whatWeDo}</dd>
+      <dt>Prediction, sealed</dt><dd>${v.why.whatWeExpect}</dd>
+      <dt>Would disprove it</dt><dd>${v.why.wouldDisprove}</dd>
+    </dl><p class="row"><a class="why" href="/foundry/why/experiment/${id}">Show your work</a></p>`)}
+
+    ${fold('reconciled', 'What actually happened', `${String(reconciled.acts.length)} ${reconciled.acts.length === 1 ? 'act' : 'acts'}, counted from the rows`, html`
+      <p class="quiet">Counted from the rows, not remembered. Each line says what it is and
+        what it deliberately leaves out.</p>
+      ${reconciled.acts.length === 0 ? html`<p>No act has authorised writing to anybody for
+        this test.</p>` : html`<ul class="plain">${reconciled.acts.map((a) => html`<li>
+          <b>${a.summary}</b>
+          <p class="quiet">${a.decidedBy ? `Decided by ${a.decidedBy} on ${a.decidedAt ?? ''}.` : 'Not decided.'}
+            ${a.revokedAt ? `Withdrawn ${a.revokedAt}.` : a.consumedAt ? `Used ${a.consumedAt}.` : `Unused, expires ${a.expiresAt}.`}</p>
+        </li>`)}</ul>`}
+      <p><strong>${reconciled.remainingAuthority}</strong></p>
+      ${[['Who', reconciled.cohort], ['What reached them', reconciled.reached],
+    ['What came back', reconciled.cameBack],
+    ['Not evidence about this test', reconciled.notEvidence]].map(([label, counts]) => html`
+        <details><summary class="quiet">${label as string}</summary>
+          <ul class="plain">${(counts as Array<{ what: string; n: number; because: string }>)
+    .map((x) => html`<li><b>${String(x.n)}</b> ${x.what}<p class="quiet">${x.because}</p></li>`)}</ul>
+        </details>`)}`)}
+
+    ${fold('allow', launch ? 'What authorising means' : 'What you allowed', '', html`
       <ul>${v.allow.explanation.map((l) => html`<li>${l}</li>`)}</ul>
       ${launch ? html`<form method="POST" action="/foundry/experiments/${id}/decline">
-        <button class="btn" type="submit">Do not run it</button></form>` : ''}
-    </section>
+        <button class="btn" type="submit">Do not run it</button></form>` : ''}`)}
 
-    <section class="know" id="offer"><h2>The offer</h2>
+    ${fold('offer', 'The offer', v.offer.price, html`
       <p><strong>${v.offer.price}</strong>${v.offer.limits ? html` · <span class="quiet">${v.offer.limits}</span>` : ''}</p>
       ${v.offer.paymentLinkUrl ? html`<p>${listing ? 'Listed at' : 'Payment link'}: <a href="${v.offer.paymentLinkUrl}" rel="noopener">${v.offer.paymentLinkUrl}</a></p>` : listing ? html`<p class="quiet">${v.state === 'running' ? 'Not listed yet; paste the address above when it is live.' : `Listed by you on ${listing.venueName} after you approve the test.`}</p>` : html`<p class="quiet">${v.state === 'running' ? 'Foundry has not placed the link yet; it tries on every pass.' : 'The link is created by Foundry after you allow the test.'}</p>`}
       ${v.offer.deliverable ? html`<p>What a buyer receives: <strong>${v.offer.deliverable.title}</strong>${v.offer.deliverable.pulledAt ? ` (data pulled ${v.offer.deliverable.pulledAt})` : ''}${v.offer.deliverable.quality.ok || listing ? '' : html` — <span class="quiet">would not pass the quality check: ${v.offer.deliverable.quality.failures.join('; ')}</span>`}</p>` : html`<p class="quiet">Nothing to deliver is attached yet.</p>`}
       ${v.state === 'running' && !v.offer.paymentLinkUrl && !listing ? html`<div class="pair">
         <form method="POST" action="/foundry/experiments/${id}/place"><button class="btn" type="submit">Try placing it now</button></form>
-        <form method="POST" action="/foundry/experiments/${id}/payment" class="stack"><label>Or a Stripe link you made, tagged for this test <input type="url" name="url" required placeholder="https://buy.stripe.com/..." /></label><button class="btn" type="submit">Use this link</button></form></div>` : ''}
-    </section>
+        <form method="POST" action="/foundry/experiments/${id}/payment" class="stack"><label>Or a Stripe link you made, tagged for this test <input type="url" name="url" required placeholder="https://buy.stripe.com/..." /></label><button class="btn" type="submit">Use this link</button></form></div>` : ''}`)}
 
-    ${v.publicPage ? html`<section class="know" id="public"><h2>Public page</h2>
+    ${v.publicPage ? fold('public', 'Public page', v.publicPage.status, html`
       <p><a href="${v.publicPage.url}" rel="noopener">${v.publicPage.url}</a> <span class="pill">${v.publicPage.status}</span></p>
       <p class="quiet">${v.publicPage.detail}</p>
       <p class="quiet"><a href="/foundry/public-workshop/preview/${id}">Preview as it would be published</a> · <a href="/foundry/public-workshop">The Workshop</a></p>
-      ${v.publicPage.gate.length ? html`<p><strong>Before anyone is written to:</strong></p><ul>${v.publicPage.gate.map((g) => html`<li>${g}</li>`)}</ul>` : ''}
-    </section>` : ''}
+      ${v.publicPage.gate.length ? html`<p><strong>Before anyone is written to:</strong></p><ul>${v.publicPage.gate.map((g) => html`<li>${g}</li>`)}</ul>` : ''}`) : ''}
 
-    ${listing ? '' : html`<section class="know" id="reach"><h2>Reach</h2>
+    ${listing ? '' : fold('reach', 'Reach', `${String(v.exposure.approved)} approved · ${String(v.exposure.excluded)} excluded`, html`
       <dl class="facts">
         <dt>Approved to contact</dt><dd>${String(v.exposure.approved)}</dd>
         <dt>Excluded</dt><dd>${String(v.exposure.excluded)}</dd>
@@ -354,47 +417,34 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
         <dt>Confirmed received</dt><dd>${String(v.exposure.delivered)}${v.exposure.killAt ? ` of ${v.exposure.killAt} before it stops itself` : ''}</dd>
         <dt>Bounced</dt><dd>${String(v.exposure.bounced)}</dd>
       </dl>
-      <p class="quiet"><a href="/foundry/experiments/${id}/recipients">Who may be contacted</a></p>
-    </section>`}
+      <p class="quiet"><a href="/foundry/experiments/${id}/recipients">Who may be contacted</a></p>`)}
 
-    <section class="know" id="money"><h2>Money</h2>
+    ${fold('money', 'Money', `${cents(v.money.spentCents)} spent of ${cents(v.money.allowanceCents)}`, html`
       <dl class="facts">
         <dt>Allowance</dt><dd>${cents(v.money.allowanceCents)}</dd>
         <dt>Spent by Foundry</dt><dd>${cents(v.money.spentCents)}</dd>
         <dt>Paid by customers</dt><dd>${cents(v.money.paidCents, v.money.currency)} (${count(v.money.payments, 'payment')})</dd>
         <dt>Refunded</dt><dd>${cents(v.money.refundedCents, v.money.currency)} (${count(v.money.refunds, 'refund')})</dd>
       </dl>
-      ${v.controls.allowance ? html`<p class="quiet">${v.controls.allowance.statement}</p>` : ''}
-    </section>
+      ${v.controls.allowance ? html`<p class="quiet">${v.controls.allowance.statement}</p>` : ''}`)}
 
-    <section class="know" id="rules"><h2>Rules it runs under</h2>
+    ${fold('rules', 'Rules it runs under', '', html`
       <p>${v.rules.success}</p>
       <p>It stops when: ${v.rules.stop.join('; ')}.</p>
-      ${v.rules.windowClosesAt ? html`<p class="quiet">Window closes ${v.rules.windowClosesAt}${v.rules.daysLeft != null ? ` (${count(v.rules.daysLeft, 'day')} left)` : ''}.</p>` : ''}
-    </section>
+      ${v.rules.windowClosesAt ? html`<p class="quiet">Window closes ${v.rules.windowClosesAt}${v.rules.daysLeft != null ? ` (${count(v.rules.daysLeft, 'day')} left)` : ''}.</p>` : ''}`)}
 
-    <section class="know" id="learned"><h2>${v.learned.headline}</h2>
+    ${fold('learned', v.learned.headline, '', html`
       <p>${v.learned.detail}</p>
       <p class="quiet">${v.learned.evidence}</p>
-      ${v.judgment ? html`<p><strong>Judgment</strong> — ${v.judgment}</p>` : ''}
-    </section>
+      ${v.judgment ? html`<p><strong>Judgment</strong> — ${v.judgment}</p>` : ''}`)}
 
-    ${v.controls.canStop ? html`<section class="know" id="stop"><h2>Stop</h2>
-      <p>Stopping withdraws permission and the offer at once. Nothing more is sent; what the world already did stays on record. It cannot be restarted.</p>
-      <form method="POST" action="/foundry/experiments/${id}/stop" class="stack">
-        <label>Why <input type="text" name="reason" required placeholder="one line, for the record" /></label>
-        <button class="btn" type="submit">Stop this test</button></form>
-    </section>` : ''}
+    ${fold('timeline', 'What happened', v.timeline.length ? `${String(v.timeline.length)} ${v.timeline.length === 1 ? 'event' : 'events'}` : 'nothing yet', v.timeline.length
+    ? html`<ul class="steps">${v.timeline.map((t) => html`<li><span class="k">${t.kind}</span><span>${t.text}</span><time>${t.at.slice(0, 16).replace('T', ' ')}</time></li>`)}</ul>`
+    : html`<p class="quiet">Nothing yet.</p>`)}
 
-    <section class="know" id="timeline"><h2>What happened</h2>
-      ${v.timeline.length ? html`<ul class="timeline">${v.timeline.map((t) => html`<li><span class="quiet">${t.at.slice(0, 16).replace('T', ' ')} · ${t.kind}</span><br />${t.text}</li>`)}</ul>` : html`<p class="quiet">Nothing yet.</p>`}
-    </section>
+    ${fold('details', 'Details', '', html`<dl class="facts">${v.details.map(([k, val]) => html`<dt>${k}</dt><dd>${val}</dd>`)}</dl>`)}
 
-    <details id="details"><summary>Details</summary>
-      <dl class="facts">${v.details.map(([k, val]) => html`<dt>${k}</dt><dd>${val}</dd>`)}</dl>
-    </details>
-
-    ${genome === null ? '' : html`<details id="kind"><summary>What kind of test this is</summary>
+    ${genome === null ? '' : fold('kind', 'What kind of test this is', '', html`
       <dl class="facts">${DIMENSIONS.map((d) => html`<dt>${d.replace(/_/g, ' ')}</dt>
         <dd>${genome.traits[d].value === null
     ? html`<span class="unknown">not recorded</span>`
@@ -402,21 +452,15 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
       ${alike === null ? '' : html`<p class="quiet">${alike.because}</p>`}
       ${alike === null || alike.against === null ? '' : html`<p class="quiet">Same:
         ${alike.shared.join(', ') || 'nothing'}. Different:
-        ${alike.differs.join(', ') || 'nothing'}.</p>`}
-    </details>`}
-    <style>
-      .steps{padding-left:1rem}.steps li{margin:.5rem 0}.steps li.done>p:first-child{opacity:.75}
-      .facts{display:grid;grid-template-columns:minmax(8rem,auto) 1fr;gap:.25rem .75rem;margin:0}.facts dd{margin:0}
-      .stack{display:grid;gap:.5rem;max-width:26rem}.stack label{display:grid;gap:.25rem}.stack input{max-width:100%;box-sizing:border-box}
-      .timeline{padding-left:1rem}.timeline li{margin:.5rem 0;overflow-wrap:anywhere}
-      .plain{list-style:none;padding:0;margin:0}.plain li{margin:.4rem 0}
-      .launch{background:var(--card,#fff);border:1px solid var(--line,#e2e6de);border-radius:14px;
-        padding:1rem;margin:1rem 0 1.25rem}
-      .launch>.act{margin:0 0 .35rem}
-      .launch .who{margin-top:.5rem}
-      .launch .who summary{cursor:pointer}
-      @media (max-width:480px){.launch{padding:.85rem;border-radius:12px}}
-    </style>`;
+        ${alike.differs.join(', ') || 'nothing'}.</p>`}`)}
+    </div>
+
+    ${v.controls.canStop ? html`<section class="panel stop-panel" id="stop"><header><h2>${mark('stop')}Stop this test</h2></header>
+      <p class="quiet">Stopping withdraws permission and the offer at once. Nothing more is sent; what the world already did stays on record. It cannot be restarted.</p>
+      <form method="POST" action="/foundry/experiments/${id}/stop" class="stack">
+        <label>Why <input type="text" name="reason" required placeholder="one line, for the record" /></label>
+        <button class="btn" type="submit">Stop this test</button></form>
+    </section>` : ''}`;
   return c.html(page(`${v.assetName ?? 'Experiment'} — ${v.stateLabel}`, body, 'experiments', where(v, 'test')));
 });
 
@@ -512,10 +556,7 @@ experimentRoutes.get('/foundry/experiments/:id/decide', async (c: any) => {
       <p class="quiet">Allowing seals this record, publishes the page and lets Foundry begin writing on its next pass. Nothing is sent before you press it.</p>`
     : html`<p class="noticed">${v.allow.reason} Allowing is refused until then, by the rows themselves, not only by this page.</p>`}
     </section>`}
-    <style>
-      .facts{display:grid;grid-template-columns:minmax(8rem,auto) 1fr;gap:.25rem .75rem;margin:0}.facts dd{margin:0}
-      .plain{list-style:none;padding:0;margin:0}.plain li{margin:.4rem 0}
-    </style>`;
+`;
   return c.html(page('Before you decide', body, 'experiments', where(v, 'decide')));
 });
 
