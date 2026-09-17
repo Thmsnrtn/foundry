@@ -101,11 +101,14 @@ BEGIN
        OR NEW.expires_at IS NOT OLD.expires_at;
 END;
 
--- A charter he signed is a fact about him, even after it ends.
+-- A charter he signed is a fact about him, even after it ends. Append-only
+-- means history is not rewritten; it does not mean his data outlives his
+-- right to have it removed, so erasure of his account is the one delete.
 CREATE TRIGGER portfolio_envelope_no_delete
 BEFORE DELETE ON portfolio_envelopes
 BEGIN
-  SELECT RAISE(ABORT,'portfolio_envelope:immutable');
+  SELECT RAISE(ABORT,'portfolio_envelope:immutable') WHERE NOT EXISTS (
+    SELECT 1 FROM products p WHERE p.owner_id = OLD.founder_id AND p.erasure_scheduled_at IS NOT NULL);
 END;
 
 CREATE INDEX idx_portfolio_envelopes_live
@@ -174,7 +177,9 @@ END;
 CREATE TRIGGER portfolio_envelope_carve_no_delete
 BEFORE DELETE ON portfolio_envelope_carves
 BEGIN
-  SELECT RAISE(ABORT,'portfolio_envelope_carve:immutable');
+  SELECT RAISE(ABORT,'portfolio_envelope_carve:immutable') WHERE EXISTS (
+    SELECT 1 FROM products p
+     WHERE p.id = OLD.product_id AND p.erasure_scheduled_at IS NULL);
 END;
 
 CREATE INDEX idx_portfolio_envelope_carves_envelope
@@ -237,3 +242,29 @@ BEGIN
        OR NEW.proposed_at IS NOT OLD.proposed_at
        OR NEW.expires_at IS NOT OLD.expires_at;
 END;
+
+-- TRIGGERS FIRE NEWEST FIRST, and two guards created after 228 relied on
+-- firing before the decision guard: an update to a consumed act's binding was
+-- refused as "the binding is sealed", the true reason, rather than by the
+-- decision guard's own consumed-act clause. Recreating the decision guard made
+-- it the newest, so the two are recreated after it, verbatim, and the order
+-- every caller met before this migration is the order they meet after it.
+DROP TRIGGER proposed_act_experiment_binding_sealed;
+CREATE TRIGGER proposed_act_experiment_binding_sealed
+BEFORE UPDATE OF experiment_id, measurement_critical ON proposed_acts
+BEGIN
+  SELECT RAISE(ABORT,'proposed_act:experiment_binding_is_sealed')
+    WHERE OLD.experiment_id IS NOT NULL
+      AND EXISTS (SELECT 1 FROM venture_experiments e
+                   WHERE e.id = OLD.experiment_id AND e.decision IS NOT NULL)
+      AND (NEW.experiment_id IS NOT OLD.experiment_id
+        OR NEW.measurement_critical IS NOT OLD.measurement_critical);
+  SELECT RAISE(ABORT,'proposed_act:experiment_id_is_immutable')
+    WHERE OLD.experiment_id IS NOT NULL AND NEW.experiment_id IS NOT OLD.experiment_id;
+  SELECT RAISE(ABORT,'proposed_act:criticality_needs_an_experiment')
+    WHERE NEW.measurement_critical IS NOT NULL AND NEW.experiment_id IS NULL;
+END;
+DROP TRIGGER proposed_acts_undertaking_is_fixed;
+CREATE TRIGGER proposed_acts_undertaking_is_fixed
+BEFORE UPDATE OF undertaking_id ON proposed_acts
+BEGIN SELECT RAISE(ABORT,'proposed_acts:undertaking_is_fixed'); END;

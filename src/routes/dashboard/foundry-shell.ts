@@ -5809,10 +5809,10 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
       </dl>
       <p class="quiet rules"><b>Writing to people.</b> ${SEALED_CONTACT_RULES}</p>`}${envelope ? '' : html`
       <form class="charter" method="POST" action="/foundry/controls/charter">
-        <label>A month, in dollars, across every probe<input type="number" name="monthly_dollars" min="1" max="1000" step="1" value="100" required inputmode="numeric" /></label>
-        <label>Probes in flight at once<input type="number" name="probes" min="1" max="12" step="1" value="3" required inputmode="numeric" /></label>
-        <label>Thinking a day, in dollars<input type="number" name="thinking_dollars" min="0.5" max="20" step="0.5" value="3" required inputmode="decimal" /></label>
-        <label>Why, in your words<textarea name="statement" rows="3" required placeholder="A river of nickels: dozens of small, sturdy things, each tested for real, none needing me."></textarea></label>
+        <label for="charter-month">A month, in dollars, across every probe</label><input id="charter-month" type="number" name="monthly_dollars" min="1" max="1000" step="1" value="100" required inputmode="numeric" />
+        <label for="charter-probes">Probes in flight at once</label><input id="charter-probes" type="number" name="probes" min="1" max="12" step="1" value="3" required inputmode="numeric" />
+        <label for="charter-thinking">Thinking a day, in dollars</label><input id="charter-thinking" type="number" name="thinking_dollars" min="0.5" max="20" step="0.5" value="3" required inputmode="decimal" />
+        <label for="charter-why">Why, in your words</label><textarea id="charter-why" name="statement" rows="3" required placeholder="A river of nickels: dozens of small, sturdy things, each tested for real, none needing me."></textarea>
         <button class="btn" type="submit">Sign for 90 days</button>
       </form>`}${past.length === 0 ? '' : html`<p class="quiet">Before: ${past.map((x) => `signed ${x.signedAt}, ended ${x.endedAt} (${x.because})`).join('; ')}.</p>`}`;
   const charterCard = card('charter', 'The charter', charterInner);

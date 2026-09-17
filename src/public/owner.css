@@ -1765,7 +1765,7 @@ main[data-place="foundry"]:has(.ask-surface)>.glance{margin-top:1.4rem}
    sized for a thumb and never narrower than the card. ── */
 .anchor{scroll-margin-top:72px}
 .ctl form.charter{display:grid;gap:var(--s2);margin-top:var(--s2)}
-.ctl form.charter label{display:grid;gap:4px;font-size:.84rem;color:var(--ink-2)}
+.ctl form.charter label{font-size:.84rem;color:var(--ink-2);margin-bottom:-6px}
 .ctl form.charter input,.ctl form.charter textarea{width:100%;max-width:100%;min-width:0;font:inherit;font-size:max(16px,1rem);
   padding:11px 13px;min-height:44px;border:1px solid var(--line-2);border-radius:10px;background:var(--card-2);color:var(--ink)}
 .ctl form.charter textarea{min-height:88px;resize:vertical}

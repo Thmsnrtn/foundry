@@ -7581,7 +7581,9 @@ END;
 CREATE TRIGGER portfolio_envelope_carve_no_delete
 BEFORE DELETE ON portfolio_envelope_carves
 BEGIN
-  SELECT RAISE(ABORT,'portfolio_envelope_carve:immutable');
+  SELECT RAISE(ABORT,'portfolio_envelope_carve:immutable') WHERE EXISTS (
+    SELECT 1 FROM products p
+     WHERE p.id = OLD.product_id AND p.erasure_scheduled_at IS NULL);
 END;
 CREATE TRIGGER portfolio_envelope_guard
 BEFORE INSERT ON portfolio_envelopes
@@ -7607,7 +7609,8 @@ END;
 CREATE TRIGGER portfolio_envelope_no_delete
 BEFORE DELETE ON portfolio_envelopes
 BEGIN
-  SELECT RAISE(ABORT,'portfolio_envelope:immutable');
+  SELECT RAISE(ABORT,'portfolio_envelope:immutable') WHERE NOT EXISTS (
+    SELECT 1 FROM products p WHERE p.owner_id = OLD.founder_id AND p.erasure_scheduled_at IS NOT NULL);
 END;
 CREATE TRIGGER portfolio_envelope_withdraw_is_one_way
 BEFORE UPDATE ON portfolio_envelopes

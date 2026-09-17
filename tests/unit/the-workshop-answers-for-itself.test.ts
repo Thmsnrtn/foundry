@@ -234,7 +234,9 @@ describe('the Workshop answers, once, and only as far as the owner allowed', () 
     expect(a.says).toContain('COMMBUYS');
     // It does not pretend a person typed it, and it names who is responsible.
     expect(a.says).toContain('Automated reply from Apex Micro');
-    expect(a.says).toContain('Thomas Norton');
+    // A person is responsible and is not named: the owner is not a public figure.
+    expect(a.says).toContain('A person at Apex Micro');
+    expect(a.says).not.toContain('Thomas Norton');
     expect(state.sends).toHaveLength(1);
     expect(state.sends[0]!.to).toEqual(['asks@example.com']);
     const r = (await replyTo(m.id))!;

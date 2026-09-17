@@ -756,6 +756,11 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
     reason: 'a search for a business, which belongs to the person who asked for it',
     onAccountErasure: { op: 'delete' },
   },
+  portfolio_envelopes: {
+    reason: 'the standing authority one person signed for their own studio: how much a '
+      + 'month, how many probes, how much thinking, and the rules for writing to people',
+    onAccountErasure: { op: 'delete' },
+  },
   venture_guidance: {
     reason: 'what the founder said while a search was running, in their own words',
     onAccountErasure: { op: 'delete' },
