@@ -182,6 +182,55 @@ function askScope(where: Where | null): { placeholder: string; hidden: string; l
   };
 }
 
+/**
+ * THE MARKS THE INSTRUMENTS SHARE. One small outline per kind of fact, drawn
+ * from the same stroke as the doors, so a tile on Home, a figure on Economics
+ * and a row on Activity read as one system. Decorative only: every mark sits
+ * beside the words it stands for and carries aria-hidden.
+ */
+export const MARK: Record<string, string> = {
+  estate: '<svg viewBox="0 0 24 24"><path d="M3 12h4l2-5 3 10 2-6 2 3h5"/></svg>',
+  autonomy: '<svg viewBox="0 0 24 24"><path d="M12 3 4 7.5v9L12 21l8-4.5v-9z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/></svg>',
+  owner: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/></svg>',
+  experiment: '<svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6L4 19h16l-6-10V3"/></svg>',
+  cash: '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2"/><path d="M16 12h2M3 10h18"/></svg>',
+  reserve: '<svg viewBox="0 0 24 24"><ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5 6v12c0 1.7 3.1 3 7 3s7-1.3 7-3V6M5 12c0 1.7 3.1 3 7 3s7-1.3 7-3"/></svg>',
+  watching: '<svg viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>',
+  changed: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>',
+  mail: '<svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>',
+  sent: '<svg viewBox="0 0 24 24"><path d="M3 11 21 3l-6 18-3-8z"/></svg>',
+  check: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m8 12 3 3 5-6"/></svg>',
+  warn: '<svg viewBox="0 0 24 24"><path d="M12 4 3 20h18z"/><path d="M12 10v4M12 17h.01"/></svg>',
+  stop: '<svg viewBox="0 0 24 24"><path d="M8 3h8l5 5v8l-5 5H8l-5-5V8z"/><path d="M12 8v5M12 16h.01"/></svg>',
+  money: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7v10M9.5 9.5c0-1 1-1.5 2.5-1.5s2.5.6 2.5 1.6-1 1.4-2.5 1.6-2.5.6-2.5 1.6 1 1.6 2.5 1.6 2.5-.5 2.5-1.5"/></svg>',
+  arrow: '<svg viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+  spark: '<svg viewBox="0 0 24 24"><path d="M12 3l1.8 5.2L19 10l-5.2 1.8L12 17l-1.8-5.2L5 10l5.2-1.8z"/></svg>',
+  box: '<svg viewBox="0 0 24 24"><path d="M4 7h16v11H4z"/><path d="M9 7V5h6v2M4 12h16"/></svg>',
+};
+
+/** A mark, rendered. */
+export function mark(name: string): HtmlEscapedString {
+  return raw(`<i class="mk" aria-hidden="true">${MARK[name] ?? MARK.box ?? ''}</i>`);
+}
+
+/**
+ * HOW LONG AGO, IN THE WORDS A PERSON USES. "12m ago", "2h ago", "3d ago";
+ * beyond a fortnight the date itself, because "23d ago" is a sum nobody wants.
+ */
+export function ago(iso: string, now: Date = new Date()): string {
+  const at = new Date(String(iso).replace(' ', 'T') + (/[zZ]|[+-]\d\d:?\d\d$/.test(String(iso)) ? '' : 'Z'));
+  const ms = now.getTime() - at.getTime();
+  if (!Number.isFinite(ms)) return String(iso).slice(0, 10);
+  const m = Math.floor(ms / 60_000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${String(m)}m ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${String(h)}h ago`;
+  const d = Math.floor(h / 24);
+  if (d < 15) return `${String(d)}d ago`;
+  return String(iso).slice(0, 10);
+}
+
 /** How many things wait behind a door, when the screen knows. */
 export type DoorCounts = Partial<Record<Place, number>>;
 

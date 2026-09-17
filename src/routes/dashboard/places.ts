@@ -574,13 +574,28 @@ placeRoutes.get('/foundry/decisions', async (c: any) => {
     local: company ? [{ href: '/foundry/decisions', label: 'All companies', count: null, on: false }] : [],
     chips: [],
   };
+  // CONSEQUENCE FIRST, RANKED. The one thing that needs deciding now, then
+  // what can wait behind it, then what was already handled — three sections
+  // with a count each, so the length of the queue is a fact he can see rather
+  // than one he has to scroll to. The card and the queue are the same
+  // renderers Home uses: a second owner queue is a second truth.
+  const decidedWord = (how: string): { word: string; cls: string } =>
+    /taken back/.test(how) ? { word: 'taken back', cls: 'back' }
+      : /refus|reject|declin|buried|not /.test(how) ? { word: how, cls: 'refused' }
+        : { word: how, cls: 'done' };
   const body = html`
     ${company ? html`<p class="crumbline"><a href="/foundry/companies/${String(company.id)}">← ${String(company.name)}</a></p>` : ''}
     <h1>${company ? `Decisions about ${String(company.name)}` : 'Decisions'}</h1>
     ${company && String(company.reality) === 'reference' ? html`<p class="quiet"><strong>${String(company.name)} does not exist.</strong> I made it up; nothing decided here is about a real company.</p>` : ''}
     <p class="lede">${waiting === 0 ? 'Nothing is waiting on you.' : `${count(waiting, 'thing')} ${waiting === 1 ? 'waits' : 'wait'} on you.`}
-      Everything you decide is kept here, with why I asked.</p>
-    ${state ? html`${standingPermission(state)}${theOneThing(attention, extras)}${waitingList(queue, attention !== null)}` : ''}
+      Only what truly needs your judgment; everything you decide is kept here, with why I asked.</p>
+    ${company ? '' : html`<p class="decisions-head">
+      <a class="chip${waiting > 0 ? ' hot' : ''}" href="#now">Needs you <b>${String(waiting)}</b></a>
+      <a class="chip" href="#decided">Decided <b>${String(decidedAll.length)}</b></a></p>`}
+    ${state ? html`${standingPermission(state)}
+      ${attention !== null ? html`<h2 class="rank" id="now"><i class="hot">1</i>Needs a decision now<span class="dim">most important first</span></h2>${theOneThing(attention, extras)}` : ''}
+      ${queue.length ? html`<h2 class="rank"${attention === null ? raw(' id="now"') : ''}><i class="${attention === null ? 'hot' : 'warm'}">${attention === null ? '1' : '2'}</i>${attention === null ? 'Waiting on you' : 'Can wait'}<span class="dim">${attention === null ? 'in the order they arrived' : 'lower urgency'}</span></h2>` : ''}
+      ${waitingList(queue, attention !== null)}` : ''}
     ${company && waiting > 0 ? html`<div class="know"><h2>Waiting on you</h2>
       ${openActs.map((a) => html`<div class="noticed"><p><strong>${String(a.summary)}</strong></p>
         <p class="quiet">An act, for <a href="/foundry/companies/${String(a.product_id)}">${String(a.name)}</a>. Expires ${day(a.expires_at)}.</p>
@@ -594,11 +609,12 @@ placeRoutes.get('/foundry/decisions', async (c: any) => {
         <p class="quiet">Something I noticed at <a href="/foundry/companies/${String(a.product_id)}">${String(a.name)}</a>.</p>
         <p class="row"><a class="btn" href="/foundry/companies/${String(a.product_id)}#noticed">Answer</a></p></div>`)}
     </div>` : ''}
-    <div class="know"><h2>What you decided</h2>
-      ${decidedAll.length ? html`<ul>${decidedAll.map((d) => html`<li><strong>${d.what}</strong> — ${d.how} on ${day(d.at)},
-        at <a href="${d.whereHref}">${d.where}</a>. <a class="why" href="${d.href}">Why I asked</a></li>`)}</ul>`
-    : html`<p class="quiet">Nothing yet. When you approve, refuse, agree or bury something, it is kept here.</p>`}
-    </div>`;
+    <h2 class="rank" id="decided"><i>${company ? '' : '✓'}</i>Already handled<span class="dim">${String(decidedAll.length)} kept, newest first</span></h2>
+    ${decidedAll.length ? html`<ul class="handled">${decidedAll.map((d) => html`<li>
+        <span class="what">${d.what}</span>
+        <span class="how"><span class="pill ${decidedWord(d.how).cls}">${decidedWord(d.how).word}</span></span>
+        <span class="where">${day(d.at)} · <a href="${d.whereHref}">${d.where}</a> · <a href="${d.href}">why I asked</a></span></li>`)}</ul>`
+    : html`<p class="quiet">Nothing yet. When you approve, refuse, agree or bury something, it is kept here.</p>`}`;
   return c.html(page('Decisions', body, company ? 'companies' : 'decisions', frame));
 });
 

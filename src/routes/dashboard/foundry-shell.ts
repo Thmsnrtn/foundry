@@ -982,7 +982,7 @@ export { page, placeHead, frameFor } from '../../views/owner/shell.js';
 export type { Where, Place, DoorCounts } from '../../views/owner/shell.js';
 import type { Where } from '../../views/owner/shell.js';
 import { consequenceOfAct, effectInWords, labelFor } from '../../services/founder/what-it-would-do.js';
-import { page, placeHead, frameFor } from '../../views/owner/shell.js';
+import { page, placeHead, frameFor, mark, ago } from '../../views/owner/shell.js';
 type H = HtmlEscapedString | Promise<HtmlEscapedString>;
 
 /**
@@ -1071,9 +1071,9 @@ const decisionCard = (d: Decision): HtmlEscapedString | Promise<HtmlEscapedStrin
       <p class="act">${d.act}</p>
       <h2 id="d-title">${d.question}</h2>
       <p class="lead">${d.title}</p>
-      ${raw(d.meaning.map((m) => `<p>${m}</p>`).join(''))}
+      <div class="means">${raw(d.meaning.map((m) => `<p>${m}</p>`).join(''))}</div>
     </div>
-    <dl>${raw(d.facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join(''))}</dl>
+    <dl class="facts">${raw(d.facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join(''))}</dl>
     ${(d.lists ?? []).map((l) => html`<div class="know">
       <h2>${l.heading}</h2>
       <ul>${l.items.map((i) => html`<li>${i}</li>`)}</ul>
@@ -2372,8 +2372,17 @@ foundryShellRoutes.get('/foundry', async (c) => {
   // I am carrying. One is a state, the other a load, and the owner asking
   // "what are you doing" means both — so the way to the second is here, where
   // he asks.
-  const nowNext = live ? html`<dl class="nownext" aria-label="Now and next">
-      <div${live.blocking.length > 1 ? raw(' class="wide"') : ''}><dt class="k">Now</dt><dd>${live.blocking.length > 1
+  // BOUNDED EXECUTION IS A BAR, NOT A SENTENCE. A live test with an approved
+  // cohort has a denominator, so the strip shows how far along it is; a test
+  // with nothing approved yet has no honest fraction and shows none.
+  const bounded = live && live.exposure.approved > 0
+    ? { done: live.exposure.sent, of: live.exposure.approved, pct: Math.round((100 * live.exposure.sent) / live.exposure.approved) }
+    : null;
+  const nowNext = live ? html`<dl class="nownext panel" aria-label="Now and next">
+      <div class="now${live.blocking.length > 1 ? ' wide' : ''}"><dt class="k">${mark('experiment')}Now <span class="state ${live.state === 'running' ? 'ok' : 'watch'}">${live.stateLabel}</span></dt>
+        <dd><a class="plainlink" href="/foundry/experiments/${live.id}"><b class="nm">${live.assetName ?? live.title}</b></a>
+        ${bounded ? html`<span class="prog" role="img" aria-label="${String(bounded.done)} of ${String(bounded.of)} written to"><i style="width:${String(Math.max(2, Math.min(100, bounded.pct)))}%"></i></span><span class="prog-n">${String(bounded.done)} / ${String(bounded.of)} written to · ${String(bounded.pct)}%</span>` : ''}
+        ${live.blocking.length > 1
     // FOUR THINGS IN THE WAY ARE FOUR THINGS, NOT ONE SENTENCE ABOUT FOUR
     // THINGS. Joined with semicolons this ran to sixty words in the one slot
     // on the first screen that answers "what are you doing", and the owner had
@@ -2381,10 +2390,10 @@ foundryShellRoutes.get('/foundry', async (c) => {
     // check already produces them separately; only the prose put them back
     // together. One blocker stays a line, because a list of one is furniture.
     ? html`<ul class="blocking">${live.blocking.map((b) => html`<li>${b}</li>`)}</ul>`
-    : live.stateDetail}</dd></div>
-      <div><dt class="k">Next</dt><dd>${live.state === 'running' ? `The hand passes again at ${String(nextPass.getUTCHours()).padStart(2, '0')}:${String(nextPass.getUTCMinutes()).padStart(2, '0')} UTC and reconciles what came back` : live.stateLabel}</dd></div>
-      <div><dt class="k">Carrying</dt><dd>${carrying.length === 0 ? html`nothing else · <a href="/foundry/roadmap">the record</a>`
-    : html`${String(carrying.length)} ${carrying.length === 1 ? 'thing' : 'things'} · <a href="/foundry/roadmap">what they are</a>`}</dd></div>
+    : html`<span class="quiet">${live.stateDetail}</span>`}</dd></div>
+      <div class="next"><dt class="k">${mark('changed')}Next</dt><dd>${live.state === 'running' ? html`<b class="nm">The hand passes again at ${String(nextPass.getUTCHours()).padStart(2, '0')}:${String(nextPass.getUTCMinutes()).padStart(2, '0')} UTC</b><span class="quiet">and reconciles what came back</span>` : html`<b class="nm">${live.stateLabel}</b>`}</dd></div>
+      <div class="carrying"><dt class="k">${mark('box')}Carrying</dt><dd>${carrying.length === 0 ? html`<b class="nm">Nothing else</b><span class="quiet"><a href="/foundry/roadmap">the record</a></span>`
+    : html`<b class="nm">${String(carrying.length)} ${carrying.length === 1 ? 'thing' : 'things'}</b><span class="quiet"><a href="/foundry/roadmap">what they are</a></span>`}</dd></div>
     </dl>` : '';
   // WHAT IS ACTUALLY HIS, for the tile below. The whole subtraction runs here
   // — it is six small reads over indexed rows — because a first screen that
@@ -2392,17 +2401,26 @@ foundryShellRoutes.get('/foundry', async (c) => {
   const { distributableSurplus } = await import('../../services/economy/projection.js');
   const yours = await distributableSurplus(s.ownerId);
   const needsN = (attention === null ? 0 : 1) + queue.length;
+  // AUTONOMY IS A STATE, NOT A PERCENTAGE. The map already says, in one
+  // sentence led by its loosest point, whether anything may act or spend
+  // without him. The tile shows the word; Controls shows the rows.
+  const { autonomyAcross } = await import('../../services/founder/autonomy-map.js');
+  const autonomy = await autonomyAcross(s.ownerId);
   const portfolioState = html`<dl class="glance" aria-label="At a glance">
-      <div class="tile door"><dt class="k">Estate</dt>
+      <div class="tile door"><dt class="k">${mark('estate')}Estate</dt>
         <dd class="v"><span class="state ${estate.cls}">${estate.word}</span></dd>
         <dd class="d">${estate.detail}</dd><a class="door" href="/foundry/controls" aria-label="Controls"></a></div>
-      <div class="tile door"><dt class="k">Needs you</dt>
+      <div class="tile door"><dt class="k">${mark('autonomy')}Autonomy</dt>
+        <dd class="v"><span class="state ${autonomy.nothingWithoutHim ? 'ok' : 'watch'}">${autonomy.nothingWithoutHim ? 'Asks first' : 'Granted'}</span></dd>
+        <dd class="d">${autonomy.nothingWithoutHim ? 'nothing acts or spends without you' : autonomy.sentence}</dd>
+        <a class="door" href="/foundry/controls" aria-label="What I may do on my own"></a></div>
+      <div class="tile door"><dt class="k">${mark('owner')}Needs you</dt>
         <dd class="v">${needsN === 0 ? html`<span class="state quiet none">None</span>` : html`<span class="state watch">${String(needsN)}</span>`}</dd>
         <dd class="d">${needsN === 0 ? 'nothing is waiting on you' : needsN === 1 ? 'one decision is yours' : 'decisions are yours'}</dd>
         <a class="door" href="${needsN === 0 ? '/foundry/decisions' : '#the-one-thing'}" aria-label="Decisions"></a></div>
-      <div class="tile door"><dt class="k">${live ? live.assetName ?? 'Experiment' : 'Experiments'}</dt>
-        <dd class="v">${live ? html`<span class="state ${live.state === 'running' ? 'ok' : 'watch'}">${live.stateLabel}</span>` : html`<span class="state quiet none">None running</span>`}</dd>
-        <dd class="d">${live ? `${String(live.exposure.sent)} of ${String(live.exposure.approved)} written to · ${String(live.exposure.delivered)} delivered · ${String(live.money.payments)} paid` : 'nothing is being tested'}</dd>
+      <div class="tile door"><dt class="k">${mark('experiment')}${live ? 'Experiment' : 'Experiments'}</dt>
+        <dd class="v">${live ? html`<span class="state ${live.state === 'running' ? 'ok' : 'watch'}">${live.stateLabel}</span>` : html`<span class="state quiet none">None</span>`}</dd>
+        <dd class="d">${live ? `${String(live.exposure.sent)} of ${String(live.exposure.approved)} written to · ${String(live.exposure.delivered)} delivered · ${String(live.money.payments)} paid` : 'nothing is running or being tested'}</dd>
         <a class="door" href="${live ? `/foundry/experiments/${live.id}` : '/foundry/experiments'}" aria-label="${live ? live.title : 'Experiments'}"></a></div>
       <!-- THIS TILE SHOWED GROSS AND CALLED IT "Settled".
            The figure it drew is what buyers were charged for tests. It is not what is
@@ -2413,19 +2431,16 @@ foundryShellRoutes.get('/foundry', async (c) => {
            economic ledger was built to end, so the tile now shows the end of
            the subtraction and keeps the gross in the line beneath it, where it
            can be checked rather than mistaken for the answer. -->
-      <div class="tile door"><dt class="k">Yours</dt>
+      <div class="tile door"><dt class="k">${mark('cash')}Yours</dt>
         <dd class="v">${yours.figure.cents === null ? html`<span class="unknown">not known</span>`
     : html`${money(yours.figure.cents)}${yours.figure.quality === 'estimated' ? html` <span class="dim">est.</span>` : ''}`}</dd>
         <dd class="d">${paidCents > 0 ? `of ${money(paidCents)} charged` : 'nothing has been paid for yet'}</dd>
         <a class="door" href="/foundry/money" aria-label="Money"></a></div>
-      <div class="tile door"><dt class="k">Watching</dt>
+      <div class="tile door"><dt class="k">${mark('watching')}Watching</dt>
         <dd class="v">${String(s.watching.real)} <span class="dim">${s.watching.real === 1 ? 'company' : 'companies'}</span></dd>
         <dd class="d">${s.watching.real === 0 ? 'name one and I will start'
     : glance.concentration ?? (s.watching.real > 1 ? 'no two depend on the same thing' : s.watching.itself ? 'and myself' : 'all of my attention is on it')}</dd>
         <a class="door" href="/foundry/companies" aria-label="Portfolio"></a></div>
-      <div class="${s.changed.changes.length ? 'tile door' : 'tile'}"><dt class="k">Since you looked</dt>
-        <dd class="v">${s.changed.changes.length === 0 ? html`<span class="state quiet none">Nothing</span>` : String(s.changed.changes.length + s.changed.more)}</dd>
-        <dd class="d">${s.changed.changes[0]?.said ?? 'nothing has changed'}</dd>${s.changed.changes.length ? html`<a class="door" href="#away" aria-label="While you were away"></a>` : ''}</div>
     </dl>`;
 
   // WHERE THINGS ARE, FROM THE FIRST SCREEN. Not doors: addresses, reached
@@ -2475,6 +2490,62 @@ foundryShellRoutes.get('/foundry', async (c) => {
   // made on the first screen rather than found one company at a time.
   const alsoWaiting = waitingList(queue, attention !== null);
 
+  // ── THE INSTRUMENTS BESIDE THE DECISION ──────────────────────────────────
+  //
+  // Two panels the handoff puts next to what needs him: how cash has moved,
+  // and what the institution has actually done. Both are read from rows the
+  // estate already keeps — the ledger and the event stream — and both say so
+  // plainly when there is nothing yet, because a chart drawn over no data is
+  // the one lie a cockpit must never tell.
+  const { ledgerEntries } = await import('../../services/economy/projection.js');
+  const { sparkline } = await import('../../lib/sparkline.js');
+  const movements = await ledgerEntries(s.ownerId, 200);
+  const since = Date.now() - 30 * 86_400_000;
+  const recent = movements.filter((e) => new Date(e.occurredAt.replace(' ', 'T')).getTime() >= since);
+  const inCents = recent.filter((e) => e.direction === 'in').reduce((t, e) => t + e.amountCents, 0);
+  const outCents = recent.filter((e) => e.direction === 'out').reduce((t, e) => t + e.amountCents, 0);
+  // A running balance by day, so the line is the shape of the month rather
+  // than a scatter of receipts. Fewer than three days with movement is not a
+  // trend, and the sparkline refuses to draw one.
+  const byDay = new Map<string, number>();
+  for (const e of [...recent].sort((a, b) => (a.occurredAt < b.occurredAt ? -1 : 1))) {
+    const d = e.occurredAt.slice(0, 10);
+    byDay.set(d, (byDay.get(d) ?? 0) + (e.direction === 'in' ? e.amountCents : -e.amountCents));
+  }
+  let running = 0;
+  const series = [...byDay.values()].map((v) => { running += v; return running; });
+  const spark = sparkline(series, { width: 320, height: 64, meaning: 'up_is_good' });
+  const trendPanel = html`<section class="panel trend" aria-label="Cash movement, thirty days">
+      <header><h2>${mark('cash')}Cash movement <span class="dim">30 days</span></h2>
+        <a class="more-link" href="/foundry/money">Economics ${mark('arrow')}</a></header>
+      ${spark.svg ? html`<div class="chart">${raw(spark.svg)}</div>` : ''}
+      <p class="figures"><span class="up">+${money(inCents)} in</span><span class="down">−${money(outCents)} out</span>
+        ${recent.length === 0 ? html`<span class="quiet">nothing has moved yet; the first row is written by Stripe, not by me</span>`
+    : spark.svg ? '' : html`<span class="quiet">${String(byDay.size)} ${byDay.size === 1 ? 'day' : 'days'} with movement — not yet a trend</span>`}</p>
+    </section>`;
+  const { whatHappened } = await import('../../services/founder/activity.js');
+  const happened = (await whatHappened(s.ownerId, 12)).slice(0, 4);
+  const EVENT_MARK: Record<string, string> = { authority: 'check', experiment: 'experiment', outward: 'sent', money: 'money', obligation: 'box', boundary: 'stop' };
+  const activityPanel = html`<section class="panel live" aria-label="Live activity">
+      <header><h2>${mark('changed')}Live activity <span class="dim">· ${s.changed.changes.length ? html`<a href="#away">Since you looked: ${String(s.changed.changes.length + s.changed.more)}</a>` : 'Nothing since you looked'}</span></h2>
+        <a class="more-link" href="/foundry/activity">View all ${mark('arrow')}</a></header>
+      ${happened.length === 0 ? html`<p class="quiet">Nothing has happened yet that is worth putting in front of you.</p>`
+    : html`<ul class="evs">${happened.map((e) => html`<li class="ev ${e.kind}">
+          ${mark(EVENT_MARK[e.kind] ?? 'box')}<span class="ev-t">${e.href ? html`<a href="${e.href}">${e.what}</a>` : e.what}</span>
+          <span class="ev-w"><time>${ago(e.at)}</time>${e.companyName ? html` · ${e.companyName}` : ''}</span>
+        </li>`)}</ul>`}
+    </section>`;
+  // WHEN NOTHING NEEDS HIM, THE PANEL SAYS SO — the mature state the handoff
+  // names: estate healthy, autonomy normal, no owner action required. Quiet is
+  // a success state, and it must not look like an empty slot.
+  const quietPanel = attention === null ? html`<section class="panel calm" aria-label="No owner action required">
+      <p class="act">Owner action</p>
+      <h2>${needsN === 0 ? 'None required' : `${String(needsN)} waiting`}</h2>
+      <p class="quiet">${needsN === 0 ? 'Nothing is waiting on your judgment. What is happening is on this screen; what happened is one tap away.'
+    : 'Nothing is asking for you first, and what is waiting is listed below.'}</p>
+      ${needsN === 0 ? html`<p class="lines"><span class="state ${estate.cls}">Estate ${estate.word.toLowerCase()}</span> <span class="state ${autonomy.nothingWithoutHim ? 'ok' : 'watch'}">Autonomy ${autonomy.nothingWithoutHim ? 'asks first' : 'within grants'}</span></p>` : ''}
+    </section>` : '';
+
   const body = html`
     <h1><span id="greet">Hello</span>${s.firstName ? `, ${s.firstName}` : ''}.</h1>
     ${placeHead(homeFrame, '')}
@@ -2488,25 +2559,25 @@ foundryShellRoutes.get('/foundry', async (c) => {
       : html`<p class="lede"><a href="#the-one-thing">${orientation}</a></p>`
     : ''}
     ${portfolioState}
-    ${nowNext}
     <!-- THE ONE THING HE CAME FOR, BEFORE ANYTHING HE DID NOT.
          This was rendered last: after what changed, after ninety lines of
          search block that can carry a whole opportunity's case. The screen said
          "One thing needs you" and then put everything else in front of it. -->
     ${standingPermission(s)}
-    ${/* THE DECISION AND THE QUEUE, SIDE BY SIDE WHERE THERE IS ROOM.
-          Desktop should become richer, not simply wider, and this page was the
-          phone's page with a rail beside it and three hundred pixels of gutter
-          doing nothing. The two things the owner came for are the one decision
-          that needs him and what else is waiting behind it; on a phone they can
-          only be stacked, and stacking them on a 1440px screen means scrolling
-          past a decision to find out how many more there are.
-          Only gridded when there are both. One of them alone belongs in the
-          column, at the width the rest of the page reads at. */
+    ${/* THE COCKPIT ROW. The decision, cash movement and live activity are one
+          composition: on a phone they stack in that order so the decision is
+          in the first viewport, and on a desk they sit side by side with the
+          decision on the right where the eye ends. The strip of Now, Next and
+          Carrying follows on a phone and leads on a desk, by CSS order rather
+          than a second rendering. */
     ''}
-    ${attention !== null && alsoWaiting !== ''
-    ? html`<div class="decide">${theOneThing(attention, extras)}<div>${alsoWaiting}</div></div>`
-    : html`${theOneThing(attention, extras)}${alsoWaiting}`}
+    <div class="cockpit">
+      ${attention !== null ? theOneThing(attention, extras) : quietPanel}
+      ${trendPanel}
+      ${activityPanel}
+    </div>
+    ${nowNext}
+    ${alsoWaiting}
     ${/* SAID ALONGSIDE, NOT INSTEAD OF. Demoting a stopped routine below a
           decision that needs him must not make it disappear: what he is being
           told may genuinely be out of date, and that is his to weigh. It is one
@@ -2716,7 +2787,11 @@ foundryShellRoutes.get('/foundry', async (c) => {
     ? ['ifyes', 'change']
     : ['okay', 'working']).map((k) =>
     `<a href="/foundry?ask=${k}">${QUESTIONS[k]}</a>`).join(''))}
-    </div>` : ''}`;
+    </div>` : ''}
+    <!-- THE PLACES WITHOUT A DOOR ON A PHONE. The desk rail carries these under
+         "Also here"; a phone has no rail, and a page nothing links to is a page
+         the owner has to already know about. -->
+    <p class="also" aria-label="Also here"><a href="/foundry/searching">Discover</a><a href="/foundry/public-workshop">Workshop</a><a href="/foundry/roadmap">Roadmap</a><a href="/foundry/absence">Absence test</a></p>`;
 
   return c.html(page('Foundry', body, 'foundry', homeFrame));
 });

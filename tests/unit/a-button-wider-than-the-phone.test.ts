@@ -99,10 +99,17 @@ describe('a button cannot be wider than what contains it', () => {
     //
     //   `.sr` is the screen-reader-only class: one pixel square and clipped.
     //
-    // Anything else added to this list needs one of those two sentences.
+    //   IT CLIPS ITSELF. `.tile dt.k` is the one-line label over an instrument
+    //   on the glance — "Estate", "Needs you", "Experiment" — with
+    //   `overflow:hidden` and an ellipsis on the same rule, so a label that
+    //   outgrows its tile loses its tail inside the tile rather than pushing
+    //   the tile, the row or the document wider. The value sits beneath it and
+    //   wraps as it likes.
+    //
+    // Anything else added to this list needs one of those three sentences.
     const named = [...phoneOnly(css()).matchAll(/(?:^|\n)([^\n{]*)\{[^}]*white-space:\s*nowrap/g)]
       .map((m) => m[1].trim())
       .filter((s) => !s.startsWith('@'));
-    expect(named.sort()).toEqual(['.filters a', '.local a', '.mline dd', '.sr'].sort());
+    expect(named.sort()).toEqual(['.filters a', '.local a', '.mline dd', '.sr', '.tile dt.k'].sort());
   });
 });

@@ -108,7 +108,7 @@ body{margin:0;background:var(--bg);color:var(--ink);
 h1{font-family:var(--serif);font-size:2rem;line-height:1.15;font-weight:500;
   letter-spacing:-.01em;margin:0 0 var(--s2)}
 .brand{display:flex;align-items:center;gap:10px;margin:0 0 var(--s4);color:var(--ink-2);font-size:.95rem}
-.brand b{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;
+.brand>b{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;
   border-radius:50%;background:var(--card);border:1px solid var(--line);
   font-family:var(--serif);font-weight:500;color:var(--ink);font-size:1.05rem}
 
@@ -734,7 +734,7 @@ body{
 }
 .wrap{position:relative}
 .brand{gap:.65rem;color:var(--ink-2);letter-spacing:.01em}
-.brand b{
+.brand>b{
   background:linear-gradient(145deg,var(--card-2),var(--card));
   border-color:var(--os-line-strong);
   box-shadow:inset 0 1px 0 var(--os-sheen-strong),var(--os-shadow-soft)
@@ -950,7 +950,7 @@ a.item .pill{flex:0 0 auto}
   .wrap{padding-left:16px;padding-right:16px;padding-top:16px}
   h1{font-size:2.12rem;margin-bottom:.45rem}
   .brand{margin-bottom:1.15rem;font-size:.82rem;text-transform:uppercase;letter-spacing:.08em}
-  .brand b{width:30px;height:30px;font-size:.95rem}
+  .brand>b{width:30px;height:30px;font-size:.95rem}
   .glance{grid-template-columns:repeat(2,minmax(0,1fr))}
   .tile{min-height:7.6rem}
   nav.places{
@@ -1328,3 +1328,188 @@ main[data-place="money"] .mline.total{margin:.25rem -.65rem 0;padding:.95rem .65
 /* Mobile door membership is intentionally absent here. The owner script derives
    it from page context, preserving the handoff's five/six/nine-door compositions
    without coupling navigation meaning to DOM position. */
+
+
+/* =============================================================================
+   PRIVATE FOUNDRY UI HANDOFF V3 — RECONSTRUCTION PASS
+   The boards, surface by surface. Everything above stays the vocabulary; this
+   is the composition the handoff draws with it. No rule here manufactures a
+   fact: every number, badge, bar and row is rendered from a reader.
+   ============================================================================= */
+
+/* ── Marks: one stroke, beside the words they stand for ─────────────────── */
+.mk{display:inline-flex;width:1em;height:1em;flex:0 0 auto;vertical-align:-.12em;color:var(--v3-mint);opacity:.9}
+.mk svg{width:100%;height:100%;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.tile .mk{width:1.15rem;height:1.15rem;margin-right:.45rem}
+.state.watch .mk,.act .mk{color:var(--v3-gold)}
+
+/* ── The glance: six instruments, three across on a phone ───────────────── */
+.glance{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+@media (max-width:359px){.glance{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.tile{display:flex;flex-direction:column;min-height:6.6rem;padding:.7rem .7rem .62rem}
+.tile dt.k{display:flex;align-items:center;font-size:.66rem;letter-spacing:.02em;text-transform:none;font-weight:500;color:var(--ink-2);line-height:1.2;
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding-right:.9rem}
+.tile dd.v{font-size:1.32rem;margin-top:.45rem;line-height:1.05}
+.tile dd.v .dim{font-size:.72rem;font-family:var(--sans);color:var(--ink-3)}
+.tile dd.d{margin-top:auto;padding-top:.5rem;font-size:.66rem;line-height:1.3;color:var(--ink-3);
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tile .state{font-size:.72rem;padding:3px 8px}
+.tile .state::before{box-shadow:0 0 0 2px currentColor}
+.tile.door::after{top:7px;right:9px;font-size:.9rem}
+.glance .tile .k{text-transform:none}
+main[data-place="foundry"]>.glance{margin-top:1.9rem;margin-bottom:.9rem}
+main[data-place="foundry"]>.glance::before{top:-1.25rem}
+
+/* ── Panels: the instruments beside the decision ────────────────────────── */
+.panel{background:linear-gradient(180deg,rgba(255,255,255,.018),transparent 50%),var(--v3-panel);
+  border:1px solid var(--v3-line);border-radius:var(--v3-radius);padding:.8rem .85rem;margin:0 0 .6rem;min-width:0}
+.panel>header{display:flex;align-items:baseline;justify-content:space-between;gap:.6rem;margin:0 0 .5rem}
+.panel>header h2,.panel h2{margin:0;font-family:var(--serif);font-size:1.05rem;font-weight:400;letter-spacing:-.01em;color:var(--ink);text-transform:none}
+.panel h2 .mk{margin-right:.4rem}
+.panel h2 .dim{font-family:var(--sans);font-size:.72rem;color:var(--ink-3)}
+.more-link{flex:0 0 auto;font-size:.76rem;color:var(--ink-2);text-decoration:none;display:inline-flex;align-items:center;gap:.25rem;min-height:32px}
+.more-link .mk{color:var(--ink-3)}
+.more-link:hover{color:var(--ink)}
+.panel .quiet{font-size:.8rem;margin:0;line-height:1.45}
+.panel.trend .chart{margin:0 0 .35rem}
+.panel.trend .chart svg{display:block;width:100%;height:64px}
+.panel.trend .figures{display:flex;flex-wrap:wrap;gap:.35rem .9rem;align-items:baseline;margin:0;font-size:.82rem;font-variant-numeric:tabular-nums}
+.panel.trend .figures .up{color:var(--good);font-weight:500}
+.panel.trend .figures .down{color:var(--ink-2);font-weight:500}
+.panel.live .evs{list-style:none;margin:0;padding:0;display:grid;gap:2px}
+.panel.live .evs .ev{display:grid;grid-template-columns:1.1rem minmax(0,1fr);gap:2px .55rem;align-items:start;padding:.42rem 0;border:0;border-bottom:1px solid var(--v3-line);border-left:0;margin:0}
+.panel.live .evs .ev::before{display:none}
+.panel.live .evs .ev:last-child{border-bottom:0}
+.panel.live .evs .ev .mk{grid-row:1/3;margin-top:.15rem;color:var(--ink-3)}
+.panel.live .evs .ev.outward .mk,.panel.live .evs .ev.money .mk{color:var(--v3-mint)}
+.panel.live .evs .ev.authority .mk,.panel.live .evs .ev.boundary .mk{color:var(--v3-gold)}
+.panel.live .ev-t{font-size:.86rem;color:var(--ink);line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.panel.live .ev-t a{color:inherit;text-decoration:none}
+.panel.live .ev-t a:hover{text-decoration:underline}
+.panel.live .ev-w{font-size:.7rem;color:var(--ink-3)}
+.panel.calm{border-color:rgba(102,229,180,.28);background:radial-gradient(circle at 100% 0,rgba(102,229,180,.07),transparent 18rem),var(--v3-panel)}
+.panel.calm .act{color:var(--v3-mint);margin-bottom:.15rem}
+.panel.calm h2{font-size:1.35rem;margin-bottom:.35rem}
+.panel.calm .lines{display:flex;flex-wrap:wrap;gap:.4rem;margin:.6rem 0 0}
+
+/* ── The cockpit row: decision, cash, activity ──────────────────────────── */
+.cockpit{display:grid;grid-template-columns:minmax(0,1fr);gap:.6rem;margin:0 0 .6rem;align-items:start}
+.cockpit>.one{margin:0}
+.cockpit>.panel{margin:0}
+
+/* ── Now / Next / Carrying, as an instrument strip ──────────────────────── */
+.nownext.panel{display:grid;grid-template-columns:minmax(0,1fr);gap:0;padding:0;margin:0 0 1.1rem;border-top:1px solid var(--v3-line)}
+.nownext.panel>div{background:none;border:0;border-radius:0;border-bottom:1px solid var(--v3-line);padding:.7rem .85rem}
+.nownext.panel>div:last-child{border-bottom:0}
+.nownext.panel dt.k{display:flex;align-items:center;gap:.4rem;font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin:0 0 .35rem}
+.nownext.panel dt.k .state{margin-left:auto;font-size:.68rem;text-transform:none;letter-spacing:0;padding:2px 8px}
+.nownext.panel dd{display:grid;gap:.3rem;font-size:.86rem}
+.nownext.panel .nm{display:block;font-family:var(--serif);font-size:1.02rem;font-weight:400;letter-spacing:-.01em;color:var(--ink);line-height:1.25}
+.nownext.panel .plainlink{color:inherit;text-decoration:none}
+.nownext.panel .plainlink:hover .nm{text-decoration:underline}
+.nownext.panel .quiet{font-size:.78rem;line-height:1.4}
+.nownext.panel .blocking{margin-top:.1rem}
+.prog{display:block;height:6px;border-radius:999px;background:rgba(255,255,255,.06);overflow:hidden;margin-top:.15rem}
+.prog i{display:block;height:100%;background:var(--v3-mint);border-radius:999px}
+.prog-n{font-size:.72rem;color:var(--ink-2);font-variant-numeric:tabular-nums}
+.nownext.panel>div.wide{grid-column:auto}
+.nownext.panel>div.now{position:relative}
+.nownext.panel>div.next .nm,.nownext.panel>div.carrying .nm{font-size:.98rem}
+
+/* ── Also here, on a phone ──────────────────────────────────────────────── */
+.also{display:flex;flex-wrap:wrap;gap:.4rem;margin:1.4rem 0 0;padding-top:.9rem;border-top:1px solid var(--v3-line)}
+.also a{font-size:.78rem;color:var(--ink-2);text-decoration:none;border:1px solid var(--v3-line);border-radius:999px;padding:6px 11px;min-height:32px;display:inline-flex;align-items:center}
+.also a:hover{color:var(--ink);border-color:var(--v3-line-strong)}
+
+/* ── A phone: the Home local row is the tab bar's job ───────────────────── */
+@media (max-width:899px){
+  main[data-place="foundry"] .local{display:none}
+  main[data-place="foundry"]>.lede:first-of-type{margin-bottom:.4rem;font-size:.98rem}
+  .cockpit>.one .one-in{padding:.9rem .9rem .5rem}
+}
+
+/* ── A desk: the strip leads, the cockpit row sits three across ──────────── */
+@media (min-width:900px){
+  main[data-place="foundry"]>h1{order:-9}
+  main[data-place="foundry"]>.lede:first-of-type{order:-8;margin-bottom:.9rem}
+  main[data-place="foundry"]>.nownext{order:-7;margin:0 0 .9rem}
+  main[data-place="foundry"]>.glance{order:-6;margin-top:1.6rem}
+  .nownext.panel{grid-template-columns:repeat(3,minmax(0,1fr));border-top:1px solid var(--v3-line)}
+  .nownext.panel>div{border-bottom:0;border-right:1px solid var(--v3-line);padding:.75rem .95rem}
+  .nownext.panel>div:last-child{border-right:0}
+  .cockpit{grid-template-columns:repeat(2,minmax(0,1fr));gap:.7rem}
+  .cockpit>.one,.cockpit>.panel.calm{grid-column:1/-1}
+  .also{display:none}
+  .panel{padding:.9rem 1rem}
+  .panel.trend .chart svg{height:84px}
+}
+@media (min-width:1180px){
+  .cockpit{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr) minmax(19rem,.95fr)}
+  .cockpit>.one,.cockpit>.panel.calm{grid-column:auto;order:3}
+  .cockpit>.one dl.facts{grid-template-columns:minmax(6rem,34%) minmax(0,1fr)}
+  .cockpit>.one .do{flex-direction:column}
+  .cockpit>.one .do form{width:100%}
+  .cockpit>.one .do form[style]{flex:1 1 auto!important}
+  .cockpit>.one .do .btn{width:100%!important}
+}
+
+/* ── Tiles at phone width: the badge fits, the label is not clipped ─────── */
+@media (max-width:429px){
+  .tile{padding:.62rem .58rem .55rem}
+  .tile dt.k{font-size:.63rem;padding-right:.7rem}
+  .tile .mk{width:1rem;height:1rem;margin-right:.32rem}
+  .tile .state{font-size:.64rem;padding:2px 6px;gap:4px}
+  .tile dd.v{font-size:1.22rem}
+  .tile.door::after{top:6px;right:7px;font-size:.8rem}
+}
+.panel>header{flex-wrap:wrap}
+@media (min-width:900px){
+  main[data-place="foundry"]>.ask{order:-10}
+}
+
+/* ── The decision card, consequence first ───────────────────────────────── */
+.one .means{margin:.35rem 0 0}
+.one .means p{font-size:.86rem;color:var(--ink-2);margin:0 0 .3rem;line-height:1.45}
+.one .means p:last-child{margin-bottom:0}
+.one .lead{font-family:var(--serif);font-size:1.12rem;line-height:1.3;color:var(--ink);margin:0 0 .35rem}
+.one h2{font-size:1.02rem;font-family:var(--sans);font-weight:500;color:var(--ink-2);letter-spacing:0;margin:0 0 .3rem}
+.one dl.facts{display:grid;grid-template-columns:minmax(6.5rem,32%) minmax(0,1fr);gap:0 var(--s2);padding:.2rem var(--s3) .35rem;font-size:.86rem;margin:0}
+.one dl.facts dt{padding:.5rem 0;border-top:1px solid var(--v3-line);color:var(--ink-3);font-size:.78rem;font-weight:500;line-height:1.35}
+.one dl.facts dd{padding:.5rem 0;border-top:1px solid var(--v3-line);margin:0;color:var(--ink);line-height:1.35}
+.one dl.facts dt:first-of-type,.one dl.facts dt:first-of-type+dd{border-top:0}
+.one dl.facts .pill{margin-left:0;margin-right:4px}
+.one .do{padding:.7rem var(--s3) .8rem;gap:.5rem}
+.one .do .btn{min-height:46px;font-size:.95rem}
+.one .do .btn.go{font-weight:600}
+.one>details>summary{padding-left:var(--s3);padding-right:var(--s3)}
+.one .row{padding:0 var(--s3) .4rem}
+@media (min-width:900px){
+  .one dl.facts{grid-template-columns:minmax(9rem,26%) minmax(0,1fr)}
+}
+
+/* ── Decisions: what needs deciding now, what can wait, what was handled ── */
+.decisions-head{display:flex;flex-wrap:wrap;gap:.4rem;margin:0 0 1rem}
+.decisions-head a.chip{display:inline-flex;align-items:center;gap:.4rem;font-size:.8rem;padding:6px 12px}
+.decisions-head a.chip b{font-weight:600;color:var(--ink);background:rgba(255,255,255,.06);border-radius:999px;padding:0 7px;font-size:.74rem;line-height:20px}
+.decisions-head a.chip.hot b{background:rgba(236,118,108,.22);color:var(--v3-red)}
+.decisions-head a.chip.on{border-color:var(--v3-mint);color:var(--v3-mint)}
+h2.rank{display:flex;align-items:center;gap:.55rem;margin:1.4rem 0 .6rem;font-family:var(--serif);font-size:1.12rem;font-weight:400;letter-spacing:-.01em;text-transform:none;color:var(--ink)}
+h2.rank i{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;font:600 .7rem/1 var(--sans);font-style:normal;color:#07100d;background:var(--v3-mint)}
+h2.rank i.hot{background:var(--v3-red)}
+h2.rank i.warm{background:var(--v3-gold)}
+h2.rank .dim{margin-left:auto;font-family:var(--sans);font-size:.74rem;color:var(--ink-3);font-weight:400}
+.handled{list-style:none;padding:0;margin:0;border-top:1px solid var(--v3-line)}
+.handled li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.15rem .7rem;align-items:start;padding:.65rem 0;border-bottom:1px solid var(--v3-line)}
+.handled .what{font-size:.9rem;color:var(--ink);line-height:1.35;overflow-wrap:anywhere}
+.handled .how{grid-column:2;grid-row:1/3;align-self:center}
+.handled .where{font-size:.74rem;color:var(--ink-3)}
+.handled .where a{color:var(--ink-2);text-decoration:none}
+.handled .where a:hover{text-decoration:underline}
+.pill.done{background:rgba(26,112,82,.28);color:var(--v3-mint);border-color:transparent}
+.pill.refused{background:rgba(119,42,37,.22);color:var(--v3-red);border-color:transparent}
+.pill.back{background:rgba(111,78,25,.24);color:var(--v3-gold);border-color:transparent}
+.queue .qitem{border-radius:var(--v3-radius);border:1px solid var(--v3-line);background:var(--v3-panel);padding:.85rem .9rem}
+.queue .qitem>p:first-child{font-size:.74rem;margin-bottom:.25rem}
+.queue .qitem>p:nth-child(2){font-size:.98rem;line-height:1.35;margin-bottom:.3rem}
+.queue .qitem .pair{margin-top:.6rem}
+.queue .qitem .pair .btn{min-height:42px;font-size:.9rem}
