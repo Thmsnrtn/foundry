@@ -1887,3 +1887,79 @@ landed at 21:29, and 22:00, 23:00 and 00:00 passed with none of them running —
 while `nav_badge_refresh`, `signal_alert_check`, `integration_sync` and
 `welcome_sequence_tick` all ran at 00:00. The scheduler is alive; it is
 specifically the society that is quiet.
+
+---
+
+## The V3 North Star, finished and shipped — 17 September 2026
+
+### What blocked the release, and what it was
+
+The private deploy of the North Star branch stopped at `npm run check` with
+three failing tests. None was a defect in the reconstruction; each was a test
+holding a fact the world or the handoff had moved.
+
+| Test | What it held | What was true |
+|---|---|---|
+| `a-roadmap-nobody-can-wish-into` | the owner map at the six doors of the pre-handoff shell | the handoff fixes it at nine; the hashed script narrows by context on a phone |
+| `the-deliberation-is-recorded-before-the-answer` | the whole external chain unblocked, with the real pilot edition's pull date measured against the clock | seven days after that pull it went red on every branch, about a calendar |
+| `the-owner-can-reach-the-one-thing` | more than 100px reserved under the fixed bars | Ask is a door on a phone now; one bar, and the honest reserve is what it covers |
+
+The first now holds the V3 canonical set and still refuses a Roadmap door. The
+second records an edition pulled today before reading the chain, so it proves
+the mechanism rather than the date. The third makes the measurement the
+invariant. **None of the gates was weakened**; each says what it meant.
+
+**A fact for the owner, surfaced by the second:** the real pilot edition of
+the Massachusetts brief was pulled on 10 September, and delivery refuses
+anything older than seven days. Readiness reports it on the experiment's own
+page, which is where a stale brief belongs. Re-pulling it is an Experiment 001
+act and was not taken by this work.
+
+### The reconstruction, board by board
+
+Every surface below renders through the one shell, the one stylesheet and the
+one hashed script, from the readers it already had. No board value was copied
+in; where a reader has nothing yet the surface says so as a state.
+
+| Board | Surface | What changed |
+|---|---|---|
+| 01, 11 | Home | six instruments three across (Estate, Autonomy, Needs you, Experiment, Yours, Watching); the cockpit row — decision, cash movement from the ledger, live activity from the stream; Now / Next / Carrying as a strip with a bounded bar; the quiet state said as a state |
+| 02, 16 | Decisions | ranked and counted: needs a decision now, can wait, already handled; the card's facts first, on the phone too |
+| 04, 05 | Experiments | the live test as a hero with a bound, four numbers, stop conditions with counts and the thesis; the detail ordered as what needs him, where it stands, what happens next, then everything it rests on one fold down |
+| 08, 13 | Economics | five figures as instruments with their quality, the subtraction, movement from the ledger, the ledger as events |
+| 10 | Ask | an exchange: his words, the answer from canonical state, what else it can answer, the composer on the screen |
+| 06 | Inbox | mode as a state changed with a reason; needs-you filter; rows that say what was read and done |
+| 07 | Activity | health above the stream, no count of events; rows as time, mark, sentence, ground |
+| 09, 15 | Controls | Stop everything first, then the envelope as cards, with the owner's exclusions |
+
+Mobile navigation stays contextual and semantic: nine doors at Home, the core
+five on leaf pages, a sixth for the secondary place he is standing in, Ask
+through `/foundry#ask-foundry`. Discover stays desktop-oriented and reachable
+from Home's "Also here" row on a phone.
+
+### Proof
+
+- every owner route photographed at 375, 390, 430, 820, 1280 and 1680 with no
+  horizontal overflow at any width (`docs/design/mobile`, `docs/design/desktop`)
+- the twelve-journeys browser test, the reach test, the first-screen prose
+  budget, the stylesheet vocabulary, the button-width contract and the
+  contextual-navigation invariant all pass
+- a new invariant, `the-north-star-composition-holds`, holds the compositions
+  as structure and what the surface refuses: an inline `<style>` on an owner
+  page, a second stylesheet or script, navigation meaning as DOM position
+
+### What remains a genuine gap against the boards
+
+- **Charts need rows.** Cash movement draws only from ledger rows, and the
+  ledger is empty until Stripe writes the first one. The board's bars are a
+  promise about what the panel becomes, not what it shows today.
+- **Stages.** The board draws Stage 1 / Stage 2 boxes; the institution records
+  a cohort, a kill threshold and a window, and the page shows those. A staged
+  plan is a design fact the schema does not yet carry, so it is not drawn.
+- **Reserve allocation and a tax centre.** The board's donut and checklist
+  rest on tax facts the institution does not have. The tax reserve is a figure
+  with its quality; nothing more is claimed.
+- **Provider status cards** on the desktop governance board (Stripe, Cloudflare,
+  Resend as live probes) are not drawn: what is connected is listed, and the
+  Workshop card says what may be touched, but no per-provider health probe
+  exists to read.
