@@ -21,9 +21,10 @@
 // =============================================================================
 
 import { Hono } from 'hono';
-import { html } from 'hono/html';
+import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import { page } from './foundry-shell.js';
+import { ago, mark } from '../../views/owner/shell.js';
 import type { Where } from './foundry-shell.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
 import { query } from '../../db/client.js';
@@ -38,9 +39,9 @@ export const moneyRoutes = new Hono();
 type H = HtmlEscapedString | Promise<HtmlEscapedString>;
 
 const frame: Where = {
-  eyebrow: 'Money',
-  crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: '/foundry/money', label: 'Money' }],
-  scope: { kind: 'foundry', id: null, name: 'Money' }, local: [], chips: [],
+  eyebrow: 'Economics',
+  crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: '/foundry/money', label: 'Economics' }],
+  scope: { kind: 'foundry', id: null, name: 'Economics' }, local: [], chips: [],
 };
 
 async function founderOf(c: any): Promise<string | null> {
@@ -108,10 +109,43 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
       : done === 'floor' ? html`<p class="noticed">Recorded. That much is kept back before anything is called yours.</p>`
         : done === 'moved' ? html`<p class="noticed">Recorded. That is measured now, because you saw it happen.</p>` : '';
 
+  // THE FIGURES FIRST, AS INSTRUMENTS. Five tiles read from the same
+  // subtraction the page has always shown — what is held, what is reserved
+  // for tax, the floor, what could be asked back, and what is his — each
+  // drawn with its quality visible. Then the subtraction itself, then how
+  // money moved, then everything that grounds a figure, one fold down.
+  const tile = (name: string, label: string, f: Figure, detail: string, cls = '') => html`<div class="tile${cls}"><dt class="k">${mark(name)}${label}</dt>
+      <dd class="v">${f.cents === null ? html`<span class="unknown">not known</span>` : html`${dollars(f.cents)}${f.quality === 'estimated' ? html` <span class="dim">est.</span>` : ''}`}</dd>
+      <dd class="d">${detail}</dd></div>`;
+  // Movement over thirty days, drawn only from rows and only as a trend when
+  // there are three days with movement; otherwise the honest absence.
+  const { sparkline } = await import('../../lib/sparkline.js');
+  const since = Date.now() - 30 * 86_400_000;
+  const recent = ledger.filter((e) => new Date(e.occurredAt.replace(' ', 'T')).getTime() >= since);
+  const inCents = recent.filter((e) => e.direction === 'in').reduce((t, e) => t + e.amountCents, 0);
+  const outCents = recent.filter((e) => e.direction === 'out').reduce((t, e) => t + e.amountCents, 0);
+  const byDay = new Map<string, number>();
+  for (const e of [...recent].sort((a, b) => (a.occurredAt < b.occurredAt ? -1 : 1))) {
+    const d = e.occurredAt.slice(0, 10);
+    byDay.set(d, (byDay.get(d) ?? 0) + (e.direction === 'in' ? e.amountCents : -e.amountCents));
+  }
+  let running = 0;
+  const spark = sparkline([...byDay.values()].map((v) => { running += v; return running; }), { width: 320, height: 64, meaning: 'up_is_good' });
+  const KIND_MARK = (e: typeof ledger[number]): string => e.direction === 'in' ? 'money' : /tax/.test(e.kind) ? 'reserve' : /owner/.test(e.kind) ? 'owner' : 'cash';
+  const fold = (id: string, title: string, gist: string, inner: H) =>
+    html`<details class="fold" id="${id}"><summary><h2>${title}</h2><span class="gist">${gist}</span></summary>${inner}</details>`;
   const body = html`
-    <h1>Money</h1>
+    <h1>Economics</h1>
     ${notice}
     <p class="lede">${s.sentence}</p>
+
+    <dl class="glance eco-glance" aria-label="The money, at a glance">
+      ${tile('cash', 'In Stripe, ours', s.held, 'settled with the provider; not a bank balance')}
+      ${tile('reserve', 'Held for tax', s.taxReserve, s.taxReserve.policy ? 'from the assumption you recorded' : 'no assumption recorded yet')}
+      ${tile('reserve', 'Kept to keep running', s.operatingReserve, 'the floor you set')}
+      ${tile('warn', 'Could be asked back', s.refundExposure, 'refund exposure on delivered work')}
+      ${tile('owner', 'Yours to take', s.figure, s.figure.cents !== null && s.figure.cents < 0 ? 'more is spoken for than is held' : 'after everything already spoken for', ' yours')}
+    </dl>
 
     <div class="know">
       <h2>The subtraction</h2>
@@ -138,16 +172,34 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
   ])}
     </div>
 
-    <div class="know">
-      <h2>What I cannot tell you</h2>
+    <section class="panel trend eco-trend" aria-label="Money movement, thirty days">
+      <header><h2>${mark('cash')}Movement <span class="dim">30 days</span></h2></header>
+      ${spark.svg ? html`<div class="chart">${raw(spark.svg)}</div>` : ''}
+      <p class="figures"><span class="up">+${dollars(inCents)} in</span><span class="down">−${dollars(outCents)} out</span>
+        ${recent.length === 0 ? html`<span class="quiet">nothing has moved yet; the first row will be written by Stripe, not by me</span>`
+    : spark.svg ? '' : html`<span class="quiet">${String(byDay.size)} ${byDay.size === 1 ? 'day' : 'days'} with movement — not yet a trend</span>`}</p>
+    </section>
+
+    <section class="panel ledger-panel" aria-label="The ledger">
+      <header><h2>${mark('changed')}Economic events</h2><span class="dim">${ledger.length ? `${String(ledger.length)} newest, in the order the world put them` : ''}</span></header>
+      ${ledger.length === 0
+        ? html`<p class="quiet">Nothing yet. The first row will be written by Stripe, not by me.</p>`
+        : html`<ul class="ledger">${ledger.map((e) => html`<li class="${e.direction}">
+            ${mark(KIND_MARK(e))}
+            <span class="what">${e.whatItIs}${e.quality === 'estimated' ? html` <span class="pill warn">estimated</span>` : ''}</span>
+            <span class="amt">${e.direction === 'out' ? '−' : '+'}${dollars(e.amountCents)}</span>
+            <span class="when"><time>${ago(e.occurredAt)}</time> · ${e.provider}${e.fromEvent ? ` event ${e.fromEvent}` : ` ${e.providerRef}`}</span>
+            <details class="why-row"><summary class="quiet">why</summary><p class="quiet">${e.because}${e.assumption ? ` Assuming: ${e.assumption}.` : ''}</p></details>
+          </li>`)}</ul>`}
+    </section>
+
+    <div class="inspect">
+    ${fold('cannot', 'What I cannot tell you', `reached a bank: ${figureText(banked)}`, html`
       <p><strong>What has reached a bank: ${fig(banked)}.</strong> ${banked.because}</p>
       <p class="quiet">Gross charged, before Stripe took anything: ${figureText(gross)}. That number is
-        not yours and is only here so the subtraction above can be checked against it.</p>
-    </div>
+        not yours and is only here so the subtraction above can be checked against it.</p>`)}
 
-    <div class="know">
-      <h2>Every sale, and what was left of it</h2>
-      ${units.length === 0
+    ${fold('sales', 'Every sale, and what was left of it', units.length ? `${String(units.length)} ${units.length === 1 ? 'sale' : 'sales'}` : 'none yet', units.length === 0
         ? html`<p class="quiet">Nothing has been sold. When something is, each sale appears here with
             what Stripe took out of it, so the margin is never guessed at from the price.</p>`
         : html`<ul class="sales">${units.map(({ row, view }) => html`<li>
@@ -156,11 +208,9 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
             · left ${fig(view.contribution)}
             ${view.contribution.cents === null
               ? html`<p class="quiet">${view.contribution.because}</p>` : ''}
-          </li>`)}</ul>`}
-    </div>
+          </li>`)}</ul>`)}
 
-    <div class="know">
-      <h2>What running this has cost</h2>
+    ${fold('cost', 'What running this has cost', figureText(cost.total), html`
       <p><strong>${fig(cost.total)}</strong> ${cost.total.because}</p>
       <p class="quiet">Not part of the subtraction above. This money has already left, out of your own
         pocket rather than out of anything a buyer paid — subtracting it there would count it twice
@@ -169,27 +219,9 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
           <b>${dollars(l.amountCents)}</b> on ${l.tool}${l.capability ? ` (${l.capability})` : ''}
           · ${l.source}${l.providerRef ? ` · receipt ${l.providerRef}` : ''}
           · ${l.at}
-        </li>`)}</ul>`}
-    </div>
+        </li>`)}</ul>`}`)}
 
-    <div class="know">
-      <h2>The ledger, as it stands</h2>
-      <p class="quiet">Every row in the order the world put them in, not the order I heard about
-        them. Each says what it claims to be and what stands behind it.</p>
-      ${ledger.length === 0
-        ? html`<p class="quiet">Nothing yet. The first row will be written by Stripe, not by me.</p>`
-        : html`<ul class="sales">${ledger.map((e) => html`<li>
-            <b>${e.direction === 'out' ? '−' : ''}${dollars(e.amountCents)}</b>
-            ${e.whatItIs}
-            · ${e.occurredAt}
-            ${e.quality === 'estimated' ? html`· <span class="quiet">estimated${e.assumption ? `, assuming: ${e.assumption}` : ''}</span>` : ''}
-            <p class="quiet">${e.because} ${e.fromEvent ? `From ${e.provider} event ${e.fromEvent}.` : `${e.provider} ${e.providerRef}.`}</p>
-          </li>`)}</ul>`}
-    </div>
-
-    <div class="know">
-      <h2>What you can set</h2>
-
+    ${fold('set', 'What you can set', 'tax, the floor, money you moved', html`
       <h3>Tax</h3>
       <p class="quiet">An assumption of yours, applied to a measured basis, so money you may owe is
         not money you think you can take. It is never a filing, a return, or advice, and it will
@@ -232,9 +264,9 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
         <label class="sr" for="movedwhy">What it was</label>
         <input id="movedwhy" name="because" type="text" placeholder="What it was" />
         <button class="btn" type="submit">Record it</button>
-      </form>
+      </form>`)}
     </div>`;
-  return c.html(page('Money', body, 'money', frame));
+  return c.html(page('Economics', body, 'money', frame));
 });
 
 // ─── What the owner sets ─────────────────────────────────────────────────────

@@ -2546,17 +2546,43 @@ foundryShellRoutes.get('/foundry', async (c) => {
       ${needsN === 0 ? html`<p class="lines"><span class="state ${estate.cls}">Estate ${estate.word.toLowerCase()}</span> <span class="state ${autonomy.nothingWithoutHim ? 'ok' : 'watch'}">Autonomy ${autonomy.nothingWithoutHim ? 'asks first' : 'within grants'}</span></p>` : ''}
     </section>` : '';
 
+  // ASK IS A FIRST-CLASS SURFACE, NOT A BOLTED-ON TEXTAREA. When he asked
+  // something, the exchange leads — his words, then the answer read from
+  // canonical state — with the questions this surface can answer beside it,
+  // and the estate follows beneath. The answer path is unchanged.
+  const askSurface = key ? html`<section class="ask-surface" aria-label="Ask Foundry">
+      <div class="turn you"><span class="avatar" aria-hidden="true">${(s.firstName || 'You').slice(0, 1).toUpperCase()}</span>
+        <div class="bubble"><p class="who">${s.firstName || 'You'}</p><p class="asked">${typed || QUESTIONS[key] || asked}</p></div></div>
+      <div class="turn foundry"><span class="avatar mark-avatar" aria-hidden="true">${mark('spark')}</span>
+        <div class="bubble"><p class="who">Foundry <span class="dim">· from canonical state</span></p>
+      ${ventureSaid ? html`<div class="said">
+        <p>That sounds like something for me to go and do rather than a question.</p>
+        <form method="POST" action="/foundry/venture">
+          <input type="hidden" name="said" value="${ventureSaid}" />
+          <button class="btn go" type="submit">Tell me what you would do</button>
+        </form>
+      </div>`
+    : about ? answerAboutCompany(about)
+      : key === 'portfolio' || key === 'capital' || key === 'away' || key === 'back'
+        ? answerAboutEverything(key, s.ownerId)
+        : await answerTo(key, s, attention)}
+        </div></div>
+      <p class="try-label">Try asking</p>
+      <div class="maybe">${raw(['today', 'needs', 'portfolio', 'allowed', 'capital', 'away'].filter((k) => k !== key).slice(0, 4).map((k) =>
+    `<a href="/foundry?ask=${k}">${QUESTIONS[k]}</a>`).join(''))}</div>
+    </section>` : '';
   const body = html`
-    <h1><span id="greet">Hello</span>${s.firstName ? `, ${s.firstName}` : ''}.</h1>
+    ${key ? html`<h1>Ask Foundry</h1><p class="lede">Answers from real state, not guesses.</p>${askSurface}`
+    : html`<h1><span id="greet">Hello</span>${s.firstName ? `, ${s.firstName}` : ''}.</h1>`}
     ${placeHead(homeFrame, '')}
     ${orientation
     ? attention === null
-      ? html`<p class="lede">${orientation}</p>`
+      ? html`<p class="lede${key ? ' quiet' : ''}">${orientation}</p>`
       // A LINE THAT ANNOUNCES AN INTERRUPTION AND GOES NOWHERE IS A DEAD
       // SUMMARY. The card is directly below on this screen, so the jump is
       // short — but it is the difference between a status and a way in, and
       // on a long page or with the text at 200% it is not short at all.
-      : html`<p class="lede"><a href="#the-one-thing">${orientation}</a></p>`
+      : html`<p class="lede${key ? ' quiet' : ''}"><a href="#the-one-thing">${orientation}</a></p>`
     : ''}
     ${portfolioState}
     <!-- THE ONE THING HE CAME FOR, BEFORE ANYTHING HE DID NOT.
@@ -2768,19 +2794,6 @@ foundryShellRoutes.get('/foundry', async (c) => {
     </div>` : ''}
 
     ${done ? whatJustHappened(done, s) : ''}
-
-    ${key ? html`<p class="asked">${typed || QUESTIONS[key] || asked}</p>
-      ${ventureSaid ? html`<div class="said">
-        <p>That sounds like something for me to go and do rather than a question.</p>
-        <form method="POST" action="/foundry/venture">
-          <input type="hidden" name="said" value="${ventureSaid}" />
-          <button class="btn go" type="submit">Tell me what you would do</button>
-        </form>
-      </div>`
-    : about ? answerAboutCompany(about)
-      : key === 'portfolio' || key === 'capital' || key === 'away' || key === 'back'
-        ? answerAboutEverything(key, s.ownerId)
-        : await answerTo(key, s, attention)}` : ''}
 
     ${!key ? html`<div class="maybe">
       ${raw((attention !== null && attention.kind !== 'stopped' && attention.kind !== 'drifted'
@@ -5692,10 +5705,43 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
   const autonomy = await autonomyAcross(s.ownerId);
   const { healthOf } = await import('../../services/founder/health.js');
   const health = await healthOf(s.ownerId);
+  // THE OWNER'S ENVELOPE, NOT A SETTINGS TREE. Stop everything first, because
+  // the one control that must never be searched for is the one that halts
+  // it all. Then the envelope as cards: health, what I may do on my own, how
+  // the Workshop speaks, the money I may spend, what I am connected to, what I
+  // hold, the Workshop's reach, and the boundaries he drew. Every fact on
+  // every card is the row it was before; only the composition changes.
+  const { exclusionsFor } = await import('../../services/institution/owner-exclusions.js');
+  const exclusions = await exclusionsFor(s.ownerId);
+  const { correspondenceHealth } = await import('../../services/public-workshop/correspondence.js');
+  const speaking = await correspondenceHealth(s.ownerId);
+  const MODE_WORD: Record<string, string> = { off: 'Off', draft: 'Draft', autonomous: 'Autonomous' };
+  const MODE_GLOSS: Record<string, string> = { off: 'answering nothing; everything waits for you', draft: 'writing answers, sending none', autonomous: 'answering ordinary messages itself' };
+  const spentPct = s.budgetMonthly !== null && s.budgetMonthly > 0 ? Math.min(100, Math.round((100 * s.spent30d) / s.budgetMonthly)) : null;
+  const card = (name: string, title: string, inner: HtmlEscapedString | Promise<HtmlEscapedString>, cls = '') =>
+    html`<section class="panel ctl${cls}"><header><h2>${mark(name)}${title}</h2></header>${inner}</section>`;
   const body = html`
-    <h1>What I'm allowed to do</h1>
-    <div class="know"><h2>System health</h2>
-      <p><span class="state ${health.state === 'ok' ? 'ok' : health.state === 'degraded' ? 'watch' : 'bad'}">${health.word}</span></p>
+    <h1>Controls</h1>
+    <p class="lede">Authority, safety and boundaries. What I may do on my own, what stops me, and the lines you drew.</p>
+
+    ${stopped ? html`<p class="noticed">Stopped. I will not use it again. If you are
+      paying for it, that has not stopped &mdash; end it in your account with them.</p>` : ''}
+
+    <section class="panel stop-all" aria-label="Stop everything">
+      ${mark('stop')}
+      <div><h2>Stop everything</h2>
+        <p class="quiet">Halts every routine, every permission and every outgoing action at once. Nothing is lost — I stop acting on it.</p></div>
+      <form method="POST" action="/autopilot/panic" data-confirm="Stop every routine, permission and outgoing action now?">
+        <input type="hidden" name="return_to" value="foundry" />
+        <button class="btn danger" type="submit">Stop everything</button>
+      </form>
+    </section>
+
+    ${standingPermission(s)}
+
+    <div class="ctl-grid">
+    ${card('estate', 'System health', html`
+      <p class="lines"><span class="state ${health.state === 'ok' ? 'ok' : health.state === 'degraded' ? 'watch' : 'bad'}">${health.word}</span></p>
       <dl class="facts">
         <dt>What failed</dt><dd>${health.failed.length ? health.failed.join('; ') : 'nothing'}</dd>
         <dt>Recovering</dt><dd>${health.recovering}</dd>
@@ -5709,21 +5755,10 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
            says what I may do; that one says what would still be true if you
            did not come back for three months, and what thinking costs. -->
       <p class="quiet"><a href="/foundry/absence">If you stepped away &mdash; seven,
-        thirty and ninety days</a></p>
-    </div>
+        thirty and ninety days</a></p>`)}
 
-    ${stopped ? html`<p class="lede">Stopped. I will not use it again. If you are
-      paying for it, that has not stopped &mdash; end it in your account with them.</p>` : ''}
-
-    ${standingPermission(s)}
-
-    <!-- THIS SECTION RENDERED ONLY WHEN THERE WERE NO PERMISSIONS.
-         The moment he granted one it disappeared, so the page titled "What I'm
-         allowed to do" said nothing about permissions in exactly the state
-         where the answer matters. It is a map now, in both states, led by its
-         loosest point — an estate's autonomy is not an average. -->
-    <div class="know">
-      <h2>What I may do on my own</h2>
+    ${card('autonomy', 'What I may do on my own', html`
+      <p class="lines"><span class="state ${autonomy.nothingWithoutHim ? 'ok' : 'watch'}">${autonomy.nothingWithoutHim ? 'Asks first' : 'Granted'}</span></p>
       <p>${autonomy.sentence}</p>
       ${autonomy.nothingWithoutHim ? html`<p class="quiet">Each of those would be something you
         allow separately, for a set time, and could take back whenever you wanted. I ask on the
@@ -5739,62 +5774,54 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
         <p class="quiet">Thirty days: ${String(r.last30.proposed)} proposed, ${String(r.last30.approved)} approved,
           ${String(r.last30.refused)} refused${r.last30.pendingOutbound > 0 ? `, ${String(r.last30.pendingOutbound)} waiting on you` : ''}.
           <a href="/foundry/companies/${r.productId}/authority">Change what I may do here</a></p>
-      </li>`)}</ul>`}
-    </div>
+      </li>`)}</ul>`}`)}
 
-    <div class="know">
-      <h2>Money</h2>
-      <ul>
-        <li>$${s.spent30d.toFixed(2)} spent in the last 30 days.</li>
-        <li>${s.budgetMonthly === null
-    ? html`You have not set a monthly limit for ${s.companyName}. The daily ceilings
-      below are what actually stops me.`
-    : html`$${String(s.budgetMonthly)} a month is the limit you set for
-      ${s.companyName}.`}</li>
-        <li>I stop thinking for a company at $2 a day, and for everything at $5 a day.</li>
-      </ul>
-      <p class="quiet">Watching costs nothing — comparing my own records uses no thinking.</p>
-    </div>
+    ${card('mail', 'Communication mode', html`
+      <div class="segments" role="group" aria-label="How the Workshop answers">
+        ${(['off', 'draft', 'autonomous'] as const).map((m) => html`<span class="seg${speaking.mode === m ? ' on' : ''}"${speaking.mode === m ? raw(' aria-current="true"') : ''}><b>${MODE_WORD[m]}</b></span>`)}
+      </div>
+      <p class="quiet">${MODE_GLOSS[speaking.mode] ?? speaking.mode}. ${speaking.answered} answered · ${speaking.sent} sent · ${speaking.escalated} left for you.</p>
+      <p class="quiet"><a href="/foundry/inbox">Change it in the Inbox</a>, with a reason for the record.</p>`)}
 
-    <div class="know">
-      <h2>Connected to</h2>
-      ${s.connectedSenses.length === 0
-    ? html`<p><strong>Nothing.</strong> I have no way to see your code, your money or your
-        customers.</p>`
-    : html`<ul>${raw(s.connectedSenses.map((x) => `<li>${x}</li>`).join(''))}</ul>`}
-    </div>
+    ${card('cash', 'Money', html`
+      <p class="lines"><b class="num">$${s.spent30d.toFixed(2)}</b> <span class="quiet">spent in 30 days${s.budgetMonthly !== null ? ` of $${String(s.budgetMonthly)} a month` : ''}</span></p>
+      ${spentPct !== null ? html`<span class="prog" role="img" aria-label="${String(spentPct)}% of the monthly limit"><i style="width:${String(Math.max(2, spentPct))}%"></i></span><p class="prog-n">$${String(s.budgetMonthly)} a month is the limit you set for ${s.companyName} · ${String(spentPct)}% used</p>`
+    : html`<p class="quiet">You have not set a monthly limit for ${s.companyName}. The daily ceilings below are what actually stops me.</p>`}
+      <dl class="facts">
+        <dt>Per company</dt><dd>I stop thinking at $2 a day</dd>
+        <dt>Everything</dt><dd>$5 a day</dd>
+        ${ceiling == null ? '' : html`<dt>Outside myself</dt><dd>$${(Number(ceiling.cents_per_month) / 100).toFixed(2)} a month of metered use, ${ceilingSetByHim
+    ? `set by you on ${String(ceiling.authorized_at).slice(0, 10)}`
+    : html`set by <span class="mono">${String(ceiling.authorized_by)}</span> on ${String(ceiling.authorized_at).slice(0, 10)} &mdash; if that was not you, it is worth asking why`}</dd>`}
+      </dl>
+      <p class="quiet">Watching costs nothing — comparing my own records uses no thinking.${ceiling == null ? '' : ' The metered ceiling is separate from any plan: agreeing to a subscription is not agreeing to unlimited computing.'}</p>`)}
 
-    ${ceiling == null ? '' : html`<div class="know">
-      <h2>Work I run outside myself</h2>
-      <p>I stop at <strong>$${(Number(ceiling.cents_per_month) / 100).toFixed(2)}</strong>
-        a month of metered use above whatever plan is paid for.
-        ${ceilingSetByHim
-    ? html`You set that on ${String(ceiling.authorized_at).slice(0, 10)}.`
-    : html`That was set by <span class="mono">${String(ceiling.authorized_by)}</span>
-        on ${String(ceiling.authorized_at).slice(0, 10)} &mdash; if that was not you,
-        it is worth asking why.`}</p>
-      <p class="quiet">This is separate from the plan itself. Agreeing to a subscription
-        is not agreeing to unlimited computing, and this is the number that makes that
-        true rather than a promise.</p>
-    </div>`}
+    ${card('watching', 'Connected to', s.connectedSenses.length === 0
+    ? html`<p><strong>Nothing.</strong> I have no way to see your code, your money or your customers.</p>`
+    : html`<ul>${raw(s.connectedSenses.map((x) => `<li>${x}</li>`).join(''))}</ul>`)}
 
-    ${held.length === 0 ? '' : html`<div class="know">
-      <h2>Things I hold</h2>
+    ${held.length === 0 ? '' : card('box', 'Things I hold', html`
       <p class="quiet">Each of these is something you said I could have. Stopping one
         stops me using it that day. It does not cancel anything you are paying for &mdash;
         that lives in your account with them, and only you can end it.</p>
-      ${held.map((h) => html`<div style="margin-top:var(--s2)">
+      ${held.map((h) => html`<div class="held">
         <p><strong>${h.whatItDoes}</strong> &mdash; ${h.provider}. ${h.costNote}</p>
         <form method="POST" action="/foundry/acquisitions/${h.id}/withdraw">
-          <button class="btn" type="submit" style="width:auto">Stop this</button>
-        </form></div>`)}
-    </div>`}
+          <button class="btn btn-sm" type="submit">Stop this</button>
+        </form></div>`)}`)}
 
-    ${workshopBlock}
+    ${workshop ? card('sent', 'The Workshop', html`
+      <p class="lines"><span class="state ${workshop.economicPause ? 'watch' : 'ok'}">${workshop.economicPause ? 'Paused' : 'Live'}</span> <span class="quiet">${workshop.zoneName}</span></p>
+      <p class="quiet">I may publish pages, deploy the one program that serves them, keep the Workshop's own DNS records, and forward its mail to you. Each change leaves a receipt with what was there before. I cannot transfer the domain, change its nameservers, delete a zone, or touch any other domain: those tools do not exist.</p>
+      <p class="quiet">${workshop.economicPause ? html`<strong>New economic activity is paused</strong> since ${workshop.economicPause.at.slice(0, 10)}: ${workshop.economicPause.reason}. What is owed still goes out.` : html`Tests write to strangers only as ${workshop.operatorName} — ${workshop.publicName}, from ${workshop.contactEmail}, pointing at a page I have read back from the world.`}</p>
+      <p class="quiet"><a href="/foundry/public-workshop">The Workshop</a></p>`) : ''}
 
-    ${watching + beyondWatching === 0 ? '' : html`<div class="know">
-      <h2>Acting on its own</h2>
-      ${beyondWatching === 0
+    ${card('stop', 'Owner exclusions', exclusions.length === 0
+    ? html`<p class="quiet">No business, person or topic is excluded by name. An exclusion outranks every score, recommendation and opportunity.</p>`
+    : html`<ul class="exclusions">${exclusions.map((x) => html`<li><span class="pill refused">Protected</span> <b>${x.entity}</b>
+        <span class="quiet">Foundry will not contact this business under any circumstances${x.marks.length ? ` · ${String(x.marks.length)} ${x.marks.length === 1 ? 'mark' : 'marks'} on record` : ''}.</span></li>`)}</ul>`)}
+
+    ${watching + beyondWatching === 0 ? '' : card('autonomy', 'Acting on its own', beyondWatching === 0
     ? html`<p>Nothing. There ${watching === 1 ? 'is one kind' : `are ${count(watching, 'kind')}`}
         of work I could in principle be allowed to do without asking &mdash; marketing,
         reaching out, changing a product, answering a customer &mdash; and every one of
@@ -5805,36 +5832,20 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
         properly, one kind of work at a time.</p>`
     : html`<p><strong>${count(beyondWatching, 'kind')} of work</strong> ${beyondWatching === 1 ? 'is' : 'are'}
         set above watching only, and ${count(watching, 'other')} ${watching === 1 ? 'is' : 'are'} not.
-        This is worth reading closely &mdash; it says I may do something without asking.</p>`}
-    </div>`}
+        This is worth reading closely &mdash; it says I may do something without asking.</p>`)}
 
-    <div class="know">
-      <h2>Stopping me</h2>
-      <p>One button halts every routine, every permission and every outgoing action at once.
-        Nothing is lost — I stop acting on it.</p>
-      <form method="POST" action="/autopilot/panic" style="margin-top:var(--s2)">
-        <input type="hidden" name="return_to" value="foundry" />
-        <button class="btn" type="submit" style="width:auto">Stop everything</button>
-      </form>
-    </div>
-
-    <div class="card">
-      <h2>The rest of the controls</h2>
+    ${card('box', 'The rest of the controls', html`
       <!-- THESE WERE REACHABLE ONLY FROM INSIDE THE LETTER.
            Settings and Privacy govern what Foundry may do and what happens to
            his data — the question this door exists to answer — but the only way
            to either was a link in the middle of the Advanced depth, in the
            other visual system. They render in this shell now and light this
            door, so the geography matches what they are. -->
-      <p>Settings holds how I speak to you, how loudly I may interrupt, how
+      <p class="quiet">Settings holds how I speak to you, how loudly I may interrupt, how
         often I run, the address your customers hear from, and the keys that let
-        anything act on this institution.</p>
-      <p>Privacy holds consent, where the data lives, taking a copy, and
+        anything act on this institution. Privacy holds consent, where the data lives, taking a copy, and
         deleting it.</p>
-      <div style="display:flex;gap:var(--s2);flex-wrap:wrap;margin-top:var(--s2)">
-        <a class="btn" href="/settings" style="width:auto">Settings</a>
-        <a class="btn" href="/privacy" style="width:auto">Privacy and data</a>
-      </div>
+      <p class="row"><a class="btn btn-sm" href="/settings">Settings</a><a class="btn btn-sm" href="/privacy">Privacy and data</a></p>`)}
     </div>`;
 
   const controlsFrame: Where = {

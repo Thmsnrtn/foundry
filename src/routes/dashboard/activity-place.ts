@@ -22,6 +22,7 @@
 import { Hono } from 'hono';
 import { html } from 'hono/html';
 import { page } from './foundry-shell.js';
+import { ago, mark } from '../../views/owner/shell.js';
 import type { Where } from './foundry-shell.js';
 import { whatHappened, type ActivityKind, type InstitutionalEvent } from '../../services/founder/activity.js';
 
@@ -96,12 +97,31 @@ activityRoutes.get('/foundry/activity', async (c: any) => {
   // change what it shows.
   const present = CLASSES.filter(([k]) => all.some((e) => e.kind === k));
 
+  // THE ESTATE'S STATE, ABOVE THE STREAM — and deliberately not a count of
+  // events. Health is a state with rows behind it; how many things happened
+  // is not a number he should be taught to watch.
+  const { healthOf } = await import('../../services/founder/health.js');
+  const health = await healthOf(founderId);
+  const healthCls = health.state === 'ok' ? 'ok' : health.state === 'degraded' ? 'watch' : 'bad';
+  const EVENT_MARK: Record<ActivityKind, string> = { authority: 'check', experiment: 'experiment', outward: 'sent', money: 'money', obligation: 'box', boundary: 'stop' };
   const body = html`
     <h1>Activity</h1>
     <p class="lede">${only
     ? `${LABEL.get(only) ?? 'Everything'}, newest first.`
     : 'What actually happened, newest first. Not what I thought, and not that I was running.'}</p>
-    ${present.length < 2 ? '' : html`<p class="chips">
+    <dl class="glance act-glance" aria-label="The estate, now">
+      <div class="tile door"><dt class="k">${mark('estate')}Health</dt>
+        <dd class="v"><span class="state ${healthCls}">${health.word}</span></dd>
+        <dd class="d">${health.failed[0] ?? health.ownerAction ?? 'all responsibilities within their authority'}</dd>
+        <a class="door" href="/foundry/controls" aria-label="Controls"></a></div>
+      <div class="tile"><dt class="k">${mark('owner')}Action</dt>
+        <dd class="v">${health.ownerAction ? html`<span class="state watch">Required</span>` : html`<span class="state quiet none">None</span>`}</dd>
+        <dd class="d">${health.ownerAction ?? (health.recovering === 'automatically' ? 'recovering on its own' : 'nothing is waiting on you here')}</dd></div>
+      <div class="tile"><dt class="k">${mark('changed')}Last healthy</dt>
+        <dd class="v">${health.lastHealthy ? html`${ago(health.lastHealthy)}` : html`<span class="dim">not recorded</span>`}</dd>
+        <dd class="d">${health.nextPass ? `next pass ${health.nextPass.slice(11, 16)} UTC` : 'no pass scheduled'}</dd></div>
+    </dl>
+    ${present.length < 2 ? '' : html`<p class="chips filters-row">
       <a class="chip${only ? '' : ' on'}" href="/foundry/activity">Everything</a>
       ${present.map(([k, label]) => html`<a class="chip${only === k ? ' on' : ''}"
         href="/foundry/activity?kind=${k}">${label}</a>`)}</p>`}
@@ -117,15 +137,15 @@ activityRoutes.get('/foundry/activity', async (c: any) => {
           scheduler running, checks that passed, or what I thought about.</p>
       </div>`
     : byDay(events).map(([day, ofDay]) => html`
-      <div class="know">
+      <div class="know stream-day">
         <h2>${day}</h2>
         <ul class="stream">
           ${ofDay.map((e) => html`<li class="ev ${e.kind}">
-            <p class="when"><time>${timeOf(e.at)}</time>
-              <span class="pill">${LABEL.get(e.kind) ?? e.kind}</span>
-              ${e.companyName ? html` <span class="quiet">${e.companyName}</span>` : ''}</p>
-            <p>${e.href ? html`<a href="${e.href}">${e.what}</a>` : e.what}</p>
-            ${e.detail ? html`<p class="quiet">${e.detail}</p>` : ''}
+            <p class="when"><time>${timeOf(e.at)}</time></p>
+            <span class="dot">${mark(EVENT_MARK[e.kind] ?? 'box')}</span>
+            <p class="what">${e.href ? html`<a href="${e.href}">${e.what}</a>` : e.what}</p>
+            ${e.detail ? html`<p class="quiet">${e.detail}${e.companyName ? html` <span class="dim">· ${e.companyName}</span>` : ''}</p>` : e.companyName ? html`<p class="quiet"><span class="dim">${e.companyName}</span></p>` : ''}
+            <span class="pill kind">${LABEL.get(e.kind) ?? e.kind}</span>
           </li>`)}
         </ul>
       </div>`)}`;

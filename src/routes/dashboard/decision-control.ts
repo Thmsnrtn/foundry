@@ -84,8 +84,6 @@ export function renderDecision(input: {
 
   return html`<div class="decision">
     ${facts}
-    <style>.alsotrue{list-style:none;padding:0;margin:0}.alsotrue li{margin:.15rem 0}
-      .decision .btn{white-space:normal;text-align:left}</style>
     <form method="POST" action="${input.action}">
       ${raw(Object.entries(input.hidden)
     .map(([k, v]) => `<input type="hidden" name="${k}" value="${v}" />`).join(''))}

@@ -9,8 +9,9 @@
 // is visible as a wrong reading rather than as a silent mishandling.
 // =============================================================================
 import { Hono } from 'hono';
-import { html } from 'hono/html';
+import { html, raw } from 'hono/html';
 import { page } from './foundry-shell.js';
+import { ago, mark } from '../../views/owner/shell.js';
 import type { Where } from './foundry-shell.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
 
@@ -47,40 +48,67 @@ inboxRoutes.get('/foundry/inbox', async (c: any) => {
   const speaking = await correspondenceHealth(founderId);
   const done = String(c.req.query('done') ?? '');
 
+  // A COMMUNICATIONS MEMBRANE, NOT A MAIL CLIENT. What rises is what needs
+  // him; what Foundry handled within its authority sits behind a filter, with
+  // its reading and its grounds beside the words so a wrong reading is visible
+  // as a wrong reading. The mode is a state shown as one, changed with a reason.
+  const show = String(c.req.query('show') ?? '');
+  const needsHim = mail.filter((m) => m.handling === 'needs_owner');
+  const handled = mail.filter((m) => m.handling === 'resolved' || m.handling === 'no_action');
+  const rows = show === 'needs' ? needsHim : show === 'handled' ? handled : mail;
+  const initials = (m: typeof mail[number]): string => (m.fromName ?? m.from).split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('');
+  const readingCls = (r: string): string => /complaint|stop_writing|wants_money_back|not_for_us|needs_a_person/.test(r) ? 'warn' : /wants_more|was_useful|answering_offer|asking/.test(r) ? 'ok' : '';
+  const MODES: Array<['off' | 'draft' | 'autonomous', string, string]> = [
+    ['off', 'Off', 'everything waits for you'],
+    ['draft', 'Draft', 'writes answers, sends none'],
+    ['autonomous', 'Autonomous', 'answers ordinary messages itself'],
+  ];
   const body = html`
     <h1>Inbox</h1>
     ${done ? html`<p class="noticed">Recorded.</p>` : ''}
-    <p class="lede">What people wrote to Apex Micro, and what Foundry made of it. Every message is also in your own mailbox, untouched — this is the institution's reading of it, not a copy of your email.</p>
-    <section class="know">
-      <h2>How much the Workshop answers for itself</h2>
-      <p class="quiet">Now: <strong>${MODE_WORD[speaking.mode]}</strong>. ${speaking.answered} answered · ${speaking.sent} sent · ${speaking.escalated} left for you · ${speaking.waiting} not yet looked at${speaking.failed ? ` · ${speaking.failed} failed to send` : ''}.</p>
-      <form method="POST" action="/foundry/inbox/mode" class="stack">
-        <label>Change it
-          <select name="mode">
-            <option value="off" ${speaking.mode === 'off' ? 'selected' : ''}>Answer nothing — everything waits for me</option>
-            <option value="draft" ${speaking.mode === 'draft' ? 'selected' : ''}>Write answers but send nothing</option>
-            <option value="autonomous" ${speaking.mode === 'autonomous' ? 'selected' : ''}>Answer ordinary messages without asking me</option>
-          </select></label>
-        <label>Why <input type="text" name="because" required placeholder="one line, for the record" /></label>
-        <button class="btn" type="submit">Set it</button>
-      </form>
-      <p class="quiet">Whatever this says, a message can never grant Foundry authority it does not already have. Legal and security messages, anything claiming your approval, new commitments and anything it could not read confidently always come to you.</p>
+    <p class="lede">What people wrote to Apex Micro, and what Foundry made of it. Your own mailbox is untouched; this is the institution's reading, not a copy of your email.</p>
+
+    <section class="panel mode-panel" aria-label="Correspondence mode">
+      <header><h2>${mark('mail')}Correspondence mode</h2><span class="dim">${speaking.answered} answered · ${speaking.sent} sent · ${speaking.escalated} left for you${speaking.failed ? ` · ${speaking.failed} failed to send` : ''}</span></header>
+      <div class="segments" role="group" aria-label="How much the Workshop answers for itself">
+        ${MODES.map(([m, label, gloss]) => html`<span class="seg${speaking.mode === m ? ' on' : ''}"${speaking.mode === m ? raw(' aria-current="true"') : ''}><b>${label}</b><small>${gloss}</small></span>`)}
+      </div>
+      <details class="fold change-mode"><summary><h3>Change it</h3><span class="gist">now: ${MODE_WORD[speaking.mode]}</span></summary>
+        <form method="POST" action="/foundry/inbox/mode" class="stack">
+          <label>Mode
+            <select name="mode">
+              <option value="off" ${speaking.mode === 'off' ? 'selected' : ''}>Answer nothing — everything waits for me</option>
+              <option value="draft" ${speaking.mode === 'draft' ? 'selected' : ''}>Write answers but send nothing</option>
+              <option value="autonomous" ${speaking.mode === 'autonomous' ? 'selected' : ''}>Answer ordinary messages without asking me</option>
+            </select></label>
+          <label>Why <input type="text" name="because" required placeholder="one line, for the record" /></label>
+          <button class="btn" type="submit">Set it</button>
+        </form>
+        <p class="quiet">Whatever this says, a message can never grant Foundry authority it does not already have. Legal and security messages, anything claiming your approval, new commitments and anything it could not read confidently always come to you.</p>
+      </details>
     </section>
+
     ${mail.length === 0 ? html`<section class="know"><h2>Nobody has written yet</h2>
       <p class="quiet">Nothing has been sent, so nothing has come back. When mail arrives at the Workshop's address it will appear here, and it will still arrive in your mailbox exactly as it does now.</p></section>`
     : html`
-    <section class="know"><h2>${String(health.waiting)} waiting on you</h2>
-      <p class="quiet">${health.heard} heard in total · ${health.unread} Foundry could not confidently read${health.oldestWaitingHours != null ? ` · the oldest thing waiting has waited ${String(health.oldestWaitingHours)}h` : ''}.</p>
-    </section>
-    <section class="know"><h2>Messages</h2>
-      ${mail.map((m) => html`<div class="item">
-        <p><strong>${m.fromName ?? m.from}</strong> <span class="quiet">${m.fromName ? m.from : ''}</span> <span class="pill">${WORD[m.handling] ?? m.handling}</span></p>
-        <p>${m.subject ?? '(no subject)'} <span class="quiet">· ${when(m.receivedAt)}</span></p>
-        <p class="quiet"><strong>Read as:</strong> ${m.reading.replaceAll('_', ' ')}${m.readingBecause ? ` — ${m.readingBecause}` : ''}</p>
-        ${m.handledBecause ? html`<p class="quiet"><strong>Foundry did:</strong> ${m.handledBecause}</p>` : ''}
-        <p class="quiet"><a href="/foundry/inbox/${m.threadKeyHref}">Read the whole thread</a></p>
-      </div>`)}
-    </section>`}`;
+    <p class="decisions-head" aria-label="Show">
+      <a class="chip${show === 'needs' ? ' on' : ''}${needsHim.length ? ' hot' : ''}" href="/foundry/inbox?show=needs">Needs you <b>${String(needsHim.length)}</b></a>
+      <a class="chip${show === 'handled' ? ' on' : ''}" href="/foundry/inbox?show=handled">Handled <b>${String(handled.length)}</b></a>
+      <a class="chip${show === '' ? ' on' : ''}" href="/foundry/inbox">All <b>${String(mail.length)}</b></a></p>
+    <p class="quiet">${health.heard} heard in total · ${health.unread} Foundry could not confidently read${health.oldestWaitingHours != null ? ` · the oldest thing waiting has waited ${String(health.oldestWaitingHours)}h` : ''}.</p>
+    <ul class="mailrows" aria-label="Messages">
+      ${rows.map((m) => html`<li class="mailrow${m.handling === 'needs_owner' ? ' needs' : ''}">
+        <a class="open" href="/foundry/inbox/${m.threadKeyHref}" aria-label="Read the whole thread"></a>
+        <span class="avatar" aria-hidden="true">${initials(m) || '?'}</span>
+        <span class="who"><b>${m.fromName ?? m.from}</b>${m.fromName ? html` <span class="dim">${m.from}</span>` : ''}</span>
+        <span class="when"><time>${ago(m.receivedAt)}</time></span>
+        <span class="subj">${m.subject ?? '(no subject)'}</span>
+        <span class="snip">${m.body.replace(/\s+/g, ' ').trim().slice(0, 110)}${m.body.length > 110 ? '…' : ''}</span>
+        <span class="tags"><span class="pill ${readingCls(m.reading)}">${m.reading.replaceAll('_', ' ')}</span><span class="pill${m.handling === 'needs_owner' ? ' warn' : m.handling === 'resolved' ? ' ok' : ''}">${WORD[m.handling] ?? m.handling}</span></span>
+        <span class="read"><strong>Read as:</strong> ${m.reading.replaceAll('_', ' ')}${m.readingBecause ? ` — ${m.readingBecause}` : ''}${m.handledBecause ? html` <span class="dim">· Foundry did: ${m.handledBecause}</span>` : ''}</span>
+      </li>`)}
+      ${rows.length === 0 ? html`<li class="quiet">Nothing of that kind.</li>` : ''}
+    </ul>`}`;
   return c.html(page('Inbox', body, 'inbox', where('inbox')));
 });
 
@@ -118,7 +146,7 @@ inboxRoutes.get('/foundry/inbox/:thread', async (c: any) => {
     ${msgs.map((m) => html`<section class="know">
       <h2>${m.fromName ?? m.from} <span class="quiet">${when(m.receivedAt)}</span></h2>
       <p class="quiet">to ${m.to}${m.sentAt ? ` · they sent it ${when(m.sentAt)}` : ''}</p>
-      <pre class="said">${m.body}</pre>
+      <pre class="letter">${m.body}</pre>
       <dl class="facts">
         <dt>Read as</dt><dd>${m.reading.replaceAll('_', ' ')}${m.readingBecause ? ` — ${m.readingBecause}` : ''}</dd>
         <dt>Foundry did</dt><dd>${m.handledBecause ?? 'nothing yet'}</dd>
@@ -131,7 +159,7 @@ inboxRoutes.get('/foundry/inbox/:thread', async (c: any) => {
       ${replies.get(m.id) ? html`<div class="answered">
         <h3>${replies.get(m.id)!.status === 'sent' ? 'Foundry answered' : replies.get(m.id)!.decision === 'escalate' ? 'Foundry did not answer this' : 'Foundry drafted an answer'}</h3>
         <p class="quiet">Read as <strong>${replies.get(m.id)!.intent.replaceAll('_', ' ')}</strong> · ${replies.get(m.id)!.because}</p>
-        ${replies.get(m.id)!.says ? html`<pre class="said">${replies.get(m.id)!.says}</pre>` : html`<p class="quiet">Nothing was said. This one is yours.</p>`}
+        ${replies.get(m.id)!.says ? html`<pre class="letter">${replies.get(m.id)!.says}</pre>` : html`<p class="quiet">Nothing was said. This one is yours.</p>`}
         ${replies.get(m.id)!.did.length ? html`<p class="quiet"><strong>And it did:</strong> ${replies.get(m.id)!.did.join('; ')}</p>` : ''}
         <p class="quiet">${replies.get(m.id)!.status === 'sent' ? `Sent ${when(replies.get(m.id)!.sentAt ?? '')} — the provider accepted it${replies.get(m.id)!.providerMessageId ? ` and calls it ${replies.get(m.id)!.providerMessageId}` : ''}.` : replies.get(m.id)!.status === 'failed' ? 'The send did not complete, and nothing was retried blindly.' : 'Not sent.'}</p>
       </div>` : ''}
@@ -139,12 +167,7 @@ inboxRoutes.get('/foundry/inbox/:thread', async (c: any) => {
         <label>How you handled it <input type="text" name="because" required placeholder="one line, for the record" /></label>
         <button class="btn" type="submit">Mark handled</button></form>` : ''}
     </section>`)}
-    <style>
-      .said{white-space:pre-wrap;word-wrap:break-word;background:var(--card,#f6f6f6);padding:.75rem;border-radius:8px;font:inherit;max-width:100%;overflow-x:auto}
-      .facts{display:grid;grid-template-columns:minmax(8rem,auto) 1fr;gap:.25rem .75rem;margin:0}.facts dd{margin:0}
-      .stack{display:grid;gap:.5rem;max-width:26rem}.stack label{display:grid;gap:.25rem}
-      .answered{border-left:3px solid var(--accent,#888);padding-left:.75rem;margin-top:.75rem}
-    </style>`;
+`;
   return c.html(page('Thread', body, 'inbox', where('thread')));
 });
 
