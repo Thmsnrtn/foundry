@@ -103,7 +103,9 @@ const INDEPENDENT_STANCES_NEEDED = 2;
  * it cannot be one of the independent ways a real candidate is believed - which
  * is what keeps the reference world a rehearsal rather than a shortcut.
  */
-export async function whatItWouldTakeToBelieve(seedId: string): Promise<WhatItWouldTakeToBelieve> {
+export async function whatItWouldTakeToBelieve(
+  seedId: string, needed: number = INDEPENDENT_STANCES_NEEDED,
+): Promise<WhatItWouldTakeToBelieve> {
   const have = ((await query(
     `SELECT t.epistemic_stance AS stance, s.what_it_says, COUNT(*) AS n
        FROM market_observations o
@@ -120,17 +122,24 @@ export async function whatItWouldTakeToBelieve(seedId: string): Promise<WhatItWo
     observations: Number(r.n),
   }));
 
-  const enough = have.length >= INDEPENDENT_STANCES_NEEDED;
-  const stillNeeded = Math.max(0, INDEPENDENT_STANCES_NEEDED - have.length);
+  const enough = have.length >= needed;
+  const stillNeeded = Math.max(0, needed - have.length);
   const sentence = have.length === 0
     ? 'Nothing has been observed about this yet. It is a thing to look into, not a '
       + 'thing I believe.'
     : enough
       ? `${String(have.length)} genuinely different ways of knowing have said something: `
         + `${have.map((h) => h.whatItSays).join('; ')}.`
-      : `Only one way of knowing has said anything — ${have[0]?.whatItSays ?? ''} — `
-        + 'across ' + String(have[0]?.observations ?? 0) + ' observations. Reading the '
-        + 'same kind of source again would not make that two.';
+      : have.length === 1
+        ? `Only one way of knowing has said anything — ${have[0]?.whatItSays ?? ''} — `
+          + 'across ' + String(have[0]?.observations ?? 0) + ' observations. Reading the '
+          + 'same kind of source again would not make that two.'
+        // RAISED BARS SAY SO. He asked to be harder to convince, and a refusal
+        // that still said "would not make that two" would be describing a rule
+        // it was no longer applying.
+        : `${String(have.length)} different ways of knowing have said something — `
+          + `${have.map((h) => h.whatItSays).join('; ')} — and you asked for `
+          + `${String(needed)}.`;
   return { have, stillNeeded, enough, sentence };
 }
 
@@ -160,11 +169,25 @@ export async function promote(input: {
     return { refused: 'a candidate belongs to a search, and this seed has none' };
   }
 
-  const believe = await whatItWouldTakeToBelieve(input.seedId);
+  // HOW HARD HE ASKED THIS SEARCH TO BE.
+  //
+  // "Be more sceptical" and "bring me only things that deserve my attention"
+  // both land as `harder` guidance, and `scepticismLevel` has read them
+  // correctly since the day it was written, with no caller. The one place the
+  // bar is actually enforced is here, so this is where it belongs: each
+  // `harder` he said raises the number of genuinely different ways of knowing
+  // a candidate must survive before it is allowed to reach him at all.
+  const { currentMandate, scepticismLevel } = await import('./mandate.js');
+  const mandate = await currentMandate(String(seed.founder_id));
+  const needed = mandate !== null && mandate.id === String(seed.mandate_id)
+    ? INDEPENDENT_STANCES_NEEDED + (scepticismLevel(mandate.guidance) - 1)
+    : INDEPENDENT_STANCES_NEEDED;
+
+  const believe = await whatItWouldTakeToBelieve(input.seedId, needed);
   if (!believe.enough) {
     return {
       refused: `${believe.sentence} A candidate needs `
-        + `${String(INDEPENDENT_STANCES_NEEDED)} genuinely different ways of knowing, `
+        + `${String(needed)} genuinely different ways of knowing, `
         + 'and one plausible story about one source is not that.',
     };
   }

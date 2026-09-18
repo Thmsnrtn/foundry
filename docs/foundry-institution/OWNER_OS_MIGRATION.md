@@ -2424,3 +2424,40 @@ Foundry cannot buy.
 **Ranking decides what is said first, never what is said at all.** Everything
 waiting still appears under "Also waiting on you", and the proof asserts it:
 with the charter as the one thing, a reversible act is still on the screen.
+
+## The door hears a direction, and steering steers (18 September 2026)
+
+"Explore API opportunities" is the sentence that exposed both halves of this.
+It names a direction and leaves the mechanics to the institution, which is the
+division of labour autonomy is meant to buy — and it landed in "I did not
+follow that", because every phrase the mandate reader knew named a new company
+to add and none of them meant go and look.
+
+The reader now knows exploration words on their own terms (`explore`, `look
+for`, `look into`, `see if there`, `see whether`, `find something`, `hunt
+for`), and knows the economic forms as things that earn: API, calculator,
+generator, utility, plugin, extension, monitoring, marketplace, licensing,
+dataset, directory, acquisition. Both halves are required, so "explore the
+inbox" is still not a mandate. `SHAPES` gained calculator, utility, plugin,
+monitoring and acquisition, and `api` gained the bare word with spaces around
+it, because a bare `api` substring lives inside `capital` and `rapid`. A shape
+named is a preference on the record and never the space the search may look in;
+nothing downstream filters by it.
+
+**One search at a time is still the rule, and it is now the institution's job
+to carry it.** A direction given while a search is running used to come back as
+"you already have a search running — steer it instead", which is the product
+telling him to do the translation himself. It is now absorbed as `favour`
+guidance on the search he already has, in his own words, and Home says
+"Pointed that way" rather than "Already looking".
+
+**And steering reaches the work.** Of the eight kinds of guidance, only `avoid`
+and `prefer` were read anywhere: `favour`, `deeper` and `industry` were
+recorded, shown back to him, and changed nothing the search did the next
+morning. Each now contributes its subject as a search term in his own words,
+beside the portfolio's own terms rather than instead of them, with "he said:"
+and his sentence as the reason on the brief. `scepticismLevel` — correct since
+the day it was written, called from nowhere — now sets the belief bar in
+`promote`: each "be more sceptical" raises the number of genuinely different
+ways of knowing a candidate must survive before it may reach him, and the
+refusal says the bar it was held to.

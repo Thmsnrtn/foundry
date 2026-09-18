@@ -132,6 +132,27 @@ async function termsFrom(
       from.push(`he said: ${g.statement} (${String(e.why)})`);
     }
   }
+
+  // WHERE HE POINTED, IN HIS OWN WORDS.
+  //
+  // `favour`, `deeper` and `industry` were recorded, shown back to him on
+  // Discover, and read by nothing: five of the eight kinds of steering existed
+  // only as a receipt. So "explore API opportunities" or "target veterinary
+  // practices instead" changed the record and not one thing the search did the
+  // next morning, which is the difference between a nudge and a note.
+  //
+  // What he named becomes a term beside the portfolio's own, never instead of
+  // them: the base terms are about work people do by hand, and replacing them
+  // with a category would return the category. A steering row with no subject
+  // on record adds nothing rather than inventing one.
+  for (const g of guidance) {
+    if (g.kind !== 'favour' && g.kind !== 'deeper' && g.kind !== 'industry') continue;
+    const said = (g.subject ?? '').trim();
+    if (said === '' || said.length > 60) continue;
+    if (terms.some((t) => t.toLowerCase() === said.toLowerCase())) continue;
+    terms.push(said);
+    from.push(`he said: ${g.statement}`);
+  }
   return { terms, from };
 }
 

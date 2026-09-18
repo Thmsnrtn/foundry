@@ -96,16 +96,42 @@ const SHAPES: Array<[string, string[]]> = [
   ['ecommerce', ['ecommerce', 'e-commerce', 'physical product', 'shop']],
   ['transactional', ['take a cut', 'per transaction', 'transaction fee']],
   ['data', ['data business', 'dataset', 'data product']],
-  ['api', ['api business', 'api product', 'developer tool']],
+  ['api', ['api business', 'api product', 'developer tool', ' api ', ' apis', 'api opportunit']],
   ['licensing', ['licensing', 'license it', 'white label', 'white-label']],
   ['productised_service', ['productised service', 'productized service', 'done-for-you']],
+  // FIVE MORE FORMS HE NAMED, and a sixth that is not origination at all.
+  //
+  // Added because he said them and the reader did not know them, not because
+  // the list is meant to become complete. A shape it does not recognise is
+  // still a mandate to look anywhere, which is the whole reason this list is
+  // allowed to grow without becoming a taxonomy.
+  ['calculator', ['calculator', 'generator', 'a tool that works out', 'estimator']],
+  ['utility', ['utility', 'small tool', 'little tool', 'single-purpose tool']],
+  ['plugin', ['plugin', 'plug-in', 'extension', 'add-on', 'addon']],
+  ['monitoring', ['monitoring', 'alerting', 'alerts', 'watch for changes', 'notify me when']],
+  ['acquisition', ['acquisition', 'acquire something', 'buy a business', 'buy an existing']],
 ];
 
+/**
+ * THE WAYS HE SAYS GO AND LOOK.
+ *
+ * "Explore API opportunities" was the sentence that exposed this list: every
+ * phrase here names a NEW THING to add, so a sentence asking Foundry to go and
+ * look in a direction landed in "I did not follow that". An owner who cannot
+ * point the institution at a direction without phrasing it as a company is
+ * being asked to do the mechanics he pays autonomy to avoid.
+ *
+ * Exploration words are here on their own terms. They still need something
+ * that earns beside them, so "explore the inbox" is not a mandate.
+ */
 const ASKING = [
   'add a new', 'add another', 'start a new', 'start another', 'find me a',
   'find me another', 'find a ', 'find another', 'look for a ', 'look for another',
   'new venture', 'another venture', 'new business', 'another business',
   'originate', 'a new company', 'another company',
+  'explore', 'look for ', 'look into ', 'see if there', 'see whether',
+  'find something', 'try something', 'go and find', 'go look', 'hunt for',
+  'have a look at', 'is there anything in',
 ];
 
 /**
@@ -118,6 +144,19 @@ const ASKING = [
  */
 const A_THING_THAT_EARNS =
   /\b(venture|business|compan|saas|product|opportunit|income stream|revenue stream|cash[- ]?flow|earner)/;
+
+/**
+ * AND THE ECONOMIC FORMS, because "explore API opportunities" names one and
+ * "explore calculators" names another without ever saying "business".
+ *
+ * These recognise what he said. They do not narrow where the search may look:
+ * the terms the search actually uses are about work people do by hand, and
+ * nothing downstream filters by a form named here.
+ */
+const EARNS = new RegExp(
+  `${A_THING_THAT_EARNS.source}|\\b(api|calculator|generator|utility|plugin|extension`
+  + '|add-?on|monitoring|alerting|marketplace|licensing|dataset|data product|directory'
+  + '|acquisition|idea)');
 
 /**
  * READ ONE SENTENCE ABOUT VENTURES.
@@ -148,7 +187,7 @@ export function readVentureSentence(raw: string): VentureReading {
     || /\bstrengthen the (river|portfolio)\b/.test(t)) {
     return { kind: 'mandate', statement, shape: null };
   }
-  if (ASKING.some((p) => t.includes(p)) && A_THING_THAT_EARNS.test(t)) {
+  if (ASKING.some((p) => t.includes(p)) && EARNS.test(t)) {
     const shape = SHAPES.find(([, phrases]) => phrases.some((p) => t.includes(p)));
     return { kind: 'mandate', statement, shape: shape ? shape[0] : null };
   }
@@ -158,7 +197,7 @@ export function readVentureSentence(raw: string): VentureReading {
 /** Whether a sentence asks for something that earns, in the mandate's own terms. */
 function sentenceAsks(statement: string): boolean {
   const t = ` ${statement.toLowerCase().replace(/[’]/g, "'")} `;
-  return (ASKING.some((p) => t.includes(p)) && A_THING_THAT_EARNS.test(t))
+  return (ASKING.some((p) => t.includes(p)) && EARNS.test(t))
     || /\b(make|keep)\b[^.]{0,10}\b(the )?river\b[^.]{0,20}\b(strong|wider|deeper|resilient|better)/.test(t);
 }
 function shapeNamedIn(statement: string): string | null {
@@ -509,11 +548,14 @@ export async function absorbParagraph(input: {
   founderId: string; readings: VentureReading[]; evidenceMode?: 'real' | 'reference';
 }): Promise<{
   opened: boolean; absorbed: number; refused: string[]; notHeard: string[];
+  /** True when a direction he gave steered the running search instead of opening one. */
+  pointed: boolean;
 }> {
   const refused: string[] = [];
   const notHeard: string[] = [];
   let opened = false;
   let absorbed = 0;
+  let pointed = false;
 
   // TWO SENTENCES THAT BOTH ASK ARE ONE ASK. "Make the river stronger. Find
   // another small digital income stream..." is a purpose and its instruction,
@@ -528,11 +570,29 @@ export async function absorbParagraph(input: {
   // asked for a search prevented one. When nothing is open and no reading is
   // a plain ask, a steering sentence that itself asks opens the search, and
   // is absorbed as steering too.
-  if (asks.length === 0 && (await currentMandate(input.founderId)) === null) {
+  const already = await currentMandate(input.founderId);
+  if (asks.length === 0 && already === null) {
     const asking = input.readings.find((r) => r.kind === 'guidance' && sentenceAsks(r.statement));
     if (asking) asks.push({ kind: 'mandate', statement: asking.statement, shape: shapeNamedIn(asking.statement) });
   }
-  if (asks.length > 0) {
+  // A DIRECTION, WITH A SEARCH ALREADY RUNNING, IS STEERING.
+  //
+  // "Explore API opportunities" while a search is open used to come back as
+  // "you already have a search running" — a refusal that told him to go and
+  // phrase it as steering himself. One search at a time remains the rule, and
+  // it is the institution's job to carry that mechanic: the direction he named
+  // is absorbed as a preference on the search he already has, in his own
+  // words, on the record, and readable back to him on Discover.
+  if (asks.length > 0 && already) {
+    for (const a of asks) {
+      await absorbGuidance({
+        mandateId: already.id, statement: a.statement, kind: 'favour',
+        subject: a.shape === null ? null : a.shape.replace(/_/g, ' '), dimension: null,
+      });
+      absorbed += 1;
+      pointed = true;
+    }
+  } else if (asks.length > 0) {
     const made = await openMandate({
       founderId: input.founderId,
       statement: asks.map((a) => a.statement).join(' '),
@@ -543,7 +603,7 @@ export async function absorbParagraph(input: {
     else opened = true;
   }
 
-  const open = await currentMandate(input.founderId);
+  const open = already ?? await currentMandate(input.founderId);
   for (const reading of input.readings) {
     if (reading.kind === 'not_venture') { notHeard.push(reading.statement); continue; }
     if (reading.kind === 'stop_mandate') {
@@ -577,7 +637,7 @@ export async function absorbParagraph(input: {
     });
     absorbed += 1;
   }
-  return { opened, absorbed, refused, notHeard };
+  return { opened, absorbed, refused, notHeard, pointed };
 }
 
 export async function stopMandate(founderId: string, reason: string): Promise<boolean> {

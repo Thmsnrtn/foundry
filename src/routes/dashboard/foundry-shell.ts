@@ -1897,7 +1897,12 @@ export function matchQuestion(text: string): string {
   // the word the portfolio rule matches on — and reading it as a question would
   // answer him instead of starting the search he asked for.
   if (/venture|originate|new business|another business|new company|another company|a new saas|micro-?saas|income stream|revenue stream|the river/.test(t)
-    || /stop looking|show me another option|try harder to disprove|higher[- ]ticket|paid acquisition/.test(t)) {
+    || /stop looking|show me another option|try harder to disprove|higher[- ]ticket|paid acquisition/.test(t)
+    // AN EXPLORATION IS AN INSTRUCTION TOO. "Explore API opportunities" names a
+    // direction rather than a company, and it reached "I did not follow that"
+    // because nothing here or in the mandate reader knew the word. Both halves
+    // are needed: a verb that means go and look, and something that earns.
+    || /\b(explore|look for|look into|see if there|see whether|find me|hunt for|is there anything in)\b[^.]{0,40}\b(api|apis|saas|calculator|generator|utility|plugin|extension|monitoring|alerting|marketplace|licensing|dataset|data product|directory|acquisition|opportunit|idea|business|venture|product)/.test(t)) {
     return 'venture';
   }
   // THE PORTFOLIO QUESTION COMES FIRST, because "how are things?" is both the
@@ -2748,6 +2753,9 @@ foundryShellRoutes.get('/foundry', async (c) => {
       something changes.</p></div>` : ''}
     ${done === 'stillintheway' ? html`<div class="done"><p><strong>Not yet.</strong>
       Something is still in the way — it is on the candidate.</p></div>` : ''}
+    ${done === 'pointedsearch' ? html`<div class="done"><p><strong>Pointed that way.</strong>
+      One search at a time, so I took your direction as a preference on the one already
+      running rather than starting a second.</p></div>` : ''}
     ${done === 'alreadylooking' ? html`<div class="done"><p><strong>Already looking.</strong>
       Stop that search first, or steer it instead — two at once would compete for the same
       attention.</p></div>` : ''}
@@ -4312,6 +4320,10 @@ async function absorbAndAnswer(
       <a class="btn go" href="/foundry">Back</a>`, 'foundry'));
   }
 
+  // POINTED, NOT REFUSED. A direction given while a search is running is now
+  // steering on that search, so the answer says what it did rather than what
+  // it would not do.
+  if (result.pointed) return c.redirect('/foundry?done=pointedsearch');
   if (hadMandate && !result.opened) return c.redirect('/foundry?done=alreadylooking');
   if (result.opened) return c.redirect('/foundry?done=looking');
   if (result.absorbed > 0) return c.redirect('/foundry?done=steeredsearch');
@@ -4563,6 +4575,8 @@ async function ventureConfirmation(c: any, founderId: string, said: string): Pro
         <h2>What I can act on</h2>
         <ul>
           <li>Asking me to look — &ldquo;add a new micro-SaaS venture to my portfolio&rdquo;</li>
+          <li>Pointing me somewhere — &ldquo;explore API opportunities&rdquo;. You name the
+            direction; working out what to test is mine.</li>
           <li>Steering the search — what to avoid, what to prefer, an industry, a budget</li>
           <li>Telling me to be harder on a candidate, or to show you another</li>
           <li>Telling me to stop</li>
