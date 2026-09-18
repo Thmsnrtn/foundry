@@ -830,3 +830,26 @@ Either is a legitimate reading and only you can pick one.
 **What happens if neither is done:** nothing breaks, nothing is spent beyond
 today's ceilings, and the River of Nickels does not start flowing. Each
 design the forge finishes waits, unsealed, on its experiment's page.
+
+---
+
+## PENDING 18 — Does "send me more of this kind of thing" reach past the page it was said on? **OWNER**
+
+Every experiment page carries a form, and one of its answers is "send me more
+of this kind of thing" (`continuation_kinds.more_like_this`, permits more).
+The constitution's rule that consent has scope is applied literally in
+`suppression.ts`: an answer given about one experiment is not permission for
+the next, so a continuation that permits more lifts nothing, and only a
+refusal binds. Nothing in the institution therefore ever acts on that answer:
+the people who asked for more are the one consented audience the Workshop
+has, and they hear nothing.
+
+The smallest decision: **may the Workshop write once to a person who answered
+"more of this kind" or "would pay regularly", when the next thing of that kind
+is placed on its page?** Under the sealed contact rules that is still one
+message, with a postal address and a way to stop, and a "never" still binds
+forever. If yes, Foundry adds that audience to the venue hand's one delivery
+act and proves it on rows; if no, the answer stays a record and the form's
+wording is changed so it does not promise what the Workshop will not do. If
+neither, the form keeps promising and the record keeps silent, which is the
+one state that should not last.
