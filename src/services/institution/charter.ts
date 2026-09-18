@@ -71,8 +71,10 @@ export async function liveCharter(founderId: string, now: Date = new Date()): Pr
   return r ? charterOf(r, now) : null;
 }
 
+export interface PastCharter { id: string; signedAt: string; endedAt: string; because: string }
+
 /** The charters that have ended, newest first, with why. */
-export async function pastCharters(founderId: string): Promise<Array<{ id: string; signedAt: string; endedAt: string; because: string }>> {
+export async function pastCharters(founderId: string): Promise<PastCharter[]> {
   return (await rows(
     `SELECT id, signed_at, expires_at, withdrawn_at, withdraw_reason FROM portfolio_envelopes
       WHERE founder_id = ? AND (withdrawn_at IS NOT NULL OR datetime(expires_at) <= datetime('now'))
@@ -196,6 +198,54 @@ export async function carve(input: { charterId: string; experimentId: string; pr
     `INSERT INTO portfolio_envelope_carves (id, envelope_id, experiment_id, product_id, cents)
      VALUES (?,?,?,?,?)`, [id, input.charterId, input.experimentId, input.productId, Math.max(0, Math.round(input.cents))]);
   return id;
+}
+
+export type CharterStatus = 'unsigned' | 'active' | 'expiring' | 'withdrawn';
+
+/** One word for where the charter stands. Expiring is the last week; withdrawn is only when the last one ended by his hand. */
+export function charterStatus(live: Charter | null, past: PastCharter[]): CharterStatus {
+  if (live) return live.daysLeft <= 7 ? 'expiring' : 'active';
+  const last = past[0];
+  return last && last.because !== 'it ran out' ? 'withdrawn' : 'unsigned';
+}
+
+export interface CharterExposure {
+  monthlyCents: number; cognitionCentsPerDay: number; days: number;
+  /** How many calendar months the period touches; the probe ceiling resets in each. */
+  monthsTouched: number;
+  thinkingOverPeriodCents: number;
+  probesOverPeriodCents: number;
+  /** A 30-day window can straddle two calendar months, so two ceilings fit inside it. */
+  anyThirtyDaysCents: number;
+  periodMaxCents: number;
+}
+
+/**
+ * THE MOST IT CAN COST, FROM THE GUARDS THAT HOLD IT.
+ *
+ * Two ceilings are real money and neither is the whole: the carve guard holds
+ * probe money to the month's ceiling per CALENDAR month, and the forge holds
+ * thinking to the day's ceiling per calendar day. So the owner's complete
+ * authorised downside is not "the monthly figure": over a period of D days
+ * touching K calendar months it is M × K on tests plus T × D on thinking, and
+ * any 30-day window may hold two months' ceilings. Conservative on purpose;
+ * the reading nets thinking out of the month, which is stricter than the rows
+ * enforce, and a ceiling stated below what the rows allow is not a ceiling.
+ */
+export function charterExposure(input: { monthlyCents: number; cognitionCentsPerDay: number; days: number; from: Date }): CharterExposure {
+  const days = Math.max(1, Math.round(input.days));
+  const from = input.from;
+  const to = new Date(from.getTime() + days * 86_400_000);
+  const monthsTouched = (to.getUTCFullYear() - from.getUTCFullYear()) * 12 + (to.getUTCMonth() - from.getUTCMonth()) + 1;
+  const M = Math.max(0, Math.round(input.monthlyCents));
+  const T = Math.max(0, Math.round(input.cognitionCentsPerDay));
+  return {
+    monthlyCents: M, cognitionCentsPerDay: T, days, monthsTouched,
+    thinkingOverPeriodCents: T * days,
+    probesOverPeriodCents: M * monthsTouched,
+    anyThirtyDaysCents: 2 * M + 30 * T,
+    periodMaxCents: M * monthsTouched + T * days,
+  };
 }
 
 /** The charter, in the words the Controls card and the Home tile say. */

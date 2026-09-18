@@ -355,6 +355,13 @@ export interface OwnerState {
   spent30d: number;
   connectedSenses: string[];
   establishedAt: string | null;
+  /**
+   * WHETHER THE ECONOMIC LOOP CAN BEGIN. No live charter, a Workshop to speak
+   * as, and something ready to run — a real test waiting on a decision, or a
+   * design the forge sealed — is the one state in which the institution is
+   * ready and only his signature is missing.
+   */
+  charter: { live: boolean; workshop: string | null; readyTests: number; sealedDesigns: number };
 }
 
 /**
@@ -522,6 +529,20 @@ async function readOwnerState(
       const { whatIsBeingAskedOf } = await import(
         '../../services/institution/standing-intent.js');
       return whatIsBeingAskedOf(founderId);
+    })(),
+    charter: await (async () => {
+      const { liveCharter } = await import('../../services/institution/charter.js');
+      const { publicWorkshopOf } = await import('../../services/public-workshop/settings.js');
+      const [live, w, ready, sealed] = await Promise.all([
+        liveCharter(founderId), publicWorkshopOf(founderId),
+        query(`SELECT COUNT(*) AS n FROM venture_experiments e WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.decision IS NULL
+                  AND e.retired_at IS NULL AND e.superseded_by IS NULL AND e.validity = 'valid'
+                  AND EXISTS (SELECT 1 FROM experiment_materials m WHERE m.experiment_id = e.id)`, [founderId]),
+        query(`SELECT COUNT(*) AS n FROM probe_designs d JOIN venture_experiments e ON e.id = d.experiment_id
+                WHERE e.founder_id = ? AND e.decision IS NULL AND e.retired_at IS NULL AND d.sealed_at IS NOT NULL`, [founderId]),
+      ]);
+      return { live: live !== null, workshop: w?.publicName ?? null,
+        readyTests: Number((ready.rows[0] as Record<string, unknown>).n), sealedDesigns: Number((sealed.rows[0] as Record<string, unknown>).n) };
     })(),
     owed: await (async () => {
       const { awaitingAnswer } = await import(
@@ -829,6 +850,7 @@ export type Attention =
   | { kind: 'recognise_company'; candidateId: string; productId: string;
       companyName: string; proposal: string; rationale: string }
   | { kind: 'expect'; responsibilityId: string; check: string; title: string }
+  | { kind: 'charter'; workshop: string; readyTests: number; sealedDesigns: number }
   | { kind: 'stopped'; routines: string[] }
   | { kind: 'drifted'; checks: string[] }
   | null;
@@ -853,7 +875,8 @@ export function whatNeedsHim(s: OwnerState): Attention {
   // in its own words that nothing needs him — stood in front of a company
   // asking to write to six customers. An act waiting on him, or a test owed an
   // answer, is needs-him exactly as an acquisition is.
-  const needsHim = Boolean(stuckOnHim) || s.asked.length > 0 || s.owed.length > 0;
+  const charterMissing = !s.charter.live && s.charter.workshop !== null && (s.charter.readyTests > 0 || s.charter.sealedDesigns > 0);
+  const needsHim = Boolean(stuckOnHim) || s.asked.length > 0 || s.owed.length > 0 || charterMissing;
   if (s.routinesFailing.length && !needsHim) {
     return { kind: 'stopped', routines: s.routinesFailing };
   }
@@ -919,6 +942,17 @@ export function whatNeedsHim(s: OwnerState): Attention {
     };
   }
 
+  // AN ECONOMIC ACTIVATION OUTRANKS THE INSTITUTION WIDENING ITS OWN AUTHORITY.
+  //
+  // Everything above is a commitment already in motion or a company of his
+  // asking. Below this line the institution is asking for room of one kind or
+  // another, and the most consequential room it can ask for is the one that
+  // starts money moving: a charter, when a test is ready to run and only his
+  // signature is missing. That comes before Foundry maintaining its own
+  // descriptions, whatever row happens to be pending for that.
+  if (charterMissing) {
+    return { kind: 'charter', workshop: String(s.charter.workshop), readyTests: s.charter.readyTests, sealedDesigns: s.charter.sealedDesigns };
+  }
   // AN EARNED PERMISSION REQUEST IS THE MOST CONSEQUENTIAL THING FOUNDRY EVER
   // PUTS TO HIM, so it comes before anything it is merely offering to notice.
   const grant = s.grantable.find((g) => !s.permissions.some((p) => p.what === 'development'));
@@ -1039,8 +1073,15 @@ interface Decision {
   title: string;
   meaning: string[];
   facts: Array<[string, string]>;
-  primary: { label: string; action: string; fields?: Record<string, string> };
+  primary?: { label: string; action: string; fields?: Record<string, string> };
   secondary?: { label: string; action: string; fields?: Record<string, string> };
+  /**
+   * A DOOR, NOT A DECISION. Some things that need him are read before they
+   * are decided — the charter is one — and the card's one button then opens
+   * the place where the decision is made, with everything it rests on. Nothing
+   * is posted from here.
+   */
+  open?: { label: string; href: string };
   /** Where this decision's provenance lives. INSPECT, from the card itself. */
   showWork?: string;
   /**
@@ -1082,12 +1123,12 @@ const decisionCard = (d: Decision): HtmlEscapedString | Promise<HtmlEscapedStrin
       ${d.why.map((w) => html`<p>${w}</p>`)}
     </div></details>` : ''}
     <div class="do">
-      <form method="POST" action="${d.primary.action}">
+      ${d.open ? html`<a class="btn go" href="${d.open.href}">${d.open.label}</a>` : d.primary ? html`<form method="POST" action="${d.primary.action}">
         <input type="hidden" name="return_to" value="foundry" />
         ${raw(Object.entries(d.primary.fields ?? {}).map(([k, v]) =>
     `<input type="hidden" name="${k}" value="${v}" />`).join(''))}
         <button class="btn go" type="submit">${d.primary.label}</button>
-      </form>
+      </form>` : ''}
       ${d.secondary ? html`<form method="POST" action="${d.secondary.action}" style="flex:0 0 auto">
         <input type="hidden" name="return_to" value="foundry" />
         ${raw(Object.entries(d.secondary.fields ?? {}).map(([k, v]) =>
@@ -1247,6 +1288,28 @@ export function theOneThing(a: Attention, extras: OneThingExtras = {}): HtmlEsca
       <dt>Money at risk</dt><dd>${h.moneyAtRisk}</dd>
       <dt>Owner action</dt><dd>${h.ownerAction ?? 'none'}</dd>
     </dl>` : ''}</section>`;
+  }
+
+  if (a.kind === 'charter') {
+    const ready = a.readyTests > 0 ? `${count(a.readyTests, 'real test is', 'real tests are')} ready` : '';
+    const sealed = a.sealedDesigns > 0 ? `${count(a.sealedDesigns, 'design is', 'designs are')} sealed` : '';
+    return decisionCard({
+      act: 'Authority',
+      question: 'Foundry is ready to begin testing.',
+      title: 'Needs your operating charter.',
+      meaning: [
+        `${[ready, sealed].filter(Boolean).join(' and ')}. Without a charter each waits for you, one at a time.`,
+        'Inside a charter a test launches, spends what was set aside for it, writes only under the sealed rules, sells and refunds — without a tap from you. Outside it, everything still asks.',
+      ],
+      facts: [
+        ['Speaks as', `${a.workshop}, never you`],
+        ['Never inside it', 'a legal commitment, or anything that cannot be undone'],
+        ['Until', '90 days from signing; withdraw at any time'],
+        ['If you do nothing', 'every real test waits for you, one at a time'],
+      ],
+      open: { label: 'Review charter', href: '/foundry/charter' },
+      technical: `no live portfolio_envelopes row · ${String(a.readyTests)} undecided real tests · ${String(a.sealedDesigns)} sealed designs`,
+    });
   }
 
   if (a.kind === 'grade') {
@@ -2052,7 +2115,9 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
           ? CHECK_IN_PLAIN_WORDS[a.check]?.name ?? a.check
           : a.kind === 'acquire'
             ? a.whatItDoes
-            : CHECK_IN_PLAIN_WORDS[a.check]?.name ?? a.title;
+            : a.kind === 'charter'
+              ? 'the operating charter'
+              : CHECK_IN_PLAIN_WORDS[a.check]?.name ?? a.title;
     if (key === 'change') {
       return a.kind === 'authorise'
         ? html`<div class="said">
@@ -2411,7 +2476,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
   const autonomy = await autonomyAcross(s.ownerId);
   // A STANDING CHARTER IS THE LOOSEST POINT, and the tile says so before the
   // map's sentence: inside it a test launches and spends with no tap from him.
-  const { envelopeReading, charterSentence } = await import('../../services/institution/charter.js');
+  const { envelopeReading } = await import('../../services/institution/charter.js');
   const envelope = await envelopeReading(s.ownerId);
   const portfolioState = html`<dl class="glance" aria-label="At a glance">
       <div class="tile door"><dt class="k">${mark('estate')}Estate</dt>
@@ -2419,8 +2484,8 @@ foundryShellRoutes.get('/foundry', async (c) => {
         <dd class="d">${estate.detail}</dd><a class="door" href="/foundry/controls" aria-label="Controls"></a></div>
       <div class="tile door"><dt class="k">${mark('autonomy')}Autonomy</dt>
         <dd class="v"><span class="state ${envelope ? 'watch' : autonomy.nothingWithoutHim ? 'ok' : 'watch'}">${envelope ? 'Chartered' : autonomy.nothingWithoutHim ? 'Asks first' : 'Granted'}</span></dd>
-        <dd class="d">${envelope ? charterSentence(envelope) : autonomy.nothingWithoutHim ? 'nothing acts or spends without you' : autonomy.sentence}</dd>
-        <a class="door" href="${envelope ? '/foundry/controls#charter' : '/foundry/controls'}" aria-label="What I may do on my own"></a></div>
+        <dd class="d">${envelope ? `$${(envelope.remainingCents / 100).toFixed(0)} of $${(envelope.charter.monthlyCents / 100).toFixed(0)} left` : autonomy.nothingWithoutHim ? 'asks first, always' : 'within grants'}</dd>
+        <a class="door" href="/foundry/charter" aria-label="The charter"></a></div>
       <div class="tile door"><dt class="k">${mark('owner')}Needs you</dt>
         <dd class="v">${needsN === 0 ? html`<span class="state quiet none">None</span>` : html`<span class="state watch">${String(needsN)}</span>`}</dd>
         <dd class="d">${needsN === 0 ? 'nothing is waiting on you' : needsN === 1 ? 'one decision is yours' : 'decisions are yours'}</dd>
@@ -4118,8 +4183,9 @@ foundryShellRoutes.post('/foundry/controls/charter',
     const founder = c.get('founder') as { id?: string } | undefined;
     if (!founder?.id) return c.redirect('/onboarding');
     const body = await c.req.parseBody();
-    const back = String(body.return_to ?? '') === 'foundry' ? '/foundry' : '/foundry/controls';
-    const refuse = (why: string) => c.redirect(`/foundry/controls?charter=error&why=${encodeURIComponent(why)}#charter`);
+    const back = String(body.return_to ?? '') === 'foundry' ? '/foundry' : '/foundry/charter';
+    const echo = ['monthly_dollars', 'probes', 'thinking_dollars', 'statement'].map((k) => `&${k}=${encodeURIComponent(String(body[k] ?? '').slice(0, 600))}`).join('');
+    const refuse = (why: string) => c.redirect(`/foundry/charter?charter=error&why=${encodeURIComponent(why)}${echo}`);
     const monthly = Number(String(body.monthly_dollars ?? ''));
     const probes = Number(String(body.probes ?? ''));
     const thinking = Number(String(body.thinking_dollars ?? ''));
@@ -4136,7 +4202,7 @@ foundryShellRoutes.post('/foundry/controls/charter',
       founderId: String(founder.id), monthlyCents: Math.round(monthly * 100), probesInFlight: probes,
       cognitionCentsPerDay: Math.round(thinking * 100), publicVoice: w.publicName, statement, days: 90,
     });
-    return c.redirect(back === '/foundry' ? '/foundry' : '/foundry/controls?charter=signed#charter');
+    return c.redirect(back === '/foundry' ? '/foundry' : '/foundry/charter?charter=signed');
   });
 
 foundryShellRoutes.post('/foundry/controls/charter/withdraw',
@@ -4146,7 +4212,7 @@ foundryShellRoutes.post('/foundry/controls/charter/withdraw',
     const body = await c.req.parseBody();
     const { withdrawCharter } = await import('../../services/institution/charter.js');
     await withdrawCharter({ founderId: String(founder.id), reason: String(body.reason ?? '').trim().slice(0, 200) || 'the owner withdrew it' });
-    return c.redirect(String(body.return_to ?? '') === 'foundry' ? '/foundry' : '/foundry/controls?charter=withdrawn#charter');
+    return c.redirect(String(body.return_to ?? '') === 'foundry' ? '/foundry' : '/foundry/charter?charter=withdrawn');
   });
 
 /**
@@ -5739,12 +5805,6 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
   // may do, and the pause that stops new economic activity is a step away.
   const { publicWorkshopOf } = await import('../../services/public-workshop/settings.js');
   const workshop = await publicWorkshopOf(s.ownerId);
-  const workshopBlock = workshop ? html`<div class="know">
-      <h2>The Workshop</h2>
-      <p>At <strong>${workshop.zoneName}</strong> I may publish pages, deploy the one program that serves them, keep the Workshop's own DNS records, and forward its mail to you. Each change leaves a receipt with what was there before. I cannot transfer the domain, change its nameservers, delete a zone, or touch any other domain: those tools do not exist.</p>
-      <p>${workshop.economicPause ? html`<strong>New economic activity is paused</strong> since ${workshop.economicPause.at.slice(0, 10)}: ${workshop.economicPause.reason}. What is owed still goes out.` : html`Tests write to strangers only as ${workshop.publicName}, from ${workshop.contactEmail}, pointing at a page I have read back from the world. Your name is on no public surface.`}</p>
-      <p class="quiet"><a href="/foundry/public-workshop">The Workshop</a></p>
-    </div>` : '';
 
   // WHAT IS WRONG AND WHETHER HE IS NEEDED, in the place he comes to when
   // something is. The Estate tile on Home shows the word; this shows the rows.
@@ -5767,58 +5827,15 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
   const MODE_WORD: Record<string, string> = { off: 'Off', draft: 'Draft', autonomous: 'Autonomous' };
   const MODE_GLOSS: Record<string, string> = { off: 'answering nothing; everything waits for you', draft: 'writing answers, sending none', autonomous: 'answering ordinary messages itself' };
   const spentPct = s.budgetMonthly !== null && s.budgetMonthly > 0 ? Math.min(100, Math.round((100 * s.spent30d) / s.budgetMonthly)) : null;
-  // THE CHARTER: his standing word, signed once, ended on a date he can see.
-  const { envelopeReading, pastCharters, SEALED_CONTACT_RULES } = await import('../../services/institution/charter.js');
+  // THE CHARTER HAS ITS OWN PLACE. Here it is one card: the word, the sentence,
+  // the door. Everything he needs to read before signing lives at /foundry/charter.
+  const { envelopeReading, charterSentence } = await import('../../services/institution/charter.js');
   const envelope = await envelopeReading(s.ownerId);
-  const past = await pastCharters(s.ownerId);
-  const charterNote = String(c.req.query('charter') ?? '');
-  const charterWhy = String(c.req.query('why') ?? '');
-  const dollars = (cents: number): string => (cents / 100).toFixed(cents % 100 === 0 ? 0 : 2);
-
   const card = (name: string, title: string, inner: HtmlEscapedString | Promise<HtmlEscapedString>, cls = '') =>
     html`<section class="panel ctl${cls}"><header><h2>${mark(name)}${title}</h2></header>${inner}</section>`;
-  const charterInner = html`${envelope ? html`
-      <p class="lines"><span class="state watch">Signed</span> <span class="quiet">${envelope.charter.signedBy === `founder:${s.ownerId}` ? 'by you' : html`by <span class="mono">${envelope.charter.signedBy}</span> &mdash; if that was not you, it is worth asking why`} on ${envelope.charter.signedAt.slice(0, 10)} · ends ${envelope.charter.expiresAt.slice(0, 10)} · ${String(envelope.charter.daysLeft)} ${envelope.charter.daysLeft === 1 ? 'day' : 'days'} left</span></p>
-      <p>${envelope.charter.statement}</p>
-      <dl class="facts">
-        <dt>This month</dt><dd>$${dollars(envelope.remainingCents)} of $${dollars(envelope.charter.monthlyCents)} left · $${dollars(envelope.carvedCents)} carved for probes · $${dollars(envelope.thinkingCents)} on thinking</dd>
-        <dt>In flight</dt><dd>${String(envelope.inFlight)} of ${String(envelope.charter.probesInFlight)} probes${envelope.roomForAnother ? '' : ' — full until one settles'}</dd>
-        <dt>Thinking</dt><dd>up to $${dollars(envelope.charter.cognitionCentsPerDay)} a day</dd>
-        <dt>Speaks as</dt><dd>${envelope.charter.publicVoice}, never you</dd>
-        <dt>Never inside it</dt><dd>a legal commitment, or anything that cannot be undone. Those wait for you, each time.</dd>
-      </dl>
-      <p class="quiet rules"><b>Writing to people.</b> ${envelope.charter.contactRules}</p>
-      ${envelope.carves.length === 0 ? html`<p class="quiet">Nothing has been let in under it yet.</p>` : html`<ul class="reach">${envelope.carves.map((k) => html`<li><a href="/foundry/experiments/${k.experimentId}">${k.experimentId}</a> <span class="quiet">$${dollars(k.cents)} · ${k.carvedAt.slice(0, 10)} · ${k.settled ? 'settled' : 'in flight'}</span></li>`)}</ul>`}
-      <p class="row">
-        <form method="POST" action="/foundry/controls/charter">
-          <input type="hidden" name="monthly_dollars" value="${dollars(envelope.charter.monthlyCents)}" />
-          <input type="hidden" name="probes" value="${String(envelope.charter.probesInFlight)}" />
-          <input type="hidden" name="thinking_dollars" value="${dollars(envelope.charter.cognitionCentsPerDay)}" />
-          <input type="hidden" name="statement" value="${envelope.charter.statement}" />
-          <button class="btn btn-sm" type="submit">Renew as it stands, 90 days</button>
-        </form>
-        <form method="POST" action="/foundry/controls/charter/withdraw" data-confirm="Withdraw the charter? Every real test waits for you again, and nothing already running is stopped.">
-          <input type="hidden" name="reason" value="withdrawn from Controls" />
-          <button class="btn btn-sm danger" type="submit">Withdraw it</button>
-        </form>
-      </p>
-      <p class="quiet">To change a number, sign a new one below; the old one is ended with the reason on record.</p>` : html`
-      <p class="lines"><span class="state quiet none">None</span> <span class="quiet">every real test waits for you</span></p>
-      <p>Sign one and a test inside it launches, spends what was carved for it, writes to strangers under the rules below, sells and refunds &mdash; without a tap from you. Outside it, a test still waits for you here. Stop everything still stops all of it.</p>
-      ${charterNote === 'error' ? html`<p class="noticed">Not signed: ${charterWhy}</p>` : ''}
-      <dl class="facts">
-        <dt>Speaks as</dt><dd>${workshop?.publicName ?? 'the Workshop'}, never you</dd>
-        <dt>Never inside it</dt><dd>a legal commitment, or anything that cannot be undone. Those wait for you, each time.</dd>
-      </dl>
-      <p class="quiet rules"><b>Writing to people.</b> ${SEALED_CONTACT_RULES}</p>`}${envelope ? '' : html`
-      <form class="charter" method="POST" action="/foundry/controls/charter">
-        <label for="charter-month">A month, in dollars, across every probe</label><input id="charter-month" type="number" name="monthly_dollars" min="1" max="1000" step="1" value="100" required inputmode="numeric" />
-        <label for="charter-probes">Probes in flight at once</label><input id="charter-probes" type="number" name="probes" min="1" max="12" step="1" value="3" required inputmode="numeric" />
-        <label for="charter-thinking">Thinking a day, in dollars</label><input id="charter-thinking" type="number" name="thinking_dollars" min="0.5" max="20" step="0.5" value="3" required inputmode="decimal" />
-        <label for="charter-why">Why, in your words</label><textarea id="charter-why" name="statement" rows="3" required placeholder="A river of nickels: dozens of small, sturdy things, each tested for real, none needing me."></textarea>
-        <button class="btn" type="submit">Sign for 90 days</button>
-      </form>`}${past.length === 0 ? '' : html`<p class="quiet">Before: ${past.map((x) => `signed ${x.signedAt}, ended ${x.endedAt} (${x.because})`).join('; ')}.</p>`}`;
-  const charterCard = card('charter', 'The charter', charterInner);
+  const charterCard = card('charter', 'The charter', html`
+      <p class="lines"><span class="state ${envelope ? 'watch' : 'quiet none'}">${envelope ? (envelope.charter.daysLeft <= 7 ? 'Expiring' : 'Active') : 'None'}</span> <span class="quiet">${envelope ? charterSentence(envelope) : 'every real test waits for you'}</span></p>
+      <p class="row"><a class="btn btn-sm" href="/foundry/charter">The charter</a></p>`);
   const body = html`
     <h1>Controls</h1>
     <p class="lede">Authority, safety and boundaries. What I may do on my own, what stops me, and the lines you drew.</p>

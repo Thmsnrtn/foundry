@@ -41,6 +41,10 @@ beforeAll(async () => {
     await next();
   });
   app.route('/', foundryShellRoutes);
+  const { experimentRoutes } = await import('../../src/routes/dashboard/experiments-place.js');
+  const { charterRoutes } = await import('../../src/routes/dashboard/charter-place.js');
+  app.route('/', experimentRoutes);
+  app.route('/', charterRoutes);
   await app.request('/foundry/companies', { method: 'POST',
     headers: { 'content-type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({ name: 'Tidewater' }).toString() });
@@ -49,7 +53,7 @@ beforeAll(async () => {
 });
 
 describe('every place the owner can be', () => {
-  const places = ['/foundry', '/foundry/companies', '/foundry/controls'];
+  const places = ['/foundry', '/foundry/companies', '/foundry/controls', '/foundry/charter', '/foundry/experiments/history'];
   for (const path of places) {
     it(`${path} descends one level at a time`, async () => {
       const levels = outline(await (await app.request(path)).text());

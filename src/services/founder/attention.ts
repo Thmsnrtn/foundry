@@ -160,7 +160,7 @@ export async function waitingOn(founderId: string): Promise<AttentionItem[]> {
       monthly_dollars: (envelope.charter.monthlyCents / 100).toFixed(0), probes: String(envelope.charter.probesInFlight),
       thinking_dollars: (envelope.charter.cognitionCentsPerDay / 100).toFixed(2), statement: envelope.charter.statement, return_to: 'foundry' } },
     no: { label: 'Let it lapse', action: '/foundry/controls/charter/withdraw', fields: { reason: 'let lapse from the front page', return_to: 'foundry' } },
-    why: null, href: '/foundry/controls#charter',
+    why: null, href: '/foundry/charter',
   }] : [];
   return [
     ...tests,

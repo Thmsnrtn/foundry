@@ -2572,6 +2572,9 @@ const { placeRoutes } = await import('./places.js');
 letterRoutes.route('/', placeRoutes);
 const { experimentRoutes } = await import('./experiments-place.js');
 letterRoutes.route('/', experimentRoutes);
+// The charter's own place: read before it is signed, one address from Home.
+const { charterRoutes } = await import('./charter-place.js');
+letterRoutes.route('/', charterRoutes);
 const { workshopRoutes } = await import('./workshop-place.js');
 const { inboxRoutes } = await import('./inbox-place.js');
 const { moneyRoutes } = await import('./money-place.js');

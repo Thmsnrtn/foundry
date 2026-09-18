@@ -259,6 +259,8 @@ async function main(): Promise<void> {
   app.route('/', foundryShellRoutes as never);
   const { experimentRoutes } = await import('../src/routes/dashboard/experiments-place.js');
   app.route('/', experimentRoutes as never);
+  const { charterRoutes } = await import('../src/routes/dashboard/charter-place.js');
+  app.route('/', charterRoutes as never);
   const { workshopRoutes } = await import('../src/routes/dashboard/workshop-place.js');
   app.route('/', workshopRoutes as never);
   // THE DEEPER SURFACES, MOUNTED SO THE GATE CAN ACTUALLY MEASURE THEM.

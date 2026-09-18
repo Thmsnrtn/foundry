@@ -198,13 +198,39 @@ describe('the charter decides an act only while it stands', () => {
 });
 
 describe('what he sees', () => {
-  it('Controls offers the signature when none stands, and Home says nothing acts without him', async () => {
+  it('Controls points at the charter place; the place offers the signature when none stands; Home says nothing acts without him', async () => {
     const controls = await (await app.request('/foundry/controls')).text();
     expect(controls).toContain('</i>The charter</h2>');
-    expect(controls).toContain('Sign for 90 days');
-    expect(controls).toContain('One message per person or business, ever');
+    expect(controls).toContain('href="/foundry/charter"');
+    expect(controls).not.toContain('Sign for 90 days');
+    const place = await (await app.request('/foundry/charter')).text();
+    // Earlier tests in this file signed and withdrew one, so the word is Withdrawn here; a fresh institution says Unsigned.
+    expect(place).toMatch(/The charter <span class="state quiet none">(Unsigned|Withdrawn)<\/span>/);
+    expect(place).toContain('Sign for 90 days');
+    expect(place).toContain('Recalculate the ceiling');
+    expect(place).toContain('One message per person or business, ever');
+    // The most it can cost, from the guards: $100 a month over the four calendar
+    // months ninety days can touch, plus $3 a day of thinking for ninety days.
+    const { charterExposure } = await import('../../src/services/institution/charter.js');
+    const ex = charterExposure({ monthlyCents: 10_000, cognitionCentsPerDay: 300, days: 90, from: new Date() });
+    expect(place).toContain(`<dt class="k">Whole charter</dt><dd class="v">$${(ex.periodMaxCents / 100).toFixed(0)}</dd>`);
+    expect(place).toContain('<dt class="k">Any 30 days</dt><dd class="v">$290</dd>');
+    // Recalculated through a GET: the server's own arithmetic, no script.
+    const again = await (await app.request('/foundry/charter?monthly_dollars=250&probes=4&thinking_dollars=5&statement=x')).text();
+    const ex2 = charterExposure({ monthlyCents: 25_000, cognitionCentsPerDay: 500, days: 90, from: new Date() });
+    expect(again).toContain(`<dd class="v">$${(ex2.periodMaxCents / 100).toFixed(0)}</dd>`);
+    expect(again).toContain('value="250"');
+    expect(again).toContain('value="4"');
     const home = await (await app.request('/foundry')).text();
     expect(home).not.toContain('Chartered');
+  });
+
+  it('the exposure arithmetic counts every calendar month the period touches', async () => {
+    const { charterExposure } = await import('../../src/services/institution/charter.js');
+    const jan = charterExposure({ monthlyCents: 10_000, cognitionCentsPerDay: 300, days: 90, from: new Date('2026-01-15T00:00:00Z') });
+    expect(jan).toMatchObject({ monthsTouched: 4, probesOverPeriodCents: 40_000, thinkingOverPeriodCents: 27_000, periodMaxCents: 67_000, anyThirtyDaysCents: 29_000 });
+    const mar = charterExposure({ monthlyCents: 10_000, cognitionCentsPerDay: 300, days: 90, from: new Date('2026-03-01T00:00:00Z') });
+    expect(mar.monthsTouched).toBe(3);
   });
 
   it('signed from Controls, the tile says Chartered and the card says what is left', async () => {
@@ -218,12 +244,18 @@ describe('what he sees', () => {
     expect(live).toMatchObject({ monthlyCents: 10_000, probesInFlight: 3, cognitionCentsPerDay: 300, publicVoice: 'Apex Micro' });
     const home = await (await app.request('/foundry')).text();
     expect(home).toContain('Chartered');
-    expect(home).toContain('$100 of $100 left this month · 0 of 3 in flight');
+    expect(home).toContain('$100 of $100 left');
+    expect(home).toContain('href="/foundry/charter" aria-label="The charter"');
     const controls = await (await app.request('/foundry/controls')).text();
-    expect(controls).toContain('Signed</span>');
-    expect(controls).toContain('by you on');
-    expect(controls).toContain('Apex Micro, never you');
-    expect(controls).toContain('Renew as it stands, 90 days');
+    expect(controls).toContain('Active</span>');
+    expect(controls).toContain('$100 of $100 left this month · 0 of 3 in flight');
+    const place = await (await app.request('/foundry/charter')).text();
+    expect(place).toContain('The charter <span class="state watch">Active</span>');
+    expect(place).toContain('Apex Micro, never you');
+    expect(place).toContain('Renew as it stands, 90 days');
+    expect(place).toContain('Withdraw it');
+    expect(place).not.toContain('Sign for 90 days');
+    expect(place).toContain(`signed founder:${OWNER}`);
     // Numbers are refused with the reason, and nothing changes.
     const bad = await app.request('/foundry/controls/charter', {
       method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
