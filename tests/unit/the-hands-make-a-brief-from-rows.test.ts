@@ -27,6 +27,9 @@ const reply = {
   sells_to: 'Small contractors and trade shops that track bids by hand.', charges_how: 'one-time, $19, no subscription',
   lighter: 'a shortlist of public rows is the lightest thing that settles whether anyone pays for the filtering',
   offer_subject: 'A short brief of bid-coordination postings and discussions',
+  page: { summary: 'A dated shortlist of public postings about tracking contractor bids.', who: 'Small contractors who track bids by hand.',
+    what: 'One brief by email, with a link to every posting.', limits: 'A shortlist of one board on one date, not a listing of the market.',
+    sources: 'A public remote-jobs board.', note: 'A small pilot from Apex Micro. If it is no use to you, you get your money back.' },
 };
 vi.mock('../../src/services/ai/client.js', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
@@ -136,10 +139,11 @@ describe('the forge shapes the offer and the hands make the thing', () => {
     expect((await materialOf(X, 'deliverable'))!.body).toContain('### 1. Harbor Homes: Estimator');
     const ready = await readiness(X);
     expect(ready.ok).toBe(false);
-    // What is still missing is people to write to and a way to send — never
-    // the thing itself, its shape or its offer text.
-    expect(ready.missing).toEqual(expect.arrayContaining(['no candidate businesses are loaded', 'email sending is not connected']));
-    expect(ready.missing.join(' | ')).not.toMatch(/nothing to deliver|offer text|stated shape|design has not/);
+    // The page is the venue, so nobody has to be loaded to write to; what is
+    // still missing is a way to send the brief and the Workshop's postal line,
+    // never the thing itself, its shape or its offer text.
+    expect(ready.missing).toContain('email sending is not connected');
+    expect(ready.missing.join(' | ')).not.toMatch(/candidate businesses|nothing to deliver|offer text|stated shape|design has not/);
   });
 
   it('refuses a design whose exchange a brief cannot carry, without making anything', async () => {

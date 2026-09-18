@@ -344,6 +344,14 @@ export interface OfferShapePlan {
    * by the owner. Readings are the venue's statistics, entered by him.
    */
   listing?: { venue: string; venueName: string; readingsAtDays: number[] };
+  /**
+   * THE WORKSHOP'S OWN PAGE AS THE VENUE. The hand places the payment link
+   * and publishes the page; nobody is written to; a buyer arrives on their
+   * own, pays, and the hand delivers by email under an act that covers
+   * exactly that. Readiness wants the thing, its words, its page and a way
+   * to send — never a list of people.
+   */
+  venue?: 'workshop';
   /** structural_fact_kinds.fact → present, with grounds; written as the pass would, basis offer_shape. */
   facts: Record<string, { present: 0 | 1; grounds: string }>;
   price: OfferPrice;
@@ -440,6 +448,14 @@ export async function allowExperiment(input: {
   const paused = (await publicWorkshopOf(input.founderId))?.economicPause;
   if (paused) throw new HandRefused('workshop_paused', paused.reason);
   const by = charter?.inside ? charterPrincipal(charter.charter.id) : `founder:${input.founderId}`;
+  // A VENUE TEST IS SETTLED BY PAYMENT. The rule is sealed with the prediction
+  // at approval; without one only the owner could settle it, and a studio
+  // test must settle itself. Thirty days from placement, at least one payment.
+  if (plan.venue === 'workshop' && e.settlesWhen === null) {
+    const { settlementRuleJson } = await import('./outcome.js');
+    await query('UPDATE venture_experiments SET settles_when = ? WHERE id = ? AND decision IS NULL AND settles_when IS NULL',
+      [settlementRuleJson({ event: 'payment', atLeast: 1, withinDays: 30 }), input.experimentId]);
+  }
   await decideExperiment({ experimentId: input.experimentId, decision: 'approved', by, via: 'its own authorisation' });
   const after = await experimentRow(input.experimentId);
   if (!after?.productId) throw new HandRefused('asset_missing');
@@ -463,7 +479,9 @@ export async function allowExperiment(input: {
   // the businesses he reviewed and the offer as written; a door that hears
   // this boundary and finds no such act refuses.
   await setBoundary({ productId: after.productId, subject: 'contact_people', mode: 'ask_first',
-    statement: 'Ask me before writing to anyone for this test; the one act I approve when I allow it is the whole of it' });
+    statement: plan.venue === 'workshop'
+      ? 'Ask me before writing to anyone for this test; the only people written to are buyers, once each, to deliver what they paid for'
+      : 'Ask me before writing to anyone for this test; the one act I approve when I allow it is the whole of it' });
   await setBoundary({ productId: after.productId, subject: 'publish', mode: 'ask_first',
     statement: 'Ask me before placing an offer anywhere for this test' });
   await setBoundary({ productId: after.productId, subject: 'move_money', mode: 'ask_first',
@@ -494,6 +512,25 @@ export async function allowExperiment(input: {
   const refundable = await bindActToExperiment({ actId: refundId, experimentId: input.experimentId, measurementCritical: false });
   if ('refused' in refundable) throw new HandRefused('act_binding_refused', refundable.refused);
   await decideProposedAct({ id: refundId, decision: 'approved', decidedBy: by });
+  if (plan.venue === 'workshop') {
+    // THE ONLY MESSAGE IS THE DELIVERY. One act covers writing to each buyer
+    // the provider reports at this test's page, once, with what they paid
+    // for; nobody else is written to under it, and the hand that plans an
+    // offer to a stranger finds no act that covers one.
+    const deliveryId = await proposeAct({
+      productId: after.productId, subject: 'contact_people', actionType: 'send_email',
+      params: { experiment_id: input.experimentId, delivers: 'the deliverable, once, to each buyer the provider reports at this test\'s exposure', one_message_each: true },
+      summary: `Send ${plan.price.productName} once to each buyer the provider reports at this test's page; nobody else is written to`,
+      why: 'A buyer who paid is owed what they paid for, without waiting for you.',
+      expectedEffect: 'One email per settled payment, carrying the deliverable and a refund link.', risk: 'One message per buyer; a buyer who asks to hear nothing further is never written to again.',
+      consequence: 'low', rung: 'public', costCents: 0, proposedBy: HAND, validForHours: hours,
+    });
+    const boundDelivery = await bindActToExperiment({ actId: deliveryId, experimentId: input.experimentId, measurementCritical: true });
+    if ('refused' in boundDelivery) throw new HandRefused('act_binding_refused', boundDelivery.refused);
+    await decideProposedAct({ id: deliveryId, decision: 'approved', decidedBy: by });
+    await sealDesign(input.experimentId);
+    return { productId: after.productId, actId: deliveryId };
+  }
   const actId = await proposeAct({
     productId: after.productId, subject: 'contact_people', actionType: 'send_email',
     params: campaignParams(input.experimentId, approved, template),
@@ -607,6 +644,24 @@ export async function readiness(experimentId: string): Promise<Readiness> {
   // is written to. What it needs before he can approve it is the file, the
   // listing text, the offer's shape and a recorded design.
   const plan = await offerShapePlanOf(experimentId);
+  if (plan?.venue === 'workshop') {
+    const missing: string[] = [];
+    if (!(await materialOf(experimentId, 'deliverable'))) missing.push('nothing to deliver is attached');
+    if (!(await materialOf(experimentId, 'offer_template'))) missing.push('the offer text is not written');
+    const { designOf } = await import('./probe-design.js');
+    if (!(await designOf(experimentId))) missing.push('the design has not been recorded');
+    const sending = await sendingReadiness(e.founderId);
+    if (sending.status !== 'ready') missing.push('email sending is not connected');
+    const { publicWorkshopOfExperiment } = await import('../public-workshop/settings.js');
+    const w = await publicWorkshopOfExperiment(experimentId);
+    if (!w) missing.push('there is no public Workshop to carry the page');
+    else {
+      if (!(await one('SELECT experiment_id FROM public_experiments WHERE experiment_id = ?', [experimentId]))) missing.push('the experiment has no public page identity');
+      if (!w.postalAddress) missing.push('the Workshop has no postal address for commercial mail');
+      if (w.economicPause) missing.push('new economic activity is paused');
+    }
+    return { ok: missing.length === 0, missing, reachable: 0, pending: 0, pendingWebForm: 0, struck: 0, sending };
+  }
   if (plan?.listing) {
     const missing: string[] = [];
     if (!(await materialOf(experimentId, 'deliverable'))) missing.push('nothing to deliver is attached');

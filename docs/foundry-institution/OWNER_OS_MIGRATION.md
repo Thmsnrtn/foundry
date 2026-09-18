@@ -2176,3 +2176,43 @@ Readiness now wants only people to write to and a way to send. The first is
 the channels tranche: a population with recorded grounds, approved under the
 charter's contact rules rather than one by one, or a venue where buyers come
 to the offer. The second is the Workshop's sending, connected once.
+
+## The Workshop is the first venue — 18 September 2026
+
+### Why
+
+Every real test so far reached the world by writing to people the owner
+reviewed one by one, and a studio cannot run on that: a population must be
+found, screened and approved for every probe. A venue where buyers come to
+the offer needs none of it. The Workshop's own page is that venue.
+
+### What was built (Tranche 6 of the River of Nickels plan, first venue)
+
+- **The offer shape may name the Workshop as the venue.** The forge does,
+  for the briefs the hands make: the hand places the payment link and
+  publishes the page (as it did for the first experiment), nobody is written
+  to, a buyer arrives on their own, and the deliverable is sent by email
+  under an act that covers exactly that — one message per buyer the provider
+  reports at the page, once. The campaign act does not exist for a venue
+  test, so the hand that plans an offer to a stranger finds nothing that
+  covers one.
+- **Readiness for a venue test** wants the thing, its words, its design, its
+  page, the Workshop's postal line and a way to send. Never a list of people.
+- **The page's public copy** is composed with the offer, in the Workshop's
+  voice, and says plainly that nobody was written to. The experiment gets its
+  number and slug when the hands make it.
+- **Settled by payment.** A venue test without a sealed settlement rule is
+  given one at approval — at least one payment within thirty days of
+  placement — so it settles itself, as a studio test must.
+- The charter lets a venue test in as it lets any other: placement, refund and
+  delivery decided as `charter:<id>`, the cost carved from the envelope, the
+  design sealed.
+
+### What still stands between a sealed design and a sale
+
+The Workshop's sending, connected once, and a payment provider configured
+for the deployment. Reach beyond the Workshop's own visitors — community
+posts, directories, small paid tests — is the rest of this tranche. The
+postal address the owner typed names him on every public page; the Workshop
+page now says so and where to change it. Foundry does not rewrite an address
+he typed.

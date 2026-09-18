@@ -45,7 +45,13 @@ const SYSTEM = [
   '  "sells": <sentence>, "claims_made": <sentence>, "collects": <sentence>,',
   '  "delivers_by": <sentence>, "sells_to": <sentence>, "charges_how": <sentence>,',
   '  "lighter": <one sentence: why nothing lighter would settle the question>,',
-  '  "offer_subject": <the email subject line>',
+  '  "offer_subject": <the email subject line>,',
+  '  "page": {',
+  '    "summary": <one or two plain sentences for the public page: what it is and why>,',
+  '    "who": <who it is for>, "what": <exactly what a buyer receives>,',
+  '    "limits": <what it does not claim>, "sources": <what it relies on, named as the record names them>,',
+  '    "note": <two sentences in the Workshop\'s own voice about this pilot; no person named>',
+  '  }',
   '}',
   '',
   dataBlockInstruction('record'),
@@ -95,6 +101,9 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
   let raw: Row;
   try { raw = JSON.parse(reply.content.slice(from, to + 1)) as Row; } catch { return { refused: 'the composition was not an offer' }; }
   const need = ['title', 'terms', 'coverage', 'price_because', 'product_name', 'sells', 'claims_made', 'collects', 'delivers_by', 'sells_to', 'charges_how', 'lighter', 'offer_subject'];
+  const page = (raw.page && typeof raw.page === 'object' ? raw.page : {}) as Row;
+  const pageNeed = ['summary', 'who', 'what', 'limits', 'sources', 'note'].filter((k) => str(page, k) === null);
+  if (pageNeed.length) return { refused: `the page copy left out ${pageNeed.join(', ')}` };
   const missing = need.filter((k) => str(raw, k) === null);
   if (missing.length) return { refused: `the offer left out ${missing.join(', ')}` };
   const price = Number(raw.price_dollars);
@@ -109,6 +118,23 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
     price: { amountCents: price * 100, currency: 'USD', lookupKey: `foundry_brief_${experimentId}_one_time`, productName: str(raw, 'product_name')!,
       productMetadata: { app_object: 'experiment_deliverable', plan_key: `brief_${experimentId}` }, confirmationMessage: 'Thank you. The brief is on its way by email.' },
     offerSubject: str(raw, 'offer_subject')!,
+    venue: 'workshop',
   };
-  return makeBrief({ founderId: record.founderId, experimentId, spec, plan });
+  const made = await makeBrief({ founderId: record.founderId, experimentId, spec, plan });
+  if ('refused' in made) return made;
+  // THE PAGE IS THE VENUE. The experiment gets its public identity — a number,
+  // a slug, the copy a stranger reads — in the Workshop's voice, and the copy
+  // says plainly that nobody was written to.
+  const { givePublicIdentity, publicIdentityOf, slugify } = await import('../../public-workshop/identity.js');
+  if (!(await publicIdentityOf(experimentId))) {
+    const base = slugify(spec.title).slice(0, 48) || 'brief';
+    const { query } = await import('../../../db/client.js');
+    const taken = (await query('SELECT 1 FROM public_experiments WHERE founder_id = ? AND slug = ?', [record.founderId, base])).rows.length > 0;
+    await givePublicIdentity({
+      experimentId, founderId: record.founderId, slug: taken ? `${base}-${experimentId.slice(0, 6).toLowerCase().replace(/[^a-z0-9]/g, '')}` : base,
+      copy: { title: spec.title, summary: str(page, 'summary')!, who: str(page, 'who')!, what: str(page, 'what')!, limits: str(page, 'limits')!,
+        sources: str(page, 'sources')!, selection: 'Nobody was written to about this. You found this page yourself.', note: str(page, 'note')! },
+    });
+  }
+  return made;
 }

@@ -151,7 +151,7 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
     <section class="know" id="identity"><h2>Identity</h2>
       <dl class="facts">
         <dt>Public name</dt><dd>${w.publicName}</dd>
-        <dt>Operator</dt><dd>${w.operatorName} <span class="quiet">(on the terms page only)</span></dd>
+        <dt>Operator</dt><dd>${w.operatorName} <span class="quiet">(on the terms page only${w.postalAddress && w.postalAddress.split('\n')[0]?.trim() === w.operatorName ? ', and on the postal address you typed — change its first line to the Workshop\'s name if you would rather' : ''})</span></dd>
         <dt>Sends as</dt><dd>${w.publicName} &lt;${w.contactEmail}&gt;</dd>
         <dt>Postal address</dt><dd>${w.postalAddress ?? html`<span class="quiet">none recorded — commercial email must carry one, so no offer goes out until it does</span>`}</dd>
         <dt>Contact spacing</dt><dd>${String(w.contactGapDays)} days between tests to one address; at most ${String(w.contactCeilingPerYear)} a year</dd>
