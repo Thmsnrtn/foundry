@@ -71,6 +71,8 @@ export interface TheRecord {
   experiment: { id: string; opportunityId: string; whatWeDo: string; whatWeExpect: string; wouldDisprove: string; costCents: number; unknown: string };
   candidate: { headline: string; whoHasIt: string; theProblem: string; whyItMight: string; killThesis: string; lighter: string | null };
   evidence: Array<{ sourceType: string; stance: string | null; bearing: string; saw: string; source: string; observedAt: string; fromAbsence: boolean }>;
+  /** The retrievals the evidence came from: the words the eyes were asked with, and what came back. A brief can be built only from these. */
+  retrievals: Array<{ sourceType: string; terms: string; source: string; returned: number; relevant: number; at: string }>;
   unknowns: Array<{ question: string; blocking: boolean; cheapestTest: string | null }>;
   lessons: Array<{ whatWeDid: string; verdict: string | null; couldNotEstablish: string | null }>;
   legal: { sentence: string; inTheWay: string[] };
@@ -104,6 +106,18 @@ export async function theRecordOf(experimentId: string): Promise<TheRecord | nul
     bearing: String(r.bearing), saw: String(r.saw).slice(0, 400), source: String(r.source),
     observedAt: String(r.observed_at).slice(0, 10), fromAbsence: Number(r.from_absence) === 1,
   }));
+  const retrievals = (await rows(
+    `SELECT DISTINCT r.source_type, r.terms, r.source, r.returned_count, r.relevant_count, r.retrieved_at
+       FROM market_retrievals r
+      WHERE r.founder_id = ? AND r.evidence_mode = 'real' AND r.id IN (
+        SELECT o.retrieval_id FROM market_observations o
+          JOIN market_claims c ON c.id = o.claim_id
+         WHERE o.retrieval_id IS NOT NULL
+           AND (c.opportunity_id = ? OR c.seed_id IN (SELECT id FROM opportunity_seeds WHERE promoted_to = ?)))
+      ORDER BY r.relevant_count DESC, r.retrieved_at DESC LIMIT 12`, [founderId, opportunityId, opportunityId])).map((r) => ({
+    sourceType: String(r.source_type), terms: String(r.terms), source: String(r.source),
+    returned: Number(r.returned_count), relevant: Number(r.relevant_count), at: String(r.retrieved_at).slice(0, 10),
+  }));
   const unknowns = (await rows(
     `SELECT question, blocking, cheapest_test FROM market_unknowns
       WHERE opportunity_id = ? AND answered_at IS NULL AND kind = 'question' ORDER BY blocking DESC, rowid`, [opportunityId]))
@@ -125,7 +139,7 @@ export async function theRecordOf(experimentId: string): Promise<TheRecord | nul
       wouldDisprove: String(e.would_disprove), costCents: Number(e.cost_cents), unknown: String(e.unknown) },
     candidate: { headline: String(e.headline), whoHasIt: String(e.who_has_it), theProblem: String(e.the_problem),
       whyItMight: String(e.why_it_might), killThesis: String(e.kill_thesis), lighter: e.lighter_architecture == null ? null : String(e.lighter_architecture) },
-    evidence, unknowns, lessons,
+    evidence, retrievals, unknowns, lessons,
     legal: { sentence: picture.sentence, inTheWay: picture.inTheWay },
     charter: envelope ? { monthlyCents: envelope.charter.monthlyCents, remainingCents: envelope.remainingCents,
       probesInFlight: envelope.charter.probesInFlight, inFlight: envelope.inFlight,
@@ -158,6 +172,7 @@ function recordBlock(r: TheRecord): string {
     `CANDIDATE: ${j(r.candidate)}`,
     `THE TEST AS PROPOSED (from the cheapest thing that would settle an unknown): ${j(r.experiment)}`,
     `EVIDENCE (each with its source type, the stance that kind of source supplies, what it bore on its own claim, and an address): ${j(r.evidence)}`,
+    `RETRIEVALS (the words the eyes were asked with, and what came back; a brief can be built only from these): ${j(r.retrievals)}`,
     `OPEN UNKNOWNS: ${j(r.unknowns)}`,
     `LESSONS OF SETTLED TESTS (what each could not establish): ${j(r.lessons)}`,
     `LEGAL PICTURE: ${j(r.legal)}`,

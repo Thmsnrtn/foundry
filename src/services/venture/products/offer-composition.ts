@@ -37,7 +37,7 @@ const SYSTEM = [
   'Reply with one JSON object and nothing else:',
   '{',
   '  "title": <the brief\'s title, without a date>,',
-  '  "terms": <the exact search words, copied from the record\'s retrievals or the test>,',
+  '  "terms": <the exact search words of one of the record\'s RETRIEVALS, copied verbatim; a brief is built only from rows the eyes kept>,',
   '  "source_types": <an array from: "job_posting", "app_store", "community", "review", "directory">,',
   '  "coverage": <one or two sentences on what the brief covers and does not>,',
   '  "price_dollars": <integer 5-49>, "price_because": <one sentence>,',
@@ -93,7 +93,7 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
   const record = await theRecordOf(experimentId);
   if (!record) return { refused: 'no record' };
   const reply = await callSonnet(SYSTEM,
-    `<record>${JSON.stringify({ candidate: record.candidate, test: record.experiment, evidence: record.evidence.slice(0, 20), charter: record.charter }, null, 1)}</record>\n<design>${JSON.stringify({
+    `<record>${JSON.stringify({ candidate: record.candidate, test: record.experiment, evidence: record.evidence.slice(0, 20), retrievals: record.retrievals, charter: record.charter }, null, 1)}</record>\n<design>${JSON.stringify({
       decides: design.decides, canProve: design.canProve, cannotProve: design.cannotProve, distribution: design.distribution, ifItSucceeds: design.ifItSucceeds }, null, 1)}</design>`,
     1800, institutionSpend('shaping the offer of a designed test for the owner\'s portfolio search, which has no company to charge yet', 'shaping an offer', { kind: 'experiment', id: experimentId }));
   const from = reply.content.indexOf('{'); const to = reply.content.lastIndexOf('}');
@@ -110,7 +110,17 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
   if (!Number.isInteger(price) || price < 5 || price > 49) return { refused: 'the price is not a whole number of dollars between 5 and 49' };
   const sourceTypes = (Array.isArray(raw.source_types) ? raw.source_types.map(String) : []).filter((s): s is typeof BRIEF_SOURCES[number] => (BRIEF_SOURCES as readonly string[]).includes(s));
   if (sourceTypes.length === 0) return { refused: 'no source the eyes keep was named' };
-  const spec: BriefSpec = { kind: 'data_brief', title: str(raw, 'title')!, terms: str(raw, 'terms')!, sourceTypes, coverage: str(raw, 'coverage')!, limit: 25 };
+  // THE WORDS ARE THE EYES' WORDS. The composed terms are used when they name
+  // a retrieval the record holds; otherwise the record's own retrievals are
+  // tried in order of what they found, and a brief of nothing is refused.
+  const composedTerms = str(raw, 'terms')!;
+  const known = record.retrievals.filter((x) => sourceTypes.includes(x.sourceType as typeof BRIEF_SOURCES[number]));
+  const candidates = [composedTerms, ...known.map((x) => x.terms)].filter((t, i, all) => all.indexOf(t) === i);
+  const spec: BriefSpec = { kind: 'data_brief', title: str(raw, 'title')!, terms: composedTerms, sourceTypes, coverage: str(raw, 'coverage')!, limit: 25 };
+  const { rowsForBrief } = await import('./registry.js');
+  for (const terms of candidates) {
+    if ((await rowsForBrief(record.founderId, { ...spec, terms })).items.length > 0) { spec.terms = terms; break; }
+  }
   const plan: OfferShapePlan = {
     shape: { sells: str(raw, 'sells')!, claimsMade: str(raw, 'claims_made')!, collects: str(raw, 'collects')!, deliversBy: str(raw, 'delivers_by')!, sellsTo: str(raw, 'sells_to')!, chargesHow: str(raw, 'charges_how')! },
     lighter: str(raw, 'lighter')!,

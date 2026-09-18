@@ -506,6 +506,43 @@ make. His attention is the scarcest thing this institution spends.
 spent on an effect that failed and one still standing after an effect that may
 have reached the world, a governance control fails toward asking again.
 
+### The charter: standing authority the owner signs once (amended 18 September 2026)
+
+**The failure the current text had.** One decision per act made the owner the
+job. A studio of dozens of small things cannot ask him once per thing, and he
+said so: "fully autonomous inside the envelope", asked only for a legal or
+irreversible act, a change to the envelope, or a new class of channel the
+first time.
+
+**The amendment.** Migration 319 adds one clause to the decision guard on
+`proposed_acts`: an act at a company may also be decided by
+`charter:<envelope id>`, where the envelope is a live row of
+`portfolio_envelopes` signed `founder:<the product's owner>`. Everything else
+above stands unchanged — the act is still proposed in full, fingerprinted,
+non-forgeable, spent once, revocable, and the proposer still cannot decide.
+What changed is only who may say yes, and only inside what he signed: a
+month's money, a number of probes in flight, a day's thinking, the sealed
+contact rules, the Workshop as the only public voice, and an end date no more
+than a quarter away. A legal or destructive act is never inside a charter; the
+ladder's `absorbable` column was not touched and `chartered()` refuses those
+rungs before anything is decided.
+
+**Why this is not amendment by implication.** The clause is inert until he
+signs. No row of `portfolio_envelopes` exists unless `founder:<id>` writes it
+from Controls, and the guard admits `charter:<id>` only while that row is
+live. His signature is the explicit review the discipline asks for, taken at
+the moment it matters, on a page that says in plain words what he is
+signing. He withdraws it in one act with a reason, and every act decided
+under it names the charter as its decider on the record.
+
+**Evidence.** `tests/unit/the-charter-the-owner-signs-once.test.ts` proves the
+row refuses a signature that is not his, one charter at a time, the fourth
+probe, the carve over the month, and the guard admitting and refusing the
+charter's principal; `the-workshop-is-the-first-venue` and
+`the-loop-from-a-sentence-to-an-offer` prove a test let in under it.
+Adversarial reading of the tranche is recorded in `OWNER_OS_MIGRATION.md`
+under "What the full chain found in the charter".
+
 ## What situation a company is in
 
 The owner's rule for the company page: *a revenue collapse should dominate

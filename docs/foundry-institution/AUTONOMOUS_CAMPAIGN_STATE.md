@@ -136,6 +136,20 @@ has not been made.
 
 ## NEXT SESSION START HERE
 
+**THE RIVER OF NICKELS IS BUILT TO THE WORLD'S EDGE (2026-09-18).** On
+`claude/foundry-v3-north-star-finish-vxq2ea`, deployed the same day: the
+charter the owner signs once (319), the Workshop as the only public voice
+(320), six public eyes (321), the forge's five lenses, composer and adversary
+(322), a brief made of the eyes' rows with a gate that refuses, the
+Workshop's own page as a venue, the steward's refresh, and the loop from a
+sentence somebody wrote to an offer let in under the charter — proven on rows
+in `the-loop-from-a-sentence-to-an-offer`. What stands between that and a sale
+is in `history/DIRECTIVE_RECONCILIATION_2026-09-18.md`: the owner's signature,
+the postal line he typed, and reach beyond the Workshop's own visitors. Read
+`OWNER_OS_MIGRATION.md` from "The charter the owner signs once" for each
+tranche's doctrine. Nothing here was hand-carried; nothing here is a sale.
+
+
 Bootstrap from disk: verify the branch and a clean tree, read
 `DEVELOPMENT_INSTITUTION.md` and this file, skim `IMPLEMENTATION_STATE.md` and
 recent git history, then work. No chat history is required.
