@@ -891,6 +891,32 @@ export function whatNeedsHim(s: OwnerState): Attention {
   if (drifted.length && !needsHim) {
     return { kind: 'drifted', checks: drifted.map((d) => d.check) };
   }
+  // A COMPANY OF HIS ASKING FOR SOMETHING OUTRANKS THE INSTITUTION'S OWN
+  // HOUSEKEEPING — AND NOT EVERY ASK IS THE SAME ASK.
+  //
+  // This screen used to rank by KIND, which put a question about one of his
+  // actual businesses last, behind Foundry looking after itself. Then every
+  // `proposed_act` ranked alike, which is the same mistake one table down: an
+  // act that owes a buyer a refund and an act that reverses itself in a minute
+  // are not one class. They are ranked here by tier, in the order
+  // OBJECTIVE.md §4 already sets out — a bound or a promise first, a
+  // consequential act outside next, reversible housekeeping beneath the things
+  // that start or protect money.
+  const asking = (tier: 'obligation' | 'external' | 'internal'): Attention => {
+    const ask = s.asked.find((a) => a.tier === tier);
+    return ask ? {
+      kind: 'spend', actId: ask.id, productId: ask.productId,
+      companyName: ask.companyName, summary: ask.summary, why: ask.why,
+      rung: ask.rung, rungMeans: ask.rungMeans, puttingItBack: ask.puttingItBack,
+      costCents: ask.costCents, expiresAt: ask.expiresAt, absorbable: ask.absorbable,
+    } : null;
+  };
+  // A BOUND ABOUT TO BE BREACHED, OR A PROMISE MADE TO SOMEBODY. Never traded,
+  // and first: a legal or irreversible act, a commitment on his behalf, money
+  // moved, or a buyer already owed delivery or a refund.
+  const promised = asking('obligation');
+  if (promised) return promised;
+
   // AN UNACCOUNTED COMMITMENT OUTRANKS A NEW ONE.
   //
   // He approved a test, the institution sealed what it expected, and it ran or
@@ -910,30 +936,34 @@ export function whatNeedsHim(s: OwnerState): Attention {
     };
   }
 
-  // A COMPANY OF HIS ASKING FOR SOMETHING OUTRANKS THE INSTITUTION'S OWN
-  // HOUSEKEEPING.
+  // A CONSEQUENTIAL ACT OUTSIDE: something published, somebody written to,
+  // money spent. It reaches the world, so it outranks the institution asking
+  // for room — but it is not a promise already made, which is why it sits
+  // below the tier above and below a test owed an answer.
+  const outside = asking('external');
+  if (outside) return outside;
+
+  // AN ECONOMIC ACTIVATION OUTRANKS THE INSTITUTION WIDENING ITS OWN AUTHORITY.
   //
-  // This screen used to rank by KIND, which put a question about one of his
-  // actual businesses last, behind Foundry looking after itself — and read
-  // `proposed_acts` nowhere at all, so the question was not merely last, it was
-  // absent. An act is ranked by its rung first and its money second: what it
-  // commits him to matters more than what it costs.
-  const ask = s.asked[0];
-  if (ask) {
-    return {
-      kind: 'spend', actId: ask.id, productId: ask.productId,
-      companyName: ask.companyName, summary: ask.summary, why: ask.why,
-      rung: ask.rung, rungMeans: ask.rungMeans, puttingItBack: ask.puttingItBack,
-      costCents: ask.costCents, expiresAt: ask.expiresAt, absorbable: ask.absorbable,
-    };
+  // Everything above is a promise, a commitment in motion, or an act that
+  // reaches the world. Below this line the institution is asking for room of
+  // one kind or another, and the most consequential room it can ask for is the
+  // one that starts money moving: a charter, when a test is ready to run and
+  // only his signature is missing. That comes before Foundry maintaining its
+  // own descriptions, whatever row happens to be pending for that.
+  if (charterMissing) {
+    return { kind: 'charter', workshop: String(s.charter.workshop), readyTests: s.charter.readyTests, sealedDesigns: s.charter.sealedDesigns };
   }
-  // BEING UNABLE TO ACT AT ALL OUTRANKS BEING ALLOWED TO ACT MORE WIDELY.
+  // BEING UNABLE TO FINISH A RESPONSIBILITY OUTRANKS BEING ALLOWED TO ACT
+  // MORE WIDELY.
   //
   // A blocking acquisition is not the institution asking for room. It is the
   // institution saying it has taken a responsibility as far as it can on its
   // own and cannot finish it: nothing available can carry the capability, so
-  // the work stops here until he answers. Every other thing on this list can
-  // wait a day without a responsibility going uncarried.
+  // the work stops here until he answers. Everything below it can wait a day
+  // without a responsibility going uncarried — but the charter above it is
+  // money beginning to move, which is the thing this institution exists to
+  // do, so it is not made to wait behind a tool Foundry cannot buy.
   //
   // It has to be BLOCKING to sit here. An acquisition that would merely be
   // useful ranks below, with the rest of what Foundry is offering to notice —
@@ -949,19 +979,18 @@ export function whatNeedsHim(s: OwnerState): Attention {
     };
   }
 
-  // AN ECONOMIC ACTIVATION OUTRANKS THE INSTITUTION WIDENING ITS OWN AUTHORITY.
-  //
-  // Everything above is a commitment already in motion or a company of his
-  // asking. Below this line the institution is asking for room of one kind or
-  // another, and the most consequential room it can ask for is the one that
-  // starts money moving: a charter, when a test is ready to run and only his
-  // signature is missing. That comes before Foundry maintaining its own
-  // descriptions, whatever row happens to be pending for that.
-  if (charterMissing) {
-    return { kind: 'charter', workshop: String(s.charter.workshop), readyTests: s.charter.readyTests, sealedDesigns: s.charter.sealedDesigns };
-  }
-  // AN EARNED PERMISSION REQUEST IS THE MOST CONSEQUENTIAL THING FOUNDRY EVER
-  // PUTS TO HIM, so it comes before anything it is merely offering to notice.
+  // AND AN ACT THAT ONLY CHANGES SOMETHING REVERSIBLE. Still his to decide,
+  // still never hidden — it is listed under "Also waiting on you" whether or
+  // not it is the one thing — but it does not stand in front of the signature
+  // that starts the economic loop, and it did, merely by being a row in
+  // `proposed_acts`.
+  const housekeeping = asking('internal');
+  if (housekeeping) return housekeeping;
+
+  // AN EARNED PERMISSION REQUEST IS THE MOST CONSEQUENTIAL THING FOUNDRY ASKS
+  // OF ITS OWN ACCORD, so it comes before anything it is merely offering to
+  // notice — and beneath everything above, each of which is either a promise,
+  // a commitment in motion, an act reaching the world, or money starting.
   const grant = s.grantable.find((g) => !s.permissions.some((p) => p.what === 'development'));
   if (grant) {
     return {

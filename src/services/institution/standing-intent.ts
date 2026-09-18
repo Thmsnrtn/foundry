@@ -697,10 +697,34 @@ export async function openProposals(productId: string): Promise<ProposedAct[]> {
   }));
 }
 
+/**
+ * WHAT CLASS OF THING THIS ACT IS, IN THE ORDER THE DOCTRINE RANKS THEM.
+ *
+ * OBJECTIVE.md §4 puts a bound about to be breached first and new origination
+ * last; ECONOMICS.md says a customer obligation survives even an owner pause.
+ * Three words over columns that already exist — the rung, the subject, and
+ * whether the act's test owes somebody something — so the first screen can
+ * rank by what an act commits him to rather than by which table it sits in.
+ * No score is invented: a tier is a name, not a number.
+ */
+export type ActTier = 'obligation' | 'external' | 'internal';
+
 export interface AskedOfHim extends ProposedAct {
   /** Whose company is asking, so a question arrives attached to a thing he owns. */
   companyName: string;
+  tier: ActTier;
+  /** Set when the act's test owes a buyer delivery or a refund. */
+  owesCustomer: boolean;
 }
+
+/** The subjects on which an act promises something on his behalf or moves somebody's money. */
+const PROMISES_SOMETHING = new Set(['commit_on_my_behalf', 'move_money']);
+
+const tierOf = (rung: string | null, subject: string, owesCustomer: boolean): ActTier =>
+  rung === 'legal' || rung === 'destructive' || PROMISES_SOMETHING.has(subject) || owesCustomer ? 'obligation'
+    : rung === 'public' || rung === 'financial' ? 'external'
+      : 'internal';
+const TIER_ORDER: Record<ActTier, number> = { obligation: 0, external: 1, internal: 2 };
 
 /**
  * WHAT THE PORTFOLIO IS ASKING OF HIM, RANKED BY WHAT IS AT STAKE.
@@ -710,10 +734,13 @@ export interface AskedOfHim extends ProposedAct {
  * company's page, while the institution's own housekeeping had the front of the
  * queue. The home screen ranked by KIND; this ranks by CONSEQUENCE.
  *
- * Order: the rung first, because what an act commits him to matters more than
- * what it costs; then the money; then what expires soonest, so a question does
- * not lapse merely because a cheaper one was asked first. An unanswered ask
- * disappearing on its expiry is a separate defect and is not fixed here.
+ * Order: the TIER first — a promise made on his behalf, somebody's money moved
+ * or a buyer owed something outranks a consequential act outside, which
+ * outranks reversible housekeeping — then the rung, because what an act
+ * commits him to matters more than what it costs; then the money; then what
+ * expires soonest, so a question does not lapse merely because a cheaper one
+ * was asked first. An unanswered ask disappearing on its expiry is a separate
+ * defect and is not fixed here.
  *
  * Real companies only. A rehearsal may not ask him for anything.
  */
@@ -723,7 +750,16 @@ export async function whatIsBeingAskedOf(founderId: string): Promise<AskedOfHim[
             a.expected_effect, a.risk, a.consequence, a.proposed_at, a.expires_at,
             a.decision, a.rung, a.cost_cents,
             r.what_it_means AS rung_means, r.putting_it_back, r.absorbable,
-            p.name AS company_name
+            p.name AS company_name,
+            -- WHETHER SOMEBODY IS OWED SOMETHING behind this act: the same
+            -- predicate the Workshop's outstanding obligations read, which is
+            -- the one class of work that survives an owner pause.
+            CASE WHEN EXISTS (
+              SELECT 1 FROM experiment_fulfilments f
+               WHERE f.experiment_id = a.experiment_id
+                 AND ((f.status IN ('owed','sent','failed') AND f.refund_ref IS NULL)
+                   OR (f.refund_requested_at IS NOT NULL AND f.refund_ref IS NULL))
+            ) THEN 1 ELSE 0 END AS owes_customer
        FROM proposed_acts a
        JOIN products p ON p.id = a.product_id
        LEFT JOIN consequence_rungs r ON r.rung = a.rung
@@ -748,7 +784,9 @@ export async function whatIsBeingAskedOf(founderId: string): Promise<AskedOfHim[
     proposedAt: String(r.proposed_at), expiresAt: String(r.expires_at),
     decision: r.decision == null ? null : String(r.decision) as 'approved' | 'refused',
     companyName: String(r.company_name),
-  }));
+    owesCustomer: Number(r.owes_customer) === 1,
+    tier: tierOf(r.rung == null ? null : String(r.rung), String(r.subject), Number(r.owes_customer) === 1),
+  })).sort((a, b) => TIER_ORDER[a.tier] - TIER_ORDER[b.tier]);
 }
 
 /**

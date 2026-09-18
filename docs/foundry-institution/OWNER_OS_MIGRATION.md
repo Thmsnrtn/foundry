@@ -2386,3 +2386,41 @@ an uncharterd Foundry thought without any ceiling while asking for authority to
 spend. The charter page now has a "Before you sign" block saying what it does
 anyway and the one line it stops at, and `forgePass` bounds pre-charter
 thinking at $1 a day.
+
+## The first screen ranks by consequence, not by storage type (18 September 2026)
+
+`whatNeedsHim` decided what Home says first by asking which table a thing came
+from. Every `proposed_act` ranked as one class, above the charter and below
+nothing, so an act that reverses itself in a minute and costs nothing stood in
+front of the one signature that starts money moving — not because it mattered
+more, but because it was a row in `proposed_acts`. Underneath, the acts ranked
+among themselves by rung, money and expiry, which put an act that owes a buyer
+a refund beside one that merely posts a page.
+
+Acts now carry a **tier**, derived in `whatIsBeingAskedOf` from columns that
+already exist and nothing else:
+
+- **obligation** — a `legal` or `destructive` rung, a subject that promises
+  something (`commit_on_my_behalf`, `move_money`), or a buyer already owed
+  delivery or a refund behind the same experiment. That last is the
+  `outstandingObligations` predicate the Workshop already reads, which is the
+  one class of work ECONOMICS.md says survives an owner pause.
+- **external** — a `public` or `financial` rung: something published, somebody
+  written to, money spent.
+- **internal** — everything reversible.
+
+Three words over existing columns. No score, no rating, no ranking number
+anywhere near a surface. Within a tier the old order stands: rung, then money,
+then how soon it expires.
+
+The first screen's order is now OBJECTIVE.md §4's: a bound or a promise, then a
+commitment already made and unaccounted for, then an act that reaches the
+world, then the charter, then a blocking acquisition, then everything
+reversible, then what Foundry is merely offering to notice. The charter moved
+above the blocking acquisition for the same reason: money beginning to move is
+the thing this institution exists to do, and it should not wait behind a tool
+Foundry cannot buy.
+
+**Ranking decides what is said first, never what is said at all.** Everything
+waiting still appears under "Also waiting on you", and the proof asserts it:
+with the charter as the one thing, a reversible act is still on the screen.
