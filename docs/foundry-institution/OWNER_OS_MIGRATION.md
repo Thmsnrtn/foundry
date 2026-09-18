@@ -2269,3 +2269,80 @@ is found slowly, on the long tail, which is where the eyes' terms live.
 Reach beyond search remains the next frontier, and its first move — a listing
 on a marketplace, a post in a community, a paid placement — is a new channel
 class the charter queues for the owner once.
+
+## The owner surface, made worthy of the institution beneath it (18 September 2026)
+
+The institution advanced faster than the product the owner meets. On his
+phone he found the charter hard to locate, old experiments accumulating in
+the active list, prose everywhere, a congested bottom bar with colliding
+labels, and internal concerns outranking economic ones. The code agreed with
+him, and this tranche reconstructs the surface — information architecture,
+hierarchy and copy — without touching the institution's evidence, authority,
+provenance or history, which become reachable in depth instead of visible at
+the surface. The visual North Star is unchanged.
+
+**Five doors under the thumb.** The bar rendered nine doors plus Ask; the
+stylesheet drew nine columns at half a rem for every phone, and the hashed
+script then forced all nine on Home, which is exactly what collided. The
+phone bar is now five doors in markup — Home, Portfolio, Experiments, Inbox,
+More — styled by the stylesheet alone, the label sized to the viewport so
+doubled text still fits its track, clipped rather than laid over a neighbour.
+The rest of the places sit in a sheet the More door opens with a fragment,
+the page underfoot marked; More lights when the page is one it holds; the
+Letter lights nothing. Ask is a button in the head. The desk rail keeps the
+whole set. No script decides membership any more, so a script that fails to
+run leaves the bar the stylesheet drew.
+
+**The charter has a place.** `/foundry/charter` is a projection the owner
+can read before granting standing authority: the status word, the limits,
+the most it can cost from the guards that hold it (the month's ceiling in
+every calendar month the period touches, the day's thinking on every day,
+two months inside any thirty days), what Foundry may and may never do inside
+it, the one rule about writing to people, and the action. The canonical
+text, the writing rules, what remains his and the history are one fold down.
+"Recalculate the ceiling" is a GET of the same page: the figure he reads is
+the server's arithmetic, the same function that reads the active charter.
+Controls keeps one card that points there; Home's Autonomy tile opens it.
+
+**The charter is the one thing when the rest is ready.** With a Workshop to
+speak as and a real test ready or a design sealed, and no charter standing,
+Home says "Foundry is ready to begin testing — needs your operating charter"
+as its one thing, above the institution widening its own authority, and the
+button opens the place rather than posting a decision. An unsigned charter
+used to produce no attention anywhere.
+
+**Now is not history.** The experiment row carries how a test ended;
+retired and superseded are states of their own, read before declined, so a
+forge-killed design no longer reappears as "Needs you". One settled
+predicate serves the charter's arithmetic, the owner's queue and the list.
+The Experiments page shows the working set, the few that finished in the
+last fortnight, and a counted door to History, where every concluded test is
+kept whole and filtered by how it ended. Home hydrates only what can still
+move.
+
+**Text earns its space.** Tiles say a state in four words or fewer; the
+search on Home is one line and a fold; Controls keeps every fact and folds
+every explanation; the thinking ceilings read the deployment; Portfolio's
+invented companies are a closed fold; the Workshop's name is read from its
+row; the commercial-era words are gone from the settings, privacy and the
+Letter's first-run card. The isolated workshop (compute) is reachable from
+the rest of the controls; the dead Workshop block on Controls is deleted.
+
+**Proof.** `five-doors-under-the-thumb` holds the structure; `five-doors-
+do-not-collide` measures, in Chromium at 375, 390 and 430 and at normal and
+doubled text, that there are at most five doors, none clipped, none
+overlapping, every target at least 44px, exactly one lit, and that the sheet
+opens with thumb-sized rows. `scripts/measure-mobile.mts` now measures the
+doors on every page it photographs and fails the run as it does for overflow
+and coverage; it seeds concluded tests and a signed charter so the pictures
+in `docs/design` show history beside the working set and the chartered
+estate. `the-charter-the-owner-signs-once` holds the exposure arithmetic on
+fixed dates; `the-charter-is-the-one-thing-when-the-rest-is-ready` and
+`history-is-not-the-active-list` hold the rest.
+
+**What remains, honestly.** The owner surface sits behind sign-in, so the
+phone-width read-back of production is the measurement above run on the
+deployed commit's tree, plus the health check; nobody here can open the
+signed-in app on the deployed host. Cards still carry a little more than a
+glance on the company pages and the Letter, which are contextual and
+inspection depths and were not the owner's complaint.

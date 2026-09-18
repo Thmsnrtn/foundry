@@ -802,8 +802,10 @@ can retire on its own. Everything else that Allow needs, Allow supplies.
 
 ## PENDING 17 — Sign the charter; and the first line of the postal address: **OWNER** (2026-09-18)
 
-Two things only you can supply, and Foundry will invent neither. Both are on
-`/foundry/controls` and `/foundry/public-workshop`; nothing else is asked.
+Two things only you can supply, and Foundry will invent neither. The charter
+has its own place, `/foundry/charter`, one tap from Home's Autonomy tile and
+from the More sheet, and Home asks for it as its one thing once a test is
+ready; the postal line is on `/foundry/public-workshop`. Nothing else is asked.
 
 **One: the charter.** Migration 319 and the constitution's amended "Ask me
 first" section give the institution standing authority to act inside an

@@ -145,7 +145,11 @@ Workshop's own page as a venue, the steward's refresh, and the loop from a
 sentence somebody wrote to an offer let in under the charter — proven on rows
 in `the-loop-from-a-sentence-to-an-offer` — and the Workshop made findable
 (323: robots, sitemap, one address per page, product metadata while a thing
-is for sale, the program kept current by the hourly tick). What stands between that and a sale
+is for sale, the program kept current by the hourly tick). The owner surface
+was then reconstructed on his production evidence — five doors, the charter
+as a place and as the one thing, history separated from the working set,
+prose folded — see `OWNER_OS_MIGRATION.md` from "The owner surface, made
+worthy of the institution beneath it". What stands between that and a sale
 is in `history/DIRECTIVE_RECONCILIATION_2026-09-18.md`: the owner's signature,
 the postal line he typed, and reach beyond the Workshop's own visitors. Read
 `OWNER_OS_MIGRATION.md` from "The charter the owner signs once" for each

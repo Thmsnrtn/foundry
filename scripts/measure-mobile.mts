@@ -91,6 +91,16 @@ async function quieten(): Promise<void> {
   const { setPostalAddress } = await import('../src/services/public-workshop/settings.js');
   await setPostalAddress(OWNER, '1 Measurement Way, Suite 0, Nowhere, MA 00000');
 }
+/** He signs, once, from the charter page's own form; measured after the loaded passes. */
+async function signTheCharter(base: string): Promise<void> {
+  const { liveCharter } = await import('../src/services/institution/charter.js');
+  if (await liveCharter(OWNER)) return;
+  const res = await fetch(base + '/foundry/controls/charter', {
+    method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: 'monthly_dollars=100&probes=3&thinking_dollars=3&statement=' + encodeURIComponent('A river of nickels: dozens of small, sturdy things, each tested for real, none needing me.'),
+  });
+  if (res.status !== 302 && res.status !== 200) throw new Error(`the charter was not signed: HTTP ${String(res.status)}`);
+}
 const COMPANY = 'mm_company';
 let REFERENCE_COMPANY = '';
 let PROOF1 = '';
@@ -228,6 +238,31 @@ async function seed(): Promise<void> {
   const { establishPublicWorkshop } = await import('../src/services/public-workshop/settings.js');
   await establishPublicWorkshop({ founderId: OWNER });
 
+  // HISTORY, SO THE WORKING SET IS MEASURED BESIDE THE RECORD. Production
+  // accumulates concluded tests; a measurement seeded with one live test
+  // photographs a page that never had to separate now from history. Three
+  // ways a test ends: retired as a duplicate of the live one, killed by the
+  // forge a month ago, and settled by the world just now.
+  const { designExperiment, retireExperiment, decideExperiment, recordResult } = await import('../src/services/venture/validation.js');
+  const { recordMaterial } = await import('../src/services/venture/hand.js');
+  const base = (await query('SELECT opportunity_id, unknown_id FROM venture_experiments WHERE id = ?', [PROOF1])).rows[0] as Record<string, unknown>;
+  const another = async (word: string): Promise<string> => {
+    const id = await designExperiment({
+      founderId: OWNER, opportunityId: String(base.opportunity_id), unknownId: String(base.unknown_id),
+      whatWeDo: `offering the ${word} brief to the same businesses`, whatWeExpect: 'at least one pays', wouldDisprove: 'nobody pays',
+      costCents: 0, evidenceMode: 'real' });
+    await recordMaterial({ founderId: OWNER, experimentId: id, kind: 'deliverable', title: `The ${word} brief`, body: `# The ${word} brief\n\nA row.`, by: 'measured' });
+    return id;
+  };
+  const dup = await another('duplicate');
+  await retireExperiment({ experimentId: dup, by: `founder:${OWNER}`, because: 'the same test as its survivor', supersededBy: PROOF1 });
+  const killed = await another('killed');
+  await query(`UPDATE venture_experiments SET retired_at = datetime('now','-30 days'), retired_because = 'the forge and its adversary both said kill' WHERE id = ?`, [killed]);
+  const finished = await another('finished');
+  await decideExperiment({ experimentId: finished, decision: 'approved', by: `founder:${OWNER}`, via: 'its own authorisation' });
+  await new Promise((r) => { setTimeout(r, 1100); });
+  await recordResult({ experimentId: finished, whatHappened: 'one business paid', asPredicted: true });
+
 }
 
 async function main(): Promise<void> {
@@ -301,6 +336,12 @@ async function main(): Promise<void> {
     // heading over rows with a coloured strip is a new shape on the phone.
     '/foundry/activity', '/foundry/activity?kind=authority',
     '/foundry/searching', '/foundry/experiments/next', '/foundry/absence',
+    // THE CHARTER, unsigned and recalculated; HISTORY, whole and filtered; and
+    // the More sheet open, which is the only way the secondary places are
+    // reached on a phone.
+    '/foundry/charter', '/foundry/charter?monthly_dollars=250&probes=4&thinking_dollars=5&statement=x',
+    '/foundry/experiments/history', '/foundry/experiments/history?state=retired',
+    '/foundry#more',
     `/foundry/companies/${COMPANY}/understanding/${RESPONSIBILITY}`,
     // Asked about a company by name: the answer is the widest structured block
     // the ask box can produce, and it renders inside the same page.
@@ -337,10 +378,17 @@ async function main(): Promise<void> {
     // because the whole question is what the first screen says when there is
     // nothing to say, and an empty page is exactly where a layout built around
     // content quietly collapses.
+    // The estate with the charter signed, on the phone: the Autonomy tile
+    // says Chartered and the charter page reads Active, the two states the
+    // owner lives in once the loop is running. Before quiet, which declines
+    // the tests the charter would otherwise let in.
+    { width: 390, scale: 1, desktop: false, chartered: true },
+    { width: 390, scale: 2, desktop: false, chartered: true },
     { width: 390, scale: 1, desktop: false, quiet: true },
     { width: 390, scale: 2, desktop: false, quiet: true },
   ];
-  for (const { width, scale, desktop, quiet } of runs) {
+  for (const { width, scale, desktop, quiet, chartered } of runs as Array<{ width: number; scale: number; desktop: boolean; quiet?: boolean; chartered?: boolean }>) {
+    if (chartered) await signTheCharter(base);
     // THE GROUND IS DARK, AND EVERY SCREENSHOT THIS HARNESS EVER TOOK WAS OF
     // THE ALTERNATE. The stylesheet is dark-first — the palette lives on bare
     // :root and light is an override under prefers-color-scheme:light. A
@@ -364,7 +412,7 @@ async function main(): Promise<void> {
     // with their styles inline, so setting the response as the document is a
     // faithful measurement of what he would see.
     const posted = new Map<string, string>();
-    for (const [label, path, body] of (quiet ? [] : POSTS)) {
+    for (const [label, path, body] of (quiet || chartered ? [] : POSTS)) {
       const res = await fetch(base + path, {
         method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body,
       });
@@ -376,7 +424,7 @@ async function main(): Promise<void> {
     // refused, an experiment declined, a candidate answered. Measured in the
     // loaded pass the page is correct and empty, which measures a page that
     // rendered nothing — the same mistake as a clean-looking 404.
-    for (const path of quiet ? ['/foundry', '/foundry/activity'] : [...paths, ...posted.keys()]) {
+    for (const path of quiet ? ['/foundry', '/foundry/activity'] : chartered ? ['/foundry', '/foundry/charter'] : [...paths, ...posted.keys()]) {
       let status = 200;
       if (posted.has(path)) {
         await page.setContent(posted.get(path) ?? '', { waitUntil: 'load' });
@@ -401,6 +449,29 @@ async function main(): Promise<void> {
       const m = await page.evaluate(() => ({
         scrollWidth: document.documentElement.scrollWidth,
         innerWidth: window.innerWidth,
+        // THE DOORS, AS THE THUMB MEETS THEM. This gate measured overflow and
+        // coverage and never a door, which is how nine doors at half a rem
+        // with colliding labels shipped green. Every visible door in the bar:
+        // does its label fit its own box, does it overlap its neighbour, is it
+        // big enough to press, and is exactly one lit. And the More sheet,
+        // when it is open: visible, with rows a thumb can hit.
+        doors: (() => {
+          // No named helper here: the script runner names function values on
+          // the way in, and the page has no such helper to call.
+          const all = [...document.querySelectorAll('nav.places a')].filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).display !== 'none'; }).map((a) => {
+            const r = a.getBoundingClientRect();
+            return { label: (a.textContent ?? '').trim(), left: r.left, right: r.right, w: r.width, h: r.height,
+              clipped: a.scrollWidth > a.clientWidth + 1 || a.scrollHeight > a.clientHeight + 1, lit: a.classList.contains('on') };
+          }).sort((x, y) => x.left - y.left);
+          const overlaps: string[] = [];
+          for (let i = 1; i < all.length; i++) if (all[i - 1]!.right > all[i]!.left + 0.5) overlaps.push(`${all[i - 1]!.label}/${all[i]!.label}`);
+          const more = document.getElementById('more');
+          const sheet = more && more.getBoundingClientRect().height > 0 && getComputedStyle(more).display !== 'none'
+            ? { rows: [...more.querySelectorAll('a')].map((a) => ({ label: (a.textContent ?? '').trim(), h: a.getBoundingClientRect().height })) }
+            : null;
+          return { n: all.length, clipped: all.filter((d) => d.clipped).map((d) => d.label), overlaps,
+            small: all.filter((d) => d.w < 44 || d.h < 44).map((d) => d.label), lit: all.filter((d) => d.lit).length, sheet };
+        })(),
         // The widest element on the page, named, so a failure says what to fix
         // rather than only that something is too wide.
         widest: (() => {
@@ -452,8 +523,18 @@ async function main(): Promise<void> {
         })(),
       }));
       const overflow = m.scrollWidth - m.innerWidth;
-      const verdict = status === 200 && overflow <= 0 && m.covered <= 0 ? 'ok'
-        : status === 200 && overflow <= 0 ? 'COVERED' : 'OVERFLOW';
+      // The door rules hold on a phone: five under the thumb, none clipped,
+      // none overlapping, every one 44px, exactly one lit. The desk rail is a
+      // list and is not held to them. A page opened at #more must show the
+      // sheet, with every row a thumb's height.
+      const wantsSheet = path.endsWith('#more');
+      const doorFault = desktop ? '' : m.doors.n > 5 ? `${String(m.doors.n)} doors` : m.doors.clipped.length ? `clipped: ${m.doors.clipped.join(', ')}`
+        : m.doors.overlaps.length ? `overlapping: ${m.doors.overlaps.join(', ')}` : m.doors.small.length ? `under 44px: ${m.doors.small.join(', ')}`
+          : m.doors.lit !== 1 ? `${String(m.doors.lit)} doors lit` : wantsSheet && !m.doors.sheet ? 'the More sheet did not open'
+            : wantsSheet && m.doors.sheet && m.doors.sheet.rows.some((r) => r.h < 44) ? `sheet rows under 44px: ${m.doors.sheet.rows.filter((r) => r.h < 44).map((r) => r.label).join(', ')}` : '';
+      const verdict = status === 200 && overflow <= 0 && m.covered <= 0 && !doorFault ? 'ok'
+        : status === 200 && overflow <= 0 && m.covered <= 0 ? 'DOORS'
+          : status === 200 && overflow <= 0 ? 'COVERED' : 'OVERFLOW';
       rows.push(`${String(width).padStart(4)} ${desktop ? ' desk' : scale === 1 ? ' 100%' : ' 200%'}  ${String(status)}  `
         + `scrollWidth ${String(m.scrollWidth).padStart(4)} vs ${String(m.innerWidth).padStart(4)}  `
         + `${verdict.padEnd(9)} ${path}`);
@@ -463,6 +544,11 @@ async function main(): Promise<void> {
       } else if (verdict === 'COVERED') {
         failures.push(`${path} at ${String(width)}px ${String(scale * 100)}% text: `
           + `${String(m.covered)}px of content sits underneath the fixed bars`);
+      } else if (verdict === 'DOORS') {
+        failures.push(`${path} at ${String(width)}px ${String(scale * 100)}% text: the doors — ${doorFault}`);
+      }
+      if (chartered && scale === 1) {
+        await page.screenshot({ path: `${dir}/${path === '/foundry' ? 'foundry-chartered' : 'charter-active'}-390.png`, fullPage: true });
       }
       if (quiet && scale === 1) {
         await page.screenshot({
@@ -498,6 +584,9 @@ async function main(): Promise<void> {
           ['/foundry/experiments/next', 'forge'], ['/foundry/absence', 'absence'],
           ['/foundry/activity', 'activity'],
           [`/foundry/companies/${COMPANY}/understanding/${RESPONSIBILITY}`, 'understanding'],
+          ['/foundry/charter', 'charter'], ['/foundry/experiments/history', 'experiments-history'],
+          ['/foundry#more', 'more'], ['/foundry/experiments', 'experiments'], ['/foundry/inbox', 'inbox'],
+          ['/foundry/companies', 'portfolio'],
         ] as Array<[string, string]>) {
           if (path === p) await page.screenshot({ path: `${dir}/${name}-390.png`, fullPage: true });
         }
@@ -516,7 +605,10 @@ async function main(): Promise<void> {
                 : path === '/foundry/money' ? 'money'
                   : path === '/foundry/controls' ? 'controls'
                     : path === '/foundry/absence' ? 'absence'
-                      : path === '/foundry/experiments/next' ? 'forge' : '';
+                      : path === '/foundry/experiments/next' ? 'forge'
+                        : path === '/foundry/charter' ? 'charter'
+                          : path === '/foundry/experiments' ? 'experiments'
+                            : path === '/foundry/experiments/history' ? 'experiments-history' : '';
         if (name) await page.screenshot({ path: `${desk}/${name}-1280.png`, fullPage: true });
       }
     }
@@ -529,11 +621,11 @@ async function main(): Promise<void> {
   console.log('\nwidth  text  http  document vs window            verdict   path');
   console.log(rows.join('\n'));
   if (failures.length) {
-    console.log('\nHORIZONTAL OVERFLOW:\n' + failures.map((f) => '  ' + f).join('\n'));
+    console.log('\nWHAT FAILED:\n' + failures.map((f) => '  ' + f).join('\n'));
     process.exit(1);
   }
-  console.log(`\nNo horizontal overflow at ${WIDTHS.join(', ')} px, at 100% and 200% text, `
-    + `nor at ${DESKTOP_WIDTHS.join(', ')} px on a desktop. Screenshots in ${dir}/ and ${desk}/.`);
+  console.log(`\nNo horizontal overflow, nothing under the bars, and five doors that fit, at ${WIDTHS.join(', ')} px, at 100% and 200% text, `
+    + `nor overflow at ${DESKTOP_WIDTHS.join(', ')} px on a desktop. Screenshots in ${dir}/ and ${desk}/.`);
   process.exit(0);
 }
 
