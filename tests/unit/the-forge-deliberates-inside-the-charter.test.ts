@@ -32,6 +32,11 @@ const world = {
 vi.mock('../../src/services/ai/client.js', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   callSonnet: vi.fn(async (system: string) => {
+    if (system.startsWith('You shape the offer')) {
+      return say({ title: 'Bid roles brief', terms: 'contractor bid tracker', source_types: ['job_posting'], coverage: 'One board on the pull date.',
+        price_dollars: 19, price_because: 'a short read', product_name: 'Bid Roles Brief', sells: 'a dated shortlist', claims_made: 'a shortlist, not a listing',
+        collects: 'an email for one delivery', delivers_by: 'email on payment', sells_to: 'Small contractors.', charges_how: 'one-time, $19', lighter: 'nothing lighter settles it', offer_subject: 'A short brief' });
+    }
     world.lensCalls += 1;
     const lens = /discipline — ([a-z ]+) —/.exec(system)?.[1] ?? 'unknown';
     return say({
@@ -215,7 +220,9 @@ describe('the forge deliberates', () => {
     // The sealed tests are not ready — no recipients, no materials — and the pass says so instead of forcing them.
     expect(pass.allowed).toEqual([]);
     expect(pass.notAllowed.length).toBeGreaterThan(0);
-    expect(pass.notAllowed[0]!.because).toMatch(/no candidate businesses|nothing to deliver|not connected|no stated shape|not written/);
+    // Here the eyes have retrieved nothing for these words, so the hands
+    // refuse to make a brief of nothing, and the pass says exactly that.
+    expect(pass.notAllowed[0]!.because).toMatch(/the hands could not make it: (nothing retrieved|there is no Workshop to speak as)/);
     // Nothing was decided behind the owner's back.
     expect(Number((await query("SELECT COUNT(*) AS n FROM venture_experiments WHERE founder_id = ? AND decision IS NOT NULL", [OWNER])).rows[0]!.n)).toBe(0);
   });

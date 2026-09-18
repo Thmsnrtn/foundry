@@ -131,10 +131,14 @@ describe('the table is gone', () => {
     // reading any of it. The schedules are retired; the code is preserved and
     // listed in `RETIRED_LOOPS` with what each used to do, which is why the
     // functions are all still referenced. Seventy-five.
+    // AND ONE CAME ON: the forge's daily pass (`forge_tick`), which designs
+    // real tests under a discipline the owner does not have to attend —
+    // five disciplines, one composer, one adversary, sealed only inside the
+    // charter he signed. Seventy-six.
     // This number may only move for a reason written here.
     expect(Object.keys(JOB_REGISTRY).length,
-      'one hundred and four, less the ROI job, the funnel that could not run, and the society on a timer')
-      .toBe(75);
+      'one hundred and four, less the ROI job, the funnel that could not run, and the society on a timer, plus the forge')
+      .toBe(76);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

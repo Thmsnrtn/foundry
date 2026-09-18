@@ -52,6 +52,7 @@ export const WORK_THE_MODEL_DOES = {
   'a lens': 'one discipline reading the record of a candidate test for what it shows and on which rows',
   'composing a probe': 'turning five disciplines\' findings into one design that says what a test decides',
   'attacking a probe': 'arguing a draft design is wrong before it is sealed, given only the draft',
+  'shaping an offer': 'saying what a designed test sells, claims, collects, delivers, sells to and charges, for a thing the hands can make',
 
   // ── what the owner opens ─────────────────────────────────────────────────
   'the daily insight': 'the one thing worth saying about a company today',

@@ -553,9 +553,16 @@ export async function forgePass(founderId: string): Promise<ForgePass> {
       WHERE e.founder_id = ? AND e.decision IS NULL AND e.retired_at IS NULL AND d.sealed_at IS NOT NULL
         AND d.designed_by = ? AND d.recommendation = 'run' ORDER BY d.sealed_at`, [founderId, FORGE]);
   if (sealed.length > 0) {
-    const { allowExperiment, readiness, HandRefused } = await import('./hand.js');
+    const { allowExperiment, readiness, materialOf, HandRefused } = await import('./hand.js');
+    const { shapeAndMake } = await import('./products/offer-composition.js');
     for (const s of sealed) {
       const id = String(s.experiment_id);
+      // THE HANDS MAKE THE THING FIRST, when nothing has been made: the offer
+      // shape, the deliverable and the offer text, or the reason none could be.
+      if (!(await materialOf(id, 'deliverable'))) {
+        const made = await shapeAndMake(id);
+        if ('refused' in made) { out.notAllowed.push({ experimentId: id, because: `the hands could not make it: ${made.refused}` }); continue; }
+      }
       const ready = await readiness(id).catch(() => null);
       if (!ready?.ok) { out.notAllowed.push({ experimentId: id, because: ready ? ready.missing.join('; ') : 'readiness could not be read' }); continue; }
       try {

@@ -2134,3 +2134,45 @@ The prompts carry the same rule the reader carries: readings, questions and
 designs may be created; pain, demand, willingness to pay, counts, prices and
 names may not. The owner is not a public figure and the legal and destructive
 rungs are never inside a charter, said in every prompt.
+
+## The hands make a brief from rows — 18 September 2026
+
+### Why
+
+Two real deliverables, and a person made both. A studio that must have its
+products made by hand cannot grow a river of nickels, and a product nobody
+checked is how a small workshop's name is spent.
+
+### What was built (Tranche 5 of the River of Nickels plan, first recipe)
+
+- **A product registry** (`products/registry.ts`) that says which kinds the
+  hands can make today and, for each they cannot, what would have to exist
+  first: a tool page needs a page recipe with a readback and an exchange for a
+  free thing; a template file needs a generator whose formulas are checked
+  mechanically; a directory needs a steward that refreshes it; an alert needs
+  subscribers the Workshop has gathered. The forge designs only for what the
+  hands can make.
+- **The brief made of rows.** The eyes keep what they returned, item by item,
+  with an address and a date. A data brief is a shortlist of those items for
+  one question: every item cites its row, the counts are the retrievals' own,
+  and not a sentence of it is composed by a model. Its gate reads the text
+  back against the rows: an item citing an address that is not a retrieval
+  row is invented and the brief is refused; so is a stale pull, a placeholder,
+  a banned claim, or a named person. A brief that fails its gate is never
+  recorded as a deliverable a later hand could send.
+- **The forge shapes the offer** for a sealed design whose exchange a brief
+  can carry: the six sentences an asset states of itself, a one-time price
+  between five and forty-nine dollars, the search words and sources the brief
+  is built from, and what it covers. The structural facts the legal pass
+  reads are properties of the recipe, filled by it, never opinions. Then the
+  hands make the brief and the offer text in the Workshop's voice, and the
+  daily pass does this before it reads readiness.
+- **Refresh.** A brief going stale is re-pulled from the same rows the eyes
+  keep pulling, through the same gate.
+
+### What still stands between a sealed design and the world
+
+Readiness now wants only people to write to and a way to send. The first is
+the channels tranche: a population with recorded grounds, approved under the
+charter's contact rules rather than one by one, or a venue where buyers come
+to the offer. The second is the Workshop's sending, connected once.
