@@ -78,49 +78,10 @@ export const OWNER_SURFACE_SCRIPT =
   + `    m();window.addEventListener('resize',m);\n`
   + `    if(window.ResizeObserver){var o=new ResizeObserver(m);`
   + `if(a)o.observe(a);if(n)o.observe(n);}})();\n`
-  // MOBILE NAVIGATION FOLLOWS THE OWNER'S CONTEXT, NOT THE VIEWPORT WIDTH.
-  //
-  // The V3 handoff deliberately changes mobile navigation density by place:
-  // Home is the cockpit and shows the complete nine-door owner map; ordinary
-  // leaf pages keep the five high-frequency doors under the thumb; a secondary
-  // place such as Decisions or Economics is inserted as a sixth door while it
-  // is the current context. Opening Ask returns to the five-door set. Discover
-  // remains a desktop/low-frequency destination. This is semantic state — it
-  // must not be encoded as nth-child guesses that change when a door is added.
-  + `  (function(){var n=document.querySelector('nav.places');if(!n)return;`
-  + `var row=n.firstElementChild;if(!row)return;\n`
-  + `    var core={'/foundry':1,'/foundry/companies':1,'/foundry/experiments':1,`
-  + `'/foundry/inbox':1,'/foundry#ask-foundry':1};\n`
-  + `    function doors(){return Array.prototype.filter.call(row.children,function(e){`
-  + `return e&&e.tagName==='A';});}\n`
-  + `    function reset(){row.style.removeProperty('grid-template-columns');`
-  + `doors().forEach(function(a){a.style.removeProperty('display');a.style.removeProperty('order');`
-  + `a.style.removeProperty('font-size');var i=a.querySelector('svg');`
-  + `if(i){i.style.removeProperty('width');i.style.removeProperty('height');}});}\n`
-  + `    function apply(){if(!window.matchMedia('(max-width: 899px)').matches){reset();return;}\n`
-  + `      var all=doors(),main=document.querySelector('main[data-place]');`
-  + `var place=main&&main.getAttribute('data-place')||'';`
-  + `var ask=window.location.hash==='#ask-foundry';var full=!ask&&place==='foundry';\n`
-  + `      var active=null;all.forEach(function(a){if(a.classList.contains('on'))active=a;});`
-  + `var activeHref=active&&active.getAttribute('href')||'';`
-  + `var contextual=!full&&active&&!core[activeHref]&&!active.classList.contains('desk');`
-  + `var columns=full?9:(contextual?6:5);\n`
-  + `      row.style.setProperty('grid-template-columns','repeat('+columns+',minmax(0,1fr))','important');\n`
-  + `      all.forEach(function(a){var href=a.getAttribute('href')||'';`
-  + `var show=full?!a.classList.contains('desk'):(!!core[href]||(contextual&&a===active));`
-  + `a.style.setProperty('display',show?'flex':'none','important');`
-  + `if(show)a.style.setProperty('font-size',full?'.51rem':'.62rem','important');`
-  + `if(full){a.style.removeProperty('order');}else{var order=0;`
-  + `if(href==='/foundry')order=1;else if(href==='/foundry/companies')order=2;`
-  + `else if(contextual&&a===active)order=activeHref==='/foundry/decisions'?3:4;`
-  + `else if(href==='/foundry/experiments')order=contextual&&activeHref==='/foundry/decisions'?4:3;`
-  + `else if(href==='/foundry/inbox')order=contextual?5:4;`
-  + `else if(href==='/foundry#ask-foundry')order=contextual?6:5;`
-  + `if(order)a.style.setProperty('order',String(order),'important');else a.style.removeProperty('order');}\n`
-  + `        var i=a.querySelector('svg');if(i&&show){i.style.width=full?'18px':'20px';`
-  + `i.style.height=full?'18px':'20px';}});}\n`
-  + `    apply();window.addEventListener('resize',apply,{passive:true});`
-  + `window.addEventListener('hashchange',apply);})();\n`
+  // THE DOORS ARE NOT ASSEMBLED HERE. A phone shows five doors, in markup,
+  // styled by the stylesheet; the rest of the places sit in a sheet the More
+  // door opens with a fragment. There is no membership to compute, so a script
+  // that fails to run leaves exactly the bar the stylesheet drew.
   // AND A FORM THAT ASKS FIRST STILL ASKS.
   //
   // Three forms here confirm before they submit — disconnecting a credential,

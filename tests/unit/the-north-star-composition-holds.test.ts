@@ -73,9 +73,9 @@ describe('Home is the Founder Cockpit', () => {
 
   it('puts the decision beside cash movement and live activity, in that order', async () => {
     const body = await read('/foundry');
-    const cockpit = /<div class="cockpit">([\s\S]*?)<\/div>\s*<dl class="nownext|<div class="cockpit">([\s\S]*?)<section class="know|<div class="cockpit">([\s\S]*?)<p class="also/.exec(body);
+    const cockpit = /<div class="cockpit">([\s\S]*?)(?:<dl class="nownext|<section class="know|<div class="know|<details class="fold"|<footer>)/.exec(body);
     expect(cockpit, 'the cockpit row exists').not.toBeNull();
-    const row = cockpit![1] ?? cockpit![2] ?? cockpit![3] ?? '';
+    const row = cockpit![1] ?? '';
     const calm = row.indexOf('class="panel calm"');
     const one = row.indexOf('id="the-one-thing"');
     const trend = row.indexOf('class="panel trend"');
@@ -100,11 +100,11 @@ describe('Home is the Founder Cockpit', () => {
     expect(body).not.toContain('id="the-one-thing"');
   });
 
-  it('keeps the places without a door reachable on a phone', async () => {
+  it('keeps the places without a door reachable on a phone, through the More sheet', async () => {
     const body = await read('/foundry');
-    const also = /<p class="also"[\s\S]*?<\/p>/.exec(body)?.[0] ?? '';
-    for (const href of ['/foundry/searching', '/foundry/public-workshop', '/foundry/roadmap', '/foundry/absence']) {
-      expect(also).toContain(`href="${href}"`);
+    const sheet = /<section class="sheet-more" id="more"[\s\S]*?<\/section>/.exec(body)?.[0] ?? '';
+    for (const href of ['/foundry/searching', '/foundry/public-workshop', '/foundry/roadmap', '/foundry/absence', '/foundry/charter', '/foundry/decisions', '/foundry/money', '/foundry/activity', '/foundry/controls', '/letter']) {
+      expect(sheet).toContain(`href="${href}"`);
     }
   });
 });
@@ -153,9 +153,9 @@ describe('what the surface refuses', () => {
     .map((f) => [f.slice(ROOT.length + 1), readFileSync(f, 'utf8')] as const);
 
   it('carries no inline <style> on any owner page', () => {
-    const offenders = FILES.filter(([name, src]) => !name.endsWith('letter.ts') && !name.endsWith('settings.ts')
-      && !name.endsWith('privacy.ts') && !name.endsWith('connections.ts') && !name.endsWith('onboarding.ts')
-      && /<style>/.test(src)).map(([n]) => n);
+    // Every owner page, the Letter and the settings pages included: none of
+    // them carries a <style> any more, so none is exempt.
+    const offenders = FILES.filter(([, src]) => /<style>/.test(src)).map(([n]) => n);
     expect(offenders).toEqual([]);
   });
 

@@ -106,10 +106,16 @@ describe('a button cannot be wider than what contains it', () => {
     //   the tile, the row or the document wider. The value sits beneath it and
     //   wraps as it likes.
     //
-    // Anything else added to this list needs one of those three sentences.
+    //   IT CLIPS ITSELF, TOO. `nav.places a` is a phone door: five tracks a
+    //   fifth of the screen wide, the label sized to the viewport, with
+    //   `overflow:hidden` on the same rule, so a label that outgrows its track
+    //   loses its tail inside the door rather than lying over the next one —
+    //   which is exactly what the owner's screenshot showed when it wrapped.
+    //
+    // Anything else added to this list needs one of those sentences.
     const named = [...phoneOnly(css()).matchAll(/(?:^|\n)([^\n{]*)\{[^}]*white-space:\s*nowrap/g)]
       .map((m) => m[1].trim())
       .filter((s) => !s.startsWith('@'));
-    expect(named.sort()).toEqual(['.filters a', '.local a', '.mline dd', '.sr', '.tile dt.k'].sort());
+    expect(named.sort()).toEqual(['.filters a', '.local a', '.mline dd', '.sr', '.tile dt.k', 'nav.places a'].sort());
   });
 });

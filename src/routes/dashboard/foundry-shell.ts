@@ -2872,11 +2872,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
     ? ['ifyes', 'change']
     : ['okay', 'working']).map((k) =>
     `<a href="/foundry?ask=${k}">${QUESTIONS[k]}</a>`).join(''))}
-    </div>` : ''}
-    <!-- THE PLACES WITHOUT A DOOR ON A PHONE. The desk rail carries these under
-         "Also here"; a phone has no rail, and a page nothing links to is a page
-         the owner has to already know about. -->
-    <p class="also" aria-label="Also here"><a href="/foundry/searching">Discover</a><a href="/foundry/public-workshop">Workshop</a><a href="/foundry/roadmap">Roadmap</a><a href="/foundry/absence">Absence test</a></p>`;
+    </div>` : ''}`;
 
   return c.html(page('Foundry', body, 'foundry', homeFrame));
 });

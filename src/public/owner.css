@@ -1244,23 +1244,30 @@ main[data-place="money"] .mline.total{margin:.25rem -.65rem 0;padding:.95rem .65
   .ask-in{max-width:none;border-radius:9px;padding:3px;background:#0b1713}
   .ask input{min-height:44px}.ask button{min-height:40px;border-radius:7px}
 
+  /* FIVE DOORS. The label is sized to the viewport, not the root, so at 200%
+     text the five still fit their tracks; the icon and the 52px target are
+     absolute. A label that would not fit is clipped, never overlapped. */
   nav.places{background:rgba(5,12,9,.97);border-color:var(--v3-line);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);padding:5px 4px calc(5px + env(safe-area-inset-bottom))}
-  nav.places div{display:grid;grid-template-columns:repeat(9,minmax(0,1fr));max-width:none;margin:0}
-  nav.places a{min-height:49px;padding:3px 1px;gap:2px;font-size:.51rem;line-height:1.05;color:var(--ink-3)}
-  nav.places a svg{width:18px;height:18px}
+  nav.places div{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));max-width:none;margin:0}
+  nav.places a{min-height:52px;padding:4px 2px;gap:3px;font-size:clamp(9px,2.85vw,12px);line-height:1.1;color:var(--ink-3);white-space:nowrap;overflow:hidden}
+  nav.places a svg{width:20px;height:20px;flex:0 0 auto}
   nav.places a.on{color:var(--v3-mint)}
   nav.places .desk{display:none}
   nav.places .sub,nav.places .more{display:none!important}
   nav.places a b{top:0;right:calc(50% - 17px);transform:scale(.88)}
   .rail-brand{display:none}
+  /* Ask is an action, not a place: a button in the head, opening the composer. */
+  .brand{justify-content:space-between}
+  .ask-fab{display:inline-flex;align-items:center;gap:6px;min-height:40px;padding:6px 12px;margin-left:auto;border:1px solid var(--v3-line-strong);border-radius:999px;color:var(--ink);font-size:.78rem;text-decoration:none}
+  .ask-fab svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+  /* THE MORE SHEET: every other place, two across, above the bar, until Close. */
+  .sheet-more{display:none;position:fixed;z-index:11;left:10px;right:10px;bottom:calc(4.9rem + env(safe-area-inset-bottom));padding:8px;background:rgba(7,16,13,.97);border:1px solid var(--v3-line-strong);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.42)}
+  .sheet-more:target{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}
+  .sheet-more a{display:flex;align-items:center;gap:8px;min-height:44px;padding:6px 10px;border-radius:8px;color:var(--ink-2);text-decoration:none;font-size:.85rem}
+  .sheet-more a svg,.sheet-more a .mk svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round;flex:0 0 auto}
+  .sheet-more a[aria-current]{color:var(--v3-mint);background:rgba(102,229,180,.10)}
+  .sheet-more .close{grid-column:1/-1;justify-content:flex-end;color:var(--ink-3)}
   .reach li{grid-template-columns:1fr}.reach li>p{grid-column:1}
-}
-
-/* Membership of the mobile doors is page-aware and is applied by the hashed
-   owner script. CSS only supplies compact sizing before that script runs. */
-@media (max-width:410px){
-  nav.places a{font-size:.62rem}
-  nav.places a svg{width:20px;height:20px}
 }
 
 /* Desktop: dense private-institution cockpit with the stable left rail seen in
@@ -1323,11 +1330,9 @@ main[data-place="money"] .mline.total{margin:.25rem -.65rem 0;padding:.95rem .65
    PRIVATE FOUNDRY UI HANDOFF V3 — NORTH STAR REFINEMENTS
    Responsive corrections found by the existing owner-surface invariants.
    ============================================================================= */
-.ask-door{color:inherit}
-
-/* Mobile door membership is intentionally absent here. The owner script derives
-   it from page context, preserving the handoff's five/six/nine-door compositions
-   without coupling navigation meaning to DOM position. */
+/* The phone's five doors are markup and stylesheet alone; no script decides
+   membership, and nothing here encodes navigation meaning as DOM position. */
+@media (min-width:900px){.ask-fab,.more-door,.sheet-more{display:none!important}}
 
 
 /* =============================================================================
@@ -1417,9 +1422,6 @@ main[data-place="foundry"]>.glance::before{top:-1.25rem}
 .nownext.panel>div.next .nm,.nownext.panel>div.carrying .nm{font-size:.98rem}
 
 /* ── Also here, on a phone ──────────────────────────────────────────────── */
-.also{display:flex;flex-wrap:wrap;gap:.4rem;margin:1.4rem 0 0;padding-top:.9rem;border-top:1px solid var(--v3-line)}
-.also a{font-size:.78rem;color:var(--ink-2);text-decoration:none;border:1px solid var(--v3-line);border-radius:999px;padding:6px 11px;min-height:32px;display:inline-flex;align-items:center}
-.also a:hover{color:var(--ink);border-color:var(--v3-line-strong)}
 
 /* ── A phone: the Home local row is the tab bar's job ───────────────────── */
 @media (max-width:899px){
@@ -1439,7 +1441,6 @@ main[data-place="foundry"]>.glance::before{top:-1.25rem}
   .nownext.panel>div:last-child{border-right:0}
   .cockpit{grid-template-columns:repeat(2,minmax(0,1fr));gap:.7rem}
   .cockpit>.one,.cockpit>.panel.calm{grid-column:1/-1}
-  .also{display:none}
   .panel{padding:.9rem 1rem}
   .panel.trend .chart svg{height:84px}
 }
