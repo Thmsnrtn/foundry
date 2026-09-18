@@ -66,6 +66,7 @@ export async function waitingOn(founderId: string): Promise<AttentionItem[]> {
   const tests: AttentionItem[] = [];
   const undecided = await rows(
     `SELECT e.id FROM venture_experiments e WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.decision IS NULL AND e.validity = 'valid'
+        AND e.retired_at IS NULL AND e.superseded_by IS NULL
         AND EXISTS (SELECT 1 FROM experiment_materials m WHERE m.experiment_id = e.id) ORDER BY e.proposed_at`, [founderId]);
   if (undecided.length) {
     const { getExperimentView } = await import('./experiment-view.js');
@@ -91,6 +92,7 @@ export async function waitingOn(founderId: string): Promise<AttentionItem[]> {
   const listed = await rows(
     `SELECT e.id FROM venture_experiments e
       WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.decision = 'approved' AND e.ran_at IS NULL AND e.validity = 'valid'
+        AND e.retired_at IS NULL AND e.superseded_by IS NULL
         AND EXISTS (SELECT 1 FROM experiment_materials m WHERE m.experiment_id = e.id AND m.kind = 'offer_shape' AND m.superseded_at IS NULL AND m.body LIKE '%"listing":%')
         AND NOT EXISTS (SELECT 1 FROM experiment_exposures x WHERE x.experiment_id = e.id AND x.withdrawn_at IS NULL)
       ORDER BY e.decided_at`, [founderId]);

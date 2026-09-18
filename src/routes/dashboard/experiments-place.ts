@@ -18,7 +18,7 @@ import type { Where } from './foundry-shell.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
 import { renderDecision } from './decision-control.js';
 import { consequenceOfApproving, firstContactDecision } from '../../services/founder/what-it-would-do.js';
-import { getExperimentView, listExperiments } from '../../services/founder/experiment-view.js';
+import { experimentLedger, getExperimentView, listExperiments } from '../../services/founder/experiment-view.js';
 import type { ExperimentView } from '../../services/founder/experiment-view.js';
 import {
   HandRefused, allowExperiment, approveRemaining, attachPaymentLinkByUrl, declineExperiment, markdownToHtml, offerShapePlanOf, prepareExposure,
@@ -44,7 +44,11 @@ const where = (v: ExperimentView | null, on: 'test' | 'recipients' | 'list' | 'd
   chips: [],
 });
 
-const stateWord: Record<ExperimentView['state'], string> = { needs_you: 'Needs you', ready: 'Ready', running: 'Running', completed: 'Completed', stopped: 'Stopped', declined: 'Declined', invalid: 'Invalid' };
+const stateWord: Record<ExperimentView['state'], string> = { needs_you: 'Needs you', ready: 'Ready', running: 'Running', completed: 'Completed', stopped: 'Stopped', declined: 'Declined', invalid: 'Invalid', retired: 'Retired', superseded: 'Superseded' };
+const CONCLUDED = ['completed', 'stopped', 'declined', 'invalid', 'retired', 'superseded'] as const;
+/** SQLite writes 'YYYY-MM-DD HH:MM:SS' in UTC and says nothing about the zone. */
+const asMs = (s: string): number => Date.parse(/[TZ]/.test(s) ? s : `${s.replace(' ', 'T')}Z`);
+const dayOf = (s: string | null): string => s ? s.slice(0, 10) : '';
 const cents = (n: number, cur = 'USD') => `${cur === 'USD' ? '$' : ''}${(n / 100).toFixed(2)}${cur === 'USD' ? '' : ` ${cur}`}`;
 const notice = (done: string, error: string): HtmlEscapedString | Promise<HtmlEscapedString> | '' => error ? html`<p class="noticed" role="alert"><strong>That did not go through.</strong> ${error}</p>`
   : done === 'allowed' ? html`<p class="noticed"><strong>Allowed.</strong> Foundry is placing the offer and will begin writing on its next pass. Nothing more is needed from you.</p>`
@@ -62,7 +66,23 @@ const notice = (done: string, error: string): HtmlEscapedString | Promise<HtmlEs
 experimentRoutes.get('/foundry/experiments', async (c: any) => {
   const founderId = await founderOf(c);
   if (!founderId) return c.redirect('/onboarding');
-  const views = await listExperiments(founderId);
+  // NOW IS NOT HISTORY. The page is the working set: what can still produce
+  // evidence. What has concluded — completed, stopped, declined, invalid,
+  // retired, superseded — is the record, kept whole on its own page and shown
+  // here only as the few that finished lately, so the owner is never asked to
+  // live inside the history of every test he ever ran.
+  const now = new Date();
+  const live = await listExperiments(founderId, now, 'now');
+  const ledger = await experimentLedger(founderId);
+  const views = live.filter((t) => !t.concluded);
+  // A test he stopped is settled by no row the SQL can read; the view knows.
+  const stoppedByHim = live.filter((t) => t.concluded);
+  const cutoff = now.getTime() - 14 * 86_400_000;
+  const lately = ledger.filter((l) => l.settled && l.settledAt !== null && asMs(l.settledAt) >= cutoff).map((l) => l.id);
+  const recent = [...stoppedByHim, ...(await Promise.all(lately.map((x) => getExperimentView(founderId, x, now)))).filter((v): v is ExperimentView => v !== null)]
+    .filter((v) => v.concluded && (v.concludedAt === null || asMs(v.concludedAt) >= cutoff))
+    .sort((a, b) => (b.concludedAt ?? '').localeCompare(a.concludedAt ?? '')).slice(0, 3);
+  const historyN = ledger.filter((l) => l.settled).length + stoppedByHim.length;
   // THE ONE THAT IS ALIVE LEADS. A running test, or one waiting on him, is the
   // instrument the page exists for; the rest are rows beneath it. Nothing here
   // is a project card: stage, exposure, money, stop conditions and what the
@@ -101,18 +121,56 @@ experimentRoutes.get('/foundry/experiments', async (c: any) => {
     </section>` : '';
   const body = html`
     <h1>Experiments</h1>
-    <p class="lede">${views.length === 0 ? 'No real test is set up yet. When one is, it appears here with what it needs from you.'
-    : `${count(views.length, 'real test')}. Each is one question put to the world, with the prediction sealed before it runs.`}</p>
+    <p class="lede">${views.length === 0
+    ? (historyN ? 'Nothing is being tested now.' : 'No real test is set up yet. When one is, it appears here with what it needs from you.')
+    : `${count(views.length, 'live test')}. Each is one question put to the world, with the prediction sealed before it runs.`}</p>
     ${hero}
-    ${rest.length ? html`<h2 class="rank">Other tests<span class="dim">${String(rest.length)}</span></h2>` : ''}
+    ${rest.length ? html`<h2 class="rank">Other live tests<span class="dim">${String(rest.length)}</span></h2>` : ''}
     ${rest.map((v) => html`<a class="item experiment-index-item exp-row" href="/foundry/experiments/${v.id}">
       <p><strong>${v.assetName ?? v.title}</strong> <span class="pill">${stateWord[v.state]}</span></p>
       <p class="quiet">${v.stateDetail}</p>
       ${pct(v) !== null ? html`<span class="prog"><i style="width:${String(Math.max(2, Math.min(100, pct(v) ?? 0)))}%"></i></span>` : ''}
     </a>`)}
-    <p class="quiet"><a href="/foundry/experiments/next">What to test next</a> — the questions
-      nobody has answered, and what the tests so far could not establish.</p>`;
+    ${recent.length ? html`<h2 class="rank" id="recent">Recently finished<span class="dim">14 days</span></h2>
+    ${recent.map((v) => html`<a class="item experiment-index-item exp-row done" href="/foundry/experiments/${v.id}">
+      <p><strong>${v.assetName ?? v.title}</strong> <span class="pill">${stateWord[v.state]}</span> <span class="dim">${dayOf(v.concludedAt)}</span></p>
+    </a>`)}` : ''}
+    <p class="quiet"><a href="/foundry/experiments/history">History (${String(historyN)})</a> · <a href="/foundry/experiments/next">What to test next</a></p>`;
   return c.html(page('Experiments', body, 'experiments', where(null, 'list')));
+});
+
+// ─── History: the record of every concluded test ─────────────────────────────
+//
+// HISTORY IS EVIDENCE, NOT NAVIGATION. Every test that concluded — however it
+// concluded — keeps its page and its rows; this is where they are read, most
+// recently concluded first, filtered by how they ended. Nothing is deleted to
+// keep the working set small; it is filed here. Mounted before `/:id` for the
+// same reason `next` is.
+experimentRoutes.get('/foundry/experiments/history', async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return c.redirect('/onboarding');
+  const now = new Date();
+  const wanted = String(c.req.query('state') ?? '');
+  const all = [...await listExperiments(founderId, now, 'history'), ...(await listExperiments(founderId, now, 'now')).filter((v) => v.concluded)]
+    .sort((a, b) => (b.concludedAt ?? '').localeCompare(a.concludedAt ?? ''));
+  const filter = (CONCLUDED as readonly string[]).includes(wanted) ? wanted as ExperimentView['state'] : null;
+  const shown = filter ? all.filter((v) => v.state === filter) : all;
+  const n = (k: string) => all.filter((v) => v.state === k).length;
+  const frame: Where = {
+    crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: '/foundry/experiments', label: 'Experiments' }, { href: '/foundry/experiments/history', label: 'History' }],
+    scope: { kind: 'foundry', id: null, name: 'Experiments' }, local: [], chips: [],
+  };
+  const body = html`
+    <h1>History</h1>
+    <p class="lede">${all.length === 0 ? 'Nothing has finished yet.' : `${count(all.length, 'concluded test')}. Each keeps its page and every row it produced.`}</p>
+    ${all.length ? html`<p class="filters"><a href="/foundry/experiments/history" class="${filter ? '' : 'on'}"${filter ? '' : raw(' aria-current="page"')}>All <b>${String(all.length)}</b></a>${CONCLUDED.filter((k) => n(k) > 0).map((k) => html`<a href="/foundry/experiments/history?state=${k}" class="${filter === k ? 'on' : ''}"${filter === k ? raw(' aria-current="page"') : ''}>${stateWord[k]} <b>${String(n(k))}</b></a>`)}</p>` : ''}
+    ${shown.map((v) => html`<a class="item experiment-index-item exp-row done" href="/foundry/experiments/${v.id}">
+      <p><strong>${v.assetName ?? v.title}</strong> <span class="pill">${stateWord[v.state]}</span> <span class="dim">${dayOf(v.concludedAt)}</span></p>
+      <p class="quiet">${v.stateDetail}${v.supersededBy ? html` <span class="dim">Succeeded by <a href="/foundry/experiments/${v.supersededBy}">the later design</a>.</span>` : ''}</p>
+    </a>`)}
+    ${filter && shown.length === 0 ? html`<p class="quiet">None ended that way.</p>` : ''}
+    <p class="quiet"><a href="/foundry/experiments">Live tests</a></p>`;
+  return c.html(page('Experiments — History', body, 'experiments', frame));
 });
 
 // ─── The forge: what is worth testing next ───────────────────────────────────
@@ -288,8 +346,9 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
     ${approve ? html`<section class="launch" id="authorise">
       <p class="act">Second real market test — a listing you place yourself</p>
       ${renderDecision({ consequence: approve, action: `/foundry/experiments/${id}/allow`, hidden: {}, primary: true })}
-      <p class="quiet">Approving seals the design and sets the allowance. It contacts nobody and publishes nothing; opening the shop and listing it are your own acts, below.
-        <a class="why" href="/foundry/experiments/${id}/decide">Everything this rests on</a></p>
+      <details class="fold"><summary><h2>What approving does</h2><span class="gist">seals the design; contacts nobody</span></summary>
+        <p class="quiet">Approving seals the design and sets the allowance. It contacts nobody and publishes nothing; opening the shop and listing it are your own acts, below.
+          <a class="why" href="/foundry/experiments/${id}/decide">Everything this rests on</a></p></details>
     </section>` : ''}
     ${blocked ? html`<section class="one alert" id="blocked"><div class="one-in">
       <p class="act">Blocked</p>
@@ -310,10 +369,9 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
     ${watch}
     ${stepper}
 
-    ${listing ? html`<section class="know" id="acts"><h2>Your acts</h2>
-      <p class="quiet">Only what you must do yourself. Foundry cannot open the shop, attach a bank account, opt out of the venue's advertising, accept its terms, or publish the listing on your behalf.</p>
-      ${html([markdownToHtml(ownerActsForListing())] as unknown as TemplateStringsArray)}
-    </section>` : ''}
+    ${listing ? fold('acts', 'Your acts', 'only what you must do yourself', html`
+      <p class="quiet">Foundry cannot open the shop, attach a bank account, opt out of the venue's advertising, accept its terms, or publish the listing on your behalf.</p>
+      ${html([markdownToHtml(ownerActsForListing())] as unknown as TemplateStringsArray)}`, !!listing && v.state === 'running' && !liveListing) : ''}
     ${listing && v.state === 'running' && !liveListing ? html`<section class="know" id="listing"><h2>Where it is listed</h2>
       <p>When the listing is live on ${listing.venueName}, paste its address. That records the exposure and starts the ${v.rules.windowClosesAt ? '' : `${String((v.rules.daysLeft ?? 30))}-day `}window.</p>
       <form method="POST" action="/foundry/experiments/${id}/listing" class="stack">

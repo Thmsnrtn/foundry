@@ -54,12 +54,16 @@ export interface ExperimentRow {
   costCents: number; whatWeDo: string; whatWeExpect: string; wouldDisprove: string; settlesWhen: string | null;
   verdict: string | null; whatHappened: string | null; decidedAt: string | null; evidenceMode: string;
   productId: string | null;
+  /** How it ended without running, when it did: retired (a duplicate, or killed
+   * by the forge and its adversary), superseded by a later design, invalidated. */
+  retiredAt: string | null; retiredBecause: string | null; supersededBy: string | null; invalidatedAt: string | null;
 }
 
 export async function experimentRow(experimentId: string): Promise<ExperimentRow | null> {
   const r = await one(
     `SELECT e.id, e.founder_id, e.opportunity_id, e.decision, e.ran_at, e.validity, e.cost_cents, e.what_we_do, e.what_we_expect,
             e.would_disprove, e.settles_when, e.verdict, e.what_happened, e.decided_at, e.evidence_mode,
+            e.retired_at, e.retired_because, e.superseded_by, e.invalidated_at,
             -- The experiment's own asset, resolved by lineage. Reality and standing do
             -- not apply: an experimental asset is exactly what this reads, and a
             -- reference experiment's asset is read the same way for the rehearsal.
@@ -74,6 +78,8 @@ export async function experimentRow(experimentId: string): Promise<ExperimentRow
     verdict: r.verdict == null ? null : String(r.verdict), whatHappened: r.what_happened == null ? null : String(r.what_happened),
     decidedAt: r.decided_at == null ? null : String(r.decided_at), evidenceMode: String(r.evidence_mode),
     productId: r.product_id == null ? null : String(r.product_id),
+    retiredAt: r.retired_at == null ? null : String(r.retired_at), retiredBecause: r.retired_because == null ? null : String(r.retired_because),
+    supersededBy: r.superseded_by == null ? null : String(r.superseded_by), invalidatedAt: r.invalidated_at == null ? null : String(r.invalidated_at),
   };
 }
 

@@ -2349,10 +2349,13 @@ foundryShellRoutes.get('/foundry', async (c) => {
   // that is also a door. None of them is prose and none of them is invented:
   // where nothing has happened the tile says so, because a first screen that
   // only looks right once the numbers are large is a poster, not a control.
-  const { listExperiments } = await import('../../services/founder/experiment-view.js');
-  const tests = await listExperiments(s.ownerId);
+  const { listExperiments, paidAcrossExperiments } = await import('../../services/founder/experiment-view.js');
+  // THE WORKING SET, NOT THE RECORD. History is read on its own page; the
+  // first screen hydrates only what can still move, and money paid is one sum
+  // over the world's rows rather than every finished test rendered again.
+  const tests = await listExperiments(s.ownerId, new Date(), 'now');
   const live = tests.find((t) => t.state === 'running' || t.state === 'needs_you' || t.state === 'ready') ?? null;
-  const paidCents = tests.reduce((acc, t) => acc + t.money.paidCents, 0);
+  const paidCents = await paidAcrossExperiments(s.ownerId);
   // HEALTH AS A STATE. One reader answers what failed, whether it recovers on
   // its own and whether he is needed; the tile shows the word and Controls
   // shows the rows. The healthy line is about the estate, not about routines.

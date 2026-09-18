@@ -21,7 +21,19 @@ import {
 type Row = Record<string, unknown>;
 const rows = async (sql: string, params: unknown[]): Promise<Row[]> => (await query(sql, params)).rows as unknown as Row[];
 
-export type ExperimentState = 'needs_you' | 'ready' | 'running' | 'completed' | 'stopped' | 'declined' | 'invalid';
+export type ExperimentState = 'needs_you' | 'ready' | 'running' | 'completed' | 'stopped' | 'declined' | 'invalid' | 'retired' | 'superseded';
+
+/**
+ * WHAT CAN NO LONGER PRODUCE NEW EVIDENCE. One predicate, in SQL, for every
+ * reader that separates the working set from the record: the charter's
+ * in-flight count (`charter.ts`), the owner's queue (`attention.ts`) and the
+ * list below. Kept byte-identical in each so a fourth copy is never written.
+ * A test the owner stopped (exposure withdrawn, act revoked) is concluded too,
+ * but only the rows the view reads can say so; callers treat `concluded` on
+ * the view as the last word.
+ */
+export const SETTLED_SQL = `(e.what_happened IS NOT NULL OR e.ran_at IS NOT NULL OR e.retired_at IS NOT NULL
+        OR e.validity <> 'valid' OR e.superseded_by IS NOT NULL OR coalesce(e.decision,'') = 'declined')`;
 
 export interface Step { key: 'recipients' | 'sending' | 'allow' | 'placing' | 'listing' | 'readings'; label: string; status: 'done' | 'todo' | 'foundry'; detail: string; href: string }
 
@@ -35,6 +47,10 @@ export interface TimelineEvent {
 export interface ExperimentView {
   id: string; founderId: string; title: string; productId: string | null; assetName: string | null;
   state: ExperimentState; stateLabel: string; stateDetail: string;
+  /** Concluded: nothing it does now produces new evidence. History, not work. */
+  concluded: boolean; concludedAt: string | null;
+  /** The later design that replaced it, when one did. */
+  supersededBy: string | null;
   /**
    * WHAT IS IN THE WAY, STILL IN PIECES.
    *
@@ -142,7 +158,12 @@ export async function getExperimentView(founderId: string, experimentId: string,
   const refundedCents = refunds.reduce((n, s) => n + (s.amountCents ?? 0), 0);
   const windowClosesAt = x && rule ? new Date(new Date(x.placedAt.replace(' ', 'T') + (x.placedAt.endsWith('Z') ? '' : 'Z')).getTime() + rule.withinDays * 86_400_000) : null;
   const daysLeft = windowClosesAt ? Math.max(0, Math.ceil((windowClosesAt.getTime() - now.getTime()) / 86_400_000)) : null;
-  if (e.decision === 'declined') { state = 'declined'; stateLabel = 'Declined'; stateDetail = 'You decided not to run it.'; }
+  // RETIRED AND SUPERSEDED COME FIRST: both happen only before a test runs
+  // (validation.ts refuses otherwise), and a retired test read as "Needs you"
+  // is a forge-killed design asking the owner to decide it. That was the bug.
+  if (e.supersededBy) { state = 'superseded'; stateLabel = 'Superseded'; stateDetail = 'Replaced by a later design; its record stands.'; }
+  else if (e.retiredAt) { state = 'retired'; stateLabel = 'Retired'; stateDetail = e.retiredBecause ?? 'Retired before it ran.'; }
+  else if (e.decision === 'declined') { state = 'declined'; stateLabel = 'Declined'; stateDetail = 'You decided not to run it.'; }
   else if (e.validity !== 'valid') { state = 'invalid'; stateLabel = 'Invalid'; stateDetail = 'It did not measure what it was for, so it is re-run rather than read.'; }
   else if (e.ranAt !== null) {
     const held = e.verdict === 'as_predicted';
@@ -158,6 +179,9 @@ export async function getExperimentView(founderId: string, experimentId: string,
     stateDetail = `${delivered === 0 ? 'No businesses have received the offer yet' : `${plural(delivered, 'business has', 'businesses have')} received the offer`}; ${payments.length === 0 ? 'no one has paid yet' : `${plural(payments.length, 'customer has', 'customers have')} paid`}.${daysLeft != null ? ` ${daysLeft} day${daysLeft === 1 ? '' : 's'} left in the window.` : ' The window opens when the offer is placed.'}`;
   } else if (!ready.ok) { state = 'needs_you'; stateLabel = 'Needs you'; stateDetail = `Before it can run: ${ready.missing.join('; ')}.`; }
   else { state = 'ready'; stateLabel = 'Ready'; stateDetail = 'Everything is in place. It runs when you allow it.'; }
+  const concluded = state === 'completed' || state === 'stopped' || state === 'declined' || state === 'invalid' || state === 'retired' || state === 'superseded';
+  const concludedAt = !concluded ? null
+    : e.retiredAt ?? e.ranAt ?? e.invalidatedAt ?? (e.decision === 'declined' ? e.decidedAt : null) ?? (withdrawn ? x!.withdrawnAt : null) ?? act?.revokedAt ?? null;
 
   const allow = {
     possible: state === 'ready', reason: state === 'needs_you' ? stateDetail : null,
@@ -205,7 +229,7 @@ export async function getExperimentView(founderId: string, experimentId: string,
 
   return {
     id: experimentId, founderId, title: e.whatWeDo, productId: e.productId, assetName: asset ? String(asset.name) : null,
-    state, stateLabel, stateDetail,
+    state, stateLabel, stateDetail, concluded, concludedAt, supersededBy: e.supersededBy,
     blocking: state === 'needs_you' ? ready.missing : listing && e.decision === 'approved' && (!x || withdrawn) && e.ranAt === null ? ['open the shop and list it', 'paste the listing address'] : [],
     why: { whatWeDo: e.whatWeDo, whatWeExpect: e.whatWeExpect, wouldDisprove: e.wouldDisprove, question: unknown ? String(unknown.question) : '' },
     steps, allow, exposure, money: moneyView, offer: offerView,
@@ -342,13 +366,52 @@ export async function getExperimentTimeline(founderId: string, experimentId: str
   return events.sort((a, b) => a.at.localeCompare(b.at));
 }
 
-/** Every real experiment of his, newest first, as the owner sees them. */
-export async function listExperiments(founderId: string, now: Date = new Date()): Promise<ExperimentView[]> {
+/**
+ * HIS REAL EXPERIMENTS, AS THE OWNER SEES THEM — the working set or the record.
+ *
+ * `'now'` is what can still produce evidence: undecided, ready, running. A
+ * test the owner stopped is not settled by any row the SQL can read, so it
+ * comes back under `'now'` with `concluded` true and the caller files it.
+ * `'history'` is everything settled, most recently concluded first. `'all'`
+ * is both, the live ones first, for readers that want the whole record.
+ */
+export async function listExperiments(founderId: string, now: Date = new Date(), scope: 'now' | 'history' | 'all' = 'all'): Promise<ExperimentView[]> {
   const ids = await rows(
     `SELECT e.id FROM venture_experiments e WHERE e.founder_id = ? AND e.evidence_mode = 'real'
         AND EXISTS (SELECT 1 FROM experiment_materials m WHERE m.experiment_id = e.id)
-      ORDER BY CASE WHEN e.decision = 'approved' AND e.ran_at IS NULL THEN 0 WHEN e.decision IS NULL THEN 1 ELSE 2 END, e.proposed_at DESC, e.rowid DESC`, [founderId]);
+        ${scope === 'now' ? `AND NOT ${SETTLED_SQL}` : scope === 'history' ? `AND ${SETTLED_SQL}` : ''}
+      ORDER BY ${scope === 'history'
+    ? 'coalesce(e.retired_at, e.ran_at, e.invalidated_at, e.decided_at) DESC, e.rowid DESC'
+    : 'CASE WHEN e.decision = \'approved\' AND e.ran_at IS NULL THEN 0 WHEN e.decision IS NULL THEN 1 ELSE 2 END, e.proposed_at DESC, e.rowid DESC'}`, [founderId]);
   const out: ExperimentView[] = [];
   for (const r of ids) { const v = await getExperimentView(founderId, String(r.id), now); if (v) out.push(v); }
   return out;
+}
+
+/**
+ * THE LEDGER WITHOUT THE VIEWS. Every real test with materials, whether it is
+ * settled and when, from the rows alone — one query, no hydration — for the
+ * count behind "History (N)" and the handful that finished lately. A test the
+ * owner stopped is not settled here (see `SETTLED_SQL`); the caller adds those
+ * from the views it already holds.
+ */
+export async function experimentLedger(founderId: string): Promise<Array<{ id: string; settled: boolean; settledAt: string | null }>> {
+  return (await rows(
+    `SELECT e.id, CASE WHEN ${SETTLED_SQL} THEN 1 ELSE 0 END AS settled,
+            coalesce(e.retired_at, e.ran_at, e.invalidated_at, CASE WHEN coalesce(e.decision,'') = 'declined' THEN e.decided_at END) AS settled_at
+       FROM venture_experiments e WHERE e.founder_id = ? AND e.evidence_mode = 'real'
+        AND EXISTS (SELECT 1 FROM experiment_materials m WHERE m.experiment_id = e.id)
+      ORDER BY settled_at DESC, e.rowid DESC`, [founderId]))
+    .map((r) => ({ id: String(r.id), settled: Number(r.settled) === 1, settledAt: r.settled_at == null ? null : String(r.settled_at) }));
+}
+
+/** What buyers have paid across every real test of his, from the world's own rows; nothing hydrated. */
+export async function paidAcrossExperiments(founderId: string): Promise<number> {
+  const r = (await rows(
+    `SELECT coalesce(SUM(b.amount_cents), 0) AS cents
+       FROM business_outcome_events b
+       JOIN experiment_exposures x ON x.id = b.exposure_id
+       JOIN venture_experiments e ON e.id = x.experiment_id
+      WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND b.kind = 'payment'`, [founderId]))[0];
+  return Number(r?.cents ?? 0);
 }
