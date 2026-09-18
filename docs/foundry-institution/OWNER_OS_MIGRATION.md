@@ -2346,3 +2346,43 @@ deployed commit's tree, plus the health check; nobody here can open the
 signed-in app on the deployed host. Cards still carry a little more than a
 glance on the company pages and the Letter, which are contextual and
 inspection depths and were not the owner's complaint.
+
+## The charter has one total, and the calendar cannot move it (18 September 2026)
+
+Migration 319 bounded the studio's money per calendar month and its thinking
+per calendar day. Both are enforceable and honest, and together they are not
+what a person reads: ninety days signed mid-month touch four calendar months,
+so "a hundred dollars a month" authorised four hundred on tests, and some
+thirty-day window could hold two months' ceilings. The page said so truthfully
+and the truth was unintuitive, which in an owner-protection surface is a
+defect.
+
+What he signs now is a **total for the whole charter**: the term in days, the
+money for tests across all of it, the thinking a day, and how many tests may
+run at once. Migration 324 adds `tests_total_cents` and a carve clause with no
+calendar in it — every carve ever made under this charter, summed, may never
+exceed the total. `monthly_cents` is written equal to the total, so 319's month
+clause is subsumed and can never bind first. The reading now computes exactly
+what the guard would admit, so what the page says is left is what the database
+would still allow.
+
+The signing surface separates **component ceilings** from **total exposure**.
+The components are labelled as parts: tests over the charter, thinking each
+day, tests at once, the term. The total stands alone in the serif —
+`$100 + $3 × 30 days = $190` — with the sentence that no day, month or window
+can exceed it. The old "Any one day — $3 thinking" tile is gone: it read as a
+day's whole downside when test money could be set aside the same day.
+
+The term is his: 30, 60 or 90 days, with **thirty preselected** until he has
+signed one, because a first charter should be a proving window rather than the
+longest thing the row admits. Renewing "as it stands" keeps the term he chose.
+
+**And an unsigned charter no longer means a dormant institution.** Everything
+except sealing already ran charter-free — the eyes look, seeds are sown,
+questioned and buried, candidates are promoted on two independent stances, five
+disciplines read a design and an adversary attacks it — but nothing said so on
+the surface, and the daily thinking cap read the charter that did not exist, so
+an uncharterd Foundry thought without any ceiling while asking for authority to
+spend. The charter page now has a "Before you sign" block saying what it does
+anyway and the one line it stops at, and `forgePass` bounds pre-charter
+thinking at $1 a day.

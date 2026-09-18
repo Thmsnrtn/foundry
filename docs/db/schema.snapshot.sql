@@ -2918,7 +2918,7 @@ CREATE TABLE portfolio_envelopes (
   expires_at               TEXT NOT NULL,
   withdrawn_at             TEXT,
   withdraw_reason          TEXT
-);
+, tests_total_cents INTEGER NOT NULL DEFAULT 0);
 CREATE TABLE portfolio_exposures (
   id            TEXT PRIMARY KEY,
   founder_id    TEXT NOT NULL REFERENCES founders(id),
@@ -7587,8 +7587,16 @@ BEGIN
   -- One carve per test: a probe is let in once.
   SELECT RAISE(ABORT,'portfolio_envelope_carve:already_carved')
     WHERE EXISTS (SELECT 1 FROM portfolio_envelope_carves c WHERE c.experiment_id = NEW.experiment_id);
-  -- THE MONTH'S MONEY. This carve plus every carve this calendar month may not
-  -- exceed what he signed for the month.
+  -- THE CHARTER'S MONEY, WHOLE. This carve plus every carve ever made under
+  -- this charter may not exceed the total he signed. No calendar appears here,
+  -- which is the point: the same sum bounds any day, any month and the term.
+  SELECT RAISE(ABORT,'portfolio_envelope_carve:over_the_charter')
+    WHERE NEW.cents + (
+      SELECT coalesce(SUM(c.cents), 0) FROM portfolio_envelope_carves c
+       WHERE c.envelope_id = NEW.envelope_id)
+      > (SELECT e.tests_total_cents FROM portfolio_envelopes e WHERE e.id = NEW.envelope_id);
+  -- THE MONTH'S MONEY, kept from 319. The total is written into it, so this
+  -- can never bind before the clause above; it stands as the older bound.
   SELECT RAISE(ABORT,'portfolio_envelope_carve:over_the_month')
     WHERE NEW.cents + (
       SELECT coalesce(SUM(c.cents), 0) FROM portfolio_envelope_carves c
@@ -7639,6 +7647,10 @@ BEGIN
     WHERE EXISTS (SELECT 1 FROM portfolio_envelopes e
                    WHERE e.founder_id = NEW.founder_id AND e.withdrawn_at IS NULL
                      AND datetime(e.expires_at) > datetime('now'));
+  -- THE TOTAL IS THE BOUND, and the month may never be looser than the whole.
+  -- Last, so every refusal 319 already made is still made in its own words.
+  SELECT RAISE(ABORT,'portfolio_envelope:needs_a_total')
+    WHERE NEW.tests_total_cents <= 0 OR NEW.tests_total_cents < NEW.monthly_cents;
 END;
 CREATE TRIGGER portfolio_envelope_no_delete
 BEFORE DELETE ON portfolio_envelopes
@@ -7657,6 +7669,7 @@ BEGIN
   SELECT RAISE(ABORT,'portfolio_envelope:immutable')
     WHERE NEW.founder_id IS NOT OLD.founder_id
        OR NEW.monthly_cents IS NOT OLD.monthly_cents
+       OR NEW.tests_total_cents IS NOT OLD.tests_total_cents
        OR NEW.probes_in_flight IS NOT OLD.probes_in_flight
        OR NEW.cognition_cents_per_day IS NOT OLD.cognition_cents_per_day
        OR NEW.contact_rules IS NOT OLD.contact_rules

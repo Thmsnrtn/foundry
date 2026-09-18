@@ -97,7 +97,7 @@ async function signTheCharter(base: string): Promise<void> {
   if (await liveCharter(OWNER)) return;
   const res = await fetch(base + '/foundry/controls/charter', {
     method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-    body: 'monthly_dollars=100&probes=3&thinking_dollars=3&statement=' + encodeURIComponent('A river of nickels: dozens of small, sturdy things, each tested for real, none needing me.'),
+    body: 'tests_dollars=100&probes=3&thinking_dollars=3&days=30&statement=' + encodeURIComponent('A river of nickels: dozens of small, sturdy things, each tested for real, none needing me.'),
   });
   if (res.status !== 302 && res.status !== 200) throw new Error(`the charter was not signed: HTTP ${String(res.status)}`);
 }
@@ -339,7 +339,7 @@ async function main(): Promise<void> {
     // THE CHARTER, unsigned and recalculated; HISTORY, whole and filtered; and
     // the More sheet open, which is the only way the secondary places are
     // reached on a phone.
-    '/foundry/charter', '/foundry/charter?monthly_dollars=250&probes=4&thinking_dollars=5&statement=x',
+    '/foundry/charter', '/foundry/charter?tests_dollars=250&probes=4&thinking_dollars=5&days=90&statement=x',
     '/foundry/experiments/history', '/foundry/experiments/history?state=retired',
     '/foundry#more',
     `/foundry/companies/${COMPANY}/understanding/${RESPONSIBILITY}`,

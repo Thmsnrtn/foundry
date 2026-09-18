@@ -70,7 +70,7 @@ beforeAll(async () => {
   const m = await openMandate({ founderId: OWNER, statement: 'Small things for trades businesses', shape: null, evidenceMode: 'real' });
   if ('refused' in m) throw new Error(m.refused);
   const { signCharter } = await import('../../src/services/institution/charter.js');
-  await signCharter({ founderId: OWNER, monthlyCents: 10_000, probesInFlight: 3, cognitionCentsPerDay: 300, publicVoice: 'Apex Micro', statement: 'A river of nickels.' });
+  await signCharter({ founderId: OWNER, testsTotalCents: 10_000, probesInFlight: 3, cognitionCentsPerDay: 300, days: 30, publicVoice: 'Apex Micro', statement: 'A river of nickels.' });
 
   // WHAT THE EYES KEPT, and what somebody wrote.
   const { recordRetrieval } = await import('../../src/services/venture/sources/index.js');

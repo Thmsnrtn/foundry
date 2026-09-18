@@ -25,6 +25,13 @@ const rows = async (sql: string, params: unknown[]): Promise<Row[]> =>
 export interface Charter {
   id: string;
   founderId: string;
+  /**
+   * WHAT HE SIGNED FOR TESTS, FOR THE WHOLE CHARTER. One number with no
+   * calendar in it: the carve guard holds every carve ever made under this
+   * charter to it, so the same sum bounds any day, any month and the term.
+   */
+  testsTotalCents: number;
+  /** Written equal to the total, so 319's month clause can never bind first. Not an owner-facing idea. */
   monthlyCents: number;
   probesInFlight: number;
   cognitionCentsPerDay: number;
@@ -35,6 +42,8 @@ export interface Charter {
   signedBy: string;
   signedAt: string;
   expiresAt: string;
+  /** The term he chose, in days, from the two timestamps. */
+  days: number;
   daysLeft: number;
 }
 
@@ -50,10 +59,12 @@ export const SEALED_CONTACT_RULES =
 
 const charterOf = (r: Row, now: Date): Charter => ({
   id: String(r.id), founderId: String(r.founder_id),
-  monthlyCents: Number(r.monthly_cents), probesInFlight: Number(r.probes_in_flight),
+  testsTotalCents: Number(r.tests_total_cents), monthlyCents: Number(r.monthly_cents),
+  probesInFlight: Number(r.probes_in_flight),
   cognitionCentsPerDay: Number(r.cognition_cents_per_day),
   contactRules: String(r.contact_rules), publicVoice: String(r.public_voice),
   statement: String(r.statement), signedBy: String(r.signed_by), signedAt: String(r.signed_at), expiresAt: String(r.expires_at),
+  days: Math.max(1, Math.round((utc(String(r.expires_at)) - utc(String(r.signed_at))) / 86_400_000)),
   daysLeft: Math.max(0, Math.ceil((utc(String(r.expires_at)) - now.getTime()) / 86_400_000)),
 });
 
@@ -63,7 +74,7 @@ const utc = (s: string): number => Date.parse(/[TZ]/.test(s) ? s : `${s.replace(
 /** The owner's live charter, or null when none is standing. */
 export async function liveCharter(founderId: string, now: Date = new Date()): Promise<Charter | null> {
   const r = (await rows(
-    `SELECT id, founder_id, monthly_cents, probes_in_flight, cognition_cents_per_day,
+    `SELECT id, founder_id, tests_total_cents, monthly_cents, probes_in_flight, cognition_cents_per_day,
             contact_rules, public_voice, statement, signed_by, signed_at, expires_at
        FROM portfolio_envelopes
       WHERE founder_id = ? AND withdrawn_at IS NULL AND datetime(expires_at) > datetime('now')
@@ -91,19 +102,24 @@ export async function pastCharters(founderId: string): Promise<PastCharter[]> {
  * ended first with the reason recorded, so renewing is one act on one page.
  */
 export async function signCharter(input: {
-  founderId: string; monthlyCents: number; probesInFlight: number; cognitionCentsPerDay: number;
-  publicVoice: string; statement: string; contactRules?: string; days?: number;
+  founderId: string; testsTotalCents: number; probesInFlight: number; cognitionCentsPerDay: number;
+  publicVoice: string; statement: string; contactRules?: string; days: number;
 }): Promise<string> {
-  const days = Math.min(92, Math.max(1, Math.round(input.days ?? 90)));
+  // A quarter is the longest the row admits. The shortest term he may CHOOSE
+  // is a week, and that is the route's bound, not this one: the mechanism
+  // takes what it is given so a test can sign a charter that ends tomorrow.
+  const days = Math.min(92, Math.max(1, Math.round(input.days)));
+  const total = Math.max(1, Math.round(input.testsTotalCents));
   const standing = await liveCharter(input.founderId);
   if (standing) await withdrawCharter({ founderId: input.founderId, reason: 'replaced by a new signature' });
   const id = nanoid();
   await query(
     `INSERT INTO portfolio_envelopes
-       (id, founder_id, monthly_cents, probes_in_flight, cognition_cents_per_day,
+       (id, founder_id, tests_total_cents, monthly_cents, probes_in_flight, cognition_cents_per_day,
         contact_rules, public_voice, statement, signed_by, expires_at)
-     VALUES (?,?,?,?,?,?,?,?,?, datetime('now', ?))`,
-    [id, input.founderId, Math.round(input.monthlyCents), Math.round(input.probesInFlight),
+     VALUES (?,?,?,?,?,?,?,?,?,?, datetime('now', ?))`,
+    // The month is written equal to the total so the older clause is subsumed.
+    [id, input.founderId, total, total, Math.round(input.probesInFlight),
       Math.round(input.cognitionCentsPerDay), (input.contactRules ?? SEALED_CONTACT_RULES).trim(),
       input.publicVoice.trim(), input.statement.trim(), `founder:${input.founderId}`, `+${String(days)} days`]);
   return id;
@@ -121,10 +137,11 @@ export async function withdrawCharter(input: { founderId: string; reason: string
 
 export interface EnvelopeReading {
   charter: Charter;
-  /** Carved for probes this calendar month. */
+  /** Carved for probes under this charter, all of it — the same sum the guard holds. */
   carvedCents: number;
-  /** Thinking bought at his scope this calendar month. */
+  /** Thinking bought at his scope since he signed. Not netted out of the tests total: they are separate ceilings. */
   thinkingCents: number;
+  /** Of the tests total. This is exactly what the carve guard would still admit. */
   remainingCents: number;
   inFlight: number;
   roomForAnother: boolean;
@@ -146,15 +163,20 @@ export async function envelopeReading(founderId: string, now: Date = new Date())
     experimentId: String(r.experiment_id), productId: String(r.product_id), cents: Number(r.cents),
     carvedAt: String(r.carved_at), settled: Number(r.settled) === 1,
   }));
-  const month = now.toISOString().slice(0, 7);
-  const carvedCents = carves.filter((c) => c.carvedAt.slice(0, 7) === month).reduce((n, c) => n + c.cents, 0);
+  // EVERY CARVE UNDER THIS CHARTER, not this month's. The reading and the row
+  // guard now hold the same arithmetic, so what the page says is left is what
+  // the database would actually still admit.
+  const carvedCents = carves.reduce((n, c) => n + c.cents, 0);
+  // Thinking since he signed, at his scope. It is a separate ceiling, bounded
+  // per day, and is not subtracted from the money for tests: netting it would
+  // report a tests balance the rows do not enforce.
   const thinkingCents = Math.round(Number(((await rows(
     `SELECT COALESCE(SUM(spent_cents), 0) AS c FROM ai_daily_spend
-      WHERE scope = 'founder' AND scope_id = ? AND date >= ?`, [founderId, `${month}-01`]))[0] as Row).c));
+      WHERE scope = 'founder' AND scope_id = ? AND date >= ?`, [founderId, charter.signedAt.slice(0, 10)]))[0] as Row).c));
   const inFlight = carves.filter((c) => !c.settled).length;
   return {
     charter, carvedCents, thinkingCents,
-    remainingCents: Math.max(0, charter.monthlyCents - carvedCents - thinkingCents),
+    remainingCents: Math.max(0, charter.testsTotalCents - carvedCents),
     inFlight, roomForAnother: inFlight < charter.probesInFlight, carves,
   };
 }
@@ -177,7 +199,7 @@ export async function chartered(input: {
   const never = input.rungs.filter((r) => r === 'legal' || r === 'destructive');
   if (never.length) because.push(`an act on the ${never.join(' and ')} rung is yours to decide each time; no charter covers it`);
   if (input.costCents > reading.remainingCents) {
-    because.push(`it would take $${(input.costCents / 100).toFixed(2)} and $${(reading.remainingCents / 100).toFixed(2)} is left of this month's $${(reading.charter.monthlyCents / 100).toFixed(2)}`);
+    because.push(`it would take $${(input.costCents / 100).toFixed(2)} and $${(reading.remainingCents / 100).toFixed(2)} is left of the charter's $${(reading.charter.testsTotalCents / 100).toFixed(2)} for tests`);
   }
   if (!reading.roomForAnother) {
     because.push(`${String(reading.inFlight)} of ${String(reading.charter.probesInFlight)} probes are already in flight`);
@@ -210,47 +232,50 @@ export function charterStatus(live: Charter | null, past: PastCharter[]): Charte
 }
 
 export interface CharterExposure {
-  monthlyCents: number; cognitionCentsPerDay: number; days: number;
-  /** How many calendar months the period touches; the probe ceiling resets in each. */
-  monthsTouched: number;
+  /** The component ceilings, each real money and neither the whole. */
+  testsTotalCents: number; cognitionCentsPerDay: number; days: number;
   thinkingOverPeriodCents: number;
-  probesOverPeriodCents: number;
-  /** A 30-day window can straddle two calendar months, so two ceilings fit inside it. */
-  anyThirtyDaysCents: number;
+  /** The one number: the most this charter can ever cost him. */
   periodMaxCents: number;
 }
 
 /**
  * THE MOST IT CAN COST, FROM THE GUARDS THAT HOLD IT.
  *
- * Two ceilings are real money and neither is the whole: the carve guard holds
- * probe money to the month's ceiling per CALENDAR month, and the forge holds
- * thinking to the day's ceiling per calendar day. So the owner's complete
- * authorised downside is not "the monthly figure": over a period of D days
- * touching K calendar months it is M × K on tests plus T × D on thinking, and
- * any 30-day window may hold two months' ceilings. Conservative on purpose;
- * the reading nets thinking out of the month, which is stricter than the rows
- * enforce, and a ceiling stated below what the rows allow is not a ceiling.
+ * Two ceilings, and neither is the whole. The carve guard holds every carve
+ * under this charter to the tests total — no calendar in it — and the forge
+ * holds thinking to the day's ceiling on each of the charter's days. So the
+ * complete authorised downside is the total plus the day's thinking across the
+ * term, and no day, month or window can exceed it. That is the figure he reads
+ * before he signs; the components are shown beside it so neither is mistaken
+ * for the whole.
  */
-export function charterExposure(input: { monthlyCents: number; cognitionCentsPerDay: number; days: number; from: Date }): CharterExposure {
+export function charterExposure(input: { testsTotalCents: number; cognitionCentsPerDay: number; days: number }): CharterExposure {
   const days = Math.max(1, Math.round(input.days));
-  const from = input.from;
-  const to = new Date(from.getTime() + days * 86_400_000);
-  const monthsTouched = (to.getUTCFullYear() - from.getUTCFullYear()) * 12 + (to.getUTCMonth() - from.getUTCMonth()) + 1;
-  const M = Math.max(0, Math.round(input.monthlyCents));
+  const tests = Math.max(0, Math.round(input.testsTotalCents));
   const T = Math.max(0, Math.round(input.cognitionCentsPerDay));
   return {
-    monthlyCents: M, cognitionCentsPerDay: T, days, monthsTouched,
+    testsTotalCents: tests, cognitionCentsPerDay: T, days,
     thinkingOverPeriodCents: T * days,
-    probesOverPeriodCents: M * monthsTouched,
-    anyThirtyDaysCents: 2 * M + 30 * T,
-    periodMaxCents: M * monthsTouched + T * days,
+    periodMaxCents: tests + T * days,
   };
 }
+
+/**
+ * WHAT FOUNDRY THINKS WITH BEFORE HE HAS SIGNED ANYTHING.
+ *
+ * Deliberation is not a consequential act and is not gated by the charter: an
+ * uncharterd Foundry still looks, reads, questions, promotes, designs and
+ * attacks its own draft, and stops at sealing. But it had no ceiling of its
+ * own — the daily cap read the charter that did not exist — so it could think
+ * without bound while asking for authority to spend. This is the bound until
+ * he sets one.
+ */
+export const PRE_CHARTER_THINKING_CENTS = 100;
 
 /** The charter, in the words the Controls card and the Home tile say. */
 export function charterSentence(r: EnvelopeReading): string {
   const left = (r.remainingCents / 100).toFixed(0);
-  const of = (r.charter.monthlyCents / 100).toFixed(0);
-  return `$${left} of $${of} left this month · ${String(r.inFlight)} of ${String(r.charter.probesInFlight)} in flight · ${String(r.charter.daysLeft)} ${r.charter.daysLeft === 1 ? 'day' : 'days'} left`;
+  const of = (r.charter.testsTotalCents / 100).toFixed(0);
+  return `$${left} of $${of} left for tests · ${String(r.inFlight)} of ${String(r.charter.probesInFlight)} in flight · ${String(r.charter.daysLeft)} ${r.charter.daysLeft === 1 ? 'day' : 'days'} left`;
 }

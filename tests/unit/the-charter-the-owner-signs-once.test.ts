@@ -80,7 +80,7 @@ beforeAll(async () => {
 });
 
 const signed = (overrides: Partial<Parameters<typeof signCharter>[0]> = {}) => signCharter({
-  founderId: OWNER, monthlyCents: 10_000, probesInFlight: 3, cognitionCentsPerDay: 300,
+  founderId: OWNER, testsTotalCents: 10_000, probesInFlight: 3, cognitionCentsPerDay: 300, days: 30,
   publicVoice: 'Apex Micro', statement: 'A river of nickels, none of them needing me.', ...overrides,
 });
 
@@ -106,7 +106,8 @@ describe('only he can sign it, and it ends', () => {
     const first = await signed();
     const live = await liveCharter(OWNER);
     expect(live).toMatchObject({ id: first, monthlyCents: 10_000, probesInFlight: 3, publicVoice: 'Apex Micro', signedBy: `founder:${OWNER}` });
-    expect(live!.daysLeft).toBeGreaterThanOrEqual(89);
+    expect(live!.daysLeft).toBeGreaterThanOrEqual(29);
+    expect(live).toMatchObject({ testsTotalCents: 10_000, days: 30 });
     expect(live!.contactRules).toContain('One message per person or business, ever');
     await expect(query(
       `INSERT INTO portfolio_envelopes (id, founder_id, monthly_cents, probes_in_flight, cognition_cents_per_day, contact_rules, public_voice, statement, signed_by, expires_at)
@@ -130,7 +131,9 @@ describe('the envelope is arithmetic over rows, and the rows refuse', () => {
       await carve({ charterId: live.id, experimentId: X[i], productId: P[i], cents: 2000 });
     }
     const r = (await envelopeReading(OWNER))!;
-    expect(r).toMatchObject({ carvedCents: 6000, inFlight: 3, roomForAnother: false, remainingCents: 6000 });
+    // Carved is every carve under this charter, and remaining is exactly what
+    // the row would still admit — the reading and the guard say one thing.
+    expect(r).toMatchObject({ carvedCents: 6000, inFlight: 3, roomForAnother: false, remainingCents: 4000 });
     const fourth = await chartered({ founderId: OWNER, experimentId: X[3], costCents: 2000, rungs: ['public'] });
     expect(fourth.inside).toBe(false);
     if (!fourth.inside) expect(fourth.because.join(' ')).toContain('3 of 3 probes are already in flight');
@@ -146,15 +149,31 @@ describe('the envelope is arithmetic over rows, and the rows refuse', () => {
     if (!c.inside) expect(c.because[0]).toContain('legal rung is yours to decide each time');
   });
 
-  it('refuses the carve over the month, at the row', async () => {
+  it('refuses the carve over the charter, at the row, whatever the calendar', async () => {
     // One probe settles: it has an answer now, so its place is free.
     await query("UPDATE venture_experiments SET ran_at = datetime('now'), what_happened = 'nobody paid', verdict = 'as_predicted' WHERE id = ?", [X[0]]);
     expect((await envelopeReading(OWNER))!.roomForAnother).toBe(true);
     const c = await chartered({ founderId: OWNER, experimentId: X[3], costCents: 7000, rungs: ['public'] });
     expect(c.inside).toBe(false);
-    if (!c.inside) expect(c.because[0]).toContain('$70.00 and $60.00 is left');
+    if (!c.inside) expect(c.because[0]).toContain("$70.00 and $40.00 is left of the charter's $100.00 for tests");
     const live = (await liveCharter(OWNER))!;
-    await expect(carve({ charterId: live.id, experimentId: X[3], productId: P[3], cents: 7000 })).rejects.toThrow(/over_the_month/);
+    await expect(carve({ charterId: live.id, experimentId: X[3], productId: P[3], cents: 7000 })).rejects.toThrow(/over_the_charter/);
+    // AND THE CALENDAR CANNOT REFILL IT. A carve dated in a previous month is
+    // invisible to the month's sum and still counts against the total, which
+    // is the whole point of the total: waiting for a month to turn buys
+    // nothing. The row is written dated, because a carve is immutable.
+    await query("UPDATE venture_experiments SET ran_at = datetime('now'), what_happened = 'nobody paid', verdict = 'as_predicted' WHERE id = ?", [X[1]]);
+    await query(
+      `INSERT INTO portfolio_envelope_carves (id, envelope_id, experiment_id, product_id, cents, carved_at)
+       VALUES ('carve_last_month', ?, ?, ?, 4000, datetime('now','-45 days'))`, [live.id, X[3], P[3]]);
+    const thisMonth = Number((await query(
+      `SELECT coalesce(SUM(cents),0) AS n FROM portfolio_envelope_carves
+        WHERE envelope_id = ? AND strftime('%Y-%m', carved_at) = strftime('%Y-%m','now')`, [live.id])).rows[0]!.n);
+    expect(thisMonth).toBe(6000);
+    const whole = (await envelopeReading(OWNER))!;
+    expect(whole).toMatchObject({ carvedCents: 10_000, remainingCents: 0 });
+    // Nothing more fits, though this calendar month has $40 of room in it.
+    await expect(carve({ charterId: live.id, experimentId: X[4], productId: P[0], cents: 1 })).rejects.toThrow(/over_the_charter|not_this_tests_asset/);
   });
 });
 
@@ -202,64 +221,77 @@ describe('what he sees', () => {
     const controls = await (await app.request('/foundry/controls')).text();
     expect(controls).toContain('</i>The charter</h2>');
     expect(controls).toContain('href="/foundry/charter"');
-    expect(controls).not.toContain('Sign for 90 days');
+    expect(controls).not.toContain('Sign for 30 days');
     const place = await (await app.request('/foundry/charter')).text();
     // Earlier tests in this file signed and withdrew one, so the word is Withdrawn here; a fresh institution says Unsigned.
     expect(place).toMatch(/The charter <span class="state quiet none">(Unsigned|Withdrawn)<\/span>/);
-    expect(place).toContain('Sign for 90 days');
+    // A PROVING WINDOW LEADS. The longest term the row admits is not the default.
+    expect(place).toContain('Sign for 30 days');
     expect(place).toContain('Recalculate the ceiling');
     expect(place).toContain('One message per person or business, ever');
-    // The most it can cost, from the guards: $100 a month over the four calendar
-    // months ninety days can touch, plus $3 a day of thinking for ninety days.
+    // AND IT SAYS WHAT IT DOES MEANWHILE, so an unsigned charter does not read
+    // as a dead institution.
+    expect(place).toContain('Before you sign');
+    expect(place).toContain('It stops at one line');
+    // The most it can cost: the tests total, plus the day's thinking across the
+    // term. One figure, and no calendar in it.
     const { charterExposure } = await import('../../src/services/institution/charter.js');
-    const ex = charterExposure({ monthlyCents: 10_000, cognitionCentsPerDay: 300, days: 90, from: new Date() });
-    expect(place).toContain(`<dt class="k">Whole charter</dt><dd class="v">$${(ex.periodMaxCents / 100).toFixed(0)}</dd>`);
-    expect(place).toContain('<dt class="k">Any 30 days</dt><dd class="v">$290</dd>');
-    // Recalculated through a GET: the server's own arithmetic, no script.
-    const again = await (await app.request('/foundry/charter?monthly_dollars=250&probes=4&thinking_dollars=5&statement=x')).text();
-    const ex2 = charterExposure({ monthlyCents: 25_000, cognitionCentsPerDay: 500, days: 90, from: new Date() });
-    expect(again).toContain(`<dd class="v">$${(ex2.periodMaxCents / 100).toFixed(0)}</dd>`);
+    const ex = charterExposure({ testsTotalCents: 10_000, cognitionCentsPerDay: 300, days: 30 });
+    expect(ex.periodMaxCents).toBe(19_000);
+    expect(place).toContain('Total exposure');
+    expect(place).toContain(`= <b>$${(ex.periodMaxCents / 100).toFixed(0)}</b>`);
+    expect(place).toContain('<dt class="k">Tests</dt><dd class="v">$100</dd>');
+    // Recalculated through a GET: the server's own arithmetic, no script, and
+    // the term is his to choose among the three the page offers.
+    const again = await (await app.request('/foundry/charter?tests_dollars=250&probes=4&thinking_dollars=5&days=90&statement=x')).text();
+    const ex2 = charterExposure({ testsTotalCents: 25_000, cognitionCentsPerDay: 500, days: 90 });
+    expect(ex2.periodMaxCents).toBe(70_000);
+    expect(again).toContain(`= <b>$${(ex2.periodMaxCents / 100).toFixed(0)}</b>`);
     expect(again).toContain('value="250"');
     expect(again).toContain('value="4"');
+    expect(again).toContain('Sign for 90 days');
+    expect(again).toContain('value="90" checked');
     const home = await (await app.request('/foundry')).text();
     expect(home).not.toContain('Chartered');
   });
 
-  it('the exposure arithmetic counts every calendar month the period touches', async () => {
+  it('the total exposure is the tests total plus the day\'s thinking across the term, and the calendar cannot move it', async () => {
     const { charterExposure } = await import('../../src/services/institution/charter.js');
-    const jan = charterExposure({ monthlyCents: 10_000, cognitionCentsPerDay: 300, days: 90, from: new Date('2026-01-15T00:00:00Z') });
-    expect(jan).toMatchObject({ monthsTouched: 4, probesOverPeriodCents: 40_000, thinkingOverPeriodCents: 27_000, periodMaxCents: 67_000, anyThirtyDaysCents: 29_000 });
-    const mar = charterExposure({ monthlyCents: 10_000, cognitionCentsPerDay: 300, days: 90, from: new Date('2026-03-01T00:00:00Z') });
-    expect(mar.monthsTouched).toBe(3);
+    // The same numbers, signed on any day of any month, give the same total.
+    for (const days of [30, 60, 90]) {
+      const ex = charterExposure({ testsTotalCents: 10_000, cognitionCentsPerDay: 300, days });
+      expect(ex).toMatchObject({ thinkingOverPeriodCents: 300 * days, periodMaxCents: 10_000 + 300 * days });
+    }
+    expect(charterExposure({ testsTotalCents: 25_000, cognitionCentsPerDay: 500, days: 90 }).periodMaxCents).toBe(70_000);
   });
 
   it('signed from Controls, the tile says Chartered and the card says what is left', async () => {
     const r = await app.request('/foundry/controls/charter', {
       method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: 'monthly_dollars=100&probes=3&thinking_dollars=3&statement=A+river+of+nickels%2C+none+needing+me.',
+      body: 'tests_dollars=100&probes=3&thinking_dollars=3&days=30&statement=A+river+of+nickels%2C+none+needing+me.',
     });
     expect(r.status).toBe(302);
     expect(r.headers.get('location')).toContain('charter=signed');
     const live = (await liveCharter(OWNER))!;
-    expect(live).toMatchObject({ monthlyCents: 10_000, probesInFlight: 3, cognitionCentsPerDay: 300, publicVoice: 'Apex Micro' });
+    expect(live).toMatchObject({ testsTotalCents: 10_000, probesInFlight: 3, cognitionCentsPerDay: 300, publicVoice: 'Apex Micro', days: 30 });
     const home = await (await app.request('/foundry')).text();
     expect(home).toContain('Chartered');
     expect(home).toContain('$100 of $100 left');
     expect(home).toContain('href="/foundry/charter" aria-label="The charter"');
     const controls = await (await app.request('/foundry/controls')).text();
     expect(controls).toContain('Active</span>');
-    expect(controls).toContain('$100 of $100 left this month · 0 of 3 in flight');
+    expect(controls).toContain('$100 of $100 left for tests · 0 of 3 in flight');
     const place = await (await app.request('/foundry/charter')).text();
     expect(place).toContain('The charter <span class="state watch">Active</span>');
     expect(place).toContain('Apex Micro, never you');
-    expect(place).toContain('Renew as it stands, 90 days');
+    expect(place).toContain('Renew as it stands, 30 days');
     expect(place).toContain('Withdraw it');
-    expect(place).not.toContain('Sign for 90 days');
+    expect(place).not.toContain('Sign for 30 days');
     expect(place).toContain(`signed founder:${OWNER}`);
     // Numbers are refused with the reason, and nothing changes.
     const bad = await app.request('/foundry/controls/charter', {
       method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: 'monthly_dollars=5000&probes=3&thinking_dollars=3&statement=too+much',
+      body: 'tests_dollars=5000&probes=3&thinking_dollars=3&days=30&statement=too+much',
     });
     expect(bad.headers.get('location')).toContain('charter=error');
     expect((await liveCharter(OWNER))!.id).toBe(live.id);
@@ -272,7 +304,9 @@ describe('what he sees', () => {
     const item = (await waitingOn(OWNER)).find((i) => i.kind === 'charter');
     expect(item).toBeDefined();
     expect(item!.summary).toMatch(/The charter ends in [45] days/);
-    expect(item!.yes).toMatchObject({ label: 'Renew for 90 days', action: '/foundry/controls/charter' });
+    // Renewing AS IT STANDS keeps the term he chose, not the longest one going.
+    expect(item!.yes).toMatchObject({ label: 'Renew for 5 days', action: '/foundry/controls/charter' });
+    expect(item!.yes.fields).toMatchObject({ days: '5', tests_dollars: '100' });
     expect(item!.no).toMatchObject({ label: 'Let it lapse', action: '/foundry/controls/charter/withdraw' });
     const withdrawn = await app.request('/foundry/controls/charter/withdraw', {
       method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: 'reason=done+testing',

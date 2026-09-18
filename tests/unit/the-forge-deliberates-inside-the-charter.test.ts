@@ -122,7 +122,7 @@ beforeAll(async () => {
 describe('the forge deliberates', () => {
   it('writes five findings before the design, composes as the forge, is attacked, and seals inside the charter', async () => {
     const { signCharter } = await import('../../src/services/institution/charter.js');
-    await signCharter({ founderId: OWNER, monthlyCents: 10_000, probesInFlight: 3, cognitionCentsPerDay: 300, publicVoice: 'Apex Micro', statement: 'A river of nickels.' });
+    await signCharter({ founderId: OWNER, testsTotalCents: 10_000, probesInFlight: 3, cognitionCentsPerDay: 300, days: 30, publicVoice: 'Apex Micro', statement: 'A river of nickels.' });
     const x = await aTest(2000);
     const { deliberate, findingsOf, attacksOf } = await import('../../src/services/venture/forge-deliberation.js');
     const d = await deliberate(x);

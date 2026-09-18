@@ -115,7 +115,7 @@ describe('the Workshop\'s page as the venue', () => {
 
   it('the charter lets it in: a placement, a refund and one delivery act, no campaign, nobody written to, settled by payment', async () => {
     const { signCharter, charterPrincipal, liveCharter } = await import('../../src/services/institution/charter.js');
-    await signCharter({ founderId: OWNER, monthlyCents: 10_000, probesInFlight: 3, cognitionCentsPerDay: 300, publicVoice: 'Apex Micro', statement: 'A river of nickels.' });
+    await signCharter({ founderId: OWNER, testsTotalCents: 10_000, probesInFlight: 3, cognitionCentsPerDay: 300, days: 30, publicVoice: 'Apex Micro', statement: 'A river of nickels.' });
     const { allowExperiment, campaignActOf } = await import('../../src/services/venture/hand.js');
     const allowed = await allowExperiment({ founderId: OWNER, experimentId: X, under: 'the charter' });
     const charter = (await liveCharter(OWNER))!;

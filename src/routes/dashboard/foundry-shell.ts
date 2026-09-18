@@ -4156,23 +4156,25 @@ foundryShellRoutes.post('/foundry/controls/charter',
     if (!founder?.id) return c.redirect('/onboarding');
     const body = await c.req.parseBody();
     const back = String(body.return_to ?? '') === 'foundry' ? '/foundry' : '/foundry/charter';
-    const echo = ['monthly_dollars', 'probes', 'thinking_dollars', 'statement'].map((k) => `&${k}=${encodeURIComponent(String(body[k] ?? '').slice(0, 600))}`).join('');
+    const echo = ['tests_dollars', 'probes', 'thinking_dollars', 'days', 'statement'].map((k) => `&${k}=${encodeURIComponent(String(body[k] ?? '').slice(0, 600))}`).join('');
     const refuse = (why: string) => c.redirect(`/foundry/charter?charter=error&why=${encodeURIComponent(why)}${echo}`);
-    const monthly = Number(String(body.monthly_dollars ?? ''));
+    const tests = Number(String(body.tests_dollars ?? ''));
     const probes = Number(String(body.probes ?? ''));
     const thinking = Number(String(body.thinking_dollars ?? ''));
+    const days = Number(String(body.days ?? ''));
     const statement = String(body.statement ?? '').trim().slice(0, 600);
-    if (!Number.isFinite(monthly) || monthly < 1 || monthly > 1000) return refuse('the month has to be between $1 and $1,000');
-    if (!Number.isInteger(probes) || probes < 1 || probes > 12) return refuse('probes in flight has to be a whole number from 1 to 12');
+    if (!Number.isFinite(tests) || tests < 1 || tests > 3000) return refuse('the money for tests has to be between $1 and $3,000');
+    if (!Number.isInteger(probes) || probes < 1 || probes > 12) return refuse('tests at once has to be a whole number from 1 to 12');
     if (!Number.isFinite(thinking) || thinking < 0.5 || thinking > 20) return refuse('thinking a day has to be between $0.50 and $20');
+    if (!Number.isInteger(days) || days < 7 || days > 92) return refuse('the term has to be a whole number of days from 7 to 92');
     if (statement.length < 8) return refuse('say why, in your words');
     const { publicWorkshopOf } = await import('../../services/public-workshop/settings.js');
     const w = await publicWorkshopOf(String(founder.id));
     if (!w) return refuse('there is no Workshop to speak as yet; found it first');
     const { signCharter } = await import('../../services/institution/charter.js');
     await signCharter({
-      founderId: String(founder.id), monthlyCents: Math.round(monthly * 100), probesInFlight: probes,
-      cognitionCentsPerDay: Math.round(thinking * 100), publicVoice: w.publicName, statement, days: 90,
+      founderId: String(founder.id), testsTotalCents: Math.round(tests * 100), probesInFlight: probes,
+      cognitionCentsPerDay: Math.round(thinking * 100), publicVoice: w.publicName, statement, days,
     });
     return c.redirect(back === '/foundry' ? '/foundry' : '/foundry/charter?charter=signed');
   });

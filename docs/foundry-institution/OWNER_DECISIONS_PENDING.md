@@ -809,9 +809,17 @@ ready; the postal line is on `/foundry/public-workshop`. Nothing else is asked.
 
 **One: the charter.** Migration 319 and the constitution's amended "Ask me
 first" section give the institution standing authority to act inside an
-envelope you sign once: a monthly ceiling in cents, how many probes may be in
-flight, a daily thinking ceiling, and the sealed contact rules, for at most 92
-days, withdrawable at any moment with a reason. Until you sign, everything
+envelope you sign once. Amended 18 September by migration 324: what you set is
+a **total for the whole charter**, not a monthly figure. Four numbers — the
+term in days, the money for tests across all of it, the thinking a day, and how
+many tests may run at once — plus the sealed contact rules, withdrawable at any
+moment with a reason.
+
+The calendar no longer moves the ceiling. A carve may never take the charter's
+total past what you signed, whatever month it falls in, so the most it can ever
+cost you is that total plus the day's thinking across the term, and the page
+shows exactly that figure before you sign: for a thirty-day charter at $100 for
+tests and $3 a day of thinking, **$190**. Until you sign, everything
 built this month runs up to the seal and stops there: the eyes look, seeds are
 promoted, the forge writes and attacks designs, and each design it would have
 sealed is left unsealed on its experiment's page with every reason, "no
@@ -819,8 +827,14 @@ charter" among them, costing you nothing until you look — the old world, one
 experiment at a time, decided by hand. After you sign, a probe inside the envelope is sealed, made, placed on
 the Workshop's page and settled with no tap from you; a probe outside it still
 queues; legal and destructive acts still queue; "Stop everything" still halts
-all. The envelope's numbers are yours to choose; the plan you approved named
-about $100 a month and three probes in flight.
+all. The numbers are yours to choose and nothing picks them for you; the form
+leads with a thirty-day proving window rather than the longest term the row
+admits, and the plan you approved named about $100 and three tests at once.
+
+Before you sign, Foundry is not idle: it looks, reads, questions, buries,
+promotes what two independent ways of knowing support, designs a probe through
+five disciplines and attacks its own draft. It stops at sealing, and its own
+thinking is bounded at $1 a day until you set a figure.
 
 **Two: the postal address.** The Workshop is the only public voice, by gate,
 but the postal address you typed at stand-up begins with your name, and the

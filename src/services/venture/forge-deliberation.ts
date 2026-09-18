@@ -533,17 +533,25 @@ export const MOST_DESIGNS_PER_PASS = 2;
 
 export async function forgePass(founderId: string): Promise<ForgePass> {
   const out: ForgePass = { proposed: 0, deliberated: [], allowed: [], notAllowed: [], skipped: null };
-  const { envelopeReading } = await import('../institution/charter.js');
+  const { envelopeReading, PRE_CHARTER_THINKING_CENTS } = await import('../institution/charter.js');
   const envelope = await envelopeReading(founderId);
   // THE CHARTER'S THINKING FOR TODAY. Read from the same ledger the door writes,
   // so a day that has already spent what he signed for designs nothing more.
-  if (envelope) {
+  // AND WHAT IT THINKS WITH BEFORE HE HAS SIGNED ANYTHING. This read the
+  // charter's daily figure and so capped nothing at all when no charter stood:
+  // an institution asking for authority to spend was meanwhile thinking
+  // without a ceiling. Deliberation stays charter-free — it is not a
+  // consequential act — inside a bound of its own until he sets one.
+  {
+    const ceiling = envelope ? envelope.charter.cognitionCentsPerDay : PRE_CHARTER_THINKING_CENTS;
     const today = new Date().toISOString().slice(0, 10);
     const spent = Number(((await one(
       `SELECT COALESCE(SUM(spent_cents), 0) AS c FROM ai_daily_spend WHERE scope = 'founder' AND scope_id = ? AND date = ?`,
       [founderId, today]))?.c) ?? 0);
-    if (spent >= envelope.charter.cognitionCentsPerDay) {
-      out.skipped = `today's thinking under the charter is spent ($${(spent / 100).toFixed(2)} of $${(envelope.charter.cognitionCentsPerDay / 100).toFixed(2)})`;
+    if (spent >= ceiling) {
+      out.skipped = envelope
+        ? `today's thinking under the charter is spent ($${(spent / 100).toFixed(2)} of $${(ceiling / 100).toFixed(2)})`
+        : `today's thinking is spent ($${(spent / 100).toFixed(2)} of $${(ceiling / 100).toFixed(2)}, the bound before a charter is signed)`;
       return out;
     }
   }

@@ -74,13 +74,13 @@ describe('what Home puts first', () => {
     // And the place it opens is the charter, unsigned, with the signature offered.
     const place = (await page('/foundry/charter')).text;
     expect(place).toContain('Unsigned');
-    expect(place).toContain('Sign for 90 days');
+    expect(place).toContain('Sign for 30 days');
   });
 
   it('signed, the card is gone and the tile says Chartered', async () => {
     const r = await app.request('/foundry/controls/charter', {
       method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: 'monthly_dollars=100&probes=3&thinking_dollars=3&statement=A+river+of+nickels%2C+none+needing+me.',
+      body: 'tests_dollars=100&probes=3&thinking_dollars=3&days=30&statement=A+river+of+nickels%2C+none+needing+me.',
     });
     expect(r.headers.get('location')).toBe('/foundry/charter?charter=signed');
     const t = (await page('/foundry')).text;

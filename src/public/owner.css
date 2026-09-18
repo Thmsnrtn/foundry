@@ -1774,3 +1774,13 @@ main[data-place="foundry"]:has(.ask-surface)>.glance{margin-top:1.4rem}
 .ctl p.row form{margin:0}
 .ctl .rules{margin:.5rem 0 0;line-height:1.5}
 .ctl .rules b{color:var(--ink-2);font-weight:600}
+
+/* THE TERM HE CHOOSES, three doors wide enough for a thumb. A first charter is
+   a proving window; the row's own bound is a quarter. */
+.charter fieldset.terms{display:flex;gap:.5rem;border:0;padding:0;margin:0 0 .4rem}
+.charter fieldset.terms legend{font-size:.78rem;color:var(--ink-2);padding:0;margin:0 0 .35rem}
+.charter label.term{display:inline-flex;align-items:center;gap:.4rem;min-height:44px;padding:6px 12px;
+  border:1px solid var(--v3-line);border-radius:999px;color:var(--ink-2);font-size:.85rem;font-weight:400;margin:0}
+.charter label.term:has(input:checked){border-color:var(--v3-mint);color:var(--v3-mint)}
+.total-exposure{font-family:var(--serif);font-size:1.25rem;margin:.2rem 0 .6rem}
+.total-exposure b{font-weight:600}

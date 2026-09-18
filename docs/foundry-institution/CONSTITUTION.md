@@ -521,7 +521,8 @@ first time.
 above stands unchanged — the act is still proposed in full, fingerprinted,
 non-forgeable, spent once, revocable, and the proposer still cannot decide.
 What changed is only who may say yes, and only inside what he signed: a
-month's money, a number of probes in flight, a day's thinking, the sealed
+money for tests across the whole charter, a number of probes in flight, a
+day's thinking, the sealed
 contact rules, the Workshop as the only public voice, and an end date no more
 than a quarter away. A legal or destructive act is never inside a charter; the
 ladder's `absorbable` column was not touched and `chartered()` refuses those
