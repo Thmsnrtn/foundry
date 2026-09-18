@@ -139,6 +139,8 @@ export const LAYER_OF: Record<string, Layer> = {
   // The first real experiment as a place under the same shell: watched,
   // inspected and stopped where everything else is.
   'src/routes/dashboard/experiments-place.ts': 'private',
+  // The charter's own place: read before it is signed, one tap from Home.
+  'src/routes/dashboard/charter-place.ts': 'private',
   'src/routes/dashboard/workshop-place.ts': 'private',
   'src/routes/dashboard/inbox-place.ts': 'private',
   // Money: the whole subtraction from what a buyer paid to what the owner may
