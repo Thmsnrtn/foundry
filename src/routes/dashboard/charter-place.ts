@@ -81,7 +81,7 @@ charterRoutes.get('/foundry/charter', async (c: any) => {
       <dt>In flight</dt><dd>${String(envelope.inFlight)} of ${String(envelope.charter.probesInFlight)}${envelope.roomForAnother ? '' : ' — full until one settles'}</dd>` : ''}
     </dl></section>`;
 
-  const exposure = html`<section class="panel exposure" aria-label="The most it can cost"><header><h2>${mark('cash')}The most it can cost</h2></header>
+  const exposure = html`<section class="panel" aria-label="The most it can cost"><header><h2>${mark('cash')}The most it can cost</h2></header>
     <dl class="numbers exp-numbers">
       <div class="tile"><dt class="k">Any one day</dt><dd class="v">${dollars(ex.cognitionCentsPerDay)}</dd><dd class="d">thinking</dd></div>
       <div class="tile"><dt class="k">Any month</dt><dd class="v">${dollars(ex.monthlyCents)}</dd><dd class="d">on tests, plus thinking</dd></div>
