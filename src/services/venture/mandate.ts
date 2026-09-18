@@ -584,7 +584,15 @@ export async function absorbParagraph(input: {
   // is absorbed as a preference on the search he already has, in his own
   // words, on the record, and readable back to him on Discover.
   if (asks.length > 0 && already) {
+    // THE SAME SENTENCE TWICE IS ONE INSTRUCTION. A phone on a slow connection
+    // double-submits, and he re-types what he already asked for; neither is a
+    // second piece of steering, and writing one would fill the search with
+    // duplicates of his own words and count them as things he said twice.
+    const said = (t: string): string => t.trim().toLowerCase();
+    const heard = new Set([said(already.statement), ...already.guidance.map((g) => said(g.statement))]);
     for (const a of asks) {
+      if (heard.has(said(a.statement))) continue;
+      heard.add(said(a.statement));
       await absorbGuidance({
         mandateId: already.id, statement: a.statement, kind: 'favour',
         subject: a.shape === null ? null : a.shape.replace(/_/g, ' '), dimension: null,

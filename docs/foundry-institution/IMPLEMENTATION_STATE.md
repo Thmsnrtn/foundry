@@ -2858,3 +2858,43 @@ general inbox and an estimating mailbox is a fact about the CHANNEL, and the
 channel is half of what this experiment tests: "nobody replied" reads
 differently when every message went to a general inbox than when some went to an
 estimator who asks for bids for a living.
+
+## The owner can initiate, steer and clear (2026-09-18)
+
+**Charter semantics.** `portfolio_envelopes.tests_total_cents` (migration 324)
+is the whole-charter bound on test money; the carve guard sums every carve of
+the envelope against it with no calendar in the clause. `monthly_cents` is
+written equal to it, so 319's month clause is subsumed and can never bind
+first. `charterExposure` returns `periodMaxCents = tests + thinking × days`,
+which is the one figure the signing page leads with. `monthsTouched` and
+`anyThirtyDaysCents` are gone. `PRE_CHARTER_THINKING_CENTS = 100` bounds
+`forgePass` when no envelope exists.
+
+**Attention.** `AskedOfHim` gained `tier` and `owesCustomer`, derived in
+`whatIsBeingAskedOf` from the rung, the subject and an EXISTS over
+`experiment_fulfilments` — the same predicate the Workshop's outstanding
+obligations read. `whatNeedsHim` reads the three tiers at three different
+ranks. `theRestOfTheQueue` is unchanged, so nothing is hidden.
+
+**Initiation and steering.** `ASKING` knows exploration verbs; `EARNS` extends
+`A_THING_THAT_EARNS` with the economic forms; `SHAPES` gained calculator,
+utility, plugin, monitoring and acquisition. `absorbParagraph` absorbs a
+mandate sentence as `favour` guidance when a search is already open and reports
+`pointed`. `termsFrom` adds the subjects of `favour`, `deeper` and `industry`
+as terms. `promote` computes its bar from `scepticismLevel` of the seed's own
+mandate, and `whatItWouldTakeToBelieve` takes the bar as a parameter.
+
+**The studio.** `economic-forms.ts` is presentation only: `ECONOMIC_FORMS` with
+plain words, the `probe_exchanges` each would need, and the words that
+recognise it in sentences somebody else wrote. `shelfCandidates` reads in three
+queries. `/foundry/experiments/explore` renders shelves; empty ones offer the
+direction through `/foundry/ask`.
+
+**Nudges.** `nudges.ts` holds the four-per-card vocabulary and `steer`, which
+re-derives the candidate, the open mandate and the subject server-side and
+writes through `absorbGuidance`. `POST /foundry/venture/steer` takes a
+candidate and a nudge key and nothing else.
+
+**The inbox.** `theThreads`, `threadCounts`, `archiveThread`,
+`unarchiveThread` and `settleThread` in `public-workshop/mail.ts`; migration
+325's two triggers; `needsTheOwner` and `mailHealth` scoped to the working set.

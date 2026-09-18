@@ -100,9 +100,9 @@ describe('with something found and believed', () => {
 
   it('evidence is said in words, and never as a score', async () => {
     const k = (await shelfCandidates(OWNER)).find((s) => s.key === 'api')?.candidates[0];
-    expect(k?.evidence).toBe('2 independent ways of knowing have said something');
+    expect(k?.evidence).toBe('2 independent ways of knowing');
     const t = (await page('/foundry/experiments/explore')).text;
-    expect(t).toContain('2 independent ways of knowing have said something');
+    expect(t).toContain('2 independent ways of knowing');
     // NO SCORE, NO RATING, NO RANK. The one number on a candidate is how many
     // genuinely different ways of knowing said something, which is a count of
     // rows rather than a judgement dressed as one.
@@ -188,6 +188,42 @@ describe('Now and Explore are two questions', () => {
   });
 });
 
+describe('a card is a glance, not the argument', () => {
+  it('evidence filed on the candidate rather than a seed still counts', async () => {
+    // Found on the real page: the first real candidate was promoted before
+    // seeds existed, so its claims hang off the opportunity. A count that saw
+    // only seeds reported "nothing observed yet" about a thing that had
+    // survived the whole evidence apparatus.
+    await query(
+      `INSERT INTO venture_opportunities (id, mandate_id, founder_id, headline, who_has_it, the_problem, why_it_might, kill_thesis, sources_json, evidence_mode)
+       SELECT 'sh_old', mandate_id, founder_id, 'a register of notices', 'shops', 'scattered across a register',
+              'somebody pays', 'nobody pays', '[]', 'real' FROM venture_opportunities WHERE id = 'sh_opp'`, []);
+    await query(`INSERT INTO market_claims (id, founder_id, opportunity_id, claim, evidence_mode)
+      VALUES ('sh_c2',?,'sh_old','notices are scattered','real')`, [OWNER]);
+    const stances = (await query(`SELECT source_type FROM market_source_types WHERE epistemic_stance <> 'rehearsal' GROUP BY epistemic_stance ORDER BY source_type LIMIT 2`, []))
+      .rows as unknown as Array<Record<string, unknown>>;
+    let n = 0;
+    for (const st of stances) {
+      n += 1;
+      await query(`INSERT INTO market_observations
+          (id, founder_id, claim_id, source_type, source, saw, bearing, directness, observed_at, evidence_mode)
+        VALUES (?,?,'sh_c2',?,?,'somebody wrote about the register','supports','direct',datetime('now'),'real')`,
+      [`sh_p${String(n)}`, OWNER, String(st.source_type), `https://example.com/p${String(n)}`]);
+    }
+    const old = (await shelfCandidates(OWNER)).flatMap((sh) => sh.candidates).find((k) => k.id === 'sh_old');
+    expect(old?.stances).toBe(2);
+    expect(old?.evidence).toBe('2 independent ways of knowing');
+  });
+
+  it('a long problem sentence is cut, because the whole argument is one tap away', async () => {
+    await query(`UPDATE venture_opportunities SET the_problem = ? WHERE id = 'sh_old'`,
+      ['x'.repeat(400)]);
+    const k = (await shelfCandidates(OWNER)).flatMap((sh) => sh.candidates).find((c) => c.id === 'sh_old');
+    expect(k?.theProblem.length).toBeLessThan(130);
+    expect(k?.theProblem.endsWith('…')).toBe(true);
+  });
+});
+
 describe('a rehearsal is never a finding', () => {
   it('a rehearsal candidate is never counted among things found about the world', async () => {
     // The rehearsal search exists so he can watch the machinery work before a
@@ -205,6 +241,7 @@ describe('a rehearsal is never a finding', () => {
       [rehearsal.id, OWNER]);
 
     const found = (await shelfCandidates(OWNER)).flatMap((s) => s.candidates).map((k) => k.id);
-    expect(found).toEqual(['sh_opp']);
+    expect(found).toContain('sh_opp');
+    expect(found).not.toContain('sh_fake');
   });
 });

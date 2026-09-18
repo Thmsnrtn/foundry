@@ -316,6 +316,9 @@ export interface MailRecord {
   threadedBecause: string;
   /** What the edge reported the whole message weighed, before anything parsed it. */
   bytesAtTheEdge: number | null;
+  /** When he took it off his screen, and the line he gave. Null while in view. */
+  archivedAt: string | null;
+  archivedBecause: string | null;
 }
 
 const project = (r: Row): MailRecord => ({
@@ -328,6 +331,8 @@ const project = (r: Row): MailRecord => ({
   spf: r.spf == null ? null : String(r.spf), dkim: r.dkim == null ? null : String(r.dkim),
   dmarc: r.dmarc == null ? null : String(r.dmarc),
   sentAt: r.sent_at == null ? null : String(r.sent_at), receivedAt: String(r.received_at),
+  archivedAt: r.archived_at == null ? null : String(r.archived_at),
+  archivedBecause: r.archived_because == null ? null : String(r.archived_because),
   rfcMessageId: String(r.rfc_message_id),
   threadKeyHref: encodeURIComponent(String(r.thread_key)),
   threadedBecause: String(r.rfc_message_id) === String(r.thread_key)

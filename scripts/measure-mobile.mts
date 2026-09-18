@@ -342,6 +342,12 @@ async function main(): Promise<void> {
     '/foundry/charter', '/foundry/charter?tests_dollars=250&probes=4&thinking_dollars=5&days=90&statement=x',
     '/foundry/experiments/history', '/foundry/experiments/history?state=retired',
     '/foundry#more',
+    // THE STUDIO AND THE WORKING INBOX. Explore is shelves of folds with a
+    // second fold inside each card, which is the deepest nesting on the phone;
+    // the inbox rows now carry buttons over a whole-row link, which is where a
+    // thumb target and a door most easily collide.
+    '/foundry/experiments/explore', '/foundry/inbox?show=needs',
+    '/foundry/inbox?show=archived',
     `/foundry/companies/${COMPANY}/understanding/${RESPONSIBILITY}`,
     // Asked about a company by name: the answer is the widest structured block
     // the ask box can produce, and it renders inside the same page.
@@ -587,6 +593,7 @@ async function main(): Promise<void> {
           ['/foundry/charter', 'charter'], ['/foundry/experiments/history', 'experiments-history'],
           ['/foundry#more', 'more'], ['/foundry/experiments', 'experiments'], ['/foundry/inbox', 'inbox'],
           ['/foundry/companies', 'portfolio'],
+          ['/foundry/experiments/explore', 'explore'], ['/foundry/inbox?show=needs', 'inbox-needs'],
         ] as Array<[string, string]>) {
           if (path === p) await page.screenshot({ path: `${dir}/${name}-390.png`, fullPage: true });
         }

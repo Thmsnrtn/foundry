@@ -209,28 +209,43 @@ describe('the journey he could not complete', () => {
     expect(open.length).toBe(1);
   });
 
-  it('survives him pressing send twice', async () => {
+  it('survives him pressing send twice, and hears a new direction as steering', async () => {
     // A phone on a slow connection double-submits. The second must not open a
-    // competing search or throw — it must tell him what is already true.
-    const res = await app.request('/foundry/ask', {
+    // competing search or throw.
+    //
+    // ONE SEARCH AT A TIME IS STILL THE RULE, AND CARRYING IT IS FOUNDRY'S JOB.
+    // A direction given while a search runs used to come back as "you already
+    // have a search running — steer it instead", which is the product telling
+    // him to do the translation himself. It is absorbed as a preference on the
+    // search he already has, in his own words.
+    const said = (body: string) => app.request('/foundry/venture/confirm', {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ said:
-        'Make the river stronger by finding another income stream.' }).toString(),
+      body: new URLSearchParams({ said: body }).toString(),
     });
-    // The door shows it back rather than opening anything; and saying yes to
-    // it a second time does not open a competing search.
-    expect(res.status).toBe(200);
-    const twice = await app.request('/foundry/venture/confirm', {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({ said:
-        'Make the river stronger by finding another income stream.' }).toString(),
-    });
+    const before = (await query(
+      `SELECT COUNT(*) AS n FROM venture_guidance g
+         JOIN venture_mandates m ON m.id = g.mandate_id
+        WHERE m.founder_id = ? AND m.closed_at IS NULL`, [OWNER])).rows[0] as Record<string, unknown>;
+
+    const twice = await said('Make the river stronger by finding another income stream.');
     expect([200, 302]).toContain(twice.status);
     if (twice.status === 302) {
-      expect(twice.headers.get('location')).toContain('alreadylooking');
+      expect(twice.headers.get('location')).toContain('pointedsearch');
     }
+
+    // THE SAME SENTENCE AGAIN IS ONE INSTRUCTION, not a second piece of
+    // steering: a double tap must not fill his search with duplicates of his
+    // own words and count them as things he said twice.
+    const again = await said('Make the river stronger by finding another income stream.');
+    expect(again.headers.get('location')).toContain('alreadylooking');
+
+    const after = (await query(
+      `SELECT COUNT(*) AS n FROM venture_guidance g
+         JOIN venture_mandates m ON m.id = g.mandate_id
+        WHERE m.founder_id = ? AND m.closed_at IS NULL`, [OWNER])).rows[0] as Record<string, unknown>;
+    expect(Number(after.n)).toBe(Number(before.n) + 1);
+
     const open = (await query(
       'SELECT COUNT(*) AS n FROM venture_mandates WHERE founder_id = ? AND closed_at IS NULL',
       [OWNER])).rows[0] as Record<string, unknown>;

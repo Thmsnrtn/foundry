@@ -85,6 +85,30 @@ export async function shelfCandidates(founderId: string): Promise<Shelf[]> {
     }
   }
 
+  // AND THROUGH THE CANDIDATE ITSELF, for the ones with no seed behind them.
+  //
+  // Found on the real page: the first real candidate was promoted before seeds
+  // existed, so its claims hang off the OPPORTUNITY rather than a seed — and
+  // the card said "nothing observed yet" about a thing that had survived the
+  // whole evidence apparatus. A count that can only see one of the two places
+  // evidence is filed reports an absence that is not there.
+  const oppStanceOf = new Map<string, number>();
+  if (rows.length > 0) {
+    const holes = rows.map(() => '?').join(',');
+    for (const r of (await query(
+      `SELECT c.opportunity_id AS opportunity_id, COUNT(DISTINCT t.epistemic_stance) AS stances
+         FROM market_claims c
+         JOIN market_observations o ON o.claim_id = c.id
+         JOIN market_source_types t ON t.source_type = o.source_type
+        WHERE c.opportunity_id IN (${holes})
+          AND o.evidence_mode <> 'reference' AND t.epistemic_stance <> 'rehearsal'
+          AND (o.from_absence = 0 OR o.bearing = 'supports')
+        GROUP BY c.opportunity_id`, rows.map((r) => String(r.id))))
+      .rows as unknown as Array<Record<string, unknown>>) {
+      oppStanceOf.set(String(r.opportunity_id), Number(r.stances));
+    }
+  }
+
   const blockedOf = new Map<string, string>();
   if (rows.length > 0) {
     const holes = rows.map(() => '?').join(',');
@@ -103,9 +127,22 @@ export async function shelfCandidates(founderId: string): Promise<Shelf[]> {
     exchanges.set(String(r.exchange), Number(r.available) === 1);
   }
 
+  // A GLANCE, NOT THE ARGUMENT. On the real phone a candidate's own problem
+  // sentence ran six lines and its kill thesis three more, so a shelf of four
+  // would be a page of prose — and every word of it is on the candidate's own
+  // page, one tap away. Cut on a word, with the ellipsis saying there is more.
+  const short = (t: string, n: number): string => {
+    const one = t.replace(/\s+/g, ' ').trim();
+    if (one.length <= n) return one;
+    const cut = one.slice(0, n);
+    return `${cut.slice(0, Math.max(0, cut.lastIndexOf(' '))) || cut}…`;
+  };
+
   const placed: ShelfCandidate[] = rows.map((r) => {
     const seedId = r.seed_id == null ? null : String(r.seed_id);
-    const stances = seedId === null ? 0 : stanceOf.get(seedId) ?? 0;
+    const stances = Math.max(
+      seedId === null ? 0 : stanceOf.get(seedId) ?? 0,
+      oppStanceOf.get(String(r.id)) ?? 0);
     const said = formOf([
       { said: String(r.headline), where: 'its headline' },
       { said: String(r.the_problem), where: 'the problem it names' },
@@ -114,12 +151,15 @@ export async function shelfCandidates(founderId: string): Promise<Shelf[]> {
     ]);
     return {
       id: String(r.id), headline: String(r.headline), whoHasIt: String(r.who_has_it),
-      theProblem: String(r.the_problem), stances,
+      theProblem: short(String(r.the_problem), 110), stances,
+      // SHORT ENOUGH TO BE A LABEL. The full sentence — which ways of knowing,
+      // and what each said — is on the candidate's own page, where he is
+      // deciding rather than glancing.
       evidence: stances === 0 ? 'nothing observed yet'
         : stances === 1 ? 'only one way of knowing'
-          : `${String(stances)} independent ways of knowing have said something`,
-      blockedBy: blockedOf.get(String(r.id)) ?? null,
-      killThesis: String(r.kill_thesis),
+          : `${String(stances)} independent ways of knowing`,
+      blockedBy: blockedOf.has(String(r.id)) ? short(String(blockedOf.get(String(r.id))), 120) : null,
+      killThesis: short(String(r.kill_thesis), 120),
       form: said.form, because: said.because, where: said.where,
     };
   });

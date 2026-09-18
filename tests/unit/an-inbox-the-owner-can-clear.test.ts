@@ -128,6 +128,16 @@ describe('he can clear his view without deleting the record', () => {
     expect(String(row.reading)).toBe(msgs[0]!.reading);
   });
 
+  it('and the line he gave is read back to him, on the row and in the thread', async () => {
+    const put = (await theThreads(OWNER, 'archived'))[0]!;
+    expect(put.newest.archivedBecause).toBe('the owner put it away');
+    const list = (await page('/foundry/inbox?show=archived')).text;
+    expect(list).toContain('Put away:');
+    expect(list).toContain('the owner put it away');
+    const thread = (await page(`/foundry/inbox/${put.href}`)).text;
+    expect(thread).toContain('Nothing about the message changed; it is only off the working list.');
+  });
+
   it('a message put away stops counting as waiting on him', async () => {
     const put = (await theThreads(OWNER, 'archived'))[0]!;
     expect((await needsTheOwner(OWNER)).map((m) => m.threadKey)).not.toContain(put.key);

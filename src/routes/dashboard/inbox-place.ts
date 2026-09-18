@@ -118,6 +118,7 @@ inboxRoutes.get('/foundry/inbox', async (c: any) => {
         ${/* CLEARING HIS VIEW IS NOT DELETING THE RECORD. Archiving asserts
               nothing about the message and is reversible; every reading, ground
               and reply stays exactly where it was and is still readable here. */ ''}
+        ${t.newest.archivedBecause ? html`<span class="read"><strong>Put away:</strong> ${t.newest.archivedBecause}${t.newest.archivedAt ? html` <span class="dim">${ago(t.newest.archivedAt)}</span>` : ''}</span>` : ''}
         <span class="acts">${t.archived
     ? html`<form method="POST" action="/foundry/inbox/thread/${t.href}/unarchive">
           <button class="btn" type="submit">Put back</button></form>`
@@ -204,6 +205,7 @@ inboxRoutes.get('/foundry/inbox/:thread', async (c: any) => {
         <dt>Read as</dt><dd>${m.reading.replaceAll('_', ' ')}${m.readingBecause ? ` — ${m.readingBecause}` : ''}</dd>
         <dt>Foundry did</dt><dd>${m.handledBecause ?? 'nothing yet'}</dd>
         <dt>Status</dt><dd>${WORD[m.handling] ?? m.handling}</dd>
+        ${m.archivedBecause ? html`<dt>Put away</dt><dd>${m.archivedBecause}${m.archivedAt ? ` — ${when(m.archivedAt)}` : ''}. Nothing about the message changed; it is only off the working list.</dd>` : ''}
         ${m.experimentId ? html`<dt>About</dt><dd><a href="/foundry/experiments/${m.experimentId}">the experiment they were written to about</a></dd>` : html`<dt>About</dt><dd class="quiet">nobody the Workshop has written to</dd>`}
         <dt>How it authenticated</dt><dd class="quiet">SPF ${m.spf ?? '—'} · DKIM ${m.dkim ?? '—'} · ${m.dmarc ?? 'no DMARC result'}</dd>
         <dt>Why it is in this thread</dt><dd class="quiet">${m.threadedBecause}${m.bytesAtTheEdge != null ? ` · ${String(m.bytesAtTheEdge)} bytes at the edge` : ''}</dd>

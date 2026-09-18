@@ -2155,3 +2155,34 @@ What Experiment 001 actually carries, and what it is being run under: bounces 3,
 opt-outs 2, declined value 3, unfulfillable 1, complaints 1, and no bounce-rate
 condition at all. These are tighter than the later defaults. They stay as they
 are; loosening them would be an owner decision, not a repair.
+
+### Owner protection, owner agency, and the working set (2026-09-18)
+
+Six changes, in order, each green on its own suites before the next was begun.
+
+1. **The charter has one total.** What he signs is the term, the money for
+   tests across the whole of it, the thinking a day and how many tests may run
+   at once. Migration 324 bounds carves against the charter's total with no
+   calendar in the clause, so no month or window can move the ceiling. The
+   signing page separates component ceilings from one total exposure figure.
+   An uncharterd Foundry now thinks within $1 a day rather than without a
+   ceiling, and says on the page what it does anyway.
+2. **Home ranks by consequence.** Acts carry a tier derived from existing
+   columns — obligation, external, internal — and the first screen's order is
+   OBJECTIVE.md §4's. Nothing is hidden by ranking lower.
+3. **The door hears a direction.** "Explore API opportunities" opens a search;
+   given while one is running it steers that search instead of being refused.
+   `favour`, `deeper` and `industry` now reach the search terms, and each
+   "be more sceptical" raises the belief bar in `promote`.
+4. **The studio.** Now and Explore. Explore shelves every open real candidate
+   by economic form, each filed by a sentence somebody wrote, with empty
+   shelves saying so.
+5. **Nudges.** One compact fold under a candidate, at most four, each writing
+   the guidance row the sentence-reader would have written.
+6. **The inbox is conversations he can clear.** Migration 325 adds a
+   reversible archive that asserts nothing and changes no evidence; rows are
+   threads; the default view is what is in flight; counts come from unbounded
+   readers.
+
+Experiment 001 is untouched throughout. Its rows, its envelope and its
+fulfilments are exactly as they were.
