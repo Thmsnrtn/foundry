@@ -489,6 +489,13 @@ experimentRoutes.get('/foundry/experiments/:id/decide', async (c: any) => {
   const stops = d ? await readStopConditions(id) : [];
   const ready = await externalReadiness(founderId, id);
   const badge: Record<string, string> = { verified: 'seen in the world', ready: 'ready', waiting: 'waiting', blocked: 'blocked' };
+  // WHAT THE FORGE READ AND WHAT ARGUED AGAINST IT, when the forge designed
+  // it: each discipline's finding on its grounds, and the adversary's attacks
+  // with whether each became an amendment. A hand-written design has none.
+  const { findingsOf, attacksOf } = await import('../../services/venture/forge-deliberation.js');
+  const lenses = await findingsOf(id);
+  const attacks = await attacksOf(id);
+  const LENS_WORD: Record<string, string> = { market_reality: 'Market reality', experimental_design: 'Experimental design', commercial_operations: 'Commercial operations', risk_ethics_compliance: 'Risk, ethics and compliance', economics_portfolio: 'Economics and the portfolio' };
 
   const body = html`
     <h1>Before you decide</h1>
@@ -511,6 +518,14 @@ experimentRoutes.get('/foundry/experiments/:id/decide', async (c: any) => {
         <ul>${d.alternatives.map((a) => html`<li><strong>${a.whatItIs}</strong> — ${a.notChosenBecause}</li>`)}</ul>
       </details>
     </section>
+
+    ${lenses.length === 0 ? '' : html`<section class="know"><h2>What each discipline said</h2>
+      <p class="quiet">Written before the design was composed, each on the rows it names.</p>
+      <ul class="plain">${lenses.map((f) => html`<li><strong>${LENS_WORD[f.lens] ?? f.lens}</strong> — ${f.finding} <span class="pill">${f.recommends}</span> <span class="quiet">${f.because}</span></li>`)}</ul>
+      ${attacks.length === 0 ? '' : html`<details><summary>What the adversary argued (${String(attacks.length)}), and its verdict: ${attacks[0]!.verdict}</summary>
+        <ul>${attacks.map((a) => html`<li>${a.claim} <span class="quiet">${a.why}</span>${a.accepted ? html` <span class="pill ok">amended</span>` : ''}</li>`)}</ul>
+        <p class="quiet">${attacks[0]!.because}</p></details>`}
+    </section>`}
 
     <section class="know"><h2>What each answer would mean</h2>
       <p><strong>If it works</strong> — ${d.canProve}</p>

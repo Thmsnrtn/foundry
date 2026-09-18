@@ -771,6 +771,18 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('_gate_fixture_voice');
   });
 
+  it('check-forge-seals-only-inside-the-charter fails when a file seals a design without asking the charter', () => {
+    // The forge acts with nobody watching. The rule it must obey — ask the
+    // charter before sealing, in the same file, before the seal — is held
+    // here, and a file that seals first and asks later is the defect.
+    plant('src/services/venture/_gate_fixture_seal.ts',
+      j('import { sealDesign } from "./probe-design.js";\n',
+        'export const go = async (id: string) => { await seal', 'Design(id); };\n'));
+    const r = run('check-forge-seals-only-inside-the-charter.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_seal');
+  });
+
   it('check-the-owner-is-not-a-public-figure passes on the tree as it stands', () => {
     const r = run('check-the-owner-is-not-a-public-figure.mjs');
     expect(r.code, r.output).toBe(0);

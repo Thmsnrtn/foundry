@@ -49,6 +49,9 @@ export const WORK_THE_MODEL_DOES = {
   'a second reading': 'trying again when the first reading of an observation came back unusable',
   'legal exposure': 'recognising whether an idea would put its owner on the wrong side of a rule',
   'cross-company patterns': 'looking for a pattern across companies that no single one could see',
+  'a lens': 'one discipline reading the record of a candidate test for what it shows and on which rows',
+  'composing a probe': 'turning five disciplines\' findings into one design that says what a test decides',
+  'attacking a probe': 'arguing a draft design is wrong before it is sealed, given only the draft',
 
   // ── what the owner opens ─────────────────────────────────────────────────
   'the daily insight': 'the one thing worth saying about a company today',

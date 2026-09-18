@@ -135,4 +135,16 @@ export const FRONTIER_WARRANTS: readonly FrontierWarrant[] = [
       + 'frontier above it, so the stake chooses the price rather than the '
       + 'author. Rare because high-gate decisions are rare.',
   },
+  {
+    file: 'src/services/venture/forge-deliberation.ts',
+    sites: 2,
+    question: 'Compose the design of a real test from five disciplines\' findings, and then attack that draft.',
+    warrant: 'Expensive to get wrong: the design is sealed at the decision and '
+      + 'decides who is written to, what is promised and where it stops; a '
+      + 'plausible wrong one costs a probe, strangers\' attention and the '
+      + 'Workshop\'s standing. The five lenses run on the operational model; '
+      + 'only the composition and the attack, which are the judgement, pay '
+      + 'frontier prices. Rare: at most two designs a day, and a design is '
+      + 'composed once.',
+  },
 ];

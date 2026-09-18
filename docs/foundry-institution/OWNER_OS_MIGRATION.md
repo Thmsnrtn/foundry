@@ -2082,3 +2082,55 @@ already standing and puts up only what differs, by digest, under the keeper
 principal it already publishes with. An unchanged page is a no-op; every
 change leaves the receipt it always did; a Workshop never published is not
 put up behind the owner's back.
+
+## The forge deliberates — 18 September 2026
+
+### Why
+
+The forge deliberately had no button: the sentences that decide an
+experiment were the owner's or nobody's, and every real design was written
+by hand. The owner asked not to be the job. The forge now composes designs
+under a discipline stricter than a person's, not looser.
+
+### What was built (Tranche 4 of the River of Nickels plan)
+
+- **Five lenses, written first.** Market reality, experimental design,
+  commercial operations, risk/ethics/compliance and economics/portfolio each
+  read the record — the candidate, its evidence with addresses and stances,
+  its unknowns, the legal picture, the lessons of settled tests, the charter,
+  the executable exchanges — on the operational model, and each finding is
+  written to `probe_lens_findings` with the rows it rests on before anything
+  is composed. A finding with no grounds is thrown away. Migration 322
+  refuses a forge design with fewer than five findings behind it.
+- **One composer.** The design is composed on the frontier model from the
+  findings, validated against the vocabularies (an executable exchange, two
+  readings the test cannot tell apart, cost on three dimensions, two stop
+  conditions), and recorded as `designed_by = 'forge'`. The warrant is in
+  the frontier table: being wrong here costs a probe.
+- **A separate attacker.** Given only the draft and the record, told to break
+  it. An attack that names an amendable sentence and a better one becomes an
+  amendment in the ledger signed `forge:adversary`; the rest are recorded in
+  `probe_attacks` with the attacker's verdict. The composer cannot attack its
+  own draft, and nothing can be attacked or found after the seal — at the row.
+- **The rule that seals is neither.** A design is sealed only when it
+  recommends running, the attacker agrees, nothing the design names stands
+  in the way, and the probe is inside the charter. Otherwise it stays
+  unsealed for the owner with every reason on the decide page. A test both
+  the composer and the adversary recommend against is retired with both
+  reasons. `scripts/check-forge-seals-only-inside-the-charter.mjs` holds
+  that any file sealing a design outside the owner's own hands asks the
+  charter first, with a planted-defect test.
+- **The daily pass** (`forge_tick`, 07:00): proposes tests from what only
+  reality can settle, designs at most two a day, and lets a sealed, ready test
+  in as the charter's principal — or says why it is not ready. It designs
+  nothing once the day's thinking under the charter is spent, read from the
+  same ledger the model door writes.
+- **The decide page** shows what each discipline said and what the adversary
+  argued, so the owner can play when he wants to and never has to.
+
+### Model calls, and what they may not do
+
+The prompts carry the same rule the reader carries: readings, questions and
+designs may be created; pain, demand, willingness to pay, counts, prices and
+names may not. The owner is not a public figure and the legal and destructive
+rungs are never inside a charter, said in every prompt.

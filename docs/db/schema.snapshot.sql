@@ -3096,6 +3096,21 @@ CREATE TABLE probe_alternatives (
   recorded_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(experiment_id, exchange)
 );
+CREATE TABLE probe_attacks (
+  id             TEXT PRIMARY KEY,
+  experiment_id  TEXT NOT NULL REFERENCES venture_experiments(id),
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  claim          TEXT NOT NULL,
+  why            TEXT NOT NULL,
+  -- The design sentence attacked, when the attack offers a better one.
+  field          TEXT,
+  reads_now      TEXT,
+  accepted       INTEGER NOT NULL DEFAULT 0 CHECK (accepted IN (0,1)),
+  verdict        TEXT NOT NULL CHECK (verdict IN ('run','reframe','defer','kill')),
+  because        TEXT NOT NULL,
+  recorded_by    TEXT NOT NULL,
+  recorded_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE probe_cost_dimensions (
   dimension   TEXT PRIMARY KEY,
   what_it_is  TEXT NOT NULL,
@@ -3176,6 +3191,23 @@ CREATE TABLE probe_interpretations (
   reading         TEXT NOT NULL,
   distinguished_by TEXT,
   recorded_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE probe_lens_findings (
+  id             TEXT PRIMARY KEY,
+  experiment_id  TEXT NOT NULL REFERENCES venture_experiments(id),
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  lens           TEXT NOT NULL CHECK (lens IN
+                   ('market_reality','experimental_design','commercial_operations',
+                    'risk_ethics_compliance','economics_portfolio')),
+  finding        TEXT NOT NULL,
+  -- The addresses or record fields the finding rests on. A finding with none
+  -- is an opinion and is not recorded.
+  grounds_json   TEXT NOT NULL,
+  risk           TEXT NOT NULL CHECK (risk IN ('low','material','high')),
+  recommends     TEXT NOT NULL CHECK (recommends IN ('run','reframe','defer','kill')),
+  because        TEXT NOT NULL,
+  recorded_by    TEXT NOT NULL,
+  recorded_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE probe_stop_conditions (
   id             TEXT PRIMARY KEY,
@@ -5057,8 +5089,10 @@ CREATE INDEX idx_predictions_type ON predictions(prediction_type);
 CREATE INDEX idx_premises_decision ON decision_premises(decision_id);
 CREATE INDEX idx_premises_product_status ON decision_premises(product_id, status);
 CREATE INDEX idx_priority_actions_product ON priority_actions(product_id, priority_score DESC) WHERE is_active = 1;
+CREATE INDEX idx_probe_attacks_experiment ON probe_attacks(experiment_id, recorded_at);
 CREATE INDEX idx_probe_design_amendments ON probe_design_amendments(experiment_id, amended_at);
 CREATE INDEX idx_probe_interpretations ON probe_interpretations(experiment_id);
+CREATE INDEX idx_probe_lens_findings_experiment ON probe_lens_findings(experiment_id, recorded_at);
 CREATE INDEX idx_product_dna_product ON product_dna(product_id);
 CREATE UNIQUE INDEX idx_product_telemetry_identity
   ON product_telemetry_events(contributor_hash, step);
@@ -7719,6 +7753,30 @@ BEGIN
   SELECT RAISE(ABORT,'probe_alternative:is_sealed') WHERE EXISTS (
     SELECT 1 FROM probe_designs d WHERE d.experiment_id = NEW.experiment_id AND d.sealed_at IS NOT NULL);
 END;
+CREATE TRIGGER probe_attack_append_only
+BEFORE UPDATE ON probe_attacks
+BEGIN SELECT RAISE(ABORT,'probe_attack:append_only'); END;
+CREATE TRIGGER probe_attack_guard
+BEFORE INSERT ON probe_attacks
+BEGIN
+  SELECT RAISE(ABORT,'probe_attack:incomplete')
+    WHERE trim(NEW.claim) = '' OR trim(NEW.why) = '' OR trim(NEW.because) = '' OR trim(NEW.recorded_by) = '';
+  SELECT RAISE(ABORT,'probe_attack:accepted_needs_a_sentence')
+    WHERE NEW.accepted = 1 AND (NEW.field IS NULL OR NEW.reads_now IS NULL OR trim(NEW.reads_now) = '');
+  -- THE ATTACKER IS NOT THE COMPOSER, and attacks a draft, not a record.
+  SELECT RAISE(ABORT,'probe_attack:no_draft') WHERE NOT EXISTS (
+    SELECT 1 FROM probe_designs d WHERE d.experiment_id = NEW.experiment_id);
+  SELECT RAISE(ABORT,'probe_attack:design_is_sealed') WHERE EXISTS (
+    SELECT 1 FROM probe_designs d WHERE d.experiment_id = NEW.experiment_id AND d.sealed_at IS NOT NULL);
+  SELECT RAISE(ABORT,'probe_attack:attacker_is_the_composer') WHERE EXISTS (
+    SELECT 1 FROM probe_designs d WHERE d.experiment_id = NEW.experiment_id AND d.designed_by = NEW.recorded_by);
+END;
+CREATE TRIGGER probe_attack_no_delete
+BEFORE DELETE ON probe_attacks
+BEGIN
+  SELECT RAISE(ABORT,'probe_attack:append_only') WHERE NOT EXISTS (
+    SELECT 1 FROM products p WHERE p.owner_id = OLD.founder_id AND p.erasure_scheduled_at IS NOT NULL);
+END;
 CREATE TRIGGER probe_cost_dimensions_constitutional_delete BEFORE DELETE ON probe_cost_dimensions
 BEGIN SELECT RAISE(ABORT,'probe_cost_dimension:constitutional'); END;
 CREATE TRIGGER probe_cost_dimensions_constitutional_insert BEFORE INSERT ON probe_cost_dimensions
@@ -7764,6 +7822,13 @@ BEGIN
   -- makes the amended claim evidence again.
   SELECT RAISE(ABORT,'probe_design_amendment:after_the_seal') WHERE EXISTS (
     SELECT 1 FROM probe_designs d WHERE d.experiment_id = NEW.experiment_id AND d.sealed_at IS NOT NULL);
+END;
+CREATE TRIGGER probe_design_forge_needs_five_lenses
+BEFORE INSERT ON probe_designs
+BEGIN
+  SELECT RAISE(ABORT,'probe_design:forge_without_five_findings')
+    WHERE NEW.designed_by = 'forge'
+      AND (SELECT COUNT(DISTINCT lens) FROM probe_lens_findings f WHERE f.experiment_id = NEW.experiment_id) < 5;
 END;
 CREATE TRIGGER probe_design_guard
 BEFORE INSERT ON probe_designs
@@ -7865,6 +7930,25 @@ BEFORE UPDATE ON probe_interpretations
 BEGIN
   SELECT RAISE(ABORT,'probe_interpretation:is_sealed') WHERE EXISTS (
     SELECT 1 FROM probe_designs d WHERE d.experiment_id = OLD.experiment_id AND d.sealed_at IS NOT NULL);
+END;
+CREATE TRIGGER probe_lens_finding_append_only
+BEFORE UPDATE ON probe_lens_findings
+BEGIN SELECT RAISE(ABORT,'probe_lens_finding:append_only'); END;
+CREATE TRIGGER probe_lens_finding_guard
+BEFORE INSERT ON probe_lens_findings
+BEGIN
+  SELECT RAISE(ABORT,'probe_lens_finding:incomplete')
+    WHERE trim(NEW.finding) = '' OR trim(NEW.because) = '' OR trim(NEW.recorded_by) = ''
+       OR NEW.grounds_json IS NULL OR NEW.grounds_json IN ('', '[]');
+  -- A finding is read before the design is composed, never after it is sealed.
+  SELECT RAISE(ABORT,'probe_lens_finding:design_is_sealed') WHERE EXISTS (
+    SELECT 1 FROM probe_designs d WHERE d.experiment_id = NEW.experiment_id AND d.sealed_at IS NOT NULL);
+END;
+CREATE TRIGGER probe_lens_finding_no_delete
+BEFORE DELETE ON probe_lens_findings
+BEGIN
+  SELECT RAISE(ABORT,'probe_lens_finding:append_only') WHERE NOT EXISTS (
+    SELECT 1 FROM products p WHERE p.owner_id = OLD.founder_id AND p.erasure_scheduled_at IS NOT NULL);
 END;
 CREATE TRIGGER probe_stop_condition_guard
 BEFORE INSERT ON probe_stop_conditions

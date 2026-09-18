@@ -3318,6 +3318,34 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       + 'works can be looked through and a sense that has stopped working stops being '
       + 'claimed (daily)',
   },
+  forge_tick: {
+    fn: async () => {
+      const { forgePass } = await import('../services/venture/forge-deliberation.js');
+      const searching = await query(
+        'SELECT DISTINCT founder_id FROM venture_mandates WHERE closed_at IS NULL AND evidence_mode = ?', ['real']);
+      for (const row of searching.rows as unknown as Array<Record<string, unknown>>) {
+        const founderId = String(row.founder_id);
+        const pass = await forgePass(founderId);
+        if (pass.skipped) {
+          logger.info(`forge_tick: ${founderId} skipped — ${pass.skipped}`, { jobName: 'forge_tick' });
+          continue;
+        }
+        for (const d of pass.deliberated) {
+          logger.info(`forge_tick: ${d.experimentId} ${d.outcome}${d.because ? ` — ${d.because}` : ''}${d.design ? `; recommends ${d.design.recommendation}` : ''}${d.sealed ? '; sealed inside the charter' : d.unsealedBecause.length ? `; not sealed: ${d.unsealedBecause.join('; ')}` : ''}`,
+            { jobName: 'forge_tick' });
+        }
+        for (const id of pass.allowed) logger.info(`forge_tick: ${id} let in under the charter`, { jobName: 'forge_tick' });
+        for (const n of pass.notAllowed) logger.info(`forge_tick: ${n.experimentId} sealed but not let in — ${n.because}`, { jobName: 'forge_tick' });
+        logger.info(`forge_tick: ${founderId} proposed ${String(pass.proposed)}, designed ${String(pass.deliberated.length)}, let in ${String(pass.allowed.length)}`,
+          { jobName: 'forge_tick' });
+      }
+    },
+    schedule: '0 7 * * *',
+    description:
+      'Deliberate on every undesigned real test: five disciplines read the record, one design is '
+      + 'composed, an adversary attacks it, and it is sealed only inside the charter; a sealed, ready '
+      + 'test is let in as the charter\'s principal (daily)',
+  },
   venture_discovery_tick: {
     fn: async () => {
       const { discover, promoteWhatEarnedIt, weedOut } = await import(
