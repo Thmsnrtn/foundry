@@ -13,6 +13,7 @@ import { html, raw } from 'hono/html';
 import { page } from './foundry-shell.js';
 import { ago, mark } from '../../views/owner/shell.js';
 import type { Where } from './foundry-shell.js';
+import type { MailRecord, MailView } from '../../services/public-workshop/mail.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
 
 export const inboxRoutes = new Hono();
@@ -41,8 +42,7 @@ const MODE_WORD: Record<string, string> = {
 inboxRoutes.get('/foundry/inbox', async (c: any) => {
   const founderId = await founderOf(c);
   if (!founderId) return c.redirect('/onboarding');
-  const { theInbox, mailHealth } = await import('../../services/public-workshop/mail.js');
-  const mail = await theInbox(founderId, 100);
+  const { mailHealth, theThreads, threadCounts } = await import('../../services/public-workshop/mail.js');
   const health = await mailHealth(founderId);
   const { correspondenceHealth } = await import('../../services/public-workshop/correspondence.js');
   const speaking = await correspondenceHealth(founderId);
@@ -54,11 +54,17 @@ inboxRoutes.get('/foundry/inbox', async (c: any) => {
   // him; what Foundry handled within its authority sits behind a filter, with
   // its reading and its grounds beside the words so a wrong reading is visible
   // as a wrong reading. The mode is a state shown as one, changed with a reason.
-  const show = String(c.req.query('show') ?? '');
-  const needsHim = mail.filter((m) => m.handling === 'needs_owner');
-  const handled = mail.filter((m) => m.handling === 'resolved' || m.handling === 'no_action');
-  const rows = show === 'needs' ? needsHim : show === 'handled' ? handled : mail;
-  const initials = (m: typeof mail[number]): string => (m.fromName ?? m.from).split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('');
+  //
+  // AND IT IS CONVERSATIONS, NOT MESSAGES. The list showed messages while the
+  // row opened a thread and the button settled a message: three objects in one
+  // row. A conversation is the object; its newest message is what the row
+  // shows; Done and Archive act on the whole of it.
+  const asked = String(c.req.query('show') ?? '');
+  const show: MailView = asked === 'needs' || asked === 'handled' || asked === 'archived' ? asked : 'working';
+  const counts = await threadCounts(founderId);
+  const threads = await theThreads(founderId, show);
+  const anyMail = counts.working + counts.handled + counts.archived > 0;
+  const initials = (m: MailRecord): string => (m.fromName ?? m.from).split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('');
   const readingCls = (r: string): string => /complaint|stop_writing|wants_money_back|not_for_us|needs_a_person/.test(r) ? 'warn' : /wants_more|was_useful|answering_offer|asking/.test(r) ? 'ok' : '';
   const MODES: Array<['off' | 'draft' | 'autonomous', string, string]> = [
     ['off', 'Off', 'everything waits for you'],
@@ -90,26 +96,39 @@ inboxRoutes.get('/foundry/inbox', async (c: any) => {
       </details>
     </section>
 
-    ${mail.length === 0 ? html`<section class="know"><h2>Nobody has written yet</h2>
+    ${!anyMail ? html`<section class="know"><h2>Nobody has written yet</h2>
       <p class="quiet">Nothing has been sent, so nothing has come back. When mail arrives at the Workshop's address it will appear here, and it will still arrive in your mailbox exactly as it does now.</p></section>`
     : html`
     <p class="decisions-head" aria-label="Show">
-      <a class="chip${show === 'needs' ? ' on' : ''}${needsHim.length ? ' hot' : ''}" href="/foundry/inbox?show=needs">Needs you <b>${String(needsHim.length)}</b></a>
-      <a class="chip${show === 'handled' ? ' on' : ''}" href="/foundry/inbox?show=handled">Handled <b>${String(handled.length)}</b></a>
-      <a class="chip${show === '' ? ' on' : ''}" href="/foundry/inbox">All <b>${String(mail.length)}</b></a></p>
+      <a class="chip${show === 'working' ? ' on' : ''}${counts.needs ? ' hot' : ''}" href="/foundry/inbox">In flight <b>${String(counts.working)}</b></a>
+      <a class="chip${show === 'needs' ? ' on' : ''}${counts.needs ? ' hot' : ''}" href="/foundry/inbox?show=needs">Needs you <b>${String(counts.needs)}</b></a>
+      <a class="chip${show === 'handled' ? ' on' : ''}" href="/foundry/inbox?show=handled">Handled <b>${String(counts.handled)}</b></a>
+      <a class="chip${show === 'archived' ? ' on' : ''}" href="/foundry/inbox?show=archived">Put away <b>${String(counts.archived)}</b></a></p>
     <p class="quiet">${health.heard} heard in total · ${health.unread} Foundry could not confidently read${health.oldestWaitingHours != null ? ` · the oldest thing waiting has waited ${String(health.oldestWaitingHours)}h` : ''}.</p>
-    <ul class="mailrows" aria-label="Messages">
-      ${rows.map((m) => html`<li class="mailrow${m.handling === 'needs_owner' ? ' needs' : ''}">
-        <a class="open" href="/foundry/inbox/${m.threadKeyHref}" aria-label="Read the whole thread"></a>
-        <span class="avatar" aria-hidden="true">${initials(m) || '?'}</span>
-        <span class="who"><b>${m.fromName ?? m.from}</b>${m.fromName ? html` <span class="dim">${m.from}</span>` : ''}</span>
-        <span class="when"><time>${ago(m.receivedAt)}</time></span>
-        <span class="subj">${m.subject ?? '(no subject)'}</span>
-        <span class="snip">${m.body.replace(/\s+/g, ' ').trim().slice(0, 110)}${m.body.length > 110 ? '…' : ''}</span>
-        <span class="tags"><span class="pill ${readingCls(m.reading)}">${m.reading.replaceAll('_', ' ')}</span><span class="pill${m.handling === 'needs_owner' ? ' warn' : m.handling === 'resolved' ? ' ok' : ''}">${WORD[m.handling] ?? m.handling}</span></span>
-        <span class="read"><strong>Read as:</strong> ${m.reading.replaceAll('_', ' ')}${m.readingBecause ? ` — ${m.readingBecause}` : ''}${m.handledBecause ? html` <span class="dim">· Foundry did: ${m.handledBecause}</span>` : ''}</span>
+    <ul class="mailrows" aria-label="Conversations">
+      ${threads.map((t) => html`<li class="mailrow${t.needsOwner ? ' needs' : ''}">
+        <a class="open" href="/foundry/inbox/${t.href}" aria-label="Read the whole thread"></a>
+        <span class="avatar" aria-hidden="true">${initials(t.newest) || '?'}</span>
+        <span class="who"><b>${t.newest.fromName ?? t.newest.from}</b>${t.newest.fromName ? html` <span class="dim">${t.newest.from}</span>` : ''}${t.messages > 1 ? html` <span class="pill">${String(t.messages)}</span>` : ''}</span>
+        <span class="when"><time>${ago(t.newest.receivedAt)}</time></span>
+        <span class="subj">${t.newest.subject ?? '(no subject)'}</span>
+        <span class="snip">${t.newest.body.replace(/\s+/g, ' ').trim().slice(0, 110)}${t.newest.body.length > 110 ? '…' : ''}</span>
+        <span class="tags"><span class="pill ${readingCls(t.newest.reading)}">${t.newest.reading.replaceAll('_', ' ')}</span><span class="pill${t.needsOwner ? ' warn' : t.newest.handling === 'resolved' ? ' ok' : ''}">${WORD[t.newest.handling] ?? t.newest.handling}</span></span>
+        <span class="read"><strong>Read as:</strong> ${t.newest.reading.replaceAll('_', ' ')}${t.newest.readingBecause ? ` — ${t.newest.readingBecause}` : ''}${t.newest.handledBecause ? html` <span class="dim">· Foundry did: ${t.newest.handledBecause}</span>` : ''}</span>
+        ${/* CLEARING HIS VIEW IS NOT DELETING THE RECORD. Archiving asserts
+              nothing about the message and is reversible; every reading, ground
+              and reply stays exactly where it was and is still readable here. */ ''}
+        <span class="acts">${t.archived
+    ? html`<form method="POST" action="/foundry/inbox/thread/${t.href}/unarchive">
+          <button class="btn" type="submit">Put back</button></form>`
+    : html`${t.needsOwner ? html`<form method="POST" action="/foundry/inbox/thread/${t.href}/done">
+          <input type="hidden" name="because" value="the owner dealt with it" />
+          <button class="btn" type="submit">Done</button></form>` : ''}
+        <form method="POST" action="/foundry/inbox/thread/${t.href}/archive">
+          <input type="hidden" name="because" value="the owner put it away" />
+          <button class="btn" type="submit">Archive</button></form>`}</span>
       </li>`)}
-      ${rows.length === 0 ? html`<li class="quiet">Nothing of that kind.</li>` : ''}
+      ${threads.length === 0 ? html`<li class="quiet">${show === 'working' ? 'Nothing is in flight. Everything written to the Workshop has been answered, put away, or needs nothing.' : 'Nothing of that kind.'}</li>` : ''}
     </ul>`}`;
   return c.html(page('Inbox', body, 'inbox', where('inbox')));
 });
@@ -130,6 +149,38 @@ inboxRoutes.post('/foundry/inbox/mode', requireInstitutionOwner(), async (c: any
   await setCorrespondenceMode({ founderId, mode: mode as 'off' | 'draft' | 'autonomous', because });
   return c.redirect('/foundry/inbox?done=mode');
 });
+
+// ─── THE THREE THINGS HE DOES WITH A CONVERSATION ────────────────────────────
+//
+// Done says he dealt with it, which is a judgement and goes on the record as
+// one. Archive says only "off my screen" — no claim about the message, nothing
+// changed but what is in view, and reversible for exactly that reason. Both
+// act on the conversation, because that is the object he is looking at.
+const actOnThread = (
+  what: 'done' | 'archive' | 'unarchive',
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+) => async (c: any): Promise<Response> => {
+  const founderId = await founderOf(c);
+  if (!founderId) return c.redirect('/onboarding');
+  const threadKey = decodeURIComponent(String(c.req.param('thread')));
+  const form = await c.req.parseBody();
+  const because = String(form.because ?? '').trim();
+  const mail = await import('../../services/public-workshop/mail.js');
+  const back = String(form.back ?? '');
+  const to = `/foundry/inbox${back ? `?show=${back}` : ''}`;
+  if (what === 'unarchive') {
+    await mail.unarchiveThread({ founderId, threadKey });
+    return c.redirect(`${to}${back ? '&' : '?'}done=putback`);
+  }
+  if (!because) return c.redirect('/foundry/inbox?error=reason%20required');
+  if (what === 'done') await mail.settleThread({ founderId, threadKey, because });
+  else await mail.archiveThread({ founderId, threadKey, because });
+  return c.redirect(`${to}${back ? '&' : '?'}done=${what === 'done' ? 'settled' : 'archived'}`);
+};
+
+inboxRoutes.post('/foundry/inbox/thread/:thread/done', requireInstitutionOwner(), actOnThread('done'));
+inboxRoutes.post('/foundry/inbox/thread/:thread/archive', requireInstitutionOwner(), actOnThread('archive'));
+inboxRoutes.post('/foundry/inbox/thread/:thread/unarchive', requireInstitutionOwner(), actOnThread('unarchive'));
 
 inboxRoutes.get('/foundry/inbox/:thread', async (c: any) => {
   const founderId = await founderOf(c);

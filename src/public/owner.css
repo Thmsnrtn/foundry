@@ -1801,3 +1801,9 @@ details.fold.steer{border-top:0;margin-top:.4rem}
 .fold.steer>summary{min-height:44px;padding:.35rem 0;color:var(--ink-2);font-size:.9rem}
 .fold.steer form{display:flex;flex-wrap:wrap;gap:.5rem;align-items:baseline;margin:0 0 .45rem}
 .fold.steer form .quiet{flex:1 1 12rem;min-width:0;font-size:.85rem}
+
+/* THE TWO THINGS HE DOES TO A CONVERSATION, above the whole-row link so a
+   thumb reaches a button rather than the door behind it. */
+.mailrow .acts{position:relative;z-index:1;grid-column:2/4;display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem}
+.mailrow .acts form{margin:0}
+.mailrow .acts .btn{min-height:40px;padding:6px 14px;font-size:.84rem}

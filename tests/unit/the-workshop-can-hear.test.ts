@@ -576,9 +576,14 @@ describe('the owner sees what was said and what was made of it', () => {
     const text = await shown.text();
     expect(text).toContain('Inbox');
     expect(text).toContain('Read as:');
-    expect(text).toContain('stop writing');
-    expect(text).toContain('do-not-contact list for the whole Workshop');
     expect(text).toContain('needs you');
+    // WHAT IS IN FLIGHT IS THE DEFAULT VIEW. Somebody asking to be left alone
+    // was settled the moment it arrived — Foundry put them on the
+    // do-not-contact list — so it is on the record under Handled rather than
+    // on a screen about what is still moving.
+    const settled = await (await app.request('/foundry/inbox?show=handled')).text();
+    expect(settled).toContain('stop writing');
+    expect(settled).toContain('do-not-contact list for the whole Workshop');
     const health = await mailHealth(OWNER);
     expect(health.heard).toBeGreaterThan(5);
     expect(health.waiting).toBeGreaterThan(0);

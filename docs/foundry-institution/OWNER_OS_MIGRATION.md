@@ -2527,3 +2527,38 @@ The route re-derives everything from the candidate and the open search: the
 form posts a candidate and a nudge key and nothing else. A nudge with no search
 running steers nothing and says so, rather than starting real work because a
 button was pressed under an old candidate.
+
+## An inbox the owner can clear, and one object per row (18 September 2026)
+
+`workshop_mail.handling` has five states and every one is a judgement about the
+message: Foundry is reading it, waiting on them, needs him, resolved, nothing
+to do. There was no way to say the thing a person says most often about a
+message they have finished with — take this off my screen. So the working
+inbox could only grow, and the only way to shrink it was to assert something
+false.
+
+Migration 325 adds `archived_at` and `archived_because`. **Archiving is a view
+state, not a verdict.** It says nothing about the message, changes no reading,
+no grounds and no reply, and is the one state in this family that is
+reversible — every verdict here is immutable on purpose, and a view state that
+could not be undone would make tidying a screen into a decision. Two triggers
+hold it: a message cannot arrive already put away, and putting one away says
+why. Clearing the owner's view is not deleting institutional evidence.
+
+**And the object is the conversation.** The list showed messages while the row
+opened a thread and the button settled a message: three objects wearing one
+row. `theThreads` groups by `thread_key` in one query and returns the newest
+message, the count, and whether anything in it still needs him. Done and
+Archive act on the whole conversation.
+
+The default view is **what is in flight** — needs you, Foundry reading it,
+waiting on them — so the two states that matched neither old chip stop being
+visible only under "All". The chips are In flight, Needs you, Handled and Put
+away, each counted from an unbounded reader rather than filtered out of a page
+of a hundred. An archived message stops counting as waiting on him and stops
+nagging as unread; the total heard is the record and still counts everything.
+
+Discover's "Decided in this search", "Buried" and "Earlier searches" are now
+folds with their counts in the gist, the idiom a situation's history already
+used. He should not have to scroll past everything he has ever turned down to
+reach the thing standing in front of him.

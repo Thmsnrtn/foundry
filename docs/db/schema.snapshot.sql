@@ -4642,7 +4642,7 @@ CREATE TABLE workshop_mail (
   sent_at         TEXT,
   received_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
+, archived_at TEXT, archived_because TEXT);
 CREATE TABLE workshop_mail_intake (
   founder_id  TEXT PRIMARY KEY REFERENCES founders(id),
   intake_key  TEXT NOT NULL UNIQUE,
@@ -5254,6 +5254,9 @@ CREATE INDEX idx_workshop_continuations ON workshop_continuations(founder_id, em
 CREATE INDEX idx_workshop_mail_handling ON workshop_mail(founder_id, handling);
 CREATE UNIQUE INDEX idx_workshop_mail_rfc ON workshop_mail(founder_id, rfc_message_id);
 CREATE INDEX idx_workshop_mail_thread ON workshop_mail(founder_id, thread_key, received_at);
+CREATE INDEX idx_workshop_mail_working
+  ON workshop_mail(founder_id, received_at DESC)
+  WHERE archived_at IS NULL;
 CREATE INDEX idx_workshop_replies ON workshop_replies(founder_id, status, created_at);
 CREATE INDEX idx_workspace_events_ws ON workspace_events(workspace_id, at);
 CREATE UNIQUE INDEX idx_workspace_grant_live
@@ -9603,6 +9606,18 @@ BEGIN
   -- Only the owner decides how much the Workshop may say for itself. Nothing
   -- that reads a message can widen what messages are answered.
   SELECT RAISE(ABORT,'workshop_correspondence_policy:owner_act') WHERE NEW.changed_by IS NOT 'founder:' || NEW.founder_id;
+END;
+CREATE TRIGGER workshop_mail_archive_says_why
+BEFORE UPDATE OF archived_at ON workshop_mail
+BEGIN
+  SELECT RAISE(ABORT,'workshop_mail:archive_needs_a_reason')
+    WHERE NEW.archived_at IS NOT NULL AND trim(coalesce(NEW.archived_because,'')) = '';
+END;
+CREATE TRIGGER workshop_mail_cannot_arrive_archived
+BEFORE INSERT ON workshop_mail
+BEGIN
+  SELECT RAISE(ABORT,'workshop_mail:cannot_arrive_archived')
+    WHERE NEW.archived_at IS NOT NULL OR NEW.archived_because IS NOT NULL;
 END;
 CREATE TRIGGER workshop_mail_erasable
 BEFORE DELETE ON workshop_mail

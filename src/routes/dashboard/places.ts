@@ -655,17 +655,23 @@ placeRoutes.get('/foundry/searching', async (c: any) => {
             <a class="why" href="/foundry/why/candidate/${k.id}">Show your work</a></p>
         </div>`) : html`<p class="quiet">None yet. Bringing you none is a real answer.</p>`}
       </div>
-      ${decided.length ? html`<div class="know"><h2>Decided in this search</h2>
+      ${/* THE WORKING SET IS WHAT IS STILL LIVE. What was decided, what was
+            buried and what he searched for before are all evidence and all
+            kept — folded, with their counts in the gist, the same idiom a
+            situation's history already uses. An owner should not have to
+            scroll past everything he has ever turned down to reach the thing
+            standing in front of him. */ ''}
+      ${decided.length ? html`<details class="fold"><summary><h2>Decided in this search</h2><span class="gist">${String(decided.length)}</span></summary>
         <ul>${decided.map((d) => html`<li><strong>${d.headline}</strong> — ${d.verdict} on ${day(d.when)}: ${d.why}</li>`)}</ul>
-      </div>` : ''}`
+      </details>` : ''}`
     : html`<p class="lede">Say what you want on <a href="/foundry">Foundry</a> and I will start. One search at a time.</p>`}
-    ${buried.length ? html`<div class="know"><h2>Buried</h2>
+    ${buried.length ? html`<details class="fold"><summary><h2>Buried</h2><span class="gist">${String(buried.length)}</span></summary>
       <p class="quiet">What you rejected, and why. I do not bring the same thing again unless something changes.</p>
       <ul>${buried.map((b) => html`<li><strong>${b.headline}</strong>${b.reference ? ' (invented)' : ''} — ${b.why}, ${day(b.when)}.${
     b.revisitIf ? ` Revisit if ${b.revisitIf}.` : ''}</li>`)}</ul>
-    </div>` : ''}
-    ${past.length ? html`<div class="know"><h2>Earlier searches</h2>
+    </details>` : ''}
+    ${past.length ? html`<details class="fold"><summary><h2>Earlier searches</h2><span class="gist">${String(past.length)}</span></summary>
       <ul>${past.map((s) => html`<li>${s.statement} — closed ${day(s.closedAt)}, ${s.why}.</li>`)}</ul>
-    </div>` : ''}`;
+    </details>` : ''}`;
   return c.html(page('Searching', body, 'foundry', frame));
 });

@@ -360,7 +360,9 @@ export async function theThread(founderId: string, threadKey: string): Promise<M
 /** What the owner is actually needed for, and nothing else. */
 export async function needsTheOwner(founderId: string): Promise<MailRecord[]> {
   return (await rows(
-    `SELECT * FROM workshop_mail WHERE founder_id = ? AND handling = 'needs_owner' ORDER BY received_at DESC, rowid DESC`,
+    `SELECT * FROM workshop_mail
+      WHERE founder_id = ? AND handling = 'needs_owner' AND archived_at IS NULL
+      ORDER BY received_at DESC, rowid DESC`,
     [founderId])).map(project);
 }
 
@@ -372,12 +374,130 @@ export async function settleMail(input: { founderId: string; id: string; handlin
     [input.handling, because, input.founderId, input.id]);
 }
 
+// ─── The inbox as objects, and a working set he can clear ────────────────────
+
+export type MailView = 'working' | 'needs' | 'handled' | 'archived';
+
+export interface MailThread {
+  /** The conversation's own key, and the url-safe form of it. */
+  key: string;
+  href: string;
+  /** Everything about the newest message in it, which is what a row shows. */
+  newest: MailRecord;
+  /** How many messages are in it. One conversation, one row, one count. */
+  messages: number;
+  /** True when any message in it still needs him. */
+  needsOwner: boolean;
+  archived: boolean;
+}
+
+/**
+ * ONE CONVERSATION, ONE ROW.
+ *
+ * The inbox listed MESSAGES while the row opened a THREAD and the button
+ * settled a MESSAGE, so the thing he was looking at, the thing he tapped and
+ * the thing he acted on were three different objects wearing one row. A
+ * conversation is the object here; its newest message is what the row shows.
+ *
+ * One query, grouped, with no `LIMIT` deciding what he is allowed to count.
+ */
+export async function theThreads(founderId: string, view: MailView = 'working'): Promise<MailThread[]> {
+  const where = view === 'archived' ? 'm.archived_at IS NOT NULL'
+    : view === 'needs' ? "m.archived_at IS NULL AND m.handling = 'needs_owner'"
+      : view === 'handled' ? "m.archived_at IS NULL AND m.handling IN ('resolved','no_action')"
+        // THE WORKING SET IS WHAT IS IN FLIGHT. The two states that matched
+        // neither chip — Foundry reading it, waiting on them — used to be
+        // visible only under "All", so the things actually in motion were the
+        // things with no filter of their own.
+        : "m.archived_at IS NULL AND m.handling IN ('needs_owner','foundry_reading','waiting_on_them')";
+
+  return (await rows(
+    `SELECT m.*,
+            (SELECT COUNT(*) FROM workshop_mail a
+              WHERE a.founder_id = m.founder_id AND a.thread_key = m.thread_key) AS messages,
+            (SELECT COUNT(*) FROM workshop_mail a
+              WHERE a.founder_id = m.founder_id AND a.thread_key = m.thread_key
+                AND a.handling = 'needs_owner' AND a.archived_at IS NULL) AS needs
+       FROM workshop_mail m
+       JOIN (SELECT thread_key, MAX(received_at) AS newest, MAX(rowid) AS top
+               FROM workshop_mail WHERE founder_id = ? GROUP BY thread_key) t
+         ON t.thread_key = m.thread_key AND m.rowid = t.top
+      WHERE m.founder_id = ? AND ${where}
+      ORDER BY m.received_at DESC, m.rowid DESC`, [founderId, founderId]))
+    .map((r) => {
+      const newest = project(r);
+      return {
+        key: newest.threadKey, href: newest.threadKeyHref, newest,
+        messages: Number(r.messages ?? 1), needsOwner: Number(r.needs ?? 0) > 0,
+        archived: r.archived_at != null,
+      };
+    });
+}
+
+/** How many conversations each view holds. Counted over rows, never over a page. */
+export async function threadCounts(founderId: string): Promise<Record<MailView, number>> {
+  const of = async (v: MailView): Promise<number> => (await theThreads(founderId, v)).length;
+  return {
+    working: await of('working'), needs: await of('needs'),
+    handled: await of('handled'), archived: await of('archived'),
+  };
+}
+
+/**
+ * TAKE IT OFF HIS SCREEN, WITHOUT CLAIMING ANYTHING ABOUT IT.
+ *
+ * Archiving is a view state. It asserts nothing about whether the message was
+ * dealt with, changes no reading, no grounds and no reply, and is reversible —
+ * which is what separates tidying a screen from recording a verdict. The whole
+ * conversation moves, because the conversation is the object he is acting on.
+ */
+export async function archiveThread(input: {
+  founderId: string; threadKey: string; because: string;
+}): Promise<number> {
+  const because = input.because.trim();
+  if (!because) throw new MailRefused('needs_a_reason');
+  const out = await query(
+    `UPDATE workshop_mail SET archived_at = datetime('now'), archived_because = ?, updated_at = datetime('now')
+      WHERE founder_id = ? AND thread_key = ? AND archived_at IS NULL`,
+    [because, input.founderId, input.threadKey]);
+  return Number(out.rowsAffected ?? 0);
+}
+
+/** And back again, because a view state that cannot be undone is a verdict. */
+export async function unarchiveThread(input: {
+  founderId: string; threadKey: string;
+}): Promise<number> {
+  const out = await query(
+    `UPDATE workshop_mail SET archived_at = NULL, archived_because = NULL, updated_at = datetime('now')
+      WHERE founder_id = ? AND thread_key = ? AND archived_at IS NOT NULL`,
+    [input.founderId, input.threadKey]);
+  return Number(out.rowsAffected ?? 0);
+}
+
+/** Settling the conversation, which is the object the button sits on. */
+export async function settleThread(input: {
+  founderId: string; threadKey: string; because: string;
+}): Promise<number> {
+  const because = input.because.trim();
+  if (!because) throw new MailRefused('needs_a_reason');
+  const out = await query(
+    `UPDATE workshop_mail SET handling = 'resolved', handled_because = ?, updated_at = datetime('now')
+      WHERE founder_id = ? AND thread_key = ? AND handling NOT IN ('resolved','no_action')`,
+    [because, input.founderId, input.threadKey]);
+  return Number(out.rowsAffected ?? 0);
+}
+
 /** Mail health, in the only terms that matter: is anybody waiting on us? */
 export async function mailHealth(founderId: string): Promise<{ waiting: number; oldestWaitingHours: number | null; unread: number; heard: number }> {
   const w = await one(
-    `SELECT COUNT(*) n, MIN(received_at) oldest FROM workshop_mail WHERE founder_id = ? AND handling = 'needs_owner'`,
+    `SELECT COUNT(*) n, MIN(received_at) oldest FROM workshop_mail
+      WHERE founder_id = ? AND handling = 'needs_owner' AND archived_at IS NULL`,
     [founderId]);
-  const u = await one(`SELECT COUNT(*) n FROM workshop_mail WHERE founder_id = ? AND reading = 'unknown'`, [founderId]);
+  // WHAT IS STILL IN VIEW. A message he put away does not go on nagging about
+  // being unread; the total heard below is the record and counts everything.
+  const u = await one(
+    `SELECT COUNT(*) n FROM workshop_mail
+      WHERE founder_id = ? AND reading = 'unknown' AND archived_at IS NULL`, [founderId]);
   const t = await one('SELECT COUNT(*) n FROM workshop_mail WHERE founder_id = ?', [founderId]);
   const oldest = w?.oldest ? String(w.oldest) : null;
   return {
