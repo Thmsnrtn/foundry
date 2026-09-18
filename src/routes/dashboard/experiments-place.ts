@@ -555,6 +555,8 @@ experimentRoutes.get('/foundry/experiments/:id/decide', async (c: any) => {
   const attacks = await attacksOf(id);
   const LENS_WORD: Record<string, string> = { market_reality: 'Market reality', experimental_design: 'Experimental design', commercial_operations: 'Commercial operations', risk_ethics_compliance: 'Risk, ethics and compliance', economics_portfolio: 'Economics and the portfolio' };
 
+  const { publicWorkshopOf } = await import('../../services/public-workshop/settings.js');
+  const voice = (await publicWorkshopOf(founderId))?.publicName ?? 'the Workshop';
   const body = html`
     <h1>Before you decide</h1>
     <p class="lede">${v.assetName ?? 'This test'} — ${v.stateLabel}. Everything here was written before this moment, and nothing on this page contacts anybody.</p>
@@ -608,7 +610,7 @@ experimentRoutes.get('/foundry/experiments/:id/decide', async (c: any) => {
       <p>${d.fulfilmentCap === null ? 'No cap on what may be owed at once.' : html`If it works, new offers stop at <strong>${String(d.fulfilmentCap)}</strong> briefs owed at once. ${d.ifItSucceeds}`}</p>
     </section>
 
-    <section class="know"><h2>What it costs Apex Micro, and what people can ask of it</h2>
+    <section class="know"><h2>What it costs ${voice}, and what people can ask of it</h2>
       <p>One public name stands behind this and every later experiment. ${d.costs.find((x) => x.dimension === 'reputation')?.grounds ?? ''}</p>
       <p><strong>Contact policy</strong> — one message per business, no follow-up, from ${v.publicPage ? 'the Workshop' : 'the connected sender'}, with a postal address and an unsubscribe in every message. A refusal said to this test is a refusal for every test.</p>
       <p><strong>What they can ask for</strong> — the page asks each reader what should happen next. "Never" removes them from the whole Workshop; "nothing further" stops the next experiment writing to them even though it is not a complaint; anything else is kept in their own words.</p>

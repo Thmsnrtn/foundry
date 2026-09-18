@@ -308,7 +308,6 @@ privacySettings.get('/privacy', async (c) => {
             <div>
               <label style="display:block;font-size:0.8rem;font-weight:600;color:var(--text-primary);margin-bottom:0.5rem;" for="preferred_region">
                 Preferred Region
-                <span style="font-size:0.72rem;font-weight:400;color:var(--alert);margin-left:0.5rem;">&#9432; Data residency enforcement coming soon</span>
               </label>
               <select id="preferred_region" name="preferred_region" style="max-width:320px;">
                 ${''}${html([regionSelect] as unknown as TemplateStringsArray)}

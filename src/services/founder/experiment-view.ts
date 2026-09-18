@@ -11,6 +11,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
+import { publicWorkshopOfExperiment } from '../public-workshop/settings.js';
 import { allowanceFor } from '../institution/standing-intent.js';
 import { exposureOf, parseSettlementRule, whatTheWorldSaid } from '../venture/outcome.js';
 import {
@@ -116,6 +117,7 @@ export async function getExperimentView(founderId: string, experimentId: string,
   // the venue's readings. Nobody is reviewed and nothing is sent, so the
   // steps that exist for the emailed offer would be lies here.
   const listing = plan?.listing ?? null;
+  const voice = listing ? (await publicWorkshopOfExperiment(experimentId))?.publicName ?? 'the Workshop' : 'the Workshop';
   const readingsTaken = listing ? Number((await rows(
     `SELECT COUNT(*) AS n FROM market_observations WHERE claim_id = (SELECT claim_id FROM venture_experiments WHERE id = ?) AND source LIKE ?`,
     [experimentId, `${listing.venue}:stats:%`]))[0]?.n ?? 0) : 0;
@@ -187,7 +189,7 @@ export async function getExperimentView(founderId: string, experimentId: string,
     possible: state === 'ready', reason: state === 'needs_you' ? stateDetail : null,
     explanation: listing ? [
       `Foundry may spend up to ${money(e.costCents)} on this test. It has no permission beyond that, and nothing here needs it to spend anything.`,
-      `It writes to nobody and publishes nothing. The listing on ${listing.venueName} is your own act, under Apex Micro, at ${price}. No subscription, no promotion, no email.`,
+      `It writes to nobody and publishes nothing. The listing on ${listing.venueName} is your own act, under ${voice}, at ${price}. No subscription, no promotion, no email.`,
       'What the venue reports — impressions, views, favourites, orders, refunds — is entered by you from its own statistics and statement, and recorded as the provider\'s facts.',
       rule ? `It settles itself: ${describeRule(rule)}.` : 'No settlement rule is sealed, so only you could settle it.',
       'You can stop it at any time from this page; taking the listing down is yours to do on the venue. Approving it permits this test only; it creates no standing permission.',

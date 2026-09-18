@@ -15,7 +15,7 @@ import type { HtmlEscapedString } from 'hono/utils/html';
 import { page } from './foundry-shell.js';
 import type { Where } from './foundry-shell.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
-import { establishPublicWorkshop, pauseNewEconomicActivity, publicWorkshopOf, resumeEconomicActivity, setAbout, setPostalAddress, WorkshopRefused } from '../../services/public-workshop/settings.js';
+import { APEX_MICRO, establishPublicWorkshop, pauseNewEconomicActivity, publicWorkshopOf, resumeEconomicActivity, setAbout, setPostalAddress, WorkshopRefused } from '../../services/public-workshop/settings.js';
 import { livePublications, previewExperimentPage, publishSite, verifySite } from '../../services/public-workshop/publication.js';
 import { projectRegistry } from '../../services/public-workshop/projection.js';
 import { cloudflareReceipts, connectWorkshopSending, outstandingObligations, standUpWorkshop, workshopHealth } from '../../services/public-workshop/infrastructure.js';
@@ -58,7 +58,7 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
       <h1>Workshop</h1>
       ${notice}
       <p class="lede">The public face every test enters the world through: one address, one sender, one set of pages a stranger can trust. It does not exist yet.</p>
-      <div class="pair"><form method="POST" action="/foundry/public-workshop/establish"><button class="btn yes" type="submit">Establish Apex Micro</button></form></div>
+      <div class="pair"><form method="POST" action="/foundry/public-workshop/establish"><button class="btn yes" type="submit">Establish ${APEX_MICRO.publicName}</button></form></div>
       <p class="quiet">This writes the Workshop's rows from the founding statement you approved. It reaches the world only when you stand it up.</p>`;
     return c.html(page('Workshop', body, 'foundry', frame));
   }

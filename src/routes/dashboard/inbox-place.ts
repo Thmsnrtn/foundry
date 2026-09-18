@@ -46,6 +46,8 @@ inboxRoutes.get('/foundry/inbox', async (c: any) => {
   const health = await mailHealth(founderId);
   const { correspondenceHealth } = await import('../../services/public-workshop/correspondence.js');
   const speaking = await correspondenceHealth(founderId);
+  const { publicWorkshopOf } = await import('../../services/public-workshop/settings.js');
+  const voice = (await publicWorkshopOf(founderId))?.publicName ?? 'the Workshop';
   const done = String(c.req.query('done') ?? '');
 
   // A COMMUNICATIONS MEMBRANE, NOT A MAIL CLIENT. What rises is what needs
@@ -66,7 +68,7 @@ inboxRoutes.get('/foundry/inbox', async (c: any) => {
   const body = html`
     <h1>Inbox</h1>
     ${done ? html`<p class="noticed">Recorded.</p>` : ''}
-    <p class="lede">What people wrote to Apex Micro, and what Foundry made of it. Your own mailbox is untouched; this is the institution's reading, not a copy of your email.</p>
+    <p class="lede">What people wrote to ${voice}, and what Foundry made of it. Your own mailbox is untouched; this is the institution's reading, not a copy of your email.</p>
 
     <section class="panel mode-panel" aria-label="Correspondence mode">
       <header><h2>${mark('mail')}Correspondence mode</h2><span class="dim">${speaking.answered} answered · ${speaking.sent} sent · ${speaking.escalated} left for you${speaking.failed ? ` · ${speaking.failed} failed to send` : ''}</span></header>

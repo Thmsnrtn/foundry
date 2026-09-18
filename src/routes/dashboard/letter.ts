@@ -1504,9 +1504,9 @@ letterRoutes.get('/letter', async (c) => {
           && !hasPendingCandidate && !fleetHasItems && !hasRecordedPerson
       && !stopped && !deletion ? html`
       <div class="card" style="padding:1.5rem;border:1px solid var(--accent);">
-        <div style="font-size:1.05rem;color:var(--text-primary);font-weight:600;">Welcome — let's get your first signal.</div>
+        <div style="font-size:1.05rem;color:var(--text-primary);font-weight:600;">Nothing recorded yet.</div>
         <div style="font-size:0.88rem;color:var(--text-muted);margin-top:0.5rem;line-height:1.55;">
-          This letter is where your AI team reports in each morning. It's empty because there's no data yet — that's expected on day one. Two things bring it to life:
+          This is the record. It fills as Foundry looks, decides and acts; it is empty because there is no data yet. Two things bring it to life:
         </div>
         <div style="margin-top:0.85rem;display:flex;flex-direction:column;gap:0.5rem;">
           <!-- THE MOST IMPORTANT LINK IN THE PRODUCT POINTED AT A PAGE THAT

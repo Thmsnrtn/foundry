@@ -236,7 +236,7 @@ settingsRoutes.get('/settings', async (c) => {
       <p style="font-size:0.8rem;color:var(--text-muted);margin:0.25rem 0 0.75rem;">
         The loudest channel Foundry may ever use. It can go quieter than this on
         its own — when you are strained, it does — but never louder. Push is the
-        only tier that interrupts your life.
+        only channel that interrupts your life.
       </p>
       <form method="POST" action="/settings/interruption-ceiling" style="display:flex;gap:0.5rem;flex-wrap:wrap;">
         ${(['log', 'letter', 'notification', 'push'] as const).map((ch) => html`
@@ -293,7 +293,7 @@ settingsRoutes.get('/settings', async (c) => {
       <h3>Metric Ingest</h3>
       <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
         A secret URL your tools can POST to — Stripe webhooks, Zapier, cron jobs, or your own pipeline.
-        Foundry maps the fields to your metrics and recomputes Signal automatically.
+        Foundry maps the fields to your metrics and reads them on its next pass.
         No login required; the URL is the secret.
       </p>
       ${ingestToken ? html`

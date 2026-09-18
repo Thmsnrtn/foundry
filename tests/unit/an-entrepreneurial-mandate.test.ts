@@ -383,6 +383,9 @@ describe('the owner walks it', () => {
       await next();
     });
     app.route('/', foundryShellRoutes as never);
+    // Discover lives in the place router; the walk reads it for what he looked for before.
+    const { placeRoutes } = await import('../../src/routes/dashboard/places.js');
+    app.route('/', placeRoutes as never);
     const res = await app.request(path, body == null ? undefined : {
       method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body,
     });
@@ -474,9 +477,13 @@ describe('the owner walks it', () => {
 
   it('remembers what he looked for before', async () => {
     await stopMandate(OWNER, 'the owner said to stop');
+    // History is evidence, not navigation: the first screen no longer carries
+    // it, and Discover keeps every earlier search with what was rejected and why.
     const home = await asOwner('/foundry');
-    expect(home.text).toContain('What you have looked for before');
-    expect(home.text).toContain('not starting from nothing');
+    expect(home.text).not.toContain('What you have looked for before');
+    const discover = await asOwner('/foundry/searching');
+    expect(discover.text).toContain('Earlier searches');
+    expect(discover.text).toContain('add a new micro-SaaS venture');
   });
 
   it('stops when he says stop, and keeps what it learned', async () => {

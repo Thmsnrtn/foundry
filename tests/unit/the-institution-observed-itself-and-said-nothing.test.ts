@@ -124,7 +124,7 @@ describe('a company nothing has observed', () => {
   it('still gets the first-run welcome', async () => {
     const body = await letterFor(UNTOUCHED, OTHER_OWNER);
     expect(body).toContain('Untouched Co');
-    expect(body).toContain('get your first signal');
+    expect(body).toContain('Nothing recorded yet');
     expect(body).toContain('no data yet');
   });
 });

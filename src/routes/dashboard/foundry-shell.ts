@@ -144,6 +144,13 @@ export function count(n: number, singular: string, plural = singular + 's'): str
   return `${n} ${n === 1 ? singular : plural}`;
 }
 
+/** A daily ceiling as the thinking door reads it from this deployment, in dollars a day. */
+const dollarsADay = (raw: string | undefined, dflt: number): string => {
+  const cents = Number.parseInt(raw ?? String(dflt), 10);
+  const c = Number.isFinite(cents) ? cents : dflt;
+  return `$${(c / 100).toFixed(c % 100 === 0 ? 0 : 2)} a day`;
+};
+
 // ─── state ──────────────────────────────────────────────────────────────────
 
 export interface OwnerState {
@@ -2431,8 +2438,8 @@ foundryShellRoutes.get('/foundry', async (c) => {
   const health = await healthOf(s.ownerId);
   const estate: { word: string; cls: 'ok' | 'watch' | 'bad'; detail: string } =
     health.state === 'blocked' ? { word: health.word, cls: 'bad', detail: health.ownerAction ?? health.failed[0] ?? 'something it needs is missing' }
-      : health.state === 'degraded' ? { word: health.word, cls: 'watch', detail: health.recovering === 'automatically' ? 'nothing is lost; recovering on its own' : health.ownerAction ?? 'needs a look' }
-        : { word: 'Healthy', cls: 'ok', detail: s.watching.real > 0 ? 'looking after what you own' : 'nothing to look after yet' };
+      : health.state === 'degraded' ? { word: health.word, cls: 'watch', detail: health.recovering === 'automatically' ? 'recovering on its own' : health.ownerAction ?? 'needs a look' }
+        : { word: 'Healthy', cls: 'ok', detail: s.watching.real > 0 ? `${count(s.watching.real, 'company', 'companies')} watched` : 'nothing to watch yet' };
   // NOW AND NEXT, from the records. Now is what the live test is doing; Next is
   // when the hand passes again. Neither is a forecast.
   const nextPass = new Date(health.nextPass ?? Date.now());
@@ -2488,11 +2495,11 @@ foundryShellRoutes.get('/foundry', async (c) => {
         <a class="door" href="/foundry/charter" aria-label="The charter"></a></div>
       <div class="tile door"><dt class="k">${mark('owner')}Needs you</dt>
         <dd class="v">${needsN === 0 ? html`<span class="state quiet none">None</span>` : html`<span class="state watch">${String(needsN)}</span>`}</dd>
-        <dd class="d">${needsN === 0 ? 'nothing is waiting on you' : needsN === 1 ? 'one decision is yours' : 'decisions are yours'}</dd>
+        <dd class="d">${needsN === 0 ? 'none waiting' : needsN === 1 ? 'one decision' : `${String(needsN)} decisions`}</dd>
         <a class="door" href="${needsN === 0 ? '/foundry/decisions' : '#the-one-thing'}" aria-label="Decisions"></a></div>
       <div class="tile door"><dt class="k">${mark('experiment')}${live ? 'Experiment' : 'Experiments'}</dt>
         <dd class="v">${live ? html`<span class="state ${live.state === 'running' ? 'ok' : 'watch'}">${live.stateLabel}</span>` : html`<span class="state quiet none">None</span>`}</dd>
-        <dd class="d">${live ? `${String(live.exposure.sent)} of ${String(live.exposure.approved)} written to · ${String(live.exposure.delivered)} delivered · ${String(live.money.payments)} paid` : 'nothing is running or being tested'}</dd>
+        <dd class="d">${live ? `${String(live.exposure.sent)} of ${String(live.exposure.approved)} written to` : 'nothing running'}</dd>
         <a class="door" href="${live ? `/foundry/experiments/${live.id}` : '/foundry/experiments'}" aria-label="${live ? live.title : 'Experiments'}"></a></div>
       <!-- THIS TILE SHOWED GROSS AND CALLED IT "Settled".
            The figure it drew is what buyers were charged for tests. It is not what is
@@ -2506,12 +2513,12 @@ foundryShellRoutes.get('/foundry', async (c) => {
       <div class="tile door"><dt class="k">${mark('cash')}Yours</dt>
         <dd class="v">${yours.figure.cents === null ? html`<span class="unknown">not known</span>`
     : html`${money(yours.figure.cents)}${yours.figure.quality === 'estimated' ? html` <span class="dim">est.</span>` : ''}`}</dd>
-        <dd class="d">${paidCents > 0 ? `of ${money(paidCents)} charged` : 'nothing has been paid for yet'}</dd>
+        <dd class="d">${paidCents > 0 ? `of ${money(paidCents)} charged` : 'nothing paid yet'}</dd>
         <a class="door" href="/foundry/money" aria-label="Money"></a></div>
       <div class="tile door"><dt class="k">${mark('watching')}Watching</dt>
         <dd class="v">${String(s.watching.real)} <span class="dim">${s.watching.real === 1 ? 'company' : 'companies'}</span></dd>
-        <dd class="d">${s.watching.real === 0 ? 'name one and I will start'
-    : glance.concentration ?? (s.watching.real > 1 ? 'no two depend on the same thing' : s.watching.itself ? 'and myself' : 'all of my attention is on it')}</dd>
+        <dd class="d">${s.watching.real === 0 ? 'name one to start'
+    : glance.concentration ? 'a shared dependency' : s.watching.real > 1 ? 'no shared dependency' : s.watching.itself ? 'and myself' : 'all my attention'}</dd>
         <a class="door" href="/foundry/companies" aria-label="Portfolio"></a></div>
     </dl>`;
 
@@ -2613,8 +2620,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
   const quietPanel = attention === null ? html`<section class="panel calm" aria-label="No owner action required">
       <p class="act">Owner action</p>
       <h2>${needsN === 0 ? 'None required' : `${String(needsN)} waiting`}</h2>
-      <p class="quiet">${needsN === 0 ? 'Nothing is waiting on your judgment. What is happening is on this screen; what happened is one tap away.'
-    : 'Nothing is asking for you first, and what is waiting is listed below.'}</p>
+      <p class="quiet">${needsN === 0 ? 'Nothing is waiting on your judgment.' : 'Nothing asks for you first; the rest is listed below.'}</p>
       ${needsN === 0 ? html`<p class="lines"><span class="state ${estate.cls}">Estate ${estate.word.toLowerCase()}</span> <span class="state ${autonomy.nothingWithoutHim ? 'ok' : 'watch'}">Autonomy ${autonomy.nothingWithoutHim ? 'asks first' : 'within grants'}</span></p>` : ''}
     </section>` : '';
 
@@ -2730,21 +2736,18 @@ foundryShellRoutes.get('/foundry', async (c) => {
     ${s.notLooking && s.watching.real === 0 && s.watching.invented === 0
     ? html`<div class="know">
       <h2>You have not told me about anything you own</h2>
-      <p class="lede">Name one and I will start paying attention to it. That is all it
-        does &mdash; it does not connect anything or let me act.</p>
+      <p class="lede">Name one and I start paying attention to it; nothing is connected and nothing acts.</p>
       <form class="inline" method="POST" action="/foundry/companies">
         <input type="text" name="name" required maxlength="80" enterkeyhint="done"
           autocapitalize="words" autocorrect="off" spellcheck="false"
           placeholder="What is it called?" aria-label="The name of a company you own" />
         <button class="btn go" type="submit">Add it</button>
       </form>
-      <p class="quiet">Or see what I do with one first &mdash; there are companies I made
-        up on your <a href="/foundry/companies">Portfolio</a>.</p>
+      <p class="quiet">Or <a href="/foundry/companies#rehearsal">see what I do with one first</a>.</p>
     </div>`
     : s.notLooking ? html`<div class="know">
       <h2>I am not looking for anything</h2>
-      <p class="lede">Say what you want and I will start looking. One sentence &mdash;
-        what you are after, and anything I should not do.</p>
+      <p class="lede">One sentence: what you are after, and anything I should not do.</p>
       <form class="inline" method="POST" action="/foundry/ask">
         <input type="text" name="said" required maxlength="300"
           placeholder="Find another small income stream. Keep legal risk low."
@@ -2769,31 +2772,11 @@ foundryShellRoutes.get('/foundry', async (c) => {
         it finds is a fact about any real market, and none of it can ever be counted or
         acted on.</p>` : ''}
       <p>${s.search.statement} <a class="why" href="/foundry/searching">Everything about this search</a></p>
-      ${s.search.guidance.length ? html`<ul>${raw(s.search.guidance.map((g) =>
-    `<li>${g}</li>`).join(''))}</ul>` : ''}
       ${s.search.blocked ? html`<p class="quiet"><strong>Where it has got to:</strong>
-        ${s.search.blocked}</p>
-        <p class="quiet">What I would need: ${s.search.wouldNeed}</p>`
+        ${s.search.blocked}</p>`
     : html`<p class="quiet">${s.search.looked} looked at,
-        ${s.search.rejected} rejected, ${s.search.open} still open.</p>
-      <p class="quiet"><strong>What I am looking through</strong> —
-        ${s.search.seeingThrough.join('; ')}.</p>
-      ${s.search.stillDark.length ? html`<p class="gap"><strong>And what I still
-        cannot see</strong> — ${s.search.stillDark.join('; ')}.</p>` : ''}`}
-      ${!s.search.another.recommend ? html`<p class="gap"><strong>I do not
-        recommend adding another venture right now.</strong>
-        ${s.search.another.because}</p>` : ''}
-      ${s.search.another.concentrations.length ? html`<div class="quiet">
-        <p><strong>What a single thing going wrong could take out</strong></p>
-        <ul>${raw(s.search.another.concentrations.map((con) =>
-    `<li>${con}</li>`).join(''))}</ul></div>` : ''}
-      ${s.search.brief ? html`<p class="quiet">${s.search.brief}</p>` : ''}
+        ${s.search.rejected} rejected, ${s.search.open} still open.</p>`}
       ${s.search.privately ? html`<p class="quiet">${s.search.privately}</p>` : ''}
-      ${s.search.needs.length ? html`<p class="quiet"><strong>What the portfolio
-        needs</strong> — ${s.search.needs.join('; ')}.</p>` : ''}
-      ${s.search.decided.length ? html`<div class="quiet">
-        <p><strong>Already decided about</strong></p>
-        <ul>${s.search.decided.map((d) => html`<li>${d}</li>`)}</ul></div>` : ''}
       ${(() => {
     // WORK IN PROGRESS IS A COUNT, NOT A DOSSIER.
     //
@@ -2856,14 +2839,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
       </div>`)}
     </div></details>` : ''}
 
-    ${!s.search && s.pastSearches.length ? html`<div class="know">
-      <h2>What you have looked for before</h2>
-      <ul>${raw(s.pastSearches.map((p) =>
-    `<li>&ldquo;${p.statement}&rdquo; — stopped ${p.closedAt}${p.why ? `, ${p.why}` : ''}.</li>`)
-    .join(''))}</ul>
-      <p class="quiet">If you ask again I am not starting from nothing: what I rejected, and
-        why, is still here.</p>
-    </div>` : ''}
+    ${/* What he looked for before is on Discover, under "Earlier searches"; the first screen does not carry history. */ ''}
 
     ${done ? whatJustHappened(done, s) : ''}
 
@@ -3412,8 +3388,8 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
       <a class="btn" href="/foundry?q=${encodeURIComponent('Where should the next dollar go?')}">Ask</a>
     </div>` : ''}
 
-    <div class="know" style="margin-top:var(--s5)">
-      <h2>Companies I made up</h2>
+    <details class="fold" id="rehearsal" style="margin-top:var(--s5)"><summary><h2>Companies I made up</h2><span class="gist">rehearsal, never counted</span></summary>
+    <div class="know">
       <p class="quiet">You should not have to hand me a real business to find out what I do
         with one. These are invented. I run them exactly as I would run yours — same
         numbers, same judgement, same ladder — and nothing I learn from them can ever be
@@ -3430,7 +3406,7 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
           <input type="hidden" name="scenario" value="${sc.key}" />
           <button class="btn" type="submit">Show me ${sc.situation}</button>
         </form>`).join(''))}
-    </div>`;
+    </div></details>`;
 
   return c.html(page('Portfolio', body, 'companies', frame));
 });
@@ -5863,18 +5839,14 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
         <dt>Owner action</dt><dd>${health.ownerAction ?? 'none'}</dd>
         <dt>Last healthy</dt><dd>${health.lastHealthy ? health.lastHealthy.slice(0, 16).replace('T', ' ') : 'not recorded'}</dd>
       </dl>
-      <!-- THE SAME QUESTION ASKED ABOUT TIME RATHER THAN AUTHORITY. This page
-           says what I may do; that one says what would still be true if you
-           did not come back for three months, and what thinking costs. -->
-      <p class="quiet"><a href="/foundry/absence">If you stepped away &mdash; seven,
-        thirty and ninety days</a></p>`)}
+      <p class="quiet"><a href="/foundry/absence">If you stepped away</a></p>`)}
 
     ${card('autonomy', 'What I may do on my own', html`
       <p class="lines"><span class="state ${autonomy.nothingWithoutHim ? 'ok' : 'watch'}">${autonomy.nothingWithoutHim ? 'Asks first' : 'Granted'}</span></p>
       <p>${autonomy.sentence}</p>
-      ${autonomy.nothingWithoutHim ? html`<p class="quiet">Each of those would be something you
+      ${autonomy.nothingWithoutHim ? html`<details class="fold"><summary><h3>How this works</h3></summary><p class="quiet">Each of those would be something you
         allow separately, for a set time, and could take back whenever you wanted. I ask on the
-        front page when I have earned the right to.</p>` : ''}
+        front page when I have earned the right to.</p></details>` : ''}
       ${autonomy.companies.length === 0 ? '' : html`<ul class="reach">${autonomy.companies.map((r) => html`<li>
         <b>${r.name}</b> — ${r.sentence}
         ${r.allowance ? html`<span class="quiet">$${(r.allowance.remainingCents / 100).toFixed(2)} of
@@ -5903,22 +5875,22 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
       ${spentPct !== null ? html`<span class="prog" role="img" aria-label="${String(spentPct)}% of the monthly limit"><i style="width:${String(Math.max(2, spentPct))}%"></i></span><p class="prog-n">$${String(s.budgetMonthly)} a month is the limit you set for ${s.companyName} · ${String(spentPct)}% used</p>`
     : html`<p class="quiet">You have not set a monthly limit for ${s.companyName}. The daily ceilings below are what actually stops me.</p>`}
       <dl class="facts">
-        <dt>Per company</dt><dd>I stop thinking at $2 a day</dd>
-        <dt>Everything</dt><dd>$5 a day</dd>
+        <dt>Per company</dt><dd>I stop thinking at ${dollarsADay(process.env.AI_DAILY_COST_CEILING_CENTS, 2500)}</dd>
+        <dt>Everything</dt><dd>${dollarsADay(process.env.AI_DAILY_COST_CEILING_GLOBAL_CENTS, 50_000)}</dd>
         ${ceiling == null ? '' : html`<dt>Outside myself</dt><dd>$${(Number(ceiling.cents_per_month) / 100).toFixed(2)} a month of metered use, ${ceilingSetByHim
     ? `set by you on ${String(ceiling.authorized_at).slice(0, 10)}`
     : html`set by <span class="mono">${String(ceiling.authorized_by)}</span> on ${String(ceiling.authorized_at).slice(0, 10)} &mdash; if that was not you, it is worth asking why`}</dd>`}
       </dl>
-      <p class="quiet">Watching costs nothing — comparing my own records uses no thinking.${ceiling == null ? '' : ' The metered ceiling is separate from any plan: agreeing to a subscription is not agreeing to unlimited computing.'}</p>`)}
+      <details class="fold"><summary><h3>How this works</h3></summary><p class="quiet">The ceilings are what actually stops me: the same numbers the thinking door reads from this deployment. Watching costs nothing — comparing my own records uses no thinking.${ceiling == null ? '' : ' The metered ceiling is separate from any plan: agreeing to a subscription is not agreeing to unlimited computing.'}</p></details>`)}
 
     ${card('watching', 'Connected to', s.connectedSenses.length === 0
     ? html`<p><strong>Nothing.</strong> I have no way to see your code, your money or your customers.</p>`
     : html`<ul>${raw(s.connectedSenses.map((x) => `<li>${x}</li>`).join(''))}</ul>`)}
 
     ${held.length === 0 ? '' : card('box', 'Things I hold', html`
-      <p class="quiet">Each of these is something you said I could have. Stopping one
+      <details class="fold"><summary><h3>How this works</h3></summary><p class="quiet">Each of these is something you said I could have. Stopping one
         stops me using it that day. It does not cancel anything you are paying for &mdash;
-        that lives in your account with them, and only you can end it.</p>
+        that lives in your account with them, and only you can end it.</p></details>
       ${held.map((h) => html`<div class="held">
         <p><strong>${h.whatItDoes}</strong> &mdash; ${h.provider}. ${h.costNote}</p>
         <form method="POST" action="/foundry/acquisitions/${h.id}/withdraw">
@@ -5926,10 +5898,12 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
         </form></div>`)}`)}
 
     ${workshop ? card('sent', 'The Workshop', html`
-      <p class="lines"><span class="state ${workshop.economicPause ? 'watch' : 'ok'}">${workshop.economicPause ? 'Paused' : 'Live'}</span> <span class="quiet">${workshop.zoneName}</span></p>
+      <p class="lines"><span class="state ${workshop.economicPause ? 'watch' : 'ok'}">${workshop.economicPause ? 'Paused' : 'Live'}</span> <span class="quiet">${workshop.zoneName} · speaks as ${workshop.publicName}</span></p>
+      ${workshop.economicPause ? html`<p class="quiet"><strong>New economic activity is paused</strong> since ${workshop.economicPause.at.slice(0, 10)}: ${workshop.economicPause.reason}. What is owed still goes out.</p>` : ''}
+      <details class="fold"><summary><h3>What I may do there</h3></summary>
       <p class="quiet">I may publish pages, deploy the one program that serves them, keep the Workshop's own DNS records, and forward its mail to you. Each change leaves a receipt with what was there before. I cannot transfer the domain, change its nameservers, delete a zone, or touch any other domain: those tools do not exist.</p>
-      <p class="quiet">${workshop.economicPause ? html`<strong>New economic activity is paused</strong> since ${workshop.economicPause.at.slice(0, 10)}: ${workshop.economicPause.reason}. What is owed still goes out.` : html`Tests write to strangers only as ${workshop.publicName}, from ${workshop.contactEmail}, pointing at a page I have read back from the world. Your name is on no public surface.`}</p>
-      <p class="quiet"><a href="/foundry/public-workshop">The Workshop</a></p>`) : ''}
+      <p class="quiet">Tests write to strangers only as ${workshop.publicName}, from ${workshop.contactEmail}, pointing at a page I have read back from the world. Your name is on no public surface.</p></details>
+      <p class="row"><a class="btn btn-sm" href="/foundry/public-workshop">The Workshop</a></p>`) : ''}
 
     ${card('stop', 'Owner exclusions', exclusions.length === 0
     ? html`<p class="quiet">No business, person or topic is excluded by name. An exclusion outranks every score, recommendation and opportunity.</p>`
@@ -5937,30 +5911,21 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
         <span class="quiet">Foundry will not contact this business under any circumstances${x.marks.length ? ` · ${String(x.marks.length)} ${x.marks.length === 1 ? 'mark' : 'marks'} on record` : ''}.</span></li>`)}</ul>`)}
 
     ${watching + beyondWatching === 0 ? '' : card('autonomy', 'Acting on its own', beyondWatching === 0
-    ? html`<p>Nothing. There ${watching === 1 ? 'is one kind' : `are ${count(watching, 'kind')}`}
-        of work I could in principle be allowed to do without asking &mdash; marketing,
-        reaching out, changing a product, answering a customer &mdash; and every one of
-        them is set to watching only. None has ever been anything else.</p>
-      <p class="quiet">There is no button here to change that, because changing it would
+    ? html`<p class="lines"><span class="state ok">Watching only</span> <span class="quiet">${count(watching, 'kind')} of work, none ever above it</span></p>
+      <details class="fold"><summary><h3>Why there is no button</h3></summary><p class="quiet">Marketing,
+        reaching out, changing a product, answering a customer: each is a kind of work I
+        could in principle be allowed to do without asking, and every one is set to
+        watching only. There is no button here to change that, because changing it would
         not do anything: the part of me that would act on such a grant is no longer
         running. If that comes back, this becomes a real choice and I will ask you for it
-        properly, one kind of work at a time.</p>`
+        properly, one kind of work at a time.</p></details>`
     : html`<p><strong>${count(beyondWatching, 'kind')} of work</strong> ${beyondWatching === 1 ? 'is' : 'are'}
         set above watching only, and ${count(watching, 'other')} ${watching === 1 ? 'is' : 'are'} not.
         This is worth reading closely &mdash; it says I may do something without asking.</p>`)}
 
     ${card('box', 'The rest of the controls', html`
-      <!-- THESE WERE REACHABLE ONLY FROM INSIDE THE LETTER.
-           Settings and Privacy govern what Foundry may do and what happens to
-           his data — the question this door exists to answer — but the only way
-           to either was a link in the middle of the Advanced depth, in the
-           other visual system. They render in this shell now and light this
-           door, so the geography matches what they are. -->
-      <p class="quiet">Settings holds how I speak to you, how loudly I may interrupt, how
-        often I run, the address your customers hear from, and the keys that let
-        anything act on this institution. Privacy holds consent, where the data lives, taking a copy, and
-        deleting it.</p>
-      <p class="row"><a class="btn btn-sm" href="/settings">Settings</a><a class="btn btn-sm" href="/privacy">Privacy and data</a></p>`)}
+      <p class="quiet">Settings holds how I speak to you, how often I run, and the keys that let anything act; Privacy holds consent, where the data lives, taking a copy, and deleting it.</p>
+      <p class="row"><a class="btn btn-sm" href="/settings">Settings</a><a class="btn btn-sm" href="/privacy">Privacy and data</a><a class="btn btn-sm" href="/foundry/workshop">The isolated workshop</a></p>`)}
     </div>`;
 
   const controlsFrame: Where = {
