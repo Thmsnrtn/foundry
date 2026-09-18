@@ -3224,9 +3224,33 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       const owners = (await query('SELECT founder_id FROM public_workshop')).rows as unknown as Array<Record<string, unknown>>;
       const { syncOptOutsFromStore } = await import('../services/public-workshop/suppression.js');
       const { workshopHealth } = await import('../services/public-workshop/infrastructure.js');
+      const { publishSite } = await import('../services/public-workshop/publication.js');
       for (const o of owners) {
         const founderId = String(o.founder_id);
         const opt = await syncOptOutsFromStore(founderId);
+        // THE WORLD SAYS WHAT THE RECORD SAYS. A page is rendered from rows,
+        // and rows change — the Workshop's own statement did, by migration —
+        // while the world kept serving the page as it was the day somebody
+        // pressed publish. Re-rendering every hour and putting up only what
+        // differs closes that gap without a button: an unchanged page is a
+        // no-op by digest, and every change leaves the receipt it always did.
+        // Only a Workshop that is already standing is kept; one that has never
+        // been published is not put up behind the owner's back.
+        const live = (await query(
+          `SELECT COUNT(*) AS n FROM public_publications WHERE founder_id = ? AND superseded_at IS NULL`,
+          [founderId])).rows[0] as Record<string, unknown>;
+        if (Number(live.n) > 0) {
+          try {
+            const site = await publishSite(founderId, 'institution:public_workshop_tick');
+            if (site.published.length > 0 || site.failed.length > 0) {
+              logger.info(`public_workshop_tick: ${founderId} republished ${site.published.join(', ') || 'nothing'}${site.failed.length ? `; failed ${site.failed.map((f) => `${f.path} (${f.reason})`).join(', ')}` : ''}`,
+                { jobName: 'public_workshop_tick' });
+            }
+          } catch (err) {
+            logger.warn(`public_workshop_tick: ${founderId} could not republish: ${err instanceof Error ? err.message : String(err)}`,
+              { jobName: 'public_workshop_tick' });
+          }
+        }
         const health = await workshopHealth(founderId);
         logger.info(`public_workshop_tick: ${founderId} opt-outs +${opt.recorded}, answers +${opt.continuations}, swept ${opt.swept}; site ${health.site.status}, cloudflare ${health.cloudflare.status}, sending ${health.sending.status}, inbox ${health.replyInbox.status}`,
           { jobName: 'public_workshop_tick', failing: health.pagesFailing, optOutFailures: opt.failed });

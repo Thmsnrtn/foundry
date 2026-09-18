@@ -176,6 +176,8 @@ describe('posting to a URL somebody else chose', () => {
       // host it could have claimed an exemption for, going through the guarded
       // path anyway.
       'src/services/venture/sources/community.ts',
+      // Every later eye reads through this one door, which reads through the guard.
+      'src/services/venture/sources/fetching.ts',
       'src/services/venture/sources/npm-registry.ts',
     ]);
   });

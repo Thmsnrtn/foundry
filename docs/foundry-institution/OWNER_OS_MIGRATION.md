@@ -2071,3 +2071,14 @@ without a key; SAM.gov needs a key; the Wikimedia API rate-limits an
 unnamed caller. Solicited eyes (owner-stated ideas, an ask-you page) belong
 with the owner surface. Each will be proposed as a capability acquisition when
 its key or page exists.
+
+### The world says what the record says — 18 September 2026
+
+The identity rule changed the Workshop's founding statement by migration and
+the public site kept serving the page as it was the day somebody pressed
+publish: the site was only re-rendered when the owner stood the Workshop up.
+The hourly Workshop tick now re-renders every page of a Workshop that is
+already standing and puts up only what differs, by digest, under the keeper
+principal it already publishes with. An unchanged page is a no-op; every
+change leaves the receipt it always did; a Workshop never published is not
+put up behind the owner's back.

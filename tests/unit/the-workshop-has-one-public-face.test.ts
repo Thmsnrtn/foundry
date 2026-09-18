@@ -604,6 +604,26 @@ describe('Allow publishes the page; offers point at it and go out as the Worksho
     await publishSite(OWNER, 'test');
     expect((await publicGet(`/experiments/${PROOF1_SLUG}`)).text).toContain('reframed before it settled');
   });
+
+  it('the world says what the record says: the hourly tick republishes a page whose rendering changed, and only that', async () => {
+    // The Workshop's own statement moved by migration, and the world kept
+    // serving the page as it was the day somebody pressed publish. Nobody
+    // should have to press anything: the tick re-renders and puts up what
+    // differs, by digest, under the principal it already publishes with.
+    const w = (await publicWorkshopOf(OWNER))!;
+    const versionsBefore = Number((await one('SELECT COUNT(*) AS n FROM public_publications WHERE founder_id = ? AND path = ?', [OWNER, '/about']))!.n);
+    await query("UPDATE public_workshop SET statement = 'Apex Micro is a small digital workshop in Massachusetts. The statement moved.' WHERE founder_id = ?", [OWNER]);
+    expect(state.cf.kv.get(w.kvNamespaceId!)!.get('page:/about')).not.toContain('The statement moved');
+    await JOB_REGISTRY.public_workshop_tick.fn();
+    expect(state.cf.kv.get(w.kvNamespaceId!)!.get('page:/about')).toContain('The statement moved');
+    expect((await publicGet('/about')).text).toContain('The statement moved');
+    const versionsAfter = Number((await one('SELECT COUNT(*) AS n FROM public_publications WHERE founder_id = ? AND path = ?', [OWNER, '/about']))!.n);
+    expect(versionsAfter).toBe(versionsBefore + 1);
+    expect(await one("SELECT published_by FROM public_publications WHERE founder_id = ? AND path = '/about' AND superseded_at IS NULL", [OWNER])).toMatchObject({ published_by: 'institution:public_workshop_tick' });
+    // Unchanged rendering, unchanged world: the next hour puts up nothing.
+    await JOB_REGISTRY.public_workshop_tick.fn();
+    expect(Number((await one('SELECT COUNT(*) AS n FROM public_publications WHERE founder_id = ? AND path = ?', [OWNER, '/about']))!.n)).toBe(versionsAfter);
+  });
 });
 
 describe('Experiment 002: the machinery rehearsed end to end', () => {
