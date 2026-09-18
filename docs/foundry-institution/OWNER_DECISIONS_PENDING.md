@@ -797,3 +797,36 @@ invent. Recorded at `/foundry/public-workshop`.
 
 Neither is a blocker to the token, and neither is something the readiness chain
 can retire on its own. Everything else that Allow needs, Allow supplies.
+
+---
+
+## PENDING 17 — Sign the charter; and the first line of the postal address: **OWNER** (2026-09-18)
+
+Two things only you can supply, and Foundry will invent neither. Both are on
+`/foundry/controls` and `/foundry/public-workshop`; nothing else is asked.
+
+**One: the charter.** Migration 319 and the constitution's amended "Ask me
+first" section give the institution standing authority to act inside an
+envelope you sign once: a monthly ceiling in cents, how many probes may be in
+flight, a daily thinking ceiling, and the sealed contact rules, for at most 92
+days, withdrawable at any moment with a reason. Until you sign, everything
+built this month runs up to the seal and stops there: the eyes look, seeds are
+promoted, the forge writes and attacks designs, and each design it would have
+sealed is left unsealed on its experiment's page with every reason, "no
+charter" among them, costing you nothing until you look — the old world, one
+experiment at a time, decided by hand. After you sign, a probe inside the envelope is sealed, made, placed on
+the Workshop's page and settled with no tap from you; a probe outside it still
+queues; legal and destructive acts still queue; "Stop everything" still halts
+all. The envelope's numbers are yours to choose; the plan you approved named
+about $100 a month and three probes in flight.
+
+**Two: the postal address.** The Workshop is the only public voice, by gate,
+but the postal address you typed at stand-up begins with your name, and the
+law wants a postal address on every page. Foundry does not rewrite an address
+you typed. If you would rather the pages name the Workshop and not you, change
+the first line on the Workshop page; if you are content, nothing needs doing.
+Either is a legitimate reading and only you can pick one.
+
+**What happens if neither is done:** nothing breaks, nothing is spent beyond
+today's ceilings, and the River of Nickels does not start flowing. Each
+design the forge finishes waits, unsealed, on its experiment's page.
