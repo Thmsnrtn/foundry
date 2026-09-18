@@ -556,7 +556,7 @@ async function main(): Promise<void> {
           fullPage: true,
         });
       }
-      if (!quiet && scale === 1 && width === 390) {
+      if (!quiet && !chartered && scale === 1 && width === 390) {
         // The home page, and the reference company's — the two the owner
         // actually looks at, and the second is the one whose disclosure has to
         // land before anything else on it does.
@@ -591,7 +591,7 @@ async function main(): Promise<void> {
           if (path === p) await page.screenshot({ path: `${dir}/${name}-390.png`, fullPage: true });
         }
       }
-      if (!quiet && path === '/foundry' && scale === 1 && width !== 390 && !desktop) {
+      if (!quiet && !chartered && path === '/foundry' && scale === 1 && width !== 390 && !desktop) {
         await page.screenshot({ path: `${dir}/foundry-${String(width)}.png`, fullPage: true });
       }
       // THE DESKTOP, AT ONE WIDTH, FOR THE THREE PAGES HE LIVES IN - so the two

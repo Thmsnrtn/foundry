@@ -49,6 +49,10 @@ beforeAll(async () => {
     await next();
   });
   app.route('/', foundryShellRoutes);
+  // Discover is where every candidate and every buried one renders now; the
+  // first screen quotes a stranger only for a candidate that earned attention.
+  const { placeRoutes } = await import('../../src/routes/dashboard/places.js');
+  app.route('/', placeRoutes);
 
   // A real search, and a real candidate carrying what the stranger wrote. The
   // door shows the sentence back first; the search opens on the confirm.
@@ -91,7 +95,7 @@ beforeAll(async () => {
 
 describe('what a stranger wrote, on his screen', () => {
   it('is shown as words, never as markup', async () => {
-    const body = await (await app.request('/foundry')).text();
+    const body = await (await app.request('/foundry/searching')).text();
     // It must appear — the whole point is that Foundry quotes the source.
     expect(body).toContain('A dataset of deadlines');
     // But as text. If this fails, a Hacker News comment is executing script in
@@ -99,10 +103,15 @@ describe('what a stranger wrote, on his screen', () => {
     expect(body).not.toContain(PAYLOAD);
     expect(body).not.toMatch(/<img src=x onerror/i);
     expect(body).toContain('&lt;img');
+    // And the first screen, which carries the search as one line, carries no
+    // markup from it either.
+    const home = await (await app.request('/foundry')).text();
+    expect(home).not.toContain(PAYLOAD);
+    expect(home).not.toMatch(/<img src=x onerror/i);
   });
 
   it('escapes every field of the card, not only the headline', async () => {
-    const body = await (await app.request('/foundry')).text();
+    const body = await (await app.request('/foundry/searching')).text();
     // One escaped occurrence per field that carries external text.
     const escaped = (body.match(/&lt;img src=x onerror/g) ?? []).length;
     expect(escaped).toBeGreaterThanOrEqual(2);

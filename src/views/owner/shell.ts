@@ -157,13 +157,17 @@ function companyBar(where: Where | null): H | '' {
   };
   const keyOf = (href: string): string => href.split('/').pop() ?? 'overview';
   const places = where.local.map((l) => ({ ...l, key: l.href.endsWith(where.scope.id ?? '') ? 'overview' : keyOf(l.href) }));
-  const shown = places.slice(0, 4);
-  const more = places.length > 4;
+  // FIVE HERE TOO: Portfolio, three dimensions, More. Six anchors in five
+  // tracks wrapped into a second row and grew the bar over the page's last
+  // lines. The dimensions behind More light it when one of them is the page.
+  const shown = places.slice(0, 3);
+  const behind = places.slice(3);
+  const moreOn = behind.some((l) => l.on);
   return html`<nav class="places company" aria-label="Within ${where.scope.name}"><div>
     <a href="/foundry/companies"><svg viewBox="0 0 24 24"><path d="M3 17c3-4 6 0 9-3s6 1 9-3"/><path d="M3 12c3-4 6 0 9-3s6 1 9-3"/></svg>Portfolio</a>
     ${shown.map((l) => html`<a href="${l.href}"${l.on ? raw(' class="on" aria-current="page"') : ''}>${raw(ICON[l.key] ?? ICON.overview ?? '')}${l.label}${
       l.count !== null && l.count > 0 ? html`<b>${String(l.count)}</b>` : ''}</a>`)}
-    ${more ? html`<a href="/foundry/companies/${where.scope.id ?? ''}#places"><svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="18" cy="12" r="1.5"/></svg>More</a>` : ''}
+    ${behind.length ? html`<a href="/foundry/companies/${where.scope.id ?? ''}#places"${moreOn ? raw(' class="on" aria-current="page"') : ''}><svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="18" cy="12" r="1.5"/></svg>More</a>` : ''}
   </div></nav>`;
 }
 

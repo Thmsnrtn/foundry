@@ -67,7 +67,9 @@ export const OWNER_SURFACE_SCRIPT =
   // So the bars measure themselves and the page reserves exactly that. The CSS
   // keeps its constant as the starting value, which is what a browser with no
   // script still gets.
-  + `  (function(){var a=document.querySelector('.ask'),n=document.querySelector('nav.places');`
+  // The bar that is shown: inside a company the first bar in the document is
+  // the hidden one and the company bar is the one over the page.
+  + `  (function(){var a=document.querySelector('.ask'),n=document.querySelector('nav.places:not(.behind)');`
   + `var r=document.documentElement;\n`
   + `    function m(){var H=window.innerHeight,h=0;[a,n].forEach(function(el){if(!el)return;`
   + `if(getComputedStyle(el).position!=='fixed')return;`
