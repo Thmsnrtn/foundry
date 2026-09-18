@@ -2499,3 +2499,31 @@ looked through, how many were set aside, candidates standing, tests running —
 and when the pipeline is genuinely empty it says that instead of dressing a
 zero up. Evidence is words, never a score: the only number on a candidate is
 how many different ways of knowing said something.
+
+## Steering the thing he is looking at (18 September 2026)
+
+He could always steer a search by typing a sentence. What he could not do was
+steer the candidate in front of him without describing it back to Foundry in
+prose, which is the owner doing the institution's clerical work.
+
+A candidate card now carries one primary action and one compact fold holding
+**at most four** nudges, chosen for that candidate: more of its kind, less of
+its kind, stay on this one, and a fourth read from the card itself — a cheaper
+test when a money question stands in the way, a different economic form when
+the hands cannot run that form's way of getting paid, otherwise the standing
+preference for things that do not need looking after. Never ten buttons: a row
+of controls under a candidate makes the decision harder, not the steering
+easier. Each button says what it will do before it is pressed.
+
+**Nothing new is written underneath.** Each nudge produces exactly the
+`venture_guidance` row the sentence-reader would have produced from the
+equivalent sentence, with its subject taken from the candidate's own recorded
+words — the economic form its own sentences put it under, never a category
+Foundry invented for it. So a nudge appears on Discover among the sentences he
+typed, and is readable, supersedable and arguable the same way. There is no
+hidden preference model and no second vocabulary.
+
+The route re-derives everything from the candidate and the open search: the
+form posts a candidate and a nudge key and nothing else. A nudge with no search
+running steers nothing and says so, rather than starting real work because a
+button was pressed under an old candidate.

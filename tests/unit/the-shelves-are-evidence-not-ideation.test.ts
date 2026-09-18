@@ -122,25 +122,53 @@ describe('with something found and believed', () => {
     expect(t).toContain('nothing yet deserves a test');
   });
 
-  it('a rehearsal candidate is never counted among things found about the world', async () => {
-    // The rehearsal search exists so he can watch the machinery work before a
-    // real market has ever answered. What it invents may never be counted as
-    // something found, which is the whole difference between a rehearsal and
-    // a shortcut. A reference candidate needs a reference search, so this
-    // closes the real one, opens that, and asks the shelves again.
-    const { currentMandate, openMandate, stopMandate } = await import('../../src/services/venture/mandate.js');
-    const real = await currentMandate(OWNER);
-    await stopMandate(OWNER, 'test');
-    const rehearsal = await openMandate({ founderId: OWNER, statement: 'A rehearsal', shape: null, evidenceMode: 'reference' });
-    if ('refused' in rehearsal) throw new Error(rehearsal.refused);
-    await query(
-      `INSERT INTO venture_opportunities (id, mandate_id, founder_id, headline, who_has_it, the_problem, why_it_might, kill_thesis, sources_json, evidence_mode)
-       VALUES ('sh_fake',?,?,'an invented api thing','nobody','invented','invented','invented','[]','reference')`,
-      [rehearsal.id, OWNER]);
+});
 
-    const found = (await shelfCandidates(OWNER)).flatMap((s) => s.candidates).map((k) => k.id);
-    expect(found).toEqual(['sh_opp']);
-    expect(real).not.toBeNull();
+describe('one tap can steer, and it writes what he would have typed', () => {
+  it('a card offers four ways to point and not ten', async () => {
+    const t = (await page('/foundry/experiments/explore')).text;
+    const card = t.slice(t.indexOf('shelf-card'), t.indexOf('</article>'));
+    expect(card).toContain('Steer the search');
+    // Four, chosen for this candidate: a money question stands in its way, so
+    // the fourth is the cheaper test rather than a standing preference.
+    expect(card.match(/name="nudge"/g)?.length).toBe(4);
+    expect(card).toContain('value="more_like"');
+    expect(card).toContain('value="less_like"');
+    expect(card).toContain('value="deeper"');
+    expect(card).toContain('value="cheaper_test"');
+    expect(card).not.toContain('value="low_support"');
+    // And each says what it will do before he presses it.
+    expect(card).toContain('I will keep working on this one rather than moving on.');
+  });
+
+  it('each nudge writes the guidance row the sentence-reader would have written', async () => {
+    const { steer } = await import('../../src/services/venture/nudges.js');
+    const said = await steer({ founderId: OWNER, opportunityId: 'sh_opp', nudge: 'more_like' });
+    expect(said).toEqual({ said: 'More like this: something other software calls' });
+    const rows = (await query(`SELECT kind, subject, statement, dimension FROM venture_guidance
+      WHERE founder_id = ? ORDER BY rowid`, [OWNER])).rows as unknown as Array<Record<string, unknown>>;
+    const last = rows[rows.length - 1];
+    expect(String(last?.kind)).toBe('favour');
+    // The subject is the candidate's own form, from its own recorded words.
+    expect(String(last?.subject)).toBe('something other software calls');
+
+    const support = await steer({ founderId: OWNER, opportunityId: 'sh_opp', nudge: 'low_support' });
+    expect('said' in support).toBe(true);
+    const after = (await query(`SELECT kind, subject, dimension FROM venture_guidance
+      WHERE founder_id = ? ORDER BY rowid`, [OWNER])).rows as unknown as Array<Record<string, unknown>>;
+    const prefer = after[after.length - 1];
+    expect(String(prefer?.kind)).toBe('prefer');
+    expect(String(prefer?.dimension)).toBe('support_burden');
+  });
+
+  it('and a nudge with no search running steers nothing rather than starting one', async () => {
+    const { stopMandate } = await import('../../src/services/venture/mandate.js');
+    const { steer } = await import('../../src/services/venture/nudges.js');
+    await stopMandate(OWNER, 'test');
+    const out = await steer({ founderId: OWNER, opportunityId: 'sh_opp', nudge: 'more_like' });
+    expect(out).toEqual({ refused: 'There is no search running to steer.' });
+    const open = (await query(`SELECT id FROM venture_mandates WHERE founder_id = ? AND closed_at IS NULL`, [OWNER])).rows;
+    expect(open.length).toBe(0);
   });
 });
 
@@ -157,5 +185,26 @@ describe('Now and Explore are two questions', () => {
     expect(t).toContain('action="/foundry/ask"');
     expect(t).toContain('placeholder="Explore something new"');
     expect(t).toContain('You name the direction. Working out what would test it is mine.');
+  });
+});
+
+describe('a rehearsal is never a finding', () => {
+  it('a rehearsal candidate is never counted among things found about the world', async () => {
+    // The rehearsal search exists so he can watch the machinery work before a
+    // real market has ever answered. What it invents may never be counted as
+    // something found, which is the whole difference between a rehearsal and
+    // a shortcut. A reference candidate needs a reference search, so this
+    // closes the real one, opens that, and asks the shelves again.
+    const { openMandate, stopMandate } = await import('../../src/services/venture/mandate.js');
+    await stopMandate(OWNER, 'test');
+    const rehearsal = await openMandate({ founderId: OWNER, statement: 'A rehearsal', shape: null, evidenceMode: 'reference' });
+    if ('refused' in rehearsal) throw new Error(rehearsal.refused);
+    await query(
+      `INSERT INTO venture_opportunities (id, mandate_id, founder_id, headline, who_has_it, the_problem, why_it_might, kill_thesis, sources_json, evidence_mode)
+       VALUES ('sh_fake',?,?,'an invented api thing','nobody','invented','invented','invented','[]','reference')`,
+      [rehearsal.id, OWNER]);
+
+    const found = (await shelfCandidates(OWNER)).flatMap((s) => s.candidates).map((k) => k.id);
+    expect(found).toEqual(['sh_opp']);
   });
 });

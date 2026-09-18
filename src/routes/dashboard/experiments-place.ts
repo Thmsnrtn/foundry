@@ -12,7 +12,7 @@
 import { Hono } from 'hono';
 import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
-import { count, page, placeHead } from './foundry-shell.js';
+import { count, page, placeHead, steerFold } from './foundry-shell.js';
 import { mark } from '../../views/owner/shell.js';
 import type { Where } from './foundry-shell.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
@@ -188,12 +188,14 @@ experimentRoutes.get('/foundry/experiments/explore', async (c: any) => {
       live.length > 0 ? `${count(live.length, 'test')} running` : 'nothing yet deserves a test',
     ].filter((x): x is string => x !== null).join(' · ');
 
+  const cannotTest = new Set(shelves.filter((sh) => sh.cannotTestYet !== null).map((sh) => sh.key));
   const card = (k: ShelfCandidate) => html`<article class="item shelf-card">
     <p><strong>${k.headline}</strong></p>
     <p class="quiet">${k.whoHasIt} — ${k.theProblem}</p>
     <p class="shelf-ev"><span class="pill${k.stances >= 2 ? ' ok' : ''}">${k.evidence}</span>${k.because ? html` <span class="dim">filed here by &ldquo;${k.because}&rdquo; in ${k.where}</span>` : ''}</p>
     <p class="quiet">${k.blockedBy ? html`<b>In the way:</b> ${k.blockedBy}` : html`<b>Strongest reason it fails:</b> ${k.killThesis}`}</p>
     <p><a class="btn" href="/foundry/why/candidate/${k.id}">Explore ${mark('arrow')}</a></p>
+    ${steerFold(k.id, { blockedBy: k.blockedBy, cannotTestYet: cannotTest.has(k.form) }, 'explore')}
   </article>`;
 
   const w = where(null, 'explore', { now: live.length, found });

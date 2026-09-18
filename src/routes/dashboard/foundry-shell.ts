@@ -46,6 +46,7 @@ import { OWNER_SURFACE_SCRIPT } from '../../lib/owner-surface-script.js';
 import { log as logger } from '../../lib/logger.js';
 import { reportError } from '../../lib/error-reporter.js';
 import { LAYER_IN_PLAIN_WORDS, layerOf } from '../../lib/repository-layers.js';
+import { nudgesFor } from '../../services/venture/nudges.js';
 import type { CompanyPlace, DimensionKey } from '../../services/founder/place.js';
 
 export const foundryShellRoutes = new Hono();
@@ -140,6 +141,32 @@ export const LADDER_IN_PLAIN_WORDS: Record<string, string> = {
 };
 
 /** "1 thing" / "2 things". "2 thing(s)" is machinery showing through. */
+/**
+ * FOUR WAYS TO POINT, FOLDED AWAY UNTIL HE WANTS THEM.
+ *
+ * One primary action and one compact fold, never a row of ten buttons: a
+ * candidate card is where he decides, and a control panel under it would make
+ * the decision harder rather than the steering easier. Each button says what
+ * it will do before he presses it, because a nudge writes a durable sentence
+ * into a running search.
+ */
+export function steerFold(
+  candidateId: string, about: { blockedBy: string | null; cannotTestYet: boolean },
+  back: 'home' | 'explore',
+): HtmlEscapedString | Promise<HtmlEscapedString> {
+  const options = nudgesFor(about);
+  return html`<details class="fold steer">
+    <summary><span class="gist">Steer the search</span></summary>
+    ${options.map((n) => html`<form method="POST" action="/foundry/venture/steer">
+      <input type="hidden" name="opportunityId" value="${candidateId}" />
+      <input type="hidden" name="nudge" value="${n.key}" />
+      <input type="hidden" name="back" value="${back}" />
+      <button class="btn" type="submit">${n.label}</button>
+      <span class="quiet">${n.what}</span>
+    </form>`)}
+  </details>`;
+}
+
 export function count(n: number, singular: string, plural = singular + 's'): string {
   return `${n} ${n === 1 ? singular : plural}`;
 }
@@ -2753,6 +2780,9 @@ foundryShellRoutes.get('/foundry', async (c) => {
       something changes.</p></div>` : ''}
     ${done === 'stillintheway' ? html`<div class="done"><p><strong>Not yet.</strong>
       Something is still in the way — it is on the candidate.</p></div>` : ''}
+    ${done === 'nosearchtosteer' ? html`<div class="done"><p><strong>Nothing to steer.</strong>
+      There is no search running, and I will not start one because you pressed a button
+      under an old candidate.</p></div>` : ''}
     ${done === 'pointedsearch' ? html`<div class="done"><p><strong>Pointed that way.</strong>
       One search at a time, so I took your direction as a preference on the one already
       running rather than starting a second.</p></div>` : ''}
@@ -2873,6 +2903,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
             <button class="btn" type="submit">Bury this one</button>
           </form>
         </div>
+        ${steerFold(cand.id, { blockedBy: cand.blockedBy, cannotTestYet: false }, 'home')}
       </div>`)}
     </div></details>` : ''}
 
@@ -4841,6 +4872,33 @@ foundryShellRoutes.post('/foundry/venture/reject',
       revisitIf: String(form.revisitIf ?? '').trim() || null,
     });
     return c.redirect('/foundry?done=rejected');
+  });
+
+/**
+ * STEERING THE THING HE IS LOOKING AT.
+ *
+ * He could always steer by typing a sentence. What he could not do was steer
+ * the candidate in front of him without describing it back to Foundry in
+ * prose, which is the owner doing the institution's clerical work.
+ *
+ * Nothing new is written. Each nudge produces exactly the `venture_guidance`
+ * row the sentence-reader would have produced, with its subject taken from the
+ * candidate's own recorded words, and it appears on Discover among the
+ * sentences he typed — readable, supersedable and arguable the same way.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/venture/steer',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const form = await c.req.parseBody();
+    const opportunityId = String(form.opportunityId ?? '').trim();
+    const nudge = String(form.nudge ?? '').trim();
+    const back = String(form.back ?? '') === 'explore' ? '/foundry/experiments/explore' : '/foundry';
+    if (!opportunityId || !nudge) return c.redirect(back);
+    const { steer } = await import('../../services/venture/nudges.js');
+    const out = await steer({ founderId: String(founder.id), opportunityId, nudge });
+    return c.redirect(`${back}?done=${'refused' in out ? 'nosearchtosteer' : 'steeredsearch'}`);
   });
 
 // ─── being asked ────────────────────────────────────────────────────────────

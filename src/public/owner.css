@@ -1794,3 +1794,10 @@ details.fold.shelf{border-top:1px solid var(--line)}
 .shelf-card p:last-child{margin-bottom:0}
 .shelf-ev{display:flex;flex-wrap:wrap;gap:.4rem;align-items:baseline}
 .shelf-ev .pill.ok{border-color:var(--v3-mint);color:var(--v3-mint)}
+
+/* STEERING, FOLDED AWAY. One primary action on a card and one fold beneath it:
+   a row of ten buttons is a control panel, not agency. */
+details.fold.steer{border-top:0;margin-top:.4rem}
+.fold.steer>summary{min-height:44px;padding:.35rem 0;color:var(--ink-2);font-size:.9rem}
+.fold.steer form{display:flex;flex-wrap:wrap;gap:.5rem;align-items:baseline;margin:0 0 .45rem}
+.fold.steer form .quiet{flex:1 1 12rem;min-width:0;font-size:.85rem}
