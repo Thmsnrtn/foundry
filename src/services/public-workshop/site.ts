@@ -35,7 +35,7 @@ export const PUBLIC_FILES = ['/robots.txt', '/sitemap.xml'] as const;
  */
 export const UNINDEXED: ReadonlySet<string> = new Set(['/email', '/email/done', '/thank-you', '/404']);
 const INDEXED_PATHS: readonly PublicPath[] = PUBLIC_PATHS.filter((x) => !UNINDEXED.has(x));
-/** JSON inside a <script>: the one sequence that could close the element is escaped. */
+/** JSON inside a script element: the one sequence that could close the element is escaped. */
 const jsonLd = (v: unknown): string => JSON.stringify(v).replace(/<\//g, '<\\/');
 
 const CSS = `
