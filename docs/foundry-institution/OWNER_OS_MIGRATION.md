@@ -2216,3 +2216,14 @@ posts, directories, small paid tests — is the rest of this tranche. The
 postal address the owner typed names him on every public page; the Workshop
 page now says so and where to change it. Foundry does not rewrite an address
 he typed.
+
+### The steward keeps a brief fresh — 18 September 2026
+
+A brief that is live, or about to be, and older than the freshness rule
+allows is re-pulled at the head of the hand's hourly pass from the rows the
+eyes keep pulling, through the same gate, and only when newer rows exist:
+re-rendering the same pull is not freshness and would put a new date on an
+old edition. A refresh that fails its gate is said so and the old edition
+stands until the rule stops it being sent. Retirement by rule already runs
+on its own schedule; this is the other half of stewardship for the first
+kind of thing the hands make.

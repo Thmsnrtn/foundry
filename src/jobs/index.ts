@@ -3184,6 +3184,13 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       // Nothing here spends beyond the asset's allowance or writes to anyone
       // the owner did not approve; the plan guard on outbound_actions is the
       // authority, not this job.
+      // THE STEWARD FIRST: a brief going stale is re-pulled before the hand
+      // would send it, so the freshness rule stops nothing that rows could
+      // have kept fresh.
+      const { refreshStaleBriefs } = await import('../services/venture/products/registry.js');
+      for (const r of await refreshStaleBriefs()) {
+        logger.info(`experiment_hand_tick: brief ${r.experimentId} ${r.refreshed ? 'refreshed' : 'not refreshed'} — ${r.because}`, { jobName: 'experiment_hand_tick' });
+      }
       const { runHand } = await import('../services/venture/hand.js');
       // No number here: the stage size is the experiment's own, small on the
       // first pass and larger once the outbound has shown it behaves.

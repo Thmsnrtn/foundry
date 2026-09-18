@@ -146,6 +146,32 @@ describe('the forge shapes the offer and the hands make the thing', () => {
     expect(ready.missing.join(' | ')).not.toMatch(/candidate businesses|nothing to deliver|offer text|stated shape|design has not/);
   });
 
+  it('the steward re-pulls a brief going stale from the same rows, through the same gate', async () => {
+    const { refreshStaleBriefs } = await import('../../src/services/venture/products/registry.js');
+    const { materialOf } = await import('../../src/services/venture/hand.js');
+    const before = (await materialOf(X, 'deliverable'))!;
+    expect(await refreshStaleBriefs()).toEqual([]);
+    // Six days on, the edition is about to fall foul of the freshness rule.
+    const later = new Date(Date.now() + 6 * 86_400_000);
+    const passes = await refreshStaleBriefs(later);
+    expect(passes).toEqual([{ experimentId: X, refreshed: false, because: expect.stringMatching(/pulled 6 days ago|nothing fresh/) }]);
+    // Fresh rows arrive (a second later, so the pull is provably newer); the
+    // next pass re-pulls and the old edition is superseded.
+    await new Promise((r) => setTimeout(r, 1100));
+    const { recordRetrieval } = await import('../../src/services/venture/sources/index.js');
+    await recordRetrieval({
+      founderId: OWNER, sourceType: 'job_posting', source: 'https://remotive.com/api/remote-jobs?search=contractor+bid+tracker', terms: 'contractor bid tracker',
+      returnedCount: 1, canSee: 'jobs', cannotSee: 'the rest', wouldMostHelp: 'a wider board', notAlsoTried: null, evidenceMode: 'real',
+      items: [{ label: 'Coastal Build: Bid Administrator', url: 'https://remotive.com/remote-jobs/ops/bid-admin-9004', datedAt: later.toISOString(), said: 'Keep the bid tracker current for a contractor.', relevant: true, sharedTerms: ['bid', 'tracker'] }],
+    });
+    const again = await refreshStaleBriefs(later);
+    expect(again).toEqual([{ experimentId: X, refreshed: true, because: expect.stringContaining('re-pulled') }]);
+    const after = (await materialOf(X, 'deliverable'))!;
+    expect(after.id).not.toBe(before.id);
+    expect(after.body).toContain('Coastal Build: Bid Administrator');
+    expect(Number((await query("SELECT COUNT(*) AS n FROM experiment_materials WHERE experiment_id = ? AND kind = 'deliverable' AND superseded_at IS NOT NULL", [X])).rows[0]!.n)).toBe(1);
+  });
+
   it('refuses a design whose exchange a brief cannot carry, without making anything', async () => {
     await query(`INSERT INTO venture_experiments (id, founder_id, opportunity_id, unknown_id, what_we_do, what_we_expect, would_disprove, cost_cents, evidence_mode)
       VALUES ('hands_x2',?,'hands_opp','hands_unk','give it first','they pay after','nobody pays',0,'real')`, [OWNER]);

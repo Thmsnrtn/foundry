@@ -193,6 +193,27 @@ export async function makeBrief(input: { founderId: string; experimentId: string
   return { deliverableId, offerTemplateId, offerShapeId, items: made.items.length, quality };
 }
 
+/**
+ * THE STEWARD'S PASS OVER BRIEFS. A brief that is live, or about to be, and
+ * older than the freshness rule allows is re-pulled from the rows the eyes
+ * keep pulling, through the same gate. A refresh that fails its gate is
+ * said so and the old edition stands until the rule stops it being sent.
+ */
+export async function refreshStaleBriefs(now: Date = new Date()): Promise<Array<{ experimentId: string; refreshed: boolean; because: string }>> {
+  const live = (await query(
+    `SELECT e.id, e.founder_id FROM venture_experiments e
+      WHERE e.evidence_mode = 'real' AND e.retired_at IS NULL AND e.validity = 'valid'
+        AND ((e.decision = 'approved' AND e.ran_at IS NULL) OR e.decision IS NULL)
+        AND EXISTS (SELECT 1 FROM experiment_materials m WHERE m.experiment_id = e.id AND m.kind = 'offer_shape' AND m.superseded_at IS NULL AND m.body LIKE '%"kind":"data_brief"%')
+      ORDER BY e.proposed_at`, [])).rows as unknown as Array<Record<string, unknown>>;
+  const out: Array<{ experimentId: string; refreshed: boolean; because: string }> = [];
+  for (const e of live) {
+    const r = await refreshBrief({ founderId: String(e.founder_id), experimentId: String(e.id), now }).catch((err: unknown) => ({ refreshed: false, because: err instanceof Error ? err.message : String(err) }));
+    if (r.because !== 'still fresh') out.push({ experimentId: String(e.id), ...r });
+  }
+  return out;
+}
+
 /** REFRESH A BRIEF THAT IS GOING STALE, from the same rows the eyes keep pulling. */
 export async function refreshBrief(input: { founderId: string; experimentId: string; now?: Date }): Promise<{ refreshed: boolean; because: string }> {
   const shape = await materialOf(input.experimentId, 'offer_shape');
@@ -200,17 +221,22 @@ export async function refreshBrief(input: { founderId: string; experimentId: str
   let parsed: (OfferShapePlan & { kind?: string; spec?: BriefSpec }) | null = null;
   try { parsed = JSON.parse(shape.body) as OfferShapePlan & { kind?: string; spec?: BriefSpec }; } catch { parsed = null; }
   if (!parsed?.spec || parsed.kind !== 'data_brief') return { refreshed: false, because: 'not a brief the hands made' };
+  const now = input.now ?? new Date();
   const current = await materialOf(input.experimentId, 'deliverable');
-  const fresh = current && current.pulledAt && (Date.now() - new Date(current.pulledAt).getTime()) / 86_400_000 <= DELIVERABLE_MAX_AGE_DAYS - 2;
+  const fresh = current && current.pulledAt && (now.getTime() - new Date(current.pulledAt).getTime()) / 86_400_000 <= DELIVERABLE_MAX_AGE_DAYS - 2;
   if (fresh) return { refreshed: false, because: 'still fresh' };
   const { publicWorkshopOf } = await import('../../public-workshop/settings.js');
   const w = await publicWorkshopOf(input.founderId);
   if (!w) return { refreshed: false, because: 'no Workshop' };
   const made = await rowsForBrief(input.founderId, parsed.spec);
-  if (made.items.length === 0) return { refreshed: false, because: 'nothing fresh was retrieved' };
+  // A refresh needs newer rows. Re-rendering the same pull is not freshness,
+  // and would put a new date on an old edition.
+  if (made.items.length === 0 || !made.pulledAt || (current?.pulledAt && made.pulledAt.getTime() <= new Date(current.pulledAt).getTime())) {
+    return { refreshed: false, because: 'nothing fresh was retrieved' };
+  }
   const body = renderBrief(parsed.spec, made, w.publicName);
   const probe: Material = { id: 'probe', kind: 'deliverable', title: parsed.spec.title, body, pulledAt: made.pulledAt?.toISOString() ?? null, digest: '', paymentLinkUrl: null, recordedAt: '' };
-  const quality = await checkBriefQuality(input.founderId, probe, input.now ?? new Date());
+  const quality = await checkBriefQuality(input.founderId, probe, now);
   if (!quality.ok) return { refreshed: false, because: quality.failures.join('; ') };
   await recordMaterial({ founderId: input.founderId, experimentId: input.experimentId, kind: 'deliverable', title: parsed.spec.title, body, pulledAt: made.pulledAt, by: HAND });
   return { refreshed: true, because: `re-pulled from ${String(made.retrievals.length)} retrieval(s), ${String(made.items.length)} item(s)` };
