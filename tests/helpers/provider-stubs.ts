@@ -93,9 +93,11 @@ export function providerStubs(): { state: ProviderState; fetch: (url: string | U
         return new Response(store?.get('page:/email/done') ?? 'Done', { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
       }
       if (method !== 'GET' && method !== 'HEAD') return new Response('Method not allowed', { status: 405 });
-      const html = /[^a-z0-9/-]/.test(path) ? undefined : store?.get(`page:${path}`);
+      // As the program does: the two files pass with their own types; no other dot does.
+      const files: Record<string, string> = { '/robots.txt': 'text/plain; charset=utf-8', '/sitemap.xml': 'application/xml; charset=utf-8' };
+      const html = /[^a-z0-9/-]/.test(path) && !(path in files) ? undefined : store?.get(`page:${path}`);
       return html === undefined ? new Response(store?.get('page:/404') ?? 'Not found', { status: 404, headers: { 'content-type': 'text/html; charset=utf-8' } })
-        : new Response(html, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
+        : new Response(html, { status: 200, headers: { 'content-type': files[path] ?? 'text/html; charset=utf-8' } });
     }
 
     // ── Cloudflare API ──

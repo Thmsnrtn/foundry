@@ -3,7 +3,8 @@
 //
 // Deployed to Cloudflare through the governed capability and served at
 // apexmicro.ai. It knows nothing: it reads finished pages out of one store
-// under `page:<path>`, writes an opt-out under `optout:<id>` when the form is
+// under `page:<path>` (two of them files, robots.txt and sitemap.xml, served as
+// what they are), writes an opt-out under `optout:<id>` when the form is
 // posted, and answers 404 to everything else. It holds no credential, reaches
 // no origin, and cannot see the private institution, which is the isolation:
 // a private route requested through the public hostname has nothing to reach.
@@ -24,14 +25,20 @@ const HEADERS = {
   'strict-transport-security': 'max-age=31536000; includeSubDomains',
   'permissions-policy': 'camera=(), microphone=(), geolocation=()',
 };
+// The two files that are not pages. Named one by one: no other dot passes.
+const FILES = { '/robots.txt': 'text/plain; charset=utf-8', '/sitemap.xml': 'application/xml; charset=utf-8' };
 function normalise(pathname) {
   let p = pathname.replace(/\\/+$/, '') || '/';
+  if (Object.prototype.hasOwnProperty.call(FILES, p)) return p;
   if (p.length > 200 || /[^a-z0-9\\/-]/.test(p)) return null;
   return p;
 }
 async function pageOr404(env, path) {
   const html = path === null ? null : await env.PAGES.get('page:' + path);
-  if (html !== null && html !== undefined) return new Response(html, { status: 200, headers: HEADERS });
+  if (html !== null && html !== undefined) {
+    const type = Object.prototype.hasOwnProperty.call(FILES, path) ? FILES[path] : HEADERS['content-type'];
+    return new Response(html, { status: 200, headers: Object.assign({}, HEADERS, { 'content-type': type }) });
+  }
   const notFound = await env.PAGES.get('page:/404');
   return new Response(notFound || 'Not found', { status: 404, headers: HEADERS });
 }

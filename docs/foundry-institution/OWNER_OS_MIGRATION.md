@@ -2227,3 +2227,45 @@ old edition. A refresh that fails its gate is said so and the old edition
 stands until the rule stops it being sent. Retirement by rule already runs
 on its own schedule; this is the other half of stewardship for the first
 kind of thing the hands make.
+
+## The Workshop can be found (18 September 2026)
+
+A page nobody can find is silence with a receipt. The eyes hear what people
+search for, the forge composes an offer on those words, and the Workshop's own
+page is the one place a stranger could pay — but until now no crawler could
+have kept it: no page named its canonical address, no sitemap existed, the row
+guard refused any path with a dot in it, and the program served everything as
+HTML.
+
+What changed, and only this:
+
+- **Two files beside the pages** (migration 323): `/robots.txt` and
+  `/sitemap.xml` are the only paths with a dot the row guard admits; every
+  other rule of the guard stands as it was. The program (`worker-source.ts`)
+  serves those two with their own content types and refuses every other dot
+  exactly as before.
+- **One address per page.** Every indexable page carries a canonical link to
+  its own address at the Workshop's origin. The pages that are for the person
+  in front of them — the opt-out form, its receipt, the answer receipt, not
+  found — say `noindex` and carry no canonical. The sitemap announces exactly
+  the indexable pages and the *listed* experiments; an unlisted page still
+  resolves and is not announced.
+- **What is for sale, in the form an index reads.** An experiment page carries
+  a Product record with its price only while the thing is actually offered
+  (testing or operating, with a price). A closed page carries none: saying
+  otherwise in machine words would be the one lie on the page.
+- **The program is kept like the pages.** The hourly `public_workshop_tick`
+  brings a running program that differs from the reviewed text current, through
+  the door, with the receipt stand-up leaves, keyed on the change itself so the
+  same replacement is never applied twice. A Workshop that has never been
+  stood up is not put up behind the owner's back. The health card's "the
+  running program differs from the reviewed one" is now a state that lasts at
+  most an hour.
+
+Held by `the-workshop-can-be-found` (renderer, program, row guard) and the
+program-keeping case in `the-workshop-has-one-public-face`. What this does
+not do: it does not make a stranger arrive. A new domain with no inbound links
+is found slowly, on the long tail, which is where the eyes' terms live.
+Reach beyond search remains the next frontier, and its first move — a listing
+on a marketplace, a post in a community, a paid placement — is a new channel
+class the charter queues for the owner once.

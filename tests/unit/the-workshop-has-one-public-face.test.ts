@@ -137,7 +137,7 @@ describe('the Workshop stands up through the door, and the world is read back', 
     expect(r.retiredRecords).toHaveLength(3);
     expect(r.site.failed).toEqual([]);
     expect(r.site.unverified).toEqual([]);
-    expect(r.site.verified).toBe(14);
+    expect(r.site.verified).toBe(16); // fourteen pages and the two files beside them
     // The world: the site answers, www redirects, the trust surface is there, the private institution is not.
     // THE OWNER IS NOT A PUBLIC FIGURE: the home page names the Workshop, not him.
     expect((await publicGet('/')).text).toContain('small digital workshop in Massachusetts');
@@ -159,7 +159,8 @@ describe('the Workshop stands up through the door, and the world is read back', 
     expect(JSON.parse(String(retired.verification_json))).toMatchObject({ gone: true });
     expect(receipts.filter((x) => x.tool === 'cloudflare_worker_deploy')).toHaveLength(1);
     expect(receipts.filter((x) => x.tool === 'cloudflare_domain_attach')).toHaveLength(2);
-    expect(receipts.filter((x) => x.tool === 'cloudflare_kv_put')).toHaveLength(14);
+    // Fourteen pages and the two files beside them, robots.txt and sitemap.xml.
+    expect(receipts.filter((x) => x.tool === 'cloudflare_kv_put')).toHaveLength(16);
     expect(receipts.filter((x) => x.tool === 'cloudflare_kv_namespace_create')).toHaveLength(1);
     expect(receipts.every((x) => x.outcome === 'applied')).toBe(true);
     await expect(query(`UPDATE cloudflare_mutations SET previous_json = '{}' WHERE rowid = 1`)).rejects.toThrow(/only_verification_may_follow/);
@@ -169,7 +170,7 @@ describe('the Workshop stands up through the door, and the world is read back', 
     const again = await standUpWorkshop(OWNER);
     expect(again).toMatchObject({ program: 'unchanged', retiredRecords: [] });
     expect(again.site.published).toEqual([]);
-    expect((await query(`SELECT COUNT(*) AS n FROM public_publications`)).rows[0]).toMatchObject({ n: 14 });
+    expect((await query(`SELECT COUNT(*) AS n FROM public_publications`)).rows[0]).toMatchObject({ n: 16 });
     const health = await workshopHealth(OWNER);
     expect(health.site).toMatchObject({ status: 'healthy' });
     // HEALTHY EVEN THOUGH `/user/tokens/verify` REFUSES THE TOKEN. An
@@ -181,7 +182,7 @@ describe('the Workshop stands up through the door, and the world is read back', 
     const { verifyToken } = await import('../../src/services/integration/cloudflare-gateway.js');
     expect(await verifyToken()).toMatchObject({ ok: true, status: 'active' });
     expect(health.sending.status).toBe('needs_attention');
-    expect((await page('/foundry/public-workshop')).text).toContain('14 pages served as published');
+    expect((await page('/foundry/public-workshop')).text).toContain('16 pages served as published');
   });
 
   it('the envelope: another zone, an NS record, a wildcard, a page key deleted, another program, another hostname are refused and the refusal is a receipt', async () => {
@@ -439,7 +440,7 @@ describe('Allow publishes the page; offers point at it and go out as the Worksho
     const sync = await syncOptOutsFromStore(OWNER);
     expect(sync).toMatchObject({ recorded: 1, swept: 1, failed: [] });
     expect(await isSuppressed(OWNER, victim.email!)).toMatchObject({ suppressed: true, reason: 'they_asked' });
-    expect(state.cf.kv.get((await publicWorkshopOf(OWNER))!.kvNamespaceId!)!.size).toBe(15); // 15 pages, the opt-out swept
+    expect(state.cf.kv.get((await publicWorkshopOf(OWNER))!.kvNamespaceId!)!.size).toBe(17); // 15 pages, robots.txt and sitemap.xml, the opt-out swept
     await expect(planOffer({ experimentId: X, recipientId: victim.id, now: NOW })).rejects.toThrow(/recipient_suppressed/);
     expect(await contactIsRefused(FOUNDRY, victim.email!)).toMatchObject({ refused: true, reason: 'workshop:they_asked' });
     // The row refuses on its own, and the list is append-only.
@@ -623,6 +624,24 @@ describe('Allow publishes the page; offers point at it and go out as the Worksho
     // Unchanged rendering, unchanged world: the next hour puts up nothing.
     await JOB_REGISTRY.public_workshop_tick.fn();
     expect(Number((await one('SELECT COUNT(*) AS n FROM public_publications WHERE founder_id = ? AND path = ?', [OWNER, '/about']))!.n)).toBe(versionsAfter);
+  });
+
+  it('the program is kept like the pages: a running program that differs from the reviewed text is brought current by the tick, through the door', async () => {
+    const w = (await publicWorkshopOf(OWNER))!;
+    const deploysBefore = (await query("SELECT COUNT(*) AS n FROM cloudflare_mutations WHERE tool = 'cloudflare_worker_deploy'")).rows[0] as Record<string, unknown>;
+    state.cf.workers.set(w.workerName, { source: '// an older program', bindings: [] });
+    await JOB_REGISTRY.public_workshop_tick.fn();
+    expect(state.cf.workers.get(w.workerName)!.source).toBe(WORKER_SOURCE);
+    const deploysAfter = (await query("SELECT COUNT(*) AS n FROM cloudflare_mutations WHERE tool = 'cloudflare_worker_deploy'")).rows[0] as Record<string, unknown>;
+    expect(Number(deploysAfter.n)).toBe(Number(deploysBefore.n) + 1);
+    // Current already: the next hour deploys nothing.
+    await JOB_REGISTRY.public_workshop_tick.fn();
+    expect(Number(((await query("SELECT COUNT(*) AS n FROM cloudflare_mutations WHERE tool = 'cloudflare_worker_deploy'")).rows[0] as Record<string, unknown>).n)).toBe(Number(deploysAfter.n));
+    // And the two files are served as what they are, from the same store.
+    const robots = await publicGet('/robots.txt');
+    expect(robots.status).toBe(200);
+    expect(robots.text).toContain('Sitemap: https://apexmicro.ai/sitemap.xml');
+    expect((await publicGet('/sitemap.xml')).text).toContain('<loc>https://apexmicro.ai/experiments</loc>');
   });
 });
 

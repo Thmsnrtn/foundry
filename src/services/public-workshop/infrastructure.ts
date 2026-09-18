@@ -113,6 +113,31 @@ export interface SendingReport { domain: string; status: string; records: string
  * Workshop's own zone; the provider is asked to verify; the identity is set
  * only once the provider says the domain is verified. Run again to poll.
  */
+/**
+ * THE PROGRAM IS KEPT LIKE THE PAGES. The reviewed text of the program changes
+ * in the repository — a new file it may serve, a header — and until now the
+ * world kept running the old one, with the health card saying so until somebody
+ * pressed stand-up again. A Workshop that is standing keeps its program current
+ * on the same terms a changed page is republished: by digest, through the
+ * door, with the receipt stand-up would leave. One that has never been stood up
+ * is not put up behind the owner's back.
+ */
+export async function keepTheProgramCurrent(founderId: string): Promise<'deployed' | 'unchanged' | 'not_standing'> {
+  const w = need(await publicWorkshopOf(founderId));
+  if (!cloudflareConfigured() || !w.kvNamespaceId) return 'not_standing';
+  const running = await readWorkerScript(w.workerName);
+  if (!running.present) return 'not_standing';
+  const runningDigest = running.source === null ? 'unreadable' : digestOf(running.source);
+  if (runningDigest === digestOf(WORKER_SOURCE)) return 'unchanged';
+  // Keyed on the change itself — from what runs to what is reviewed — so the
+  // same replacement is never applied twice, and a later regression is not
+  // mistaken for the deploy stand-up already made of this same text.
+  await door(w, 'cloudflare_worker_deploy', `keep the Workshop program ${w.workerName} current with its reviewed text`,
+    { script_name: w.workerName, source: WORKER_SOURCE, kv_namespace_id: w.kvNamespaceId, purpose: 'the public Workshop program' },
+    `public:${founderId}:worker:${runningDigest}->${digestOf(WORKER_SOURCE)}`);
+  return 'deployed';
+}
+
 export async function connectWorkshopSending(founderId: string, fetchImpl: typeof fetch = fetch): Promise<SendingReport> {
   const w = need(await publicWorkshopOf(founderId));
   const key = await resendCredential(w);

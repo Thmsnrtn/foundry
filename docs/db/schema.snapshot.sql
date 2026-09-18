@@ -8276,7 +8276,7 @@ BEFORE INSERT ON public_publications
 BEGIN
   SELECT RAISE(ABORT,'public_publication:path_invalid')
     WHERE NEW.path NOT LIKE '/%' OR NEW.path LIKE '%..%' OR NEW.path LIKE '%?%' OR NEW.path LIKE '%#%'
-       OR NEW.path GLOB '*[^a-z0-9/-]*';
+       OR (NEW.path GLOB '*[^a-z0-9/-]*' AND NEW.path NOT IN ('/robots.txt', '/sitemap.xml'));
   SELECT RAISE(ABORT,'public_publication:incomplete')
     WHERE trim(NEW.digest) = '' OR NEW.bytes <= 0 OR trim(NEW.published_by) = '';
   SELECT RAISE(ABORT,'public_publication:cannot_arrive_verified')
@@ -8287,10 +8287,6 @@ BEGIN
         AND NEW.path = '/experiments/' || w.slug);
   SELECT RAISE(ABORT,'public_publication:page_carries_no_experiment')
     WHERE NEW.kind = 'page' AND NEW.experiment_id IS NOT NULL;
-  -- AN EXPERIMENT IS PUBLISHED ONLY WHEN THE OWNER HAS DECIDED IT. Before his
-  -- decision nothing exists to put the Workshop's name behind. A declined test
-  -- that was never published stays unpublished; one that was published stays
-  -- (its record is the point), and its page says what happened.
   SELECT RAISE(ABORT,'public_publication:experiment_not_approved')
     WHERE NEW.kind = 'experiment' AND NOT EXISTS (
       SELECT 1 FROM venture_experiments e WHERE e.id = NEW.experiment_id AND e.decision = 'approved');

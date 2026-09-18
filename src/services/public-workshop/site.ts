@@ -26,6 +26,17 @@ const amount = (p: NonNullable<PublicExperiment['price']>): string =>
 
 export const PUBLIC_PATHS = ['/', '/about', '/experiments', '/operating', '/graduated', '/closed', '/contact', '/privacy', '/email', '/email/done', '/thank-you', '/refunds', '/terms', '/404'] as const;
 export type PublicPath = typeof PUBLIC_PATHS[number];
+/** The two files that are not pages, served beside them with their own types. */
+export const PUBLIC_FILES = ['/robots.txt', '/sitemap.xml'] as const;
+/**
+ * WHAT A CRAWLER IS TOLD NOT TO KEEP. The opt-out form, its receipt, the
+ * answer receipt and the not-found page are for the person in front of them,
+ * not for an index; the rest of the Workshop is meant to be found.
+ */
+export const UNINDEXED: ReadonlySet<string> = new Set(['/email', '/email/done', '/thank-you', '/404']);
+const INDEXED_PATHS: readonly PublicPath[] = PUBLIC_PATHS.filter((x) => !UNINDEXED.has(x));
+/** JSON inside a <script>: the one sequence that could close the element is escaped. */
+const jsonLd = (v: unknown): string => JSON.stringify(v).replace(/<\//g, '<\\/');
 
 const CSS = `
 :root{--bg:#f8f6f1;--ink:#1f1d1a;--soft:#5d5852;--line:#e2ddd3;--accent:#2f5d50;--card:#fffdf9}
@@ -54,9 +65,15 @@ textarea{width:100%;font:inherit;padding:.7rem .8rem;border:1px solid var(--line
 button{font:inherit}footer{border-top:1px solid var(--line);padding:1.5rem 1.25rem 3rem;color:var(--soft);font-size:.9rem}
 footer p{margin:.3rem 0}`;
 
-function shell(f: PublicWorkshopFacts, title: string, current: string, body: string, description: string): string {
+function shell(f: PublicWorkshopFacts, title: string, current: string, body: string, description: string, at: { path: string; head?: string }): string {
   // The paths stay what they are; what a visitor reads is what a person calls it.
   const nav = [['/', 'Home'], ['/about', 'About'], ['/experiments', 'What I\'ve made'], ['/contact', 'Contact']] as const;
+  // ONE ADDRESS PER PAGE. A crawler that reaches a page by any other route is
+  // told which address is the page's own; a page that is not for an index says
+  // so instead, and carries no canonical, which would contradict it.
+  const found = UNINDEXED.has(at.path)
+    ? '<meta name="robots" content="noindex">'
+    : `<link rel="canonical" href="${esc(f.origin)}${esc(at.path)}">`;
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -65,6 +82,7 @@ function shell(f: PublicWorkshopFacts, title: string, current: string, body: str
 <title>${esc(title === f.name ? f.name : `${title} · ${f.name}`)}</title>
 <meta name="description" content="${esc(description)}">
 <meta name="referrer" content="no-referrer">
+${found}${at.head ? `\n${at.head}` : ''}
 <style>${CSS}</style>
 </head>
 <body>
@@ -109,7 +127,7 @@ ${listOf(listed, 'Nothing\'s open at the moment.')}
 <h2>About Apex Micro</h2>
 ${paras(f.statement)}
 <p><a href="/experiments">Everything I've made</a> · <a href="/about">More about me</a></p>`;
-  return shell(f, f.name, '/', body, `${f.name}: ${f.tagline}.`);
+  return shell(f, f.name, '/', body, `${f.name}: ${f.tagline}.`, { path: '/' });
 }
 
 export function renderAbout(f: PublicWorkshopFacts): string {
@@ -129,7 +147,7 @@ ${f.about ? `<h2>A little more</h2>${paras(f.about)}` : ''}
   <dt>On its own now</dt><dd>It grew into a business of its own; its page here links to where it lives.</dd>
   <dt>Closed</dt><dd>It wasn't worth carrying on with. The page stays, with a short honest note of why.</dd>
 </dl>`;
-  return shell(f, 'About', '/about', body, `What ${f.name} is and how it works.`);
+  return shell(f, 'About', '/about', body, `What ${f.name} is and how it works.`, { path: '/about' });
 }
 
 export function renderRegistry(f: PublicWorkshopFacts, registry: PublicExperiment[], which: 'all' | 'operating' | 'graduated' | 'closed'): string {
@@ -148,7 +166,7 @@ export function renderRegistry(f: PublicWorkshopFacts, registry: PublicExperimen
 <p class="lede">${intro[which]}</p>
 ${listOf(xs, empty[which])}
 ${which === 'all' ? `<p class="quiet"><a href="/operating">Still going</a> · <a href="/graduated">On their own now</a> · <a href="/closed">Closed</a></p>` : `<p class="quiet"><a href="/experiments">Everything</a></p>`}`;
-  return shell(f, titles[which], '/experiments', body, `${titles[which]}, at ${f.name}.`);
+  return shell(f, titles[which], '/experiments', body, `${titles[which]}, at ${f.name}.`, { path: which === 'all' ? '/experiments' : `/${which}` });
 }
 
 export function renderExperiment(f: PublicWorkshopFacts, x: PublicExperiment): string {
@@ -237,7 +255,15 @@ ${refundLine ? `<p>${esc(refundLine)}</p>` : ''}
 <p>Anything else, <a href="/contact">just write to me</a>. Replies to anything I send come straight back to me.</p>
 <p class="quiet">${x.openedOn ? `Opened ${esc(x.openedOn)}` : 'Not open yet'}${x.closedOn ? ` · Closed ${esc(x.closedOn)}` : ''} · Page updated ${esc(x.updatedOn)}</p>
 <p class="quiet"><a href="/experiments">Everything I've made</a></p>`;
-  return shell(f, x.title, '/experiments', body, x.summary);
+  // WHAT IS FOR SALE, SAID IN THE FORM AN INDEX READS. Only while the thing is
+  // actually offered: a closed page describes a product no one can buy, and
+  // saying otherwise in machine words would be the one lie on the page.
+  const product = asking && x.price ? `<script type="application/ld+json">${jsonLd({
+    '@context': 'https://schema.org', '@type': 'Product', name: x.title, description: x.summary,
+    brand: { '@type': 'Organization', name: f.name },
+    offers: { '@type': 'Offer', price: (x.price.amountCents / 100).toFixed(2), priceCurrency: x.price.currency.toUpperCase(), availability: 'https://schema.org/InStock', url: `${f.origin}${x.path}` },
+  })}</script>` : undefined;
+  return shell(f, x.title, '/experiments', body, x.summary, { path: x.path, head: product });
 }
 
 export function renderContact(f: PublicWorkshopFacts): string {
@@ -247,7 +273,7 @@ export function renderContact(f: PublicWorkshopFacts): string {
 <p>Replies to anything the workshop sends arrive at the same place. If you bought something and want your money back, there's a link in the delivery email — replying works just as well.</p>
 <p>If you'd rather not hear from the workshop again, use the <a href="/email">opt-out page</a> or just say so in a reply.</p>
 ${f.postalAddress ? `<p>Post: ${postalLines(f.postalAddress).map(esc).join('<br />')}</p>` : ''}`;
-  return shell(f, 'Contact', '/contact', body, `How to reach ${f.name}.`);
+  return shell(f, 'Contact', '/contact', body, `How to reach ${f.name}.`, { path: '/contact' });
 }
 
 export function renderPrivacy(f: PublicWorkshopFacts): string {
@@ -264,7 +290,7 @@ export function renderPrivacy(f: PublicWorkshopFacts): string {
 <p>Your address goes on a do-not-contact list so nothing from this workshop writes to it again. That's the only reason it's kept.</p>
 <h2>Asking</h2>
 <p>To see, correct or delete anything I hold about you, <a href="/contact">write to me</a>.</p>`;
-  return shell(f, 'Privacy', '/privacy', body, `What ${f.name} collects, which is very little.`);
+  return shell(f, 'Privacy', '/privacy', body, `What ${f.name} collects, which is very little.`, { path: '/privacy' });
 }
 
 export function renderEmail(f: PublicWorkshopFacts): string {
@@ -278,7 +304,7 @@ export function renderEmail(f: PublicWorkshopFacts): string {
   <button class="btn" type="submit">Don't contact me</button>
 </form>
 <p class="quiet">Replying "stop" to any email from me does the same thing.</p>`;
-  return shell(f, 'Email & opt-out', '/email', body, `How ${f.name} uses email, and how to opt out.`);
+  return shell(f, 'Email & opt-out', '/email', body, `How ${f.name} uses email, and how to opt out.`, { path: '/email' });
 }
 
 export function renderEmailDone(f: PublicWorkshopFacts): string {
@@ -286,7 +312,7 @@ export function renderEmailDone(f: PublicWorkshopFacts): string {
 <h1>Done</h1>
 <p class="lede">That address is on the do-not-contact list. Nothing from me will write to it.</p>
 <p><a href="/">Back to ${esc(f.name)}</a></p>`;
-  return shell(f, 'Opted out', '/email', body, 'Your address is on the do-not-contact list.');
+  return shell(f, 'Opted out', '/email', body, 'Your address is on the do-not-contact list.', { path: '/email/done' });
 }
 
 export function renderThankYou(f: PublicWorkshopFacts): string {
@@ -295,7 +321,7 @@ export function renderThankYou(f: PublicWorkshopFacts): string {
 <p class="lede">That's noted, and it's what decides whether you hear from me again.</p>
 <p>If you asked not to be contacted, nothing here will write to you. If you said nothing further was wanted, nothing further gets sent. Anything else you wrote is kept in your own words and read before I write to anyone else.</p>
 <p><a href="/">Back to ${esc(f.name)}</a></p>`;
-  return shell(f, 'Thank you', '', body, 'Your answer is recorded.');
+  return shell(f, 'Thank you', '', body, 'Your answer is recorded.', { path: '/thank-you' });
 }
 
 export function renderRefunds(f: PublicWorkshopFacts): string {
@@ -304,7 +330,7 @@ export function renderRefunds(f: PublicWorkshopFacts): string {
 <p class="lede">If something you bought is no use to you, you get your money back.</p>
 <p>Reply to the delivery email, or use the refund link inside it. Stripe refunds it in full and you keep what was sent. No form, no time limit, and you don't have to explain.</p>
 <p>That holds whether or not the thing is still on sale. Closing something stops new sales; it doesn't cancel what was promised to people who already bought.</p>`;
-  return shell(f, 'Refunds', '/refunds', body, `How refunds work at ${f.name}.`);
+  return shell(f, 'Refunds', '/refunds', body, `How refunds work at ${f.name}.`, { path: '/refunds' });
 }
 
 export function renderTerms(f: PublicWorkshopFacts): string {
@@ -317,7 +343,7 @@ export function renderTerms(f: PublicWorkshopFacts): string {
 <p><strong>Refunds.</strong> In full, on request, as described on the <a href="/refunds">refunds page</a>.</p>
 <p><strong>Your information.</strong> As described on the <a href="/privacy">privacy page</a>.</p>
 <p><strong>Changes.</strong> Every page says when it was last updated. Closing something stops new sales and leaves what was already promised in force.</p>`;
-  return shell(f, 'Terms', '/terms', body, `Terms for experiments at ${f.name}.`);
+  return shell(f, 'Terms', '/terms', body, `Terms for experiments at ${f.name}.`, { path: '/terms' });
 }
 
 export function renderNotFound(f: PublicWorkshopFacts): string {
@@ -325,12 +351,33 @@ export function renderNotFound(f: PublicWorkshopFacts): string {
 <h1>Not here</h1>
 <p class="lede">There is no page at that address.</p>
 <p><a href="/">${esc(f.name)}</a> · <a href="/experiments">Experiments</a></p>`;
-  return shell(f, 'Not found', '', body, 'No page at that address.');
+  return shell(f, 'Not found', '', body, 'No page at that address.', { path: '/404' });
 }
 
 /** Every page of the site at once, keyed by path. Experiment pages included. */
+/** What a crawler may keep: every indexable page and every listed experiment; the unlisted resolve but are not announced. */
+export function renderSitemap(f: PublicWorkshopFacts, registry: PublicExperiment[]): string {
+  const paths = [...INDEXED_PATHS, ...registry.filter((x) => x.listed).map((x) => x.path)];
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+${paths.map((p) => `  <url><loc>${esc(f.origin)}${esc(p)}</loc></url>`).join('\n')}
+</urlset>
+`;
+}
+
+export function renderRobots(f: PublicWorkshopFacts): string {
+  return `User-agent: *
+Allow: /
+Disallow: /email
+Disallow: /thank-you
+Sitemap: ${f.origin}/sitemap.xml
+`;
+}
+
 export function renderSite(f: PublicWorkshopFacts, registry: PublicExperiment[]): Map<string, string> {
   const pages = new Map<string, string>();
+  pages.set('/robots.txt', renderRobots(f));
+  pages.set('/sitemap.xml', renderSitemap(f, registry));
   pages.set('/', renderHome(f, registry));
   pages.set('/about', renderAbout(f));
   pages.set('/experiments', renderRegistry(f, registry, 'all'));

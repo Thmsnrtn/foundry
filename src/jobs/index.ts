@@ -3230,7 +3230,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       const { query } = await import('../db/client.js');
       const owners = (await query('SELECT founder_id FROM public_workshop')).rows as unknown as Array<Record<string, unknown>>;
       const { syncOptOutsFromStore } = await import('../services/public-workshop/suppression.js');
-      const { workshopHealth } = await import('../services/public-workshop/infrastructure.js');
+      const { workshopHealth, keepTheProgramCurrent } = await import('../services/public-workshop/infrastructure.js');
       const { publishSite } = await import('../services/public-workshop/publication.js');
       for (const o of owners) {
         const founderId = String(o.founder_id);
@@ -3248,6 +3248,10 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
           [founderId])).rows[0] as Record<string, unknown>;
         if (Number(live.n) > 0) {
           try {
+            // The program first, so a page that needs the new program (a file
+            // served as what it is) is never put up under the old one.
+            const program = await keepTheProgramCurrent(founderId);
+            if (program === 'deployed') logger.info(`public_workshop_tick: ${founderId} program brought current with its reviewed text`, { jobName: 'public_workshop_tick' });
             const site = await publishSite(founderId, 'institution:public_workshop_tick');
             if (site.published.length > 0 || site.failed.length > 0) {
               logger.info(`public_workshop_tick: ${founderId} republished ${site.published.join(', ') || 'nothing'}${site.failed.length ? `; failed ${site.failed.map((f) => `${f.path} (${f.reason})`).join(', ')}` : ''}`,
