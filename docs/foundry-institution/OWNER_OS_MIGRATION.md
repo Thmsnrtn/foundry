@@ -2461,3 +2461,41 @@ the day it was written, called from nowhere — now sets the belief bar in
 `promote`: each "be more sceptical" raises the number of genuinely different
 ways of knowing a candidate must survive before it may reach him, and the
 refusal says the bar it was held to.
+
+## The studio: Now, and what has been found (18 September 2026)
+
+Experiments answered "what is running". Nothing answered "what have you
+found" — everything the institution had ever found and believed lived inside
+whichever search happened to be open, on a screen about searching, so an owner
+with no search open was shown nothing at all about it.
+
+`/foundry/experiments` and `/foundry/experiments/explore` are the two
+questions, as two tabs. Now is unchanged. Explore arranges every open, real
+candidate on shelves by economic form: software people subscribe to, something
+other software calls, a small tool, a calculator or generator, assembled data,
+watching and telling, a part of something bigger, a place two sides meet,
+letting somebody else use it, buying something that already earns, and
+everything else.
+
+**A shelf sorts; it never creates.** `economic-forms.ts` is presentation, in
+exactly the relationship `SHAPES` has to `venture_mandates.shape`. A candidate
+reaches a shelf only through a sentence somebody actually wrote — its own
+headline, the problem it names, why it might work, or the words that started
+the seed — and the card says which word, in which sentence, filed it there.
+Every candidate on a shelf already survived promotion, which needs genuinely
+different ways of knowing. An empty shelf says "nothing found so far looks like
+this" and offers one thing: to point the search that way, through the mandate,
+in his words.
+
+`shelfCandidates` reads in three queries and never `candidatesFor`'s loop:
+the open real candidates with their seeds, one grouped count of independent
+stances, one pass of blocking unknowns. The card shows the headline, who has
+the problem, the evidence in plain language, what is in the way or the
+strongest reason it fails, and one door to the candidate's own page. Burden is
+absent rather than guessed: `probe_costs` exists only after a design.
+
+One quiet line says what is alive, from row counts alone — possibilities being
+looked through, how many were set aside, candidates standing, tests running —
+and when the pipeline is genuinely empty it says that instead of dressing a
+zero up. Evidence is words, never a score: the only number on a candidate is
+how many different ways of knowing said something.

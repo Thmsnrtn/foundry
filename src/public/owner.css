@@ -1784,3 +1784,13 @@ main[data-place="foundry"]:has(.ask-surface)>.glance{margin-top:1.4rem}
 .charter label.term:has(input:checked){border-color:var(--v3-mint);color:var(--v3-mint)}
 .total-exposure{font-family:var(--serif);font-size:1.25rem;margin:.2rem 0 .6rem}
 .total-exposure b{font-weight:600}
+
+/* THE SHELVES. A candidate at a glance, and the sentence that filed it there.
+   Compact on purpose: the whole argument lives on the candidate's own page,
+   and a shelf he has to read is a shelf he will not open. */
+details.fold.shelf{border-top:1px solid var(--line)}
+.shelf-card{display:block;padding:var(--s3) 0}
+.shelf-card p{margin:0 0 .3rem}
+.shelf-card p:last-child{margin-bottom:0}
+.shelf-ev{display:flex;flex-wrap:wrap;gap:.4rem;align-items:baseline}
+.shelf-ev .pill.ok{border-color:var(--v3-mint);color:var(--v3-mint)}

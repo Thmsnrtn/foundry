@@ -12,7 +12,7 @@
 import { Hono } from 'hono';
 import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
-import { count, page } from './foundry-shell.js';
+import { count, page, placeHead } from './foundry-shell.js';
 import { mark } from '../../views/owner/shell.js';
 import type { Where } from './foundry-shell.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
@@ -25,6 +25,8 @@ import {
   reviewRecipient, senderCompanyOf, stopExperiment,
 } from '../../services/venture/hand.js';
 import { approveListing, ownerActsForListing, recordListing, recordVenueOrder, recordVenueReading, recordVenueRefund } from '../../services/venture/proof-2.js';
+import { shelfCandidates } from '../../services/venture/shelves.js';
+import type { ShelfCandidate } from '../../services/venture/shelves.js';
 
 export const experimentRoutes = new Hono();
 
@@ -33,13 +35,20 @@ async function founderOf(c: any): Promise<string | null> {
   return founder?.id ? String(founder.id) : null;
 }
 
-const where = (v: ExperimentView | null, on: 'test' | 'recipients' | 'list' | 'decide'): Where => ({
+const where = (v: ExperimentView | null, on: 'test' | 'recipients' | 'list' | 'decide' | 'explore', counts?: { now: number; found: number }): Where => ({
   crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: '/foundry/experiments', label: 'Experiments' }, ...(v ? [{ href: `/foundry/experiments/${v.id}`, label: v.assetName ?? 'This test' }] : [])],
   scope: { kind: 'foundry', id: v?.id ?? null, name: v?.assetName ?? 'Experiments' },
+  // TWO QUESTIONS, TWO PLACES. "What is running" and "what have you found" are
+  // different questions and were one page, which meant the second had no
+  // answer at all: everything the institution had found and believed lived
+  // inside whichever search happened to be open, on a screen about searching.
   local: v ? [
     { href: `/foundry/experiments/${v.id}`, label: 'The test', count: null, on: on === 'test' },
     { href: `/foundry/experiments/${v.id}/recipients`, label: 'Who may be contacted', count: v.exposure.pending || null, on: on === 'recipients' },
     { href: `/foundry/experiments/${v.id}/decide`, label: 'Before you decide', count: null, on: on === 'decide' },
+  ] : (on === 'list' || on === 'explore') ? [
+    { href: '/foundry/experiments', label: 'Now', count: counts?.now || null, on: on === 'list' },
+    { href: '/foundry/experiments/explore', label: 'Explore', count: counts?.found || null, on: on === 'explore' },
   ] : [],
   chips: [],
 });
@@ -119,8 +128,10 @@ experimentRoutes.get('/foundry/experiments', async (c: any) => {
       <p class="exp-links"><a class="btn go" href="/foundry/experiments/${featured.id}">${featured.state === 'needs_you' ? 'What it needs from you' : featured.state === 'ready' ? 'Decide' : 'Open the test'}</a>
         <a class="why" href="/foundry/experiments/${featured.id}/decide">Everything it rests on</a></p>
     </section>` : '';
+  const found = (await shelfCandidates(founderId)).reduce((n, sh) => n + sh.candidates.length, 0);
+  const w = where(null, 'list', { now: views.length, found });
   const body = html`
-    <h1>Experiments</h1>
+    ${placeHead(w, 'Experiments')}
     <p class="lede">${views.length === 0
     ? (historyN ? 'Nothing is being tested now.' : 'No real test is set up yet. When one is, it appears here with what it needs from you.')
     : `${count(views.length, 'live test')}. Each is one question put to the world, with the prediction sealed before it runs.`}</p>
@@ -136,7 +147,82 @@ experimentRoutes.get('/foundry/experiments', async (c: any) => {
       <p><strong>${v.assetName ?? v.title}</strong> <span class="pill">${stateWord[v.state]}</span> <span class="dim">${dayOf(v.concludedAt)}</span></p>
     </a>`)}` : ''}
     <p class="quiet"><a href="/foundry/experiments/history">History (${String(historyN)})</a> · <a href="/foundry/experiments/next">What to test next</a></p>`;
-  return c.html(page('Experiments', body, 'experiments', where(null, 'list')));
+  return c.html(page('Experiments', body, 'experiments', w));
+});
+
+// ─── Explore: what has been found, and what has not ──────────────────────────
+//
+// THE SHELVES ARE NOT A MENU. Every shelf is a way of looking at candidates
+// that already exist, and a candidate exists only by surviving two genuinely
+// different ways of knowing about something somebody actually wrote. A shelf
+// with nothing on it says so and offers to point the search that way — which
+// goes through the mandate, in his words, exactly as any other instruction
+// from him does. It does not fill itself.
+//
+// This is also where a search that has found nothing yet stops being invisible.
+// Everything the institution had found lived inside whichever search happened
+// to be open, on a screen about searching; an owner with no search open was
+// shown nothing about what his institution had ever discovered.
+experimentRoutes.get('/foundry/experiments/explore', async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return c.redirect('/onboarding');
+  const now = new Date();
+  const shelves = await shelfCandidates(founderId);
+  const found = shelves.reduce((n, sh) => n + sh.candidates.length, 0);
+  const live = (await listExperiments(founderId, now, 'now')).filter((t) => !t.concluded);
+  const { mandateProgress } = await import('../../services/venture/mandate.js');
+  const progress = await mandateProgress(founderId);
+  const { openSeeds } = await import('../../services/venture/seeds.js');
+  const seeds = await openSeeds(founderId, 200);
+
+  // ALIVE, WITHOUT BEING NOISY. Every number here is a row count and nothing
+  // is invented to look busy: what is being looked through, what was set
+  // aside, and whether anything has earned a test. When the pipeline is
+  // genuinely empty it says that instead of dressing a zero up.
+  const alive = progress === null && seeds.length === 0 && found === 0
+    ? 'Nothing is being looked into. Point me somewhere and I will start.'
+    : [
+      seeds.length > 0 ? `Looking through ${count(seeds.length, 'possibility', 'possibilities')}` : null,
+      progress && progress.rejected > 0 ? `${String(progress.rejected)} set aside` : null,
+      found > 0 ? `${count(found, 'candidate')} standing` : null,
+      live.length > 0 ? `${count(live.length, 'test')} running` : 'nothing yet deserves a test',
+    ].filter((x): x is string => x !== null).join(' · ');
+
+  const card = (k: ShelfCandidate) => html`<article class="item shelf-card">
+    <p><strong>${k.headline}</strong></p>
+    <p class="quiet">${k.whoHasIt} — ${k.theProblem}</p>
+    <p class="shelf-ev"><span class="pill${k.stances >= 2 ? ' ok' : ''}">${k.evidence}</span>${k.because ? html` <span class="dim">filed here by &ldquo;${k.because}&rdquo; in ${k.where}</span>` : ''}</p>
+    <p class="quiet">${k.blockedBy ? html`<b>In the way:</b> ${k.blockedBy}` : html`<b>Strongest reason it fails:</b> ${k.killThesis}`}</p>
+    <p><a class="btn" href="/foundry/why/candidate/${k.id}">Explore ${mark('arrow')}</a></p>
+  </article>`;
+
+  const w = where(null, 'explore', { now: live.length, found });
+  const body = html`
+    ${placeHead(w, 'Explore')}
+    <p class="lede">${found === 0
+    ? 'Nothing has survived enough evidence to stand as a candidate yet. That is an answer about the world, not a gap in the page.'
+    : `${count(found, 'thing')} found and believed, arranged by what it would be.`}</p>
+    <p class="quiet">${alive}</p>
+    ${shelves.map((sh) => html`<details class="fold shelf"${sh.candidates.length ? raw(' open') : raw('')}>
+      <summary><span class="gist"><b>${sh.label}</b> <span class="dim">${sh.candidates.length ? String(sh.candidates.length) : 'nothing yet'}</span></span></summary>
+      <p class="quiet">${sh.whatItIs}</p>
+      ${sh.cannotTestYet ? html`<p class="quiet"><b>${sh.cannotTestYet}</b></p>` : ''}
+      ${sh.candidates.length === 0
+    ? html`<p class="quiet">Nothing found so far looks like this.</p>
+        <form method="POST" action="/foundry/ask">
+          <input type="hidden" name="said" value="Explore ${sh.label.toLowerCase()}" />
+          <button class="btn" type="submit">Look for something like this</button>
+        </form>`
+    : sh.candidates.map(card)}
+    </details>`)}
+    <form class="inline" method="POST" action="/foundry/ask">
+      <input type="text" name="said" maxlength="800" placeholder="Explore something new"
+        aria-label="Explore something new" enterkeyhint="send" autocapitalize="sentences"
+        autocorrect="on" spellcheck="true" />
+      <button class="btn" type="submit">Go and look</button>
+    </form>
+    <p class="quiet">You name the direction. Working out what would test it is mine.</p>`;
+  return c.html(page('Explore', body, 'experiments', w));
 });
 
 // ─── History: the record of every concluded test ─────────────────────────────
