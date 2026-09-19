@@ -2213,3 +2213,20 @@ relative reader should date its facts relatively, and there is no gate saying so
 
 The owner-facing consequence is worth stating plainly: a red chain is not
 always a broken institution. It can be a calendar.
+
+### A deploy gate that raced its own clock (2026-09-19)
+
+Two deploys the same evening, same branch, same chain. The first ran the full
+chain in 36m57s and shipped. The second ran 44m28s on a slower runner and was
+cancelled at the job's 45-minute limit, one step from green, with the build
+skipped. Nothing was wrong with it.
+
+The chain has grown to within a few minutes of the ceiling that was meant to
+catch a hung job. At that margin the limit stops being a safety property and
+becomes a coin flip on runner speed — and it reports itself as a red deploy,
+which on a surface whose whole promise is that red means something is the worst
+kind of noise. Raised to 90 minutes, which still stops a genuinely hung job.
+
+The real remedy, when the chain next grows, is to make it faster rather than to
+keep raising the ceiling: ~4,900 tests in one sequential vitest run is the
+cost, and nothing about it is parallelised.

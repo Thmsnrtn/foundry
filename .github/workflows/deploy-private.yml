@@ -70,7 +70,17 @@ jobs:
     name: The full chain, before anything ships
     if: contains(github.event.head_commit.message, '[deploy-private]')
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    # A LIMIT THAT STOPS A HUNG JOB, NOT ONE THE CHAIN RACES.
+    #
+    # This was 45, and the chain grew into it: 36m57s on 19 September passed
+    # with eight minutes to spare, and the very next deploy ran 44m28s on a
+    # slower runner and was killed one step from green. Nothing was wrong with
+    # it. A ceiling the work reaches on an ordinary day is not a safety
+    # property — it is a coin flip that reports itself as a broken build, and
+    # on a surface whose whole promise is that red means something, that is the
+    # worst kind of noise. Raised to leave real headroom; it still stops a job
+    # that has genuinely hung, which is the only thing it was ever for.
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
