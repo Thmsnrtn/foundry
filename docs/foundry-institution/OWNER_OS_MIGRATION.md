@@ -2562,3 +2562,52 @@ Discover's "Decided in this search", "Buried" and "Earlier searches" are now
 folds with their counts in the gist, the idiom a situation's history already
 used. He should not have to scroll past everything he has ever turned down to
 reach the thing standing in front of him.
+
+## The address he typed stops naming him on every page (19 September 2026)
+
+The doctrine is that the owner is not a public figure: the Workshop is the only
+public voice, and his name stays on exactly two surfaces where the law wants to
+know who is behind a trading name — the terms page and the listing's privacy
+policy. `scripts/check-the-owner-is-not-a-public-figure.mjs` has held that since
+it was written.
+
+It could not hold it, because the breach was not in the code. He typed the
+postal address at stand-up beginning with his own name, which is the ordinary
+way to write one, and `postal_address` is a row value the gate never sees. That
+line then went out in the footer of all fifteen published pages and in every
+commercial email — read back live on 19 September on `/`, `/about`, `/terms`,
+`/privacy`, `/contact`, `/email`, `/refunds` and `/experiments`, and twice on
+the contact page. A rule enforced everywhere except on the one string a person
+actually typed is not enforced.
+
+**The name line is dropped, and nothing stands in its place.** Both surfaces
+that render the address have just said "Apex Micro is a small digital workshop"
+in the line above it, so a name line would only repeat it. `publicPostalLines`
+(`settings.ts`) returns the address with a leading line equal to the operator's
+name removed; `postalLines` is untouched and still serves the owner's own view.
+
+The correction happens at the **projection** — `workshopFacts` builds the public
+`postalAddress` from `publicPostalLines` — so `site.ts` needs no rule of its
+own: by the time an address reaches a template the name is already off it. The
+hand reads the record directly rather than the projection, so its
+commercial-email footer asks for the public reading itself.
+
+**The street address is never touched**, and an address that does not begin with
+his name passes through unchanged. This is not Foundry rewriting what he gave
+it; it is Foundry declining to put his name on a page that is not his to be
+named on. The stored value stays exactly as he typed it, and the Workshop page
+still shows it in full. If an address were only his name the result is empty,
+and `publication.ts` already refuses to send without one — loud, rather than a
+page quietly losing its notice.
+
+A fourth clause in the gate keeps it: the projection must build the public
+address through `publicPostalLines`, and no file on a public path may reach for
+the raw lines, except `settings.ts`, which defines both readings, and `site.ts`,
+which renders the projection. It has a planted-defect test beside the three that
+were already there.
+
+**Two surfaces still name him, deliberately.** The terms page (`site.ts`) and the
+Etsy privacy policy (`proof-2-content.ts`) — the two disclosures the doctrine
+names. And Experiment 001's sealed text says "I'm Thomas Norton, and Apex Micro
+is my workshop" on its own public page. That is a record, not a surface, and it
+is not rewritten.

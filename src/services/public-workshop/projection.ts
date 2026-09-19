@@ -14,7 +14,7 @@
 // one boundary and live together on purpose.
 // =============================================================================
 import { query, realCompany } from '../../db/client.js';
-import { publicWorkshopOfExperiment } from './settings.js';
+import { publicPostalLines, publicWorkshopOfExperiment } from './settings.js';
 import type { PublicWorkshop } from './settings.js';
 
 export type PublicStatus = 'preparing' | 'testing' | 'operating' | 'graduated' | 'closed';
@@ -159,7 +159,11 @@ export interface PublicWorkshopFacts {
 export function workshopFacts(w: PublicWorkshop): PublicWorkshopFacts {
   return {
     name: w.publicName, legalOperator: w.operatorName, origin: w.origin, tagline: 'a small digital workshop in Massachusetts',
-    statement: w.statement, about: w.about, contactEmail: w.contactEmail, postalAddress: w.postalAddress,
+    statement: w.statement, about: w.about, contactEmail: w.contactEmail,
+    // THE NAME COMES OFF HERE, at the one boundary where the record becomes
+    // public facts — so no renderer downstream can put it back by accident.
+    // `site.ts` never sees it and needs no rule of its own.
+    postalAddress: publicPostalLines(w).join('\n') || null,
     region: 'Massachusetts',
   };
 }

@@ -771,6 +771,22 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('_gate_fixture_voice');
   });
 
+  it('check-the-owner-is-not-a-public-figure fails when a public surface reads the raw postal address', () => {
+    // The hole the three older clauses could not see. He typed his own name as
+    // the first line of the postal address, which is the ordinary way to write
+    // one, and it then went out on the footer of every public page and every
+    // commercial email — surfaces the doctrine says he is not named on. Source
+    // text was not where that lived. A public path that reaches for the raw
+    // lines instead of the reading with his name taken off is the way it
+    // returns.
+    plant('src/services/public-workshop/_gate_fixture_postal.ts',
+      j('import { postal', "Lines } from './settings.js';\n",
+        'export const foot = (a: string) => postal', 'Lines(a).join(", ");\n'));
+    const r = run('check-the-owner-is-not-a-public-figure.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_postal');
+  });
+
   it('check-forge-seals-only-inside-the-charter fails when a file seals a design without asking the charter', () => {
     // The forge acts with nobody watching. The rule it must obey — ask the
     // charter before sealing, in the same file, before the seal — is held

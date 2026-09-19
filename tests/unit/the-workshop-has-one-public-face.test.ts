@@ -711,3 +711,54 @@ describe('the public program serves only the store, and the private institution 
     void stopExperiment; void prepareExposure;
   });
 });
+
+// =============================================================================
+// THE ADDRESS HE TYPED, WITHOUT HIS NAME ON EVERY PAGE.
+//
+// The Workshop is the only public voice and his name belongs on exactly two
+// surfaces where the law wants to know who is behind a trading name. A gate
+// held that over the code and could not hold it over the address: he wrote his
+// own name as its first line, which is the ordinary way to write one, and it
+// went out on the footer of all fifteen published pages and every commercial
+// email. A rule enforced everywhere except on the one string a person actually
+// typed is not enforced.
+// =============================================================================
+describe('the address he typed does not put his name on every page', () => {
+  it('the street address is on every page; his name is on the terms page and the sealed record only', async () => {
+    const { renderSite } = await import('../../src/services/public-workshop/site.js');
+    const { workshopFacts } = await import('../../src/services/public-workshop/projection.js');
+    const { publicPostalLines } = await import('../../src/services/public-workshop/settings.js');
+
+    // As he typed it at stand-up: his name, then the mailbox.
+    await setPostalAddress(OWNER, 'Thomas Norton\n11 Apex Drive\nSuite 300A #361\nMarlborough, MA 01752');
+    const w = (await publicWorkshopOf(OWNER))!;
+    // The record keeps what he gave it. Nothing here rewrites his address.
+    expect(w.postalAddress).toBe('Thomas Norton\n11 Apex Drive\nSuite 300A #361\nMarlborough, MA 01752');
+
+    const pages = renderSite(workshopFacts(w), await projectRegistry(OWNER));
+    expect(pages.size).toBeGreaterThan(8);
+    for (const [path, html] of pages) {
+      if (path.includes('robots') || path.includes('sitemap')) continue;
+      // Every page still carries a postal address, because commercial mail
+      // must and because the footer is the same on all of them.
+      expect(html, `${path} lost the street address`).toContain('Suite 300A #361');
+      if (path.includes('terms')) {
+        // One of the two disclosures the law asks for.
+        expect(html).toContain('Thomas Norton');
+      } else if (!path.includes(PROOF1_SLUG)) {
+        expect(html, `${path} names the owner`).not.toContain('Thomas Norton');
+      }
+    }
+
+    // And the reading the commercial-email footer is built from is the same one.
+    expect(publicPostalLines(w)).toEqual(['11 Apex Drive', 'Suite 300A #361', 'Marlborough, MA 01752']);
+    expect(publicPostalLines(w).join(', ')).not.toContain('Thomas Norton');
+  });
+
+  it('an address that does not begin with his name is rendered exactly as given', async () => {
+    const { workshopFacts } = await import('../../src/services/public-workshop/projection.js');
+    await setPostalAddress(OWNER, 'Apex Micro\n11 Apex Drive\nMarlborough, MA 01752');
+    const w = (await publicWorkshopOf(OWNER))!;
+    expect(workshopFacts(w).postalAddress).toBe('Apex Micro\n11 Apex Drive\nMarlborough, MA 01752');
+  });
+});

@@ -2186,3 +2186,30 @@ Six changes, in order, each green on its own suites before the next was begun.
 
 Experiment 001 is untouched throughout. Its rows, its envelope and its
 fulfilments are exactly as they were.
+
+### A gate that reddens by the calendar (2026-09-19)
+
+Found while running the chain for the postal correction: three assertions in
+`a-drift-that-only-reached-a-log.test.ts` began failing on 19 September with
+nothing having changed. `getSelfCheckStanding` reads only the last thirty days,
+on the stated ground that a check nobody has verified in a month is not the
+current standing of anything — and the test dated its observations
+`2026-08-20`, which crossed that boundary overnight.
+
+Fixed by dating the fixtures relative to now, which is what the reader is
+relative to, and by adding the test the window never had: a failure nobody has
+looked at in forty days is not current standing, and the same failure looked at
+yesterday is.
+
+**The class is not closed.** Thirty-five test files carry absolute 2026
+timestamps, clustered in late August and early September. Most are fixtures
+read by nothing time-relative and will never trip; any that are read against a
+window will redden on their own date, weeks apart, each looking like a
+regression and none being one. They are not swept here because sweeping
+thirty-five files to change dates that are mostly harmless is a worse trade
+than fixing each where it surfaces — the chain is a reliable detector and
+caught this one the morning it mattered. **Proof debt, named:** a test of a
+relative reader should date its facts relatively, and there is no gate saying so.
+
+The owner-facing consequence is worth stating plainly: a red chain is not
+always a broken institution. It can be a calendar.

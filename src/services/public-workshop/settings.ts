@@ -130,6 +130,41 @@ export function postalLines(address: string | null): string[] {
   return (address ?? '').split('\n').map((l) => l.trim()).filter((l) => l.length > 0);
 }
 
+/**
+ * THE SAME ADDRESS, WITHOUT THE OWNER'S NAME ON IT.
+ *
+ * The Workshop is the only public voice, and his name belongs on exactly two
+ * surfaces where the law wants to know who is behind a trading name: the terms
+ * page and the listing's privacy policy. A gate holds that over the code.
+ *
+ * It could not hold it over the address, because the address is not code. He
+ * typed it at stand-up beginning with his own name, which is the ordinary way
+ * to write one, and that line then went out on the footer of every public page
+ * and every commercial email — fifteen surfaces where the doctrine says he is
+ * not named. A rule enforced everywhere except on the one string a person
+ * actually typed is not enforced.
+ *
+ * So the name line is dropped here, and NOTHING is put in its place: both
+ * surfaces that render this already say "<the Workshop> is a small digital
+ * workshop" immediately above it, and a name line would only repeat it. The
+ * street address itself is never touched — commercial mail must carry one, and
+ * that is the part the law is asking for. An address that does not begin with
+ * his name passes through unchanged, so this is not Foundry rewriting what he
+ * gave it; it is Foundry declining to put his name on a page that is not his
+ * to be named on.
+ *
+ * If the address were only his name the result is empty, and the publication
+ * gate already refuses to send without an address — loud, rather than a page
+ * that quietly loses its disclosure.
+ */
+export function publicPostalLines(
+  w: { postalAddress: string | null; operatorName: string },
+): string[] {
+  const lines = postalLines(w.postalAddress);
+  const named = w.operatorName.trim().toLowerCase();
+  return named.length > 0 && lines[0]?.toLowerCase() === named ? lines.slice(1) : lines;
+}
+
 export async function setPostalAddress(founderId: string, address: string | null): Promise<void> {
   // Trailing and leading blanks are noise; the lines between them are not.
   const a = postalLines(address).join('\n') || null;

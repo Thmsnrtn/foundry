@@ -800,7 +800,7 @@ can retire on its own. Everything else that Allow needs, Allow supplies.
 
 ---
 
-## PENDING 17 — Sign the charter; and the first line of the postal address: **OWNER** (2026-09-18)
+## PENDING 17 — Sign the charter (the postal half is settled): **OWNER** (2026-09-18, postal settled 2026-09-19)
 
 Two things only you can supply, and Foundry will invent neither. The charter
 has its own place, `/foundry/charter`, one tap from Home's Autonomy tile and
@@ -836,12 +836,27 @@ promotes what two independent ways of knowing support, designs a probe through
 five disciplines and attacks its own draft. It stops at sealing, and its own
 thinking is bounded at $1 a day until you set a figure.
 
-**Two: the postal address.** The Workshop is the only public voice, by gate,
-but the postal address you typed at stand-up begins with your name, and the
-law wants a postal address on every page. Foundry does not rewrite an address
-you typed. If you would rather the pages name the Workshop and not you, change
-the first line on the Workshop page; if you are content, nothing needs doing.
-Either is a legitimate reading and only you can pick one.
+**Two: the postal address. SETTLED 19 September — nothing is waiting on you.**
+The Workshop is the only public voice, by gate, but the postal address you typed
+at stand-up began with your name, and it was going out in the footer of all
+fifteen published pages and every commercial email. You asked for it corrected
+and chose to drop the name line rather than replace it.
+
+What was done: the public reading of the address has a leading line equal to
+your name removed, at the projection, so no renderer downstream can put it back.
+Nothing stands in its place — every one of those surfaces already says "Apex
+Micro is a small digital workshop" in the line above. The street address is
+untouched and still on every page, because commercial mail must carry one. Your
+stored address is exactly as you typed it and your own Workshop page still shows
+it whole: Foundry did not rewrite what you gave it, it declined to put your name
+on pages that are not yours to be named on. A fourth clause in the gate keeps it
+from returning.
+
+Two surfaces still name you, deliberately: the terms page and the Etsy privacy
+policy — the disclosures the law asks for. Experiment 001's page also says "I'm
+Thomas Norton, and Apex Micro is my workshop" in its sealed offer text. That is
+a record rather than a surface and it is not rewritten; if you would rather it
+did not, say so and it becomes a decision about amending a sealed record.
 
 **What happens if neither is done:** nothing breaks, nothing is spent beyond
 today's ceilings, and the River of Nickels does not start flowing. Each

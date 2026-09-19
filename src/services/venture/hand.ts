@@ -848,7 +848,7 @@ export async function planOffer(input: { experimentId: string; recipientId: stri
   const tooOften = await contactFrequencyRefusal({ founderId: e.founderId, email: recipient.email, experimentId: input.experimentId, now: input.now });
   if (tooOften) throw new HandRefused('contact_frequency', tooOften);
   const { publicationGate, pageUrlFor } = await import('../public-workshop/publication.js');
-  const { postalLines, publicWorkshopOfExperiment } = await import('../public-workshop/settings.js');
+  const { publicPostalLines, publicWorkshopOfExperiment } = await import('../public-workshop/settings.js');
   const w = await publicWorkshopOfExperiment(input.experimentId);
   if (w) {
     // READ THE PAGE FROM THE PUBLIC INTERNET, NOW, NOT FROM WHAT WE SAW OF IT.
@@ -869,7 +869,12 @@ export async function planOffer(input: { experimentId: string; recipientId: stri
   if (!quality.ok) throw new HandRefused('offer_quality', quality.failures.join('; '));
   const replyTo = await replyAddressFor(e.productId, e.founderId);
   // Every message carries who is writing, from where, and how to stop it.
-  const footer = w ? `\n\n—\n${w.publicName} is a small digital workshop.${w.postalAddress ? ` ${postalLines(w.postalAddress).join(', ')}.` : ''}\nTo hear nothing further from ${w.publicName}: ${w.origin}/email` : '';
+  //
+  // The address without the owner's name on it: the Workshop is the voice here,
+  // it has just said so in the line before, and the law is asking for a place
+  // mail reaches rather than a person's name in front of it.
+  const post = w ? publicPostalLines(w) : [];
+  const footer = w ? `\n\n—\n${w.publicName} is a small digital workshop.${post.length ? ` ${post.join(', ')}.` : ''}\nTo hear nothing further from ${w.publicName}: ${w.origin}/email` : '';
   const body = offer.body.replace(/\{Business name\}/g, recipient.counterpartyRef.split(',')[0].trim()) + footer;
   const id = nanoid();
   await query(

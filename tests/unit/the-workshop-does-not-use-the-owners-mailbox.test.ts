@@ -113,11 +113,36 @@ describe('the postal address is the owner\'s, exactly as he gave it', () => {
     expect(postalLines('')).toEqual([]);
   });
 
+  it('and the public reading is the same address without his name in front of it', async () => {
+    const { publicPostalLines } = await import('../../src/services/public-workshop/settings.js');
+    const street = ['11 Some Drive', 'Suite 300A #361', 'Town, MA 01752'];
+    // The name line goes, and nothing stands in its place: the surfaces that
+    // render this have just said whose workshop it is.
+    expect(publicPostalLines({ postalAddress: `A Person\n${street.join('\n')}`, operatorName: 'A Person' }))
+      .toEqual(street);
+    // Case and stray spaces are how a person types, not a different address.
+    expect(publicPostalLines({ postalAddress: `  a person  \n${street.join('\n')}`, operatorName: 'A Person' }))
+      .toEqual(street);
+    // An address that does not begin with his name is not touched at all —
+    // Foundry is declining to name him, not editing what he wrote.
+    expect(publicPostalLines({ postalAddress: `Apex Micro\n${street.join('\n')}`, operatorName: 'A Person' }))
+      .toEqual(['Apex Micro', ...street]);
+    // His name further down is part of the address and stays.
+    expect(publicPostalLines({ postalAddress: `11 Some Drive\nc/o A Person`, operatorName: 'A Person' }))
+      .toEqual(['11 Some Drive', 'c/o A Person']);
+    // Nothing recorded stays nothing, and the publication gate refuses to send
+    // without an address — loud rather than a page quietly losing its notice.
+    expect(publicPostalLines({ postalAddress: 'A Person', operatorName: 'A Person' })).toEqual([]);
+    expect(publicPostalLines({ postalAddress: null, operatorName: 'A Person' })).toEqual([]);
+  });
+
   it('is read from one recorded truth wherever it is shown', () => {
     // A second copy of an address is a second address as soon as one changes.
-    for (const rel of ['src/services/public-workshop/site.ts', 'src/services/venture/hand.ts']) {
-      expect(executable(rel)).toContain('postalLines(');
-    }
+    // The site renders the projection, which has already taken his name off;
+    // the hand reads the record and must ask for the public reading itself.
+    expect(executable('src/services/public-workshop/site.ts')).toContain('postalLines(');
+    expect(executable('src/services/public-workshop/projection.ts')).toContain('publicPostalLines(');
+    expect(executable('src/services/venture/hand.ts')).toContain('publicPostalLines(');
   });
 });
 
