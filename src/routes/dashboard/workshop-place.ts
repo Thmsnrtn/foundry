@@ -15,7 +15,7 @@ import type { HtmlEscapedString } from 'hono/utils/html';
 import { page } from './foundry-shell.js';
 import type { Where } from './foundry-shell.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
-import { APEX_MICRO, establishPublicWorkshop, pauseNewEconomicActivity, publicWorkshopOf, resumeEconomicActivity, setAbout, setPostalAddress, WorkshopRefused } from '../../services/public-workshop/settings.js';
+import { APEX_MICRO, establishPublicWorkshop, pauseNewEconomicActivity, publicPostalLines, publicWorkshopOf, resumeEconomicActivity, setAbout, setPostalAddress, WorkshopRefused } from '../../services/public-workshop/settings.js';
 import { livePublications, previewExperimentPage, publishSite, verifySite } from '../../services/public-workshop/publication.js';
 import { projectRegistry } from '../../services/public-workshop/projection.js';
 import { cloudflareReceipts, connectWorkshopSending, outstandingObligations, standUpWorkshop, workshopHealth } from '../../services/public-workshop/infrastructure.js';
@@ -151,9 +151,15 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
     <section class="know" id="identity"><h2>Identity</h2>
       <dl class="facts">
         <dt>Public name</dt><dd>${w.publicName}</dd>
-        <dt>Operator</dt><dd>${w.operatorName} <span class="quiet">(on the terms page only${w.postalAddress && w.postalAddress.split('\n')[0]?.trim() === w.operatorName ? ', and on the postal address you typed — change its first line to the Workshop\'s name if you would rather' : ''})</span></dd>
+        ${/* WHAT THE PUBLIC ACTUALLY READS, not what he typed. This used to ask
+              him to change the first line of his address himself, which was the
+              right sentence while his name on it still reached every page. It
+              does not any more — the projection takes it off — so the line says
+              what is true now rather than asking for work already done. */ ''}
+        <dt>Operator</dt><dd>${w.operatorName} <span class="quiet">(on the terms page only${w.postalAddress && w.postalAddress.split('\n')[0]?.trim() === w.operatorName ? ' — your address below begins with your name, and that line is left off the public pages and commercial mail, which carry the street address alone' : ''})</span></dd>
         <dt>Sends as</dt><dd>${w.publicName} &lt;${w.contactEmail}&gt;</dd>
         <dt>Postal address</dt><dd>${w.postalAddress ?? html`<span class="quiet">none recorded — commercial email must carry one, so no offer goes out until it does</span>`}</dd>
+        ${w.postalAddress ? html`<dt>As the public reads it</dt><dd>${publicPostalLines(w).join(', ') || html`<span class="quiet">nothing — the address is only your name, so no offer can go out</span>`}</dd>` : ''}
         <dt>Contact spacing</dt><dd>${String(w.contactGapDays)} days between tests to one address; at most ${String(w.contactCeilingPerYear)} a year</dd>
       </dl>
       <form method="POST" action="/foundry/public-workshop/postal" class="stack"><label>Postal address for commercial mail (a business or mailbox address, not your home) <textarea name="address" rows="4" placeholder="Street, Suite …&#10;Town, MA 0xxxx">${w.postalAddress ?? ''}</textarea></label><button class="btn" type="submit">Save</button></form>
