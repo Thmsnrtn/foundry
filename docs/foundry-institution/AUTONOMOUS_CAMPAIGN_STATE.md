@@ -2320,3 +2320,15 @@ sender once a second company is named. Two economic forms from the evidence;
 four questions on every unknown. The schema is migrated once and restored
 per file, proven equal. Next: full chain, deploy, review cells with the new
 lenses at day 15 and on a phone.
+
+### Release: the integrated tranche is live (2026-09-21)
+
+`3e4f30cd` deployed to `foundry-intel` at 18:55 UTC: health on the commit,
+loops running, the Workshop answering. The chain that guards the release ran
+in 867s locally (587 files, 5011 tests) and the deploy took nineteen minutes
+from push, both roughly half what they were before the schema template.
+Reviews E1–E4 (returning owner, accountant, phone, compliance) are folded
+into the map; what they left is listed there with the reason, and two
+decisions are the owner's: PENDING 19 (his name on Experiment 001's sealed
+public page against his own rule) and PENDING 20 (whether the hands may test
+a free resource or something licensed in).
