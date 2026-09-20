@@ -203,10 +203,19 @@ experimentRoutes.get('/foundry/experiments/explore', async (c: any) => {
   </article>`;
 
   const w = where(null, 'explore', { now: live.length, found });
+  // AN EMPTY SHELF SAYS WHY. "An answer about the world" was printed after the
+  // owner closed the search himself, which is an answer about him.
+  const { currentMandate, pastSearches } = await import('../../services/venture/mandate.js');
+  const open = await currentMandate(founderId);
+  const last = open ? null : (await pastSearches(founderId, 1))[0] ?? null;
+  const emptyBecause = open
+    ? 'Nothing has survived enough evidence to stand as a candidate yet. That is an answer about the world, not a gap in the page.'
+    : last
+      ? `Nothing is being looked for: the last search closed on ${last.closedAt} (${last.why}). Say what to look for and this fills again.`
+      : 'Nothing is being looked for yet. Say what to look for in the box below.';
   const body = html`
     ${placeHead(w, 'Explore')}
-    <p class="lede">${found === 0
-    ? 'Nothing has survived enough evidence to stand as a candidate yet. That is an answer about the world, not a gap in the page.'
+    <p class="lede">${found === 0 ? emptyBecause
     : `${count(found, 'thing')} found and believed, arranged by what it would be.`}</p>
     <p class="quiet">${alive}</p>
     ${shelves.map((sh) => html`<details class="fold shelf"${sh.candidates.length ? raw(' open') : raw('')}>

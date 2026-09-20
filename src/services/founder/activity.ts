@@ -339,10 +339,11 @@ export async function whatHappened(
     }
   }
   for (const g of await rows(
-    `SELECT g.statement, g.given_at FROM venture_guidance g
+    `SELECT g.statement, MAX(g.given_at) AS given_at FROM venture_guidance g
        JOIN venture_mandates m ON m.id = g.mandate_id
       WHERE m.founder_id = ? AND m.evidence_mode = 'real'
-      ORDER BY g.given_at DESC LIMIT ?`, [founderId, limit])) {
+      GROUP BY g.mandate_id, g.statement
+      ORDER BY given_at DESC LIMIT ?`, [founderId, limit])) {
     out.push({ at: String(g.given_at), kind: 'search', productId: null, companyName: null,
       what: `Steered the search: ${String(g.statement)}`, detail: null, href: '/foundry/searching' });
   }

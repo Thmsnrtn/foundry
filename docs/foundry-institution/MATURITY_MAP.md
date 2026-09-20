@@ -108,6 +108,20 @@ they found is folded into the rows above; what was repaired that day is in
 `OWNER_OS_MIGRATION.md` § *The first direction lands*. What they found and
 was **not** repaired, by choice, with the reason:
 
+**Review D, 21 September, at day 15 of the world** (away a fortnight; can I
+afford another test; clear what I dealt with; stop this direction; why did it
+fail): 0 achieved, 4 partial, 1 failed. Repaired the same day
+(`the-owner-returns.test.ts`): the week-away answer covers the days he was
+actually away, not seven by default, and says the search ran each morning; a
+sentence with "Foundry" in it is about the institution, not the company that
+carries its name (it was answered from that company's boundaries, silently);
+"can I afford another test" is a money question; "stop pursuing this
+direction" is a stop; Explore, empty because he closed the search, says so
+rather than calling it an answer about the world; a buried candidate's reason
+is printed once; one steering row per sentence; "what are you working on"
+names the search. Left: "clear what I have dealt with" (the Inbox does it,
+per thread); six labels for one outcome across surfaces (vocabulary).
+
 - *The composer is hidden on the phone until the Ask pill is tapped.* All
   three reviewers tripped on it. It is the North Star's decision — no fixed
   composer eating the viewport — and stays until the owner says otherwise.

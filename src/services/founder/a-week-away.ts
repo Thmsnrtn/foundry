@@ -284,6 +284,14 @@ export async function whileYouWereAway(founderId: string, days = 7): Promise<Ret
       GROUP BY e.id`, [founderId, since])).rows as unknown as Array<Record<string, unknown>>) {
     effects.push(`${String(o.sent)} of ${String(o.n)} messages sent to people under the test: ${String(o.what_we_do)}`);
   }
+  // THE SEARCH RAN. Fifteen mornings of looking and finding nothing read as
+  // nothing having happened; the mornings are what happened.
+  const { mandateProgress } = await import('../venture/mandate.js');
+  const search = await mandateProgress(founderId);
+  if (search && search.mandate.evidenceMode === 'real') {
+    happened.push(`the search "${search.mandate.statement}" ran each morning: ${String(search.looked)} looked at, `
+      + `${String(search.open)} standing, ${String(search.rejected)} buried`);
+  }
   for (const m of (await query(
     `SELECT statement, closed_reason,
             CASE WHEN closed_at IS NOT NULL AND closed_at >= datetime('now', ?) THEN 1 ELSE 0 END AS closed_lately

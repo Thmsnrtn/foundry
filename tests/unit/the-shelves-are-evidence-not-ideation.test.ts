@@ -48,7 +48,7 @@ describe('with nothing found', () => {
     expect(shelves.every((s) => s.candidates.length === 0)).toBe(true);
 
     const t = (await page('/foundry/experiments/explore')).text;
-    expect(t).toContain('Nothing has survived enough evidence to stand as a candidate yet');
+    expect(t).toMatch(/Nothing has survived enough evidence to stand as a candidate yet|Nothing is being looked for/);
     expect(t).toContain('Nothing found so far looks like this.');
     // And the only thing an empty shelf offers is to point the search there.
     expect(t).toContain('Look for something like this');
@@ -248,6 +248,6 @@ describe('a rehearsal is never a finding', () => {
     // The real candidate went with its search: buried with the reason, not counted and not lost.
     const buried = (await query(`SELECT verdict, verdict_why FROM venture_opportunities WHERE id = 'sh_opp'`, [])).rows[0] as Record<string, unknown>;
     expect(String(buried.verdict)).toBe('rejected');
-    expect(String(buried.verdict_why)).toContain('the search was closed');
+    expect(String(buried.verdict_why)).toContain('the search closing:');
   });
 });

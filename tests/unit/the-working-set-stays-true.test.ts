@@ -68,7 +68,7 @@ describe('a closed search takes its debris with it', () => {
 
     const c = (await rows(`SELECT verdict, verdict_why, revisit_if FROM venture_opportunities WHERE id = ?`, [candidateId]))[0]!;
     expect(String(c.verdict)).toBe('rejected');
-    expect(String(c.verdict_why)).toContain('the search was closed');
+    expect(String(c.verdict_why)).toBe('the search closing: the owner said to stop');
     expect(String(c.revisit_if)).toContain('a search opens that this fits');
     const d = (await rows(`SELECT retired_at, retired_because FROM venture_experiments WHERE id = ?`, [designId]))[0]!;
     expect(d.retired_at).not.toBeNull();

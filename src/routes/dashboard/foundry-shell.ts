@@ -1878,9 +1878,14 @@ export async function companyHeMeant(
   // not exist before it says anything else about it — disclosure, not exclusion.
   // Nothing here becomes owner truth: the numbers it leads to carry the same
   // banner the company's own page does.
+  // NOT THE INSTITUTION'S OWN PRODUCT. The row that carries Foundry's identity
+  // is named "Foundry", so "can I afford to let Foundry run another test?"
+  // was read as a question about a company called Foundry and answered from
+  // that company's boundaries — silently, and about the wrong thing.
   const rows = (await query(
     `SELECT id, name, reality FROM products
       WHERE owner_id = ? AND status = 'active' AND deleted_at IS NULL
+        AND id NOT IN (SELECT product_id FROM system_identities WHERE identity_key = 'foundry')
       ORDER BY length(name) DESC, rowid`, [founderId]))
     .rows as unknown as Array<Record<string, unknown>>;
   for (const row of rows) {
@@ -1973,7 +1978,7 @@ export function matchQuestion(text: string): string {
   if (/\b(okay|ok|alright|fine|health|wrong|broken|problem)\b/.test(t)) return 'okay';
   if (/working on|doing|busy|up to|watching/.test(t)) return 'working';
   if (/own|compan|portfolio|business/.test(t)) return 'companies';
-  if (/allow|permission|authority|can you|able to|spend|budget|money|cost/.test(t)) return 'allowed';
+  if (/allow|permission|authority|can you|able to|spend|budget|money|cost|afford|another test|run a test|one more test/.test(t)) return 'allowed';
   if (/today|happen|since|yesterday|new/.test(t)) return 'today';
   if (/need|want|from me|should i/.test(t)) return 'needs';
   if (/responsib|upkeep|map|look after/.test(t)) return 'working';
@@ -2117,7 +2122,12 @@ async function answerAboutEverything(
   if (key === 'back') {
     return (async () => {
       const { whileYouWereAway } = await import('../../services/founder/a-week-away.js');
-      const l = await whileYouWereAway(founderId);
+      // HOW LONG HE WAS AWAY, NOT A WEEK BY DEFAULT. The visit marker knows
+      // when he last looked; "what happened while I was away" after fifteen
+      // days answered for seven and called the rest nothing.
+      const visit = (await query('SELECT since FROM owner_visits WHERE founder_id = ?', [founderId])).rows[0] as Record<string, unknown> | undefined;
+      const away = visit?.since ? Math.round((Date.now() - Date.parse(String(visit.since).replace(' ', 'T') + (String(visit.since).endsWith('Z') ? '' : 'Z'))) / 86_400_000) : 7;
+      const l = await whileYouWereAway(founderId, Math.min(90, Math.max(7, Number.isFinite(away) ? away : 7)));
       const list = (title: string, items: string[], empty: string): string =>
         `<p class="quiet"><strong>${title}</strong>${items.length ? '' : ` — ${empty}`}</p>`
         + (items.length ? `<ul>${items.map((i) => `<li>${i}</li>`).join('')}</ul>` : '');
@@ -2288,13 +2298,19 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
   if (key === 'working') {
     const { underWayFor } = await import('../../services/institution/undertaking.js');
     const underWay = await underWayFor(s.ownerId);
+    // THE SEARCH IS WORK. "What are you working on?" said nobody had asked it
+    // to look after anything, with a search he gave it running every morning.
+    const { mandateProgress } = await import('../../services/venture/mandate.js');
+    const search = await mandateProgress(s.ownerId);
     return html`<div class="said">
+      ${search ? html`<p>I am looking for: ${search.mandate.statement} — ${String(search.looked)} looked at,
+        ${String(search.open)} standing, ${String(search.rejected)} buried. Every morning.</p>` : ''}
       ${underWay.length ? html`<p>Under way, because you asked or agreed:</p>
       <ul>${underWay.map((u) => html`<li><a href="/foundry/companies/${u.productId}/work">${u.companyName}</a>
         — ${u.understoodAs}</li>`)}</ul>` : ''}
       ${s.checks.length === 0
-    ? html`<p>Nothing yet. I can only see my own workings, and nobody has asked me to look
-        after anything.</p>`
+    ? html`<p>${search ? 'Beyond the search, nobody has asked me to look after a company yet.'
+      : 'Nothing yet. I can only see my own workings, and nobody has asked me to look after anything.'}</p>`
     : html`<p>I watch these, and record what I find:</p>
       <ul>${raw(s.checks.map((c) => `<li>${CHECK_IN_PLAIN_WORDS[c.check]?.name ?? c.check} — `
       + `${c.result === 'passed' ? 'still accurate' : 'out of step'}</li>`).join(''))}</ul>`}

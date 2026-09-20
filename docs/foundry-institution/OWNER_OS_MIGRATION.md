@@ -2890,3 +2890,19 @@ What running the months found, each repaired at the root and kept as a proof:
   the future in the laboratory. A clock that moves `_at` and not `_after` is
   not a clock.
 
+## The owner returns after a fortnight (21 September 2026)
+
+A reviewer drove the world at day fifteen as the owner coming back. "What
+happened while I was away" answered for seven days by default and called the
+rest nothing; it reads the visit marker now and covers the days he was away,
+and the letter says the search ran each morning and what it looked at. "Can I
+afford to let Foundry run another test?" was routed to the company that
+carries Foundry's name and answered from its boundaries — the institution's
+own identity product is never "a company he named", and *afford* is a money
+question. "Stop pursuing this direction" is a stop. Explore, empty because he
+closed the search, said "that is an answer about the world"; it says the
+search closed, when and why. A buried candidate's reason was printed twice;
+once now. The same steering sentence, absorbed twice, showed twice on
+Activity; once now. "What are you working on" names the search before saying
+nobody has asked it to look after a company. Proof: `the-owner-returns.test.ts`.
+

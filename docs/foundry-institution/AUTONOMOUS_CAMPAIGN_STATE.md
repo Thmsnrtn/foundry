@@ -2292,3 +2292,10 @@ the day's discovery; the world's settlement not ending a test's budget; a
 settled test's refund refused once its budget ended. Next: vocabulary and
 empty states; a review cell at day 15.
 
+### The owner returns after a fortnight (2026-09-21)
+
+Review D at day 15 of the world: the away answer covers the real absence; a
+sentence naming Foundry is about the institution; "afford" is a money
+question; "stop pursuing this direction" stops; Explore says who closed the
+search. Boundary B follows: full chain, deploy, live verification.
+

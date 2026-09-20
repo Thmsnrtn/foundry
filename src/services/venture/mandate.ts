@@ -184,8 +184,8 @@ export function readVentureSentence(raw: string): VentureReading {
   // "cancel the search" — the one thing he said not to do. A stop verb with
   // "don't", "do not", "never" or "not" in front of it is not a stop.
   const negatedStop = /\b(?:don'?t|do not|never|not|without)\s+(?:you\s+)?(?:stop|abandon|cancel|forget|call off)\b/.test(t);
-  if (!negatedStop && (/\b(stop|abandon|cancel|forget)\b.*\b(look|search|hunt|venture|business|company)/.test(t)
-    || /\bstop looking\b|\bstop searching\b|\bcall it off\b/.test(t))) {
+  if (!negatedStop && (/\b(stop|abandon|cancel|forget|drop)\b.*\b(look|search|hunt|venture|business|company|direction|pursuit)/.test(t)
+    || /\bstop looking\b|\bstop searching\b|\bcall it off\b|\bstop pursuing\b|\bdon'?t pursue (this|that|it)\b/.test(t))) {
     return { kind: 'stop_mandate', statement };
   }
 
@@ -810,7 +810,7 @@ export async function stopMandate(founderId: string, reason: string): Promise<bo
       await retireExperiment({ experimentId: d.id, by: 'the search closing', because: 'its search was closed before it was decided' });
     }
     await rejectCandidate({ opportunityId: o.id, by: 'the search closing',
-      why: `the search was closed: ${reason}`, revisitIf: 'a search opens that this fits' });
+      why: reason, revisitIf: 'a search opens that this fits' });
   }
   return true;
 }

@@ -85,7 +85,7 @@ export async function seedProductionShape(opts: WorldOptions = {}): Promise<{ ex
   if (!opts.unsettled && !opts.undecided) {
     await new Promise((r) => { setTimeout(r, 1100); }); // a resolution is after its prediction, by the clock
     await recordResult({ experimentId: seeded.experimentId, asPredicted: false,
-      whatHappened: '21 businesses were written to, 19 were delivered, and none bought within the seven days the test allowed.' });
+      whatHappened: 'nobody bought within the seven days the test allowed.' });
   }
 
   const { INSTITUTION_LOOPS, recordJobSuccess } = await import('../../src/services/institution/loop-health.js');
@@ -242,6 +242,10 @@ export async function ownerApp(): Promise<Hono> {
     c.set('csrfToken' as never, 'world' as never);
     await next();
   });
+  // The stylesheet, exactly as the application serves it, so a reviewer sees the product.
+  const { resolve } = await import('node:path');
+  const { staticAssetHandler } = await import('../../src/routes/public/static-assets.js');
+  app.get('/static/:file', staticAssetHandler(resolve(process.cwd(), 'src')) as never);
   // Written out one by one: Vite only follows a dynamic import it can read.
   app.route('/', (await import('../../src/routes/dashboard/foundry-shell.js')).foundryShellRoutes as never);
   app.route('/', (await import('../../src/routes/dashboard/experiments-place.js')).experimentRoutes as never);
