@@ -165,8 +165,11 @@ describe('one tap can steer, and it writes what he would have typed', () => {
     const { stopMandate } = await import('../../src/services/venture/mandate.js');
     const { steer } = await import('../../src/services/venture/nudges.js');
     await stopMandate(OWNER, 'test');
+    // A closed search takes its candidates with it, so the nudge lands on a
+    // buried candidate of a finished search: refused either way, and nothing
+    // opens because a button was pressed under an old candidate.
     const out = await steer({ founderId: OWNER, opportunityId: 'sh_opp', nudge: 'more_like' });
-    expect(out).toEqual({ refused: 'There is no search running to steer.' });
+    expect('refused' in out).toBe(true);
     const open = (await query(`SELECT id FROM venture_mandates WHERE founder_id = ? AND closed_at IS NULL`, [OWNER])).rows;
     expect(open.length).toBe(0);
   });
@@ -241,7 +244,9 @@ describe('a rehearsal is never a finding', () => {
       [rehearsal.id, OWNER]);
 
     const found = (await shelfCandidates(OWNER)).flatMap((s) => s.candidates).map((k) => k.id);
-    expect(found).toContain('sh_opp');
     expect(found).not.toContain('sh_fake');
+    // The real candidates went with their search: buried with the reason, not counted and not lost.
+    const buried = (await query(`SELECT id, verdict, verdict_why FROM venture_opportunities WHERE id IN ('sh_opp','sh_old')`, [])).rows as unknown as Array<Record<string, unknown>>;
+    expect(buried.every((b) => String(b.verdict) === 'rejected' && String(b.verdict_why).includes('the search was closed'))).toBe(true);
   });
 });
