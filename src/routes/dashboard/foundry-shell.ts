@@ -2261,8 +2261,11 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
 
   if (key === 'okay') {
     const well = s.routinesFailing.length === 0 && drifted.length === 0;
+    const { howFoundryIsRunning: pulseOf } = await import('../../services/founder/health.js');
+    const p = await pulseOf(s.ownerId);
     return html`<div class="said">
-      <p>${well ? 'Yes.' : 'Not entirely.'}</p>
+      <p>${well && p.state !== 'stopped' ? 'Yes.' : 'Not entirely.'}</p>
+      <p>${p.sentence}</p>
       ${s.routinesFailing.length ? html`<p>${count(s.routinesFailing.length, 'routine')} of mine
         ${s.routinesFailing.length === 1 ? 'has' : 'have'} stopped, so some of what I tell you
         may be out of date.</p>` : ''}
@@ -2497,6 +2500,16 @@ foundryShellRoutes.get('/foundry', async (c) => {
   const carrying = await underWayFor(s.ownerId);
   const { healthOf } = await import('../../services/founder/health.js');
   const health = await healthOf(s.ownerId);
+  // WHETHER FOUNDRY ITSELF IS OPERATING, as one sentence he does not have to
+  // assemble from tiles: ran or did not, and if it ran, what it decided.
+  const { howFoundryIsRunning, since: sinceThen } = await import('../../services/founder/health.js');
+  const pulse = await howFoundryIsRunning(s.ownerId);
+  const pulseCls = pulse.state === 'stopped' ? 'bad' : pulse.state === 'blocked' ? 'watch' : pulse.state === 'working' ? 'ok' : 'quiet';
+  // AN INSTRUMENT, NOT PROSE. It is a reading off `job_health` and the rows,
+  // drawn as one compact panel under the greeting, before the glance — the
+  // first thing after "what needs you" is "whether I am running", and the
+  // screen's line budget counts panels as state rather than as prose.
+  const pulseLine = html`<section class="panel pulse" id="pulse" aria-label="Whether Foundry is running"><p><span class="state ${pulseCls}">${pulse.word}</span> ${pulse.sentence}${pulse.state !== 'stopped' && pulse.lastPassAt ? html` <span class="dim">Last completed pass ${sinceThen(pulse.lastPassAt, new Date())}.</span>` : ''}</p></section>`;
   const estate: { word: string; cls: 'ok' | 'watch' | 'bad'; detail: string } =
     health.state === 'blocked' ? { word: health.word, cls: 'bad', detail: health.ownerAction ?? health.failed[0] ?? 'something it needs is missing' }
       : health.state === 'degraded' ? { word: health.word, cls: 'watch', detail: health.recovering === 'automatically' ? 'recovering on its own' : health.ownerAction ?? 'needs a look' }
@@ -2723,6 +2736,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
       // on a long page or with the text at 200% it is not short at all.
       : html`<p class="lede${key ? ' quiet' : ''}"><a href="#the-one-thing">${orientation}</a></p>`
     : ''}
+    ${pulseLine}
     ${portfolioState}
     <!-- THE ONE THING HE CAME FOR, BEFORE ANYTHING HE DID NOT.
          This was rendered last: after what changed, after ninety lines of

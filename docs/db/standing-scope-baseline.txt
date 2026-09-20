@@ -1,5 +1,5 @@
 src/cli/index.ts 1
-src/jobs/index.ts 3
+src/jobs/index.ts 4
 src/routes/auth/clerk.ts 1
 src/routes/dashboard/foundry-shell.ts 9
 src/routes/dashboard/roadmap-place.ts 1

@@ -3357,6 +3357,63 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       + 'composed, an adversary attacks it, and it is sealed only inside the charter; a sealed, ready '
       + 'test is let in as the charter\'s principal (daily)',
   },
+  // WHETHER FOUNDRY'S OWN WORK COMPLETED, told to the owner once, without
+  // his opening anything.
+  //
+  // The reading is the same one Home shows: the economic loop's routines,
+  // each against its own cadence, from `job_health`. When one has stopped —
+  // failing, or simply not succeeding when it should — one account notice
+  // goes to the owner through the same door billing notices use, keyed on the
+  // last time that routine succeeded, so a stoppage is one message and an
+  // hourly re-check cannot become a feed. Recovery is not mailed; Home says
+  // it. Nothing here is a monitoring system: no thresholds beyond the cadence
+  // the loop list already states, no preferences, no queue.
+  //
+  // WHAT IT CANNOT DO: run when the scheduler itself is dead. That case is the
+  // deployment's to see, and /internal/health now carries this same reading
+  // for whatever probes it from outside.
+  institution_pulse_tick: {
+    fn: async () => {
+      const { query } = await import('../db/client.js');
+      const { howFoundryIsRunning } = await import('../services/founder/health.js');
+      const { sendAccountNotice } = await import('../services/billing/account-notice.js');
+      // STANDING DOES NOT APPLY: this resolves the one product that IS the
+      // institution, by its system identity, to find whose account to write
+      // to. It is an identity lookup, not a roll-up of his companies, and the
+      // institution's own product is never an experimental asset.
+      const owners = (await query(
+        `SELECT p.id AS product_id, f.id AS founder_id, f.email
+           FROM system_identities s JOIN products p ON p.id = s.product_id
+           JOIN founders f ON f.id = p.owner_id
+          WHERE s.identity_key = 'foundry'`, []))
+        .rows as unknown as Array<Record<string, unknown>>;
+      for (const o of owners) {
+        const pulse = await howFoundryIsRunning(String(o.founder_id));
+        logger.info(`institution_pulse_tick: ${pulse.state} — ${pulse.sentence}`, { jobName: 'institution_pulse_tick' });
+        if (pulse.state !== 'stopped' || pulse.stoppedLoop === null) continue;
+        const sent = await sendAccountNotice({
+          productId: String(o.product_id), to: String(o.email),
+          notice: {
+            kind: 'institution_stopped', companyName: 'Foundry',
+            // THE STOPPAGE'S IDENTITY. The same routine, stopped since the same
+            // last success, is the same stoppage, and the door's dedup refuses
+            // a second message about it.
+            effectiveAt: `${pulse.stoppedLoop.jobName}:${pulse.stoppedLoop.lastSuccessAt ?? 'never'}`,
+            detail: pulse.sentence,
+          },
+        });
+        logger.info(`institution_pulse_tick: owner ${sent ? 'told' : 'not told (already told, or the door refused)'} about ${pulse.stoppedLoop.jobName}`,
+          { jobName: 'institution_pulse_tick' });
+      }
+    },
+    // After the hourly routines have had their turn, so a routine that ran at
+    // :20, :35 or :40 is read as run rather than as stale by minutes.
+    schedule: '50 * * * *',
+    description:
+      'Read whether the economic loop\'s routines completed on their cadence, and tell the '
+      + 'owner once, by account notice, when one has stopped (hourly)',
+  },
+
   venture_discovery_tick: {
     fn: async () => {
       const { discover, promoteWhatEarnedIt, weedOut } = await import(

@@ -1807,3 +1807,10 @@ details.fold.steer{border-top:0;margin-top:.4rem}
 .mailrow .acts{position:relative;z-index:1;grid-column:2/4;display:flex;flex-wrap:wrap;gap:.4rem;margin-top:.5rem}
 .mailrow .acts form{margin:0}
 .mailrow .acts .btn{min-height:40px;padding:6px 14px;font-size:.84rem}
+
+/* WHETHER FOUNDRY ITSELF IS OPERATING, in one line under the first section:
+   a state word he can read in a glance, and the sentence beside it. */
+.panel.pulse{padding:.55rem .8rem;margin:.35rem 0 .5rem}
+.panel.pulse p{display:flex;flex-wrap:wrap;align-items:baseline;gap:.45rem .6rem;margin:0;font-size:.93rem;color:var(--ink-2)}
+.panel.pulse .state{flex:0 0 auto}
+.panel.pulse .dim{flex:1 0 100%;font-size:.8rem}

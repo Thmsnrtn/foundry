@@ -53,6 +53,36 @@ healthRoutes.get('/internal/health', async (c) => {
   const scheduler = schedulerStanding();
   checks.scheduler = scheduler.running > 0 ? 'ok' : 'error';
 
+  // AND WHETHER THE ROUTINES ACTUALLY COMPLETED, which "scheduled" cannot say.
+  //
+  // A routine can be registered on a cron and fail every hour, or never come
+  // round, and the line above still reads ok. The economic loop's routines
+  // each write their success and failure to `job_health`, and the loop list
+  // knows each one's cadence; this reads the same reading the owner's Home
+  // shows, so a probe from outside — Fly's own check, or the owner from his
+  // phone — sees the institution's condition and not only the process's.
+  //
+  // It does not turn the response into a 503: a stalled loop is a logical
+  // failure, and restarting the machine for it would be the wrong reflex. The
+  // status word says degraded; the process stays up to be looked at.
+  let loops: { stopped: string[]; lastCompletedPass: string | null } = { stopped: [], lastCompletedPass: null };
+  try {
+    const { ECONOMIC_LOOPS, INSTITUTION_LOOPS, getFailingInstitutionLoops } = await import('../../services/institution/loop-health.js');
+    const failing = (await getFailingInstitutionLoops()).filter((l) => INSTITUTION_LOOPS[l.jobName]?.economic === true);
+    const marks = ECONOMIC_LOOPS.map(() => '?').join(',');
+    const last = (await query(
+      `SELECT MAX(last_success_at) AS at FROM job_health WHERE job_name IN (${marks})`, [...ECONOMIC_LOOPS]))
+      .rows[0] as Record<string, unknown> | undefined;
+    loops = {
+      stopped: failing.map((l) => `${l.jobName}: ${l.stoppedRunning ? 'has not run' : `failed ${String(l.consecutiveFailures)}x`}; last succeeded ${l.lastSuccessAt ?? 'never'}`),
+      lastCompletedPass: last?.at == null ? null : String(last.at),
+    };
+    checks.loops = failing.length === 0 ? 'ok' : 'error';
+  } catch {
+    checks.loops = 'error';
+  }
+  const degradedLoops = checks.loops === 'error';
+
   // WHICH DATABASE IS ACTUALLY IN USE, WHICH IS NOT THE SAME AS WHICH ONE WAS
   // CONFIGURED.
   //
@@ -75,7 +105,7 @@ healthRoutes.get('/internal/health', async (c) => {
 
   return c.json(
     {
-      status: healthy ? 'ok' : 'degraded',
+      status: healthy && !degradedLoops ? 'ok' : 'degraded',
       timestamp: new Date().toISOString(),
       version: '0.1.0',
       // WHICH COMMIT THIS ACTUALLY IS.
@@ -91,6 +121,7 @@ healthRoutes.get('/internal/health', async (c) => {
       // path, which is itself worth knowing.
       commit: process.env.FOUNDRY_COMMIT ?? 'unknown',
       checks,
+      loops,
       storage,
     },
     healthy ? 200 : 503,

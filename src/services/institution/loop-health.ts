@@ -29,7 +29,7 @@ import { query } from '../../db/client.js';
  * reported, judgments raised and later compared with reality, expectations
  * resolved against what was actually observed.
  */
-export const INSTITUTION_LOOPS: Record<string, { label: string; staleAfterHours: number }> = {
+export const INSTITUTION_LOOPS: Record<string, { label: string; staleAfterHours: number; economic?: boolean }> = {
   institutional_effect_reconciliation: {
     label: 'turning what people outside report into whether something worked',
     // Hourly. Six missed runs is past any plausible blip.
@@ -41,7 +41,53 @@ export const INSTITUTION_LOOPS: Record<string, { label: string; staleAfterHours:
     // Every six hours. A day of silence is four missed runs.
     staleAfterHours: 24,
   },
+
+  // THE ECONOMIC LOOP, which is the institution's actual work.
+  //
+  // Seven routines carry a sentence somebody wrote to a priced offer on the
+  // Workshop's page and back to a settled prediction, and not one of them was
+  // named here — so the owner's page could say "everything I run is running"
+  // with the forge silent for a week, because the two loops it did watch are
+  // about companies he does not yet have. "Nothing found" and "nothing looked"
+  // were one sentence. Each is marked `economic` so the first screen can read
+  // the loop as a whole: whether it ran, and if it ran, what it decided.
+  //
+  // The staleness bounds are the cadence plus a margin, not a guess: a daily
+  // routine that has not succeeded in thirty hours has missed a day; an hourly
+  // one that has not succeeded in six has missed six.
+  sense_check_tick: {
+    label: 'checking that each way of looking still answers',
+    staleAfterHours: 30, economic: true,
+  },
+  real_market_evidence_tick: {
+    label: 'checking what has been claimed against real sources',
+    staleAfterHours: 30, economic: true,
+  },
+  venture_discovery_tick: {
+    label: 'looking through the eyes, sowing and burying seeds, and promoting what has earned it',
+    staleAfterHours: 30, economic: true,
+  },
+  forge_tick: {
+    label: 'designing and attacking tests, and sealing them inside the charter',
+    staleAfterHours: 30, economic: true,
+  },
+  experiment_hand_tick: {
+    label: 'placing offers, delivering what was paid for, and reconciling receipts',
+    staleAfterHours: 6, economic: true,
+  },
+  business_outcome_tick: {
+    label: 'settling each test by what the world actually did',
+    staleAfterHours: 6, economic: true,
+  },
+  public_workshop_tick: {
+    label: 'keeping the public pages current',
+    staleAfterHours: 6, economic: true,
+  },
 };
+
+/** The loops that are the institution's economic work, named. */
+export const ECONOMIC_LOOPS: readonly string[] = Object.entries(INSTITUTION_LOOPS)
+  .filter(([, v]) => v.economic === true).map(([k]) => k);
 
 /** One job's health. `consecutiveFailures` is the only number a founder needs:
  *  it answers "is this failing now", which a lifetime total never does. */

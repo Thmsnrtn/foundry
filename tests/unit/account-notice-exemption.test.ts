@@ -195,12 +195,18 @@ describe('naming the exempt tool does not buy arbitrary content', () => {
 // =============================================================================
 
 describe('the exemption is account administration and nothing else', () => {
-  it('sends only the five account-administration kinds', async () => {
+  it('sends only the six account-administration kinds', async () => {
     const { NOTICE_KINDS } = await import('../../src/services/billing/account-notice.js');
     // Stated as an exact set on purpose. Adding a kind is then a deliberate
     // edit to this line, where the boundary is written down, rather than a
     // quiet widening of the one capability that survives a pause.
+    //
+    // `institution_stopped` is the deliberate sixth (20 September 2026): the
+    // state of the institution itself, sent once per stoppage by a routine
+    // that reads job_health — the same class as read_only_started, and the
+    // one thing the owner asked to hear without opening the application.
     expect([...NOTICE_KINDS].sort()).toEqual([
+      'institution_stopped',
       'payment_failed',
       'read_only_started',
       'subscription_cancelled',

@@ -102,7 +102,10 @@ describe('Health check returns 503 when DB is down', () => {
   });
 
   it('health check reports status as ok or degraded', () => {
-    expect(healthRouteSource).toMatch(/healthy\s*\?\s*['"]ok['"]\s*:\s*['"]degraded['"]/);
+    // The word, not the boolean that chooses it: since 20 September the status
+    // also reads degraded when the economic loop's routines have stopped
+    // completing, without that turning the response into a 503.
+    expect(healthRouteSource).toMatch(/\?\s*['"]ok['"]\s*:\s*['"]degraded['"]/);
   });
 
   it('health check verifies AI key is configured', () => {

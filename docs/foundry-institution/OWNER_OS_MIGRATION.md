@@ -2611,3 +2611,73 @@ Etsy privacy policy (`proof-2-content.ts`) — the two disclosures the doctrine
 names. And Experiment 001's sealed text says "I'm Thomas Norton, and Apex Micro
 is my workshop" on its own public page. That is a record, not a surface, and it
 is not rewritten.
+
+## Foundry knows whether Foundry ran (20 September 2026)
+
+"Foundry has nothing connected to it, so silence from it means nothing." That
+was the one open owner item on the 15 September closeout, and it is the gap an
+autonomous institution cannot leave: the page could say "everything I run is
+running" with the forge silent for a week, because the two loops it watched
+were about companies he does not yet have and the seven that carry a sentence
+to a priced offer were watched by nothing. "Nothing found" and "nothing looked"
+were one sentence.
+
+Nothing new is recorded. The scheduler already writes every routine's success
+and failure to `job_health`; the loop list already knows a routine's cadence;
+the rows already say whether a search is open, what was found, what was
+designed, and what is running. Four things read them:
+
+- **The economic loop is named.** `INSTITUTION_LOOPS` gains the seven routines
+  of the economic loop, each against its own cadence plus a margin (daily: 30
+  hours, hourly: 6), marked `economic`. The estate reader, the absence test
+  and the loops-stopped card pick them up with no further change.
+- **One sentence, the first true thing.** `howFoundryIsRunning` says
+  *stopped* (a routine failed or did not succeed within its cadence; said
+  first because everything below it is stale), *blocked* (the routines ran and
+  something outside stands in the way: a stuck live test, the Workshop needing
+  attention, a search with no way of looking), *working* (tests running or
+  being designed), or *waiting* (the routines ran and decided on the rows that
+  nothing deserves action — no search open, nothing found has earned a
+  candidate, no candidate deserves a test, or a sealed test waits for the
+  charter). A fresh institution says it has not completed a pass yet rather
+  than reading an empty ledger as calm. Never an error message: which routine,
+  and since when.
+- **Home shows it**, one line under the first section, with the last completed
+  pass beside it; "Are you okay?" gives the same sentence. `/internal/health`
+  carries the same reading as `checks.loops` and `loops.stopped`, and turns the
+  status word to `degraded` without turning the response into a 503 — a stalled
+  loop is not a reason to restart the machine.
+- **He is told once.** `institution_pulse_tick`, hourly at :50, sends one
+  account notice of the deliberate sixth kind, `institution_stopped`, through
+  the door billing notices already use, keyed on the stopped routine and its
+  last success, so a stoppage is one message and an hourly re-check cannot
+  become a feed. Recovery is read on Home, not mailed. Nothing here is a
+  monitoring system: no thresholds beyond the cadence the loop list states,
+  no preferences, no queue, no new service.
+
+**What it cannot see, and says so:** a process that is not running writes
+nothing, so no sentence this process produces can report its own death. That
+is what the deployment's health check is for, and the endpoint now carries this
+reading for whatever probes it.
+
+## Experiment 001, settled by the ledger (19 September 2026)
+
+The prediction sealed on 12 September: *at least one business pays $29 and
+receives the brief before 25 have received the offer, within seven days of the
+offer being placed.* What was recorded: 21 businesses written to, 19 delivered,
+2 bounced, 0 replies, 0 payments, 0 deliveries.
+
+On 19 September the hourly `business_outcome_tick` applied the sealed rule to
+what the providers reported, exactly as `settleFromTheWorld` was written to:
+the window closed with nothing, so the verdict is **surprised** — not as
+predicted — written to the row with the counts as its reason, the market
+unknown answered, an observation recorded contradicting the claim, and the
+prediction graded by `business_outcome` rather than by anybody's opinion. The
+public page reads "Closed — the pilot ran and the thesis did not hold." Nothing
+was reinterpreted and nothing was asked of the owner; no independent verdict
+was needed because the rule was sealed with the prediction and the events came
+from a provider.
+
+What follows on its own: the experimental asset retires after the grace the
+owner's policy gives a failed test (`failed_test_grace_days`, 30 by default)
+unless a re-run is designed. No re-run is created merely to show progress.

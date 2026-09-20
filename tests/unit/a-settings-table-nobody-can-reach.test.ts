@@ -138,7 +138,10 @@ describe('the table is gone', () => {
     // This number may only move for a reason written here.
     expect(Object.keys(JOB_REGISTRY).length,
       'one hundred and four, less the ROI job, the funnel that could not run, and the society on a timer, plus the forge')
-      .toBe(76);
+      // And `institution_pulse_tick` — which reads whether the economic loop's
+      // routines completed on their cadence and tells the owner once, by account
+      // notice, when one has stopped — makes seventy-seven (20 September 2026).
+      .toBe(77);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

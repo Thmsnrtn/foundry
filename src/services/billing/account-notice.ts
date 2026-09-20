@@ -33,7 +33,8 @@ export type NoticeKind =
   | 'trial_ending'
   | 'trial_ended'
   | 'subscription_cancelled'
-  | 'payment_failed';
+  | 'payment_failed'
+  | 'institution_stopped';
 
 export interface AccountNotice {
   kind: NoticeKind;
@@ -41,6 +42,13 @@ export interface AccountNotice {
   companyName: string;
   /** The date the notice turns on: when access ends, or when the trial does. */
   effectiveAt?: string | null;
+  /**
+   * The one sentence an `institution_stopped` notice carries, composed by the
+   * reader on the server and never by a caller. It names a routine and a time
+   * and nothing else: no error text, no message, nothing a failure was
+   * carrying — the same rule `job_health` keeps.
+   */
+  detail?: string | null;
 }
 
 const APP_URL = (): string => process.env.APP_URL ?? 'https://foundry.so';
@@ -82,6 +90,18 @@ function render(notice: AccountNotice): { subject: string; html: string } {
         html: shell(`<p>The last payment for <strong>${escapeHtml(notice.companyName)}</strong> did not go through. We will retry it automatically.</p>
           <p>Nothing changes while we retry. Updating your card now avoids any interruption.</p>
           <p><a href="${billing}">Update payment method →</a></p>`),
+      };
+    case 'institution_stopped':
+      // THE ONE THING THE OWNER SHOULD HEAR WITHOUT OPENING THE APP: that the
+      // institution's scheduled work has stopped completing. One message per
+      // stoppage — the dedup key is the last time the routine succeeded — and
+      // nothing more until it stops again. Recovery is read on Home, not mailed.
+      return {
+        subject: 'Foundry hasn\'t completed its scheduled work',
+        html: shell(`<p>${escapeHtml(notice.detail ?? 'Foundry hasn\'t completed its scheduled work.')}</p>
+          <p>What it tells you may be out of date until it recovers. Nothing is lost, and nothing needs you unless Home says so.</p>
+          <p>I will not write again about this stoppage. If it stops again after recovering, I will.</p>
+          <p><a href="${APP_URL()}/foundry">See where it stands →</a></p>`),
       };
     case 'read_only_started':
       return {
@@ -136,10 +156,19 @@ async function ownerEmail(productId: string): Promise<string | null> {
  * widens the single capability that survives a pause, so it is a decision, not
  * a convenience — the test file states this set exactly, and an addition has to
  * change that line too.
+ *
+ * `institution_stopped` was added 20 September 2026 as the sixth, and it is
+ * the same class as `read_only_started`: the state of the institution itself,
+ * as it concerns the owner. It is sent by a routine that reads `job_health`,
+ * carries a sentence the server composed, and is deduplicated on the last time
+ * the stopped routine succeeded, so it is one message per stoppage and never a
+ * feed. The owner asked for exactly this: to learn promptly that scheduled
+ * work has stopped, without opening the application and without a
+ * notification system.
  */
 export const NOTICE_KINDS: readonly NoticeKind[] = [
   'read_only_started', 'trial_ending', 'trial_ended',
-  'subscription_cancelled', 'payment_failed',
+  'subscription_cancelled', 'payment_failed', 'institution_stopped',
 ] as const;
 
 const KINDS = new Set<NoticeKind>(NOTICE_KINDS);

@@ -2230,3 +2230,16 @@ kind of noise. Raised to 90 minutes, which still stops a genuinely hung job.
 The real remedy, when the chain next grows, is to make it faster rather than to
 keep raising the ceiling: ~4,900 tests in one sequential vitest run is the
 cost, and nothing about it is parallelised.
+
+### Foundry knows whether Foundry ran; Experiment 001 settled (2026-09-20)
+
+The one open owner item from the closeout — that silence from Foundry meant
+nothing — is closed on existing infrastructure: the economic loop's seven
+routines named against their cadence in the loop list, one reader saying the
+first true thing (stopped, blocked, working, waiting), the sentence on Home and
+in the health endpoint, and one account notice per stoppage. No new table, no
+new service, no dashboard.
+
+Experiment 001 settled itself on 19 September through the sealed rule and the
+hourly outcome tick: surprised, graded by the world, prediction preserved. The
+owner was asked nothing. Its asset retires around 19 October unless re-run.
