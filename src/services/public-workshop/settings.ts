@@ -192,6 +192,31 @@ export async function newEconomicActivityPaused(founderId: string): Promise<bool
   return (await publicWorkshopOf(founderId))?.economicPause !== null && (await publicWorkshopOf(founderId)) !== null;
 }
 
-export async function recordWorkshopHealth(founderId: string, health: Record<string, unknown>): Promise<void> {
+export async function recordWorkshopHealth(founderId: string, health: Record<string, unknown>, now = new Date()): Promise<void> {
   await query(`UPDATE public_workshop SET health_json = ?, health_at = datetime('now'), updated_at = datetime('now') WHERE founder_id = ?`, [JSON.stringify(health), founderId]);
+  // AND THE DAY KEEPS ITS OWN RECORD (migration 327). The snapshot above is
+  // overwritten hourly, so it can say the reply path is broken now and never
+  // whether it was open on the days a test was asking the world to answer.
+  // One row per path per day, holding the WORST reading of that day: a path
+  // that was down for an hour could not carry a reply sent in that hour.
+  const day = now.toISOString().slice(0, 10);
+  for (const channel of ['replyInbox', 'sending', 'site', 'cloudflare', 'mail'] as const) {
+    const signal = health[channel] as { status?: string; detail?: string } | undefined;
+    const status = signal?.status;
+    if (status !== 'healthy' && status !== 'needs_attention' && status !== 'unknown') continue;
+    await query(
+      `INSERT INTO public_channel_days (founder_id, channel, day, worst_status, detail, readings, first_at, last_at)
+       VALUES (?,?,?,?,?,1,datetime('now'),datetime('now'))
+       ON CONFLICT(founder_id, channel, day) DO UPDATE SET
+         -- The worst of the day stands; a later healthy reading only counts.
+         worst_status = CASE
+           WHEN public_channel_days.worst_status = 'needs_attention' OR excluded.worst_status = 'needs_attention' THEN 'needs_attention'
+           WHEN public_channel_days.worst_status = 'unknown' OR excluded.worst_status = 'unknown' THEN 'unknown'
+           ELSE 'healthy' END,
+         detail = CASE WHEN excluded.worst_status <> 'healthy' AND public_channel_days.worst_status = 'healthy'
+                       THEN excluded.detail ELSE public_channel_days.detail END,
+         readings = public_channel_days.readings + 1,
+         last_at = datetime('now')`,
+      [founderId, channel, day, status, signal?.detail ?? null]);
+  }
 }

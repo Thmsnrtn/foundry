@@ -3378,6 +3378,25 @@ CREATE TABLE proposed_acts (
   consumed_at         TEXT,
   consumed_by         TEXT
 , rung TEXT REFERENCES consequence_rungs(rung), cost_cents INTEGER, experiment_id TEXT REFERENCES venture_experiments(id), measurement_critical INTEGER, undertaking_id TEXT REFERENCES undertakings(id));
+CREATE TABLE public_channel_days (
+  founder_id   TEXT NOT NULL REFERENCES founders(id),
+  -- The path the world would answer through: the reply mailbox, the sending
+  -- identity, the public site, the provider that carries them.
+  channel      TEXT NOT NULL CHECK (channel IN ('replyInbox','sending','site','cloudflare','mail')),
+  day          TEXT NOT NULL,
+  -- THE WORST OF THE DAY, not the last. A path that was down for an hour
+  -- could not carry a reply sent in that hour, and the last reading of the
+  -- day would call that day healthy.
+  worst_status TEXT NOT NULL CHECK (worst_status IN ('healthy','needs_attention','unknown')),
+  -- What was wrong, in the words the health reading used.
+  detail       TEXT,
+  -- How many readings the day got, so a day watched once is not read as a day
+  -- that was watched.
+  readings     INTEGER NOT NULL DEFAULT 1 CHECK (readings > 0),
+  first_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  last_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (founder_id, channel, day)
+);
 CREATE TABLE public_contacts (
   id             TEXT PRIMARY KEY,
   founder_id     TEXT NOT NULL REFERENCES founders(id),
@@ -5117,6 +5136,7 @@ CREATE INDEX idx_proposed_acts_open
 CREATE INDEX idx_proposed_acts_spendable
   ON proposed_acts(product_id, action_type, params_fingerprint)
   WHERE decision = 'approved' AND consumed_at IS NULL AND revoked_at IS NULL;
+CREATE INDEX idx_public_channel_days ON public_channel_days(founder_id, channel, day);
 CREATE INDEX idx_public_contacts_email ON public_contacts(founder_id, email, contacted_at);
 CREATE INDEX idx_public_publication_experiment ON public_publications(experiment_id, superseded_at);
 CREATE UNIQUE INDEX idx_public_publication_live ON public_publications(founder_id, path) WHERE superseded_at IS NULL;
@@ -8275,6 +8295,18 @@ WHEN NEW.undertaking_id IS NOT NULL AND (
   (SELECT product_id FROM undertakings WHERE id = NEW.undertaking_id) IS NOT NEW.product_id
   OR (SELECT closed_at FROM undertakings WHERE id = NEW.undertaking_id) IS NOT NULL)
 BEGIN SELECT RAISE(ABORT,'proposed_acts:undertaking_must_be_same_company_and_open'); END;
+CREATE TRIGGER public_channel_day_keeps_the_worst
+BEFORE UPDATE ON public_channel_days
+BEGIN
+  SELECT RAISE(ABORT,'public_channel_day:immutable') WHERE
+    NEW.founder_id <> OLD.founder_id OR NEW.channel <> OLD.channel OR NEW.day <> OLD.day
+    OR NEW.first_at <> OLD.first_at;
+  SELECT RAISE(ABORT,'public_channel_day:a_day_does_not_get_better')
+    WHERE OLD.worst_status = 'needs_attention' AND NEW.worst_status <> 'needs_attention';
+  SELECT RAISE(ABORT,'public_channel_day:a_day_does_not_get_better')
+    WHERE OLD.worst_status = 'unknown' AND NEW.worst_status = 'healthy';
+  SELECT RAISE(ABORT,'public_channel_day:readings_only_rise') WHERE NEW.readings < OLD.readings;
+END;
 CREATE TRIGGER public_contact_append_only_delete
 BEFORE DELETE ON public_contacts
 BEGIN
