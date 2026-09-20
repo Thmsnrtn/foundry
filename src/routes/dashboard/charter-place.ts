@@ -70,6 +70,8 @@ charterRoutes.get('/foundry/charter', async (c: any) => {
     ? charterExposure({ testsTotalCents: envelope.charter.testsTotalCents, cognitionCentsPerDay: envelope.charter.cognitionCentsPerDay, days: envelope.charter.days })
     : charterExposure({ testsTotalCents: Math.round(form.tests * 100), cognitionCentsPerDay: Math.round(form.thinking * 100), days: form.days });
   const probes = envelope ? envelope.charter.probesInFlight : form.probes;
+  const { AI_CEILINGS } = await import('../../services/ai/client.js');
+  const deploymentCap = AI_CEILINGS().founder;
   const voice = envelope ? envelope.charter.publicVoice : workshop?.publicName ?? 'the Workshop';
   const rules = envelope ? envelope.charter.contactRules : SEALED_CONTACT_RULES;
   const firstRule = rules.split(/(?<=\.)\s/)[0] ?? rules;
@@ -105,7 +107,8 @@ charterRoutes.get('/foundry/charter', async (c: any) => {
     </dl>
     <p class="act">Total exposure</p>
     <p class="lead total-exposure">${dollars(ex.testsTotalCents)} + ${dollars(ex.cognitionCentsPerDay)} × ${String(ex.days)} days = <b>${dollars(ex.periodMaxCents)}</b></p>
-    <p class="quiet">The most this charter can ever cost you. No day, no month and no window can exceed it: the tests total is held whole by the row that sets money aside, whatever month a test falls in, and the day's thinking is held on each of the ${String(ex.days)} days. Money buyers pay is not in these figures; what is at risk is. Refunds come out of what was paid.</p>
+    <p class="quiet">The most this charter can ever cost you. No day, no month and no window can exceed it: the tests total is held whole by the row that sets money aside, whatever month a test falls in, and the day's thinking is refused at the door on each of the ${String(ex.days)} days. Money buyers pay is not in these figures; what is at risk is. Refunds come out of what was paid.</p>
+    ${deploymentCap < ex.cognitionCentsPerDay ? html`<p class="quiet"><b>Also standing:</b> this deployment stops thinking for you at ${dollars(deploymentCap)} a day, so that is the day's true bound and the most it can cost is at most ${dollars(ex.testsTotalCents + deploymentCap * ex.days)}.</p>` : html`<p class="quiet"><b>Also standing:</b> this deployment stops thinking for you at ${dollars(deploymentCap)} a day; the charter's rate is lower, so the charter binds.</p>`}
   </section>`;
 
   // WHAT IT DOES BEFORE HE SIGNS. The charter gates acting consequentially, not

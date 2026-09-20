@@ -302,7 +302,8 @@ describe('places he can walk to', () => {
     expect(said).toContain('What I may do on my own');
     expect(said).toMatch(/cannot act or spend/i);
     expect(said).toContain('Stop everything');
-    expect(said).toContain('a month is the limit you set');
+    expect(said).toContain('a note you set');
+    expect(said).toContain('thought today');
   });
 
   it('keeps saying what it may do once something has been allowed', async () => {

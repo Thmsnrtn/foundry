@@ -19,6 +19,7 @@ src/services/founder/what-changed.ts 1
 src/services/institution/absence-test.ts 4
 src/services/institution/acting.ts 3
 src/services/institution/ecosystem-principal.ts 1
+src/services/institution/spending.ts 1
 src/services/institution/standing-intent.ts 1
 src/services/intelligence/founder-health.ts 3
 src/services/letter/verifier.ts 2

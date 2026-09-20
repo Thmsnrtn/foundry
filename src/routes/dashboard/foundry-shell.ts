@@ -173,11 +173,6 @@ export function count(n: number, singular: string, plural = singular + 's'): str
 }
 
 /** A daily ceiling as the thinking door reads it from this deployment, in dollars a day. */
-const dollarsADay = (raw: string | undefined, dflt: number): string => {
-  const cents = Number.parseInt(raw ?? String(dflt), 10);
-  const c = Number.isFinite(cents) ? cents : dflt;
-  return `$${(c / 100).toFixed(c % 100 === 0 ? 0 : 2)} a day`;
-};
 
 // ─── state ──────────────────────────────────────────────────────────────────
 
@@ -389,7 +384,10 @@ export interface OwnerState {
    * him as his own decision on a page about what he has told Foundry it may do.
    */
   budgetMonthly: number | null;
+  /** Thinking bought at his scope in the last thirty days, from the ledger the door enforces. */
   spent30d: number;
+  /** What may be thought today and why (institution/spending.ts): the one reading. */
+  thinking: import('../../services/institution/spending.js').ThinkingToday;
   connectedSenses: string[];
   establishedAt: string | null;
   /**
@@ -674,7 +672,11 @@ async function readOwnerState(
     }),
     budgetMonthly: product?.operating_budget_monthly_usd == null ? null
       : Number(product.operating_budget_monthly_usd),
-    spent30d: Number(product?.ai_cost_trailing_30d_usd ?? 0),
+    // THE FIGURE SHOWN IS THE FIGURE ENFORCED: the founder-scope ledger the
+    // reservation guard reads, not a per-company trailing column written by
+    // one family of agents.
+    spent30d: await (async () => { const { thinkingSpent } = await import('../../services/institution/spending.js'); return (await thinkingSpent('founder', founderId, 30)) / 100; })(),
+    thinking: await (async () => { const { thinkingToday } = await import('../../services/institution/spending.js'); return thinkingToday(founderId); })(),
     connectedSenses: product?.github_repo_url ? ['its code'] : [],
     establishedAt: product?.created_at == null ? null : String(product.created_at).slice(0, 10),
     elsewhere: await questionsElsewhere(founderId, productId),
@@ -2530,6 +2532,7 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
       and you can take it back above.</p>
       ${s.connectedSenses.length === 0 ? html`<p>In practice I cannot use it: I have no way
         to reach the repository, so nothing I could change is reachable from here.</p>` : ''}`}
+      <p>Today I may think up to $${(s.thinking.bindingCents / 100).toFixed(2)}: ${s.thinking.because}. $${(s.thinking.spentTodayCents / 100).toFixed(2)} of it is spent, and the door refuses the call that would pass it.</p>
       <p>${s.spent30d === 0
     ? html`Thinking has cost nothing this month.`
     : html`Thinking has cost $${s.spent30d.toFixed(2)} this month.`}</p>
@@ -3498,7 +3501,7 @@ export async function readCompany(productId: string, founderId: string): Promise
     }))),
     budgetMonthly: row.operating_budget_monthly_usd == null ? null
       : Number(row.operating_budget_monthly_usd),
-    spent30d: Number(row.ai_cost_trailing_30d_usd ?? 0),
+    spent30d: await (async () => { const { thinkingSpent } = await import('../../services/institution/spending.js'); return (await thinkingSpent('product', productId, 30)) / 100; })(),
     knows, gaps,
     responsibilities: responsibilities.map((r) => ({
       id: String(r.id), title: String(r.title), state: String(r.state),
@@ -6321,7 +6324,6 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
   const speaking = await correspondenceHealth(s.ownerId);
   const MODE_WORD: Record<string, string> = { off: 'Off', draft: 'Draft', autonomous: 'Autonomous' };
   const MODE_GLOSS: Record<string, string> = { off: 'answering nothing; everything waits for you', draft: 'writing answers, sending none', autonomous: 'answering ordinary messages itself' };
-  const spentPct = s.budgetMonthly !== null && s.budgetMonthly > 0 ? Math.min(100, Math.round((100 * s.spent30d) / s.budgetMonthly)) : null;
   // THE CHARTER HAS ITS OWN PLACE. Here it is one card: the word, the sentence,
   // the door. Everything he needs to read before signing lives at /foundry/charter.
   const { envelopeReading, charterSentence } = await import('../../services/institution/charter.js');
@@ -6394,17 +6396,17 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
       <p class="quiet"><a href="/foundry/inbox">Change it in the Inbox</a>, with a reason for the record.</p>`)}
 
     ${card('cash', 'Money', html`
-      <p class="lines"><b class="num">$${s.spent30d.toFixed(2)}</b> <span class="quiet">spent in 30 days${s.budgetMonthly !== null ? ` of $${String(s.budgetMonthly)} a month` : ''}</span></p>
-      ${spentPct !== null ? html`<span class="prog" role="img" aria-label="${String(spentPct)}% of the monthly limit"><i style="width:${String(Math.max(2, spentPct))}%"></i></span><p class="prog-n">$${String(s.budgetMonthly)} a month is the limit you set for ${s.companyName} · ${String(spentPct)}% used</p>`
-    : html`<p class="quiet">You have not set a monthly limit for ${s.companyName}. The daily ceilings below are what actually stops me.</p>`}
+      <p class="lines"><b class="num">$${(s.thinking.spentTodayCents / 100).toFixed(2)}</b> <span class="quiet">of $${(s.thinking.bindingCents / 100).toFixed(2)} thought today</span></p>
+      <p class="quiet">I stop thinking at $${(s.thinking.bindingCents / 100).toFixed(2)} today: ${s.thinking.because}. The door refuses the call that would pass it.</p>
       <dl class="facts">
-        <dt>Per company</dt><dd>I stop thinking at ${dollarsADay(process.env.AI_DAILY_COST_CEILING_CENTS, 2500)} <span class="quiet">— until a charter is signed, $${(PRE_CHARTER_THINKING_CENTS / 100).toFixed(0)} a day binds, whichever is lower</span></dd>
-        <dt>Everything</dt><dd>${dollarsADay(process.env.AI_DAILY_COST_CEILING_GLOBAL_CENTS, 50_000)}</dd>
+        <dt>Also standing</dt><dd>${s.thinking.ceilings.filter((c) => c.cents !== s.thinking.bindingCents || c.name !== s.thinking.ceilings[0].name).map((c) => `${c.name}: $${(c.cents / 100).toFixed(2)} ${c.per}`).join(' · ')}</dd>
+        <dt>Thirty days</dt><dd>$${s.spent30d.toFixed(2)} of thinking, from the same ledger the door reads</dd>
+        ${s.budgetMonthly !== null ? html`<dt>Your note</dt><dd>$${String(s.budgetMonthly)} a month is a note you set for ${s.companyName}, not a limit: nothing reads it to stop me. The ceilings above do.</dd>` : ''}
         ${ceiling == null ? '' : html`<dt>Outside myself</dt><dd>$${(Number(ceiling.cents_per_month) / 100).toFixed(2)} a month of metered use, ${ceilingSetByHim
     ? `set by you on ${String(ceiling.authorized_at).slice(0, 10)}`
     : html`set by <span class="mono">${String(ceiling.authorized_by)}</span> on ${String(ceiling.authorized_at).slice(0, 10)} &mdash; if that was not you, it is worth asking why`}</dd>`}
       </dl>
-      <details class="fold"><summary><h3>How this works</h3></summary><p class="quiet">The ceilings are what actually stops me: the same numbers the thinking door reads from this deployment. Watching costs nothing — comparing my own records uses no thinking.${ceiling == null ? '' : ' The metered ceiling is separate from any plan: agreeing to a subscription is not agreeing to unlimited computing.'}</p></details>`)}
+      <details class="fold"><summary><h3>How this works</h3></summary><p class="quiet">The binding ceiling is the lowest of what stands: the charter's daily rate once you sign one, $${(PRE_CHARTER_THINKING_CENTS / 100).toFixed(0)} a day until then, and this deployment's own caps. The same number is handed to the door that buys thinking, so what you read here is what refuses the call. Watching costs nothing — comparing my own records uses no thinking.${ceiling == null ? '' : ' The metered ceiling is separate from any plan: agreeing to a subscription is not agreeing to unlimited computing.'}</p></details>`)}
 
     ${card('watching', 'Connected to', s.connectedSenses.length === 0
     ? html`<p><strong>Nothing.</strong> I have no way to see your code, your money or your customers.</p>`

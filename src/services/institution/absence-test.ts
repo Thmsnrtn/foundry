@@ -323,12 +323,11 @@ async function bounded(founderId: string, days: number, now: Date): Promise<Prop
   // bounded by the rate he signed, not the provider's founder-wide ceiling —
   // which read "$700 over 7 days" beside a charter that allows $3 a day.
   // Without one, the pre-charter rate; the provider ceiling is the backstop.
-  const { PRE_CHARTER_THINKING_CENTS, liveCharter } = await import('./charter.js');
-  const charter = await liveCharter(founderId, now);
-  const providerCeilingCents = parseInt(process.env.AI_DAILY_COST_CEILING_FOUNDER_CENTS ?? '10000', 10);
-  const founderCeilingCents = Math.min(providerCeilingCents, charter ? charter.cognitionCentsPerDay : PRE_CHARTER_THINKING_CENTS);
+  const { thinkingToday } = await import('./spending.js');
+  const t = await thinkingToday(founderId, now);
+  const founderCeilingCents = t.bindingCents;
   const thinkingWorstCase = founderCeilingCents * days;
-  evidence.push(`thinking: at most ${money(founderCeilingCents)} a day${charter ? ' under the charter' : ' until a charter is signed'}, `
+  evidence.push(`thinking: at most ${money(founderCeilingCents)} a day${t.bindingIs === 'charter' ? ' under the charter' : t.bindingIs === 'pre-charter' ? ' until a charter is signed' : ' by this deployment\u2019s own cap'}, `
     + `so ${money(thinkingWorstCase)} over ${String(days)} days if every day hit the ceiling`);
 
   // REAL COMPANIES ONLY, AND DELIBERATELY NOT EARNED ONES ONLY. A reference

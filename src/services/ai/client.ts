@@ -50,6 +50,10 @@ const DAILY_COST_CEILING_CENTS = parseInt(process.env.AI_DAILY_COST_CEILING_CENT
 const FOUNDER_COST_CEILING_CENTS = parseInt(process.env.AI_DAILY_COST_CEILING_FOUNDER_CENTS ?? '10000', 10);
 const GLOBAL_COST_CEILING_CENTS = parseInt(process.env.AI_DAILY_COST_CEILING_GLOBAL_CENTS ?? '50000', 10);
 
+/** The deployment's three caps, for the one reading of spend (institution/spending.ts). */
+export const AI_CEILINGS = (): { product: number; founder: number; global: number } =>
+  ({ product: DAILY_COST_CEILING_CENTS, founder: FOUNDER_COST_CEILING_CENTS, global: GLOBAL_COST_CEILING_CENTS });
+
 const GLOBAL_SCOPE_ID = '__global__';
 const CACHE_TTL_MS = 60_000; // re-read from DB at most once per minute per scope
 
@@ -260,9 +264,20 @@ async function authorizeSpend(
   // maxOutputTokens is the provider-enforced output bound.
   const maxInputTokens = new TextEncoder().encode(prompt).length + 64;
   const amountCents = Math.max(computeCostCents(model, maxInputTokens, maxOutputTokens), 0.000001);
+  // THE THINKING BOUND THE OWNER READS IS THE ONE THAT REFUSES THE CALL. The
+  // charter's daily rate (or the pre-charter bound) used to stop one job from
+  // starting a pass; every other call ran to the deployment's founder cap.
+  // The founder-scope cap handed to the guard is now the lower of the two, so
+  // "I stop thinking at $1 a day until you sign" is enforced where thinking
+  // is bought, and the reservation row records the cap that applied.
+  let founderCap = FOUNDER_COST_CEILING_CENTS;
+  if (founderId) {
+    const { thinkingCapFor } = await import('../institution/spending.js');
+    founderCap = Math.min(founderCap, await thinkingCapFor(founderId));
+  }
   return reserveSpend({
     productId, founderId: founderId ?? undefined, model, amountCents,
-    caps: { global: GLOBAL_COST_CEILING_CENTS, product: DAILY_COST_CEILING_CENTS, founder: FOUNDER_COST_CEILING_CENTS },
+    caps: { global: GLOBAL_COST_CEILING_CENTS, product: DAILY_COST_CEILING_CENTS, founder: founderCap },
     purpose, work,
   });
 }
