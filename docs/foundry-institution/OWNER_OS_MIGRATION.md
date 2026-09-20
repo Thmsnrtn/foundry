@@ -2950,3 +2950,37 @@ carrying words of the question and of the mechanism, thresholds written into
 the reason — so the owner can disagree with a reading rather than guess it.
 Proofs: `tests/simulation/09-what-was-learned-changes-the-next-design.test.ts`,
 `precedent-is-scoped.test.ts`.
+
+## The laboratory grows; the forms follow the evidence; the suite costs what it is worth (21 September 2026)
+
+**A month of a portfolio, with the world going wrong** (scenario 10). Two
+companies he named through the Portfolio's own form, a search open, a test
+allowed under a charter. The mail provider is down the morning the hand
+writes: nothing is sent, the morning says so once, naming the provider's
+answer, the experiment page says who could not be reached and that it will
+try again, and the next morning the same offers go out once each under the
+same idempotency key. Before this month, a failed offer counted its recipient
+as done and one bad morning dropped those people from the test for good. A
+buyer pays, the delivery bounces, and the payment provider is down when the
+refund is owed: the refund waits, the page says it needs him, and issues once
+when the provider returns. Naming a second company had made the sender
+"ambiguous" so no test could write to anyone; under a Workshop the sender is
+the Workshop, as the doctrine already said. On day 30 the letter, Home and
+the money reading agree; the companies nothing reports on are listed as ones
+Foundry cannot see, never as quiet ones.
+
+**The forms follow the evidence** (`ECONOMICS.md` § *Mechanisms with
+sources*). Two forms join the shelf, a free resource that supports a paid
+product and something licensed in and resold, each naming the exchange it
+would need, which the shelf says is not available today rather than running a
+different test. Every open unknown is filed under demand, distribution,
+conversion or fulfilment from its own words, and the forge's record says
+which, so the cheapest test is for the question actually open.
+
+**The suite costs what it is worth.** Every test file replayed the migrations
+into its own database; the first now dumps a template keyed to the migration
+files and the rest restore it in one call: tables, then the seed rows, then
+the guards. The restored database is proven equal to the migrated one: the
+same objects with the same SQL, the same rows in every table, the same guards
+refusing the same writes with the same words. One file: 7.8s to 4.3s.
+`FOUNDRY_MIGRATION_TEMPLATE=off` is the honest way to compare against.

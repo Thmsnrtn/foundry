@@ -47,6 +47,8 @@ the objective and not the path (`scripts/owner-review-harness.mts`, below).
 | J14 | **Watch an experiment reach customers and see what they did** | works | natural | **pending reality** | Experiment 001: 21 written to, 19 delivered, 2 bounced, 0 replies, 0 purchases; settled *surprised* by the sealed rule on 19 Sep with the prediction preserved. That is one external observation of one channel; it establishes the null of that offer to that population in that window and nothing wider. |
 | J16 | **Understand what happened to a test, in one word, with the reason** | works *(since 21 Sep)* | natural | reachable | One reader (`what-happened.ts`) turns a test's rows into one word, its meaning, the recorded reason and what it does and does not establish; the page, Recently finished, History, Activity, the letter, Home and the Ask answer render it (`what-happened-has-one-name`). Before: six labels for one outcome, two of them the raw column, and the page repeated the verdict without the reason (reviews A–D). *Partly* — some paid, fewer than the rule asked — reaches him from the grade. |
 | J17 | **Ask the first commercial questions and be answered from the rows** | works *(since 21 Sep)* | natural | measures | "Is anything making money yet?" is answered from real payments, refunds, the last settlement and what is set aside (it reached the permissions answer before); "show me what you've found" names the search and the candidates standing; "I don't like this direction" and "look more closely at X" steer; a steering sentence that asks to look opens the search it steers (`the-owners-sentences-land`). |
+| J18 | **Keep going through a provider outage** without losing anyone or paying twice | works *(since 21 Sep)* | natural | protects | Scenario 10 on the world: the mail provider down the morning the hand writes — nothing sent, the morning says so once naming the provider's answer, the page says who could not be reached and that it will try again; the next morning the same offers go out once each under the same idempotency key. Before: a failed offer counted its recipient as done, and one bad morning dropped those people for good. A payment provider down when a refund is owed: the refund waits, the page says it needs him, and issues once when the provider returns. |
+| J19 | **Own more than one company and still run a test** | works *(since 21 Sep)* | natural | reachable | Scenario 10: naming a second company made the sender "ambiguous" and no test could write to anyone; under a Workshop the sender is the Workshop (`senderCompanyOf`). Home watches the companies; "can I step away" lists the ones nothing reports on as ones Foundry cannot see. |
 | J15 | **Own an asset**: see its state, obligations, costs and whether it is worth keeping | works, gap | findable, rough | **pending reality** | Experimental assets are kept outside operating paths until reality earns them (`asset.ts`); a failed test's asset retires after `failed_test_grace_days`. Owner-adjusted value (support, owner minutes, entropy, dependency, reversibility) is doctrine (`OBJECTIVE.md`, `RIVER.md`) and partly columns; no asset has earned, so nothing has been valued. |
 
 ## The economic loop, transition by transition
@@ -92,10 +94,20 @@ has by n days, in the format its writer used — the SQL is the clock, so time
 passes by moving rows, and the one guard that refuses a uniform translation
 is lifted and put back verbatim. `runMorning()` drives the economic loop
 through the registry as the scheduler does. Two months of ownership run on it
-(`tests/simulation/07-thirty-days-of-a-search`, `08-a-test-through-thirty-days`):
+(`tests/simulation/07-thirty-days-of-a-search`, `08-a-test-through-thirty-days`,
+`09-what-was-learned-changes-the-next-design`, `10-thirty-days-of-a-portfolio`):
 a direction given, steered and asked about over thirty mornings that find
-nothing, honestly; and a test allowed, written, delivered, unanswered, settled,
-learned from and retired over forty-one. `scripts/owner-review-harness.mts`
+nothing, honestly; a test allowed, written, delivered, unanswered, settled,
+learned from and retired over forty-one; a settled test binding the next
+design appropriately; and a portfolio with the world going wrong — provider
+outages as a world state (`outage`), companies added through the owner's own
+door (`addCompanies`). `the-owner-surface-fits-a-phone` reads the surfaces
+that changed on a 390px phone in a real browser. The suite itself costs what
+it is worth: the schema is migrated once into a template and restored per
+file (`src/test/template-db.ts`, proven equal by `the-template-is-the-schema`),
+and `scripts/measure-suite-cost.mjs` reads the figures from a run that
+already happened — before: 583 files, 2634s, 450 of them replaying 361
+migrations. `scripts/owner-review-harness.mts`
 serves that world (`--day N` to return to it later) so a reviewer who has not
 seen the code is given an objective
 in the owner's words, drives the real pages in a real browser, and reports
