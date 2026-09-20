@@ -187,7 +187,7 @@ charterRoutes.get('/foundry/charter', async (c: any) => {
     ${fold('text', 'Full charter text', envelope ? 'as signed' : 'as it would be signed', html`
       <p><b>Statement.</b> ${envelope ? envelope.charter.statement : (form.statement || 'Your words go here.')}</p>
       <p><b>Limits.</b> ${dollars(ex.testsTotalCents)} across every test for the whole charter; ${String(probes)} tests in flight at once; ${dollars(ex.cognitionCentsPerDay)} a calendar day of thinking; ${String(ex.days)} days from signing. The most it can cost is ${dollars(ex.periodMaxCents)}.</p>
-      <p><b>Speaks as.</b> ${voice}, never you; no person is named on any public surface.</p>
+      <p><b>Speaks as.</b> ${voice}, never you; no person is named on any public surface beyond the terms page and Experiment 001's sealed record.</p>
       <p><b>Writing to people.</b> ${rules}</p>
       <p><b>Never inside it.</b> A legal commitment, or anything that cannot be undone. Those wait for you, each time.</p>
       ${envelope ? html`<p class="mono">signed ${envelope.charter.signedBy} · ${envelope.charter.signedAt} · ends ${envelope.charter.expiresAt} · ${envelope.charter.id}</p>` : html`<p class="mono">signed founder:${founderId} on signing · portfolio_envelopes</p>`}`)}

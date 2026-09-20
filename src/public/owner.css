@@ -80,6 +80,10 @@
   --alert:#96601A; --alert-soft:#F6EBDD;
   --bad:#A8412F; --bad-soft:#F7E4E0;
   --c1:#123D33; --c2:#2F7D68; --c3:#7FB8A2; --c4:#CADED6;
+  --v3-bg:#F3F4F1; --v3-rail:#ECEEE9; --v3-panel:#FFFFFF; --v3-panel-2:#F8F9F6;
+  --v3-line:rgba(18,61,51,.16); --v3-line-strong:rgba(18,61,51,.30);
+  --v3-mint:#256454; --v3-mint-soft:rgba(37,100,84,.10); --v3-gold:#96601A; --v3-gold-soft:rgba(150,96,26,.10);
+  --v3-red:#A8412F; --v3-shadow:0 14px 38px rgba(0,0,0,.08);
   color-scheme:light;
 }}
 :root[data-theme="light"]{
@@ -90,6 +94,10 @@
   --alert:#96601A; --alert-soft:#F6EBDD;
   --bad:#A8412F; --bad-soft:#F7E4E0;
   --c1:#123D33; --c2:#2F7D68; --c3:#7FB8A2; --c4:#CADED6;
+  --v3-bg:#F3F4F1; --v3-rail:#ECEEE9; --v3-panel:#FFFFFF; --v3-panel-2:#F8F9F6;
+  --v3-line:rgba(18,61,51,.16); --v3-line-strong:rgba(18,61,51,.30);
+  --v3-mint:#256454; --v3-mint-soft:rgba(37,100,84,.10); --v3-gold:#96601A; --v3-gold-soft:rgba(150,96,26,.10);
+  --v3-red:#A8412F; --v3-shadow:0 14px 38px rgba(0,0,0,.08);
   color-scheme:light;
 }
 
@@ -455,7 +463,7 @@ h2.section{font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:
 .alarm{color:var(--alert);font-weight:600}
 /* WHERE HE IS: the same slots on every screen. */
 .crumbs{display:flex;flex-wrap:wrap;align-items:center;gap:4px 6px;margin:0 0 var(--s2);font-size:.82rem;color:var(--ink-3)}
-.crumbs a{color:var(--ink-2);text-decoration:none;padding:6px 0;min-height:32px;display:inline-flex;align-items:center}
+.crumbs a{color:var(--ink-2);text-decoration:none;padding:6px 0;min-height:44px;display:inline-flex;align-items:center}
 .crumbs a:hover{text-decoration:underline}
 .crumbs i{font-style:normal;color:var(--ink-3)}
 .crumbs span{color:var(--ink)}
@@ -1110,13 +1118,63 @@ body{background-color:var(--bg)}
   --v3-shadow:0 14px 38px rgba(0,0,0,.22);
 }
 
-body{
+/* THE GROUND FOLLOWS THE THEME. This layer painted a dark gradient on the body
+   whatever the theme said, so a phone in daylight showed near-black ink on a
+   dark ground: every headline, every figure, the answer to his question,
+   invisible. A reviewer on a light-mode phone could read nothing but the grey.
+   The gradient is the dark theme's; light gets the flat ground its tokens name. */
+body{background:var(--v3-bg)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) body{
+  background:
+    radial-gradient(ellipse at 70% -8%,rgba(190,147,72,.10),transparent 30rem),
+    radial-gradient(ellipse at 58% 0%,rgba(52,113,88,.13),transparent 46rem),
+    linear-gradient(180deg,#0a1512 0,#07100d 34rem,#050a08 100%);
+  background-color:var(--v3-bg);
+}}
+:root[data-theme="dark"] /* THE GROUND FOLLOWS THE THEME. This layer painted a dark gradient on the body
+   whatever the theme said, so a phone in daylight showed near-black ink on a
+   dark ground: every headline, every figure, the answer to his question,
+   invisible. A reviewer on a light-mode phone could read nothing but the grey.
+   The gradient is the dark theme's; light gets the flat ground its tokens name. */
+body{background:var(--v3-bg)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) body{
+  background:
+    radial-gradient(ellipse at 70% -8%,rgba(190,147,72,.10),transparent 30rem),
+    radial-gradient(ellipse at 58% 0%,rgba(52,113,88,.13),transparent 46rem),
+    linear-gradient(180deg,#0a1512 0,#07100d 34rem,#050a08 100%);
+  background-color:var(--v3-bg);
+}}
+:root[data-theme="dark"] body{
   background:
     radial-gradient(ellipse at 70% -8%,rgba(190,147,72,.10),transparent 30rem),
     radial-gradient(ellipse at 58% 0%,rgba(52,113,88,.13),transparent 46rem),
     linear-gradient(180deg,#0a1512 0,#07100d 34rem,#050a08 100%);
   background-color:var(--v3-bg);
 }
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]) body::before{display:none}
+  :root:not([data-theme="dark"]) main[data-place="money"] .facts.money{background:var(--card)}
+  :root:not([data-theme="dark"]) .ask{background:var(--card)}
+  :root:not([data-theme="dark"]) .sheet-more{background:var(--card)}
+  :root:not([data-theme="dark"]) .btn.go,:root:not([data-theme="dark"]) .btn.btn-primary{background:var(--v3-mint);border-color:var(--v3-mint);color:#FFFFFF}
+  :root:not([data-theme="dark"]) h2.rank i,:root:not([data-theme="dark"]) .stepper li.done i{color:#FFFFFF}}
+:root[data-theme="light"] body::before{display:none}
+:root[data-theme="light"] main[data-place="money"] .facts.money{background:var(--card)}
+:root[data-theme="light"] .ask{background:var(--card)}
+:root[data-theme="light"] .sheet-more{background:var(--card)}
+:root[data-theme="light"] .btn.go,:root[data-theme="light"] .btn.btn-primary{background:var(--v3-mint);border-color:var(--v3-mint);color:#FFFFFF}
+:root[data-theme="light"] h2.rank i,:root[data-theme="light"] .stepper li.done i{color:#FFFFFF}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]) body::before{display:none}
+  :root:not([data-theme="dark"]) main[data-place="money"] .facts.money{background:var(--card)}
+  :root:not([data-theme="dark"]) .ask{background:var(--card)}
+  :root:not([data-theme="dark"]) .sheet-more{background:var(--card)}
+  :root:not([data-theme="dark"]) .btn.go,:root:not([data-theme="dark"]) .btn.btn-primary{background:var(--v3-mint);border-color:var(--v3-mint);color:#FFFFFF}
+  :root:not([data-theme="dark"]) h2.rank i,:root:not([data-theme="dark"]) .stepper li.done i{color:#FFFFFF}}
+:root[data-theme="light"] body::before{display:none}
+:root[data-theme="light"] main[data-place="money"] .facts.money{background:var(--card)}
+:root[data-theme="light"] .ask{background:var(--card)}
+:root[data-theme="light"] .sheet-more{background:var(--card)}
+:root[data-theme="light"] .btn.go,:root[data-theme="light"] .btn.btn-primary{background:var(--v3-mint);border-color:var(--v3-mint);color:#FFFFFF}
+:root[data-theme="light"] h2.rank i,:root[data-theme="light"] .stepper li.done i{color:#FFFFFF}
 
 body::before{
   content:"";position:fixed;z-index:-1;inset:0 0 auto 0;height:min(25rem,44vh);pointer-events:none;

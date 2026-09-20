@@ -240,6 +240,7 @@ export async function getExperimentView(founderId: string, experimentId: string,
     superseded_by: e.supersededBy, invalidated_at: e.invalidatedAt, decided_at: e.decidedAt,
     cannot_prove: graded.cannot_prove == null ? null : String(graded.cannot_prove),
     stopped_by_owner: withdrawn || Boolean(act && !actLive),
+    placed: x !== null,
   });
   const delivered = said.filter((s) => s.kind === 'offer_delivered').length;
   const payments = said.filter((s) => s.kind === 'payment');
@@ -277,13 +278,13 @@ export async function getExperimentView(founderId: string, experimentId: string,
   const allow = {
     possible: state === 'ready', reason: state === 'needs_you' ? stateDetail : null,
     explanation: listing ? [
-      `Foundry may spend up to ${money(e.costCents)} on this test. It has no permission beyond that, and nothing here needs it to spend anything.`,
+      `Foundry ${concluded ? 'could' : 'may'} spend up to ${money(e.costCents)} on this test. It ${concluded ? 'had' : 'has'} no permission beyond that, and nothing here needs it to spend anything.`,
       `It writes to nobody and publishes nothing. The listing on ${listing.venueName} is your own act, under ${voice}, at ${price}. No subscription, no promotion, no email.`,
       'What the venue reports — impressions, views, favourites, orders, refunds — is entered by you from its own statistics and statement, and recorded as the provider\'s facts.',
       rule ? `It settles itself: ${describeRule(rule)}.` : 'No settlement rule is sealed, so only you could settle it.',
       'You can stop it at any time from this page; taking the listing down is yours to do on the venue. Approving it permits this test only; it creates no standing permission.',
     ] : [
-      `Foundry may spend up to ${money(e.costCents)} on this test. It has no permission beyond that.`,
+      `Foundry ${concluded ? 'could' : 'may'} spend up to ${money(e.costCents)} on this test. It ${concluded ? 'had' : 'has'} no permission beyond that.`,
       `It writes once to each of the ${ready.reachable} approved businesses it can reach, in your name, offering the ${price} brief. No subscription, no follow-ups.`,
       'When someone pays, Foundry delivers the brief by email after its quality check, and records the delivery only when the mail provider confirms it.',
       process.env.FOUNDRY_ENABLE_MONEY_TOOLS === 'true' ? 'If a delivery fails, Foundry refunds the payment.' : 'If a delivery fails, the refund waits for you (refund handling is off).',

@@ -63,6 +63,8 @@ export interface OutcomeRow {
   cannot_prove?: string | null;
   /** True when the owner withdrew the exposure or the act before it settled. */
   stopped_by_owner?: boolean;
+  /** Whether an offer was ever placed. Unknown (undefined) where the rows are not to hand. */
+  placed?: boolean;
 }
 
 const str = (v: unknown): string | null => v == null || v === '' ? null : String(v);
@@ -70,7 +72,7 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
 
 /** The prose for what a settled result establishes, lifted from the Ask answer; one copy. */
 function establishing(word: 'as predicted' | 'partly' | 'surprised', cannotProve: string | null): { establishes: string; doesNotEstablish: string } {
-  const limit = cannotProve ? ` It could not establish: ${cannotProve}.` : '';
+  const limit = cannotProve ? ` It could not establish: ${cannotProve.trim().replace(/\.+$/, '')}.` : '';
   if (word === 'surprised') {
     return {
       establishes: 'that this offer, to that population, through that channel, in that window, did not sell.',
@@ -112,9 +114,13 @@ export function outcomeFromRow(r: OutcomeRow): Outcome {
     const grade = str(r.grade);
     const word: 'as predicted' | 'partly' | 'surprised' = grade === 'partly' ? 'partly'
       : (grade ?? str(r.verdict)) === 'as_predicted' ? 'as predicted' : 'surprised';
-    const meaning = word === 'as predicted' ? 'The prediction held.'
+    // WHAT THE ROWS SAY, NOT WHAT THE SENTENCE IMPLIES. A test settled with no
+    // offer ever placed did not fail to sell; nobody could buy. The word stays
+    // the world's; the meaning says so.
+    const meaning = (word === 'as predicted' ? 'The prediction held.'
       : word === 'partly' ? 'Some of what was predicted happened, fewer than the rule asked for.'
-        : 'The prediction did not hold.';
+        : 'The prediction did not hold.')
+      + (r.placed === false ? ' Nothing was sent: no offer was ever placed, so nobody could buy.' : '');
     const e = establishing(word, str(r.cannot_prove));
     return { word, label: cap(word), meaning, reason: str(r.what_happened), establishes: e.establishes, doesNotEstablish: e.doesNotEstablish,
       when: str(r.ran_at), settled: true, concluded: true };
@@ -145,11 +151,12 @@ export async function outcomeOf(experimentId: string): Promise<Outcome | null> {
     `SELECT e.decision, e.validity, e.verdict, e.what_happened, e.ran_at, e.retired_at, e.retired_because,
             e.superseded_by, e.invalidated_at, e.invalid_because, e.decided_at, d.cannot_prove,
             ${GRADE_SQL} AS grade,
-            EXISTS (SELECT 1 FROM experiment_exposures x WHERE x.experiment_id = e.id AND x.withdrawn_at IS NOT NULL) AS withdrawn
+            EXISTS (SELECT 1 FROM experiment_exposures x WHERE x.experiment_id = e.id AND x.withdrawn_at IS NOT NULL) AS withdrawn,
+            EXISTS (SELECT 1 FROM experiment_exposures x WHERE x.experiment_id = e.id) AS placed
        FROM venture_experiments e LEFT JOIN probe_designs d ON d.experiment_id = e.id
       WHERE e.id = ?`, [experimentId])).rows[0] as Record<string, unknown> | undefined;
   if (!r) return null;
-  return outcomeFromRow({ ...(r as OutcomeRow), stopped_by_owner: Number(r.withdrawn) === 1 });
+  return outcomeFromRow({ ...(r as OutcomeRow), stopped_by_owner: Number(r.withdrawn) === 1, placed: Number(r.placed) === 1 });
 }
 
 /** "settled surprised on 2026-09-12: nobody bought …" — one line for a stream or a letter. */

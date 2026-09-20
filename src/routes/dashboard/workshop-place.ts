@@ -78,7 +78,7 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
   const body = html`
     <h1>${w.publicName} <span class="pill">${w.economicPause ? 'Paused' : 'Operating'}</span></h1>
     ${notice}
-    <p class="lede"><a href="${w.origin}" rel="noopener">${w.zoneName}</a> — ${w.publicName} is an independent digital workshop. Every test that reaches a stranger does so as ${w.publicName}, from ${w.contactEmail}, with a page at ${w.zoneName}. You are not a public figure here: your name appears only on the terms page, where the law wants to know who is behind a trading name.</p>
+    <p class="lede"><a href="${w.origin}" rel="noopener">${w.zoneName}</a> — ${w.publicName} is an independent digital workshop. Every test that reaches a stranger does so as ${w.publicName}, from ${w.contactEmail}, with a page at ${w.zoneName}. You are not a public figure here: your name appears on the terms page, where the law wants to know who is behind a trading name, and in Experiment 001's sealed public copy, which is a record and is not rewritten; nowhere else.</p>
 
     <section class="know" id="health"><h2>Health</h2>
       ${health ? html`<dl class="facts">
@@ -156,7 +156,7 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
               right sentence while his name on it still reached every page. It
               does not any more — the projection takes it off — so the line says
               what is true now rather than asking for work already done. */ ''}
-        <dt>Operator</dt><dd>${w.operatorName} <span class="quiet">(on the terms page only${w.postalAddress && w.postalAddress.split('\n')[0]?.trim() === w.operatorName ? ' — your address below begins with your name, and that line is left off the public pages and commercial mail, which carry the street address alone' : ''})</span></dd>
+        <dt>Operator</dt><dd>${w.operatorName} <span class="quiet">(on the terms page, and in Experiment 001's sealed public copy${w.postalAddress && w.postalAddress.split('\n')[0]?.trim() === w.operatorName ? ' — your address below begins with your name, and that line is left off the public pages and commercial mail, which carry the street address alone' : ''})</span></dd>
         <dt>Sends as</dt><dd>${w.publicName} &lt;${w.contactEmail}&gt;</dd>
         <dt>Postal address</dt><dd>${w.postalAddress ?? html`<span class="quiet">none recorded — commercial email must carry one, so no offer goes out until it does</span>`}</dd>
         ${w.postalAddress ? html`<dt>As the public reads it</dt><dd>${publicPostalLines(w).join(', ') || html`<span class="quiet">nothing — the address is only your name, so no offer can go out</span>`}</dd>` : ''}

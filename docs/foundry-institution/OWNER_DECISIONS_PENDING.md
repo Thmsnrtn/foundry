@@ -884,3 +884,40 @@ act and proves it on rows; if no, the answer stays a record and the form's
 wording is changed so it does not promise what the Workshop will not do. If
 neither, the form keeps promising and the record keeps silent, which is the
 one state that should not last.
+
+## PENDING 19 — Your name on Experiment 001's public page, against your own rule: **OWNER** (2026-09-21)
+
+Two of your rules conflict and only you can settle it. The standing
+constraint says your name appears on the public site only on the terms page
+and in the Etsy privacy policy. Experiment 001's sealed public copy — the
+page at apexmicro.ai/experiments/ma-millwork-bid-brief — carries "I'm Thomas
+Norton, and Apex Micro is my workshop" under "Who I am", and it is indexable
+and in the sitemap. The institution's other rule is that a sealed record is
+not rewritten. A compliance reader found it on 21 September; until then the
+owner surface told you your name was on no public surface, which was false
+and now says exactly where it is.
+
+Your options: (1) leave the sealed page as it is and amend the rule to say
+"the terms page, the Etsy policy, and Experiment 001's sealed record"; (2)
+ask for the public copy to be amended, which the institution treats as an
+owner act on a record (it is recorded as an amendment with your reason, not
+silently rewritten); (3) take the page down, which the public site's own
+promise ("every page stays up, whatever happened to it") argues against.
+Neighbours of the same decision: the contact mailbox thomas@apexmicro.ai puts
+your first name on /contact and on every From line; and the public site
+discloses that software does "the research and the day-to-day running" but
+not that its prose is written by software. Nothing here changes until you
+say.
+
+## PENDING 20 — Whether Foundry may test a free resource, or something licensed in: **OWNER** (2026-09-21)
+
+The economic forms now include *a free resource that supports a paid
+product* and *something licensed in and resold* (`ECONOMICS.md` §
+Mechanisms with sources). Each names the exchange it would need —
+`free_with_role` and `license` — and neither is available today: the
+exchange vocabulary is constitutional and only `upfront_price` can be run.
+A candidate of either form is shelved and the shelf says the hands cannot
+test it yet. Widening the exchanges Foundry may run is a change to what it
+may do with strangers and with your money, and it is yours: say which, and
+under what limit, and the migration that makes it available is written with
+your words as its reason.

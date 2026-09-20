@@ -2427,7 +2427,7 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
       <p><strong>What happened</strong> — ${String(last.what_happened)}
         ${last.ran_at ? html` (settled ${String(last.ran_at).slice(0, 10)})` : ''}.</p>
       <p><strong>What that establishes</strong> — ${outcome.establishes ?? ''}</p>
-      <p><strong>What it does not</strong> — ${outcome.doesNotEstablish ?? ''}</p>
+      <p><strong>What it does not establish</strong> — ${outcome.doesNotEstablish ?? ''}</p>
       <p><strong>What changes</strong> — the next design is written against that limit: it
         has to answer to what this one could not establish, or it is asking the same question
         again in different words. Nothing is designed until a candidate stands and, to run,
@@ -4151,7 +4151,7 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     `<li>${p.statement} <span class="quiet">— a preference. I lean that way; I refuse
       nothing because of it.</span></li>`).join(''))}</ul>` : ''}
       ${view.formerAllowance ? html`<p class="quiet">Before ${view.formerAllowance.withdrawnAt}
-        it was $${view.formerAllowance.amount} — ${view.formerAllowance.reason}.</p>` : ''}
+        its allowance was $${view.formerAllowance.amount} — ${view.formerAllowance.reason}.</p>` : ''}
       ${view.formerly ? html`<p class="quiet">Before ${view.formerly.retiredAt} it was:
         &ldquo;${view.formerly.statement}&rdquo; — replaced because
         ${view.formerly.retiredReason}.</p>` : ''}
@@ -4778,7 +4778,7 @@ async function housekeepingConfirmation(founderId: string, door: import('../../s
     <h1>${counts.handled === 0 ? 'Nothing to put away' : `Put away ${count(counts.handled, 'conversation')}?`}</h1>
     <p class="lede">You said: <strong>${door.said}</strong></p>
     ${counts.handled === 0
-    ? html`<p>Every conversation you dealt with is already put away${counts.needs ? `; ${count(counts.needs, 'still needs', 'still need')} you` : ''}.
+    ? html`<p>${counts.working + counts.handled + counts.archived === 0 ? 'Nobody has written to the Workshop yet, so there is nothing to put away.' : `Every conversation you dealt with is already put away${counts.needs ? `; ${count(counts.needs, 'still needs', 'still need')} you` : ''}.`}
         ${counts.archived ? html`What is put away is under <a href="/foundry/inbox?show=archived">Put away</a>.` : ''}</p>`
     : html`<div class="know">
         <h2>What I will do</h2>
@@ -5007,12 +5007,20 @@ async function ventureConfirmation(c: any, founderId: string, said: string): Pro
         </form>
         <a class="btn" href="/foundry">Back</a>`, 'foundry'));
     }
+    // WHAT IT WOULD CHANGE, IN ONE LINE. "I will look for a different kind of
+    // candidate" named neither the direction nor the candidates standing, so
+    // the owner could not tell what he was about to set aside.
+    const standing = (await query(`SELECT headline FROM venture_opportunities WHERE mandate_id = ? AND verdict IS NULL AND evidence_mode = 'real' ORDER BY rowid DESC LIMIT 5`, [open.id]))
+      .rows.map((r) => String((r as Record<string, unknown>).headline));
     return c.html(page('What you said', html`
-      <h1>Hold the search to this?</h1>
+      <h1>${reading.guidance === 'another' ? 'Change course?' : 'Hold the search to this?'}</h1>
       <p class="lede">You said: <strong>${said}</strong></p>
       <div class="know">
         <h2>What I will do</h2>
         <p>${guidanceInPlainWords(reading.guidance, reading.subject)}</p>
+        <p class="quiet">The search now: &ldquo;${open.statement}&rdquo;. ${standing.length
+    ? `${reading.guidance === 'another' ? 'Standing candidates I would pass over' : 'Standing candidates it applies to'}: ${standing.join('; ')}.`
+    : 'No candidate is standing.'}</p>
         <p class="quiet">This becomes part of the search itself, not a note beside it.
           Every candidate from here is tested against it, and I will tell you when one
           fails because of something you said.</p>
@@ -6344,7 +6352,7 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
       ${spentPct !== null ? html`<span class="prog" role="img" aria-label="${String(spentPct)}% of the monthly limit"><i style="width:${String(Math.max(2, spentPct))}%"></i></span><p class="prog-n">$${String(s.budgetMonthly)} a month is the limit you set for ${s.companyName} · ${String(spentPct)}% used</p>`
     : html`<p class="quiet">You have not set a monthly limit for ${s.companyName}. The daily ceilings below are what actually stops me.</p>`}
       <dl class="facts">
-        <dt>Per company</dt><dd>I stop thinking at ${dollarsADay(process.env.AI_DAILY_COST_CEILING_CENTS, 2500)}</dd>
+        <dt>Per company</dt><dd>I stop thinking at ${dollarsADay(process.env.AI_DAILY_COST_CEILING_CENTS, 2500)} <span class="quiet">— until a charter is signed, $${(PRE_CHARTER_THINKING_CENTS / 100).toFixed(0)} a day binds, whichever is lower</span></dd>
         <dt>Everything</dt><dd>${dollarsADay(process.env.AI_DAILY_COST_CEILING_GLOBAL_CENTS, 50_000)}</dd>
         ${ceiling == null ? '' : html`<dt>Outside myself</dt><dd>$${(Number(ceiling.cents_per_month) / 100).toFixed(2)} a month of metered use, ${ceilingSetByHim
     ? `set by you on ${String(ceiling.authorized_at).slice(0, 10)}`
@@ -6371,7 +6379,7 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
       ${workshop.economicPause ? html`<p class="quiet"><strong>New economic activity is paused</strong> since ${workshop.economicPause.at.slice(0, 10)}: ${workshop.economicPause.reason}. What is owed still goes out.</p>` : ''}
       <details class="fold"><summary><h3>What I may do there</h3></summary>
       <p class="quiet">I may publish pages, deploy the one program that serves them, keep the Workshop's own DNS records, and forward its mail to you. Each change leaves a receipt with what was there before. I cannot transfer the domain, change its nameservers, delete a zone, or touch any other domain: those tools do not exist.</p>
-      <p class="quiet">Tests write to strangers only as ${workshop.publicName}, from ${workshop.contactEmail}, pointing at a page I have read back from the world. Your name is on no public surface.</p></details>
+      <p class="quiet">Tests write to strangers only as ${workshop.publicName}, from ${workshop.contactEmail}, pointing at a page I have read back from the world. Your name is on the terms page and, in Experiment 001's sealed public copy, on that test's page; that copy is a record and is not rewritten. Nowhere else.</p></details>
       <p class="row"><a class="btn btn-sm" href="/foundry/public-workshop">The Workshop</a></p>`) : ''}
 
     ${card('stop', 'Owner exclusions', exclusions.length === 0

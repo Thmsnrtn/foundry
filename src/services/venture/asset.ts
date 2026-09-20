@@ -92,7 +92,8 @@ export async function beginExperimentalAsset(input: {
   const id = nanoid();
   // THE NAME IS THE CANDIDATE'S HEADLINE, bounded the way the company form
   // bounds a name. It is a working title for a test object, not a brand.
-  const name = String(e.headline).trim().slice(0, 60) || 'an experiment';
+  const whole = String(e.headline).trim();
+  const name = (whole.length <= 60 ? whole : (whole.slice(0, 60).replace(/\s+\S*$/, '') || whole.slice(0, 60))) || 'an experiment';
   await query(
     `INSERT INTO products
        (id, name, owner_id, status, reality, standing, operating_boundary,

@@ -25,11 +25,15 @@ export default defineConfig({
     // replays all 297 migrations into its own in-memory database before doing
     // anything. Oversubscribing four cores with that makes it worse.
     //
-    // THE REAL FIX IS THEREFORE A DIFFERENT ONE: migrate once into a template
-    // database and have each file copy it, rather than replaying the schema
-    // 543 times. That is where the twenty-five minutes actually is. Flipping
-    // this flag is safe to try again on a bigger machine, or after that
-    // change, and the number to beat is 1889s.
+    // THE REAL FIX WAS THEREFORE A DIFFERENT ONE, AND IT IS DONE (21 Sep 2026):
+    // the first file to migrate dumps a template keyed to the migration files
+    // and every later file restores it in one call (`src/test/template-db.ts`,
+    // proven equal to the migrated schema by `the-template-is-the-schema`).
+    // Measured on one file: 7.8s with the replay, 4.3s with the template; the
+    // full run before the template was 583 files in 2634s with 450 of them
+    // replaying 361 migrations (`scripts/measure-suite-cost.mjs`). Flipping
+    // this flag is worth measuring again now that the per-file cost is mostly
+    // the tests themselves; it stays off until a measured run says otherwise.
     fileParallelism: false,
   },
   resolve: {

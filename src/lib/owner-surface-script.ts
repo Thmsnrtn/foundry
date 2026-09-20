@@ -117,6 +117,8 @@ export const OWNER_SURFACE_SCRIPT =
   + `    if(!t||!t.hasAttribute||!t.hasAttribute('data-submits'))return;\n`
   + `    var f=t.closest('form');if(!f)return;`
   + `if(f.requestSubmit)f.requestSubmit();else f.submit();});\n`
+  + `  document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a.ask-fab');`
+  + `if(!a)return;setTimeout(function(){var f=document.querySelector('#ask-foundry input,#ask-foundry textarea');if(f)f.focus();},0);});\n`
   + `  document.addEventListener('click',function(e){\n`
   + `    var t=e.target&&e.target.closest&&e.target.closest(`
   + `'[data-select],[data-copy],[data-open],[data-close]');if(!t)return;\n`

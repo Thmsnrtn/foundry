@@ -40,6 +40,11 @@ async function main(): Promise<void> {
   // THE SAME WORLD THE PROOFS USE (tests/helpers/world.ts): production's
   // shape, moved `--day N` days on so a reviewer can return to it later.
   await seedProductionShape({ charter: flag('charter'), searching: flag('searching'), eyes: flag('eyes') });
+  // He looked before he left: the days that pass are his absence, and the
+  // answer to "what happened while I was away" covers them, not seven by default.
+  const { markVisit } = await import('../src/services/founder/what-changed.js');
+  const { OWNER } = await import('../tests/helpers/world.js');
+  await markVisit(OWNER);
   if (day > 0) {
     const moved = await advanceDays(day);
     if (moved.refused.length > 0) console.error(`advanceDays: ${String(moved.refused.length)} constitutional column(s) stayed where they were (expected)`);

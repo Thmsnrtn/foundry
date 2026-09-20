@@ -137,6 +137,53 @@ names the search. Left that day and repaired on 21 Sep in the next tranche:
 "clear what I have dealt with" (a housekeeping destination at the door, J13);
 six labels for one outcome (one reader, J16).
 
+**Review E, 21 September, four lenses at day 15 of the world** — the
+returning owner on a laptop (seven sentences and the settled test's page),
+the sceptical accountant (every money figure on every page), the first-time
+reader on a 390px phone, and the compliance reader (the live public site and
+the owner surface). Repaired the same day (`the-owner-surface-fits-a-phone`,
+`the-owners-sentences-land`, `what-happened-has-one-name`): **every page was
+unreadable in light mode** — the v3 layer painted a dark ground whatever the
+theme said, so on a light-mode phone or laptop every headline, figure and
+answer was near-black on near-black; the ground now follows the theme and the
+proof reads the headline's contrast against it in light mode. The settled
+test's page showed live steps ("What happens next 3 of 4 done") and
+present-tense permissions after settlement; a settled test with no offer ever
+placed said "nobody bought" as if people had been asked (it now says nothing
+was sent); the money fold's "Set aside $100" on a settled test was read as
+still earmarked (now "Was set aside … ended with its answer"); "$100 to run"
+on the why page read as spend (now "a ceiling, not spend"); the harness
+answered "what happened while I was away" for seven days because it never
+marked his leaving (it does); the Ask pill needed two taps (one, with the
+cursor in the box); breadcrumbs were 32px (44); a title was cut mid-word;
+"I don't like this direction" never said which direction or what would be
+passed over (it names the search and the standing candidates and is headed
+"Change course?"); "clear the messages" with no mail ever said he had put
+things away (it says nobody has written); a double full stop; "What it does
+not" is "What it does not establish". **The compliance reader found the
+owner surface telling him his name is on no public surface while Experiment
+001's sealed public copy names him** on an indexable page — the sealed
+record is not rewritten; the assurances on Controls, the Workshop page and
+the charter now say exactly where his name is. Left, with the reason:
+- *The public experiment page names him* (Experiment 001's sealed copy, a
+  record by the institution's own rule; the owner's standing constraint says
+  terms and the Etsy policy only). The two rules conflict and only he can
+  settle it: `OWNER_DECISIONS_PENDING.md`. The first-name mailbox
+  (thomas@) and the site's disclosure that its prose is machine-written are
+  the same decision's neighbours.
+- *Five thinking ceilings on Controls* ($1, $3, $25, $500 a day; $50 a month):
+  the binding one is now said beside them; unifying them into one reading is
+  a design, not a repair. The charter form's defaults print as figures on an
+  unsigned charter; "price cents: not recorded" beside a $29 offer; "$0.00 in
+  Stripe" does not distinguish a read of zero from no read.
+- *The laboratory's settled test never placed an offer* (the world settles
+  Experiment 001 by the owner's own settlement, not the hand's); the page now
+  tells that truth, and a world that runs the hand to settlement is scenario
+  08's, not the harness's default.
+- *Vocabulary the phone reader did not understand* — "Estate", "Autonomy",
+  "candidate standing", "sealed", "from canonical state", "Every figure is a
+  row" — is the same vocabulary pass as before, unchanged.
+
 - *The composer is hidden on the phone until the Ask pill is tapped.* All
   three reviewers tripped on it. It is the North Star's decision — no fixed
   composer eating the viewport — and stays until the owner says otherwise.

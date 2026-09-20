@@ -427,7 +427,7 @@ async function whyExperiment(founderId: string, experimentId: string): Promise<W
       t.verdict ? `${t.verdict.replace('_', ' ')}.` : 'No verdict yet.',
       ...resolutions.map((r) => `Resolved ${String(r.verdict).replace('_', ' ')} by ${String(r.resolved_by)} on ${day(r.resolved_at)}: ${String(r.because)}`),
     ],
-    cost: [t.costCents > 0 ? `${money(t.costCents)} to run.` : 'Nothing to run.',
+    cost: [t.costCents > 0 ? `Up to ${money(t.costCents)} to run: a ceiling, not spend.` : 'Nothing to run.',
       ...(thinking > 0 ? [`${money(thinking)} of my own thinking about it, from the ledger.`] : []),
       // Cash is the smallest of these. What a probe truly costs is stated at
       // design time across every dimension it spends, so the cheap-sounding

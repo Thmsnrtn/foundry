@@ -96,8 +96,10 @@ describe('with a search open', () => {
     const r = await me.ask("I don't like this direction.");
     expect(r.status).toBe(200);
     const t = asText(await r.text());
-    expect(t).toContain('Hold the search to this?');
+    expect(t).toContain('Change course?');
     expect(t).toContain('a different kind of candidate');
+    expect(t).toContain('The search now:');
+    expect(t).toContain('Standing candidates I would pass over: A filtered brief of public bid notices');
     expect(t).toContain('Stop looking instead');
     expect(t).not.toContain(NOT_FOLLOWED);
   });

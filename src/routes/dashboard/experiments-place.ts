@@ -447,7 +447,7 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
       <p><span class="state ${stateCls}">${v.outcome.label}</span> ${v.outcome.meaning}</p>
       ${v.outcome.reason ? html`<p><strong>Why</strong> — ${v.outcome.reason}</p>` : ''}
       ${v.outcome.establishes ? html`<p><strong>What that establishes</strong> — ${v.outcome.establishes}</p>` : ''}
-      ${v.outcome.doesNotEstablish ? html`<p><strong>What it does not</strong> — ${v.outcome.doesNotEstablish}</p>` : ''}
+      ${v.outcome.doesNotEstablish ? html`<p><strong>What it does not establish</strong> — ${v.outcome.doesNotEstablish}</p>` : ''}
     </section>` : ''}
     ${launch ? html`<section class="launch" id="authorise">
       <p class="act">First real market test</p>
@@ -494,7 +494,7 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
     ${v.exceptions.length ? html`<section class="know" id="exceptions"><h2>Needs your attention</h2>
       <ul>${v.exceptions.map((x) => html`<li>${x}</li>`)}</ul></section>` : ''}
     ${watch}
-    ${stepper}
+    ${v.outcome.concluded ? '' : stepper}
 
     ${listing ? fold('acts', 'Your acts', 'only what you must do yourself', html`
       <p class="quiet">Foundry cannot open the shop, attach a bank account, opt out of the venue's advertising, accept its terms, or publish the listing on your behalf.</p>
@@ -606,7 +606,7 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
 
     ${fold('money', 'Money', `${cents(v.money.spentCents)} spent of ${cents(v.money.allowanceCents)}`, html`
       <dl class="facts">
-        <dt>Set aside</dt><dd>${cents(v.money.authorisedCents)}${v.money.carvedCents > 0 ? ` — carved from the charter` : ''}</dd>
+        <dt>${v.outcome.concluded ? 'Was set aside' : 'Set aside'}</dt><dd>${cents(v.money.authorisedCents)}${v.money.carvedCents > 0 ? ` — carved from the charter` : ''}${v.outcome.concluded ? ' — ended with its answer' : ''}</dd>
         <dt>Allowance standing</dt><dd>${cents(v.money.remainingCents)} of ${cents(v.money.allowanceCents)}</dd>
         <dt>Spent by Foundry</dt><dd>${cents(v.money.spentCents)}</dd>
         <dt>Paid by customers</dt><dd>${cents(v.money.paidCents, v.money.currency)} (${count(v.money.payments, 'payment')})</dd>
