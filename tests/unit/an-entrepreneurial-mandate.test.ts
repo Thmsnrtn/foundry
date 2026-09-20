@@ -398,9 +398,12 @@ describe('the owner walks it', () => {
     expect(shown.status).toBe(200);
     expect(shown.text).toContain('Go and look?');
     expect(shown.text).toContain('not an instruction to build one');
-    // Predictable consequence, in the grammar every binding act here uses.
-    expect(shown.text).toContain('I cannot create a');
-    expect(shown.text).toContain('Telling you\n        none of them are worth it is a real');
+    // Predictable consequence, in the grammar every binding act here uses —
+    // and, since 20 September, what actually happens each morning and where
+    // the authority boundary is.
+    expect(shown.text).toContain('Nothing is sealed, sent or spent without authority');
+    expect(shown.text).toContain('Every morning');
+    expect(shown.text).toContain('is a\n          real answer');
   });
 
   it('shows the search on the first screen, and says where it honestly is', async () => {
@@ -417,8 +420,11 @@ describe('the owner walks it', () => {
   it('absorbs steering typed into the ask box', async () => {
     const asked = await asOwner(
       `/foundry?q=${encodeURIComponent("I don't want paid acquisition")}`);
-    // An instruction, not a question — offered as something to do.
-    expect(asked.text).toContain('something for me to go and do');
+    // An instruction, not a question. The question entrance used to answer
+    // "that sounds like something for me to go and do" and make him press
+    // again; it now consults the door first and shows the same "What I will
+    // do" the venture screen shows, so both entrances agree.
+    expect(asked.text).toContain('Hold the search to this?');
 
     const shown = await asOwner('/foundry/venture',
       'said=' + encodeURIComponent("I don't want paid acquisition"));

@@ -2681,3 +2681,54 @@ from a provider.
 What follows on its own: the experimental asset retires after the grace the
 owner's policy gives a failed test (`failed_test_grace_days`, 30 by default)
 unless a re-run is designed. No re-run is created merely to show progress.
+
+## Ask connects the owner to the institution (20 September 2026)
+
+The owner typed his first direction into the box on Home — "Find and
+investigate low-maintenance digital income opportunities, explore different
+economic forms, evaluate evidence, reject weak candidates, and develop
+justified experiments within my authority and spending limits" — and was told
+"I don't know yet", followed by a list of the questions Foundry could answer.
+The search machinery existed, steering existed, the door that hears both
+existed. None of it was behind the box he used.
+
+What happened, exactly: the composer on every page was a GET to `/foundry?q=`,
+which reaches the *question* path and nothing else. `matchQuestion` read the
+word "reject" in his sentence as "what was turned down", found nothing turned
+down, and fell through to the honest-sounding fallback. The door
+(`whichDoor`) — which reads that same sentence as a venture direction — sat
+behind a second form he was never shown. So a legitimate instruction was
+answered as a question nobody asked, and nothing was recorded.
+
+The repair, with nothing new invented:
+
+- **One entrance.** The composer posts to `/foundry/ask`, the door route. A
+  question is handed on to the answer path it always had, with its scope, so
+  nothing that worked is lost; a direction comes back as "Go and look?", steering
+  as "Hold the search to this?", stopping as "Stop looking?", and a sentence the
+  door cannot place comes back with his words kept and a list of what it can
+  act on. The old `?q=` entrance consults the door first as well, so a bookmark
+  or a back button cannot reopen the defect.
+- **The reader hears the plain forms.** "Find …", "look for …", "explore …",
+  "investigate …" at the head of a sentence, and *income*, *revenue*,
+  *earnings* among the things that earn. "Find out how much we made" stays a
+  question. "Focus more on APIs and calculators" is heard as steering, one
+  guidance row per thing. A constraint said inside a direction ("low-
+  maintenance", "hands-off", "passive income") is absorbed beside the mandate
+  as a preference on the record, rather than left on the statement — read
+  apart from the rest of the steering, because guidance is read before
+  mandate and the preference would otherwise swallow the direction whole.
+- **The boundary is said, not hidden.** A sentence asking Foundry to write
+  to people or spend money is answered with what does not happen on a sentence,
+  what the charter is and what is currently in flight under it — the same
+  authority system, not a new one.
+- **Nothing is claimed that does not exist.** Saying yes writes the mandate
+  row the discovery pass iterates; the acknowledgement is the row read back;
+  Home shows "What I am looking for" and the search page shows the guidance in
+  his words. The proof (`ask-connects-the-owner-to-the-institution.test.ts`)
+  drives the real composer and asserts on rows, and fails on a plausible
+  acknowledgement that wrote nothing.
+
+What still requires the charter is unchanged: a search opens and runs on his
+sentence; a test is designed, attacked and sealed inside the charter; nothing
+is sent or spent without it.

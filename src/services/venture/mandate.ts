@@ -156,7 +156,17 @@ const A_THING_THAT_EARNS =
 const EARNS = new RegExp(
   `${A_THING_THAT_EARNS.source}|\\b(api|calculator|generator|utility|plugin|extension`
   + '|add-?on|monitoring|alerting|marketplace|licensing|dataset|data product|directory'
-  + '|acquisition|idea)');
+  + '|acquisition|idea|income|revenue|earning|earn money|passive)');
+
+/**
+ * ASKS TO LOOK. The phrase list, and the plainest form of all: a sentence that
+ * begins "find …", "look for …" or "explore …". "Find low-maintenance digital
+ * income" was not heard because it named no company and began with none of
+ * the phrases; "find out how much …" is a question and stays one.
+ */
+const asksToLook = (t: string): boolean =>
+  ASKING.some((p) => t.includes(p))
+  || /^\s*(?:please\s+|i(?:'d| would) like you to\s+|go and\s+)?(?:find|look for|explore|investigate)\s+(?!out\b)/.test(t);
 
 /**
  * READ ONE SENTENCE ABOUT VENTURES.
@@ -187,23 +197,42 @@ export function readVentureSentence(raw: string): VentureReading {
     || /\bstrengthen the (river|portfolio)\b/.test(t)) {
     return { kind: 'mandate', statement, shape: null };
   }
-  if (ASKING.some((p) => t.includes(p)) && EARNS.test(t)) {
+  if (asksToLook(t) && EARNS.test(t)) {
     const shape = SHAPES.find(([, phrases]) => phrases.some((p) => t.includes(p)));
     return { kind: 'mandate', statement, shape: shape ? shape[0] : null };
   }
+  const inside = readConstraintInside(t, statement);
+  if (inside) return inside;
   return { kind: 'not_venture', statement };
 }
 
 /** Whether a sentence asks for something that earns, in the mandate's own terms. */
 function sentenceAsks(statement: string): boolean {
   const t = ` ${statement.toLowerCase().replace(/[’]/g, "'")} `;
-  return (ASKING.some((p) => t.includes(p)) && EARNS.test(t))
+  return (asksToLook(t) && EARNS.test(t))
     || /\b(make|keep)\b[^.]{0,10}\b(the )?river\b[^.]{0,20}\b(strong|wider|deeper|resilient|better)/.test(t);
 }
 function shapeNamedIn(statement: string): string | null {
   const t = ` ${statement.toLowerCase()} `;
   const shape = SHAPES.find(([, phrases]) => phrases.some((p) => t.includes(p)));
   return shape ? shape[0] : null;
+}
+
+/**
+ * A CONSTRAINT THE OWNER PUTS INSIDE A DIRECTION. "Low-maintenance", "hands-
+ * off", "passive": his own words for almost no support burden, and the words
+ * he put inside "find low-maintenance digital income opportunities". Read
+ * apart from the rest of the guidance because that sentence is a direction
+ * first — guidance is read before mandate, and a preference heard here would
+ * otherwise swallow the mandate whole and steer a search that was never
+ * opened. So: on its own ("low-maintenance only, please") it steers; inside a
+ * direction it is absorbed beside the mandate, clause by clause.
+ */
+function readConstraintInside(t: string, statement: string): GuidanceProposal | null {
+  if (/\b(low|lower|minimal|zero)[- ]maintenance\b|\bhands[- ]off\b|\bpassive[- ](?:income|revenue|earnings?)\b/.test(t)) {
+    return { kind: 'guidance', statement, guidance: 'prefer', subject: 'almost no support burden', dimension: 'support_burden' };
+  }
+  return null;
 }
 
 function readGuidance(t: string, statement: string): GuidanceProposal | null {
@@ -320,6 +349,15 @@ function readGuidance(t: string, statement: string): GuidanceProposal | null {
   }
   if (/\bi like (this|that) one\b|\bthat one\b.*\b(interesting|promising)\b|\bgo with (this|that)\b/.test(t)) {
     return say('favour');
+  }
+  // "FOCUS MORE ON APIS AND CALCULATORS." The owner's plainest steering
+  // sentence, and neither reader heard it: the door said it could not place
+  // it and the question path said it did not know. What follows the verb is
+  // the subject, kept in his words; a list in it is split into one row per
+  // thing when it is absorbed, so each reaches the search as its own term.
+  const focus = /\b(?:focus|concentrate|lean|prioriti[sz]e|put more (?:effort|time|weight))\s+(?:more\s+|mostly\s+|heavily\s+)?(?:on|towards?|into)\s+(.+)$/i.exec(statement.trim().replace(/[.!]+$/, ''));
+  if (focus?.[1]) {
+    return say('favour', focus[1].trim());
   }
   if (/show me another|something else|a different one|next option|other options|none of these|keep looking/.test(t)) {
     return say('another');
@@ -612,7 +650,28 @@ export async function absorbParagraph(input: {
   }
 
   const open = already ?? await currentMandate(input.founderId);
-  for (const reading of input.readings) {
+
+  // A CONSTRAINT SAID INSIDE THE DIRECTION IS STEERING. "Find low-maintenance
+  // digital income opportunities" is one sentence and one mandate, and the
+  // sentence-reader returns one reading per sentence — so "low-maintenance"
+  // was on the statement and held against nothing. Each clause of an asking
+  // sentence is read again for what it asks the search to prefer or avoid,
+  // and what it finds is absorbed beside the mandate, in his words, on the
+  // record where Discover reads it back.
+  const readings: VentureReading[] = [...input.readings];
+  if (open) {
+    for (const ask of input.readings.filter((r): r is MandateProposal => r.kind === 'mandate')) {
+      const clauses = ask.statement.split(/\s*(?:,|;|\band\b)\s*/).map((c) => c.trim()).filter((c) => c.length > 0);
+      for (const clause of clauses) {
+        const lowered = ` ${clause.toLowerCase().replace(/[’]/g, "'")} `;
+        const heard = readGuidance(lowered, clause) ?? readConstraintInside(lowered, clause);
+        if (heard && !readings.some((r) => r.kind === 'guidance' && r.guidance === heard.guidance && r.subject === heard.subject)) {
+          readings.push(heard);
+        }
+      }
+    }
+  }
+  for (const reading of readings) {
     if (reading.kind === 'not_venture') { notHeard.push(reading.statement); continue; }
     if (reading.kind === 'stop_mandate') {
       if (await stopMandate(input.founderId, 'the owner said to stop')) absorbed += 1;
@@ -639,11 +698,20 @@ export async function absorbParagraph(input: {
       }
       continue;
     }
-    await absorbGuidance({
-      mandateId: open.id, statement: reading.statement, kind: reading.guidance,
-      subject: reading.subject, dimension: reading.dimension,
-    });
-    absorbed += 1;
+    // A LIST IS SEVERAL THINGS. "APIs and calculators" favoured as one subject
+    // would reach the search as one term nobody writes; as two rows each is a
+    // term, each is readable back on Discover, and each can be superseded on
+    // its own.
+    const subjects = reading.guidance === 'favour' && reading.subject
+      ? reading.subject.split(/\s*(?:,|\band\b|\bor\b)\s*/).map((x) => x.trim()).filter((x) => x.length > 0)
+      : [reading.subject];
+    for (const subject of subjects.length > 0 ? subjects : [reading.subject]) {
+      await absorbGuidance({
+        mandateId: open.id, statement: reading.statement, kind: reading.guidance,
+        subject, dimension: reading.dimension,
+      });
+      absorbed += 1;
+    }
   }
   return { opened, absorbed, refused, notHeard, pointed };
 }

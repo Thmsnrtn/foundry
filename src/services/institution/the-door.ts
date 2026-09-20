@@ -35,6 +35,7 @@ export type Destination =
   | 'posture'          // what a company is FOR now: grow, hold, harvest, retire
   | 'undertaking'      // a verb: investigate, grow, fix, test, spend less, handle, take on
   | 'question'         // he is asking, not instructing
+  | 'authority'        // an act only a test or the charter may carry: say the boundary
   | 'unplaceable';     // say so, and keep what he wrote
 
 export interface Doorway {
@@ -134,6 +135,14 @@ export function whichDoor(
       handOffTo: null, said, needs: 'which company you mean' };
   }
 
+  // AN ACT THAT ONLY A TEST OR THE CHARTER MAY CARRY.
+  //
+  // "Email every millwork shop today" is not a question and not steering: it
+  // is an instruction to write to strangers, spend, or commit — the three
+  // things this institution does only inside a test he allowed or the charter
+  // let in, never on a sentence. Read as a question it was answered with what
+  // happened today; read as nothing it came back "I did not follow that". Both
+  // hide the one fact he needs: where the boundary is and what moves it.
   const proposal = interpret(said);
   // ITS FALLBACK IS NOT A RECOGNITION. The company parser answers `objective`
   // for anything it does not recognise, which inside one company's page is
@@ -155,7 +164,32 @@ export function whichDoor(
       handOffTo: null, said, needs: 'which company you mean' };
   }
 
+  // ONLY WHAT NOTHING ELSE COULD PLACE. "Spend no more than $200" is an
+  // allowance and "spend less here" is an undertaking; both were heard above
+  // and stay heard. What reaches here is an imperative to act outward that no
+  // reader owns — and the honest answer to it is the boundary, not a shrug.
+  const authority = readAuthorityAsk(said);
+  if (authority !== null) {
+    return { destination: 'authority', understoodAs: authority, handOffTo: null, said, needs: null };
+  }
+
   return { destination: 'unplaceable',
     understoodAs: 'I could not tell what you wanted me to do with that',
     handOffTo: null, said, needs: null };
+}
+
+/**
+ * The imperatives that ask for an outward act. Recognised only at the head of
+ * the sentence — the instruction, not a mention — so "find me a business that
+ * emails invoices" is a search (read earlier) and "email the shops" is this.
+ */
+const OUTWARD = /^\s*(?:please\s+)?(?:(?:email|e-mail|mail|write to|contact|message|reach out to|call|phone|text|send (?:an? )?(?:email|message|offer)s? to)\b|(?:spend|pay|buy|purchase|charge|sign up for|subscribe to)\b)/i;
+
+export function readAuthorityAsk(said: string): string | null {
+  const t = said.trim();
+  if (!OUTWARD.test(t)) return null;
+  if (/^\s*(?:please\s+)?(?:spend|pay|buy|purchase|charge|sign up for|subscribe to)\b/i.test(t)) {
+    return 'you want me to spend or commit money';
+  }
+  return 'you want me to write to people';
 }

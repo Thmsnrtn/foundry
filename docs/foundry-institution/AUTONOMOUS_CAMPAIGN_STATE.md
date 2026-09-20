@@ -2243,3 +2243,14 @@ new service, no dashboard.
 Experiment 001 settled itself on 19 September through the sealed rule and the
 hourly outcome tick: surprised, graded by the world, prediction preserved. The
 owner was asked nothing. Its asset retires around 19 October unless re-run.
+
+### Ask connects the owner to the institution (2026-09-20)
+
+The owner's first direction, typed into the box on Home, was answered as a
+question ("I don't know yet") because the composer was a GET to the question
+path and the door that hears initiation and steering sat behind a form he never
+saw. One entrance now: every sentence goes through the door; a question is
+handed on with its scope; a direction, steering or stop comes back as the
+confirmation it always had; an outward ask is answered with the charter
+boundary. The reader hears the plain forms ("find …", income, low-maintenance
+as a preference). Proof drives the real composer and asserts on rows.

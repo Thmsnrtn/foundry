@@ -328,12 +328,19 @@ const page2 = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedStrin
 ${crumbsOf(where)}
 ${body}
 ${active === 'advanced' ? '' : html`<footer><a href="/letter">Advanced — inspect the system</a></footer>`}
-<form class="ask" id="ask-foundry" method="GET" action="/foundry">
+${/* ONE ENTRANCE. This was a GET to /foundry?q=, which reaches the question
+      path and nothing else: the owner typed a mandate into it and was answered
+      as a question, because the door that hears initiation and steering sat
+      behind a different form he never saw. Every sentence now goes through
+      the door first; a question is handed on to the same answer path it always
+      had, with its scope, so nothing that worked is lost. A TypeScript comment,
+      not an HTML one: prose in the markup ships to every page. */ ''}
+<form class="ask" id="ask-foundry" method="POST" action="/foundry/ask">
   ${askScope(where).line}
   ${askScope(where).hidden ? html`<input type="hidden" name="scope" value="${askScope(where).hidden}" />` : ''}
   <div class="ask-in">
-    <label for="q" class="sr">${askScope(where).placeholder}</label>
-    <input id="q" name="q" type="search" enterkeyhint="search" autocorrect="on"
+    <label for="said" class="sr">${askScope(where).placeholder}</label>
+    <input id="said" name="said" type="text" enterkeyhint="send" autocorrect="on" maxlength="800"
       autocapitalize="sentences" spellcheck="true" placeholder="${askScope(where).placeholder}" />
     <button type="submit">Ask</button>
   </div>

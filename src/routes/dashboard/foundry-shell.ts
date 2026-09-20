@@ -2404,6 +2404,22 @@ foundryShellRoutes.get('/foundry', async (c) => {
   const asked = String(c.req.query('ask') ?? '').trim();
   const typed = String(c.req.query('q') ?? '').trim();
   const done = String(c.req.query('done') ?? '').trim();
+
+  // THE DOOR FIRST, EVEN HERE. This path classified with a question regex
+  // alone, so an instruction that reached it — the composer used to send
+  // everything here — was answered as whichever question it happened to
+  // resemble ("reject" read as "what did I turn down?"). The door decides
+  // whether a sentence is a question at all; only then is it answered. A GET
+  // binds nothing: an instruction is shown back with "What I will do" and a
+  // button, exactly as the venture screen has always done.
+  if (typed && !asked) {
+    const { whichDoor } = await import('../../services/institution/the-door.js');
+    const { currentMandate } = await import('../../services/venture/mandate.js');
+    const door = whichDoor(typed, { searching: await currentMandate(s.ownerId) !== null });
+    if (door.destination === 'venture') return ventureConfirmation(c, s.ownerId, typed);
+    if (door.destination === 'authority') return c.html(await authorityBoundary(s.ownerId, door));
+    if (door.destination === 'unplaceable' && matchQuestion(typed) === '') return c.html(didNotFollow(door));
+  }
   const key = asked || (typed ? matchQuestion(typed) : '');
 
   // A QUESTION TYPED INSIDE A COMPANY STAYS ABOUT THAT COMPANY. The composer on
@@ -4468,7 +4484,16 @@ foundryShellRoutes.post('/foundry/ask', requireInstitutionOwner(), async (c: any
   // real answer. Two entrances to one institution must not disagree about what
   // it can do, so this one hands the question to the path that answers it.
   if (door.destination === 'question') {
-    return c.redirect(`/foundry?q=${encodeURIComponent(said)}`);
+    const scope = String(form.scope ?? '').trim();
+    return c.redirect(`/foundry?q=${encodeURIComponent(said)}${scope ? `&scope=${encodeURIComponent(scope)}` : ''}`);
+  }
+
+  // THE BOUNDARY, NAMED, WITH THE THING THAT MOVES IT. Writing to people,
+  // spending and committing happen only inside a test he allowed or the
+  // charter let in — never on a sentence. Saying so is the answer; a generic
+  // "I did not follow that" would hide the one fact he came for.
+  if (door.destination === 'authority') {
+    return c.html(await authorityBoundary(String(founder.id), door));
   }
 
   // A VERB NAMES ITS COMPANY, OR NAMES A NEW ONE.
@@ -4523,13 +4548,27 @@ foundryShellRoutes.post('/foundry/ask', requireInstitutionOwner(), async (c: any
   // AND WHAT IT COULD NOT PLACE COMES BACK WITH HIS WORDS IN IT. Losing three
   // hundred words of mandate because nothing recognised them is a worse failure
   // than the 404 was: the 404 at least did not pretend to have heard him.
-  return c.html(page('What you said', html`
+  return c.html(didNotFollow(door));
+});
+
+/** The same page from either entrance: his words kept, what is heard, listed. */
+function didNotFollow(door: import('../../services/institution/the-door.js').Doorway): HtmlEscapedString | Promise<HtmlEscapedString> {
+  return page('What you said', html`
     <h1>I did not follow that</h1>
     <p class="lede">You said: <strong>${door.said}</strong></p>
     ${door.needs !== null ? html`<p>I understood ${door.understoodAs}, but I need
       ${door.needs} before I can act on it. Say it on that company's page and it will
       stick.</p>`
     : html`<p>I understood you were telling me something, but not what to do about it.</p>`}
+    <div class="know">
+      <h2>What I can act on</h2>
+      <ul>
+        <li>A direction — &ldquo;find low-maintenance digital income&rdquo;, &ldquo;explore API opportunities&rdquo;. I open a search, or point the one running.</li>
+        <li>Steering — &ldquo;focus more on calculators&rdquo;, &ldquo;avoid subscriptions&rdquo;, &ldquo;be more sceptical&rdquo;, &ldquo;spend no more than $25&rdquo;.</li>
+        <li>Stopping — &ldquo;stop looking&rdquo;.</li>
+        <li>A question — how I am, what I am doing, what you own, what happened today.</li>
+      </ul>
+    </div>
     <div class="know">
       <h2>Your words are not lost</h2>
       <p class="quiet">Change anything you like and send it again.</p>
@@ -4539,8 +4578,44 @@ foundryShellRoutes.post('/foundry/ask', requireInstitutionOwner(), async (c: any
         <button class="btn go" type="submit">Send it again</button>
       </form>
     </div>
-    <a class="btn" href="/foundry">Back</a>`, 'foundry'));
-});
+    <a class="btn" href="/foundry">Back</a>`, 'foundry');
+}
+
+/**
+ * WHERE THE BOUNDARY IS, AND WHAT MOVES IT. Read from the rows: whether a
+ * test is live, whether a charter stands, whether a search is open — so the
+ * next action offered is the real one and not a generic door.
+ */
+async function authorityBoundary(founderId: string, door: import('../../services/institution/the-door.js').Doorway): Promise<HtmlEscapedString> {
+  const { liveCharter } = await import('../../services/institution/charter.js');
+  const { currentMandate } = await import('../../services/venture/mandate.js');
+  const { listExperiments } = await import('../../services/founder/experiment-view.js');
+  const charter = await liveCharter(founderId);
+  const mandate = await currentMandate(founderId);
+  const live = (await listExperiments(founderId, new Date(), 'now')).filter((t) => !t.concluded);
+  const money = door.understoodAs.includes('money');
+  return page('What you said', html`
+    <h1>${money ? 'I do not spend on a sentence' : 'I do not write to anyone on a sentence'}</h1>
+    <p class="lede">You said: <strong>${door.said}</strong></p>
+    <p>I understood ${door.understoodAs}. ${money ? 'Money moves' : 'People are written to'} only inside a test —
+      one you allowed, or one the charter let in — with its recipients approved, its allowance set and its
+      prediction sealed first. That is not a limit on this sentence; it is the shape every outward act takes.</p>
+    <div class="know">
+      <h2>What moves it</h2>
+      <ul>
+        ${live.length ? live.map((t) => html`<li>A test is running: <a href="/foundry/experiments/${t.id}">${t.assetName ?? t.title}</a>. Its recipients and allowance are on its page.</li>`) : ''}
+        ${!charter ? html`<li>No charter stands, so no test is let in without your tap. <a href="/foundry/charter">The charter</a> is what gives standing authority, within limits you set.</li>`
+    : html`<li>The charter stands: a sealed design is let in on the next pass, within ${'$'}${(charter.testsTotalCents / 100).toFixed(0)} for tests and ${String(charter.probesInFlight)} at once.</li>`}
+        ${!mandate ? html`<li>No search is open. Say what to look for — &ldquo;find low-maintenance digital income&rdquo; — and the eyes, the forge and the hands take it from there.</li>`
+    : html`<li>A search is open: <a href="/foundry/searching">${mandate.statement}</a>. What it finds becomes tests; tests are what write and spend.</li>`}
+      </ul>
+    </div>
+    <form method="POST" action="/foundry/ask" class="inline">
+      <input type="text" name="said" maxlength="800" placeholder="Say what to look for instead" aria-label="Say what to look for" enterkeyhint="send" autocapitalize="sentences" spellcheck="true" />
+      <button class="btn" type="submit">Tell me</button>
+    </form>
+    <a class="btn go" href="/foundry">Back</a>`, 'foundry');
+}
 
 // ADOPT, CONFIRMED. The preview above bound nothing; this binds exactly the
 // words it showed. A confirmation carrying a different reading — the sentence
@@ -4688,18 +4763,23 @@ async function ventureConfirmation(c: any, founderId: string, said: string): Pro
     <p class="lede">You said: <strong>${said}</strong></p>
     <div class="know">
       <h2>What I will do</h2>
-      <p>I will treat that as an instruction to go and find you
-        ${reading.shape ? `a ${reading.shape.replaceAll('_', '-')} business` : 'a business'}
-        — not an instruction to build one.</p>
-      <p class="quiet">That means looking for real problems people already have, working
-        out who solves them now, how they reach anyone, and what anyone pays — and trying
-        to kill each idea before I bring it to you. I will advance very few. Telling you
-        none of them are worth it is a real answer.</p>
+      <p>I will treat that as a direction to go and find you
+        ${reading.shape ? `a ${reading.shape.replaceAll('_', '-')} business` : 'something that earns'}
+        — not an instruction to build one. Your words become the search itself; every
+        constraint in them is held against every candidate.</p>
       <ul>
-        <li><strong>Cost</strong> — nothing until you set a budget.</li>
-        <li><strong>What I could do on my own</strong> — nothing. I cannot create a
-          company, spend anything, or contact anyone without asking you.</li>
-        <li><strong>Stopping</strong> — say so, any time.</li>
+        <li><strong>Every morning</strong> — I look through the eyes, sow what somebody
+          actually wrote, bury what a capable source contradicts, and promote only what two
+          independent ways of knowing support. Then I design a test for what survives,
+          attack my own design, and seal it. Telling you none of it deserves a test is a
+          real answer.</li>
+        <li><strong>Nothing is sealed, sent or spent without authority</strong> — a sealed
+          design waits for your tap, or for the charter, which lets it in within limits you
+          set. Research and design need neither; my thinking is bounded at $1 a day until a
+          charter says otherwise.</li>
+        <li><strong>Where you see it</strong> — Home says whether I am looking and what I
+          am looking for; Experiments → Explore shows what has been found; steer it from
+          here in a sentence, and stop it the same way.</li>
       </ul>
     </div>
     <form method="POST" action="/foundry/venture/confirm">
