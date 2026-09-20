@@ -294,10 +294,19 @@ experimentRoutes.get('/foundry/experiments/next', async (c: any) => {
   if (!founderId) return c.redirect('/onboarding');
   const { forgeFor } = await import('../../services/venture/forge.js');
   const f = await forgeFor(founderId);
+  // WHEN THIS FILLS, IN ONE SENTENCE. Empty, the page pointed him at Ask and
+  // said nothing about what would put a line here: a candidate standing under
+  // an open search, with a question only money settles.
+  const { currentMandate } = await import('../../services/venture/mandate.js');
+  const searching = await currentMandate(founderId);
+  const fills = f.open.length > 0 ? '' : searching
+    ? `A search is open (${searching.statement}); this fills when it finds a candidate worth a question that only a test can settle.`
+    : 'No search is open, so nothing arrives here. Say what to look for in the box below and the search brings its questions here.';
 
   const body = html`
     <h1>What to test next</h1>
     <p class="lede">${f.sentence}</p>
+    ${fills ? html`<p class="quiet">${fills}</p>` : ''}
     <p class="quiet">Read, not suggested. Every line below is a row somebody wrote —
       a question marked unanswered, or a limit a finished test recorded before it ran.</p>
 

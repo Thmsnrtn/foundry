@@ -867,7 +867,7 @@ export async function mandateProgress(founderId: string): Promise<MandateProgres
   // this unblocks itself without anybody editing this function. And asked in
   // the mandate's own world: a rehearsal search sees through rehearsal sources,
   // a real one needs something real.
-  const { waysOfLooking, whatIsStillDark } = await import('./research-sources.js');
+  const { plainNameOf, waysOfLooking, whatIsStillDark } = await import('./research-sources.js');
   const ways = await waysOfLooking(founderId, mandate.evidenceMode);
   const canSeeMarket = ways.length > 0;
 
@@ -887,7 +887,7 @@ export async function mandateProgress(founderId: string): Promise<MandateProgres
       : 'I cannot see outside your companies yet, so I have nowhere to look. '
         + 'I will not describe opportunities from memory.',
     stillDark: canSeeMarket ? await whatIsStillDark(founderId, mandate.evidenceMode) : [],
-    seeingThrough: ways.map((w) => `${w.named} — ${w.whatItIs}`),
+    seeingThrough: ways.map((w) => `${plainNameOf(w.named)} (${w.whatItIs})`),
     brief: await (async () => {
       const row = (await query(
         `SELECT looking_for, shape_named, terms_tried, terms_from FROM search_briefs

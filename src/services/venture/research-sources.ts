@@ -32,6 +32,21 @@ export interface WayOfLooking {
   connectedOn: string;
 }
 
+/**
+ * A SOURCE BY ITS PLAIN NAME. The rows carry the provider's key
+ * (`apple_app_reviews`, `hn_algolia`) and the owner was reading those keys on
+ * the search page beside what each one is. He is not reading code.
+ */
+export function plainNameOf(provider: string): string {
+  const names: Record<string, string> = {
+    apple_app_reviews: 'App Store reviews', apple_app_store: 'the App Store', hn_algolia: 'Hacker News',
+    github_issues: 'GitHub issue trackers', npm_registry: 'the npm registry', wikipedia_pageviews: 'Wikipedia page views',
+    duckduckgo_autocomplete: 'search suggestions', remotive: 'remote job postings', commbuys: 'the Massachusetts public-bid register',
+    reference_world: 'the rehearsal world',
+  };
+  return names[provider] ?? provider.replace(/_/g, ' ');
+}
+
 /** Every live way this person has of looking outside their own companies. */
 export async function waysOfLooking(
   founderId: string, world: 'real' | 'reference' = 'real',

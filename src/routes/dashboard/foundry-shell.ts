@@ -4646,6 +4646,7 @@ function didNotFollow(door: import('../../services/institution/the-door.js').Doo
         <li>Steering — &ldquo;focus more on calculators&rdquo;, &ldquo;avoid subscriptions&rdquo;, &ldquo;be more sceptical&rdquo;, &ldquo;spend no more than $25&rdquo;.</li>
         <li>Stopping — &ldquo;stop looking&rdquo;.</li>
         <li>A question — how I am, what I am doing, what you own, what happened today.</li>
+        <li>Housekeeping is done where the things are: put a conversation away from the <a href="/foundry/inbox">Inbox</a>, stop a test from its own page.</li>
       </ul>
     </div>
     <div class="know">
