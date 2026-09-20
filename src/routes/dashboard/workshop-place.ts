@@ -96,7 +96,7 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
           <form method="POST" action="/foundry/public-workshop/publish"><button class="btn" type="submit">Publish what changed</button></form>`}
       </div>
       ${health && health.sending.status !== 'healthy' ? html`<form method="POST" action="/foundry/public-workshop/sending" class="stack"><p>Sending as the Workshop needs the mail provider to verify ${w.zoneName}; Foundry writes the records it asks for and checks back.</p><button class="btn" type="submit">Connect sending as ${w.publicName}</button></form>` : ''}
-      ${health && health.replyInbox.status !== 'healthy' ? html`<form method="POST" action="/foundry/public-workshop/inbox" class="stack"><p>Replies to ${w.contactEmail} are forwarded to your own inbox. The first time, Cloudflare emails you one confirmation link to click.</p><button class="btn" type="submit">Connect the reply inbox</button></form>` : ''}
+      ${health && health.replyInbox.status !== 'healthy' ? html`<form method="POST" action="/foundry/public-workshop/inbox" class="stack"><p><strong>Replies to ${w.contactEmail} are not reaching you.</strong> ${health.replyInbox.detail || 'the path is not readable'}. Connect it and they are forwarded to your own inbox; the first time, Cloudflare emails you one confirmation link to click. Until then, silence from a test is not an answer from anybody.</p><button class="btn" type="submit">Connect the reply inbox</button></form>` : ''}
     </section>
 
     <section class="know" id="pause"><h2>${w.economicPause ? 'New economic activity is paused' : 'Pausing'}</h2>

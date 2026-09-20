@@ -34,6 +34,13 @@ export interface EstateHealth {
   moneyAtRisk: string;
   /** What only the owner can do, or null. */
   ownerAction: string | null;
+  /**
+   * WHAT TODAY REQUIRED AND DID NOT GET, apart from what merely failed. A
+   * routine that returns having done nothing is the failure mode this reading
+   * exists for, so it is not mixed into `failed` where a surface would show
+   * whichever came first.
+   */
+  didNotDoTheDay: string[];
   lastHealthy: string | null;
   /** When the hand next passes, from its schedule and its last success. */
   nextPass: string | null;
@@ -135,6 +142,11 @@ export async function healthOf(founderId: string, now: Date = new Date()): Promi
     ?? blocked.find((b) => b.ownerAction)?.ownerAction ?? (workshopNeeds.length ? workshopNeeds[0] ?? null : null);
 
   const state: EstateState = blocked.length ? 'blocked' : (loops.length || workshopNeeds.length || undone.length) ? 'degraded' : 'ok';
+  // LAST HEALTHY IS NOT THE LAST TIME A JOB RETURNED. A pass that returned
+  // having done nothing the day required is not a moment of health, so it
+  // cannot be the answer to "when was everything last right". When the day's
+  // work is undone, the honest answer is that it has not been right today.
+  const lastRight = undone.length ? null : lastHealthy;
   return {
     state,
     word: state === 'ok' ? 'Healthy'
@@ -151,7 +163,8 @@ export async function healthOf(founderId: string, now: Date = new Date()): Promi
     moneyAtRisk: owed.length ? `$${(owedCents / 100).toFixed(2)} owed to ${owed.length === 1 ? 'a buyer' : 'buyers'}`
       : blocked.some((b) => /payment|refund|fulfil/i.test(b.attempting)) ? 'a payment or delivery is waiting' : 'none',
     ownerAction,
-    lastHealthy,
+    didNotDoTheDay: undone,
+    lastHealthy: lastRight,
     nextPass: nextPassAfter(now),
   };
 }

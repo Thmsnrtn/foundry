@@ -268,7 +268,8 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
         <label class="sr" for="movedwhy">What it was</label>
         <input id="movedwhy" name="because" type="text" placeholder="What it was" />
         <button class="btn" type="submit">Record it</button>
-      </form>`)}
+      </form>
+      <p class="quiet">Nothing here is deleted. A row you did not mean is corrected by recording the opposite movement, with the reason, so the ledger shows both what was said and what was corrected.</p>`)}
     </div>`;
   return c.html(page('Economics', body, 'money', frame));
 });
@@ -331,8 +332,22 @@ moneyRoutes.post('/foundry/money/moved', requireInstitutionOwner(), async (c: an
   const form = await c.req.parseBody();
   const amount = cents(String(form.amount ?? ''));
   const because = String(form.because ?? '').trim();
-  const direction = String(form.direction) === 'owner_contribution' ? 'owner_contribution' as const : 'owner_distribution' as const;
+  // A WORD IT DOES NOT KNOW IS NOT "TOOK OUT". This read anything that was
+  // not `owner_contribution` as a distribution, so a mistyped direction —
+  // or a form posted by hand — silently wrote money OUT of the institution
+  // and answered "done". The ledger has no delete by design, so a wrong row
+  // is corrected by a second row and never erased: a write that guesses what
+  // the owner meant is a permanent mark on the one figure he trusts.
+  const said = String(form.direction ?? '');
+  if (said !== 'owner_contribution' && said !== 'owner_distribution') {
+    return back(c, '', `"${said || 'nothing'}" is not a direction I know. Say whether you put money in or took it out; I will not guess, because the ledger keeps what it is told.`);
+  }
+  const direction = said;
   if (amount === null || amount === 0) return back(c, '', 'That amount is not a number of dollars.');
+  // AN AMOUNT A PERSON DID NOT MEAN. A million dollars through this form is
+  // far likelier to be a slip than a fact, and the row cannot be taken back.
+  if (amount < 0) return back(c, '', 'Record what moved as a positive amount, and say which way it went.');
+  if (amount > 100_000_00) return back(c, '', `$${(amount / 100).toFixed(2)} is more than this form will take in one entry. If that is really the figure, record it in parts, so a slipped key cannot become the ledger.`);
   if (!because) return back(c, '', 'Say what the movement was, so the ledger reads as something rather than as an adjustment.');
   await record({
     founderId,

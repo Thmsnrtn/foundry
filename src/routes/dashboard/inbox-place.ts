@@ -64,6 +64,31 @@ inboxRoutes.get('/foundry/inbox', async (c: any) => {
   const counts = await threadCounts(founderId);
   const threads = await theThreads(founderId, show);
   const anyMail = counts.working + counts.handled + counts.archived > 0;
+  // WHAT WENT OUT INVITING A REPLY, and whether the path that carries one is
+  // working. An empty inbox means one thing after nothing was sent and quite
+  // another after nineteen strangers were asked to write back.
+  //
+  // STANDING DOES NOT APPLY: every message a test sends goes out under that
+  // test's own asset, which is experimental by nature until the world earns
+  // it. Counting only earned companies would count nothing and say "nothing
+  // has been sent", which is the false sentence this reading exists to end.
+  // Reality applies: a reference company writes to nobody.
+  const { query, realCompany } = await import('../../db/client.js');
+  const sentUnderTests = Number(((await query(
+    `SELECT COUNT(*) AS n FROM outbound_actions o
+       JOIN products p ON p.id = o.product_id
+       JOIN venture_experiments e ON e.id = p.from_experiment_id
+      WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND o.experiment_act = 'offer'
+        AND o.status = 'executed' AND ${realCompany('p')}`, [founderId])).rows[0] as Record<string, unknown>).n ?? 0);
+  const replyPath = await (async () => {
+    if (sentUnderTests === 0) return null;
+    const w = (await query('SELECT health_json FROM public_workshop WHERE founder_id = ?', [founderId])).rows[0] as Record<string, unknown> | undefined;
+    const h = w?.health_json == null ? null : JSON.parse(String(w.health_json)) as Record<string, { status: string; detail: string }>;
+    const r = h?.replyInbox;
+    return r && r.status !== 'healthy'
+      ? `Replies to the Workshop's address are ${r.status === 'unknown' ? 'unreadable' : 'not being delivered'}${r.detail ? `: ${r.detail}` : ''}.`
+      : null;
+  })();
   const initials = (m: MailRecord): string => (m.fromName ?? m.from).split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('');
   const readingCls = (r: string): string => /complaint|stop_writing|wants_money_back|not_for_us|needs_a_person/.test(r) ? 'warn' : /wants_more|was_useful|answering_offer|asking/.test(r) ? 'ok' : '';
   const MODES: Array<['off' | 'draft' | 'autonomous', string, string]> = [
@@ -97,7 +122,16 @@ inboxRoutes.get('/foundry/inbox', async (c: any) => {
     </section>
 
     ${!anyMail ? html`<section class="know"><h2>Nobody has written yet</h2>
-      <p class="quiet">Nothing has been sent, so nothing has come back. When mail arrives at the Workshop's address it will appear here, and it will still arrive in your mailbox exactly as it does now.</p></section>`
+      ${/* THIS SAID "NOTHING HAS BEEN SENT, SO NOTHING HAS COME BACK" a
+            fortnight after nineteen cold emails reached strangers, each one
+            inviting a reply. An empty inbox after nothing was sent and an
+            empty inbox after nineteen were are opposite facts, and the second
+            is the one worth a sentence about the path. */ ''}
+      <p class="quiet">${sentUnderTests === 0
+    ? 'Nothing has been sent, so nothing has come back.'
+    : `${String(sentUnderTests)} ${sentUnderTests === 1 ? 'message has' : 'messages have'} gone out under your tests, each inviting a reply, and nothing has come back yet.`}
+        When mail arrives at the Workshop's address it will appear here, and it will still arrive in your mailbox exactly as it does now.</p>
+      ${replyPath === null ? '' : html`<p class="noticed"><strong>The reply path needs you.</strong> ${replyPath} Until it works, silence here is not an answer from anybody.</p>`}</section>`
     : html`
     <p class="decisions-head" aria-label="Show">
       <a class="chip${show === 'working' ? ' on' : ''}${counts.needs ? ' hot' : ''}" href="/foundry/inbox">In flight <b>${String(counts.working)}</b></a>

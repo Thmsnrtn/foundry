@@ -50,6 +50,7 @@ the objective and not the path (`scripts/owner-review-harness.mts`, below).
 | J18 | **Keep going through a provider outage** without losing anyone or paying twice | works *(since 21 Sep)* | natural | protects | Scenario 10 on the world: the mail provider down the morning the hand writes — nothing sent, the morning says so once naming the provider's answer, the page says who could not be reached and that it will try again; the next morning the same offers go out once each under the same idempotency key. Before: a failed offer counted its recipient as done, and one bad morning dropped those people for good. A payment provider down when a refund is owed: the refund waits, the page says it needs him, and issues once when the provider returns. |
 | J19 | **Own more than one company and still run a test** | works *(since 21 Sep)* | natural | reachable | Scenario 10: naming a second company made the sender "ambiguous" and no test could write to anyone; under a Workshop the sender is the Workshop (`senderCompanyOf`). Home watches the companies; "can I step away" lists the ones nothing reports on as ones Foundry cannot see. |
 | J20 | **Know what a buyer is owed, and what only he can do about it** | works *(since 21 Sep)* | natural | protects | One reader (`obligations.ts`): owed, sent-unconfirmed, failed-refund-pending, refund-requested, disputed, uncovered — each with the action and whether it is his. Home's one thing when it needs him, the queue, Economics ("Owed to buyers"), the test's page, the Workshop page and the door's ranking all read it. The obligation outlives the acts' expiry, the test's settlement and a stop (the refund act survives a stop; the asset retires when the last buyer is square), and closes only when the goods are confirmed delivered or the money has gone back. Proved in the hand's suite under out-of-order, late and post-closure events and in the portfolio month. Unobserved in production: no real purchase yet. |
+| J22 | **Trust that a result means what it says** | works, gap *(since 21 Sep)* | natural | **pending reality** | `the-instrument.ts`: what an offer invited, whether that path can carry it, and what a silence on a doubtful channel does not establish — on the settled page, in the outcome's limits and in the Inbox. Gap: the Workshop's health is a snapshot, so it can say the path is broken now and not that it was broken then. Experiment 001's own null was taken on a channel whose reply path was not routed, which is why this exists. |
 | J21 | **Know the most Foundry can spend today, and why that number** | works *(since 21 Sep)* | natural | measures | One reader (`spending.ts`): the ceiling that binds, its source, what is spent against it, every other ceiling standing. The same number is handed to the door that buys thinking, so what Controls, the Ask answer, the charter page and the absence reading say is what refuses the call — the pre-charter dollar until he signs, the charter's rate after, the deployment's founder cap if lower. The monthly budget is shown as a note, not a limit; the thirty-day figure is the enforced ledger. Before: five ceilings, one enforced, two tables. In production this now binds all thinking at $1 a day until a charter is signed, as Controls has said since 21 Sep. |
 | J15 | **Own an asset**: see its state, obligations, costs and whether it is worth keeping | works, gap | findable, rough | **pending reality** | Experimental assets are kept outside operating paths until reality earns them (`asset.ts`); a failed test's asset retires after `failed_test_grace_days`. Owner-adjusted value (support, owner minutes, entropy, dependency, reversibility) is doctrine (`OBJECTIVE.md`, `RIVER.md`) and partly columns; no asset has earned, so nothing has been valued. |
 
@@ -144,6 +145,48 @@ carries them under *Obligations*. What they left: the buyer is invisible to
 him (no name, no note that nobody has told them) and there is no "deliver
 instead of refund" path, both future frontier; the provider's fee on a
 refunded sale is an external-evidence boundary.
+
+**Review cell G, 21 September** (a returning owner after a fortnight; an
+operational-reliability reviewer; an adversarial systems reviewer; the phone at
+390px in both schemes), on the world in `--world --day 15`.
+
+The worst defect this campaign has found came from the returning owner, and it
+is not a bug in any component: **nineteen cold emails went to strangers
+inviting a reply, the Workshop's reply path was not routed, and seven days
+later the sealed rule settled the test *surprised* — and the institution filed
+that as evidence about a market.** No rule was broken; the rule counts
+confirmed deliveries and payments, and there were none. The failure is upstream
+of every safeguard: a null result is only evidence about the world if the world
+could have answered. `venture/the-instrument.ts` reads what an offer invited
+and whether that path can carry it, and the settled page, the outcome's limits
+and the Inbox say so. **The verdict is never touched** — a sealed rule counted
+what it said it would, and rewriting a settled result to suit a later discovery
+is the thing the seal prevents. What changes is what the institution CLAIMS the
+result establishes, which is its own claim and its to correct. Proof debt: the
+Workshop's health is a snapshot, so the sentence says it cannot know whether
+the path was down while the test ran; a per-day record of the reply path would
+let it say more.
+
+Four more release-blocking, all repaired: Home printed "Everything is fine.
+Nothing needs you." above a health reading that said otherwise, and above a
+queue that had one thing in it; "Last healthy" was asserted at the same instant
+as "Recovering: stuck", because it measured a job returning rather than the
+day's work being done; the Inbox said "Nothing has been sent, so nothing has
+come back" a fortnight after nineteen went out; and the Workshop promised
+"refunds still go out" and "replies are forwarded to your own inbox" directly
+beneath the reading that said neither was true. Activity's new obligation rows
+called a bounced *offer* "a delivery to a buyer did not arrive" — a defect
+introduced by the previous wave and caught here, since both are written under
+the same event kind.
+
+The adversarial lens could not bypass authority: no email, publication, money
+movement or cross-owner act, and no way to make an obligation disappear. It
+found one integrity defect, now repaired: the owner's own "money moved" form
+read any unrecognised direction as *took out* and accepted any amount, writing
+a permanent row into the one figure he trusts. It refuses a direction it does
+not know, bounds a single entry, and says that a wrong row is corrected by a
+second row rather than erased. Carried, not repaired: a refused route is a
+transient banner and is not recorded where he would later see it.
 
 **Reviews on 20 September** — A (steer, absence, why it failed, health), B
 (initiate, spend, inbox, stop), C (explore, charter, next test, hold sending):

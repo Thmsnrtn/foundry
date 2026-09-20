@@ -312,7 +312,17 @@ export async function whatHappened(
             (SELECT p.id FROM products p WHERE p.from_experiment_id = x.experiment_id AND p.deleted_at IS NULL AND ${realCompany('p')}) AS product_id,
             (SELECT p.name FROM products p WHERE p.from_experiment_id = x.experiment_id AND p.deleted_at IS NULL AND ${realCompany('p')}) AS name
        FROM business_outcome_events b JOIN experiment_exposures x ON x.id = b.exposure_id
-      WHERE b.founder_id = ? AND b.evidence_mode = 'real' AND b.kind IN ('payment','refund','delivery','delivery_failed','dispute')
+      WHERE b.founder_id = ? AND b.evidence_mode = 'real'
+        AND (b.kind IN ('payment','refund','dispute')
+          -- A BOUNCED OFFER IS NOT AN UNDELIVERED PURCHASE. Both are written
+          -- as delivery_failed (outcome.ts records an offer's failure under
+          -- that kind), and reading one as the other put "a delivery to a
+          -- buyer did not arrive" on the owner's Activity when nobody had
+          -- bought anything. Only what a DELIVERY action carried counts here.
+          OR (b.kind IN ('delivery','delivery_failed') AND EXISTS (
+                SELECT 1 FROM outbound_actions o
+                 WHERE o.experiment_id = x.experiment_id AND o.experiment_act = 'delivery'
+                   AND json_extract(o.provider_receipt_json, '$.message_id') = b.provider_event_ref)))
       ORDER BY b.observed_at DESC LIMIT ?`, [founderId, limit])) {
     const amount = r.amount_cents == null ? '' : ` $${(Number(r.amount_cents) / 100).toFixed(2)}`;
     const kind = String(r.kind);

@@ -1382,7 +1382,7 @@ export function theOneThing(a: Attention, extras: OneThingExtras = {}): HtmlEsca
       <dt>Customer effect</dt><dd>${h.customerEffect}</dd>
       <dt>Money at risk</dt><dd>${h.moneyAtRisk}</dd>
       <dt>Owner action</dt><dd>${h.ownerAction ?? 'none'}</dd>
-      <dt>Last healthy</dt><dd>${h.lastHealthy ? h.lastHealthy.slice(0, 16).replace('T', ' ') : 'not recorded'}</dd>
+      <dt>Last healthy</dt><dd>${h.lastHealthy ? h.lastHealthy.slice(0, 16).replace('T', ' ') : h.didNotDoTheDay.length ? 'not today — the day\u2019s work is not done' : 'not recorded'}</dd>
     </dl>` : ''}
     <details><summary>Technical details</summary><div class="inner">
       <p class="mono">${a.routines.join(', ')}</p>
@@ -2738,6 +2738,17 @@ foundryShellRoutes.get('/foundry', async (c) => {
   const about = named && (key === 'howdoing' || key === 'numbers' || key === 'working'
     || key === 'needs' || key === 'allowed') ? { ...named, key } : null;
 
+  const { healthOf: readHealth } = await import('../../services/founder/health.js');
+  const health = await readHealth(s.ownerId);
+  // "EVERYTHING IS FINE. NOTHING NEEDS YOU." WAS PRINTED ABOVE A HEALTH
+  // READING THAT SAID OTHERWISE, and a returning owner found it: once the
+  // first line was provably false, every calm summary on the screen became
+  // something he had to re-check. The lead says the health reading's own
+  // words whenever it is not well, and "fine" only when it is.
+  const notWell = health.state !== 'ok'
+    ? (health.didNotDoTheDay[0] ?? health.failed[0] ?? health.word)
+    : null;
+
   // ORIENTATION IS ONE SENTENCE. Not four green bullets: a routine count and a
   // spend of zero are true, measurable, and not why he opened this.
   // IS EVERYTHING OKAY, ANSWERED AGAINST WHAT IS ACTUALLY THERE.
@@ -2764,7 +2775,9 @@ foundryShellRoutes.get('/foundry', async (c) => {
     : attention === null
       ? (nothingYet
         ? 'I am set up, and I have not learned anything about you yet.'
-        : settled)
+        : notWell
+          ? `Nothing needs a decision from you. Not everything is fine, though: ${notWell}.`
+          : settled)
       : attention.kind === 'stopped' || attention.kind === 'drifted'
         ? 'Something needs looking at.'
         : 'One thing needs you.';
@@ -2804,8 +2817,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
   // WHAT ELSE I AM CARRYING, for the Now/Next strip and the way to the record.
   const { underWayFor } = await import('../../services/institution/undertaking.js');
   const carrying = await underWayFor(s.ownerId);
-  const { healthOf } = await import('../../services/founder/health.js');
-  const health = await healthOf(s.ownerId);
+
   // WHETHER FOUNDRY ITSELF IS OPERATING, as one sentence he does not have to
   // assemble from tiles: ran or did not, and if it ran, what it decided.
   const { howFoundryIsRunning, since: sinceThen } = await import('../../services/founder/health.js');
@@ -2818,7 +2830,11 @@ foundryShellRoutes.get('/foundry', async (c) => {
   const pulseLine = html`<section class="panel pulse" id="pulse" aria-label="Whether Foundry is running"><p><span class="state ${pulseCls}">${pulse.word}</span> ${pulse.sentence}${pulse.state !== 'stopped' && pulse.lastPassAt ? html` <span class="dim">Last completed pass ${sinceThen(pulse.lastPassAt, new Date())}.</span>` : ''}</p></section>`;
   const estate: { word: string; cls: 'ok' | 'watch' | 'bad'; detail: string } =
     health.state === 'blocked' ? { word: health.word, cls: 'bad', detail: health.ownerAction ?? health.failed[0] ?? 'something it needs is missing' }
-      : health.state === 'degraded' ? { word: health.word, cls: 'watch', detail: health.recovering === 'automatically' ? 'recovering on its own' : health.ownerAction ?? 'needs a look' }
+      : health.state === 'degraded' ? { word: health.word, cls: 'watch',
+        // THE DAY'S UNDONE WORK FIRST. A morning that observed nothing
+        // outranks a nuisance in the plumbing, and showing whichever came
+        // first turned the one into the other on the owner's first screen.
+        detail: health.didNotDoTheDay[0] ?? (health.recovering === 'automatically' ? 'recovering on its own' : health.ownerAction ?? 'needs a look') }
         : { word: 'Healthy', cls: 'ok', detail: s.watching.real > 0 ? `${count(s.watching.real, 'company', 'companies')} watched` : 'nothing to watch yet' };
   // NOW AND NEXT, from the records. Now is what the live test is doing; Next is
   // when the hand passes again. Neither is a forecast.
@@ -6377,13 +6393,13 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
   const workshop = await publicWorkshopOf(s.ownerId);
 
   // WHAT IS WRONG AND WHETHER HE IS NEEDED, in the place he comes to when
-  // something is. The Estate tile on Home shows the word; this shows the rows.
+  // something is. The Health tile on Home shows the word; this shows the rows.
+  const { healthOf } = await import('../../services/founder/health.js');
+  const health = await healthOf(s.ownerId);
   // WHAT I MAY DO ON MY OWN, ACROSS EVERYTHING — the question this page's
   // title asks and could not answer once anything had been granted.
   const { autonomyAcross } = await import('../../services/founder/autonomy-map.js');
   const autonomy = await autonomyAcross(s.ownerId);
-  const { healthOf } = await import('../../services/founder/health.js');
-  const health = await healthOf(s.ownerId);
   // THE OWNER'S ENVELOPE, NOT A SETTINGS TREE. Stop everything first, because
   // the one control that must never be searched for is the one that halts
   // it all. Then the envelope as cards: health, what I may do on my own, how
@@ -6434,7 +6450,7 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
         <dt>Customer effect</dt><dd>${health.customerEffect}</dd>
         <dt>Money at risk</dt><dd>${health.moneyAtRisk}</dd>
         <dt>Owner action</dt><dd>${health.ownerAction ?? 'none'}</dd>
-        <dt>Last healthy</dt><dd>${health.lastHealthy ? health.lastHealthy.slice(0, 16).replace('T', ' ') : 'not recorded'}</dd>
+        <dt>Last healthy</dt><dd>${health.lastHealthy ? health.lastHealthy.slice(0, 16).replace('T', ' ') : health.didNotDoTheDay.length ? 'not today — the day\u2019s work is not done' : 'not recorded'}</dd>
       </dl>
       <p class="quiet"><a href="/foundry/absence">If you stepped away</a></p>`)}
 

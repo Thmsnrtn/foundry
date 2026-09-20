@@ -2390,3 +2390,35 @@ decisions are the owner's and were not touched: his name on Experiment 001's
 sealed page (PENDING 19) and whether the hands may test a free resource or
 something licensed in (PENDING 20).
 
+### Wave 2 and review cell G: the instrument, and the screen that said it was fine (2026-09-21)
+
+**The final recursive question, answered.** The reviewers did not find missing
+machinery. They found the institution asserting things its own rows
+contradicted — and, once, asserting a fact about a market it had no standing to
+claim. Nineteen cold emails invited a reply to an address that was not routed;
+the sealed rule settled the test *surprised*; nothing anywhere connected those
+two facts. Every safeguard worked: the rule counted what it said it would, no
+evidence was fabricated, the verdict was honest about what it counted. The
+gap is a level above all of them — **whether the instrument that produced the
+evidence was working**.
+
+That is the pattern this wave adds to the campaign's standing questions:
+before believing a result, ask whether the channel that would have carried the
+other answer was open. The institution can now say when it was not, and says
+plainly that it cannot know whether it was open at the time, because it keeps
+no day-by-day record of it. Naming the limit is the honest half; the record is
+proof debt.
+
+**And the smaller pattern, again.** Home said "Everything is fine. Nothing
+needs you." above its own health reading and its own queue; "Last healthy" was
+"just now" beside "Recovering: stuck"; the Inbox said nothing had been sent.
+Each is one reading contradicting another reading of the same fact — the shape
+this codebase keeps finding, and the reason the vocabulary and the single
+readers keep earning their place.
+
+**What the adversary could not do.** No email, no publication, no money moved,
+no act on another owner's behalf, no obligation made to disappear. The one
+thing it could do was feed the owner's own bookkeeping form a direction the
+form did not recognise and have it silently mean *took out*, permanently, in
+an append-only ledger. Authority held; input did not.
+

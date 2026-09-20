@@ -448,6 +448,16 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
       ${v.outcome.reason ? html`<p><strong>Why</strong> — ${v.outcome.reason}</p>` : ''}
       ${v.outcome.establishes ? html`<p><strong>What that establishes</strong> — ${v.outcome.establishes}</p>` : ''}
       ${v.outcome.doesNotEstablish ? html`<p><strong>What it does not establish</strong> — ${v.outcome.doesNotEstablish}</p>` : ''}
+      ${/* WAS THE INSTRUMENT WORKING WHEN THE WORLD WAS ASKED? Nineteen cold
+            emails invited a reply to an address whose path was not routed, and
+            seven days later the rule settled the test as a fact about a
+            market. The verdict stands — it is sealed, and it counted what it
+            said it would — and what the institution CLAIMS the result
+            establishes is its own and is corrected here. */ ''}
+      ${v.instrumentDoubts.length ? html`<div class="noticed" role="note">
+        <p><strong>About the instrument.</strong> ${v.instrumentDoubts.map((d) => d.sentence).join(' ')}</p>
+        <p>So it also does not establish ${v.instrumentDoubts.map((d) => d.doesNotEstablish).join(' ')}</p>
+      </div>` : ''}
     </section>` : ''}
     ${launch ? html`<section class="launch" id="authorise">
       <p class="act">First real market test</p>

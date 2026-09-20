@@ -635,7 +635,13 @@ async function onlyRealDecisions(
   const owedHim = (await owedTo(founderId, now)).filter((o) => o.asksHim !== null);
   for (const o of owedHim) evidence.push(`a buyer is owed something only you can give: ${o.sentence}`);
   if (owedHim.length > 0) wouldFixIt.push(`settle ${plural(owedHim.length, 'buyer\'s refund or dispute', 'buyers\' refunds or disputes')} before you go`);
-  const waiting = proposals.length + waitingTests + owedHim.length;
+  // AND WHAT THE QUEUE COUNTS. This asked its own question of its own rows and
+  // answered "nothing is waiting for you" while Home said one thing was: two
+  // readings of one fact, which is the defect this institution keeps finding.
+  const { waitingOn } = await import('../founder/attention.js');
+  const queue = await waitingOn(founderId);
+  for (const q of queue) evidence.push(`waiting on you: ${q.summary}`);
+  const waiting = Math.max(proposals.length + waitingTests + owedHim.length, queue.length);
   const compromised = lapsing.length + overdue.length;
   return {
     property: 'only_real_decisions',

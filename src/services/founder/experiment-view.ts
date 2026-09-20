@@ -78,6 +78,8 @@ export interface ExperimentView {
   learned: { headline: string; detail: string; evidence: string };
   judgment: string | null;
   exceptions: string[];
+  /** What stood between this test's question and an answer (venture/the-instrument.ts). */
+  instrumentDoubts: Array<import('../venture/the-instrument.js').InstrumentDoubt>;
   timeline: TimelineEvent[];
   controls: { canStop: boolean; allowance: { budget: string; statement: string } | null; actId: string | null };
   details: Array<[string, string]>;
@@ -324,6 +326,13 @@ export async function getExperimentView(founderId: string, experimentId: string,
     steps, allow, exposure, money: moneyView, offer: offerView,
     rules: { success: rule ? `Success means ${describeRule(rule)}.` : 'No machine rule; the owner would settle it.', stop: stopRules(e, rule), windowClosesAt: windowClosesAt ? windowClosesAt.toISOString().slice(0, 10) : null, daysLeft },
     learned, judgment,
+    // WAS THE INSTRUMENT WORKING WHEN THE WORLD WAS ASKED? A null result on a
+    // channel that may not have carried a reply says less than it looks like
+    // (venture/the-instrument.ts), and the page says so beside the outcome.
+    instrumentDoubts: await (async () => {
+      const { doubtsAboutTheInstrument } = await import('../venture/the-instrument.js');
+      return doubtsAboutTheInstrument(experimentId);
+    })(),
     exceptions: await handExceptions(experimentId),
     timeline: await getExperimentTimeline(founderId, experimentId),
     controls: { canStop: e.decision === 'approved' && e.ranAt === null && !withdrawn, allowance: allowance ? { budget: money(allowance.amountCents), statement: `${allowance.statement} (${allowance.horizon})` } : null, actId: act?.id ?? null },
