@@ -177,7 +177,7 @@ describe('day 25 — the lesson reaches the next design', () => {
     expect(record?.lessons.some((l) => l.whatWeDid.includes('Massachusetts millwork') && l.verdict === 'surprised')).toBe(true);
     // And "why did it fail" answers from the same record, in his words.
     const why = await me.answer('Why did the millwork test fail?');
-    expect(why).toContain('It did not hold.');
+    expect(why).toContain('The prediction did not hold.');
   });
 });
 
@@ -187,7 +187,7 @@ describe('day 30 and day 41 — the month closes and the asset retires', () => {
     await morning();
     const { whileYouWereAway } = await import('../../src/services/founder/a-week-away.js');
     const letter = await whileYouWereAway(OWNER, 30);
-    expect(letter.outcomes.some((o) => /not what I expected/.test(o))).toBe(true);
+    expect(letter.outcomes.some((o) => /settled surprised on \d{4}-\d{2}-\d{2}: /.test(o))).toBe(true);
     expect(letter.learned.some((l) => /did not hold/.test(l))).toBe(true);
     expect(letter.money.some((m) => /set aside for it/.test(m))).toBe(true);
     expect(letter.money.some((m) => /\$100\.00 on a test/.test(m))).toBe(false);

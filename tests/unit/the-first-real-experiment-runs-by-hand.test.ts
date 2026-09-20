@@ -417,7 +417,7 @@ describe('Foundry operates: purchase, delivery, refund, settlement', () => {
     expect(String(e.what_happened)).toMatch(/1 delivery that counted out of 10 offer_delivereds within 7 days.*As predicted\./);
     const v = (await getExperimentView(OWNER, X, NOW))!;
     expect(v.state).toBe('completed');
-    expect(v.learned.headline).toBe('The prediction held');
+    expect(v.learned.headline).toBe('The prediction held.');
     expect(v.exceptions).toEqual([]);
     // The offer came down with the settlement: withdrawn here, deactivated at the provider.
     const x = (await exposureOf(X))!;
@@ -428,7 +428,7 @@ describe('Foundry operates: purchase, delivery, refund, settlement', () => {
     expect(await runHand({ now: NOW })).toEqual([]);
     expect(state.sends.length).toBe(before);
     expect((await page('/foundry')).text).not.toContain('a real test');
-    expect((await page(`/foundry/experiments/${X}`)).text).toContain('Completed');
+    expect((await page(`/foundry/experiments/${X}`)).text).toContain('As predicted');
   });
 
   it('the buyer refunds themselves through the signed link; with money tools off the request is recorded and the page shows it', async () => {

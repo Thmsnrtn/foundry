@@ -121,7 +121,7 @@ describe('the pages: a working set, a strip of what finished lately, and the rec
     expect(recent).toContain(`/foundry/experiments/${C}`);
     expect(recent).not.toContain(`/foundry/experiments/${B}`);
     expect(recent).toContain('Superseded');
-    expect(recent).toContain('Completed');
+    expect(recent).toContain('As predicted');
     expect(t).toContain('href="/foundry/experiments/history">History (3)</a>');
     expect(t).not.toContain('Other tests');
   });

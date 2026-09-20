@@ -50,6 +50,7 @@
 // waited for a company to earn its standing would be empty for exactly as long
 // as it mattered. This page shows the frontier AS the frontier.
 // =============================================================================
+import { GRADE_SQL, outcomeFromRow, type OutcomeRow } from './what-happened.js';
 import { query, realCompany } from '../../db/client.js';
 
 /**
@@ -167,7 +168,7 @@ export async function whatHappened(
     // half to doubt. Unresolved, the row keeps the event and drops the name.
     `SELECT e.id, e.what_we_do, e.decision, e.decided_at, e.ran_at, e.verdict,
             e.what_happened, e.retired_at, e.retired_because, e.invalidated_at,
-            e.invalid_because,
+            e.invalid_because, e.validity, e.superseded_by, ${GRADE_SQL} AS grade,
             (SELECT p.id FROM products p
               WHERE p.from_experiment_id = e.id AND p.deleted_at IS NULL
                 AND ${realCompany('p')}) AS product_id,
@@ -197,12 +198,12 @@ export async function whatHappened(
         detail: null,
       });
     }
+    // THE ONE VOCABULARY: the word here is the word on the page and in the letter.
+    const outcome = outcomeFromRow(r as OutcomeRow);
     if (r.ran_at != null) {
       out.push({
         ...base, at: String(r.ran_at),
-        what: r.verdict === 'as_predicted'
-          ? `Experiment settled as predicted: ${title}`
-          : `Experiment settled against its prediction: ${title}`,
+        what: `Experiment settled ${outcome.word}: ${title}`,
         detail: str(r.what_happened),
       });
     }
@@ -215,7 +216,7 @@ export async function whatHappened(
     if (r.retired_at != null) {
       out.push({
         ...base, at: String(r.retired_at),
-        what: `Experiment retired: ${title}`, detail: str(r.retired_because),
+        what: `Experiment ${outcome.word}: ${title}`, detail: outcome.reason ?? str(r.retired_because),
       });
     }
   }

@@ -13,6 +13,7 @@
 // here is read from a row that would survive replacing the model that wrote
 // it. Where a level has nothing behind it, it says so; it is never padded.
 // =============================================================================
+import { outcomeFromRow } from './what-happened.js';
 import { query } from '../../db/client.js';
 import { money } from './portfolio.js';
 
@@ -354,7 +355,7 @@ async function whyCandidate(founderId: string, opportunityId: string): Promise<W
       ...(unknowns.length ? [`${String(unknowns.length)} ${unknowns.length === 1 ? 'question is' : 'questions are'} still open; a test settles them, not more reading.`] : []),
     ],
     activity: tried.length
-      ? tried.map((t) => `${t.whatWeDo} — ${t.decision === null ? 'proposed' : t.decision}${t.ranAt ? `, ran ${day(t.ranAt)}` : ''}${t.verdict ? `, ${t.verdict.replace('_', ' ')}` : ''}.`)
+      ? tried.map((t) => `${t.whatWeDo} — ${t.decision === null ? 'proposed' : t.decision}${t.ranAt ? `, ran ${day(t.ranAt)}` : ''}${t.verdict ? `, settled ${outcomeFromRow({ ran_at: t.ranAt, verdict: t.verdict, grade: t.grade }).word}` : ''}.`)
       : ['No test has been designed for it yet.'],
     outcome: [o.verdict ? `${String(o.verdict)} on ${day(o.decided_at)}${o.verdict_why ? ` — ${String(o.verdict_why)}` : ''}.` : 'Undecided. Advancing or burying it is yours.'],
     cost: [tried.length ? `${money(tried.reduce((n, t) => n + t.costCents, 0))} across ${String(tried.length)} ${tried.length === 1 ? 'test' : 'tests'}.` : 'Nothing spent on tests.',

@@ -33,6 +33,8 @@ export interface Experiment {
   ranAt: string | null;
   whatHappened: string | null;
   verdict: 'as_predicted' | 'surprised' | null;
+  /** The grade the world wrote beside the verdict; 'partly' lives only here. */
+  grade: 'as_predicted' | 'partly' | 'surprised' | null;
   /** INVALID means the test did not measure what it was for. It has no
    * verdict and is re-run, not read. Distinct from a market that said no. */
   validity: 'valid' | 'invalid';
@@ -117,7 +119,8 @@ export async function whatWasTried(opportunityId: string): Promise<Experiment[]>
   return ((await query(
     `SELECT e.id, e.what_we_do, e.what_we_expect, e.would_disprove, e.cost_cents,
             e.decision, e.ran_at, e.what_happened, e.verdict, u.question,
-            e.validity, e.invalid_because, e.invalidated_by, e.invalidated_at, e.settles_when, e.rerun_of
+            e.validity, e.invalid_because, e.invalidated_by, e.invalidated_at, e.settles_when, e.rerun_of,
+            (SELECT g.verdict FROM prediction_resolutions g WHERE g.kind = 'venture_experiment' AND g.prediction_id = e.id ORDER BY g.rowid DESC LIMIT 1) AS grade
        FROM venture_experiments e
        JOIN market_unknowns u ON u.id = e.unknown_id
       WHERE e.opportunity_id = ? AND e.decision IS NOT NULL
@@ -135,7 +138,8 @@ export async function theExperiment(experimentId: string): Promise<Experiment | 
   const r = (await query(
     `SELECT e.id, e.what_we_do, e.what_we_expect, e.would_disprove, e.cost_cents,
             e.decision, e.ran_at, e.what_happened, e.verdict, u.question,
-            e.validity, e.invalid_because, e.invalidated_by, e.invalidated_at, e.settles_when, e.rerun_of
+            e.validity, e.invalid_because, e.invalidated_by, e.invalidated_at, e.settles_when, e.rerun_of,
+            (SELECT g.verdict FROM prediction_resolutions g WHERE g.kind = 'venture_experiment' AND g.prediction_id = e.id ORDER BY g.rowid DESC LIMIT 1) AS grade
        FROM venture_experiments e
        JOIN market_unknowns u ON u.id = e.unknown_id
       WHERE e.id = ?`, [experimentId])).rows[0] as unknown as Record<string, unknown> | undefined;
@@ -152,6 +156,7 @@ function read(r: Record<string, unknown>): Experiment {
     whatHappened: r.what_happened == null ? null : String(r.what_happened),
     verdict: r.verdict == null ? null
       : String(r.verdict) as 'as_predicted' | 'surprised',
+    grade: r.grade == null ? null : String(r.grade) as 'as_predicted' | 'partly' | 'surprised',
     validity: String(r.validity ?? 'valid') as 'valid' | 'invalid',
     invalidBecause: r.invalid_because == null ? null : String(r.invalid_because),
     invalidatedBy: r.invalidated_by == null ? null : String(r.invalidated_by),

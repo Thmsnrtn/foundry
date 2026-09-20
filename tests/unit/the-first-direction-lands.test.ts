@@ -152,10 +152,11 @@ describe('the answers agree with the record', () => {
 
   it('"why did the test fail" is answered from the settled test: prediction, outcome, limit, and what changes', async () => {
     const t = await answer('Why did the millwork test fail?');
-    expect(t).toContain('It did not hold.');
+    expect(t).toContain('The prediction did not hold.');
     expect(t).toContain('What I predicted');
     expect(t).toContain('21 businesses were written to');
-    expect(t).toContain('did not sell. Not that the category is worthless');
+    expect(t).toContain('did not sell.');
+    expect(t).toContain('that the category is worthless');
     expect(t).not.toContain("I don't know yet");
   });
 

@@ -14,6 +14,7 @@
 // Foundry cannot see, not as a quiet one. Reference companies never appear.
 // =============================================================================
 
+import { GRADE_SQL, outcomeFromRow, outcomeSentence, type OutcomeRow } from './what-happened.js';
 import { query, realCompany } from '../../db/client.js';
 
 export interface WeekAwayView {
@@ -252,12 +253,14 @@ export async function whileYouWereAway(founderId: string, days = 7): Promise<Ret
   }
 
   for (const e of (await query(
-    `SELECT e.id, e.what_we_do, e.what_we_expect, e.what_happened, e.verdict, e.cost_cents
+    `SELECT e.id, e.what_we_do, e.what_we_expect, e.what_happened, e.verdict, e.cost_cents, e.ran_at,
+            ${GRADE_SQL} AS grade
        FROM venture_experiments e
       WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.ran_at >= datetime('now', ?)`,
     [founderId, since])).rows as unknown as Array<Record<string, unknown>>) {
-    outcomes.push(`${String(e.what_we_do)}: ${String(e.what_happened)} - `
-      + `${String(e.verdict) === 'as_predicted' ? 'as I expected' : `not what I expected (${String(e.what_we_expect)})`}`);
+    // THE ONE VOCABULARY: "settled surprised", the same word as the page.
+    const o = outcomeFromRow(e as OutcomeRow);
+    outcomes.push(`${String(e.what_we_do)}: ${outcomeSentence(o)} ${o.meaning} I predicted: ${String(e.what_we_expect)}.`);
     // THE CEILING IS NOT THE SPEND. "$100 on a test" printed the amount
     // approved under a heading that read as money gone; the one reading of a
     // test's money says what was set aside and what of it actually went.
@@ -310,12 +313,15 @@ export async function whileYouWereAway(founderId: string, days = 7): Promise<Ret
     changed.push(`you steered the search: "${String(g.statement)}"`);
   }
   for (const e of (await query(
-    `SELECT e.what_we_do, e.verdict, d.cannot_prove FROM venture_experiments e
+    `SELECT e.what_we_do, e.verdict, e.ran_at, e.what_happened, d.cannot_prove, ${GRADE_SQL} AS grade
+       FROM venture_experiments e
        LEFT JOIN probe_designs d ON d.experiment_id = e.id
       WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.verdict IS NOT NULL
         AND e.ran_at >= datetime('now', ?)`, [founderId, since])).rows as unknown as Array<Record<string, unknown>>) {
-    learned.push(`the test "${String(e.what_we_do)}" ${String(e.verdict) === 'surprised' ? 'did not hold' : 'held'}`
-      + `${e.cannot_prove ? `; it could not establish ${String(e.cannot_prove)}` : ''}; the next design is written against that`);
+    const o = outcomeFromRow(e as OutcomeRow);
+    learned.push(`the test "${String(e.what_we_do)}" settled ${o.word}: ${o.meaning.replace(/\.$/, '')}`
+      + `; it establishes ${o.establishes ?? ''} It does not establish ${o.doesNotEstablish ?? ''}`
+      + ' The next design is written against that');
   }
   for (const c of (await query(
     `SELECT claim, settled_as, settled_by FROM market_claims

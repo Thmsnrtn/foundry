@@ -54,7 +54,7 @@ const where = (v: ExperimentView | null, on: 'test' | 'recipients' | 'list' | 'd
   chips: [],
 });
 
-const stateWord: Record<ExperimentView['state'], string> = { needs_you: 'Needs you', ready: 'Ready', running: 'Running', completed: 'Completed', stopped: 'Stopped', declined: 'Declined', invalid: 'Invalid', retired: 'Retired', superseded: 'Superseded' };
+const stateWord: Record<ExperimentView['state'], string> = { needs_you: 'Needs you', ready: 'Ready', running: 'Running', completed: 'Settled', stopped: 'Stopped', declined: 'Declined', invalid: 'Invalid', retired: 'Retired', superseded: 'Superseded' };
 const CONCLUDED = ['completed', 'stopped', 'declined', 'invalid', 'retired', 'superseded'] as const;
 /** SQLite writes 'YYYY-MM-DD HH:MM:SS' in UTC and says nothing about the zone. */
 const asMs = (s: string): number => Date.parse(/[TZ]/.test(s) ? s : `${s.replace(' ', 'T')}Z`);
@@ -148,7 +148,8 @@ experimentRoutes.get('/foundry/experiments', async (c: any) => {
     </a>`)}
     ${recent.length ? html`<h2 class="rank" id="recent">Recently finished<span class="dim">14 days</span></h2>
     ${recent.map((v) => html`<a class="item experiment-index-item exp-row done" href="/foundry/experiments/${v.id}">
-      <p><strong>${v.assetName ?? v.title}</strong> <span class="pill">${stateWord[v.state]}</span> <span class="dim">${dayOf(v.concludedAt)}</span></p>
+      <p><strong>${v.assetName ?? v.title}</strong> <span class="pill">${v.outcome.label}</span> <span class="dim">${dayOf(v.concludedAt)}</span></p>
+      ${v.outcome.reason ? html`<p class="quiet">${v.outcome.reason}</p>` : ''}
     </a>`)}` : ''}
     <p class="quiet"><a href="/foundry/experiments/history">History (${String(historyN)})</a> · <a href="/foundry/experiments/next">What to test next</a></p>`;
   return c.html(page('Experiments', body, 'experiments', w));
@@ -273,8 +274,8 @@ experimentRoutes.get('/foundry/experiments/history', async (c: any) => {
     <p class="lede">${all.length === 0 ? 'Nothing has finished yet.' : `${count(all.length, 'concluded test')}. Each keeps its page and every row it produced.`}</p>
     ${all.length ? html`<p class="filters"><a href="/foundry/experiments/history" class="${filter ? '' : 'on'}"${filter ? '' : raw(' aria-current="page"')}>All <b>${String(all.length)}</b></a>${CONCLUDED.filter((k) => n(k) > 0).map((k) => html`<a href="/foundry/experiments/history?state=${k}" class="${filter === k ? 'on' : ''}"${filter === k ? raw(' aria-current="page"') : ''}>${stateWord[k]} <b>${String(n(k))}</b></a>`)}</p>` : ''}
     ${shown.map((v) => html`<a class="item experiment-index-item exp-row done" href="/foundry/experiments/${v.id}">
-      <p><strong>${v.assetName ?? v.title}</strong> <span class="pill">${stateWord[v.state]}</span> <span class="dim">${dayOf(v.concludedAt)}</span></p>
-      <p class="quiet">${v.stateDetail}${v.supersededBy ? html` <span class="dim">Succeeded by <a href="/foundry/experiments/${v.supersededBy}">the later design</a>.</span>` : ''}</p>
+      <p><strong>${v.assetName ?? v.title}</strong> <span class="pill">${v.outcome.label}</span> <span class="dim">${dayOf(v.concludedAt)}</span></p>
+      <p class="quiet">${v.outcome.meaning}${v.outcome.reason ? html` ${v.outcome.reason}` : ''}${v.supersededBy ? html` <span class="dim">Succeeded by <a href="/foundry/experiments/${v.supersededBy}">the later design</a>.</span>` : ''}</p>
       ${retiredAssets.has(v.id) ? html`<p class="quiet"><span class="dim">Its asset, ${String(retiredAssets.get(v.id)!.name)}, is retired: ${String(retiredAssets.get(v.id)!.retired_because ?? '')}</span></p>` : ''}
     </a>`)}
     ${filter && shown.length === 0 ? html`<p class="quiet">None ended that way.</p>` : ''}
@@ -342,9 +343,9 @@ experimentRoutes.get('/foundry/experiments/next', async (c: any) => {
         has to answer to.</p>`
     : html`<ul class="sales">${f.lessons.map((l) => html`<li>
           <b>${l.decided ?? l.whatWeDid}</b>
-          <p class="quiet">${l.verdict
-      ? `The world said: ${l.verdict}.`
-      : 'The world has not answered yet.'}</p>
+          <p class="quiet">${l.outcome.settled
+      ? `Settled ${l.outcome.word}: ${l.outcome.meaning}${l.outcome.reason ? ` ${l.outcome.reason}` : ''}`
+      : l.outcome.concluded ? `${l.outcome.label}: ${l.outcome.meaning}` : 'The world has not answered yet.'}</p>
           ${l.couldNotEstablish ? html`<p><strong>It could not establish:</strong> ${l.couldNotEstablish}
             <span class="quiet">— written before it ran, which is what makes it evidence rather than
             a rationalisation afterwards.</span></p>` : ''}
@@ -414,7 +415,7 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
   const pctDone = v.exposure.approved > 0 ? Math.round((100 * v.exposure.sent) / v.exposure.approved) : null;
   const { readStopConditions } = await import('../../services/venture/probe-design.js');
   const stopReadings = await readStopConditions(id);
-  const stateCls = v.state === 'running' || v.state === 'completed' ? 'ok' : v.state === 'needs_you' || v.state === 'ready' ? 'watch' : v.state === 'stopped' || v.state === 'invalid' ? 'bad' : 'quiet';
+  const stateCls = v.outcome.word === 'surprised' || v.state === 'stopped' || v.state === 'invalid' ? 'bad' : v.outcome.word === 'partly' ? 'watch' : v.state === 'running' || v.state === 'completed' ? 'ok' : v.state === 'needs_you' || v.state === 'ready' ? 'watch' : 'quiet';
   const watch = html`<section class="panel exp-watch" aria-label="Where it stands">
       <dl class="numbers exp-numbers">
         <div class="tile"><dt class="k">${mark('sent')}Written to</dt><dd class="v">${String(v.exposure.sent)}${v.exposure.approved ? html` <span class="dim">/ ${String(v.exposure.approved)}</span>` : ''}</dd><dd class="d">${pctDone !== null ? html`<span class="prog"><i style="width:${String(Math.max(2, Math.min(100, pctDone)))}%"></i></span>` : `${String(v.exposure.pending)} still to review`}</dd></div>
@@ -440,6 +441,13 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
     <h1>${v.assetName ?? 'The test'} <span class="state ${stateCls}">${v.stateLabel}</span></h1>
     ${notice(done, error)}
     <p class="lede">${v.stateDetail}</p>
+    ${v.outcome.concluded ? html`<section class="panel exp-outcome" id="outcome" aria-label="What happened and why">
+      <header><h2>${mark('experiment')}What happened and why</h2>${v.outcome.when ? html`<span class="dim">${dayOf(v.outcome.when)}</span>` : ''}</header>
+      <p><span class="state ${stateCls}">${v.outcome.label}</span> ${v.outcome.meaning}</p>
+      ${v.outcome.reason ? html`<p><strong>Why</strong> — ${v.outcome.reason}</p>` : ''}
+      ${v.outcome.establishes ? html`<p><strong>What that establishes</strong> — ${v.outcome.establishes}</p>` : ''}
+      ${v.outcome.doesNotEstablish ? html`<p><strong>What it does not</strong> — ${v.outcome.doesNotEstablish}</p>` : ''}
+    </section>` : ''}
     ${launch ? html`<section class="launch" id="authorise">
       <p class="act">First real market test</p>
       ${renderDecision({

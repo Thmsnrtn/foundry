@@ -2337,27 +2337,28 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
     // THE LAST SETTLED TEST, AS A RECORD: what was predicted, what the world
     // did, what that establishes and does not, and what is designed against it.
     const last = (await query(
-      `SELECT e.what_we_do, e.what_we_expect, e.would_disprove, e.what_happened, e.verdict, e.ran_at,
+      `SELECT e.id, e.what_we_do, e.what_we_expect, e.would_disprove, e.what_happened, e.verdict, e.ran_at,
               e.cost_cents, d.cannot_prove
          FROM venture_experiments e LEFT JOIN probe_designs d ON d.experiment_id = e.id
         WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.verdict IS NOT NULL
         ORDER BY e.ran_at DESC LIMIT 1`, [s.ownerId])).rows[0] as Record<string, unknown> | undefined;
-    if (!last) {
+    // THE ONE VOCABULARY: the word and what it establishes come from the same
+    // reader the page, History, Activity and the letter render from.
+    const { outcomeOf } = await import('../../services/founder/what-happened.js');
+    const outcome = last ? await outcomeOf(String(last.id)) : null;
+    if (!last || !outcome) {
       return html`<div class="said"><p>No test of mine has settled yet, so there is nothing to
         have learned from the world. What I have is what I have read, under Searching.</p></div>`;
     }
-    const surprised = String(last.verdict) === 'surprised';
     return html`<div class="said">
-      <p><strong>${surprised ? 'It did not hold.' : 'It held.'}</strong> The test was:
+      <p><strong>${outcome.label}.</strong> ${outcome.meaning} The test was:
         ${String(last.what_we_do)}.</p>
       <p><strong>What I predicted</strong> — ${String(last.what_we_expect)}. I said beforehand
         that ${String(last.would_disprove)} would prove me wrong.</p>
       <p><strong>What happened</strong> — ${String(last.what_happened)}
         ${last.ran_at ? html` (settled ${String(last.ran_at).slice(0, 10)})` : ''}.</p>
-      <p><strong>What that establishes</strong> — ${surprised
-    ? 'that this offer, to that population, through that channel, in that window, did not sell. Not that the category is worthless, and not that nobody would buy it another way.'
-    : 'that the prediction held for this offer, this population and this window — one result, not a formula.'}
-        ${last.cannot_prove ? html` It could not establish: ${String(last.cannot_prove)}.` : ''}</p>
+      <p><strong>What that establishes</strong> — ${outcome.establishes ?? ''}</p>
+      <p><strong>What it does not</strong> — ${outcome.doesNotEstablish ?? ''}</p>
       <p><strong>What changes</strong> — the next design is written against that limit: it
         has to answer to what this one could not establish, or it is asking the same question
         again in different words. Nothing is designed until a candidate stands and, to run,
@@ -2598,6 +2599,14 @@ foundryShellRoutes.get('/foundry', async (c) => {
   // over the world's rows rather than every finished test rendered again.
   const tests = await listExperiments(s.ownerId, new Date(), 'now');
   const live = tests.find((t) => t.state === 'running' || t.state === 'needs_you' || t.state === 'ready') ?? null;
+  // AND WHEN NOTHING IS LIVE, THE LAST WORD: a test that settled this fortnight
+  // is the one thing the tile can say about experiments, in the one vocabulary.
+  const { experimentLedger } = await import('../../services/founder/experiment-view.js');
+  const { outcomeOf } = await import('../../services/founder/what-happened.js');
+  const fortnight = Date.now() - 14 * 86_400_000;
+  const lastDone = live ? null : (await experimentLedger(s.ownerId)).find((l) => l.settled && l.settledAt !== null
+    && Date.parse(/[TZ]/.test(l.settledAt) ? l.settledAt : `${l.settledAt.replace(' ', 'T')}Z`) >= fortnight) ?? null;
+  const lastOutcome = lastDone ? await outcomeOf(lastDone.id) : null;
   const paidCents = await paidAcrossExperiments(s.ownerId);
   // HEALTH AS A STATE. One reader answers what failed, whether it recovers on
   // its own and whether he is needed; the tile shows the word and Controls
@@ -2678,10 +2687,12 @@ foundryShellRoutes.get('/foundry', async (c) => {
         <dd class="v">${needsN === 0 ? html`<span class="state quiet none">None</span>` : html`<span class="state watch">${String(needsN)}</span>`}</dd>
         <dd class="d">${needsN === 0 ? 'none waiting' : needsN === 1 ? 'one decision' : `${String(needsN)} decisions`}</dd>
         <a class="door" href="${attention === null ? '/foundry/decisions' : '#the-one-thing'}" aria-label="Decisions"></a></div>
-      <div class="tile door"><dt class="k">${mark('experiment')}${live ? 'Experiment' : 'Experiments'}</dt>
-        <dd class="v">${live ? html`<span class="state ${live.state === 'running' ? 'ok' : 'watch'}">${live.stateLabel}</span>` : html`<span class="state quiet none">None</span>`}</dd>
-        <dd class="d">${live ? `${String(live.exposure.sent)} of ${String(live.exposure.approved)} written to` : 'nothing running'}</dd>
-        <a class="door" href="${live ? `/foundry/experiments/${live.id}` : '/foundry/experiments'}" aria-label="${live ? live.title : 'Experiments'}"></a></div>
+      <div class="tile door"><dt class="k">${mark('experiment')}${live ? 'Experiment' : lastOutcome ? 'Last test' : 'Experiments'}</dt>
+        <dd class="v">${live ? html`<span class="state ${live.state === 'running' ? 'ok' : 'watch'}">${live.stateLabel}</span>`
+    : lastOutcome ? html`<span class="state ${lastOutcome.word === 'surprised' ? 'bad' : lastOutcome.word === 'partly' ? 'watch' : lastOutcome.word === 'as predicted' ? 'ok' : 'quiet'}">${lastOutcome.label}</span>`
+      : html`<span class="state quiet none">None</span>`}</dd>
+        <dd class="d">${live ? `${String(live.exposure.sent)} of ${String(live.exposure.approved)} written to` : lastOutcome ? `${lastOutcome.settled ? 'settled' : 'ended'} ${lastOutcome.when ? lastOutcome.when.slice(0, 10) : ''}; nothing running` : 'nothing running'}</dd>
+        <a class="door" href="${live ? `/foundry/experiments/${live.id}` : lastDone ? `/foundry/experiments/${lastDone.id}` : '/foundry/experiments'}" aria-label="${live ? live.title : lastOutcome ? `The last test: ${lastOutcome.label}` : 'Experiments'}"></a></div>
       ${/* THIS TILE SHOWED GROSS AND CALLED IT "Settled".
            The figure it drew is what buyers were charged for tests. It is not what is
            settled and it is not the owner's: Stripe takes a fee at the moment

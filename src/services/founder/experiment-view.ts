@@ -13,6 +13,8 @@
 import { query } from '../../db/client.js';
 import { publicWorkshopOfExperiment } from '../public-workshop/settings.js';
 import { allowanceFor } from '../institution/standing-intent.js';
+import { GRADE_SQL, outcomeFromRow, type Outcome } from './what-happened.js';
+export { outcomeOf, outcomeFromRow, outcomeSentence, type Outcome, type OutcomeWord } from './what-happened.js';
 import { exposureOf, parseSettlementRule, whatTheWorldSaid } from '../venture/outcome.js';
 import {
   campaignActOf, experimentRow, handExceptions, materialOf, offerShapePlanOf, readiness, recipientsOf,
@@ -48,6 +50,8 @@ export interface TimelineEvent {
 export interface ExperimentView {
   id: string; founderId: string; title: string; productId: string | null; assetName: string | null;
   state: ExperimentState; stateLabel: string; stateDetail: string;
+  /** WHAT HAPPENED, IN THE ONE VOCABULARY every surface renders from. */
+  outcome: Outcome;
   /** Concluded: nothing it does now produces new evidence. History, not work. */
   concluded: boolean; concludedAt: string | null;
   /** The later design that replaced it, when one did. */
@@ -173,6 +177,7 @@ export async function getExperimentView(founderId: string, experimentId: string,
   ]);
   const said = x ? await whatTheWorldSaid(x.id) : [];
   const allowance = e.productId ? await allowanceFor(e.productId) : null;
+  const graded = (await rows(`SELECT ${GRADE_SQL} AS grade, d.cannot_prove FROM venture_experiments e LEFT JOIN probe_designs d ON d.experiment_id = e.id WHERE e.id = ?`, [experimentId]))[0] ?? {};
   const rule = parseSettlementRule(e.settlesWhen);
   const unknown = (await rows('SELECT question FROM market_unknowns WHERE id = (SELECT unknown_id FROM venture_experiments WHERE id = ?)', [experimentId]))[0];
   const price = plan ? `${money(plan.price.amountCents, plan.price.currency)} one-time` : 'one-time';
@@ -229,6 +234,13 @@ export async function getExperimentView(founderId: string, experimentId: string,
 
   // ── State, truthfully from the rows ──
   let state: ExperimentState; let stateLabel: string; let stateDetail: string;
+  const outcome = outcomeFromRow({
+    decision: e.decision, validity: e.validity, verdict: e.verdict, grade: graded.grade == null ? null : String(graded.grade),
+    what_happened: e.whatHappened, ran_at: e.ranAt, retired_at: e.retiredAt, retired_because: e.retiredBecause,
+    superseded_by: e.supersededBy, invalidated_at: e.invalidatedAt, decided_at: e.decidedAt,
+    cannot_prove: graded.cannot_prove == null ? null : String(graded.cannot_prove),
+    stopped_by_owner: withdrawn || Boolean(act && !actLive),
+  });
   const delivered = said.filter((s) => s.kind === 'offer_delivered').length;
   const payments = said.filter((s) => s.kind === 'payment');
   const refunds = said.filter((s) => s.kind === 'refund');
@@ -246,9 +258,8 @@ export async function getExperimentView(founderId: string, experimentId: string,
   else if (e.decision === 'declined') { state = 'declined'; stateLabel = 'Declined'; stateDetail = 'You decided not to run it.'; }
   else if (e.validity !== 'valid') { state = 'invalid'; stateLabel = 'Invalid'; stateDetail = 'It did not measure what it was for, so it is re-run rather than read.'; }
   else if (e.ranAt !== null) {
-    const held = e.verdict === 'as_predicted';
-    state = held ? 'completed' : 'stopped'; stateLabel = held ? 'Completed' : 'Stopped by its own rule';
-    stateDetail = e.whatHappened ?? (held ? 'As predicted.' : 'Not as predicted.');
+    // SETTLED BY THE WORLD: the word is the one vocabulary's, not a fourth.
+    state = 'completed'; stateLabel = outcome.label; stateDetail = outcome.reason ?? outcome.meaning;
   } else if (e.decision === 'approved' && (withdrawn || (act && !actLive))) { state = 'stopped'; stateLabel = 'Stopped by you'; stateDetail = 'Nothing more is sent; what the world already did stays on record.'; }
   else if (e.decision === 'approved' && listing) {
     state = 'running'; stateLabel = x && !withdrawn ? 'Listed' : 'Approved';
@@ -298,7 +309,7 @@ export async function getExperimentView(founderId: string, experimentId: string,
     limits: plan?.shape.claimsMade ?? '',
   };
   const learned = e.ranAt !== null
-    ? { headline: e.verdict === 'as_predicted' ? 'The prediction held' : 'Not as predicted', detail: e.whatHappened ?? '', evidence: 'Settled by what providers reported at the offer, never by my opinion or yours.' }
+    ? { headline: outcome.meaning, detail: e.whatHappened ?? '', evidence: 'Settled by what providers reported at the offer, never by my opinion or yours.' }
     : { headline: payments.length ? `So far: ${plural(payments.length, 'customer has', 'customers have')} paid` : delivered ? 'So far: the offer has reached people; no one has paid yet' : 'Nothing commercial learned yet',
       detail: e.decision !== 'approved' ? 'It has not run.' : delivered === 0 ? 'No businesses have received the offer yet.' : payments.length === 0 ? 'No customer has paid yet.' : `${money(paidCents)} paid${refunds.length ? `, ${money(refundedCents)} refunded` : ''}.`,
       evidence: 'Only what the world does at the offer counts; an interested reply is not a payment.' };
@@ -306,7 +317,7 @@ export async function getExperimentView(founderId: string, experimentId: string,
 
   return {
     id: experimentId, founderId, title: e.whatWeDo, productId: e.productId, assetName: asset ? String(asset.name) : null,
-    state, stateLabel, stateDetail, concluded, concludedAt, supersededBy: e.supersededBy,
+    state, stateLabel, stateDetail, outcome, concluded, concludedAt, supersededBy: e.supersededBy,
     blocking: state === 'needs_you' ? ready.missing : listing && e.decision === 'approved' && (!x || withdrawn) && e.ranAt === null ? ['open the shop and list it', 'paste the listing address'] : [],
     why: { whatWeDo: e.whatWeDo, whatWeExpect: e.whatWeExpect, wouldDisprove: e.wouldDisprove, question: unknown ? String(unknown.question) : '' },
     steps, allow, exposure, money: moneyView, offer: offerView,
@@ -437,7 +448,9 @@ export async function getExperimentTimeline(founderId: string, experimentId: str
     if (f.refund_ref) events.push({ at: String(f.updated_at), kind: 'Verified', text: `Refund issued for payment ${String(f.payment_ref)}.`, source: 'experiment_fulfilments' });
   }
   if (base.ran_at) {
-    events.push({ at: String(base.ran_at), kind: 'Concluded', text: e.verdict === 'as_predicted' ? 'Settled by the world: as predicted.' : 'Settled by the world: not as predicted.', source: `venture_experiments/${experimentId}` });
+    const grade = (await rows(`SELECT ${GRADE_SQL} AS grade FROM venture_experiments e WHERE e.id = ?`, [experimentId]))[0]?.grade;
+    const settledAs = outcomeFromRow({ ran_at: String(base.ran_at), verdict: e.verdict, grade: grade == null ? null : String(grade) });
+    events.push({ at: String(base.ran_at), kind: 'Concluded', text: `Settled by the world: ${settledAs.word}.`, source: `venture_experiments/${experimentId}` });
     events.push({ at: String(base.ran_at), kind: 'Learned', text: e.whatHappened ?? 'Recorded beside the prediction.', source: `venture_experiments/${experimentId}` });
   }
   return events.sort((a, b) => a.at.localeCompare(b.at));
