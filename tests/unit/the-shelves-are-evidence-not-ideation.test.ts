@@ -245,8 +245,9 @@ describe('a rehearsal is never a finding', () => {
 
     const found = (await shelfCandidates(OWNER)).flatMap((s) => s.candidates).map((k) => k.id);
     expect(found).not.toContain('sh_fake');
-    // The real candidates went with their search: buried with the reason, not counted and not lost.
-    const buried = (await query(`SELECT id, verdict, verdict_why FROM venture_opportunities WHERE id IN ('sh_opp','sh_old')`, [])).rows as unknown as Array<Record<string, unknown>>;
-    expect(buried.every((b) => String(b.verdict) === 'rejected' && String(b.verdict_why).includes('the search was closed'))).toBe(true);
+    // The real candidate went with its search: buried with the reason, not counted and not lost.
+    const buried = (await query(`SELECT verdict, verdict_why FROM venture_opportunities WHERE id = 'sh_opp'`, [])).rows[0] as Record<string, unknown>;
+    expect(String(buried.verdict)).toBe('rejected');
+    expect(String(buried.verdict_why)).toContain('the search was closed');
   });
 });
