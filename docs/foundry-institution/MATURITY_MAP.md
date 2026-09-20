@@ -40,7 +40,7 @@ the objective and not the path (`scripts/owner-review-harness.mts`, below).
 | J7 | **Understand why an experiment failed and what was learned** | works, gap | findable, rough | reachable | Settlement by sealed rule, verdict + `cannot_prove` on the design; `lessonsFor` reaches the next design's deliberation. The answer to "why did it fail" now says prediction, outcome, what that establishes and does not, and what the next design is written against. Gap: the lesson is *context* for the next design, not a recorded change in what is selected — unobserved until a second real design exists (E1). Review A: the experiment page states the outcome in six places and the reason in none; the jargon ("surprised", act ids) stands. |
 | J8 | **Know whether Foundry itself ran** — and be told when it stops without opening the app | works | natural | protects | `foundry-knows-whether-foundry-ran.test.ts`; pulse on Home; `/internal/health` `loops`; one account notice per stoppage. Production: `loops.stopped: []`, last pass within the hour (20 Sep). |
 | J9 | **Sign, read and withdraw the charter**; know what runs on its own and what still asks | works | natural | protects | `charter.ts`, `/foundry/charter`, `/foundry/controls/charter`; tests sealed only inside it; forge lets a sealed test in as the charter's principal. Review C: the Autonomy tile → `/foundry/charter` answers on its own / asks me / spend / ends in two taps; the Ask answer contradicted it ("Nothing…") and now reads the envelope. |
-| J10 | **See the next test, why, and challenge it** | works | findable, rough | reachable | `/foundry/experiments/next`, `/explore`; adversary attack recorded before the seal (`proof-1-deliberation`, migration 286). Review C: with nothing designed, "What to test next" is empty and points at Ask, which cannot answer "what is the next experiment"; "Show your work" gives the why and what would kill it but no control to challenge. The loop closes only when a candidate stands; the empty state should say that in one sentence. Not repaired. |
+| J10 | **See the next test, why, and challenge it** | works | findable, rough | reachable | `/foundry/experiments/next`, `/explore`; adversary attack recorded before the seal (`proof-1-deliberation`, migration 286). Review C: with nothing designed, "What to test next" is empty and points at Ask, which cannot answer "what is the next experiment"; "Show your work" gives the why and what would kill it but no control to challenge. The loop closes only when a candidate stands; the empty state now says so in one sentence, and whether a search is open. |
 | J11 | **Hold sending without cancelling the search** | works | natural *(since 20 Sep)* | protects | Review C: **failed** — six phrasings, one of which ("…don't cancel the search") was read as *cancel the search*. The stop rule is negation-aware now; "hold off sending / pause outreach / don't email anyone" is heard at the door and offered as the one act that does it, the Workshop's pause on new economic activity (offers, placements and new tests stop; deliveries, refunds and the search carry on); "are you allowed to contact anyone" says the hold is in force. |
 | J12 | **Know what was spent, what may be spent, what needs permission** | works *(since 21 Sep)* | natural | measures | `/foundry/charter` in two taps; the Ask answer reads the charter and the tests. `one-reading-of-a-tests-money.test.ts`: one reader (`moneyOfExperiment`) holds authorised, carved, allowance standing, spent, paid and refunded apart, and every surface renders it with its own label — the page names each quantity, the letter says *set aside* and how much went (never the ceiling as spend), Home says what is set aside when nothing is paid, the absence test bounds thinking by the charter he signed. Before: five figures on five surfaces (reviews A/B/C). An allowance ends with its test. |
 | J13 | **Clear the inbox and have it stay cleared** | works | findable, rough | n/a | Per-thread archive / done / unarchive on the Inbox, proven. A thread he put away that a reply reopened now says when he put it away and why (`the-working-set-stays-true`). Review B: "clear old items from my inbox" typed into Ask is not heard; not repaired — an Ask verb for housekeeping is a new reader, and the Inbox itself does the job. |
@@ -111,17 +111,17 @@ was **not** repaired, by choice, with the reason:
 - *The composer is hidden on the phone until the Ask pill is tapped.* All
   three reviewers tripped on it. It is the North Star's decision — no fixed
   composer eating the viewport — and stays until the owner says otherwise.
-- *Raw source names* (`apple_app_reviews`, `hn_algolia`) and *internal words*
-  (surprised, act, seal, bury, `founder:<id>`) reach owner copy on Searching,
-  the experiment page and History. A vocabulary pass, not a repair; the facts
-  are right.
+- *Internal words* (surprised, act, seal, bury, `founder:<id>`) reach owner
+  copy on the experiment page and History. A vocabulary pass, not a repair;
+  the facts are right. (The raw source names on Searching are plain names now.)
 - *Four money figures for one test* across Home, Controls, the experiment page
   and the letter. Real, and the one that needs a design: one reading of a
   test's money (allowed, carved, spent, settled) that every surface renders.
 - *Activity carries no search events* (opened, steered, stopped). The letter
   and Searching's history do; Activity's kinds are fixed and adding one is a
   small change with a vocabulary question attached.
-- *"Clear my inbox" typed into Ask* is not heard. The Inbox does it per thread.
+- *"Clear my inbox" typed into Ask* is not heard. The Inbox does it per thread,
+  and "I did not follow that" now says so.
 - *The experiment page states the outcome six times and the reason nowhere.*
   The reason is now one question away in Ask; the page itself is a design
   change.
