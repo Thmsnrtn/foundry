@@ -54,7 +54,7 @@ const act = (over: Partial<AskedOfHim>): AskedOfHim => ({
  * the other forty would obscure the four cases this file exists to prove.
  */
 const state = (over: Partial<OwnerState>): OwnerState => ({
-  acquisitions: [], asked: [], owed: [], routinesFailing: [], checks: [],
+  acquisitions: [], asked: [], owed: [], obligations: [], routinesFailing: [], checks: [],
   grantable: [], permissions: [], pendingCandidates: [], responsibilities: [],
   elsewhere: [], record: 'not graded yet',
   charter: { live: false, workshop: null, readyTests: 0, sealedDesigns: 0 },

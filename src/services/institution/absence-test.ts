@@ -391,13 +391,22 @@ async function bounded(founderId: string, days: number, now: Date): Promise<Prop
   }
 
   const worst = thinkingWorstCase + allowedCents;
+  // WHAT IS OWED TO BUYERS IS NOT IN THE CEILING, and the accountant asks
+  // exactly that: it is theirs, and a refund returns it; the provider's fee
+  // on the sale is not returned and is the one real cost the refund leaves.
+  const { obligationsFor: owedTo } = await import('../venture/obligations.js');
+  const owedNow = await owedTo(founderId, now);
+  const owedCents = owedNow.reduce((n, o) => n + o.amountCents, 0);
+  const owedLine = owedNow.length === 0 ? ''
+    : ` ${money(owedCents)} is owed to ${plural(owedNow.length, 'buyer', 'buyers')} besides: theirs, not yours, and a refund returns it (Stripe\u2019s fee on the sale is not returned).`;
+  if (owedNow.length) evidence.push(`owed to buyers: ${money(owedCents)}, outside the ceiling because it is their money`);
   return {
     property: 'bounded',
     question: `Over ${String(days)} days, what is the most that could happen without me, and does it stop on its own?`,
     finding: unbounded === 0 ? 'HOLDS' : 'DOES_NOT_HOLD',
     sentence: unbounded === 0
       ? `At most ${money(worst)} could be spent over ${String(days)} days, and every permission I hold `
-        + 'ends by itself whether or not you come back.'
+        + 'ends by itself whether or not you come back.' + owedLine
       : `${plural(unbounded, 'permission does', 'permissions do')} not end on their own, so `
         + `${String(days)} days away and a year away are the same thing to ${unbounded === 1 ? 'it' : 'them'}.`,
     evidence, wouldFixIt,
@@ -620,7 +629,13 @@ async function onlyRealDecisions(
       + 'that fall inside the absence');
   }
 
-  const waiting = proposals.length + waitingTests;
+  // A BUYER OWED SOMETHING ONLY HE CAN GIVE waits for him too, and does not
+  // expire: it is there when he returns, and the buyer waits with it.
+  const { obligationsFor: owedTo } = await import('../venture/obligations.js');
+  const owedHim = (await owedTo(founderId, now)).filter((o) => o.asksHim !== null);
+  for (const o of owedHim) evidence.push(`a buyer is owed something only you can give: ${o.sentence}`);
+  if (owedHim.length > 0) wouldFixIt.push(`settle ${plural(owedHim.length, 'buyer\'s refund or dispute', 'buyers\' refunds or disputes')} before you go`);
+  const waiting = proposals.length + waitingTests + owedHim.length;
   const compromised = lapsing.length + overdue.length;
   return {
     property: 'only_real_decisions',

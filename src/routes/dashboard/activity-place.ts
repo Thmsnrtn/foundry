@@ -44,7 +44,7 @@ const CLASSES: Array<[ActivityKind, string]> = [
   ['experiment', 'Experiments'],
   ['outward', 'Reached someone'],
   ['money', 'Money'],
-  ['obligation', 'Promises'],
+  ['obligation', 'Obligations'],
   ['boundary', 'Refused'],
   ['search', 'Searching'],
 ];

@@ -88,9 +88,11 @@ export async function thinkingToday(founderId: string, now = new Date()): Promis
     charter
       ? { name: 'The charter', cents: charter.cognitionCentsPerDay, source: `the thinking rate you signed on ${charter.signedAt.slice(0, 10)}`, stops: 'call', per: 'a day' }
       : { name: 'Until a charter is signed', cents: PRE_CHARTER_THINKING_CENTS, source: 'the bound Foundry thinks under before you sign anything', stops: 'call', per: 'a day' },
-    { name: 'This deployment, for you', cents: caps.founder, source: 'AI_DAILY_COST_CEILING_FOUNDER_CENTS in the deployment', stops: 'call', per: 'a day' },
-    { name: 'This deployment, per company', cents: caps.product, source: 'AI_DAILY_COST_CEILING_CENTS in the deployment', stops: 'call', per: 'a day' },
-    { name: 'This deployment, everything', cents: caps.global, source: 'AI_DAILY_COST_CEILING_GLOBAL_CENTS in the deployment', stops: 'call', per: 'a day' },
+    // ONE OWNER: "for you" is all the thinking there is, so the per-company
+    // and everything caps stand behind it, never beside it.
+    { name: 'This deployment, for you (all of my thinking)', cents: caps.founder, source: 'AI_DAILY_COST_CEILING_FOUNDER_CENTS in the deployment', stops: 'call', per: 'a day' },
+    { name: 'This deployment, any one company', cents: caps.product, source: 'AI_DAILY_COST_CEILING_CENTS in the deployment', stops: 'call', per: 'a day' },
+    { name: 'This deployment, everything it runs (only you)', cents: caps.global, source: 'AI_DAILY_COST_CEILING_GLOBAL_CENTS in the deployment', stops: 'call', per: 'a day' },
   ];
   // The binding one first; the rest in the order they would bite.
   ceilings.sort((a, b) => a.cents - b.cents);

@@ -920,7 +920,10 @@ export function whatNeedsHim(s: OwnerState): Attention {
   // asking to write to six customers. An act waiting on him, or a test owed an
   // answer, is needs-him exactly as an acquisition is.
   const charterMissing = !s.charter.live && s.charter.workshop !== null && (s.charter.readyTests > 0 || s.charter.sealedDesigns > 0);
-  const owedToBuyer = s.obligations.filter((o) => o.asksHim !== null);
+  // A STATE ASSEMBLED WITHOUT THIS FIELD owes nobody anything; the reading is
+  // never inferred from its absence, and a screen that cannot say is not a
+  // screen that says none is owed — `ownerState` always supplies it.
+  const owedToBuyer = (s.obligations ?? []).filter((o) => o.asksHim !== null);
   const needsHim = Boolean(stuckOnHim) || s.asked.length > 0 || s.owed.length > 0 || charterMissing || owedToBuyer.length > 0;
   if (s.routinesFailing.length && !needsHim) {
     return { kind: 'stopped', routines: s.routinesFailing };
@@ -2523,7 +2526,10 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
         a charter. My thinking is bounded at $${(PRE_CHARTER_THINKING_CENTS / 100).toFixed(0)} a day until one says otherwise.</p>`}
       <p>${Number(tests.approved) === 0
     ? 'No test has been approved yet, so no test has spent anything.'
-    : `${count(Number(tests.approved), 'test')} approved at ${dollars(Number(tests.approved_cents))} in all; ${count(Number(written.n), 'message')} sent to people under those tests; ${Number(tests.running) === 0 ? 'none running now' : `${count(Number(tests.running), 'test')} running now`}.`}</p>
+    : `${count(Number(tests.approved), 'test')} approved at ${dollars(Number(tests.approved_cents))} in all; ${count(Number(written.n), 'message')} sent to people under those tests; ${Number(tests.running) === 0 ? 'none running now, and an allowance ends with its test, so nothing is set aside now' : `${count(Number(tests.running), 'test')} running now`}.`}</p>
+      <p>${process.env.FOUNDRY_ENABLE_MONEY_TOOLS === 'true'
+    ? 'Money tools are on: a refund a test\u2019s approved act covers is issued by me through Stripe.'
+    : 'Money tools are off in this deployment: I may not move money, so a refund a test\u2019s approved act covers waits for you to issue it in Stripe.'}</p>
       ${s.permissions.length === 0
     ? html`<p>On my own code I may change nothing.</p>`
     : html`<p>On my own code I may change ${s.permissions[0].path

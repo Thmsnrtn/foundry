@@ -83,7 +83,7 @@ charterRoutes.get('/foundry/charter', async (c: any) => {
     : note === 'withdrawn' ? html`<p class="noticed">Withdrawn. Every real test waits for you again; nothing already running was stopped.</p>`
       : note === 'error' ? html`<p class="noticed" role="alert"><strong>Not signed.</strong> ${why}</p>` : '';
 
-  const limits = html`<section class="panel" aria-label="Limits"><header><h2>${mark('charter')}Limits</h2></header>
+  const limits = html`<section class="panel" aria-label="Limits"><header><h2>${mark('charter')}${envelope ? 'Limits' : 'Limits, if you sign with these numbers'}</h2></header>
     <dl class="facts">
       <dt>Tests, whole charter</dt><dd>${dollars(ex.testsTotalCents)}</dd>
       <dt>Thinking, a day</dt><dd>${dollars(ex.cognitionCentsPerDay)}</dd>

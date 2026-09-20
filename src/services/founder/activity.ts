@@ -297,6 +297,35 @@ export async function whatHappened(
     }
   }
 
+  // ── WHAT BUYERS ARE OWED, AS IT HAPPENED ──────────────────────────────────
+  // A payment, a delivery that failed, money that went back, a charge
+  // contested: the provider's own reports at a test's page, dated by the
+  // provider's clock. Without these the stream showed offers and bounces and
+  // never the purchase, so the obligation existed only as a status.
+  //
+  // STANDING DOES NOT APPLY to the asset lookup: a purchase is reported at a
+  // TEST'S exposure, and every asset a test opens is experimental until the
+  // world earns it — reading only earned ones would hide every obligation
+  // there is. Reality does apply: a reference company's rows never appear.
+  for (const r of await rows(
+    `SELECT b.id, b.kind, b.amount_cents, b.currency, b.observed_at, b.provider_event_ref, x.experiment_id,
+            (SELECT p.id FROM products p WHERE p.from_experiment_id = x.experiment_id AND p.deleted_at IS NULL AND ${realCompany('p')}) AS product_id,
+            (SELECT p.name FROM products p WHERE p.from_experiment_id = x.experiment_id AND p.deleted_at IS NULL AND ${realCompany('p')}) AS name
+       FROM business_outcome_events b JOIN experiment_exposures x ON x.id = b.exposure_id
+      WHERE b.founder_id = ? AND b.evidence_mode = 'real' AND b.kind IN ('payment','refund','delivery','delivery_failed','dispute')
+      ORDER BY b.observed_at DESC LIMIT ?`, [founderId, limit])) {
+    const amount = r.amount_cents == null ? '' : ` $${(Number(r.amount_cents) / 100).toFixed(2)}`;
+    const kind = String(r.kind);
+    out.push({
+      at: String(r.observed_at), kind: 'obligation', productId: str(r.product_id), companyName: str(r.name),
+      what: kind === 'payment' ? `A buyer paid${amount}` : kind === 'refund' ? `${amount.trim() || 'Money'} went back to a buyer`
+        : kind === 'delivery' ? 'What a buyer paid for reached them' : kind === 'delivery_failed' ? 'A delivery to a buyer did not arrive'
+          : `A buyer contested a charge${amount}`,
+      detail: String(r.provider_event_ref),
+      href: `/foundry/experiments/${String(r.experiment_id)}`,
+    });
+  }
+
   // ── BOUNDARIES ─────────────────────────────────────────────────────────────
   // A CANDIDATE STRUCK IS THE MOST IMPORTANT ROW HERE and the easiest to leave
   // out, because nothing happened. That is the point: the owner's exclusions

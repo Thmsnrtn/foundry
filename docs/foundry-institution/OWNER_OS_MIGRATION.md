@@ -2984,3 +2984,8 @@ the guards. The restored database is proven equal to the migrated one: the
 same objects with the same SQL, the same rows in every table, the same guards
 refusing the same writes with the same words. One file: 7.8s to 4.3s.
 `FOUNDRY_MIGRATION_TEMPLATE=off` is the honest way to compare against.
+
+## Somebody is owed something; the most it can spend today (21 September 2026)
+
+Home's one thing, when a buyer is owed something Foundry cannot carry alone: the sentence, the amount, the payment reference, since when, what only he can do (a refund with money tools off, a dispute only he can answer, a purchase reported after the acts lapsed) and what happens if he does nothing. Economics lists "Owed to buyers" under the subtraction; the test's page carries the same sentence; the queue carries it as "somebody owed something". Controls' Money card leads with today's binding ceiling and why, lists the others as also standing, and calls the monthly budget a note. The Ask answer to "what are you allowed to spend" says today's bound in the same words. The charter page says what also stands beside the charter's rate.
+

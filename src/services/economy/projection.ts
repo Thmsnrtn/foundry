@@ -105,8 +105,16 @@ export async function moneyHeld(founderId: string): Promise<Figure> {
       WHERE founder_id = ? AND evidence_mode = 'real'
         AND kind IN ('owner_contribution','owner_distribution')`, [founderId]);
   const held = inflow - outflow + owner;
+  // A PAYMENT THE SALE LEDGER KNOWS AND THE MONEY LEDGER DOES NOT is said as
+  // that, never as "nobody has paid": the sale is written from the intent
+  // event, the charge row from the charge event, and they can arrive apart.
+  const reported = await sum(
+    `SELECT COUNT(*) AS total FROM experiment_fulfilments f JOIN business_outcome_events b ON b.id = f.payment_event_id
+      WHERE f.founder_id = ? AND b.evidence_mode = 'real'`, [founderId]);
   return measured(held, held === 0
-    ? 'Nobody has paid for anything, and the owner has neither put money in nor taken any out.'
+    ? (reported > 0
+      ? `${String(reported)} ${reported === 1 ? 'payment was' : 'payments were'} reported at a test's page, and Stripe's charge for ${reported === 1 ? 'it' : 'them'} has not been read yet, so nothing is counted as held.`
+      : 'Nobody has paid for anything, and the owner has neither put money in nor taken any out.')
     : "What buyers paid, less what Stripe took and what went back, plus or minus what the owner has moved himself.");
 }
 

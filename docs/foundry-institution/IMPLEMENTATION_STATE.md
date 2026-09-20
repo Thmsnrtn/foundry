@@ -2962,3 +2962,15 @@ candidate and a nudge key and nothing else.
   nineteen suites the repairs touch. Proof debt: the five thinking ceilings
   are said, not unified; the laboratory's default world settles Experiment
   001 without the hand.
+
+## The purchase pathway holds; one reading of spend; the laboratory runs the hand (2026-09-21)
+
+- **Migration 326**: `business_outcome_events.settles_ref`; `experiment_fulfilments.disputed_at`, `dispute_outcome`; a fulfilment born against a prior refund closes at birth; the plan guard admits a delivery whose purchase was reported before the act expired and refuses one on a contested charge.
+- **`settlement-intake.ts`** reads by reference: `payment_intent.payment_failed` → `checkout_started`; `charge.dispute.created/closed` → disputed / won / lost (a Dispute carries no metadata; the experiment is found by its references, in the money ledger too). **`billing/stripe.ts`** claims an event with `INSERT OR IGNORE` and releases the claim on a throw.
+- **`obligations.ts`** is the one reader of what a buyer is owed (`OPEN_OBLIGATION` for SQL); `attention.ts`, `whatNeedsHim` (`owed_to_buyer`), Economics, the Workshop page, the door's `owes_customer`, the hand's aftermath and `handExceptions` read it. `campaignActCovers` / `covering(since)` in `experimentActFor`: an act covers the discharge of what was taken on while it stood; a used act is history, so a stop is read from `retired_at` (`isLive`, the live selector). `stopExperiment` keeps the refund act; `retireExperimentalAsset` refuses while anything is owed; `carryWhatIsOwed` retires a stopped test's asset when the last buyer is square, fails a `sent` delivery unconfirmed for seven days and runs the approved refund, retries link-requested refunds, and neither delivers nor refunds a disputed or uncovered purchase.
+- **`institution/spending.ts`**: `thinkingToday`, `thinkingCapFor` (handed to `reserveSpend` as the founder cap by `ai/client.ts authorizeSpend`), `thinkingSpent`, `testsToday`; `AI_CEILINGS()` exported from the client. Controls, the Ask answer, the charter page, the absence test and the forge's pass read it; the company page's spend is the product-scope ledger.
+- **`tests/helpers/world.ts`**: `settledBy: 'the world'`, `providers`, `HANDS`, `EXPERIMENT_001_IN_THE_WORLD`; harness `--world`, `--owed`, provider-credential guard. **`outcome.ts eventNoun`**: the rule's events in the owner's words.
+- **Lint**: `check-the-owner-is-not-a-public-figure` reads every public-path file for the literal name; the four sealed records are reported by id, anything else fails.
+- **Unrun**: `scripts/stripe-test-mode-run.mts` (six facts only real Stripe can establish).
+- **Proofs**: `the-first-real-experiment-runs-by-hand` (+8 cases), `one-reading-of-what-foundry-may-spend`, `what-happened-has-one-name` on the world, scenario 10 (obligation on Economics, action after a day).
+

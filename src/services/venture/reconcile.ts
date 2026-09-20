@@ -170,7 +170,7 @@ export async function reconcileExperiment(
     { what: 'on the suppression list because of this test', n: suppressed,
       because: 'opt-outs and bounces together; both stop further contact' },
     { what: 'paid', n: purchased,
-      because: 'a fulfilment row is written when money arrives, and none has' },
+      because: purchased > 0 ? 'a fulfilment row was written when money arrived; what is owed on it is read on this page under what needs you' : 'a fulfilment row is written when money arrives, and none has' },
   ];
 
   // ─── traffic that is not evidence about this experiment ────────────────────

@@ -12,7 +12,7 @@
 // Deliberately NOT part of `npm run check`: it is a stage, not a gate. The
 // regression proofs that come out of a review are the gate.
 //
-//   npx tsx scripts/owner-review-harness.mts [--port 4320] [--charter] [--searching] [--eyes] [--day N] [--world]
+//   npx tsx scripts/owner-review-harness.mts [--port 4320] [--charter] [--searching] [--eyes] [--day N] [--world] [--owed]
 //
 // `--charter` signs a live charter first (the owner's next act in production).
 // `--searching` opens a search on the owner's first direction, so the steering
@@ -58,6 +58,26 @@ async function main(): Promise<void> {
     // Foundry kept running while the days passed; what it could not do
     // without providers (look, send, settle) it did not do.
     await routinesRanThisMorning();
+  }
+  // `--owed`: a buyer paid, the delivery bounced, and the refund did not go
+  // through with money tools off — the obligation the ownership-protection
+  // lens looks for. Needs the world's own exposure, so `--world` too.
+  if (flag('owed')) {
+    if (!world) { console.error('owner-review-harness: --owed needs --world (the purchase is reported at the world\'s own exposure)'); process.exit(2); }
+    process.env.FOUNDRY_ENABLE_MONEY_TOOLS = 'false';
+    const { query } = await import('../src/db/client.js');
+    const { exposureOf, recordBusinessOutcome } = await import('../src/services/venture/outcome.js');
+    const { findProof1 } = await import('../src/services/venture/proof-1.js');
+    const experimentId = (await findProof1(OWNER))!;
+    const x = (await exposureOf(experimentId))!;
+    const ev = await recordBusinessOutcome({ exposureId: x.id, kind: 'payment', amountCents: 2900, currency: 'usd', observedAt: new Date(), provider: 'stripe', providerRef: 'pi_harness_1', payerReference: 'buyer@example.com', arrivedVia: 'payment_link' });
+    if ('refused' in ev) throw new Error(ev.refused);
+    await query(`INSERT INTO experiment_fulfilments (id, founder_id, experiment_id, exposure_id, payment_event_id, provider, payment_ref, charge_ref, amount_cents, currency)
+                 VALUES ('ful_harness_1', ?, ?, ?, ?, 'stripe', 'pi_harness_1', 'ch_harness_1', 2900, 'usd')`, [OWNER, experimentId, x.id, ev.id]);
+    const { record } = await import('../src/services/economy/ledger.js');
+    await record({ founderId: OWNER, kind: 'charge', amountCents: 2900, currency: 'usd', occurredAt: new Date(), provider: 'stripe', providerRef: 'ch_harness_1',
+      sourceEventId: ev.id, fulfilmentId: 'ful_harness_1', claimQuality: 'measured', evidenceMode: 'real', because: 'A buyer was charged this, and Stripe said so.' });
+    await query(`UPDATE experiment_fulfilments SET status = 'failed', updated_at = datetime('now', '-2 days') WHERE id = 'ful_harness_1'`, []);
   }
   const app = await ownerApp();
   serve({ fetch: app.fetch, port });

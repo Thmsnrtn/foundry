@@ -49,6 +49,8 @@ the objective and not the path (`scripts/owner-review-harness.mts`, below).
 | J17 | **Ask the first commercial questions and be answered from the rows** | works *(since 21 Sep)* | natural | measures | "Is anything making money yet?" is answered from real payments, refunds, the last settlement and what is set aside (it reached the permissions answer before); "show me what you've found" names the search and the candidates standing; "I don't like this direction" and "look more closely at X" steer; a steering sentence that asks to look opens the search it steers (`the-owners-sentences-land`). |
 | J18 | **Keep going through a provider outage** without losing anyone or paying twice | works *(since 21 Sep)* | natural | protects | Scenario 10 on the world: the mail provider down the morning the hand writes — nothing sent, the morning says so once naming the provider's answer, the page says who could not be reached and that it will try again; the next morning the same offers go out once each under the same idempotency key. Before: a failed offer counted its recipient as done, and one bad morning dropped those people for good. A payment provider down when a refund is owed: the refund waits, the page says it needs him, and issues once when the provider returns. |
 | J19 | **Own more than one company and still run a test** | works *(since 21 Sep)* | natural | reachable | Scenario 10: naming a second company made the sender "ambiguous" and no test could write to anyone; under a Workshop the sender is the Workshop (`senderCompanyOf`). Home watches the companies; "can I step away" lists the ones nothing reports on as ones Foundry cannot see. |
+| J20 | **Know what a buyer is owed, and what only he can do about it** | works *(since 21 Sep)* | natural | protects | One reader (`obligations.ts`): owed, sent-unconfirmed, failed-refund-pending, refund-requested, disputed, uncovered — each with the action and whether it is his. Home's one thing when it needs him, the queue, Economics ("Owed to buyers"), the test's page, the Workshop page and the door's ranking all read it. The obligation outlives the acts' expiry, the test's settlement and a stop (the refund act survives a stop; the asset retires when the last buyer is square), and closes only when the goods are confirmed delivered or the money has gone back. Proved in the hand's suite under out-of-order, late and post-closure events and in the portfolio month. Unobserved in production: no real purchase yet. |
+| J21 | **Know the most Foundry can spend today, and why that number** | works *(since 21 Sep)* | natural | measures | One reader (`spending.ts`): the ceiling that binds, its source, what is spent against it, every other ceiling standing. The same number is handed to the door that buys thinking, so what Controls, the Ask answer, the charter page and the absence reading say is what refuses the call — the pre-charter dollar until he signs, the charter's rate after, the deployment's founder cap if lower. The monthly budget is shown as a note, not a limit; the thirty-day figure is the enforced ledger. Before: five ceilings, one enforced, two tables. In production this now binds all thinking at $1 a day until a charter is signed, as Controls has said since 21 Sep. |
 | J15 | **Own an asset**: see its state, obligations, costs and whether it is worth keeping | works, gap | findable, rough | **pending reality** | Experimental assets are kept outside operating paths until reality earns them (`asset.ts`); a failed test's asset retires after `failed_test_grace_days`. Owner-adjusted value (support, owner minutes, entropy, dependency, reversibility) is doctrine (`OBJECTIVE.md`, `RIVER.md`) and partly columns; no asset has earned, so nothing has been valued. |
 
 ## The economic loop, transition by transition
@@ -107,13 +109,41 @@ it is worth: the schema is migrated once into a template and restored per
 file (`src/test/template-db.ts`, proven equal by `the-template-is-the-schema`),
 and `scripts/measure-suite-cost.mjs` reads the figures from a run that
 already happened — before: 583 files, 2634s, 450 of them replaying 361
-migrations. `scripts/owner-review-harness.mts`
-serves that world (`--day N` to return to it later) so a reviewer who has not
+migrations. `seedProductionShape({ settledBy: 'the world' })` settles Experiment 001 as
+production did — the cohort of twenty-one with their grounds, the Workshop on
+stubbed providers, the owner's one act, the hand's mornings, 19 delivered and
+2 bounced — and running it found the sealed rule's own sentence unreadable
+("deliverys", "offer_delivereds"), which the ledger-written result had never
+shown. `scripts/owner-review-harness.mts`
+serves that world (`--day N` to return to it later; `--world` for the
+hand-settled test; `--owed` for a buyer owed a refund with money tools off;
+without `--world` it refuses to start when a provider credential is set) so
+a reviewer who has not
 seen the code is given an objective
 in the owner's words, drives the real pages in a real browser, and reports
 achieved / partial / failed with the moments of doubt, before reading any
 source to name the cause. Findings become regression proofs or map rows; the
 harness itself is a stage, not a gate.
+
+**Review cell F, 21 September** (a sceptical accountant; an
+ownership-protection reviewer), on the world in `--world --owed` mode: a buyer
+owed $29 that Foundry may not refund. Five release-blocking findings, every
+one a sentence contradicting a fact the same product held, all repaired:
+Economics said "nobody has paid for anything" beside "$29 paid, not
+delivered" (the sale ledger and the money ledger are written by different
+events; the page says which is which now); Controls' health and the absence
+reading said "customer effect: none · money at risk: none" beside an unpaid
+buyer (both read the obligations, and what only he can do outranks a
+nuisance in the Workshop's plumbing); the experiment page said "a fulfilment
+row is written when money arrives, and none has" above "paid 1"; the
+Workshop's pause promised "refunds still go out" with the deployment's
+money-tools switch off; and the owner could not tell whether the refund he
+had approved was authorised. Activity had no row for a payment, a failed
+delivery or a refund — the obligation existed only as a status — and now
+carries them under *Obligations*. What they left: the buyer is invisible to
+him (no name, no note that nobody has told them) and there is no "deliver
+instead of refund" path, both future frontier; the provider's fee on a
+refunded sale is an external-evidence boundary.
 
 **Reviews on 20 September** — A (steer, absence, why it failed, health), B
 (initiate, spend, inbox, stop), C (explore, charter, next test, hold sending):

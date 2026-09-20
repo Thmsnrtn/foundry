@@ -77,6 +77,13 @@ export const UNCONFIRMED_IS_FAILED_AFTER_DAYS = 7;
 /** A refund refused for this long has had its retries; the owner is asked. */
 export const REFUND_IS_HIS_AFTER_HOURS = 24;
 
+/** What is his when a refund is owed and Foundry cannot issue it. The refund
+ * act he approved still covers this purchase — its expiry bounds what may be
+ * taken on, not the discharge — but the door will not move money while the
+ * deployment's switch is off, and only he can refund in Stripe. */
+const MONEY_TOOLS_OFF = 'The refund you approved covers this purchase, but this deployment\u2019s money-tools switch (FOUNDRY_ENABLE_MONEY_TOOLS, set where Foundry is deployed, not on a page) is off, so I may not move money. Refund it yourself in Stripe and I close it when Stripe reports the refund; or have the switch turned on and I issue it on the next pass.';
+const REFUND_YOURSELF = 'The refund you approved has been refused at the door for a day. Refund it yourself in Stripe and I close it when Stripe reports the refund; I keep trying each pass meanwhile.';
+
 const money = (cents: number, currency: string): string =>
   `${currency.toLowerCase() === 'usd' ? '$' : ''}${(cents / 100).toFixed(2)}${currency.toLowerCase() === 'usd' ? '' : ` ${currency.toUpperCase()}`}`;
 const day = (iso: string): string => iso.slice(0, 10);
@@ -109,14 +116,12 @@ function read(r: Row, now: Date, moneyToolsOn: boolean): Obligation {
     asksHim = 'Answering the dispute is yours, in your Stripe account; Foundry does not speak to a bank for you.';
   } else if (String(r.status) === 'failed' && r.refund_ref == null) {
     state = 'failed_refund_pending'; action = refundAsk();
-    sentence = `A buyer paid ${amount} for ${title} (payment ${ref}) but it could not be delivered, and the refund did not go through.${action === 'nothing' ? ' I try again on the next pass.' : ''}`;
-    asksHim = action === 'money_tools_off' ? 'Foundry may not move money (the money-tools setting is off), so this refund is yours to issue in Stripe, or turn the setting on.'
-      : action === 'refund_yourself' ? 'The refund has been refused for a day; issue it yourself in Stripe, or check the money-tools setting.' : null;
+    sentence = `A buyer paid ${amount} for ${title} (payment ${ref}) on ${day(String(r.created_at))}; the delivery failed on ${day(String(r.updated_at))}, and the refund did not go through.${action === 'nothing' ? ' I try again on the next pass.' : ''}`;
+    asksHim = action === 'money_tools_off' ? MONEY_TOOLS_OFF : action === 'refund_yourself' ? REFUND_YOURSELF : null;
   } else if (refundOwed) {
     state = 'refund_requested'; action = refundAsk();
     sentence = `A buyer asked for a refund through the delivery link (payment ${ref}) and the ${amount} has not gone back.${action === 'nothing' ? ' I try again on the next pass.' : ''}`;
-    asksHim = action === 'money_tools_off' ? 'Foundry may not move money (the money-tools setting is off), so this refund is yours to issue in Stripe, or turn the setting on.'
-      : action === 'refund_yourself' ? 'The refund has been refused for a day; issue it yourself in Stripe, or check the money-tools setting.' : null;
+    asksHim = action === 'money_tools_off' ? MONEY_TOOLS_OFF : action === 'refund_yourself' ? REFUND_YOURSELF : null;
   } else if (String(r.status) === 'sent') {
     const hours = hoursSince(sentAt ?? String(r.updated_at), now);
     state = 'sent_unconfirmed'; action = hours >= CHECK_DELIVERY_AFTER_HOURS ? 'check_delivery' : 'nothing';

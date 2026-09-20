@@ -153,6 +153,35 @@ for (const dir of PUBLIC_DIRS) {
   }
 }
 
+// 5. THE PUBLIC COPY OF EVERY EXPERIMENT, not only the interpolation sites.
+//
+// A sealed page can name him legitimately — Experiment 001's does, and the
+// rule that a sealed record is not rewritten stands beside the rule that his
+// name is on no public surface (OWNER_DECISIONS_PENDING.md, PENDING 19). What
+// must not happen is a SECOND such page appearing silently. So every file on
+// a public path is read for the literal name outside comments; the sealed
+// records are listed by id and REPORTED, and anything else FAILS.
+if (name) {
+  const SEALED = new Map([
+    ['src/services/venture/proof-1.ts', 'Experiment 001\'s sealed public copy (PROOF1_PUBLIC, "Who I am") — PENDING 19'],
+    ['src/services/venture/proof-1-content.ts', 'Experiment 001\'s outreach as sent (OUTREACH_TEMPLATE_MD sign-off) — a record of what went out'],
+    ['src/services/venture/proof-2-content.ts', 'the Etsy privacy policy (PRIVACY_POLICY_MD) — the marketplace\'s disclosure'],
+    ['src/services/public-workshop/settings.ts', 'the Workshop record that holds the operator\'s name'],
+  ]);
+  const carried = [];
+  for (const dir of PUBLIC_DIRS) {
+    for (const f of tsFiles(resolve(ROOT, dir))) {
+      const r = rel(f);
+      const lines = readFileSync(f, 'utf8').split('\n');
+      const hits = lines.map((line, i) => (line.includes(name) && !/^\s*(\/\/|\*)/.test(line) ? i + 1 : 0)).filter(Boolean);
+      if (!hits.length) continue;
+      if (SEALED.has(r)) carried.push(`${r}:${hits.join(',')} — ${SEALED.get(r)}`);
+      else failures.push(`${r}:${hits[0]}: the owner's name in public copy outside the sealed records; a second sealed page cannot appear silently`);
+    }
+  }
+  for (const c of carried) console.log(`  carried by a sealed record: ${c}`);
+}
+
 if (failures.length) {
   console.error('the owner is not a public figure — his name reaches a public surface:');
   for (const f of failures) console.error(`  ${f}`);

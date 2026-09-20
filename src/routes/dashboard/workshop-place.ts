@@ -102,7 +102,7 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
     <section class="know" id="pause"><h2>${w.economicPause ? 'New economic activity is paused' : 'Pausing'}</h2>
       ${w.economicPause ? html`<p>Since ${w.economicPause.at.slice(0, 16).replace('T', ' ')}, ${w.economicPause.by === `founder:${founderId}` ? 'by you' : `by ${w.economicPause.by}`}: ${w.economicPause.reason}. No offers, no placements, no new tests. Deliveries, refunds, the pages and the contact path carry on.</p>
         <form method="POST" action="/foundry/public-workshop/resume"><button class="btn yes" type="submit">Resume</button></form>`
-    : html`<p>Stops new offers, placements and tests without touching what is owed to anyone who already bought. The public site stays up; refunds still go out.</p>
+    : html`<p>Stops new offers, placements and tests without touching what is owed to anyone who already bought. The public site stays up; deliveries and refunds carry on${process.env.FOUNDRY_ENABLE_MONEY_TOOLS === 'true' ? '' : ' \u2014 though with this deployment\u2019s money-tools switch off, a refund waits for you'}.</p>
         <form method="POST" action="/foundry/public-workshop/pause" class="stack"><label>Why <input type="text" name="reason" required placeholder="one line, for the record" /></label><button class="btn" type="submit">Pause new economic activity</button></form>`}
     </section>
 
@@ -157,7 +157,9 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
               does not any more — the projection takes it off — so the line says
               what is true now rather than asking for work already done. */ ''}
         <dt>Operator</dt><dd>${w.operatorName} <span class="quiet">(on the terms page, and in Experiment 001's sealed public copy${w.postalAddress && w.postalAddress.split('\n')[0]?.trim() === w.operatorName ? ' — your address below begins with your name, and that line is left off the public pages and commercial mail, which carry the street address alone' : ''})</span></dd>
-        <dt>Sends as</dt><dd>${w.publicName} &lt;${w.contactEmail}&gt;</dd>
+        <dt>Sends as</dt><dd>${w.publicName} &lt;${w.contactEmail}&gt; <span class="quiet">— a first-name mailbox, so your first name is on the From line and on /contact; software answers it in the Workshop's voice, within the mode set on the Inbox</span></dd>
+        <dt>Also carrying your name</dt><dd><span class="quiet">Experiment 001's outreach as sent (signed by you), the Etsy listing's privacy policy, and Experiment 001's public page under "Who I am". Nothing else, and a second sealed page cannot appear without the release gate saying so. Whether the sealed page keeps your name is yours to decide (PENDING 19).</span></dd>
+        <dt>Disclosure</dt><dd><span class="quiet">The public site says software does the research and the day-to-day running and that the decisions and the responsibility are yours; it does not say the prose is written by software.</span></dd>
         <dt>Postal address</dt><dd>${w.postalAddress ?? html`<span class="quiet">none recorded — commercial email must carry one, so no offer goes out until it does</span>`}</dd>
         ${w.postalAddress ? html`<dt>As the public reads it</dt><dd>${publicPostalLines(w).join(', ') || html`<span class="quiet">nothing — the address is only your name, so no offer can go out</span>`}</dd>` : ''}
         <dt>Contact spacing</dt><dd>${String(w.contactGapDays)} days between tests to one address; at most ${String(w.contactCeilingPerYear)} a year</dd>

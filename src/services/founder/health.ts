@@ -78,7 +78,15 @@ export async function healthOf(founderId: string, now: Date = new Date()): Promi
   const lastHealthy = loops.length === 0
     ? (latestPass == null ? null : String(latestPass))
     : loops.map((l) => l.lastSuccessAt).filter((s): s is string => !!s).sort()[0] ?? null;
-  const ownerAction = blocked.find((b) => b.ownerAction)?.ownerAction ?? (workshopNeeds.length ? workshopNeeds[0] ?? null : null);
+  // SOMEBODY OWED SOMETHING is the customer effect and the money at risk,
+  // whatever the routines say, and what only he can do about it outranks a
+  // nuisance in the Workshop's plumbing.
+  const { obligationsFor } = await import('../venture/obligations.js');
+  const owed = await obligationsFor(founderId, now);
+  const owedNeedingHim = owed.filter((o) => o.asksHim !== null);
+  const owedCents = owed.reduce((n, o) => n + o.amountCents, 0);
+  const ownerAction = owedNeedingHim[0]?.asksHim
+    ?? blocked.find((b) => b.ownerAction)?.ownerAction ?? (workshopNeeds.length ? workshopNeeds[0] ?? null : null);
 
   const state: EstateState = blocked.length ? 'blocked' : (loops.length || workshopNeeds.length) ? 'degraded' : 'ok';
   return {
@@ -92,8 +100,10 @@ export async function healthOf(founderId: string, now: Date = new Date()): Promi
     // THE RECORDS SAY WHO IS AFFECTED, OR THEY DO NOT. A blocked pass on a live
     // test means people outside are waiting on something; a stopped routine
     // affects only what the owner is told.
-    customerEffect: blocked.length ? 'a running test is not progressing' : 'none',
-    moneyAtRisk: blocked.some((b) => /payment|refund|fulfil/i.test(b.attempting)) ? 'a payment or delivery is waiting' : 'none',
+    customerEffect: owed.length ? `${String(owed.length)} ${owed.length === 1 ? 'buyer is' : 'buyers are'} owed something (${owed.map((o) => o.state.replace(/_/g, ' ')).join(', ')})`
+      : blocked.length ? 'a running test is not progressing' : 'none',
+    moneyAtRisk: owed.length ? `$${(owedCents / 100).toFixed(2)} owed to ${owed.length === 1 ? 'a buyer' : 'buyers'}`
+      : blocked.some((b) => /payment|refund|fulfil/i.test(b.attempting)) ? 'a payment or delivery is waiting' : 'none',
     ownerAction,
     lastHealthy,
     nextPass: nextPassAfter(now),

@@ -2332,3 +2332,61 @@ into the map; what they left is listed there with the reason, and two
 decisions are the owner's: PENDING 19 (his name on Experiment 001's sealed
 public page against his own rule) and PENDING 20 (whether the hands may test
 a free resource or something licensed in).
+
+### Wave 1 — economic readiness, and what the reviewers found (2026-09-21)
+
+**Built.** The purchase pathway now holds under the ways the world actually
+reports: a refund that arrives before its payment closes the purchase at the
+row rather than leaving goods owed on money already returned; a dispute
+suspends the obligation and its outcome resumes or closes it; a declined
+attempt is a checkout begun and nobody's obligation; a webhook the intake
+cannot record releases its claim so the provider retries instead of the sale
+being lost behind a 200. What a buyer is owed became one object every surface
+reads, and it outlives the acts' expiry, the test's settlement and a stop —
+the act covers the discharge of what was taken on while it stood, which is
+what the owner approved in the act's own words, and a purchase reported after
+the acts lapsed is named as his rather than acted on. What Foundry may spend
+today became one reading whose number is handed to the door that buys
+thinking, so the figure on Controls is the figure that refuses the call.
+Experiment 001 now runs in the laboratory through the hand rather than being
+written into the ledger.
+
+**The final recursive question, answered.** Running the test through the hand
+immediately found something twelve months of ledger-written proofs could not:
+the sealed rule's own sentence, which every surface shows as *the reason a
+test ended*, read "0 deliverys that counted out of 19 offer_delivereds". The
+laboratory had been proving the surfaces against a result it wrote itself.
+That is the pattern to keep watching: **a proof that supplies its own
+evidence cannot fail the way production does.**
+
+**What the two review cells found, at the wave boundary.** An accountant and
+an ownership-protection reviewer, neither given the implementer's account,
+read the product with a buyer owed $29 that Foundry may not refund. Five
+release-blocking findings, all repaired here: Economics said "nobody has paid
+for anything" on the same page as "$29 paid, not delivered" (the sale ledger
+and the money ledger can be written by different events, and the page now
+says which is which); Controls' health and the absence reading both said
+"customer effect: none · money at risk: none" beside an unpaid buyer (both
+read the obligations now, and what only he can do outranks a nuisance in the
+plumbing); the experiment page said "a fulfilment row is written when money
+arrives, and none has" above "paid 1"; the Workshop's pause promised
+"refunds still go out" when this deployment's money-tools switch is off; and
+the owner could not tell whether the refund he had approved was authorised —
+it is, and the sentence now says the switch is a deployment setting, not a
+page, and that Foundry closes the obligation when Stripe reports his own
+refund. Activity carried no row for a payment, a failed delivery or a refund,
+so the obligation existed only as a status; it has events now, and the class
+is *Obligations* rather than *Promises*.
+
+**The shape of all five.** Every one was a sentence that contradicted a fact
+the same product held. None was a missing mechanism. The repairs are
+therefore where the reading is composed, not new machinery — which is the
+directive's "prefer simpler equivalent architecture" arriving as a finding
+rather than a principle.
+
+**Still open, and named.** The six facts only real Stripe can establish are
+written as an unrun procedure. Nothing is proven about a real purchase. Two
+decisions are the owner's and were not touched: his name on Experiment 001's
+sealed page (PENDING 19) and whether the hands may test a free resource or
+something licensed in (PENDING 20).
+
