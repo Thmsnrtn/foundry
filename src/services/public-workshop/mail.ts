@@ -394,6 +394,14 @@ export interface MailThread {
   /** True when any message in it still needs him. */
   needsOwner: boolean;
   archived: boolean;
+  /**
+   * WHEN HE PUT IT AWAY, IF A NEWER MESSAGE HAS SINCE REOPENED IT. A thread
+   * he archived came back into "In flight" on a new reply with no trace that
+   * it had been put away — the newest row carries no `archived_at`, and the
+   * row is what the view shows. The older rows remember; this says so.
+   */
+  putAwayAt: string | null;
+  putAwayBecause: string | null;
 }
 
 /**
@@ -422,7 +430,14 @@ export async function theThreads(founderId: string, view: MailView = 'working'):
               WHERE a.founder_id = m.founder_id AND a.thread_key = m.thread_key) AS messages,
             (SELECT COUNT(*) FROM workshop_mail a
               WHERE a.founder_id = m.founder_id AND a.thread_key = m.thread_key
-                AND a.handling = 'needs_owner' AND a.archived_at IS NULL) AS needs
+                AND a.handling = 'needs_owner' AND a.archived_at IS NULL) AS needs,
+            (SELECT MAX(a.archived_at) FROM workshop_mail a
+              WHERE a.founder_id = m.founder_id AND a.thread_key = m.thread_key
+                AND a.archived_at IS NOT NULL AND a.rowid < m.rowid) AS put_away_at,
+            (SELECT a.archived_because FROM workshop_mail a
+              WHERE a.founder_id = m.founder_id AND a.thread_key = m.thread_key
+                AND a.archived_at IS NOT NULL AND a.rowid < m.rowid
+              ORDER BY a.archived_at DESC LIMIT 1) AS put_away_because
        FROM workshop_mail m
        JOIN (SELECT thread_key, MAX(received_at) AS newest, MAX(rowid) AS top
                FROM workshop_mail WHERE founder_id = ? GROUP BY thread_key) t
@@ -435,6 +450,8 @@ export async function theThreads(founderId: string, view: MailView = 'working'):
         key: newest.threadKey, href: newest.threadKeyHref, newest,
         messages: Number(r.messages ?? 1), needsOwner: Number(r.needs ?? 0) > 0,
         archived: r.archived_at != null,
+        putAwayAt: r.archived_at != null || r.put_away_at == null ? null : String(r.put_away_at),
+        putAwayBecause: r.archived_at != null || r.put_away_because == null ? null : String(r.put_away_because),
       };
     });
 }

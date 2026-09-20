@@ -607,6 +607,13 @@ export async function stopExperiment(input: { founderId: string; experimentId: s
     await revokeApproval(String(a.id), reason);
   }
   if (e.productId) await retireExperimentalAsset({ productId: e.productId, because: `you stopped it: ${reason}` });
+  // THE STOP IS WRITTEN ON THE TEST. It used to live only on the exposure and
+  // the acts, so the attention queue read the withdrawn exposure as "approved
+  // and not yet listed" and asked him to list the test he had just stopped.
+  // A test that already ran is settled by the world and cannot be retired; a
+  // test that had not run is retired here with his reason.
+  const { retireExperiment } = await import('./validation.js');
+  await retireExperiment({ experimentId: input.experimentId, by: `founder:${input.founderId}`, because: `you stopped it: ${reason}` });
   // The public record says what happened, and stays.
   await republishRecord(input.experimentId).catch(() => undefined);
   return { takenDown: down.done, because: down.reason };

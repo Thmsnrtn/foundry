@@ -10,6 +10,7 @@
 // sending address, allow the test. Foundry does the rest and shows its work.
 // =============================================================================
 import { Hono } from 'hono';
+import { query, realCompany } from '../../db/client.js';
 import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import { count, page, placeHead, steerFold } from './foundry-shell.js';
@@ -88,8 +89,11 @@ experimentRoutes.get('/foundry/experiments', async (c: any) => {
   const stoppedByHim = live.filter((t) => t.concluded);
   const cutoff = now.getTime() - 14 * 86_400_000;
   const lately = ledger.filter((l) => l.settled && l.settledAt !== null && asMs(l.settledAt) >= cutoff).map((l) => l.id);
+  // A concluded test with no date of its own ages by the ledger's, and one
+  // with neither is not "recent": it used to stay here for good.
+  const settledAtOf = new Map(ledger.filter((l) => l.settledAt !== null).map((l) => [l.id, l.settledAt as string]));
   const recent = [...stoppedByHim, ...(await Promise.all(lately.map((x) => getExperimentView(founderId, x, now)))).filter((v): v is ExperimentView => v !== null)]
-    .filter((v) => v.concluded && (v.concludedAt === null || asMs(v.concludedAt) >= cutoff))
+    .filter((v) => { const at = v.concludedAt ?? settledAtOf.get(v.id) ?? null; return v.concluded && at !== null && asMs(at) >= cutoff; })
     .sort((a, b) => (b.concludedAt ?? '').localeCompare(a.concludedAt ?? '')).slice(0, 3);
   const historyN = ledger.filter((l) => l.settled).length + stoppedByHim.length;
   // THE ONE THAT IS ALIVE LEADS. A running test, or one waiting on him, is the
@@ -244,6 +248,13 @@ experimentRoutes.get('/foundry/experiments/history', async (c: any) => {
   const filter = (CONCLUDED as readonly string[]).includes(wanted) ? wanted as ExperimentView['state'] : null;
   const shown = filter ? all.filter((v) => v.state === filter) : all;
   const n = (k: string) => all.filter((v) => v.state === k).length;
+  // A RETIRED ASSET IS FINDABLE HERE. The test's asset is archived with its
+  // reason when the test fails and the grace runs out, or when he stops it;
+  // it was listed nowhere. Its own page stays reachable from this row.
+  const retiredAssets = new Map((await query(
+    `SELECT p.from_experiment_id AS e, p.id, p.name, p.retired_because FROM products p
+      WHERE p.owner_id = ? AND p.standing = 'experimental' AND p.status = 'archived' AND p.deleted_at IS NULL AND p.from_experiment_id IS NOT NULL AND ${realCompany('p')}`, [founderId]))
+    .rows.map((r) => [String((r as Record<string, unknown>).e), r as Record<string, unknown>]));
   const frame: Where = {
     crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: '/foundry/experiments', label: 'Experiments' }, { href: '/foundry/experiments/history', label: 'History' }],
     scope: { kind: 'foundry', id: null, name: 'Experiments' }, local: [], chips: [],
@@ -255,6 +266,7 @@ experimentRoutes.get('/foundry/experiments/history', async (c: any) => {
     ${shown.map((v) => html`<a class="item experiment-index-item exp-row done" href="/foundry/experiments/${v.id}">
       <p><strong>${v.assetName ?? v.title}</strong> <span class="pill">${stateWord[v.state]}</span> <span class="dim">${dayOf(v.concludedAt)}</span></p>
       <p class="quiet">${v.stateDetail}${v.supersededBy ? html` <span class="dim">Succeeded by <a href="/foundry/experiments/${v.supersededBy}">the later design</a>.</span>` : ''}</p>
+      ${retiredAssets.has(v.id) ? html`<p class="quiet"><span class="dim">Its asset, ${String(retiredAssets.get(v.id)!.name)}, is retired: ${String(retiredAssets.get(v.id)!.retired_because ?? '')}</span></p>` : ''}
     </a>`)}
     ${filter && shown.length === 0 ? html`<p class="quiet">None ended that way.</p>` : ''}
     <p class="quiet"><a href="/foundry/experiments">Live tests</a></p>`;

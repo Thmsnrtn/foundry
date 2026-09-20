@@ -788,6 +788,30 @@ export async function stopMandate(founderId: string, reason: string): Promise<bo
   await query(
     `UPDATE venture_mandates SET state = 'stopped', closed_at = datetime('now'),
             closed_reason = ? WHERE id = ?`, [reason, open.id]);
+
+  // A CLOSED SEARCH TAKES ITS DEBRIS WITH IT. The end of a search was written
+  // on one row and read by nothing else: its open candidates stayed on the
+  // Explore shelf and in its count while Discover said "I am not looking for
+  // anything", and a design that had not been decided kept asking the owner
+  // to decide it. Each is closed here through its own writer, with the reason
+  // on the row and a way back — a candidate is buried with "worth another look
+  // if a search opens that it fits", never deleted. A test he already approved
+  // is not touched: it is the charter's, and stopping it is a different act.
+  const orphans = (await query(
+    `SELECT id FROM venture_opportunities WHERE mandate_id = ? AND verdict IS NULL`, [open.id]))
+    .rows as unknown as Array<{ id: string }>;
+  for (const o of orphans) {
+    const { retireExperiment } = await import('./validation.js');
+    const designs = (await query(
+      `SELECT id FROM venture_experiments
+        WHERE opportunity_id = ? AND decision IS NULL AND retired_at IS NULL
+          AND superseded_by IS NULL AND validity = 'valid'`, [o.id])).rows as unknown as Array<{ id: string }>;
+    for (const d of designs) {
+      await retireExperiment({ experimentId: d.id, by: 'the search closing', because: 'its search was closed before it was decided' });
+    }
+    await rejectCandidate({ opportunityId: o.id, by: 'the search closing',
+      why: `the search was closed: ${reason}`, revisitIf: 'a search opens that this fits' });
+  }
   return true;
 }
 
@@ -1227,6 +1251,11 @@ export async function seenBefore(
   const words = meaningfulWords(headline);
   if (words.size === 0) return null;
   for (const buried of await graveyardFor(founderId, 200)) {
+    // A CANDIDATE BURIED BECAUSE ITS SEARCH CLOSED IS NOT A BAD IDEA. It was
+    // never judged; the search ended around it. Holding it against the next
+    // search that finds the same thing would bury every idea the owner ever
+    // changed direction on, once, for good.
+    if (buried.why.startsWith('the search closing:')) continue;
     const theirs = meaningfulWords(buried.headline);
     const shared = [...words].filter((w) => theirs.has(w));
     // Half of what this one says, and at least three words of it.

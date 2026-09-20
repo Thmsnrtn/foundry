@@ -46,6 +46,7 @@ const CLASSES: Array<[ActivityKind, string]> = [
   ['money', 'Money'],
   ['obligation', 'Promises'],
   ['boundary', 'Refused'],
+  ['search', 'Searching'],
 ];
 
 const LABEL = new Map<ActivityKind, string>(CLASSES);
@@ -103,7 +104,7 @@ activityRoutes.get('/foundry/activity', async (c: any) => {
   const { healthOf } = await import('../../services/founder/health.js');
   const health = await healthOf(founderId);
   const healthCls = health.state === 'ok' ? 'ok' : health.state === 'degraded' ? 'watch' : 'bad';
-  const EVENT_MARK: Record<ActivityKind, string> = { authority: 'check', experiment: 'experiment', outward: 'sent', money: 'money', obligation: 'box', boundary: 'stop' };
+  const EVENT_MARK: Record<ActivityKind, string> = { authority: 'check', experiment: 'experiment', outward: 'sent', money: 'money', obligation: 'box', boundary: 'stop', search: 'watching' };
   const body = html`
     <h1>Activity</h1>
     <p class="lede">${only

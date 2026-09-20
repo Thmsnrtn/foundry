@@ -164,6 +164,8 @@ export async function getExperimentView(founderId: string, experimentId: string,
   // (validation.ts refuses otherwise), and a retired test read as "Needs you"
   // is a forge-killed design asking the owner to decide it. That was the bug.
   if (e.supersededBy) { state = 'superseded'; stateLabel = 'Superseded'; stateDetail = 'Replaced by a later design; its record stands.'; }
+  // HE STOPPED IT: the retirement carries his reason, and the word stays his.
+  else if (e.retiredAt && (e.retiredBecause ?? '').startsWith('you stopped it')) { state = 'stopped'; stateLabel = 'Stopped by you'; stateDetail = 'Nothing more is sent; what the world already did stays on record.'; }
   else if (e.retiredAt) { state = 'retired'; stateLabel = 'Retired'; stateDetail = e.retiredBecause ?? 'Retired before it ran.'; }
   else if (e.decision === 'declined') { state = 'declined'; stateLabel = 'Declined'; stateDetail = 'You decided not to run it.'; }
   else if (e.validity !== 'valid') { state = 'invalid'; stateLabel = 'Invalid'; stateDetail = 'It did not measure what it was for, so it is re-run rather than read.'; }

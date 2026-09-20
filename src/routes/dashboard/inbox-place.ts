@@ -119,6 +119,7 @@ inboxRoutes.get('/foundry/inbox', async (c: any) => {
               nothing about the message and is reversible; every reading, ground
               and reply stays exactly where it was and is still readable here. */ ''}
         ${t.newest.archivedBecause ? html`<span class="read"><strong>Put away:</strong> ${t.newest.archivedBecause}${t.newest.archivedAt ? html` <span class="dim">${ago(t.newest.archivedAt)}</span>` : ''}</span>` : ''}
+        ${t.putAwayAt ? html`<span class="read"><strong>Reopened:</strong> you put this away ${ago(t.putAwayAt)}${t.putAwayBecause ? ` (${t.putAwayBecause})` : ''}; a newer message brought it back.</span>` : ''}
         <span class="acts">${t.archived
     ? html`<form method="POST" action="/foundry/inbox/thread/${t.href}/unarchive">
           <button class="btn" type="submit">Put back</button></form>`

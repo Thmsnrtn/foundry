@@ -1193,6 +1193,7 @@ main[data-place="activity"] .ev.authority::before,
 main[data-place="activity"] .ev.money::before{background:var(--v3-mint)}
 main[data-place="activity"] .ev.boundary::before,
 main[data-place="activity"] .ev.obligation::before{background:var(--v3-gold)}
+main[data-place="activity"] .ev.search::before{background:var(--v3-mint)}
 main[data-place="activity"] .ev>p:nth-child(2){font-family:var(--serif);font-size:1.01rem;font-weight:400}
 
 /* Economics: arithmetic first, explanations inspectable. */

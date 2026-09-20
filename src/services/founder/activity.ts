@@ -70,7 +70,9 @@ export type ActivityKind =
   /** A promise opened or discharged. */
   | 'obligation'
   /** A boundary of the owner's refusing something. */
-  | 'boundary';
+  | 'boundary'
+  /** The owner's search: opened, steered, closed. */
+  | 'search';
 
 export interface InstitutionalEvent {
   /** When the world did it, not when Foundry heard about it. */
@@ -320,6 +322,29 @@ export async function whatHappened(
       detail: str(r.review_reason),
       href: `/foundry/experiments/${String(r.experiment_id)}/recipients`,
     });
+  }
+
+  // THE SEARCH IS THE OWNER'S OWN WORK, and the one lifecycle the stream could
+  // not show: he opened it, steered it, replaced it or stopped it, and
+  // "what happened" said nothing. His words, from the rows they bind.
+  for (const m of await rows(
+    `SELECT id, statement, opened_at, closed_at, closed_reason FROM venture_mandates
+      WHERE founder_id = ? AND evidence_mode = 'real'
+      ORDER BY COALESCE(closed_at, opened_at) DESC LIMIT ?`, [founderId, limit])) {
+    out.push({ at: String(m.opened_at), kind: 'search', productId: null, companyName: null,
+      what: `Started looking: ${String(m.statement)}`, detail: null, href: '/foundry/searching' });
+    if (m.closed_at != null) {
+      out.push({ at: String(m.closed_at), kind: 'search', productId: null, companyName: null,
+        what: `Stopped looking: ${String(m.statement)}`, detail: str(m.closed_reason), href: '/foundry/searching' });
+    }
+  }
+  for (const g of await rows(
+    `SELECT g.statement, g.given_at FROM venture_guidance g
+       JOIN venture_mandates m ON m.id = g.mandate_id
+      WHERE m.founder_id = ? AND m.evidence_mode = 'real'
+      ORDER BY g.given_at DESC LIMIT ?`, [founderId, limit])) {
+    out.push({ at: String(g.given_at), kind: 'search', productId: null, companyName: null,
+      what: `Steered the search: ${String(g.statement)}`, detail: null, href: '/foundry/searching' });
   }
 
   // Newest first, and only as many as were asked for. Sorted here rather than
