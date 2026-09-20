@@ -2311,3 +2311,12 @@ world at day 25. Economic mechanisms read from named sources with grades
 (`ECONOMICS.md` § *Mechanisms with sources*). Boundary A: full chain, deploy,
 live verification. Next: the laboratory grows (outages, a portfolio, a phone
 width), the forms follow the evidence, the suite costs what it is worth.
+
+### The laboratory grows; the forms follow the evidence; the suite is cheaper (2026-09-21)
+
+Scenario 10 (a portfolio, outages, a refund owed while the provider is down)
+found and repaired a lost recipient after a failed send and an ambiguous
+sender once a second company is named. Two economic forms from the evidence;
+four questions on every unknown. The schema is migrated once and restored
+per file, proven equal. Next: full chain, deploy, review cells with the new
+lenses at day 15 and on a phone.

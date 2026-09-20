@@ -2920,3 +2920,20 @@ candidate and a nudge key and nothing else.
   on the world. Proof debt: L10 unobserved in production until a second real
   design exists; the mechanism thresholds (0.6 of the carrying words) are a
   reading the owner can disagree with, recorded in every refusal.
+
+## The laboratory grows; the forms follow the evidence; the suite is cheaper (2026-09-21)
+
+- `tests/helpers/world.ts` — `addCompanies`, `outage`; `provider-stubs.ts`
+  `resendDown`. `tests/simulation/10-thirty-days-of-a-portfolio.test.ts`;
+  `tests/unit/the-owner-surface-fits-a-phone.test.ts`.
+- `src/services/venture/hand.ts` — `senderCompanyOf` prefers the Workshop;
+  the hand retries a failed offer past its reconcile time under the same key;
+  `handExceptions` names failed offers and that they will be tried again.
+- `src/services/venture/economic-forms.ts` — `free_resource`, `licensed_in`;
+  `fourQuestionsOf`. `whereToLookNext` and the forge's record carry `asks`.
+- `src/test/template-db.ts`, `src/db/migrate.ts` — the schema template;
+  `scripts/measure-suite-cost.mjs`. Proof: `the-template-is-the-schema`.
+- Proof debt: the free-resource form's exchange (`free_with_role`) is
+  constitutional and unavailable, so the form can be shelved but not tested;
+  widening it is the owner's decision. `fileParallelism` stays off until a
+  measured run with the template says otherwise.
