@@ -129,3 +129,41 @@ describe('one word for one place', () => {
     expect(LABELS.discover).toBe('Searching');
   });
 });
+
+// =============================================================================
+// A SUMMARY READS THE LIST IT SUMMARISES.
+//
+// Two convergence reviewers found this independently, by using the product:
+// "Nothing needs a decision from you" was printed six inches above "Needs you
+// 1", and the Ask box answered "What needs me?" with "Nothing. I will tell you
+// the moment that changes." The calm sentences were computed from the one-thing
+// reader, which has no branch for some of the kinds the queue holds.
+// =============================================================================
+describe('nothing is never said above a queue with something in it', () => {
+  it('the one thing points at the list when it cannot put one decision in front of him', async () => {
+    const { whatNeedsHim } = await import('../../src/routes/dashboard/foundry-shell.js');
+    const bare = { asked: [], owed: [], obligations: [], acquisitions: [], routinesFailing: [], checks: [],
+      record: 'no rate yet', elsewhere: [], grantable: [], permissions: [], candidates: [], expecting: [],
+      pendingCandidates: [], responsibilities: [], watching: { real: 0, invented: 0, itself: false },
+      charter: { live: false, workshop: null, readyTests: 0, sealedDesigns: 0 },
+      settledSinceHeLooked: null, queued: 0 } as never;
+    expect(whatNeedsHim(bare)).toBeNull();
+    const withQueue = { ...(bare as object), queued: 2 } as never;
+    const a = whatNeedsHim(withQueue);
+    expect(a).toMatchObject({ kind: 'queued', n: 2 });
+    // LAST OF ALL: anything that can be one decision outranks a pointer at a list.
+    const withAnAct = { ...(withQueue as object), asked: [{ id: 'a1', tier: 'external', productId: 'p', companyName: 'c', summary: 's', why: 'w', rung: 'financial', rungMeans: null, puttingItBack: null, costCents: 100, expiresAt: '2026-10-01', absorbable: null }] } as never;
+    expect(whatNeedsHim(withAnAct)?.kind).toBe('spend');
+  });
+
+  it('the screen and the Ask answer agree with the count beside them', async () => {
+    const home = asText(await me.page('/foundry'));
+    const waiting = /Needs you (\d+)/.exec(home);
+    if (waiting && Number(waiting[1]) > 0) {
+      expect(home).not.toContain('Nothing needs a decision from you');
+      expect(home).not.toContain('Everything is fine. Nothing needs you.');
+      const said = asText(await me.answer('what needs me'));
+      expect(said).not.toContain('Nothing. I will tell you the moment that changes');
+    }
+  });
+});

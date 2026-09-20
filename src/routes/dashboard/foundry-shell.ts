@@ -217,6 +217,8 @@ export interface OwnerState {
   owed: import('../../services/institution/calibration.js').AwaitingAnswer[];
   /** What buyers are owed, in the one reading (venture/obligations.ts). */
   obligations: import('../../services/venture/obligations.js').Obligation[];
+  /** How many things wait on him, from the same reader the queue renders. */
+  queued: number;
   /**
    * A TEST THE WORLD SETTLED SINCE HE LAST LOOKED, and what it came to. It is
    * the one thing until he has seen it once: a result nobody reads is a test
@@ -607,6 +609,10 @@ async function readOwnerState(
       const { obligationsFor } = await import('../../services/venture/obligations.js');
       return obligationsFor(founderId);
     })(),
+    queued: await (async () => {
+      const { waitingOn } = await import('../../services/founder/attention.js');
+      return (await waitingOn(founderId)).length;
+    })(),
     settledSinceHeLooked: await (async () => {
       // SINCE HE LAST LOOKED, from the visit the page itself just recorded.
       // Before the first visit there is no "since", so nothing is new.
@@ -899,6 +905,7 @@ async function readOwnerState(
  */
 export type Attention =
   | { kind: 'owed_to_buyer'; obligation: import('../../services/venture/obligations.js').Obligation; others: number }
+  | { kind: 'queued'; n: number }
   | { kind: 'read_the_result'; experimentId: string; title: string;
       outcome: import('../../services/founder/what-happened.js').Outcome; record: string }
   | { kind: 'grade'; experimentId: string; about: string; expected: string;
@@ -950,7 +957,14 @@ export function whatNeedsHim(s: OwnerState): Attention {
   // never inferred from its absence, and a screen that cannot say is not a
   // screen that says none is owed — `ownerState` always supplies it.
   const owedToBuyer = (s.obligations ?? []).filter((o) => o.asksHim !== null);
-  const needsHim = Boolean(stuckOnHim) || s.asked.length > 0 || s.owed.length > 0 || charterMissing || owedToBuyer.length > 0;
+  // AND WHATEVER ELSE THE QUEUE IS HOLDING. Two convergence reviewers found
+  // the same defect independently: the calm sentences were computed here,
+  // which has no branch for some of the kinds `attention.waitingOn` holds, so
+  // "Nothing needs a decision from you" was printed six inches above
+  // "Needs you 1". A summary that does not read the list it summarises is
+  // not a summary.
+  const queued = s.queued ?? 0;
+  const needsHim = Boolean(stuckOnHim) || s.asked.length > 0 || s.owed.length > 0 || charterMissing || owedToBuyer.length > 0 || queued > 0;
   if (s.routinesFailing.length && !needsHim) {
     return { kind: 'stopped', routines: s.routinesFailing };
   }
@@ -1123,6 +1137,14 @@ export function whatNeedsHim(s: OwnerState): Attention {
       proposal: asked.proposal, rationale: asked.rationale,
     };
   }
+
+  // ANYTHING THE QUEUE IS HOLDING THAT NO BRANCH ABOVE COULD EXPRESS — a test
+  // waiting to be listed, something the Workshop needs from him. Last of all,
+  // because every branch above can put ONE decision in front of him and this
+  // can only point at a list; and never omitted, because the alternative was
+  // printing "nothing needs you" above a queue with things in it.
+  if (queued > 0) return { kind: 'queued', n: queued };
+
   return null;
 }
 
@@ -1408,6 +1430,20 @@ export function theOneThing(a: Attention, extras: OneThingExtras = {}): HtmlEsca
       <dt>Money at risk</dt><dd>${h.moneyAtRisk}</dd>
       <dt>Owner action</dt><dd>${h.ownerAction ?? 'none'}</dd>
     </dl>` : ''}</section>`;
+  }
+
+  if (a.kind === 'queued') {
+    return decisionCard({
+      act: 'Responsibility',
+      question: a.n === 1 ? 'One thing is waiting on you.' : `${String(a.n)} things are waiting on you.`,
+      title: 'Each is listed below, with what it is and where it goes.',
+      meaning: [
+        'None of these is a single yes or no I can put in front of you — a test waiting to be listed, something the Workshop needs from you — so the list is their honest shape.',
+      ],
+      facts: [['Waiting', String(a.n)], ['If you do nothing', 'they keep waiting; none of them expires on its own']],
+      open: { label: 'See what is waiting', href: '/foundry/decisions' },
+      technical: `${String(a.n)} from attention.waitingOn`,
+    });
   }
 
   if (a.kind === 'read_the_result') {
@@ -2309,7 +2345,9 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
       return html`<div class="said"><p>There is nothing waiting on you at the moment,
         so there is nothing to explain yet.</p></div>`;
     }
-    const named = a.kind === 'read_the_result'
+    const named = a.kind === 'queued'
+      ? `the ${a.n === 1 ? 'thing' : `${String(a.n)} things`} waiting on you`
+      : a.kind === 'read_the_result'
       ? `what the world said about ${a.title}`
       : a.kind === 'owed_to_buyer'
       ? `what a buyer is owed on ${a.obligation.experimentTitle}`
@@ -2616,14 +2654,18 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
       ${s.checks.length ? html`<p>I checked ${count(s.checks.length, 'thing')} about myself.
         ${drifted.length === 0 ? 'All of them still match.'
     : `${count(drifted.length, 'thing')} went out of step.`}</p>` : ''}
-      ${a === null ? html`<p>Nothing that needs you.</p>` : ''}
+      ${a === null ? html`<p>Nothing that needs you.</p>`
+    : a.kind === 'queued' ? html`<p>${count(a.n, 'thing')} waiting on you, on <a href="/foundry/decisions">Decisions</a>.</p>`
+      : html`<p>One thing needs you; it is on your first screen.</p>`}
     </div>`;
   }
 
   if (key === 'needs') {
     return a === null
       ? html`<div class="said"><p>Nothing. I will tell you the moment that changes.</p></div>`
-      : html`<div class="said"><p>The one thing above.</p></div>`;
+      : a.kind === 'queued'
+        ? html`<div class="said"><p>${count(a.n, 'thing')} waiting on you, listed on <a href="/foundry/decisions">Decisions</a>.</p></div>`
+        : html`<div class="said"><p>The one thing above.</p></div>`;
   }
 
   return html`<div class="said">
@@ -2810,6 +2852,10 @@ foundryShellRoutes.get('/foundry', async (c) => {
   const lastDone = live ? null : (await experimentLedger(s.ownerId)).find((l) => l.settled && l.settledAt !== null
     && Date.parse(/[TZ]/.test(l.settledAt) ? l.settledAt : `${l.settledAt.replace(' ', 'T')}Z`) >= fortnight) ?? null;
   const lastOutcome = lastDone ? await outcomeOf(lastDone.id) : null;
+  const lastDoubt = lastDone ? (await (async () => {
+    const { doubtsAboutTheInstrument } = await import('../../services/venture/the-instrument.js');
+    return doubtsAboutTheInstrument(lastDone.id);
+  })()).length > 0 : false;
   const paidCents = await paidAcrossExperiments(s.ownerId);
   // HEALTH AS A STATE. One reader answers what failed, whether it recovers on
   // its own and whether he is needed; the tile shows the word and Controls
@@ -2897,7 +2943,13 @@ foundryShellRoutes.get('/foundry', async (c) => {
         <dd class="v">${live ? html`<span class="state ${live.state === 'running' ? 'ok' : 'watch'}">${live.stateLabel}</span>`
     : lastOutcome ? html`<span class="state ${lastOutcome.word === 'surprised' ? 'bad' : lastOutcome.word === 'partly' ? 'watch' : lastOutcome.word === 'as predicted' ? 'ok' : 'quiet'}">${lastOutcome.label}</span>`
       : html`<span class="state quiet none">None</span>`}</dd>
-        <dd class="d">${live ? `${String(live.exposure.sent)} of ${String(live.exposure.approved)} written to` : lastOutcome ? `${lastOutcome.settled ? 'settled' : 'ended'} ${lastOutcome.when ? lastOutcome.when.slice(0, 10) : ''}; nothing running` : 'nothing running'}</dd>
+        ${/* THE WORD CARRIES ITS DOUBT. A settled test whose reply path was
+              not working while it asked is still settled — the rule is sealed
+              — but showing the word alone, in a tile, is how a result taken on
+              a broken instrument becomes a fact the owner remembers. */ ''}
+        <dd class="d">${live ? `${String(live.exposure.sent)} of ${String(live.exposure.approved)} written to`
+    : lastOutcome ? `${lastOutcome.settled ? 'settled' : 'ended'} ${lastOutcome.when ? lastOutcome.when.slice(0, 10) : ''}${lastDoubt ? ' — on a channel that may not have carried a reply' : '; nothing running'}`
+      : 'nothing running'}</dd>
         <a class="door" href="${live ? `/foundry/experiments/${live.id}` : lastDone ? `/foundry/experiments/${lastDone.id}` : '/foundry/experiments'}" aria-label="${live ? live.title : lastOutcome ? `The last test: ${lastOutcome.label}` : 'Experiments'}"></a></div>
       ${/* THIS TILE SHOWED GROSS AND CALLED IT "Settled".
            The figure it drew is what buyers were charged for tests. It is not what is
