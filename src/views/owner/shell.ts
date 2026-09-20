@@ -242,6 +242,12 @@ export function ago(iso: string, now: Date = new Date()): string {
 /** How many things wait behind a door, when the screen knows. */
 export type DoorCounts = Partial<Record<Place, number>>;
 
+// ONE WORD FOR ONE PLACE (views/owner/labels.ts). The rail, the More sheet and
+// every route's crumbs read the same name, so a door cannot be "Discover" here
+// and "Searching" two screens later.
+import { ADDRESSES, LABELS, READINGS } from './labels.js';
+export { ADDRESSES, LABELS, READINGS };
+
 const ICONS = {
   home: '<svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/></svg>',
   decisions: '<svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg>',
@@ -268,12 +274,12 @@ const ICONS = {
  */
 const MORE_PLACES: ReadonlySet<Place> = new Set<Place>(['decisions', 'discover', 'activity', 'money', 'controls']);
 const MORE_SHEET: ReadonlyArray<{ href: string; label: string; key: Place | null; icon: string }> = [
-  { href: '/foundry/decisions', label: 'Decisions', key: 'decisions', icon: ICONS.decisions },
+  { href: ADDRESSES.decisions, label: LABELS.decisions, key: 'decisions', icon: ICONS.decisions },
   { href: '/foundry/charter', label: 'The charter', key: null, icon: MARK.charter },
-  { href: '/foundry/money', label: 'Economics', key: 'money', icon: ICONS.money },
-  { href: '/foundry/activity', label: 'Activity', key: 'activity', icon: ICONS.activity },
-  { href: '/foundry/controls', label: 'Controls', key: 'controls', icon: ICONS.controls },
-  { href: '/foundry/searching', label: 'Discover', key: 'discover', icon: ICONS.discover },
+  { href: ADDRESSES.money, label: LABELS.money, key: 'money', icon: ICONS.money },
+  { href: ADDRESSES.activity, label: LABELS.activity, key: 'activity', icon: ICONS.activity },
+  { href: ADDRESSES.controls, label: LABELS.controls, key: 'controls', icon: ICONS.controls },
+  { href: ADDRESSES.discover, label: LABELS.discover, key: 'discover', icon: ICONS.discover },
   { href: '/foundry/public-workshop', label: 'Workshop', key: null, icon: MARK.sent },
   { href: '/foundry/roadmap', label: 'Roadmap', key: null, icon: MARK.changed },
   { href: '/foundry/absence', label: 'Absence test', key: null, icon: MARK.watching },
@@ -349,15 +355,15 @@ ${/* ONE ENTRANCE. This was a GET to /foundry?q=, which reaches the question
 ${companyBar(where)}
 <nav class="places${where && where.scope.kind === 'company' && where.local.length ? ' behind' : ''}" aria-label="Places"><div>
   <header class="rail-brand"><span class="forge-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M16 3v26M7 10c5 0 9 6 9 6s-4 6-9 6c0-6 4-12 9-12Zm18 0c-5 0-9 6-9 6s4 6 9 6c0-6-4-12-9-12Z"/></svg></span><span><b>Foundry</b><small>Private Lab for Digital Income Streams</small></span></header>
-  ${door('/foundry', 'foundry', 'Home', ICONS.home, lit, counts)}
-  ${door('/foundry/decisions', 'decisions', 'Decisions', ICONS.decisions, lit, counts, true)}
-  ${door('/foundry/companies', 'companies', 'Portfolio', ICONS.portfolio, lit, counts)}
-  ${door('/foundry/searching', 'discover', 'Discover', ICONS.discover, lit, counts, true)}
-  ${door('/foundry/experiments', 'experiments', 'Experiments', ICONS.experiments, lit, counts)}
-  ${door('/foundry/inbox', 'inbox', 'Inbox', ICONS.inbox, lit, counts)}
-  ${door('/foundry/activity', 'activity', 'Activity', ICONS.activity, lit, counts, true)}
-  ${door('/foundry/money', 'money', 'Economics', ICONS.money, lit, counts, true)}
-  ${door('/foundry/controls', 'controls', 'Controls', ICONS.controls, lit, counts, true)}
+  ${door(ADDRESSES.foundry, 'foundry', LABELS.foundry, ICONS.home, lit, counts)}
+  ${door(ADDRESSES.decisions, 'decisions', LABELS.decisions, ICONS.decisions, lit, counts, true)}
+  ${door(ADDRESSES.companies, 'companies', LABELS.companies, ICONS.portfolio, lit, counts)}
+  ${door(ADDRESSES.discover, 'discover', LABELS.discover, ICONS.discover, lit, counts, true)}
+  ${door(ADDRESSES.experiments, 'experiments', LABELS.experiments, ICONS.experiments, lit, counts)}
+  ${door(ADDRESSES.inbox, 'inbox', LABELS.inbox, ICONS.inbox, lit, counts)}
+  ${door(ADDRESSES.activity, 'activity', LABELS.activity, ICONS.activity, lit, counts, true)}
+  ${door(ADDRESSES.money, 'money', LABELS.money, ICONS.money, lit, counts, true)}
+  ${door(ADDRESSES.controls, 'controls', LABELS.controls, ICONS.controls, lit, counts, true)}
   <a class="more-door${MORE_PLACES.has(lit) ? ' on' : ''}" href="#more" aria-haspopup="true"${MORE_PLACES.has(lit) ? raw(' aria-current="page"') : ''}>${raw(ICONS.more)}More</a>
   ${railExtra(where)}
 </div></nav>

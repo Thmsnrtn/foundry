@@ -18,6 +18,7 @@ import type { HtmlEscapedString } from 'hono/utils/html';
 import { query, realCompany } from '../../db/client.js';
 import { money } from '../../services/founder/portfolio.js';
 import {
+  ADDRESSES, LABELS,
   LADDER_IN_PLAIN_WORDS, context, count, frameFor, page, placeHead, plainly, readCompany,
   extrasFor, standingPermission, theOneThing, theRestOfTheQueue, waitingList, whatNeedsHim,
 } from './foundry-shell.js';
@@ -469,7 +470,7 @@ placeRoutes.get('/foundry/why/:kind/:id', async (c: any) => {
     crumbs: [{ href: '/foundry', label: 'Foundry' },
       ...(why.object.kind === 'company'
         ? [{ href: '/foundry/companies', label: 'Portfolio' }, { href: why.object.href, label: why.object.name }]
-        : [{ href: '/foundry/searching', label: 'Searching' }]),
+        : [{ href: ADDRESSES.discover, label: LABELS.discover }]),
       { href: c.req.path, label: 'Why' }],
     scope: why.object.kind === 'company' && why.object.id
       ? { kind: 'company', id: why.object.id, name: why.object.name }
@@ -630,8 +631,8 @@ placeRoutes.get('/foundry/searching', async (c: any) => {
   const buried = await m.graveyardFor(founderId, 10);
   const past = await m.pastSearches(founderId, 5);
   const frame: Where = {
-    eyebrow: 'Searching',
-    crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: '/foundry/searching', label: 'Searching' }],
+    eyebrow: LABELS.discover,
+    crumbs: [{ href: ADDRESSES.foundry, label: 'Foundry' }, { href: ADDRESSES.discover, label: LABELS.discover }],
     scope: { kind: 'searching', id: progress?.mandate.id ?? null, name: 'the search' },
     local: [], chips: progress ? [progress.mandate.evidenceMode === 'reference' ? 'invented' : 'real',
       `${String(progress.looked)} looked at`, `${String(progress.open)} open`, `${String(progress.rejected)} buried`] : [],

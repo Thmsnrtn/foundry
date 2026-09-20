@@ -48,6 +48,43 @@ export function nextPassAfter(now: Date): string {
   return next.toISOString();
 }
 
+/**
+ * WHAT TODAY REQUIRED AND DID NOT GET. Read from the work's own rows rather
+ * than from whether a job returned: a search standing open while nothing was
+ * observed all day, and a test whose window has closed while the rule that
+ * settles it has not run. Each is said in the owner's words, or nothing is.
+ */
+async function whatTheDayRequired(founderId: string, now: Date): Promise<string[]> {
+  const out: string[] = [];
+  const today = now.toISOString().slice(0, 10);
+  const { currentMandate } = await import('../venture/mandate.js');
+  const mandate = await currentMandate(founderId);
+  // A SEARCH OPENED TODAY HAS NOT HAD A MORNING YET. The day's requirement is
+  // a requirement of days that have happened, not of the minute he spoke.
+  const openedBeforeToday = mandate !== null && String(mandate.openedAt).slice(0, 10) < today;
+  if (openedBeforeToday) {
+    const looked = Number(((await query(
+      `SELECT COUNT(*) AS n FROM market_retrievals WHERE founder_id = ? AND date(retrieved_at) = ?`,
+      [founderId, today])).rows[0] as Record<string, unknown>).n);
+    if (looked === 0) {
+      out.push('a search is open and nothing was looked at today — the morning ran and observed nothing');
+    }
+  }
+  // A test whose window has closed and which the rule has not settled: the
+  // settlement is the day's work and it did not happen.
+  const overdue = (await query(
+    `SELECT COUNT(*) AS n FROM venture_experiments e
+      WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.decision = 'approved'
+        AND e.ran_at IS NULL AND e.retired_at IS NULL AND e.validity = 'valid'
+        AND e.settles_when IS NOT NULL
+        AND EXISTS (SELECT 1 FROM experiment_exposures x WHERE x.experiment_id = e.id
+                     AND datetime(x.placed_at, '+' || COALESCE(json_extract(e.settles_when, '$.withinDays'), 30) || ' days') < datetime(?))`,
+    [founderId, now.toISOString()])).rows[0] as Record<string, unknown>;
+  const n = Number(overdue.n);
+  if (n > 0) out.push(`${String(n)} ${n === 1 ? 'test has' : 'tests have'} passed the window the sealed rule was given and ${n === 1 ? 'has' : 'have'} not been settled`);
+  return out;
+}
+
 export async function healthOf(founderId: string, now: Date = new Date()): Promise<EstateHealth> {
   const loops = await getFailingInstitutionLoops(now);
   const blocked = await whatIsBlocked(founderId);
@@ -60,9 +97,18 @@ export async function healthOf(founderId: string, now: Date = new Date()): Promi
     .filter(([, v]) => v?.status === 'needs_attention')
     .map(([k, v]) => `${k === 'replyInbox' ? 'the reply inbox' : k === 'site' ? 'the public site' : k === 'sending' ? 'email sending' : k}: ${v.detail}`);
 
+  // WHAT THE DAY REQUIRED, AND WHETHER IT WAS DONE. A routine that returns is
+  // not a routine that did its work: for a fortnight the morning could report
+  // a clean pass having looked at nothing, because the pass itself succeeded.
+  // What the day required is read from the day's own facts — a search open
+  // with nothing observed, a test past its window still unsettled — and said
+  // as waiting, with the reason, never as healthy.
+  const undone = await whatTheDayRequired(founderId, now);
+
   const failed = [
     ...blocked.map((b) => `${b.attempting} — ${b.because ?? 'blocked'}`),
     ...loops.map((l) => l.stoppedRunning ? `${l.label} has not run for longer than it should` : `${l.label} failed ${String(l.consecutiveFailures)} times running`),
+    ...undone,
     ...workshopNeeds,
   ];
   // LAST HEALTHY IS A DATE THE ESTATE HAS. It was read off the FAILING loops,
@@ -88,7 +134,7 @@ export async function healthOf(founderId: string, now: Date = new Date()): Promi
   const ownerAction = owedNeedingHim[0]?.asksHim
     ?? blocked.find((b) => b.ownerAction)?.ownerAction ?? (workshopNeeds.length ? workshopNeeds[0] ?? null : null);
 
-  const state: EstateState = blocked.length ? 'blocked' : (loops.length || workshopNeeds.length) ? 'degraded' : 'ok';
+  const state: EstateState = blocked.length ? 'blocked' : (loops.length || workshopNeeds.length || undone.length) ? 'degraded' : 'ok';
   return {
     state,
     word: state === 'ok' ? 'Healthy'

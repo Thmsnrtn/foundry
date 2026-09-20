@@ -64,7 +64,9 @@ describe('Home is the Founder Cockpit', () => {
     const body = await read('/foundry');
     const glance = /<dl class="glance"[\s\S]*?<\/dl>/.exec(body)?.[0] ?? '';
     const tiles = labels(glance, /<dt class="k"><i class="mk"[^>]*>[\s\S]*?<\/i>([^<]+)<\/dt>/g);
-    expect(tiles.slice(0, 3)).toEqual(['Estate', 'Autonomy', 'Needs you']);
+    // ONE WORD FOR ONE PLACE (views/owner/labels.ts): what Controls calls
+    // Health, Home called Estate, and a reviewer read them as two readings.
+    expect(tiles.slice(0, 3)).toEqual(['Health', 'Autonomy', 'Needs you']);
     expect(tiles[3]).toMatch(/^Experiments?$/);
     expect(tiles.slice(4)).toEqual(['Yours', 'Watching']);
     // Every tile is a door: the whole tile is the link.
@@ -127,7 +129,7 @@ describe('Controls is the owner envelope', () => {
     expect(stop).toBeGreaterThan(0);
     expect(grid).toBeGreaterThan(stop);
     expect(body).toMatch(/action="\/autopilot\/panic"[^>]*data-confirm=/);
-    for (const card of ['System health', 'What I may do on my own', 'Communication mode', 'Money', 'Owner exclusions']) {
+    for (const card of ['Health', 'What I may do on my own', 'Communication mode', 'Money', 'Owner exclusions']) {
       expect(body, card).toContain(`</i>${card}</h2>`);
     }
   });

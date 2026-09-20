@@ -97,7 +97,7 @@ phones('the estate, journey by journey', () => {
   it('1. healthy, nothing to do: the glance says so before any sentence, and no button asks anything', async () => {
     const seen = await onThePhone('/foundry');
     expect(seen.overflowX).toBe(0);
-    expect(seen.firstScreen).toContain('Estate | Healthy');
+    expect(seen.firstScreen).toContain('Health | Healthy');
     expect(seen.firstScreen).toContain('Needs you | None');
     expect(seen.text).not.toMatch(/routine/i);
     expect(seen.oneThingTop).toBeNull();
@@ -107,7 +107,7 @@ phones('the estate, journey by journey', () => {
     await query(`INSERT INTO job_health (job_name, consecutive_failures, last_failure_at, last_error_name, last_success_at)
       VALUES ('institutional_judgment_tick', 3, datetime('now'), 'TypeError', datetime('now','-2 days'))`);
     const seen = await onThePhone('/foundry');
-    expect(seen.firstScreen).toMatch(/Estate \| 1 thing needs looking at/);
+    expect(seen.firstScreen).toMatch(/Health \| 1 thing needs looking at/);
     expect(seen.text).toMatch(/system degraded/i);
     expect(seen.text).toContain('Recovering');
     expect(seen.text).toContain('automatically');
@@ -192,7 +192,7 @@ phones('the estate, journey by journey', () => {
     await recordRun(X, OWNER, { state: 'blocked', attempting: 'writing to the businesses you approved',
       because: 'the Workshop has no sending identity', dependency: 'resend', ownerAction: 'connect sending in the Workshop', progressed: false });
     const seen = await onThePhone('/foundry');
-    expect(seen.firstScreen).toContain('Estate | 1 pass blocked');
+    expect(seen.firstScreen).toContain('Health | 1 pass blocked');
     expect(seen.firstScreen).toContain('connect sending in the Workshop');
     await recordRun(X, OWNER, { state: 'success', attempting: 'writing to the businesses you approved', because: null, dependency: null, ownerAction: null, progressed: true });
   });

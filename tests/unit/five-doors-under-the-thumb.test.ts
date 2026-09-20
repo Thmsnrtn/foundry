@@ -9,6 +9,7 @@ import { Hono } from 'hono';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
+import { ADDRESSES } from '../../src/views/owner/labels.js';
 
 // =============================================================================
 // FIVE DOORS UNDER THE THUMB.
@@ -54,10 +55,13 @@ const lit = (html: string): string[] => anchors(html).filter((a) => a.cls.split(
 
 describe('the structure', () => {
   it('renders four phone doors, five on the rail only, and the More door; the Ask tab is gone', () => {
-    const phone = [...shell.matchAll(/\$\{door\('([^']+)', '[^']+', '[^']+', ICONS\.[a-z]+, lit, counts\)\}/g)].map((m) => m[1]);
-    const desk = [...shell.matchAll(/\$\{door\('([^']+)', '[^']+', '[^']+', ICONS\.[a-z]+, lit, counts, true\)\}/g)].map((m) => m[1]);
-    expect(phone).toEqual(['/foundry', '/foundry/companies', '/foundry/experiments', '/foundry/inbox']);
-    expect(desk).toEqual(['/foundry/decisions', '/foundry/searching', '/foundry/activity', '/foundry/money', '/foundry/controls']);
+    // The doors name their PLACE; the place's address and word come from the
+    // one vocabulary (views/owner/labels.ts), so this reads the keys and
+    // resolves them there rather than re-typing the addresses here.
+    const phone = [...shell.matchAll(/\$\{door\(ADDRESSES\.\w+, '([^']+)', LABELS\.\w+, ICONS\.[a-z]+, lit, counts\)\}/g)].map((m) => m[1]);
+    const desk = [...shell.matchAll(/\$\{door\(ADDRESSES\.\w+, '([^']+)', LABELS\.\w+, ICONS\.[a-z]+, lit, counts, true\)\}/g)].map((m) => m[1]);
+    expect(phone.map((k) => ADDRESSES[k as keyof typeof ADDRESSES])).toEqual(['/foundry', '/foundry/companies', '/foundry/experiments', '/foundry/inbox']);
+    expect(desk.map((k) => ADDRESSES[k as keyof typeof ADDRESSES])).toEqual(['/foundry/decisions', '/foundry/searching', '/foundry/activity', '/foundry/money', '/foundry/controls']);
     expect(shell).toContain('class="more-door');
     expect(shell).not.toContain('ask-door');
     expect(shell).toContain('class="ask-fab" href="#ask-foundry"');
@@ -87,7 +91,7 @@ describe('the rendered bar', () => {
   });
 
   it('lights More on a place the sheet holds, and marks that place inside the sheet', async () => {
-    for (const [path, label] of [['/foundry/decisions', 'Decisions'], ['/foundry/money', 'Economics'], ['/foundry/controls', 'Controls'], ['/foundry/charter', 'The charter'], ['/foundry/searching', 'Discover']] as const) {
+    for (const [path, label] of [['/foundry/decisions', 'Decisions'], ['/foundry/money', 'Economics'], ['/foundry/controls', 'Controls'], ['/foundry/charter', 'The charter'], ['/foundry/searching', 'Searching']] as const) {
       const html = await page(path);
       expect(lit(html), path).toEqual(['More']);
       const current = [...sheet(html).matchAll(/<a href="([^"]+)" aria-current="page">/g)].map((m) => m[1]);

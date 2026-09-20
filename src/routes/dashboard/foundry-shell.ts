@@ -217,6 +217,14 @@ export interface OwnerState {
   owed: import('../../services/institution/calibration.js').AwaitingAnswer[];
   /** What buyers are owed, in the one reading (venture/obligations.ts). */
   obligations: import('../../services/venture/obligations.js').Obligation[];
+  /**
+   * A TEST THE WORLD SETTLED SINCE HE LAST LOOKED, and what it came to. It is
+   * the one thing until he has seen it once: a result nobody reads is a test
+   * nobody learns from, and the queue had no tier for an answer that asks
+   * nothing of him.
+   */
+  settledSinceHeLooked: { experimentId: string; title: string;
+    outcome: import('../../services/founder/what-happened.js').Outcome } | null;
   /** How often this institution has been right before, when it has been graded. */
   record: string;
   search: {
@@ -462,6 +470,12 @@ async function readOwnerState(
   // are all honestly empty, and the institutional half of the page — what needs
   // him across everything he owns — is unaffected.
   const self = productId ?? '';
+  // WHEN HE LAST LOOKED, recorded once for the whole screen. Two readings need
+  // it — what changed while he was away, and a test the world settled since —
+  // and `markVisit` moves the marker, so asking twice would make the second
+  // reading believe he had just been here.
+  const { markVisit, whatChangedSince } = await import('../../services/founder/what-changed.js');
+  const lastLookedAt = await markVisit(founderId);
   const product = productId === null ? undefined : (await query(
     `SELECT name, created_at, operating_budget_monthly_usd, ai_cost_trailing_30d_usd, github_repo_url
        FROM products WHERE id = ?`, [self])).rows[0] as Record<string, unknown> | undefined;
@@ -593,14 +607,24 @@ async function readOwnerState(
       const { obligationsFor } = await import('../../services/venture/obligations.js');
       return obligationsFor(founderId);
     })(),
+    settledSinceHeLooked: await (async () => {
+      // SINCE HE LAST LOOKED, from the visit the page itself just recorded.
+      // Before the first visit there is no "since", so nothing is new.
+      if (lastLookedAt === null) return null;
+      const r = (await query(
+        `SELECT e.id, e.what_we_do, e.ran_at FROM venture_experiments e
+          WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.ran_at IS NOT NULL
+            AND datetime(e.ran_at) > datetime(?)
+          ORDER BY e.ran_at DESC LIMIT 1`, [founderId, lastLookedAt])).rows[0] as Record<string, unknown> | undefined;
+      if (!r) return null;
+      const { outcomeOf: read } = await import('../../services/founder/what-happened.js');
+      const outcome = await read(String(r.id));
+      return outcome === null ? null : { experimentId: String(r.id), title: String(r.what_we_do), outcome };
+    })(),
     companyName: String(product?.name ?? 'this company'),
     firstName: founderName.split(' ')[0] || '',
     routinesHealthy: Number(health?.n ?? 0),
-    changed: await (async () => {
-      const { markVisit, whatChangedSince } = await import(
-        '../../services/founder/what-changed.js');
-      return whatChangedSince(founderId, await markVisit(founderId));
-    })(),
+    changed: await whatChangedSince(founderId, lastLookedAt),
     watching: await (async () => {
       // FOUNDRY IS A COMPANY, AND IT IS NOT ONE OF HIS BUSINESSES.
       //
@@ -875,6 +899,8 @@ async function readOwnerState(
  */
 export type Attention =
   | { kind: 'owed_to_buyer'; obligation: import('../../services/venture/obligations.js').Obligation; others: number }
+  | { kind: 'read_the_result'; experimentId: string; title: string;
+      outcome: import('../../services/founder/what-happened.js').Outcome; record: string }
   | { kind: 'grade'; experimentId: string; about: string; expected: string;
       wouldDisprove: string | null; dueAt: string | null; record: string }
   | { kind: 'spend'; actId: string; productId: string; companyName: string;
@@ -1033,6 +1059,17 @@ export function whatNeedsHim(s: OwnerState): Attention {
   const housekeeping = asking('internal');
   if (housekeeping) return housekeeping;
 
+  // THE WORLD ANSWERED WHILE HE WAS AWAY, and it asks nothing of him — which
+  // is why it never reached this screen at all: it stood behind every act and
+  // every ask, and a test settled on the ninth was still unread on the
+  // twentieth. NEEDS-NOTHING STILL DOES NOT OUTRANK NEEDS-HIM, so it sits
+  // here, beneath everything waiting on an answer and above an empty screen:
+  // the one thing when nothing else is, once, until he has seen it.
+  if (s.settledSinceHeLooked) {
+    return { kind: 'read_the_result', experimentId: s.settledSinceHeLooked.experimentId,
+      title: s.settledSinceHeLooked.title, outcome: s.settledSinceHeLooked.outcome, record: s.record };
+  }
+
   // AN EARNED PERMISSION REQUEST IS THE MOST CONSEQUENTIAL THING FOUNDRY ASKS
   // OF ITS OWN ACCORD, so it comes before anything it is merely offering to
   // notice — and beneath everything above, each of which is either a promise,
@@ -1094,11 +1131,11 @@ export function whatNeedsHim(s: OwnerState): Attention {
 // now and every place consumes them from there. Re-exported here so the five
 // consumers that imported them from this file keep working; the removal path
 // is to point them at the shell and delete these lines.
-export { page, placeHead, frameFor } from '../../views/owner/shell.js';
+export { ADDRESSES, LABELS, READINGS, page, placeHead, frameFor } from '../../views/owner/shell.js';
 export type { Where, Place, DoorCounts } from '../../views/owner/shell.js';
 import type { Where } from '../../views/owner/shell.js';
 import { consequenceOfAct, effectInWords, labelFor } from '../../services/founder/what-it-would-do.js';
-import { page, placeHead, frameFor, mark, ago } from '../../views/owner/shell.js';
+import { ADDRESSES, LABELS, READINGS, page, placeHead, frameFor, mark, ago } from '../../views/owner/shell.js';
 type H = HtmlEscapedString | Promise<HtmlEscapedString>;
 
 /**
@@ -1371,6 +1408,29 @@ export function theOneThing(a: Attention, extras: OneThingExtras = {}): HtmlEsca
       <dt>Money at risk</dt><dd>${h.moneyAtRisk}</dd>
       <dt>Owner action</dt><dd>${h.ownerAction ?? 'none'}</dd>
     </dl>` : ''}</section>`;
+  }
+
+  if (a.kind === 'read_the_result') {
+    const o = a.outcome;
+    return decisionCard({
+      act: 'Recognition',
+      question: 'The world answered.',
+      title: `${a.title} — ${o.label.toLowerCase()}.`,
+      meaning: [
+        o.meaning,
+        o.reason ?? 'The rule you sealed settled it; the page carries the count it settled on.',
+        'Nothing is asked of you here. I am showing it once because a result nobody reads is a test nobody learns from.',
+      ].filter(Boolean),
+      facts: [
+        ['What happened', o.label],
+        ['Settled', o.when ? o.when.slice(0, 10) : 'not recorded'],
+        ['What it establishes', o.establishes ?? 'the page says'],
+        ['What it does not', o.doesNotEstablish ?? 'the page says'],
+        ['My record', a.record],
+      ],
+      open: { label: 'Read what happened', href: `/foundry/experiments/${a.experimentId}` },
+      technical: `${o.word} · experiment ${a.experimentId}`,
+    });
   }
 
   if (a.kind === 'owed_to_buyer') {
@@ -2249,7 +2309,9 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
       return html`<div class="said"><p>There is nothing waiting on you at the moment,
         so there is nothing to explain yet.</p></div>`;
     }
-    const named = a.kind === 'owed_to_buyer'
+    const named = a.kind === 'read_the_result'
+      ? `what the world said about ${a.title}`
+      : a.kind === 'owed_to_buyer'
       ? `what a buyer is owed on ${a.obligation.experimentTitle}`
       : a.kind === 'grade'
       ? `what happened with ${a.about}`
@@ -2804,7 +2866,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
   const { envelopeReading } = await import('../../services/institution/charter.js');
   const envelope = await envelopeReading(s.ownerId);
   const portfolioState = html`<dl class="glance" aria-label="At a glance">
-      <div class="tile door"><dt class="k">${mark('estate')}Estate</dt>
+      <div class="tile door"><dt class="k">${mark('estate')}${READINGS.health}</dt>
         <dd class="v"><span class="state ${estate.cls}">${estate.word}</span></dd>
         <dd class="d">${estate.detail}</dd><a class="door" href="/foundry/controls" aria-label="Controls"></a></div>
       <div class="tile door"><dt class="k">${mark('autonomy')}Autonomy</dt>
@@ -2839,8 +2901,12 @@ foundryShellRoutes.get('/foundry', async (c) => {
         <a class="door" href="/foundry/money" aria-label="Money"></a></div>
       <div class="tile door"><dt class="k">${mark('watching')}Watching</dt>
         <dd class="v">${String(s.watching.real)} <span class="dim">${s.watching.real === 1 ? 'company' : 'companies'}</span></dd>
+        ${/* THE SHARED THING, BY NAME. "a shared dependency" told him a
+              concentration existed and not what it was, so the one fact that
+              would make him act — which provider or channel they all stand on
+              — was a click away on a page he had no reason to open. */ ''}
         <dd class="d">${s.watching.real === 0 ? 'name one to start'
-    : glance.concentration ? 'a shared dependency' : s.watching.real > 1 ? 'no shared dependency' : s.watching.itself ? 'and myself' : 'all my attention'}</dd>
+    : glance.concentration ? glance.concentration : s.watching.real > 1 ? 'no shared dependency' : s.watching.itself ? 'and myself' : 'all my attention'}</dd>
         <a class="door" href="/foundry/companies" aria-label="Portfolio"></a></div>
     </dl>`;
 
@@ -2872,7 +2938,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
     local: [
       { href: '/foundry/companies', label: 'Portfolio', count: s.watching.real + s.watching.invented, on: false },
       { href: '/foundry/decisions', label: 'Decisions', count: Number(waiting[0]?.n ?? 0), on: false },
-      { href: '/foundry/searching', label: s.search ? 'Searching' : 'Not searching', count: null, on: false },
+      { href: ADDRESSES.discover, label: LABELS.discover, count: null, on: false },
       { href: '/foundry/public-workshop', label: 'Workshop', count: null, on: false },
       { href: '/foundry/inbox', label: 'Inbox', count: mail.waiting || null, on: false },
       // WHAT HAPPENED HAS A DOOR TOO. Everything on it was already recorded and
@@ -2943,7 +3009,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
       <p class="act">Owner action</p>
       <h2>${needsN === 0 ? 'None required' : `${String(needsN)} waiting`}</h2>
       <p class="quiet">${needsN === 0 ? 'Nothing is waiting on your judgment.' : 'Nothing asks for you first; the rest is listed below.'}</p>
-      ${needsN === 0 ? html`<p class="lines"><span class="state ${estate.cls}">Estate ${estate.word.toLowerCase()}</span> <span class="state ${autonomy.nothingWithoutHim ? 'ok' : 'watch'}">Autonomy ${autonomy.nothingWithoutHim ? 'asks first' : 'within grants'}</span></p>` : ''}
+      ${needsN === 0 ? html`<p class="lines"><span class="state ${estate.cls}">${READINGS.health} ${estate.word.toLowerCase()}</span> <span class="state ${autonomy.nothingWithoutHim ? 'ok' : 'watch'}">Autonomy ${autonomy.nothingWithoutHim ? 'asks first' : 'within grants'}</span></p>` : ''}
     </section>` : '';
 
   // ASK IS A FIRST-CLASS SURFACE, NOT A BOLTED-ON TEXTAREA. When he asked
@@ -6359,7 +6425,7 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
     ${standingPermission(s)}
 
     <div class="ctl-grid">
-    ${card('estate', 'System health', html`
+    ${card('estate', READINGS.health, html`
       <p class="lines"><span class="state ${health.state === 'ok' ? 'ok' : health.state === 'degraded' ? 'watch' : 'bad'}">${health.word}</span></p>
       <dl class="facts">
         <dt>What failed</dt><dd>${health.failed.length ? health.failed.join('; ') : 'nothing'}</dd>
