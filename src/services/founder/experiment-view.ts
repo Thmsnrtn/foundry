@@ -68,7 +68,7 @@ export interface ExperimentView {
   steps: Step[];
   allow: { possible: boolean; reason: string | null; explanation: string[] };
   exposure: { approved: number; excluded: number; pending: number; pendingWebForm: number; sent: number; delivered: number; bounced: number; remaining: number; killAt: number | null };
-  money: { currency: string; allowanceCents: number; spentCents: number; remainingCents: number; paidCents: number; payments: number; refundedCents: number; refunds: number; paidYet: boolean };
+  money: ExperimentMoney;
   offer: { price: string; oneTime: boolean; paymentLinkUrl: string | null; offerQuality: { ok: boolean; failures: string[] } | null; deliverable: { title: string; pulledAt: string | null; items: number; quality: { ok: boolean; failures: string[] } } | null; limits: string };
   rules: { success: string; stop: string[]; windowClosesAt: string | null; daysLeft: number | null };
   learned: { headline: string; detail: string; evidence: string };
@@ -86,6 +86,82 @@ export interface ExperimentView {
 const money = (cents: number, currency = 'USD') => `${currency.toUpperCase() === 'USD' ? '$' : ''}${(cents / 100).toFixed(2)}${currency.toUpperCase() === 'USD' ? '' : ` ${currency.toUpperCase()}`}`;
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 const KIND_WORDS: Record<string, string> = { offer_delivered: 'businesses have received the offer', arrival: 'people have arrived at the offer', payment: 'payments', delivery: 'paying customers receive what they bought' };
+
+/**
+ * ONE READING OF A TEST'S MONEY. One approved $100 test read as $-100 on
+ * Home, "$100 more without asking" on Controls, "Spent $0.00" on its page and
+ * "$100 on a test" in the week-away letter — five figures, each correct about
+ * a different quantity, none reconciled. This is the one place the
+ * quantities are read side by side, each named for what it is, and every
+ * surface renders from it with its own label.
+ */
+export interface ExperimentMoney {
+  currency: string;
+  /** What the owner authorised for the test: its cost, as approved. Not spend. */
+  authorisedCents: number;
+  /** What the charter's envelope set aside for it, if it was let in under one. Not spend. */
+  carvedCents: number;
+  /** The standing allowance on the test's asset, and what is left of it. */
+  allowanceCents: number;
+  remainingCents: number;
+  /** What Foundry actually consumed against it: thinking and real outlay. */
+  spentCents: number;
+  /** What customers actually paid, and gave back. */
+  paidCents: number; payments: number; refundedCents: number; refunds: number; paidYet: boolean;
+  /** The one word for where the money stands. */
+  word: 'authorised' | 'spending' | 'settled' | 'none';
+  /** The reading as a sentence, for a letter or a line. */
+  sentence: string;
+}
+
+export async function moneyOfExperiment(experimentId: string): Promise<ExperimentMoney> {
+  const e = (await rows(
+    `SELECT e.cost_cents, e.ran_at, e.retired_at, e.decision,
+            (SELECT p.id FROM products p WHERE p.from_experiment_id = e.id AND p.deleted_at IS NULL) AS product_id
+       FROM venture_experiments e WHERE e.id = ?`, [experimentId]))[0];
+  if (!e) throw new Error('no such experiment');
+  const productId = e.product_id == null ? null : String(e.product_id);
+  const allowance = productId ? await allowanceFor(productId) : null;
+  // A SETTLED TEST STILL SPENT WHAT IT SPENT. Its allowance is withdrawn the
+  // day it settles, and the live-allowance reader then answers nothing — so
+  // the spend is read from the ledgers directly, from the day the budget was
+  // set, whether or not the budget still stands.
+  const last = productId ? (await rows(
+    `SELECT amount_cents, set_at FROM owner_allowances WHERE product_id = ? ORDER BY set_at DESC, rowid DESC LIMIT 1`, [productId]))[0] : undefined;
+  const spentSince = async (since: string): Promise<number> => {
+    const thinking = Number(((await rows(
+      `SELECT COALESCE(SUM(spent_cents), 0) AS c FROM ai_daily_spend WHERE scope = 'product' AND scope_id = ? AND date >= date(?)`, [productId, since]))[0] ?? {}).c ?? 0);
+    const outlay = Number(((await rows(
+      `SELECT COALESCE(SUM(CASE WHEN source = 'reversed' THEN -amount_cents ELSE amount_cents END), 0) AS c
+         FROM asset_money_spent WHERE product_id = ? AND date(recorded_at) >= date(?)`, [productId, since]))[0] ?? {}).c ?? 0);
+    return thinking + Math.max(0, outlay);
+  };
+  const carved = Number(((await rows(
+    `SELECT COALESCE(SUM(cents), 0) AS c FROM portfolio_envelope_carves WHERE experiment_id = ?`, [experimentId]))[0] ?? {}).c ?? 0);
+  const x = await exposureOf(experimentId);
+  const said = x ? await whatTheWorldSaid(x.id) : [];
+  const payments = said.filter((s) => s.kind === 'payment');
+  const refunds = said.filter((s) => s.kind === 'refund');
+  const paidCents = payments.reduce((n, s) => n + (s.amountCents ?? 0), 0);
+  const refundedCents = refunds.reduce((n, s) => n + (s.amountCents ?? 0), 0);
+  const currency = payments[0]?.currency ?? 'USD';
+  const authorisedCents = Number(e.cost_cents ?? 0);
+  const spentCents = allowance?.spentCents ?? (last ? await spentSince(String(last.set_at)) : 0);
+  const settled = e.ran_at != null || e.retired_at != null;
+  const word: ExperimentMoney['word'] = authorisedCents === 0 && paidCents === 0 ? 'none'
+    : settled ? 'settled' : spentCents > 0 || paidCents > 0 ? 'spending' : 'authorised';
+  const $ = (c: number) => `$${(c / 100).toFixed(2)}`;
+  const sentence = word === 'none' ? 'no money was set aside for it and none moved'
+    : `${$(authorisedCents)} set aside for it${carved > 0 ? ` (carved from the charter)` : ''}; ${$(spentCents)} of that spent; `
+      + `${paidCents === 0 ? 'nothing paid by anyone' : `${$(paidCents)} paid by customers`}${refundedCents > 0 ? `, ${$(refundedCents)} refunded` : ''}`;
+  return {
+    currency, authorisedCents, carvedCents: carved,
+    allowanceCents: allowance?.amountCents ?? (last ? Number(last.amount_cents) : authorisedCents),
+    remainingCents: allowance?.remainingCents ?? (settled ? 0 : authorisedCents),
+    spentCents, paidCents, payments: payments.length, refundedCents, refunds: refunds.length, paidYet: payments.length > 0,
+    word, sentence,
+  };
+}
 
 export async function getExperimentView(founderId: string, experimentId: string, now: Date = new Date()): Promise<ExperimentView | null> {
   const e = await experimentRow(experimentId);
@@ -214,10 +290,7 @@ export async function getExperimentView(founderId: string, experimentId: string,
     sent: Number(counts.sent ?? 0), delivered, bounced: Number(counts.bounced ?? 0), remaining: Math.max(0, ready.reachable - Number(counts.sent ?? 0)),
     killAt: rule?.atMost ?? null,
   };
-  const moneyView = {
-    currency: plan?.price.currency ?? 'USD', allowanceCents: allowance?.amountCents ?? e.costCents, spentCents: allowance?.spentCents ?? 0,
-    remainingCents: allowance?.remainingCents ?? e.costCents, paidCents, payments: payments.length, refundedCents, refunds: refunds.length, paidYet: payments.length > 0,
-  };
+  const moneyView: ExperimentMoney = { ...await moneyOfExperiment(experimentId), currency: plan?.price.currency ?? 'USD' };
   const dq = deliverable ? checkDeliverableQuality(deliverable, now) : null;
   const offerView = {
     price, oneTime: true, paymentLinkUrl: offer?.paymentLinkUrl ?? null, offerQuality: offer ? checkOfferQuality(offer) : null,

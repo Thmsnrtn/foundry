@@ -252,13 +252,19 @@ export async function whileYouWereAway(founderId: string, days = 7): Promise<Ret
   }
 
   for (const e of (await query(
-    `SELECT e.what_we_do, e.what_we_expect, e.what_happened, e.verdict, e.cost_cents
+    `SELECT e.id, e.what_we_do, e.what_we_expect, e.what_happened, e.verdict, e.cost_cents
        FROM venture_experiments e
       WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.ran_at >= datetime('now', ?)`,
     [founderId, since])).rows as unknown as Array<Record<string, unknown>>) {
     outcomes.push(`${String(e.what_we_do)}: ${String(e.what_happened)} - `
       + `${String(e.verdict) === 'as_predicted' ? 'as I expected' : `not what I expected (${String(e.what_we_expect)})`}`);
-    if (Number(e.cost_cents) > 0) moneyLines.push(`${money(Number(e.cost_cents))} on a test: ${String(e.what_we_do)}`);
+    // THE CEILING IS NOT THE SPEND. "$100 on a test" printed the amount
+    // approved under a heading that read as money gone; the one reading of a
+    // test's money says what was set aside and what of it actually went.
+    if (Number(e.cost_cents) > 0) {
+      const { moneyOfExperiment } = await import('./experiment-view.js');
+      moneyLines.push(`a test, ${String(e.what_we_do)}: ${(await moneyOfExperiment(String(e.id))).sentence}`);
+    }
   }
   // WHAT THE VENTURE DID, WHETHER OR NOT HE OWNS A COMPANY. Everything above
   // this line is scoped to owned companies, so with none the letter said

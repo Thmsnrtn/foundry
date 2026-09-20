@@ -579,7 +579,8 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
 
     ${fold('money', 'Money', `${cents(v.money.spentCents)} spent of ${cents(v.money.allowanceCents)}`, html`
       <dl class="facts">
-        <dt>Allowance</dt><dd>${cents(v.money.allowanceCents)}</dd>
+        <dt>Set aside</dt><dd>${cents(v.money.authorisedCents)}${v.money.carvedCents > 0 ? ` — carved from the charter` : ''}</dd>
+        <dt>Allowance standing</dt><dd>${cents(v.money.remainingCents)} of ${cents(v.money.allowanceCents)}</dd>
         <dt>Spent by Foundry</dt><dd>${cents(v.money.spentCents)}</dd>
         <dt>Paid by customers</dt><dd>${cents(v.money.paidCents, v.money.currency)} (${count(v.money.payments, 'payment')})</dd>
         <dt>Refunded</dt><dd>${cents(v.money.refundedCents, v.money.currency)} (${count(v.money.refunds, 'refund')})</dd>

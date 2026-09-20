@@ -33,6 +33,7 @@ import { Hono } from 'hono';
 import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import { query, realCompany, referenceCompany } from '../../db/client.js';
+import { PRE_CHARTER_THINKING_CENTS } from '../../services/institution/charter.js';
 import { money } from '../../services/founder/portfolio.js';
 import { selectedProductId } from '../../services/founder/selected-company.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
@@ -2385,7 +2386,7 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
         that asks you first.</p>`
     : html`<p><strong>No charter is signed</strong>, so nothing is sent or spent on my own
         say-so. I can look, design and seal a test; running one waits for your tap on it, or for
-        a charter. My thinking is bounded at $1 a day until one says otherwise.</p>`}
+        a charter. My thinking is bounded at $${(PRE_CHARTER_THINKING_CENTS / 100).toFixed(0)} a day until one says otherwise.</p>`}
       <p>${Number(tests.approved) === 0
     ? 'No test has been approved yet, so no test has spent anything.'
     : `${count(Number(tests.approved), 'test')} approved at ${dollars(Number(tests.approved_cents))} in all; ${count(Number(written.n), 'message')} sent to people under those tests; ${Number(tests.running) === 0 ? 'none running now' : `${count(Number(tests.running), 'test')} running now`}.`}</p>
@@ -2677,7 +2678,9 @@ foundryShellRoutes.get('/foundry', async (c) => {
       <div class="tile door"><dt class="k">${mark('cash')}Yours</dt>
         <dd class="v">${yours.figure.cents === null ? html`<span class="unknown">not known</span>`
     : html`${money(yours.figure.cents)}${yours.figure.quality === 'estimated' ? html` <span class="dim">est.</span>` : ''}`}</dd>
-        <dd class="d">${paidCents > 0 ? `of ${money(paidCents)} charged` : 'nothing paid yet'}</dd>
+        <dd class="d">${paidCents > 0 ? `of ${money(paidCents)} charged`
+    : (yours.authorisedCapital.cents ?? 0) > 0 ? `${money(yours.authorisedCapital.cents ?? 0)} set aside for tests, nothing paid yet`
+      : 'nothing paid yet'}</dd>
         <a class="door" href="/foundry/money" aria-label="Money"></a></div>
       <div class="tile door"><dt class="k">${mark('watching')}Watching</dt>
         <dd class="v">${String(s.watching.real)} <span class="dim">${s.watching.real === 1 ? 'company' : 'companies'}</span></dd>
@@ -4891,7 +4894,7 @@ async function ventureConfirmation(c: any, founderId: string, said: string): Pro
           real answer.</li>
         <li><strong>Nothing is sealed, sent or spent without authority</strong> — a sealed
           design waits for your tap, or for the charter, which lets it in within limits you
-          set. Research and design need neither; my thinking is bounded at $1 a day until a
+          set. Research and design need neither; my thinking is bounded at $${(PRE_CHARTER_THINKING_CENTS / 100).toFixed(0)} a day until a
           charter says otherwise.</li>
         <li><strong>Where you see it</strong> — Home says whether I am looking and what I
           am looking for; Experiments → Explore shows what has been found; steer it from

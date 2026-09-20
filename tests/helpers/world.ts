@@ -67,6 +67,10 @@ export async function seedProductionShape(opts: WorldOptions = {}): Promise<{ ex
   await establishPublicWorkshop({ founderId: OWNER });
   await setPostalAddress(OWNER, 'Thomas Norton\n11 Apex Drive Suite 300A #361\nMarlborough, MA 01752');
 
+  // The thinking behind the test is recorded before the decision, as it was
+  // in production: a decision on an unrecorded deliberation is refused.
+  const { reconsiderProof1 } = await import('../../src/services/venture/proof-1-deliberation.js');
+  await reconsiderProof1(OWNER);
   const { decideExperiment, recordResult } = await import('../../src/services/venture/validation.js');
   await decideExperiment({ experimentId: seeded.experimentId, decision: 'approved', by: `founder:${OWNER}`, via: 'its own authorisation' });
   if (!opts.unsettled) {
