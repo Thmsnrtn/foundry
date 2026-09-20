@@ -2299,3 +2299,15 @@ sentence naming Foundry is about the institution; "afford" is a money
 question; "stop pursuing this direction" stops; Explore says who closed the
 search. Boundary B follows: full chain, deploy, live verification.
 
+
+### One word, the sentences that land, learning that binds (2026-09-21)
+
+An experiment's outcome has one reader and one vocabulary on every surface;
+six owner sentences land at the door, including housekeeping as a confirmed,
+reversible act and the first commercial question answered from the rows; a
+settled test on a candidate refuses the same question by the same mechanism,
+narrows a different one, and leaves other candidates alone — proven on the
+world at day 25. Economic mechanisms read from named sources with grades
+(`ECONOMICS.md` § *Mechanisms with sources*). Boundary A: full chain, deploy,
+live verification. Next: the laboratory grows (outages, a portfolio, a phone
+width), the forms follow the evidence, the suite costs what it is worth.

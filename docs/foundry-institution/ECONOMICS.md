@@ -287,3 +287,71 @@ So the population narrows to shops with observed public-bid activity, and the
 same messages carry more information. This is not deferral: the surface is
 built, the ceiling is set, the stops are set, and endless pre-analysis is its
 own failure. Sensing sharpens the shot; it does not replace taking it.
+
+## Mechanisms with sources (2026-09-21)
+
+External economic writing was read for mechanisms, not playbooks. A mechanism
+is a cause that would still operate if Foundry never copied the author's
+tactics; a playbook is what worked for one author once. Each entry names the
+source, the mechanism extracted, what it depends on, an evidence grade, and
+whether it applies to Foundry now. Grades: **A** primary data the author
+measured and published; **B** a practitioner's account of their own business
+with numbers; **C** a practitioner's account without numbers, or a
+synthesis; **D** promotional or vendor-authored. Nothing here is a target, a
+forecast or a claim about any market Foundry has tested; the only market
+evidence Foundry holds is Experiment 001's null.
+
+### Demand, distribution, conversion and fulfilment are four questions
+
+Every source below answers one of four questions, and the institution keeps
+them apart because a test that answers one is routinely read as answering all
+four: **demand** (would anyone pay for this at all), **distribution** (can the
+people who would pay be reached at a cost below what they pay), **conversion**
+(of those reached, who acts, and on what offer), **fulfilment** (can what was
+promised be delivered at a cost and burden the owner accepts). Experiment 001
+answered conversion for one offer through one channel to one population, and
+nothing else. A candidate's unknowns are now filed under one of the four (see
+`economic-forms.ts`, `fourQuestionsOf`), and the cheapest test proposed is for
+the question actually open.
+
+### Product form follows the evidence
+
+| Source | Mechanism | Depends on | Grade | Applies now |
+|---|---|---|---|---|
+| Walling, *The Stair Step Method of Bootstrapping* (2015), robwalling.com | Order of forms: one-time-priced add-ons to an existing ecosystem with one free channel first; stack them until they replace an income; only then a recurring product, because recurring revenue is what makes paid acquisition affordable ("there's a long ramp to any kind of substantial revenue"). | A free discovery channel existing for the form (a plugin directory, an app store, search); low lifetime value per sale, so no paid acquisition at step one. | B — the author's own revenue by step and named examples (Rodenbaugh, Derksen), no independent data. | Yes: it is the order Foundry's forms already imply. The available exchange is `upfront_price`; recurring forms stay unavailable until something has earned one-time. |
+| McKenzie, *Bingo Card Creator year in review 2012*, kalzumeus.com | A small, specific product for a specific population can earn with almost no owner time when its channel is organic search and its improvements compound ("a percent here, two percent there … for six years"). | Search demand for the exact task; conversion measured and A/B tested; support bounded ("estimated weekly support time: 20 minutes"). | B — the author's audited numbers: 2,254 sales, $64,791.81 net of refunds, $38,598 profit, traffic Google 56%, AdWords 12%, trial-to-purchase 2.4%. | Partly: the shape (one task, one population, organic search, bounded support) is the shape Foundry's forms name; the channel is one Foundry has not yet earned. |
+| Graham, *Do Things That Don't Scale* (2013), paulgraham.com | Early demand is created by hand: recruit users one at a time, treat the first as consulting clients, make the experience of being a user delightful; a launch is not a channel. | The founder's own hours; a narrow first population; willingness to do manual work that later becomes software. | C — essays with named examples (Airbnb, Stripe, Wufoo), no measured data. | Yes, with a limit: the institution's "hand" does the manual work under a sealed design; the owner's hours are the one thing the design must not spend without saying so. |
+
+### Distribution is a capability, and it is bounded from outside
+
+| Source | Mechanism | Depends on | Grade | Applies now |
+|---|---|---|---|---|
+| Ahrefs, *The Free Tools SEO Strategy*, ahrefs.com/blog | A working tool earns search traffic that an article cannot ("the searcher doesn't want to read, they want to do"); the tool introduces the paid product to the people who need it, free. | Low-difficulty queries where page one is thin tool pages; the tool actually working; a paid product the tool's user would want. | B/D — real traffic figures (Omni Calculator ~2.3M visits/month, FreeConvert 380K→1.5M) measured by a vendor whose product measures them. | Yes as a form: *a free resource supporting a paid product* is now an economic form on the shelf, with its cheapest test being a page that earns arrivals before anything is charged. Not yet as a channel Foundry has earned. |
+| Google, *New updates to address spam and low-quality results* (March 2024), blog.google | Pages produced at scale to rank, "whether automation, humans or a combination are involved", are spam; site-reputation and expired-domain abuse likewise; Google reported 45% less low-quality content after enforcement. | Nothing Foundry can change: it is the rule the channel is governed by. | A — the platform's own policy and its own measured figure. | Yes, as a constraint: the Workshop publishes only what a person would bookmark, says how it was made, and never a page per query. This is the line between the free-resource form and scaled-content abuse. |
+| Vohra, *How Superhuman built an engine to find product/market fit* (2018), review.firstround.com | Fit can be measured before it is felt: ask users how they would feel without the product, count "very disappointed", segment by who the fans are, spend half the roadmap on what they love and half on what holds the rest back. | Enough users to survey (≈40 for direction, 100–200 for the method); a product people already use. | B — the author's own scores over time (22% → 33% → 58%), the 40% benchmark from Sean Ellis's survey of "nearly a hundred startups". | Not yet: the method needs users, and Foundry has none who use anything. Recorded so that the first asset with users is measured this way rather than by opinion. |
+
+### Disposition: build, buy, license, hold, retire — doctrine, not machinery
+
+| Source | Mechanism | Depends on | Grade | Applies now |
+|---|---|---|---|---|
+| Flippa, *SaaS valuation multiples* (data to end 2024), flippa.com/blog | Small software businesses have a public price: owner-operated businesses under $1M ARR change hands at roughly 2–4× profit, with the multiple rising with size and falling with churn; buyers pay for verified, predictable earnings, not narrative. | Verified earnings; a transferable asset; a marketplace with enough transactions (795 SaaS sales in the sample). | A/D — marketplace transaction data, published by the marketplace. | As a reading, not a plan: it gives the disposition model a price scale. Buying, licensing or selling anything is the owner's decision and no code proposes one. |
+| Google SRE, *Embracing Risk* and *Eliminating Toil*, sre.google | An explicit budget for failure beats maximal reliability ("incremental improvement in reliability may cost 100× more than the previous increment"); toil — manual, repetitive, automatable, without enduring value — is capped (50%) and engineered out at the source. | A measured objective; a neutral measurement; the will to stop releasing when the budget is spent. | A — the operating doctrine of a large organisation, with its rationale. | Yes, already: the charter is a budget (money, tests in flight, thinking per day) and the sealed rule is the neutral measurement; the absence test and the owner-minutes column are the toil reading. The 50% cap is a number for a team; Foundry's equivalent is that owner minutes per asset are counted and shown. |
+| *When Agent Automation Becomes Profitable* (arXiv 2606.16465, preprint, June 2026) | Automation is acceptable "when its expected benefit exceeds the premium, control cost, and remaining risk", and that "requires a defined role with bounded permissions and comparable traces". | A defined role; bounded permissions; traces that can be read back. | B — a preprint with a testbed and audited traces; not yet peer-reviewed. | Yes as a statement of what Foundry already is: every act is under a role with a boundary, every consequence is a row. |
+| The AI-trading articles surveyed (a Medium account of a $441K loss, 403 on fetch; MindStudio's bot tutorial, vendor-authored) | The bounded example: an agent with wallet access and no limits is "a loaded gun with no safety"; the working systems name per-position caps (2–5%), a daily loss limit (2%), a halt on drawdown and human approval above a threshold, and report no returns. | Hard limits set by the principal before the agent runs; a halt that does not need the agent's consent. | C/D — anecdote and vendor content; the mechanism is the limits, not the returns. | Yes, as a mirror: the charter's total, in-flight cap and per-day thinking are the same shape, set by the owner and enforced by rows the agent cannot write. Trading itself is outside Foundry's scope and stays there. |
+| AI-automation case studies for small businesses (theautomators.ai and similar, 2026) | Claimed reductions in operating cost and hours; the one finding that survives is that most adopters report no earnings impact without redesigning the workflow. | — | D — vendor-authored, unnamed clients, aggregate figures from consultancies, no independent measurement. | No: nothing here is evidence Foundry may act on. Recorded so the same pages are not read again as if they were. |
+| "Nicholson" (named in the owner's directive) | Not located: searches for an essay by that name on structuring a one-person company around small products returned nothing attributable. | — | not graded | Not used. If the owner names the piece, it is read and graded like the rest. |
+
+### What this changes in the institution
+
+- The economic forms gain *a free resource supporting a paid product* and
+  *something licensed in and resold*; both are shelved with their cheapest
+  test and the exchange they would need, and the second's exchange is not
+  available today, which the shelf says.
+- An unknown is filed under demand, distribution, conversion or fulfilment,
+  derived from its own words, so "cheapest test" means cheapest for that
+  question and a settled conversion test is not read as settled demand.
+- Distribution is read as a capability the institution has or lacks, bounded
+  by the platform's rules, never as a tactic the Workshop performs at scale.
+- The disposition model has a price scale to read against when the day comes;
+  nothing is built for buying or licensing, and the decision stays the
+  owner's.

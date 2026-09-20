@@ -2899,3 +2899,24 @@ candidate and a nudge key and nothing else.
 **The inbox.** `theThreads`, `threadCounts`, `archiveThread`,
 `unarchiveThread` and `settleThread` in `public-workshop/mail.ts`; migration
 325's two triggers; `needsTheOwner` and `mailHealth` scoped to the working set.
+
+## What happened has one name; the sentences land; a settled test binds the next (2026-09-21)
+
+- `src/services/founder/what-happened.ts` — `outcomeFromRow`, `outcomeOf`,
+  `outcomeSentence`, `GRADE_SQL`; `ExperimentView.outcome`; every owner
+  surface renders from it. The experiment page's "What happened and why".
+- `src/services/institution/the-door.ts` — `housekeeping` destination,
+  `readHousekeepingAsk`; guidance that asks to look, or dislikes the
+  direction, reaches the venture door without a search open.
+  `POST /foundry/inbox/clear-handled`. `matchQuestion` keys `paid`, `found`.
+  `readGuidance`: a dislike is *another*; "look more closely at X" favours X.
+- `src/services/venture/precedent.ts` — `precedentFor`, `precedentOfExperiment`,
+  `testedBefore`, `askedBeforeSentence`; used by
+  `proposeWhatRealityWouldSettle`, `designStandsInTheWay`, `theRecordOf`
+  (`PRECEDENT ON THIS CANDIDATE` in the forge's input) and the Explore card.
+  `designExperiment` accepts `rerunOf`. `likeness` is scoped to the candidate.
+- Evidence: `what-happened-has-one-name`, `the-owners-sentences-land`,
+  `precedent-is-scoped`, `tests/simulation/09-…` — all from the real entrance
+  on the world. Proof debt: L10 unobserved in production until a second real
+  design exists; the mechanism thresholds (0.6 of the carrying words) are a
+  reading the owner can disagree with, recorded in every refusal.

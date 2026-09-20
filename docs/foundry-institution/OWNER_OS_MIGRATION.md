@@ -2906,3 +2906,47 @@ once now. The same steering sentence, absorbed twice, showed twice on
 Activity; once now. "What are you working on" names the search before saying
 nobody has asked it to look after a company. Proof: `the-owner-returns.test.ts`.
 
+
+## One word for what happened, the sentences that land, and a settled test that changes the next design (21 September 2026)
+
+Three tranches on the world, each proven from the real entrance.
+
+**What happened has one name.** One settled test read "Stopped by its own
+rule" on its page, "Stopped" in History, "settled against its prediction" on
+Activity, "not what I expected" in the letter, "It did not hold" in the Ask
+answer and "The world said: surprised" — the raw column — on the next-test
+page. `what-happened.ts` is the one reader: the word (*as predicted*,
+*partly*, *surprised*, *stopped by you*, *closed with its search*, *retired*,
+*declined*, *invalid*, *superseded*, *running*, *proposed*), its meaning, the
+recorded reason, and what the result does and does not establish. The
+experiment page carries "What happened and why"; Home shows the last test's
+word when nothing is live; *partly* reaches the owner from the grade the
+world wrote beside the two-valued column. Proof:
+`what-happened-has-one-name.test.ts`.
+
+**The owner's sentences land.** Six sentences traced through the classifier:
+"Is anything making money yet?" had reached the permissions answer because
+the word *money* sits in that rule — it is answered from real payments,
+refunds, the last settlement and what is set aside. "Show me what you've
+found" names the search and the candidates standing. "I don't like this
+direction" and "look more closely at calculators" are steering. "Find
+something with less legal exposure" with no search open is a direction to
+open, held to its constraint, after one confirmation. "Clear the messages
+I've already dealt with" is a housekeeping destination at the door: the
+count, what moves and what does not, one tap, reversible; the Inbox's Handled
+view has the same control. Proof: `the-owners-sentences-land.test.ts`.
+
+**A settled test changes the next design.** `precedent.ts` answers, for a
+candidate and a proposed design, whether a settled test on the same candidate
+already asked this question by this mechanism: *asked_before* (refused, the
+precedent named, the way through stated — say what it changes, or re-run on
+the record through the schema's own door), *narrowed* (allowed, with the scope
+of what was established beside it), or *clear*. It bites in the proposer, in
+the sealing rule (`designStandsInTheWay`) and in the forge's recorded input;
+the Explore card says what was tested before; `likeness` compares only within
+the candidate. Appropriately, not universally: a different candidate is
+untouched and no sealed record moves. The comparison is deterministic — the
+carrying words of the question and of the mechanism, thresholds written into
+the reason — so the owner can disagree with a reading rather than guess it.
+Proofs: `tests/simulation/09-what-was-learned-changes-the-next-design.test.ts`,
+`precedent-is-scoped.test.ts`.
