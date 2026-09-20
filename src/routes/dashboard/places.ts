@@ -555,7 +555,11 @@ placeRoutes.get('/foundry/decisions', async (c: any) => {
   const decidedTests = company ? [] : await rows(
     `SELECT e.id, e.what_we_do, e.decision, e.decided_at FROM venture_experiments e
       WHERE e.founder_id = ? AND e.decision IS NOT NULL ORDER BY e.decided_at DESC LIMIT 40`, [founderId]);
-  const waiting = company ? openActs.length + openAdvice.length + openAsks.length : (attention === null ? 0 : 1) + queue.length;
+  // ONE COUNT, THE SAME ARITHMETIC AS HOME'S. The queued card is the queue
+  // itself said once, not an extra item on top of it; every other kind of one
+  // thing is a decision lifted out of the queue and counts beside what remains.
+  const waiting = company ? openActs.length + openAdvice.length + openAsks.length
+    : attention?.kind === 'queued' ? queue.length : (attention === null ? 0 : 1) + queue.length;
   const decidedAll = [
     ...decidedActs.map((a) => ({ at: String(a.revoked_at ?? a.decided_at), what: String(a.summary),
       how: a.revoked_at ? 'taken back' : `${String(a.decision)}${a.consumed_at ? ', done' : ''}`,

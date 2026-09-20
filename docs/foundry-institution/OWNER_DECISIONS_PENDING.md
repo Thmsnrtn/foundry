@@ -921,3 +921,37 @@ test it yet. Widening the exchanges Foundry may run is a change to what it
 may do with strangers and with your money, and it is yours: say which, and
 under what limit, and the migration that makes it available is written with
 your words as its reason.
+
+## PENDING 21 — Whether Experiment 001's null stands, or is void and re-run: **OWNER** (2026-09-21)
+
+Twenty-one businesses were written to in the Workshop's name, each message
+inviting a reply. The Workshop's reply path was not routed. Seven days later
+the sealed rule settled the test **surprised** — nobody bought — and the
+institution recorded that as evidence about a market.
+
+The institution has taken the narrow position on its own: **the verdict
+stands**, because the rule counted exactly what it said it would and a sealed
+result is not rewritten to suit a later discovery; and **what the result is
+claimed to establish is corrected**, because that claim is the institution's
+own. Every surface that shows the outcome now shows, beside it, that the reply
+path was not working on every day of the window, and that a silence on a
+channel that may not have carried a reply is not the same evidence as a
+silence on one that did.
+
+A design reviewer reading the product took the wider position: *a test run on
+a broken instrument is void, not surprising; recording it as evidence misleads
+the owner about what he now knows.* That is a judgment about your own record,
+and it is yours.
+
+Your options: (1) leave it as it stands — the verdict recorded, the caveat
+beside it everywhere; (2) mark Experiment 001 **void for its instrument** and
+re-run the same question once the reply path is working, which the precedent
+reader would otherwise refuse as a question already asked; (3) treat the null
+as sound, on the grounds that a purchase needed no reply — the payment link
+carried the answer the rule actually counted, and the dead reply path cost
+only the replies, not the sales.
+
+Nothing here changes until you say. The reply path itself is fixable from
+`/foundry/public-workshop`, and the institution now keeps a day-by-day record
+of it, so a second run would know what its instrument was doing.
+

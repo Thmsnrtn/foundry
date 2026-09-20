@@ -2422,3 +2422,39 @@ thing it could do was feed the owner's own bookkeeping form a direction the
 form did not recognise and have it silently mean *took out*, permanently, in
 an append-only ledger. Authority held; input did not.
 
+### The convergence cell, and what it cost to agree with itself (2026-09-21)
+
+Two reviewers who had never seen the code — a design executive and a
+first-time owner — read the whole institution and arrived, independently, at
+the same release-blocking defect: **the calm sentences did not read the list
+they summarised.** "Nothing needs a decision from you" printed six inches
+above "Needs you 1"; the Ask box answering "What needs me?" with "Nothing. I
+will tell you the moment that changes." while Decisions said one thing waited.
+Every part was honest; the screen as a whole was false.
+
+The cause was structural rather than careless. The one-thing reader ranks the
+kinds it can put a single yes or no on; the queue holds kinds it cannot. Both
+were right about their own rows, and nothing read both. The repair gives the
+reader a last branch that points at the list, and one arithmetic for the count
+on Home, on Decisions and in the Ask answer. Fixing it produced the same
+defect once more in miniature — the pointer card counted as an extra item, so
+Home said one and Decisions said two — which is the pattern stating itself:
+**two readings of one fact will disagree unless one of them is derived from
+the other.**
+
+The design lens also raised a judgment the institution may not make for
+itself: *a test run on a broken instrument is void, not surprising.* The
+institution has taken the narrow position — the verdict stands, because the
+rule counted exactly what it said it would and a sealed result is not
+rewritten to suit a later discovery; the claim about what it establishes is
+corrected, because that claim is the institution's own. Whether Experiment
+001's null is sound, void, or sound-for-payments-and-void-for-replies is the
+owner's, and is recorded as PENDING 21.
+
+**Converged.** Every release-blocking finding from cells F and G and from the
+convergence cell is repaired and proved. What is left is current-scope and
+named: provider machinery in a few sentences ("mail routing is not enabled on
+the zone"), a refused route shown as a banner and not recorded, the length of
+a drought unsaid, and three counts of "companies" that mean three different
+things. None of them misleads about money, obligations or authority.
+

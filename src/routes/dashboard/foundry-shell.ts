@@ -2917,7 +2917,10 @@ foundryShellRoutes.get('/foundry', async (c) => {
   // shows revenue instead of surplus teaches the owner the wrong number.
   const { distributableSurplus } = await import('../../services/economy/projection.js');
   const yours = await distributableSurplus(s.ownerId);
-  const needsN = (attention === null ? 0 : 1) + queue.length;
+  // THE CARD THAT POINTS AT THE LIST IS NOT AN EXTRA ITEM. Every other kind of
+  // one thing is a decision lifted OUT of the queue, so it counts as one
+  // beside what remains; the queued card is the queue itself, said once.
+  const needsN = attention?.kind === 'queued' ? queue.length : (attention === null ? 0 : 1) + queue.length;
   // AUTONOMY IS A STATE, NOT A PERCENTAGE. The map already says, in one
   // sentence led by its loosest point, whether anything may act or spend
   // without him. The tile shows the word; Controls shows the rows.
