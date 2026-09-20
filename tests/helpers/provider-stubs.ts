@@ -13,6 +13,8 @@ export interface ProviderState {
   nextDomainStatus: string;
   /** The payment provider is unreachable, so a probe cannot place or check its offer. */
   stripeDown: boolean;
+  /** The mail provider answering 503 to every send: an outage, not a refusal. */
+  resendDown: boolean;
   products: Array<{ id: string; name: string; metadata: Record<string, string> }>;
   prices: Array<{ id: string; product: string; unit_amount: number; currency: string; lookup_key: string; recurring: null; metadata: Record<string, string> }>;
   paymentLinks: Array<{ id: string; url: string; active: boolean; metadata: Record<string, string>; payment_intent_data: { metadata: Record<string, string> } | null; line_items: Array<{ price: string; quantity: number }> }>;
@@ -67,7 +69,7 @@ function nested(params: Record<string, string>, prefix: string): Record<string, 
 }
 
 export function providerStubs(): { state: ProviderState; fetch: (url: string | URL, init?: RequestInit) => Promise<Response> } {
-  const state: ProviderState = { sends: [], deliveryState: new Map(), refunds: [], domains: [], nextDomainStatus: 'pending', stripeDown: false, products: [], prices: [], paymentLinks: [], buyers: new Map(), calls: [], seq: 0, cf: freshCloudflare() };
+  const state: ProviderState = { sends: [], deliveryState: new Map(), refunds: [], domains: [], nextDomainStatus: 'pending', stripeDown: false, resendDown: false, products: [], prices: [], paymentLinks: [], buyers: new Map(), calls: [], seq: 0, cf: freshCloudflare() };
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   const cfOk = (result: unknown, status = 200) => json({ success: true, result, errors: [] }, status);
   const cfErr = (code: number, message: string, status = 400) => json({ success: false, result: null, errors: [{ code, message }] }, status);
@@ -190,6 +192,7 @@ export function providerStubs(): { state: ProviderState; fetch: (url: string | U
 
     // ── Resend ──
     if (u === 'https://api.resend.com/emails' && method === 'POST') {
+      if (state.resendDown) return json({ message: 'Service Unavailable' }, 503);
       const body = JSON.parse(String(init?.body)) as ProviderState['sends'][number];
       const id = `msg_${++state.seq}`;
       state.sends.push({ ...body, idempotency: headers['Idempotency-Key'], id });

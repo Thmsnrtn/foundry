@@ -35,6 +35,7 @@
 //   the reader uses. A number in a finding that is not in the record is a
 //   defect, and the grounds each finding must cite are how it is caught.
 // =============================================================================
+import { fourQuestionsOf } from './economic-forms.js';
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { callOpus, callSonnet } from '../ai/client.js';
@@ -73,7 +74,7 @@ export interface TheRecord {
   evidence: Array<{ sourceType: string; stance: string | null; bearing: string; saw: string; source: string; observedAt: string; fromAbsence: boolean }>;
   /** The retrievals the evidence came from: the words the eyes were asked with, and what came back. A brief can be built only from these. */
   retrievals: Array<{ sourceType: string; terms: string; source: string; returned: number; relevant: number; at: string }>;
-  unknowns: Array<{ question: string; blocking: boolean; cheapestTest: string | null }>;
+  unknowns: Array<{ question: string; blocking: boolean; cheapestTest: string | null; asks: 'demand' | 'distribution' | 'conversion' | 'fulfilment' }>;
   lessons: Array<{ whatWeDid: string; verdict: string | null; couldNotEstablish: string | null }>;
   /** WHAT IS ALREADY KNOWN ABOUT THIS CANDIDATE, with its scope: the settled tests on it, and whether the proposed act repeats one. */
   precedent: { stands: 'clear' | 'asked_before' | 'narrowed'; because: string; settled: string[] };
@@ -123,7 +124,7 @@ export async function theRecordOf(experimentId: string): Promise<TheRecord | nul
   const unknowns = (await rows(
     `SELECT question, blocking, cheapest_test FROM market_unknowns
       WHERE opportunity_id = ? AND answered_at IS NULL AND kind = 'question' ORDER BY blocking DESC, rowid`, [opportunityId]))
-    .map((r) => ({ question: String(r.question), blocking: Number(r.blocking) === 1, cheapestTest: r.cheapest_test == null ? null : String(r.cheapest_test) }));
+    .map((r) => ({ question: String(r.question), blocking: Number(r.blocking) === 1, cheapestTest: r.cheapest_test == null ? null : String(r.cheapest_test), asks: fourQuestionsOf(String(r.question)) }));
   const { lessonsFor } = await import('./forge.js');
   const lessons = (await lessonsFor(founderId)).map((l) => ({ whatWeDid: l.whatWeDid, verdict: l.verdict, couldNotEstablish: l.couldNotEstablish }));
   const { precedentOfExperiment } = await import('./precedent.js');
@@ -179,7 +180,7 @@ function recordBlock(r: TheRecord): string {
     `THE TEST AS PROPOSED (from the cheapest thing that would settle an unknown): ${j(r.experiment)}`,
     `EVIDENCE (each with its source type, the stance that kind of source supplies, what it bore on its own claim, and an address): ${j(r.evidence)}`,
     `RETRIEVALS (the words the eyes were asked with, and what came back; a brief can be built only from these): ${j(r.retrievals)}`,
-    `OPEN UNKNOWNS: ${j(r.unknowns)}`,
+    `OPEN UNKNOWNS (each with which of the four questions it asks — demand, distribution, conversion, fulfilment — so the cheapest test is for the question actually open): ${j(r.unknowns)}`,
     `LESSONS OF SETTLED TESTS (what each could not establish): ${j(r.lessons)}`,
     `PRECEDENT ON THIS CANDIDATE (what is already known, with its scope; "asked_before" means this act repeats a settled test by the same mechanism and will not seal unless it says what it changes): ${j(r.precedent)}`,
     `LEGAL PICTURE: ${j(r.legal)}`,

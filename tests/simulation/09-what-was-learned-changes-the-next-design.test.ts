@@ -24,7 +24,7 @@ process.env.OPENROUTER_API_KEY = 'test-key';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { query } from '../../src/db/client.js';
 import { providerStubs } from '../helpers/provider-stubs.js';
-import { OWNER, asText, owner, ownerApp, seedProductionShape } from '../helpers/world.js';
+import { OWNER, advanceDays, asText, owner, ownerApp, seedProductionShape } from '../helpers/world.js';
 
 const { fetch: fetchStub } = providerStubs();
 vi.stubGlobal('fetch', fetchStub);
@@ -233,6 +233,9 @@ describe('(d) a re-run on the record', () => {
     // the claim revised after the result, or it is the same claim tested twice.
     const x = await one('SELECT claim_id FROM venture_experiments WHERE id = ?', [X]);
     await expect(designExperiment({ ...same, rerunOf: X })).rejects.toThrow(/rerun_needs_a_revised_claim/);
+    // The revision must come after the result by the clock the schema reads
+    // (whole seconds); a day passes, as it would.
+    await advanceDays(1);
     const { reviseClaim } = await import('../../src/services/venture/market-evidence.js');
     await reviseClaim({ founderId: OWNER, claimId: String(x.claim_id), opportunityId: OPP,
       into: 'A Massachusetts millwork shop that already sells to the public sector will pay $29 for a screened brief', because: 'the first test reached shops with no public-sector work' });

@@ -17,6 +17,7 @@
 // record first.
 // =============================================================================
 
+import { fourQuestionsOf, type FourQuestions } from './economic-forms.js';
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { matchRealityOnly, observe, realityOnlyPatterns } from './market-evidence.js';
@@ -333,8 +334,7 @@ export interface WhereToLookNext {
     /** And what would mean we were wrong. */
     wouldBeWrongIf: string;
     /** The cheapest thing that would settle it, if anybody has named one. */
-    cheapestTest: string | null;
-  }>;
+    cheapestTest: string | null; /** Which of the four questions it asks: demand, distribution, conversion, fulfilment. */ asks: FourQuestions; }>;
   /** Questions a source could still answer, and nobody has asked. */
   stillWorthReading: string[];
 }
@@ -376,6 +376,7 @@ export async function whereToLookNext(opportunityId: string): Promise<WhereToLoo
         question, onlySettledBy: hit.onlySettledBy, looksLike: hit.looksLike,
         wouldBeWrongIf: hit.wouldBeWrongIf,
         cheapestTest: row.cheapest_test == null ? null : String(row.cheapest_test),
+        asks: fourQuestionsOf(question),
       });
     } else {
       stillWorthReading.push(question);

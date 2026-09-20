@@ -288,3 +288,27 @@ export function owner(app: Hono) {
 export function asText(html: string): string {
   return html.replace(/<style[\s\S]*?<\/style>/g, ' ').replace(/<script[\s\S]*?<\/script>/g, ' ').replace(/<[^>]+>/g, ' ').replace(/&[a-z]+;/g, ' ').replace(/\s+/g, ' ').trim();
 }
+
+/**
+ * COMPANIES HE NAMED, THROUGH THE SAME DOOR HE WOULD USE: the Portfolio's
+ * "Add it" form. Real companies, nothing connected, nothing acting.
+ */
+export async function addCompanies(app: Hono, names: string[]): Promise<string[]> {
+  const me = owner(app);
+  const ids: string[] = [];
+  for (const name of names) {
+    const r = await me.post('/foundry/companies', { name });
+    if (r.status !== 302) throw new Error(`adding "${name}" was not accepted (HTTP ${String(r.status)})`);
+    const row = (await query(`SELECT id FROM products WHERE owner_id = ? AND name = ? AND deleted_at IS NULL ORDER BY rowid DESC LIMIT 1`, [OWNER, name])).rows[0] as Record<string, unknown> | undefined;
+    if (!row) throw new Error(`"${name}" was not recorded`);
+    ids.push(String(row.id));
+  }
+  return ids;
+}
+
+/** A provider outage, as a state of the world the stubs answer from. */
+export function outage(state: { resendDown: boolean; stripeDown: boolean; cf: { siteDown: boolean } }, provider: 'resend' | 'stripe' | 'workshop', down: boolean): void {
+  if (provider === 'resend') state.resendDown = down;
+  else if (provider === 'stripe') state.stripeDown = down;
+  else state.cf.siteDown = down;
+}

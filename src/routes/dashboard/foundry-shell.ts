@@ -2580,10 +2580,10 @@ foundryShellRoutes.get('/foundry', async (c) => {
     if (door.destination === 'venture') return ventureConfirmation(c, s.ownerId, typed);
     if (door.destination === 'authority') return c.html(await authorityBoundary(s.ownerId, door));
     if (door.destination === 'housekeeping') return c.html(await housekeepingConfirmation(s.ownerId, door));
-    // matchQuestion never returns '' — the fallback is 'unknown' — so the
-    // branch this replaced was dead and an unplaceable sentence typed here
-    // was answered as whichever question it resembled.
-    if (door.destination === 'unplaceable' && matchQuestion(typed) === 'unknown') return c.html(didNotFollow(door));
+    // An unplaceable sentence typed here is answered as a question, and the
+    // question path says plainly when it does not know; the front door (POST)
+    // is where "I did not follow that" lives. (A branch here that compared
+    // matchQuestion to '' was dead: the fallback is 'unknown'.)
   }
   const key = asked || (typed ? matchQuestion(typed) : '');
 

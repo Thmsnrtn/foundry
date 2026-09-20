@@ -6,6 +6,7 @@
 // =============================================================================
 
 import { getDb } from './client.js';
+import { log } from '../lib/logger.js';
 import { readFileSync, readdirSync } from 'fs';
 import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
@@ -96,6 +97,28 @@ export function splitSqlStatements(sql: string): string[] {
 export async function runMigrations(): Promise<void> {
   const db = getDb();
 
+  // THE SCHEMA, ONCE, IN THE TEST SUITE. An empty in-memory database under
+  // test is restored from a template the first migrated one dumped, keyed to
+  // the migration files; the markers come with it, so everything below is a
+  // no-op afterwards. `src/test/template-db.ts` says why and how; the proof
+  // that the copy is the schema is `the-template-is-the-schema.test.ts`.
+  const { templateWanted, templateKey, readTemplate, restoreTemplate, dumpTemplate, writeTemplate, TEMPLATE_RESTORED } = await import('../test/template-db.js');
+  const migrationsDirForTemplate = resolve(__dirname, 'migrations');
+  let templateToWrite: string | null = null;
+  if (templateWanted()) {
+    const empty = (await db.execute({ sql: `SELECT COUNT(*) AS n FROM sqlite_master WHERE type = 'table'`, args: [] })).rows[0];
+    if (Number((empty as Record<string, unknown> | undefined)?.n ?? 0) === 0) {
+      const key = templateKey(migrationsDirForTemplate);
+      const text = readTemplate(key);
+      if (text !== null) {
+        await restoreTemplate(db, text);
+        log.info(TEMPLATE_RESTORED);
+        return;
+      }
+      templateToWrite = key;
+    }
+  }
+
   // Tracking table — must exist before anything else
   await db.execute({
     sql: `CREATE TABLE IF NOT EXISTS schema_migrations (
@@ -176,5 +199,9 @@ export async function runMigrations(): Promise<void> {
     console.log('[MIGRATE] All migrations already applied.');
   } else {
     console.log(`[MIGRATE] Applied ${ran} migration(s).`);
+  }
+  if (templateToWrite !== null) {
+    writeTemplate(templateToWrite, await dumpTemplate(db));
+    log.info('[MIGRATE] Wrote the schema template for the files that follow.');
   }
 }

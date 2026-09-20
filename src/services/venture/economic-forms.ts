@@ -42,6 +42,21 @@ export interface EconomicForm {
 }
 
 export const ECONOMIC_FORMS: EconomicForm[] = [
+  // THE TWO FORMS THE EVIDENCE NAMES (ECONOMICS.md § Mechanisms with sources),
+  // read first: "a free calculator" is the free resource it says it is, not
+  // the calculator sold beside it.
+  // A free resource earns attention a page of words cannot, and the paid
+  // product beside it is what the attention is for; the exchange it needs is
+  // constitutional and not available today, and the shelf says so rather than
+  // running a different test. Licensing in is buying the hard part.
+  { key: 'free_resource', label: 'A free resource that supports a paid product',
+    whatItIs: 'Something useful given away — a tool, a calculator, a list — with the thing that costs money beside it.',
+    needsExchange: ['free_with_role'],
+    words: ['free tool', 'free calculator', 'free resource', 'free version', 'given away', 'lead magnet', 'free tier', 'free to use', 'free checker', 'free generator'] },
+  { key: 'licensed_in', label: 'Something licensed in and resold',
+    whatItIs: 'Somebody else’s data or work, licensed, and sold on in a form they do not offer.',
+    needsExchange: ['license'],
+    words: ['license the', 'licensed from', 'licensed in', 'license in', 'resell it', 'resold', 'bought the rights', 'under license'] },
   { key: 'saas', label: 'Software people subscribe to',
     whatItIs: 'Something people log into and pay for every month.',
     needsExchange: ['subscription'],
@@ -112,3 +127,24 @@ export function formOf(
 
 export const formNamed = (key: string): EconomicForm =>
   ECONOMIC_FORMS.find((f) => f.key === key) ?? ECONOMIC_FORMS[ECONOMIC_FORMS.length - 1] as EconomicForm;
+
+/**
+ * WHICH OF THE FOUR QUESTIONS AN UNKNOWN ASKS.
+ *
+ * Demand (would anyone pay for this at all), distribution (can the people who
+ * would pay be reached at a cost below what they pay), conversion (of those
+ * reached, who acts, and on what offer), fulfilment (can what was promised be
+ * delivered at a cost and burden the owner accepts). A settled test answers
+ * the one it was for, and a design that reads a conversion result as demand
+ * is asking the wrong next question. Read from the unknown's own words;
+ * demand is the widest and is the answer when nothing narrower is said.
+ */
+export type FourQuestions = 'demand' | 'distribution' | 'conversion' | 'fulfilment';
+export function fourQuestionsOf(question: string): FourQuestions {
+  const t = ` ${question.toLowerCase().replace(/[^a-z0-9$% ]+/g, ' ').replace(/\s+/g, ' ')} `;
+  if (/\b(deliver|delivered|delivery|fulfil|fulfill|assembled|assemble|produce|support burden|without the owner|owner s time|maintain|keep it current|every week|each week)\b/.test(t)) return 'fulfilment';
+  if (/\b(reach|reached|be found|find it|arrive|arrives|channel|cold email|search traffic|by search|through the register|distribution|listed on|directory|app store|marketplace)\b/.test(t)
+    && !/\b(convert|conversion|rate)\b/.test(t)) return 'distribution';
+  if (/\b(convert|conversion|rate|of those|of the shops|of the people|how many buy|rather than \$|at \$\d+ rather|checkout|sign up|signs? up)\b/.test(t)) return 'conversion';
+  return 'demand';
+}

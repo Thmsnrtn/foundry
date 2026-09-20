@@ -630,6 +630,17 @@ export interface SendingReadiness { status: 'ready' | 'not_connected' | 'unavail
  * send). Null when he has none or more than one — ambiguity refuses.
  */
 export async function senderCompanyOf(founderId: string): Promise<string | null> {
+  // UNDER A WORKSHOP, THE SENDER IS THE WORKSHOP. This required exactly one
+  // earned real company and returned nothing otherwise, so the day the owner
+  // named a second company no test could write to anyone: "Foundry cannot
+  // tell which one that is". A month of a portfolio run in the laboratory
+  // found it. The Workshop, where one stands, is the one public voice and
+  // the sender; the single-company rule is for an owner without one.
+  const w = (await rows(`SELECT product_id FROM public_workshop WHERE founder_id = ? AND product_id IS NOT NULL`, [founderId]))[0];
+  if (w?.product_id != null) {
+    const alive = await rows(`SELECT id FROM products WHERE id = ? AND owner_id = ? AND deleted_at IS NULL`, [String(w.product_id), founderId]);
+    if (alive.length === 1) return String(w.product_id);
+  }
   const r = await rows(`SELECT id FROM products WHERE owner_id = ? AND standing = 'earned' AND reality = 'real' AND deleted_at IS NULL`, [founderId]);
   return r.length === 1 ? String(r[0].id) : null;
 }
@@ -1190,6 +1201,21 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
       if (capacity.over) { report.exceptions.push(`holding the offer: ${capacity.owed} purchases owed against a cap of ${capacity.cap} until they are delivered`); mayWrite = false; }
     }
 
+    // A PROVIDER OUTAGE IS NOT A REFUSAL. An offer the provider could not take
+    // (a 503, a timeout) was written as failed and its recipient counted as
+    // done, so one bad morning silently dropped those people from the test
+    // for good. The month of a portfolio run in the laboratory found it. A
+    // failed offer past its reconcile time is tried again under the same
+    // idempotency key, so the provider cannot deliver it twice; a refusal by
+    // our own rules (rejected) is never retried.
+    if (mayWrite) {
+      for (const f of await rows(`SELECT id FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'offer' AND status = 'failed'
+                                    AND (reconcile_after IS NULL OR datetime(reconcile_after) <= datetime(?)) ORDER BY created_at, rowid`, [experimentId, now.toISOString()])) {
+        await query(`UPDATE outbound_actions SET status = 'pending_approval', effect_certainty = 'not_attempted', result_json = NULL, reconcile_after = NULL WHERE id = ? AND status = 'failed'`, [String(f.id)]);
+        const again = await executeAction(String(f.id));
+        if (again.dispatched) report.offersSent += 1; else report.exceptions.push(`offer tried again: ${again.refusedReason}`);
+      }
+    }
     // Offers, paced, one per approved business, never twice.
     if (mayWrite) {
       const done = new Set((await rows(`SELECT recipient_id FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'offer' AND recipient_id IS NOT NULL`, [experimentId])).map((r) => String(r.recipient_id)));
@@ -1325,6 +1351,12 @@ export async function handExceptions(experimentId: string): Promise<string[]> {
   for (const f of failedDeliveries) out.push(`A buyer paid (${String(f.payment_ref)}) but the brief could not be delivered and the refund did not go through. This needs you: check the money-tools setting or refund it yourself.`);
   const asked = await rows(`SELECT id, payment_ref FROM experiment_fulfilments WHERE experiment_id = ? AND refund_requested_at IS NOT NULL AND refund_ref IS NULL AND status <> 'failed'`, [experimentId]);
   for (const f of asked) out.push(`A buyer asked for a refund through the delivery link (payment ${String(f.payment_ref)}) and I could not issue it. This needs you: check the money-tools setting or refund it yourself.`);
+  const failed = await rows(`SELECT COUNT(*) AS n, MIN(result_json) AS why FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'offer' AND status = 'failed'`, [experimentId]);
+  const n = Number(failed[0]?.n ?? 0);
+  if (n > 0) {
+    const why = (JSON.parse(String(failed[0]?.why ?? '{}')) as { reason?: string }).reason ?? 'the provider did not answer';
+    out.push(`${String(n)} ${n === 1 ? 'offer' : 'offers'} could not be sent because the mail provider refused or did not answer (${why}). Nobody is dropped: I try again on the next pass, under the same key, so nobody can receive it twice.`);
+  }
   const rejected = await rows(`SELECT preview_text, result_json FROM outbound_actions WHERE experiment_id = ? AND status = 'rejected' ORDER BY created_at DESC LIMIT 3`, [experimentId]);
   for (const r of rejected) out.push(`${String(r.preview_text)} was refused by my own rules and not sent: ${String((JSON.parse(String(r.result_json ?? '{}')) as { reason?: string; refused?: string }).reason ?? (JSON.parse(String(r.result_json ?? '{}')) as { refused?: string }).refused ?? 'see the door')}.`);
   return out;
