@@ -107,13 +107,13 @@ absenceRoutes.get('/foundry/absence', async (c: any) => {
         ${thinking.byModel.map((m) => html`<li>${m.model.replace('anthropic/claude-', '')} —
           ${String(m.calls)} ${m.calls === 1 ? 'call' : 'calls'}, ${dollars(m.cents)}</li>`)}
       </ul>`}
-      <!-- THE SAME MONEY, BY WHAT IT WAS FOR. The list above answers the
+      ${/* THE SAME MONEY, BY WHAT IT WAS FOR. The list above answers the
            question about the provider; this answers the one about the
            institution, which is the one he is actually asking. It was
            unanswerable for seventy per cent of the spend until every call site
            had to name its work. Rows written before that say so rather than
            being folded into an "other", because a total that disagrees with
-           the ledger is how a summary stops being worth reading. -->
+           the ledger is how a summary stops being worth reading. */ ''}
       ${thinking.byWork.length === 0 ? '' : html`<details>
         <summary class="quiet">What the thinking was for</summary>
         <ul>${thinking.byWork.map((w) => html`<li>${w.work === null
@@ -136,10 +136,10 @@ absenceRoutes.get('/foundry/absence', async (c: any) => {
       ${thinking.notSpentCents === null ? '' : html`<p class="quiet">About
         ${dollars(thinking.notSpentCents)} not spent because something decided there was nothing
         worth thinking about. An estimate, from what the same question cost when it did think.</p>`}
-      <!-- READ FROM THE TABLE, NOT RESTATED FROM IT. A page that says "eleven
+      ${/* READ FROM THE TABLE, NOT RESTATED FROM IT. A page that says "eleven
            files, each with an argument" is a sentence somebody typed; a page
            that lists them is the argument itself, and it cannot drift from the
-           build gate that enforces it. -->
+           build gate that enforces it. */ ''}
       <details>
         <summary class="quiet">Where the most expensive model is reached, and why
           (${String(FRONTIER_WARRANTS.length)}

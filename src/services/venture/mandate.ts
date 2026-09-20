@@ -180,8 +180,12 @@ export function readVentureSentence(raw: string): VentureReading {
   const statement = raw.trim();
   const t = ` ${statement.toLowerCase().replace(/[’]/g, "'")} `;
 
-  if (/\b(stop|abandon|cancel|forget)\b.*\b(look|search|hunt|venture|business|company)/.test(t)
-    || /\bstop looking\b|\bstop searching\b|\bcall it off\b/.test(t)) {
+  // NEGATION FIRST. "Hold off sending, but don't cancel the search" was read as
+  // "cancel the search" — the one thing he said not to do. A stop verb with
+  // "don't", "do not", "never" or "not" in front of it is not a stop.
+  const negatedStop = /\b(?:don'?t|do not|never|not|without)\s+(?:you\s+)?(?:stop|abandon|cancel|forget|call off)\b/.test(t);
+  if (!negatedStop && (/\b(stop|abandon|cancel|forget)\b.*\b(look|search|hunt|venture|business|company)/.test(t)
+    || /\bstop looking\b|\bstop searching\b|\bcall it off\b/.test(t))) {
     return { kind: 'stop_mandate', statement };
   }
 
@@ -252,7 +256,7 @@ function readGuidance(t: string, statement: string): GuidanceProposal | null {
   // Negation has to be adjacent and explicit, because the un-negated words are
   // most of a mandate: "add another subscription business" is a search, and
   // reading it as its own refusal would be the worst possible mishearing.
-  if (/\b(don'?t want|do not want|no more|not another|rather not|sick of|tired of|avoid)\b[^.]{0,40}\b(subscription|recurring|another saas|more saas)\b/.test(t)) {
+  if (/\b(don'?t want|do not want|no more|not another|rather not|sick of|tired of|avoid)\b[^.]{0,40}\b(subscriptions?|recurring|another saas|more saas)\b/.test(t)) {
     return say('avoid', 'subscription', 'revenue_model');
   }
 
@@ -307,6 +311,22 @@ function readGuidance(t: string, statement: string): GuidanceProposal | null {
       : /model|openai|anthropic|llm|\bai\b/.test(named) ? 'ai_dependency'
         : 'platform_dependency';
     return say('avoid', named, axis);
+  }
+
+  // "AVOID ANYTHING THAT NEEDS CUSTOMER SUPPORT." "STAY AWAY FROM MARKETPLACES."
+  // The generic form, read last so the named rules above keep their axes.
+  // Seven ways of saying "avoid support" were all refused and fell through to
+  // "which company do you mean" — the owner owns no company. Support in the
+  // subject is the support-burden preference; anything else is an avoidance
+  // in his words, held against every candidate as written.
+  const avoid = /\b(?:avoid|steer clear of|stay away from|keep away from|nothing (?:that|which) (?:needs|requires|involves|depends on)|not anything (?:that|which) (?:needs|requires))\s+(.+)$/i
+    .exec(statement.trim().replace(/[.!]+$/, ''));
+  if (avoid?.[1]) {
+    const subject = avoid[1].trim().replace(/^(?:anything|things|stuff|something|any)\s+(?:that|which|with)?\s*(?:needs?|requires?|involves?|has)?\s*/i, '').trim();
+    if (/\b(support|customer service|helpdesk|help desk|hand-?holding|onboarding calls?)\b/i.test(subject)) {
+      return say('prefer', 'almost no support burden', 'support_burden');
+    }
+    if (subject.length > 0) return say('avoid', subject, null);
   }
 
   // "SELL TO BUSINESSES RATHER THAN CONSUMERS."
@@ -491,11 +511,57 @@ export async function openMandate(input: {
   if ((input.evidenceMode ?? 'real') === 'reference') {
     const { exerciseReferenceMandate } = await import('./reference-candidates.js');
     await exerciseReferenceMandate(id);
+  } else {
+    // A REAL SEARCH LOOKS THROUGH WHAT IS ALREADY PROVEN, FROM THE MOMENT IT
+    // OPENS. The public sources the morning sense check has proven were opened
+    // for a searcher only by the next morning's check, so a direction given at
+    // noon read "Blocked: nowhere to look" until 05:40 — a day of a true
+    // sentence about the wrong moment. Nothing is granted by this: these are
+    // ways of looking, and every row says what it never grants.
+    const { openTheEyesThatAreProven } = await import('./research-sources.js');
+    await openTheEyesThatAreProven(input.founderId);
   }
 
   const made = await currentMandate(input.founderId);
   if (!made) throw new Error('mandate did not open');
   return made;
+}
+
+/**
+ * WHAT A PIECE OF STEERING MEANS, IN PLAIN WORDS. One text for the
+ * confirmation ("Hold the search to this?") and for the search page reading it
+ * back, so the two cannot drift. The page used to print the statement alone,
+ * and a preference absorbed from inside a direction printed the direction
+ * again beneath itself.
+ */
+export function guidanceInPlainWords(kind: string, subject: string | null): string {
+  switch (kind) {
+    case 'avoid':
+      return `I will reject any candidate that depends on ${subject ?? 'that'}, and say `
+        + 'that is why.';
+    case 'prefer':
+      return `I will weight the search toward ${subject ?? 'that'} — it makes a candidate `
+        + 'more likely to reach you, not automatically right.';
+    case 'industry':
+      return `I will look in ${subject ?? 'that industry'} instead of wherever I was `
+        + 'looking. This replaces the last industry you named.';
+    case 'budget':
+      return `I will spend at most $${subject ?? '0'} finding out whether a candidate is `
+        + 'real, and stop and tell you when it is gone.';
+    case 'harder':
+      return 'I will raise the bar. A candidate now has to survive more attempts to kill '
+        + 'it before I bring it to you at all.';
+    case 'deeper':
+      return 'I will keep working on that one rather than moving on.';
+    case 'favour':
+      return subject
+        ? `I will put my effort toward ${subject} first — without stopping trying to kill it, `
+          + 'which is when a favourite is most dangerous.'
+        : 'I will treat that one as the front runner and put my effort there — without '
+          + 'stopping trying to kill it, which is when a favourite is most dangerous.';
+    default:
+      return 'I will look for a different kind of candidate.';
+  }
 }
 
 export async function currentMandate(founderId: string): Promise<Mandate | null> {

@@ -275,6 +275,15 @@ export async function recordResult(input: {
     });
   }
 
+  // ITS BUDGET ENDS WITH ITS ANSWER. The allowance granted with the test's
+  // asset ran to the day the test owed an answer; a test that settled early
+  // left the ceiling standing, and Controls read "may spend up to $100 more
+  // without asking" on a stopped test. Withdrawn here, with the reason.
+  await query(
+    `UPDATE owner_allowances SET withdrawn_at = datetime('now'),
+            withdraw_reason = 'the test settled; its budget ended with its answer'
+      WHERE withdrawn_at IS NULL
+        AND product_id IN (SELECT id FROM products WHERE from_experiment_id = ?)`, [input.experimentId]);
   await query(
     `UPDATE market_unknowns SET answered_at = datetime('now'), answer = ?
       WHERE id = ? AND answered_at IS NULL`,

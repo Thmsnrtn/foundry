@@ -97,6 +97,17 @@ export function whichDoor(
   // THE WHOLE PARAGRAPH, EVERY CLAUSE OF IT. readVentureParagraph returns one
   // reading per sentence, and a paragraph counts as venture when any sentence
   // of it is - the constraints travel with the mandate rather than away from it.
+  // A HOLD ON SENDING IS AN ACT WITH A PRIMITIVE. "Hold off sending anything to
+  // anyone for now", "pause outreach", "don't email anybody": the Workshop's
+  // pause on new economic activity. Read before the venture reader, which
+  // heard "keep looking" in it as steering; before posture, because "stop
+  // sending" is not "stop everything"; and before the company parser, which
+  // heard every "do not …" as a boundary on a company he does not own.
+  if (readHoldAsk(said) !== null) {
+    return { destination: 'authority', understoodAs: 'you want me to hold off writing to anyone',
+      handOffTo: null, said, needs: null };
+  }
+
   const readings = readVentureParagraph(said);
   const venture = readings.filter((r) => r.kind !== 'not_venture');
   const opening = venture.some((r) => r.kind === 'mandate');
@@ -184,6 +195,18 @@ export function whichDoor(
  * emails invoices" is a search (read earlier) and "email the shops" is this.
  */
 const OUTWARD = /^\s*(?:please\s+)?(?:(?:email|e-mail|mail|write to|contact|message|reach out to|call|phone|text|send (?:an? )?(?:email|message|offer)s? to)\b|(?:spend|pay|buy|purchase|charge|sign up for|subscribe to)\b)/i;
+
+/** "Hold off sending", "pause outreach", "don't send anything to anyone". */
+export function readHoldAsk(said: string): string | null {
+  const t = said.trim().toLowerCase();
+  const holds = /\b(?:hold off|hold|pause|freeze|suspend|stop|no more|don'?t|do not|never)\b[^.]{0,30}\b(?:send(?:ing)?|mail(?:ing)?|email(?:ing|s)?|outreach|messag(?:e|es|ing)|writ(?:e|ing) to|contact(?:ing)?|reach(?:ing)? out)\b/.test(t)
+    || /\b(?:send|email|mail|write to|contact|message)\s+(?:nobody|no one|no-one|nothing to anyone)\b/.test(t);
+  if (!holds) return null;
+  // "Stop looking" and "stop everything" are not this; nor is a sentence that
+  // asks to send more.
+  if (/\bstop (?:looking|searching|everything)\b/.test(t)) return null;
+  return 'you want me to hold off writing to anyone';
+}
 
 export function readAuthorityAsk(said: string): string | null {
   const t = said.trim();

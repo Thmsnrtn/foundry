@@ -260,6 +260,49 @@ export async function whileYouWereAway(founderId: string, days = 7): Promise<Ret
       + `${String(e.verdict) === 'as_predicted' ? 'as I expected' : `not what I expected (${String(e.what_we_expect)})`}`);
     if (Number(e.cost_cents) > 0) moneyLines.push(`${money(Number(e.cost_cents))} on a test: ${String(e.what_we_do)}`);
   }
+  // WHAT THE VENTURE DID, WHETHER OR NOT HE OWNS A COMPANY. Everything above
+  // this line is scoped to owned companies, so with none the letter said
+  // "nothing left the building" a week after 21 businesses were written to
+  // under a test, "nothing you set changed" after he steered the search, and
+  // "nothing settled" after a test settled. The venture's rows are his too.
+  // STANDING DOES NOT APPLY: the join reaches each test's own asset, which is
+  // experimental by nature — this reports what the tests sent, as the tests.
+  for (const o of (await query(
+    `SELECT e.what_we_do, COUNT(*) AS n,
+            SUM(CASE WHEN o.status = 'executed' THEN 1 ELSE 0 END) AS sent
+       FROM outbound_actions o
+       JOIN products p ON p.id = o.product_id
+       JOIN venture_experiments e ON e.id = p.from_experiment_id
+      WHERE e.founder_id = ? AND o.action_type = 'send_email' AND ${realCompany('p')}
+        AND COALESCE(o.executed_at, o.created_at) >= datetime('now', ?)
+      GROUP BY e.id`, [founderId, since])).rows as unknown as Array<Record<string, unknown>>) {
+    effects.push(`${String(o.sent)} of ${String(o.n)} messages sent to people under the test: ${String(o.what_we_do)}`);
+  }
+  for (const m of (await query(
+    `SELECT statement, closed_reason,
+            CASE WHEN closed_at IS NOT NULL AND closed_at >= datetime('now', ?) THEN 1 ELSE 0 END AS closed_lately
+       FROM venture_mandates
+      WHERE founder_id = ? AND evidence_mode = 'real'
+        AND (opened_at >= datetime('now', ?) OR closed_at >= datetime('now', ?))
+      ORDER BY opened_at`, [since, founderId, since, since])).rows as unknown as Array<Record<string, unknown>>) {
+    changed.push(Number(m.closed_lately) === 1
+      ? `the search "${String(m.statement)}" closed: ${String(m.closed_reason ?? '')}`
+      : `a search opened: "${String(m.statement)}"`);
+  }
+  for (const g of (await query(
+    `SELECT g.statement FROM venture_guidance g JOIN venture_mandates m ON m.id = g.mandate_id
+      WHERE m.founder_id = ? AND g.given_at >= datetime('now', ?) ORDER BY g.rowid`, [founderId, since]))
+    .rows as unknown as Array<Record<string, unknown>>) {
+    changed.push(`you steered the search: "${String(g.statement)}"`);
+  }
+  for (const e of (await query(
+    `SELECT e.what_we_do, e.verdict, d.cannot_prove FROM venture_experiments e
+       LEFT JOIN probe_designs d ON d.experiment_id = e.id
+      WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.verdict IS NOT NULL
+        AND e.ran_at >= datetime('now', ?)`, [founderId, since])).rows as unknown as Array<Record<string, unknown>>) {
+    learned.push(`the test "${String(e.what_we_do)}" ${String(e.verdict) === 'surprised' ? 'did not hold' : 'held'}`
+      + `${e.cannot_prove ? `; it could not establish ${String(e.cannot_prove)}` : ''}; the next design is written against that`);
+  }
   for (const c of (await query(
     `SELECT claim, settled_as, settled_by FROM market_claims
       WHERE founder_id = ? AND evidence_mode = 'real' AND settled_at >= datetime('now', ?)`,

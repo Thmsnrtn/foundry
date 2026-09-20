@@ -396,7 +396,7 @@ describe('the owner walks it', () => {
     const shown = await asOwner('/foundry/venture',
       'said=' + encodeURIComponent("I'd like you to add a new micro-SaaS venture to my portfolio"));
     expect(shown.status).toBe(200);
-    expect(shown.text).toContain('Go and look?');
+    expect(shown.text).toMatch(/Go and look\?|Point the search, or start this one\?/);
     expect(shown.text).toContain('not an instruction to build one');
     // Predictable consequence, in the grammar every binding act here uses —
     // and, since 20 September, what actually happens each morning and where

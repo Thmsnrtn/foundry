@@ -41,7 +41,7 @@ import {
   type CannotSay, type Consequence, consequenceOfApproving, isCannotSay,
 } from '../../services/founder/what-it-would-do.js';
 import type { CompanyNumbers } from '../../services/founder/what-the-numbers-say.js';
-import type { VentureReading } from '../../services/venture/mandate.js';
+import { guidanceInPlainWords, type VentureReading } from '../../services/venture/mandate.js';
 import { OWNER_SURFACE_SCRIPT } from '../../lib/owner-surface-script.js';
 import { log as logger } from '../../lib/logger.js';
 import { reportError } from '../../lib/error-reporter.js';
@@ -1940,6 +1940,12 @@ export function matchQuestion(text: string): string {
   if (/what do i own|my companies|everything doing|how are things|across (all|my)|portfolio|deteriorat|which company/.test(t)) {
     return 'portfolio';
   }
+  // "IS FOUNDRY HEALTHY", "ARE YOU STUCK", "IS IT STILL RUNNING" are about the
+  // institution, and were answered "which company do you mean".
+  if (/\b(healthy|health|stuck|stalled|still running|running ok|alive|operating)\b/.test(t) && !/\b(company|business)\b/.test(t)) return 'okay';
+  // "WHY DID IT FAIL", "WHAT DID YOU LEARN": the settled test, its rule, its
+  // limit, and what the next design is written against. Was "I don't know yet".
+  if (/why (did|has|did it|didn'?t|hasn'?t)|what went wrong|what (did|have) (you|we) learn|lesson|learn(ed|t)\b|fail(ed|ure)?\b|didn'?t work|not work(ing)?\b|surprised/.test(t)) return 'learned';
   if (/how is|how are|how'?s |doing|going|healthy|health of/.test(t)) return 'howdoing';
   // CONTEXT FIRST. He is looking at something; "what does this mean" is about
   // that, and he should never have to name it again to be understood.
@@ -2310,22 +2316,90 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
     </div>`;
   }
 
-  if (key === 'allowed') {
+  if (key === 'learned') {
+    // THE LAST SETTLED TEST, AS A RECORD: what was predicted, what the world
+    // did, what that establishes and does not, and what is designed against it.
+    const last = (await query(
+      `SELECT e.what_we_do, e.what_we_expect, e.would_disprove, e.what_happened, e.verdict, e.ran_at,
+              e.cost_cents, d.cannot_prove
+         FROM venture_experiments e LEFT JOIN probe_designs d ON d.experiment_id = e.id
+        WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.verdict IS NOT NULL
+        ORDER BY e.ran_at DESC LIMIT 1`, [s.ownerId])).rows[0] as Record<string, unknown> | undefined;
+    if (!last) {
+      return html`<div class="said"><p>No test of mine has settled yet, so there is nothing to
+        have learned from the world. What I have is what I have read, under Searching.</p></div>`;
+    }
+    const surprised = String(last.verdict) === 'surprised';
     return html`<div class="said">
+      <p><strong>${surprised ? 'It did not hold.' : 'It held.'}</strong> The test was:
+        ${String(last.what_we_do)}.</p>
+      <p><strong>What I predicted</strong> — ${String(last.what_we_expect)}. I said beforehand
+        that ${String(last.would_disprove)} would prove me wrong.</p>
+      <p><strong>What happened</strong> — ${String(last.what_happened)}
+        ${last.ran_at ? html` (settled ${String(last.ran_at).slice(0, 10)})` : ''}.</p>
+      <p><strong>What that establishes</strong> — ${surprised
+    ? 'that this offer, to that population, through that channel, in that window, did not sell. Not that the category is worthless, and not that nobody would buy it another way.'
+    : 'that the prediction held for this offer, this population and this window — one result, not a formula.'}
+        ${last.cannot_prove ? html` It could not establish: ${String(last.cannot_prove)}.` : ''}</p>
+      <p><strong>What changes</strong> — the next design is written against that limit: it
+        has to answer to what this one could not establish, or it is asking the same question
+        again in different words. Nothing is designed until a candidate stands and, to run,
+        a charter is live.</p>
+      <p class="quiet">The whole record — rule, receipts, prediction and outcome — is under
+        Experiments &rsaquo; History.</p>
+    </div>`;
+  }
+
+  if (key === 'allowed') {
+    // THE CHARTER AND THE TESTS, NOT ONLY THE COMPANY CONSENTS. "What can you
+    // spend?" was answered from code-change permissions and model spend, so it
+    // said "I cannot contact anyone" a week after 21 businesses were written to.
+    const { envelopeReading } = await import('../../services/institution/charter.js');
+    const envelope = await envelopeReading(s.ownerId);
+    const tests = (await query(
+      `SELECT COALESCE(SUM(CASE WHEN e.decision = 'approved' THEN e.cost_cents ELSE 0 END), 0) AS approved_cents,
+              COUNT(CASE WHEN e.decision = 'approved' THEN 1 END) AS approved,
+              COUNT(CASE WHEN e.decision = 'approved' AND e.verdict IS NULL AND e.retired_at IS NULL THEN 1 END) AS running
+         FROM venture_experiments e WHERE e.founder_id = ? AND e.evidence_mode = 'real'`, [s.ownerId]))
+      .rows[0] as Record<string, unknown>;
+    // STANDING DOES NOT APPLY: the join reaches a test's own asset, which is
+    // experimental by nature — this counts what the tests sent, as the tests.
+    const written = (await query(
+      `SELECT COUNT(*) AS n FROM outbound_actions o
+         JOIN products p ON p.id = o.product_id
+         JOIN venture_experiments e ON e.id = p.from_experiment_id
+        WHERE e.founder_id = ? AND o.action_type = 'send_email' AND o.status = 'executed' AND ${realCompany('p')}`, [s.ownerId]))
+      .rows[0] as Record<string, unknown>;
+    const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
+    const { publicWorkshopOf } = await import('../../services/public-workshop/settings.js');
+    const pause = (await publicWorkshopOf(s.ownerId))?.economicPause ?? null;
+    return html`<div class="said">
+      ${pause ? html`<p><strong>Sending is on hold</strong> since ${pause.at.slice(0, 10)}: &ldquo;${pause.reason}&rdquo;.
+        Nothing is offered or sent to anyone until you lift it on the Workshop; deliveries and refunds carry on.</p>` : ''}
+      ${envelope
+    ? html`<p><strong>Under the charter</strong> I may spend up to
+        ${dollars(envelope.charter.testsTotalCents)} on tests over ${String(envelope.charter.days)} days
+        (${dollars(envelope.remainingCents)} of it left, ${String(envelope.charter.daysLeft)} days to go),
+        run ${String(envelope.charter.probesInFlight)} at once (${String(envelope.inFlight)} in flight),
+        and think for up to ${dollars(envelope.charter.cognitionCentsPerDay)} a day. Anything outside
+        that asks you first.</p>`
+    : html`<p><strong>No charter is signed</strong>, so nothing is sent or spent on my own
+        say-so. I can look, design and seal a test; running one waits for your tap on it, or for
+        a charter. My thinking is bounded at $1 a day until one says otherwise.</p>`}
+      <p>${Number(tests.approved) === 0
+    ? 'No test has been approved yet, so no test has spent anything.'
+    : `${count(Number(tests.approved), 'test')} approved at ${dollars(Number(tests.approved_cents))} in all; ${count(Number(written.n), 'message')} sent to people under those tests; ${Number(tests.running) === 0 ? 'none running now' : `${count(Number(tests.running), 'test')} running now`}.`}</p>
       ${s.permissions.length === 0
-    ? html`<p><strong>Nothing.</strong> I can look, and I can tell you what I find. I cannot
-        change anything, spend anything, or contact anyone.</p>
-      <p>Each of those would be something you allow separately, for a set time, and could take
-        back whenever you wanted.</p>`
-    : html`<p>I may change ${s.permissions[0].path
+    ? html`<p>On my own code I may change nothing.</p>`
+    : html`<p>On my own code I may change ${s.permissions[0].path
       ? 'one file — my own description of my database — and nothing else'
       : s.permissions[0].what}, until ${s.permissions[0].until}. It ends then by itself,
       and you can take it back above.</p>
       ${s.connectedSenses.length === 0 ? html`<p>In practice I cannot use it: I have no way
         to reach the repository, so nothing I could change is reachable from here.</p>` : ''}`}
       <p>${s.spent30d === 0
-    ? html`I have spent nothing.`
-    : html`I have spent $${s.spent30d.toFixed(2)} this month.`}</p>
+    ? html`Thinking has cost nothing this month.`
+    : html`Thinking has cost $${s.spent30d.toFixed(2)} this month.`}</p>
     </div>`;
   }
 
@@ -2586,12 +2660,12 @@ foundryShellRoutes.get('/foundry', async (c) => {
       <div class="tile door"><dt class="k">${mark('owner')}Needs you</dt>
         <dd class="v">${needsN === 0 ? html`<span class="state quiet none">None</span>` : html`<span class="state watch">${String(needsN)}</span>`}</dd>
         <dd class="d">${needsN === 0 ? 'none waiting' : needsN === 1 ? 'one decision' : `${String(needsN)} decisions`}</dd>
-        <a class="door" href="${needsN === 0 ? '/foundry/decisions' : '#the-one-thing'}" aria-label="Decisions"></a></div>
+        <a class="door" href="${attention === null ? '/foundry/decisions' : '#the-one-thing'}" aria-label="Decisions"></a></div>
       <div class="tile door"><dt class="k">${mark('experiment')}${live ? 'Experiment' : 'Experiments'}</dt>
         <dd class="v">${live ? html`<span class="state ${live.state === 'running' ? 'ok' : 'watch'}">${live.stateLabel}</span>` : html`<span class="state quiet none">None</span>`}</dd>
         <dd class="d">${live ? `${String(live.exposure.sent)} of ${String(live.exposure.approved)} written to` : 'nothing running'}</dd>
         <a class="door" href="${live ? `/foundry/experiments/${live.id}` : '/foundry/experiments'}" aria-label="${live ? live.title : 'Experiments'}"></a></div>
-      <!-- THIS TILE SHOWED GROSS AND CALLED IT "Settled".
+      ${/* THIS TILE SHOWED GROSS AND CALLED IT "Settled".
            The figure it drew is what buyers were charged for tests. It is not what is
            settled and it is not the owner's: Stripe takes a fee at the moment
            of the charge, the work may be owed and not yet delivered, and the
@@ -2599,7 +2673,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
            gross on the first screen is exactly the gross-as-net conflation the
            economic ledger was built to end, so the tile now shows the end of
            the subtraction and keeps the gross in the line beneath it, where it
-           can be checked rather than mistaken for the answer. -->
+           can be checked rather than mistaken for the answer. */ ''}
       <div class="tile door"><dt class="k">${mark('cash')}Yours</dt>
         <dd class="v">${yours.figure.cents === null ? html`<span class="unknown">not known</span>`
     : html`${money(yours.figure.cents)}${yours.figure.quality === 'estimated' ? html` <span class="dim">est.</span>` : ''}`}</dd>
@@ -2754,10 +2828,10 @@ foundryShellRoutes.get('/foundry', async (c) => {
     : ''}
     ${pulseLine}
     ${portfolioState}
-    <!-- THE ONE THING HE CAME FOR, BEFORE ANYTHING HE DID NOT.
+    ${/* THE ONE THING HE CAME FOR, BEFORE ANYTHING HE DID NOT.
          This was rendered last: after what changed, after ninety lines of
          search block that can carry a whole opportunity's case. The screen said
-         "One thing needs you" and then put everything else in front of it. -->
+         "One thing needs you" and then put everything else in front of it. */ ''}
     ${standingPermission(s)}
     ${/* THE COCKPIT ROW. The decision, cash movement and live activity are one
           composition: on a phone they stack in that order so the decision is
@@ -2813,6 +2887,8 @@ foundryShellRoutes.get('/foundry', async (c) => {
     ${done === 'nosearchtosteer' ? html`<div class="done"><p><strong>Nothing to steer.</strong>
       There is no search running, and I will not start one because you pressed a button
       under an old candidate.</p></div>` : ''}
+    ${done === 'replacedsearch' ? html`<div class="done"><p><strong>Looking for that instead.</strong>
+      The earlier search is closed, with what it found kept on the record under Searching.</p></div>` : ''}
     ${done === 'pointedsearch' ? html`<div class="done"><p><strong>Pointed that way.</strong>
       One search at a time, so I took your direction as a preference on the one already
       running rather than starting a second.</p></div>` : ''}
@@ -2825,11 +2901,11 @@ foundryShellRoutes.get('/foundry', async (c) => {
       ${s.changed.more > 0 ? html`<p class="quiet">And ${String(s.changed.more)} other
         ${s.changed.more === 1 ? 'thing' : 'things'}.</p>` : ''}
     </div>` : ''}
-    <!-- NOTHING TO LOOK AFTER IS A DIFFERENT SCREEN FROM NOTHING TO LOOK FOR.
+    ${/* NOTHING TO LOOK AFTER IS A DIFFERENT SCREEN FROM NOTHING TO LOOK FOR.
          With no companies, this offered to go searching and then admitted in
          the next line that it had nowhere to look — an offer it could not keep,
          and the screen's only action. The first thing to do when you own
-         nothing is name something you own. -->
+         nothing is name something you own. */ ''}
     ${s.notLooking && s.watching.real === 0 && s.watching.invented === 0
     ? html`<div class="know">
       <h2>You have not told me about anything you own</h2>
@@ -2850,9 +2926,9 @@ foundryShellRoutes.get('/foundry', async (c) => {
           placeholder="Find another small income stream. Keep legal risk low."
           aria-label="What to look for, and what not to do" enterkeyhint="send" autocapitalize="sentences"
           autocorrect="on" spellcheck="true" />
-        <!-- SECONDARY, DELIBERATELY. The one primary action on this screen is
+        ${/* SECONDARY, DELIBERATELY. The one primary action on this screen is
              whatever actually needs him; an offer to go looking is an offer,
-             and two things styled as the decision is one thing too many. -->
+             and two things styled as the decision is one thing too many. */ ''}
         <button class="btn" type="submit">Start looking</button>
       </form>
       ${s.notLooking.canSeeThrough.length ? html`<p class="quiet"><strong>What I would be
@@ -3454,9 +3530,9 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
     `<span><i style="background:${swatches[i % swatches.length]}"></i>${r.form} ${Math.round((r.cents / formTotal) * 100)}%</span>`).join(''))}</p>
       <p class="quiet">From what each company says about how it earns. A company that has not said is not here.</p>
     </div>` : ''}` : ''}
-    <!-- THE LIST HAS A NAME NOW. The company cards were h3 with no h2 above
+    ${/* THE LIST HAS A NAME NOW. The company cards were h3 with no h2 above
          them, so a screen reader heard the page jump a level straight into
-         them — and the page itself never said what the list was. -->
+         them — and the page itself never said what the list was. */ ''}
     ${portfolio.companies.length > 0
     ? html`<h2 class="section">What you own</h2>` : ''}
     ${raw(portfolio.companies.map((c) => {
@@ -3873,13 +3949,13 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     </details>
 
     ${view.senses.length ? html`<details class="know fold"><summary><h3>What I can see</h3><span class="gist">${count(view.senses.length, 'thing')}, from ${[...new Set(view.senses.map((x) => x.providerName))].join(' and ')}</span></summary>
-      <!-- ESCAPED, AND THE REASON IS NOT HYPOTHETICAL. sense.lastError is a
+      ${/* ESCAPED, AND THE REASON IS NOT HYPOTHETICAL. sense.lastError is a
            verbatim slice of a remote HTTP response body: the provider gateways
            throw the status followed by 300 characters of the body, and that
            message is stored on company_senses.last_error and shown here.
            grantedScopes comes straight off a provider's token endpoint. Both
            are text a third party chooses, and this block used to build a
-           string and hand it to raw(). -->
+           string and hand it to raw(). */ ''}
       <ul>${view.senses.map((sense) => html`<li><strong>${sense.wouldLearn}</strong> —
         from ${sense.providerName}${sense.mode === 'sandbox'
     ? ', in test mode, so none of it is the world'
@@ -3924,13 +4000,13 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
         separate question.</p>
     </details>
 
-    <!-- WHAT IT UNDERSTANDS ABOUT EACH OF THESE WAS A FLOOR DOWN.
+    ${/* WHAT IT UNDERSTANDS ABOUT EACH OF THESE WAS A FLOOR DOWN.
          The list said what Foundry looks after and at which rung; the page
          that says what it UNDERSTANDS the thing to be — and lets the owner
          correct a fact that has stopped being true — lived at /letter, inside
          the Advanced depth, in a list of thirty other endpoints. A correction
          belongs one tap from the thing being corrected, in the company it is
-         about, which is here. -->
+         about, which is here. */ ''}
     ${view.responsibilities.length ? html`<details class="know fold"><summary><h3>What I look after</h3><span class="gist">${count(view.responsibilities.length, 'responsibility', 'responsibilities')}</span></summary>
       <ul>${raw(view.responsibilities.map((r) =>
     `<li><a href="/foundry/companies/${view.id}/understanding/${r.id}">${r.title}</a>
@@ -3960,10 +4036,10 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
         before anything takes effect.</p>
       ${view.allowance ? html`<p><strong>Up to $${view.allowance.amount}</strong> —
         $${view.allowance.left} of it left. ${view.allowance.statement}</p>
-      <!-- A CEILING HE COULD SET AND NEVER REMOVE. The function to withdraw one
+      ${/* A CEILING HE COULD SET AND NEVER REMOVE. The function to withdraw one
            existed, was exported, and was called from nowhere — so the only way
            to take back a spending allowance was to set a different one, which
-           is not the same act and not what he would mean. -->
+           is not the same act and not what he would mean. */ ''}
       <form method="POST"
         action="/foundry/companies/${view.id}/allowance/${view.allowance.id}/withdraw">
         <button class="btn" type="submit">Take that allowance back</button>
@@ -4016,11 +4092,11 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
 
     ${view.lifted.length ? html`<details class="know fold"><summary><h3>What you lifted</h3><span class="gist">${count(view.lifted.length, 'boundary', 'boundaries')}</span></summary>
       <p class="quiet">Changing your mind runs both ways. These are no longer in force.</p>
-      <!-- ESCAPED, AND THE ATTRIBUTE IS THE REASON. His own sentence was
+      ${/* ESCAPED, AND THE ATTRIBUTE IS THE REASON. His own sentence was
            interpolated into value="..." through raw(), so a boundary containing
            a quotation mark — "don't email anyone" typed with a real quote — cut
            the attribute short and the button silently re-bound him to a
-           different, shorter rule than the one on the screen above it. -->
+           different, shorter rule than the one on the screen above it. */ ''}
       ${view.lifted.map((b) => html`<div class="noticed">
         <p>${b.statement}</p>
         <p class="quiet">Lifted ${b.liftedAt} — ${b.liftedReason}.</p>
@@ -4351,7 +4427,7 @@ foundryShellRoutes.post('/foundry/acquisitions/:id/withdraw',
  * and one of them silently losing his constraints is how this started.
  */
 async function absorbAndAnswer(
-  c: any, founderId: string, readings: VentureReading[],
+  c: any, founderId: string, readings: VentureReading[], replaced = false,
 ): Promise<Response> {
   const venture = await import('../../services/venture/mandate.js');
   const hadMandate = readings.some((r) => r.kind === 'mandate');
@@ -4386,7 +4462,7 @@ async function absorbAndAnswer(
   // it would not do.
   if (result.pointed) return c.redirect('/foundry?done=pointedsearch');
   if (hadMandate && !result.opened) return c.redirect('/foundry?done=alreadylooking');
-  if (result.opened) return c.redirect('/foundry?done=looking');
+  if (result.opened) return c.redirect(replaced ? '/foundry?done=replacedsearch' : '/foundry?done=looking');
   if (result.absorbed > 0) return c.redirect('/foundry?done=steeredsearch');
   return c.redirect('/foundry');
 }
@@ -4594,6 +4670,34 @@ async function authorityBoundary(founderId: string, door: import('../../services
   const mandate = await currentMandate(founderId);
   const live = (await listExperiments(founderId, new Date(), 'now')).filter((t) => !t.concluded);
   const money = door.understoodAs.includes('money');
+  const hold = door.understoodAs.includes('hold');
+  if (hold) {
+    // "HOLD OFF SENDING ANYTHING TO ANYONE, BUT KEEP LOOKING." The primitive
+    // exists — the Workshop's pause stops offers, placements and new tests and
+    // leaves deliveries, refunds and the search alone — and six phrasings of
+    // it were answered "which company do you mean". One confirmation, then
+    // the same act the Workshop page performs.
+    const { publicWorkshopOf } = await import('../../services/public-workshop/settings.js');
+    const w = await publicWorkshopOf(founderId);
+    return page('What you said', html`
+      <h1>${w?.economicPause ? 'Sending is already on hold' : 'Hold all sending?'}</h1>
+      <p class="lede">You said: <strong>${door.said}</strong></p>
+      ${!w ? html`<p>There is no public Workshop yet, so nothing can be sent or offered anyway. The
+        search, if one is open, carries on.</p>`
+    : w.economicPause ? html`<p>New economic activity has been paused since ${w.economicPause.at.slice(0, 10)}:
+        &ldquo;${w.economicPause.reason}&rdquo;. Nothing is offered, placed or sent to anyone; what is owed —
+        deliveries, refunds, the public record — carries on, and so does the search. Lift it from the
+        <a href="/foundry/workshop">Workshop</a>.</p>`
+    : html`<p>I would pause new economic activity on the Workshop: no offer is placed, nothing is sent to
+        anyone and no new test starts, until you lift it. Deliveries, refunds and the public record carry
+        on, because a customer's claim does not depend on your attention. The search keeps looking; what
+        it finds waits.</p>
+      <form method="POST" action="/foundry/public-workshop/pause">
+        <input type="hidden" name="reason" value="${door.said.slice(0, 200)}" />
+        <button class="btn go" type="submit">Yes — hold all sending</button>
+      </form>`}
+      <a class="btn" href="/foundry">${w && !w.economicPause ? 'No' : 'Back'}</a>`, 'foundry');
+  }
   return page('What you said', html`
     <h1>${money ? 'I do not spend on a sentence' : 'I do not write to anyone on a sentence'}</h1>
     <p class="lede">You said: <strong>${door.said}</strong></p>
@@ -4746,7 +4850,7 @@ async function ventureConfirmation(c: any, founderId: string, said: string): Pro
       <p class="lede">You said: <strong>${said}</strong></p>
       <div class="know">
         <h2>What I will do</h2>
-        <p>${GUIDANCE_IN_PLAIN_WORDS(reading.guidance, reading.subject)}</p>
+        <p>${guidanceInPlainWords(reading.guidance, reading.subject)}</p>
         <p class="quiet">This becomes part of the search itself, not a note beside it.
           Every candidate from here is tested against it, and I will tell you when one
           fails because of something you said.</p>
@@ -4758,9 +4862,21 @@ async function ventureConfirmation(c: any, founderId: string, said: string): Pro
       <a class="btn" href="/foundry">No</a>`, 'foundry'));
   }
 
+  // ONE SEARCH AT A TIME IS THE RULE; WHICH ONE IS HIS CALL. A direction given
+  // while a search was running was silently folded into it as a preference —
+  // his first real direction, absorbed into the search that Experiment 001
+  // had already answered, and the confirmation never said so. The running
+  // search is named here, and he chooses: point it, or close it and start this.
+  const running = await venture.currentMandate(founderId);
   return c.html(page('What you said', html`
-    <h1>Go and look?</h1>
+    <h1>${running ? 'Point the search, or start this one?' : 'Go and look?'}</h1>
     <p class="lede">You said: <strong>${said}</strong></p>
+    ${running ? html`<div class="know">
+      <h2>A search is already running</h2>
+      <p>&ldquo;${running.statement}&rdquo; — since ${running.openedAt}. I run one search at a
+        time. I can hold that one to what you just said, or close it — what it found stays on
+        the record — and look for this instead.</p>
+    </div>` : ''}
     <div class="know">
       <h2>What I will do</h2>
       <p>I will treat that as a direction to go and find you
@@ -4782,40 +4898,24 @@ async function ventureConfirmation(c: any, founderId: string, said: string): Pro
           here in a sentence, and stop it the same way.</li>
       </ul>
     </div>
+    ${running ? html`<form method="POST" action="/foundry/venture/confirm">
+      <input type="hidden" name="said" value="${said}" />
+      <input type="hidden" name="mode" value="replace" />
+      <button class="btn go" type="submit">Close that search and look for this</button>
+    </form>
     <form method="POST" action="/foundry/venture/confirm">
       <input type="hidden" name="said" value="${said}" />
+      <input type="hidden" name="mode" value="point" />
+      <button class="btn" type="submit">Keep that search, pointed this way</button>
+    </form>` : html`<form method="POST" action="/foundry/venture/confirm">
+      <input type="hidden" name="said" value="${said}" />
       <button class="btn go" type="submit">Yes — go and look</button>
-    </form>
+    </form>`}
     <a class="btn" href="/foundry">No</a>`, 'foundry'));
 }
 
 /** Plain words for what a piece of steering will actually do. */
-function GUIDANCE_IN_PLAIN_WORDS(kind: string, subject: string | null): string {
-  switch (kind) {
-    case 'avoid':
-      return `I will reject any candidate that depends on ${subject ?? 'that'}, and say `
-        + 'that is why.';
-    case 'prefer':
-      return `I will weight the search toward ${subject ?? 'that'} — it makes a candidate `
-        + 'more likely to reach you, not automatically right.';
-    case 'industry':
-      return `I will look in ${subject ?? 'that industry'} instead of wherever I was `
-        + 'looking. This replaces the last industry you named.';
-    case 'budget':
-      return `I will spend at most $${subject ?? '0'} finding out whether a candidate is `
-        + 'real, and stop and tell you when it is gone.';
-    case 'harder':
-      return 'I will raise the bar. A candidate now has to survive more attempts to kill '
-        + 'it before I bring it to you at all.';
-    case 'deeper':
-      return 'I will keep working on that one rather than moving on.';
-    case 'favour':
-      return 'I will treat that one as the front runner and put my effort there — without '
-        + 'stopping trying to kill it, which is when a favourite is most dangerous.';
-    default:
-      return 'I will look for a different kind of candidate.';
-  }
-}
+// The plain words for a piece of steering live beside the reader (`guidanceInPlainWords`).
 
 /** Bind it. The sentence is re-read here rather than trusted from the form. */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -4836,6 +4936,12 @@ foundryShellRoutes.post('/foundry/venture/confirm',
     if (readings.some((r) => r.kind === 'stop_mandate') && readings.length === 1) {
       const stopped = await venture.stopMandate(String(founder.id), 'the owner said to stop');
       return c.redirect(`/foundry?done=${stopped ? 'searchstopped' : 'nothing'}`);
+    }
+    // HE CHOSE TO REPLACE THE RUNNING SEARCH. Closed with the reason on the
+    // row, through the same act "stop looking" uses; then the new one opens.
+    if (String(form.mode ?? '') === 'replace' && readings.some((r) => r.kind === 'mandate')) {
+      await venture.stopMandate(String(founder.id), `the owner gave a new direction: ${said}`);
+      return absorbAndAnswer(c, String(founder.id), readings, true);
     }
     return absorbAndAnswer(c, String(founder.id), readings);
   });
@@ -5844,7 +5950,7 @@ foundryShellRoutes.get('/foundry/companies/:id/understanding/:responsibilityId',
           <button class="btn" type="submit" style="width:auto">Correct it</button>
         </form>` : ''}
       </div>`)}
-      <!-- THE SAME SENTENCE, NINE TIMES, WAS THE WHOLE PAGE.
+      ${/* THE SAME SENTENCE, NINE TIMES, WAS THE WHOLE PAGE.
            Each fact nobody has stated rendered its own paragraph saying it had
            not been stated, so a responsibility with one answer and eleven gaps
            read as eleven near-identical refusals with an answer buried in them.
@@ -5855,7 +5961,7 @@ foundryShellRoutes.get('/foundry/companies/:id/understanding/:responsibilityId',
            first time is answering a question, and the question path already
            asks one at a time in the order that unblocks the most. A second way
            in would fight it, and a form the correction guard refuses would be
-           worse than none. -->
+           worse than none. */ ''}
       ${unknown.length === 0 ? '' : html`<div class="fact">
         <p class="quiet">What I do not know</p>
         <p>Nobody has told me ${unknown.length === 1

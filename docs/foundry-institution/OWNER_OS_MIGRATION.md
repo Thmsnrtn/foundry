@@ -2732,3 +2732,78 @@ The repair, with nothing new invented:
 What still requires the charter is unchanged: a search opens and runs on his
 sentence; a test is designed, attacked and sealed inside the charter; nothing
 is sent or spent without it.
+
+## The first direction lands, and the answers agree with the record (20 September 2026)
+
+The owner's standing instruction is that he should not be Foundry's
+integration tester. So before the next tranche, three reviewers who had not
+seen the code were given ordinary owner objectives and the product on a
+390-pixel phone (`scripts/owner-review-harness.mts`, production's shape:
+Experiment 001 run and settled, its search still open, no charter). Twelve
+objectives; one achieved outright. The failures were not wording. They were
+the same class as the Ask defect: capability behind a door the sentence never
+reached, and answers composed from a narrower record than the one that
+existed.
+
+What was repaired, each with a proof from the real entrance
+(`the-first-direction-lands.test.ts`) and a read-back in a real browser:
+
+- **A direction while a search is running is his call.** Experiment 001's
+  search is still open in production, so his first direction would have been
+  folded into it as a preference with a line saying "Pointed that way". The
+  confirmation now names the running search and offers both: keep it, pointed
+  this way, or close it — with the reason on the row, what it found kept under
+  Searching — and look for this. Closing and opening is one transaction.
+- **A search can look from the moment it opens.** The proven public sources
+  were opened for a searcher only by the next morning's sense check, so a
+  direction given at noon read *Blocked: nowhere to look* until 05:40.
+  `openMandate` opens them; Home reads *Waiting — Foundry is working* at once.
+- **Steering in his words.** "Avoid anything that needs customer support"
+  fell through to "which company do you mean". A generic *avoid X* is heard
+  last, after the named rules; support in it is the support-burden
+  preference. "Subscriptions" matches as well as "subscription". The search
+  page reads steering back in plain words, his sentence beside it, from the
+  one helper the confirmation uses (`guidanceInPlainWords`).
+- **A negated stop is not a stop.** "…but don't cancel the search" was read
+  as *cancel the search*.
+- **A hold on sending is an act.** "Hold off sending anything to anyone for
+  now" is heard at the door before the venture reader and offered as the one
+  thing that does it — the Workshop's pause on new economic activity: offers,
+  placements and new tests stop; deliveries, refunds, the public record and
+  the search carry on. "Are you allowed to contact anyone" answers that the
+  hold is in force, since when, and where to lift it.
+- **The money answer reads the charter and the tests.** "What can you spend"
+  was composed from code-change consents and model spend, and said "I cannot
+  contact anyone" a week after 21 businesses were written to. It now says the
+  charter's envelope (or that none is signed and what that means), what tests
+  were approved at, what was sent under them, what is running, whether sending
+  is on hold — and, separately, what thinking cost.
+- **"Why did it fail" has an answer.** The last settled test: what was
+  predicted, what would have disproved it, what happened, what that
+  establishes (this offer, that population, that channel, that window) and
+  does not (the category, other channels), what the design could not
+  establish, and what the next design is written against.
+- **"Is Foundry healthy" is about Foundry.** It went to the company reader.
+- **The week-away letter carries the venture.** Scoped to owned companies, it
+  said "nothing left the building" and "nothing you set changed". Sends under
+  tests, searches opened and closed, steering and settled tests are his rows
+  whether or not he owns a company.
+- **A budget ends with its answer.** The allowance granted with an approved
+  test ran to the day it owed an answer, so a test that settled early left
+  "may spend up to $100 more without asking" standing on Controls. Withdrawn
+  on settlement, and on retirement as the backstop.
+- **Last healthy is a date the estate has.** It was read off the failing
+  loops, so a healthy estate showed "not recorded" beside "Healthy".
+- **The Decisions tile points at a section that is on the page.** The anchor
+  was chosen by the count of things waiting; the section is rendered by the
+  one thing.
+- **No page ships its own development notes.** Thirty-six HTML comments in
+  the owner templates went to the phone on every request; one carried the
+  phrase "I don't know yet" after the sentence itself was gone. All are
+  TypeScript comments now, and a proof reads ten pages for either marker.
+
+What the reviewers found and was left, with the reason, is in
+`MATURITY_MAP.md` § *Testing the product as a person*. The map itself is
+new: one row per owner journey and per transition of the economic loop, three
+verdicts each — works, usable, earns — with what proves them.
+

@@ -12,6 +12,7 @@
 // not already; the forms that bind him stay where they were.
 // =============================================================================
 import { Hono } from 'hono';
+import { guidanceInPlainWords } from '../../services/venture/mandate.js';
 import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import { query, realCompany } from '../../db/client.js';
@@ -640,7 +641,7 @@ placeRoutes.get('/foundry/searching', async (c: any) => {
     ${progress ? html`
       ${frame.chips?.length ? html`<p class="chips">${frame.chips.map((ch) => html`<span class="chip">${ch}</span>`)}</p>` : ''}
       <p class="lede">${progress.mandate.statement}</p>
-      ${progress.mandate.guidance.length ? html`<ul>${progress.mandate.guidance.map((g) => html`<li>${g.statement}</li>`)}</ul>` : ''}
+      ${progress.mandate.guidance.length ? html`<ul>${progress.mandate.guidance.map((g) => html`<li>${guidanceInPlainWords(g.kind, g.subject)} <span class="quiet">— you said &ldquo;${g.statement}&rdquo;</span></li>`)}</ul>` : ''}
       ${progress.blocked ? html`<p class="gap"><strong>Where it has got to:</strong> ${progress.blocked}</p>
         <p class="quiet">What I would need: ${progress.wouldNeed ?? ''}</p>` : ''}
       <p class="quiet"><strong>Looking through</strong> — ${progress.seeingThrough.length ? progress.seeingThrough.join('; ') : 'nothing yet'}.</p>

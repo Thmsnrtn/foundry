@@ -309,11 +309,11 @@ const page2 = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedStrin
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 <title>${title}</title>
-<!-- ON THE HOME SCREEN, IT IS HIS PRODUCT. The owner's surface was the one
+${/* ON THE HOME SCREEN, IT IS HIS PRODUCT. The owner's surface was the one
      place not wired to the installable app: no manifest, no icon, no theme
      colour — so adding it to a phone gave a browser chrome bar in the wrong
      colour and a generic icon, while the manifest it would have used described
-     the commercial product and its dark palette. -->
+     the commercial product and its dark palette. */ ''}
 <link rel="manifest" href="/manifest.json" />
 <link rel="apple-touch-icon" href="/static/icon-192.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />

@@ -284,7 +284,7 @@ privacySettings.get('/privacy', async (c) => {
       </div>
     </div>
 
-    <!-- Section 1: Data Sharing & Consent -->
+    ${/* Section 1: Data Sharing & Consent */ ''}
     <div class="card" style="padding:0;overflow:hidden;margin-bottom:1.5rem;">
       <div style="padding:1rem 1.25rem;border-bottom:1px solid rgba(255,255,255,0.07);background:rgba(255,255,255,0.02);">
         <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.2rem;">Section 1</div>
@@ -294,7 +294,7 @@ privacySettings.get('/privacy', async (c) => {
       ${consentRows}
     </div>
 
-    <!-- Section 2: Data Residency -->
+    ${/* Section 2: Data Residency */ ''}
     <div class="card" style="padding:0;overflow:hidden;margin-bottom:1.5rem;">
       <div style="padding:1rem 1.25rem;border-bottom:1px solid rgba(255,255,255,0.07);background:rgba(255,255,255,0.02);">
         <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.2rem;">Section 2</div>
@@ -322,7 +322,7 @@ privacySettings.get('/privacy', async (c) => {
               <select id="data_retention_days" name="data_retention_days" style="max-width:200px;">
                 ${''}${html([retentionSelect] as unknown as TemplateStringsArray)}
               </select>
-              <!-- THIS SAID "How long Foundry retains your product data" AND
+              ${/* THIS SAID "How long Foundry retains your product data" AND
                    GOVERNED NOTHING. The data_residency_settings row was written
                    by this form, read back by this page, and consulted by no
                    job. The retention sweep now honours it where it is SHORTER
@@ -330,7 +330,7 @@ privacySettings.get('/privacy', async (c) => {
                    keep less — and the sentence says which half is in force
                    rather than implying both. Keeping data LONGER than the
                    platform horizon is the question already with counsel, and a
-                   dropdown does not answer it. -->
+                   dropdown does not answer it. */ ''}
               <p style="margin:0.35rem 0 0;font-size:0.75rem;color:var(--text-muted);">A shorter period than Foundry's own is honoured: your data goes when you asked, not when Foundry's schedule would. A longer one is not — Foundry's horizon still applies. Current: ${retentionLabel(residency.data_retention_days)}</p>
             </div>
 
@@ -341,12 +341,12 @@ privacySettings.get('/privacy', async (c) => {
               <select id="delete_agent_logs_after_days" name="delete_agent_logs_after_days" style="max-width:200px;">
                 ${''}${html([logRetentionSelect] as unknown as TemplateStringsArray)}
               </select>
-              <!-- Same correction, narrower scope. This governs agent chatter
+              ${/* Same correction, narrower scope. This governs agent chatter
                    (agent_messages), where the shorter of this and the retention
                    period above wins. It deliberately does NOT reach the audit
                    trail: two of its event types are the record that an erasure
                    happened, and whether that record may be shortened is a legal
-                   question, not a dropdown. -->
+                   question, not a dropdown. */ ''}
               <p style="margin:0.35rem 0 0;font-size:0.75rem;color:var(--text-muted);">Agent-to-agent activity older than this is deleted, if that is sooner than Foundry's own schedule. The audit trail is kept separately — it is what answers &ldquo;why didn't you show me this?&rdquo; — and this setting does not shorten it. Current: ${logRetentionLabel(residency.delete_agent_logs_after_days)}</p>
             </div>
 
@@ -358,7 +358,7 @@ privacySettings.get('/privacy', async (c) => {
       </div>
     </div>
 
-    <!-- Section 3: Your Data -->
+    ${/* Section 3: Your Data */ ''}
     <div class="card" style="padding:0;overflow:hidden;margin-bottom:1.5rem;">
       <div style="padding:1rem 1.25rem;border-bottom:1px solid rgba(255,255,255,0.07);background:rgba(255,255,255,0.02);">
         <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.2rem;">Section 3</div>
@@ -438,7 +438,7 @@ privacySettings.get('/privacy', async (c) => {
       </div>
     </div>
 
-    <!-- THE DIALOG IS A DIALOG NOW. What stood here was a fixed-position div
+    ${/* THE DIALOG IS A DIALOG NOW. What stood here was a fixed-position div
          toggled between display:none and display:flex, with an inline script
          listening for Escape. It announced itself as a dialog to a screen
          reader and behaved as none: the page behind it stayed focusable, so a
@@ -446,7 +446,7 @@ privacySettings.get('/privacy', async (c) => {
          the delete button they had just been warned about. A dialog element with
          showModal() makes the rest of the page inert, puts focus inside, and
          closes on Escape — which is why the inline script is gone rather than
-         moved. -->
+         moved. */ ''}
     <dialog id="delete-modal" class="sheet" aria-label="Confirm product deletion">
       <div style="background:var(--card);border:1px solid var(--bad);border-radius:12px;padding:2rem;">
         <h2 style="margin:0 0 0.75rem;color:var(--bad);font-size:1.1rem;">Delete all data for ${ctx.productName}?</h2>

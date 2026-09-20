@@ -65,7 +65,19 @@ export async function healthOf(founderId: string, now: Date = new Date()): Promi
     ...loops.map((l) => l.stoppedRunning ? `${l.label} has not run for longer than it should` : `${l.label} failed ${String(l.consecutiveFailures)} times running`),
     ...workshopNeeds,
   ];
-  const lastHealthy = loops.map((l) => l.lastSuccessAt).filter((s): s is string => !!s).sort()[0] ?? null;
+  // LAST HEALTHY IS A DATE THE ESTATE HAS. It was read off the FAILING loops,
+  // so a healthy estate showed "not recorded" beside "Healthy": when nothing is
+  // failing it is the latest completed pass of any routine on the list; when
+  // something is, the oldest success among the failing ones, which is the last
+  // moment everything was known to be running.
+  const { INSTITUTION_LOOPS } = await import('../institution/loop-health.js');
+  const names = Object.keys(INSTITUTION_LOOPS);
+  const latestPass = names.length === 0 ? null : (((await query(
+    `SELECT MAX(last_success_at) AS at FROM job_health WHERE job_name IN (${names.map(() => '?').join(',')})`, names))
+    .rows[0] as Record<string, unknown> | undefined)?.at ?? null);
+  const lastHealthy = loops.length === 0
+    ? (latestPass == null ? null : String(latestPass))
+    : loops.map((l) => l.lastSuccessAt).filter((s): s is string => !!s).sort()[0] ?? null;
   const ownerAction = blocked.find((b) => b.ownerAction)?.ownerAction ?? (workshopNeeds.length ? workshopNeeds[0] ?? null : null);
 
   const state: EstateState = blocked.length ? 'blocked' : (loops.length || workshopNeeds.length) ? 'degraded' : 'ok';

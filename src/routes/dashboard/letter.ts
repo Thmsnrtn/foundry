@@ -1011,11 +1011,11 @@ const observationChannelSection = (
       <div style="font-size:0.82rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid rgba(255,255,255,0.05);display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
         <span style="flex:1;min-width:200px;">${c.label}${c.unit ? html` <span style="color:var(--text-muted);">(${c.unit})</span>` : ''}
         <span style="color:var(--text-muted);font-size:0.72rem;"> — post as <code>${c.channelKey}</code></span></span>
-        <!-- A DOOR OUT. The revoke function existed, exported, with no route:
+        ${/* A DOOR OUT. The revoke function existed, exported, with no route:
              a founder could tell Foundry what to watch and had no way to tell
              it to stop, while the identical support-channel revoke had been
              there from the start. A withdrawal only ever lowers what Foundry
-             may do, so it is never the half to leave unbuilt. -->
+             may do, so it is never the half to leave unbuilt. */ ''}
         <form method="POST" action="/letter/company/observation-channel/revoke" style="margin:0;">
           <input type="hidden" name="channel_key" value="${c.channelKey}" />
           <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;">Stop watching this</button>
@@ -1083,10 +1083,10 @@ const permissionSection = (
         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">I still may not ${item.mayNot}.</div>
         ${item.granted ? html`
           <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.35rem;">You've allowed this until ${new Date(item.grantExpiresAt as string).toDateString()}.</div>
-          <!-- A LIVE GRANT AND ACTUALLY HELPING ARE DIFFERENT FACTS. The card
+          ${/* A LIVE GRANT AND ACTUALLY HELPING ARE DIFFERENT FACTS. The card
                showed only the first, so a grant the database refused to admit
                read exactly like one it accepted: the founder allowed something,
-               saw the same words back, and Foundry was not helping. -->
+               saw the same words back, and Foundry was not helping. */ ''}
           ${item.assisting ? '' : html`
           <div style="font-size:0.72rem;color:var(--alert);margin-top:0.2rem;">I have not been able to start on it yet, so your permission is recorded and unused. It stays yours — nothing here takes it back.</div>`}
           <form method="POST" action="/letter/responsibilities/${item.responsibilityId}/permission/revoke" style="margin-top:0.35rem;">
@@ -1219,13 +1219,13 @@ letterRoutes.get('/letter', async (c) => {
         : 'I raised this and you have not said which way to go'}`}</div>
             </div>
             ${n.kind === 'decision' ? html`
-            <!-- THE REACTION USED TO RACE THE NAVIGATION IT RECORDED. This was
+            ${/* THE REACTION USED TO RACE THE NAVIGATION IT RECORDED. This was
                  a link that fired a POST from an inline handler and then left
                  the page; a browser is entitled to cancel an in-flight request
                  on navigation, and on a slow connection — the one case where
                  the ranking most wants to learn that he acted — it usually
                  does. A form records the reaction on the server and the server
-                 sends him on, so the two cannot come apart. -->
+                 sends him on, so the two cannot come apart. */ ''}
             <form method="POST" action="/letter/attention/${n.decisionId}" style="margin:0;">
               <input type="hidden" name="product_id" value="${n.productId}" />
               <input type="hidden" name="reaction" value="acted" />
@@ -1237,10 +1237,10 @@ letterRoutes.get('/letter', async (c) => {
               <input type="hidden" name="reaction" value="dismissed" />
               <button type="submit" class="btn btn-ghost" style="font-size:0.72rem;padding:0.25rem 0.5rem;" title="Not now — teaches the ranking">Later</button>
             </form>` : html`
-            <!-- Acting on a responsibility means being IN that company: its
+            ${/* Acting on a responsibility means being IN that company: its
                  reason, its disposition form, its authority. So this switches
                  the active company and comes back to the letter, where the
-                 full view below now renders it. -->
+                 full view below now renders it. */ ''}
             <form method="POST" action="/switch-product" style="margin:0;">
               <input type="hidden" name="product_id" value="${n.productId}" />
               <button type="submit" class="btn btn-primary" style="font-size:0.78rem;padding:0.3rem 0.7rem;">Look at ${n.productName}</button>
@@ -1254,10 +1254,10 @@ letterRoutes.get('/letter', async (c) => {
           ${fleet.system.map((s) => html`<div style="font-size:0.85rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid rgba(255,255,255,0.05);">${s}</div>`)}
         </div>` : ''}
 
-        <!-- The ACTIVE company is skipped here: it renders in full below, and
+        ${/* The ACTIVE company is skipped here: it renders in full below, and
              showing its handled/learned lines in both places would make the
              page say the same thing twice — the defect this letter spent
-             several commits removing from its own headline. -->
+             several commits removing from its own headline. */ ''}
         ${fleet.products.filter((p) => p.productId !== ctx.productId)
     .map((p) => (p.letter.quiet && Object.values(p.responsibilities).every((items) => items.length === 0) ? '' : html`
         <div class="card" style="padding:1.1rem 1.25rem;margin-bottom:0.9rem;">
@@ -1509,7 +1509,7 @@ letterRoutes.get('/letter', async (c) => {
           This is the record. It fills as Foundry looks, decides and acts; it is empty because there is no data yet. Two things bring it to life:
         </div>
         <div style="margin-top:0.85rem;display:flex;flex-direction:column;gap:0.5rem;">
-          <!-- THE MOST IMPORTANT LINK IN THE PRODUCT POINTED AT A PAGE THAT
+          ${/* THE MOST IMPORTANT LINK IN THE PRODUCT POINTED AT A PAGE THAT
                NO LONGER EXISTS.
                It aimed at /agents/integrations — the commercial page listing
                Stripe, PostHog, Plausible, Resend and GitHub with a connect form
@@ -1518,7 +1518,7 @@ letterRoutes.get('/letter', async (c) => {
                second link's /decisions went with them. A dead-end is worse than
                the wrong page: the wrong page at least explains itself.
                The owner's instance connects a provider under Controls and reads
-               what is waiting under Decisions, so those are where these go. -->
+               what is waiting under Decisions, so those are where these go. */ ''}
           <a href="/foundry/controls" class="btn btn-primary" style="font-size:0.85rem;align-self:flex-start;">Connect a provider → so Foundry can see your real numbers</a>
           <a href="/foundry/decisions" class="btn btn-secondary" style="font-size:0.85rem;align-self:flex-start;">See what is waiting on you → and the belief behind each one</a>
         </div>
@@ -1532,14 +1532,14 @@ letterRoutes.get('/letter', async (c) => {
     ? 'Switch companies at the top to look at another.'
     : "That's the goal. Go build — or rest."}</div>
       </div>
-      <!-- A QUIET DAY IS NOT A CLOSED DOOR.
+      ${/* A QUIET DAY IS NOT A CLOSED DOOR.
            Reporting what the company has to handle is the one intake the
            running system has — discovery admits a founder report and nothing
            else — and it lived only in the busy body, so on a quiet day, and on
            the first day of a new company, there was no way to tell Foundry
            about an obligation at all. That is the rung the owner has to climb
            before anything can be understood, watched or permitted, and it was
-           behind the one branch that means "nothing is happening yet". -->
+           behind the one branch that means "nothing is happening yet". */ ''}
       ${reportObligationSection(obligationOptions)}` : html`
       ${letter.needsYou ? html`
       <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid var(--accent);">
@@ -1576,7 +1576,7 @@ letterRoutes.get('/letter', async (c) => {
       ${noticeSection([...responsibilitySummary.NEEDS_YOU, ...responsibilitySummary.CHANGED,
         ...responsibilitySummary.HANDLED, ...responsibilitySummary.STILL_OPEN])}
       ${uncarriedNoticeSection(uncarriedNotices)}
-      <!-- TELLING ME SOMETHING IS NOT SOMETHING NEEDING YOUR ATTENTION.
+      ${/* TELLING ME SOMETHING IS NOT SOMETHING NEEDING YOUR ATTENTION.
            These two were rendered unconditionally in the attention stream —
            the only sections on the page with no empty-state guard — so on a
            genuinely quiet day the founder still got two blank data-entry
@@ -1584,7 +1584,7 @@ letterRoutes.get('/letter', async (c) => {
            Foundry's way of asking, and they must stay reachable: a capability
            a person cannot reach is the defect this codebase has repeatedly
            found. So they move behind one disclosure, after the things that do
-           need reading. -->
+           need reading. */ ''}
       <details style="margin-bottom:1rem;">
         <summary style="cursor:pointer;font-size:0.72rem;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);padding:0.5rem 0;">Tell me something</summary>
         ${reportObligationSection(obligationOptions)}

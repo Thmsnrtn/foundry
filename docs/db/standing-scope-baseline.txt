@@ -1,12 +1,13 @@
 src/cli/index.ts 1
 src/jobs/index.ts 4
 src/routes/auth/clerk.ts 1
-src/routes/dashboard/foundry-shell.ts 9
+src/routes/dashboard/foundry-shell.ts 10
 src/routes/dashboard/roadmap-place.ts 1
 src/routes/dashboard/settings.ts 1
 src/routes/ingest/index.ts 1
 src/services/billing/entitlement.ts 2
 src/services/economy/projection.ts 2
+src/services/founder/a-week-away.ts 1
 src/services/founder/activity.ts 7
 src/services/founder/attention.ts 3
 src/services/founder/autonomy-map.ts 1

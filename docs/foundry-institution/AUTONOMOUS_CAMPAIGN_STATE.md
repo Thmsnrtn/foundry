@@ -2254,3 +2254,24 @@ handed on with its scope; a direction, steering or stop comes back as the
 confirmation it always had; an outward ask is answered with the charter
 boundary. The reader hears the plain forms ("find …", income, low-maintenance
 as a preference). Proof drives the real composer and asserts on rows.
+
+### The first direction lands; the maturity map; the product reviewed as a person (2026-09-20)
+
+Three independent reviewers drove twelve owner objectives through the real
+pages on a phone before reading code (`scripts/owner-review-harness.mts`).
+Repaired the same day, each with a proof from the real entrance
+(`the-first-direction-lands.test.ts`): a direction while a search runs is the
+owner's choice (point it, or close it and start this); the proven eyes open
+when a search opens; a generic "avoid X"; a negated stop is not a stop; a hold
+on sending is offered as the Workshop's pause; the money, why-it-failed and
+health answers read the record; the week-away letter carries the venture; an
+allowance ends with its test; last-healthy is a date; no page ships its
+comments. `MATURITY_MAP.md` records, per journey and per loop transition,
+whether it works, whether he can use it, and whether it earns — with what the
+reviewers found and was deliberately left.
+
+**Next start.** The owner re-enters his direction; the search opens and looks
+that morning. Nothing is sealed or sent without the charter. The next tranche
+is chosen from the map by consequence: one reading of a test's money that every
+surface renders; search events on Activity; the vocabulary pass.
+

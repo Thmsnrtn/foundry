@@ -184,9 +184,9 @@ describe('asking it something', () => {
 
   it('answers what it may do without a Controls to visit', async () => {
     const said = await reads('/foundry?ask=allowed');
-    expect(said).toContain('Nothing.');
-    expect(said).toContain('I cannot change anything, spend anything, or contact anyone');
-    expect(said).toContain('I have spent nothing');
+    expect(said).toContain('No charter is signed');
+    expect(said).toContain('nothing is sent or spent on my own');
+    expect(said).toContain('Thinking has cost nothing');
   });
 
   it('understands typed words, not only the buttons', async () => {

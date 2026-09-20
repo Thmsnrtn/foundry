@@ -70,6 +70,18 @@ describe('the box he used', () => {
     expect(home).toContain('name="said"');
     expect(home).not.toContain('method="GET" action="/foundry"');
   });
+
+  it('no page ships its own development notes', async () => {
+    // Prose in an HTML comment goes to the phone on every request, and it is
+    // read by tests and search engines as page text: one such comment carried
+    // "I don't know yet" on every page after the sentence itself was gone.
+    // Comments in the templates are TypeScript comments now, and stay so.
+    for (const path of ['/foundry', '/foundry/searching', '/foundry/experiments', '/foundry/money', '/foundry/inbox', '/foundry/activity', '/foundry/controls', '/foundry/absence', '/foundry/decisions', '/foundry/charter']) {
+      const t = await page(path);
+      expect(t, path).not.toContain('<!' + '--'); // spelled apart, so the comment gate does not read it as one
+      expect(t, path).not.toContain('$' + '{/*'); // spelled apart, so the comment gate does not read it as one
+    }
+  });
 });
 
 describe('the exact instruction he gave', () => {
@@ -120,7 +132,7 @@ describe('the exact instruction he gave', () => {
     expect(t).not.toContain("I don't know yet");
     expect(t).not.toContain('What did I turn down');
     // One search is running, so the same direction is steering, shown back first.
-    expect(t).toMatch(/Hold the search to this\?|Go and look\?/);
+    expect(t).toMatch(/Hold the search to this\?|Go and look\?|Point the search, or start this one\?/);
   });
 });
 
@@ -201,9 +213,34 @@ describe('the other things he can say, from the same box', () => {
   });
 
   it('a direction with no search open opens one — he never has to find the Experiments screen first', async () => {
+    // What the morning sense check leaves behind in production: public sources
+    // proven to answer. Witnessed, because maturity cannot be written directly.
+    const { recordMaturity } = await import('../../src/services/institution/capabilities.js');
+    const proven = (await query(`SELECT id FROM capability_providers WHERE supplies_source_type IS NOT NULL AND maturity = 'declared' LIMIT 2`, [])).rows as unknown as Array<{ id: string }>;
+    expect(proven.length).toBeGreaterThan(0);
+    for (const { id } of proven) {
+      await recordMaturity({ providerId: id, to: 'available', evidenceMode: 'real', witnessedBy: 'test', evidence: 'answered the sense check' });
+    }
+    // Before anything opens: nothing to look through, honestly.
+    const { waysOfLooking } = await import('../../src/services/venture/research-sources.js');
+    expect(await waysOfLooking(OWNER, 'real')).toHaveLength(0);
+
     await confirm('Find low-maintenance digital income.');
     const open = await openSearch();
     expect(open).toHaveLength(1);
     expect(String(open[0]!.statement)).toBe('Find low-maintenance digital income.');
+
+    // THE SEARCH CAN LOOK FROM THE MOMENT IT OPENS. The proven eyes used to be
+    // opened for him only by the next morning's sense check, so his fresh
+    // direction read "Blocked: nowhere to look" on Home for the rest of the day.
+    expect((await waysOfLooking(OWNER, 'real')).length).toBe(proven.length);
+    const home = await page('/foundry');
+    expect(home).not.toContain('nowhere to look');
+    expect(home).toContain('What I am looking for');
+    // And a constraint said inside the direction reads back as what it means,
+    // not as the direction repeated beneath itself.
+    const searching = await page('/foundry/searching');
+    expect(searching).toContain('I will weight the search toward almost no support burden');
+    expect(searching.split('Find low-maintenance digital income.').length - 1).toBeLessThanOrEqual(2); // the statement, and "you said" once
   });
 });

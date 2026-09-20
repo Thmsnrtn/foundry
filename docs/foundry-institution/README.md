@@ -43,6 +43,7 @@ a concept → code index. Read the rest when the work touches it.
 | [`IMPLEMENTATION_STATE.md`](IMPLEMENTATION_STATE.md) | Current verified reality and the debt that matters. |
 | [`AUTONOMOUS_CAMPAIGN_STATE.md`](AUTONOMOUS_CAMPAIGN_STATE.md) | Live frontier and exact next start. Not a backlog. |
 | [`OWNER_DECISIONS_PENDING.md`](OWNER_DECISIONS_PENDING.md) | Genuinely unresolved owner and external dependencies. |
+| [`MATURITY_MAP.md`](MATURITY_MAP.md) | Per owner journey and loop transition: does it work, can he use it, does it earn — with evidence. |
 | [`CONSEQUENTIAL_EFFECTS.json`](CONSEQUENTIAL_EFFECTS.json) | The governed-effect inventory. |
 
 ## History and lineage

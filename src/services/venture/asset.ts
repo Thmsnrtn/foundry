@@ -193,6 +193,14 @@ export async function retireExperimentalAsset(input: {
     `UPDATE products SET status = 'archived', retired_because = ?, updated_at = datetime('now')
       WHERE id = ? AND standing = 'experimental' AND status = 'active'`,
     [input.because.trim(), input.productId]);
+  if ((r.rowsAffected ?? 0) > 0) {
+    // A retired asset holds no budget. Its allowance ended with the test's
+    // answer; retirement is the backstop for a test that never got one.
+    await query(
+      `UPDATE owner_allowances SET withdrawn_at = datetime('now'), withdraw_reason = ?
+        WHERE product_id = ? AND withdrawn_at IS NULL`,
+      [`the asset was retired: ${input.because.trim().slice(0, 160)}`, input.productId]);
+  }
   return (r.rowsAffected ?? 0) > 0;
 }
 

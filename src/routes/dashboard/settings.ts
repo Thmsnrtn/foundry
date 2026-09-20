@@ -125,7 +125,7 @@ settingsRoutes.get('/settings', async (c) => {
   const content = html`
     ${successBannerMsg ? html`<div class="state ok" style="display:block;padding:0.75rem 1.25rem;margin-bottom:1.5rem;font-size:0.875rem;font-weight:500;">${successBannerMsg}</div>` : ''}
     <h1>Settings</h1>
-    <!-- PROFILE, CONNECTED REPOSITORIES, COMPETITORS AND BETA INFRASTRUCTURE,
+    ${/* PROFILE, CONNECTED REPOSITORIES, COMPETITORS AND BETA INFRASTRUCTURE,
          DELETED with the settingsPage component. Three of the four were Commercial
          Foundry's audit product: repositories it scanned, competitors it
          tracked, and a beta-intake surface whose table was dropped in
@@ -135,13 +135,13 @@ settingsRoutes.get('/settings', async (c) => {
          identity belongs to the auth provider and cannot be edited here, and
          the tier is the subscription that went with the product. A card that
          shows three facts you cannot change, one of which is about a plan
-         nobody is on, is not a setting. -->
-    <!-- SUBSCRIPTION, DELETED. Three price buttons and a Stripe customer
+         nobody is on, is not a setting. */ ''}
+    ${/* SUBSCRIPTION, DELETED. Three price buttons and a Stripe customer
          portal for Commercial Foundry's tiers. It was already hidden on this
          instance by the posture check, which is a different thing from being
          gone: the code, the /checkout routes and the tier vocabulary were all
          still here, one environment variable away from rendering. Private
-         Foundry has one owner who does not bill himself. -->
+         Foundry has one owner who does not bill himself. */ ''}
 
     <div class="card">
       <h3>Products</h3>
@@ -158,7 +158,7 @@ settingsRoutes.get('/settings', async (c) => {
       <a href="/onboarding" class="btn btn-primary btn-sm" style="margin-top:0.75rem;">+ Add Product</a>
     </div>
 
-    <!-- Manage Company (F-061-A) -->
+    ${/* Manage Company (F-061-A) */ ''}
     <div class="card" style="border:1px solid rgba(255,255,255,0.08);">
       <h3>Manage Company</h3>
       <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
@@ -167,7 +167,7 @@ settingsRoutes.get('/settings', async (c) => {
 
       ${productId ? html`
       <div style="display:flex;flex-direction:column;gap:1rem;">
-        <!-- Pause / Resume -->
+        ${/* Pause / Resume */ ''}
         <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.06);">
           <div>
             <div style="font-size:0.875rem;font-weight:600;color:var(--text-primary);">Pause Product</div>
@@ -181,7 +181,7 @@ settingsRoutes.get('/settings', async (c) => {
           </form>
         </div>
 
-        <!-- Export Data -->
+        ${/* Export Data */ ''}
         <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.06);">
           <div>
             <div style="font-size:0.875rem;font-weight:600;color:var(--text-primary);">Export Data</div>
@@ -193,7 +193,7 @@ settingsRoutes.get('/settings', async (c) => {
           </div>
         </div>
 
-        <!-- Delete -->
+        ${/* Delete */ ''}
         <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;background:rgba(255,107,107,0.04);border-radius:8px;border:1px solid rgba(255,107,107,0.12);">
           <div>
             <div style="font-size:0.875rem;font-weight:600;color:var(--bad);">Delete Product</div>
@@ -203,7 +203,7 @@ settingsRoutes.get('/settings', async (c) => {
         </div>
 
         ${products.rows.length > 1 ? html`
-        <!-- Fleet-wide actions -->
+        ${/* Fleet-wide actions */ ''}
         <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:1rem;margin-top:0.25rem;">
           <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.5rem;">Fleet-wide</div>
           <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
@@ -250,7 +250,7 @@ settingsRoutes.get('/settings', async (c) => {
 
     <div class="card">
       <h3>How often I run</h3>
-      <!-- THIS CARD WAS CALLED "WISDOM NETWORK" AND MOSTLY WAS NOT ONE.
+      ${/* THIS CARD WAS CALLED "WISDOM NETWORK" AND MOSTLY WAS NOT ONE.
            Its framing offered to contribute anonymised decision patterns to a
            cross-product wisdom layer so that "your AI recommendations benefit
            from patterns across all contributing businesses" — a promise that
@@ -262,7 +262,7 @@ settingsRoutes.get('/settings', async (c) => {
            because one of them ends the string early.)
            What was real in it is the pace control, which decides how often the
            institution acts on his behalf. That is an Attention Law question,
-           so it keeps the card and the card gets its actual name. -->
+           so it keeps the card and the card gets its actual name. */ ''}
       ${productId ? html`
       <div class="row" style="justify-content:space-between;flex-wrap:nowrap;gap:var(--s3);">
         <div>
@@ -280,13 +280,13 @@ settingsRoutes.get('/settings', async (c) => {
       </div>` : ''}
     </div>
 
-    <!-- INVESTOR / ADVISOR ACCESS, DELETED. A generated link giving a
+    ${/* INVESTOR / ADVISOR ACCESS, DELETED. A generated link giving a
          read-only view of Signal score, metrics and recent decisions to
          "investors or advisors". Private Foundry has neither, and zero of the
          thirteen products in this instance had ever had a share token
          generated, so the control offered to revoke an access nobody held.
          /share stays mounted because it also carries the refund links an
-         Apex Micro buyer uses, which is a different thing entirely. -->
+         Apex Micro buyer uses, which is a different thing entirely. */ ''}
 
     ${productId ? html`
     <div class="card">
