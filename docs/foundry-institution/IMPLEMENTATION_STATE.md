@@ -2937,3 +2937,28 @@ candidate and a nudge key and nothing else.
   constitutional and unavailable, so the form can be shelved but not tested;
   widening it is the owner's decision. `fileParallelism` stays off until a
   measured run with the template says otherwise.
+
+## Review E repaired: light mode, the settled page, the absence, the assurances (2026-09-21)
+
+- `src/public/owner.css` — the v3 layer's ground follows the theme (light
+  tokens for the v3 palette; the dark gradient scoped to dark); `.crumbs a`
+  44px. `src/lib/owner-surface-script.ts` — one tap on the Ask pill puts the
+  cursor in the box (the script is hashed at load).
+- `what-happened.ts` — a settled test with no offer ever placed says nothing
+  was sent; one full stop. `experiments-place.ts` — no live steps on a
+  concluded test; "Was set aside … ended with its answer"; "What it does not
+  establish". `experiment-view.ts` — past-tense permissions once concluded.
+  `why.ts` — a ceiling is not printed as a cost. `asset.ts` — a name is cut
+  on a word.
+- `scripts/owner-review-harness.mts` — marks the owner's leaving before the
+  days pass, so the away answer covers the absence.
+- `foundry-shell.ts` — "Change course?" names the search and the standing
+  candidates; housekeeping with no mail says nobody has written; the binding
+  thinking ceiling is said beside the configured ones; "its allowance was".
+  `foundry-shell.ts`, `workshop-place.ts`, `charter-place.ts` — the assurance
+  about the owner's name says exactly where it is (PENDING 19).
+- Evidence: `the-owner-surface-fits-a-phone` (light-mode contrast, one-tap
+  Ask), `the-owners-sentences-land`, `what-happened-has-one-name`, and the
+  nineteen suites the repairs touch. Proof debt: the five thinking ceilings
+  are said, not unified; the laboratory's default world settles Experiment
+  001 without the hand.
