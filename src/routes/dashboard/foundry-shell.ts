@@ -1914,10 +1914,24 @@ const QUESTIONS: Record<string, string> = {
   venture: 'Find me a new business',
   away: 'Can I disappear for a week?',
   back: 'What happened while I was away?',
+  paid: 'Is anything making money yet?',
+  found: 'Show me what you have found',
 };
 
 export function matchQuestion(text: string): string {
   const t = text.toLowerCase();
+  // THE OWNER'S FIRST COMMERCIAL QUESTION, READ FIRST. "Is anything making
+  // money yet?" reached the permissions answer because the word "money" sits
+  // in the rule for what Foundry is allowed to do. It is a question about the
+  // world's rows, and it is answered from them.
+  if (/making (?:any |me |us )?money|made (?:any )?money|(?:any(?:one|body)|someone|somebody) (?:paid|bought|buy|pay)|(?:anything|something) (?:sold|paid|earn|bought)|sold anything|earn(?:ing|ed) anything|money (?:yet|coming in|come in)|paid yet|bought anything|customers? yet|any (?:sales|revenue|income) yet|(?:is|has) (?:anything|any of it|it) (?:making|earning|selling)/.test(t)) {
+    return 'paid';
+  }
+  // "SHOW ME WHAT YOU'VE FOUND." A question about the search's findings, not
+  // about the numbers of a company, and not an instruction to look elsewhere.
+  if (/show me what you(?:'ve| have)? found|what (?:have|did) you (?:find|found)|what you(?:'ve| have) found|found anything|anything (?:you(?:'ve| have) )?found|what turned up|what have you got/.test(t)) {
+    return 'found';
+  }
   // ASKED ABOUT A COMPANY, WHICH IS A DIFFERENT QUESTION FROM ASKED ABOUT
   // FOUNDRY. These two run first because "how is AcreOS doing" also matches
   // /okay/ below, and answering it with Foundry's own health would be a
@@ -2333,6 +2347,61 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
     </div>`;
   }
 
+  if (key === 'paid') {
+    // MONEY FROM THE WORLD, NOT PERMISSION TO SPEND. Real payments only —
+    // the rehearsal world's rows never count — and the one reading of each
+    // test's money for what is set aside and spent.
+    const { paidAcrossExperiments, experimentLedger, listExperiments, moneyOfExperiment } = await import('../../services/founder/experiment-view.js');
+    const { outcomeOf, outcomeSentence } = await import('../../services/founder/what-happened.js');
+    const paidCents = await paidAcrossExperiments(s.ownerId);
+    const refunded = (await query(
+      `SELECT coalesce(SUM(b.amount_cents), 0) AS cents, COUNT(*) AS n FROM business_outcome_events b
+         JOIN experiment_exposures x ON x.id = b.exposure_id JOIN venture_experiments e ON e.id = x.experiment_id
+        WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND b.kind = 'refund'`, [s.ownerId])).rows[0] as Record<string, unknown>;
+    const payments = Number(((await query(
+      `SELECT COUNT(*) AS n FROM business_outcome_events b
+         JOIN experiment_exposures x ON x.id = b.exposure_id JOIN venture_experiments e ON e.id = x.experiment_id
+        WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND b.kind = 'payment'`, [s.ownerId])).rows[0] as Record<string, unknown>).n ?? 0);
+    const ledger = await experimentLedger(s.ownerId);
+    const settled = ledger.filter((l) => l.settled);
+    const last = settled[0] ? await outcomeOf(settled[0].id) : null;
+    const running = (await listExperiments(s.ownerId, new Date(), 'now')).filter((t) => t.state === 'running');
+    const runningMoney = await Promise.all(running.map(async (t) => ({ t, m: await moneyOfExperiment(t.id) })));
+    const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
+    return html`<div class="said">
+      <p><strong>${paidCents === 0 ? 'Nobody has paid for anything yet.' : `${dollars(paidCents)} has been paid by ${count(payments, 'customer')}${Number(refunded.n) ? `, ${dollars(Number(refunded.cents))} of it refunded` : ''}.`}</strong>
+        ${paidCents === 0 ? '' : 'That is what buyers were charged under tests, before fees and obligations; it is not yet yours.'}</p>
+      <p>${settled.length === 0 ? 'No test has run to a settlement yet.'
+    : `${count(settled.length, 'test has', 'tests have')} settled${last ? `; the last ${outcomeSentence(last)}` : '.'}`}</p>
+      ${runningMoney.length === 0 ? html`<p>Nothing is running now, so nothing is set aside.</p>`
+    : runningMoney.map(({ t, m }) => html`<p>Running: ${t.assetName ?? t.title} — ${m.sentence}</p>`)}
+      <p class="quiet">Every figure is a row: payments and refunds from providers, spend from the ledgers. <a href="/foundry/experiments">Experiments</a> · <a href="/foundry/money">Money</a></p>
+    </div>`;
+  }
+
+  if (key === 'found') {
+    // WHAT THE SEARCH HAS FOUND, BY NAME. Candidates standing on the Explore
+    // shelves, one line each; or how much was looked at and that nothing
+    // stands; or that nothing is being looked for.
+    const { mandateProgress } = await import('../../services/venture/mandate.js');
+    const { shelfCandidates } = await import('../../services/venture/shelves.js');
+    const progress = await mandateProgress(s.ownerId);
+    if (!progress) {
+      return html`<div class="said"><p><strong>Nothing is being looked for</strong>, so there is nothing found.
+        Give me a direction — &ldquo;find low-maintenance digital income&rdquo; — and I will look every morning
+        and put what stands on <a href="/foundry/experiments/explore">Explore</a>.</p></div>`;
+    }
+    const shelves = (await shelfCandidates(s.ownerId)).filter((sh) => sh.candidates.length > 0);
+    const found = shelves.flatMap((sh) => sh.candidates.map((k) => ({ ...k, shelf: sh.label })));
+    return html`<div class="said">
+      <p><strong>${found.length === 0 ? 'Nothing stands yet.' : `${count(found.length, 'candidate stands', 'candidates stand')}.`}</strong>
+        Looking for: ${progress.mandate.statement}. I have looked at ${count(progress.looked, 'thing')}${progress.rejected ? ` and buried ${String(progress.rejected)}` : ''}${progress.blocked ? `; ${progress.blocked}` : ''}.</p>
+      ${found.length ? html`<ul>${found.map((k) => html`<li><a href="/foundry/why/candidate/${k.id}"><strong>${k.headline}</strong></a> — ${k.theProblem} <span class="quiet">(${k.shelf}; ${k.evidence}${k.blockedBy ? `; in the way: ${k.blockedBy}` : ''})</span></li>`)}</ul>` : ''}
+      ${progress.seeingThrough.length ? html`<p class="quiet">Seeing through ${progress.seeingThrough.join(', ')}.</p>` : ''}
+      <p class="quiet"><a href="/foundry/experiments/explore">Explore</a> · <a href="/foundry/searching">Searching</a></p>
+    </div>`;
+  }
+
   if (key === 'learned') {
     // THE LAST SETTLED TEST, AS A RECORD: what was predicted, what the world
     // did, what that establishes and does not, and what is designed against it.
@@ -2510,7 +2579,11 @@ foundryShellRoutes.get('/foundry', async (c) => {
     const door = whichDoor(typed, { searching: await currentMandate(s.ownerId) !== null });
     if (door.destination === 'venture') return ventureConfirmation(c, s.ownerId, typed);
     if (door.destination === 'authority') return c.html(await authorityBoundary(s.ownerId, door));
-    if (door.destination === 'unplaceable' && matchQuestion(typed) === '') return c.html(didNotFollow(door));
+    if (door.destination === 'housekeeping') return c.html(await housekeepingConfirmation(s.ownerId, door));
+    // matchQuestion never returns '' — the fallback is 'unknown' — so the
+    // branch this replaced was dead and an unplaceable sentence typed here
+    // was answered as whichever question it resembled.
+    if (door.destination === 'unplaceable' && matchQuestion(typed) === 'unknown') return c.html(didNotFollow(door));
   }
   const key = asked || (typed ? matchQuestion(typed) : '');
 
@@ -4602,6 +4675,11 @@ foundryShellRoutes.post('/foundry/ask', requireInstitutionOwner(), async (c: any
     return c.html(await authorityBoundary(String(founder.id), door));
   }
 
+  // HOUSEKEEPING IS ONE REVERSIBLE ACT, CONFIRMED WITH THE COUNT.
+  if (door.destination === 'housekeeping') {
+    return c.html(await housekeepingConfirmation(String(founder.id), door));
+  }
+
   // A VERB NAMES ITS COMPANY, OR NAMES A NEW ONE.
   //
   // "Grow AcreOS" said at the front door used to come back as "I need which
@@ -4673,7 +4751,7 @@ function didNotFollow(door: import('../../services/institution/the-door.js').Doo
         <li>Steering — &ldquo;focus more on calculators&rdquo;, &ldquo;avoid subscriptions&rdquo;, &ldquo;be more sceptical&rdquo;, &ldquo;spend no more than $25&rdquo;.</li>
         <li>Stopping — &ldquo;stop looking&rdquo;.</li>
         <li>A question — how I am, what I am doing, what you own, what happened today.</li>
-        <li>Housekeeping is done where the things are: put a conversation away from the <a href="/foundry/inbox">Inbox</a>, stop a test from its own page.</li>
+        <li>Housekeeping — &ldquo;clear the messages I&rsquo;ve already dealt with&rdquo;. Stopping a test is done from its own page.</li>
       </ul>
     </div>
     <div class="know">
@@ -4686,6 +4764,33 @@ function didNotFollow(door: import('../../services/institution/the-door.js').Doo
       </form>
     </div>
     <a class="btn" href="/foundry">Back</a>`, 'foundry');
+}
+
+/**
+ * "CLEAR THE MESSAGES I'VE ALREADY DEALT WITH." The count, what moves and what
+ * does not, and one tap that performs the Inbox's own act. Nothing is deleted;
+ * nothing that needs him moves; Put back undoes any of it.
+ */
+async function housekeepingConfirmation(founderId: string, door: import('../../services/institution/the-door.js').Doorway): Promise<HtmlEscapedString> {
+  const { threadCounts } = await import('../../services/public-workshop/mail.js');
+  const counts = await threadCounts(founderId);
+  return page('What you said', html`
+    <h1>${counts.handled === 0 ? 'Nothing to put away' : `Put away ${count(counts.handled, 'conversation')}?`}</h1>
+    <p class="lede">You said: <strong>${door.said}</strong></p>
+    ${counts.handled === 0
+    ? html`<p>Every conversation you dealt with is already put away${counts.needs ? `; ${count(counts.needs, 'still needs', 'still need')} you` : ''}.
+        ${counts.archived ? html`What is put away is under <a href="/foundry/inbox?show=archived">Put away</a>.` : ''}</p>`
+    : html`<div class="know">
+        <h2>What I will do</h2>
+        <p>Put away the ${count(counts.handled, 'conversation')} you have already dealt with, with your reason on each.
+          ${counts.needs ? `The ${count(counts.needs, 'conversation')} that still ${counts.needs === 1 ? 'needs' : 'need'} you ${counts.needs === 1 ? 'stays' : 'stay'} where ${counts.needs === 1 ? 'it is' : 'they are'}.` : 'Nothing that needs you moves.'}
+          Nothing is deleted: every reading, ground and reply stays on the record, and Put back brings any of them back.</p>
+      </div>
+      <form method="POST" action="/foundry/inbox/clear-handled">
+        <input type="hidden" name="because" value="you cleared what you had dealt with" />
+        <button class="btn go" type="submit">Yes — put them away</button>
+      </form>`}
+    <a class="btn" href="/foundry/inbox">The Inbox</a> <a class="btn" href="/foundry">Back</a>`, 'foundry');
 }
 
 /**
@@ -4869,11 +4974,37 @@ async function ventureConfirmation(c: any, founderId: string, said: string): Pro
   if (reading.kind === 'guidance') {
     const open = await venture.currentMandate(founderId);
     if (!open) {
+      // A STEERING SENTENCE THAT ASKS TO LOOK OPENS THE SEARCH IT STEERS.
+      // "Find something with less legal exposure" with nothing open is a
+      // direction, held to its own constraint; the absorber opens it that way.
+      if (venture.sentenceAsks(said)) {
+        return c.html(page('What you said', html`
+          <h1>Go and look, holding it to this?</h1>
+          <p class="lede">You said: <strong>${said}</strong></p>
+          <div class="know">
+            <h2>What I will do</h2>
+            <p>Nothing is being looked for at the moment, so I will open a search from your words and hold it to
+              what you put inside them: ${guidanceInPlainWords(reading.guidance, reading.subject)}</p>
+            <p class="quiet">Every morning I look through the eyes and put what stands on Explore. Nothing is
+              sealed, sent or spent without your tap or a charter.</p>
+          </div>
+          <form method="POST" action="/foundry/venture/confirm">
+            <input type="hidden" name="said" value="${said}" />
+            <button class="btn go" type="submit">Yes — look</button>
+          </form>
+          <a class="btn" href="/foundry">No</a>`, 'foundry'));
+      }
       return c.html(page('What you said', html`
-        <h1>There is no search to steer</h1>
+        <h1>Nothing is being looked for</h1>
         <p class="lede">You said: <strong>${said}</strong></p>
-        <p>Ask me to look for something first, and I will hold that against every
-          candidate I find.</p>
+        <p>I am not looking for anything at the moment, so there is no direction to
+          ${reading.guidance === 'another' ? 'dislike' : 'steer'} yet. Give me one — &ldquo;find low-maintenance digital
+          income&rdquo;, &ldquo;explore API opportunities&rdquo; — and I will hold it to what you just said:
+          ${guidanceInPlainWords(reading.guidance, reading.subject)}</p>
+        <form class="inline" method="POST" action="/foundry/ask">
+          <input type="text" name="said" maxlength="800" placeholder="What to look for" aria-label="What to look for" enterkeyhint="send" autocapitalize="sentences" spellcheck="true" />
+          <button class="btn" type="submit">Look for this</button>
+        </form>
         <a class="btn" href="/foundry">Back</a>`, 'foundry'));
     }
     return c.html(page('What you said', html`
@@ -4890,6 +5021,10 @@ async function ventureConfirmation(c: any, founderId: string, said: string): Pro
         <input type="hidden" name="said" value="${said}" />
         <button class="btn go" type="submit">Yes</button>
       </form>
+      ${reading.guidance === 'another' ? html`<form method="POST" action="/foundry/venture/confirm">
+        <input type="hidden" name="said" value="Stop looking." />
+        <button class="btn" type="submit">Stop looking instead</button>
+      </form>` : ''}
       <a class="btn" href="/foundry">No</a>`, 'foundry'));
   }
 

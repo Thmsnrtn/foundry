@@ -25,7 +25,7 @@
 
 import { interpret } from './standing-intent.js';
 import { readPosture } from '../founder/burden.js';
-import { readVentureParagraph } from '../venture/mandate.js';
+import { readVentureParagraph, sentenceAsks } from '../venture/mandate.js';
 import { readUndertaking } from './undertaking.js';
 
 /** Where a sentence belongs. Each names a capability that already exists. */
@@ -36,6 +36,7 @@ export type Destination =
   | 'undertaking'      // a verb: investigate, grow, fix, test, spend less, handle, take on
   | 'question'         // he is asking, not instructing
   | 'authority'        // an act only a test or the charter may carry: say the boundary
+  | 'housekeeping'     // clear what he has dealt with: reversible, confirmed, his
   | 'unplaceable';     // say so, and keep what he wrote
 
 export interface Doorway {
@@ -108,6 +109,16 @@ export function whichDoor(
       handOffTo: null, said, needs: null };
   }
 
+  // "CLEAR THE MESSAGES I'VE ALREADY DEALT WITH." Housekeeping was "done where
+  // the things are" — which meant the one sentence a returning owner says
+  // first was answered with a list of pages. It is one reversible act on the
+  // Inbox, confirmed with the count before anything moves.
+  const housekeeping = readHousekeepingAsk(said);
+  if (housekeeping !== null) {
+    return { destination: 'housekeeping', understoodAs: housekeeping,
+      handOffTo: '/foundry/inbox/clear-handled', said, needs: null };
+  }
+
   const readings = readVentureParagraph(said);
   const venture = readings.filter((r) => r.kind !== 'not_venture');
   const opening = venture.some((r) => r.kind === 'mandate');
@@ -117,7 +128,16 @@ export function whichDoor(
   // is far more likely to be about a company. Routing it into an empty search
   // would absorb nothing and redirect him to a screen that had not changed,
   // which is the silent version of the failure he already hit once today.
-  if (opening || stopping || (venture.length > 0 && world.searching)) {
+  // A STEERING SENTENCE THAT ITSELF ASKS TO LOOK — "find something with less
+  // legal exposure" — is a direction to open when nothing is open, not a
+  // sentence about a company: absorbParagraph already opens it that way, and
+  // the door must not drop on the floor what the absorber would have heard.
+  const asksToo = venture.some((r) => r.kind === 'guidance' && sentenceAsks(r.statement));
+  // AND A REJECTION OF THE DIRECTION — "I don't like this direction" — is
+  // about the search whether or not one is open: with none, the answer is
+  // that nothing is being looked for and how to give one, never a shrug.
+  const dislikes = venture.some((r) => r.kind === 'guidance' && r.guidance === 'another');
+  if (opening || stopping || (venture.length > 0 && (world.searching || asksToo || dislikes))) {
     return {
       destination: 'venture',
       understoodAs: stopping ? 'you want me to stop looking'
@@ -195,6 +215,22 @@ export function whichDoor(
  * emails invoices" is a search (read earlier) and "email the shops" is this.
  */
 const OUTWARD = /^\s*(?:please\s+)?(?:(?:email|e-mail|mail|write to|contact|message|reach out to|call|phone|text|send (?:an? )?(?:email|message|offer)s? to)\b|(?:spend|pay|buy|purchase|charge|sign up for|subscribe to)\b)/i;
+
+/**
+ * "Clear the messages I've already dealt with", "archive what's handled",
+ * "tidy the inbox". Only the Inbox's handled conversations; nothing else is
+ * housekeeping from a sentence, and nothing here touches the record.
+ */
+export function readHousekeepingAsk(said: string): string | null {
+  const t = said.trim().toLowerCase().replace(/[’]/g, "'");
+  const verb = /\b(?:clear|archive|put away|tidy(?: up)?|clean up|sweep|file away|clear out|clear away)\b/;
+  const object = /\b(?:messages?|conversations?|threads?|inbox|mail|correspondence)\b/;
+  const handled = /\b(?:i'?ve|i have|you'?ve|you have|already|that (?:are|is|were)) (?:already )?(?:dealt with|handled|answered|done with|finished with|read|sorted|resolved)\b|\bhandled\b|\bdealt with\b/;
+  if (!verb.test(t)) return null;
+  if (!(object.test(t) || handled.test(t))) return null;
+  if (!handled.test(t) && !/\binbox\b/.test(t)) return null;
+  return 'you want me to put away the conversations you have already dealt with';
+}
 
 /** "Hold off sending", "pause outreach", "don't send anything to anyone". */
 export function readHoldAsk(said: string): string | null {

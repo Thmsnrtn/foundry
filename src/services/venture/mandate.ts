@@ -210,10 +210,17 @@ export function readVentureSentence(raw: string): VentureReading {
   return { kind: 'not_venture', statement };
 }
 
-/** Whether a sentence asks for something that earns, in the mandate's own terms. */
-function sentenceAsks(statement: string): boolean {
+/**
+ * Whether a sentence asks for something that earns, in the mandate's own
+ * terms — or asks to find *something* at all. "Find something with less legal
+ * exposure" names no form and no earner; it is still an instruction to go and
+ * look, shaped by the constraint inside it, and with no search open the only
+ * honest reading is a direction to open.
+ */
+export function sentenceAsks(statement: string): boolean {
   const t = ` ${statement.toLowerCase().replace(/[’]/g, "'")} `;
   return (asksToLook(t) && EARNS.test(t))
+    || (asksToLook(t) && /\b(something|anything|things|options?|candidates?|ideas?|what)\b/.test(t))
     || /\b(make|keep)\b[^.]{0,10}\b(the )?river\b[^.]{0,20}\b(strong|wider|deeper|resilient|better)/.test(t);
 }
 function shapeNamedIn(statement: string): string | null {
@@ -375,9 +382,19 @@ function readGuidance(t: string, statement: string): GuidanceProposal | null {
   // it and the question path said it did not know. What follows the verb is
   // the subject, kept in his words; a list in it is split into one row per
   // thing when it is absorbed, so each reaches the search as its own term.
-  const focus = /\b(?:focus|concentrate|lean|prioriti[sz]e|put more (?:effort|time|weight))\s+(?:more\s+|mostly\s+|heavily\s+)?(?:on|towards?|into)\s+(.+)$/i.exec(statement.trim().replace(/[.!]+$/, ''));
+  // "LOOK MORE CLOSELY AT CALCULATORS." The same lever in the words a person
+  // uses when a shelf has caught his eye: what follows "at" is the subject.
+  const focus = /\b(?:focus|concentrate|lean|prioriti[sz]e|put more (?:effort|time|weight)|look (?:more )?(?:closely|harder|further|deeper))\s+(?:more\s+|mostly\s+|heavily\s+)?(?:on|towards?|into|at)\s+(.+)$/i.exec(statement.trim().replace(/[.!]+$/, ''));
   if (focus?.[1]) {
     return say('favour', focus[1].trim());
+  }
+  // "I DON'T LIKE THIS DIRECTION." His plainest rejection of where the search
+  // is going, and it fell to "I did not follow that". It is the lever that
+  // asks for a different kind of candidate; with no search open the door says
+  // there is nothing to dislike yet and how to give a direction.
+  if (/\b(?:don'?t|do not|not) (?:like|want|care for|fancy)\b[^.]{0,20}\b(?:this|that|the|these) (?:direction|way|line|one|ones|idea|candidates?|options?)\b/.test(t)
+    || /\bwrong direction\b|\bnot (?:keen on|what i (?:want|meant|had in mind))\b/.test(t)) {
+    return say('another');
   }
   if (/show me another|something else|a different one|next option|other options|none of these|keep looking/.test(t)) {
     return say('another');

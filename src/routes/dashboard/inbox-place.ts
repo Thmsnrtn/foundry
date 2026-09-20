@@ -73,7 +73,7 @@ inboxRoutes.get('/foundry/inbox', async (c: any) => {
   ];
   const body = html`
     <h1>Inbox</h1>
-    ${done ? html`<p class="noticed">Recorded.</p>` : ''}
+    ${done === 'cleared' ? html`<p class="noticed"><strong>Put away.</strong> ${String(c.req.query('n') ?? '0')} ${String(c.req.query('n') ?? '0') === '1' ? 'conversation' : 'conversations'} you had dealt with. Each keeps its record and can be put back from <a href="/foundry/inbox?show=archived">Put away</a>.</p>` : done ? html`<p class="noticed">Recorded.</p>` : ''}
     <p class="lede">What people wrote to ${voice}, and what Foundry made of it. Your own mailbox is untouched; this is the institution's reading, not a copy of your email.</p>
 
     <section class="panel mode-panel" aria-label="Correspondence mode">
@@ -104,6 +104,10 @@ inboxRoutes.get('/foundry/inbox', async (c: any) => {
       <a class="chip${show === 'needs' ? ' on' : ''}${counts.needs ? ' hot' : ''}" href="/foundry/inbox?show=needs">Needs you <b>${String(counts.needs)}</b></a>
       <a class="chip${show === 'handled' ? ' on' : ''}" href="/foundry/inbox?show=handled">Handled <b>${String(counts.handled)}</b></a>
       <a class="chip${show === 'archived' ? ' on' : ''}" href="/foundry/inbox?show=archived">Put away <b>${String(counts.archived)}</b></a></p>
+    ${show === 'handled' && counts.handled > 0 ? html`<form method="POST" action="/foundry/inbox/clear-handled" class="inline">
+      <input type="hidden" name="because" value="you cleared what you had dealt with" />
+      <button class="btn" type="submit">Put away all ${String(counts.handled)}</button>
+      <span class="quiet">Reversible; every reading and reply stays on the record.</span></form>` : ''}
     <p class="quiet">${health.heard} heard in total · ${health.unread} Foundry could not confidently read${health.oldestWaitingHours != null ? ` · the oldest thing waiting has waited ${String(health.oldestWaitingHours)}h` : ''}.</p>
     <ul class="mailrows" aria-label="Conversations">
       ${threads.map((t) => html`<li class="mailrow${t.needsOwner ? ' needs' : ''}">
@@ -179,6 +183,25 @@ const actOnThread = (
   else await mail.archiveThread({ founderId, threadKey, because });
   return c.redirect(`${to}${back ? '&' : '?'}done=${what === 'done' ? 'settled' : 'archived'}`);
 };
+
+// CLEAR WHAT HE HAS DEALT WITH: every handled conversation put away in one
+// act, through the same thread-scoped writer the Archive button uses, with
+// the same reason on every row. Nothing that needs him moves; nothing is
+// deleted; Put back undoes any of it.
+inboxRoutes.post('/foundry/inbox/clear-handled', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return c.redirect('/onboarding');
+  const form = await c.req.parseBody();
+  const because = String(form.because ?? '').trim() || 'you cleared what you had dealt with';
+  const mail = await import('../../services/public-workshop/mail.js');
+  const handled = await mail.theThreads(founderId, 'handled');
+  let n = 0;
+  for (const t of handled) {
+    const moved = await mail.archiveThread({ founderId, threadKey: t.key, because });
+    if (moved > 0) n += 1;
+  }
+  return c.redirect(`/foundry/inbox?done=cleared&n=${String(n)}`);
+});
 
 inboxRoutes.post('/foundry/inbox/thread/:thread/done', requireInstitutionOwner(), actOnThread('done'));
 inboxRoutes.post('/foundry/inbox/thread/:thread/archive', requireInstitutionOwner(), actOnThread('archive'));
