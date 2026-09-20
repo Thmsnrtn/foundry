@@ -2275,3 +2275,12 @@ that morning. Nothing is sealed or sent without the charter. The next tranche
 is chosen from the map by consequence: one reading of a test's money that every
 surface renders; search events on Activity; the vocabulary pass.
 
+### The world, the working set, one reading of money (2026-09-21)
+
+The laboratory has a shared world with a clock (`tests/helpers/world.ts`;
+time passes by moving rows), the working set no longer lies after a stop, a
+replace, a stopped test, a reopened thread or a retirement, and a test's money
+is read once and rendered everywhere with its own label. Proven from the real
+entrance. Next: the thirty-day scenarios on the world; vocabulary and empty
+states; a review cell at day 15.
+

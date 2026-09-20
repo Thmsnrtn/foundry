@@ -2807,3 +2807,46 @@ What the reviewers found and was left, with the reason, is in
 new: one row per owner journey and per transition of the economic loop, three
 verdicts each — works, usable, earns — with what proves them.
 
+## The world, the working set, and one reading of money (21 September 2026)
+
+Three tranches, one discipline: the laboratory stands where the owner stands,
+and what it finds is repaired at the root.
+
+**The world.** `tests/helpers/world.ts` carries production's shape once, for
+the proofs and the review harness alike. Time is the binding constraint on any
+simulation of ownership — four hundred and sixty-seven `datetime('now')` in the
+services and nullary routines in the registry leave no seam for a clock — so
+time passes the way the house has always made it pass: every timestamp the
+live schema has is moved N days into the past, in the format its writer used.
+The rows the clock most needs (a mandate, an allowance, a sealed envelope, a
+settled prediction) are exactly the ones the constitution makes immutable to
+application code; passing time is not an edit, so the guard that refuses is
+lifted for one uniform translation and put back verbatim, and the helper says
+which. `runMorning()` drives the economic loop through the registry the way the
+scheduler does. The harness takes `--day N`.
+
+**The working set stays true.** An object's end was written on one row and
+read by nothing else. A closed search now takes its debris with it: open
+candidates are buried with the reason and a way back ("worth another look if a
+search opens that this fits"), undecided designs are retired, and a candidate
+buried because its search closed is not held against the next search that
+finds the same thing. A test the owner stops is written as stopped on the
+test, so the attention queue no longer asks him to list the test he just
+stopped. A thread he put away that a reply reopened says when he put it away.
+Activity carries the search — started, steered, stopped — in his words.
+History names a retired asset. "Recently finished" ages out by the ledger's
+date.
+
+**One reading of money.** One approved $100 test read as $-100 on Home, "$100
+more without asking" on Controls, "Spent $0.00" on its page, "$100 on a test"
+in the week-away letter and "$800 over 7 days" on the absence test — each
+correct about a different quantity, none reconciled, one printing the ceiling
+as spend. `moneyOfExperiment` reads authorised, carved, allowance standing,
+spent, paid and refunded side by side with one word for where the money
+stands, and every surface renders it with its own label. A settled test still
+reads what it spent. The absence test bounds thinking by the charter the owner
+signed, not the provider's ceiling.
+
+Proofs: `the-world-can-be-moved-through-time`, `the-working-set-stays-true`,
+`a-test-he-stopped-stays-stopped`, `one-reading-of-a-tests-money`.
+
