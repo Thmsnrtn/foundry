@@ -184,14 +184,20 @@ export interface Likeness {
 export async function likeness(
   founderId: string, subject: Genome,
 ): Promise<Likeness> {
+  // SCOPED TO THE CANDIDATE. This compared against the most recent settled
+  // test anywhere, so a test of one candidate was read beside a test of
+  // another as if they were alike. A precedent is a settled test on the same
+  // candidate; nothing else is honest to compare.
   const settled = await rows(
-    `SELECT id FROM venture_experiments
-      WHERE founder_id = ? AND evidence_mode = 'real' AND ran_at IS NOT NULL
-        AND id <> ? ORDER BY ran_at DESC LIMIT 1`, [founderId, subject.experimentId]);
+    `SELECT e.id FROM venture_experiments e
+      WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.ran_at IS NOT NULL
+        AND e.id <> ?
+        AND e.opportunity_id = (SELECT opportunity_id FROM venture_experiments WHERE id = ?)
+      ORDER BY e.ran_at DESC LIMIT 1`, [founderId, subject.experimentId, subject.experimentId]);
   if (settled.length === 0) {
     return {
       against: null, shared: [], differs: [],
-      because: 'No other experiment has settled, so there is nothing to compare this to. '
+      because: 'No other experiment on this candidate has settled, so there is nothing to compare this to. '
         + 'One result is an observation and not a rate.',
     };
   }

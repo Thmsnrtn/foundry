@@ -199,6 +199,7 @@ experimentRoutes.get('/foundry/experiments/explore', async (c: any) => {
     <p class="quiet">${k.whoHasIt} — ${k.theProblem}</p>
     <p class="shelf-ev"><span class="pill${k.stances >= 2 ? ' ok' : ''}">${k.evidence}</span>${k.because ? html` <span class="dim">filed here by &ldquo;${k.because}&rdquo; in ${k.where}</span>` : ''}</p>
     <p class="quiet">${k.blockedBy ? html`<b>In the way:</b> ${k.blockedBy}` : html`<b>Strongest reason it fails:</b> ${k.killThesis}`}</p>
+    ${k.testedBefore.map((line) => html`<p class="quiet tested-before">${line}</p>`)}
     <p><a class="btn" href="/foundry/why/candidate/${k.id}">Explore ${mark('arrow')}</a></p>
     ${steerFold(k.id, { blockedBy: k.blockedBy, cannotTestYet: cannotTest.has(k.form) }, 'explore')}
   </article>`;

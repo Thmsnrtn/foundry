@@ -275,6 +275,13 @@ export async function designStandsInTheWay(experimentId: string): Promise<string
   if (d.recommendation === 'defer') missing.push('the deliberation recommends waiting');
   if (d.interpretations.length === 0) missing.push('no competing readings of the likely result are recorded');
   if (d.costs.length === 0) missing.push('no cost beyond cash is recorded');
+  // WHAT A SETTLED TEST ON THIS CANDIDATE ALREADY ESTABLISHED. A design that
+  // asks the same question by the same mechanism does not seal: it says what
+  // it changes, or it is a re-run on the record. A different mechanism, or a
+  // different question, passes with the precedent's scope beside it.
+  const { precedentOfExperiment, askedBeforeSentence } = await import('./precedent.js');
+  const precedent = await precedentOfExperiment(experimentId);
+  if (precedent?.stands === 'asked_before') missing.push(askedBeforeSentence(precedent));
   return missing;
 }
 

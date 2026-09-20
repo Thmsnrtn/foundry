@@ -36,6 +36,8 @@ export interface ShelfCandidate {
   killThesis: string;
   /** Which economic form it answers to, and the words that put it there. */
   form: string;
+  /** The settled tests on this candidate, one line each: what, the word, what it establishes and does not. */
+  testedBefore: string[];
   because: string;
   /** Which of its own sentences the words were found in. */
   where: string;
@@ -138,6 +140,12 @@ export async function shelfCandidates(founderId: string): Promise<Shelf[]> {
     return `${cut.slice(0, Math.max(0, cut.lastIndexOf(' '))) || cut}…`;
   };
 
+  // WHAT WAS TESTED BEFORE ON EACH CANDIDATE, so a card carries the precedent
+  // the next design has to answer to, not only the reasons it might fail.
+  const { testedBefore } = await import('./precedent.js');
+  const precedentOf = new Map<string, string[]>();
+  for (const r of rows) precedentOf.set(String(r.id), (await testedBefore(founderId, String(r.id))).map((p) => p.line));
+
   const placed: ShelfCandidate[] = rows.map((r) => {
     const seedId = r.seed_id == null ? null : String(r.seed_id);
     const stances = Math.max(
@@ -161,6 +169,7 @@ export async function shelfCandidates(founderId: string): Promise<Shelf[]> {
       blockedBy: blockedOf.has(String(r.id)) ? short(String(blockedOf.get(String(r.id))), 120) : null,
       killThesis: short(String(r.kill_thesis), 120),
       form: said.form, because: said.because, where: said.where,
+      testedBefore: precedentOf.get(String(r.id)) ?? [],
     };
   });
 

@@ -64,17 +64,21 @@ export async function designExperiment(input: {
    * return leg can apply without opinion. Sealed with the prediction at
    * approval. Without one, only the owner can settle the test. */
   settlesWhen?: SettlementRule | null;
+  /** THE SETTLED TEST THIS ONE DELIBERATELY REPEATS: the one honest way to ask
+   * the same question again. Immutable once written; the schema's guard says
+   * what a re-run may follow. */
+  rerunOf?: string | null;
 }): Promise<string> {
   const id = nanoid();
   await query(
     `INSERT INTO venture_experiments
        (id, founder_id, opportunity_id, unknown_id, claim_id, what_we_do,
-        what_we_expect, would_disprove, cost_cents, evidence_mode, settles_when)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        what_we_expect, would_disprove, cost_cents, evidence_mode, settles_when, rerun_of)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
     [id, input.founderId, input.opportunityId, input.unknownId,
       input.claimId ?? null, input.whatWeDo.trim(), input.whatWeExpect.trim(),
       input.wouldDisprove.trim(), input.costCents ?? 0, input.evidenceMode,
-      input.settlesWhen == null ? null : settlementRuleJson(input.settlesWhen)]);
+      input.settlesWhen == null ? null : settlementRuleJson(input.settlesWhen), input.rerunOf ?? null]);
   return id;
 }
 
@@ -451,6 +455,19 @@ export async function proposeWhatRealityWouldSettle(input: {
         WHERE unknown_id = ? AND (decision IS NULL OR ran_at IS NULL)`,
       [String(unknown.id)])).rows[0];
     if (already) continue;
+
+    // AND A QUESTION THE WORLD ALREADY ANSWERED ON THIS CANDIDATE, BY THIS
+    // MECHANISM, IS NOT PROPOSED AGAIN IN NEW WORDS. The precedent is named;
+    // the way through is a design that says what it changes, or a re-run.
+    const { precedentFor, askedBeforeSentence } = await import('./precedent.js');
+    const precedent = await precedentFor({
+      founderId: input.founderId, opportunityId: input.opportunityId,
+      design: { whatWeDo: question.cheapestTest, question: question.question, unknownId: String(unknown.id) },
+    });
+    if (precedent.stands === 'asked_before') {
+      skipped.push({ question: question.question, because: askedBeforeSentence(precedent) });
+      continue;
+    }
 
     proposed.push(await designExperiment({
       founderId: input.founderId, opportunityId: input.opportunityId,

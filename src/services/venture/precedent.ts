@@ -30,6 +30,7 @@ import { GRADE_SQL, outcomeFromRow, type Outcome, type OutcomeRow } from '../fou
 
 export interface PrecedentRef {
   experimentId: string;
+  unknownId: string;
   whatWeDid: string;
   question: string;
   outcome: Outcome;
@@ -67,18 +68,24 @@ export function words(s: string | null | undefined): Set<string> {
     .filter((w) => w.length > 2 && !STOP.has(w)));
 }
 
-/** Jaccard overlap of the carrying words, 0..1. Empty against anything is 0. */
+/**
+ * How much of the shorter sentence's carrying words the longer one holds,
+ * 0..1. The shorter side is the measure on purpose: a sealed design says its
+ * distribution in a paragraph and a new proposal says the same act in a line,
+ * and the question is whether the line is inside the paragraph, not whether
+ * the two are the same length. Empty against anything is 0.
+ */
 export function overlap(a: string | null | undefined, b: string | null | undefined): number {
   const A = words(a); const B = words(b);
   if (A.size === 0 || B.size === 0) return 0;
   let both = 0;
   for (const w of A) if (B.has(w)) both += 1;
-  return both / (A.size + B.size - both);
+  return both / Math.min(A.size, B.size);
 }
 
 /** The thresholds, named once so `because` can say them. */
-export const SAME_QUESTION_AT = 0.5;
-export const SAME_MECHANISM_AT = 0.5;
+export const SAME_QUESTION_AT = 0.6;
+export const SAME_MECHANISM_AT = 0.6;
 
 const settledOn = async (founderId: string, opportunityId: string, except: string | null): Promise<PrecedentRef[]> => {
   const rows = (await query(
@@ -96,7 +103,7 @@ const settledOn = async (founderId: string, opportunityId: string, except: strin
     const outcome = outcomeFromRow(r as OutcomeRow);
     const when = outcome.when ? ` on ${outcome.when.slice(0, 10)}` : '';
     return {
-      experimentId: String(r.id), whatWeDid: String(r.what_we_do), question: String(r.question), outcome,
+      experimentId: String(r.id), unknownId: String(r.unknown_id), whatWeDid: String(r.what_we_do), question: String(r.question), outcome,
       decides: r.decides == null ? null : String(r.decides), exchange: r.exchange == null ? null : String(r.exchange),
       distribution: r.distribution == null ? null : String(r.distribution),
       line: `Tested before: ${String(r.what_we_do)} — settled ${outcome.word}${when}. It establishes ${outcome.establishes ?? 'nothing yet'} It does not establish ${outcome.doesNotEstablish ?? ''}`.trim(),
@@ -121,7 +128,7 @@ export async function precedentFor(input: {
       nearby.push(s); notes.push(`a re-run of ${s.experimentId}, on the record`); continue;
     }
     const questionOverlap = Math.max(overlap(d.question, s.question), overlap(d.decides, s.decides));
-    const sameQuestion = (d.unknownId != null && d.unknownId === s.experimentId) || questionOverlap >= SAME_QUESTION_AT;
+    const sameQuestion = (d.unknownId != null && d.unknownId === s.unknownId) || questionOverlap >= SAME_QUESTION_AT;
     // The mechanism is the exchange and the way of reaching people when the
     // design has them; before it does, the proposed act itself.
     const mechanismOverlap = d.exchange && s.exchange
