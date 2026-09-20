@@ -205,8 +205,8 @@ export async function recordWorkshopHealth(founderId: string, health: Record<str
     const status = signal?.status;
     if (status !== 'healthy' && status !== 'needs_attention' && status !== 'unknown') continue;
     await query(
-      `INSERT INTO public_channel_days (founder_id, channel, day, worst_status, detail, readings, first_at, last_at)
-       VALUES (?,?,?,?,?,1,datetime('now'),datetime('now'))
+      `INSERT INTO public_channel_days (founder_id, channel, day, worst_status, detail, readings, last_at)
+       VALUES (?,?,?,?,?,1,datetime('now'))
        ON CONFLICT(founder_id, channel, day) DO UPDATE SET
          -- The worst of the day stands; a later healthy reading only counts.
          worst_status = CASE

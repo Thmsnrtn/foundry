@@ -3393,7 +3393,9 @@ CREATE TABLE public_channel_days (
   -- How many readings the day got, so a day watched once is not read as a day
   -- that was watched.
   readings     INTEGER NOT NULL DEFAULT 1 CHECK (readings > 0),
-  first_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- When the day was last looked at. There is deliberately no `first_at`
+  -- beside it: `readings` already says whether a day was watched once or
+  -- often, and a column nothing reads is a column that drifts.
   last_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (founder_id, channel, day)
 );
@@ -8299,8 +8301,7 @@ CREATE TRIGGER public_channel_day_keeps_the_worst
 BEFORE UPDATE ON public_channel_days
 BEGIN
   SELECT RAISE(ABORT,'public_channel_day:immutable') WHERE
-    NEW.founder_id <> OLD.founder_id OR NEW.channel <> OLD.channel OR NEW.day <> OLD.day
-    OR NEW.first_at <> OLD.first_at;
+    NEW.founder_id <> OLD.founder_id OR NEW.channel <> OLD.channel OR NEW.day <> OLD.day;
   SELECT RAISE(ABORT,'public_channel_day:a_day_does_not_get_better')
     WHERE OLD.worst_status = 'needs_attention' AND NEW.worst_status <> 'needs_attention';
   SELECT RAISE(ABORT,'public_channel_day:a_day_does_not_get_better')
