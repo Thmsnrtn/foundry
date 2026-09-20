@@ -2850,3 +2850,43 @@ signed, not the provider's ceiling.
 Proofs: `the-world-can-be-moved-through-time`, `the-working-set-stays-true`,
 `a-test-he-stopped-stays-stopped`, `one-reading-of-a-tests-money`.
 
+## Thirty days of ownership, twice (21 September 2026)
+
+The owner does not use Foundry in one sitting, and a proof that runs in one
+second sees the day he gave a direction and never the day he came back. Two
+scenarios now run a month over the shared world, through the real entrance,
+with the routines run against providers that answer as the real ones do:
+
+- **A search that finds nothing, honestly** (`07-thirty-days-of-a-search`). Day
+  1 he replaces the finished search with his direction; day 2 the morning runs
+  and every public source answers nothing; day 4 he steers; day 8 he asks what
+  he missed; day 30 the search is still open and the month's letter is a dozen
+  lines. No candidate is invented to fill the silence.
+- **A test through its life** (`08-a-test-through-thirty-days`). Day 1 he
+  allows it; day 2 the hand writes; day 3 the receipts arrive; day 8 the letter
+  says what was sent, and the charter has expired around a running test without
+  touching it; day 10 the sealed rule settles it, the budget ends with the
+  answer, the working set lets it go; day 25 the next design under the same
+  candidate is written against what this one could not establish; day 30 the
+  reading, the letter and Home agree; day 41 the asset retires.
+
+What running the months found, each repaired at the root and kept as a proof:
+
+- **One silent source ended the whole day's discovery.** The issue tracker
+  beside the forum was guarded; the forum was read bare, so an unreachable
+  `hn.algolia.com` failed the pass for every search and Home read *Stopped*
+  the next morning. The forum is passed over out loud now.
+- **The world's settlement did not end the test's budget.** The owner's own
+  settlement withdrew the allowance; the sealed rule's did not, so a test
+  settled by the world kept "may spend $100 more" standing for the rest of its
+  horizon.
+- **A refund owed by a settled test was refused once its budget ended.** The
+  consequence door accepted a refund on the standing allowance or on an exact
+  approval whose fingerprint the refund never matched. What is owed outlives
+  the test: the refund act the owner approved with it now carries the refund
+  after the allowance is gone, and only that — a delivery, a refund, a
+  take-down the gateway resolved from the test's own rows.
+- **The clock did not move `reconcile_after`**, so receipts stayed forever in
+  the future in the laboratory. A clock that moves `_at` and not `_after` is
+  not a clock.
+

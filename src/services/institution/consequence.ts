@@ -77,6 +77,14 @@ export async function consequenceAllows(input: {
    * accepting somebody's terms arrive through the same hand.
    */
   browserAct?: string | null;
+  /**
+   * THE TEST'S OWN ACT, when the gateway resolved one from the rows for this
+   * effect (a refund of a recorded purchase, a delivery, a take-down). The
+   * owner approved that act with the test; it is his exact approval of this
+   * kind of act, and it outlives the test's budget — what is owed does not
+   * end when the allowance does.
+   */
+  experimentActId?: string | null;
   /** What this act will cost, in cents. Required on the financial rung. */
   estimatedCents?: number | null;
 }): Promise<ConsequenceVerdict> {
@@ -150,6 +158,12 @@ export async function consequenceAllows(input: {
       paramsFingerprint: input.paramsFingerprint,
     });
     if (approved) return { allowed: true, rung, reason: 'you approved exactly this act' };
+    // A REFUND OWED BY A SETTLED TEST. Its allowance ended with its answer;
+    // the refund act he approved with the test did not, and a customer's money
+    // does not wait on a budget that was never for it.
+    if (!facts.drawsOnAllowance && input.experimentActId) {
+      return { allowed: true, rung, reason: 'an act you approved with the test, which outlives its budget' };
+    }
     return {
       allowed: false, rung,
       reason: `this ${facts.whatItMeans}, and you have neither allowed money for this `

@@ -499,6 +499,16 @@ export async function settleFromTheWorld(experimentId: string, now = new Date())
   await query(
     `UPDATE venture_experiments SET ran_at = ?, what_happened = ?, verdict = ? WHERE id = ?`,
     [now.toISOString(), because, verdict === 'as_predicted' ? 'as_predicted' : 'surprised', experimentId]);
+  // ITS BUDGET ENDS WITH ITS ANSWER, on this path too. The owner's own
+  // settlement (`recordResult`) withdrew the allowance; the world's did not,
+  // so a test the sealed rule settled kept "may spend $100 more" standing
+  // for the rest of its horizon. A month of ownership run in the laboratory
+  // found it on day ten.
+  await query(
+    `UPDATE owner_allowances SET withdrawn_at = datetime('now'),
+            withdraw_reason = 'the test settled; its budget ended with its answer'
+      WHERE withdrawn_at IS NULL
+        AND product_id IN (SELECT id FROM products WHERE from_experiment_id = ?)`, [experimentId]);
   await query(
     `UPDATE market_unknowns SET answered_at = datetime('now'), answer = ? WHERE id = ? AND answered_at IS NULL`,
     [because, String(e.unknown_id)]);

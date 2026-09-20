@@ -214,6 +214,7 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
       productId: req.productId, tool: req.tool, paramsFingerprint: fingerprint(req.params),
       browserAct: req.browserAct ?? null,
       estimatedCents: req.estimatedCents ?? null,
+      experimentActId: experimentAct?.actId ?? null,
     });
     if (!verdict.allowed) {
       await recordGatewayInvocation({

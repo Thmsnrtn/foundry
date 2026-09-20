@@ -38,6 +38,8 @@ export interface WorldOptions {
   eyes?: boolean;
   /** Leave Experiment 001 unsettled (still listed) rather than settled by the world. */
   unsettled?: boolean;
+  /** Leave Experiment 001 undecided: deliberated, its people approved, waiting for the owner's tap. */
+  undecided?: boolean;
 }
 
 export const FIRST_DIRECTION = 'Find low-maintenance digital income opportunities.';
@@ -59,21 +61,28 @@ export async function seedProductionShape(opts: WorldOptions = {}): Promise<{ ex
 
   const { seedProof1 } = await import('../../src/services/venture/proof-1.js');
   const seeded = await seedProof1(OWNER);
+  // The Workshop first: tests write as it, from its own address.
+  const { establishPublicWorkshop, setPostalAddress } = await import('../../src/services/public-workshop/settings.js');
+  const workshop = await establishPublicWorkshop({ founderId: OWNER });
+  await setPostalAddress(OWNER, 'Thomas Norton\n11 Apex Drive Suite 300A #361\nMarlborough, MA 01752');
   const { setSendingIdentity } = await import('../../src/services/outbound/sending-identity.js');
-  await setSendingIdentity({ productId: COMPANY, provider: 'resend', credential: 're_world', fromEmail: 'thomas@apexmicro.example', fromName: 'Apex Micro' });
+  await setSendingIdentity({ productId: COMPANY, provider: 'resend', credential: 're_world', fromEmail: workshop.contactEmail, fromName: workshop.publicName });
+  // Its public page, as production carries it: /experiments/ma-millwork-bid-brief.
+  const { givePublicIdentity } = await import('../../src/services/public-workshop/identity.js');
+  const { PROOF1_PUBLIC, PROOF1_SLUG } = await import('../../src/services/venture/proof-1.js');
+  await givePublicIdentity({ experimentId: seeded.experimentId, founderId: OWNER, slug: PROOF1_SLUG, copy: PROOF1_PUBLIC });
   const { approveRemaining } = await import('../../src/services/venture/hand.js');
   await approveRemaining({ founderId: OWNER, experimentId: seeded.experimentId });
-  const { establishPublicWorkshop, setPostalAddress } = await import('../../src/services/public-workshop/settings.js');
-  await establishPublicWorkshop({ founderId: OWNER });
-  await setPostalAddress(OWNER, 'Thomas Norton\n11 Apex Drive Suite 300A #361\nMarlborough, MA 01752');
 
   // The thinking behind the test is recorded before the decision, as it was
   // in production: a decision on an unrecorded deliberation is refused.
   const { reconsiderProof1 } = await import('../../src/services/venture/proof-1-deliberation.js');
   await reconsiderProof1(OWNER);
   const { decideExperiment, recordResult } = await import('../../src/services/venture/validation.js');
-  await decideExperiment({ experimentId: seeded.experimentId, decision: 'approved', by: `founder:${OWNER}`, via: 'its own authorisation' });
-  if (!opts.unsettled) {
+  if (!opts.undecided) {
+    await decideExperiment({ experimentId: seeded.experimentId, decision: 'approved', by: `founder:${OWNER}`, via: 'its own authorisation' });
+  }
+  if (!opts.unsettled && !opts.undecided) {
     await new Promise((r) => { setTimeout(r, 1100); }); // a resolution is after its prediction, by the clock
     await recordResult({ experimentId: seeded.experimentId, asPredicted: false,
       whatHappened: '21 businesses were written to, 19 were delivered, and none bought within the seven days the test allowed.' });
@@ -119,7 +128,10 @@ export async function timeColumns(): Promise<Array<{ table: string; column: stri
     for (const c of cols) {
       const t = String(c.type ?? '').toUpperCase();
       if (t.startsWith('INT') || t.startsWith('REAL') || t.startsWith('NUM') || t.startsWith('BOOL')) continue;
-      if (/(_at|_on|_date|_until|_since|_day|_deadline|_expires)$|^(date|until|since|deadline|day|expires_at|when)$/.test(c.name)) {
+      // `reconcile_after` is a clock too: the hand polls a receipt only after
+      // it, and a day that moved every `_at` but not it left the receipts
+      // forever in the future — found by the test that ran a month.
+      if (/(_at|_on|_date|_until|_since|_day|_deadline|_expires|_after|_before)$|^(date|until|since|deadline|day|expires_at|when)$/.test(c.name)) {
         out.push({ table: name, column: c.name });
       }
     }

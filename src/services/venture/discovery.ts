@@ -303,7 +303,19 @@ export async function discover(input: {
 
   for (const terms of brief.terms) {
     if (sown.length >= MOST_SEEDS_PER_PASS || read >= MOST_READINGS_PER_PASS) break;
-    const talk = await whatPeopleSaid(terms, 10);
+    // THE FORUM NOT ANSWERING IS PASSED OVER, NOT FATAL. The tracker beside it
+    // already was; the forum was read bare, so one unreachable source ended
+    // the whole day's pass for every search, and Home read "Stopped" the
+    // next morning. A month of ownership over a world where the sources
+    // answered nothing found it on day two.
+    let talk: Awaited<ReturnType<typeof whatPeopleSaid>>;
+    try {
+      talk = await whatPeopleSaid(terms, 10);
+    } catch (err) {
+      passedOver.push({ what: `what people said about "${terms}"`,
+        because: `the forum did not answer: ${err instanceof Error ? err.message : String(err)}` });
+      continue;
+    }
     // A SECOND PLACE PEOPLE WRITE THINGS DOWN. Public issue trackers are the
     // same kind of knowing — somebody said something, in public, at a date —
     // and the same reader sows from them. An eye that does not answer is

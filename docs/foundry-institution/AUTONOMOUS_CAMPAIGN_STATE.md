@@ -2284,3 +2284,11 @@ is read once and rendered everywhere with its own label. Proven from the real
 entrance. Next: the thirty-day scenarios on the world; vocabulary and empty
 states; a review cell at day 15.
 
+### Thirty days of ownership, twice (2026-09-21)
+
+Two months run over the world: a search that finds nothing honestly, and a
+test through its whole life. They found and repaired: a silent source ending
+the day's discovery; the world's settlement not ending a test's budget; a
+settled test's refund refused once its budget ended. Next: vocabulary and
+empty states; a review cell at day 15.
+

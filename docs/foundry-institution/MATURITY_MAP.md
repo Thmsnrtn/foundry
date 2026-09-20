@@ -58,13 +58,13 @@ The loop as the routines run it (`src/jobs/index.ts`): `sense_check_tick` 05:40
 |---|---|---|---|---|
 | L1 | Owner intention → open search | **end-to-end verified, deployed** *(20 Sep)* | `the-door.ts`, `mandate.ts`, `/foundry/ask` | — |
 | L2 | Search → ways of looking connected | **end-to-end verified** *(20 Sep)* | `research-sources.ts`, `openMandate`, `sense_check_tick` | The proven public sources open the moment a real search opens (`the-first-direction-lands`, browser read-back: Home reads *Waiting — Foundry is working* right after the direction, not *Blocked: nowhere to look*). |
-| L3 | Ways of looking → real market evidence (retrievals, observations, unknowns) | **end-to-end verified, deployed; externally observed in the reference world only** | `sources/*`, `market-evidence.ts`, `real_market_evidence_tick` | The eleven public sources need no credential (`321_more_ways_of_looking.sql`). Whether they answer in production is the sense check's daily reading; not yet read back for a real search. |
+| L3 | Ways of looking → real market evidence (retrievals, observations, unknowns) | **end-to-end verified, deployed; externally observed in the reference world only** | `sources/*`, `market-evidence.ts`, `real_market_evidence_tick` | The eleven public sources need no credential (`321_more_ways_of_looking.sql`). A month over a world where every source answers nothing (`07-thirty-days-of-a-search`) found that one unreachable forum ended the whole day's pass for every search — the forum read is guarded now, like the tracker beside it, and the pass says which source did not answer. |
 | L4 | Evidence → seeds → candidates (and burials) | **end-to-end verified locally** | `discovery.ts` (`discover`, `weedOut`, `promoteWhatEarnedIt`) | A real search has not yet run a full day in production with eyes open. |
 | L5 | Candidate → design, adversary, seal | **end-to-end verified locally; deployed** | `forge-deliberation.ts`, `probe-design.ts`, charter | Needs a live charter: nothing is sealed outside one. Production has none signed yet. |
 | L6 | Sealed test → authority → offer → distribution | **externally observed once** (Experiment 001) | `hand.ts`, outbound door, Workshop pages, `payment-link.ts` | One channel (email to a screened population) observed; the Workshop page and the Etsy listing exist as channels, unobserved commercially. |
 | L7 | Customer behaviour → purchase / non-purchase → fulfilment → refund | **implemented; observed only as non-purchase** | Stripe webhook → `economic_events`; deliveries; buyer's own refund link | The first real payment. |
 | L8 | Costs and revenue reconciled | **implemented; near-vacuous** | `probe_costs`, `cost_events`, `economic_events`, `reconcile.ts` | Real spend under a live charter; the first payment. |
-| L9 | Outcome settled against the sealed rule | **externally observed once** | `settleFromTheWorld`, `business_outcome_tick` | — (Experiment 001 settled itself; the owner was asked nothing.) |
+| L9 | Outcome settled against the sealed rule | **externally observed once; end-to-end verified over thirty days** | `settleFromTheWorld`, `business_outcome_tick` | Experiment 001 settled itself; the owner was asked nothing. `08-a-test-through-thirty-days` runs a test from the owner's tap through sends, receipts, the window, settlement, the lesson and retirement over the world's clock, and found two gaps on the way: the world's settlement did not end the test's budget (the owner's did), and a refund owed by a settled test was refused once its budget ended — a test's own approved act carries the refund now. |
 | L10 | Learning returns to the next decision | **implemented, unobserved** | `lessonsFor` → forge deliberation context | A second real design that can be shown to differ because of the first's limit. Until then the lesson is stored, not demonstrably learned. |
 | L11 | Portfolio disposition (keep, retire) | **implemented, unobserved** | `outcome.ts` retirement after grace; `asset.ts` | The first earned asset. |
 
@@ -89,7 +89,11 @@ routines run, public sources proven; `charter`, `searching`, `eyes`,
 has by n days, in the format its writer used — the SQL is the clock, so time
 passes by moving rows, and the one guard that refuses a uniform translation
 is lifted and put back verbatim. `runMorning()` drives the economic loop
-through the registry as the scheduler does. `scripts/owner-review-harness.mts`
+through the registry as the scheduler does. Two months of ownership run on it
+(`tests/simulation/07-thirty-days-of-a-search`, `08-a-test-through-thirty-days`):
+a direction given, steered and asked about over thirty mornings that find
+nothing, honestly; and a test allowed, written, delivered, unanswered, settled,
+learned from and retired over forty-one. `scripts/owner-review-harness.mts`
 serves that world (`--day N` to return to it later) so a reviewer who has not
 seen the code is given an objective
 in the owner's words, drives the real pages in a real browser, and reports
