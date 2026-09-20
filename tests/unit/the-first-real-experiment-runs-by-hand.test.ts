@@ -414,7 +414,7 @@ describe('Foundry operates: purchase, delivery, refund, settlement', () => {
     expect(r[0].settled).toBe('as_predicted');
     const e = (await query('SELECT verdict, what_happened, ran_at FROM venture_experiments WHERE id = ?', [X])).rows[0] as Record<string, unknown>;
     expect(e.verdict).toBe('as_predicted');
-    expect(String(e.what_happened)).toMatch(/1 delivery that counted out of 10 offer_delivereds within 7 days.*As predicted\./);
+    expect(String(e.what_happened)).toMatch(/1 delivery that counted out of 10 offers delivered within 7 days.*As predicted\./);
     const v = (await getExperimentView(OWNER, X, NOW))!;
     expect(v.state).toBe('completed');
     expect(v.learned.headline).toBe('The prediction held.');

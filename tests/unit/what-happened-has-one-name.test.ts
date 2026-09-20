@@ -27,7 +27,10 @@ let X: string;
 const RAW = /\b(as_predicted|The world said|settled against its prediction|Stopped by its own rule|not what I expected|It did not hold)\b/;
 
 beforeAll(async () => {
-  ({ experimentId: X } = await seedProductionShape({}));
+  // ON THE WORLD'S OWN PATH: Experiment 001 settled by the hand's mornings,
+  // not written into the ledger, so the word and its caveat come from what was
+  // actually sent and delivered.
+  ({ experimentId: X } = await seedProductionShape({ settledBy: 'the world' }));
   const { markVisit } = await import('../../src/services/founder/what-changed.js');
   await markVisit(OWNER);
   app = await ownerApp();
@@ -40,7 +43,11 @@ describe('one settled test, one word, one reason', () => {
     expect(o.word).toBe('surprised');
     expect(o.label).toBe('Surprised');
     expect(o.settled).toBe(true);
-    expect(o.reason).toContain('nobody bought within the seven days');
+    // THE WORLD'S OWN REASON: the sealed rule's sentence, in his words, from
+    // what was actually sent and delivered — never an internal event name.
+    expect(o.reason).toContain('0 deliveries that counted out of 19 offers delivered');
+    expect(o.reason).not.toMatch(/deliverys|offer_delivereds|_/);
+    expect(o.meaning).not.toContain('Nothing was sent');
     expect(o.establishes).toContain('did not sell');
     expect(o.doesNotEstablish).toContain('the category is worthless');
   });
@@ -50,7 +57,8 @@ describe('one settled test, one word, one reason', () => {
     expect(t).toContain('Surprised');
     expect(t).toContain('What happened and why');
     expect(t).toContain('The prediction did not hold.');
-    expect(t).toContain('nobody bought within the seven days');
+    expect(t).toContain('0 deliveries that counted out of 19 offers delivered');
+    expect(t).not.toContain('Nothing was sent');
     expect(t).toContain('What that establishes');
     expect(t).not.toMatch(RAW);
   });
@@ -58,15 +66,15 @@ describe('one settled test, one word, one reason', () => {
   it('Experiments (Recently finished), History, Activity, the letter, Home and the next-test page say the same word', async () => {
     const index = asText(await me.page('/foundry/experiments'));
     expect(index).toContain('Surprised');
-    expect(index).toContain('nobody bought within the seven days');
+    expect(index).toContain('0 deliveries that counted out of 19 offers delivered');
     const history = asText(await me.page('/foundry/experiments/history'));
     expect(history).toContain('Surprised');
-    expect(history).toContain('nobody bought within the seven days');
+    expect(history).toContain('0 deliveries that counted out of 19 offers delivered');
     const activity = asText(await me.page('/foundry/activity?kind=experiment'));
     expect(activity).toContain('Experiment settled surprised');
     const { whileYouWereAway } = await import('../../src/services/founder/a-week-away.js');
     const letter = await whileYouWereAway(OWNER, 7);
-    expect(letter.outcomes.some((o) => /settled surprised on \d{4}-\d{2}-\d{2}: nobody bought/.test(o))).toBe(true);
+    expect(letter.outcomes.some((o) => /settled surprised on \d{4}-\d{2}-\d{2}: 0 deliveries that counted/.test(o))).toBe(true);
     expect(letter.learned.some((o) => /settled surprised: The prediction did not hold; it establishes that this offer/.test(o))).toBe(true);
     const home = asText(await me.page('/foundry'));
     expect(home).toContain('Last test');

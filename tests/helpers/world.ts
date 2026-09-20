@@ -26,6 +26,8 @@ import type { Hono } from 'hono';
 import { query } from '../../src/db/client.js';
 import { runMigrations } from '../../src/db/migrate.js';
 
+import { providerStubs, type ProviderState } from './provider-stubs.js';
+
 export const OWNER = 'wd_owner';
 export const COMPANY = 'wd_company';
 
@@ -40,7 +42,23 @@ export interface WorldOptions {
   unsettled?: boolean;
   /** Leave Experiment 001 undecided: deliberated, its people approved, waiting for the owner's tap. */
   undecided?: boolean;
+  /**
+   * HOW EXPERIMENT 001 COMES TO BE SETTLED. 'the ledger' (the default, and the
+   * fast one) writes the result directly, as a proof of the surfaces would. 'the
+   * world' runs it as production did: the cohort of 21 with their recorded
+   * grounds, the Workshop stood up on stubbed providers, the owner's one act,
+   * the hand's mornings — offers placed and sent in stages, 19 delivered and 2
+   * bounced, the window closing, the sealed rule settling it surprised. Nothing
+   * reaches the internet: the provider stubs are installed on `globalThis.fetch`
+   * before any provider module is imported, and handed back for the proof.
+   */
+  settledBy?: 'the ledger' | 'the world';
+  /** The provider stubs to run 'the world' against, when the proof holds its own. */
+  providers?: { state: ProviderState; fetch: (url: string | URL, init?: RequestInit) => Promise<Response> };
 }
+
+/** What production's Experiment 001 came to: written to, delivered, bounced. */
+export const EXPERIMENT_001_IN_THE_WORLD = { written: 21, delivered: 19, bounced: 2 } as const;
 
 export const FIRST_DIRECTION = 'Find low-maintenance digital income opportunities.';
 
@@ -50,7 +68,18 @@ export const FIRST_DIRECTION = 'Find low-maintenance digital income opportunitie
  * (surprised), every routine having run, the public sources proven. No search
  * of the owner's, no charter, unless asked for.
  */
-export async function seedProductionShape(opts: WorldOptions = {}): Promise<{ experimentId: string }> {
+export async function seedProductionShape(opts: WorldOptions = {}): Promise<{ experimentId: string; providers: WorldOptions['providers'] | null }> {
+  const byTheWorld = opts.settledBy === 'the world';
+  // THE STUBS GO IN BEFORE ANY PROVIDER MODULE IS IMPORTED, and the env a
+  // provider module reads at import is set here too, if it is not already.
+  const providers = byTheWorld ? (opts.providers ?? providerStubs()) : null;
+  if (providers) {
+    globalThis.fetch = providers.fetch as typeof fetch;
+    process.env.CLOUDFLARE_API_TOKEN ??= 'cfat_world';
+    process.env.CLOUDFLARE_ACCOUNT_ID = 'acct_test'; // the stub answers for this account and no other
+    process.env.STRIPE_SECRET_KEY ??= 'sk_test_world';
+    process.env.STRIPE_WEBHOOK_SECRET ??= 'whsec_world';
+  }
   await runMigrations();
   await query('INSERT INTO founders (id,clerk_user_id,email,name) VALUES (?,?,?,?)',
     [OWNER, 'clerk_wd', 'owner@example.com', 'Thomas Norton']);
@@ -79,13 +108,17 @@ export async function seedProductionShape(opts: WorldOptions = {}): Promise<{ ex
   const { reconsiderProof1 } = await import('../../src/services/venture/proof-1-deliberation.js');
   await reconsiderProof1(OWNER);
   const { decideExperiment, recordResult } = await import('../../src/services/venture/validation.js');
-  if (!opts.undecided) {
-    await decideExperiment({ experimentId: seeded.experimentId, decision: 'approved', by: `founder:${OWNER}`, via: 'its own authorisation' });
-  }
-  if (!opts.unsettled && !opts.undecided) {
-    await new Promise((r) => { setTimeout(r, 1100); }); // a resolution is after its prediction, by the clock
-    await recordResult({ experimentId: seeded.experimentId, asPredicted: false,
-      whatHappened: 'nobody bought within the seven days the test allowed.' });
+  if (byTheWorld && providers) {
+    await settledByTheWorld(seeded.experimentId, providers, opts);
+  } else {
+    if (!opts.undecided) {
+      await decideExperiment({ experimentId: seeded.experimentId, decision: 'approved', by: `founder:${OWNER}`, via: 'its own authorisation' });
+    }
+    if (!opts.unsettled && !opts.undecided) {
+      await new Promise((r) => { setTimeout(r, 1100); }); // a resolution is after its prediction, by the clock
+      await recordResult({ experimentId: seeded.experimentId, asPredicted: false,
+        whatHappened: 'nobody bought within the seven days the test allowed.' });
+    }
   }
 
   const { INSTITUTION_LOOPS, recordJobSuccess } = await import('../../src/services/institution/loop-health.js');
@@ -114,7 +147,67 @@ export async function seedProductionShape(opts: WorldOptions = {}): Promise<{ ex
     const { openTheEyesThatAreProven } = await import('../../src/services/venture/research-sources.js');
     await openTheEyesThatAreProven(OWNER);
   }
-  return { experimentId: seeded.experimentId };
+  return { experimentId: seeded.experimentId, providers };
+}
+
+/** The three routines that carry a test through the world, in the order the morning runs them. */
+export const HANDS = ['public_workshop_tick', 'experiment_hand_tick', 'business_outcome_tick'] as const;
+
+/**
+ * EXPERIMENT 001 AS PRODUCTION RAN IT, on stubbed providers. The cohort with
+ * its grounds (the CLI's own path), the Workshop on the edge, the domain
+ * verified, the brief pulled yesterday, the owner's one act, then mornings
+ * until the sealed rule settles it: 21 written to, 19 delivered, 2 bounced,
+ * nobody paid. Replay fixtures are not touched; this is the hand's own path.
+ */
+async function settledByTheWorld(experimentId: string, providers: NonNullable<WorldOptions['providers']>, opts: WorldOptions): Promise<void> {
+  const { state, fetch } = providers;
+  state.domains.push({ id: 'dom_world', name: 'apexmicro.ai', status: 'verified', records: [] });
+  const { applyProof1Cohort, amendProof1ForTheCohort } = await import('../../src/services/venture/proof-1-cohort.js');
+  const cohort = await applyProof1Cohort(OWNER);
+  const { approveRemaining, recordMaterial, materialOf, recipientsOf, reviewRecipient } = await import('../../src/services/venture/hand.js');
+  // A COHORT MEMBER AN OLDER, ADDRESSLESS ROW STANDS IN FOR is never silently
+  // re-addressed by the cohort; the owner supplied those addresses by hand,
+  // which is how production came to write to all twenty-one.
+  for (const sh of cohort.shadowed.filter((x) => x.instead === null)) {
+    const row = (await recipientsOf(experimentId)).find((r) => r.counterpartyRef === sh.who);
+    if (row) await reviewRecipient({ founderId: OWNER, experimentId, recipientId: row.id, decision: 'approved', email: sh.has, reason: 'the address the cohort chose, supplied by hand' });
+  }
+  await amendProof1ForTheCohort(OWNER);
+  await approveRemaining({ founderId: OWNER, experimentId });
+  // WHO IS WRITTEN TO IS WHO THE SCREENING COVERS. The seeded candidates the
+  // cohort's grounds do not reach are struck, as the owner struck them, so the
+  // population is the cohort and nothing else: 21, as production's was.
+  for (const r of (await recipientsOf(experimentId)).filter((x) => x.reviewStatus === 'approved' && !x.qualifiedAt)) {
+    await reviewRecipient({ founderId: OWNER, experimentId, recipientId: r.id, decision: 'struck', reason: 'no recorded grounds put it in this population' });
+  }
+  // The goods are fresh at seed: an edition pulled yesterday. The freshness
+  // gate exists to bite later, on the world's clock, not at birth.
+  const brief = (await materialOf(experimentId, 'deliverable'))!;
+  await recordMaterial({ founderId: OWNER, experimentId, kind: 'deliverable', title: brief.title, body: brief.body,
+    pulledAt: new Date(Date.now() - 86_400_000), by: 'the world' });
+  const { standUpWorkshop } = await import('../../src/services/public-workshop/infrastructure.js');
+  await standUpWorkshop(OWNER, fetch as unknown as typeof fetch);
+  if (opts.undecided) return;
+  const { allowExperiment } = await import('../../src/services/venture/hand.js');
+  await allowExperiment({ founderId: OWNER, experimentId });
+  if (opts.unsettled) return;
+  // Mornings until the world settles it. Deliveries are the provider's word,
+  // given as the stub gives it (delivered unless told otherwise before the
+  // send): the last two of the cohort bounce, as two of production's did.
+  const { PROOF1_COHORT } = await import('../../src/services/venture/proof-1-cohort.js');
+  for (const m of PROOF1_COHORT.slice(-EXPERIMENT_001_IN_THE_WORLD.bounced)) state.deliveryState.set(`next:${m.email}`, 'bounced');
+  for (let day = 0; day < 14; day++) {
+    await advanceDays(1);
+    const ran = await runMorning(HANDS);
+    const failed = ran.filter((r) => !r.ok);
+    if (failed.length) throw new Error(`the world could not run Experiment 001: ${failed.map((f) => `${f.job}: ${f.error ?? ''}`).join('; ')}`);
+    const e = (await query('SELECT ran_at FROM venture_experiments WHERE id = ?', [experimentId])).rows[0] as Record<string, unknown>;
+    if (e.ran_at != null) break;
+  }
+  const e = (await query('SELECT ran_at, verdict FROM venture_experiments WHERE id = ?', [experimentId])).rows[0] as Record<string, unknown>;
+  if (e.ran_at == null) throw new Error('the world did not settle Experiment 001 within fourteen mornings');
+  if (state.sends.length !== EXPERIMENT_001_IN_THE_WORLD.written) throw new Error(`the world wrote to ${String(state.sends.length)} businesses, not ${String(EXPERIMENT_001_IN_THE_WORLD.written)}`);
 }
 
 /** The timestamp columns of the live schema, by table: read once from SQLite itself. */

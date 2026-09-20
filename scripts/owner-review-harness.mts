@@ -12,7 +12,7 @@
 // Deliberately NOT part of `npm run check`: it is a stage, not a gate. The
 // regression proofs that come out of a review are the gate.
 //
-//   npx tsx scripts/owner-review-harness.mts [--port 4320] [--charter] [--searching] [--eyes] [--day N]
+//   npx tsx scripts/owner-review-harness.mts [--port 4320] [--charter] [--searching] [--eyes] [--day N] [--world]
 //
 // `--charter` signs a live charter first (the owner's next act in production).
 // `--searching` opens a search on the owner's first direction, so the steering
@@ -37,9 +37,16 @@ const port = Number(args[args.indexOf('--port') + 1] || 4320);
 const day = args.includes('--day') ? Number(args[args.indexOf('--day') + 1] || 0) : 0;
 
 async function main(): Promise<void> {
+  // NEVER THE REAL INTERNET. In `--world` mode the provider stubs are installed
+  // before any provider module is imported (the seed does it); without it the
+  // harness runs no provider path at all, and refuses to start if a provider
+  // credential is in the environment, since nothing here may reach one.
+  const world = flag('world');
+  const live = ['CLOUDFLARE_API_TOKEN', 'STRIPE_SECRET_KEY', 'RESEND_API_KEY'].filter((k) => process.env[k]);
+  if (!world && live.length) { console.error(`owner-review-harness: ${live.join(', ')} set in the environment; run with --world (stubbed providers) or unset them`); process.exit(2); }
   // THE SAME WORLD THE PROOFS USE (tests/helpers/world.ts): production's
   // shape, moved `--day N` days on so a reviewer can return to it later.
-  await seedProductionShape({ charter: flag('charter'), searching: flag('searching'), eyes: flag('eyes') });
+  await seedProductionShape({ charter: flag('charter'), searching: flag('searching'), eyes: flag('eyes'), settledBy: world ? 'the world' : 'the ledger' });
   // He looked before he left: the days that pass are his absence, and the
   // answer to "what happened while I was away" covers them, not seven by default.
   const { markVisit } = await import('../src/services/founder/what-changed.js');

@@ -428,6 +428,21 @@ export interface Settlement {
  * unknown, records the observation against the claim, and — if somebody
  * unmatched paid and received — lets reality earn the asset.
  */
+/** An outcome event kind as the owner reads it, singular or plural. */
+export function eventNoun(kind: string, n: number): string {
+  const one = n === 1;
+  switch (kind) {
+    case 'delivery': return one ? 'delivery' : 'deliveries';
+    case 'offer_delivered': return one ? 'offer delivered' : 'offers delivered';
+    case 'delivery_failed': return one ? 'delivery that failed' : 'deliveries that failed';
+    case 'checkout_started': return one ? 'checkout begun' : 'checkouts begun';
+    case 'offer_viewed': return one ? 'view of the offer' : 'views of the offer';
+    case 'declined_value': return one ? 'person who said it was not useful' : 'people who said it was not useful';
+    case 'continuation_requested': return one ? 'person who asked to keep hearing' : 'people who asked to keep hearing';
+    default: return `${kind.replace(/_/g, ' ')}${one ? '' : 's'}`;
+  }
+}
+
 export async function settleFromTheWorld(experimentId: string, now = new Date()): Promise<Settlement> {
   const e = (await query(
     `SELECT e.founder_id, e.unknown_id, e.claim_id, e.decision, e.decided_at, e.ran_at,
@@ -489,11 +504,14 @@ export async function settleFromTheWorld(experimentId: string, now = new Date())
         + `; the window closes ${closesAt.toISOString().slice(0, 10)}` };
   }
 
-  const because = `${String(event)} ${rule.event}${event === 1 ? '' : 's'} that counted`
-    + (rule.outOf === undefined ? '' : ` out of ${String(outOf)} ${rule.outOf}${outOf === 1 ? '' : 's'}`)
+  // THE REASON IS READ BY THE OWNER on every surface that carries the outcome,
+  // so the rule's events are said in his words: "0 deliveries that counted out
+  // of 19 offers delivered", never "deliverys" or "offer_delivereds".
+  const because = `${String(event)} ${eventNoun(rule.event, event)} that counted`
+    + (rule.outOf === undefined ? '' : ` out of ${String(outOf)} ${eventNoun(rule.outOf, outOf)}`)
     + ` within ${String(rule.withinDays)} days; the rule asked for at least ${String(rule.atLeast)}`
     + (rule.atMost === undefined ? '' : ` out of at most ${String(rule.atMost)}`)
-    + (uncounted > 0 ? `; ${String(uncounted)} ${rule.event}${uncounted === 1 ? '' : 's'} did not count `
+    + (uncounted > 0 ? `; ${String(uncounted)} ${eventNoun(rule.event, uncounted)} did not count `
       + '(the owner\'s own, internal, a test account, or nobody the provider could say)' : '')
     + `. ${verdict === 'as_predicted' ? 'As predicted.' : verdict === 'partly' ? 'Partly: some, fewer than predicted.' : 'Not as predicted.'}`;
 
