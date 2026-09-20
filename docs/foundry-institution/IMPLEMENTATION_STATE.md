@@ -2974,3 +2974,16 @@ candidate and a nudge key and nothing else.
 - **Unrun**: `scripts/stripe-test-mode-run.mts` (six facts only real Stripe can establish).
 - **Proofs**: `the-first-real-experiment-runs-by-hand` (+8 cases), `one-reading-of-what-foundry-may-spend`, `what-happened-has-one-name` on the world, scenario 10 (obligation on Economics, action after a day).
 
+## The instrument, the summaries, and the day's work (2026-09-21)
+
+- **`venture/the-instrument.ts`** — `doubtsAboutTheInstrument(experimentId)` / `instrumentCaveat`. What an offer invited (executed `offer` actions), whether the path that carries an answer is working now (`public_workshop.health_json`), and — from **migration 327 `public_channel_days`** — on how many of the test's own days it was not. `theWindow` is first offer → settlement. A day with no row is named as unrecorded and never counted as well. Read by `experiment-view.ts` (`instrumentDoubts`), the experiment page's outcome section, Home's last-test tile and the Inbox. Never changes a verdict.
+- **Migration 327** — one row per path per day, keyed `(founder_id, channel, day)`, holding the WORST reading of the day; `public_channel_day_keeps_the_worst` refuses to make a bad day good and refuses falling `readings`. Written by `recordWorkshopHealth`, which the `public_workshop_tick` already calls.
+- **`founder/health.ts`** — `whatTheDayRequired` (a search open since before today with no retrieval; a test past the window its sealed rule was given, unsettled) feeds `didNotDoTheDay`, which surfaces rank above other failures; `lastHealthy` is null when the day's work is undone, because a pass that returned having done nothing is not a moment of health. `customerEffect`/`moneyAtRisk`/`ownerAction` read `obligationsFor`.
+- **`foundry-shell.ts`** — `OwnerState.queued` from `waitingOn`; `whatNeedsHim` gains `queued` (last) and `read_the_result` (beneath everything that needs him); one arithmetic for `needsN` here and `waiting` in `places.ts`; the lead sentence reads the health reading; the Health tile leads with the day's undone work; the concentration names the shared thing; Home's last-test tile carries the instrument's doubt.
+- **`views/owner/labels.ts`** — `LABELS`, `ADDRESSES`, `READINGS`, read by the rail, the More sheet, the Searching route and Home. Discover → Searching; Estate/System health → Health.
+- **`inbox-place.ts`** — what went out under tests inviting a reply, and whether the reply path carries one.
+- **`money-place.ts`** — an unrecognised direction is refused rather than read as *took out*; one entry is bounded; the form says a wrong row is corrected by a second row.
+- **`founder/activity.ts`** — obligation events (payment, refund, dispute, and delivery/`delivery_failed` only where a DELIVERY action carried them, so a bounced offer is not read as an undelivered purchase); the class is *Obligations*.
+- **`absence-test.ts`** — the bound names what is owed to buyers as theirs; the waiting count is the queue's.
+- **Proofs**: `was-the-instrument-working`, `the-one-thing-reads-the-world`, plus the surface, journey and world suites.
+
