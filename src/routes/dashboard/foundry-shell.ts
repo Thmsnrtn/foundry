@@ -220,6 +220,8 @@ export interface OwnerState {
    * exactly the pattern that fills a portfolio with things nobody examined.
    */
   owed: import('../../services/institution/calibration.js').AwaitingAnswer[];
+  /** What buyers are owed, in the one reading (venture/obligations.ts). */
+  obligations: import('../../services/venture/obligations.js').Obligation[];
   /** How often this institution has been right before, when it has been graded. */
   record: string;
   search: {
@@ -589,6 +591,10 @@ async function readOwnerState(
         '../../services/institution/calibration.js');
       return (await howOftenRight(founderId)).sentence;
     })(),
+    obligations: await (async () => {
+      const { obligationsFor } = await import('../../services/venture/obligations.js');
+      return obligationsFor(founderId);
+    })(),
     companyName: String(product?.name ?? 'this company'),
     firstName: founderName.split(' ')[0] || '',
     routinesHealthy: Number(health?.n ?? 0),
@@ -866,6 +872,7 @@ async function readOwnerState(
  * the institution exists to absorb.
  */
 export type Attention =
+  | { kind: 'owed_to_buyer'; obligation: import('../../services/venture/obligations.js').Obligation; others: number }
   | { kind: 'grade'; experimentId: string; about: string; expected: string;
       wouldDisprove: string | null; dueAt: string | null; record: string }
   | { kind: 'spend'; actId: string; productId: string; companyName: string;
@@ -911,7 +918,8 @@ export function whatNeedsHim(s: OwnerState): Attention {
   // asking to write to six customers. An act waiting on him, or a test owed an
   // answer, is needs-him exactly as an acquisition is.
   const charterMissing = !s.charter.live && s.charter.workshop !== null && (s.charter.readyTests > 0 || s.charter.sealedDesigns > 0);
-  const needsHim = Boolean(stuckOnHim) || s.asked.length > 0 || s.owed.length > 0 || charterMissing;
+  const owedToBuyer = s.obligations.filter((o) => o.asksHim !== null);
+  const needsHim = Boolean(stuckOnHim) || s.asked.length > 0 || s.owed.length > 0 || charterMissing || owedToBuyer.length > 0;
   if (s.routinesFailing.length && !needsHim) {
     return { kind: 'stopped', routines: s.routinesFailing };
   }
@@ -939,6 +947,11 @@ export function whatNeedsHim(s: OwnerState): Attention {
       costCents: ask.costCents, expiresAt: ask.expiresAt, absorbable: ask.absorbable,
     } : null;
   };
+  // A BUYER ALREADY OWED SOMETHING THAT FOUNDRY CANNOT CARRY ALONE comes
+  // before everything: a refund it may not issue, a dispute only he can
+  // answer, a delivery the provider never confirmed. The promise was made to
+  // a stranger in the Workshop's name, and it is the one thing.
+  if (owedToBuyer.length) return { kind: 'owed_to_buyer', obligation: owedToBuyer[0], others: owedToBuyer.length - 1 };
   // A BOUND ABOUT TO BE BREACHED, OR A PROMISE MADE TO SOMEBODY. Never traded,
   // and first: a legal or irreversible act, a commitment on his behalf, money
   // moved, or a buyer already owed delivery or a refund.
@@ -1129,7 +1142,7 @@ export function plainly(situation: string): string {
  * what it means, what it costs, what it does NOT permit, what he might be asked
  * next, and one button whose label states the resulting state.
  */
-type OwnerAct = 'Recognition' | 'Responsibility' | 'Authority';
+type OwnerAct = 'Recognition' | 'Responsibility' | 'Authority' | 'Obligation';
 
 interface Decision {
   act: OwnerAct;
@@ -1263,7 +1276,7 @@ export function waitingList(queue: import('../../services/founder/attention.js')
     <h2>${afterTheOneThing ? 'Also waiting on you' : 'Waiting on you'} <span class="pill">${String(queue.length)}</span></h2>
     ${queue.map((item) => html`<div class="noticed qitem">
       <p class="quiet"><a href="${item.href}">${item.companyName}</a> · ${
-    item.kind === 'act' ? 'an act' : item.kind === 'advice' ? 'advice' : item.kind === 'experiment' ? 'a real test' : item.kind === 'charter' ? 'the charter' : 'something I noticed'}</p>
+    item.kind === 'act' ? 'an act' : item.kind === 'advice' ? 'advice' : item.kind === 'experiment' ? 'a real test' : item.kind === 'charter' ? 'the charter' : item.kind === 'obligation' ? 'somebody owed something' : 'something I noticed'}</p>
       <p><strong>${item.summary}</strong>${item.effect ? html` <span class="pill ${item.effect === 'internal' ? 'ok' : 'warn'}">${item.effect === 'internal' ? 'internal' : item.effect === 'person' ? 'person-facing' : item.effect === 'public' ? 'public' : item.effect === 'provider' ? 'provider-facing' : 'account-facing'}</span>` : ''}</p>
       ${item.points && item.points.length > 1
     ? html`<ul class="blocking quiet">${item.points.map((b) => html`<li>${b}</li>`)}</ul>`
@@ -1294,6 +1307,7 @@ export async function theRestOfTheQueue(ownerId: string, attention: Attention): 
   const { waitingOn } = await import('../../services/founder/attention.js');
   return (await waitingOn(ownerId))
     .filter((item) => !(attention && attention.kind === 'spend' && item.kind === 'act' && item.id === attention.actId))
+    .filter((item) => !(attention && attention.kind === 'owed_to_buyer' && item.kind === 'obligation' && item.id === attention.obligation.id))
     .filter((item) => !(attention && attention.kind === 'recognise_company' && item.kind === 'noticed' && item.id === attention.candidateId));
 }
 
@@ -1352,6 +1366,36 @@ export function theOneThing(a: Attention, extras: OneThingExtras = {}): HtmlEsca
       <dt>Money at risk</dt><dd>${h.moneyAtRisk}</dd>
       <dt>Owner action</dt><dd>${h.ownerAction ?? 'none'}</dd>
     </dl>` : ''}</section>`;
+  }
+
+  if (a.kind === 'owed_to_buyer') {
+    const o = a.obligation;
+    const amount = `${o.currency.toLowerCase() === 'usd' ? '$' : ''}${(o.amountCents / 100).toFixed(2)}${o.currency.toLowerCase() === 'usd' ? '' : ` ${o.currency.toUpperCase()}`}`;
+    const stateWord: Record<typeof o.state, string> = {
+      owed: 'paid for, not yet sent', sent_unconfirmed: 'sent, not confirmed', failed_refund_pending: 'delivery failed, refund owed',
+      refund_requested: 'refund asked for', disputed: 'contested with the bank', uncovered: 'paid after the acts lapsed',
+    };
+    return decisionCard({
+      act: 'Obligation',
+      question: 'Somebody is owed something.',
+      title: o.sentence,
+      meaning: [
+        o.asksHim ?? '',
+        'This stands whatever happens to the test: after it settles, after the acts that allowed it expire, after a stop. A buyer is never the one who waits.',
+        ...(a.others > 0 ? [`${count(a.others, 'more buyer is', 'more buyers are')} owed something too; the test’s page lists each.`] : []),
+      ].filter(Boolean),
+      facts: [
+        ['Amount', amount],
+        ['Payment', o.paymentRef],
+        ['Standing', stateWord[o.state]],
+        ['Since', o.since.slice(0, 10)],
+        ['If you do nothing', o.state === 'disputed' ? 'the bank decides without you, and usually for the buyer'
+          : o.state === 'sent_unconfirmed' ? 'after seven days unconfirmed it is treated as undelivered and refunded'
+            : 'the buyer waits, and the promise the Workshop made in public goes unkept'],
+      ],
+      open: { label: 'Open the test', href: `/foundry/experiments/${o.experimentId}` },
+      technical: `fulfilment ${o.id} · ${o.state} · ${o.action} · experiment ${o.experimentId}`,
+    });
   }
 
   if (a.kind === 'charter') {
@@ -2200,7 +2244,9 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
       return html`<div class="said"><p>There is nothing waiting on you at the moment,
         so there is nothing to explain yet.</p></div>`;
     }
-    const named = a.kind === 'grade'
+    const named = a.kind === 'owed_to_buyer'
+      ? `what a buyer is owed on ${a.obligation.experimentTitle}`
+      : a.kind === 'grade'
       ? `what happened with ${a.about}`
       : a.kind === 'spend'
       ? `${a.summary} at ${a.companyName}`

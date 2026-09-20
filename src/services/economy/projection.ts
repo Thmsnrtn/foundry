@@ -210,12 +210,15 @@ export async function unitContribution(founderId: string, fulfilmentId: string):
  * buyer has paid and is owed something.
  */
 export async function obligationsOutstanding(founderId: string): Promise<Figure> {
+  // The one predicate (venture/obligations.ts), less what was delivered and
+  // is merely asked back — that is refund exposure, counted below.
+  const { OPEN_OBLIGATION } = await import('../venture/obligations.js');
   const total = await sum(
-    `SELECT COALESCE(SUM(amount_cents), 0) AS total FROM experiment_fulfilments
-      WHERE founder_id = ? AND status IN ('owed','sent')`, [founderId]);
+    `SELECT COALESCE(SUM(f.amount_cents), 0) AS total FROM experiment_fulfilments f
+      WHERE f.founder_id = ? AND ${OPEN_OBLIGATION('f')} AND f.status <> 'delivered'`, [founderId]);
   return measured(total, total === 0
     ? 'Nothing has been paid for that has not been delivered.'
-    : 'Paid for and not yet delivered.');
+    : 'Paid for and not yet delivered, or owed back.');
 }
 
 /**

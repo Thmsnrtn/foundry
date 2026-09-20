@@ -197,6 +197,9 @@ export async function recordBusinessOutcome(input: {
    * instrument that produced it. Null where none was recorded, which is the
    * honest answer for every row written before designs existed. */
   exchange?: string | null;
+  /** The payment this event reverses or contests, by the provider's reference,
+   * so a refund that arrives before its payment still says what it returns. */
+  settlesRef?: string | null;
 }): Promise<{ id: string; counterparty: Counterparty; duplicate: boolean } | { refused: string }> {
   const x = (await query(
     `SELECT founder_id, evidence_mode, withdrawn_at FROM experiment_exposures WHERE id = ?`,
@@ -218,12 +221,12 @@ export async function recordBusinessOutcome(input: {
     await query(
       `INSERT INTO business_outcome_events
          (id, founder_id, exposure_id, kind, amount_cents, currency, observed_at, provider,
-          provider_event_ref, evidence_mode, counterparty, arrived_via, exchange)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          provider_event_ref, evidence_mode, counterparty, arrived_via, exchange, settles_ref)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [id, String(x.founder_id), input.exposureId, input.kind, input.amountCents ?? null,
         input.currency ?? 'usd', input.observedAt.toISOString(), input.provider.trim(),
         input.providerRef.trim(), evidenceMode, counterparty, input.arrivedVia ?? null,
-        input.exchange ?? null]);
+        input.exchange ?? null, input.settlesRef ?? null]);
   } catch (err) {
     return { refused: err instanceof Error ? err.message : String(err) };
   }
@@ -557,7 +560,11 @@ async function paidAndReceived(exposureId: string, world: OutcomeWorld): Promise
        (SELECT COUNT(*) FROM business_outcome_events b JOIN business_outcome_event_kinds k ON k.kind = b.kind
          WHERE b.exposure_id = ? AND k.is_delivery = 1) AS delivered,
        (SELECT COUNT(*) FROM business_outcome_events b
-         WHERE b.exposure_id = ? AND b.kind IN ('refund','dispute')) AS reversed`,
+         WHERE b.exposure_id = ? AND (b.kind = 'refund'
+           -- A dispute the buyer lost is money still paid; the row says so.
+           OR (b.kind = 'dispute' AND NOT EXISTS (
+             SELECT 1 FROM experiment_fulfilments f WHERE f.exposure_id = b.exposure_id
+               AND f.dispute_outcome = 'won' AND b.settles_ref IN (f.payment_ref, coalesce(f.charge_ref, '')))))) AS reversed`,
     [exposureId, world === 'reference' ? 'reference' : 'unmatched_external', exposureId, exposureId]))
     .rows[0] as Record<string, unknown>;
   return Number(r.paid) > 0 && Number(r.delivered) > 0 && Number(r.reversed) === 0;

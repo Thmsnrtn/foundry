@@ -26,6 +26,7 @@
 // =============================================================================
 
 import { createHash } from 'node:crypto';
+import { OPEN_OBLIGATION } from '../venture/obligations.js';
 import { nanoid } from 'nanoid';
 import { query, realCompany } from '../../db/client.js';
 
@@ -518,6 +519,15 @@ export async function experimentActFor(input: { productId: string; tool: string;
   const standing = `e.decision = 'approved' AND e.validity = 'valid'
         AND a.experiment_id = e.id AND a.product_id = ? AND a.action_type IS ?
         AND a.decision = 'approved' AND a.revoked_at IS NULL AND datetime(a.expires_at) > datetime('now')`;
+  // WHAT WAS TAKEN ON WHILE THE ACT STOOD IS DISCHARGED UNDER IT. A delivery
+  // or a refund of a purchase reported before the act expired is covered by
+  // that act after its expiry — the act says so in the words the owner
+  // approved (hand.ts allowExperiment) — and never by a revoked one. `since`
+  // is the fulfilment's own clock. Offers and placements need the act now.
+  const covering = (since: string) => `e.decision = 'approved' AND e.validity = 'valid'
+        AND a.experiment_id = e.id AND a.product_id = ? AND a.action_type IS ?
+        AND a.decision = 'approved' AND a.revoked_at IS NULL
+        AND (datetime(a.expires_at) > datetime('now') OR datetime(${since}) <= datetime(a.expires_at))`;
   // Messages and placements belong to a test still running; what a buyer is
   // owed outlives the test's settlement, so a refund needs only the act.
   const live = `e.ran_at IS NULL AND ${standing}`;
@@ -531,8 +541,11 @@ export async function experimentActFor(input: { productId: string; tool: string;
          JOIN venture_experiments e ON e.id = o.experiment_id
          JOIN products p ON p.id = o.product_id AND p.from_experiment_id = e.id AND p.standing = 'experimental'
          JOIN proposed_acts a ON a.id = o.proposed_act_id AND coalesce(a.measurement_critical, 0) = 1
+         LEFT JOIN experiment_fulfilments f ON f.id = o.fulfilment_id AND o.experiment_act = 'delivery'
         WHERE o.product_id = ? AND o.effect_id = ? AND o.status = 'executing'
-          AND (e.ran_at IS NULL OR o.experiment_act = 'delivery') AND ${standing}`,
+          AND (e.ran_at IS NULL OR o.experiment_act = 'delivery')
+          AND NOT (f.disputed_at IS NOT NULL AND f.dispute_outcome IS NULL)
+          AND ${covering("coalesce(f.created_at, '9999-12-31')")}`,
       [input.productId, input.effectId, input.productId, input.tool])).rows[0] as Record<string, unknown> | undefined;
     if (message) return found(message);
     // A REFUND: what is owed on a purchase the provider reported at this
@@ -544,7 +557,9 @@ export async function experimentActFor(input: { productId: string; tool: string;
          JOIN products p ON p.from_experiment_id = e.id AND p.standing = 'experimental'
          JOIN proposed_acts a ON a.experiment_id = e.id
         WHERE p.id = ? AND 'experiment:' || f.experiment_id || ':refund:' || f.payment_ref = ?
-          AND f.refund_requested_at IS NOT NULL AND f.refund_ref IS NULL AND ${standing}
+          AND f.refund_requested_at IS NOT NULL AND f.refund_ref IS NULL
+          AND NOT (f.disputed_at IS NOT NULL AND f.dispute_outcome IS NULL)
+          AND ${covering('f.created_at')}
         ORDER BY a.decided_at, a.rowid LIMIT 1`,
       [input.productId, input.effectId, input.productId, input.tool])).rows[0] as Record<string, unknown> | undefined;
     if (refund) return found(refund);
@@ -756,9 +771,7 @@ export async function whatIsBeingAskedOf(founderId: string): Promise<AskedOfHim[
             -- the one class of work that survives an owner pause.
             CASE WHEN EXISTS (
               SELECT 1 FROM experiment_fulfilments f
-               WHERE f.experiment_id = a.experiment_id
-                 AND ((f.status IN ('owed','sent','failed') AND f.refund_ref IS NULL)
-                   OR (f.refund_requested_at IS NOT NULL AND f.refund_ref IS NULL))
+               WHERE f.experiment_id = a.experiment_id AND ${OPEN_OBLIGATION('f')}
             ) THEN 1 ELSE 0 END AS owes_customer
        FROM proposed_acts a
        JOIN products p ON p.id = a.product_id

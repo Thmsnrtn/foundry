@@ -88,6 +88,8 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
   const error = String(c.req.query('error') ?? '');
 
   const s = await distributableSurplus(founderId);
+  const { obligationsFor } = await import('../../services/venture/obligations.js');
+  const owedToBuyers = await obligationsFor(founderId);
   const gross = await grossCharged(founderId);
   const banked = await moneyBanked();
 
@@ -161,6 +163,8 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
           <dd>${fig(s.figure)}</dd>
         </div>
       </dl>
+      ${owedToBuyers.length ? html`<h2>Owed to buyers</h2>
+      <ul class="owed-to-buyers">${owedToBuyers.map((o) => html`<li><a href="/foundry/experiments/${o.experimentId}">${o.sentence}</a>${o.asksHim ? html` <strong>${o.asksHim}</strong>` : ''}</li>`)}</ul>` : ''}
       ${reasons([
     ['In Stripe, ours', s.held],
     ['Paid for, not delivered', s.obligations],

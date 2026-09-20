@@ -11,7 +11,7 @@
 import { query } from '../../db/client.js';
 
 export interface AttentionItem {
-  kind: 'act' | 'advice' | 'noticed' | 'experiment' | 'charter';
+  kind: 'act' | 'advice' | 'noticed' | 'experiment' | 'charter' | 'obligation';
   id: string;
   productId: string;
   companyName: string;
@@ -163,7 +163,19 @@ export async function waitingOn(founderId: string): Promise<AttentionItem[]> {
     no: { label: 'Let it lapse', action: '/foundry/controls/charter/withdraw', fields: { reason: 'let lapse from the front page', return_to: 'foundry' } },
     why: null, href: '/foundry/charter',
   }] : [];
+  // SOMEBODY IS OWED SOMETHING, AND IT NEEDS HIM. The one reading of what a
+  // buyer is owed (venture/obligations.ts); only the obligations that ask
+  // something of him are waiting on him — the rest the next pass carries.
+  const { obligationsFor } = await import('../venture/obligations.js');
+  const owedToBuyers: AttentionItem[] = (await obligationsFor(founderId)).filter((o) => o.asksHim !== null).map((o) => ({
+    kind: 'obligation', id: o.id, productId: o.productId ?? '', companyName: o.experimentTitle,
+    summary: o.sentence, detail: o.asksHim ?? '',
+    yes: { label: 'Open the test', action: `/foundry/experiments/${o.experimentId}` }, no: { label: 'Later', action: `/foundry/experiments/${o.experimentId}` },
+    why: null, href: `/foundry/experiments/${o.experimentId}`, open: { label: 'Open the test', href: `/foundry/experiments/${o.experimentId}` },
+    effect: 'person',
+  }));
   return [
+    ...owedToBuyers,
     ...tests,
     ...workshop,
     ...actItems,

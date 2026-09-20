@@ -14,6 +14,7 @@
 // even when a provider cannot be reached at that moment.
 // =============================================================================
 import { query } from '../../db/client.js';
+import { OPEN_OBLIGATION } from '../venture/obligations.js';
 import { invoke } from '../outbound/gateway.js';
 import { withRetry } from '../resilience.js';
 import { pathSegment } from '../outbound/path-segment.js';
@@ -380,6 +381,6 @@ export async function cloudflareReceipts(founderId: string, limit = 40): Promise
 export async function outstandingObligations(founderId: string): Promise<Array<{ experimentId: string; paymentRef: string; status: string; since: string }>> {
   return (await rows(
     `SELECT f.experiment_id, f.payment_ref, f.status, f.created_at FROM experiment_fulfilments f JOIN venture_experiments e ON e.id = f.experiment_id
-      WHERE e.founder_id = ? AND ((f.status IN ('owed','sent','failed') AND f.refund_ref IS NULL) OR (f.refund_requested_at IS NOT NULL AND f.refund_ref IS NULL)) ORDER BY f.created_at`, [founderId]))
+      WHERE e.founder_id = ? AND ${OPEN_OBLIGATION('f')} ORDER BY f.created_at`, [founderId]))
     .map((r) => ({ experimentId: String(r.experiment_id), paymentRef: String(r.payment_ref), status: String(r.status), since: String(r.created_at) }));
 }

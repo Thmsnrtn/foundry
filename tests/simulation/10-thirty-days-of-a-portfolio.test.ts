@@ -141,6 +141,16 @@ describe('day 5 — a buyer pays, the delivery bounces, and the payment provider
     expect(state.refunds).toHaveLength(0);
     const { handExceptions } = await import('../../src/services/venture/hand.js');
     expect((await handExceptions(X)).some((e) => /refund did not go through/.test(e))).toBe(true);
+    // THE OBLIGATION IS ONE OBJECT, and it reaches him where he is: as an
+    // exception on the test, on Economics as owed to a buyer, and — once the
+    // door has had its day of retries — as the one thing on Home.
+    const { obligationsFor } = await import('../../src/services/venture/obligations.js');
+    const now = (await obligationsFor(OWNER)).find((o) => o.paymentRef === 'pi_p_1')!;
+    expect(now).toMatchObject({ state: 'failed_refund_pending', action: 'nothing' });
+    expect((await obligationsFor(OWNER, new Date(Date.now() + 25 * 3_600_000))).find((o) => o.paymentRef === 'pi_p_1')).toMatchObject({ action: 'refund_yourself' });
+    const economics = asText(await me.page('/foundry/money'));
+    expect(economics).toContain('Owed to buyers');
+    expect(economics).toContain('pi_p_1');
     expect((await money()).paidCents).toBe(2900);
     expect((await money()).refundedCents).toBe(0);
   });

@@ -100,7 +100,10 @@ export function moneyFactsFromStripeEvent(
 
   // A dispute IS expanded: `balance_transactions` arrives as objects, so the
   // withdrawal and the provider's handling charge are both stated outright.
-  if (event.type === 'charge.dispute.created' && o.object === 'dispute' && isOurs(meta)) {
+  // A DISPUTE CARRIES NO METADATA OF OURS (a Dispute's metadata is its own,
+  // never copied from the charge); it names the charge and the intent, and
+  // `linkFor` below finds the sale by those or finds nothing.
+  if (event.type === 'charge.dispute.created' && o.object === 'dispute' && (isOurs(meta) || o.charge != null)) {
     const txns = (o.balance_transactions as Array<Record<string, unknown>> | undefined) ?? [];
     const facts: MoneyFact[] = [{
       kind: 'dispute_withdrawal', amountCents: Number(o.amount ?? 0), currency, occurredAt: at,

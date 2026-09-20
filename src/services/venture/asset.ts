@@ -190,9 +190,15 @@ export async function earnAsset(input: {
 export async function retireExperimentalAsset(input: {
   productId: string; because: string;
 }): Promise<boolean> {
+  // NOT WHILE ANYBODY IS OWED SOMETHING. A buyer's delivery or refund runs
+  // under the asset; archiving it with an obligation open would leave the
+  // obligation with nothing to carry it. The hand retires a stopped test's
+  // asset itself once the last buyer is square (hand.ts carryWhatIsOwed).
+  const { OPEN_OBLIGATION } = await import('./obligations.js');
   const r = await query(
     `UPDATE products SET status = 'archived', retired_because = ?, updated_at = datetime('now')
-      WHERE id = ? AND standing = 'experimental' AND status = 'active'`,
+      WHERE id = ? AND standing = 'experimental' AND status = 'active'
+        AND NOT EXISTS (SELECT 1 FROM experiment_fulfilments f WHERE f.experiment_id = products.from_experiment_id AND ${OPEN_OBLIGATION('f')})`,
     [input.because.trim(), input.productId]);
   if ((r.rowsAffected ?? 0) > 0) {
     // A retired asset holds no budget. Its allowance ended with the test's

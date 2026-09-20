@@ -198,38 +198,47 @@ export async function handleWebhook(payload: string, signature: string): Promise
 
   const event = stripe.webhooks.constructEvent(payload, signature, secret);
 
-  // RT08-P0-03: Idempotency — skip already-processed events to prevent replay attacks
-  const existing = await query('SELECT event_id FROM stripe_webhook_events WHERE event_id = ?', [event.id]);
-  if (existing.rows.length > 0) return; // Already processed
-  await query('INSERT INTO stripe_webhook_events (event_id, event_type, processed_at) VALUES (?, ?, CURRENT_TIMESTAMP)', [event.id, event.type]);
-
-  // AN EXPERIMENT'S OFFER SETTLES THROUGH THE SAME DOOR. Events tagged for a
-  // venture experiment (`metadata.experiment_id`, app absent or 'foundry') are
-  // the world reporting to that experiment's exposure; they never touch
-  // Foundry's own subscription rows below, and a failure here never hides the
-  // event from the intake's own log.
-  const asPayload = event as unknown as { id?: string; type: string; created?: number; data?: { object?: unknown } };
+  // RT08-P0-03: Idempotency — one claim per event id, taken atomically, so a
+  // replay and a concurrent redelivery both find the row and stop.
+  //
+  // THE CLAIM IS RELEASED IF THE EVENT IS NOT ACTUALLY PROCESSED. The row used
+  // to be written first and the intakes below each swallowed their own errors,
+  // so an intake that threw (a guard refusing, the database away for a moment)
+  // left the event marked processed with nothing recorded: Stripe was told
+  // 200 and never sent it again, and the sale was lost with no trace but a
+  // warning line. Now a throw anywhere on the path deletes the claim and
+  // surfaces (the route answers 400), so the provider retries and the next
+  // delivery finds no claim. Every write the intakes make is idempotent on the
+  // provider's own references, so a retry after a partial run records nothing
+  // twice.
+  const claim = await query('INSERT OR IGNORE INTO stripe_webhook_events (event_id, event_type, processed_at) VALUES (?, ?, CURRENT_TIMESTAMP)', [event.id, event.type]);
+  if ((claim.rowsAffected ?? 0) === 0) return; // Already processed, or being processed
   try {
-    const { intakeStripeSettlement } = await import('../venture/settlement-intake.js');
-    await intakeStripeSettlement(asPayload);
+    await processWebhookEvent(event);
   } catch (err) {
-    log.warn('experiment settlement intake failed', { eventId: event.id, error: String(err) });
+    await query('DELETE FROM stripe_webhook_events WHERE event_id = ?', [event.id]).catch(() => undefined);
+    log.warn('stripe webhook not processed; claim released for the provider to retry', { eventId: event.id, eventType: event.type, error: String(err) });
+    throw err;
   }
+}
+
+async function processWebhookEvent(event: Stripe.Event): Promise<void> {
+  // AN EXPERIMENT'S OFFER SETTLES THROUGH THE SAME DOOR. Events tagged for a
+  // venture experiment (`metadata.experiment_id`, app absent or 'foundry'),
+  // and disputes that name one of its charges, are the world reporting to
+  // that experiment's exposure; they never touch Foundry's own subscription
+  // rows below. A failure here is a failure of the whole delivery: the claim
+  // is released by the caller and the provider retries.
+  const asPayload = event as unknown as { id?: string; type: string; created?: number; data?: { object?: unknown } };
+  const { intakeStripeSettlement } = await import('../venture/settlement-intake.js');
+  await intakeStripeSettlement(asPayload);
 
   // AND THE SAME EVENT READ AS MONEY, AFTER the sale reading and never before.
   // The economic ledger's `charge` row points at the outcome event and the
   // fulfilment that the intake above creates, so running this first would find
   // no sale to attach to and would record nothing at all.
-  //
-  // Its own try/catch for the same reason as the one above: a failure to
-  // account for money must not stop the institution from knowing a sale
-  // happened, and it must not hide the event from the ledger's own log.
-  try {
-    const { intakeStripeEconomics } = await import('../economy/stripe-economics.js');
-    await intakeStripeEconomics(asPayload);
-  } catch (err) {
-    log.warn('economic intake failed', { eventId: event.id, error: String(err) });
-  }
+  const { intakeStripeEconomics } = await import('../economy/stripe-economics.js');
+  await intakeStripeEconomics(asPayload);
 
   switch (event.type) {
     case 'customer.subscription.created':

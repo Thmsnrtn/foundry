@@ -578,7 +578,7 @@ CREATE TABLE business_outcome_events (
   -- inferred. Public distribution provenance strengthens independence.
   arrived_via    TEXT,
   recorded_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-, exchange TEXT REFERENCES probe_exchanges(exchange));
+, exchange TEXT REFERENCES probe_exchanges(exchange), settles_ref TEXT);
 CREATE TABLE call_transcripts (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL,
@@ -1579,7 +1579,7 @@ CREATE TABLE experiment_fulfilments (
   refund_requested_at TEXT,
   refund_ref          TEXT,
   created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, disputed_at TEXT, dispute_outcome TEXT CHECK (dispute_outcome IN ('won','lost')),
   UNIQUE(payment_event_id)
 );
 CREATE TABLE experiment_invalidity_kinds (
@@ -4826,6 +4826,7 @@ CREATE INDEX idx_briefing_share_code ON briefing_shares(share_code);
 CREATE INDEX idx_briefing_share_founder
   ON briefing_shares(founder_id, created_at DESC);
 CREATE INDEX idx_business_actors_product ON business_actors(product_id, retired_at);
+CREATE INDEX idx_business_outcome_events_settles ON business_outcome_events(exposure_id, kind, settles_ref);
 CREATE INDEX idx_business_outcome_exposure
   ON business_outcome_events(exposure_id, kind, observed_at);
 CREATE UNIQUE INDEX idx_business_outcome_provider_event_ref
@@ -6194,20 +6195,22 @@ BEGIN
   SELECT RAISE(ABORT,'experiment_action:experiment_not_live') WHERE NOT EXISTS (
     SELECT 1 FROM venture_experiments e WHERE e.id = NEW.experiment_id AND e.decision = 'approved'
       AND (e.ran_at IS NULL OR NEW.experiment_act = 'delivery') AND e.validity = 'valid');
+  -- WHAT WAS TAKEN ON WHILE THE ACT STOOD IS DISCHARGED UNDER IT. An offer
+  -- needs the act standing now; a delivery needs it to have stood when the
+  -- purchase was reported (the fulfilment's own clock), and never revoked.
   SELECT RAISE(ABORT,'experiment_action:not_authorised') WHERE NOT EXISTS (
     SELECT 1 FROM proposed_acts a WHERE a.id = NEW.proposed_act_id AND a.product_id = NEW.product_id
       AND a.experiment_id = NEW.experiment_id AND coalesce(a.measurement_critical, 0) = 1
       AND a.subject = 'contact_people' AND a.action_type = 'send_email'
-      AND a.decision = 'approved' AND a.revoked_at IS NULL AND datetime(a.expires_at) > datetime('now'));
+      AND a.decision = 'approved' AND a.revoked_at IS NULL
+      AND (datetime(a.expires_at) > datetime('now')
+        OR (NEW.experiment_act = 'delivery' AND EXISTS (
+              SELECT 1 FROM experiment_fulfilments f WHERE f.id = NEW.fulfilment_id
+                AND datetime(f.created_at) <= datetime(a.expires_at)))));
   SELECT RAISE(ABORT,'experiment_action:recipient_not_approved') WHERE NEW.experiment_act = 'offer' AND NOT EXISTS (
     SELECT 1 FROM experiment_recipients r WHERE r.id = NEW.recipient_id AND r.experiment_id = NEW.experiment_id
       AND r.review_status = 'approved' AND r.channel = 'email'
       AND r.email = coalesce(json_extract(NEW.parameters_json, '$.to[0]'), ''));
-  -- APPROVED IS NOT THE SAME AS COVERED BY THIS APPROVAL. Consent was read at
-  -- the moment of sending, alongside evidence the institution may record on its
-  -- own — so consent over a group silently extended to whoever in that group
-  -- later qualified. The act names who it covers when it is given, and this is
-  -- where that naming is enforced.
   SELECT RAISE(ABORT,'experiment_action:recipient_not_in_this_authorisation') WHERE NEW.experiment_act = 'offer'
     AND NOT EXISTS (
       SELECT 1 FROM experiment_recipients r WHERE r.id = NEW.recipient_id
@@ -6215,16 +6218,15 @@ BEGIN
   SELECT RAISE(ABORT,'experiment_action:nothing_owed') WHERE NEW.experiment_act = 'delivery' AND NOT EXISTS (
     SELECT 1 FROM experiment_fulfilments f WHERE f.id = NEW.fulfilment_id AND f.experiment_id = NEW.experiment_id
       AND f.status = 'owed');
-  -- THE WORKSHOP'S RULES. Offers only: what a buyer is owed survives a pause.
+  SELECT RAISE(ABORT,'experiment_action:purchase_disputed') WHERE NEW.experiment_act = 'delivery' AND EXISTS (
+    SELECT 1 FROM experiment_fulfilments f WHERE f.id = NEW.fulfilment_id
+      AND f.disputed_at IS NOT NULL AND f.dispute_outcome IS NULL);
   SELECT RAISE(ABORT,'experiment_action:workshop_paused') WHERE NEW.experiment_act = 'offer' AND EXISTS (
     SELECT 1 FROM public_workshop w JOIN venture_experiments e ON e.founder_id = w.founder_id
      WHERE e.id = NEW.experiment_id AND w.economic_pause_at IS NOT NULL);
   SELECT RAISE(ABORT,'experiment_action:recipient_suppressed') WHERE NEW.experiment_act = 'offer' AND EXISTS (
     SELECT 1 FROM public_suppressions s JOIN venture_experiments e ON e.founder_id = s.founder_id
      WHERE e.id = NEW.experiment_id AND s.email = lower(coalesce(json_extract(NEW.parameters_json, '$.to[0]'), '')));
-  -- The page is required of an owner who HAS a public Workshop: under one, no
-  -- stranger is written to without a record they can read; without one, the
-  -- pre-Workshop path stands unchanged.
   SELECT RAISE(ABORT,'experiment_action:no_public_page') WHERE NEW.experiment_act = 'offer'
     AND EXISTS (SELECT 1 FROM public_workshop w JOIN venture_experiments e ON e.founder_id = w.founder_id
                  WHERE e.id = NEW.experiment_id)
@@ -6258,6 +6260,28 @@ BEGIN
       AND NOT EXISTS (SELECT 1 FROM products p
                        WHERE p.id = NEW.product_id AND p.from_experiment_id = NEW.experiment_id);
 END;
+CREATE TRIGGER experiment_fulfilment_closed_on_arrival
+AFTER INSERT ON experiment_fulfilments
+BEGIN
+  UPDATE experiment_fulfilments
+     SET status = 'refunded',
+         refund_ref = (SELECT b.provider_event_ref FROM business_outcome_events b
+                        WHERE b.exposure_id = NEW.exposure_id AND b.kind = 'refund' AND b.settles_ref = NEW.payment_ref
+                        ORDER BY b.observed_at, b.rowid LIMIT 1),
+         updated_at = datetime('now')
+   WHERE id = NEW.id
+     AND EXISTS (SELECT 1 FROM business_outcome_events b
+                  WHERE b.exposure_id = NEW.exposure_id AND b.kind = 'refund' AND b.settles_ref = NEW.payment_ref);
+  UPDATE experiment_fulfilments
+     SET disputed_at = (SELECT MIN(b.observed_at) FROM business_outcome_events b
+                         WHERE b.exposure_id = NEW.exposure_id AND b.kind = 'dispute'
+                           AND b.settles_ref IN (NEW.payment_ref, coalesce(NEW.charge_ref, ''))),
+         updated_at = datetime('now')
+   WHERE id = NEW.id AND disputed_at IS NULL
+     AND EXISTS (SELECT 1 FROM business_outcome_events b
+                  WHERE b.exposure_id = NEW.exposure_id AND b.kind = 'dispute'
+                    AND b.settles_ref IN (NEW.payment_ref, coalesce(NEW.charge_ref, '')));
+END;
 CREATE TRIGGER experiment_fulfilment_guard
 BEFORE INSERT ON experiment_fulfilments
 BEGIN
@@ -6283,6 +6307,10 @@ BEGIN
   SELECT RAISE(ABORT,'experiment_fulfilment:delivered_is_final') WHERE OLD.status = 'delivered' AND NEW.status NOT IN ('delivered','refunded');
   SELECT RAISE(ABORT,'experiment_fulfilment:request_in_the_future') WHERE NEW.refund_requested_at IS NOT NULL
     AND datetime(NEW.refund_requested_at) > datetime('now', '+5 minutes');
+  SELECT RAISE(ABORT,'experiment_fulfilment:disputed') WHERE NEW.status = 'sent' AND OLD.status <> 'sent'
+    AND NEW.disputed_at IS NOT NULL AND NEW.dispute_outcome IS NULL;
+  SELECT RAISE(ABORT,'experiment_fulfilment:dispute_outcome_needs_a_dispute') WHERE NEW.dispute_outcome IS NOT NULL AND NEW.disputed_at IS NULL;
+  SELECT RAISE(ABORT,'experiment_fulfilment:dispute_outcome_is_final') WHERE OLD.dispute_outcome IS NOT NULL AND NEW.dispute_outcome IS NOT OLD.dispute_outcome;
 END;
 CREATE TRIGGER experiment_invalidity_kinds_constitutional_delete
 BEFORE DELETE ON experiment_invalidity_kinds

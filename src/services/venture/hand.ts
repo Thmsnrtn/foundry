@@ -31,6 +31,7 @@ import { decideProposedAct, proposeAct, revokeApproval, setBoundary } from '../i
 import { stateOfferShape, retireExperimentalAsset } from './asset.js';
 import { answerLighter } from './legal-surface.js';
 import { bindActToExperiment, exposureOf, placeExposure, recordBusinessOutcome, settleFromTheWorld, withdrawExposure } from './outcome.js';
+import { OPEN_OBLIGATION, UNCONFIRMED_IS_FAILED_AFTER_DAYS, obligationsOf, owesAnybody } from './obligations.js';
 import { decideExperiment } from './validation.js';
 import {
   buyerAddressFor, createExperimentPaymentLink, describePaymentLink, findExperimentPaymentLink, paymentCapabilityConfigured, paymentLinkParams,
@@ -85,7 +86,10 @@ export async function experimentRow(experimentId: string): Promise<ExperimentRow
 
 /** Live means: approved, valid, not yet settled, and not stopped by the owner. */
 export function isLive(e: ExperimentRow, exposureWithdrawn: boolean): boolean {
-  return e.decision === 'approved' && e.validity === 'valid' && e.ranAt === null && !exposureWithdrawn;
+  // A stopped test is retired on its own row; the act it ran under may have
+  // been used already (and a used act is history, not revocable), so the stop
+  // is read from the test, never inferred from the act.
+  return e.decision === 'approved' && e.validity === 'valid' && e.ranAt === null && e.retiredAt === null && !exposureWithdrawn;
 }
 
 // ── Whom Foundry may write to ────────────────────────────────────────────────
@@ -405,6 +409,20 @@ export async function campaignIsLive(experimentId: string): Promise<boolean> {
   return !!a && a.decision === 'approved' && a.revokedAt === null && new Date(a.expiresAt).getTime() > Date.now();
 }
 
+/**
+ * WHAT WAS TAKEN ON WHILE THE ACT STOOD IS DISCHARGED UNDER IT. An act's expiry
+ * bounds what may be taken on (an offer, a purchase reported after it) and not
+ * the discharge of what was taken on while it stood: a buyer who paid on the
+ * last day the offer stood is owed the goods on the day after. The act says so
+ * in its own words when the owner approves it (below), so this is his reading
+ * and not the hand's; a REVOKED act covers nothing, because revocation is his
+ * word too. `since` is the fulfilment's own clock, never the caller's.
+ */
+export async function campaignActCovers(experimentId: string, since: string): Promise<boolean> {
+  const a = await campaignActOf(experimentId);
+  return !!a && a.decision === 'approved' && a.revokedAt === null && new Date(since.includes('T') ? since : since.replace(' ', 'T') + 'Z').getTime() <= new Date(a.expiresAt).getTime();
+}
+
 function campaignParams(experimentId: string, approved: Recipient[], template: Material | null): Record<string, unknown> {
   return { experiment_id: experimentId, recipients: approved.map((r) => r.id).sort(), template_digest: template?.digest ?? null, one_message_each: true };
 }
@@ -509,8 +527,9 @@ export async function allowExperiment(input: {
   await decideProposedAct({ id: placementId, decision: 'approved', decidedBy: by });
   const refundId = await proposeAct({
     productId: after.productId, subject: 'move_money', actionType: 'stripe_create_refund',
-    params: { experiment_id: input.experimentId, refunds: 'a purchase reported at this test\'s exposure whose delivery failed or whose buyer asked, in full' },
-    summary: 'Refund, in full, any purchase of this test that could not be delivered or that the buyer returns',
+    params: { experiment_id: input.experimentId, refunds: 'a purchase reported at this test\'s exposure whose delivery failed or whose buyer asked, in full',
+      stands_for: 'purchases reported while this act is valid; returning one is never cut off by its expiry or by the test ending' },
+    summary: 'Refund, in full, any purchase of this test that could not be delivered or that the buyer returns; a purchase made while this stands is refunded whenever that happens, after it expires and after the test ends',
     why: 'A buyer who did not get what they paid for is owed their money without waiting for you.',
     expectedEffect: 'The purchase amount returns to the buyer\'s card through your Stripe account.', risk: 'At most the purchases themselves; nothing of yours beyond what buyers paid.',
     consequence: 'medium', rung: 'financial', costCents: 0, proposedBy: HAND, validForHours: hours,
@@ -525,8 +544,9 @@ export async function allowExperiment(input: {
     // offer to a stranger finds no act that covers one.
     const deliveryId = await proposeAct({
       productId: after.productId, subject: 'contact_people', actionType: 'send_email',
-      params: { experiment_id: input.experimentId, delivers: 'the deliverable, once, to each buyer the provider reports at this test\'s exposure', one_message_each: true },
-      summary: `Send ${plan.price.productName} once to each buyer the provider reports at this test's page; nobody else is written to`,
+      params: { experiment_id: input.experimentId, delivers: 'the deliverable, once, to each buyer the provider reports at this test\'s exposure', one_message_each: true,
+        stands_for: 'purchases reported while this act is valid; delivering one is never cut off by its expiry' },
+      summary: `Send ${plan.price.productName} once to each buyer the provider reports at this test's page, including a buyer who paid on the last day it stands; nobody else is written to`,
       why: 'A buyer who paid is owed what they paid for, without waiting for you.',
       expectedEffect: 'One email per settled payment, carrying the deliverable and a refund link.', risk: 'One message per buyer; a buyer who asks to hear nothing further is never written to again.',
       consequence: 'low', rung: 'public', costCents: 0, proposedBy: HAND, validForHours: hours,
@@ -540,7 +560,7 @@ export async function allowExperiment(input: {
   const actId = await proposeAct({
     productId: after.productId, subject: 'contact_people', actionType: 'send_email',
     params: campaignParams(input.experimentId, approved, template),
-    summary: `Write once to each of the ${approved.length} businesses you approved that the screening puts in this population${reachable.length > approved.length ? ` (${reachable.length - approved.length} more you approved carry no recorded grounds and are not covered)` : ''}, in your name, offering ${plan.price.productName} at $${(plan.price.amountCents / 100).toFixed(2)} one-time`,
+    summary: `Write once to each of the ${approved.length} businesses you approved that the screening puts in this population${reachable.length > approved.length ? ` (${reachable.length - approved.length} more you approved carry no recorded grounds and are not covered)` : ''}, in your name, offering ${plan.price.productName} at $${(plan.price.amountCents / 100).toFixed(2)} one-time; a buyer who pays while this stands is sent what they paid for even after it expires`,
     why: e.whatWeDo, expectedEffect: e.whatWeExpect, risk: 'One message per business, no follow-ups; a business that does not reply is never written to again for this test.',
     consequence: 'medium', rung: 'public', costCents: 0, proposedBy: HAND, validForHours: hours,
   });
@@ -602,10 +622,15 @@ export async function stopExperiment(input: { founderId: string; experimentId: s
   if (x && x.withdrawnAt === null) await withdrawExposure(x.id);
   // The link comes down while the placement act still stands to cover it.
   const down = await takeDownExposure(input.experimentId).catch((err: unknown) => ({ done: false, reason: err instanceof Error ? err.message : String(err) }));
-  // Every act allowing it carried: the campaign, the placement, the refunds.
-  for (const a of await rows(`SELECT id FROM proposed_acts WHERE experiment_id = ? AND decision = 'approved' AND revoked_at IS NULL`, [input.experimentId])) {
+  // The acts that TAKE THINGS ON are revoked: the campaign and the placement.
+  // The refund act is not, because a stop is not a decision to keep a buyer's
+  // money: a purchase that slipped in before the link came down is returned
+  // under the act he already approved, and the door finds it there.
+  for (const a of await rows(`SELECT id FROM proposed_acts WHERE experiment_id = ? AND decision = 'approved' AND revoked_at IS NULL AND action_type IS NOT 'stripe_create_refund'`, [input.experimentId])) {
     await revokeApproval(String(a.id), reason);
   }
+  // The asset retires now if nobody is owed anything; otherwise the next pass
+  // retires it once the last buyer has been refunded (carryWhatIsOwed).
   if (e.productId) await retireExperimentalAsset({ productId: e.productId, because: `you stopped it: ${reason}` });
   // THE STOP IS WRITTEN ON THE TEST. It used to live only on the exposure and
   // the acts, so the attention queue read the withdrawn exposure as "approved
@@ -953,7 +978,11 @@ export async function executeAction(actionId: string): Promise<ActionResult> {
   // An offer belongs to a test still running; a delivery is owed whether or
   // not the test has settled since, so long as the acts allowing it stand.
   const owed = String(r.experiment_act) === 'delivery' && !!e && e.decision === 'approved' && e.validity === 'valid';
-  const live = !!e && (isLive(e, !!x && x.withdrawnAt !== null) || owed) && (await campaignIsLive(experimentId));
+  const f = owed && r.fulfilment_id != null ? await one('SELECT created_at, disputed_at, dispute_outcome FROM experiment_fulfilments WHERE id = ?', [String(r.fulfilment_id)]) : null;
+  const disputed = !!f && f.disputed_at != null && f.dispute_outcome == null;
+  const live = !!e && !disputed && (owed
+    ? !!f && (await campaignActCovers(experimentId, String(f.created_at)))
+    : isLive(e, !!x && x.withdrawnAt !== null) && (await campaignIsLive(experimentId)));
   if (!live) {
     await query(`UPDATE outbound_actions SET status = 'rejected', effect_certainty = 'not_attempted', result_json = ? WHERE id = ? AND status = 'pending_approval'`, [JSON.stringify({ refused: 'the test or its act is no longer live' }), actionId]);
     return { actionId, dispatched: false, certainty: 'not_attempted', refusedReason: 'not_live' };
@@ -1061,6 +1090,10 @@ export async function refundFulfilment(input: { fulfilmentId: string; reason: st
   const f = await one('SELECT f.*, p.id AS product_id FROM experiment_fulfilments f JOIN products p ON p.from_experiment_id = f.experiment_id AND p.deleted_at IS NULL WHERE f.id = ?', [input.fulfilmentId]);
   if (!f) throw new HandRefused('fulfilment_not_found');
   if (String(f.status) === 'refunded' || f.refund_ref != null) return { issued: true, refusedReason: null };
+  // A CONTESTED CHARGE IS THE BANK'S UNTIL IT DECIDES. The provider refuses a
+  // refund on a disputed charge; foreseeing that costs nothing and spends no
+  // unit at the door.
+  if (f.disputed_at != null && f.dispute_outcome == null) return { issued: false, refusedReason: 'disputed: the buyer is contesting the charge with their bank; nothing moves until it decides' };
   const charge = f.charge_ref == null ? null : String(f.charge_ref);
   if (!charge) return { issued: false, refusedReason: 'charge_unknown' };
   await query(`UPDATE experiment_fulfilments SET refund_requested_at = COALESCE(refund_requested_at, datetime('now')), updated_at = datetime('now') WHERE id = ?`, [input.fulfilmentId]);
@@ -1157,7 +1190,7 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
   const now = input.now ?? new Date();
   const live = await rows(
     `SELECT e.id FROM venture_experiments e
-      WHERE e.decision = 'approved' AND e.ran_at IS NULL AND e.validity = 'valid' AND e.evidence_mode = 'real'
+      WHERE e.decision = 'approved' AND e.ran_at IS NULL AND e.validity = 'valid' AND e.evidence_mode = 'real' AND e.retired_at IS NULL
         ${input.founderId ? 'AND e.founder_id = ?' : ''}
         AND EXISTS (SELECT 1 FROM proposed_acts a WHERE a.experiment_id = e.id AND coalesce(a.measurement_critical, 0) = 1
                       AND a.decision = 'approved' AND a.revoked_at IS NULL AND datetime(a.expires_at) > datetime('now'))
@@ -1274,7 +1307,7 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
     `SELECT e.id FROM venture_experiments e
       WHERE e.decision = 'approved' AND e.evidence_mode = 'real' ${input.founderId ? 'AND e.founder_id = ?' : ''}
         AND e.id NOT IN (${live.map(() => '?').join(',') || "''"})
-        AND (EXISTS (SELECT 1 FROM experiment_fulfilments f WHERE f.experiment_id = e.id AND f.status IN ('owed','sent','failed'))
+        AND (EXISTS (SELECT 1 FROM experiment_fulfilments f WHERE f.experiment_id = e.id AND ${OPEN_OBLIGATION('f')})
           OR EXISTS (SELECT 1 FROM experiment_exposures x WHERE x.experiment_id = e.id AND x.withdrawn_at IS NOT NULL AND datetime(x.withdrawn_at) > datetime('now', '-7 days')))
       ORDER BY e.decided_at, e.rowid`, [...(input.founderId ? [input.founderId] : []), ...live.map((r) => String(r.id))]);
   for (const row of aftermath) {
@@ -1307,11 +1340,21 @@ async function republishRecord(experimentId: string, report?: HandReport): Promi
 async function carryWhatIsOwed(experimentId: string, now: Date, report: HandReport, deliveryStatus?: (productId: string, messageId: string) => Promise<DeliveryStatus>): Promise<void> {
   const e = await experimentRow(experimentId);
   const x = await exposureOf(experimentId);
-  // Owed under a withdrawn offer that never settled: the owner stopped it, and
-  // a purchase that slipped in is returned rather than fulfilled.
-  const withdrawnBeforeSettlement = !!e && e.ranAt === null && !!x && x.withdrawnAt !== null;
-  for (const f of await rows(`SELECT id, payment_ref FROM experiment_fulfilments WHERE experiment_id = ? AND status = 'owed' ORDER BY created_at, rowid`, [experimentId])) {
-    if (withdrawnBeforeSettlement) {
+  const act = await campaignActOf(experimentId);
+  // Owed under an offer the owner STOPPED: a purchase that slipped in is
+  // returned rather than fulfilled. A stop is read from the campaign act he
+  // revoked (a settlement withdraws the exposure too, and a purchase reported
+  // after a settlement is still delivered); the older reading — withdrawn
+  // before the world settled it — is kept for the same case reached by hand.
+  const stopped = (!!act && act.revokedAt !== null) || (!!e && e.ranAt === null && (e.retiredAt !== null || (!!x && x.withdrawnAt !== null)));
+  for (const f of await rows(`SELECT id, payment_ref, disputed_at, dispute_outcome, created_at FROM experiment_fulfilments WHERE experiment_id = ? AND status = 'owed' ORDER BY created_at, rowid`, [experimentId])) {
+    // A CONTESTED PURCHASE IS NEITHER DELIVERED NOR REFUNDED until the bank
+    // decides; the obligation stays visible as itself (obligations.ts).
+    if (f.disputed_at != null && f.dispute_outcome == null) continue;
+    // Reported after the acts lapsed: nothing he approved covers it, so it is
+    // neither delivered nor refunded here; it is his (obligations.ts).
+    if (act && new Date(String(f.created_at).replace(' ', 'T') + (String(f.created_at).endsWith('Z') ? '' : 'Z')).getTime() > new Date(act.expiresAt).getTime()) continue;
+    if (stopped) {
       const r = await refundFulfilment({ fulfilmentId: String(f.id), reason: 'the offer was withdrawn before delivery' });
       if (r.issued) { report.refundsIssued += 1; await query(`UPDATE experiment_fulfilments SET status = 'refunded', updated_at = datetime('now') WHERE id = ? AND status = 'owed'`, [String(f.id)]); }
       else report.exceptions.push(`refund for ${String(f.payment_ref)} (offer withdrawn): ${r.refusedReason}`);
@@ -1334,10 +1377,41 @@ async function carryWhatIsOwed(experimentId: string, now: Date, report: HandRepo
     if (r.outcome === 'verified_success' || r.outcome === 'verified_failure') report.reconciled += 1;
   }
 
-  // A failed delivery is refunded; a refund that cannot be issued is the owner's.
-  for (const f of await rows(`SELECT id FROM experiment_fulfilments WHERE experiment_id = ? AND status = 'failed' AND refund_ref IS NULL`, [experimentId])) {
-    const r = await refundFulfilment({ fulfilmentId: String(f.id), reason: 'the brief could not be delivered' });
+  // A DELIVERY THE PROVIDER NEVER CONFIRMED IS, AFTER SEVEN DAYS, A DELIVERY
+  // THAT DID NOT HAPPEN. The sealed rule counts confirmed deliveries and the
+  // public promise is a refund with no questions asked, so an obligation that
+  // never closes is the worse outcome: the row fails and the approved refund
+  // runs. The action's own outcome stays unresolved — nothing was verified.
+  for (const f of await rows(
+    `SELECT f.id, f.payment_ref, o.provider_receipt_json FROM experiment_fulfilments f
+       JOIN outbound_actions o ON o.fulfilment_id = f.id AND o.experiment_act = 'delivery' AND o.status = 'executed' AND o.outcome_status = 'unresolved'
+      WHERE f.experiment_id = ? AND f.status = 'sent' AND datetime(o.executed_at) <= datetime(?, ?)`,
+    [experimentId, now.toISOString(), `-${String(UNCONFIRMED_IS_FAILED_AFTER_DAYS)} days`])) {
+    const receipt = JSON.parse(String(f.provider_receipt_json ?? '{}')) as { message_id?: string };
+    if (x) {
+      const { exchangeOf } = await import('./probe-design-context.js');
+      // Observed on the real clock: the ledger refuses a source clock ahead of its own.
+      await recordBusinessOutcome({ exposureId: x.id, kind: 'delivery_failed', observedAt: new Date(Math.min(now.getTime(), Date.now())), provider: 'resend',
+        providerRef: `${receipt.message_id ?? String(f.id)}:unconfirmed:${String(UNCONFIRMED_IS_FAILED_AFTER_DAYS)}d`, arrivedVia: 'email', exchange: await exchangeOf(experimentId) });
+    }
+    await query(`UPDATE experiment_fulfilments SET status = 'failed', updated_at = datetime('now') WHERE id = ? AND status = 'sent'`, [String(f.id)]);
+    report.exceptions.push(`delivery ${String(f.payment_ref)}: not confirmed by the provider in ${String(UNCONFIRMED_IS_FAILED_AFTER_DAYS)} days; treated as undelivered and refunded`);
+  }
+
+  // A failed delivery is refunded; a refund the buyer asked for that could not
+  // be issued (an outage, the door refusing) is tried again under the same
+  // key; a refund that cannot be issued is the owner's.
+  for (const f of await rows(`SELECT id, status, refund_requested_at FROM experiment_fulfilments f WHERE f.experiment_id = ? AND f.refund_ref IS NULL AND f.status <> 'refunded'
+                                 AND (f.status = 'failed' OR f.refund_requested_at IS NOT NULL) AND NOT (f.disputed_at IS NOT NULL AND f.dispute_outcome IS NULL)`, [experimentId])) {
+    const r = await refundFulfilment({ fulfilmentId: String(f.id), reason: String(f.status) === 'failed' ? 'the brief could not be delivered' : 'buyer asked through the delivery link' });
     if (r.issued) report.refundsIssued += 1; else report.exceptions.push(`refund for ${String(f.id)}: ${r.refusedReason}`);
+  }
+
+  // A STOPPED TEST'S ASSET RETIRES WHEN THE LAST BUYER IS SQUARE. Retirement
+  // refuses while anything is owed (asset.ts), so the stop leaves it standing;
+  // this is the pass that finishes what the stop began.
+  if (stopped && e?.productId && !(await owesAnybody(experimentId))) {
+    await retireExperimentalAsset({ productId: e.productId, because: 'you stopped it, and the last buyer has been refunded' });
   }
 }
 
@@ -1347,10 +1421,15 @@ export async function handExceptions(experimentId: string): Promise<string[]> {
   const e = await experimentRow(experimentId);
   // A settled or stopped test can still owe a buyer something; those lines stay.
   if (!e || e.decision !== 'approved') return out;
-  const failedDeliveries = await rows(`SELECT id, payment_ref, refund_ref, refund_requested_at FROM experiment_fulfilments WHERE experiment_id = ? AND status = 'failed' AND refund_ref IS NULL`, [experimentId]);
-  for (const f of failedDeliveries) out.push(`A buyer paid (${String(f.payment_ref)}) but the brief could not be delivered and the refund did not go through. This needs you: check the money-tools setting or refund it yourself.`);
-  const asked = await rows(`SELECT id, payment_ref FROM experiment_fulfilments WHERE experiment_id = ? AND refund_requested_at IS NOT NULL AND refund_ref IS NULL AND status <> 'failed'`, [experimentId]);
-  for (const f of asked) out.push(`A buyer asked for a refund through the delivery link (payment ${String(f.payment_ref)}) and I could not issue it. This needs you: check the money-tools setting or refund it yourself.`);
+  // WHAT A BUYER IS OWED, in the one reading every surface shares. Only what
+  // needs him, or is worth his eyes, is an exception; what the next pass
+  // carries on its own is the obligation's ordinary life.
+  for (const o of await obligationsOf(experimentId)) {
+    // Owed and not yet sent, or sent and awaiting the provider's word, is the
+    // ordinary path and not an exception.
+    if (o.state === 'owed' || (o.state === 'sent_unconfirmed' && o.action === 'nothing')) continue;
+    out.push(`${o.sentence} ${o.asksHim ?? ''}`.trim());
+  }
   const failed = await rows(`SELECT COUNT(*) AS n, MIN(result_json) AS why FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'offer' AND status = 'failed'`, [experimentId]);
   const n = Number(failed[0]?.n ?? 0);
   if (n > 0) {

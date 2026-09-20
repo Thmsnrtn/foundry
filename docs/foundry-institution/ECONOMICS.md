@@ -100,6 +100,51 @@ stops new commitments; it does not cancel the ones already made.
 This is why the public surface does not depend on the private control plane
 being awake, and why the pause is enforced on offers rather than on the door.
 
+### What a buyer is owed, as one object (2026-09-21)
+
+An obligation is a purchase not yet discharged: the goods not sent, a delivery
+the provider has not confirmed, a refund owed and not issued, a refund the
+buyer asked for, or a charge the buyer is contesting. It is read in one place
+(`services/venture/obligations.ts`) by every surface that shows, ranks or
+carries it, and it closes only when the goods are confirmed delivered and
+nothing is asked back, or when the money has gone back. Four rules follow,
+each stated here because each is a judgment rather than a fact:
+
+- **The acts cover what was taken on while they stood.** An act's expiry
+  bounds what may be taken on under it, not the discharge of what was taken
+  on while it stood: a buyer who paid on the last day the offer stood is
+  delivered on the day after, and refunded after the test ends, under the act
+  the owner approved — which says so in its own summary at approval. A
+  purchase reported *after* the last act lapsed is covered by nothing he
+  approved, so Foundry neither delivers nor refunds it: it is his, in Stripe,
+  and Home says so as the one thing.
+- **A stop keeps the refund act.** A stop revokes the acts that take things
+  on (the campaign, the placement) and not the refund; a purchase that
+  slipped in before the link came down is returned under the act already
+  approved, and the asset retires only when the last buyer is square.
+- **A delivery the provider never confirms is, after seven days, undelivered.**
+  The sealed rule counts confirmed deliveries and the public promise is a
+  refund with no questions asked, so an obligation that never closes is the
+  worse outcome: the row fails, the failure is recorded as such (not as a
+  verified receipt), and the approved refund runs. From seventy-two hours it
+  is worth the owner's eyes and says so.
+- **A contested charge is the bank's until it decides.** Nothing is sent or
+  refunded on it; won, the row resumes; lost, the money is gone and the row
+  closes as refunded with the dispute as its reference, never as a second
+  refund. Answering the dispute is the owner's, in Stripe; Foundry does not
+  speak to a bank for him.
+
+The provider reports out of order, and the intake reads by reference rather
+than by arrival: a refund names the payment it returns, and a payment that
+arrives after its own refund is closed at the row (migration 326). An event
+the intake cannot record releases its claim, so the provider retries it and
+the sale is not lost. What only real Stripe can establish — that the tag
+reaches the intent, the session and the charge and not the dispute; that a
+decline at a link fires `payment_failed`; the link parameter shape; refund
+idempotency on retry and refusal on a disputed charge; redelivery after a
+400 — is written as a runnable, unrun procedure (`scripts/stripe-test-mode-run.mts`)
+and recorded in the map as an external-evidence boundary.
+
 ## The deliberation is recorded before the answer (2026-09-09)
 
 `why.ts` carried a comment against its own "assumptions" and "alternatives"

@@ -182,7 +182,7 @@ h1{font-family:var(--serif);font-size:2rem;line-height:1.15;font-weight:500;
    label track sized to content once starved the value to zero width and a
    141-character sentence rendered one letter per line. */
 .facts{display:grid;grid-template-columns:minmax(0,1fr);gap:2px var(--s3);margin:0;
-  padding:var(--s3);border-top:1px solid var(--line);font-size:.95rem}
+  padding:var(--s3);border-top:1px solid var(--os-line);font-size:.95rem}
 .facts dt{color:var(--ink-3);font-weight:500;font-size:.85rem;padding-top:2px}
 .facts dt+dd{margin-bottom:var(--s2)}
 .facts dd:last-child{margin-bottom:0}
@@ -199,7 +199,7 @@ h1{font-family:var(--serif);font-size:2rem;line-height:1.15;font-weight:500;
 .hero.alert{border-color:var(--alert)}
 .quiet{color:var(--ink-2);font-size:.93rem}
 /* FOLDED, NOT HIDDEN: one line that says what is in it, opening in place. */
-details.fold{border-top:1px solid var(--line);margin:0}
+details.fold{border-top:1px solid var(--os-line);margin:0}
 .fold>summary{padding:var(--s2) 0;min-height:48px;gap:var(--s3);flex-wrap:wrap}
 .fold>summary h2,.fold>summary h3{margin:0;flex:0 0 auto;font-size:1rem;font-weight:600;letter-spacing:0;text-transform:none;color:var(--ink)}
 .fold .gist{flex:1 1 8rem;min-width:0;text-align:right;color:var(--ink-2);font-size:.93rem;overflow-wrap:break-word}
@@ -245,12 +245,12 @@ a:visited{color:var(--accent)}
 .one p:last-child{margin-bottom:0}
 .lead{color:var(--ink)}
 dl{display:grid;grid-template-columns:minmax(0,1fr);gap:2px var(--s3);margin:0;
-  padding:var(--s2) var(--s3);border-top:1px solid var(--line);font-size:.93rem}
+  padding:var(--s2) var(--s3);border-top:1px solid var(--os-line);font-size:.93rem}
 dt{color:var(--ink-3)}
 dt+dd{margin-bottom:var(--s2)}
 dd:last-child{margin-bottom:0}
 dd{margin:0;min-width:0;overflow-wrap:break-word}
-.do{padding:var(--s3);border-top:1px solid var(--line);display:flex;flex-wrap:wrap;gap:var(--s2)}
+.do{padding:var(--s3);border-top:1px solid var(--os-line);display:flex;flex-wrap:wrap;gap:var(--s2)}
 .do form{flex:1 1 auto;min-width:0}
 /* THE OTHER SYSTEM'S SURFACE, IN THIS SYSTEM'S MATERIALS.
    `.card` wraps forty-two blocks of the Letter and has no definition here.
@@ -393,7 +393,7 @@ dl.money{display:block;margin:0}
 .btn:active{transform:translateY(1px)}
 @media (prefers-reduced-motion:reduce){.btn:active{transform:none}}
 
-details{border-top:1px solid var(--line)}
+details{border-top:1px solid var(--os-line)}
 summary{cursor:pointer;list-style:none;padding:var(--s2) var(--s3);min-height:48px;
   display:flex;align-items:center;justify-content:space-between;gap:var(--s2);font-size:.93rem;color:var(--ink-2)}
 summary::-webkit-details-marker{display:none}
@@ -417,7 +417,7 @@ details[open] summary::after{content:"\2212"}
 
 /* ─── Ask: the composer ───────────────────────────────────────────────────── */
 .ask{position:fixed;left:0;right:0;bottom:var(--kb,0px);background:var(--bg);
-  border-top:1px solid var(--line);padding:var(--s2) var(--s3)}
+  border-top:1px solid var(--os-line);padding:var(--s2) var(--s3)}
 .ask-in{max-width:34rem;margin:0 auto;display:flex;gap:var(--s2)}
 .ask input{flex:1;min-width:0;font:inherit;font-size:max(16px,1rem);padding:13px 15px;min-height:48px;
   border:1px solid var(--line-2);border-radius:12px;background:var(--card);color:var(--ink)}
@@ -433,7 +433,7 @@ details[open] summary::after{content:"\2212"}
    rest of the canonical set lives in the rail and is reached from inside a
    door. Nine tabs at 375px is forty pixels each, which is not a door. */
 nav.places{position:fixed;left:0;right:0;bottom:0;z-index:2;background:var(--bg);
-  border-top:1px solid var(--line);padding:6px 0 calc(6px + env(safe-area-inset-bottom))}
+  border-top:1px solid var(--os-line);padding:6px 0 calc(6px + env(safe-area-inset-bottom))}
 nav.places div{max-width:34rem;margin:0 auto;display:flex}
 nav.places a{flex:1 1 0;min-width:0;text-decoration:none;color:var(--ink-3);font-size:.7rem;
   display:flex;flex-direction:column;align-items:center;gap:3px;padding:4px 0;min-height:44px;position:relative}
@@ -567,7 +567,7 @@ form.inline input[type=text],textarea,select{flex:1 1 12rem;min-width:0;font:inh
   padding:13px 15px;min-height:48px;border:1px solid var(--line-2);border-radius:12px;background:var(--card);color:var(--ink)}
 form.inline input:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
 form.inline button{flex:0 0 auto}
-footer{margin-top:var(--s5);padding-top:var(--s3);border-top:1px solid var(--line)}
+footer{margin-top:var(--s5);padding-top:var(--s3);border-top:1px solid var(--os-line)}
 footer a{color:var(--ink-3);font-size:.85rem;text-decoration:none}
 footer a:hover,footer a:focus-visible{text-decoration:underline}
 
@@ -602,7 +602,7 @@ footer a:hover,footer a:focus-visible{text-decoration:underline}
      greeting repeated it; a phone still needs it, a desk does not. */
   main[data-place="foundry"] .local{display:none}
   .askwhere{max-width:none;margin:0 0 6px}
-  nav.places .sub,nav.places .more{display:flex;flex-direction:column;gap:2px;margin:var(--s2) 0 0;padding:var(--s2) 0 0;border-top:1px solid var(--line)}
+  nav.places .sub,nav.places .more{display:flex;flex-direction:column;gap:2px;margin:var(--s2) 0 0;padding:var(--s2) 0 0;border-top:1px solid var(--os-line)}
   nav.places .sub b{font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);padding:4px 12px 6px;font-weight:600;position:static;background:none;height:auto;line-height:1.4}
   nav.places .sub a,nav.places .more a{font-size:.92rem;min-height:36px;padding:6px 12px 6px 24px;color:var(--ink-2)}
   nav.places .sub a span{margin-left:auto;font-size:.78rem;color:var(--accent);background:var(--accent-soft);border-radius:999px;padding:1px 7px}
@@ -1851,7 +1851,7 @@ main[data-place="foundry"]:has(.ask-surface)>.glance{margin-top:1.4rem}
 /* THE SHELVES. A candidate at a glance, and the sentence that filed it there.
    Compact on purpose: the whole argument lives on the candidate's own page,
    and a shelf he has to read is a shelf he will not open. */
-details.fold.shelf{border-top:1px solid var(--line)}
+details.fold.shelf{border-top:1px solid var(--os-line)}
 .shelf-card{display:block;padding:var(--s3) 0}
 .shelf-card p{margin:0 0 .3rem}
 .shelf-card p:last-child{margin-bottom:0}
@@ -1877,3 +1877,9 @@ details.fold.steer{border-top:0;margin-top:.4rem}
 .panel.pulse p{display:flex;flex-wrap:wrap;align-items:baseline;gap:.45rem .6rem;margin:0;font-size:.93rem;color:var(--ink-2)}
 .panel.pulse .state{flex:0 0 auto}
 .panel.pulse .dim{flex:1 0 100%;font-size:.8rem}
+
+/* Owed to buyers (Economics): each obligation is one line and one door to its test. */
+.owed-to-buyers{list-style:none;padding:0;margin:.5rem 0 1rem}
+.owed-to-buyers li{padding:.55rem 0;border-top:1px solid var(--os-line)}
+.owed-to-buyers li:first-child{border-top:0}
+.owed-to-buyers strong{display:block;margin-top:.2rem;color:var(--ink)}

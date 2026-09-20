@@ -504,7 +504,10 @@ describe('Stop, and nothing he can press dead-ends', () => {
     const xy = (await exposureOf(Y))!;
     expect(xy.withdrawnAt).not.toBeNull();
     expect(state.paymentLinks.find((l) => l.id === xy.exposureRef)!.active).toBe(false);
-    expect((await query(`SELECT COUNT(*) AS n FROM proposed_acts WHERE experiment_id = ? AND revoked_at IS NULL AND decision = 'approved'`, [Y])).rows[0]).toMatchObject({ n: 0 });
+    // The acts that TAKE THINGS ON are revoked; the refund act stands, because
+    // a purchase that slipped in before the link came down is still returned.
+    expect((await query(`SELECT COUNT(*) AS n FROM proposed_acts WHERE experiment_id = ? AND revoked_at IS NULL AND decision = 'approved' AND action_type <> 'stripe_create_refund'`, [Y])).rows[0]).toMatchObject({ n: 0 });
+    expect((await query(`SELECT COUNT(*) AS n FROM proposed_acts WHERE experiment_id = ? AND revoked_at IS NULL AND decision = 'approved' AND action_type = 'stripe_create_refund'`, [Y])).rows[0]).toMatchObject({ n: 1 });
     expect((await query('SELECT status, retired_because FROM products WHERE from_experiment_id = ?', [Y])).rows[0]).toMatchObject({ status: 'archived', retired_because: 'you stopped it: changed my mind' });
     const before = state.sends.length;
     expect(await runHand({ now: NOW })).toEqual([]);
@@ -535,4 +538,258 @@ describe('Stop, and nothing he can press dead-ends', () => {
     }
     expect(seen.size).toBeGreaterThan(5);
   });
+});
+
+// =============================================================================
+// THE PURCHASE PATHWAY HOLDS UNDER OUT-OF-ORDER, LATE AND POST-CLOSURE EVENTS.
+// Each case below is a way the world actually reports, and each used to lose a
+// sale, deliver for money already returned, or leave a buyer owed something
+// with nothing allowed to carry it. All of it is stubbed; none of it is
+// commercial evidence.
+// =============================================================================
+describe('what a buyer is owed outlives order, expiry, settlement and a stop', () => {
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+  const fulfilment = async (ref: string) => (await query('SELECT * FROM experiment_fulfilments WHERE payment_ref = ?', [ref])).rows[0] as Record<string, unknown> | undefined;
+  const pay = async (ref: string, buyer: string, charge: string, extra: Record<string, unknown> = {}) => {
+    state.buyers.set(ref, buyer);
+    const [p, s] = signedEvent('payment_intent.succeeded', { id: ref, object: 'payment_intent', amount_received: 2900, currency: 'usd', receipt_email: buyer, latest_charge: charge, metadata: { app: 'foundry', experiment_id: X, primitive: 'sale' }, ...extra });
+    await handleWebhook(p, s);
+  };
+
+  it('a refund that arrives before its payment closes the purchase at birth; nothing is delivered for money already gone', async () => {
+    const buyer = 'early@refund.example';
+    const [p, s] = signedEvent('charge.refunded', { id: 'ch_h_early', object: 'charge', payment_intent: 'pi_h_early', currency: 'usd', amount_refunded: 2900, receipt_email: buyer, metadata: { app: 'foundry', experiment_id: X }, refunds: { data: [{ id: 're_h_early', amount: 2900 }] } });
+    await handleWebhook(p, s);
+    expect(await fulfilment('pi_h_early')).toBeUndefined();
+    const refundEvent = (await query(`SELECT settles_ref FROM business_outcome_events WHERE provider_event_ref = 're_h_early'`, [])).rows[0];
+    expect(refundEvent).toMatchObject({ settles_ref: 'pi_h_early' });
+    await pay('pi_h_early', buyer, 'ch_h_early');
+    expect(await fulfilment('pi_h_early')).toMatchObject({ status: 'refunded', refund_ref: 're_h_early' });
+    const before = state.sends.length;
+    await runHand({ now: NOW });
+    expect(state.sends.length).toBe(before);
+    expect(state.sends.some((m) => m.to[0] === buyer)).toBe(false);
+  });
+
+  it('a purchase reported after the test settled is still delivered: the obligation outlives the answer', async () => {
+    const buyer = 'late@buyer.example';
+    expect(((await query('SELECT ran_at FROM venture_experiments WHERE id = ?', [X])).rows[0] as Record<string, unknown>).ran_at).not.toBeNull();
+    await pay('pi_h_late', buyer, 'ch_h_late');
+    expect(await fulfilment('pi_h_late')).toMatchObject({ status: 'owed' });
+    const r = await runHand({ now: NOW });
+    expect(r.find((x) => x.experimentId === X)?.deliveriesSent).toBe(1);
+    expect(state.sends.filter((m) => m.to[0] === buyer && m.subject === PROOF1_TITLE)).toHaveLength(1);
+    expect(await fulfilment('pi_h_late')).toMatchObject({ status: 'sent' });
+  });
+
+  it('a contested charge is neither delivered nor refunded until the bank decides; won resumes it, lost closes it without a second refund', async () => {
+    const buyer = 'contest@buyer.example';
+    await pay('pi_h_disp', buyer, 'ch_h_disp');
+    const [d1, s1] = signedEvent('charge.dispute.created', { id: 'dp_h_1', object: 'dispute', charge: 'ch_h_disp', payment_intent: 'pi_h_disp', amount: 2900, currency: 'usd', status: 'needs_response', reason: 'fraudulent', metadata: {}, balance_transactions: [{ amount: -2900, fee: 1500 }] });
+    await handleWebhook(d1, s1);
+    expect(await fulfilment('pi_h_disp')).toMatchObject({ status: 'owed', dispute_outcome: null });
+    expect((await fulfilment('pi_h_disp'))!.disputed_at).not.toBeNull();
+    expect((await query(`SELECT settles_ref FROM business_outcome_events WHERE provider_event_ref = 'dp_h_1'`, [])).rows[0]).toMatchObject({ settles_ref: 'pi_h_disp' });
+    // The money ledger read it by reference, with no metadata on the dispute.
+    expect((await query(`SELECT kind, amount_cents FROM economic_events WHERE provider_ref IN ('dp_h_1','dp_h_1:fee') ORDER BY kind`, [])).rows).toEqual([
+      expect.objectContaining({ kind: 'dispute_fee', amount_cents: 1500 }), expect.objectContaining({ kind: 'dispute_withdrawal', amount_cents: 2900 })]);
+    const before = { sends: state.sends.length, refunds: state.refunds.length };
+    await runHand({ now: NOW });
+    expect(state.sends.length).toBe(before.sends);
+    expect(state.refunds.length).toBe(before.refunds);
+    const { refundFulfilment } = await import('../../src/services/venture/hand.js');
+    expect((await refundFulfilment({ fulfilmentId: String((await fulfilment('pi_h_disp'))!.id), reason: 'test' })).refusedReason).toMatch(/^disputed/);
+    const { obligationsOf } = await import('../../src/services/venture/obligations.js');
+    expect((await obligationsOf(X)).find((o) => o.paymentRef === 'pi_h_disp')).toMatchObject({ state: 'disputed', action: 'respond_to_dispute' });
+    // Won: the row resumes and the goods go out.
+    const [d2, s2] = signedEvent('charge.dispute.closed', { id: 'dp_h_1', object: 'dispute', charge: 'ch_h_disp', payment_intent: 'pi_h_disp', amount: 2900, currency: 'usd', status: 'won', metadata: {} });
+    await handleWebhook(d2, s2);
+    expect(await fulfilment('pi_h_disp')).toMatchObject({ status: 'owed', dispute_outcome: 'won' });
+    const r = await runHand({ now: NOW });
+    expect(r.find((x) => x.experimentId === X)?.deliveriesSent).toBe(1);
+    expect(state.sends.filter((m) => m.to[0] === buyer)).toHaveLength(1);
+    // Lost, on another purchase: the money is gone, the row closes as refunded with the dispute as its reference, and no refund event is invented.
+    const other = 'lost@buyer.example';
+    await pay('pi_h_lost', other, 'ch_h_lost');
+    const [d3, s3] = signedEvent('charge.dispute.created', { id: 'dp_h_2', object: 'dispute', charge: 'ch_h_lost', payment_intent: 'pi_h_lost', amount: 2900, currency: 'usd', status: 'needs_response', metadata: {}, balance_transactions: [] });
+    await handleWebhook(d3, s3);
+    const [d4, s4] = signedEvent('charge.dispute.closed', { id: 'dp_h_2', object: 'dispute', charge: 'ch_h_lost', payment_intent: 'pi_h_lost', amount: 2900, currency: 'usd', status: 'lost', metadata: {} });
+    await handleWebhook(d4, s4);
+    expect(await fulfilment('pi_h_lost')).toMatchObject({ status: 'refunded', refund_ref: 'dp_h_2', dispute_outcome: 'lost' });
+    expect((await query(`SELECT COUNT(*) AS n FROM business_outcome_events WHERE kind = 'refund' AND settles_ref = 'pi_h_lost'`, [])).rows[0]).toMatchObject({ n: 0 });
+    expect((await query(`SELECT COUNT(*) AS n FROM business_outcome_events WHERE kind = 'dispute' AND settles_ref = 'pi_h_lost'`, [])).rows[0]).toMatchObject({ n: 1 });
+    // The same closure again changes nothing.
+    const [d5, s5] = signedEvent('charge.dispute.closed', { id: 'dp_h_2', object: 'dispute', charge: 'ch_h_lost', payment_intent: 'pi_h_lost', amount: 2900, currency: 'usd', status: 'lost', metadata: {} });
+    await handleWebhook(d5, s5);
+    expect(await fulfilment('pi_h_lost')).toMatchObject({ status: 'refunded', refund_ref: 'dp_h_2' });
+    expect((await obligationsOf(X)).some((o) => o.paymentRef === 'pi_h_lost')).toBe(false);
+    // The won purchase's delivery is owed until the provider confirms it; then it is nobody's obligation.
+    expect((await obligationsOf(X)).find((o) => o.paymentRef === 'pi_h_disp')).toMatchObject({ state: 'sent_unconfirmed' });
+    await pastDue();
+    await runHand({ now: NOW });
+    expect(await fulfilment('pi_h_disp')).toMatchObject({ status: 'delivered' });
+    expect((await obligationsOf(X)).some((o) => o.paymentRef === 'pi_h_disp')).toBe(false);
+  });
+
+  it('a declined attempt is a checkout that began and no obligation; the same intent succeeding later is one purchase', async () => {
+    const buyer = 'declined@buyer.example';
+    const [p, s] = signedEvent('payment_intent.payment_failed', { id: 'pi_h_declined', object: 'payment_intent', amount: 2900, currency: 'usd', receipt_email: buyer, last_payment_error: { charge: 'ch_h_declined', code: 'card_declined' }, metadata: { app: 'foundry', experiment_id: X, primitive: 'sale' } });
+    await handleWebhook(p, s);
+    expect((await query(`SELECT kind FROM business_outcome_events WHERE provider_event_ref = 'pi_h_declined:declined'`, [])).rows[0]).toMatchObject({ kind: 'checkout_started' });
+    expect(await fulfilment('pi_h_declined')).toBeUndefined();
+    await pay('pi_h_declined', buyer, 'ch_h_declined_2');
+    expect(await fulfilment('pi_h_declined')).toMatchObject({ status: 'owed' });
+    expect((await query(`SELECT COUNT(*) AS n FROM business_outcome_events WHERE provider_event_ref IN ('pi_h_declined','pi_h_declined:declined')`, [])).rows[0]).toMatchObject({ n: 2 });
+    await runHand({ now: NOW });
+    expect(await fulfilment('pi_h_declined')).toMatchObject({ status: 'sent' });
+  });
+
+  it('a delivery the provider never confirms is, after seven days, undelivered: the row fails, the failure is recorded, and the approved refund runs', async () => {
+    const buyer = 'quiet@buyer.example';
+    state.deliveryState.set(`next:${buyer}`, 'pending');
+    await pay('pi_h_quiet', buyer, 'ch_h_quiet');
+    await runHand({ now: NOW });
+    expect(await fulfilment('pi_h_quiet')).toMatchObject({ status: 'sent' });
+    const { obligationsOf } = await import('../../src/services/venture/obligations.js');
+    const fresh = (await obligationsOf(X)).find((o) => o.paymentRef === 'pi_h_quiet')!;
+    expect(fresh).toMatchObject({ state: 'sent_unconfirmed', action: 'nothing' });
+    // Three days on it is worth his eyes; seven days on it is a failure.
+    const threeDays = (await obligationsOf(X, new Date(Date.now() + 73 * 3_600_000))).find((o) => o.paymentRef === 'pi_h_quiet')!;
+    expect(threeDays.action).toBe('check_delivery');
+    await pastDue();
+    const refundsBefore = state.refunds.length;
+    const r = await runHand({ now: new Date(Date.now() + 8 * 86_400_000) });
+    expect(r.find((x) => x.experimentId === X)?.exceptions.join(' ')).toMatch(/not confirmed by the provider in 7 days/);
+    expect(await fulfilment('pi_h_quiet')).toMatchObject({ status: 'failed' });
+    expect((await query(`SELECT COUNT(*) AS n FROM business_outcome_events WHERE kind = 'delivery_failed' AND provider_event_ref LIKE '%:unconfirmed:7d'`, [])).rows[0]).toMatchObject({ n: 1 });
+    expect(state.refunds.length).toBe(refundsBefore + 1);
+    expect(state.refunds[state.refunds.length - 1].idempotency).toBe(`experiment:${X}:refund:pi_h_quiet`);
+    expect((await fulfilment('pi_h_quiet'))!.refund_ref).not.toBeNull();
+  });
+
+  it('an event the intake cannot record releases its claim, so the provider retries it and the sale is not lost', async () => {
+    const buyer = 'retry@buyer.example';
+    state.buyers.set('pi_h_retry', buyer);
+    const payload = JSON.stringify({ id: 'evt_h_retry', object: 'event', type: 'payment_intent.succeeded', created: Math.floor(Date.now() / 1000),
+      data: { object: { id: 'pi_h_retry', object: 'payment_intent', amount_received: 0, currency: 'usd', receipt_email: buyer, latest_charge: 'ch_h_retry', metadata: { app: 'foundry', experiment_id: X, primitive: 'sale' } } } });
+    const sig = stripe.webhooks.generateTestHeaderString({ payload, secret: SECRET });
+    // A zero amount violates the fulfilment's own guard: the intake throws, the
+    // handler throws (the route answers 400), and the claim is released.
+    await expect(handleWebhook(payload, sig)).rejects.toThrow(/experiment_fulfilment|CHECK/);
+    expect((await query(`SELECT COUNT(*) AS n FROM stripe_webhook_events WHERE event_id = 'evt_h_retry'`, [])).rows[0]).toMatchObject({ n: 0 });
+    expect(await fulfilment('pi_h_retry')).toBeUndefined();
+    // Redelivered under the same event id, now recordable: one purchase, once.
+    const good = JSON.stringify({ id: 'evt_h_retry', object: 'event', type: 'payment_intent.succeeded', created: Math.floor(Date.now() / 1000),
+      data: { object: { id: 'pi_h_retry', object: 'payment_intent', amount_received: 2900, currency: 'usd', receipt_email: buyer, latest_charge: 'ch_h_retry', metadata: { app: 'foundry', experiment_id: X, primitive: 'sale' } } } });
+    await handleWebhook(good, stripe.webhooks.generateTestHeaderString({ payload: good, secret: SECRET }));
+    expect(await fulfilment('pi_h_retry')).toMatchObject({ status: 'owed', amount_cents: 2900 });
+    expect((await query(`SELECT COUNT(*) AS n FROM stripe_webhook_events WHERE event_id = 'evt_h_retry'`, [])).rows[0]).toMatchObject({ n: 1 });
+    await handleWebhook(good, stripe.webhooks.generateTestHeaderString({ payload: good, secret: SECRET }));
+    expect((await query('SELECT COUNT(*) AS n FROM experiment_fulfilments WHERE payment_ref = ?', ['pi_h_retry'])).rows[0]).toMatchObject({ n: 1 });
+  });
+
+  it('a stop with a purchase owed keeps the refund act, leaves the asset standing, refunds under that act, and only then retires the asset', async () => {
+    const e = (await query('SELECT opportunity_id, claim_id FROM venture_experiments WHERE id = ?', [X])).rows[0] as Record<string, unknown>;
+    await query(`INSERT INTO market_unknowns (id, founder_id, opportunity_id, claim_id, question, blocking) VALUES ('u_third', ?, ?, ?, 'would a third set of shops pay too?', 1)`, [OWNER, String(e.opportunity_id), String(e.claim_id)]);
+    const Z = await designExperiment({ founderId: OWNER, opportunityId: String(e.opportunity_id), unknownId: 'u_third', claimId: String(e.claim_id), evidenceMode: 'real', costCents: 5000,
+      whatWeDo: 'Offer the same brief to a third set of shops', whatWeExpect: 'one pays and receives it', wouldDisprove: 'nobody does', settlesWhen: { event: 'delivery', atLeast: 1, outOf: 'offer_delivered', atMost: 10, withinDays: 7 } });
+    await query('UPDATE venture_experiments SET needs_workshop = 0 WHERE id = ?', [Z]);
+    const by = 'test';
+    await recordMaterial({ founderId: OWNER, experimentId: Z, kind: 'deliverable', title: 'Third brief', body: BRIEF_MD, pulledAt: new Date('2026-09-07T12:00:00Z'), by });
+    await recordMaterial({ founderId: OWNER, experimentId: Z, kind: 'offer_template', title: PROOF1_PLAN.offerSubject, body: OUTREACH_TEMPLATE_MD, by });
+    await recordMaterial({ founderId: OWNER, experimentId: Z, kind: 'offer_shape', title: 'shape', body: JSON.stringify({ ...PROOF1_PLAN, price: { ...PROOF1_PLAN.price, lookupKey: 'foundry_third_brief' } }), by });
+    await addRecipients({ founderId: OWNER, experimentId: Z, recipients: [{ counterpartyRef: 'A Third Shop, Lowell', email: 'third@example.com', channel: 'email' }] });
+    expect(redirectedTo(await post(`/foundry/experiments/${Z}/recipients/approve-remaining`))).toContain('done=reviewed');
+    for (const cand of (await recipientsOf(Z)).filter((x) => x.reviewStatus === 'approved')) {
+      await qualifyRecipient({ founderId: OWNER, experimentId: Z, recipientId: cand.id, because: 'names two public schools among its own completed projects', source: 'https://example-millwork.test/projects' });
+    }
+    const { recordDesign } = await import('../../src/services/venture/probe-design.js');
+    await recordDesign({
+      founderId: OWNER, experimentId: Z, designedBy: 'test',
+      decides: 'whether a third set of shops answers the same way', decidesBecause: 'two sets cannot say whether the answer was the shops or the offer',
+      exchange: 'upfront_price', exchangeBecause: 'the same instrument, so the results can be compared at all',
+      canProve: 'that a shop outside the first sets will pay', cannotProve: 'that any set represents the trade',
+      ratherThanWaiting: 'the earlier results are in hand and cannot be interpreted alone',
+      distribution: 'the same cold outbound, to a third hand-reviewed set', ifItSucceeds: 'nothing widens; three results are still three results',
+      recommendation: 'run', recommendationBecause: 'it is the cheapest way to learn whether the earlier answers were about the shops',
+      interpretations: [{ observation: 'the third set answers differently', reading: 'the earlier results were about those shops, not the offer' }],
+      costs: [{ dimension: 'reputation', level: 'material', grounds: 'the same public name stands behind all of them' }],
+    });
+    expect(redirectedTo(await post(`/foundry/experiments/${Z}/allow`))).toContain('done=allowed');
+    await runHand({ now: NOW }); // the offer is placed and the one shop written to
+    const xz = (await exposureOf(Z))!;
+    const buyer = 'third@example.com';
+    state.buyers.set('pi_h_z', buyer);
+    const [p, s] = signedEvent('payment_intent.succeeded', { id: 'pi_h_z', object: 'payment_intent', amount_received: 2900, currency: 'usd', receipt_email: buyer, latest_charge: 'ch_h_z', metadata: { app: 'foundry', experiment_id: Z, primitive: 'sale' } });
+    await handleWebhook(p, s);
+    expect(await fulfilment('pi_h_z')).toMatchObject({ status: 'owed' });
+    // He stops it with a purchase owed.
+    expect(redirectedTo(await post(`/foundry/experiments/${Z}/stop`, { reason: 'not this one' }))).toContain('done=stopped');
+    // The campaign act was USED (one offer went out), and a used act is
+    // history that cannot be revoked; the stop is written on the test itself.
+    expect(((await query('SELECT retired_at FROM venture_experiments WHERE id = ?', [Z])).rows[0] as Record<string, unknown>).retired_at).not.toBeNull();
+    expect(((await query('SELECT consumed_at FROM proposed_acts WHERE id = ?', [(await campaignActOf(Z))!.id])).rows[0] as Record<string, unknown>).consumed_at).not.toBeNull();
+    expect((await query(`SELECT COUNT(*) AS n FROM proposed_acts WHERE experiment_id = ? AND action_type = 'stripe_create_refund' AND decision = 'approved' AND revoked_at IS NULL`, [Z])).rows[0]).toMatchObject({ n: 1 });
+    // The asset is NOT archived while a buyer is owed something.
+    expect((await query('SELECT status FROM products WHERE from_experiment_id = ?', [Z])).rows[0]).toMatchObject({ status: 'active' });
+    expect(state.paymentLinks.find((l) => l.id === xz.exposureRef)!.active).toBe(false);
+    const refundsBefore = state.refunds.length;
+    const r = await runHand({ now: NOW });
+    expect(r.find((x) => x.experimentId === Z)).toMatchObject({ refundsIssued: 1, deliveriesSent: 0 });
+    expect(state.refunds.length).toBe(refundsBefore + 1);
+    expect(state.refunds[state.refunds.length - 1].idempotency).toBe(`experiment:${Z}:refund:pi_h_z`);
+    expect(await fulfilment('pi_h_z')).toMatchObject({ status: 'refunded' });
+    // And only now the asset retires, saying why.
+    expect((await query('SELECT status, retired_because FROM products WHERE from_experiment_id = ?', [Z])).rows[0]).toMatchObject({ status: 'archived', retired_because: 'you stopped it, and the last buyer has been refunded' });
+    expect(await runHand({ now: NOW })).toEqual(expect.not.arrayContaining([expect.objectContaining({ experimentId: Z })]));
+  });
+
+  it('a purchase reported while the act stood is delivered after the act expires; one reported after it lapsed is neither delivered nor refunded, and is his', async () => {
+    const buyer = 'lastday@buyer.example';
+    await pay('pi_h_lastday', buyer, 'ch_h_lastday');
+    const f = (await fulfilment('pi_h_lastday'))!;
+    // THE WORLD'S CLOCK, not an edited row: twenty-two days pass, so the acts
+    // minted for twenty-one have lapsed and the purchase above was reported
+    // while they stood. The brief is re-recorded fresh, as an edition would be.
+    const { advanceDays } = await import('../helpers/world.js');
+    const moved = await advanceDays(22);
+    expect(moved.refused).toEqual([]);
+    await recordMaterial({ founderId: OWNER, experimentId: X, kind: 'deliverable', title: PROOF1_TITLE, body: BRIEF_MD, pulledAt: PROOF1_EDITION_PULLED_AT, by: 'test' });
+    const { campaignIsLive, campaignActCovers } = await import('../../src/services/venture/hand.js');
+    expect(await campaignIsLive(X)).toBe(false);
+    const shifted = (await fulfilment('pi_h_lastday'))!;
+    expect(await campaignActCovers(X, String(shifted.created_at))).toBe(true);
+    void f; void sleep;
+    const r = await runHand({ now: NOW });
+    expect(r.find((x) => x.experimentId === X)?.deliveriesSent).toBe(1);
+    expect(state.sends.filter((m) => m.to[0] === buyer && m.subject === PROOF1_TITLE)).toHaveLength(1);
+    // Reported after the lapse: covered by nothing he approved.
+    const stranger = 'toolate@buyer.example';
+    await pay('pi_h_toolate', stranger, 'ch_h_toolate');
+    const before = { sends: state.sends.length, refunds: state.refunds.length };
+    const again = await runHand({ now: NOW });
+    expect(state.sends.length).toBe(before.sends);
+    expect(state.refunds.length).toBe(before.refunds);
+    expect(again.find((x) => x.experimentId === X)?.deliveriesSent ?? 0).toBe(0);
+    const { obligationsOf } = await import('../../src/services/venture/obligations.js');
+    const o = (await obligationsOf(X)).find((x) => x.paymentRef === 'pi_h_toolate')!;
+    expect(o.state).toBe('uncovered');
+    expect(o.asksHim).toMatch(/yours, in Stripe/);
+    const v = (await getExperimentView(OWNER, X, NOW))!;
+    expect(v.exceptions.join(' ')).toMatch(/after the acts you approved for this test had lapsed/);
+    // The refund link is refused too: the door finds no act covering it.
+    const { refundFulfilment } = await import('../../src/services/venture/hand.js');
+    const refused = await refundFulfilment({ fulfilmentId: String((await fulfilment('pi_h_toolate'))!.id), reason: 'test' });
+    expect(refused.issued).toBe(false);
+    // Home names it as the one thing, above everything else.
+    const home = (await page('/foundry')).text;
+    expect(home).toContain('Somebody is owed something.');
+    expect(home).toContain('pi_h_toolate');
+    // He refunds it in Stripe; the provider's word closes it.
+    const [p, s] = signedEvent('charge.refunded', { id: 'ch_h_toolate', object: 'charge', payment_intent: 'pi_h_toolate', currency: 'usd', amount_refunded: 2900, receipt_email: stranger, metadata: { app: 'foundry', experiment_id: X }, refunds: { data: [{ id: 're_h_toolate', amount: 2900 }] } });
+    await handleWebhook(p, s);
+    expect(await fulfilment('pi_h_toolate')).toMatchObject({ status: 'refunded', refund_ref: 're_h_toolate' });
+    expect((await obligationsOf(X)).some((x) => x.paymentRef === 'pi_h_toolate')).toBe(false);
+  });
+
 });
