@@ -156,7 +156,28 @@ export async function outcomeOf(experimentId: string): Promise<Outcome | null> {
        FROM venture_experiments e LEFT JOIN probe_designs d ON d.experiment_id = e.id
       WHERE e.id = ?`, [experimentId])).rows[0] as Record<string, unknown> | undefined;
   if (!r) return null;
-  return outcomeFromRow({ ...(r as OutcomeRow), stopped_by_owner: Number(r.withdrawn) === 1, placed: Number(r.placed) === 1 });
+  const o = outcomeFromRow({ ...(r as OutcomeRow), stopped_by_owner: Number(r.withdrawn) === 1, placed: Number(r.placed) === 1 });
+  // AND WHAT THE INSTRUMENT COSTS THE CLAIM, in the one vocabulary.
+  //
+  // The correction used to live on two surfaces, because two surfaces had been
+  // written to ask for it. Every other place that prints an outcome — the
+  // ledger, Economics, Activity, the week-away letter, an answer at the door —
+  // printed the verdict and its limits without it, so whether an owner learned
+  // that a result was measured through a broken channel depended on which page
+  // he happened to open.
+  //
+  // It belongs here, where the word itself is derived, so no surface can print
+  // the verdict without the limit. Only for a settled result: an unsettled
+  // test has nothing yet to overclaim, and asking would be four queries per
+  // row of a list for an answer that cannot matter.
+  if (o.settled && o.doesNotEstablish !== null) {
+    const { doubtsAboutTheInstrument } = await import('../venture/the-instrument.js');
+    const doubts = await doubtsAboutTheInstrument(experimentId);
+    if (doubts.length > 0) {
+      return { ...o, doesNotEstablish: `${o.doesNotEstablish} And ${doubts.map((d) => d.doesNotEstablish).join(' ')}` };
+    }
+  }
+  return o;
 }
 
 /** "settled surprised on 2026-09-12: nobody bought …" — one line for a stream or a letter. */
