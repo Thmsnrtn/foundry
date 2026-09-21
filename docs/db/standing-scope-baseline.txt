@@ -12,6 +12,7 @@ src/services/founder/a-week-away.ts 1
 src/services/founder/activity.ts 9
 src/services/founder/attention.ts 3
 src/services/founder/autonomy-map.ts 1
+src/services/founder/burden.ts 1
 src/services/founder/intelligence.ts 1
 src/services/founder/portfolio.ts 1
 src/services/founder/selected-company.ts 1

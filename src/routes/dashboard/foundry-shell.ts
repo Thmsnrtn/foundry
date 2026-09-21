@@ -3850,7 +3850,7 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
     ? html`<h2 class="section">What you own</h2>` : ''}
     ${raw(portfolio.companies.map((c) => {
     const b = burdens.get(c.productId);
-    return line(c) + (b ? `<p class="${b.verdict === 'earning its keep' || b.verdict === 'too early to say' ? 'quiet' : 'gap'}"
+    return line(c) + (b ? `<p class="${(b.verdict === 'earning its keep' || b.verdict === 'not enough to say') && b.burden !== 'needs you often' ? 'quiet' : 'gap'}"
       style="margin:-8px 0 var(--s3)">${b.sentence}${b.posture !== 'grow'
       ? ` You have me ${POSTURE_IN_PLAIN_WORDS[b.posture as keyof typeof POSTURE_IN_PLAIN_WORDS] ?? b.posture}.` : ''}</p>` : '');
   }).join(''))}`;

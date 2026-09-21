@@ -50,19 +50,55 @@ already has:
   them. A bound, not a cost.
 - **Owner attention.** A ceiling per week, per asset and in total. Exceeding it
   is a failure of the institution even in a month where revenue rose.
-- **Overhead.** Bounded per asset *relative to that asset's own cash flow*, never
-  globally — a global cost cap starves a growing asset to protect a dying one.
+- **Overhead.** Bounded per asset *relative to that asset's own cash flow* —
+  a per-asset cap alone starves a growing asset to protect a dying one — **and
+  bounded in aggregate**, because the institution's shared costs are paid out
+  of the whole portfolio's proceeds and a collection of individually
+  well-behaved assets can still be insolvent together. Both bounds hold; an
+  earlier version of this document asserted the first and denied the second,
+  which left nothing watching whether the institution itself was worth running.
+- **Owner attention is bounded by its shape, not only its total.** An earlier
+  version of this document refused flat recurring attention curves
+  categorically. That was wrong. Ten predictable minutes a year is an
+  excellent thing to own; an unpredictable hour that arrives without warning
+  may not be. Frequency, duration, urgency and unpredictability are separate
+  facts about what an asset asks of him, and the last two are what make a
+  small total expensive.
 
 **OBJECTIVE — maximize, subject to those bounds.**
-- Durable, risk-adjusted, owner-adjusted cash flow. MRR is its primary
-  observable; ROI is the efficiency of the capital deployed to obtain it.
+- Durable, risk-adjusted, owner-adjusted economic value. **Flow is the general
+  concept** — money moving because value was created and captured — and MRR is
+  one of its shapes, not its definition. RIVER states this and states it
+  correctly; this document said "MRR is its primary observable" and the
+  institution's code believed it.
 
-**MRR and ROI are different instruments and they conflict if pooled.** MRR
-growth can always be bought at terrible ROI; ROI is maximized by never investing
-at all. They resolve by operating at different stages rather than by being
-weighted: **ROI gates entry** — should capital be deployed into this at all —
-and **MRR measures durability** once entered. A candidate is judged on ROI. A
-holding is judged on MRR and its persistence.
+**WHAT THAT MISTAKE COST, recorded here because it is the clearest example of
+a doctrine reaching operation.** The ownership verdict in
+`services/founder/burden.ts` read monthly recurring revenue and nothing else,
+so an asset that sells a thing once, licenses it, or is paid on an event
+earned nothing it could see. The first real thing this institution ever sold
+was a **$29 one-time brief**. Under the rule this paragraph licensed, Foundry's
+own first encounter with economic reality was unreadable — "too early to say",
+for ever.
+
+**ROI and durability are different instruments and they conflict if pooled.**
+Growth can always be bought at terrible ROI. The converse claim this document
+used to make — that "ROI is maximized by never investing at all" — is not
+sound: a return on zero deployed capital is undefined, not maximal, and an
+institution that reasoned from it would refuse every investigation on
+arithmetic that does not exist. They resolve by operating at different stages:
+**expected return gates entry** — should capital be deployed into this at all —
+and **flow and its persistence measure durability** once entered. A candidate
+is judged on what it would cost to find out against what the answer is worth.
+A holding is judged on what it brings in, what it costs to own, what it asks of
+him, and how fast either would decay if Foundry did nothing.
+
+**And an early forecast cannot carry a precise gate.** A number with a range
+wider than the threshold it is being compared against decides nothing. What a
+bounded investigation can honestly justify is not a predicted return but an
+affordable loss against a decision-critical unknown: what would we do
+differently if we knew, and is the cheapest way to find out worth less than
+the difference.
 
 ## 2. The threshold thesis, which is the actual mechanism
 
