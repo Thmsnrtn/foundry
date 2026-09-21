@@ -353,6 +353,23 @@ describe('the owner\'s word decides what goes up, not a comment saying so', () =
     expect(report.held.length).toBeGreaterThan(0);
   });
 
+  it('tells the owner a page is held, where he reads that it is not up', async () => {
+    // A HOLD HE CANNOT SEE IS THE SAME TO HIM AS A PAGE THAT QUIETLY STOPPED
+    // UPDATING. `publishSite` reported `published`, `unchanged` and `failed`
+    // and said nothing about what it deliberately withheld, so the owner's own
+    // word being applied left no trace on any screen. One read-only reader now
+    // answers the same question for the pass and for his Workshop page.
+    const { heldFromPublishing } = await import('../../src/services/public-workshop/publication.js');
+    const holds = await heldFromPublishing(OWNER);
+    const entry = holds.find((h) => h.path === '/experiments/bid-decision-workbook');
+    expect(entry).toBeTruthy();
+    expect(entry!.reason).toContain('waits for you');
+    expect(entry!.title).toBeTruthy();
+    // AND IT PUBLISHES NOTHING BY BEING LOOKED AT: the same call, twice, with
+    // no publication in between, answers the same.
+    expect(await heldFromPublishing(OWNER)).toEqual(holds);
+  });
+
   it('takes the strictest word, not the first row it finds', async () => {
     // A global `never` written after a product-scoped `ask_first` was silently
     // ignored, because the reader took `.find`'s first match and the two share

@@ -16,7 +16,7 @@ import { page } from './foundry-shell.js';
 import type { Where } from './foundry-shell.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
 import { APEX_MICRO, establishPublicWorkshop, pauseNewEconomicActivity, publicPostalLines, publicWorkshopOf, resumeEconomicActivity, setAbout, setPostalAddress, WorkshopRefused } from '../../services/public-workshop/settings.js';
-import { livePublications, previewExperimentPage, publishSite, verifySite } from '../../services/public-workshop/publication.js';
+import { heldFromPublishing, livePublications, previewExperimentPage, publishSite, verifySite } from '../../services/public-workshop/publication.js';
 import { projectRegistry } from '../../services/public-workshop/projection.js';
 import { cloudflareReceipts, connectWorkshopSending, outstandingObligations, standUpWorkshop, workshopHealth } from '../../services/public-workshop/infrastructure.js';
 import type { Signal, WorkshopHealth } from '../../services/public-workshop/infrastructure.js';
@@ -66,6 +66,12 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
   const health: WorkshopHealth | null = (w.health as unknown as WorkshopHealth | null);
   const registry = await projectRegistry(founderId);
   const pubs = await livePublications(founderId);
+  // WHY A PAGE IS NOT GOING UP, WHERE HE READS THAT IT IS NOT UP. The hourly
+  // pass holds a page whose owner said `never`, and one whose owner asked to be
+  // asked — and it used to do so silently, so the only signal was a page that
+  // quietly stopped changing. Read-only: looking at this screen publishes
+  // nothing.
+  const holds = new Map((await heldFromPublishing(founderId)).map((h) => [h.path, h.reason] as const));
   const lists = await suppressionsOf(founderId, 50);
   const owed = await outstandingObligations(founderId);
   // WHAT WOULD BE LEFT IF HE STOPPED, read before the decision rather than
@@ -127,7 +133,7 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
       <p class="quiet">${registry.length} with a public identity · ${byStatus('testing').length} testing · ${byStatus('operating').length} operating · ${byStatus('graduated').length} graduated · ${byStatus('closed').length} closed · ${byStatus('preparing').length} preparing</p>
       ${registry.map((x) => { const pub = pubs.find((p) => p.path === x.path); const eid = experimentIds.get(x.slug); return html`<div class="noticed qitem">
         <p><strong>Experiment ${String(x.number).padStart(3, '0')} — ${x.title}</strong> <span class="pill">${x.statusLabel}</span>${x.listed ? '' : html` <span class="pill">unlisted</span>`}</p>
-        <p class="quiet">${pub ? html`<a href="${w.origin}${x.path}" rel="noopener">${w.zoneName}${x.path}</a> · v${String(pub.version)} · ${pub.verifiedStatus === 'verified' ? `seen ${String(pub.verifiedAt).slice(0, 16).replace('T', ' ')}` : `not seen: ${pub.verifiedDetail ?? pub.verifiedStatus ?? 'unverified'}`}` : html`${w.zoneName}${x.path} · not published yet`}
+        <p class="quiet">${pub ? html`<a href="${w.origin}${x.path}" rel="noopener">${w.zoneName}${x.path}</a> · v${String(pub.version)} · ${pub.verifiedStatus === 'verified' ? `seen ${String(pub.verifiedAt).slice(0, 16).replace('T', ' ')}` : `not seen: ${pub.verifiedDetail ?? pub.verifiedStatus ?? 'unverified'}`}` : html`${w.zoneName}${x.path} · not published yet`}${holds.has(x.path) ? html` · <strong>held</strong>: ${holds.get(x.path)}` : ''}
           · <a href="/foundry/public-workshop/preview/${eid ?? ''}">preview</a>${eid ? html` · <a href="/foundry/experiments/${eid}">the test</a>` : ''}</p>
       </div>`; })}`}
     </section>

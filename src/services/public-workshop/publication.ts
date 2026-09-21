@@ -133,6 +133,35 @@ export async function publishPage(input: { founderId: string; path: string; html
 
 export interface SiteReport { published: string[]; unchanged: string[]; failed: Array<{ path: string; reason: string }>; /** Rendered, and deliberately not put up: the owner's word, or his turn. */ held: Array<{ path: string; reason: string }>; verified: number; unverified: string[] }
 
+/**
+ * WHY THIS ASSET'S PAGE IS NOT GOING UP, or null when nothing is holding it.
+ *
+ * One reading, shared by the pass that publishes and the page where the owner
+ * reads what is waiting for him — because a hold he cannot see is the same to
+ * him as a page that silently stopped updating. It writes nothing, so the page
+ * that shows it does not publish by being looked at.
+ */
+export async function heldFrom(experimentId: string): Promise<string | null> {
+  const { howItShouldShow } = await import('./how-it-should-show.js');
+  const shown = await howItShouldShow(experimentId);
+  if (shown.yourWord === 'never') return shown.because[0] ?? 'you said Foundry publishes nothing for it';
+  if (shown.yourWord === 'ask_first') return 'it waits for you: you asked to be asked before anything is published for it';
+  return null;
+}
+
+/** What the next pass would hold back, and why. Reads only; publishes nothing. */
+export async function heldFromPublishing(founderId: string): Promise<Array<{ path: string; title: string; reason: string }>> {
+  const approved = await approvedSlugs(founderId);
+  const all = (await projectRegistry(founderId)).filter((x) => x.status !== 'preparing' && approved.has(x.slug));
+  await indexSlugs(founderId, all);
+  const out: Array<{ path: string; title: string; reason: string }> = [];
+  for (const x of all) {
+    const reason = await heldFrom(experimentIdOf(x, all));
+    if (reason !== null) out.push({ path: x.path, title: x.title, reason });
+  }
+  return out;
+}
+
 /** Render the whole site from the rows and publish what changed. Idempotent
  * by digest, so calling it every hour costs nothing when nothing moved. */
 export async function publishSite(founderId: string, by: string, fetchImpl?: typeof fetch): Promise<SiteReport> {
@@ -172,7 +201,6 @@ export async function publishSite(founderId: string, by: string, fetchImpl?: typ
   // deliberately and no routine writes on its own, and only once the owner
   // approved it. This filter is the owner overriding that earlier yes. It is
   // not a second gate on whether the thing is public at all.
-  const { howItShouldShow } = await import('./how-it-should-show.js');
   const held: Array<{ path: string; reason: string }> = [];
   const all = (await projectRegistry(founderId)).filter((x) => x.status !== 'preparing' && approved.has(x.slug));
   // INDEXED FIRST, AND FROM ALL OF THEM — BEFORE ANY PUBLICATION DECISION.
@@ -188,9 +216,8 @@ export async function publishSite(founderId: string, by: string, fetchImpl?: typ
   await indexSlugs(founderId, all);
   const registry: typeof all = [];
   for (const x of all) {
-    const shown = await howItShouldShow(experimentIdOf(x, all));
-    if (shown.yourWord === 'never') { held.push({ path: x.path, reason: shown.because[0] ?? 'you said Foundry publishes nothing for it' }); continue; }
-    if (shown.yourWord === 'ask_first') { held.push({ path: x.path, reason: 'it waits for you: you asked to be asked before anything is published for it' }); continue; }
+    const reason = await heldFrom(experimentIdOf(x, all));
+    if (reason !== null) { held.push({ path: x.path, reason }); continue; }
     registry.push(x);
   }
   const pages = renderSite(facts, registry);

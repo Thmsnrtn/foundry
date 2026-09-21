@@ -3260,8 +3260,11 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
             const program = await keepTheProgramCurrent(founderId);
             if (program === 'deployed') logger.info(`public_workshop_tick: ${founderId} program brought current with its reviewed text`, { jobName: 'public_workshop_tick' });
             const site = await publishSite(founderId, 'institution:public_workshop_tick');
-            if (site.published.length > 0 || site.failed.length > 0) {
-              logger.info(`public_workshop_tick: ${founderId} republished ${site.published.join(', ') || 'nothing'}${site.failed.length ? `; failed ${site.failed.map((f) => `${f.path} (${f.reason})`).join(', ')}` : ''}`,
+            // A HELD PAGE IS SAID OUT LOUD. It is not a failure and not a
+            // success, and leaving it out of the line meant the only trace of
+            // the owner's word being applied was a page that stopped changing.
+            if (site.published.length > 0 || site.failed.length > 0 || site.held.length > 0) {
+              logger.info(`public_workshop_tick: ${founderId} republished ${site.published.join(', ') || 'nothing'}${site.failed.length ? `; failed ${site.failed.map((f) => `${f.path} (${f.reason})`).join(', ')}` : ''}${site.held.length ? `; held ${site.held.map((h) => `${h.path} (${h.reason})`).join(', ')}` : ''}`,
                 { jobName: 'public_workshop_tick' });
             }
           } catch (err) {
