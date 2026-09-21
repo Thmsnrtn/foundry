@@ -84,6 +84,12 @@ export const REFUND_IS_HIS_AFTER_HOURS = 24;
 const MONEY_TOOLS_OFF = 'The refund you approved covers this purchase, but this deployment\u2019s money-tools switch (FOUNDRY_ENABLE_MONEY_TOOLS, set where Foundry is deployed, not on a page) is off, so I may not move money. Refund it yourself in Stripe and I close it when Stripe reports the refund; or have the switch turned on and I issue it on the next pass.';
 const REFUND_YOURSELF = 'The refund you approved has been refused at the door for a day. Refund it yourself in Stripe and I close it when Stripe reports the refund; I keep trying each pass meanwhile.';
 
+// WHAT HE IS ASKED WHEN HE HAS TAKEN THE AUTHORITY BACK. Not the sentence
+// above: that one promises to keep trying, and after a withdrawal that would
+// be a promise nothing can keep.
+const REFUND_WITHDRAWN = 'You withdrew the authority to refund this test, so I will not try again. '
+  + 'Refund it yourself in Stripe and I close it when Stripe reports the refund, or approve the refund again and I will.';
+
 const money = (cents: number, currency: string): string =>
   `${currency.toLowerCase() === 'usd' ? '$' : ''}${(cents / 100).toFixed(2)}${currency.toLowerCase() === 'usd' ? '' : ` ${currency.toUpperCase()}`}`;
 const day = (iso: string): string => iso.slice(0, 10);
@@ -100,8 +106,15 @@ function read(r: Row, now: Date, moneyToolsOn: boolean): Obligation {
   // after the last act allowing the test expired is covered by nothing he
   // approved, so Foundry neither delivers nor refunds it: it is his.
   const uncovered = r.act_expires_at != null && hoursSince(String(r.act_expires_at), new Date(String(r.created_at).includes('T') ? String(r.created_at) : String(r.created_at).replace(' ', 'T') + 'Z')) > 0;
+  // THE AUTHORITY TO GIVE MONEY BACK, WITHDRAWN. Not the same as expiry and
+  // not the same as money tools being off: the owner took back the one act
+  // that would have discharged this, so nothing Foundry does on the next pass
+  // will refund it. Said at once rather than after a day of saying it will
+  // try again.
+  const refundWithdrawn = r.refund_act_revoked_at != null;
   let state: ObligationState; let action: ObligationAction; let sentence: string; let asksHim: string | null = null;
   const refundAsk = (): ObligationAction => {
+    if (refundWithdrawn) return 'refund_yourself';
     if (!moneyToolsOn) return 'money_tools_off';
     const askedAt = r.refund_requested_at == null ? String(r.updated_at) : String(r.refund_requested_at);
     return hoursSince(askedAt, now) >= REFUND_IS_HIS_AFTER_HOURS ? 'refund_yourself' : 'nothing';
@@ -116,12 +129,14 @@ function read(r: Row, now: Date, moneyToolsOn: boolean): Obligation {
     asksHim = 'Answering the dispute is yours, in your Stripe account; Foundry does not speak to a bank for you.';
   } else if (String(r.status) === 'failed' && r.refund_ref == null) {
     state = 'failed_refund_pending'; action = refundAsk();
-    sentence = `A buyer paid ${amount} for ${title} (payment ${ref}) on ${day(String(r.created_at))}; the delivery failed on ${day(String(r.updated_at))}, and the refund did not go through.${action === 'nothing' ? ' I try again on the next pass.' : ''}`;
-    asksHim = action === 'money_tools_off' ? MONEY_TOOLS_OFF : action === 'refund_yourself' ? REFUND_YOURSELF : null;
+    sentence = `A buyer paid ${amount} for ${title} (payment ${ref}) on ${day(String(r.created_at))}; the delivery failed on ${day(String(r.updated_at))}, and the refund did not go through.${action === 'nothing' ? ' I try again on the next pass.' : ''}${refundWithdrawn ? ' You withdrew the authority to refund this test, so I will not try again.' : ''}`;
+    asksHim = refundWithdrawn ? REFUND_WITHDRAWN
+      : action === 'money_tools_off' ? MONEY_TOOLS_OFF : action === 'refund_yourself' ? REFUND_YOURSELF : null;
   } else if (refundOwed) {
     state = 'refund_requested'; action = refundAsk();
-    sentence = `A buyer asked for a refund through the delivery link (payment ${ref}) and the ${amount} has not gone back.${action === 'nothing' ? ' I try again on the next pass.' : ''}`;
-    asksHim = action === 'money_tools_off' ? MONEY_TOOLS_OFF : action === 'refund_yourself' ? REFUND_YOURSELF : null;
+    sentence = `A buyer asked for a refund through the delivery link (payment ${ref}) and the ${amount} has not gone back.${action === 'nothing' ? ' I try again on the next pass.' : ''}${refundWithdrawn ? ' You withdrew the authority to refund this test, so I will not try again.' : ''}`;
+    asksHim = refundWithdrawn ? REFUND_WITHDRAWN
+      : action === 'money_tools_off' ? MONEY_TOOLS_OFF : action === 'refund_yourself' ? REFUND_YOURSELF : null;
   } else if (String(r.status) === 'sent') {
     const hours = hoursSince(sentAt ?? String(r.updated_at), now);
     state = 'sent_unconfirmed'; action = hours >= CHECK_DELIVERY_AFTER_HOURS ? 'check_delivery' : 'nothing';
@@ -150,7 +165,16 @@ const SELECT = `SELECT f.id, f.experiment_id, f.status, f.amount_cents, f.curren
          (SELECT o.executed_at FROM outbound_actions o WHERE o.fulfilment_id = f.id AND o.experiment_act = 'delivery' AND o.executed_at IS NOT NULL
            ORDER BY o.executed_at DESC LIMIT 1) AS sent_at,
          (SELECT a.expires_at FROM proposed_acts a WHERE a.experiment_id = f.experiment_id AND a.subject = 'contact_people' AND a.action_type = 'send_email'
-            AND coalesce(a.measurement_critical, 0) = 1 ORDER BY a.proposed_at DESC, a.rowid DESC LIMIT 1) AS act_expires_at
+            AND coalesce(a.measurement_critical, 0) = 1 ORDER BY a.proposed_at DESC, a.rowid DESC LIMIT 1) AS act_expires_at,
+         -- AND WHETHER WHAT WOULD DISCHARGE IT STILL STANDS. An act that
+         -- expired stops covering what happens after it; an act the owner
+         -- WITHDREW stops covering anything at all, including what it had
+         -- already taken on. Both leave a buyer owed something, and until this
+         -- was read the second case reported "I try again on the next pass"
+         -- about a refund that could never go through.
+         (SELECT a.revoked_at FROM proposed_acts a WHERE a.experiment_id = f.experiment_id
+            AND a.action_type = 'stripe_create_refund'
+            ORDER BY a.proposed_at DESC, a.rowid DESC LIMIT 1) AS refund_act_revoked_at
     FROM experiment_fulfilments f JOIN venture_experiments e ON e.id = f.experiment_id`;
 
 const moneyToolsOn = (): boolean => process.env.FOUNDRY_ENABLE_MONEY_TOOLS === 'true';
