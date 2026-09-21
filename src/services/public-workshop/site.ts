@@ -149,12 +149,12 @@ ${paras(f.statement)}
 ${f.about ? `<h2>A little more</h2>${paras(f.about)}` : ''}
 <h2>How the workshop works</h2>
 <p>It looks for small, specific problems where a modest, well-made thing would help — a shortlist somebody would otherwise put together by hand, a deadline that's easy to miss, a set of facts scattered across public sources. Before building anything bigger it tries a small version for real: a proper offer, at a proper price, to a handful of people it might actually suit.</p>
-<p>Everything sold here says what you get, what it costs, whether it repeats (it doesn't, unless a page says so), what it doesn't cover, and where its information comes from. Some things are sold on a marketplace instead: those have a short entry saying what they are and who is behind them, and the listing itself carries the price and the terms. If you buy something and it's no use to you, you can have your money back. If you hear from the workshop and would rather not, one line says so and it won't write again.</p>
+<p>Everything sold here says what you get, what it costs, whether it repeats (it doesn't, unless a page says so), what it doesn't cover, and where its information comes from. Some things are sold on a marketplace instead. Where one of those has an entry here, the entry says what it is and who is behind it, and the listing itself carries the price and the terms. If you buy something and it's no use to you, you can have your money back. If you hear from the workshop and would rather not, one line says so and it won't write again.</p>
 <h2>Where the software fits</h2>
 <p>Software built here does a lot of the research and the day-to-day running. A person makes the decisions, stands behind the offers and carries the responsibility. If something here is wrong, <a href="/contact">say so</a> and it will be fixed.</p>
 <h2>What happens to things it tries</h2>
 <dl>
-  <dt>Open</dt><dd>You can buy it now — at the price on its page, or on the marketplace its entry points to.</dd>
+  <dt>Open</dt><dd>You can buy it now — at the price on its page, or, where its entry points at a marketplace, at the price on that listing.</dd>
   <dt>Pilot</dt><dd>The first run of something, so nobody knows yet whether it will carry on.</dd>
   <dt>On its own now</dt><dd>It grew into a business of its own; its page here links to where it lives.</dd>
   <dt>Closed</dt><dd>It wasn't worth carrying on with. The page stays, with a short honest note of why.</dd>
@@ -201,6 +201,41 @@ ${which === 'all' ? `<p class="quiet"><a href="/operating">Still going</a> · <a
  * person to reach, and where the money went are all here, because a customer
  * who came to verify a seller has come for exactly that.
  */
+/**
+ * WHAT STANDS AT THE ADDRESS WHEN THE OWNER HAS SAID `never`.
+ *
+ * A review found that holding a page out of the hourly pass did nothing at all
+ * to a page already published: the bytes sit in the store and keep being served
+ * with their price and their Buy button, for ever. Dropping it from the pass is
+ * not taking it down.
+ *
+ * AND IT IS NOT A DELETE, BY DESIGN. `cloudflare_kv_delete` refuses any key
+ * beginning `page:` (`pages_are_never_deleted`), which is the right rule: a URL
+ * a customer has is not something this institution breaks. So a withdrawal is a
+ * replacement. The address keeps answering, and what it says is true.
+ *
+ * WHAT IT MUST STILL CARRY. The owner's word here is about the offer, not about
+ * the people who took it. Anyone who already bought keeps everything they were
+ * promised, so the responsible business is still named, a person is still
+ * reachable, and the refund promise is repeated rather than linked away.
+ */
+export function renderWithdrawn(f: PublicWorkshopFacts, x: PublicExperiment): string {
+  const body = `
+<h1>${esc(x.title)}</h1>
+<p class="lede">This isn\u2019t offered here any more.</p>
+<p>${esc(f.name)} has taken it down. There is nothing to buy on this page, and
+nothing further is being said about it here.</p>
+<h2>If you already bought it</h2>
+<p>Everything you were promised still stands, and taking this page down changes
+none of it. You can have your money back \u2014 no form, no time limit, and you
+don\u2019t have to explain. Write to
+<a href="mailto:${esc(f.contactEmail)}">${esc(f.contactEmail)}</a> and a person
+reads it.</p>
+<p class="quiet">${esc(f.name)}, ${esc(f.region)} \u00b7 Taken down ${esc(x.updatedOn)}</p>
+<p class="quiet"><a href="/experiments">Everything I\u2019ve put in front of people</a></p>`;
+  return shell(f, x.title, '', body, `${x.title} is no longer offered by ${f.name}.`, { path: x.path });
+}
+
 function portfolioEntry(
   f: PublicWorkshopFacts, x: PublicExperiment, at: { url: string; venueName: string } | null,
 ): string {
@@ -211,17 +246,26 @@ function portfolioEntry(
   terms and privacy policy. ${esc(f.name)} is the seller — the thing itself, what it claims
   and putting it right are mine.</p>
 </div>`
-    : `<p class="gap">It isn't listed at the moment, so there's nowhere to buy it right now.
-  What was promised to anyone who already has it still stands.</p>`;
+    : `<p class="quiet">It isn’t listed at the moment, so there’s nowhere to buy it right
+  now. What was promised to anyone who already has it still stands.</p>`;
   const body = `
 <h1>${esc(x.title)}</h1>
 <p class="lede">${esc(x.summary)}</p>
-<p class="quiet"><span class="pill">${esc(x.statusLabel)}</span> A ${esc(f.name)} product${at ? `, sold on ${esc(at.venueName)}` : ''}. ${esc(f.name)}, ${esc(f.region)}.</p>
+<p class="quiet"><span class="pill">${esc(x.statusLabel)}</span> ${esc(f.name)}’s${at ? `, sold on ${esc(at.venueName)}` : ''}. ${esc(f.name)}, ${esc(f.region)}.</p>
 
 ${where}
 
-<h2>Who it's for</h2>
+<h2>Who it’s for</h2>
 ${paras(x.who)}
+
+${/* WHAT HAPPENED TO IT, WHICH /about PROMISES IN SO MANY WORDS: "the page
+     stays, with a short honest note of why". The entry rendered the status
+     PILL and not the note, so every venue-sold thing that closed showed a page
+     marked Closed that never said why — and the dated-clarification mechanism,
+     which exists so a record can carry a later finding without editing a word
+     of itself, was silently unavailable for this whole shape. */ ''}
+${x.outcome ? `<h2>How it went</h2>\n${paras(x.outcome)}` : ''}
+${x.clarification ? `<div class="card"><p class="quiet">Added ${esc(x.clarification.on)}, beneath the record and changing no word of it:</p>${paras(x.clarification.text)}</div>` : ''}
 
 ${/* THE PROMISE IS MINE WHEREVER YOU BOUGHT IT. The first version said the
      refund page "covers what you buy directly from Apex Micro, which this is
@@ -231,12 +275,15 @@ ${/* THE PROMISE IS MINE WHEREVER YOU BOUGHT IT. The first version said the
      wording contradicted a live customer promise and pointed at a remedy the
      venue does not actually grant on an instant download. What differs between
      channels is the MECHANISM, not the promise. */ ''}
-<h2>If something's wrong with it</h2>
-<p>You can have your money back. No form, no time limit, and you don't have to
-explain.${at ? ` Message me through ${esc(at.venueName)} and I'll refund it there, since that's
-where the payment was taken` : ''} — or write to me at
-<a href="mailto:${esc(f.contactEmail)}">${esc(f.contactEmail)}</a> and a person reads it.</p>
-<p class="quiet">${x.openedOn ? `Listed ${esc(x.openedOn)}` : ''}${x.closedOn ? ` · Closed ${esc(x.closedOn)}` : ''} · Page updated ${esc(x.updatedOn)}</p>
+<h2>If something’s wrong with it</h2>
+<p>You can have your money back. No form, no time limit, and you don’t have to
+explain.${at ? ` Message me through ${esc(at.venueName)} and I’ll refund it there, since that’s
+where the payment was taken, or write to me at
+<a href="mailto:${esc(f.contactEmail)}">${esc(f.contactEmail)}</a> with your order number — that’s
+what I can look you up by, because the marketplace doesn’t give me your name or your email.`
+    : ` Write to me at <a href="mailto:${esc(f.contactEmail)}">${esc(f.contactEmail)}</a> with your
+order number — that’s what I can look you up by.`} A person reads it.</p>
+<p class="quiet">${[x.openedOn ? `Listed ${esc(x.openedOn)}` : '', x.closedOn ? `Closed ${esc(x.closedOn)}` : '', `Page updated ${esc(x.updatedOn)}`].filter(Boolean).join(' · ')}</p>
 <p class="quiet"><a href="/experiments">Everything I've put in front of people</a></p>`;
   return shell(f, x.title, '/experiments', body, x.summary, { path: x.path });
 }
@@ -256,7 +303,21 @@ export function renderExperiment(f: PublicWorkshopFacts, x: PublicExperiment): s
   // sentence this whole change exists to remove. Uncertainty was supposed to go
   // less public, never more; that fall-through did the opposite. The entry
   // renderer handles a missing address itself, by saying so.
-  if (x.shape === 'portfolio_entry') return portfolioEntry(f, x, x.whereToGetIt);
+  //
+  // AND `identity_only` TAKES THE SAME SHAPE, which the version above did not.
+  // It branched on `portfolio_entry` alone, so the shape the reader returns
+  // precisely BECAUSE the rows could not settle which channel carries the
+  // thing fell through to the full product page — price, Stripe sentence and
+  // all. The one shape that exists because of uncertainty published the most,
+  // which is rule 2 of the reader's own header exactly inverted.
+  //
+  // `not_public` is deliberately NOT in this list. It means nothing has
+  // reached anybody yet, which is the state every test is in before its offer
+  // is placed and the state the rehearsal page lives in permanently — neither
+  // is a portfolio entry, and neither is published while it holds. A `never`
+  // no longer collapses a shape into `not_public`, so a forbidden entry still
+  // reads as an entry on the owner's preview.
+  if (x.shape === 'portfolio_entry' || x.shape === 'identity_only') return portfolioEntry(f, x, x.whereToGetIt);
   const number = String(x.number).padStart(3, '0');
   const asking = x.status === 'testing' || x.status === 'operating';
   // THE PRICE IS NOT A REVEAL. It used to sit under its own heading four
@@ -375,7 +436,7 @@ export function renderPrivacy(f: PublicWorkshopFacts): string {
 <h2>When you buy something here</h2>
 <p>Stripe handles the payment and passes me your email address so I can send you what you bought, and refund it if you ask. I don't keep a customer database of my own — your address lives in Stripe's records and in the delivery email.</p>
 <h2>When you buy something on a marketplace</h2>
-<p>Some things are sold on a marketplace instead. There the marketplace takes the payment, delivers the file and holds whatever it holds about you, under its own privacy policy — I see only what it shows a seller about an order. The listing names the marketplace, and so does this site's entry for that product.</p>
+<p>Some things are sold on a marketplace instead. There the marketplace takes the payment, delivers the file and holds whatever it holds about you, under its own privacy policy — I see only what it shows a seller about an order. The listing names the marketplace, and so does this site's entry for that product where it has one.</p>
 <h2>If I email you</h2>
 <p>I write once to a business whose own website suggests something here might be useful to it, at the address that business publishes. The message says what it's about and why you got it. There's no tracking in it, and I don't follow up.</p>
 <h2>When you opt out</h2>

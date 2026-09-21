@@ -880,7 +880,12 @@ export async function prepareExposure(experimentId: string): Promise<{ exposureI
   const { publishSite, pageUrlFor } = await import('../public-workshop/publication.js');
   const report = await publishSite(w.founderId, HAND);
   const pageUrl = await pageUrlFor(experimentId);
-  const failures = [...report.failed.map((f) => `${f.path}: ${f.reason}`), ...report.unverified];
+  // A HELD PAGE IS NOT A PUBLISHED ONE. This read `failed` and `unverified`
+  // only, so an offer whose page the owner had forbidden came back
+  // `published: true` with a `pageUrl` that answers 404, and the owner's
+  // screen said "placed".
+  const failures = [...report.failed.map((f) => `${f.path}: ${f.reason}`),
+    ...report.held.map((h) => `${h.path}: ${h.reason}`), ...report.unverified];
   return { ...placed, pageUrl, published: failures.length === 0, failures };
 }
 
@@ -1565,8 +1570,14 @@ async function republishRecord(experimentId: string, report?: HandReport): Promi
   const w = await publicWorkshopOfExperiment(experimentId);
   if (!w) return;
   const { publishSite } = await import('../public-workshop/publication.js');
-  const r = await publishSite(w.founderId, HAND).catch((err: unknown) => ({ failed: [{ path: '*', reason: err instanceof Error ? err.message : String(err) }], unverified: [] as string[] }));
+  const r = await publishSite(w.founderId, HAND).catch((err: unknown) => ({ failed: [{ path: '*', reason: err instanceof Error ? err.message : String(err) }], held: [] as Array<{ path: string; reason: string }>, unverified: [] as string[] }));
   for (const f of r.failed) report?.exceptions.push(`public record not updated: ${f.path}: ${f.reason}`);
+  // A HELD PAGE IS THE ONE THIS FUNCTION MOST NEEDS TO SAY OUT LOUD. Its whole
+  // contract is that a stopped test's page says so and the way to pay comes
+  // off it. If the page was held, none of that happened: the live bytes still
+  // read "Open now" with a Buy button over a link `takeDownExposure` has just
+  // deactivated, and this returned in silence.
+  for (const h of r.held) report?.exceptions.push(`public record not updated — the page is held: ${h.path}: ${h.reason}`);
   for (const u of r.unverified) report?.exceptions.push(`public record not seen: ${u}`);
 }
 

@@ -126,7 +126,7 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
   const shape = shown.shape;
   const { offerShapePlanOf } = await import('../venture/hand.js');
   const plan = await offerShapePlanOf(experimentId);
-  const listingRef = shape === 'portfolio_entry' && plan?.listing
+  const listingRef = (shape === 'portfolio_entry' || shape === 'identity_only') && plan?.listing
     ? (await rows(
       `SELECT exposure_ref FROM experiment_exposures
         WHERE experiment_id = ? AND provider = ? AND withdrawn_at IS NULL
@@ -196,10 +196,10 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
     whereToGetIt, shape,
     clarification: r.public_clarification == null || r.public_clarification_at == null ? null
       : { on: String(r.public_clarification_at), text: String(r.public_clarification) },
-    price: shape === 'portfolio_entry' ? null : price, recurring: false,
+    price: shape === 'portfolio_entry' || shape === 'identity_only' ? null : price, recurring: false,
     // The way to pay is public only while the offer stands; a closed test's
     // link is down and the page says so rather than pointing at it.
-    payUrl: shape === 'portfolio_entry' ? null
+    payUrl: shape === 'portfolio_entry' || shape === 'identity_only' ? null
       : status === 'testing' && !withdrawn && r.pay_url != null ? String(r.pay_url) : null,
     openedOn: day(r.placed_at) ?? day(r.decided_at), closedOn: ended ? (day(r.ran_at) ?? day(r.withdrawn_at) ?? day(r.updated_at)) : null,
     updatedOn: day(r.last_published) ?? day(r.updated_at) ?? day(r.created_at) ?? '',

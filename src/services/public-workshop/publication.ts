@@ -131,7 +131,7 @@ export async function publishPage(input: { founderId: string; path: string; html
   return (await verifyPublication(input.founderId, input.path, input.fetchImpl))!;
 }
 
-export interface SiteReport { published: string[]; unchanged: string[]; failed: Array<{ path: string; reason: string }>; /** Rendered, and deliberately not put up: the owner's word, or his turn. */ held: Array<{ path: string; reason: string }>; verified: number; unverified: string[] }
+export interface SiteReport { published: string[]; unchanged: string[]; failed: Array<{ path: string; reason: string }>; /** Rendered, and deliberately not put up: the owner's word, or his turn. */ held: Array<{ path: string; reason: string }>; /** Was live, and has been replaced with a notice because he said `never`. */ withdrawn: string[]; verified: number; unverified: string[] }
 
 /**
  * WHY THIS ASSET'S PAGE IS NOT GOING UP, or null when nothing is holding it.
@@ -145,7 +145,6 @@ export async function heldFrom(experimentId: string): Promise<string | null> {
   const { howItShouldShow } = await import('./how-it-should-show.js');
   const shown = await howItShouldShow(experimentId);
   if (shown.yourWord === 'never') return shown.because[0] ?? 'you said Foundry publishes nothing for it';
-  if (shown.yourWord === 'ask_first') return 'it waits for you: you asked to be asked before anything is published for it';
   return null;
 }
 
@@ -215,13 +214,45 @@ export async function publishSite(founderId: string, by: string, fetchImpl?: typ
   // offer. One index, built from `all`, read through `all` everywhere.
   await indexSlugs(founderId, all);
   const registry: typeof all = [];
+  const takeDown: typeof all = [];
   for (const x of all) {
     const reason = await heldFrom(experimentIdOf(x, all));
-    if (reason !== null) { held.push({ path: x.path, reason }); continue; }
-    registry.push(x);
+    if (reason === null) { registry.push(x); continue; }
+    held.push({ path: x.path, reason });
+    // DROPPING IT FROM THE PASS IS NOT TAKING IT DOWN. A review found the
+    // headline guarantee still hollow for the case it exists for: the owner
+    // says `never` after a complaint, this loop skips the page, and the bytes
+    // already in the store keep serving the price and the Buy button for ever.
+    // Every hold here is a `never`, which is a word about the page itself.
+    takeDown.push(x);
   }
   const pages = renderSite(facts, registry);
-  const report: SiteReport = { published: [], unchanged: [], failed: [], held, verified: 0, unverified: [] };
+  const report: SiteReport = { published: [], unchanged: [], failed: [], held, withdrawn: [], verified: 0, unverified: [] };
+  // AND A RECORD IS NOT SOMETHING A ROUTINE DESTROYS ON A GENERAL INSTRUCTION.
+  //
+  // Two of the owner's words meet here: a `never` is decisive, and truthful
+  // historical records and existing customer obligations are preserved when an
+  // offering closes. For a page nobody has been told anything about, there is
+  // no conflict — it comes down. For a page carrying a published outcome or a
+  // dated clarification, replacing it with a notice would destroy the account
+  // the seal exists to keep, and which of his two words he meant is not a
+  // routine's to decide. It stays up, and the conflict is said out loud in the
+  // report he reads rather than settled quietly either way.
+  const { renderWithdrawn } = await import('./site.js');
+  for (const x of takeDown) {
+    const live = await livePublication(founderId, x.path);
+    if (!live) continue;
+    if (x.outcome !== null || x.clarification !== null) {
+      report.failed.push({ path: x.path, reason: 'you said to publish nothing for it, and its page carries a sealed record — taking it down would destroy the account, so it stays up until you say which you meant' });
+      continue;
+    }
+    try {
+      const html = renderWithdrawn(facts, x);
+      const p = await publishPage({ founderId, path: x.path, html, kind: 'experiment', experimentId: experimentIdOf(x, all), by, fetchImpl });
+      report.withdrawn.push(x.path);
+      if (p.verifiedStatus !== 'verified') report.unverified.push(`${x.path}: ${p.verifiedDetail ?? p.verifiedStatus ?? 'unverified'}`);
+    } catch (e) { report.failed.push({ path: x.path, reason: `could not take it down: ${e instanceof Error ? e.message : String(e)}` }); }
+  }
   for (const [path, html] of pages) {
     const x = registry.find((r) => r.path === path);
     if (x) {
@@ -303,18 +334,25 @@ export async function publicationGate(experimentId: string, opts: { now?: Date; 
   // Rendered once and reused: the shape branch, the floor and the leak check
   // all read the same bytes, so none of them can be checking a different page
   // from the one that would go up.
+  //
+  // AND THE FACTS ARE THE PUBLISHER'S FACTS. That sentence was false when it
+  // was written: this render used `workshopFacts(w)`, which defaults
+  // `replyRouteProven` to false, while `publishSite` renders with the proven
+  // value and the staleness check below already read it. On a day the reply
+  // route is proven, every check here ran over bytes that were not the page
+  // going up. One reading, taken once, used by all of them.
+  const { replyRouteEvidence } = await import('./reply-probe.js');
+  const proven = (await replyRouteEvidence(w.founderId)).grade.startsWith('proven');
+  const facts = workshopFacts(w, { replyRouteProven: proven });
   const { renderExperiment } = await import('./site.js');
   let page: string | null = null;
-  const html = (): string => (page ??= renderExperiment(workshopFacts(w), x));
+  const html = (): string => (page ??= renderExperiment(facts, x));
 
   // The page: published, seen, and current.
   let pub = await experimentPublication(experimentId);
   if (!pub) failures.push('the public page has not been published');
   else {
-    const { replyRouteEvidence } = await import('./reply-probe.js');
-    const proven = (await replyRouteEvidence(w.founderId)).grade.startsWith('proven');
-    const facts = workshopFacts(w, { replyRouteProven: proven });
-    const current = digestOf(renderExperiment(facts, x));
+    const current = digestOf(html());
     if (current !== pub.digest) failures.push('the published page is stale: the rows have changed since it was put up');
     if (opts.verifyLive !== false) pub = (await verifyPublication(w.founderId, pub.path, opts.fetchImpl)) ?? pub;
     if (pub.verifiedStatus !== 'verified') failures.push(`the public page could not be seen at ${pageUrl}: ${pub.verifiedDetail ?? 'unverified'}`);
@@ -335,7 +373,9 @@ export async function publicationGate(experimentId: string, opts: { now?: Date; 
   // is responsible, a way to reach a person, a refund path, a privacy
   // statement, a postal address, a page that reads on a phone, and nothing
   // private on it. "Short" is allowed; "silent about accountability" is not.
-  const entry = x.shape === 'portfolio_entry';
+  // THE SAME TWO SHAPES THE RENDERER TAKES THE ENTRY BRANCH FOR, so the gate
+  // judges the page it would actually get.
+  const entry = x.shape === 'portfolio_entry' || x.shape === 'identity_only';
   if (entry) {
     if (!x.whereToGetIt) failures.push('the entry names no address where the thing can actually be got');
     // ESCAPED, BECAUSE THE PAGE IS. A real listing URL copied out of a venue's

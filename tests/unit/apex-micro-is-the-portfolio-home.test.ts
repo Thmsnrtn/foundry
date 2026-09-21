@@ -118,9 +118,13 @@ describe('what reached nobody is not published', () => {
       statement: 'Foundry publishes nothing for this one' });
 
     const shown = await howItShouldShow(X);
-    expect(shown.shape).toBe('not_public');
+    // HIS WORD IS THE PERMISSION, NOT THE READING. An earlier version returned
+    // `not_public` here and stopped, which put the permission back inside the
+    // shape — and under a `never` the Etsy asset's own preview then rendered as
+    // a full product page with a price, because the renderer never saw
+    // `portfolio_entry`. The shape still says what the thing is.
+    expect(shown.yourWord).toBe('never');
     expect(shown.because[0]).toContain('you said so');
-    expect(shown.mustCarry).toHaveLength(0);
   });
 });
 
@@ -240,10 +244,15 @@ describe('a venue-sold asset gets an entry, not a storefront', () => {
     const html = renderExperiment((await workshopFactsOfExperiment(V))!, x);
     expect(html).toContain('You can have your money back');
     expect(html).toContain('No form, no time limit');
-    expect(html).toContain('Message me through Etsy and I\'ll refund it there');
+    expect(html.replace(/\s+/g, ' ')).toContain('Message me through Etsy and I\u2019ll refund it there');
     // The mechanism is named because that is where the payment was taken — and
     // a person here is still reachable, so the venue is never the only door.
-    expect(html).toContain('a person reads it');
+    expect(html).toContain('A person reads it');
+    // AND HE IS ASKED FOR THE ONE THING HE ACTUALLY HAS. The owner's own Etsy
+    // privacy policy says his records hold the order number and the amount and
+    // never the buyer's name or email, so "write to me" without it named a
+    // route by which nobody could be found.
+    expect(html.replace(/\s+/g, ' ')).toContain('with your order number');
     // AND NOTHING TELLS THIS BUYER THEY ARE OUTSIDE THE PROMISE.
     expect(html).not.toContain('which this is not');
     expect(html).not.toMatch(/only covers|does not cover/i);
@@ -293,7 +302,10 @@ describe('the owner\'s word decides what goes up, not a comment saying so', () =
       statement: 'Take it down and publish nothing for it' });
 
     const shown = await howItShouldShow(V);
-    expect(shown.shape).toBe('not_public');
+    expect(shown.yourWord).toBe('never');
+    // The reading is untouched: it is still a thing sold on Etsy, and the
+    // owner's preview still renders it as an entry rather than as a storefront.
+    expect(shown.shape).toBe('portfolio_entry');
 
     const { publishSite } = await import('../../src/services/public-workshop/publication.js');
     const report = await publishSite(OWNER, 'test:the-owner-said-never');
@@ -304,29 +316,38 @@ describe('the owner\'s word decides what goes up, not a comment saying so', () =
     expect(report.held.find((h) => h.path === entryPath)?.reason).toContain('you said so');
   });
 
-  it('holds it for ask_first too, because a routine cannot satisfy "ask me"', async () => {
-    // `publish` has a NULL door in `owner_boundary_subjects`, so the kill
-    // switch never sees it and ask_first was enforced by nothing whatsoever.
-    // An hourly pass must not read a shape as permission.
-    const { setBoundary } = await import('../../src/services/institution/standing-intent.js');
+  it('does not read a Stripe approval as consent to publish a page', async () => {
+    // THE SECOND VERSION OF THIS TEST ASSERTED THE OPPOSITE, AND THE RULE IT
+    // PINNED WAS THE DEFECT. `publish` is not the page's subject in this
+    // codebase — it is the subject of PLACING AN OFFER, and `approveExperiment`
+    // writes exactly that sentence before proposing the placement. Enforcing it
+    // in the page pass meant a `stripe_create_payment_link` approval, whose
+    // entire disclosure to him is "a product, a price and a payment link exist;
+    // no money moves", standing as his consent to publish a web page in his
+    // name. Authority inferred from an adjacent capability is the one move this
+    // institution does not make, and it was being made by the function whose
+    // header promises to protect his word.
     const p = (await query(
       `SELECT id FROM products WHERE from_experiment_id = ? AND deleted_at IS NULL
         ORDER BY rowid LIMIT 1`, [V])).rows[0] as Record<string, unknown>;
     await query(
       `UPDATE owner_boundaries SET lifted_at = datetime('now'), lifted_reason = 'narrowing it'
         WHERE product_id = ? AND subject = 'publish' AND lifted_at IS NULL`, [String(p.id)]);
+    const { setBoundary } = await import('../../src/services/institution/standing-intent.js');
     await setBoundary({ productId: String(p.id), subject: 'publish', mode: 'ask_first',
-      statement: 'Ask me before you publish anything for it' });
+      statement: 'Ask me before placing an offer anywhere for this test' });
 
     const shown = await howItShouldShow(V);
+    // The shape is unchanged and the page is not held: an offer-placement
+    // boundary is enforced where offers are placed, not here.
     expect(shown.shape).toBe('portfolio_entry');
-    expect(shown.yourWord).toBe('ask_first');
+    expect(shown.yourWord).toBeNull();
+    // It is still SAID, because he should know a boundary stands on the asset.
+    expect(shown.because.join(' ')).toContain('waits for you each time');
 
     const { publishSite } = await import('../../src/services/public-workshop/publication.js');
     const report = await publishSite(OWNER, 'test:ask-me-first');
-    const entryPath = '/experiments/bid-decision-workbook';
-    expect(report.held.map((h) => h.path)).toContain(entryPath);
-    expect(report.held.find((h) => h.path === entryPath)?.reason).toContain('waits for you');
+    expect(report.held.map((h) => h.path)).not.toContain('/experiments/bid-decision-workbook');
   });
 
   it('holds for his word and never for a shape it could not yet read', async () => {
@@ -359,11 +380,21 @@ describe('the owner\'s word decides what goes up, not a comment saying so', () =
     // and said nothing about what it deliberately withheld, so the owner's own
     // word being applied left no trace on any screen. One read-only reader now
     // answers the same question for the pass and for his Workshop page.
-    const { heldFromPublishing } = await import('../../src/services/public-workshop/publication.js');
+    const { heldFromPublishing, publishSite } = await import('../../src/services/public-workshop/publication.js');
+    const p = (await query(
+      `SELECT id FROM products WHERE from_experiment_id = ? AND deleted_at IS NULL
+        ORDER BY rowid LIMIT 1`, [V])).rows[0] as Record<string, unknown>;
+    await query(
+      `UPDATE owner_boundaries SET lifted_at = datetime('now'), lifted_reason = 'his word changed'
+        WHERE product_id = ? AND subject = 'publish' AND lifted_at IS NULL`, [String(p.id)]);
+    const { setBoundary } = await import('../../src/services/institution/standing-intent.js');
+    await setBoundary({ productId: String(p.id), subject: 'publish', mode: 'never',
+      statement: 'Publish nothing for the workbook' });
+    await publishSite(OWNER, 'test:seed-a-hold');
     const holds = await heldFromPublishing(OWNER);
     const entry = holds.find((h) => h.path === '/experiments/bid-decision-workbook');
     expect(entry).toBeTruthy();
-    expect(entry!.reason).toContain('waits for you');
+    expect(entry!.reason).toContain('you said so');
     expect(entry!.title).toBeTruthy();
     // AND IT PUBLISHES NOTHING BY BEING LOOKED AT: the same call, twice, with
     // no publication in between, answers the same.
@@ -377,10 +408,92 @@ describe('the owner\'s word decides what goes up, not a comment saying so', () =
     const { setBoundary } = await import('../../src/services/institution/standing-intent.js');
     await setBoundary({ productId: null, subject: 'publish', mode: 'never',
       statement: 'Publish nothing anywhere for now' });
-    expect((await howItShouldShow(V)).shape).toBe('not_public');
+    expect((await howItShouldShow(V)).yourWord).toBe('never');
     await query(
       `UPDATE owner_boundaries SET lifted_at = datetime('now'), lifted_reason = 'done'
         WHERE product_id IS NULL AND subject = 'publish' AND lifted_at IS NULL`);
+  });
+});
+
+describe('a never takes the page down, and does not destroy a record', () => {
+  // DROPPING A PAGE FROM THE PASS IS NOT TAKING IT DOWN, which is the case the
+  // whole guarantee exists for: he reads a complaint and says take it down.
+  // The bytes already in the store keep being served — the Worker reads
+  // `page:<path>` from KV — and `cloudflare_kv_delete` refuses any key
+  // beginning `page:`, correctly, because a URL a customer holds is not
+  // something to break. So withdrawal is a replacement.
+
+  it('replaces a live page with a notice that keeps the remedy reachable', async () => {
+    const { publishSite, livePublication } = await import('../../src/services/public-workshop/publication.js');
+    const path = '/experiments/bid-decision-workbook';
+    // It is live first — otherwise this proves nothing.
+    const p = (await query(
+      `SELECT id FROM products WHERE from_experiment_id = ? AND deleted_at IS NULL
+        ORDER BY rowid LIMIT 1`, [V])).rows[0] as Record<string, unknown>;
+    await query(
+      `UPDATE owner_boundaries SET lifted_at = datetime('now'), lifted_reason = 'let it up first'
+        WHERE product_id = ? AND subject = 'publish' AND lifted_at IS NULL`, [String(p.id)]);
+    await publishSite(OWNER, 'test:up-first');
+    expect(await livePublication(OWNER, path)).toBeTruthy();
+
+    const { setBoundary } = await import('../../src/services/institution/standing-intent.js');
+    await setBoundary({ productId: String(p.id), subject: 'publish', mode: 'never',
+      statement: 'Take it down and publish nothing for it' });
+    const report = await publishSite(OWNER, 'test:take-it-down');
+    expect(report.withdrawn).toContain(path);
+
+    // AND THE BYTES IN THE STORE ARE THE NOTICE'S BYTES, not merely "something
+    // was published": the live digest has to match the withdrawal render.
+    const live = (await livePublication(OWNER, path))!;
+    expect(live).toBeTruthy();
+    const { renderWithdrawn } = await import('../../src/services/public-workshop/site.js');
+    const { digestOf } = await import('../../src/services/integration/cloudflare-gateway.js');
+    const html = renderWithdrawn((await workshopFactsOfExperiment(V))!, (await projectExperiment(V))!);
+    expect(live.digest).toBe(digestOf(html));
+    // WHAT IT SAYS NOW.
+    expect(html).toContain('isn\u2019t offered here any more');
+    // AND WHAT IT STILL CARRIES, because his word was about the offer and not
+    // about the people who took it.
+    expect(html).toContain('Everything you were promised still stands');
+    expect(html).toContain('have your money back');
+    expect(html).toContain('Apex Micro');
+    expect(html).toMatch(/mailto:/);
+    // AND NOTHING TO BUY.
+    expect(html).not.toMatch(/\$\d/);
+    expect(html).not.toMatch(/stripe\.com|buy\.stripe/i);
+    expect(html).not.toContain('Get it on Etsy');
+  });
+
+  it('will not replace a page carrying a sealed record, and says why', async () => {
+    // TWO OF HIS WORDS MEET HERE: a `never` is decisive, and truthful
+    // historical records are preserved when an offering closes. Replacing a
+    // published outcome with a stub destroys the account the seal exists to
+    // keep. Which he meant is not a routine's to decide.
+    const { publishSite } = await import('../../src/services/public-workshop/publication.js');
+    const p = (await query(
+      `SELECT id FROM products WHERE from_experiment_id = ? AND deleted_at IS NULL
+        ORDER BY rowid LIMIT 1`, [X])).rows[0] as Record<string, unknown> | undefined;
+    if (!p) return;
+    const { setBoundary } = await import('../../src/services/institution/standing-intent.js');
+    await setBoundary({ productId: String(p.id), subject: 'publish', mode: 'never',
+      statement: 'Publish nothing for Experiment 001' });
+    // The world settles Experiment 001 but does not write its public account
+    // here — the hourly job does that. One is written directly, through the
+    // same column and under the same trigger, which allows it because the test
+    // has ended.
+    await query(
+      `UPDATE public_experiments SET public_outcome = ? WHERE experiment_id = ?`,
+      ['Nobody bought. The record stays up because it is a true account of what happened.', X]);
+    const x = (await projectExperiment(X))!;
+    expect(x.outcome ?? x.clarification).toBeTruthy();
+
+    const report = await publishSite(OWNER, 'test:sealed');
+    const path = '/experiments/ma-millwork-bid-brief';
+    expect(report.withdrawn).not.toContain(path);
+    const said = report.failed.find((f) => f.path === path);
+    expect(said).toBeTruthy();
+    expect(said!.reason).toContain('sealed record');
+    expect(said!.reason).toContain('which you meant');
   });
 });
 
@@ -393,7 +506,7 @@ describe('an entry never falls through to a product page', () => {
     const x = (await projectExperiment(V))!;
     const html = renderExperiment((await workshopFactsOfExperiment(V))!,
       { ...x, whereToGetIt: null });
-    expect(html).toContain('isn\'t listed at the moment');
+    expect(html).toContain('isn\u2019t listed at the moment');
     expect(html).not.toContain('Buying this here');
     expect(html).not.toContain('What you get');
     expect(html).not.toContain('Why I wrote to you');

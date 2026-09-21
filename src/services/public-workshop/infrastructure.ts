@@ -44,7 +44,7 @@ const door = async (w: PublicWorkshop, tool: string, action: string, params: Rec
   return (r.result ?? {}) as Record<string, unknown>;
 };
 
-export interface StandUpReport { store: string; program: 'deployed' | 'unchanged'; hostnames: string[]; retiredRecords: string[]; site: { published: string[]; verified: number; unverified: string[]; failed: string[] } }
+export interface StandUpReport { store: string; program: 'deployed' | 'unchanged'; hostnames: string[]; retiredRecords: string[]; site: { published: string[]; verified: number; unverified: string[]; held: string[]; failed: string[] } }
 
 /**
  * THE WORKSHOP EXISTS IN THE WORLD after this, and running it again changes
@@ -87,7 +87,7 @@ export async function standUpWorkshop(founderId: string, fetchImpl?: typeof fetc
   }
   // 4. The pages, and the world's reading of them.
   const site = await publishSite(founderId, KEEPER, fetchImpl);
-  return { store: storeId, program, hostnames, retiredRecords: retired, site: { published: site.published, verified: site.verified, unverified: site.unverified, failed: site.failed.map((f) => `${f.path}: ${f.reason}`) } };
+  return { store: storeId, program, hostnames, retiredRecords: retired, site: { published: site.published, verified: site.verified, unverified: site.unverified, held: site.held.map((h) => `${h.path}: ${h.reason}`), failed: site.failed.map((f) => `${f.path}: ${f.reason}`) } };
 }
 
 // ─── Sending as the Workshop ─────────────────────────────────────────────────

@@ -1279,16 +1279,40 @@ Until then the reader answers `not_public` for that asset and the entry does not
 go up, which is the correct behaviour for a boundary that has not actually been
 changed yet.
 
-The narrowed mode is `ask_first`, not open: the entry is proposed to you and
-waits, every time, rather than going up because a principle said it could. That
-sentence was false when it was first written — `publish` is the one boundary
-subject with no door behind it, so nothing enforced it at all — and two review
-cells found it independently. It is enforced now, in `publishSite`, and it
-holds for this asset specifically because `approveListing` proposes no
-placement act: on Etsy the placement is your own act on the venue, so there is
-nothing standing that answers the question. An experiment the Workshop carries
-gets the same boundary and answers it in the same breath, when you approve the
-offer's placement.
+**A correction, because the first version of this section promised you
+something the code could not do.** It said the narrowed mode was `ask_first`
+and that "the entry is proposed to you and waits, every time". Two review cells
+took that apart. `publish` is the one boundary subject with no door behind it,
+so nothing enforced it; the attempt to enforce it in the publishing pass then
+made things worse in four ways at once, and the sentence stayed false
+throughout, because nothing anywhere proposes a publishing act for a listing.
+There was no question to answer and no way to answer it.
+
+What is true now, and enforced:
+
+- **`never` is decisive and it takes the page down.** Not just "stops
+  republishing" — a page already in the store is replaced with a short notice
+  that says it is no longer offered, keeps Apex Micro named, keeps a person
+  reachable and repeats the refund promise. The one exception is a page
+  carrying a sealed record or a dated clarification: replacing that would
+  destroy the account the seal exists to keep, so it stays up and the conflict
+  between your two words is put to you rather than settled by a routine.
+- **`ask_first` on `publish` is not a rule about pages, and the code no longer
+  pretends it is.** In this codebase that subject means *placing an offer*
+  — `approveExperiment` writes exactly that sentence — and it is enforced where
+  offers are placed. Reading it as a page rule meant a Stripe catalog
+  approval, whose whole disclosure to you is "a product, a price and a payment
+  link exist; no money moves", being taken as your consent to publish a web
+  page in your name. That is authority inferred from an adjacent capability,
+  which this institution does not do.
+- **The offer half of your word is enforced structurally, not by the boundary
+  row.** A portfolio entry cannot carry a price or a checkout because the
+  projection nulls both before the page is rendered, and the gate re-reads the
+  rendered bytes for a currency figure or a Stripe address. That holds whatever
+  any boundary row says.
+
+So once you narrow the live row, the entry goes up. It does not ask again each
+time, and this section no longer claims it will.
 
 ### What neither decision authorises
 

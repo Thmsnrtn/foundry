@@ -563,8 +563,75 @@ pinned: `seedProductionShape` cannot complete unless Experiment 001's page
 publishes before its offer is placed, and a test asserts no page is ever held
 for a reason other than the owner's own word.
 
-**Proof debt.** The `ask_first`-is-answered rule is proven against the two
-shapes that exist — a Workshop-carried offer and an Etsy listing. It has never
-been exercised against an asset the owner answered and then revoked; `revoked_at`
-is read but no test revokes. That waits on the same trigger as the four limits
-above.
+**And then two cells took the repair apart, and the repair was wrong at the
+root.** The `ask_first`-is-answered rule — which the section above presented as
+the elegant resolution — was an over-reach that produced four defects from one
+mistake. `owner_boundary_subjects.publish` is not the subject of *publishing a
+page*. It is the subject of **placing an offer**, and `approveExperiment`
+writes that sentence verbatim before proposing the placement and recording the
+owner's answer. Reading it as a page rule meant:
+
+1. The page pass inventing a question the owner was never asked.
+2. A `stripe_create_payment_link` approval — disclosed to him as "a product, a
+   one-time price and a payment link exist on the shared account; no money
+   moves" — being consumed as his consent to put a web page in his name and
+   re-put it hourly. **Authority inferred from an adjacent capability**, which
+   is the single thing this institution's constitution forbids, committed by
+   the very function whose header claims to protect his word.
+3. `stopExperiment` revoking that act and then calling `republishRecord`, so a
+   stopped test's page would be held for ever with "Open now" and a Buy button
+   over a payment link the same function had just deactivated.
+4. A listing's boundary becoming unanswerable, because nothing anywhere
+   proposes a publishing act for a listing — making §25's promise that "the
+   entry is proposed to you and waits, every time" false in both halves.
+
+The rule is gone. `yourWord` is `'never' | null`. Whether an offer may be
+placed belongs to the door that places offers.
+
+**The harder half: a `never` did not take anything down.** Both cells found it
+independently, and it is the case the guarantee exists for — the owner reads a
+complaint and says "take it down". Dropping the page from the hourly pass does
+nothing to bytes already in the store: the Worker serves `page:<path>` from KV
+and `cloudflare_kv_delete` refuses any key beginning `page:`
+(`pages_are_never_deleted`), correctly, because a URL a customer holds is not
+something to break. So withdrawal is a **replacement**: the address keeps
+answering and says the thing is no longer offered, with the responsible
+business named, a person reachable and the refund promise repeated rather than
+linked away.
+
+One case is deliberately not resolved by code. Where the page carries a
+published outcome or a dated clarification, two of the owner's words meet —
+`never` is decisive, and truthful historical records are preserved when an
+offering closes — and replacing it would destroy the account the seal exists to
+keep. Which he meant is not a routine's to decide, so the page stays and the
+conflict is reported to him by name. An institution that resolves a conflict
+between two owner instructions silently, in either direction, is worse than one
+that asks.
+
+**Also closed this round, all from the two cells:** three callers reported a
+held page as a success (`prepareExposure` returned `published: true` with a
+404-ing URL and the owner's screen said "placed"; `standUpWorkshop` dropped
+`held` entirely; the owner's own Publish button said "published" when every
+page was held); the renderer branched on one shape of five, so `identity_only`
+— the shape that exists *because* the rows could not settle the channel —
+published the most, inverting the reader's own rule 2; the publication gate's
+new comment claimed all its checks read the bytes that would go up while the
+render used `replyRouteProven: false` and the staleness check used the real
+value; `/about` and `/privacy` asserted unconditionally that a marketplace
+product *has* an entry here when none is published; a closed entry showed a
+"Closed" pill with no note of why, and could not carry a dated clarification at
+all; and a delisted entry rendered a sentence beginning "— or" with nothing to
+be an alternative to.
+
+**Proof debt, stated plainly.** The marketplace refund promise on `/refunds`
+— "the promise is the same one … no form, no time limit … mine is not limited
+by it" — is *supported* by a recorded source observation (Etsy's own help page:
+the seller may refund at any time through Etsy Payments) and is consistent with
+the live listing. But no machinery stands behind it: nothing reads the venue,
+`recordVenueOrder` marks a fulfilment `delivered` on insert so no refund
+obligation can ever be raised for a venue sale, and the only refund executor is
+Stripe. It is an honest promise the owner keeps by hand, published in the same
+voice as one the institution enforces, and nothing would detect it being
+broken. Evidence maturity: **asserted, not observed.** It is recorded here
+rather than built around, and it moves on the same trigger as the four limits
+above — the second earned asset.

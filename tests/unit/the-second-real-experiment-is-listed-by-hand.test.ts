@@ -125,7 +125,16 @@ describe('the owner\'s part is one approval, then his own acts outside', () => {
     expect(asset.standing).toBe('experimental');
     expect((await query('SELECT amount_cents FROM owner_allowances WHERE product_id = ? AND withdrawn_at IS NULL', [String(asset.id)])).rows[0]).toMatchObject({ amount_cents: PROOF2_ALLOWANCE_CENTS });
     const b = (await query(`SELECT subject, mode FROM owner_boundaries WHERE product_id = ? AND lifted_at IS NULL ORDER BY subject`, [String(asset.id)])).rows;
-    expect(b).toEqual(expect.arrayContaining([expect.objectContaining({ subject: 'contact_people', mode: 'never' }), expect.objectContaining({ subject: 'publish', mode: 'never' })]));
+    // THE PUBLISHING WORD IS NARROWED, NOT LIFTED (owner decision, 21 September
+    // 2026, §25). It read `never` while the only shape the Workshop could put
+    // up was a full offer page, so "publish nothing" and "do not put my offer
+    // up as though it were yours" were one sentence. They are not any more: a
+    // portfolio entry may go up and the offer half stands, enforced where it
+    // belongs — the projection nulls the price and the pay link before the page
+    // is rendered, and the gate re-reads the rendered bytes for either.
+    expect(b).toEqual(expect.arrayContaining([expect.objectContaining({ subject: 'contact_people', mode: 'never' }), expect.objectContaining({ subject: 'publish', mode: 'ask_first' })]));
+    const publishing = (b as unknown as Array<Record<string, unknown>>).find((r) => r.subject === 'publish')!;
+    expect(String(publishing.mode)).toBe('ask_first');
     expect((await query('SELECT COUNT(*) AS n FROM proposed_acts WHERE experiment_id = ?', [X])).rows[0]).toMatchObject({ n: 0 });
     expect(redirectedTo(await post(`/foundry/experiments/${X}/allow`))).toContain('error=already');
     const v = (await getExperimentView(OWNER, X, NOW))!;
