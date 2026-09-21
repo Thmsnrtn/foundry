@@ -299,3 +299,95 @@ repeated owner intervention that could safely go; a major usability defect in
 an important workflow; a demonstrable reduction of future burden. A future
 ambition is not on the list. A tranche is done when the row it touches carries
 new evidence in every dimension it claims — not when its tests pass.
+
+---
+
+## The independent review, reconciled (21 September 2026)
+
+An independent strategic review ("Astra") examined the institution from
+outside: its economic objective, its opportunity selection, the facts its safety
+rests on, its owner-authority semantics, its recovery posture and its private
+boundary. It is recorded **here**, in the map, rather than in a document of its
+own — a second governing document to store a reconciliation would be a second
+place for the institution's account of itself to drift from this one.
+
+Each finding carries a classification, where it lives in the code, and the
+smallest thing that would falsify the resolution. **Five findings were rejected
+or found already answered**, which is the part of a reconciliation most worth
+writing down: a review that is accepted wholesale has not been read.
+
+### Already resolved, with evidence
+
+| Finding | Where | The proof |
+|---|---|---|
+| Backups exist but a restore is unproven | `keeping.ts:208` | `restoreTheInstitution` gunzips into a named path, opens it as a separate client and refuses the live database. It was already exercised; what it verified was shallow, and **that** was the real finding — see below. |
+| Nothing preserves obligations in a degraded mode | `hand.ts:1407-1411`, `:1503`, `:1555` | `mayWrite` gates only new exposure. `carryWhatIsOwed` runs unconditionally on both passes and provider reconciliation runs before any pause check. Proven end to end in `stopping-is-not-abandoning`: a paused morning places nothing and refunds the buyer anyway. |
+| Authority is one global verdict | `consequence.ts:53-186` | The seven-rung ladder binds to the capability and the act, per act, with `absorbable = 0` on the two rungs no policy may ever pre-authorise. What was global was the owner-facing *rollup*, and that is a real gap — see "accepted narrow". |
+| The owner's entry point is missing (`apexmicro.ai/foundry` → 404) | `the-workshop-has-one-public-face` | Correct by design. The Workshop is the only public voice; a Foundry door on the public domain would be the rule broken, not a feature added. The owner's entry is `foundry-intel.fly.dev/foundry`, which answers 401. Recorded in OWNER_DECISIONS_PENDING as resolved so the next reviewer reads the answer. |
+| The same-volume backup limitation is hidden | `keeping.ts:51-56`, `fly.private.toml:100-105` | Stated in the source and in the deploy config, in both places, before anybody asked. |
+
+### Rejected, with a reason
+
+| Finding | Why it is wrong |
+|---|---|
+| The order record holds the buyer's email, so `persistent_personal_data` is present | It does not. `buyerAddressFor` (`payment-link.ts:183`) reads `receipt_email` / `billing_details.email` from Stripe **at delivery**; what persists is a keyed HMAC of the counterparty and nothing else. I had already set the fact to `present: 1` on the reviewer's reasoning before checking, and reverted it. This is the single most important correction of the reconciliation: an inference from a plausible model of the system nearly became a recorded observation about it. |
+
+### Accepted, and narrow
+
+| Finding | What was actually wrong | Where |
+|---|---|---|
+| MRR is treated as the definition of success | The ownership verdict read MRR minus the AI bill and could not see a one-time sale, an experimental asset, or the institution's own ledger. Rebuilt on `economic_events`; money and owner time are separate judgements; `OBJECTIVE.md` reconciled to RIVER. | `burden.ts`, `OBJECTIVE.md` (`bcdf3cee`) |
+| A polite question can be executed as an instruction | It was ordering, not parsing: `isAsking` ran before the reader that recognises an instruction inside a question. A genuine enquiry naming a consequential act now asks one clarification. | `the-door.ts` (`ad8a78c2`) |
+| A recipe's intention is recorded as an observed fact | `basis` now gates binding policy; a structural fact that is `assumed` cannot satisfy a requirement, and `enforced` must name what enforces it. One of the three examples given was wrong (above). | migration 332, `offer-composition.ts` (`cbec68c1`, `d9942979`) |
+| Shared exposure is read as economic inferiority | `makesItWorse` meant "shared, therefore worse". It is now deepening a way to FAIL with no new ground; shared reach reports as reuse, with the concentration still named. | `resilience.ts` (`4d08e54e`) |
+| The factory defines the opportunity space | True, and now stated rather than fixed: `theAperture()` derives what could not have come through — the five effort seeds, the ten markers, the one makeable form of five, the $5–49 single payment — from the live facts. The coverage exercise finds that not one of seven forms outside the recipe was rejected on economic grounds. | `the-aperture.ts` (`4d08e54e`) |
+| Distribution has no economic role | It entered one step too late, as free text on the experiment design after a candidate had won. A candidate can no longer earn a company with nothing on record about how its buyers would be reached. | `validation.ts` (`4d08e54e`) |
+| A backup is not a recovery | The restore verified a table count and a founder count. It now reconstructs what is owed, money taken and returned, live spending authority and live assets, compared against the live database — and the test that matters requires it to report a **difference**. | `keeping.ts` (`34fd213a`) |
+| Autonomy is reported as one estate-wide verdict | Added the reading by kind of act, on the door's own seven rungs. | `autonomy-map.ts` (`34fd213a`) |
+| A learning claim has no denominator | A null result now carries how many people received it and what a silence that size could not have detected. | `what-happened.ts` (`d07ce02e`) |
+
+### Accepted as a failure class, not an example
+
+- **Two readings of one fact disagree unless one is derived from the other.**
+  Every repair above that could be derived was derived: the aperture reads the
+  live seeds and the registry's own `needs` strings; the restore comparison is
+  one statement run against two connections; the autonomy rungs are read from
+  the constitutional table. A hand-kept list is accurate the day it is written.
+- **A filter right on one side of a comparison and absent on the other does not
+  fail loudly — it agrees, silently, about the wrong world.** Found in
+  `portfolioFitOf`, one query below a file header forbidding exactly that.
+- **A rebuild takes its guards with it.** Migration 332 dropped and recreated
+  `structural_facts` and silently lost two inherited triggers.
+
+### Deferred, on a named trigger
+
+| What | The trigger |
+|---|---|
+| An external liveness witness | Needs a third party, an account and a bill. Recorded as the owner's decision. Until then the absence page states the undetectable-outage window beside what is owed. |
+| A production Clerk instance | PENDING 24. Needs an account action and a new secret; the code reads both from the environment already. |
+| Repository visibility | PENDING 23. Not an engineering decision, and changing it would not undo any disclosure already made. |
+| Buying any unmakeable product form | A capability is bought by a specific evidenced opportunity, never by an empty slot in a registry. The trigger is an opportunity that justifies it, not the gap itself. |
+
+### The institution's own development economics, after this wave
+
+**What it can now do safely that it could not.** Judge a candidate without
+mistaking a shared channel for a shared fault. Say out loud what it could not
+have found. Refuse to take a candidate forward with nothing on record about how
+its buyers would be reached. Tell its owner what stopping would leave on his
+desk before he stops. Demonstrate that a copy reconstructs what is owed rather
+than that a file opens. State how long it could be dead before anybody noticed.
+Publish a dated correction without a sealed byte moving.
+
+**What is blocked by remaining work.** Nothing in the opportunity space is
+blocked by *code*; it is blocked by the aperture, and the aperture is now
+visible rather than repaired — deliberately, because widening it means buying a
+capability, and that needs an opportunity that justifies it. The two external
+dependencies (PENDING 23, 24) block nothing operational.
+
+**Would a simpler implementation have been equivalent?** For three of these,
+yes and it was taken: no new tables for distribution, no `if_it_works` column on
+a constitutional vocabulary, no new document for this register. For the
+clarification, no — the additive column with its three refusals is the smallest
+thing that can publish a correction and still prove the record did not move. The
+one place complexity was genuinely added is `winding-down.ts`, and it earns its
+place by answering a question no existing surface could.
