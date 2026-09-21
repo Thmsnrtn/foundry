@@ -13,6 +13,18 @@ import { postalLines } from './settings.js';
 const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const paras = (s: string): string => s.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('\n');
 const money = (p: NonNullable<PublicExperiment['price']>): string => p.label;
+// A HEADING IS NOT A METADATA LINE. The dates beside "Opened" and "Closed" stay
+// as the record spells them; a dated footnote reads as a sentence, so its date
+// is written the way a sentence writes one. Parsed rather than formatted with a
+// locale, because the day this renders differently in another region is the day
+// two readers disagree about when a correction was made.
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July',
+  'August', 'September', 'October', 'November', 'December'];
+const longDate = (iso: string): string => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(iso);
+  if (!m) return iso;
+  return `${String(Number(m[3]))} ${MONTHS[Number(m[2]) - 1] ?? m[2]} ${m[1]}`;
+};
 /**
  * JUST THE AMOUNT. `label` carries the terms as well ("$29, one time"), which
  * reads correctly on its own and badly inside a sentence — "the whole $29, one
@@ -230,6 +242,9 @@ ${paras(x.limits)}
 ${paras(x.sources)}
 <h2>Who I am</h2>
 ${paras(x.note)}
+${x.clarification ? `<hr>
+<h2>Clarification, ${esc(longDate(x.clarification.on))}</h2>
+${paras(x.clarification.text)}` : ''}
 ${asking ? `<h2>Anything you'd like to say?</h2>
 <p>If you've got a view, one answer here is enough. I read them before writing to anyone else, and a no here applies to everything I do, not just this.</p>
 <form method="POST" action="${x.path}/continue" class="card">

@@ -12,7 +12,7 @@ around each item.
 
 ---
 
-# TEN ANSWERED, FOUR PENDING
+# TEN ANSWERED, SIX PENDING
 
 The owner answered the first eight queued decisions; those are recorded below as
 settled, with the record of what was asked and why in git history. **§10 and §14 are now answered and implemented** — see RESOLVED 9 and RESOLVED
@@ -28,6 +28,12 @@ the end of this file and are in force now.**
 
 §14 is a product and legal position rather than an engineering mechanism, which
 is why it is here rather than decided in git history.
+
+**Two more were added on 2026-09-21** (PENDING 23, the repository's visibility;
+PENDING 24, the development-instance Clerk key running in production). Both came
+out of verifying an independent review's claims against the live deployment
+rather than accepting them, and both are external or account decisions rather
+than engineering ones. Neither blocks anything.
 
 **Counsel debt is a kind of proof debt** (`PROOF_PROGRAM.md`): a conclusion
 software cannot responsibly draw. Each item below states the question, what
@@ -1074,3 +1080,90 @@ sealed body copy:
 This is adjacent to PENDING 21: if the result is treated as void, the public
 line is wrong rather than merely unqualified, and option 1 stops being
 available.
+
+---
+
+## PENDING 23 — The repository that holds all of this is public: **OWNER** (2026-09-21)
+
+An independent review asserted it, and I checked rather than repeating it. The
+GitHub API reports `"private": false, "visibility": "public"` for the
+repository this institution is built in. Anyone who finds it can read every
+line of it.
+
+**What is not true, and I checked that too.** No secret is committed. The only
+tracked files whose names mention credentials are `.env.example`, migrations and
+source modules; `.env`, `.env.local` and `.env.production` are all gitignored.
+I make **no claim about the repository's history** — I did not walk it, and a
+statement that nothing was ever committed and removed is not one I am in a
+position to make.
+
+**What being public actually exposes.** Not keys. It exposes the institution's
+reasoning: every gate and exactly how it is enforced, the shape of the charter
+and what it refuses, the contents of Experiment 001 including which businesses
+were written to and the exact words used, the economic projections and their
+assumptions, and this file — which is a running record of decisions you have
+not yet made. Somebody deciding whether to buy from the Workshop could read the
+argument the Workshop had with itself about whether to sell to them.
+
+**Two things it is worth being precise about.**
+
+1. **Changing the setting does not undo disclosure.** Anything already cloned,
+   forked, cached by a search engine or read by a model stays read. Making the
+   repository private from here stops future reading; it does not retract past
+   reading, and nobody can tell you how much of either has happened.
+2. **The reasoning being public is not obviously a cost.** A workshop whose
+   public voice is "I try small things and tell you how they went" is a
+   workshop whose open record is an asset, not a leak. The argument for closing
+   it is about the outreach records and about this file, not about the code.
+
+**What I will not do.** I will not change the visibility. It is not a technical
+decision and the review directive is explicit that it is not mine to take. If
+you want it private, that is one setting in GitHub and I can tell you exactly
+what breaks (nothing — the deploy uses a token that works either way).
+
+---
+
+## PENDING 24 — Production signs people in with a development-instance key: **OWNER** (2026-09-21)
+
+The live sign-in page at `foundry-intel.fly.dev` serves a Clerk **publishable**
+key beginning `pk_test_`. That is a development instance running in production.
+
+**What this is not.** It is not an authentication bypass, and I want to be
+exact because a `test` prefix invites the inference: `/foundry` on the live
+deployment returns **401** to an unauthenticated request. The door is shut. A
+publishable key is also not a secret — it is meant to be in the page.
+
+**What it actually costs.** Clerk's development instances are built for
+development: they carry lower rate limits, shorter session lifetimes, a
+development-mode banner in some flows, and — the one that matters — Clerk does
+not guarantee their durability the way it does a production instance's. A
+development instance can be reset. If it were, you would be locked out of your
+own institution until a new one was provisioned, and the machine would keep
+running unattended with obligations on it and nobody able to open the door.
+
+**Why this is yours and not mine.** Provisioning a production Clerk instance
+means an account action on a third-party service, a new secret key in Fly's
+secrets, and a domain configuration. Each of those is an external dependency,
+and none is something I may do on my own authority. The code change on this
+side is nil: the keys are read from the environment already.
+
+**What I would do if you asked.** Nothing until you have created the production
+instance and set `CLERK_SECRET_KEY` and `CLERK_PUBLISHABLE_KEY` in Fly. After
+that it is a deploy and a read-back.
+
+---
+
+## RESOLVED — `apexmicro.ai/foundry` returns 404, and that is correct (2026-09-21)
+
+Recorded because an independent review reported it as a defect, and it is worth
+having the answer written down rather than re-derived by the next reviewer.
+
+The public Workshop serves exactly nine paths and `/foundry` is not one of them.
+`the-workshop-has-one-public-face` asserts the 404 directly. The owner's
+surface lives on the private deployment, behind authentication, and the
+standing rule is that the Workshop is the only public voice — so a Foundry
+entry point on the public domain would be the rule being broken, not a missing
+feature.
+
+The owner's entry point is `foundry-intel.fly.dev/foundry`, which returns 401
+until Clerk has signed you in. Nothing to fix.

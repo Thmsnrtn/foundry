@@ -25,6 +25,11 @@ export interface PublicExperiment {
   /** An excerpt of what a buyer actually receives, when the thing has one. */
   sample: string | null;
   status: PublicStatus; statusLabel: string; statusLine: string; outcome: string | null;
+  /**
+   * A dated later finding, added beneath the record without changing a word of
+   * it. Null for every test that has none, which is all of them but one.
+   */
+  clarification: { on: string; text: string } | null;
   price: { amountCents: number; currency: string; label: string } | null;
   recurring: false;
   payUrl: string | null;
@@ -37,7 +42,7 @@ export interface PublicExperiment {
 /** The fields the public shape carries, as a record the tests can read. */
 export const PUBLIC_EXPERIMENT_FIELDS = [
   'number', 'slug', 'path', 'listed', 'title', 'summary', 'who', 'what', 'limits', 'sources', 'selection', 'note', 'sample',
-  'status', 'statusLabel', 'statusLine', 'outcome', 'price', 'recurring', 'payUrl', 'openedOn', 'closedOn', 'updatedOn', 'supersedes', 'successor', 'graduatedTo',
+  'status', 'statusLabel', 'statusLine', 'outcome', 'clarification', 'price', 'recurring', 'payUrl', 'openedOn', 'closedOn', 'updatedOn', 'supersedes', 'successor', 'graduatedTo',
 ] as const;
 
 type Row = Record<string, unknown>;
@@ -123,6 +128,8 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
     limits: String(r.public_limits), sources: String(r.public_sources), selection: String(r.public_selection), note: String(r.public_note),
     sample: r.public_sample == null || String(r.public_sample).trim() === '' ? null : String(r.public_sample),
     status, statusLabel: STATUS_LABELS[status], statusLine, outcome,
+    clarification: r.public_clarification == null || r.public_clarification_at == null ? null
+      : { on: String(r.public_clarification_at), text: String(r.public_clarification) },
     price, recurring: false,
     // The way to pay is public only while the offer stands; a closed test's
     // link is down and the page says so rather than pointing at it.

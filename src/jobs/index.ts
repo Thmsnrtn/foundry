@@ -3250,6 +3250,13 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
           try {
             // The program first, so a page that needs the new program (a file
             // served as what it is) is never put up under the old one.
+            // THE RECORD FIRST, for the same reason as the program: a page
+            // republished a moment before its own record was brought current
+            // is a page that carries yesterday's record for an hour, and the
+            // one thing a correction must not be is late by a cycle.
+            const { keepProof1sRecordCurrent } = await import('../services/venture/proof-1.js');
+            const record = await keepProof1sRecordCurrent(founderId);
+            if (record === 'written') logger.info(`public_workshop_tick: ${founderId} added the authorised clarification to Experiment 001's record`, { jobName: 'public_workshop_tick' });
             const program = await keepTheProgramCurrent(founderId);
             if (program === 'deployed') logger.info(`public_workshop_tick: ${founderId} program brought current with its reviewed text`, { jobName: 'public_workshop_tick' });
             const site = await publishSite(founderId, 'institution:public_workshop_tick');

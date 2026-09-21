@@ -204,6 +204,43 @@ export const PROOF1_PUBLIC = {
   sample: '1. Framingham Housing Authority — On-Call Carpentry Services\n\nBid # BD-26-1507-FHA01-JJB01-132802 · Bid opening: September 14, 2026, 2:00 PM · Closing soon\n\nWhat the notice says: "invites written quotes from Contractors for On-Call Carpentry Services for the FHA in Framingham, MA."\n\nContact: the housing authority\'s procurement officer, by name, with email and phone.\n\nAlso worth knowing: electronic quotes are not accepted; see the ad attached to the notice.\n\nWhy it may fit: a standing carpentry contract with a housing authority. How broad the scope is won\'t be clear until you read the ad.\n\nSource: a link to the notice on COMMBUYS.\n\nThe other twenty-two look like that too.',
 } as const;
 
+/**
+ * A LATER FINDING ABOUT EXPERIMENT 001, DATED, AND ADDED TO THE RECORD RATHER
+ * THAN WRITTEN INTO IT.
+ *
+ * The owner authorised a narrow, clearly dated public clarification, on terms
+ * that are the shape of the text below: preserve the original sealed
+ * prediction, settlement, receipts and historical record exactly as they are;
+ * do not rewrite the experiment; do not present it as successful; keep it
+ * factual, concise, and clearly identified as a later finding; and do not use
+ * the authorisation to change the offer, restart outreach, contact previous
+ * recipients, or publish anything further about him.
+ *
+ * WHAT IT SAYS AND WHAT IT DOES NOT. The result is unchanged and is stated
+ * first: nobody bought inside the window. What was found afterwards is that
+ * the reply route for those messages was unrouted, so a reply to them would
+ * not have arrived — which does not move the result and does change what the
+ * result is EVIDENCE ABOUT. A recorded silence from people who could not have
+ * been heard is not a recorded silence from people who chose not to answer.
+ *
+ * IT SAYS NOTHING ABOUT THE REPAIR, deliberately. The reply route has been
+ * proven since, and a stranger reading a public record does not need the
+ * institution's account of its own recovery; they need to know what the record
+ * they are reading can and cannot support. A clarification that spent half its
+ * length on the fix would be a press release with a date on it.
+ *
+ * AND IT IS IMPERSONAL. This is a footnote to a record, in the voice the record
+ * is kept in, not a message from anybody to anybody.
+ */
+export const PROOF1_CLARIFICATION = {
+  on: '2026-09-21',
+  text: 'This pilot did not meet its stated condition: there were no purchases '
+    + 'within its seven-day window. A defect found after it closed left the reply '
+    + 'route for these messages unrouted, so a reply to them would not have '
+    + 'arrived. The recorded result stands and is not evidence about whether '
+    + 'recipients attempted to respond. The text above is unchanged.',
+} as const;
+
 export interface Proof1Seed { experimentId: string; opportunityId: string; recipientsAdded: number; alreadyExisted: boolean }
 
 /**
@@ -342,4 +379,47 @@ async function refreshMaterials(founderId: string, experimentId: string): Promis
   if (!(await same('offer_template', OUTREACH_TEMPLATE_MD))) await recordMaterial({ founderId, experimentId, kind: 'offer_template', title: PROOF1_PLAN.offerSubject, body: OUTREACH_TEMPLATE_MD, by });
   const plan = JSON.stringify(PROOF1_PLAN);
   if (!(await same('offer_shape', plan))) await recordMaterial({ founderId, experimentId, kind: 'offer_shape', title: 'The offer\'s shape', body: plan, by });
+}
+
+/**
+ * KEEP EXPERIMENT 001'S RECORD CURRENT, which today means one thing: put the
+ * authorised clarification on the page once the test has ended, and never a
+ * second time.
+ *
+ * Idempotent by the row it writes, not by a flag: a clarification already on
+ * the record is left exactly as it is, and the table refuses a reworded one
+ * that keeps the old date. The workshop tick re-renders every live page from
+ * rows and publishes only what differs, so this is the whole of the
+ * publication — there is no separate act to remember, and no way for the
+ * source and the page to fall out of step.
+ *
+ * It writes nothing if the test has not ended, and the table would refuse it
+ * if it tried. Both, because a rule kept in one place is a rule somebody
+ * eventually reads past.
+ */
+export async function keepProof1sRecordCurrent(founderId: string): Promise<'written' | 'already' | 'not_yet' | 'no_record'> {
+  const experimentId = await findProof1(founderId);
+  if (experimentId === null) return 'no_record';
+  const row = (await query(
+    `SELECT public_clarification FROM public_experiments WHERE experiment_id = ?`,
+    [experimentId])).rows[0] as Record<string, unknown> | undefined;
+  if (!row) return 'no_record';
+  if (row.public_clarification != null) return 'already';
+
+  const ended = (await query(
+    `SELECT 1 FROM venture_experiments e
+      WHERE e.id = ?
+        AND (e.ran_at IS NOT NULL OR e.decision = 'declined' OR e.validity = 'invalid'
+             OR EXISTS (SELECT 1 FROM experiment_exposures x
+                         WHERE x.experiment_id = e.id AND x.withdrawn_at IS NOT NULL))`,
+    [experimentId])).rows.length > 0;
+  if (!ended) return 'not_yet';
+
+  await query(
+    `UPDATE public_experiments
+        SET public_clarification = ?, public_clarification_at = ?,
+            updated_at = datetime('now')
+      WHERE experiment_id = ? AND public_clarification IS NULL`,
+    [PROOF1_CLARIFICATION.text, PROOF1_CLARIFICATION.on, experimentId]);
+  return 'written';
 }

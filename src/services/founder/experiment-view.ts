@@ -269,15 +269,20 @@ export async function getExperimentView(founderId: string, experimentId: string,
   // the same till, including what its emptiness does and does not mean.
   const moneySoFar = await moneyOfExperiment(experimentId);
   let state: ExperimentState; let stateLabel: string; let stateDetail: string;
+  // HOISTED, BECAUSE THE CLAIM NEEDS IT. How many people actually received the
+  // offer is the denominator of every null result, and it was computed one line
+  // after the sentence that needed it. Derived here from the same events the
+  // tiles count, so the page cannot say nineteen in one place and something
+  // else in another.
+  const delivered = said.filter((s) => s.kind === 'offer_delivered').length;
   const outcome = outcomeFromRow({
     decision: e.decision, validity: e.validity, verdict: e.verdict, grade: graded.grade == null ? null : String(graded.grade),
     what_happened: e.whatHappened, ran_at: e.ranAt, retired_at: e.retiredAt, retired_because: e.retiredBecause,
     superseded_by: e.supersededBy, invalidated_at: e.invalidatedAt, decided_at: e.decidedAt,
     cannot_prove: graded.cannot_prove == null ? null : String(graded.cannot_prove),
     stopped_by_owner: withdrawn || Boolean(act && !actLive),
-    placed: x !== null,
+    placed: x !== null, reached: delivered,
   });
-  const delivered = said.filter((s) => s.kind === 'offer_delivered').length;
   const payments = said.filter((s) => s.kind === 'payment');
   const refunds = said.filter((s) => s.kind === 'refund');
   const paidCents = payments.reduce((n, s) => n + (s.amountCents ?? 0), 0);

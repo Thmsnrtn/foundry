@@ -64,6 +64,23 @@ export async function recordPublicOutcome(experimentId: string, outcome: string)
   await query(`UPDATE public_experiments SET public_outcome = ?, updated_at = datetime('now') WHERE experiment_id = ?`, [outcome.trim(), experimentId]);
 }
 
+/**
+ * A DATED LATER FINDING, ADDED BENEATH THE RECORD.
+ *
+ * Not an edit. The sealed copy and the outcome are untouched by this statement
+ * — the row refuses a write that moved both at once — and once it is published
+ * it cannot be withdrawn, nor reworded while keeping its date. A footnote that
+ * can quietly disappear is a draft the public happened to see.
+ */
+export async function recordPublicClarification(
+  experimentId: string, text: string, on: string,
+): Promise<void> {
+  await query(
+    `UPDATE public_experiments SET public_clarification = ?, public_clarification_at = ?,
+            updated_at = datetime('now')
+      WHERE experiment_id = ?`, [text.trim(), on, experimentId]);
+}
+
 /** Graduation is a promotion the owner records; the page stays and points on. */
 export async function markGraduated(experimentId: string, url: string): Promise<void> {
   if (!/^https:\/\/[^\s/]+/.test(url)) throw new Error('a graduated venture lives at an https address');
