@@ -2654,3 +2654,34 @@ honest version of "converged" here is "the findings got smaller", not "there
 are none".
 
 [deploy-private]
+
+### Read back from production (21 September 2026, 19:34–20:05 UTC)
+
+`foundry-intel` runs `8ee765ac`. Health `ok`; database, AI, Clerk and scheduler
+`ok`; loops `ok` with none stopped; storage on the volume. The owner's door
+answers 401, the Workshop answers 200, and `apexmicro.ai/foundry` answers 404 —
+the designed behaviour, not a gap.
+
+**Experiment 001's page, diffed byte for byte against the capture taken before
+the deploy.** Two differences and no others:
+
+1. **The clarification, added**, three lines, beneath "Who I am" — so its last
+   sentence is a true description of the page. Every sealed section is
+   byte-identical: title, summary, who, what, limits, sources, selection, note
+   and the specimen all unchanged.
+2. **A claim withdrawn**, below the footnote: *"Replies to anything I send come
+   straight back to me."* is gone.
+
+The second is worth naming rather than filing as noise. That sentence was being
+published without evidence — it was true of an intention and not of the route
+the nineteen were given. W2 bound it to proof: `workshopFacts` defaults
+`replyRouteProven` to false, so a caller who has not read the evidence does not
+get the claim. Its absence today therefore means the live route has not yet
+proven itself on this deployment, and the page says nothing in its place rather
+than saying something it cannot show. It should return once the daily probe
+completes a round trip; if it does not, that is a real finding about the route
+and not about the page.
+
+**What this release did to the public record, stated plainly:** it added one
+dated correction and removed one unevidenced claim. Nothing else the world can
+see has changed.
