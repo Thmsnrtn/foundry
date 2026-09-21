@@ -104,7 +104,21 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
   else status = 'preparing';
 
   const outcome = r.public_outcome == null ? null : String(r.public_outcome);
-  const statusLine = status === 'graduated' ? `Graduated — this experiment now operates independently.`
+  const clarified = r.public_clarification != null;
+  // A CORRECTED RECORD DOES NOT LOSE THE RESULT IT CORRECTS.
+  //
+  // The status line is computed from OTHER tables — the asset's standing and
+  // the experiment's verdict — so it is not frozen by the rule that freezes the
+  // record's own columns. A review cell walked it: mark the asset earned and a
+  // clarified, failed test renders "Operating — this remains a small Apex Micro
+  // product", with the recorded outcome not merely moved but DISCARDED, because
+  // only the `closed` branch ever reads it.
+  //
+  // The transition itself is the owner's to make and stays his. What may not
+  // happen is a page that carries a dated correction about a result while the
+  // result itself has been dropped off it.
+  const statusLine = clarified && outcome !== null ? outcome
+    : status === 'graduated' ? `Graduated — this experiment now operates independently.`
     : status === 'operating' ? 'Operating — this remains a small Apex Micro product.'
       : status === 'closed' ? (outcome ?? (r.ran_at != null
         ? (String(r.verdict) === 'as_predicted'

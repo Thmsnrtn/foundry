@@ -277,8 +277,11 @@ export interface Recovered {
   what: string;
   /** What the live database says, and what the copy says. Equal, or it is not recovered. */
   live: number;
-  inTheCopy: number;
+  /** Null when the copy could not answer at all — which is never the same as agreeing. */
+  inTheCopy: number | null;
   same: boolean;
+  /** Why it could not be asked, when it could not. */
+  because?: string;
 }
 
 /**
@@ -319,11 +322,27 @@ export async function restoreTheInstitution(
       // A TABLE THE COPY PREDATES IS NOT A DISAGREEMENT. A copy taken before a
       // migration added one of these reads as absent rather than as wrong, and
       // saying "0 where live says 3" would be a lie about what happened.
+      const live = Number((((await query(l.sql)).rows[0]) as Record<string, unknown>).n);
       let inTheCopy: number;
       try {
         inTheCopy = Number((((await restored.execute(l.sql)).rows[0]) as Record<string, unknown>).n);
-      } catch { continue; }
-      const live = Number((((await query(l.sql)).rows[0]) as Record<string, unknown>).n);
+      } catch (err) {
+        // A READING THAT CANNOT BE TAKEN IS NOT A READING THAT AGREED, and the
+        // first version of this dropped it from the list entirely. A third
+        // review cell found what that costs: `OPEN_OBLIGATION` names columns
+        // added in migration 326, so restoring a sixty-day-old copy — well
+        // inside the retention this file defends — silently removed all three
+        // buyer-obligation readings, and the operator read seven greens with
+        // nothing saying the comparison had not been made. The repair turned
+        // "reports it wrong" into "does not report it", on the one reading
+        // whose absence the header of this file calls the answer it must never
+        // give.
+        liabilities.push({
+          what: l.what, live, inTheCopy: null, same: false,
+          because: `the copy could not answer this — ${err instanceof Error ? err.message : String(err)}`,
+        });
+        continue;
+      }
       liabilities.push({ what: l.what, live, inTheCopy, same: live === inTheCopy });
     }
     return { bytes: (await stat(into)).size, tables, founders, liabilities };

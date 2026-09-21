@@ -8495,6 +8495,15 @@ BEGIN
   SELECT RAISE(ABORT,'public_experiment:cannot_arrive_concluded') WHERE NEW.public_outcome IS NOT NULL OR NEW.graduated_to_url IS NOT NULL;
   SELECT RAISE(ABORT,'public_experiment:cannot_arrive_clarified')
     WHERE NEW.public_clarification IS NOT NULL OR NEW.public_clarification_at IS NOT NULL;
+
+  -- THE DOOR REPLACE COMES THROUGH.
+  SELECT RAISE(ABORT,'public_experiment:cannot_replace_a_clarified_record')
+    WHERE EXISTS (SELECT 1 FROM public_experiments x
+                   WHERE x.public_clarification IS NOT NULL
+                     AND (x.experiment_id = NEW.experiment_id
+                       OR (x.founder_id = NEW.founder_id AND x.slug = NEW.slug)
+                       OR (x.founder_id = NEW.founder_id AND x.number = NEW.number)));
+
   SELECT RAISE(ABORT,'public_experiment:supersedes_unknown') WHERE NEW.supersedes_experiment_id IS NOT NULL AND NOT EXISTS (
     SELECT 1 FROM venture_experiments e WHERE e.id = NEW.supersedes_experiment_id AND e.founder_id = NEW.founder_id);
 END;
@@ -8584,10 +8593,20 @@ END;
 CREATE TRIGGER public_experiment_is_not_deleted
 BEFORE DELETE ON public_experiments
 BEGIN
+  -- ERASURE IS THE ONE LEGITIMATE END. A published record is permanent against
+  -- its keeper and not against the person it belongs to: an institution that
+  -- could refuse to forget somebody because it had published a correction
+  -- about them would have made its own bookkeeping into their problem. The
+  -- exemption is the same one migration 331 uses for an outage's history, and
+  -- it is narrow: an erasure has to be scheduled on one of this founder's own
+  -- products before anything here may go.
   SELECT RAISE(ABORT,'public_experiment:a_published_record_is_not_deleted')
-    WHERE OLD.public_clarification IS NOT NULL
-       OR EXISTS (SELECT 1 FROM public_publications p
-                   WHERE p.experiment_id = OLD.experiment_id AND p.superseded_at IS NULL);
+    WHERE (OLD.public_clarification IS NOT NULL
+        OR EXISTS (SELECT 1 FROM public_publications p
+                    WHERE p.experiment_id = OLD.experiment_id AND p.superseded_at IS NULL))
+      AND NOT EXISTS (SELECT 1 FROM products p
+                       WHERE p.owner_id = OLD.founder_id
+                         AND p.erasure_scheduled_at IS NOT NULL);
 END;
 CREATE TRIGGER public_publication_guard
 BEFORE INSERT ON public_publications

@@ -66,6 +66,12 @@ export interface OutcomeRow {
   /** Whether an offer was ever placed. Unknown (undefined) where the rows are not to hand. */
   placed?: boolean;
   /**
+   * HOW MANY PURCHASES THE WORLD ACTUALLY REPORTED. Zero is what makes the
+   * bound below applicable; anything else makes it arithmetic about an event
+   * that happened.
+   */
+  purchases?: number;
+  /**
    * HOW MANY PEOPLE ACTUALLY RECEIVED IT — the denominator, which a null result
    * is meaningless without and which no surface used to carry.
    *
@@ -120,7 +126,7 @@ export function couldNotHaveSeen(reached: number): string | null {
 }
 
 /** The prose for what a settled result establishes, lifted from the Ask answer; one copy. */
-function establishing(word: 'as predicted' | 'partly' | 'surprised', cannotProve: string | null, reached?: number): { establishes: string; doesNotEstablish: string } {
+function establishing(word: 'as predicted' | 'partly' | 'surprised', cannotProve: string | null, reached?: number, purchases?: number): { establishes: string; doesNotEstablish: string } {
   const limit = cannotProve ? ` It could not establish: ${cannotProve.trim().replace(/\.+$/, '')}.` : '';
   // THE DENOMINATOR GOES WITH THE CLAIM, not in a footnote somewhere else. A
   // result whose size is on a different page is a result most people will read
@@ -134,7 +140,14 @@ function establishing(word: 'as predicted' | 'partly' | 'surprised', cannotProve
   // read his one working result as statistically empty and walked away from the
   // only thing that ever sold. Both review cells found it independently, which
   // is how obvious it is once somebody says it out loud.
-  const size = reached === undefined || word !== 'surprised' ? '' : (() => {
+  //
+  // AND THE GATE IS THE COUNT, NOT THE WORD. A third reading found that
+  // `surprised` is not a zero-purchase verdict: `outcome.ts` writes it whenever
+  // the kill number is breached, and a test disproved by one extra delivery can
+  // take a sale on day five and still settle `surprised`. Gating on the word
+  // narrowed the defect and did not close it. Zero is the only thing that makes
+  // a zero-events bound a true sentence.
+  const size = reached === undefined || word !== 'surprised' || (purchases ?? 0) > 0 ? '' : (() => {
     const s = couldNotHaveSeen(reached);
     return s === null ? '' : ` ${s}`;
   })();
@@ -186,7 +199,7 @@ export function outcomeFromRow(r: OutcomeRow): Outcome {
       : word === 'partly' ? 'Some of what was predicted happened, fewer than the rule asked for.'
         : 'The prediction did not hold.')
       + (r.placed === false ? ' Nothing was sent: no offer was ever placed, so nobody could buy.' : '');
-    const e = establishing(word, str(r.cannot_prove), r.reached);
+    const e = establishing(word, str(r.cannot_prove), r.reached, r.purchases);
     return { word, label: cap(word), meaning, reason: str(r.what_happened), establishes: e.establishes, doesNotEstablish: e.doesNotEstablish,
       when: str(r.ran_at), settled: true, concluded: true };
   }
@@ -214,6 +227,11 @@ export const REACHED_SQL = `(SELECT COUNT(*) FROM business_outcome_events b
    JOIN experiment_exposures xe ON xe.id = b.exposure_id
   WHERE xe.experiment_id = e.id AND b.kind = 'offer_delivered')`;
 
+/** And how many of them bought, which is what decides whether "silence" is a word this result may use. */
+export const PURCHASES_SQL = `(SELECT COUNT(*) FROM business_outcome_events b
+   JOIN experiment_exposures xe ON xe.id = b.exposure_id
+  WHERE xe.experiment_id = e.id AND b.kind = 'payment')`;
+
 /** The SQL that reads the grade the world wrote beside a test's verdict. */
 export const GRADE_SQL = `(SELECT g.verdict FROM prediction_resolutions g
    WHERE g.kind = 'venture_experiment' AND g.prediction_id = e.id
@@ -224,13 +242,13 @@ export async function outcomeOf(experimentId: string): Promise<Outcome | null> {
   const r = (await query(
     `SELECT e.decision, e.validity, e.verdict, e.what_happened, e.ran_at, e.retired_at, e.retired_because,
             e.superseded_by, e.invalidated_at, e.invalid_because, e.decided_at, d.cannot_prove,
-            ${GRADE_SQL} AS grade, ${REACHED_SQL} AS reached,
+            ${GRADE_SQL} AS grade, ${REACHED_SQL} AS reached, ${PURCHASES_SQL} AS purchases,
             EXISTS (SELECT 1 FROM experiment_exposures x WHERE x.experiment_id = e.id AND x.withdrawn_at IS NOT NULL) AS withdrawn,
             EXISTS (SELECT 1 FROM experiment_exposures x WHERE x.experiment_id = e.id) AS placed
        FROM venture_experiments e LEFT JOIN probe_designs d ON d.experiment_id = e.id
       WHERE e.id = ?`, [experimentId])).rows[0] as Record<string, unknown> | undefined;
   if (!r) return null;
-  const o = outcomeFromRow({ ...(r as OutcomeRow), stopped_by_owner: Number(r.withdrawn) === 1, placed: Number(r.placed) === 1, reached: Number(r.reached) });
+  const o = outcomeFromRow({ ...(r as OutcomeRow), stopped_by_owner: Number(r.withdrawn) === 1, placed: Number(r.placed) === 1, reached: Number(r.reached), purchases: Number(r.purchases) });
   // AND WHAT THE INSTRUMENT COSTS THE CLAIM, in the one vocabulary.
   //
   // The correction used to live on two surfaces, because two surfaces had been

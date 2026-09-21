@@ -312,7 +312,7 @@ export async function portfolioFitOf(input: {
               ? 'you already depend on across more than one business'
               : 'you already carry'} - and brings nothing new. Another one of these is `
             + `not another income stream; it is another way the same failure hurts.${reach}`
-          : newGround.length > 0 && deepens.length === 0
+          : newGround.length > 0 && deepens.length === 0 && reuses.length === 0
             ? `Everything about how this makes money is new ground for you: `
               + `${newGround.map((n) => n.value).join(', ')}. That is the case for it, `
               + `separately from whether it is a good business.${reach}`

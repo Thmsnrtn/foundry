@@ -87,7 +87,11 @@ export async function howThisWouldEnd(founderId: string): Promise<WindDown> {
     });
     switch (o.action) {
       case 'nothing':
-        if (moneyToolsOn || o.state !== 'owed') {
+        // 'owed' AND 'sent_unconfirmed' BOTH. The first version excluded only
+        // `owed`, so a brief sent seventy-one hours ago took the plain branch
+        // and a brief sent seventy-three hours ago did not — the same story the
+        // comment above tells, reachable two hours earlier.
+        if (moneyToolsOn || (o.state !== 'owed' && o.state !== 'sent_unconfirmed')) {
           itWillFinish.push(entry('foundry',
             'the pass that carries what is owed runs whether or not anything new is allowed'));
         } else {
@@ -169,7 +173,7 @@ export async function howThisWouldEnd(founderId: string): Promise<WindDown> {
   // Saying "nothing" beside a live allowance would be the most reassuring
   // sentence on the page and one of the least true.
   const stillLive = stillAuthorised.length === 0
-    ? ' Nothing would be left for you.'
+    ? ''
     : ` ${String(stillAuthorised.length)} spending `
       + `${stillAuthorised.length === 1 ? 'authority' : 'authorities'} of yours would `
       + `stay live — $${(stillAuthorised.reduce((n, a) => n + a.amountCents, 0) / 100).toFixed(2)} `
@@ -181,11 +185,11 @@ export async function howThisWouldEnd(founderId: string): Promise<WindDown> {
     ? `${String(itCannotSettle.length)} ${itCannotSettle.length === 1 ? 'thing' : 'things'} `
       + `worth ${dollars(stuck)} would be left for you — nothing I do on a later pass `
       + `changes that. ${itWillFinish.length === 0 ? 'Nothing else is outstanding.'
-        : `I would finish the other ${String(itWillFinish.length)} by myself.`}`
+        : `I would finish the other ${String(itWillFinish.length)} by myself.`}${stillLive}`
     : itWillFinish.length > 0
       ? `I would finish all ${String(itWillFinish.length)} outstanding `
         + `${itWillFinish.length === 1 ? 'obligation' : 'obligations'} by myself, and `
-        + `stop taking on anything new.${stillLive}`
+        + `stop taking on anything new.${stillLive || ' Nothing would be left for you.'}`
       : `Nobody is owed anything. Stopping now would leave nothing outstanding.${stillLive}`;
 
   return {

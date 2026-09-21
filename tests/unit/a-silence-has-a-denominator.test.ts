@@ -92,3 +92,29 @@ describe('the claim carries it', () => {
     expect(o.doesNotEstablish).not.toContain('received it');
   });
 });
+
+describe('a surprised result is not always a silence', () => {
+  it('says nothing about size when somebody actually bought', () => {
+    // `surprised` is not a zero-purchase verdict. `outcome.ts` writes it
+    // whenever the kill number is breached, so a test disproved by one extra
+    // delivery can take a sale on day five and still settle surprised. Gating
+    // the zero-events bound on the WORD narrowed the defect and did not close
+    // it; the count is the only thing that makes the sentence true.
+    const o = outcomeFromRow({
+      ran_at: '2026-09-19T00:00:00Z', verdict: 'surprised', grade: 'surprised',
+      what_happened: 'the kill number was breached before anybody paid',
+      placed: true, reached: 26, purchases: 1,
+    });
+    expect(o.establishes).toContain('did not sell');
+    expect(o.establishes).not.toContain('received it');
+    expect(o.establishes).not.toContain('silence');
+  });
+
+  it('still carries it when nobody bought', () => {
+    const o = outcomeFromRow({
+      ran_at: '2026-09-19T00:00:00Z', verdict: 'surprised', grade: 'surprised',
+      what_happened: 'nobody bought', placed: true, reached: 19, purchases: 0,
+    });
+    expect(o.establishes).toContain('19 people received it');
+  });
+});

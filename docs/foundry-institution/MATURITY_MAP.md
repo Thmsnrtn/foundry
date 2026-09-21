@@ -447,3 +447,48 @@ there is no unbounded loop to bound. Whether five lenses beat one is an
 empirical question with no ground truth available: one real experiment has
 settled, and answering it means running designs both ways and paying for both.
 The trigger is a second settled real result, not a harness built in advance.
+
+
+### And what a third cell found in the repairs of the repairs (21 September 2026)
+
+Eight more, six confirmed, two severe — in the commit that fixed the previous
+fourteen. The pattern is now established well enough to be written down as a
+rule rather than an observation: **a correction is code, and code gets the same
+adversarial reading or it gets none.** Three rounds, and each round found real
+defects in the round before it.
+
+- *The permanence broke erasure.* Making a published record undeletable gave the
+  founder-erasure sweep an abort it cannot retry past, so a person asking to be
+  forgotten would have been half-forgotten and the founders row never redacted.
+  The file that runs that sweep documents this exact failure class in a comment
+  about another table. Migration 335 exempts a scheduled erasure, the way
+  migration 331 already did. A record is permanent against its keeper, not
+  against the person it is about.
+- *The rule watched the wrong door.* SQLite resolves `INSERT OR REPLACE` by
+  deleting the conflicting row **without firing BEFORE DELETE triggers**, and
+  `INSERT OR REPLACE` is an ordinary idiom here. The reviewer executed it: the
+  footnote gone, every sealed column rewritten. Closed on the insert side, which
+  is the only side that can close it.
+- *"Surprised" is not a zero-purchase verdict.* Gating the zero-events bound on
+  the word narrowed the defect the previous round found and did not close it: a
+  test disproved by one extra delivery can take a sale and still settle
+  surprised. It is gated on the purchase count now.
+- *The restore's repair made a reading vanish.* `OPEN_OBLIGATION` names columns
+  added in migration 326, and the loop's `catch` dropped any reading the copy
+  could not answer — so restoring a sixty-day-old copy silently removed all
+  three buyer-obligation readings and reported seven greens. An unaskable
+  reading is now reported as unaskable, which is what it is.
+- *And two smaller ones*: the wind-down's money-tools caveat missed a delivery
+  seventy-one hours old and caught one seventy-three hours old; a verdict said
+  "everything about how this makes money is new" in the same breath as naming
+  what was reused.
+
+**Accepted narrow, and stated rather than fixed.** The public status line is
+computed from the asset's standing and the experiment's verdict, neither of
+which the record's freeze covers — so an owner marking an asset earned still
+changes what the page calls itself. That transition is his. What was fixed is
+the part that was not: a clarified record no longer DISCARDS its recorded
+outcome when that happens. And the channel gate, as rewritten, decides nothing
+on the real path today and can be evaded by retiring a true statement; it is
+satisfiable and inert, which is better than unsatisfiable and blocking, and the
+gap is the one recorded above.

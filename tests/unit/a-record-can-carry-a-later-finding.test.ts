@@ -273,3 +273,140 @@ describe('the footnote goes on the record it was authorised for', () => {
     expect(await keepProof1sRecordCurrent('nobody_at_all')).toBe('no_record');
   });
 });
+
+// =============================================================================
+// WHAT THE THIRD CELL FOUND IN THE REPAIR.
+//
+// A wave of corrections is not safer than the code it corrects. Migration 334
+// made a published record permanent and permanent was too strong by exactly one
+// case, and it watched the door nobody was using.
+// =============================================================================
+
+describe('permanent against its keeper, not against the person', () => {
+  it('lets an erasure through, because forgetting somebody is not bookkeeping', async () => {
+    // WITHOUT THIS, ASKING TO BE FORGOTTEN ABORTS HALF-WAY. The erasure sweep
+    // issues a plain DELETE with no try/catch, so the founders row is never
+    // redacted and every table after this one in the order is never cleared —
+    // and retrying is futile, because the refusal is permanent by design.
+    const id = 'clar_erasable';
+    await query(
+      `INSERT INTO founders (id,clerk_user_id,email,name) VALUES (?,?,?,?)`,
+      [id, 'clerk_clar_e', 'gone@example.com', 'Leaving']);
+    await query(
+      `INSERT INTO venture_mandates (id, founder_id, statement, evidence_mode)
+       VALUES ('clar_m', ?, 'a search', 'real')`, [id]);
+    await query(
+      `INSERT INTO venture_opportunities
+         (id, mandate_id, founder_id, headline, who_has_it, the_problem, why_it_might,
+          kill_thesis, sources_json, evidence_mode)
+       VALUES ('clar_o','clar_m',?,'h','w','p','y','k','[]','real')`, [id]);
+    await query(
+      `INSERT INTO market_unknowns (id, founder_id, opportunity_id, question)
+       VALUES ('clar_u',?,'clar_o','q')`, [id]);
+    await query(
+      `INSERT INTO venture_experiments
+         (id, founder_id, opportunity_id, unknown_id, what_we_do, what_we_expect,
+          would_disprove, evidence_mode, ran_at)
+       VALUES ('clar_x',?,'clar_o','clar_u','d','e','w','real',NULL)`, [id]);
+    // A test cannot arrive run, and cannot run unapproved. It ends by going
+    // through the states, which is the rule and not an inconvenience.
+    await query(
+      `UPDATE venture_experiments SET decision = 'approved', decided_at = datetime('now'),
+              decided_by = ? WHERE id = 'clar_x'`, [id]);
+    await query(
+      `UPDATE venture_experiments SET ran_at = datetime('now'), what_happened = 'nobody bought', verdict = 'surprised' WHERE id = 'clar_x'`);
+    await query(
+      `INSERT INTO public_experiments
+         (experiment_id, founder_id, number, slug, public_title, public_summary,
+          public_who, public_what, public_limits, public_sources, public_selection, public_note)
+       VALUES ('clar_x',?,1,'a-leaving-record','t','s','w','x','l','o','n','q')`, [id]);
+    await query(
+      `UPDATE public_experiments SET public_clarification = 'a later finding',
+              public_clarification_at = '2026-09-21' WHERE experiment_id = 'clar_x'`);
+
+    // Refused while nobody has asked to be forgotten.
+    await expect(query(`DELETE FROM public_experiments WHERE founder_id = ?`, [id]))
+      .rejects.toThrow(/a_published_record_is_not_deleted/);
+
+    // And allowed once an erasure is actually scheduled on one of his products.
+    await query(
+      `INSERT INTO products (id,name,owner_id,status,erasure_scheduled_at)
+       VALUES ('clar_p','Leaving Co',?,'active',datetime('now'))`, [id]);
+    await query(`DELETE FROM public_experiments WHERE founder_id = ?`, [id]);
+    expect((await query(
+      `SELECT COUNT(*) AS n FROM public_experiments WHERE founder_id = ?`, [id]))
+      .rows[0]).toMatchObject({ n: 0 });
+  });
+
+  it('refuses the door a BEFORE DELETE trigger cannot see', async () => {
+    // SQLite resolves INSERT OR REPLACE by deleting the conflicting row WITHOUT
+    // firing BEFORE DELETE triggers unless `recursive_triggers` is on, which
+    // nothing here sets. A reviewer executed it: DELETE blocked, REPLACE
+    // succeeded, the footnote gone and every sealed column rewritten. It is an
+    // ordinary idiom in this repository, not a statement somebody has to go
+    // looking for.
+    await expect(query(
+      `INSERT OR REPLACE INTO public_experiments
+         (experiment_id, founder_id, number, slug, listed, public_title, public_summary,
+          public_who, public_what, public_limits, public_sources, public_selection, public_note)
+       VALUES (?,?,1,'ma-millwork-bid-brief',1,'Any words at all','rewritten',
+               'w','x','l','o','n','q')`, [X, OWNER]))
+      .rejects.toThrow(/cannot_replace_a_clarified_record/);
+
+    // And the record is exactly as it was.
+    const row = (await query(
+      `SELECT public_summary, public_clarification FROM public_experiments
+        WHERE experiment_id = ?`, [X])).rows[0] as Record<string, unknown>;
+    expect(String(row.public_summary)).toBe(PROOF1_PUBLIC.summary);
+    expect(row.public_clarification).not.toBeNull();
+  });
+
+  it('keeps the recorded result on the page when the asset is marked earned', async () => {
+    // The status line is computed from the asset's standing, which the freeze
+    // does not cover — so a clarified, failed test could render "Operating —
+    // this remains a small Apex Micro product" with the recorded outcome not
+    // moved but DISCARDED, because only the closed branch ever read it. The
+    // transition stays the owner's; losing the result off the page does not.
+    const { projectExperiment } = await import('../../src/services/public-workshop/projection.js');
+    const { recordPublicOutcome, recordPublicClarification } =
+      await import('../../src/services/public-workshop/identity.js');
+
+    await query(
+      `INSERT INTO market_unknowns (id, founder_id, opportunity_id, question)
+       SELECT 'clar_u2', founder_id, opportunity_id, 'another question'
+         FROM venture_experiments WHERE id = ?`, [X]);
+    await query(
+      `INSERT INTO venture_experiments
+         (id, founder_id, opportunity_id, unknown_id, what_we_do, what_we_expect,
+          would_disprove, evidence_mode)
+       SELECT 'clar_y', founder_id, opportunity_id, 'clar_u2', 'd', 'e', 'w', 'real'
+         FROM venture_experiments WHERE id = ?`, [X]);
+    await query(
+      `UPDATE venture_experiments SET decision = 'approved', decided_at = datetime('now'),
+              decided_by = ? WHERE id = 'clar_y'`, [OWNER]);
+    await query(`UPDATE venture_experiments SET ran_at = datetime('now'), what_happened = 'nobody bought', verdict = 'surprised' WHERE id = 'clar_y'`);
+    await query(
+      `INSERT INTO public_experiments
+         (experiment_id, founder_id, number, slug, public_title, public_summary,
+          public_who, public_what, public_limits, public_sources, public_selection, public_note)
+       VALUES ('clar_y',?,77,'a-second-public-record','t','s','w','x','l','o','n','q')`, [OWNER]);
+
+    // Recorded in the right order: the outcome at conclusion, the correction
+    // afterwards. Once the correction exists the outcome can no longer move.
+    await recordPublicOutcome('clar_y', 'Closed — nobody bought inside the window.');
+    await recordPublicClarification('clar_y', 'a later finding about it', '2026-09-21');
+
+    // And now the asset earns its standing, which is the owner's to say.
+    await query(
+      `INSERT INTO products (id,name,owner_id,status,standing,reality,from_experiment_id)
+       VALUES ('clar_asset','Second asset',?,'active','experimental','real','clar_y')`, [OWNER]);
+    await query(
+      `UPDATE products SET standing = 'earned', earned_at = datetime('now'),
+              earned_by = ?, earned_because = 'the owner says so'
+        WHERE id = 'clar_asset'`, [`founder:${OWNER}`]);
+
+    const x = await projectExperiment('clar_y');
+    expect(x?.statusLine).toContain('nobody bought');
+    expect(x?.clarification?.text).toBe('a later finding about it');
+  });
+});
