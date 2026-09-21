@@ -3481,7 +3481,7 @@ CREATE TABLE public_experiments (
   supersedes_experiment_id TEXT REFERENCES venture_experiments(id),
   graduated_to_url TEXT,
   created_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, public_sample TEXT,
+  updated_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, public_sample TEXT, public_clarification TEXT, public_clarification_at TEXT,
   UNIQUE(founder_id, number),
   UNIQUE(founder_id, slug)
 );
@@ -8493,6 +8493,8 @@ BEGIN
        OR trim(NEW.public_what) = '' OR trim(NEW.public_limits) = '' OR trim(NEW.public_sources) = ''
        OR trim(NEW.public_selection) = '' OR trim(NEW.public_note) = '';
   SELECT RAISE(ABORT,'public_experiment:cannot_arrive_concluded') WHERE NEW.public_outcome IS NOT NULL OR NEW.graduated_to_url IS NOT NULL;
+  SELECT RAISE(ABORT,'public_experiment:cannot_arrive_clarified')
+    WHERE NEW.public_clarification IS NOT NULL OR NEW.public_clarification_at IS NOT NULL;
   SELECT RAISE(ABORT,'public_experiment:supersedes_unknown') WHERE NEW.supersedes_experiment_id IS NOT NULL AND NOT EXISTS (
     SELECT 1 FROM venture_experiments e WHERE e.id = NEW.supersedes_experiment_id AND e.founder_id = NEW.founder_id);
 END;
@@ -8503,6 +8505,7 @@ BEGIN
     WHERE NEW.experiment_id IS NOT OLD.experiment_id OR NEW.founder_id IS NOT OLD.founder_id
        OR NEW.number IS NOT OLD.number OR NEW.slug IS NOT OLD.slug
        OR NEW.supersedes_experiment_id IS NOT OLD.supersedes_experiment_id;
+
   -- A public outcome is written about a test that has ended: settled, stopped
   -- or declined. Writing one earlier would be a prediction dressed as a result.
   SELECT RAISE(ABORT,'public_experiment:outcome_needs_an_ended_test')
@@ -8510,6 +8513,81 @@ BEGIN
       SELECT 1 FROM venture_experiments e WHERE e.id = NEW.experiment_id
         AND (e.ran_at IS NOT NULL OR e.decision = 'declined' OR e.validity = 'invalid'
              OR EXISTS (SELECT 1 FROM experiment_exposures x WHERE x.experiment_id = e.id AND x.withdrawn_at IS NOT NULL)));
+
+  -- A LATER FINDING IS ABOUT A TEST THAT HAS ENDED, for the same reason.
+  SELECT RAISE(ABORT,'public_experiment:clarification_needs_an_ended_test')
+    WHERE NEW.public_clarification IS NOT NULL
+      AND NEW.public_clarification IS NOT OLD.public_clarification AND NOT EXISTS (
+      SELECT 1 FROM venture_experiments e WHERE e.id = NEW.experiment_id
+        AND (e.ran_at IS NOT NULL OR e.decision = 'declined' OR e.validity = 'invalid'
+             OR EXISTS (SELECT 1 FROM experiment_exposures x WHERE x.experiment_id = e.id AND x.withdrawn_at IS NOT NULL)));
+
+  SELECT RAISE(ABORT,'public_experiment:clarification_needs_a_date')
+    WHERE (NEW.public_clarification IS NULL) <> (NEW.public_clarification_at IS NULL);
+  SELECT RAISE(ABORT,'public_experiment:clarification_is_empty')
+    WHERE NEW.public_clarification IS NOT NULL AND trim(NEW.public_clarification) = '';
+
+  -- ONCE THERE IS A FOOTNOTE, THE RECORD BENEATH IT IS FROZEN — by ANY
+  -- statement, not merely by the one that writes the footnote. This is the
+  -- rule the sentence "The text above is unchanged" actually needs, and every
+  -- column that renders above the footnote is in it, including the three the
+  -- first version missed and the two that decide what the page CALLS itself.
+  SELECT RAISE(ABORT,'public_experiment:the_text_above_is_unchanged')
+    WHERE OLD.public_clarification IS NOT NULL
+      AND (NEW.public_title IS NOT OLD.public_title
+        OR NEW.public_summary IS NOT OLD.public_summary
+        OR NEW.public_who IS NOT OLD.public_who
+        OR NEW.public_what IS NOT OLD.public_what
+        OR NEW.public_limits IS NOT OLD.public_limits
+        OR NEW.public_sources IS NOT OLD.public_sources
+        OR NEW.public_selection IS NOT OLD.public_selection
+        OR NEW.public_note IS NOT OLD.public_note
+        OR NEW.public_sample IS NOT OLD.public_sample
+        OR NEW.public_outcome IS NOT OLD.public_outcome
+        OR NEW.graduated_to_url IS NOT OLD.graduated_to_url
+        OR NEW.listed IS NOT OLD.listed);
+
+  -- And the statement that FIRST publishes one may not carry an edit either,
+  -- because at that moment OLD has no clarification and the rule above is
+  -- silent. Same list, same reason.
+  SELECT RAISE(ABORT,'public_experiment:a_clarification_does_not_edit_the_record')
+    WHERE NEW.public_clarification IS NOT OLD.public_clarification
+      AND (NEW.public_title IS NOT OLD.public_title
+        OR NEW.public_summary IS NOT OLD.public_summary
+        OR NEW.public_who IS NOT OLD.public_who
+        OR NEW.public_what IS NOT OLD.public_what
+        OR NEW.public_limits IS NOT OLD.public_limits
+        OR NEW.public_sources IS NOT OLD.public_sources
+        OR NEW.public_selection IS NOT OLD.public_selection
+        OR NEW.public_note IS NOT OLD.public_note
+        OR NEW.public_sample IS NOT OLD.public_sample
+        OR NEW.public_outcome IS NOT OLD.public_outcome
+        OR NEW.graduated_to_url IS NOT OLD.graduated_to_url
+        OR NEW.listed IS NOT OLD.listed);
+
+  SELECT RAISE(ABORT,'public_experiment:a_clarification_is_not_withdrawn')
+    WHERE OLD.public_clarification IS NOT NULL AND NEW.public_clarification IS NULL;
+
+  -- A CORRECTION MAY SUPERSEDE ITSELF, AND ONLY TOGETHER. New words need a new
+  -- date, and a new date needs new words — the second half is what stops a
+  -- footnote published after settlement being redated to look as though it came
+  -- before.
+  SELECT RAISE(ABORT,'public_experiment:a_reworded_clarification_is_a_new_one')
+    WHERE OLD.public_clarification IS NOT NULL
+      AND NEW.public_clarification IS NOT OLD.public_clarification
+      AND NEW.public_clarification_at IS OLD.public_clarification_at;
+  SELECT RAISE(ABORT,'public_experiment:a_date_does_not_move_on_its_own')
+    WHERE OLD.public_clarification IS NOT NULL
+      AND NEW.public_clarification_at IS NOT OLD.public_clarification_at
+      AND NEW.public_clarification IS OLD.public_clarification;
+END;
+CREATE TRIGGER public_experiment_is_not_deleted
+BEFORE DELETE ON public_experiments
+BEGIN
+  SELECT RAISE(ABORT,'public_experiment:a_published_record_is_not_deleted')
+    WHERE OLD.public_clarification IS NOT NULL
+       OR EXISTS (SELECT 1 FROM public_publications p
+                   WHERE p.experiment_id = OLD.experiment_id AND p.superseded_at IS NULL);
 END;
 CREATE TRIGGER public_publication_guard
 BEFORE INSERT ON public_publications

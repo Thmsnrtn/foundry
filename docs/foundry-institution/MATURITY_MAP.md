@@ -391,3 +391,59 @@ clarification, no — the additive column with its three refusals is the smalles
 thing that can publish a correction and still prove the record did not move. The
 one place complexity was genuinely added is `winding-down.ts`, and it earns its
 place by answering a question no existing surface could.
+
+
+### What two review cells found in the reconciliation itself (21 September 2026)
+
+The register above was written before the changed institution had been reviewed.
+Two independent cells then read only this wave's diff — one on owner protection,
+one on the public record — and between them found **fourteen** defects, of which
+three would have caused real harm and two were regressions introduced by the
+repairs themselves. That is the finding worth recording: a wave of corrections
+is not safer than the code it corrects, and a reconciliation that is not itself
+reviewed is a longer way of being confident.
+
+**The three that would have caused harm.**
+
+1. *The distribution gate was unsatisfiable.* Requiring a candidate to declare
+   how its buyers would be reached is right; nothing on the real path writes
+   that row, so an unconditional gate would have held every real candidate for
+   ever behind a sentence that reads like an action item, with no control
+   anywhere that performs it. A gate nobody can satisfy is not a standard; it is
+   an outage with a principled explanation. It now asks only of a candidate that
+   has already said how it earns, and the gap is recorded here instead.
+2. *"The text above is unchanged" was enforced by nothing.* The rule fired only
+   on the statement that wrote the footnote, so the record beneath it was frozen
+   for one statement and free for every statement afterwards — and two exported
+   functions do exactly that in the ordinary course of business. It also missed
+   three columns, one of which (`graduated_to_url`) would have presented the
+   failed experiment as a success inside the statement the rule existed to
+   police, and it treated DELETE as not a write. Migration 334 replaces the
+   enumeration with one rule: once a footnote exists, the record beneath it is
+   frozen against every statement and the row cannot be deleted.
+3. *The zero-events bound was printed on results that were not zero.* A test
+   that delivered nineteen briefs and took three purchases read "the prediction
+   held … would still have produced this silence". There was no silence. Both
+   cells found it independently.
+
+**The two regressions the repairs introduced**, both caught here rather than in
+production: the shared-reach rule was widened until a candidate identical to the
+portfolio on channel, buyer and industry was told "nothing about it fails at the
+same moment as something you own" — contradicted by the rows it was holding; and
+the aperture, put on the first screen, broke the standing invariant that the
+first screen is not a filing cabinet. The first is corrected to report reuse
+without excusing it; the second moved to the search's own page.
+
+**And the record of the authorisation was the one record missing.** The
+repository held the mechanism, the wording and the proofs for the public
+clarification, and nowhere the permission. It is now recorded as §22 RESOLVED in
+`OWNER_DECISIONS_PENDING.md` with the owner's words quoted. One word of the
+footnote changed with it: "the recorded result stands" became "is unchanged",
+because whether the null stands is PENDING 21, which is open and is his.
+
+**Deferred, on a named trigger.** The forge's five-lens deliberation has a
+structural stopping condition — five disciplines, one pass, one attacker — so
+there is no unbounded loop to bound. Whether five lenses beat one is an
+empirical question with no ground truth available: one real experiment has
+settled, and answering it means running designs both ways and paying for both.
+The trigger is a second settled real result, not a harness built in advance.

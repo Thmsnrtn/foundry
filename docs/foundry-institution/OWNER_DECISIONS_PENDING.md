@@ -12,7 +12,7 @@ around each item.
 
 ---
 
-# TEN ANSWERED, SIX PENDING
+# ELEVEN ANSWERED, FIVE PENDING
 
 The owner answered the first eight queued decisions; those are recorded below as
 settled, with the record of what was asked and why in git history. **§10 and §14 are now answered and implemented** — see RESOLVED 9 and RESOLVED
@@ -29,8 +29,10 @@ the end of this file and are in force now.**
 §14 is a product and legal position rather than an engineering mechanism, which
 is why it is here rather than decided in git history.
 
-**Two more were added on 2026-09-21** (PENDING 23, the repository's visibility;
-PENDING 24, the development-instance Clerk key running in production). Both came
+**PENDING 22 was answered on 2026-09-21** and is recorded as RESOLVED at the end
+of this file, with the authorisation quoted. **Two more were added the same day**
+(PENDING 23, the repository's visibility; PENDING 24, the development-instance
+Clerk key running in production). Both came
 out of verifying an independent review's claims against the live deployment
 rather than accepting them, and both are external or account decisions rather
 than engineering ones. Neither blocks anything.
@@ -1167,3 +1169,54 @@ feature.
 
 The owner's entry point is `foundry-intel.fly.dev/foundry`, which returns 401
 until Clerk has signed you in. Nothing to fix.
+
+
+---
+
+## §22 RESOLVED — A narrow, dated public clarification, and what it does not authorise (2026-09-21)
+
+Recorded here because an adversarial review found the one record that was
+missing: the repository contained the mechanism, the wording and the proofs, and
+nowhere the **permission**. An institution whose thesis is that the record is the
+truth cannot have the authorisation for a public act live only in a conversation.
+
+PENDING 22 asked whether the public record of a settled test carries its limit,
+and offered three options about the status line: leave it, qualify it, or
+withdraw it. The owner answered with a fourth, narrower thing:
+
+> *"I authorize a narrow, clearly dated public clarification of Experiment 001's
+> findings. Preserve the original sealed prediction, settlement, receipts, and
+> historical record exactly as they are. Do not rewrite the original experiment
+> or present it as successful... Keep the clarification factual, concise, and
+> clearly identified as a later finding. Do not use this authorization to change
+> the experiment's offer, restart outreach, contact previous recipients, or
+> publish additional personal information about me. Verify the exact public
+> wording and its relationship to the sealed historical record before
+> publication."*
+
+**What was built to that.** An additive column beside the sealed copy, never an
+edit to it; a dated footnote rendered beneath "Who I am", which is what makes its
+last sentence — "The text above is unchanged" — a true description of the page.
+Migration 334 makes that sentence a rule rather than a claim: once a footnote is
+published the record beneath it is frozen against every statement, the row cannot
+be deleted, a clarification cannot arrive on a new row, and a date cannot move on
+its own. The status line was **not** touched, so option 2 remains open to the
+owner separately.
+
+**One word was changed after review, and the reason is worth keeping.** The
+footnote said "the recorded result stands" and now says "the recorded result is
+unchanged". "Unchanged" is a statement about the record. "Stands" would have been
+a statement about the result's validity — which is PENDING 21, which is open, and
+which is his. Publishing it would have settled his question in public, on his own
+page, inside a footnote authorised for something else.
+
+**What it does not authorise, restated because the authorisation says so.** No
+change to the offer. No outreach. No contact with the nineteen. Nothing further
+published about the owner. And nothing about the repair: the reply route has been
+proven since, and a stranger reading a public record needs to know what that
+record can support, not the institution's account of its own recovery.
+
+**Relationship to PENDING 21.** The footnote is publishable while PENDING 21 is
+open because it asserts nothing about whether the null stands. If the owner later
+decides the result is void, that is a second dated footnote — which the mechanism
+allows, with new words and a new date together, and which no rule here prevents.

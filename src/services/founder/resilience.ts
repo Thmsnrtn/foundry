@@ -257,7 +257,22 @@ export async function portfolioFitOf(input: {
   // both lists empty and came out WORSE on the strength of having been read by
   // a lawyer's eye at all. Neither is a portfolio judgement. Deepening a way
   // to fail is.
-  const makesItWorse = deepens.length > 0 && newGround.length === 0;
+  //
+  // AND REUSE COUNTS IN IT, which is the correction an adversarial reading
+  // forced and the reviewer was right about. The first version of this rule
+  // excluded shared reach entirely, so a candidate sharing the channel, the
+  // buyer and the industry with four earned companies and differing on nothing
+  // came back "nothing about it fails at the same moment as something you own"
+  // — contradicted by the very rows it was holding, whose own `if_it_fails`
+  // text reads "one channel closing takes the customers of everything on it".
+  //
+  // The distinction worth making is in the REPORTING, not the verdict. A
+  // candidate that reuses reach AND opens new ground is not fragile, and the
+  // old rule agreed. A candidate that opens nothing has added no independence
+  // whatever the axis, and softening that to make room for a good idea about
+  // acquisition efficiency would be the institution telling its owner what he
+  // wants to hear about the one decision it exists to slow down.
+  const makesItWorse = (deepens.length > 0 || reuses.length > 0) && newGround.length === 0;
 
   // SERVING A NEED is having a different answer on an axis where the portfolio
   // is concentrated - not merely being new, but being new where it matters.
@@ -283,19 +298,24 @@ export async function portfolioFitOf(input: {
       ? 'The only thing recorded about how this would earn is a kind of liability '
         + 'it would add, and that is not enough to say what it would do to your '
         + 'portfolio. It is not a reason against it either.'
-      : makesItWorse
-        ? `This would deepen ${deepens.map((d) => d.value).join(', ')} - which `
-          + `${deepens.some((d) => d.carriedBy.length > 1)
-            ? 'you already depend on across more than one business'
-            : 'you already carry'} - and brings nothing new. Another one of these is `
-          + `not another income stream; it is another way the same failure hurts.${reach}`
-        : newGround.length > 0 && deepens.length === 0
-          ? `Everything about how this makes money is new ground for you: `
-            + `${newGround.map((n) => n.value).join(', ')}. That is the case for it, `
-            + `separately from whether it is a good business.${reach}`
-          : newGround.length === 0 && deepens.length === 0
-            ? 'Nothing about how this would earn is new to you, and nothing about it '
-              + `fails at the same moment as something you own.${reach}`
+      : makesItWorse && deepens.length === 0
+        // ALL REUSE AND NO NEW GROUND. The cheap sale is said first because it
+        // is real, and then the thing that matters: nothing here fails for a
+        // different reason than what he already owns.
+        ? `This would go back over ground you already stand on — `
+          + `${reuses.map((r) => r.value).join(', ')} — which makes the selling `
+          + 'cheaper and adds no independence at all. Another one of these is not '
+          + 'another income stream; it is another way the same failure hurts.'
+        : makesItWorse
+          ? `This would deepen ${deepens.map((d) => d.value).join(', ')} - which `
+            + `${deepens.some((d) => d.carriedBy.length > 1)
+              ? 'you already depend on across more than one business'
+              : 'you already carry'} - and brings nothing new. Another one of these is `
+            + `not another income stream; it is another way the same failure hurts.${reach}`
+          : newGround.length > 0 && deepens.length === 0
+            ? `Everything about how this makes money is new ground for you: `
+              + `${newGround.map((n) => n.value).join(', ')}. That is the case for it, `
+              + `separately from whether it is a good business.${reach}`
             : `It would deepen ${deepens.map((d) => d.value).join(', ') || 'nothing'} `
               + `and open ${newGround.map((n) => n.value).join(', ') || 'nothing'}.${reach}`;
 

@@ -253,13 +253,6 @@ export interface OwnerState {
     another: {
       recommend: boolean; because: string; concentrations: string[];
     };
-    /**
-     * WHAT THIS SEARCH COULD NOT HAVE FOUND, which is not the same as what it
-     * looked at and rejected. Every count on this page is a count of things
-     * that came through one aperture; without this, the page reads as a report
-     * about the world rather than a report about the machine.
-     */
-    aperture: { sentence: string; unseen: string[] };
     /** What has already been turned down or taken forward, with the reason. */
     decided: string[];
     /** What the portfolio needs, derived from what it is concentrated on. */
@@ -806,14 +799,6 @@ async function readOwnerState(
               // would turn a guess into a fact on the way to a decision about
               // starting a business.
               + (con.guessed ? ' (partly worked out rather than told to me)' : '')),
-          };
-        })(),
-        aperture: await (async () => {
-          const { theAperture } = await import('../../services/venture/the-aperture.js');
-          const a = theAperture();
-          return {
-            sentence: a.sentence,
-            unseen: a.unseen.map((u) => `${u.what} — ${u.because}. It would take ${u.wouldNeed}.`),
           };
         })(),
         // WHAT HE HAS ALREADY TURNED DOWN, AND WHY. Kept on the page rather
@@ -3339,15 +3324,6 @@ foundryShellRoutes.get('/foundry', async (c) => {
         </div>
         ${steerFold(cand.id, { blockedBy: cand.blockedBy, cannotTestYet: false }, 'home')}
       </div>`)}
-      ${/* LAST, AND NOT OPTIONAL. Everything above is what came through the
-           aperture; this is the aperture. It is folded because it does not
-           change day to day, and it is on this page rather than a page of its
-           own because a limit kept somewhere else is a limit nobody reads. */ ''}
-      <details class="fold"><summary><h3>What I could not have found</h3>
-        <span class="gist">${String(s.search.aperture.unseen.length)} kinds</span></summary>
-        <p class="quiet">${s.search.aperture.sentence}</p>
-        <ul class="quiet">${s.search.aperture.unseen.map((u) => html`<li>${u}</li>`)}</ul>
-      </details>
     </div></details>` : ''}
 
     ${/* What he looked for before is on Discover, under "Earlier searches"; the first screen does not carry history. */ ''}

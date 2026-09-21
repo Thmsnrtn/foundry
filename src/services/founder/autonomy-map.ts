@@ -149,13 +149,21 @@ export async function autonomyAcross(founderId: string): Promise<AutonomyMap> {
   return {
     sentence: sentenceFor(readings, canAct, canSpend, waitingOnHim),
     companies: readings,
-    byConsequence: await byConsequence(canAct, canSpend),
+    // NOT `canAct`. A company is `carry` when it has an allowance OR a standing
+    // grant (`authority.ts:144`), so `canAct` includes companies where the only
+    // thing the owner ever allowed was money. Telling him that acts which
+    // "publish, message or contact someone outside" may happen there without
+    // asking — because he set a $50 budget — is the wrong direction of error on
+    // the page whose job is to bound what happens in his absence.
+    byConsequence: await byConsequence(readings.filter((r) => r.grants.length > 0), canSpend),
     nothingWithoutHim, waitingOnHim,
   };
 }
 
 async function byConsequence(
-  canAct: CompanyAutonomy[], canSpend: CompanyAutonomy[],
+  /** Companies carrying a standing grant — the only basis on which an ACT may go without asking. */
+  canAct: CompanyAutonomy[],
+  canSpend: CompanyAutonomy[],
 ): Promise<ByConsequence[]> {
   const rungs = (await query(
     `SELECT r.rung, r.what_it_means, r.absorbable,
@@ -184,19 +192,30 @@ async function byConsequence(
         sentence: `Nothing here can do this at all yet, so there is nothing to allow.` };
     }
     if (rung === 'financial') {
+      // AND IT SAYS WHAT IT DOES NOT COVER. An allowance gates what goes
+      // through the DOOR. It does not gate what the institution spends
+      // thinking: `spentThinkingAbout` reads no allowance, and this repository
+      // already tells him so on the company page — "I spent $x thinking about
+      // it, which no setting changes". A sentence here that said "nothing
+      // spends without asking" would be the one place he could read the
+      // opposite of that, on the screen he checks before leaving.
+      const thinking = ' Money spent on thinking is not inside this: it is bounded '
+        + 'by the charter, not by an allowance, and no setting here stops it.';
       return canSpend.length === 0
         ? { rung, whatItMeans, capabilities, standing: 'nowhere' as const,
-          sentence: 'Nowhere. No allowance of yours is live, so anything that spends asks first.' }
+          sentence: 'No allowance of yours is live, so anything that spends at the door '
+            + `asks first.${thinking}` }
         : { rung, whatItMeans, capabilities, standing: 'only_within_an_allowance' as const,
           sentence: `Only up to $${(canSpend.reduce((n, c) => n + (c.allowance?.remainingCents ?? 0), 0) / 100).toFixed(2)}, `
             + `at ${where(canSpend)}, and only for what you said the allowance was for. `
-            + 'Past that it asks.' };
+            + `Past that it asks.${thinking}` };
     }
     return canAct.length === 0
       ? { rung, whatItMeans, capabilities, standing: 'nowhere' as const,
-        sentence: 'Nowhere on its own. Everything of this kind is proposed to you first.' }
+        sentence: 'Nowhere on its own. Nothing here carries a standing grant for this '
+          + 'kind of act, so every one of them is proposed to you first.' }
       : { rung, whatItMeans, capabilities, standing: 'where_you_allowed_it' as const,
-        sentence: `At ${where(canAct)}, within what you allowed there.` };
+        sentence: `At ${where(canAct)}, within the standing grant you gave there.` };
   });
 }
 

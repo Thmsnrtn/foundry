@@ -101,8 +101,19 @@ const cap = (s: string): string => s.charAt(0).toUpperCase() + s.slice(1);
  */
 export function couldNotHaveSeen(reached: number): string | null {
   if (!Number.isFinite(reached) || reached < 1) return null;
+  // BELOW FIVE, THE SENTENCE WOULD BE FALSE. An adversarial reading did the
+  // arithmetic the first version did not: `Math.max(2, …)` floored the answer
+  // at "one in two", and at three trials a rate of one in two produces silence
+  // one time in EIGHT, not one in twenty. A rounding guard that protects the
+  // prose from looking silly by making it untrue is the worst of both. Under
+  // five the honest sentence is that nothing has been bounded at all.
+  if (reached < 5) {
+    return `${String(reached)} ${reached === 1 ? 'person' : 'people'} received it, `
+      + 'which is too few to rule out any rate at all — this is an anecdote about '
+      + 'the offer, not a measurement of it.';
+  }
   const bound = 1 - Math.pow(0.05, 1 / reached);
-  const oneIn = Math.max(2, Math.round(1 / bound));
+  const oneIn = Math.round(1 / bound);
   return `${String(reached)} ${reached === 1 ? 'person' : 'people'} received it, which `
     + `is a narrow result: a real rate as high as one buyer in ${String(oneIn)} would `
     + `still have produced this silence about one time in twenty.`;
@@ -114,7 +125,16 @@ function establishing(word: 'as predicted' | 'partly' | 'surprised', cannotProve
   // THE DENOMINATOR GOES WITH THE CLAIM, not in a footnote somewhere else. A
   // result whose size is on a different page is a result most people will read
   // without its size.
-  const size = reached === undefined ? '' : (() => {
+  //
+  // AND ONLY ON THE RESULT IT IS ABOUT. `couldNotHaveSeen` is the bound for
+  // ZERO events in n trials, and the first version of this spliced it into all
+  // three branches — so a test that delivered nineteen briefs and took three
+  // purchases rendered "the prediction held … would still have produced this
+  // silence". There was no silence. An owner back from a month away would have
+  // read his one working result as statistically empty and walked away from the
+  // only thing that ever sold. Both review cells found it independently, which
+  // is how obvious it is once somebody says it out loud.
+  const size = reached === undefined || word !== 'surprised' ? '' : (() => {
     const s = couldNotHaveSeen(reached);
     return s === null ? '' : ` ${s}`;
   })();

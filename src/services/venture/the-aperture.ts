@@ -90,9 +90,16 @@ export function theAperture(): Aperture {
     what: 'a want nobody describes as repeated manual work - an audience already '
       + 'gathered somewhere, a thing people buy badly today, a price that is wrong '
       + 'in somebody\'s favour',
-    because: `every search begins from ${String(BASE_TERMS.length)} phrases about effort `
-      + `(${BASE_TERMS.map((t) => `"${t}"`).join(', ')}) and nothing that fails all `
-      + `${String(MARKERS.length)} triage markers is ever read`,
+    // THE SEEDS ARE THE STARTING POINT, NOT THE QUERY. `termsFrom` narrows each
+    // base phrase by any shape the owner named and appends his own steering
+    // phrases, so quoting these as "the terms searched" would be a second
+    // inaccuracy inside the module that exists to correct one. The marker half
+    // is exact: triage is a pure `MARKERS` gate and nothing else reaches a
+    // reader.
+    because: `every search STARTS from ${String(BASE_TERMS.length)} phrases about effort `
+      + `(${BASE_TERMS.map((t) => `"${t}"`).join(', ')}), narrowed by whatever shape you `
+      + `named, and nothing that fails all ${String(MARKERS.length)} triage markers is `
+      + 'ever paid to be read',
     wouldNeed: 'a second family of search terms about demand rather than labour, and '
       + 'the markers to triage it, which is a change to the eyes and not to the hands',
   });
@@ -113,7 +120,12 @@ export function theAperture(): Aperture {
   // business could sit just outside it in either direction.
   unseen.push({
     kind: 'outside_the_band',
-    what: `anything worth more than $${String(OFFER_BAND.highDollars)} to a buyer once`,
+    // A BAND HAS TWO EDGES, and the first version of this named one. Everything
+    // a buyer would pay two dollars for, many times over, is as invisible as
+    // everything worth two hundred — and a list of blind spots with a blind
+    // spot in it is worse than none, because it reads as complete.
+    what: `anything worth less than $${String(OFFER_BAND.lowDollars)} or more than `
+      + `$${String(OFFER_BAND.highDollars)} to a buyer once`,
     because: `an offer is refused unless its price is a whole number of dollars `
       + `between ${String(OFFER_BAND.lowDollars)} and ${String(OFFER_BAND.highDollars)}`,
     wouldNeed: 'a reason to widen the band, and the delivery and remedy that a larger '
@@ -132,7 +144,13 @@ export function theAperture(): Aperture {
     looksFor: BASE_TERMS,
     hearsOnly: MARKERS.map((m) => m.kind),
     canMake, cannotMake, band: OFFER_BAND, unseen,
-    sentence: `Foundry can currently find one shape of problem and make one shape of `
+    // DERIVED, INCLUDING THE NUMERAL. The header of this file says a hand-kept
+    // list goes quietly wrong afterwards, and the first version of this
+    // sentence then hard-coded "one shape of answer" — so the day somebody
+    // built the tool-page recipe, the one page whose purpose is not to be
+    // quietly wrong would have been.
+    sentence: `Foundry can currently find one shape of problem and make `
+      + `${canMake.length === 1 ? 'one shape' : `${String(canMake.length)} shapes`} of `
       + `answer for it, sold once for between $${String(OFFER_BAND.lowDollars)} and `
       + `$${String(OFFER_BAND.highDollars)}. ${String(unseen.length)} kinds of `
       + `opportunity could not have reached you through that - not because they were `

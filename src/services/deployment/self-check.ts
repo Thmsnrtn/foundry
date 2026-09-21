@@ -273,10 +273,20 @@ export async function howLongCouldItBeGone(
   const open = await obligationsFor(founderId, now);
   const owedCents = open.reduce((n, o) => n + o.amountCents, 0);
 
+  // PURCHASES, NOT PEOPLE. `obligationsFor` deliberately reads no buyer
+  // identity, so one person who bought twice is two rows — and saying "two
+  // people are waiting" would be an inference the records cannot support, in
+  // the one sentence whose job is to size a silence honestly.
+  //
+  // AND ONLY WHERE THE CURRENCY IS ONE. Obligations carry their own currency;
+  // summing them and prefixing a dollar sign would report €40 as $40.
+  const currencies = new Set(open.map((o) => o.currency.toLowerCase()));
+  const amount = currencies.size === 1 && currencies.has('usd')
+    ? ` worth ${dollarsOwed(owedCents)}` : '';
   const promise = open.length === 0
     ? 'Nobody is waiting on anything, so the silence costs nothing today.'
-    : `${String(open.length)} ${open.length === 1 ? 'person is' : 'people are'} waiting `
-      + `on ${dollarsOwed(owedCents)} of work meanwhile.`;
+    : `${String(open.length)} ${open.length === 1 ? 'purchase is' : 'purchases are'} `
+      + `waiting${amount} meanwhile.`;
 
   const sentence = `If this stopped now, nothing outside it would say so. From the inside a `
     + `stalled routine is called stale after ${String(tightestBoundHours)} hours — but that `

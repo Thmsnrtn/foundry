@@ -231,13 +231,21 @@ export const PROOF1_PUBLIC = {
  *
  * AND IT IS IMPERSONAL. This is a footnote to a record, in the voice the record
  * is kept in, not a message from anybody to anybody.
+ *
+ * IT SAYS "UNCHANGED" AND NOT "STANDS", which is one word and the difference
+ * between a fact and a verdict. "Unchanged" is a statement about the record:
+ * nothing here rewrites it. "Stands" would be a statement about the result's
+ * VALIDITY — and whether Experiment 001's null stands or is void and re-run is
+ * PENDING 21, which is the owner's and is open. Publishing "stands" would
+ * settle his question in public before he had answered it, on his own page, in
+ * a footnote he authorised for a different purpose.
  */
 export const PROOF1_CLARIFICATION = {
   on: '2026-09-21',
   text: 'This pilot did not meet its stated condition: there were no purchases '
     + 'within its seven-day window. A defect found after it closed left the reply '
     + 'route for these messages unrouted, so a reply to them would not have '
-    + 'arrived. The recorded result stands and is not evidence about whether '
+    + 'arrived. The recorded result is unchanged and is not evidence about whether '
     + 'recipients attempted to respond. The text above is unchanged.',
 } as const;
 
@@ -397,13 +405,30 @@ async function refreshMaterials(founderId: string, experimentId: string): Promis
  * if it tried. Both, because a rule kept in one place is a rule somebody
  * eventually reads past.
  */
-export async function keepProof1sRecordCurrent(founderId: string): Promise<'written' | 'already' | 'not_yet' | 'no_record'> {
+export async function keepProof1sRecordCurrent(founderId: string): Promise<'written' | 'already' | 'not_yet' | 'no_record' | 'not_the_authorised_record'> {
   const experimentId = await findProof1(founderId);
   if (experimentId === null) return 'no_record';
+
+  // AND IT HAS TO BE THE RECORD THE OWNER AUTHORISED, not merely a test this
+  // founder happens to have.
+  //
+  // `findProof1` resolves by a deliverable's TITLE. That is fine for seeding
+  // and wrong for publishing: the hourly tick runs this for every row of
+  // `public_workshop`, so a second founder seeded with the same proof — which
+  // the CLI, the measurement script and the screenshot script all do — would
+  // have had a dated statement published on THEIR page asserting that nobody
+  // bought and that the reply route was unrouted, about a test whose route was
+  // fine. The footnote cannot then be withdrawn, by design.
+  //
+  // So both readings have to name the same row: the authorised slug, and the
+  // experiment the title finds. A title is a convenience; a slug is the
+  // address a stranger was sent to, and the authorisation was about that.
   const row = (await query(
-    `SELECT public_clarification FROM public_experiments WHERE experiment_id = ?`,
-    [experimentId])).rows[0] as Record<string, unknown> | undefined;
+    `SELECT experiment_id, public_clarification FROM public_experiments
+      WHERE founder_id = ? AND slug = ?`, [founderId, PROOF1_SLUG]))
+    .rows[0] as Record<string, unknown> | undefined;
   if (!row) return 'no_record';
+  if (String(row.experiment_id) !== experimentId) return 'not_the_authorised_record';
   if (row.public_clarification != null) return 'already';
 
   const ended = (await query(

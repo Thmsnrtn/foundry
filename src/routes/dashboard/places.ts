@@ -651,6 +651,23 @@ placeRoutes.get('/foundry/searching', async (c: any) => {
         <p class="quiet">What I would need: ${progress.wouldNeed ?? ''}</p>` : ''}
       <p class="quiet"><strong>Looking through</strong> — ${progress.seeingThrough.length ? progress.seeingThrough.join('; ') : 'nothing yet'}.</p>
       ${progress.stillDark.length ? html`<p class="gap"><strong>Still cannot see</strong> — ${progress.stillDark.join('; ')}.</p>` : ''}
+      ${/* WHAT COULD NOT HAVE COME THROUGH AT ALL, which is a different
+           question from "still cannot see" above it: that one is about what
+           this search has not reached yet, and this is about what no search
+           Foundry runs could reach. It lives here rather than on the first
+           screen because it does not change day to day and the first screen is
+           for what needs him — and on this page rather than one of its own,
+           because a limit kept somewhere else is a limit nobody reads. */ ''}
+      ${await (async () => {
+    const { theAperture } = await import('../../services/venture/the-aperture.js');
+    const a = theAperture();
+    return html`<details class="fold"><summary><h2>What I could not have found</h2>
+      <span class="gist">${String(a.unseen.length)} kinds</span></summary>
+      <p class="quiet">${a.sentence}</p>
+      <ul class="quiet">${a.unseen.map((u) => html`<li>${u.what} — ${u.because}.
+        It would take ${u.wouldNeed}.</li>`)}</ul>
+    </details>`;
+  })()}
       <div class="know"><h2>Candidates</h2>
         ${candidates.length ? candidates.map((k) => html`<div class="noticed">
           <p><strong>${k.headline}</strong></p>

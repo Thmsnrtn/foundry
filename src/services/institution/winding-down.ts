@@ -74,6 +74,9 @@ export interface WindDown {
  */
 export async function howThisWouldEnd(founderId: string): Promise<WindDown> {
   const open = await obligationsFor(founderId);
+  // Read once, here, rather than per obligation: the same switch decides what
+  // the door may do for every one of them.
+  const moneyToolsOn = process.env.FOUNDRY_ENABLE_MONEY_TOOLS === 'true';
   const itWillFinish: LeftOver[] = [];
   const itCannotSettle: LeftOver[] = [];
 
@@ -84,12 +87,36 @@ export async function howThisWouldEnd(founderId: string): Promise<WindDown> {
     });
     switch (o.action) {
       case 'nothing':
-        itWillFinish.push(entry('foundry',
-          'the pass that carries what is owed runs whether or not anything new is allowed'));
+        if (moneyToolsOn || o.state !== 'owed') {
+          itWillFinish.push(entry('foundry',
+            'the pass that carries what is owed runs whether or not anything new is allowed'));
+        } else {
+          itWillFinish.push(entry('foundry',
+            'the pass that carries what is owed runs whether or not anything new is '
+            + 'allowed — though if the delivery fails, the refund would be yours to '
+            + 'issue, because this deployment cannot move money'));
+        }
         break;
+      // A PROMISE THIS DEPLOYMENT MAY NOT BE ABLE TO KEEP.
+      //
+      // An unconfirmed delivery becomes a failed one after seven days and then
+      // needs a REFUND — and with the money-tools switch off, which is the
+      // default posture, the door refuses to issue it. The first version of
+      // this filed it under "I will finish it myself", so a wind-down with two
+      // briefs unconfirmed read "Nothing would be left for you", the owner
+      // stopped and left for a month, and a week later two people who had paid
+      // were owed money nothing in the deployment could return, with nobody
+      // looking at the page. The same reasoning applies to a delivery that is
+      // merely late: what is owed today is not what will be owed on Friday.
       case 'check_delivery':
-        itWillFinish.push(entry('foundry',
-          'it will be treated as failed and refunded if the provider never confirms it'));
+        if (moneyToolsOn) {
+          itWillFinish.push(entry('foundry',
+            'it will be treated as failed and refunded if the provider never confirms it'));
+        } else {
+          itCannotSettle.push(entry('you',
+            'if the provider never confirms it, it becomes a refund — and this '
+            + 'deployment cannot move money, so that refund would be yours to issue'));
+        }
         break;
       case 'money_tools_off':
         itCannotSettle.push(entry('you',
@@ -136,6 +163,17 @@ export async function howThisWouldEnd(founderId: string): Promise<WindDown> {
   const stopped = await newEconomicActivityPaused(founderId);
 
   const stuck = itCannotSettle.reduce((n, l) => n + l.amountCents, 0);
+  // AND "NOTHING WOULD BE LEFT FOR YOU" IS NOT TRUE WHILE MONEY MAY STILL GO
+  // OUT. A pause stops new exposure; it does not withdraw an allowance, and
+  // this module's whole job is to say what would still be running afterwards.
+  // Saying "nothing" beside a live allowance would be the most reassuring
+  // sentence on the page and one of the least true.
+  const stillLive = stillAuthorised.length === 0
+    ? ' Nothing would be left for you.'
+    : ` ${String(stillAuthorised.length)} spending `
+      + `${stillAuthorised.length === 1 ? 'authority' : 'authorities'} of yours would `
+      + `stay live — $${(stillAuthorised.reduce((n, a) => n + a.amountCents, 0) / 100).toFixed(2)} `
+      + 'in all. Stopping does not withdraw them.';
   const sentence = itCannotSettle.length > 0
     // THE PART THAT NEEDS A PERSON GOES FIRST, whatever else is true. An owner
     // who reads "everything is in hand" and stops reading has been told the
@@ -147,8 +185,8 @@ export async function howThisWouldEnd(founderId: string): Promise<WindDown> {
     : itWillFinish.length > 0
       ? `I would finish all ${String(itWillFinish.length)} outstanding `
         + `${itWillFinish.length === 1 ? 'obligation' : 'obligations'} by myself, and `
-        + 'stop taking on anything new. Nothing would be left for you.'
-      : 'Nobody is owed anything. Stopping now would leave nothing outstanding.';
+        + `stop taking on anything new.${stillLive}`
+      : `Nobody is owed anything. Stopping now would leave nothing outstanding.${stillLive}`;
 
   return {
     newExposureStopped: stopped, itWillFinish, itCannotSettle,

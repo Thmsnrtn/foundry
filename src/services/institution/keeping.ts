@@ -25,6 +25,7 @@ import { createGunzip, createGzip } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import { basename, dirname, join } from 'node:path';
 import { query } from '../../db/client.js';
+import { OPEN_OBLIGATION } from '../venture/obligations.js';
 
 // =============================================================================
 // HOW FAR BACK, AND WHY THESE THREE NUMBERS
@@ -234,8 +235,24 @@ export async function whatIsKept(): Promise<Array<{ name: string; bytes: number;
 // attribute one table's column to another. The gate was right and the string
 // was wrong.
 const THE_LIABILITIES: Array<{ what: string; sql: string }> = [
+  // DERIVED FROM THE INSTITUTION'S OWN PREDICATE, not restated beside it.
+  //
+  // The first version wrote `status IN ('owed','sent')` — and `OPEN_OBLIGATION`
+  // is three disjuncts wide. A copy taken before two buyers clicked their
+  // refund links and a third filed a chargeback reported all seven readings
+  // identical, because every one of those rows is `delivered` on both sides and
+  // no refund had been ISSUED to move the money figures. Seven greens over the
+  // erasure of two live refund obligations and an unanswered dispute — exactly
+  // the rows that turn into "took money and vanished". This is the failure this
+  // repository names most often and I wrote it into the check against it.
   { what: 'what buyers are owed',
-    sql: `SELECT COUNT(*) AS n FROM experiment_fulfilments WHERE status IN ('owed','sent')` },
+    sql: `SELECT COUNT(*) AS n FROM experiment_fulfilments f WHERE ${OPEN_OBLIGATION('f')}` },
+  { what: 'refunds asked for and not yet issued',
+    sql: `SELECT COUNT(*) AS n FROM experiment_fulfilments f
+           WHERE f.refund_requested_at IS NOT NULL AND f.refund_ref IS NULL` },
+  { what: 'charges being contested',
+    sql: `SELECT COUNT(*) AS n FROM experiment_fulfilments f
+           WHERE f.disputed_at IS NOT NULL AND f.dispute_outcome IS NULL` },
   { what: 'money taken from buyers',
     sql: `SELECT COALESCE(SUM(amount_cents),0) AS n FROM economic_events WHERE kind = 'charge'` },
   { what: 'money returned to buyers',
@@ -248,6 +265,12 @@ const THE_LIABILITIES: Array<{ what: string; sql: string }> = [
     sql: `SELECT COUNT(*) AS n FROM owner_boundaries` },
   { what: 'people who were contacted',
     sql: `SELECT COUNT(*) AS n FROM experiment_exposures` },
+  // THE LIST WHOSE LOSS MAKES FOUNDRY WRITE TO SOMEBODY AGAIN. A bounce, a
+  // complaint and a "never write to me" all land here, and a copy that had lost
+  // them would restore an institution that is willing to contact people who
+  // have already said no. Nothing else in this list would notice.
+  { what: 'people who must never be written to',
+    sql: `SELECT COUNT(*) AS n FROM public_suppressions` },
 ];
 
 export interface Recovered {

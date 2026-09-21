@@ -557,22 +557,47 @@ export async function whatStandsInTheWay(opportunityId: string): Promise<string[
   // the "how it earns" sentence reads. Requiring it here makes the channel a
   // declared fact of the candidate at the same standing as how it charges,
   // rather than a sentence composed about it later.
-  const channel = (await query(
-    `SELECT 1 FROM portfolio_exposures
-      WHERE subject_kind = 'opportunity' AND subject_id = ?
-        AND dimension = 'acquisition_channel' AND retired_at IS NULL LIMIT 1`,
-    [opportunityId])).rows.length > 0;
-  if (!channel) {
-    inTheWay.push('nothing is recorded about how its buyers would be reached — name '
-      + 'the channel it would be sold through before it can earn a company');
+  //
+  // AND IT ONLY BITES WHERE IT CAN BE ANSWERED, which is the correction an
+  // adversarial reading forced. The first version of this asked every candidate
+  // for a channel. Nothing on the real path writes one: the three callers of
+  // `noteExposure` are the two rehearsal seeders and the legal pass, and the
+  // legal pass writes `legal_exposure` and nothing else. So an unconditional
+  // gate was an unconditional DEADLOCK — every real candidate held for ever
+  // behind a sentence that reads like an action item, with no control anywhere
+  // that performs it, discovered by an owner returning from six weeks away.
+  //
+  // A gate nobody can satisfy is not a standard. It is an outage with a
+  // principled explanation.
+  //
+  // So it asks only of a candidate that HAS said how it earns. Somebody who
+  // described the revenue model, the pricing and the buyer and left out how
+  // they would be found has left a hole in one account; somebody who has said
+  // nothing has not contradicted themselves, and the silence is reported on the
+  // card rather than enforced here. The day the discovery path declares what it
+  // found, this starts biting on its own — and until then the gap is named in
+  // the maturity map, where an unmeasured quantity belongs.
+  const owner = (await query(
+    `SELECT founder_id, evidence_mode FROM venture_opportunities WHERE id = ?`,
+    [opportunityId])).rows[0] as Record<string, unknown> | undefined;
+
+  const declared = (await query(
+    `SELECT dimension FROM portfolio_exposures
+      WHERE subject_kind = 'opportunity' AND subject_id = ? AND retired_at IS NULL
+        AND evidence_mode = ?`,
+    [opportunityId, String(owner?.evidence_mode) === 'reference' ? 'reference' : 'real']))
+    .rows as unknown as Array<Record<string, unknown>>;
+  const says = new Set(declared.map((d) => String(d.dimension)));
+  const aboutEarning = ['revenue_model', 'pricing_model', 'customer_type'].filter((d) => says.has(d));
+  if (aboutEarning.length > 0 && !says.has('acquisition_channel')) {
+    inTheWay.push(`it says how it would earn (${aboutEarning.join(', ')}) and nothing `
+      + 'about how its buyers would be found — name the channel it would be sold '
+      + 'through before it can earn a company');
   }
 
   // WHAT LIABILITY IT CREATES, before it can go anywhere. A candidate nobody
   // has asked that of, one that needs a qualified person to look, or one whose
   // legal picture is over six months old, waits - however good the rest reads.
-  const owner = (await query(
-    `SELECT founder_id, evidence_mode FROM venture_opportunities WHERE id = ?`,
-    [opportunityId])).rows[0] as Record<string, unknown> | undefined;
   if (owner) {
     const { legalPictureOf } = await import('./legal-surface.js');
     const picture = await legalPictureOf({
