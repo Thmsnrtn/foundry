@@ -39,7 +39,7 @@ import { PROOF1_SLUG, findProof1, reframeProof1UnderTheWorkshop, seedProof1 } fr
 import { reconsiderProof1 } from '../../src/services/venture/proof-1-deliberation.js';
 import { allowExperiment, approveRemaining, planOffer, qualifyRecipient, recipientsOf, runHand } from '../../src/services/venture/hand.js';
 import { establishPublicWorkshop, pauseNewEconomicActivity, publicWorkshopOf, resumeEconomicActivity, setPostalAddress } from '../../src/services/public-workshop/settings.js';
-import { connectWorkshopSending, standUpWorkshop } from '../../src/services/public-workshop/infrastructure.js';
+import { connectWorkshopSending, standUpTheEars, standUpWorkshop } from '../../src/services/public-workshop/infrastructure.js';
 import { publicationGate } from '../../src/services/public-workshop/publication.js';
 import { recipientsOf } from '../../src/services/venture/hand.js';
 
@@ -89,6 +89,14 @@ beforeAll(async () => {
   await seedProof1(OWNER);
   await establishPublicWorkshop({ founderId: OWNER });
   await standUpWorkshop(OWNER);
+  // AND ITS EARS: nobody is written to through a Workshop that cannot hear.
+  // The institution routes mail only to an https address, and this suite's
+  // APP_URL is a local http one, so it is lent one for the call.
+  {
+    const held = process.env.APP_URL;
+    process.env.APP_URL = 'https://foundry.test';
+    try { await standUpTheEars(OWNER); } finally { process.env.APP_URL = held; }
+  }
   X = (await reframeProof1UnderTheWorkshop(OWNER)).successor;
   await approveRemaining({ founderId: OWNER, experimentId: X });
   for (const cand of (await recipientsOf(X)).filter((x) => x.reviewStatus === 'approved')) {

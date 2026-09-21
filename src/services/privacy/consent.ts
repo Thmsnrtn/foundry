@@ -1028,6 +1028,14 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
       + 'stale; written for his test and erased with him',
     onAccountErasure: { op: 'delete' },
   },
+  // WHAT ONE PERSON'S TEST DEPENDED ON, and whether it was working while the
+  // test was asking. It names the paths of his own Workshop and nobody else's;
+  // it goes with the test it belongs to.
+  experiment_paths: {
+    reason: 'the paths one person\'s test depended on, and whether each was working '
+      + 'while the world was being asked',
+    onAccountErasure: { op: 'delete' },
+  },
   experiment_fulfilments: {
     reason: 'what one person\'s test owes after a payment, keyed to the provider\'s references '
       + 'and naming no buyer; goes with the test',
@@ -1233,6 +1241,14 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   cross_product_insights: 'aggregate claims that name no contributor; the rows behind them are erased via decision_patterns',
   failure_patterns: 'a library of known failure shapes, written by the institution',
   governed_effect_kinds: 'the effect vocabulary',
+  // THE INSTRUMENT'S OWN VOCABULARIES. Constitutional tables, written once by
+  // a migration and refused to every writer after it: the channels a public
+  // path can be observed on, the kinds of path an experiment can depend on,
+  // and which paths must be working for an event to be observable at all.
+  // They name nobody and belong to no company.
+  public_channel_kinds: 'the channels a public path can be observed on',
+  experiment_path_kinds: 'the kinds of path an experiment can depend on',
+  settlement_event_paths: 'which paths an event has to travel for anyone to know it happened',
   owner_boundary_subjects: 'the vocabulary of things a boundary can be about, constitutional and the same for every owner; the boundaries themselves are erased with their company',
   senses: 'the vocabulary of what Foundry can learn about any company and what that never grants; constitutional and the same for every owner',
   workspace_substrates: 'the kinds of computer a workshop can run on and whether each is isolated from the institution; constitutional, naming nobody',

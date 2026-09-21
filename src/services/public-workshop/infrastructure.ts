@@ -265,13 +265,13 @@ export async function retireMailbox(founderId: string, email: string): Promise<{
 // ─── Health ──────────────────────────────────────────────────────────────────
 
 export type Signal = { status: 'healthy' | 'needs_attention' | 'unknown'; detail: string };
-export interface WorkshopHealth { site: Signal; cloudflare: Signal; sending: Signal; replyInbox: Signal; mail: Signal; checkedAt: string; pages: number; pagesFailing: string[] }
+export interface WorkshopHealth { site: Signal; cloudflare: Signal; sending: Signal; replyInbox: Signal; mail: Signal; payments: Signal; checkedAt: string; pages: number; pagesFailing: string[] }
 
 export async function workshopHealth(founderId: string, opts: { fetchImpl?: typeof fetch } = {}): Promise<WorkshopHealth> {
   const w = need(await publicWorkshopOf(founderId));
   const fetchImpl = opts.fetchImpl ?? fetch;
   const health: WorkshopHealth = {
-    site: { status: 'unknown', detail: '' }, cloudflare: { status: 'unknown', detail: '' }, sending: { status: 'unknown', detail: '' }, replyInbox: { status: 'unknown', detail: '' }, mail: { status: 'unknown', detail: '' },
+    site: { status: 'unknown', detail: '' }, cloudflare: { status: 'unknown', detail: '' }, sending: { status: 'unknown', detail: '' }, replyInbox: { status: 'unknown', detail: '' }, mail: { status: 'unknown', detail: '' }, payments: { status: 'unknown', detail: '' },
     checkedAt: new Date().toISOString(), pages: 0, pagesFailing: [],
   };
   // The site: every live page read from its public address.
@@ -330,7 +330,6 @@ export async function workshopHealth(founderId: string, opts: { fetchImpl?: type
               : { status: 'healthy', detail: `${w.contactEmail} reaches the program that hears, which keeps every message in the Workshop's own store${held === 0 ? ' (nothing held yet)' : ` (${String(held)} held)`}` };
     } catch (e) { health.replyInbox = { status: 'unknown', detail: e instanceof Error ? e.message : String(e) }; }
   } else health.replyInbox = { status: 'unknown', detail: 'cannot be read without Cloudflare' };
-  await recordWorkshopHealth(founderId, health as unknown as Record<string, unknown>);
   // CAN IT HEAR, AND IS ANYBODY WAITING? Not a mail dashboard: the only two
   // questions that bear on an obligation or on somebody's patience.
   try {
@@ -343,6 +342,28 @@ export async function workshopHealth(founderId: string, opts: { fetchImpl?: type
         ? { status: 'needs_attention', detail: `${m.waiting} waiting on you${m.oldestWaitingHours != null ? `, oldest ${m.oldestWaitingHours}h` : ''}` }
         : { status: 'healthy', detail: m.heard === 0 ? 'listening; nobody has written yet' : `${m.heard} heard, none waiting on you` };
   } catch (e) { health.mail = { status: 'unknown', detail: e instanceof Error ? e.message : String(e) }; }
+
+  // CAN IT HEAR ABOUT MONEY? The sixth path, and the only one that is not
+  // something Foundry can look at: a payment event is something the provider
+  // does TO this deployment. Read here so the Workshop's health is one reading
+  // of every public path, and so the day record covers this one too — without
+  // which a paid test could be measured through an instrument that was never
+  // able to carry the thing it was measuring.
+  try {
+    const { paymentObservationPath } = await import('../venture/the-instrument.js');
+    const pay = await paymentObservationPath();
+    health.payments = { status: pay.status === 'working' ? 'healthy' : pay.status === 'not_working' ? 'needs_attention' : 'unknown', detail: pay.detail };
+  } catch (e) { health.payments = { status: 'unknown', detail: e instanceof Error ? e.message : String(e) }; }
+
+  // RECORDED LAST, WHEN EVERY READING IS IN. This line used to sit above the
+  // mail block, so the snapshot and the day record both carried
+  // `mail: unknown` on every pass this institution has ever made — including
+  // the passes where the reading said the Workshop COULD NOT HEAR. The owner's
+  // health filters for `needs_attention`, so the one channel that would have
+  // named the Experiment 001 failure was the one channel that could never
+  // raise it. Nothing was inferred wrongly; a fact was overwritten with an
+  // absence before anyone could read it.
+  await recordWorkshopHealth(founderId, health as unknown as Record<string, unknown>);
 
   return health;
 }

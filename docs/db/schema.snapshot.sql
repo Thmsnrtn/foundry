@@ -1601,6 +1601,44 @@ CREATE TABLE experiment_materials (
   recorded_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   superseded_at    TEXT
 );
+CREATE TABLE experiment_path_kinds (
+  kind        TEXT PRIMARY KEY,
+  what_it_is  TEXT NOT NULL,
+  observed_on TEXT REFERENCES public_channel_kinds(channel),
+  -- SOME PATHS DO NOT EXIST UNTIL THE OWNER APPROVES THE TEST, because
+  -- approving it is what creates them: the act that mints the way to pay and
+  -- the authority to give money back is the owner's Allow. A check before
+  -- approval that asked for them would refuse every test for lacking the thing
+  -- approval is for. They are checked where they matter instead — before
+  -- anybody is written to, and every morning after.
+  exists_after_approval INTEGER NOT NULL DEFAULT 0 CHECK (exists_after_approval IN (0,1)),
+  sort_order  INTEGER NOT NULL
+);
+CREATE TABLE experiment_paths (
+  experiment_id TEXT NOT NULL REFERENCES venture_experiments(id),
+  -- Carried as its siblings carry it (`experiment_fulfilments`,
+  -- `experiment_run_state`): a test belongs to one person, the erasure walks
+  -- founder-scoped tables by that column, and a child that made the erasure
+  -- take a different route would be a child the erasure could miss.
+  founder_id    TEXT NOT NULL REFERENCES founders(id),
+  kind          TEXT NOT NULL REFERENCES experiment_path_kinds(kind),
+  bears_on      TEXT NOT NULL CHECK (bears_on IN ('measurement','invitation','obligation')),
+  -- In the owner's words, why this test depends on this path.
+  why           TEXT NOT NULL,
+  -- Whether the test may not proceed without it. Derived, never argued down.
+  essential     INTEGER NOT NULL DEFAULT 1 CHECK (essential IN (0,1)),
+  declared_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- The last verification against the world, and what it found.
+  verified_at     TEXT,
+  verified_status TEXT CHECK (verified_status IN ('working','not_working','unknown')),
+  verified_detail TEXT,
+  -- When it was first found not working and not yet found working since. The
+  -- interval an owner needs to know about, and the reader's evidence that a
+  -- window was measured through a broken instrument.
+  broken_since  TEXT,
+  broken_detail TEXT,
+  PRIMARY KEY (experiment_id, kind)
+);
 CREATE TABLE experiment_recipients (
   id               TEXT PRIMARY KEY,
   founder_id       TEXT NOT NULL REFERENCES founders(id),
@@ -3378,26 +3416,25 @@ CREATE TABLE proposed_acts (
   consumed_at         TEXT,
   consumed_by         TEXT
 , rung TEXT REFERENCES consequence_rungs(rung), cost_cents INTEGER, experiment_id TEXT REFERENCES venture_experiments(id), measurement_critical INTEGER, undertaking_id TEXT REFERENCES undertakings(id));
-CREATE TABLE public_channel_days (
+CREATE TABLE "public_channel_days" (
   founder_id   TEXT NOT NULL REFERENCES founders(id),
-  -- The path the world would answer through: the reply mailbox, the sending
-  -- identity, the public site, the provider that carries them.
-  channel      TEXT NOT NULL CHECK (channel IN ('replyInbox','sending','site','cloudflare','mail')),
+  channel      TEXT NOT NULL REFERENCES public_channel_kinds(channel),
   day          TEXT NOT NULL,
-  -- THE WORST OF THE DAY, not the last. A path that was down for an hour
-  -- could not carry a reply sent in that hour, and the last reading of the
-  -- day would call that day healthy.
+  -- THE WORST OF THE DAY, not the last. A path that was down for an hour could
+  -- not carry a reply sent in that hour, and the last reading of the day would
+  -- call that day healthy.
   worst_status TEXT NOT NULL CHECK (worst_status IN ('healthy','needs_attention','unknown')),
-  -- What was wrong, in the words the health reading used.
   detail       TEXT,
   -- How many readings the day got, so a day watched once is not read as a day
   -- that was watched.
   readings     INTEGER NOT NULL DEFAULT 1 CHECK (readings > 0),
-  -- When the day was last looked at. There is deliberately no `first_at`
-  -- beside it: `readings` already says whether a day was watched once or
-  -- often, and a column nothing reads is a column that drifts.
   last_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (founder_id, channel, day)
+);
+CREATE TABLE public_channel_kinds (
+  channel     TEXT PRIMARY KEY,
+  what_it_is  TEXT NOT NULL,
+  sort_order  INTEGER NOT NULL
 );
 CREATE TABLE public_contacts (
   id             TEXT PRIMARY KEY,
@@ -4023,6 +4060,11 @@ CREATE TABLE senses (
   -- is honest for a sense that feeds understanding rather than a metric.
   channels_json  TEXT NOT NULL DEFAULT '[]',
   sort_order     INTEGER NOT NULL
+);
+CREATE TABLE settlement_event_paths (
+  event_kind TEXT NOT NULL REFERENCES business_outcome_event_kinds(kind),
+  path_kind  TEXT NOT NULL REFERENCES experiment_path_kinds(kind),
+  PRIMARY KEY (event_kind, path_kind)
 );
 CREATE TABLE signal_events (
   id TEXT PRIMARY KEY,
@@ -4966,6 +5008,7 @@ CREATE UNIQUE INDEX idx_experiment_exposure_ref
 CREATE INDEX idx_experiment_fulfilments ON experiment_fulfilments(experiment_id, status);
 CREATE UNIQUE INDEX idx_experiment_materials_live
   ON experiment_materials(experiment_id, kind) WHERE superseded_at IS NULL;
+CREATE INDEX idx_experiment_paths_broken ON experiment_paths(experiment_id, broken_since);
 CREATE INDEX idx_experiment_recipients ON experiment_recipients(experiment_id, review_status);
 CREATE INDEX idx_experiment_variants_experiment ON experiment_variants(experiment_id);
 CREATE INDEX idx_experiments_product ON experiments(product_id, status);
@@ -6365,6 +6408,40 @@ BEGIN
     OR NEW.recorded_by <> OLD.recorded_by OR NEW.recorded_at <> OLD.recorded_at
     OR (OLD.superseded_at IS NOT NULL AND NEW.superseded_at IS NOT OLD.superseded_at);
 END;
+CREATE TRIGGER experiment_path_declares_something
+BEFORE INSERT ON experiment_paths
+BEGIN
+  SELECT RAISE(ABORT,'experiment_path:unsaid') WHERE trim(NEW.why) = '';
+  SELECT RAISE(ABORT,'experiment_path:working_while_broken')
+    WHERE NEW.verified_status = 'working' AND NEW.broken_since IS NOT NULL;
+END;
+CREATE TRIGGER experiment_path_is_declared_once
+BEFORE UPDATE ON experiment_paths
+BEGIN
+  -- WHY A TEST DEPENDS ON A PATH IS SETTLED WHEN IT IS DECLARED. Rewriting it
+  -- afterwards would let a launch that failed a check pass by restating what
+  -- the check was about.
+  SELECT RAISE(ABORT,'experiment_path:immutable')
+    WHERE NEW.kind <> OLD.kind OR NEW.bears_on <> OLD.bears_on OR NEW.why <> OLD.why
+       OR NEW.declared_at <> OLD.declared_at;
+  -- A DEPENDENCY IS NEVER ARGUED DOWN. Essentiality follows from the sealed
+  -- rule and the offer; nothing may lower it to make a refusal go away.
+  SELECT RAISE(ABORT,'experiment_path:essential_does_not_fall')
+    WHERE OLD.essential = 1 AND NEW.essential = 0;
+  -- A PATH IS NOT WORKING AND BROKEN AT THE SAME TIME. Recovery clears
+  -- `broken_since` in the same statement that records the working reading.
+  SELECT RAISE(ABORT,'experiment_path:working_while_broken')
+    WHERE NEW.verified_status = 'working' AND NEW.broken_since IS NOT NULL;
+END;
+CREATE TRIGGER experiment_path_kinds_constitutional_delete
+BEFORE DELETE ON experiment_path_kinds
+BEGIN SELECT RAISE(ABORT,'experiment_path_kind:constitutional'); END;
+CREATE TRIGGER experiment_path_kinds_constitutional_insert
+BEFORE INSERT ON experiment_path_kinds
+BEGIN SELECT RAISE(ABORT,'experiment_path_kind:constitutional'); END;
+CREATE TRIGGER experiment_path_kinds_constitutional_update
+BEFORE UPDATE ON experiment_path_kinds
+BEGIN SELECT RAISE(ABORT,'experiment_path_kind:constitutional'); END;
 CREATE TRIGGER experiment_recipient_contact_kind_guard
 BEFORE UPDATE OF contact_kind, contact_source ON experiment_recipients
 BEGIN
@@ -8308,6 +8385,15 @@ BEGIN
     WHERE OLD.worst_status = 'unknown' AND NEW.worst_status = 'healthy';
   SELECT RAISE(ABORT,'public_channel_day:readings_only_rise') WHERE NEW.readings < OLD.readings;
 END;
+CREATE TRIGGER public_channel_kinds_constitutional_delete
+BEFORE DELETE ON public_channel_kinds
+BEGIN SELECT RAISE(ABORT,'public_channel_kind:constitutional'); END;
+CREATE TRIGGER public_channel_kinds_constitutional_insert
+BEFORE INSERT ON public_channel_kinds
+BEGIN SELECT RAISE(ABORT,'public_channel_kind:constitutional'); END;
+CREATE TRIGGER public_channel_kinds_constitutional_update
+BEFORE UPDATE ON public_channel_kinds
+BEGIN SELECT RAISE(ABORT,'public_channel_kind:constitutional'); END;
 CREATE TRIGGER public_contact_append_only_delete
 BEFORE DELETE ON public_contacts
 BEGIN
@@ -9158,6 +9244,15 @@ CREATE TRIGGER senses_constitutional_insert BEFORE INSERT ON senses
 BEGIN SELECT RAISE(ABORT,'sense:constitutional'); END;
 CREATE TRIGGER senses_constitutional_update BEFORE UPDATE ON senses
 BEGIN SELECT RAISE(ABORT,'sense:constitutional'); END;
+CREATE TRIGGER settlement_event_paths_constitutional_delete
+BEFORE DELETE ON settlement_event_paths
+BEGIN SELECT RAISE(ABORT,'settlement_event_path:constitutional'); END;
+CREATE TRIGGER settlement_event_paths_constitutional_insert
+BEFORE INSERT ON settlement_event_paths
+BEGIN SELECT RAISE(ABORT,'settlement_event_path:constitutional'); END;
+CREATE TRIGGER settlement_event_paths_constitutional_update
+BEFORE UPDATE ON settlement_event_paths
+BEGIN SELECT RAISE(ABORT,'settlement_event_path:constitutional'); END;
 CREATE TRIGGER shadow_expectation_names_its_channel
 BEFORE INSERT ON responsibility_shadow_expectations
 WHEN NEW.observation_source_kind IS NULL OR trim(NEW.observation_source_kind)=''

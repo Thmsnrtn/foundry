@@ -20,7 +20,7 @@ process.env.CLOUDFLARE_ACCOUNT_ID = 'acct_test';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { query } from '../../src/db/client.js';
 import { providerStubs } from '../helpers/provider-stubs.js';
-import { OWNER, advanceDays, asText, owner, ownerApp, routinesRanThisMorning, runMorning, seedProductionShape } from '../helpers/world.js';
+import { OWNER, advanceDays, asText, giveTheWorkshopEars, owner, ownerApp, routinesRanThisMorning, runMorning, seedProductionShape } from '../helpers/world.js';
 
 const { state, fetch: fetchStub } = providerStubs();
 vi.stubGlobal('fetch', fetchStub);
@@ -60,6 +60,10 @@ beforeAll(async () => {
   // The Workshop stands on the edge (stubbed): a page store, a worker, a zone.
   const { standUpWorkshop } = await import('../../src/services/public-workshop/infrastructure.js');
   await standUpWorkshop(OWNER, fetchStub as unknown as typeof fetch);
+  // AND ITS EARS. A test that writes to strangers may not go out through a
+  // Workshop that cannot receive their answer, so a scenario in which people
+  // are written to has to stand up an institution that can hear.
+  await giveTheWorkshopEars(OWNER);
   const { signCharter } = await import('../../src/services/institution/charter.js');
   await signCharter({ founderId: OWNER, testsTotalCents: 10000, probesInFlight: 3, cognitionCentsPerDay: 300, days: 7,
     publicVoice: 'Apex Micro', statement: 'A river of nickels.' });

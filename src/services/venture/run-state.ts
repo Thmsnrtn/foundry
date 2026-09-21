@@ -45,7 +45,11 @@ export function readRun(input: {
   attempting: string;
 }): RunReading {
   const { authorised, intended, achieved, exceptions, attempting } = input;
-  const blocking = exceptions.find((e) => /not placed|not published|no asset|paused|unavailable|no trusted policy/i.test(e));
+  // "is not working" is the instrument's words for a path this test depends on
+  // that the world says is down. It is the same kind of fact as an unplaceable
+  // offer — something the institution depends on, unavailable — and reads as
+  // BLOCKED rather than as a failure of the pass.
+  const blocking = exceptions.find((e) => /not placed|not published|no asset|paused|unavailable|no trusted policy|is not working/i.test(e));
 
   if (!authorised) {
     return { state: 'noop_expected', attempting, progressed: false,
@@ -81,6 +85,9 @@ export function readRun(input: {
 }
 
 function dependencyIn(because: string): string | null {
+  // The instrument names its own path, and the name is the dependency.
+  const path = /^(the [a-z ]+?) is not working/i.exec(because);
+  if (path) return path[1];
   if (/no trusted policy|stripe|payment link/i.test(because)) return 'the payment provider, through its governed door';
   if (/not published|page/i.test(because)) return 'the public site';
   if (/no asset/i.test(because)) return "the experiment's own asset";

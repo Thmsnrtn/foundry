@@ -689,6 +689,25 @@ export async function sendingReadiness(founderId: string): Promise<SendingReadin
 export async function readiness(experimentId: string): Promise<Readiness> {
   const e = await experimentRow(experimentId);
   if (!e) throw new HandRefused('experiment_not_found');
+  // WHAT THIS TEST DEPENDS ON, WRITTEN DOWN AND READ BACK. Declared from the
+  // rule it sealed and the offer it makes, then read against the health this
+  // deployment last took — an hour old at worst, and no provider call to draw
+  // a page. The pass that is about to write to strangers takes a live reading
+  // instead, because that is where the consequence is.
+  //
+  // Only paths found NOT WORKING appear here. An unknown path does not refuse:
+  // a path nobody could read is not a path that failed, and a deployment with
+  // no provider configured would otherwise be unable to run anything at all.
+  const instrumentMissing = async (): Promise<string[]> => {
+    const { declareInstrument, instrumentAgainst, lastHealthReading, pathsNotWorking, sentenceFor } =
+      await import('./the-instrument.js');
+    await declareInstrument(experimentId);
+    const readings = await instrumentAgainst(experimentId, await lastHealthReading(e.founderId));
+    // Not the paths approval itself creates: asking for the way to pay before
+    // the act that mints it would refuse every test for lacking the thing the
+    // owner is being asked to authorise.
+    return pathsNotWorking(readings).filter((p) => !p.existsAfterApproval).map(sentenceFor);
+  };
   // A LISTING THE OWNER PLACES HIMSELF needs no cohort and no sender: nobody
   // is written to. What it needs before he can approve it is the file, the
   // listing text, the offer's shape and a recorded design.
@@ -709,6 +728,7 @@ export async function readiness(experimentId: string): Promise<Readiness> {
       if (!w.postalAddress) missing.push('the Workshop has no postal address for commercial mail');
       if (w.economicPause) missing.push('new economic activity is paused');
     }
+    missing.push(...await instrumentMissing());
     return { ok: missing.length === 0, missing, reachable: 0, pending: 0, pendingWebForm: 0, struck: 0, sending };
   }
   if (plan?.listing) {
@@ -752,6 +772,7 @@ export async function readiness(experimentId: string): Promise<Readiness> {
     if (!w.postalAddress) missing.push('the Workshop has no postal address for commercial mail');
     if (w.economicPause) missing.push('new economic activity is paused');
   }
+  missing.push(...await instrumentMissing());
   return { ok: missing.length === 0, missing, reachable, pending, pendingWebForm: pendingAll.length - pending, struck: rs.filter((r) => r.reviewStatus === 'struck').length, sending };
 }
 
@@ -1196,6 +1217,18 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
                       AND a.decision = 'approved' AND a.revoked_at IS NULL AND datetime(a.expires_at) > datetime('now'))
       ORDER BY e.decided_at, e.rowid`, input.founderId ? [input.founderId] : []);
   const reports: HandReport[] = [];
+  // ONE READING OF THE WORLD PER OWNER PER PASS. Three experiments sharing a
+  // Workshop share its paths; asking the provider three times would cost three
+  // times as much and could answer differently each time, which is the one
+  // thing a record of what was working must not do.
+  const healthByFounder = new Map<string, Awaited<ReturnType<typeof import('../public-workshop/infrastructure.js')['workshopHealth']>> | null>();
+  const healthFor = async (founderId: string): Promise<Awaited<ReturnType<typeof import('../public-workshop/infrastructure.js')['workshopHealth']>> | undefined> => {
+    if (!healthByFounder.has(founderId)) {
+      const { workshopHealth } = await import('../public-workshop/infrastructure.js');
+      healthByFounder.set(founderId, await workshopHealth(founderId).catch(() => null));
+    }
+    return healthByFounder.get(founderId) ?? undefined;
+  };
   for (const row of live) {
     const experimentId = String(row.id);
     const report: HandReport = { experimentId, offersPlanned: 0, offersSent: 0, deliveriesSent: 0, reconciled: 0, refundsIssued: 0, settled: null, exceptions: [], state: 'noop_expected', because: null };
@@ -1220,6 +1253,27 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
       const placed = await prepareExposure(experimentId).catch((err: unknown) => ({ refused: err instanceof Error ? err.message : String(err) }));
       if ('refused' in placed) { report.exceptions.push(`offer not placed: ${placed.refused}`); mayWrite = false; }
       else if (w && !placed.published) { report.exceptions.push(`page not published: ${placed.failures.join('; ')}`); mayWrite = false; }
+    }
+
+    // THE INSTRUMENT, READ AGAINST THE WORLD, BEFORE ANYBODY IS WRITTEN TO.
+    // This is the check whose absence sent nineteen people an invitation to
+    // reply to an address that was not routed. A path that bears on the
+    // MEASUREMENT or on the INVITATION stops the writing; a path that bears on
+    // an OBLIGATION is handled below, where what is owed is carried out,
+    // because stopping the writing does not discharge a promise already made.
+    //
+    // Only `not_working` stops it. `unknown` is left to run: a path nobody
+    // could read is not a path that failed, and this institution has just
+    // spent a campaign learning not to collapse those two.
+    if (mayWrite) {
+      const { declareInstrument, verifyInstrument, pathsNotWorking, sentenceFor } = await import('./the-instrument.js');
+      await declareInstrument(experimentId);
+      const readings = await verifyInstrument(experimentId, { now, health: await healthFor(e.founderId) });
+      const broken = pathsNotWorking(readings).filter((r) => r.bearsOn !== 'obligation');
+      if (broken.length > 0) {
+        report.exceptions.push(...broken.map(sentenceFor));
+        mayWrite = false;
+      }
     }
 
     // WHAT THE WORLD HAS ALREADY SAID CAN STOP IT BEFORE ITS BUDGET DOES.

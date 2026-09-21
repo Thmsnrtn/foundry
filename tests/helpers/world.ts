@@ -53,6 +53,12 @@ export interface WorldOptions {
    * before any provider module is imported, and handed back for the proof.
    */
   settledBy?: 'the ledger' | 'the world';
+  /**
+   * Whether the Workshop can hear before the hand writes to anyone. True by
+   * default, which is the institution as it must now be; false reproduces the
+   * conditions Experiment 001 actually ran under, where nothing could answer.
+   */
+  earsOpen?: boolean;
   /** The provider stubs to run 'the world' against, when the proof holds its own. */
   providers?: { state: ProviderState; fetch: (url: string | URL, init?: RequestInit) => Promise<Response> };
 }
@@ -150,6 +156,30 @@ export async function seedProductionShape(opts: WorldOptions = {}): Promise<{ ex
   return { experimentId: seeded.experimentId, providers };
 }
 
+/**
+ * GIVE THE WORKSHOP EARS, for a scenario that writes to people.
+ *
+ * The hand refuses to write through a path that cannot carry the answer, so a
+ * laboratory scenario in which strangers are written to has to stand up an
+ * institution that can hear — which is the whole point of the refusal, and the
+ * reason this helper exists rather than each scenario reaching around it.
+ *
+ * The institution will only route mail to an https address; the suite's own
+ * APP_URL is a local http one, so it is lent an https address for the length
+ * of the call and given back exactly what it had. Nothing is reached: the edge
+ * is a stub, and the address is only what the stub is told to hand mail to.
+ */
+export async function giveTheWorkshopEars(founderId: string = OWNER): Promise<void> {
+  const held = process.env.APP_URL;
+  if (!(held ?? '').startsWith('https://')) process.env.APP_URL = 'https://foundry.test';
+  try {
+    const { standUpTheEars } = await import('../../src/services/public-workshop/infrastructure.js');
+    await standUpTheEars(founderId);
+  } finally {
+    if (held === undefined) delete process.env.APP_URL; else process.env.APP_URL = held;
+  }
+}
+
 /** The three routines that carry a test through the world, in the order the morning runs them. */
 export const HANDS = ['public_workshop_tick', 'experiment_hand_tick', 'business_outcome_tick'] as const;
 
@@ -188,6 +218,21 @@ async function settledByTheWorld(experimentId: string, providers: NonNullable<Wo
     pulledAt: new Date(Date.now() - 86_400_000), by: 'the world' });
   const { standUpWorkshop } = await import('../../src/services/public-workshop/infrastructure.js');
   await standUpWorkshop(OWNER, fetch as unknown as typeof fetch);
+  // AND THE EARS, WHICH PRODUCTION'S EXPERIMENT 001 RAN WITHOUT.
+  //
+  // This is the one place the world deliberately differs from what happened.
+  // Production wrote to nineteen people while the Workshop's reply route was
+  // not up, and the institution now refuses to write through a path that
+  // cannot carry the answer — so a faithful reproduction of that morning would
+  // send nothing at all, and every proof that reads a settled test would have
+  // nothing to read.
+  //
+  // The world therefore models the institution AS IT MUST NOW BE: ears open
+  // before anybody is written to. What happened instead is not lost — it is
+  // what `the-instrument-is-declared-before-the-world-is-asked` sets up on
+  // purpose, by taking the route down, and what a reply path that fails
+  // mid-window proves in `was-the-instrument-working`.
+  if (opts.earsOpen !== false) await giveTheWorkshopEars(OWNER);
   if (opts.undecided) return;
   const { allowExperiment } = await import('../../src/services/venture/hand.js');
   await allowExperiment({ founderId: OWNER, experimentId });

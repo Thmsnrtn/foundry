@@ -34,6 +34,19 @@
 //     grow the other'"'"'s job; when an entry looks odd, ask both.
 //   • A column is READ if its name appears anywhere in `src/` outside every
 //     such write context, comments stripped.
+//   • THE READ IS NOT ATTRIBUTED TO A TABLE, and two columns with the same
+//     name share a fate. `the-instrument.ts` began reading
+//     `stripe_webhook_events.processed_at` to answer whether the payment
+//     provider has ever reached this deployment, and that one read took
+//     `agent_initiative_queue.processed_at` and `signal_events.processed_at`
+//     off the list with it. Both of those are still written and still read by
+//     nothing. They are recorded here rather than in the baseline because the
+//     baseline is what this gate can see, and this is what it cannot: a
+//     column that leaves the list because a NAMESAKE gained a reader has not
+//     gained one. Attributing a read to a table is not cheap — `r.status`
+//     after a join names no table at all — and a gate that guessed would
+//     report defects that are not there, which is worse than a gate that
+//     states its blind spot.
 //   • It therefore MISSES a read that never names the column — `SELECT *`
 //     followed by generic row iteration. That is a false positive in the
 //     direction of asking a question, which is the safe direction.

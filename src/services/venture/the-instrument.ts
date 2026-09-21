@@ -129,3 +129,376 @@ export async function instrumentCaveat(experimentId: string): Promise<string | n
   const doubts = await doubtsAboutTheInstrument(experimentId);
   return doubts.length === 0 ? null : doubts.map((d) => d.sentence).join(' ');
 }
+
+// =============================================================================
+// PART TWO: THE INSTRUMENT IS DECLARED BEFORE THE WORLD IS ASKED.
+//
+// Everything above reads a result after the fact. That is the wrong end of the
+// problem, and reading it after the fact is how a person rather than the
+// institution found the defect. What follows is the same idea taken forwards:
+// an experiment states, before it does anything consequential, which paths it
+// depends on and what each one bears on; the paths are checked against the
+// world before the first act and while the question is open; and a path that
+// is not working stops the asking rather than quietly bounding the answer.
+//
+// NOTHING HERE IS A NEW OBSERVABILITY SYSTEM. The world is read exactly once,
+// by `workshopHealth`, which already checks the site, the provider, the
+// sending identity, the reply route and the Workshop's ears against the
+// outside. This maps that one reading onto what one experiment needs, and
+// keeps what it finds where the experiment can be asked about it.
+// =============================================================================
+
+import type { WorkshopHealth } from '../public-workshop/infrastructure.js';
+
+export type PathKind = 'offer_page' | 'sending' | 'reply' | 'payment' | 'payment_observation' | 'fulfilment' | 'refund';
+/** What the test loses if the path is not working. */
+export type BearsOn = 'measurement' | 'invitation' | 'obligation';
+export type PathStatus = 'working' | 'not_working' | 'unknown';
+
+export interface RequiredPath {
+  kind: PathKind;
+  bearsOn: BearsOn;
+  /** In the owner's words: why this test depends on this path. */
+  why: string;
+  essential: boolean;
+}
+
+export interface PathReading extends RequiredPath {
+  /**
+   * Whether approving the test is what brings this path into being — the way
+   * to pay and the authority to refund are minted by the owner's Allow, so a
+   * check before approval must not ask for them.
+   */
+  existsAfterApproval: boolean;
+  status: PathStatus;
+  detail: string;
+  /** Set while the path has been found not working and not found working since. */
+  brokenSince: string | null;
+  /** What was wrong when it first broke, kept while it is still broken. */
+  brokenDetail: string | null;
+  verifiedAt: string | null;
+}
+
+/**
+ * WHAT THIS EXPERIMENT DEPENDS ON, derived rather than decided.
+ *
+ * Three sources, none of them anybody's opinion at launch:
+ *   the SEALED RULE — `settlement_event_paths` says what must be working for
+ *     each event the rule counts to be observable at all;
+ *   the OFFER — writing to a person invites a reply by existing, whatever the
+ *     text says: the From line is a reply route and a stranger will use it;
+ *   the PRICE — taking money means being able to take it, to see that it was
+ *     taken, to deliver against it and to give it back.
+ *
+ * A listing the owner places himself has none of the first two: the venue
+ * carries the offer and the conversation, and the Workshop's paths are not
+ * part of that instrument.
+ */
+export async function pathsRequiredBy(experimentId: string): Promise<RequiredPath[]> {
+  const e = (await query(
+    `SELECT e.id, e.founder_id, e.settles_when FROM venture_experiments e WHERE e.id = ?`, [experimentId]))
+    .rows[0] as Row | undefined;
+  if (!e) return [];
+
+  const { offerShapePlanOf, materialOf, recipientsOf } = await import('./hand.js');
+  const plan = await offerShapePlanOf(experimentId);
+  // A LISTING IS SOMEBODY ELSE'S INSTRUMENT. The venue carries the offer, takes
+  // the money and answers the buyer; the owner enters its readings by hand.
+  // Declaring the Workshop's paths for it would be declaring a dependency that
+  // does not exist, which is its own kind of untruth.
+  if (plan?.listing) return [];
+
+  const out = new Map<PathKind, RequiredPath>();
+  const need = (kind: PathKind, bearsOn: BearsOn, why: string): void => {
+    // MEASUREMENT OUTRANKS INVITATION where a path bears on both: losing the
+    // measurement is the larger loss, and the sentence should say so.
+    const held = out.get(kind);
+    if (held && (held.bearsOn === 'measurement' || bearsOn !== 'measurement')) return;
+    out.set(kind, { kind, bearsOn, why, essential: true });
+  };
+
+  // ── What the sealed rule cannot be measured without ──────────────────────
+  const { parseSettlementRule } = await import('./outcome.js');
+  const rule = parseSettlementRule(e.settles_when);
+  for (const event of [rule?.event, rule?.outOf].filter((x): x is string => typeof x === 'string')) {
+    const paths = (await query(
+      `SELECT p.path_kind, k.what_it_is FROM settlement_event_paths p
+         JOIN experiment_path_kinds k ON k.kind = p.path_kind
+        WHERE p.event_kind = ? ORDER BY k.sort_order`, [event])).rows as unknown as Row[];
+    for (const p of paths) {
+      need(String(p.path_kind) as PathKind, 'measurement',
+        `the rule this test sealed counts ${event.replace(/_/g, ' ')}, and ${String(p.what_it_is)}`);
+    }
+  }
+
+  // ── What the offer asks a stranger to do ─────────────────────────────────
+  const writesToPeople = (await recipientsOf(experimentId)).some((r) => r.channel === 'email' && r.email);
+  if (writesToPeople) {
+    need('sending', 'invitation', 'this test writes to people, and nothing reaches them without it');
+    // THE DEFECT THIS FILE EXISTS FOR. A message with a From line is an
+    // invitation to reply whether or not its words say so, and nineteen people
+    // were given one that went nowhere.
+    need('reply', 'invitation', 'every message this test sends can be replied to, and a reply nobody receives is worse than no reply at all');
+  }
+  const page = (await query(`SELECT experiment_id FROM public_experiments WHERE experiment_id = ?`, [experimentId])).rows[0];
+  if (page) {
+    need('offer_page', 'invitation', 'the offer sends people to a page, which has to be there and say what it was published saying');
+  }
+  if (plan?.venue === 'workshop') {
+    need('reply', 'invitation', 'a buyer arriving on their own has one way to ask a question, and it has to reach somebody');
+  }
+
+  // ── What taking money commits us to ──────────────────────────────────────
+  if ((plan?.price?.amountCents ?? 0) > 0) {
+    need('payment', 'invitation', 'this offer asks people for money, so the way to pay has to work');
+    need('payment_observation', 'measurement', 'a payment Foundry never hears about is a customer owed something nobody knows about');
+    need('fulfilment', 'obligation', 'somebody who pays is owed the thing, and this is the way it reaches them');
+    need('refund', 'obligation', 'the public promise is money back with no questions, which has to be possible before it is made');
+  } else if (await materialOf(experimentId, 'deliverable')) {
+    need('fulfilment', 'obligation', 'this test promises somebody a thing, and this is the way it reaches them');
+  }
+
+  const order = (await query(`SELECT kind FROM experiment_path_kinds ORDER BY sort_order`, [])).rows as unknown as Row[];
+  return order.map((r) => out.get(String(r.kind) as PathKind)).filter((p): p is RequiredPath => p !== undefined);
+}
+
+/**
+ * WRITE THE INSTRUMENT DOWN, once, before the first consequential act.
+ * Idempotent: a path already declared keeps its declaration, because why a
+ * test depends on a path is settled when it is declared and the row refuses to
+ * have it rewritten.
+ */
+export async function declareInstrument(experimentId: string): Promise<RequiredPath[]> {
+  const e = (await query(`SELECT founder_id FROM venture_experiments WHERE id = ?`, [experimentId]))
+    .rows[0] as Row | undefined;
+  if (!e) return [];
+  const required = await pathsRequiredBy(experimentId);
+  for (const p of required) {
+    await query(
+      `INSERT INTO experiment_paths (experiment_id, founder_id, kind, bears_on, why, essential)
+       VALUES (?,?,?,?,?,?) ON CONFLICT(experiment_id, kind) DO NOTHING`,
+      [experimentId, String(e.founder_id), p.kind, p.bearsOn, p.why, p.essential ? 1 : 0]);
+  }
+  return required;
+}
+
+/** The recorded instrument, without touching the world. */
+export async function instrumentOf(experimentId: string): Promise<PathReading[]> {
+  const rows = (await query(
+    `SELECT p.kind, p.bears_on, p.why, p.essential, p.verified_at, p.verified_status,
+            p.verified_detail, p.broken_since, p.broken_detail, k.exists_after_approval
+       FROM experiment_paths p JOIN experiment_path_kinds k ON k.kind = p.kind
+      WHERE p.experiment_id = ? ORDER BY k.sort_order`, [experimentId])).rows as unknown as Row[];
+  return rows.map((r) => ({
+    kind: String(r.kind) as PathKind, bearsOn: String(r.bears_on) as BearsOn, why: String(r.why),
+    essential: Number(r.essential) === 1, existsAfterApproval: Number(r.exists_after_approval) === 1,
+    status: (r.verified_status == null ? 'unknown' : String(r.verified_status)) as PathStatus,
+    detail: r.verified_detail == null ? 'not checked yet' : String(r.verified_detail),
+    brokenSince: r.broken_since == null ? null : String(r.broken_since),
+    brokenDetail: r.broken_detail == null ? null : String(r.broken_detail),
+    verifiedAt: r.verified_at == null ? null : String(r.verified_at),
+  }));
+}
+
+/**
+ * CHECK THE DECLARED PATHS AGAINST THE WORLD, and keep what was found.
+ *
+ * One reading of the world serves every path that has a channel: the pass that
+ * already takes the Workshop's health hourly hands its reading in, and nothing
+ * here goes out to a provider twice. The two paths no channel covers are asked
+ * directly, and both of them answer "unknown" rather than "working" when the
+ * honest answer is that nobody has tried it yet.
+ *
+ * `not_working` and `unknown` are kept apart everywhere below. A path nobody
+ * could read is not a path that failed, and a path that failed is not a path
+ * that was never tried — collapsing those three is how an institution ends up
+ * certain about something it never observed.
+ */
+export async function verifyInstrument(
+  experimentId: string,
+  opts: { health?: WorkshopHealth; fetchImpl?: typeof fetch; now?: Date } = {},
+): Promise<PathReading[]> {
+  const e = (await query(`SELECT founder_id FROM venture_experiments WHERE id = ?`, [experimentId]))
+    .rows[0] as Row | undefined;
+  if (!e) return [];
+  const now = opts.now ?? new Date();
+  let health = opts.health ?? null;
+  if (health === null) {
+    const { workshopHealth } = await import('../public-workshop/infrastructure.js');
+    try { health = await workshopHealth(String(e.founder_id), { fetchImpl: opts.fetchImpl }); }
+    catch { health = null; }
+  }
+  const read = await instrumentAgainst(experimentId, health, now);
+  const out: PathReading[] = [];
+  for (const found of read) {
+    // RECOVERY AND FAILURE IN ONE STATEMENT, so the row is never working and
+    // broken at the same time (the table refuses that pairing outright).
+    await query(
+      `UPDATE experiment_paths
+          SET verified_at = ?, verified_status = ?, verified_detail = ?,
+              broken_since = CASE WHEN ? = 'not_working' THEN COALESCE(broken_since, ?) ELSE NULL END,
+              broken_detail = CASE WHEN ? = 'not_working' THEN ? ELSE NULL END
+        WHERE experiment_id = ? AND kind = ?`,
+      [now.toISOString(), found.status, found.detail, found.status, now.toISOString(),
+        found.status, found.status === 'not_working' ? found.detail : null, experimentId, found.kind]);
+    const row = (await query(
+      `SELECT broken_since, broken_detail FROM experiment_paths WHERE experiment_id = ? AND kind = ?`, [experimentId, found.kind]))
+      .rows[0] as Row | undefined;
+    out.push({ ...found,
+      brokenSince: row?.broken_since == null ? null : String(row.broken_since),
+      brokenDetail: row?.broken_detail == null ? null : String(row.broken_detail) });
+  }
+  return out;
+}
+
+/**
+ * THE DECLARED PATHS READ AGAINST A HEALTH READING, WITHOUT WRITING ANYTHING.
+ *
+ * What a page and a door use: the Workshop's health is taken hourly and stored,
+ * so asking the world again to draw a card would be three provider calls per
+ * render for a reading that is already an hour fresh at worst. The pass that is
+ * about to write to strangers takes a live reading instead — the cost belongs
+ * where the consequence is.
+ */
+export async function instrumentAgainst(
+  experimentId: string, health: WorkshopHealth | null, now = new Date(),
+): Promise<PathReading[]> {
+  const declared = await instrumentOf(experimentId);
+  if (declared.length === 0) return [];
+  const e = (await query(`SELECT founder_id FROM venture_experiments WHERE id = ?`, [experimentId]))
+    .rows[0] as Row | undefined;
+  if (!e) return declared;
+  const channelOf = (await query(`SELECT kind, observed_on FROM experiment_path_kinds`, [])).rows as unknown as Row[];
+  const observedOn = new Map(channelOf.map((r) => [String(r.kind), r.observed_on == null ? null : String(r.observed_on)]));
+  const out: PathReading[] = [];
+  for (const p of declared) {
+    const found = await readOnePath(p, { experimentId, founderId: String(e.founder_id), health, observedOn, now });
+    out.push({ ...p, status: found.status, detail: found.detail, verifiedAt: now.toISOString() });
+  }
+  return out;
+}
+
+/** The health reading this deployment last took, for a reader that must not take one. */
+export async function lastHealthReading(founderId: string): Promise<WorkshopHealth | null> {
+  const w = (await query('SELECT health_json FROM public_workshop WHERE founder_id = ?', [founderId]))
+    .rows[0] as Row | undefined;
+  if (w?.health_json == null) return null;
+  try { return JSON.parse(String(w.health_json)) as WorkshopHealth; } catch { return null; }
+}
+
+/**
+ * THE ESSENTIAL PATHS THAT ARE NOT WORKING, in the owner's words. Empty is the
+ * ordinary answer and says nothing. `unknown` is deliberately not here: a path
+ * nobody could read is not a path that failed, and refusing on it would stop
+ * every test on every deployment without a provider configured.
+ */
+export function pathsNotWorking(readings: PathReading[]): PathReading[] {
+  return readings.filter((r) => r.essential && r.status === 'not_working');
+}
+
+/** One path, read from the one health reading or from its own source. */
+async function readOnePath(
+  p: RequiredPath,
+  ctx: { experimentId: string; founderId: string; health: WorkshopHealth | null; observedOn: Map<string, string | null>; now: Date },
+): Promise<{ status: PathStatus; detail: string }> {
+  // THE ONE READING FIRST. Where a channel covers the path, the Workshop's
+  // health has already looked at the world and said what is wrong in a
+  // sentence an owner can act on; restating it here would be a second reading
+  // of one fact, which is how the last three defects began.
+  const channel = ctx.observedOn.get(p.kind) ?? null;
+  const signal = channel === null || ctx.health === null ? undefined
+    : (ctx.health as unknown as Record<string, { status?: string; detail?: string }>)[channel];
+  if (signal?.status) {
+    return {
+      status: signal.status === 'healthy' ? 'working' : signal.status === 'needs_attention' ? 'not_working' : 'unknown',
+      detail: signal.detail ?? '',
+    };
+  }
+  // ITS OWN SOURCE, when no reading covers it — an older health reading taken
+  // before a channel existed, or a path no channel watches.
+  if (p.kind === 'payment') return paymentPath(ctx.experimentId);
+  if (p.kind === 'payment_observation') return paymentObservationPath(ctx.now);
+  if (p.kind === 'refund') return refundPath(ctx.experimentId);
+  if (channel !== null) return { status: 'unknown', detail: `nothing read ${channel}, so this path was not checked` };
+  return { status: 'unknown', detail: 'no way to check this path is implemented' };
+}
+
+/** The way to pay: the link exists, is ours, is live, and charges what the offer says. */
+async function paymentPath(experimentId: string): Promise<{ status: PathStatus; detail: string }> {
+  const m = (await query(
+    `SELECT payment_link_url FROM experiment_materials
+      WHERE experiment_id = ? AND payment_link_url IS NOT NULL ORDER BY recorded_at DESC LIMIT 1`, [experimentId]))
+    .rows[0] as Row | undefined;
+  if (!m?.payment_link_url) {
+    return { status: 'not_working', detail: 'no way to pay is attached to this offer' };
+  }
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return { status: 'unknown', detail: 'a way to pay is attached, but this deployment has no payment provider configured to check it against' };
+  }
+  return { status: 'working', detail: `a way to pay is attached: ${String(m.payment_link_url)}` };
+}
+
+/**
+ * THE WAY MONEY GOES BACK. Not "could we call the provider" — whether the
+ * authority to refund exists and has not lapsed, which is the thing that
+ * actually refuses at three in the morning when somebody wants their $29 back.
+ */
+async function refundPath(experimentId: string): Promise<{ status: PathStatus; detail: string }> {
+  const act = (await query(
+    `SELECT a.id, a.decision, a.revoked_at, a.expires_at FROM proposed_acts a
+      WHERE a.experiment_id = ? AND a.action_type = 'stripe_create_refund'
+      ORDER BY a.rowid DESC LIMIT 1`, [experimentId])).rows[0] as Row | undefined;
+  if (!act) return { status: 'not_working', detail: 'nothing authorises a refund for this test' };
+  if (act.decision !== 'approved') return { status: 'not_working', detail: 'the refund has not been authorised' };
+  if (act.revoked_at != null) return { status: 'not_working', detail: 'the authority to refund was withdrawn' };
+  if (!process.env.STRIPE_SECRET_KEY) {
+    return { status: 'unknown', detail: 'a refund is authorised, but this deployment has no payment provider configured to make one through' };
+  }
+  return { status: 'working', detail: 'a refund is authorised and the provider is configured' };
+}
+
+/**
+ * THE PAYMENT OBSERVATION PATH, which has no health signal of its own because
+ * it is not something Foundry can look at: it is something the provider does
+ * TO us. Three honest states — we cannot accept an event at all; we can, and
+ * one has arrived; we can, and none ever has — and the third is `unknown`,
+ * never `working`. What would settle it is named rather than assumed.
+ */
+export async function paymentObservationPath(now = new Date()): Promise<{ status: PathStatus; detail: string }> {
+  if (!process.env.STRIPE_WEBHOOK_SECRET) {
+    return { status: 'not_working', detail: 'nothing is configured to receive a payment event, so a payment would happen and Foundry would not know' };
+  }
+  const since = new Date(now.getTime() - 30 * 86_400_000).toISOString();
+  const seen = (await query(
+    `SELECT event_type, processed_at FROM stripe_webhook_events
+      WHERE datetime(processed_at) >= datetime(?) ORDER BY processed_at DESC LIMIT 1`, [since]))
+    .rows[0] as Row | undefined;
+  if (!seen) {
+    return { status: 'unknown', detail: 'a payment event can be received, but none ever has been: nothing has yet proved the provider can reach this deployment' };
+  }
+  return { status: 'working', detail: `the provider reached this deployment on ${String(seen.processed_at).slice(0, 10)} (${String(seen.event_type)})` };
+}
+
+/**
+ * ONE NAME PER PATH, everywhere. The kinds table says what each path is for
+ * the record; this is what the owner reads on a card, in a refusal and in the
+ * letter, so a path cannot be "the reply inbox" in one place and "the way a
+ * person answers" in another.
+ */
+export const PATH_NAMES: Record<PathKind, string> = {
+  offer_page: 'the page the offer sends people to',
+  sending: 'the way messages reach people',
+  reply: 'the way a person answers',
+  payment: 'the way a person pays',
+  payment_observation: 'the way a payment becomes something Foundry knows about',
+  fulfilment: 'the way what was paid for reaches the buyer',
+  refund: 'the way money goes back',
+};
+
+/** What is wrong with one path, as a sentence: the name, the finding, the cost. */
+export function sentenceFor(r: PathReading): string {
+  const cost = r.bearsOn === 'measurement' ? 'this test cannot measure what it was for'
+    : r.bearsOn === 'invitation' ? 'people would be invited to use something that is not there'
+      : 'a promise could be made that cannot be kept';
+  return `${PATH_NAMES[r.kind]} is not working${r.detail ? ` (${r.detail})` : ''} — ${cost}`;
+}

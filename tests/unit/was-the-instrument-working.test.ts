@@ -8,9 +8,18 @@
 // about a market. No rule was broken. A null result is only evidence about the
 // world if the world could have answered.
 //
-// This runs on the world's own path — Experiment 001 carried by the hand, 21
-// written to, 19 delivered — because a test that supplies its own result
-// cannot show a defect in the instrument that produced one.
+// This runs on the world's own path — Experiment 001 carried by the hand —
+// because a test that supplies its own result cannot show a defect in the
+// instrument that produced one.
+//
+// THE SCENARIO IS NO LONGER PRODUCTION'S EXACTLY, and the difference is the
+// point. Production wrote to nineteen people through a path that was never
+// routed; the institution now refuses to write through a path that cannot
+// carry the answer, so that morning could not happen again and cannot be
+// staged. What is staged instead is the case that survives the refusal and is
+// the harder one: a path that WAS working when the offers went out and failed
+// while the window was still open. The offers are real, the days are real, and
+// the result still means less than it appears to.
 // =============================================================================
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
@@ -18,14 +27,28 @@ process.env.FOUNDRY_INSTANCE_POSTURE = 'private_owner';
 process.env.FOUNDRY_OWNER_EMAIL = 'owner@example.com';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { query } from '../../src/db/client.js';
-import { OWNER, asText, owner, ownerApp, seedProductionShape } from '../helpers/world.js';
+import { HANDS, OWNER, advanceDays, asText, owner, ownerApp, runMorning, seedProductionShape } from '../helpers/world.js';
 
 let app: Awaited<ReturnType<typeof ownerApp>>;
 let me: ReturnType<typeof owner>;
 let X = '';
 
 beforeAll(async () => {
-  ({ experimentId: X } = await seedProductionShape({ settledBy: 'the world' }));
+  const seeded = await seedProductionShape({ settledBy: 'the world', unsettled: true });
+  X = seeded.experimentId;
+  const providers = seeded.providers!;
+  // Two mornings with the reply path open: the offers go out and reach people.
+  for (let i = 0; i < 2; i += 1) { await advanceDays(1); await runMorning(HANDS); }
+  // Then the route fails, and stays failed for the rest of the window. Nothing
+  // further is written — the hand refuses that now — but what was already sent
+  // was sent, and the people who got it can no longer answer.
+  providers.state.cf.routing.enabled = false;
+  for (let i = 0; i < 14; i += 1) {
+    await advanceDays(1);
+    await runMorning(HANDS);
+    const e = (await query('SELECT ran_at FROM venture_experiments WHERE id = ?', [X])).rows[0] as Record<string, unknown> | undefined;
+    if (e?.ran_at != null) break;
+  }
   app = await ownerApp();
   me = owner(app);
 });

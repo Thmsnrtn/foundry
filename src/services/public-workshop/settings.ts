@@ -200,7 +200,7 @@ export async function recordWorkshopHealth(founderId: string, health: Record<str
   // One row per path per day, holding the WORST reading of that day: a path
   // that was down for an hour could not carry a reply sent in that hour.
   const day = now.toISOString().slice(0, 10);
-  for (const channel of ['replyInbox', 'sending', 'site', 'cloudflare', 'mail'] as const) {
+  for (const channel of ['replyInbox', 'sending', 'site', 'cloudflare', 'mail', 'payments'] as const) {
     const signal = health[channel] as { status?: string; detail?: string } | undefined;
     const status = signal?.status;
     if (status !== 'healthy' && status !== 'needs_attention' && status !== 'unknown') continue;

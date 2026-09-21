@@ -23,7 +23,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import Stripe from 'stripe';
 import { query } from '../../src/db/client.js';
 import { providerStubs } from '../helpers/provider-stubs.js';
-import { OWNER, addCompanies, advanceDays, asText, outage, owner, ownerApp, routinesRanThisMorning, runMorning, seedProductionShape } from '../helpers/world.js';
+import { OWNER, addCompanies, advanceDays, asText, giveTheWorkshopEars, outage, owner, ownerApp, routinesRanThisMorning, runMorning, seedProductionShape } from '../helpers/world.js';
 
 const { state, fetch: fetchStub } = providerStubs();
 vi.stubGlobal('fetch', fetchStub);
@@ -66,6 +66,8 @@ beforeAll(async () => {
   }
   const { standUpWorkshop } = await import('../../src/services/public-workshop/infrastructure.js');
   await standUpWorkshop(OWNER, fetchStub as unknown as typeof fetch);
+  // AND ITS EARS: nobody is written to through a Workshop that cannot hear.
+  await giveTheWorkshopEars(OWNER);
 });
 
 describe('day 1 — a portfolio, a search, a test allowed', () => {

@@ -1,7 +1,6 @@
 agent_configs.parent_version
 agent_configs.updated_by
 agent_configs.word_count
-agent_initiative_queue.processed_at
 agent_predictions.outcome_notes
 agent_sessions.agent_version
 agent_sessions.evolution_candidates
@@ -52,10 +51,8 @@ responsibility_candidate_decisions.grounding_mechanism
 responsibility_candidate_decisions.resulting_initial_state
 responsibility_shadow_comparisons.learned_claim_id
 revenue_attributions.evidence_json
-signal_events.processed_at
 signal_events.processing_session_id
 strategic_decisions_log.authority_required_json
-stripe_webhook_events.processed_at
 system_identities.established_reason
 weekly_plans.items_json
 weekly_plans.signal_at_generation
