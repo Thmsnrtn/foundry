@@ -2606,3 +2606,51 @@ to ask about. A dependency nobody declared — a provider changing a default, a
 DNS record the owner edits by hand, a registrar lapsing — is still discovered
 by consequence rather than by instrument. The declared instrument narrows that
 to the paths a test's own design implies, which is most of them and not all.
+
+---
+
+## The Astra reconciliation, released (21 September 2026)
+
+Twenty-nine commits, from `eef78cd9` to this one. Full chain green on the frozen
+tree: 611 files, 5220 tests, every gate holding.
+
+**What was reconciled.** An independent strategic review examined the
+institution from outside — its economic objective, its opportunity selection,
+the facts its safety rests on, its owner-authority semantics, its recovery
+posture, its private boundary. Its consequential findings are classified in
+`MATURITY_MAP.md` with source locations and acceptance proofs, including the
+five that were rejected or already answered and the one inference that was
+wrong and nearly shipped as an observation.
+
+**What shipped.** The ownership verdict reads the institution's own ledger
+rather than MRR minus the AI bill. A polite question carrying an instruction is
+an instruction. A recipe's intention is no longer an observed fact. Shared reach
+is told apart from a shared fault in what the owner reads, and a real candidate
+is no longer called fragile for having been read by a lawyer's eye. The aperture
+says what could not have come through it at all. A backup demonstrates that it
+reconstructs what is owed. Stopping has an answer before it is ordered. Autonomy
+reads by kind of act. A null result carries its denominator. And Experiment 001's
+record carries a dated correction with the record beneath it frozen by rule.
+
+**What it cost to be right about it.** Three rounds of independent review found
+twenty-two defects, of which five would have caused real harm and four were
+regressions introduced by the repairs themselves — including a trigger that
+would have broken founder erasure, and a rule that watched a door SQLite does
+not send `INSERT OR REPLACE` through. The rule that came out of it:
+
+> A correction is code, and gets the same adversarial reading or it gets none.
+
+**What is still open and is the owner's.** PENDING 21 (whether Experiment 001's
+null stands or is void). PENDING 23 (the repository is public). PENDING 24 (a
+development-instance Clerk key in production). An external liveness witness,
+which needs a third party and a bill. None blocks anything; all are recorded
+with what changing each would and would not achieve.
+
+**And the recursive question, again.** *What would I be embarrassed to have
+missed?* That two of the three review rounds found defects in the round before
+it, and I stopped at three because the tree was green rather than because the
+findings had stopped. A fourth cell would probably have found something. The
+honest version of "converged" here is "the findings got smaller", not "there
+are none".
+
+[deploy-private]
