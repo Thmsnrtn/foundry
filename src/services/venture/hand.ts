@@ -102,6 +102,13 @@ export interface Recipient {
   qualifiedAt: string | null; qualifiedBecause: string | null; qualifiedSource: string | null;
   /** Which evidence put it in the population, once that has been observed. Never a grade. */
   evidenceStratum: 'public_work_observed' | 'commercial_institutional_capable' | null;
+  /**
+   * WHEN A MESSAGE ACTUALLY WENT TO THIS ROW, or null. Without it a list can
+   * tell the owner an address is protected where a message already went to
+   * it — which is a comfortable lie about a thing that already happened to a
+   * person, and the one thing a record of outreach must never do.
+   */
+  writtenToAt: string | null;
 }
 
 const recipientId = (experimentId: string, counterpartyRef: string) =>
@@ -139,7 +146,13 @@ export async function addRecipients(input: {
 }
 
 export async function recipientsOf(experimentId: string): Promise<Recipient[]> {
-  return (await rows('SELECT * FROM experiment_recipients WHERE experiment_id = ? ORDER BY created_at, rowid', [experimentId])).map((r) => ({
+  return (await rows(
+    `SELECT r.*,
+            (SELECT MIN(o.executed_at) FROM outbound_actions o
+              WHERE o.recipient_id = r.id AND o.experiment_act = 'offer' AND o.executed_at IS NOT NULL)
+              AS written_to_at
+       FROM experiment_recipients r WHERE r.experiment_id = ? ORDER BY r.created_at, r.rowid`,
+    [experimentId])).map((r) => ({
     id: String(r.id), experimentId: String(r.experiment_id), counterpartyRef: String(r.counterparty_ref),
     email: r.email == null ? null : String(r.email), channel: String(r.channel) as Recipient['channel'],
     sourceUrl: r.source_url == null ? null : String(r.source_url), reviewStatus: String(r.review_status) as Recipient['reviewStatus'],
@@ -149,6 +162,7 @@ export async function recipientsOf(experimentId: string): Promise<Recipient[]> {
     qualifiedSource: r.qualified_source == null ? null : String(r.qualified_source),
     evidenceStratum: r.evidence_stratum == null ? null
       : String(r.evidence_stratum) as Recipient['evidenceStratum'],
+    writtenToAt: r.written_to_at == null ? null : String(r.written_to_at),
   }));
 }
 
@@ -928,21 +942,34 @@ export async function planOffer(input: { experimentId: string; recipientId: stri
   // an unscreened stranger here is the whole of the rule — and it fails closed:
   // no qualification recorded means no message, never "probably fine".
   if (!recipient.qualifiedAt) throw new HandRefused('recipient_unqualified', recipient.counterpartyRef);
-  // AN EXCLUSION IS ABOUT A PERSON, NOT ABOUT A ROW.
+  // ─── THE OWNER'S BOUNDARY, AT THE ACTION ─────────────────────────────────
   //
-  // A returning owner found this by reading his own recipients list: the same
-  // business, at the same address, held as two rows — one from the seeded
-  // candidates and one from the cohort, under names differing by "LLC". One
-  // was struck for having no recorded grounds; the other was approved; and the
-  // message went to the address that had just been excluded. Both rows were
-  // true, the promise on the page ("nobody excluded is ever written to") was
-  // false as the person receiving it experiences it, and the activity feed
-  // showed him the exclusion as evidence that the promise had held.
+  // `owner_exclusions` and its marks (name, domain, email, phone, address) are
+  // the institution's one exclusion engine, and `whyExcluded` is its reader.
+  // It was consulted in exactly one place: `addRecipients`, when a candidate
+  // is REGISTERED. Nothing re-read it when a message was about to go out.
   //
-  // The promise is about who gets a message, so it binds on the ADDRESS. A
-  // struck row anywhere in this test silences its address everywhere in it,
-  // and it fails closed at the door rather than in whichever loop happens to
-  // be selecting recipients.
+  // So an entity the owner excluded AFTER his candidates were approved was
+  // still written to, and "an owner exclusion outranks everything" was
+  // enforced at an interface rather than at the action. The duplicate-row case
+  // two reviewers found is the small version of that; this is the large one.
+  // Here is where every offer in the system is planned, so here is where it
+  // belongs — the same engine, no second policy, and it fails closed.
+  const { whyExcluded } = await import('../institution/owner-exclusions.js');
+  const no = await whyExcluded({ founderId: e.founderId, name: recipient.counterpartyRef,
+    email: recipient.email, url: recipient.sourceUrl });
+  if (no.excluded) throw new HandRefused('owner_excluded', `${recipient.counterpartyRef} — ${no.entity ?? ''} (${no.matched ?? ''})`);
+
+  // ─── AND THE SCREENING RULE, WHICH IS A DIFFERENT THING ──────────────────
+  //
+  // A row struck for having no recorded grounds is not the owner saying never
+  // again; it is this test's population being what the design said it was. It
+  // binds on the ADDRESS because the promise is about who receives a message,
+  // and the same business can sit on one list twice under names differing by
+  // an "LLC" — which is how a message went to an address that had just been
+  // excluded. It binds WITHIN THIS EXPERIMENT only, because that is all a
+  // screening decision means, and claiming more would make every test's
+  // housekeeping into a permanent judgment about a business.
   const struckHere = (await rows(
     `SELECT 1 AS n FROM experiment_recipients
       WHERE experiment_id = ? AND review_status = 'struck'

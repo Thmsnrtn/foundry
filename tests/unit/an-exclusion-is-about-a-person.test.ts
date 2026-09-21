@@ -22,7 +22,9 @@ process.env.FOUNDRY_INSTANCE_POSTURE = 'private_owner';
 process.env.FOUNDRY_OWNER_EMAIL = 'owner@example.com';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { query } from '../../src/db/client.js';
-import { HANDS, advanceDays, asText, owner, ownerApp, runMorning, seedProductionShape } from '../helpers/world.js';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import { HANDS, OWNER, advanceDays, asText, owner, ownerApp, runMorning, seedProductionShape } from '../helpers/world.js';
 
 let app: Awaited<ReturnType<typeof ownerApp>>;
 let me: ReturnType<typeof owner>;
@@ -77,7 +79,7 @@ describe('the same address on two rows', () => {
     const page = asText(await me.page(`/foundry/experiments/${X}/recipients`));
     expect(page).toContain('excluded by address');
     expect(page).toMatch(/This address is excluded on another line of this list/);
-    expect(page).toMatch(/an exclusion is about the person who would receive the message, not about the row/);
+    expect(page).toMatch(/an exclusion for this test binds on the person who would receive the message, not on the row/);
   });
 });
 
@@ -96,5 +98,40 @@ describe('and the world runs without writing to it', () => {
     const written = providers.state.sends.flatMap((m) => m.to.map((a) => a.trim().toLowerCase()));
     const breached = written.filter((a) => forbidden.has(a));
     expect(breached, 'an address excluded on any line of the list is written to on none of them').toEqual([]);
+  });
+});
+
+describe('the owner\'s boundary is read where the message is sent, not where the row was made', () => {
+  it('an entity excluded AFTER his candidates were approved is not written to', async () => {
+    // THE LARGE VERSION OF THE SAME DEFECT. `whyExcluded` — the institution's
+    // one exclusion engine, with marks of kind name, domain, email, phone and
+    // address — was consulted only by `addRecipients`, when a candidate is
+    // registered. An exclusion recorded afterwards changed nothing, and "an
+    // owner exclusion outranks everything" was a claim about an interface.
+    const target = (await query(
+      `SELECT id, counterparty_ref, email FROM experiment_recipients
+        WHERE experiment_id = ? AND review_status = 'approved' AND email IS NOT NULL
+          AND id NOT IN (SELECT recipient_id FROM outbound_actions
+                          WHERE experiment_id = ? AND recipient_id IS NOT NULL)
+        ORDER BY rowid DESC LIMIT 1`, [X, X])).rows[0] as Record<string, unknown> | undefined;
+    expect(target, 'an approved business nobody has written to yet').toBeTruthy();
+
+    const { planOffer } = await import('../../src/services/venture/hand.js');
+    const { excludeEntity } = await import('../../src/services/institution/owner-exclusions.js');
+    await excludeEntity({
+      founderId: OWNER, entity: String(target!.counterparty_ref), by: `founder:${OWNER}`,
+      because: 'the owner decided, after approving the cohort, that this one is not to be written to',
+      marks: [{ kind: 'email', value: String(target!.email), source: 'the owner named the address' }],
+    });
+    await expect(planOffer({ experimentId: X, recipientId: String(target!.id) }))
+      .rejects.toThrow(/owner_excluded/);
+  });
+
+  it('and the engine is the one that already existed, not a second one beside it', async () => {
+    const source = readFileSync(resolve(__dirname, '../../src/services/venture/hand.ts'), 'utf8');
+    const door = source.slice(source.indexOf('export async function planOffer'));
+    const body = door.slice(0, door.indexOf('\nexport '));
+    expect(body, 'the canonical reader, at the action').toMatch(/whyExcluded/);
+    expect(body, 'and the address-level list it already consulted').toMatch(/isSuppressed/);
   });
 });
