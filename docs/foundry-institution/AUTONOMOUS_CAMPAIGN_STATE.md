@@ -2503,3 +2503,106 @@ anything beyond Experiment 001's null, and nothing after a real purchase has
 been observed outside the laboratory. The Stripe test-mode run is written and
 deliberately unrun; the six facts only real Stripe can establish are proof
 debt, not evidence.
+
+## The observation-integrity campaign (2026-09-21)
+
+The owner's second mandate names the failure class Experiment 001 exposed:
+**Foundry can execute a process correctly according to its internal state
+while the external path required for that process to achieve or observe its
+intended outcome is broken.** Not an email-routing defect — a class.
+
+### The distinction, three times, each one level further out
+
+The institution had drawn this line twice before and neither reached the new
+case:
+
+| where | what it separates |
+|---|---|
+| `run-state.ts` | "it ran without throwing" is not "it did what it was for" |
+| `the-instrument.ts` (part one) | "it did what it was for" is not "the result means what it appears to mean" |
+| **this campaign** | neither is "the path required to obtain or observe the outcome was working while the question was open" |
+
+The five layers the mandate names — the economic event, the outside system it
+happens through, the instrument we observe it with, the record of that
+observation, and the interpretation drawn from the record — are now kept apart
+by machinery rather than by care.
+
+### What was built
+
+**An experiment declares its instrument before it asks the world.**
+`experiment_paths` holds what one test depends on, derived rather than decided:
+`settlement_event_paths` maps each event a sealed rule counts to the paths that
+must work for it to be observable, and the offer's own shape adds what it asks
+a stranger to do. Each path says what it BEARS ON — *measurement* (the rule
+cannot be seen without it), *invitation* (the offer asks a stranger to use it),
+*obligation* (a promise depends on it). Experiment 001's reply path was an
+invitation its rule never counted, which is precisely why nothing noticed: the
+measurement was sound, the invitation was not, and the institution had no word
+for the second.
+
+**The hand refuses to write through a path that is not working**, and only the
+writing stops — what is owed is still carried out and the world's verdict is
+still read, exactly as the owner's pause already behaves. `unknown` never
+stops anything: a path nobody could read is not a path that failed.
+
+**A null drawn through a gap is refused.** `invalidateByObservation` is a
+second door into the invalidity the institution already had, and its authority
+is the record: it reads the day-by-day channel record itself, refuses when
+there is no gap, and refuses outright for a result that observed something. No
+caller can declare its own grounds.
+
+**The provider is asked what it knows.** No check made beforehand catches a
+payment whose webhook was dropped, so once a pass Foundry reads the provider's
+own list and takes what it missed in through the same door a webhook uses. The
+finding is recorded against the PATH as well as repaired — a payment that
+arrived only because we asked means the observation path was not carrying what
+it is for that day.
+
+**An empty count is not always an answer.** One reader — `whatSilenceMeans` —
+gives three answers kept apart: reliable, broken, unknown. The Inbox, the
+"has anybody paid" answer and the search's empty shelf read it. A sentence,
+never a card: an institution that turned every uncertainty into a warning
+would teach its owner to ignore warnings.
+
+**The limit travels with the word.** What the instrument cost a claim is
+derived where the outcome word is derived, so no surface can print a verdict
+without it.
+
+### Four defects found in what was already there
+
+1. `workshopHealth` wrote its snapshot before the mail reading was taken, so
+   the snapshot and the day record have always carried `mail: unknown` —
+   including on every pass that found the Workshop could not hear. The owner's
+   health filters for `needs_attention`, so the one channel that would have
+   named this failure was the one channel that could never raise it.
+2. The day record replaced its detail only when the day had been healthy, so a
+   day that read unknown in the morning and needs_attention in the afternoon
+   kept the status of the second reading and the words of the first.
+3. `stripe_webhook_events` recorded every event since migration 055 and
+   nothing about which world it came from, so a test-mode proof was
+   indistinguishable from evidence about the live route.
+4. An obligation whose refund authority the owner WITHDREW went on saying "I
+   try again on the next pass" for a day about something that could never go
+   through.
+
+### The laboratory had to change with the institution
+
+The world stood up a Workshop that could not hear — faithful to the morning
+Experiment 001 ran — so once the hand refused to write through an unrouted
+path, a faithful reproduction sent nothing at all. The world now opens the
+Workshop's ears before anybody is written to: **the institution as it must now
+be.** What happened instead is staged on purpose, in two shapes — a route
+taken down before the first offer (nothing is sent) and a route that fails
+mid-window (the offers stand, and the result means less than it appears to).
+
+That is a change worth naming. A laboratory that reproduces the institution's
+own defects as its baseline cannot tell you whether they are fixed.
+
+### The final recursive question
+
+*What would I be embarrassed to have missed?* That the campaign's own repair
+has a shape it cannot see: every check added here reads a path Foundry knows
+to ask about. A dependency nobody declared — a provider changing a default, a
+DNS record the owner edits by hand, a registrar lapsing — is still discovered
+by consequence rather than by instrument. The declared instrument narrows that
+to the paths a test's own design implies, which is most of them and not all.
