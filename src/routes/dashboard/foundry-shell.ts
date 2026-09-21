@@ -4877,6 +4877,24 @@ foundryShellRoutes.post('/foundry/ask', requireInstitutionOwner(), async (c: any
     return c.redirect(`/foundry?q=${encodeURIComponent(said)}${scope ? `&scope=${encodeURIComponent(scope)}` : ''}`);
   }
 
+  // IT ASKS AND IT INSTRUCTS, so the institution asks him which — unless he
+  // has already told it, in which case this is the second half of that
+  // exchange and the answer goes where he said.
+  if (door.destination === 'clarify') {
+    const meant = String(form.meant ?? '').trim();
+    if (meant === 'answer_it') {
+      return c.redirect(`/foundry?q=${encodeURIComponent(said)}`);
+    }
+    if (meant === 'do_it') {
+      const { actAsTold } = await import('../../services/institution/the-door.js');
+      const told = actAsTold(said, { searching: await currentMandate(String(founder.id)) !== null });
+      if (told?.destination === 'venture') return ventureConfirmation(c, String(founder.id), said);
+      if (told?.destination === 'authority') return c.html(await authorityBoundary(String(founder.id), told));
+      if (told?.destination === 'housekeeping') return c.html(await housekeepingConfirmation(String(founder.id), told));
+    }
+    return c.html(await whichDidYouMean(door));
+  }
+
   // THE BOUNDARY, NAMED, WITH THE THING THAT MOVES IT. Writing to people,
   // spending and committing happen only inside a test he allowed or the
   // charter let in — never on a sentence. Saying so is the answer; a generic
@@ -5008,6 +5026,38 @@ async function housekeepingConfirmation(founderId: string, door: import('../../s
  * test is live, whether a charter stands, whether a search is open — so the
  * next action offered is the real one and not a generic door.
  */
+/**
+ * IT BOTH ASKS AND INSTRUCTS, SO IT ASKS HIM WHICH.
+ *
+ * "Should I stop the search?" is a question about an act and could be either.
+ * Guessing confidently in one direction is how an institution either ignores a
+ * boundary or acts on a musing, and both are worse than one short question.
+ *
+ * One question, not a habit: a POLITE instruction ("could you stop this
+ * search?") does not come here at all — it is an instruction and is treated as
+ * one. Only a genuine enquiry that names a consequential act does.
+ */
+async function whichDidYouMean(door: import('../../services/institution/the-door.js').Doorway): Promise<HtmlEscapedString> {
+  const act = (door.needs ?? '').replace(/^whether you are asking me, or telling me: /, '');
+  return page('What you said', html`
+    <h1>Are you asking me, or telling me?</h1>
+    <p class="lede">You said: <strong>${door.said}</strong></p>
+    <p>I can read that two ways, and one of them does something, so I would rather
+      ask than guess: <strong>${act}</strong>.</p>
+    <form method="POST" action="/foundry/ask" class="act-row">
+      <input type="hidden" name="said" value="${door.said}" />
+      <input type="hidden" name="meant" value="do_it" />
+      <button type="submit" class="primary">Yes — ${act}</button>
+    </form>
+    <form method="POST" action="/foundry/ask">
+      <input type="hidden" name="said" value="${door.said}" />
+      <input type="hidden" name="meant" value="answer_it" />
+      <button type="submit">No — just answer the question</button>
+    </form>
+    <p class="quiet">Nothing has happened either way.</p>
+  `);
+}
+
 async function authorityBoundary(founderId: string, door: import('../../services/institution/the-door.js').Doorway): Promise<HtmlEscapedString> {
   const { liveCharter } = await import('../../services/institution/charter.js');
   const { currentMandate } = await import('../../services/venture/mandate.js');

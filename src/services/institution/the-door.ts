@@ -37,6 +37,7 @@ export type Destination =
   | 'question'         // he is asking, not instructing
   | 'authority'        // an act only a test or the charter may carry: say the boundary
   | 'housekeeping'     // clear what he has dealt with: reversible, confirmed, his
+  | 'clarify'          // it both asks and instructs: say which, in one question
   | 'unplaceable';     // say so, and keep what he wrote
 
 export interface Doorway {
@@ -65,9 +66,52 @@ const ASKING_MARK = /\?\s*$/;
 // as an enquiry would file his firmest instruction as idle curiosity.
 const TOLD_NOT_TO = /^\s*(do not|don't|dont|never|no\b)/i;
 
+/**
+ * A POLITE FRAME AROUND AN INSTRUCTION IS AN INSTRUCTION.
+ *
+ * "Could you stop this search?" and "Please stop contacting people?" were
+ * filed as idle curiosity, because a trailing question mark sent a sentence to
+ * the answer desk before one action reader was consulted, and the only
+ * exemption was a list of negative OPENINGS. Every polite framing in English
+ * sits outside that list, and the owner should not have to learn imperative
+ * syntax to stop his own institution doing something.
+ *
+ * This is not a patch for two phrases. It is the distinction the two phrases
+ * exposed: English asks for things with the grammar of a question, and which
+ * kind of asking a sentence is doing is knowable from how it opens. "Could
+ * you", "please", "would you" are how a person gives an instruction without
+ * barking it. "What", "how", "why" open an enquiry.
+ */
+const POLITE_FRAME = /^\s*(?:and\s+|but\s+|actually,?\s+|ok(?:ay)?,?\s+|so\s+)*(?:please\b|could you\b|can you\b|would you\b|will you\b|can we\b|could we\b|let's\b|lets\b|i'?d like you to\b|i want you to\b|do you mind\b|would you mind\b)/i;
+
 function isAsking(said: string): boolean {
   if (TOLD_NOT_TO.test(said)) return false;
   return ASKING_MARK.test(said) || ASKING.test(said);
+}
+
+/**
+ * WHAT THIS SENTENCE WOULD DO, if it is an instruction at all.
+ *
+ * The readers that already recognise these acts, asked as a group and without
+ * acting on anything. Interpretation only: what may follow from it is the
+ * authority system's, every time.
+ */
+function actInIt(said: string, world: { searching: boolean }): { understoodAs: string; door: Destination } | null {
+  const hold = readHoldAsk(said);
+  if (hold !== null) return { understoodAs: hold, door: 'authority' };
+  const housekeeping = readHousekeepingAsk(said);
+  if (housekeeping !== null) return { understoodAs: housekeeping, door: 'housekeeping' };
+  const venture = readVentureParagraph(said).filter((r) => r.kind !== 'not_venture');
+  if (venture.length > 0 && venture.every((r) => r.kind === 'stop_mandate')) {
+    return { understoodAs: 'you want me to stop looking', door: 'venture' };
+  }
+  if (venture.some((r) => r.kind === 'mandate')) {
+    return { understoodAs: 'you want me to look for another way to make money', door: 'venture' };
+  }
+  if (venture.length > 0 && world.searching) {
+    return { understoodAs: 'you are steering what I am already looking for', door: 'venture' };
+  }
+  return null;
 }
 
 /**
@@ -80,6 +124,20 @@ function isAsking(said: string): boolean {
  * and drop the rest. The whole paragraph is offered to the venture reader
  * first, because it is the only reader that keeps every clause.
  */
+/**
+ * THE SAME SENTENCE, READ AS THE INSTRUCTION IT ALSO IS.
+ *
+ * Only for the second half of a clarification he answered: he was asked which
+ * he meant and said he was telling me. The reading is the door's own, so there
+ * is no second interpreter and no chance of the two disagreeing about what he
+ * asked for. Nothing here authorises anything; it places the sentence.
+ */
+export function actAsTold(said: string, world: { searching: boolean } = { searching: false }): Doorway | null {
+  const act = actInIt(said.trim(), world);
+  if (act === null) return null;
+  return { destination: act.door, understoodAs: act.understoodAs, handOffTo: null, said: said.trim(), needs: null };
+}
+
 export function whichDoor(
   raw: string, world: { searching: boolean } = { searching: false },
 ): Doorway {
@@ -89,7 +147,31 @@ export function whichDoor(
       handOffTo: null, said, needs: 'something to go on' };
   }
 
+  // ─── WHAT IT ASKS FOR, BEFORE WHAT IT LOOKS LIKE ─────────────────────────
+  //
+  // Grammatical form used to decide this outright, and an independent reviewer
+  // showed what that cost: two boundaries filed as enquiries by their
+  // punctuation, before any reader that would have recognised them ran. Both
+  // WERE recognised — by readers the door never asked. So the readers are
+  // asked first, and the question mark decides only what is left.
   if (isAsking(said)) {
+    const act = actInIt(said, world);
+    if (act !== null) {
+      // HE ASKED FOR IT POLITELY: an instruction, and treated as one.
+      if (POLITE_FRAME.test(said) || TOLD_NOT_TO.test(said)) {
+        return { destination: act.door, understoodAs: act.understoodAs, handOffTo: null, said, needs: null };
+      }
+      // HE ASKED ABOUT IT: "should I stop the search?", "what happens if you
+      // stop contacting people?". Both readings are live and the act is
+      // consequential, so the institution asks which he meant rather than
+      // guessing confidently in either direction. One question, not a habit.
+      return {
+        destination: 'clarify',
+        understoodAs: 'you asked about something I can also do',
+        handOffTo: null, said,
+        needs: `whether you are asking me, or telling me: ${act.understoodAs}`,
+      };
+    }
     return { destination: 'question',
       understoodAs: 'you asked me something rather than told me to do something',
       handOffTo: '/foundry/ask/answer', said, needs: null };
@@ -235,12 +317,18 @@ export function readHousekeepingAsk(said: string): string | null {
 /** "Hold off sending", "pause outreach", "don't send anything to anyone". */
 export function readHoldAsk(said: string): string | null {
   const t = said.trim().toLowerCase();
-  const holds = /\b(?:hold off|hold|pause|freeze|suspend|stop|no more|don'?t|do not|never)\b[^.]{0,30}\b(?:send(?:ing)?|mail(?:ing)?|email(?:ing|s)?|outreach|messag(?:e|es|ing)|writ(?:e|ing) to|contact(?:ing)?|reach(?:ing)? out)\b/.test(t)
+  // EVERY INFLECTION OF THE VERB, not the imperative alone. This read "hold
+  // off" and "hold" but not "holding off", so "do you mind holding off on
+  // sending anything?" was not recognised as a hold at all — and the sentence
+  // then fell through to the answer desk, which is how a boundary becomes a
+  // chat. A reader that only knows one form of each word is a reader that
+  // works when he phrases it the way the author happened to.
+  const holds = /\b(?:hold(?:ing)? off|hold(?:ing)?|paus(?:e|ing)|freez(?:e|ing)|suspend(?:ing)?|stop(?:ping)?|no more|don'?t|do not|never)\b[^.]{0,30}\b(?:send(?:ing)?|mail(?:ing)?|email(?:ing|s)?|outreach|messag(?:e|es|ing)|writ(?:e|ing) to|contact(?:ing)?|reach(?:ing)? out)\b/.test(t)
     || /\b(?:send|email|mail|write to|contact|message)\s+(?:nobody|no one|no-one|nothing to anyone)\b/.test(t);
   if (!holds) return null;
   // "Stop looking" and "stop everything" are not this; nor is a sentence that
   // asks to send more.
-  if (/\bstop (?:looking|searching|everything)\b/.test(t)) return null;
+  if (/\bstop(?:ping)? (?:looking|searching|everything)\b/.test(t)) return null;
   return 'you want me to hold off writing to anyone';
 }
 

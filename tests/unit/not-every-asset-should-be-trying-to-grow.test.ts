@@ -95,7 +95,10 @@ describe('what a thing earns against what it costs to own', () => {
     const burdens = await burdenFor(OWNER);
     const real = burdens.find((b) => b.productId === REAL);
     expect(real?.sentence).toContain('earns about $420 a month');
-    expect(real?.sentence).toContain('costs about $12 a month in AI');
+    // COST IS COST NOW, not the AI bill alone: settled outlay through the door
+    // and the thinking about it, because an asset's provider fees and refunds
+    // are what owning it costs and they were not in this sentence at all.
+    expect(real?.sentence).toContain('costs about $12');
     expect(real?.sentence).toContain('has not needed you');
     expect(real?.verdict).toBe('earning its keep');
   });
@@ -105,10 +108,18 @@ describe('what a thing earns against what it costs to own', () => {
     expect(burdens.every((b) => b.productId === REAL)).toBe(true);
   });
 
-  it('says when it costs more of him than it earns, by a stated rule', async () => {
+  it('says when it is asking a lot of him, by a stated rule and at any revenue', async () => {
     // Through the ask-first door, the way an interruption actually happens:
-    // Foundry proposes, he decides. Four decisions in a month on a business
-    // earning a few hundred dollars is the stated threshold.
+    // Foundry proposes, he decides. Four decisions in a month is the owner's
+    // own number, from the sentence this reader was written around.
+    //
+    // THIS USED TO ASSERT ONE COMBINED VERDICT, and the combination is what an
+    // independent reviewer broke: the rule only looked at his time BELOW five
+    // hundred dollars a month, so an asset earning more could interrupt him
+    // fifty times and still read as earning its keep. Money and his time are
+    // two facts and no threshold can honestly trade one against the other, so
+    // they are two sentences — and this asset, which earns well AND asks a
+    // lot, is exactly the case the old shape could not say out loud.
     const { proposeAct, decideProposedAct, setBoundary } = await import(
       '../../src/services/institution/standing-intent.js');
     // A proposal exists only because he asked to be asked.
@@ -123,7 +134,9 @@ describe('what a thing earns against what it costs to own', () => {
     }
     const real = (await burdenFor(OWNER)).find((b) => b.productId === REAL);
     expect(real?.interruptions).toBe(4);
-    expect(real?.verdict).toBe('costs more of you than it earns');
+    expect(real?.burden).toBe('needs you often');
+    expect(real?.verdict, 'the money is still fine, and that was never the defect').toBe('earning its keep');
     expect(real?.sentence).toContain('needed you 4 times');
+    expect(real?.sentence, 'and it says so where he reads it').toContain('asking a lot of you');
   });
 });
