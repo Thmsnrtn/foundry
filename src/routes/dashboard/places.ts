@@ -659,7 +659,17 @@ placeRoutes.get('/foundry/searching', async (c: any) => {
           ${k.failsBecause ? html`<p class="gap">${k.failsBecause}</p>` : ''}
           <p class="row"><a class="btn" href="/foundry#the-one-thing">Decide on Foundry</a>
             <a class="why" href="/foundry/why/candidate/${k.id}">Show your work</a></p>
-        </div>`) : html`<p class="quiet">None yet. Bringing you none is a real answer.</p>`}
+        </div>`) : progress.looked === 0
+    ? html`${/* "BRINGING YOU NONE IS A REAL ANSWER" WAS PRINTED BEFORE
+                ANYTHING HAD BEEN LOOKED AT. An empty shelf after a search has
+                examined two hundred businesses and an empty shelf after it has
+                examined none are opposite facts, and only the first is an
+                answer about the world. The page has the count; it now reads
+                it. */ ''}
+        <p class="quiet">None yet — and nothing has been looked at yet, so that is not an
+          answer about the world. It means the search has not run, not that there is nothing
+          out there.</p>`
+    : html`<p class="quiet">None yet, out of ${String(progress.looked)} looked at. Bringing you none is a real answer.</p>`}
       </div>
       ${/* THE WORKING SET IS WHAT IS STILL LIVE. What was decided, what was
             buried and what he searched for before are all evidence and all

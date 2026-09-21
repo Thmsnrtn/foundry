@@ -601,3 +601,66 @@ export async function measurementGapIn(
   }
   return out;
 }
+
+export type PublicChannel = 'site' | 'cloudflare' | 'sending' | 'replyInbox' | 'mail' | 'payments';
+export type AbsenceMeaning = 'reliable' | 'unknown' | 'broken';
+
+export interface WhatSilenceMeans {
+  meaning: AbsenceMeaning;
+  daysBroken: number;
+  daysUnwatched: number;
+  days: number;
+  /** One sentence to print beside the empty count, or null when there is nothing to add. */
+  sentence: string | null;
+}
+
+/**
+ * WHAT AN EMPTY COUNT MEANS, which is not always the same thing.
+ *
+ * Half a dozen surfaces say a version of "nothing came back". Each one counted
+ * its own rows and printed its own sentence, and not one of them could ask the
+ * question that decides what the sentence means: was the path that would have
+ * carried something working while we were waiting?
+ *
+ * Three answers, kept apart on purpose:
+ *   RELIABLE — the path was well on every day of the window. Nothing came back
+ *              and that is a fact about the world. Nothing is added.
+ *   BROKEN   — the path was down on days of the window. The silence is partly
+ *              or wholly ours, and the sentence says so.
+ *   UNKNOWN  — the window has days with no reading. Not reassurance and not an
+ *              alarm: an honest gap, said once.
+ *
+ * This deliberately produces a SENTENCE and not a card. An institution that
+ * turned every uncertainty into a warning would teach its owner to ignore
+ * warnings, which is a worse failure than the one it was guarding against.
+ */
+export async function whatSilenceMeans(
+  founderId: string, channel: PublicChannel, from: Date, to: Date, about = 'an answer',
+): Promise<WhatSilenceMeans> {
+  const fromDay = from.toISOString().slice(0, 10);
+  const toDay = to.toISOString().slice(0, 10);
+  const days = Math.max(1, Math.round(
+    (new Date(toDay + 'T00:00:00Z').getTime() - new Date(fromDay + 'T00:00:00Z').getTime()) / 86_400_000) + 1);
+  const rows = (await query(
+    `SELECT worst_status, detail FROM public_channel_days
+      WHERE founder_id = ? AND channel = ? AND day >= ? AND day <= ?`,
+    [founderId, channel, fromDay, toDay])).rows as unknown as Row[];
+  const broken = rows.filter((r) => String(r.worst_status) === 'needs_attention');
+  const watched = rows.filter((r) => String(r.worst_status) !== 'unknown').length;
+  const daysUnwatched = Math.max(0, days - watched);
+
+  if (broken.length > 0) {
+    const detail = broken[0].detail == null ? '' : ` (${String(broken[0].detail)})`;
+    return {
+      meaning: 'broken', daysBroken: broken.length, daysUnwatched, days,
+      sentence: `On ${String(broken.length)} of those ${String(days)} days ${about} could not have reached me${detail}, so the silence is not all theirs.`,
+    };
+  }
+  if (daysUnwatched > 0) {
+    return {
+      meaning: 'unknown', daysBroken: 0, daysUnwatched, days,
+      sentence: `I have no record of whether ${about} could have reached me on ${String(daysUnwatched)} of those ${String(days)} days, and I do not count a day I did not watch as a day that was well.`,
+    };
+  }
+  return { meaning: 'reliable', daysBroken: 0, daysUnwatched: 0, days, sentence: null };
+}

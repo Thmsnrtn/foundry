@@ -2519,9 +2519,27 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
     const running = (await listExperiments(s.ownerId, new Date(), 'now')).filter((t) => t.state === 'running');
     const runningMoney = await Promise.all(running.map(async (t) => ({ t, m: await moneyOfExperiment(t.id) })));
     const dollars = (c: number) => `$${(c / 100).toFixed(2)}`;
+    const silenceAboutPayment = paidCents > 0 ? null : await (async () => {
+      const placed = (await query(
+        `SELECT MIN(x.placed_at) AS at FROM experiment_exposures x
+           JOIN venture_experiments e ON e.id = x.experiment_id
+          WHERE x.founder_id = ? AND e.evidence_mode = 'real' AND x.placed_at IS NOT NULL`, [s.ownerId]))
+        .rows[0] as Record<string, unknown> | undefined;
+      if (placed?.at == null) return null;
+      const { whatSilenceMeans } = await import('../../services/venture/the-instrument.js');
+      const from = new Date(String(placed.at).replace(' ', 'T') + 'Z');
+      return (await whatSilenceMeans(s.ownerId, 'payments', from, new Date(), 'a payment')).sentence;
+    })();
     return html`<div class="said">
       <p><strong>${paidCents === 0 ? 'Nobody has paid for anything yet.' : `${dollars(paidCents)} has been paid by ${count(payments, 'customer')}${Number(refunded.n) ? `, ${dollars(Number(refunded.cents))} of it refunded` : ''}.`}</strong>
         ${paidCents === 0 ? '' : 'That is what buyers were charged under tests, before fees and obligations; it is not yet yours.'}</p>
+      ${/* NOBODY PAID, OR NOBODY COULD HAVE TOLD ME. The strongest economic
+            conclusion on this page is drawn from an empty count, and an empty
+            count means one thing when the route a payment travels was working
+            throughout and another thing entirely when it was not. Said as one
+            sentence beneath the figure, and only when the record has something
+            to say. */ ''}
+      ${paidCents > 0 || silenceAboutPayment === null ? '' : html`<p class="quiet">${silenceAboutPayment}</p>`}
       <p>${settled.length === 0 ? 'No test has run to a settlement yet.'
     : `${count(settled.length, 'test has', 'tests have')} settled${last ? `; the last ${outcomeSentence(last)}` : '.'}`}</p>
       ${runningMoney.length === 0 ? html`<p>Nothing is running now, so nothing is set aside.</p>`

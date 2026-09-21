@@ -89,6 +89,28 @@ inboxRoutes.get('/foundry/inbox', async (c: any) => {
       ? `Replies to the Workshop's address are ${r.status === 'unknown' ? 'unreadable' : 'not being delivered'}${r.detail ? `: ${r.detail}` : ''}.`
       : null;
   })();
+  // AND WHAT THE SILENCE MEANS, from the days rather than from now. The line
+  // above says whether the path is broken at this moment, which is the only
+  // thing this page could ever say: a route that failed for three days and
+  // came back an hour ago left an inbox that looks exactly like an inbox
+  // nobody wrote to. The day record can tell those apart, so it does.
+  const silence = sentUnderTests === 0 ? null : await (async () => {
+    const { whatSilenceMeans } = await import('../../services/venture/the-instrument.js');
+    // STANDING DOES NOT APPLY: a test's offers go out from the EXPERIMENTAL
+    // asset the test created, which is the whole point of an experimental
+    // asset. Asking for an earned one here would find nothing and the window
+    // would silently be empty, which is the failure this file is about.
+    const first = (await query(
+      `SELECT MIN(o.executed_at) AS at FROM outbound_actions o
+         JOIN products p ON p.id = o.product_id
+         JOIN venture_experiments e ON e.id = p.from_experiment_id
+        WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND o.experiment_act = 'offer'
+          AND o.status = 'executed' AND ${realCompany('p')}`, [founderId]))
+      .rows[0] as Record<string, unknown> | undefined;
+    if (first?.at == null) return null;
+    const from = new Date(String(first.at).replace(' ', 'T') + 'Z');
+    return (await whatSilenceMeans(founderId, 'replyInbox', from, new Date(), 'a reply')).sentence;
+  })();
   const initials = (m: MailRecord): string => (m.fromName ?? m.from).split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join('');
   const readingCls = (r: string): string => /complaint|stop_writing|wants_money_back|not_for_us|needs_a_person/.test(r) ? 'warn' : /wants_more|was_useful|answering_offer|asking/.test(r) ? 'ok' : '';
   const MODES: Array<['off' | 'draft' | 'autonomous', string, string]> = [
@@ -131,7 +153,8 @@ inboxRoutes.get('/foundry/inbox', async (c: any) => {
     ? 'Nothing has been sent, so nothing has come back.'
     : `${String(sentUnderTests)} ${sentUnderTests === 1 ? 'message has' : 'messages have'} gone out under your tests, each inviting a reply, and nothing has come back yet.`}
         When mail arrives at the Workshop's address it will appear here, and it will still arrive in your mailbox exactly as it does now.</p>
-      ${replyPath === null ? '' : html`<p class="noticed"><strong>The reply path needs you.</strong> ${replyPath} Until it works, silence here is not an answer from anybody.</p>`}</section>`
+      ${replyPath === null ? '' : html`<p class="noticed"><strong>The reply path needs you.</strong> ${replyPath} Until it works, silence here is not an answer from anybody.</p>`}
+      ${silence === null ? '' : html`<p class="quiet">${silence}</p>`}</section>`
     : html`
     <p class="decisions-head" aria-label="Show">
       <a class="chip${show === 'working' ? ' on' : ''}${counts.needs ? ' hot' : ''}" href="/foundry/inbox">In flight <b>${String(counts.working)}</b></a>
