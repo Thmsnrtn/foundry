@@ -211,7 +211,7 @@ export async function handleWebhook(payload: string, signature: string): Promise
   // delivery finds no claim. Every write the intakes make is idempotent on the
   // provider's own references, so a retry after a partial run records nothing
   // twice.
-  const claim = await query('INSERT OR IGNORE INTO stripe_webhook_events (event_id, event_type, processed_at) VALUES (?, ?, CURRENT_TIMESTAMP)', [event.id, event.type]);
+  const claim = await query('INSERT OR IGNORE INTO stripe_webhook_events (event_id, event_type, processed_at, livemode) VALUES (?, ?, CURRENT_TIMESTAMP, ?)', [event.id, event.type, event.livemode === undefined ? null : (event.livemode ? 1 : 0)]);
   if ((claim.rowsAffected ?? 0) === 0) return; // Already processed, or being processed
   try {
     await processWebhookEvent(event);

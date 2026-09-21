@@ -496,14 +496,30 @@ export async function paymentObservationPath(now = new Date()): Promise<{ status
     return { status: 'not_working', detail: 'nothing is configured to receive a payment event, so a payment would happen and Foundry would not know' };
   }
   const since = new Date(now.getTime() - 30 * 86_400_000).toISOString();
-  const seen = (await query(
+  // WHICH WORLD THE EVENT CAME FROM IS THE WHOLE QUESTION. The live endpoint
+  // is configured separately at the provider and can be missing while every
+  // test-mode event arrives perfectly, so a test-mode proof is reported as
+  // what it is: the machinery works, the live route is unproven.
+  const live = (await query(
     `SELECT event_type, processed_at FROM stripe_webhook_events
+      WHERE datetime(processed_at) >= datetime(?) AND livemode = 1 ORDER BY processed_at DESC LIMIT 1`, [since]))
+    .rows[0] as Row | undefined;
+  if (live) {
+    return { status: 'working', detail: `the provider reached this deployment on ${String(live.processed_at).slice(0, 10)} (${String(live.event_type)})` };
+  }
+  const any = (await query(
+    `SELECT event_type, processed_at, livemode FROM stripe_webhook_events
       WHERE datetime(processed_at) >= datetime(?) ORDER BY processed_at DESC LIMIT 1`, [since]))
     .rows[0] as Row | undefined;
-  if (!seen) {
+  if (!any) {
     return { status: 'unknown', detail: 'a payment event can be received, but none ever has been: nothing has yet proved the provider can reach this deployment' };
   }
-  return { status: 'working', detail: `the provider reached this deployment on ${String(seen.processed_at).slice(0, 10)} (${String(seen.event_type)})` };
+  return {
+    status: 'unknown',
+    detail: any.livemode == null
+      ? `the provider reached this deployment on ${String(any.processed_at).slice(0, 10)}, from a deployment that did not record which world the event came from`
+      : 'the provider reaches this deployment in test mode; nothing has yet proved the live route, which is configured separately and can be missing while every test passes',
+  };
 }
 
 /**

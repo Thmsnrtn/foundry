@@ -4220,7 +4220,7 @@ CREATE TABLE stripe_webhook_events (
   event_id TEXT PRIMARY KEY,
   event_type TEXT NOT NULL,
   processed_at DATETIME NOT NULL
-);
+, livemode INTEGER);
 CREATE TABLE structural_fact_kinds (
   fact                TEXT PRIMARY KEY,
   what_it_is          TEXT NOT NULL,

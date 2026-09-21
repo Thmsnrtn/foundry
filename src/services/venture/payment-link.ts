@@ -84,6 +84,34 @@ async function listActiveLinks(): Promise<RawLink[]> {
   return out;
 }
 
+/**
+ * WHAT THE PROVIDER KNOWS IT TOOK, since a moment. Succeeded payments only,
+ * tagged as ours: a charge at somebody else's link is not this institution's
+ * business to read, and the intake refuses it anyway.
+ *
+ * This is a read. It moves no money, so it does not go through the governed
+ * door that authorises effects — but it is the only way to find out that money
+ * moved and nobody told us, which is why it exists.
+ */
+export async function paymentsTheProviderKnowsOf(sinceUnix: number): Promise<Array<Record<string, unknown>>> {
+  const out: Array<Record<string, unknown>> = [];
+  let after: string | null = null;
+  for (let pageNo = 0; pageNo < 5; pageNo += 1) {
+    const res: { data: Array<Record<string, unknown>>; has_more: boolean } = await stripeGet<{ data: Array<Record<string, unknown>>; has_more: boolean }>(
+      `/payment_intents?created[gte]=${String(sinceUnix)}&limit=100${after ? `&starting_after=${after}` : ''}`);
+    for (const intent of res.data) {
+      if (String(intent.status) !== 'succeeded') continue;
+      const meta = intent.metadata as Record<string, string> | undefined;
+      if (!meta || typeof meta.experiment_id !== 'string' || meta.experiment_id.trim() === '') continue;
+      if (meta.app != null && meta.app !== 'foundry') continue;
+      out.push({ ...intent, object: 'payment_intent' });
+    }
+    if (!res.has_more || res.data.length === 0) break;
+    after = String(res.data[res.data.length - 1].id);
+  }
+  return out;
+}
+
 /** The active link at this URL, read from Stripe; null when there is none. */
 export async function describePaymentLink(url: string): Promise<PaymentLinkFacts | null> {
   const wanted = url.trim();

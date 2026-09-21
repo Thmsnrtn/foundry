@@ -213,8 +213,18 @@ export async function recordWorkshopHealth(founderId: string, health: Record<str
            WHEN public_channel_days.worst_status = 'needs_attention' OR excluded.worst_status = 'needs_attention' THEN 'needs_attention'
            WHEN public_channel_days.worst_status = 'unknown' OR excluded.worst_status = 'unknown' THEN 'unknown'
            ELSE 'healthy' END,
-         detail = CASE WHEN excluded.worst_status <> 'healthy' AND public_channel_days.worst_status = 'healthy'
-                       THEN excluded.detail ELSE public_channel_days.detail END,
+         -- THE DETAIL OF THE WORST READING, not of the first bad one. This used
+         -- to replace the detail only when the day had been HEALTHY, so a day
+         -- that read unknown in the morning and needs_attention in the
+         -- afternoon kept the status of the second reading and the words of
+         -- the first — a row that said the path failed and could not say how.
+         -- Worse in the order healthy < unknown < needs_attention takes the words.
+         detail = CASE
+           WHEN excluded.worst_status = 'needs_attention' AND public_channel_days.worst_status <> 'needs_attention'
+             THEN excluded.detail
+           WHEN excluded.worst_status = 'unknown' AND public_channel_days.worst_status = 'healthy'
+             THEN excluded.detail
+           ELSE public_channel_days.detail END,
          readings = public_channel_days.readings + 1,
          last_at = datetime('now')`,
       [founderId, channel, day, status, signal?.detail ?? null]);

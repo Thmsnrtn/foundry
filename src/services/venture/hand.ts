@@ -789,6 +789,23 @@ export async function ensureExposure(experimentId: string): Promise<{ exposureId
   if (!paymentCapabilityConfigured()) return { refused: 'Stripe is not configured for this deployment' };
   const plan = await offerShapePlanOf(experimentId);
   if (!plan) return { refused: 'no offer shape' };
+  // THE SMALLEST BOUNDARY THAT KEEPS REAL MONEY SAFE. A way to pay may not be
+  // put where a stranger can reach it while NOTHING in this deployment is able
+  // to receive a payment event: the money would move, the person would be owed
+  // something, and Foundry would not know either fact. That is not a risk to
+  // weigh against an experiment's value; it is a promise that cannot be kept.
+  //
+  // Only that case refuses. A deployment that CAN receive an event but never
+  // has is allowed to proceed, because the live route is configured at the
+  // provider and cannot be proved before the first live payment — and the pass
+  // asks the provider directly every hour, so a payment nobody told us about
+  // surfaces within one. Refusing there instead would make a first paid test
+  // impossible, which is a different way of being wrong.
+  if (plan.price.amountCents > 0) {
+    const { paymentObservationPath } = await import('./the-instrument.js');
+    const observation = await paymentObservationPath();
+    if (observation.status === 'not_working') return { refused: `a way to pay is not placed while ${observation.detail}` };
+  }
   let link: PaymentLinkFacts | null = await findExperimentPaymentLink(experimentId);
   if (link && !validateExperimentPaymentLink(link, experimentId, plan.price).ok) link = null;
   if (!link) {
@@ -1221,6 +1238,7 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
   // Workshop share its paths; asking the provider three times would cost three
   // times as much and could answer differently each time, which is the one
   // thing a record of what was working must not do.
+  const askedTheProvider = new Set<string>();
   const healthByFounder = new Map<string, Awaited<ReturnType<typeof import('../public-workshop/infrastructure.js')['workshopHealth']>> | null>();
   const healthFor = async (founderId: string): Promise<Awaited<ReturnType<typeof import('../public-workshop/infrastructure.js')['workshopHealth']>> | undefined> => {
     if (!healthByFounder.has(founderId)) {
@@ -1235,6 +1253,20 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
     reports.push(report);
     const e = await experimentRow(experimentId);
     if (!e?.productId) { report.exceptions.push('no asset'); continue; }
+
+    // ASK THE PROVIDER WHAT IT KNOWS, BEFORE ANYTHING IS READ OR CONCLUDED.
+    // Once per owner per pass, and never gated on whether the test may write:
+    // a pause, a broken path and a stopped campaign all stop the asking, and
+    // none of them stops somebody having paid. A payment that reached Foundry
+    // only because it asked is written onto the day first, so the health
+    // reading taken afterwards cannot make that day look well — the day record
+    // keeps the worst of a day, which is what that rule is for.
+    if (!askedTheProvider.has(e.founderId)) {
+      askedTheProvider.add(e.founderId);
+      const { reconcileWithTheProvider } = await import('./what-the-provider-knows.js');
+      const found = await reconcileWithTheProvider(e.founderId, now).catch(() => null);
+      if (found?.sentence) report.exceptions.push(found.sentence);
+    }
 
     // NEW ECONOMIC ACTIVITY STOPS AT THE OWNER'S PAUSE. Three things do not:
     // what a buyer is owed, the refund of what failed, and the world's verdict.

@@ -152,7 +152,10 @@ describe('what is not known is not treated as what is broken', () => {
     const before = await paymentObservationPath();
     expect(before.status).toBe('unknown');
     expect(before.detail).toMatch(/none ever has been/);
-    await query(`INSERT INTO stripe_webhook_events (event_id, event_type, processed_at) VALUES (?,?,datetime('now'))`,
+    // A LIVE event proves the live route. A test-mode one proves the
+    // machinery and is reported as unknown, which
+    // `a-payment-nobody-told-us-about` holds on its own.
+    await query(`INSERT INTO stripe_webhook_events (event_id, event_type, processed_at, livemode) VALUES (?,?,datetime('now'),1)`,
       ['evt_world', 'payment_intent.succeeded']);
     expect((await paymentObservationPath()).status).toBe('working');
   });

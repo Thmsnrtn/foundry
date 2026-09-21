@@ -1,0 +1,21 @@
+-- =============================================================================
+-- A PAYMENT EVENT SAYS WHICH WORLD IT CAME FROM.
+--
+-- `stripe_webhook_events` has recorded every event this deployment processed
+-- since migration 055, and it records the one thing that makes such a record
+-- usable as evidence about the live route: nothing. A test-mode event and a
+-- live-mode event are the same row.
+--
+-- That matters now, because the instrument asks whether the path a payment
+-- would travel has ever carried anything. A test-mode event proves the
+-- machinery — the signature check, the intake, the fulfilment, the refund —
+-- and proves NOTHING about the live endpoint, which is configured separately
+-- at the provider and can be missing while every test passes.
+--
+-- Nullable on purpose: the rows already here came from a deployment that did
+-- not record it, and back-filling a guess would be inventing the exact fact
+-- this column exists to stop being guessed. An unknown world is reported as
+-- unknown.
+-- =============================================================================
+
+ALTER TABLE stripe_webhook_events ADD COLUMN livemode INTEGER;

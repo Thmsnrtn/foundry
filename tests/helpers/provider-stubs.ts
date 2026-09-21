@@ -20,6 +20,12 @@ export interface ProviderState {
   paymentLinks: Array<{ id: string; url: string; active: boolean; metadata: Record<string, string>; payment_intent_data: { metadata: Record<string, string> } | null; line_items: Array<{ price: string; quantity: number }> }>;
   /** payment_intent id → the buyer's address Stripe would report. */
   buyers: Map<string, string>;
+  /**
+   * WHAT THE PROVIDER KNOWS IT TOOK. Listed when the institution asks, whether
+   * or not a webhook for it was ever delivered — which is the whole point of
+   * asking, and the only way to stage a payment nobody was told about.
+   */
+  payments: Array<{ id: string; created: number; amount: number; amount_received: number; currency: string; status: string; latest_charge: string | null; metadata: Record<string, string>; receipt_email: string | null }>;
   calls: string[];
   seq: number;
   /** Cloudflare, shape-faithful: the zone, its records, the store, the program, the hostnames, mail routing. */
@@ -69,7 +75,7 @@ function nested(params: Record<string, string>, prefix: string): Record<string, 
 }
 
 export function providerStubs(): { state: ProviderState; fetch: (url: string | URL, init?: RequestInit) => Promise<Response> } {
-  const state: ProviderState = { sends: [], deliveryState: new Map(), refunds: [], domains: [], nextDomainStatus: 'pending', stripeDown: false, resendDown: false, products: [], prices: [], paymentLinks: [], buyers: new Map(), calls: [], seq: 0, cf: freshCloudflare() };
+  const state: ProviderState = { sends: [], deliveryState: new Map(), refunds: [], domains: [], nextDomainStatus: 'pending', stripeDown: false, resendDown: false, products: [], prices: [], paymentLinks: [], buyers: new Map(), payments: [], calls: [], seq: 0, cf: freshCloudflare() };
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   const cfOk = (result: unknown, status = 200) => json({ success: true, result, errors: [] }, status);
   const cfErr = (code: number, message: string, status = 400) => json({ success: false, result: null, errors: [{ code, message }] }, status);
@@ -260,6 +266,12 @@ export function providerStubs(): { state: ProviderState; fetch: (url: string | U
       const link = state.paymentLinks.find((l) => l.id === li[1]);
       return json({ data: (link?.line_items ?? []).map((i) => { const price = state.prices.find((p) => p.id === i.price); return { quantity: i.quantity, price: price ? { id: price.id, unit_amount: price.unit_amount, currency: price.currency, recurring: price.recurring, lookup_key: price.lookup_key } : { id: i.price, unit_amount: null, currency: 'usd', recurring: null } }; }) });
     }
+    if (u.startsWith('https://api.stripe.com/v1/payment_intents?') && method === 'GET') {
+      // The provider's own list, which knows nothing about what it managed to
+      // tell anybody.
+      const since = Number(/created%5Bgte%5D=(\d+)|created\[gte\]=(\d+)/.exec(u)?.slice(1).find(Boolean) ?? 0);
+      return json({ data: state.payments.filter((p) => p.created >= since), has_more: false });
+    }
     const pi = /^https:\/\/api\.stripe\.com\/v1\/payment_intents\/([^/?]+)/.exec(u);
     if (pi && method === 'GET') {
       const id = decodeURIComponent(pi[1]);
@@ -281,4 +293,21 @@ export function seedHandMadeLink(state: ProviderState, opts: { experimentId: str
     payment_intent_data: opts.tagIntent === false ? null : { metadata: { app: 'foundry', experiment_id: opts.experimentId } }, line_items: [{ price: price.id, quantity: 1 }] };
   state.paymentLinks.push(link);
   return link.url;
+}
+
+/**
+ * A PAYMENT THE PROVIDER TOOK AND NEVER MANAGED TO TELL US ABOUT. No webhook
+ * is delivered: the money moved, the buyer is waiting, and the only way the
+ * institution can find out is to ask.
+ */
+export function seedUnheardPayment(state: ProviderState, opts: { experimentId: string; paymentLinkId: string; amountCents: number; email: string; created?: Date }): string {
+  const id = `pi_unheard_${++state.seq}`;
+  state.payments.push({
+    id, created: Math.floor((opts.created ?? new Date()).getTime() / 1000),
+    amount: opts.amountCents, amount_received: opts.amountCents, currency: 'usd', status: 'succeeded',
+    latest_charge: `ch_${id}`, receipt_email: opts.email,
+    metadata: { app: 'foundry', experiment_id: opts.experimentId, payment_link: opts.paymentLinkId },
+  });
+  state.buyers.set(id, opts.email);
+  return id;
 }
