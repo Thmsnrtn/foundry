@@ -121,6 +121,33 @@ export async function doubtsAboutTheInstrument(experimentId: string): Promise<In
       daysBroken, daysUnrecorded,
     });
   }
+
+  // AND EVERY OTHER PATH THE OFFER INVITED SOMEBODY TO USE. The block above
+  // reads the reply channel directly, because it predates the declared
+  // instrument and still answers for the tests that have none — Experiment 001
+  // among them, whose reading must not change. For a test that declared its
+  // paths, the same question is asked of each of them from the same day-by-day
+  // record: a page that was not there, or a way to pay that was not working,
+  // costs a result exactly what a reply route does.
+  if (window) {
+    const invited = (await instrumentOf(experimentId))
+      .filter((p) => p.essential && p.bearsOn === 'invitation' && p.kind !== 'reply');
+    const channels = (await query(`SELECT kind, observed_on FROM experiment_path_kinds`, [])).rows as unknown as Row[];
+    const observedOn = new Map(channels.map((r) => [String(r.kind), r.observed_on == null ? null : String(r.observed_on)]));
+    for (const p of invited) {
+      const channel = observedOn.get(p.kind) ?? null;
+      if (channel === null) continue;
+      const record = await acrossTheWindow(String(e.founder_id), channel, window);
+      if (record.broken === 0) continue;
+      out.push({
+        channel: 'reply',
+        sentence: `${PATH_NAMES[p.kind]} was not working on ${String(record.broken)} of the ${String(window.days)} days this test was asking`
+          + (record.worstDetail ? ` (${record.worstDetail})` : '') + '.',
+        doesNotEstablish: `that the offer was refused: people were sent to something that was not working, and what they would have done with a working one is not in this result.`,
+        daysBroken: record.broken, daysUnrecorded: window.days - record.recorded,
+      });
+    }
+  }
   return out;
 }
 
@@ -501,4 +528,60 @@ export function sentenceFor(r: PathReading): string {
     : r.bearsOn === 'invitation' ? 'people would be invited to use something that is not there'
       : 'a promise could be made that cannot be kept';
   return `${PATH_NAMES[r.kind]} is not working${r.detail ? ` (${r.detail})` : ''} — ${cost}`;
+}
+
+export interface MeasurementGap {
+  kind: PathKind;
+  /** Days of the window on which the path could not have carried what the rule counts. */
+  daysBroken: number;
+  days: number;
+  /** In the owner's words: why a null from this window is not an answer. */
+  sentence: string;
+}
+
+/**
+ * COULD THE RULE HAVE SEEN AN ANSWER, ON EVERY DAY IT WAS OPEN?
+ *
+ * Read from the day-by-day record rather than from anybody's assertion: the
+ * declared paths that bear on the MEASUREMENT, the channel each is observed
+ * on, and what that channel's worst reading was on each day of the settlement
+ * window. A day nobody watched is not counted against the test — an absence of
+ * record is not a record of failure, the same way it is not a record of
+ * health.
+ *
+ * This is deliberately not a threshold. It answers one question — was there a
+ * day on which the answer could not have reached us — and leaves what follows
+ * from that to the caller, because the answer means something different for a
+ * null than for a result with events in it.
+ */
+export async function measurementGapIn(
+  experimentId: string, from: Date, to: Date,
+): Promise<MeasurementGap[]> {
+  const declared = (await instrumentOf(experimentId)).filter((p) => p.essential && p.bearsOn === 'measurement');
+  if (declared.length === 0) return [];
+  const e = (await query(`SELECT founder_id FROM venture_experiments WHERE id = ?`, [experimentId]))
+    .rows[0] as Row | undefined;
+  if (!e) return [];
+  const fromDay = from.toISOString().slice(0, 10);
+  const toDay = to.toISOString().slice(0, 10);
+  const days = Math.max(1, Math.round((new Date(toDay + 'T00:00:00Z').getTime() - new Date(fromDay + 'T00:00:00Z').getTime()) / 86_400_000) + 1);
+  const channels = (await query(`SELECT kind, observed_on FROM experiment_path_kinds`, [])).rows as unknown as Row[];
+  const observedOn = new Map(channels.map((r) => [String(r.kind), r.observed_on == null ? null : String(r.observed_on)]));
+
+  const out: MeasurementGap[] = [];
+  for (const p of declared) {
+    const channel = observedOn.get(p.kind) ?? null;
+    if (channel === null) continue;
+    const broken = (await query(
+      `SELECT day, detail FROM public_channel_days
+        WHERE founder_id = ? AND channel = ? AND day >= ? AND day <= ? AND worst_status = 'needs_attention'
+        ORDER BY day`, [String(e.founder_id), channel, fromDay, toDay])).rows as unknown as Row[];
+    if (broken.length === 0) continue;
+    const detail = broken[0].detail == null ? '' : ` (${String(broken[0].detail)})`;
+    out.push({
+      kind: p.kind, daysBroken: broken.length, days,
+      sentence: `${PATH_NAMES[p.kind]} was not working on ${String(broken.length)} of the ${String(days)} days this test was asking${detail}`,
+    });
+  }
+  return out;
 }

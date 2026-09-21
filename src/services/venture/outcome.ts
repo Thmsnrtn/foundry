@@ -328,6 +328,59 @@ export async function invalidateExperiment(input: {
 }
 
 /**
+ * THE INSTRUMENT ITSELF SAYS THE TEST DID NOT MEASURE.
+ *
+ * The second door into invalidity, and it is not a door anybody can walk
+ * through by asserting something. `invalidateExperiment` above admits exactly
+ * one thing — a measurement-critical ACT of this experiment whose own
+ * prediction resolved surprised — and that is why Experiment 001 slipped past
+ * it: every act succeeded. What failed was a path no act predicted about.
+ *
+ * So the evidence here is the record, and this function goes and reads it
+ * rather than being told. The caller names an experiment and a window; the
+ * day-by-day channel record says whether an essential measurement path could
+ * have carried the answer on each of those days; and if there was no day it
+ * could not, this refuses. A caller cannot declare its own grounds, which is
+ * the whole of the institution's position on authority applied to evidence.
+ *
+ * It never invalidates a result with events in it. A test that observed
+ * something observed it; the instrument being imperfect afterwards does not
+ * un-observe a payment. What it refuses to let stand is a NULL drawn through a
+ * gap — which is the conclusion this campaign exists because of.
+ */
+export async function invalidateByObservation(input: {
+  experimentId: string; from: Date; to: Date; countedEvents: number;
+}): Promise<{ invalidated: true; because: string } | { refused: string }> {
+  if (input.countedEvents > 0) {
+    return { refused: 'this test observed something; a gap afterwards does not un-observe it' };
+  }
+  const { measurementGapIn } = await import('./the-instrument.js');
+  const gaps = await measurementGapIn(input.experimentId, input.from, input.to);
+  if (gaps.length === 0) {
+    return { refused: 'the record shows no day on which an answer could not have reached us' };
+  }
+  const because = gaps.map((g) => g.sentence).join('; ')
+    + '. Nobody bought, and this cannot say whether anybody would have: it did not measure.';
+  try {
+    const r = await query(
+      `UPDATE venture_experiments
+          SET validity = 'invalid', invalid_because = 'instrumentation_defect',
+              invalidated_by = 'the record', invalidated_at = datetime('now')
+        WHERE id = ? AND validity = 'valid' AND ran_at IS NULL`, [input.experimentId]);
+    if (r.rowsAffected === 0) return { refused: 'no such experiment, or it is already settled or invalid' };
+  } catch (err) {
+    return { refused: err instanceof Error ? err.message : String(err) };
+  }
+  // The offer comes down, as it does for the other door: an offer whose
+  // measurement is broken should not keep collecting events that will never
+  // count.
+  await query(
+    `UPDATE experiment_exposures SET withdrawn_at = datetime('now')
+      WHERE experiment_id = ? AND withdrawn_at IS NULL`, [input.experimentId]);
+  return { invalidated: true, because };
+}
+
+/**
  * RUN IT AGAIN. A re-run of an invalid test needs nothing but the decision; a
  * re-run after a valid contradiction needs the claim revised first, and the
  * database refuses otherwise. The new experiment is undecided: he approves it
@@ -497,6 +550,16 @@ export async function settleFromTheWorld(experimentId: string, now = new Date())
   if (metAt !== null && (disprovedAt === null || metAt <= disprovedAt)) verdict = 'as_predicted';
   else if (disprovedAt !== null) verdict = 'surprised';
   else if (windowClosed) verdict = event > 0 ? 'partly' : 'surprised';
+
+  // A NULL IS NOT AN ANSWER IF NO ANSWER COULD HAVE REACHED US. Before the
+  // rule's verdict is written, the record is asked whether an essential
+  // measurement path was down on any day of this window. Nothing is asserted
+  // here: the door goes and reads the day-by-day record itself, refuses when
+  // there is no gap, and refuses outright for a result with events in it.
+  if (verdict === 'surprised' && event === 0) {
+    const gap = await invalidateByObservation({ experimentId, from: placedAt, to: closesAt, countedEvents: event });
+    if ('invalidated' in gap) return none(gap.because);
+  }
   if (verdict === null) {
     return { settled: null, earned: false, counted,
       because: `${String(event)} of ${String(rule.atLeast)} ${rule.event} so far`
