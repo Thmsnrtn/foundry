@@ -951,6 +951,82 @@ as sound, on the grounds that a purchase needed no reply — the payment link
 carried the answer the rule actually counted, and the dead reply path cost
 only the replies, not the sales.
 
+### The factual account, for each of the three
+
+Not advice. What each option would and would not establish, what it costs, and
+what it requires — so the judgment is made against facts rather than against a
+feeling about a defect.
+
+**What is not in dispute, under any of them.** Twenty-one businesses were
+written to; nineteen were delivered and two bounced; nobody paid; the sealed
+rule counted confirmed deliveries and payments and settled on the day it said
+it would. Those rows are immutable and none of the options touches them. The
+receipts, the timestamps, the sealed prediction and the settlement stay
+exactly as they are, and remain readable on the test's own page whichever way
+you decide.
+
+**(1) Leave it as it stands — the verdict recorded, the limit beside it.**
+
+- Establishes: nobody bought, in that window, on that channel, from those
+  twenty-one. Nothing about whether anybody would have.
+- Costs: nothing, and the precedent reader keeps treating the question as
+  asked, so a second run of the same question would be refused as a duplicate
+  until you overrode it.
+- Requires: nothing.
+- Risk: the weakest form of the wrong lesson — "cold email to millwork shops
+  does not work" is not what this measured, and the caveat is a sentence a
+  tired owner can skim past.
+
+**(2) Void for its instrument, and re-run when the path is working.**
+
+- Establishes: nothing yet. It reopens the market question, which is the
+  honest state of a question that was asked into a void.
+- Costs: the second run's money and days, and it re-spends the attention of
+  people who were already written to once — unless the re-run addresses a
+  fresh cohort, which changes the population and therefore the comparison.
+- Requires: the reply path working first (it is, now, and the institution
+  refuses to write through it otherwise); your instruction to mark it void.
+  The institution will not mark it void by itself: the second door into
+  invalidity (`invalidateByObservation`) reads the day-by-day channel record,
+  and Experiment 001 has no such record because migration 327 did not exist
+  while it ran. It refuses to invalidate on an absence of evidence, which is
+  the rule you would want it to follow.
+- What it does not do: erase anything. An invalid test keeps its page, its
+  receipts and its prediction; it stops being read as an answer.
+
+**(3) Sound — the null stands on its own terms.**
+
+- The argument: the rule counted payments, and a payment needed no reply. The
+  payment link carried the answer the rule actually asked for; the dead reply
+  path cost the replies, not the sales.
+- Establishes: as (1), and additionally lets the result stand as a precedent
+  the forge may bind the next design against.
+- Costs: nothing now. The exposure is that the strongest signal a cold
+  approach produces at this size is usually a reply, not a sale, so a design
+  that treats "no sales" as the whole answer may be tuned against the wrong
+  variable.
+- Requires: nothing — this is the position the institution already takes
+  operationally, minus the caveat.
+
+**Where each fact lives, so a later reading can find both.** The original
+outcome is on `venture_experiments` (verdict, ran_at, the sealed rule) and on
+the test's public page, unchanged. The correction is computed, never stored
+over it: `venture/the-instrument.ts` reads the offers, the channel record and
+the Workshop's receipts and says what the result does not establish, wherever
+the outcome is shown. Reading one has never required believing the other.
+
+**And what can now be said about the window that could not be said before.**
+The day-by-day channel record begins at migration 327, after Experiment 001
+closed, so its days are unrecorded and are reported as unrecorded — an absence
+of record is not a record of health. But the route that carries a reply is made
+through the governed door, and the door keeps a receipt with a date. Where that
+receipt is dated after a test's window closed, the institution now says so as a
+fact: *that path was not made until <date>, after this test had already closed,
+so nothing it invited could have arrived.* For Experiment 001 that receipt is
+the one written when the Workshop was given ears — read it on
+`/foundry/public-workshop` under the mutation receipts, and it will name the
+day the reply route first existed.
+
 Nothing here changes until you say. The reply path itself is fixable from
 `/foundry/public-workshop`, and the institution now keeps a day-by-day record
 of it, so a second run would know what its instrument was doing.

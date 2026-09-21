@@ -122,6 +122,36 @@ describe('a null result on a channel that may not have carried a reply says less
   });
 });
 
+describe('where there is no day record, the receipts may still know', () => {
+  it('a route that already existed before the window is never reported as made too late', async () => {
+    // EXPERIMENT 001'S WINDOW PREDATES THE DAY RECORD ENTIRELY, which is why
+    // the honest sentence stopped at "I cannot say". The route that carries a
+    // reply is made through the governed door like everything else, and the
+    // door keeps a receipt with a date on it: a route made AFTER a test closed
+    // was not carrying anything during it, and that is a fact rather than an
+    // inference. That is the branch production's own records will take.
+    //
+    // It cannot be staged here in the direction that fires. The world stands
+    // the Workshop's ears up before it writes to anybody — the institution as
+    // it must now be — so its route receipt predates every window, and a
+    // receipt can never be deleted or moved (the trigger refuses, and should).
+    // What IS held here is the dangerous direction: a route that was already
+    // there must never be reported as having come too late.
+    await query(`DELETE FROM public_channel_days WHERE founder_id = ? AND channel = 'replyInbox'`, [OWNER]);
+    await query(`UPDATE public_workshop SET health_json = ? WHERE founder_id = ?`,
+      [JSON.stringify({ replyInbox: { status: 'needs_attention', detail: 'mail routing is not enabled on the zone' } }), OWNER]);
+    const made = (await query(
+      `SELECT COUNT(*) AS n FROM cloudflare_mutations
+        WHERE tool = 'cloudflare_email_route_upsert' AND outcome = 'applied'`, []))
+      .rows[0] as Record<string, unknown>;
+    expect(Number(made.n), 'the world routed its replies before it wrote to anybody').toBeGreaterThan(0);
+    const { doubtsAboutTheInstrument } = await import('../../src/services/venture/the-instrument.js');
+    const doubts = await doubtsAboutTheInstrument(X);
+    expect(doubts[0].sentence).not.toMatch(/was not made until/);
+    expect(doubts[0].sentence).toMatch(/no day-by-day record/);
+  });
+});
+
 describe('the channel keeps its own record, so the doubt becomes a fact', () => {
   it('says on how many of the test\'s own days the path was not working, from the day-by-day record', async () => {
     const { doubtsAboutTheInstrument } = await import('../../src/services/venture/the-instrument.js');

@@ -105,9 +105,24 @@ export async function doubtsAboutTheInstrument(experimentId: string): Promise<In
     const asked = `${String(offers)} ${offers === 1 ? 'message' : 'messages'} went out under this test asking people to reply to ${String(w.contact_email)}`;
     // WHAT THE RECORD ESTABLISHES, said as a fact; what it does not, said as
     // an absence. A day with no row is not a day that was well.
+    // WHERE THERE IS NO DAY RECORD, THE RECEIPTS MAY STILL KNOW. Migration 327
+    // began keeping the days; Experiment 001 ran before it existed, so its
+    // whole window is unrecorded and the honest sentence stopped at "I cannot
+    // say". But the route that carries a reply is made through the governed
+    // door like everything else, and the door writes a receipt with a date. A
+    // route created AFTER a test's window closed was not carrying anything
+    // during it, and that is a fact from a receipt rather than an inference.
+    const routeMade = window === null ? null : (await query(
+      `SELECT MIN(recorded_at) AS at FROM cloudflare_mutations
+        WHERE founder_id = ? AND tool = 'cloudflare_email_route_upsert' AND outcome = 'applied'`,
+      [String(e.founder_id)])).rows[0] as Row | undefined;
+    const madeAfter = routeMade?.at != null && window !== null
+      && String(routeMade.at).slice(0, 10) > window.to;
     const then = daysBroken > 0
       ? `That path was not working on ${String(daysBroken)} of the ${String(window?.days ?? daysBroken)} days the test was asking${record?.worstDetail ? ` (${record.worstDetail})` : ''}`
-      : `I have no day-by-day record of that path while the test was asking`;
+      : madeAfter
+        ? `That path was not made until ${String(routeMade!.at).slice(0, 10)}, after this test had already closed, so nothing it invited could have arrived`
+        : `I have no day-by-day record of that path while the test was asking`;
     const now = brokenNow
       ? `, and it is ${reply.status === 'unknown' ? 'unreadable' : 'not working'} now${reply.detail ? ` (${reply.detail})` : ''}`
       : ', though it is working now';
