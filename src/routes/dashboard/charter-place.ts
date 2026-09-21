@@ -70,7 +70,7 @@ charterRoutes.get('/foundry/charter', async (c: any) => {
     ? charterExposure({ testsTotalCents: envelope.charter.testsTotalCents, cognitionCentsPerDay: envelope.charter.cognitionCentsPerDay, days: envelope.charter.days })
     : charterExposure({ testsTotalCents: Math.round(form.tests * 100), cognitionCentsPerDay: Math.round(form.thinking * 100), days: form.days });
   const probes = envelope ? envelope.charter.probesInFlight : form.probes;
-  const { AI_CEILINGS } = await import('../../services/ai/client.js');
+  const { AI_CEILINGS } = await import('../../services/deployment/ai-ceilings.js');
   const deploymentCap = AI_CEILINGS().founder;
   const voice = envelope ? envelope.charter.publicVoice : workshop?.publicName ?? 'the Workshop';
   const rules = envelope ? envelope.charter.contactRules : SEALED_CONTACT_RULES;

@@ -9,6 +9,9 @@ import type { AIModel, AICallConfig, AIResponse } from '../../types/ai.js';
 import { log } from '../../lib/logger.js';
 import { reportError } from '../../lib/error-reporter.js';
 import { operatingProduct, query } from '../../db/client.js';
+import {
+  DAILY_COST_CEILING_CENTS, FOUNDER_COST_CEILING_CENTS, GLOBAL_COST_CEILING_CENTS,
+} from '../deployment/ai-ceilings.js';
 import { finishReservation, reserveSpend, type SpendReservation } from './spend-ledger.js';
 import {
   subjectPurpose, subjectWork,
@@ -43,16 +46,13 @@ export const MODELS = {
 // and is shared across machines — the in-process Map is only a read-through
 // cache (short TTL) so we don't hit the DB on every one of the 73 AI crons.
 //
-//   product default $25/day  (AI_DAILY_COST_CEILING_CENTS)
-//   founder default $100/day (AI_DAILY_COST_CEILING_FOUNDER_CENTS)
-//   global  default $500/day (AI_DAILY_COST_CEILING_GLOBAL_CENTS)
-const DAILY_COST_CEILING_CENTS = parseInt(process.env.AI_DAILY_COST_CEILING_CENTS ?? '2500', 10);
-const FOUNDER_COST_CEILING_CENTS = parseInt(process.env.AI_DAILY_COST_CEILING_FOUNDER_CENTS ?? '10000', 10);
-const GLOBAL_COST_CEILING_CENTS = parseInt(process.env.AI_DAILY_COST_CEILING_GLOBAL_CENTS ?? '50000', 10);
-
-/** The deployment's three caps, for the one reading of spend (institution/spending.ts). */
-export const AI_CEILINGS = (): { product: number; founder: number; global: number } =>
-  ({ product: DAILY_COST_CEILING_CENTS, founder: FOUNDER_COST_CEILING_CENTS, global: GLOBAL_COST_CEILING_CENTS });
+// The three caps themselves live in `deployment/ai-ceilings.ts`, not here:
+// they bound this deployment rather than belonging to the thing that spends,
+// and the institutional kernel must be able to read them without importing a
+// model client. This module enforces them; it does not own them.
+export {
+  DAILY_COST_CEILING_CENTS, FOUNDER_COST_CEILING_CENTS, GLOBAL_COST_CEILING_CENTS, AI_CEILINGS,
+} from '../deployment/ai-ceilings.js';
 
 const GLOBAL_SCOPE_ID = '__global__';
 const CACHE_TTL_MS = 60_000; // re-read from DB at most once per minute per scope

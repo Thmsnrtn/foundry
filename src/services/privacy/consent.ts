@@ -1043,6 +1043,18 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
       + 'each of them never permits',
     onAccountErasure: { op: 'delete' },
   },
+  // WHETHER HIS OWN CHANNELS COULD CARRY AN ANSWER, DAY BY DAY. It carries no
+  // product id, and it could not: the Workshop's reply path and sending
+  // identity are one person's, standing behind whichever of their tests is
+  // asking. It exists to say what a null result does and does not establish,
+  // which is a fact about how this institution served him and about nobody
+  // else — least of all the strangers who were written to, who are not named
+  // in it at all.
+  public_channel_days: {
+    reason: 'whether one person\'s own public channels were working on each day '
+      + 'their own tests were asking the world',
+    onAccountErasure: { op: 'delete' },
+  },
   venture_experiments: {
     reason: 'tests designed against one person\'s candidates, with what was '
       + 'predicted before each one ran',

@@ -118,15 +118,21 @@ describe('it is one of the places, drawn by the one shell', () => {
     expect(shell).toContain('href="/foundry/roadmap"');
   });
 
-  it('adds no door of its own', () => {
+  it('adds no door of its own', async () => {
     // THE DOORS ARE THE V3 CANONICAL SET, AND THE ROADMAP IS NOT ONE OF THEM.
     // The supplied handoff fixes the owner map at Home, Decisions, Portfolio,
     // Discover, Experiments, Inbox, Activity, Economics, Controls and Ask; on
     // a phone the hashed owner script narrows that by context rather than by
     // position. The Roadmap stays in "Also here" beside the Workshop and the
     // absence test: it is one tap from Home, not a place under the thumb.
+    // THE DOORS NAME A PLACE AND THE PLACE KNOWS ITS OWN ADDRESS. The rail
+    // used to carry nine typed strings; they live in `owner/labels.ts` now, so
+    // the rail and the More sheet cannot drift apart. The claim is unchanged:
+    // exactly these nine, in this order, and the Roadmap is not among them.
+    const { ADDRESSES } = await import('../../src/views/owner/labels.js');
     const shell = readFileSync(resolve(ROOT, 'src/views/owner/shell.ts'), 'utf8');
-    const doors = [...shell.matchAll(/\$\{door\('([^']+)'/g)].map((m) => m[1]);
+    const doors = [...shell.matchAll(/\$\{door\(ADDRESSES\.(\w+)/g)]
+      .map((m) => ADDRESSES[m[1] as keyof typeof ADDRESSES]);
     expect(doors).toEqual([
       '/foundry', '/foundry/decisions', '/foundry/companies', '/foundry/searching',
       '/foundry/experiments', '/foundry/inbox', '/foundry/activity', '/foundry/money',

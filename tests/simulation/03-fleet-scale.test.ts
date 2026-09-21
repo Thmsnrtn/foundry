@@ -15,6 +15,11 @@ let clientSource: string;
 let aiClientSource: string;
 let spendLedgerSource: string;
 let provisonerSource: string;
+// THE DEPLOYMENT'S THREE CAPS MOVED OUT OF THE CLIENT. They bound this
+// deployment rather than belonging to the thing that spends, and the
+// institutional kernel (which may not import a model client) has to read them
+// to explain them. Same facts, asserted where they now live.
+let ceilingsSource: string;
 
 beforeAll(() => {
   schedulerSource = readFileSync(resolve(SRC, 'services/scp/scheduler.ts'), 'utf-8');
@@ -22,6 +27,7 @@ beforeAll(() => {
   aiClientSource = readFileSync(resolve(SRC, 'services/ai/client.ts'), 'utf-8');
   spendLedgerSource = readFileSync(resolve(SRC, 'services/ai/spend-ledger.ts'), 'utf-8');
   provisonerSource = readFileSync(resolve(SRC, 'services/scp/provisioner.ts'), 'utf-8');
+  ceilingsSource = readFileSync(resolve(SRC, 'services/deployment/ai-ceilings.ts'), 'utf-8');
 });
 
 // =============================================================================
@@ -143,18 +149,21 @@ describe('AI cost ceiling is persisted and multi-scoped', () => {
   });
 
   it('enforces fleet-level caps (per-founder and global) with env overrides', () => {
-    expect(aiClientSource).toMatch(/AI_DAILY_COST_CEILING_FOUNDER_CENTS/);
-    expect(aiClientSource).toMatch(/AI_DAILY_COST_CEILING_GLOBAL_CENTS/);
+    expect(ceilingsSource).toMatch(/AI_DAILY_COST_CEILING_FOUNDER_CENTS/);
+    expect(ceilingsSource).toMatch(/AI_DAILY_COST_CEILING_GLOBAL_CENTS/);
     expect(aiClientSource).toMatch(/GLOBAL_COST_CEILING_CENTS/);
   });
 
   it('per-product cost ceiling is configurable via environment variable', () => {
-    expect(aiClientSource).toMatch(/AI_DAILY_COST_CEILING_CENTS/);
-    expect(aiClientSource).toMatch(/process\.env\.AI_DAILY_COST_CEILING_CENTS/);
+    expect(ceilingsSource).toMatch(/AI_DAILY_COST_CEILING_CENTS/);
+    expect(ceilingsSource).toMatch(/process\.env\.AI_DAILY_COST_CEILING_CENTS/);
+    // And the client still reads that one home rather than the env itself.
+    expect(aiClientSource).toMatch(/from '\.\.\/deployment\/ai-ceilings\.js'/);
+    expect(aiClientSource).not.toMatch(/process\.env\.AI_DAILY_COST_CEILING/);
   });
 
   it('per-product cost ceiling has a sensible default ($25/day = 2500 cents)', () => {
-    expect(aiClientSource).toMatch(/2500/);
+    expect(ceilingsSource).toMatch(/2500/);
   });
 
   it('callClaude atomically authorizes spend before making API call', () => {

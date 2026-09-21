@@ -50,9 +50,14 @@ export interface ThinkingToday {
   sentence: string;
 }
 
-/** The deployment's caps, read from the one module that reads the env. */
+/**
+ * The deployment's caps, read from the one module that reads the env. NOT from
+ * the model client that enforces them: the institutional kernel makes no model
+ * calls and may not import one, and the caps are the deployment's fact rather
+ * than the client's.
+ */
 async function providerCaps(): Promise<{ product: number; founder: number; global: number }> {
-  const { AI_CEILINGS } = await import('../ai/client.js');
+  const { AI_CEILINGS } = await import('../deployment/ai-ceilings.js');
   return AI_CEILINGS();
 }
 
