@@ -424,6 +424,11 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
         <div class="tile"><dt class="k">${mark('money')}Paid</dt><dd class="v">${String(v.money.payments)}</dd><dd class="d">${v.money.payments ? `${cents(v.money.paidCents, v.money.currency)}${v.money.refunds ? ` · ${String(v.money.refunds)} refunded` : ''}` : 'no purchases yet'}</dd></div>
         <div class="tile"><dt class="k">${mark('cash')}Spent</dt><dd class="v">${cents(v.money.spentCents)}</dd><dd class="d">of ${cents(v.money.allowanceCents)} allowed</dd></div>
       </dl>
+      ${/* AN EMPTY TILL IS AN ABSENCE, AND AN ABSENCE IS ONLY EVIDENCE WHEN
+            THE THING THAT WOULD HAVE RECORDED A PRESENCE WAS WORKING. The
+            tile above says "no purchases recorded" rather than "none yet"
+            whenever that is in doubt, and this says why. */ ''}
+      ${v.money.emptyTill ? html`<p class="quiet">${v.money.emptyTill}</p>` : ''}
       ${stopReadings.length ? html`<p class="exp-stops"><span class="quiet">Stops itself at</span>${stopReadings.map((x) => html`<span class="chip${x.met ? ' hit' : ''}">${x.whatItIs} <b>${String(x.count)} / ${String(x.threshold)}</b></span>`)}</p>`
     : v.rules.stop.length ? html`<p class="exp-stops"><span class="quiet">Stops when</span>${v.rules.stop.map((x) => html`<span class="chip">${x}</span>`)}</p>` : ''}
       ${v.rules.windowClosesAt ? html`<p class="quiet">Window closes ${v.rules.windowClosesAt}${v.rules.daysLeft != null ? ` · ${count(v.rules.daysLeft, 'day')} left` : ''}.</p>` : ''}

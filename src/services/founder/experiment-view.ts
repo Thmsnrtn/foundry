@@ -116,6 +116,13 @@ export interface ExperimentMoney {
   spentCents: number;
   /** What customers actually paid, and gave back. */
   paidCents: number; payments: number; refundedCents: number; refunds: number; paidYet: boolean;
+  /**
+   * WHAT AN EMPTY TILL MEANS, or null when it means what it looks like. The
+   * limit travels with the number rather than beside it, so no surface can
+   * print `$0.00` or "nobody paid" without the reason it might not be a fact
+   * about anybody's willingness to pay.
+   */
+  emptyTill: string | null;
   /** The one word for where the money stands. */
   word: 'authorised' | 'spending' | 'settled' | 'none';
   /** The reading as a sentence, for a letter or a line. */
@@ -162,12 +169,32 @@ export async function moneyOfExperiment(experimentId: string): Promise<Experimen
   const sentence = word === 'none' ? 'no money was set aside for it and none moved'
     : `${$(authorisedCents)} set aside for it${carved > 0 ? ` (carved from the charter)` : ''}; ${$(spentCents)} of that spent; `
       + `${paidCents === 0 ? 'nothing paid by anyone' : `${$(paidCents)} paid by customers`}${refundedCents > 0 ? `, ${$(refundedCents)} refunded` : ''}`;
+  // WHAT THE EMPTY TILL MEANS, asked only when it IS empty: a test somebody
+  // paid for has an answer, and the question costs four queries.
+  const emptyTill = payments.length > 0 ? null : await (async () => {
+    const { whatAnEmptyTillMeans } = await import('../venture/the-instrument.js');
+    const founder = (await rows(`SELECT founder_id FROM venture_experiments WHERE id = ?`, [experimentId]))[0];
+    if (!founder) return null;
+    // SQLite writes `2026-09-12 13:00:00`, the services write ISO with a Z,
+    // and `new Date` of the first is invalid in Node. One parser, tolerant of
+    // both, and a bad value is simply no window rather than a 500 on the page.
+    const when = (v: unknown): Date | null => {
+      if (v == null) return null;
+      const t = String(v);
+      const d = new Date(/[TZ]/.test(t) ? t : `${t.replace(' ', 'T')}Z`);
+      return Number.isNaN(d.getTime()) ? null : d;
+    };
+    const opened = when(x?.placedAt) ?? new Date(Date.now() - 7 * 86_400_000);
+    const closed = when(e.ran_at) ?? new Date();
+    if (closed.getTime() < opened.getTime()) return null;
+    return whatAnEmptyTillMeans(String(founder.founder_id), opened, closed);
+  })();
   return {
     currency, authorisedCents, carvedCents: carved,
     allowanceCents: allowance?.amountCents ?? (last ? Number(last.amount_cents) : authorisedCents),
     remainingCents: allowance?.remainingCents ?? (settled ? 0 : authorisedCents),
     spentCents, paidCents, payments: payments.length, refundedCents, refunds: refunds.length, paidYet: payments.length > 0,
-    word, sentence,
+    word, sentence: emptyTill ? `${sentence}. ${emptyTill}` : sentence, emptyTill,
   };
 }
 
@@ -237,6 +264,10 @@ export async function getExperimentView(founderId: string, experimentId: string,
   ];
 
   // ── State, truthfully from the rows ──
+  // ONE READING OF THIS TEST'S MONEY, taken here and used everywhere below:
+  // the sentence, the tiles and the state line all say the same thing about
+  // the same till, including what its emptiness does and does not mean.
+  const moneySoFar = await moneyOfExperiment(experimentId);
   let state: ExperimentState; let stateLabel: string; let stateDetail: string;
   const outcome = outcomeFromRow({
     decision: e.decision, validity: e.validity, verdict: e.verdict, grade: graded.grade == null ? null : String(graded.grade),
@@ -269,10 +300,10 @@ export async function getExperimentView(founderId: string, experimentId: string,
   else if (e.decision === 'approved' && listing) {
     state = 'running'; stateLabel = x && !withdrawn ? 'Listed' : 'Approved';
     stateDetail = !x || withdrawn ? `Approved. Waiting on you: open the shop, list it on ${listing.venueName}, and paste the listing address here; the window starts then.`
-      : `Listed at ${x.exposureRef}; ${readingsTaken} of ${listing.readingsAtDays.length} readings entered; ${payments.length === 0 ? 'no one has paid yet' : `${plural(payments.length, 'buyer has', 'buyers have')} paid`}.${daysLeft != null ? ` ${daysLeft} day${daysLeft === 1 ? '' : 's'} left in the window.` : ''}`;
+      : `Listed at ${x.exposureRef}; ${readingsTaken} of ${listing.readingsAtDays.length} readings entered; ${payments.length === 0 ? (moneySoFar.emptyTill ? 'no purchase is recorded' : 'no one has paid yet') : `${plural(payments.length, 'buyer has', 'buyers have')} paid`}.${daysLeft != null ? ` ${daysLeft} day${daysLeft === 1 ? '' : 's'} left in the window.` : ''}`;
   } else if (e.decision === 'approved') {
     state = 'running'; stateLabel = 'Running';
-    stateDetail = `${delivered === 0 ? 'No businesses have received the offer yet' : `${plural(delivered, 'business has', 'businesses have')} received the offer`}; ${payments.length === 0 ? 'no one has paid yet' : `${plural(payments.length, 'customer has', 'customers have')} paid`}.${daysLeft != null ? ` ${daysLeft} day${daysLeft === 1 ? '' : 's'} left in the window.` : ' The window opens when the offer is placed.'}`;
+    stateDetail = `${delivered === 0 ? 'No businesses have received the offer yet' : `${plural(delivered, 'business has', 'businesses have')} received the offer`}; ${payments.length === 0 ? (moneySoFar.emptyTill ? 'no purchase is recorded' : 'no one has paid yet') : `${plural(payments.length, 'customer has', 'customers have')} paid`}.${daysLeft != null ? ` ${daysLeft} day${daysLeft === 1 ? '' : 's'} left in the window.` : ' The window opens when the offer is placed.'}`;
   } else if (!ready.ok) { state = 'needs_you'; stateLabel = 'Needs you'; stateDetail = `Before it can run: ${ready.missing.join('; ')}.`; }
   else { state = 'ready'; stateLabel = 'Ready'; stateDetail = 'Everything is in place. It runs when you allow it.'; }
   const concluded = state === 'completed' || state === 'stopped' || state === 'declined' || state === 'invalid' || state === 'retired' || state === 'superseded';
@@ -306,7 +337,7 @@ export async function getExperimentView(founderId: string, experimentId: string,
     sent: Number(counts.sent ?? 0), delivered, bounced: Number(counts.bounced ?? 0), remaining: Math.max(0, ready.reachable - Number(counts.sent ?? 0)),
     killAt: rule?.atMost ?? null,
   };
-  const moneyView: ExperimentMoney = { ...await moneyOfExperiment(experimentId), currency: plan?.price.currency ?? 'USD' };
+  const moneyView: ExperimentMoney = { ...moneySoFar, currency: plan?.price.currency ?? 'USD' };
   const dq = deliverable ? checkDeliverableQuality(deliverable, now) : null;
   const offerView = {
     price, oneTime: true, paymentLinkUrl: offer?.paymentLinkUrl ?? null, offerQuality: offer ? checkOfferQuality(offer) : null,

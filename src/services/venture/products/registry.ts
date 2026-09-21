@@ -200,10 +200,25 @@ export async function makeBrief(input: { founderId: string; experimentId: string
  * said so and the old edition stands until the rule stops it being sent.
  */
 export async function refreshStaleBriefs(now: Date = new Date()): Promise<Array<{ experimentId: string; refreshed: boolean; because: string }>> {
+  // AND A TEST NOBODY IS RUNNING ANY MORE THAT STILL OWES SOMEBODY.
+  //
+  // This watched live tests only. What is owed outlives the test — that is the
+  // whole purchase pathway — and until now the STEWARDSHIP of what is owed did
+  // not: a buyer who paid as a test settled was owed a brief, the brief went
+  // past its freshness limit, the quality gate refused the delivery (rightly),
+  // and nothing was ever going to re-pull it. The obligation then said "the
+  // delivery goes out on the next pass" on every pass, for ever, which is the
+  // promise-it-cannot-keep this institution refuses to make.
+  //
+  // So the steward follows the obligation, not the lifecycle.
+  const { OPEN_OBLIGATION } = await import('../obligations.js');
   const live = (await query(
     `SELECT e.id, e.founder_id FROM venture_experiments e
-      WHERE e.evidence_mode = 'real' AND e.retired_at IS NULL AND e.validity = 'valid'
-        AND ((e.decision = 'approved' AND e.ran_at IS NULL) OR e.decision IS NULL)
+      WHERE e.evidence_mode = 'real'
+        AND ( (e.retired_at IS NULL AND e.validity = 'valid'
+               AND ((e.decision = 'approved' AND e.ran_at IS NULL) OR e.decision IS NULL))
+           OR EXISTS (SELECT 1 FROM experiment_fulfilments f
+                       WHERE f.experiment_id = e.id AND ${OPEN_OBLIGATION('f')}) )
         AND EXISTS (SELECT 1 FROM experiment_materials m WHERE m.experiment_id = e.id AND m.kind = 'offer_shape' AND m.superseded_at IS NULL AND m.body LIKE '%"kind":"data_brief"%')
       ORDER BY e.proposed_at`, [])).rows as unknown as Array<Record<string, unknown>>;
   const out: Array<{ experimentId: string; refreshed: boolean; because: string }> = [];

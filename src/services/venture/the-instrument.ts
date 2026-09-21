@@ -904,6 +904,33 @@ export interface WhatSilenceMeans {
  * turned every uncertainty into a warning would teach its owner to ignore
  * warnings, which is a worse failure than the one it was guarding against.
  */
+/**
+ * WHAT AN EMPTY TILL MEANS — the one reader every "nobody paid" goes through.
+ *
+ * `$0.00` and "no purchases yet" are absences, and an absence is only evidence
+ * when the thing that would have recorded a presence was working. Two
+ * different facts can make the till empty and neither of them is a market:
+ * the way to pay was down on some of the days, or nothing has ever proved that
+ * the provider can reach this deployment at all — in which case a payment
+ * could have happened and Foundry would not know.
+ *
+ * Returns null when the silence is worth what it looks like, which is the
+ * ordinary case and is why this can sit behind every one of those surfaces
+ * without turning them into a warning.
+ */
+export async function whatAnEmptyTillMeans(
+  founderId: string, from: Date, to: Date,
+): Promise<string | null> {
+  // THE STRONGER FACT FIRST. A deployment the provider has never reached has
+  // nothing to say about who paid, whatever its day-by-day record shows.
+  const heard = await paymentObservationPath(to);
+  if (heard.status !== 'working') {
+    return `Nothing here establishes that nobody paid: ${heard.detail}.`;
+  }
+  const days = await whatSilenceMeans(founderId, 'payments', from, to, 'a payment');
+  return days.sentence;
+}
+
 export async function whatSilenceMeans(
   founderId: string, channel: PublicChannel, from: Date, to: Date, about = 'an answer',
 ): Promise<WhatSilenceMeans> {

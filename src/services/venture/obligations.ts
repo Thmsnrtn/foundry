@@ -95,7 +95,7 @@ const money = (cents: number, currency: string): string =>
 const day = (iso: string): string => iso.slice(0, 10);
 const hoursSince = (iso: string | null, now: Date): number => iso ? (now.getTime() - new Date(iso.includes('T') ? iso : iso.replace(' ', 'T') + 'Z').getTime()) / 3_600_000 : 0;
 
-function read(r: Row, now: Date, moneyToolsOn: boolean): Obligation {
+async function read(r: Row, now: Date, moneyToolsOn: boolean): Promise<Obligation> {
   const amount = money(Number(r.amount_cents), String(r.currency));
   const ref = String(r.payment_ref);
   const title = String(r.title ?? 'the test');
@@ -143,11 +143,45 @@ function read(r: Row, now: Date, moneyToolsOn: boolean): Obligation {
     sentence = `${title} was sent to a buyer (payment ${ref}, ${amount}) on ${day(sentAt ?? String(r.updated_at))} and the mail provider has not confirmed it arrived. After ${String(UNCONFIRMED_IS_FAILED_AFTER_DAYS)} days without confirmation it is treated as undelivered and refunded.`;
     asksHim = action === 'check_delivery' ? 'Worth a look: the provider has not confirmed this delivery in three days.' : null;
   } else {
-    state = 'owed'; action = 'nothing';
-    sentence = `A buyer paid ${amount} for ${title} (payment ${ref}) on ${day(String(r.created_at))}; the delivery goes out on the next pass.`;
+    // A PROMISE THE INSTITUTION CANNOT KEEP IS WORSE THAN A REFUSAL IT
+    // EXPLAINS — the rule an owner-withdrawn refund taught, met here a second
+    // time. The thing a buyer bought can go past its freshness limit, and the
+    // quality gate then refuses the delivery, rightly and for ever. The
+    // steward re-pulls what it can re-pull; where it cannot, "the delivery
+    // goes out on the next pass" is a sentence the institution says on every
+    // pass about something that will never happen.
+    const stuck = await whyItCannotGoOut(String(r.experiment_id), now);
+    if (stuck) {
+      state = 'owed'; action = 'deliver_or_refund_yourself';
+      sentence = `A buyer paid ${amount} for ${title} (payment ${ref}) on ${day(String(r.created_at))}, `
+        + `and the delivery is refused: ${stuck}. Nothing I do on a later pass changes that, so I am not going to tell you it is coming.`;
+      asksHim = 'This one is yours: send them what they bought, or refund them in Stripe.';
+    } else {
+      state = 'owed'; action = 'nothing';
+      sentence = `A buyer paid ${amount} for ${title} (payment ${ref}) on ${day(String(r.created_at))}; the delivery goes out on the next pass.`;
+    }
   }
   return { id: String(r.id), experimentId: String(r.experiment_id), experimentTitle: title, productId: r.product_id == null ? null : String(r.product_id),
     state, action, amountCents: Number(r.amount_cents), currency: String(r.currency), paymentRef: ref, since: String(r.created_at), sentAt, sentence, asksHim };
+}
+
+/**
+ * WHY WHAT WAS BOUGHT CANNOT GO OUT, or null when nothing stands in the way.
+ *
+ * Only a reason the institution cannot clear by itself counts. A brief the
+ * hands made is re-pulled by the steward on the same pass, so its staleness is
+ * a delay and not a dead end; a deliverable nothing can re-pull is a dead end,
+ * and the difference is exactly what the owner needs to be told apart.
+ */
+async function whyItCannotGoOut(experimentId: string, now: Date): Promise<string | null> {
+  const { materialOf, checkDeliverableQuality } = await import('./hand.js');
+  const deliverable = await materialOf(experimentId, 'deliverable');
+  if (!deliverable) return 'there is nothing attached to deliver';
+  const quality = checkDeliverableQuality(deliverable, now);
+  if (quality.ok) return null;
+  const shape = await materialOf(experimentId, 'offer_shape');
+  const canRePull = (shape?.body ?? '').includes('"kind":"data_brief"');
+  return canRePull ? null : quality.failures.join('; ');
 }
 
 // OWNER TRUTH: an obligation reaches Home, the queue and Economics as his, so
@@ -182,13 +216,13 @@ const moneyToolsOn = (): boolean => process.env.FOUNDRY_ENABLE_MONEY_TOOLS === '
 /** Every open obligation of this owner's, oldest first. */
 export async function obligationsFor(founderId: string, now = new Date()): Promise<Obligation[]> {
   const on = moneyToolsOn();
-  return (await rows(`${SELECT} WHERE e.founder_id = ? AND ${OPEN_OBLIGATION('f')} ORDER BY f.created_at, f.rowid`, [founderId])).map((r) => read(r, now, on));
+  return Promise.all((await rows(`${SELECT} WHERE e.founder_id = ? AND ${OPEN_OBLIGATION('f')} ORDER BY f.created_at, f.rowid`, [founderId])).map(async (r) => read(r, now, on)));
 }
 
 /** The open obligations of one test. */
 export async function obligationsOf(experimentId: string, now = new Date()): Promise<Obligation[]> {
   const on = moneyToolsOn();
-  return (await rows(`${SELECT} WHERE f.experiment_id = ? AND ${OPEN_OBLIGATION('f')} ORDER BY f.created_at, f.rowid`, [experimentId])).map((r) => read(r, now, on));
+  return Promise.all((await rows(`${SELECT} WHERE f.experiment_id = ? AND ${OPEN_OBLIGATION('f')} ORDER BY f.created_at, f.rowid`, [experimentId])).map(async (r) => read(r, now, on)));
 }
 
 /** Whether anything is still owed behind this test. */
