@@ -2458,3 +2458,48 @@ the zone"), a refused route shown as a banner and not recorded, the length of
 a drought unsaid, and three counts of "companies" that mean three different
 things. None of them misleads about money, obligations or authority.
 
+
+### The release, and what the chain caught on the way out (2026-09-21)
+
+`eef78cd9` is live on `foundry-intel`, deployed at 00:38 UTC. Health reports
+the commit, all five checks ok, no stopped loops, a pass completed at 00:35.
+`apexmicro.ai` answers 200 and Experiment 001's sealed page is unchanged —
+same verdict line, same identity paragraph, same "Page updated 2026-09-19".
+
+**The frozen tree failed the chain first, on four gates, and every one of them
+was a gate doing its job on work from this campaign.** That is worth recording
+rather than quietly fixing, because the four are a taxonomy of how a campaign
+of connected changes breaks the things that watch it.
+
+1. **A boundary crossed for a harmless reason.** `institution/spending.ts`
+   imported the model client to read three integers. The institutional
+   cognition gate forbids that import outright — not the call, the import —
+   because a gate that pauses to judge intent is a gate that can be argued
+   with. The shim that would have satisfied it was available and was not
+   taken. The fact moved instead: `deployment/ai-ceilings.ts` is now the one
+   module reading `AI_DAILY_COST_CEILING_*`, the client enforces them, the
+   kernel explains them, and the dynamic import cycle between them is gone.
+2. **A new table nobody decided about.** `public_channel_days` — added this
+   campaign so a null result can say whether the world could have answered —
+   was in no erasure bucket, so an account erasure would have stepped around
+   it and left a founder id behind. Founder-scoped, deleted, reason written
+   down.
+3. **A gate that could no longer fail.** When the rail's nine addresses moved
+   into the owner vocabulary, the proof that the Roadmap adds no door of its
+   own began matching an empty list. It passed. It would have passed forever.
+   It now reads the addresses where they live.
+4. And the fourth was the same as the third in a different file: a source
+   assertion aimed at a module that had stopped holding the fact.
+
+**The pattern, stated once more.** Three of the four are the campaign's
+standing finding in a new dress — *two readings of one fact will disagree
+unless one is derived from the other* — except here the second reading was a
+gate, and a gate reading a stale location does not disagree loudly. It agrees,
+silently, about nothing. A moved fact must move its watchers with it.
+
+**What the release carries and what it does not** is in the release commit
+message verbatim. The boundary that matters: no customer has established
+anything beyond Experiment 001's null, and nothing after a real purchase has
+been observed outside the laboratory. The Stripe test-mode run is written and
+deliberately unrun; the six facts only real Stripe can establish are proof
+debt, not evidence.

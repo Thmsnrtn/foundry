@@ -87,6 +87,22 @@ page as a channel, or any other population. It is recorded that way
 (`OWNER_OS_MIGRATION.md` § *Experiment 001, settled by the ledger*) and the
 forge reads it that way.
 
+**And the null is narrower still than that.** Nineteen of the twenty-one
+messages were delivered, every one of them inviting a reply, and the
+Workshop's reply path was not routed. The verdict stands — the sealed rule
+counted confirmed deliveries and payments, there were none, and a settled
+result is not rewritten to suit a later discovery. What is corrected is the
+institution's own claim about what the result *establishes*: a silence on a
+channel that may not have carried a reply is not the same evidence as a
+silence on one that did. `venture/the-instrument.ts` says so wherever the
+outcome is said, and `public_channel_days` now keeps the worst reading of each
+public path on each day, so for days it covers that correction is a fact
+rather than a caveat — and a day with no row is reported as unwatched, never
+counted as a day that was well.
+
+Whether that makes the null void, sound, or sound-for-payments-and-void-for-
+replies is a judgment about his own experiment and is his: **PENDING 21**.
+
 ## Testing the product as a person
 
 `tests/helpers/world.ts` is the one seed: production's shape (owner,
