@@ -492,3 +492,28 @@ outcome when that happens. And the channel gate, as rewritten, decides nothing
 on the real path today and can be evaded by retiring a true statement; it is
 satisfiable and inert, which is better than unsatisfiable and blocking, and the
 gap is the one recorded above.
+
+
+### The portfolio, and the four limits waiting on a second earned asset (21 September 2026)
+
+Reconciling the owner's clarification — Apex Micro as the portfolio home rather
+than the storefront — turned up four real limits. None blocks anything today,
+because there is at most one earned asset. All four bite on the second, and the
+trigger is exactly that: **the second earned asset**, not a date and not a
+tidiness pass.
+
+| What | Where | Why it waits |
+|---|---|---|
+| The Workshop assumes exactly one earned company | `settings.ts:87` `earnedCompanyOf`, `hand.ts:690` `senderCompanyOf` | Both require a single row and return null for two. The Workshop would lose the identity it acts as, on the day the portfolio becomes a portfolio. |
+| An earned asset has nowhere to hang a sale | `experiment_exposures.experiment_id` is `NOT NULL` | Every sale is recorded against an *experiment*. An earned, non-experimental asset selling on a venue cannot record one at all. |
+| Obligation remedies are Stripe-shaped | `obligations.ts:84-91` | "Refund it yourself in Stripe" is wrong for a venue sale, and no venue obligation has ever actually been carried — proof-2 delivers and refunds in the same breath, so `OPEN_OBLIGATION` has never been true for one. |
+| Nothing records the venue or the responsible seller as a fact | `structural_fact_kinds` is closed by a constitutional trigger | Venue lives in prose — `grounds` strings, `deliversBy`, `chargesHow` — and in `OfferShapePlan.listing`, which is not persisted as a fact. A new kind cannot be added; it would need another table or an `origination_policy` requirement. |
+
+**What was built instead, because a real asset bought it.** Experiment 002 sells
+a workbook on Etsy today and had no presence on the site at all — the only shape
+available was the full product page, and the owner's boundary rightly forbade
+publishing the offer. The portfolio entry is the missing shape: what it is, who
+it is for, who is responsible, and a link to where it actually lives. Two things
+stood in its way and both were specific rather than architectural: the listing
+address was classed with the Stripe payment-link ids as a secret, and the
+publication gate demanded a price and a way to pay.

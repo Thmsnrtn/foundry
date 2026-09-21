@@ -138,7 +138,7 @@ export function renderHome(f: PublicWorkshopFacts, registry: PublicExperiment[])
 ${listOf(listed, 'Nothing\'s open at the moment.')}
 <h2>About Apex Micro</h2>
 ${paras(f.statement)}
-<p><a href="/experiments">Everything I've made</a> · <a href="/about">More about me</a></p>`;
+<p><a href="/experiments">Everything I've put in front of people</a> · <a href="/about">More about me</a></p>`;
   return shell(f, f.name, '/', body, `${f.name}: ${f.tagline}.`, { path: '/' });
 }
 
@@ -164,7 +164,14 @@ ${f.about ? `<h2>A little more</h2>${paras(f.about)}` : ''}
 
 export function renderRegistry(f: PublicWorkshopFacts, registry: PublicExperiment[], which: 'all' | 'operating' | 'graduated' | 'closed'): string {
   const listed = registry.filter((x) => x.listed);
-  const titles = { all: 'Everything I\'ve made', operating: 'Still going', graduated: 'On their own now', closed: 'Closed' } as const;
+  // WHAT I PUT IN FRONT OF PEOPLE, NOT WHAT I MADE. The title said "made" over
+  // a lede that said "put in front of people", and only the lede was true: this
+  // lists what reached somebody. Internal research, rejected ideas and tests
+  // that never left the building are not here and must never be — a title
+  // promising the whole workbench invites a reader to conclude the workbench is
+  // this small, which is a claim about the private institution the public page
+  // has no business making.
+  const titles = { all: 'Everything I\'ve put in front of people', operating: 'Still going', graduated: 'On their own now', closed: 'Closed' } as const;
   const intro = {
     all: 'Everything I\'ve put in front of people, in the order I made it. Every page stays up, whatever happened to it.',
     operating: 'The ones that worked well enough to keep.',
@@ -181,7 +188,57 @@ ${which === 'all' ? `<p class="quiet"><a href="/operating">Still going</a> · <a
   return shell(f, titles[which], '/experiments', body, `${titles[which]}, at ${f.name}.`, { path: which === 'all' ? '/experiments' : `/${which}` });
 }
 
+/**
+ * THE SHORT FORM: what it is, who it is for, who is responsible, and where it
+ * actually lives.
+ *
+ * WHAT IT MUST NOT DO is as important as what it does. It states no price and
+ * offers no way to pay, because the offer is the venue's and the owner's
+ * standing boundary says Foundry publishes none of it. It does not restate the
+ * venue's refund or privacy terms as though they were this site's, because they
+ * are not — it names whose they are and points at them. And it does not go
+ * quiet about accountability to keep itself short: the business behind it, a
+ * person to reach, and where the money went are all here, because a customer
+ * who came to verify a seller has come for exactly that.
+ */
+function portfolioEntry(
+  f: PublicWorkshopFacts, x: PublicExperiment, at: { url: string; venueName: string },
+): string {
+  const body = `
+<h1>${esc(x.title)}</h1>
+<p class="lede">${esc(x.summary)}</p>
+<p class="quiet"><span class="pill">${esc(x.statusLabel)}</span> A ${esc(f.name)} product, sold on ${esc(at.venueName)}. ${esc(f.name)}, ${esc(f.region)}.</p>
+
+<div class="card">
+  <p><a class="btn" href="${esc(at.url)}" rel="noopener">Get it on ${esc(at.venueName)}</a></p>
+  <p class="quiet">${esc(at.venueName)} takes the payment and delivers it, under its own
+  terms and privacy policy. ${esc(f.name)} is the seller — the thing itself, what it claims
+  and putting it right are mine.</p>
+</div>
+
+<h2>Who it's for</h2>
+${paras(x.who)}
+
+<h2>If something's wrong with it</h2>
+<p>Write to me at <a href="mailto:${esc(f.contactEmail)}">${esc(f.contactEmail)}</a> and a person
+reads it. Refunds for anything bought on ${esc(at.venueName)} go through ${esc(at.venueName)},
+under their policy and the terms on the listing — <a href="/refunds">the refund page here</a>
+covers what you buy directly from ${esc(f.name)}, which this is not.</p>
+<p class="quiet">${x.openedOn ? `Listed ${esc(x.openedOn)}` : ''}${x.closedOn ? ` · Closed ${esc(x.closedOn)}` : ''} · Page updated ${esc(x.updatedOn)}</p>
+<p class="quiet"><a href="/experiments">Everything I've put in front of people</a></p>`;
+  return shell(f, x.title, '/experiments', body, x.summary, { path: x.path });
+}
+
 export function renderExperiment(f: PublicWorkshopFacts, x: PublicExperiment): string {
+  // A PORTFOLIO ENTRY IS NOT A SHORTER PRODUCT PAGE. It is a different thing
+  // with a different job: to let somebody who found the product somewhere else
+  // check who stands behind it, and to let somebody who found Apex Micro first
+  // get to where the product actually lives. It carries no price, no checkout
+  // and none of the six sections that describe a purchase happening here,
+  // because none of that happens here — repeating the venue's own copy would be
+  // duplicating a fulfilment experience the owner explicitly does not want
+  // duplicated, and would go stale the day he edits the listing.
+  if (x.shape === 'portfolio_entry' && x.whereToGetIt) return portfolioEntry(f, x, x.whereToGetIt);
   const number = String(x.number).padStart(3, '0');
   const asking = x.status === 'testing' || x.status === 'operating';
   // THE PRICE IS NOT A REVEAL. It used to sit under its own heading four
@@ -266,10 +323,10 @@ ${asking ? `<h2>Anything you'd like to say?</h2>
 
 <h2>Refunds, privacy and how to reach me</h2>
 ${refundLine ? `<p>${esc(refundLine)}</p>` : ''}
-<p>Stripe handles the payment and passes me your email address so I can send you the brief. That's all I use it for. There's no tracking in the email or on this site, so the only thing I know is what you choose to tell me — more on the <a href="/privacy">privacy page</a>.</p>
+<p>Buying this here, Stripe handles the payment and passes me your email address so I can send you the brief. That's all I use it for. There's no tracking in the email or on this site, so the only thing I know is what you choose to tell me — more on the <a href="/privacy">privacy page</a>.</p>
 <p>Anything else, <a href="/contact">just write to me</a>.${f.replyRouteProven ? ' Replies to anything I send come straight back to me.' : ''}</p>
 <p class="quiet">${x.openedOn ? `Opened ${esc(x.openedOn)}` : 'Not open yet'}${x.closedOn ? ` · Closed ${esc(x.closedOn)}` : ''} · Page updated ${esc(x.updatedOn)}</p>
-<p class="quiet"><a href="/experiments">Everything I've made</a></p>`;
+<p class="quiet"><a href="/experiments">Everything I've put in front of people</a></p>`;
   // WHAT IS FOR SALE, SAID IN THE FORM AN INDEX READS. Only while the thing is
   // actually offered: a closed page describes a product no one can buy, and
   // saying otherwise in machine words would be the one lie on the page.
@@ -297,8 +354,10 @@ export function renderPrivacy(f: PublicWorkshopFacts): string {
 <p class="lede">This site doesn't collect anything about you. Anything I sell collects only what delivering it needs.</p>
 <h2>This site</h2>
 <p>No cookies, no analytics, no tracking pixels, no scripts. The pages come off a content network which, like any web server, sees requests as they arrive. Nothing about you is kept here.</p>
-<h2>When you buy something</h2>
+<h2>When you buy something here</h2>
 <p>Stripe handles the payment and passes me your email address so I can send you what you bought, and refund it if you ask. I don't keep a customer database of my own — your address lives in Stripe's records and in the delivery email.</p>
+<h2>When you buy something on a marketplace</h2>
+<p>Some things are sold on a marketplace instead. There the marketplace takes the payment, delivers the file and holds whatever it holds about you, under its own privacy policy — I see only what it shows a seller about an order. The listing names the marketplace, and so does this site's entry for that product.</p>
 <h2>If I email you</h2>
 <p>I write once to a business whose own website suggests something here might be useful to it, at the address that business publishes. The message says what it's about and why you got it. There's no tracking in it, and I don't follow up.</p>
 <h2>When you opt out</h2>
@@ -343,8 +402,19 @@ export function renderRefunds(f: PublicWorkshopFacts): string {
   const body = `
 <h1>Refunds</h1>
 <p class="lede">If something you bought is no use to you, you get your money back.</p>
+<h2>Bought here</h2>
 <p>Reply to the delivery email, or use the refund link inside it. Stripe refunds it in full and you keep what was sent. No form, no time limit, and you don't have to explain.</p>
-<p>That holds whether or not the thing is still on sale. Closing something stops new sales; it doesn't cancel what was promised to people who already bought.</p>`;
+<p>That holds whether or not the thing is still on sale. Closing something stops new sales; it doesn't cancel what was promised to people who already bought.</p>
+${/* SAID BECAUSE IT BECAME TRUE, not in advance. This page promised one
+     mechanism as though it were the only one, which it was while everything
+     sold went through a payment link here. A thing sold on a marketplace is
+     refunded by that marketplace under its terms, and a page that said
+     otherwise would be describing a refund nobody could actually get. */ ''}
+<h2>Bought somewhere else</h2>
+<p>Some things are sold on a marketplace rather than here. Those are refunded
+through the marketplace, under its policy and the terms on the listing — the
+listing says which, and so does this site's entry for it. Either way, if
+something isn't right, <a href="/contact">write to me</a> and a person reads it.</p>`;
   return shell(f, 'Refunds', '/refunds', body, `How refunds work at ${f.name}.`, { path: '/refunds' });
 }
 

@@ -16,6 +16,7 @@
 import { query, realCompany } from '../../db/client.js';
 import { publicPostalLines, publicWorkshopOfExperiment } from './settings.js';
 import type { PublicWorkshop } from './settings.js';
+import type { PublicShape } from './how-it-should-show.js';
 
 export type PublicStatus = 'preparing' | 'testing' | 'operating' | 'graduated' | 'closed';
 
@@ -25,6 +26,18 @@ export interface PublicExperiment {
   /** An excerpt of what a buyer actually receives, when the thing has one. */
   sample: string | null;
   status: PublicStatus; statusLabel: string; statusLine: string; outcome: string | null;
+  /**
+   * WHERE A CUSTOMER ACTUALLY GETS IT, when that is somewhere else.
+   *
+   * Deliberately NOT `payUrl`, which is suppressed unless the test is still
+   * running, and deliberately not `graduatedTo`, which overrides the status and
+   * says "now its own business". This is the one thing a portfolio entry has to
+   * carry that a product page does not: the address of the venue that takes the
+   * money. Null for everything sold here.
+   */
+  whereToGetIt: { url: string; venueName: string } | null;
+  /** The shape this record is published at, from `howItShouldShow`. */
+  shape: PublicShape;
   /**
    * A dated later finding, added beneath the record without changing a word of
    * it. Null for every test that has none, which is all of them but one.
@@ -42,7 +55,7 @@ export interface PublicExperiment {
 /** The fields the public shape carries, as a record the tests can read. */
 export const PUBLIC_EXPERIMENT_FIELDS = [
   'number', 'slug', 'path', 'listed', 'title', 'summary', 'who', 'what', 'limits', 'sources', 'selection', 'note', 'sample',
-  'status', 'statusLabel', 'statusLine', 'outcome', 'clarification', 'price', 'recurring', 'payUrl', 'openedOn', 'closedOn', 'updatedOn', 'supersedes', 'successor', 'graduatedTo',
+  'status', 'statusLabel', 'statusLine', 'outcome', 'clarification', 'whereToGetIt', 'shape', 'price', 'recurring', 'payUrl', 'openedOn', 'closedOn', 'updatedOn', 'supersedes', 'successor', 'graduatedTo',
 ] as const;
 
 type Row = Record<string, unknown>;
@@ -103,6 +116,26 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
   else if (String(r.decision ?? '') === 'approved') status = 'testing';
   else status = 'preparing';
 
+  // HOW MUCH OF ITSELF THIS SHOULD SHOW, and where a customer actually gets it.
+  //
+  // Read once, here, at the projection boundary — the same place the private
+  // rows stop and public facts begin — so no renderer downstream has to decide
+  // it and none of them can disagree about it.
+  const { howItShouldShow } = await import('./how-it-should-show.js');
+  const shown = await howItShouldShow(experimentId);
+  const shape = shown.shape;
+  const { offerShapePlanOf } = await import('../venture/hand.js');
+  const plan = await offerShapePlanOf(experimentId);
+  const listingRef = shape === 'portfolio_entry' && plan?.listing
+    ? (await rows(
+      `SELECT exposure_ref FROM experiment_exposures
+        WHERE experiment_id = ? AND provider = ? ORDER BY placed_at DESC`,
+      [experimentId, plan.listing.venue]))[0]
+    : undefined;
+  const whereToGetIt = listingRef && plan?.listing
+    ? { url: String(listingRef.exposure_ref), venueName: plan.listing.venueName }
+    : null;
+
   const outcome = r.public_outcome == null ? null : String(r.public_outcome);
   const clarified = r.public_clarification != null;
   // A CORRECTED RECORD DOES NOT LOSE THE RESULT IT CORRECTS.
@@ -128,6 +161,17 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
         : status === 'testing' ? 'Open now — the first run of this, so it may or may not continue.'
           : 'Not offered to anyone yet.';
 
+  // A PORTFOLIO ENTRY CARRIES NO PRICE PAST THIS BOUNDARY.
+  //
+  // The offer of a listing obviously HAS a price — it is on the venue's page,
+  // where it belongs. What must not happen is Apex Micro restating it: the
+  // owner's boundary is that Foundry publishes no offer for it, and a number on
+  // this site is an offer whatever heading it sits under. It would also go
+  // stale the moment he edits the listing, so the site would be quoting a price
+  // the venue no longer charges.
+  //
+  // Enforced HERE rather than trusted to the renderer, because the projection
+  // is the allowlist boundary: what a renderer is never handed, it cannot leak.
   let price: PublicExperiment['price'] = null;
   if (r.shape_json != null) {
     try {
@@ -142,12 +186,14 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
     limits: String(r.public_limits), sources: String(r.public_sources), selection: String(r.public_selection), note: String(r.public_note),
     sample: r.public_sample == null || String(r.public_sample).trim() === '' ? null : String(r.public_sample),
     status, statusLabel: STATUS_LABELS[status], statusLine, outcome,
+    whereToGetIt, shape,
     clarification: r.public_clarification == null || r.public_clarification_at == null ? null
       : { on: String(r.public_clarification_at), text: String(r.public_clarification) },
-    price, recurring: false,
+    price: shape === 'portfolio_entry' ? null : price, recurring: false,
     // The way to pay is public only while the offer stands; a closed test's
     // link is down and the page says so rather than pointing at it.
-    payUrl: status === 'testing' && !withdrawn && r.pay_url != null ? String(r.pay_url) : null,
+    payUrl: shape === 'portfolio_entry' ? null
+      : status === 'testing' && !withdrawn && r.pay_url != null ? String(r.pay_url) : null,
     openedOn: day(r.placed_at) ?? day(r.decided_at), closedOn: ended ? (day(r.ran_at) ?? day(r.withdrawn_at) ?? day(r.updated_at)) : null,
     updatedOn: day(r.last_published) ?? day(r.updated_at) ?? day(r.created_at) ?? '',
     supersedes: r.supersedes_slug == null ? null : { slug: String(r.supersedes_slug), title: String(r.supersedes_title) },
@@ -217,6 +263,7 @@ export async function workshopFactsOfExperiment(experimentId: string): Promise<P
  * held against this list before it is published and again in the tests.
  */
 export async function privateStringsOf(experimentId: string): Promise<string[]> {
+  const { offerShapePlanOf } = await import('../venture/hand.js');
   const out = new Set<string>();
   const e = (await rows('SELECT id, founder_id, opportunity_id, unknown_id, claim_id, what_we_expect, would_disprove, decided_by FROM venture_experiments WHERE id = ?', [experimentId]))[0];
   if (!e) return [];
@@ -230,8 +277,35 @@ export async function privateStringsOf(experimentId: string): Promise<string[]> 
   for (const a of await rows('SELECT id, params_fingerprint FROM proposed_acts WHERE experiment_id = ?', [experimentId])) {
     for (const k of ['id', 'params_fingerprint']) if (a[k] != null && String(a[k]).length >= 5) out.add(String(a[k]));
   }
+  // DELIBERATELY NOT SCOPED, AND SCOPING IT WOULD BE THE DEFECT. Everywhere
+  // else a reference company must be kept out of owner truth; here the job is
+  // to collect every string that must never reach a public page, and a
+  // rehearsal asset's id is exactly as unpublishable as a real one's. Narrowing
+  // this query would make the secret list SHORTER, which is the one direction
+  // a secret list must never move.
   for (const p of await rows('SELECT id, name FROM products WHERE from_experiment_id = ?', [experimentId])) out.add(String(p.id));
-  for (const x of await rows('SELECT id, exposure_ref FROM experiment_exposures WHERE experiment_id = ?', [experimentId])) { out.add(String(x.id)); out.add(String(x.exposure_ref)); }
+  // AN EXPOSURE'S REFERENCE IS PRIVATE, WITH ONE NAMED EXCEPTION.
+  //
+  // Every `exposure_ref` used to go in here without looking at what it was, and
+  // that is right for the thing it was written for: a Stripe payment-link id is
+  // a private handle on a live checkout and must never appear on a page, by any
+  // path, ever. It is wrong for the other kind. A listing the OWNER placed
+  // himself on a public venue is already public — it is a URL he published, on
+  // a site anybody can read, and the whole point of a portfolio entry is to
+  // point at it. Treating it as a secret meant the page carrying it would be
+  // silently skipped at publication rather than published.
+  //
+  // So the exception is narrow and keyed to the offer's own declared venue,
+  // not to a guess about what the string looks like: only the reference placed
+  // at the venue this offer says it is listed on, and only when the offer
+  // declares a listing at all. Everything else stays private, including every
+  // exposure of an offer the Workshop carries itself.
+  const listingVenue = (await offerShapePlanOf(experimentId))?.listing?.venue ?? null;
+  for (const x of await rows('SELECT id, exposure_ref, provider FROM experiment_exposures WHERE experiment_id = ?', [experimentId])) {
+    out.add(String(x.id));
+    if (listingVenue !== null && String(x.provider) === listingVenue) continue;
+    out.add(String(x.exposure_ref));
+  }
   for (const a of await rows('SELECT id, effect_id FROM outbound_actions WHERE experiment_id = ?', [experimentId])) { out.add(String(a.id)); if (a.effect_id != null) out.add(String(a.effect_id)); }
   for (const f of await rows('SELECT email FROM founders WHERE id = ?', [String(e.founder_id)])) if (f.email != null) out.add(String(f.email));
   return [...out];

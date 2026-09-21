@@ -164,3 +164,58 @@ identity), `identity` (an experiment's number, slug and public words),
 `publication` (the door, the verification and the quality gate), `suppression`
 (one no, Workshop-wide), `infrastructure` (standing it up, sending, health) and
 `rehearsal` (the machinery proving itself on a synthetic experiment).
+
+## What the membrane carries, per asset (2026-09-21)
+
+The membrane above says how the public plane is isolated. This says how much of
+any one thing goes through it, which the owner clarified after the first two
+assets turned out to sell in completely different ways.
+
+**Three layers, and they are not the same thing.**
+
+- **Private Foundry** is the economic intelligence and operating institution:
+  code, research, finances, institutional memory, controls, portfolio
+  machinery. It stays private. A customer needs no account of the software, the
+  agents, the research process or the portfolio strategy behind an offer, unless
+  a particular fact is material to the service itself.
+- **Apex Micro** is the public business identity and the portfolio home —
+  credible enough that somebody who meets an offer anywhere can find out who is
+  responsible for it, and complete enough that somebody who meets Apex Micro can
+  tell what it is associated with. It is **not** the purchasing or delivery
+  platform for anything, and never was: payment has always been off-site, and
+  the Worker serves finished pages only.
+- **Individual assets** reach customers through whatever channel suits their
+  actual economic mechanism. A template sold on Etsy is discovered, bought and
+  delivered on Etsy.
+
+**The presentation patterns are shapes, not stages.** `PublicShape` in
+`public-workshop/how-it-should-show.ts` names five — not public, business
+identity alone, a portfolio entry, a product page, its own presence — and
+nothing progresses through them. An asset may sit at a portfolio entry for its
+whole life and that is a complete answer, not an arrested one. There is no
+ordering, no score and no comparison in that module, deliberately: the owner
+asked for judgement, and a number invites the reader to move it instead of
+argue with it.
+
+**Two rules decide the hard cases, and both fail toward less exposure.**
+
+- An owner's `never` on publishing is decisive and is never reasoned around. A
+  clarification about product strategy does not lift a boundary he set by name;
+  he is asked, and the answer is recorded before anything is built.
+- Where the rows do not settle the channel, the reader says so and falls back to
+  the smallest honest shape. The same direction `workshopFacts` takes with
+  `replyRouteProven`: false unless shown.
+
+**The floor is shape-independent.** Whatever depth is chosen, a published page
+identifies the responsible business, reaches a person, and — where money changed
+hands — reaches a remedy. `publicationGate` checks price, payment link, cadence
+and sender authentication only for an offer the Workshop carries, because for an
+entry every one of them is a category error; it checks the floor for everything.
+Short is allowed. Silent about accountability is not.
+
+**And the channel decides the shape, because the channel is what the customer
+uses.** The reader takes the exposure's `provider` as the ground — the row
+written when the offer was really placed — and the plan's declared `venue` only
+as corroboration. Reading the declaration first was the first version and it was
+wrong in the way this repository keeps correcting: the declaration is optional,
+and the one asset that actually has a product page predates it.

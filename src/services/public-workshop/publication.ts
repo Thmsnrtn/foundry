@@ -231,6 +231,13 @@ export async function publicationGate(experimentId: string, opts: { now?: Date; 
   const pageUrl = await pageUrlFor(experimentId);
   if (!x || !pageUrl) return { ok: false, failures: [...failures, 'the experiment has no public identity (number, slug and public copy)'], pageUrl: null, verifiedAt: null, checkedAt: now.toISOString() };
 
+  // Rendered once and reused: the shape branch, the floor and the leak check
+  // all read the same bytes, so none of them can be checking a different page
+  // from the one that would go up.
+  const { renderExperiment } = await import('./site.js');
+  let page: string | null = null;
+  const html = (): string => (page ??= renderExperiment(workshopFacts(w), x));
+
   // The page: published, seen, and current.
   let pub = await experimentPublication(experimentId);
   if (!pub) failures.push('the public page has not been published');
@@ -238,18 +245,44 @@ export async function publicationGate(experimentId: string, opts: { now?: Date; 
     const { replyRouteEvidence } = await import('./reply-probe.js');
     const proven = (await replyRouteEvidence(w.founderId)).grade.startsWith('proven');
     const facts = workshopFacts(w, { replyRouteProven: proven });
-    const { renderExperiment } = await import('./site.js');
     const current = digestOf(renderExperiment(facts, x));
     if (current !== pub.digest) failures.push('the published page is stale: the rows have changed since it was put up');
     if (opts.verifyLive !== false) pub = (await verifyPublication(w.founderId, pub.path, opts.fetchImpl)) ?? pub;
     if (pub.verifiedStatus !== 'verified') failures.push(`the public page could not be seen at ${pageUrl}: ${pub.verifiedDetail ?? 'unverified'}`);
     else if (pub.verifiedAt && now.getTime() - new Date(pub.verifiedAt.replace(' ', 'T') + (pub.verifiedAt.endsWith('Z') ? '' : 'Z')).getTime() > 24 * 3_600_000) failures.push('the public page was last seen more than a day ago');
   }
+  // WHAT THIS GATE ASKS DEPENDS ON WHAT THE PAGE IS FOR.
+  //
+  // Every clause below about price, payment link, cadence and sender
+  // authentication is about an offer THE WORKSHOP CARRIES: it checks that the
+  // number on the page is the number the provider will charge, and that the
+  // institution may write to somebody about it. Asked of a portfolio entry,
+  // every one of them is a category error — the entry states no price on
+  // purpose, offers no way to pay on purpose, and nobody is written to at all.
+  // A gate that demanded them would make the shape the owner asked for
+  // unpublishable, which is the same defect as a gate nobody can satisfy.
+  //
+  // The floor below is NOT shape-dependent and is checked for every shape: who
+  // is responsible, a way to reach a person, a refund path, a privacy
+  // statement, a postal address, a page that reads on a phone, and nothing
+  // private on it. "Short" is allowed; "silent about accountability" is not.
+  const entry = x.shape === 'portfolio_entry';
+  if (entry) {
+    if (!x.whereToGetIt) failures.push('the entry names no address where the thing can actually be got');
+    else if (!html().includes(x.whereToGetIt.url)) failures.push('the entry does not carry the link it exists to carry');
+    if (x.whereToGetIt && !html().includes(x.whereToGetIt.venueName)) failures.push('the entry does not say who takes the payment');
+    // The projection refuses to hand an entry a price or a pay link at all, so
+    // this checks the page that would actually go up rather than the object:
+    // a gate that only re-read the same field the boundary already nulled
+    // would be agreeing with itself.
+    if (/\$\d/.test(html())) failures.push('a portfolio entry states no price, and this one does');
+    if (/stripe\.com|buy\.stripe/i.test(html())) failures.push('a portfolio entry offers no way to pay here, and this one does');
+  }
   // The page says what the provider will charge: price and cadence.
-  if (x.status !== 'testing') failures.push(`the experiment is ${x.statusLabel.toLowerCase()}, not testing`);
-  if (!x.price) failures.push('the page states no price');
-  if (!x.payUrl) failures.push('the page has no way to pay');
-  else {
+  if (!entry && x.status !== 'testing') failures.push(`the experiment is ${x.statusLabel.toLowerCase()}, not testing`);
+  if (!entry && !x.price) failures.push('the page states no price');
+  if (!entry && !x.payUrl) failures.push('the page has no way to pay');
+  else if (!entry && x.payUrl) {
     const { describePaymentLink } = await import('../venture/payment-link.js');
     const link = await describePaymentLink(x.payUrl).catch(() => null);
     if (!link) failures.push('the payment link on the page is not active at the provider');
@@ -260,10 +293,11 @@ export async function publicationGate(experimentId: string, opts: { now?: Date; 
     }
   }
   // The sender is the Workshop, and its domain is authenticated at the provider.
+  // Not asked of an entry: nothing is ever sent about it.
   const { getSendingIdentity } = await import('../outbound/sending-identity.js');
-  const identity = await getSendingIdentity(w.productId);
-  if (!identity) failures.push('no sending identity is connected for the Workshop');
-  else {
+  const identity = entry ? null : await getSendingIdentity(w.productId);
+  if (!entry && !identity) failures.push('no sending identity is connected for the Workshop');
+  else if (identity) {
     if (!identity.fromEmail.endsWith(`@${w.zoneName}`)) failures.push(`the sending address ${identity.fromEmail} is not on ${w.zoneName}`);
     if (!identity.fromName || !identity.fromName.includes(w.publicName)) failures.push(`the sender name does not carry ${w.publicName}`);
     if (opts.verifyLive !== false) {
@@ -273,10 +307,14 @@ export async function publicationGate(experimentId: string, opts: { now?: Date; 
     }
   }
   // The page carries the paths a stranger needs, and nothing private, and reads on a phone.
-  const { renderExperiment } = await import('./site.js');
-  const html = renderExperiment(workshopFacts(w), x);
-  for (const [needle, what] of [['/contact', 'a contact path'], ['/email', 'an opt-out path'], ['/refunds', 'a refund path'], ['/privacy', 'a privacy statement'], ['name="viewport"', 'a mobile viewport']] as const) {
-    if (!html.includes(needle)) failures.push(`the page lacks ${what}`);
+  // An entry is not asked for an opt-out path: nothing writes to anybody about
+  // it, so a page offering to stop mail that was never sent would be inventing
+  // a relationship the customer does not have.
+  const floor = entry
+    ? [['/contact', 'a contact path'], ['/refunds', 'a refund path'], ['/privacy', 'a privacy statement'], ['name="viewport"', 'a mobile viewport'], [w.publicName, 'the name of the business responsible for it']] as const
+    : [['/contact', 'a contact path'], ['/email', 'an opt-out path'], ['/refunds', 'a refund path'], ['/privacy', 'a privacy statement'], ['name="viewport"', 'a mobile viewport'], [w.publicName, 'the name of the business responsible for it']] as const;
+  for (const [needle, what] of floor) {
+    if (!html().includes(needle)) failures.push(`the page lacks ${what}`);
   }
   // THE PAGE SAYS, IN WORDS, THAT NOTHING RECURS — and this now checks the
   // commitment rather than one sentence. It used to require the exact string
@@ -285,8 +323,8 @@ export async function publicationGate(experimentId: string, opts: { now?: Date; 
   // the reader's behalf and then answers it reads as written by something that
   // is not a person. What a buyer is owed is a plain statement that there is no
   // subscription, wherever on the page it is made.
-  if (!/\bno subscription\b|\bnot a subscription\b/i.test(html)) failures.push('the page does not say plainly that there is no subscription');
-  const leak = leakIn(html, await privateStringsOf(experimentId));
+  if (!entry && !/\bno subscription\b|\bnot a subscription\b/i.test(html())) failures.push('the page does not say plainly that there is no subscription');
+  const leak = leakIn(html(), await privateStringsOf(experimentId));
   if (leak) failures.push('a private value would appear on the page');
   return { ok: failures.length === 0, failures, pageUrl, verifiedAt: pub?.verifiedAt ?? null, checkedAt: now.toISOString() };
 }

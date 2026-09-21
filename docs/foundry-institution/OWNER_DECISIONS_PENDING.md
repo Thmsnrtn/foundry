@@ -12,7 +12,7 @@ around each item.
 
 ---
 
-# ELEVEN ANSWERED, FIVE PENDING
+# THIRTEEN ANSWERED, FIVE PENDING
 
 The owner answered the first eight queued decisions; those are recorded below as
 settled, with the record of what was asked and why in git history. **§10 and §14 are now answered and implemented** — see RESOLVED 9 and RESOLVED
@@ -1220,3 +1220,71 @@ record can support, not the institution's account of its own recovery.
 open because it asserts nothing about whether the null stands. If the owner later
 decides the result is void, that is a second dated footnote — which the mechanism
 allows, with new words and a new date together, and which no rule here prevents.
+
+
+---
+
+## §25 RESOLVED — Apex Micro is the portfolio home, not the storefront (2026-09-21)
+
+The owner clarified the relationship between the three layers, and two of the
+consequences were his to decide rather than mine to infer. Both were asked and
+both were answered before anything was built.
+
+**The shape of the clarification.** Private Foundry carries the intelligence and
+the operating work and stays private. Apex Micro is the public business identity
+and the portfolio home — credible enough that somebody can tell who is
+responsible for an offer — and is **not** required to be the purchasing or
+delivery platform for anything. Each asset reaches customers through whatever
+channel suits its actual economic mechanism, with Apex Micro named as the
+responsible business. The presentation patterns — business identity alone, a
+portfolio entry, a product page, its own presence — are **possible shapes chosen
+for a reason, not stages and not a score.**
+
+### The first decision: Experiment 002's boundary
+
+When the Etsy listing was approved, `approveListing` set a standing boundary at
+mode `never` on the subject `publish`: *"Foundry publishes nothing for this test;
+the listing is my own act on the venue."* That is an owner boundary, and the
+institution's own rule is that an owner's `never` is never reasoned around — so
+rather than reading the clarification as implicitly lifting it, it was put back
+to him.
+
+**Answered: narrow it.** Foundry may publish a portfolio entry for the Etsy
+asset — what the workbook is, who it is for, that Apex Micro is responsible, and
+a link to the listing. It still publishes **no offer, no price and no checkout**;
+that half of the boundary stands and is what the original sentence was for.
+
+### The second decision: the legal copy
+
+`/privacy` and `/refunds` assert, as universal facts, that *"Stripe handles the
+payment and passes me your email address"* and that *"Stripe refunds it in
+full"*. Both are true today, because everything sold so far went through a Stripe
+link. Both become false the moment a venue-sold asset is represented on the site,
+and a false statement about who takes the money and who returns it is exactly the
+kind of thing the clarification says must not happen.
+
+**Answered: scope them per channel.** The existing pages keep their promises and
+say plainly that they cover what is bought directly through Apex Micro. A
+venue-sold entry carries its own short customer-information block, naming the
+venue's policy alongside the operator's own contact and remedy. Additive; the
+live pages keep their meaning for what they actually cover.
+
+### What still needs your hand, once
+
+`approveListing` writes the narrowed wording for any listing approved from here
+on. Experiment 002's boundary row already exists in production at mode `never`,
+and a boundary the owner set is not something code rewrites behind him — so the
+live row stays as it is until you narrow it through the door, in your own words.
+Until then the reader answers `not_public` for that asset and the entry does not
+go up, which is the correct behaviour for a boundary that has not actually been
+changed yet.
+
+The narrowed mode is `ask_first`, not open: the entry is proposed to you and
+waits, every time, rather than going up because a principle said it could.
+
+### What neither decision authorises
+
+No public-site redesign, no commerce platform, no parallel publication system. No
+change to Experiment 001's sealed record or its dated clarification. No offer,
+price or checkout published for the Etsy asset. And no entry for anything that
+never reached a prospective customer — internal research stays internal.

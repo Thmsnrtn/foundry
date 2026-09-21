@@ -320,8 +320,23 @@ export async function approveListing(input: { founderId: string; experimentId: s
   // nothing for Foundry to do to a person or the public here.
   await setBoundary({ productId: after.productId, subject: 'contact_people', mode: 'never',
     statement: 'Nobody is written to for this test, by anyone; a buyer arrives on their own or not at all' });
-  await setBoundary({ productId: after.productId, subject: 'publish', mode: 'never',
-    statement: 'Foundry publishes nothing for this test; the listing is my own act on the venue' });
+  // AND THE PUBLISHING WORD, NARROWED BY HIM ON 21 SEPTEMBER 2026.
+  //
+  // It used to read "Foundry publishes nothing for this test; the listing is my
+  // own act on the venue" — written when the only shape the Workshop could
+  // publish was a full offer page, so "publish nothing" and "do not put my
+  // offer up as though it were yours" were the same sentence. They are not the
+  // same sentence any more.
+  //
+  // He was asked, rather than having the clarification read as lifting a
+  // boundary he set by name, and he narrowed it: a portfolio entry may go up —
+  // what the thing is, who it is for, that Apex Micro is responsible, and a
+  // link to the listing — and the offer half stands. No price, no checkout,
+  // nothing that competes with the venue's own page. Recorded as §25 in
+  // OWNER_DECISIONS_PENDING.md with the question as it was put to him.
+  await setBoundary({ productId: after.productId, subject: 'publish', mode: 'ask_first',
+    statement: 'Foundry publishes no offer for this test — no price, no checkout; the listing '
+      + 'is my own act on the venue. A portfolio entry that says what it is and links there is allowed' });
   // Sealed with the prediction: a deliberation that could be edited afterwards
   // would let every result be narrated as the expected one.
   await sealDesign(input.experimentId);
