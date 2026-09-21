@@ -314,10 +314,13 @@ export async function approveListing(input: { founderId: string; experimentId: s
   const after = await experimentRow(input.experimentId);
   if (!after?.productId) throw new HandRefused('asset_missing');
   await statedShapeAndFacts(after, after.productId, plan);
-  // HIS STANDING WORD FOR THIS ASSET, in the mode the door enforces: never.
-  // The first experiment's asset carried ask-first boundaries with one act
-  // approved under each; this one carries no act at all, because there is
-  // nothing for Foundry to do to a person or the public here.
+  // HIS STANDING WORD FOR THIS ASSET. `contact_people` is enforced at the
+  // outbound door, which is the door that subject has. `publish` has none —
+  // `owner_boundary_subjects` seeds it with a NULL door, so the kill switch
+  // never sees it — and a review found that saying "the mode the door enforces"
+  // about both was wrong twice over. What enforces the publishing word is the
+  // filter in `publishSite`, which reads it through `howItShouldShow` before
+  // anything reaches the store.
   await setBoundary({ productId: after.productId, subject: 'contact_people', mode: 'never',
     statement: 'Nobody is written to for this test, by anyone; a buyer arrives on their own or not at all' });
   // AND THE PUBLISHING WORD, NARROWED BY HIM ON 21 SEPTEMBER 2026.

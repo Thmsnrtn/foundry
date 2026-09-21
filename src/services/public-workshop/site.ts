@@ -10,7 +10,7 @@
 import type { PublicExperiment, PublicWorkshopFacts } from './projection.js';
 import { postalLines } from './settings.js';
 
-const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+export const esc = (s: string): string => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 const paras = (s: string): string => s.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).map((p) => `<p>${esc(p).replace(/\n/g, '<br>')}</p>`).join('\n');
 const money = (p: NonNullable<PublicExperiment['price']>): string => p.label;
 // A HEADING IS NOT A METADATA LINE. The dates beside "Opened" and "Closed" stay
@@ -79,7 +79,7 @@ footer p{margin:.3rem 0}`;
 
 function shell(f: PublicWorkshopFacts, title: string, current: string, body: string, description: string, at: { path: string; head?: string }): string {
   // The paths stay what they are; what a visitor reads is what a person calls it.
-  const nav = [['/', 'Home'], ['/about', 'About'], ['/experiments', 'What I\'ve made'], ['/contact', 'Contact']] as const;
+  const nav = [['/', 'Home'], ['/about', 'About'], ['/experiments', 'What I\'ve put out'], ['/contact', 'Contact']] as const;
   // ONE ADDRESS PER PAGE. A crawler that reaches a page by any other route is
   // told which address is the page's own; a page that is not for an index says
   // so instead, and carries no canonical, which would contradict it.
@@ -149,12 +149,12 @@ ${paras(f.statement)}
 ${f.about ? `<h2>A little more</h2>${paras(f.about)}` : ''}
 <h2>How the workshop works</h2>
 <p>It looks for small, specific problems where a modest, well-made thing would help — a shortlist somebody would otherwise put together by hand, a deadline that's easy to miss, a set of facts scattered across public sources. Before building anything bigger it tries a small version for real: a proper offer, at a proper price, to a handful of people it might actually suit.</p>
-<p>Everything here says what you get, what it costs, whether it repeats (it doesn't, unless a page says so), what it doesn't cover, and where its information comes from. If you buy something and it's no use to you, you can have your money back. If you hear from the workshop and would rather not, one line says so and it won't write again.</p>
+<p>Everything sold here says what you get, what it costs, whether it repeats (it doesn't, unless a page says so), what it doesn't cover, and where its information comes from. Some things are sold on a marketplace instead: those have a short entry saying what they are and who is behind them, and the listing itself carries the price and the terms. If you buy something and it's no use to you, you can have your money back. If you hear from the workshop and would rather not, one line says so and it won't write again.</p>
 <h2>Where the software fits</h2>
 <p>Software built here does a lot of the research and the day-to-day running. A person makes the decisions, stands behind the offers and carries the responsibility. If something here is wrong, <a href="/contact">say so</a> and it will be fixed.</p>
 <h2>What happens to things it tries</h2>
 <dl>
-  <dt>Open</dt><dd>You can buy it now, at the price on its page.</dd>
+  <dt>Open</dt><dd>You can buy it now — at the price on its page, or on the marketplace its entry points to.</dd>
   <dt>Pilot</dt><dd>The first run of something, so nobody knows yet whether it will carry on.</dd>
   <dt>On its own now</dt><dd>It grew into a business of its own; its page here links to where it lives.</dd>
   <dt>Closed</dt><dd>It wasn't worth carrying on with. The page stays, with a short honest note of why.</dd>
@@ -202,28 +202,40 @@ ${which === 'all' ? `<p class="quiet"><a href="/operating">Still going</a> · <a
  * who came to verify a seller has come for exactly that.
  */
 function portfolioEntry(
-  f: PublicWorkshopFacts, x: PublicExperiment, at: { url: string; venueName: string },
+  f: PublicWorkshopFacts, x: PublicExperiment, at: { url: string; venueName: string } | null,
 ): string {
-  const body = `
-<h1>${esc(x.title)}</h1>
-<p class="lede">${esc(x.summary)}</p>
-<p class="quiet"><span class="pill">${esc(x.statusLabel)}</span> A ${esc(f.name)} product, sold on ${esc(at.venueName)}. ${esc(f.name)}, ${esc(f.region)}.</p>
-
-<div class="card">
+  const where = at
+    ? `<div class="card">
   <p><a class="btn" href="${esc(at.url)}" rel="noopener">Get it on ${esc(at.venueName)}</a></p>
   <p class="quiet">${esc(at.venueName)} takes the payment and delivers it, under its own
   terms and privacy policy. ${esc(f.name)} is the seller — the thing itself, what it claims
   and putting it right are mine.</p>
-</div>
+</div>`
+    : `<p class="gap">It isn't listed at the moment, so there's nowhere to buy it right now.
+  What was promised to anyone who already has it still stands.</p>`;
+  const body = `
+<h1>${esc(x.title)}</h1>
+<p class="lede">${esc(x.summary)}</p>
+<p class="quiet"><span class="pill">${esc(x.statusLabel)}</span> A ${esc(f.name)} product${at ? `, sold on ${esc(at.venueName)}` : ''}. ${esc(f.name)}, ${esc(f.region)}.</p>
+
+${where}
 
 <h2>Who it's for</h2>
 ${paras(x.who)}
 
+${/* THE PROMISE IS MINE WHEREVER YOU BOUGHT IT. The first version said the
+     refund page "covers what you buy directly from Apex Micro, which this is
+     not" — and the Etsy listing itself tells the buyer, in the owner's own
+     words, to use that page. It also promises "no form and no time limit"
+     unconditionally, and he honours every refund at once. So the earlier
+     wording contradicted a live customer promise and pointed at a remedy the
+     venue does not actually grant on an instant download. What differs between
+     channels is the MECHANISM, not the promise. */ ''}
 <h2>If something's wrong with it</h2>
-<p>Write to me at <a href="mailto:${esc(f.contactEmail)}">${esc(f.contactEmail)}</a> and a person
-reads it. Refunds for anything bought on ${esc(at.venueName)} go through ${esc(at.venueName)},
-under their policy and the terms on the listing — <a href="/refunds">the refund page here</a>
-covers what you buy directly from ${esc(f.name)}, which this is not.</p>
+<p>You can have your money back. No form, no time limit, and you don't have to
+explain.${at ? ` Message me through ${esc(at.venueName)} and I'll refund it there, since that's
+where the payment was taken` : ''} — or write to me at
+<a href="mailto:${esc(f.contactEmail)}">${esc(f.contactEmail)}</a> and a person reads it.</p>
 <p class="quiet">${x.openedOn ? `Listed ${esc(x.openedOn)}` : ''}${x.closedOn ? ` · Closed ${esc(x.closedOn)}` : ''} · Page updated ${esc(x.updatedOn)}</p>
 <p class="quiet"><a href="/experiments">Everything I've put in front of people</a></p>`;
   return shell(f, x.title, '/experiments', body, x.summary, { path: x.path });
@@ -238,7 +250,13 @@ export function renderExperiment(f: PublicWorkshopFacts, x: PublicExperiment): s
   // because none of that happens here — repeating the venue's own copy would be
   // duplicating a fulfilment experience the owner explicitly does not want
   // duplicated, and would go stale the day he edits the listing.
-  if (x.shape === 'portfolio_entry' && x.whereToGetIt) return portfolioEntry(f, x, x.whereToGetIt);
+  // ON THE SHAPE ALONE. The first version also required an address, so an entry
+  // without one fell through to the SIX-SECTION PRODUCT PAGE — complete with
+  // "Buying this here, Stripe handles the payment", which is the precise false
+  // sentence this whole change exists to remove. Uncertainty was supposed to go
+  // less public, never more; that fall-through did the opposite. The entry
+  // renderer handles a missing address itself, by saying so.
+  if (x.shape === 'portfolio_entry') return portfolioEntry(f, x, x.whereToGetIt);
   const number = String(x.number).padStart(3, '0');
   const asking = x.status === 'testing' || x.status === 'operating';
   // THE PRICE IS NOT A REVEAL. It used to sit under its own heading four
@@ -407,14 +425,24 @@ export function renderRefunds(f: PublicWorkshopFacts): string {
 <p>That holds whether or not the thing is still on sale. Closing something stops new sales; it doesn't cancel what was promised to people who already bought.</p>
 ${/* SAID BECAUSE IT BECAME TRUE, not in advance. This page promised one
      mechanism as though it were the only one, which it was while everything
-     sold went through a payment link here. A thing sold on a marketplace is
-     refunded by that marketplace under its terms, and a page that said
-     otherwise would be describing a refund nobody could actually get. */ ''}
-<h2>Bought somewhere else</h2>
-<p>Some things are sold on a marketplace rather than here. Those are refunded
-through the marketplace, under its policy and the terms on the listing — the
-listing says which, and so does this site's entry for it. Either way, if
-something isn't right, <a href="/contact">write to me</a> and a person reads it.</p>`;
+     sold went through a payment link here.
+
+     AND THE SECOND HEADING NARROWED THE PROMISE, WHICH WAS WORSE THAN THE GAP
+     IT FILLED. It first read that a marketplace sale is refunded "by that
+     marketplace, under its policy and the terms on the listing" — handing a
+     customer's remedy to a venue whose policy on an instant download may well
+     grant nothing, while the listing itself, in the owner's own words, sends
+     that buyer to this page and promises no form and no time limit. What
+     changes with the channel is where the money goes back THROUGH. The promise
+     is the owner's and it does not move. */ ''}
+<h2>Bought on a marketplace</h2>
+<p>Some things are sold on a marketplace rather than here, and the promise is the
+same one: if it's no use to you, you get your money back, with no form, no time
+limit and no explanation. What differs is the route the money takes — message me
+through the marketplace and I refund it there, because that is where the payment
+was taken. The marketplace has its own policy; mine is not limited by it. If
+anything about that doesn't work, <a href="/contact">write to me</a> and a person
+reads it.</p>`;
   return shell(f, 'Refunds', '/refunds', body, `How refunds work at ${f.name}.`, { path: '/refunds' });
 }
 
@@ -423,8 +451,8 @@ export function renderTerms(f: PublicWorkshopFacts): string {
 <h1>Terms</h1>
 <p class="lede">Short, because the work is.</p>
 <p><strong>Who you're dealing with.</strong> ${esc(f.name)} is a small digital workshop run by ${esc(f.legalOperator)} in ${esc(f.region)}. It isn't a company and doesn't claim to be one.</p>
-<p><strong>What you're buying.</strong> Exactly what the page describes, with the limits it states. These are small, early things: made carefully and described honestly, and claiming nothing beyond what their page says.</p>
-<p><strong>Price and renewal.</strong> The price on the page, once. Nothing renews unless a page says so, and none does.</p>
+<p><strong>What you're buying.</strong> Exactly what the page describes, with the limits it states — or, where the entry points at a marketplace, what that listing describes. These are small, early things: made carefully and described honestly, and claiming nothing beyond what their page says.</p>
+<p><strong>Price and renewal.</strong> The price on the page, or on the listing the entry points at, once. Nothing renews unless a page says so, and none does.</p>
 <p><strong>Refunds.</strong> In full, on request, as described on the <a href="/refunds">refunds page</a>.</p>
 <p><strong>Your information.</strong> As described on the <a href="/privacy">privacy page</a>.</p>
 <p><strong>Changes.</strong> Every page says when it was last updated. Closing something stops new sales and leaves what was already promised in force.</p>`;

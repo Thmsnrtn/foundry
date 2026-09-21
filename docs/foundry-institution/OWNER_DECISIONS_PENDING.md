@@ -1280,7 +1280,15 @@ go up, which is the correct behaviour for a boundary that has not actually been
 changed yet.
 
 The narrowed mode is `ask_first`, not open: the entry is proposed to you and
-waits, every time, rather than going up because a principle said it could.
+waits, every time, rather than going up because a principle said it could. That
+sentence was false when it was first written — `publish` is the one boundary
+subject with no door behind it, so nothing enforced it at all — and two review
+cells found it independently. It is enforced now, in `publishSite`, and it
+holds for this asset specifically because `approveListing` proposes no
+placement act: on Etsy the placement is your own act on the venue, so there is
+nothing standing that answers the question. An experiment the Workshop carries
+gets the same boundary and answers it in the same breath, when you approve the
+offer's placement.
 
 ### What neither decision authorises
 

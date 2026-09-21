@@ -129,9 +129,16 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
   const listingRef = shape === 'portfolio_entry' && plan?.listing
     ? (await rows(
       `SELECT exposure_ref FROM experiment_exposures
-        WHERE experiment_id = ? AND provider = ? ORDER BY placed_at DESC`,
+        WHERE experiment_id = ? AND provider = ? AND withdrawn_at IS NULL
+        ORDER BY placed_at DESC, rowid DESC LIMIT 1`,
       [experimentId, plan.listing.venue]))[0]
     : undefined;
+  // A TAKEN-DOWN LISTING IS NOT A PLACE TO SEND ANYBODY. The rule four
+  // paragraphs down has always held for the Workshop's own link — "a closed
+  // test's link is down and the page says so rather than pointing at it" — and
+  // the first version of this did not hold the venue's link to it. A review
+  // walked it: a "Closed" pill above a live green button pointing at a delisted
+  // URL, under a sentence promising the venue would take the payment.
   const whereToGetIt = listingRef && plan?.listing
     ? { url: String(listingRef.exposure_ref), venueName: plan.listing.venueName }
     : null;

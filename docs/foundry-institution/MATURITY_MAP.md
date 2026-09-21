@@ -517,3 +517,54 @@ it is for, who is responsible, and a link to where it actually lives. Two things
 stood in its way and both were specific rather than architectural: the listing
 address was classed with the Stripe payment-link ids as a secret, and the
 publication gate demanded a price and a way to pay.
+
+### A guarantee that lives in one function nobody calls (21 September 2026)
+
+Two adversarial cells read the portfolio-entry diff independently and found the
+same severe defect, in the same words. `how-it-should-show.ts` opens by
+asserting that **an owner's `never` is decisive and is never reasoned around**.
+That rule was implemented — correctly, in the one function that computed it —
+and the only consumer of the answer was a renderer branch choosing between two
+page layouts. `publishSite` filtered on `status` and on approval and read no
+boundary at all. An owner tightening `publish` to `never` would have watched the
+full product page republish, unchanged, on the next hourly pass.
+
+Compounding it, `owner_boundary_subjects.publish` carries a **NULL door**, so
+`boundaryStandingInTheWay` — which selects on `s.door IN ('outbound','spend')` —
+never sees that subject. `ask_first` on publishing was therefore enforced by
+nothing anywhere in the institution, and the sentence in §25 promising the owner
+that the entry "waits, every time" was false as implemented.
+
+**The repair then broke the thing it was protecting, which is the part worth
+recording.** Filtering the publishing pass on the reader's whole verdict looked
+obviously right and was wrong: `shape` answers `not_public` both for "he
+forbade it" and for "nothing has reached anybody yet", and the asset whose own
+page is the venue has no exposure until an offer is placed and no offer until
+the gate sees a published page. `seedProductionShape` failed outright — the
+world would not start. The second attempt, holding on the boundary row alone,
+failed the same way for a different reason: `approveExperiment` writes
+`publish: ask_first` for *every* approved test and approves the placement act
+two lines later, so reading the boundary without asking whether he had answered
+it held every Workshop-carried page forever.
+
+Three separate conflations, one shape:
+
+| Conflated | Kept apart by |
+|---|---|
+| A reading of how public a thing should be, and permission to publish it | `shape` versus `yourWord` — only the second holds a page |
+| A boundary that stands, and one he has already answered | An approved, unrevoked act under subject `publish` for that product |
+| An approval bounded to one effect, and an asset's standing public record | Reading `decision`/`revoked_at` and deliberately not `consumed_at`/`expires_at` |
+
+The doctrine this campaign wrote after the A-series — *a correction is code, and
+gets the same adversarial reading or it gets none* — earned its keep twice in
+one afternoon. Both regressions were introduced by repairs, both were caught by
+the world fixture rather than by any assertion aimed at them, and both are now
+pinned: `seedProductionShape` cannot complete unless Experiment 001's page
+publishes before its offer is placed, and a test asserts no page is ever held
+for a reason other than the owner's own word.
+
+**Proof debt.** The `ask_first`-is-answered rule is proven against the two
+shapes that exist — a Workshop-carried offer and an Etsy listing. It has never
+been exercised against an asset the owner answered and then revoked; `revoked_at`
+is read but no test revokes. That waits on the same trigger as the four limits
+above.

@@ -206,6 +206,31 @@ argue with it.
   the smallest honest shape. The same direction `workshopFacts` takes with
   `replyRouteProven`: false unless shown.
 
+**The shape is a reading; the hold is a permission.** These are two answers and
+conflating them cost a day. `publishSite` filters the hourly pass on
+`yourWord` — the owner's own boundary on publishing this asset — and on nothing
+else. It does **not** filter on `shape`, because `not_public` also means "the
+rows cannot yet describe it", and the asset whose page *is* its venue has no
+exposure until an offer is placed, and no offer until its page is published.
+Holding on the shape deadlocked it outright. The line that keeps internal
+research off the site is upstream and always was: a test reaches the registry
+only once `givePublicIdentity` has written it a `public_experiments` row and
+the owner has approved it. The filter is him overriding that earlier yes.
+
+**An `ask_first` he has already answered is answered.** This is the outbound
+door's own rule, applied where the door has no jurisdiction —
+`owner_boundary_subjects.publish` carries a NULL door, so `boundaryStandingInTheWay`
+never sees it and for as long as that was the only enforcement, `ask_first` on
+publishing was enforced by nothing. The reader now asks whether an approved,
+unrevoked act exists under subject `publish` for that product.
+`approveExperiment` writes the boundary and proposes the offer's placement in
+the same breath, so a Workshop-carried offer is answered. `approveListing`
+writes the same boundary and proposes nothing, because on a venue the placement
+is the owner's own act — so it stands, and the entry waits for him. The
+difference falls out of the rows, not out of reading the statements' wording.
+Consumption and expiry are deliberately not read: they bound a single effect,
+and a page is a standing record re-put only when its digest moves.
+
 **The floor is shape-independent.** Whatever depth is chosen, a published page
 identifies the responsible business, reaches a person, and — where money changed
 hands — reaches a remedy. `publicationGate` checks price, payment link, cadence

@@ -23,6 +23,7 @@ import { publicWorkshopOf, publicWorkshopOfExperiment, WorkshopRefused } from '.
 import type { PublicWorkshop } from './settings.js';
 import { leakIn, privateStringsOf, projectExperiment, projectRegistry, workshopFacts } from './projection.js';
 import type { PublicExperiment } from './projection.js';
+import { esc } from './site.js';
 import { renderSite } from './site.js';
 
 export interface Publication {
@@ -130,7 +131,7 @@ export async function publishPage(input: { founderId: string; path: string; html
   return (await verifyPublication(input.founderId, input.path, input.fetchImpl))!;
 }
 
-export interface SiteReport { published: string[]; unchanged: string[]; failed: Array<{ path: string; reason: string }>; verified: number; unverified: string[] }
+export interface SiteReport { published: string[]; unchanged: string[]; failed: Array<{ path: string; reason: string }>; /** Rendered, and deliberately not put up: the owner's word, or his turn. */ held: Array<{ path: string; reason: string }>; verified: number; unverified: string[] }
 
 /** Render the whole site from the rows and publish what changed. Idempotent
  * by digest, so calling it every hour costs nothing when nothing moved. */
@@ -149,19 +150,60 @@ export async function publishSite(founderId: string, by: string, fetchImpl?: typ
   // ran was never put in front of anybody, so there is no public record owed —
   // publishing it would also be refused by the row on every pass forever.
   const approved = await approvedSlugs(founderId);
-  const registry = (await projectRegistry(founderId)).filter((x) => x.status !== 'preparing' && approved.has(x.slug));
-  await indexSlugs(founderId, registry);
+  // AND THE OWNER'S WORD ON PUBLISHING, WHICH NOTHING ON THIS PATH USED TO
+  // CONSULT.
+  //
+  // `howItShouldShow` asserts in its own header that a `never` is decisive and
+  // is never reasoned around — and a review found that the only consumer of its
+  // answer was a renderer branch, so a boundary tightened to `never` left the
+  // page publishing on the next pass exactly as before. The guarantee was a
+  // comment. It is a filter now, and `ask_first` holds here too: an hourly
+  // routine must not read a shape as permission, because "ask me first" is not
+  // a thing a routine can satisfy on its own.
+  //
+  // IT HOLDS ON HIS WORD AND ON NOTHING ELSE. Holding on the whole verdict —
+  // any `not_public` — was wrong and the suite said so within the hour: the
+  // reader answers `not_public` for an asset nothing has reached yet, and for
+  // the one asset whose own page IS the venue that is a deadlock, because the
+  // page is what reaches people and the offer gate will not place an offer
+  // until the page is up. The line that keeps internal research off the site
+  // is not this filter and never was: a test reaches `projectRegistry` only
+  // once it has a `public_experiments` row, which `givePublicIdentity` writes
+  // deliberately and no routine writes on its own, and only once the owner
+  // approved it. This filter is the owner overriding that earlier yes. It is
+  // not a second gate on whether the thing is public at all.
+  const { howItShouldShow } = await import('./how-it-should-show.js');
+  const held: Array<{ path: string; reason: string }> = [];
+  const all = (await projectRegistry(founderId)).filter((x) => x.status !== 'preparing' && approved.has(x.slug));
+  // INDEXED FIRST, AND FROM ALL OF THEM — BEFORE ANY PUBLICATION DECISION.
+  //
+  // The slug index is a lookup — slug to experiment — that the hand and the
+  // edge's POST handler both read; it is not a publication decision, and the
+  // hold below needs it to ask the reader anything at all. Two ways of getting
+  // this wrong showed up in one afternoon, both from the same mistake: the
+  // cache is keyed by the ARRAY, so a filtered copy is a different key. Asking
+  // the reader before indexing threw; indexing the filtered list left the
+  // holds un-indexed and the hand could not find the experiment behind its own
+  // offer. One index, built from `all`, read through `all` everywhere.
+  await indexSlugs(founderId, all);
+  const registry: typeof all = [];
+  for (const x of all) {
+    const shown = await howItShouldShow(experimentIdOf(x, all));
+    if (shown.yourWord === 'never') { held.push({ path: x.path, reason: shown.because[0] ?? 'you said Foundry publishes nothing for it' }); continue; }
+    if (shown.yourWord === 'ask_first') { held.push({ path: x.path, reason: 'it waits for you: you asked to be asked before anything is published for it' }); continue; }
+    registry.push(x);
+  }
   const pages = renderSite(facts, registry);
-  const report: SiteReport = { published: [], unchanged: [], failed: [], verified: 0, unverified: [] };
+  const report: SiteReport = { published: [], unchanged: [], failed: [], held, verified: 0, unverified: [] };
   for (const [path, html] of pages) {
     const x = registry.find((r) => r.path === path);
     if (x) {
-      const leak = leakIn(html, await privateStringsOf(experimentIdOf(x, registry)));
+      const leak = leakIn(html, await privateStringsOf(experimentIdOf(x, all)));
       if (leak) { report.failed.push({ path, reason: `a private value would appear on the page (${leak.slice(0, 24)}…)` }); continue; }
     }
     try {
       const before = await livePublication(founderId, path);
-      const p = await publishPage({ founderId, path, html, kind: x ? 'experiment' : 'page', experimentId: x ? experimentIdOf(x, registry) : null, by, fetchImpl });
+      const p = await publishPage({ founderId, path, html, kind: x ? 'experiment' : 'page', experimentId: x ? experimentIdOf(x, all) : null, by, fetchImpl });
       if (before && before.id === p.id) report.unchanged.push(path); else report.published.push(path);
       if (p.verifiedStatus === 'verified') report.verified += 1; else report.unverified.push(`${path}: ${p.verifiedDetail ?? p.verifiedStatus ?? 'unverified'}`);
     } catch (e) { report.failed.push({ path, reason: e instanceof Error ? e.message : String(e) }); }
@@ -269,7 +311,11 @@ export async function publicationGate(experimentId: string, opts: { now?: Date; 
   const entry = x.shape === 'portfolio_entry';
   if (entry) {
     if (!x.whereToGetIt) failures.push('the entry names no address where the thing can actually be got');
-    else if (!html().includes(x.whereToGetIt.url)) failures.push('the entry does not carry the link it exists to carry');
+    // ESCAPED, BECAUSE THE PAGE IS. A real listing URL copied out of a venue's
+    // address bar carries `?ref=…&frs=1`, and the renderer has already turned
+    // that `&` into `&amp;` — so a raw comparison called a correct page broken,
+    // which is a gate lying about the bytes it just rendered.
+    else if (!html().includes(esc(x.whereToGetIt.url))) failures.push('the entry does not carry the link it exists to carry');
     if (x.whereToGetIt && !html().includes(x.whereToGetIt.venueName)) failures.push('the entry does not say who takes the payment');
     // The projection refuses to hand an entry a price or a pay link at all, so
     // this checks the page that would actually go up rather than the object:

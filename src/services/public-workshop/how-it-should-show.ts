@@ -43,7 +43,7 @@
 //      direction for a default to fail in when the failure is published.
 // =============================================================================
 
-import { query, realCompany } from '../../db/client.js';
+import { query } from '../../db/client.js';
 import { offerShapePlanOf } from '../venture/hand.js';
 import { boundariesFor } from '../institution/standing-intent.js';
 
@@ -74,6 +74,26 @@ export interface HowItShouldShow {
   mustCarry: string[];
   /** Said out loud rather than defaulted past. Null when the rows settled it. */
   cannotTell: string | null;
+  /**
+   * HIS OWN WORD ON PUBLISHING THIS, SEPARATED FROM EVERY OTHER REASON A SHAPE
+   * MIGHT BE SMALL — AND THE ONLY THING THE PUBLISHING PASS HOLDS ON.
+   *
+   * A review found the first version of this file asserting in its own header
+   * that an owner's word is decisive while nothing on the path that puts bytes
+   * on the internet consulted it: the guarantee was a comment. Making it a
+   * rule then over-reached in the other direction, because `shape` collapses
+   * two unlike things into one `not_public` — "he forbade it" and "the rows do
+   * not yet describe it". Holding on the second deadlocked the one asset whose
+   * page IS the venue: its page cannot be published until an offer is placed,
+   * and the offer cannot be placed until its page is published.
+   *
+   * So the shape stays a reading and this stays a permission. `never` means he
+   * said no. `ask_first` means publishing is his act and not an hourly
+   * routine's, which is not a quieter no and is not a yes. Null means he has
+   * said nothing, which is also not a yes — it only means this field is not
+   * what decides, and the approval on the row still does.
+   */
+  yourWord: 'never' | 'ask_first' | null;
 }
 
 /**
@@ -113,41 +133,83 @@ export async function howItShouldShow(experimentId: string): Promise<HowItShould
   if (!e) {
     return {
       shape: 'not_public', because: ['there is no such test'], mustCarry: [],
-      cannotTell: null,
+      cannotTell: null, yourWord: null,
     };
   }
 
-  // `realCompany` because a rehearsal asset must never decide what the world is
-  // shown. This reads the product to find the owner's standing boundary on
-  // publishing, and a synthetic one carrying a synthetic boundary would be a
-  // rehearsal deciding a real page.
+  // NOT SCOPED TO REAL COMPANIES, AND THE FIRST VERSION WAS — WRONGLY.
+  //
+  // The instinct was right everywhere else: a rehearsal asset must not decide
+  // owner truth. Here it inverted the protection. This lookup exists to find
+  // the owner's boundary on PUBLISHING, and the rehearsal's own page really is
+  // published, to the real Cloudflare store, by the same pass. Filtering the
+  // rehearsal product out did not stop a synthetic boundary deciding a real
+  // page; it left the rehearsal page publishing with NO boundary consulted at
+  // all. Scoping a permission check is not the same act as scoping a reading,
+  // and this is the first kind.
+  //
+  // Deterministic by `rowid`: two products from one experiment used to mean an
+  // arbitrary one decided the boundary, which would also flip the page's digest
+  // between passes and leave it reading permanently stale.
   const product = (await query(
-    `SELECT p.id, p.standing FROM products p
-      WHERE p.from_experiment_id = ? AND ${realCompany('p')} AND p.deleted_at IS NULL`,
+    `SELECT p.id FROM products p
+      WHERE p.from_experiment_id = ? AND p.deleted_at IS NULL
+      ORDER BY p.rowid LIMIT 1`,
     [experimentId])).rows[0] as Record<string, unknown> | undefined;
 
   // THE OWNER FIRST, ALWAYS. Before any reading of what would be useful, what
   // has he already said. A boundary at `never` on publishing ends the question.
   let asksFirst: string | null = null;
   if (product) {
-    const publishing = (await boundariesFor(String(product.id)))
-      .find((b) => b.subject === 'publish');
+    // THE STRICTEST WORD WINS, NOT THE FIRST ROW FOUND. `boundariesFor` returns
+    // the product's own rows and the estate-wide ones together, ordered by the
+    // subject's sort order and then insertion — so `.find` let a global `never`
+    // written after a product-scoped `ask_first` be silently ignored. The door's
+    // own reader iterates every row for exactly this reason.
+    const publishRows = (await boundariesFor(String(product.id)))
+      .filter((b) => b.subject === 'publish');
+    const publishing = publishRows.find((b) => b.mode === 'never') ?? publishRows[0];
     if (publishing?.mode === 'never') {
       return {
         shape: 'not_public',
         because: [`you said so: "${publishing.statement}"`],
         mustCarry: [],
         cannotTell: null,
+        yourWord: 'never',
       };
     }
-    // ASK-FIRST IS NOT A QUIETER NEVER, AND IT IS NOT A YES.
+    // ASK-FIRST IS NOT A QUIETER NEVER, AND IT IS NOT A YES — SO THE QUESTION
+    // IS WHETHER HE HAS ALREADY ANSWERED IT FOR THIS ASSET.
     //
-    // This reader says what shape the thing SHOULD take. Whether the act of
-    // publishing may happen is the door's question, and an ask-first boundary
-    // means he answers it each time. Both things are said, because an owner
-    // reading "portfolio entry" without "and it waits for you" would think it
-    // had already gone up.
-    if (publishing?.mode === 'ask_first') asksFirst = publishing.statement;
+    // This is the door's own rule, not a new one: an `ask_first` boundary is
+    // satisfied by an approved act under that subject, and stands where
+    // nothing has been put to him. Reading the boundary alone was wrong and
+    // the suite proved it within the hour — `approveExperiment` writes
+    // `publish: ask_first` for EVERY approved test ("Ask me before placing an
+    // offer anywhere for this test") and then proposes the offer's placement
+    // and records his approval of it two lines later. Treating that as an
+    // unanswered question held the page of the one asset whose page IS the
+    // venue, which the offer gate then refused for want of a published page.
+    // `approveListing` writes the same subject and proposes no placement act,
+    // because on Etsy the placement is his own act on the venue — so nothing
+    // answers it and it holds. The difference falls out of the rows rather
+    // than out of reading the statements' wording, which is the point.
+    //
+    // DECIDED, NOT UNSPENT. The door reads `consumed_at` and `expires_at`
+    // because it is authorising ONE effect. A page is not an effect; it is the
+    // asset's standing public record, re-rendered every hour and re-put only
+    // when its digest moves. Reading consumption here would mean the first
+    // payment link created silently froze the asset's page for ever. What he
+    // can take back is the approval itself, and `revoked_at` is how.
+    if (publishing?.mode === 'ask_first') {
+      const answered = (await query(
+        `SELECT id FROM proposed_acts
+          WHERE product_id = ? AND subject = 'publish'
+            AND decision = 'approved' AND revoked_at IS NULL
+          ORDER BY decided_at, rowid LIMIT 1`, [String(product.id)])).rows[0];
+      if (answered) because.push('you approved its placement when you approved the test');
+      else asksFirst = publishing.statement;
+    }
   }
 
   // DID IT REACH ANYBODY AT ALL. Internal research, rejected ideas and tests
@@ -156,14 +218,14 @@ export async function howItShouldShow(experimentId: string): Promise<HowItShould
   // exposure is the row that says somebody outside could see this.
   const exposure = (await query(
     `SELECT provider, exposure_ref, withdrawn_at FROM experiment_exposures
-      WHERE experiment_id = ? ORDER BY placed_at DESC`, [experimentId]))
+      WHERE experiment_id = ? ORDER BY placed_at DESC, rowid DESC LIMIT 1`, [experimentId]))
     .rows[0] as Record<string, unknown> | undefined;
   if (!exposure) {
     return {
       shape: 'not_public',
       because: ['it has never been put in front of anybody'],
       mustCarry: [],
-      cannotTell: null,
+      cannotTell: null, yourWord: asksFirst === null ? null : 'ask_first',
     };
   }
   because.push(exposure.withdrawn_at == null
@@ -194,7 +256,7 @@ export async function howItShouldShow(experimentId: string): Promise<HowItShould
       because: [...because,
         `it is sold on ${plan.listing.venueName}, which carries discovery, payment and delivery`],
       mustCarry,
-      cannotTell: null,
+      cannotTell: null, yourWord: asksFirst === null ? null : 'ask_first',
     };
   }
 
@@ -204,7 +266,7 @@ export async function howItShouldShow(experimentId: string): Promise<HowItShould
       shape: 'product_page',
       because: [...because, 'the Workshop\'s own page is the venue: a buyer arrives here and pays here'],
       mustCarry,
-      cannotTell: null,
+      cannotTell: null, yourWord: asksFirst === null ? null : 'ask_first',
     };
   }
 
@@ -218,5 +280,6 @@ export async function howItShouldShow(experimentId: string): Promise<HowItShould
     mustCarry,
     cannotTell: 'the offer does not record which channel carries it, so how much '
       + 'to show is not something the rows decide',
+    yourWord: asksFirst === null ? null : 'ask_first',
   };
 }
