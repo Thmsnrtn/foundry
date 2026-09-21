@@ -2751,3 +2751,41 @@ row still reads `never`, and a boundary the owner set by name is not something
 code rewrites behind him. `approveListing` writes the narrowed wording for any
 listing approved from here on; the existing row waits for him to narrow it
 through the door, in his own words.
+
+### Read back from production (21 September 2026, 23:05–23:55 UTC)
+
+`foundry-intel` runs `4d17e5d3`. Health `ok`; database, AI, Clerk and scheduler
+`ok`; loops `ok` with none stopped. The owner's door answers 401, all seven
+Workshop pages answer 200, and `apexmicro.ai/foundry` answers 404.
+
+The first read after the deploy found every page byte-identical, which was not
+reassurance — the hourly pass had last completed at 22:40 and the bytes had not
+moved yet. The read below was taken after the republish.
+
+**Experiment 001's page, diffed against the capture taken before the deploy.
+Three differences and no others**, none of them in the record:
+
+1. The nav label, `What I've made` → `What I've put out`.
+2. The footer link, `Everything I've made` → `Everything I've put in front of
+   people`.
+3. One sentence scoped to its channel: `Stripe handles the payment…` →
+   `Buying this here, Stripe handles the payment…`.
+
+Every sealed section is byte-identical: title, summary, who, what, limits,
+sources, selection, note and the specimen. **"Clarification, 21 September 2026"
+is present and unchanged**, and the reply-route claim is on the page, so the
+daily probe has completed a round trip on this deployment.
+
+**What the world can see that it could not before.** `/refunds` carries two
+headings — *Bought here* and *Bought on a marketplace* — with the promise
+unconditional across both: "the promise is the same one: if it's no use to you,
+you get your money back, with no form, no time limit and no explanation. What
+differs is the route the money takes… The marketplace has its own policy; mine
+is not limited by it." `/privacy` is scoped the same way. `/about` and `/terms`
+no longer claim every page is priced.
+
+**And what it still cannot see, correctly.** `apexmicro.ai/experiments/bid-decision-workbook`
+answers 404 and the registry names no marketplace product. The Etsy asset's
+live boundary row reads `never`, and code does not rewrite a boundary the owner
+set by name. The portfolio entry exists, is proven, and publishes nothing until
+he narrows that row through the door in his own words.
