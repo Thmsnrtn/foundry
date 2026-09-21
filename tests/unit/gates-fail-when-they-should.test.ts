@@ -799,6 +799,41 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('_gate_fixture_seal');
   });
 
+  it('check-the-laboratory-is-the-institution fails when the harness mounts less than production', () => {
+    // THE DEFECT IT EXISTS FOR: production serves a journey the laboratory
+    // cannot reach, so a reviewer walks a smaller institution than the one
+    // they are reviewing and reports its absences as the product's.
+    plant('src/_gate_fixture_index.ts',
+      j("app.route('/', letter", "Routes);\n", "app.route('/', buyer", "Routes);\n"));
+    plant('tests/helpers/_gate_fixture_world.ts',
+      j("app.route('/', (await import('x')).letter", 'Routes as never);\n',
+        'export const NOT_MOUNTED_IN_THE_LABORATORY = Object.freeze({\n});\n'));
+    const r = run('check-the-laboratory-is-the-institution.mjs',
+      ['src/_gate_fixture_index.ts', 'tests/helpers/_gate_fixture_world.ts']);
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('buyerRoutes');
+  });
+
+  it('check-the-laboratory-is-the-institution fails when a stated absence is no longer one', () => {
+    // A REASON NOBODY NEEDS ANY MORE IS ALSO DRIFT. An excuse that outlives
+    // the thing it excused is how a list of deliberate absences turns into a
+    // list nobody reads.
+    plant('src/_gate_fixture_index2.ts', j("app.route('/', letter", 'Routes);\n'));
+    plant('tests/helpers/_gate_fixture_world2.ts',
+      j("app.route('/', (await import('x')).letter", 'Routes as never);\n',
+        'export const NOT_MOUNTED_IN_THE_LABORATORY = Object.freeze({\n',
+        "  letterRoutes: 'an excuse that outlived the thing it was excusing',\n});\n"));
+    const r = run('check-the-laboratory-is-the-institution.mjs',
+      ['src/_gate_fixture_index2.ts', 'tests/helpers/_gate_fixture_world2.ts']);
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('no longer one');
+  });
+
+  it('check-the-laboratory-is-the-institution passes on the tree as it stands', () => {
+    const r = run('check-the-laboratory-is-the-institution.mjs');
+    expect(r.code, r.output).toBe(0);
+  });
+
   it('check-the-owner-is-not-a-public-figure passes on the tree as it stands', () => {
     const r = run('check-the-owner-is-not-a-public-figure.mjs');
     expect(r.code, r.output).toBe(0);

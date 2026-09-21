@@ -507,6 +507,39 @@ async function theWorldCarriesTheReplyCheck(): Promise<void> {
   }
 }
 
+/**
+ * A BUYER WHO PAID, WHOSE DELIVERY FAILED, AND WHOSE REFUND HAS NOT GONE BACK.
+ *
+ * The obligation the ownership-protection lens looks for, and the only state
+ * in which the buyer's own refund link is a page rather than a 404. It lived
+ * in the review harness as thirty lines of hand-written rows — a second
+ * reading of what a purchase is, in a file no proof ran — so the harness and
+ * the proofs could disagree about the shape of a sale and nothing would say
+ * so. One fixture, used by both.
+ *
+ * Needs a world seeded `settledBy: 'the world'`: the purchase is reported at
+ * that world's own exposure, through the door a provider's event uses.
+ */
+export async function aBuyerIsOwedARefund(founderId: string = OWNER): Promise<{ fulfilmentId: string; paymentRef: string }> {
+  const { exposureOf, recordBusinessOutcome } = await import('../../src/services/venture/outcome.js');
+  const { findProof1 } = await import('../../src/services/venture/proof-1.js');
+  const experimentId = (await findProof1(founderId))!;
+  const x = (await exposureOf(experimentId))!;
+  const ev = await recordBusinessOutcome({ exposureId: x.id, kind: 'payment', amountCents: 2900, currency: 'usd',
+    observedAt: new Date(), provider: 'stripe', providerRef: 'pi_harness_1',
+    payerReference: 'buyer@example.com', arrivedVia: 'payment_link' });
+  if ('refused' in ev) throw new Error(ev.refused);
+  await query(`INSERT INTO experiment_fulfilments (id, founder_id, experiment_id, exposure_id, payment_event_id, provider, payment_ref, charge_ref, amount_cents, currency)
+               VALUES ('ful_harness_1', ?, ?, ?, ?, 'stripe', 'pi_harness_1', 'ch_harness_1', 2900, 'usd')`,
+  [founderId, experimentId, x.id, ev.id]);
+  const { record } = await import('../../src/services/economy/ledger.js');
+  await record({ founderId, kind: 'charge', amountCents: 2900, currency: 'usd', occurredAt: new Date(),
+    provider: 'stripe', providerRef: 'ch_harness_1', sourceEventId: ev.id, fulfilmentId: 'ful_harness_1',
+    claimQuality: 'measured', evidenceMode: 'real', because: 'A buyer was charged this, and Stripe said so.' });
+  await query(`UPDATE experiment_fulfilments SET status = 'failed', updated_at = datetime('now', '-2 days') WHERE id = 'ful_harness_1'`, []);
+  return { fulfilmentId: 'ful_harness_1', paymentRef: 'pi_harness_1' };
+}
+
 /** The owner surface, mounted the way the harness and the proofs mount it, signed in as the owner. */
 export async function ownerApp(): Promise<Hono> {
   const { Hono: H } = await import('hono');
@@ -540,8 +573,39 @@ export async function ownerApp(): Promise<Hono> {
   app.route('/', (await import('../../src/routes/dashboard/letter.js')).letterRoutes as never);
   app.route('/', (await import('../../src/routes/dashboard/settings.js')).settingsRoutes as never);
   app.route('/', (await import('../../src/routes/dashboard/privacy.js')).privacySettings as never);
+  // AND THE BUYER'S DOOR. A customer who paid follows a signed link to ask for
+  // their money back; that is a supported journey of this institution and it
+  // was not reachable in the laboratory at all, so no review has ever walked
+  // it. It is mounted here rather than in a separate app because a reviewer
+  // walks one surface, as a person does.
+  app.route('/', (await import('../../src/routes/share/index.js')).shareRoutes as never);
   return app as unknown as Hono;
 }
+
+/**
+ * WHAT PRODUCTION MOUNTS THAT THE LABORATORY DOES NOT, AND WHY.
+ *
+ * Every entry is a deliberate absence with a reason a person can check. The
+ * gate `check-the-laboratory-is-the-institution.mjs` fails when `src/index.ts`
+ * mounts a router that is neither mounted above nor named here, so the
+ * laboratory cannot quietly shrink again: it already had, and two independent
+ * reviewers reported the owner's own exit doors as broken when they were
+ * merely absent from the copy they were reviewing.
+ *
+ * A reason here is a claim about the product, not an excuse. "It is hard to
+ * mount" is not one of them.
+ */
+export const NOT_MOUNTED_IN_THE_LABORATORY: Readonly<Record<string, string>> = Object.freeze({
+  landingRoutes: 'the door for somebody who is not signed in; the laboratory is always signed in as the owner, '
+    + 'which is the harness\'s one deliberate untruth and is stated here rather than discovered',
+  authRoutes: 'signing in and out, which the laboratory does not do for the same reason',
+  onboardingRoutes: 'the first-run walk-through for an account that has nothing; the world seeds an owner who is past it',
+  ingestRoutes: 'provider webhooks, which arrive as HTTP in production and are driven directly in the '
+    + 'laboratory so a proof can say exactly which event it sent',
+  healthRoutes: 'what a machine asks about the deployment, not a journey anybody walks',
+  ecosystemRoutes: 'the same, for the estate',
+  apiV1: 'the programmatic surface; every journey it serves has a page, and the pages are what a review reads',
+});
 
 /** The owner, speaking in sentences through the box on every page. */
 export function owner(app: Hono) {

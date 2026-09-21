@@ -65,19 +65,12 @@ async function main(): Promise<void> {
   if (flag('owed')) {
     if (!world) { console.error('owner-review-harness: --owed needs --world (the purchase is reported at the world\'s own exposure)'); process.exit(2); }
     process.env.FOUNDRY_ENABLE_MONEY_TOOLS = 'false';
-    const { query } = await import('../src/db/client.js');
-    const { exposureOf, recordBusinessOutcome } = await import('../src/services/venture/outcome.js');
-    const { findProof1 } = await import('../src/services/venture/proof-1.js');
-    const experimentId = (await findProof1(OWNER))!;
-    const x = (await exposureOf(experimentId))!;
-    const ev = await recordBusinessOutcome({ exposureId: x.id, kind: 'payment', amountCents: 2900, currency: 'usd', observedAt: new Date(), provider: 'stripe', providerRef: 'pi_harness_1', payerReference: 'buyer@example.com', arrivedVia: 'payment_link' });
-    if ('refused' in ev) throw new Error(ev.refused);
-    await query(`INSERT INTO experiment_fulfilments (id, founder_id, experiment_id, exposure_id, payment_event_id, provider, payment_ref, charge_ref, amount_cents, currency)
-                 VALUES ('ful_harness_1', ?, ?, ?, ?, 'stripe', 'pi_harness_1', 'ch_harness_1', 2900, 'usd')`, [OWNER, experimentId, x.id, ev.id]);
-    const { record } = await import('../src/services/economy/ledger.js');
-    await record({ founderId: OWNER, kind: 'charge', amountCents: 2900, currency: 'usd', occurredAt: new Date(), provider: 'stripe', providerRef: 'ch_harness_1',
-      sourceEventId: ev.id, fulfilmentId: 'ful_harness_1', claimQuality: 'measured', evidenceMode: 'real', because: 'A buyer was charged this, and Stripe said so.' });
-    await query(`UPDATE experiment_fulfilments SET status = 'failed', updated_at = datetime('now', '-2 days') WHERE id = 'ful_harness_1'`, []);
+    // ONE FIXTURE, SHARED WITH THE PROOFS. This was thirty lines of rows
+    // written here by hand — a second reading of what a purchase is, in a
+    // file no proof ran, so the harness and the proofs could disagree about
+    // the shape of a sale and nothing would say so.
+    const { aBuyerIsOwedARefund } = await import('../tests/helpers/world.js');
+    await aBuyerIsOwedARefund(OWNER);
   }
   const app = await ownerApp();
   serve({ fetch: app.fetch, port });
