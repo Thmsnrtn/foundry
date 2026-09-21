@@ -384,17 +384,26 @@ export async function ownerApp(): Promise<Hono> {
   const { resolve } = await import('node:path');
   const { staticAssetHandler } = await import('../../src/routes/public/static-assets.js');
   app.get('/static/:file', staticAssetHandler(resolve(process.cwd(), 'src')) as never);
-  // Written out one by one: Vite only follows a dynamic import it can read.
-  app.route('/', (await import('../../src/routes/dashboard/foundry-shell.js')).foundryShellRoutes as never);
-  app.route('/', (await import('../../src/routes/dashboard/experiments-place.js')).experimentRoutes as never);
-  app.route('/', (await import('../../src/routes/dashboard/charter-place.js')).charterRoutes as never);
-  app.route('/', (await import('../../src/routes/dashboard/workshop-place.js')).workshopRoutes as never);
-  app.route('/', (await import('../../src/routes/dashboard/places.js')).placeRoutes as never);
-  app.route('/', (await import('../../src/routes/dashboard/inbox-place.js')).inboxRoutes as never);
-  app.route('/', (await import('../../src/routes/dashboard/money-place.js')).moneyRoutes as never);
-  app.route('/', (await import('../../src/routes/dashboard/roadmap-place.js')).roadmapRoutes as never);
-  app.route('/', (await import('../../src/routes/dashboard/absence-place.js')).absenceRoutes as never);
-  app.route('/', (await import('../../src/routes/dashboard/activity-place.js')).activityRoutes as never);
+  // THE SAME SURFACE THE APPLICATION MOUNTS, from the same place it mounts it.
+  //
+  // This used to list the owner's routers one by one, rebuilding by hand what
+  // `src/index.ts` assembles — and it had drifted. Three addresses the product
+  // links to from the footer of every page and from Controls (`/letter`,
+  // `/settings`, `/privacy`, the last of which is where taking a copy of the
+  // data and deleting it live) simply answered 404 in the laboratory. Two
+  // independent reviewers reported the exit doors as broken; they are not
+  // broken, the laboratory was smaller than the institution it was reviewing.
+  //
+  // A review instrument that is missing parts of the thing it reviews produces
+  // findings that are not true and hides findings that are, which is this
+  // campaign's own subject wearing a different coat. `letterRoutes` carries
+  // the whole owner surface (it mounts the shell, the places, the experiments,
+  // the charter, the Workshop, the Inbox, Economics, the Roadmap, the absence
+  // test and Activity, in that order, exactly as production does), so mounting
+  // it is one fact rather than ten copies of one.
+  app.route('/', (await import('../../src/routes/dashboard/letter.js')).letterRoutes as never);
+  app.route('/', (await import('../../src/routes/dashboard/settings.js')).settingsRoutes as never);
+  app.route('/', (await import('../../src/routes/dashboard/privacy.js')).privacySettings as never);
   return app as unknown as Hono;
 }
 

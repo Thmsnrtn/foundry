@@ -192,8 +192,26 @@ export async function newEconomicActivityPaused(founderId: string): Promise<bool
   return (await publicWorkshopOf(founderId))?.economicPause !== null && (await publicWorkshopOf(founderId)) !== null;
 }
 
-export async function recordWorkshopHealth(founderId: string, health: Record<string, unknown>, now = new Date()): Promise<void> {
-  await query(`UPDATE public_workshop SET health_json = ?, health_at = datetime('now'), updated_at = datetime('now') WHERE founder_id = ?`, [JSON.stringify(health), founderId]);
+export async function recordWorkshopHealth(
+  founderId: string, health: Record<string, unknown>, now = new Date(),
+  opts: { snapshot?: 'replace' | 'leave' } = {},
+): Promise<void> {
+  // THE SNAPSHOT IS THE WHOLE READING, AND A PARTIAL WRITE ERASED IT.
+  //
+  // This function's contract is "here is the Workshop's health": it replaces
+  // `health_json` outright. The payment reconciler called it with one channel
+  // to get a day recorded, and wiped the site, the provider, the sending
+  // identity, the reply route and the mail from the snapshot — which the
+  // owner's estate health, the Inbox's reply line and the instrument's own
+  // reader all read. A known-broken reply path silently became `unknown` for
+  // up to an hour, and an Allow decided in that hour is permanent.
+  //
+  // A caller with one reading to add says so and the snapshot is left alone.
+  // The DAY record below is per-channel and additive either way, which is why
+  // it was the only half that behaved.
+  if (opts.snapshot !== 'leave') {
+    await query(`UPDATE public_workshop SET health_json = ?, health_at = datetime('now'), updated_at = datetime('now') WHERE founder_id = ?`, [JSON.stringify(health), founderId]);
+  }
   // AND THE DAY KEEPS ITS OWN RECORD (migration 327). The snapshot above is
   // overwritten hourly, so it can say the reply path is broken now and never
   // whether it was open on the days a test was asking the world to answer.

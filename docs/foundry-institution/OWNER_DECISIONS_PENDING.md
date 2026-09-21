@@ -1031,3 +1031,46 @@ Nothing here changes until you say. The reply path itself is fixable from
 `/foundry/public-workshop`, and the institution now keeps a day-by-day record
 of it, so a second run would know what its instrument was doing.
 
+
+## PENDING 22 — Whether the public record of a settled test carries its limit: **OWNER** (2026-09-21)
+
+An adversarial review of the observation-integrity work found one surface the
+correction does not reach, and it is the one strangers read.
+
+`what-happened.ts` now derives what a result does not establish in the same
+place it derives the result's word, so no owner-facing surface can print a
+verdict without its limit. The **public** page does not go through it. At
+`apexmicro.ai/experiments/<slug>`, a closed test's status line is computed
+from the row alone and says, in your name:
+
+> Closed — the pilot ran and the thesis did not hold.
+
+Nineteen of the people who read that line are the people who were written to.
+The institution's own position on this result is that the reply path they were
+invited to use was not routed, and that a silence on a channel that may not
+have carried a reply is not the same evidence as a silence on one that did.
+The page says none of that.
+
+**Why this was not simply fixed.** The Workshop is your only public voice and
+its copy is yours. Adding a sentence to a published page is publishing, in
+your name, to people you already wrote to once. The institution will not do
+that on its own authority, and the standing rule that Experiment 001's sealed
+text is never disturbed is the reason the rule exists.
+
+**What is actually being asked.** Three options, none of them touching the
+sealed body copy:
+
+1. **Leave it.** The public line stays a plain statement of the outcome. Its
+   cost: the strongest claim the institution makes in public about this result
+   is the one claim it has since qualified everywhere else.
+2. **Qualify the status line** for any test whose instrument raised a doubt —
+   one computed sentence, the same one the owner reads, appended where the
+   verdict is printed. Nothing sealed changes; the public page stops asserting
+   more than the record supports.
+3. **Say nothing publicly and withdraw the line**, leaving only "Closed" with
+   the date. Least said, and also the least useful to a reader who is deciding
+   whether to trust the next thing you publish.
+
+This is adjacent to PENDING 21: if the result is treated as void, the public
+line is wrong rather than merely unqualified, and option 1 stops being
+available.

@@ -69,7 +69,13 @@ async function acrossTheWindow(founderId: string, channel: string, w: { from: st
       WHERE founder_id = ? AND channel = ? AND day >= ? AND day <= ?`,
     [founderId, channel, w.from, w.to])).rows as unknown as Row[];
   const broken = rows.filter((r) => String(r.worst_status) === 'needs_attention');
-  return { broken: broken.length, recorded: rows.length, worstDetail: broken[0]?.detail == null ? null : String(broken[0].detail) };
+  // A DAY READ AS `unknown` IS NOT A DAY THAT WAS WATCHED. This counted every
+  // row, so a window each of whose days had been read and found unreadable
+  // reported nothing unrecorded at all — while `whatSilenceMeans`, reading the
+  // same table for the same purpose, excluded them. Two readers of one table
+  // disagreeing, and the permissive one was the one attached to a verdict.
+  const watched = rows.filter((r) => String(r.worst_status) !== 'unknown');
+  return { broken: broken.length, recorded: watched.length, worstDetail: broken[0]?.detail == null ? null : String(broken[0].detail) };
 }
 
 /**
@@ -101,23 +107,31 @@ export async function doubtsAboutTheInstrument(experimentId: string): Promise<In
   const daysBroken = record?.broken ?? 0;
   const daysUnrecorded = window ? window.days - (record?.recorded ?? 0) : 0;
   const brokenNow = !!reply && reply.status !== 'healthy';
-  if (brokenNow || daysBroken > 0) {
+  // WHERE THERE IS NO DAY RECORD, THE RECEIPTS MAY STILL KNOW. Migration 327
+  // began keeping the days; a test that ran before it existed has an
+  // unrecorded window, and the honest sentence used to stop at "I cannot say".
+  // But the route that carries a reply is made through the governed door like
+  // everything else, and the door writes a receipt with a date. A route
+  // created AFTER a test's window closed was not carrying anything during it,
+  // and that is a fact from a receipt rather than an inference.
+  //
+  // READ BEFORE THE GATE, AND ABLE TO OPEN IT. This sat inside the condition
+  // below, which asks whether the path is broken NOW or was recorded broken
+  // during the window — so for the one test it was written for, the moment the
+  // owner repaired the route the receipt fact became unreachable and the
+  // correction to the result vanished with it. An adversarial reviewer found
+  // it. A record of a past measurement that disappears when the instrument is
+  // mended is worse than no record: it is a record that flatters every repair.
+  const routeMade = window === null ? null : (await query(
+    `SELECT MIN(recorded_at) AS at FROM cloudflare_mutations
+      WHERE founder_id = ? AND tool = 'cloudflare_email_route_upsert' AND outcome = 'applied'`,
+    [String(e.founder_id)])).rows[0] as Row | undefined;
+  const madeAfter = routeMade?.at != null && window !== null
+    && String(routeMade.at).slice(0, 10) > window.to;
+  if (brokenNow || daysBroken > 0 || madeAfter) {
     const asked = `${String(offers)} ${offers === 1 ? 'message' : 'messages'} went out under this test asking people to reply to ${String(w.contact_email)}`;
     // WHAT THE RECORD ESTABLISHES, said as a fact; what it does not, said as
     // an absence. A day with no row is not a day that was well.
-    // WHERE THERE IS NO DAY RECORD, THE RECEIPTS MAY STILL KNOW. Migration 327
-    // began keeping the days; Experiment 001 ran before it existed, so its
-    // whole window is unrecorded and the honest sentence stopped at "I cannot
-    // say". But the route that carries a reply is made through the governed
-    // door like everything else, and the door writes a receipt with a date. A
-    // route created AFTER a test's window closed was not carrying anything
-    // during it, and that is a fact from a receipt rather than an inference.
-    const routeMade = window === null ? null : (await query(
-      `SELECT MIN(recorded_at) AS at FROM cloudflare_mutations
-        WHERE founder_id = ? AND tool = 'cloudflare_email_route_upsert' AND outcome = 'applied'`,
-      [String(e.founder_id)])).rows[0] as Row | undefined;
-    const madeAfter = routeMade?.at != null && window !== null
-      && String(routeMade.at).slice(0, 10) > window.to;
     const then = daysBroken > 0
       ? `That path was not working on ${String(daysBroken)} of the ${String(window?.days ?? daysBroken)} days the test was asking${record?.worstDetail ? ` (${record.worstDetail})` : ''}`
       : madeAfter
@@ -125,7 +139,7 @@ export async function doubtsAboutTheInstrument(experimentId: string): Promise<In
         : `I have no day-by-day record of that path while the test was asking`;
     const now = brokenNow
       ? `, and it is ${reply.status === 'unknown' ? 'unreadable' : 'not working'} now${reply.detail ? ` (${reply.detail})` : ''}`
-      : ', though it is working now';
+      : ', though it is working now — which is a fact about today and not about the days this result was measured over';
     const unrecorded = daysUnrecorded > 0 && window
       ? ` ${String(daysUnrecorded)} of those days ${daysUnrecorded === 1 ? 'has' : 'have'} no record at all, and I do not count a day I did not watch as a day that was well.`
       : '';
@@ -311,9 +325,21 @@ export async function pathsRequiredBy(experimentId: string): Promise<RequiredPat
  * have it rewritten.
  */
 export async function declareInstrument(experimentId: string): Promise<RequiredPath[]> {
-  const e = (await query(`SELECT founder_id FROM venture_experiments WHERE id = ?`, [experimentId]))
+  const e = (await query(
+    `SELECT founder_id, settles_when FROM venture_experiments WHERE id = ?`, [experimentId]))
     .rows[0] as Row | undefined;
   if (!e) return [];
+  // NOTHING IS WRITTEN DOWN UNTIL THE RULE IT IS DERIVED FROM EXISTS.
+  //
+  // What a path bears on follows from the sealed settlement rule, and the row
+  // refuses to have it rewritten — which is right, and was a hole: `readiness`
+  // runs on an ordinary page render, so opening the test's page before the
+  // rule was sealed froze every path as an `invitation` or an `obligation`
+  // derived from the price alone. The rule sealed afterwards could not correct
+  // it, and the gap reader skips everything that is not `measurement`. An
+  // adversarial reviewer found it. Before the rule exists the paths are
+  // computed and shown; they are not recorded.
+  if (e.settles_when == null || String(e.settles_when).trim() === '') return pathsRequiredBy(experimentId);
   const required = await pathsRequiredBy(experimentId);
   for (const p of required) {
     await query(
@@ -378,11 +404,21 @@ export async function verifyInstrument(
     await query(
       `UPDATE experiment_paths
           SET verified_at = ?, verified_status = ?, verified_detail = ?,
-              broken_since = CASE WHEN ? = 'not_working' THEN COALESCE(broken_since, ?) ELSE NULL END,
-              broken_detail = CASE WHEN ? = 'not_working' THEN ? ELSE NULL END
+              -- ONLY A WORKING READING CLOSES A BROKEN INTERVAL. This cleared
+              -- it for anything that was not a not-working reading, so one
+              -- unreadable pass — a provider timeout, a health read that threw — erased
+              -- the record of three broken days. The column exists to be the
+              -- evidence that a window was measured through a broken
+              -- instrument; an absence of reading is not a repair.
+              broken_since = CASE WHEN ? = 'not_working' THEN COALESCE(broken_since, ?)
+                                  WHEN ? = 'working' THEN NULL ELSE broken_since END,
+              broken_detail = CASE WHEN ? = 'not_working' THEN ?
+                                   WHEN ? = 'working' THEN NULL ELSE broken_detail END
         WHERE experiment_id = ? AND kind = ?`,
-      [now.toISOString(), found.status, found.detail, found.status, now.toISOString(),
-        found.status, found.status === 'not_working' ? found.detail : null, experimentId, found.kind]);
+      [now.toISOString(), found.status, found.detail,
+        found.status, now.toISOString(), found.status,
+        found.status, found.status === 'not_working' ? found.detail : null, found.status,
+        experimentId, found.kind]);
     const row = (await query(
       `SELECT broken_since, broken_detail FROM experiment_paths WHERE experiment_id = ? AND kind = ?`, [experimentId, found.kind]))
       .rows[0] as Row | undefined;
@@ -477,7 +513,27 @@ async function paymentPath(experimentId: string): Promise<{ status: PathStatus; 
   if (!process.env.STRIPE_SECRET_KEY) {
     return { status: 'unknown', detail: 'a way to pay is attached, but this deployment has no payment provider configured to check it against' };
   }
-  return { status: 'working', detail: `a way to pay is attached: ${String(m.payment_link_url)}` };
+  // A LINK ON RECORD IS NOT A LINK THAT WORKS, and this said it was.
+  //
+  // An accountant reading the product found the readiness check reporting
+  // "the link on record is not active at the provider" on the same test, on
+  // the same day, that this reported the way to pay as working. Two readings
+  // of one fact, which is the shape this campaign keeps finding — and the
+  // worse of the two was the one that could stop an offer going out.
+  //
+  // It asks the provider, through the same reader the readiness check uses.
+  // An answer that cannot be got is unknown, never working: a link nobody
+  // could check is not a link anybody has vouched for.
+  const url = String(m.payment_link_url);
+  try {
+    const { describePaymentLink } = await import('./payment-link.js');
+    const link = await describePaymentLink(url);
+    return link
+      ? { status: 'working', detail: `an active one-time link at the provider (${url})` }
+      : { status: 'not_working', detail: `the link on record is not active at the provider (${url})` };
+  } catch (err) {
+    return { status: 'unknown', detail: `the provider could not be asked about the link on record (${err instanceof Error ? err.message : String(err)})` };
+  }
 }
 
 /**
@@ -493,6 +549,13 @@ async function refundPath(experimentId: string): Promise<{ status: PathStatus; d
   if (!act) return { status: 'not_working', detail: 'nothing authorises a refund for this test' };
   if (act.decision !== 'approved') return { status: 'not_working', detail: 'the refund has not been authorised' };
   if (act.revoked_at != null) return { status: 'not_working', detail: 'the authority to refund was withdrawn' };
+  // AN EXPIRED AUTHORITY IS NOT A STANDING ONE. The column was selected and
+  // never read, so a test whose acts had lapsed reported a working way to give
+  // money back while `obligations.ts` was calling the same purchases his to
+  // refund by hand.
+  if (act.expires_at != null && new Date(String(act.expires_at).replace(' ', 'T') + 'Z').getTime() < Date.now()) {
+    return { status: 'not_working', detail: `the authority to refund lapsed on ${String(act.expires_at).slice(0, 10)}` };
+  }
   if (!process.env.STRIPE_SECRET_KEY) {
     return { status: 'unknown', detail: 'a refund is authorised, but this deployment has no payment provider configured to make one through' };
   }
@@ -584,6 +647,17 @@ export interface MeasurementGap {
  * day on which the answer could not have reached us — and leaves what follows
  * from that to the caller, because the answer means something different for a
  * null than for a result with events in it.
+ *
+ * WHAT IT DOES NOT COVER, SAID PLAINLY. Only paths that bear on the
+ * MEASUREMENT are read here, and that is the intended reading: a broken reply
+ * route does not stop a rule counting payments from being measured, so a test
+ * settled through one is limited rather than void. Experiment 001 is exactly
+ * that case, and this door would not have refused its verdict — the doctrine
+ * is that a sealed result stands and the claim about it is corrected, and
+ * whether that null is void is the owner's judgment, recorded as PENDING 21.
+ * An earlier version of this comment claimed otherwise; a reviewer was right
+ * to call the claim false, and a safeguard that overstates its own reach is
+ * the defect this campaign exists to remove.
  */
 export async function measurementGapIn(
   experimentId: string, from: Date, to: Date,

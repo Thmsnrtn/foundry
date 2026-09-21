@@ -786,9 +786,22 @@ experimentRoutes.get('/foundry/experiments/:id/recipients', async (c: any) => {
   const open = v.state === 'needs_you' || v.state === 'ready';
   const pending = v.recipients.filter((r) => r.reviewStatus === 'pending');
   const decided = v.recipients.filter((r) => r.reviewStatus !== 'pending');
+  // AN EXCLUSION IS ABOUT A PERSON, NOT ABOUT A ROW. The same business can sit
+  // on this list twice — once as it appears in a public listing and once as a
+  // cohort names it, differing by an "LLC" — and striking one row used to
+  // leave the other free to be written to at the SAME ADDRESS. Two reviewers
+  // reading this page found it independently. The door refuses it now; this is
+  // the page saying so, because a list that shows "approved" beside an address
+  // it will never write to is its own kind of untruth.
+  const struckAddresses = new Set(v.recipients
+    .filter((r) => r.reviewStatus === 'struck' && r.email)
+    .map((r) => r.email!.trim().toLowerCase()));
+  const silenced = (r: ExperimentView['recipients'][number]): boolean =>
+    r.reviewStatus === 'approved' && !!r.email && struckAddresses.has(r.email.trim().toLowerCase());
   const row = (r: ExperimentView['recipients'][number]) => html`<div class="noticed qitem">
-    <p><strong>${r.counterpartyRef}</strong> <span class="pill">${r.reviewStatus === 'pending' ? (r.channel === 'email' ? 'to review' : 'web form only') : r.reviewStatus === 'approved' ? 'approved' : 'excluded'}</span></p>
+    <p><strong>${r.counterpartyRef}</strong> <span class="pill">${r.reviewStatus === 'pending' ? (r.channel === 'email' ? 'to review' : 'web form only') : silenced(r) ? 'excluded by address' : r.reviewStatus === 'approved' ? 'approved' : 'excluded'}</span></p>
     <p class="quiet">${r.email ?? 'no published email'}${r.sourceUrl ? html` · <a href="${r.sourceUrl}" rel="noopener">source</a>` : ''}${r.reviewReason ? ` · ${r.reviewReason}` : ''}</p>
+    ${silenced(r) ? html`<p class="quiet"><strong>This address is excluded on another line of this list.</strong> Nothing is written to it, whatever this line says: an exclusion is about the person who would receive the message, not about the row it was recorded on.</p>` : ''}
     ${r.qualifiedAt
       ? html`<p class="quiet">Why they are in this test's population: ${r.qualifiedBecause} · <a href="${r.qualifiedSource}" rel="noopener">the record that says so</a></p>`
       : html`<p class="quiet"><strong>No recorded reason this business is in the population this test names.</strong> Nothing will be written to them, whether or not you approve them here.</p>`}

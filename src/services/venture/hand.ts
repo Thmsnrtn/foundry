@@ -29,6 +29,7 @@ import { getSendingIdentity } from '../outbound/sending-identity.js';
 import { withRetry } from '../resilience.js';
 import { decideProposedAct, proposeAct, revokeApproval, setBoundary } from '../institution/standing-intent.js';
 import { stateOfferShape, retireExperimentalAsset } from './asset.js';
+import { RECONCILE_DAYS } from './what-the-provider-knows.js';
 import { answerLighter } from './legal-surface.js';
 import { bindActToExperiment, exposureOf, placeExposure, recordBusinessOutcome, settleFromTheWorld, withdrawExposure } from './outcome.js';
 import { OPEN_OBLIGATION, UNCONFIRMED_IS_FAILED_AFTER_DAYS, obligationsOf, owesAnybody } from './obligations.js';
@@ -853,6 +854,17 @@ export async function prepareExposure(experimentId: string): Promise<{ exposureI
 
 /** A link the owner made by hand: held to the same contract, then placed. */
 export async function attachPaymentLinkByUrl(input: { experimentId: string; url: string }): Promise<{ ok: true } | { refused: string }> {
+  // THE SAME BOUNDARY AS THE HAND'S OWN PLACEMENT. This door lets the owner
+  // paste a link he made himself, and it reached the public page without ever
+  // asking whether anything in this deployment could hear about a payment made
+  // through it. The money would move, somebody would be owed something, and
+  // Foundry would know neither — which is the case the boundary exists for,
+  // whichever door the link came through.
+  {
+    const { paymentObservationPath } = await import('./the-instrument.js');
+    const observation = await paymentObservationPath();
+    if (observation.status === 'not_working') return { refused: `a way to pay is not attached while ${observation.detail}` };
+  }
   const e = await experimentRow(input.experimentId);
   if (!e || !e.productId) return { refused: 'the experiment has no asset yet; allow it first' };
   const plan = await offerShapePlanOf(input.experimentId);
@@ -916,6 +928,27 @@ export async function planOffer(input: { experimentId: string; recipientId: stri
   // an unscreened stranger here is the whole of the rule — and it fails closed:
   // no qualification recorded means no message, never "probably fine".
   if (!recipient.qualifiedAt) throw new HandRefused('recipient_unqualified', recipient.counterpartyRef);
+  // AN EXCLUSION IS ABOUT A PERSON, NOT ABOUT A ROW.
+  //
+  // A returning owner found this by reading his own recipients list: the same
+  // business, at the same address, held as two rows — one from the seeded
+  // candidates and one from the cohort, under names differing by "LLC". One
+  // was struck for having no recorded grounds; the other was approved; and the
+  // message went to the address that had just been excluded. Both rows were
+  // true, the promise on the page ("nobody excluded is ever written to") was
+  // false as the person receiving it experiences it, and the activity feed
+  // showed him the exclusion as evidence that the promise had held.
+  //
+  // The promise is about who gets a message, so it binds on the ADDRESS. A
+  // struck row anywhere in this test silences its address everywhere in it,
+  // and it fails closed at the door rather than in whichever loop happens to
+  // be selecting recipients.
+  const struckHere = (await rows(
+    `SELECT 1 AS n FROM experiment_recipients
+      WHERE experiment_id = ? AND review_status = 'struck'
+        AND lower(trim(email)) = lower(trim(?))`,
+    [input.experimentId, recipient.email]));
+  if (struckHere.length > 0) throw new HandRefused('recipient_struck_at_this_address', recipient.counterpartyRef);
   const effectId = `experiment:${input.experimentId}:offer:${recipient.id}`;
   const existing = await existingByEffect(e.productId, effectId);
   if (existing) return existing;
@@ -1239,6 +1272,32 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
   // times as much and could answer differently each time, which is the one
   // thing a record of what was working must not do.
   const askedTheProvider = new Set<string>();
+  // EVERY OWNER WITH A LIVE PAID OFFER, NOT ONLY ONE WITH A STANDING ACT.
+  //
+  // The ask used to happen inside the loop over live experiments, whose own
+  // condition requires an approved, unrevoked, UNEXPIRED measurement-critical
+  // act. Acts expire at three weeks; a settlement window can be thirty days.
+  // So a buyer paying on day 24 of a test whose acts lapsed on day 21, with a
+  // dropped webhook, was never asked about by anybody — the money moved, no
+  // obligation existed, and the rule settled "nobody bought" over the top of
+  // it. An adversarial reviewer found it. The ask is about somebody having
+  // paid, which no expiry stops, so it runs for every owner the pass touches
+  // and for every owner with a paid exposure placed inside the window.
+  const owedAnAsking = (await rows(
+    `SELECT DISTINCT x.founder_id FROM experiment_exposures x
+       JOIN venture_experiments e ON e.id = x.experiment_id
+      WHERE x.provider = 'stripe' AND e.evidence_mode = 'real' AND x.placed_at IS NOT NULL
+        AND datetime(x.placed_at) >= datetime(?)
+        ${input.founderId ? 'AND x.founder_id = ?' : ''}`,
+    input.founderId
+      ? [new Date(now.getTime() - RECONCILE_DAYS * 86_400_000).toISOString(), input.founderId]
+      : [new Date(now.getTime() - RECONCILE_DAYS * 86_400_000).toISOString()]))
+    .map((r) => String(r.founder_id));
+  for (const founderId of owedAnAsking) {
+    askedTheProvider.add(founderId);
+    const { reconcileWithTheProvider } = await import('./what-the-provider-knows.js');
+    await reconcileWithTheProvider(founderId, now).catch(() => undefined);
+  }
   const healthByFounder = new Map<string, Awaited<ReturnType<typeof import('../public-workshop/infrastructure.js')['workshopHealth']>> | null>();
   const healthFor = async (founderId: string): Promise<Awaited<ReturnType<typeof import('../public-workshop/infrastructure.js')['workshopHealth']>> | undefined> => {
     if (!healthByFounder.has(founderId)) {
@@ -1301,7 +1360,17 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
       const { declareInstrument, verifyInstrument, pathsNotWorking, sentenceFor } = await import('./the-instrument.js');
       await declareInstrument(experimentId);
       const readings = await verifyInstrument(experimentId, { now, health: await healthFor(e.founderId) });
-      const broken = pathsNotWorking(readings).filter((r) => r.bearsOn !== 'obligation');
+      // AN OBLIGATION PATH STOPS A NEW PROMISE, AND ONLY A NEW ONE.
+      //
+      // This dropped every obligation path, on the reasoning that discharging
+      // what is already owed must not be stopped by the same check. That part
+      // is right and is preserved — nothing below this gate is affected, and
+      // `carryWhatIsOwed` still runs. But the refund path's own recorded
+      // reason is "the public promise is money back with no questions, which
+      // has to be possible before it is made", and dropping it here meant the
+      // one path whose failure can never stop a new promise being made was the
+      // one that promise depends on. An adversarial reviewer found it.
+      const broken = pathsNotWorking(readings);
       if (broken.length > 0) {
         report.exceptions.push(...broken.map(sentenceFor));
         mayWrite = false;

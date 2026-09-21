@@ -87,11 +87,20 @@ export async function reconcileWithTheProvider(
     // arrived, so the fact is recorded once, by one writer, with the same
     // refusals — a payment at somebody else's link is refused here exactly as
     // it is there.
-    const { intakeStripeSettlement } = await import('./settlement-intake.js');
-    const taken = await intakeStripeSettlement({
+    const event = {
       id: `reconciled_${intent.id}`, type: 'payment_intent.succeeded',
       created: intent.created, data: { object: intent as unknown as Record<string, unknown> },
-    });
+    };
+    const { intakeStripeSettlement } = await import('./settlement-intake.js');
+    const taken = await intakeStripeSettlement(event);
+    // AND THE MONEY LEDGER, which the webhook's own door also feeds. Recording
+    // only the obligation recovered the sale and lost the charge, the
+    // provider's fee and the unit economics — in the same outage that dropped
+    // the delivery, and with nothing that would ever ask again.
+    try {
+      const { intakeStripeEconomics } = await import('../economy/stripe-economics.js');
+      await intakeStripeEconomics(event as never);
+    } catch { /* the sale is recorded either way; the ledger catches up on the next real event */ }
     if (taken.recorded.length > 0) weDidNot.push(intent.id);
   }
 
@@ -105,7 +114,7 @@ export async function reconcileWithTheProvider(
         status: 'needs_attention',
         detail: `${String(weDidNot.length)} payment${weDidNot.length === 1 ? '' : 's'} reached Foundry only because it asked the provider, not because the provider reached Foundry`,
       },
-    }, now);
+    }, now, { snapshot: 'leave' });
     log.warn('payments.reconcile.unheard', { founderId, count: weDidNot.length });
   }
 
