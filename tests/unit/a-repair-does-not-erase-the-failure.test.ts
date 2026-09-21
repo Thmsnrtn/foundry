@@ -69,12 +69,24 @@ describe('an interval is opened, kept, and closed rather than deleted', () => {
 
   it('a path that breaks again opens a second interval rather than reopening the first', async () => {
     const { verifyInstrument, outagesAcross } = await import('../../src/services/venture/the-instrument.js');
+    // AT THE SAME INSTANT AS THE FIRST. An interval was keyed on the clock,
+    // so a second one for the same path in the same millisecond collided with
+    // the first and threw in the middle of the pass that writes to strangers —
+    // which is what every pass with a fixed clock does, and what a real one
+    // does whenever two readings land inside a millisecond of each other.
+    const frozen = new Date('2026-09-20T09:00:00.000Z');
+    await verifyInstrument(X, { now: frozen, health: { sending: { status: 'healthy', detail: 'fine' } } as never });
+    await verifyInstrument(X, { now: frozen, health: { sending: { status: 'needs_attention', detail: 'a momentary fault' } } as never });
+    await verifyInstrument(X, { now: frozen, health: { sending: { status: 'healthy', detail: 'fine again' } } as never });
+    await verifyInstrument(X, { now: frozen, health: { sending: { status: 'needs_attention', detail: 'and another' } } as never });
+    await verifyInstrument(X, { now: frozen, health: { sending: { status: 'healthy', detail: 'fine again' } } as never });
     await verifyInstrument(X, { health: { sending: { status: 'needs_attention', detail: 'the domain fell out of authentication' } } as never });
     const all = (await outagesAcross(X)).filter((o) => o.kind === 'sending');
-    expect(all).toHaveLength(2);
+    expect(all, 'every break is its own interval, whatever the clock said').toHaveLength(4);
+    expect(all.filter((o) => o.mendedAt === null), 'exactly one is still open').toHaveLength(1);
     expect(all[0].mendedAt, 'the first is still closed').not.toBeNull();
-    expect(all[1]).toMatchObject({ brokeDetail: 'the domain fell out of authentication', mendedAt: null });
-    expect(all[0].brokeAt <= all[1].brokeAt, 'oldest first').toBe(true);
+    expect(all[all.length - 1]).toMatchObject({ brokeDetail: 'the domain fell out of authentication', mendedAt: null });
+    expect(all[0].brokeAt <= all[all.length - 1].brokeAt, 'oldest first').toBe(true);
   });
 });
 

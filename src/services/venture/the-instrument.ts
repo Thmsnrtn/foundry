@@ -491,10 +491,16 @@ async function keepTheInterval(
     .rows[0] as Row | undefined;
   if (found.status === 'not_working') {
     if (open) return; // one interval, still running
+    // AN IDENTIFIER IS NOT A TIMESTAMP. This was keyed on the clock, and a
+    // second interval for the same path at the same instant — which every
+    // test with a fixed clock produces, and a real deployment produces inside
+    // one millisecond — collided with the first and threw in the middle of the
+    // pass that was writing to strangers.
+    const { nanoid } = await import('nanoid');
     await query(
       `INSERT INTO experiment_path_outages (id, experiment_id, founder_id, kind, broke_at, broke_detail)
        VALUES (?,?,?,?,?,?)`,
-      [`epo_${experimentId}_${found.kind}_${now.getTime()}`, experimentId, founderId, found.kind,
+      [`epo_${nanoid(14)}`, experimentId, founderId, found.kind,
         now.toISOString(), found.detail || 'not working']);
     return;
   }
