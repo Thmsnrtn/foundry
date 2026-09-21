@@ -2685,3 +2685,69 @@ and not about the page.
 **What this release did to the public record, stated plainly:** it added one
 dated correction and removed one unevidenced claim. Nothing else the world can
 see has changed.
+
+## P1 — Apex Micro is the portfolio home, not the storefront (21 September 2026)
+
+The owner clarified a three-layer relationship: Private Foundry keeps the
+intelligence and the operating work and stays private; Apex Micro is the public
+business identity and the portfolio home, credible enough that somebody can tell
+who is responsible for an offer, and **not** required to be the purchasing or
+delivery platform for anything; and each asset reaches customers through
+whatever channel suits its actual economic mechanism.
+
+The architecture was closer to this than it looked. The membrane was never a
+storefront — payment has always been an off-site link, the public site is a
+credential-less Worker serving finished pages, and no rule requires an asset to
+have a page. What it had was **one shape**: the full six-section product page or
+nothing at all, which is why Experiment 002 sells a workbook on Etsy today and
+had no presence on the site whatsoever. The missing shape is a portfolio entry.
+
+Two owner decisions were taken before anything was built, and are recorded as
+§25: he narrowed the Etsy asset's publishing boundary to allow an entry (what it
+is, who it is for, who is responsible, and a link to the listing — still no
+offer, no price, no checkout), and he scoped the customer copy per channel.
+
+### What this took, and what it cost
+
+Four commits, three of them repairs, and the repairs were where the work was.
+
+`d2f60fc0` built the reader, the entry shape, the narrowed leak rule and the
+shape-aware gate. Two adversarial cells then found that the reader's headline
+guarantee — an owner's `never` is decisive and is never reasoned around — was
+enforced in exactly one function whose output nothing on the publishing path
+read. The guarantee was a comment.
+
+`f8664be0` made it a filter, and introduced two regressions doing so: holding on
+the reader's whole verdict deadlocked the one asset whose page *is* its venue,
+and holding on the boundary row alone would have held every Workshop-carried
+page for ever.
+
+`ef85fa19` surfaced a held page to the owner, who could not otherwise tell a
+withheld page from a broken one.
+
+`7511e4fb` was the one that mattered. Two fresh cells took the repair apart and
+found it wrong at the root: `owner_boundary_subjects.publish` is the subject of
+*placing an offer*, not of publishing a page, so the rule made a Stripe catalog
+approval stand as the owner's consent to publish a web page in his name —
+authority inferred from an adjacent capability, committed by the function whose
+header promises to protect his word. Both cells independently found the second:
+a `never` stopped new bytes and did nothing to bytes already in the store, so
+the case the guarantee exists for — he reads a complaint and says take it down —
+was unchanged. Withdrawal is now a replacement, because `cloudflare_kv_delete`
+refuses page keys and a URL a customer holds is not something to break.
+
+Where a page carries a sealed record, two of his words collide and the routine
+does not choose between them: the page stays and the conflict is reported by
+name.
+
+### Where it stands
+
+`npm run check` green on the frozen tree: 612 files, 5243 tests, all 31 gates.
+Proof debt recorded rather than built around: the marketplace refund promise is
+truthful and sourced, and nothing in the institution can execute or monitor it.
+
+**In production, nothing publishes for the Etsy asset yet.** Its live boundary
+row still reads `never`, and a boundary the owner set by name is not something
+code rewrites behind him. `approveListing` writes the narrowed wording for any
+listing approved from here on; the existing row waits for him to narrow it
+through the door, in his own words.
