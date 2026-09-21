@@ -277,6 +277,20 @@ export async function legalPictureOf(input: {
   for (const row of policy) {
     if (row.treatment === 'policy' || row.requirement === 'block_on_unresolved_material_uncertainty') continue;
     const fact = factByRequirement.get(row.requirement);
+    // AN ASSUMPTION IS NOT A FINDING, AND THIS TREATED IT AS ONE.
+    //
+    // A fact written because the recipe said so satisfied a binding
+    // requirement exactly as an observation would, and nothing looked at
+    // `basis` — which has been on the row the whole time. An intended US
+    // audience became "does not sell across a border"; a refund policy became
+    // "no support obligation". Deterministic enforcement cannot compensate for
+    // a false premise handed to it, so the premise now has to say what it is.
+    // ONLY WHAT SAYS IT IS AN ASSUMPTION. Rows written `offer_shape` predate
+    // the distinction and are left exactly as they were: re-judging them now
+    // would be the retroactive rewriting the migration refused to do, and
+    // would block an institution on no new evidence about it. New facts
+    // classify themselves, and the ones that matter have been restated.
+    const believedOnly = fact !== undefined && fact.basis === 'assumed';
     const verdict: 'satisfied' | 'violated' | 'unknown' = fact === undefined || fact.present === null
       ? 'unknown'
       : (fact.present ? 1 : 0) === fact.satisfiedWhen ? 'satisfied' : 'violated';
@@ -290,6 +304,14 @@ export async function legalPictureOf(input: {
     if (binding && verdict === 'unknown' && shaped) {
       inTheWay.push(`whether ${row.requirement.replace(/_/g, ' ')} holds is still unknown, and `
         + 'the offer has a shape now, so that is no longer a question for later');
+    }
+    // A REQUIREMENT MET ONLY BY AN ASSUMPTION IS NOT MET. Said in the words of
+    // what would settle it, because "assumed" alone tells him nothing about
+    // what to do next.
+    if (binding && verdict === 'satisfied' && believedOnly && shaped) {
+      inTheWay.push(`${row.requirement.replace(/_/g, ' ')} is assumed rather than checked`
+        + `${fact?.grounds ? ` (${fact.grounds})` : ''} — the offer has a shape now, so it needs `
+        + 'something that enforces it or somebody who has looked');
     }
   }
 

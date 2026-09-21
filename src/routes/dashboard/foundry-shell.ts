@@ -5044,7 +5044,7 @@ async function whichDidYouMean(door: import('../../services/institution/the-door
     <p class="lede">You said: <strong>${door.said}</strong></p>
     <p>I can read that two ways, and one of them does something, so I would rather
       ask than guess: <strong>${act}</strong>.</p>
-    <form method="POST" action="/foundry/ask" class="act-row">
+    <form method="POST" action="/foundry/ask" class="row">
       <input type="hidden" name="said" value="${door.said}" />
       <input type="hidden" name="meant" value="do_it" />
       <button type="submit" class="primary">Yes — ${act}</button>

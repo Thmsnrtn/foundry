@@ -86,17 +86,66 @@ export const PROOF1_PLAN: OfferShapePlan = {
     chargesHow: 'one-time, $29, no subscription, refunded on request through the link in the delivery',
   },
   lighter: 'a single hand-assembled brief delivered by email; no feed, no account, no software',
+  // ─── AND WHAT KIND OF CLAIM EACH ONE IS ──────────────────────────────────
+  //
+  // These are the premises the first-proof policy is judged against, and until
+  // now they were written as bare assertions: a sentence from the recipe
+  // satisfied a binding requirement exactly as an observation would, and
+  // nothing recorded which it was. The words here are unchanged where they
+  // were true; what is added is how each is known, and the one line that was
+  // an intention now says so.
   facts: {
-    recurring_billing: { present: 0, grounds: 'Charges: one-time, no subscription' },
-    persistent_personal_data: { present: 0, grounds: 'Collects: the buyer address is read from the provider at delivery and not kept' },
-    cross_border_selling: { present: 0, grounds: 'Sells to: Massachusetts businesses only' },
-    support_obligation: { present: 0, grounds: 'Delivers: one brief, once; a refund link instead of support' },
-    manual_fulfilment: { present: 0, grounds: 'Delivers by: the stored brief is sent by the institution after payment; nobody does anything by hand per sale' },
-    user_generated_content: { present: 0, grounds: 'Sells: public notice metadata, nobody else\'s words' },
-    account_system: { present: 0, grounds: 'Delivers by: email; no account' },
-    two_sided_marketplace: { present: 0, grounds: 'Sells to: one audience, the buyer' },
-    one_visit_delivery: { present: 0, grounds: 'Delivers by: email on the institution\'s next hourly pass after payment, not on the page itself' },
-    front_loaded_attention: { present: 1, grounds: 'The owner\'s non-delegable work is three acts before it runs: review who may be contacted, connect his sending address, allow it; nothing weekly' },
+    recurring_billing: {
+      present: 0, basis: 'enforced',
+      enforcedBy: 'validateExperimentPaymentLink refuses a recurring link before any offer goes out',
+      grounds: 'Charges: one-time, no subscription',
+    },
+    persistent_personal_data: {
+      present: 0, basis: 'observed',
+      grounds: 'Collects: the buyer address is read from the provider at delivery and not kept; '
+        + 'what stays is a keyed hash of it, which separates the owner\'s own payments from the '
+        + 'market\'s and cannot be read back into an address',
+    },
+    // AN INTENTION, AND NOW SAID TO BE ONE. The offer is written for
+    // Massachusetts businesses and only they are contacted — and the way to
+    // pay is a public link that takes a card from anywhere. Nothing in this
+    // institution refuses one, so "sells to Massachusetts only" is what is
+    // meant rather than what is enforced.
+    cross_border_selling: {
+      present: 0, basis: 'assumed',
+      grounds: 'Sells to: Massachusetts businesses only — who the offer is written for and who is '
+        + 'written to. The public way to pay is not restricted by country',
+    },
+    support_obligation: {
+      present: 0, basis: 'observed',
+      grounds: 'Delivers: one brief, once; a refund link instead of support. What is owed is bounded '
+        + 'and real: the brief, a refund when a delivery fails or the buyer asks, and a decision for '
+        + 'the owner where it cannot go out at all',
+    },
+    manual_fulfilment: {
+      present: 0, basis: 'observed',
+      grounds: 'Delivers by: the stored brief is sent by the institution after payment; nobody does anything by hand per sale',
+    },
+    user_generated_content: {
+      present: 0, basis: 'observed',
+      grounds: 'Sells: public notice metadata, nobody else\'s words',
+    },
+    account_system: {
+      present: 0, basis: 'enforced',
+      enforcedBy: 'there is no account system in this institution for a buyer to be given one',
+      grounds: 'Delivers by: email; no account',
+    },
+    two_sided_marketplace: {
+      present: 0, basis: 'observed', grounds: 'Sells to: one audience, the buyer',
+    },
+    one_visit_delivery: {
+      present: 0, basis: 'observed',
+      grounds: 'Delivers by: email on the institution\'s next hourly pass after payment, not on the page itself',
+    },
+    front_loaded_attention: {
+      present: 1, basis: 'observed',
+      grounds: 'The owner\'s non-delegable work is three acts before it runs: review who may be contacted, connect his sending address, allow it; nothing weekly',
+    },
   },
   price: {
     amountCents: 2900, currency: 'USD', lookupKey: 'foundry_proof1_ma_millwork_brief_one_time',

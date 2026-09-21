@@ -4264,16 +4264,27 @@ CREATE TABLE structural_fact_kinds (
   satisfied_when      INTEGER,
   sort_order          INTEGER NOT NULL
 );
-CREATE TABLE structural_facts (
+CREATE TABLE "structural_facts" (
   id             TEXT PRIMARY KEY,
   founder_id     TEXT NOT NULL REFERENCES founders(id),
   subject_kind   TEXT NOT NULL CHECK (subject_kind IN ('company','opportunity')),
   subject_id     TEXT NOT NULL,
   fact           TEXT NOT NULL REFERENCES structural_fact_kinds(fact),
   present        INTEGER CHECK (present IN (0,1)),
-  basis          TEXT NOT NULL CHECK (basis IN ('stated','assumed_by_lighter','offer_shape','unknown')),
+  -- WHAT KIND OF CLAIM THIS IS, which is the whole point of the column.
+  --   enforced: a named control makes it true
+  --   observed: somebody looked
+  --   assumed:  believed on intent alone
+  --   stated / assumed_by_lighter / offer_shape: how earlier rows were written
+  --   unknown:  nobody has answered it
+  basis          TEXT NOT NULL CHECK (basis IN
+                   ('enforced','observed','assumed','stated','assumed_by_lighter','offer_shape','unknown')),
   -- The words the answer rests on, copied from the record it was read from.
   grounds        TEXT,
+  -- WHAT MAKES IT TRUE, for an enforced claim: the control that would refuse.
+  -- A claim that says "enforced" and cannot name what enforces it is an
+  -- assumption wearing a better word, and the trigger below says so.
+  enforced_by    TEXT,
   recognised_by  TEXT NOT NULL,
   evidence_mode  TEXT NOT NULL CHECK (evidence_mode IN ('real','reference')),
   recorded_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -5298,8 +5309,7 @@ CREATE INDEX idx_stressor_product ON stressor_history(product_id);
 CREATE INDEX idx_stressor_product_active ON stressor_history(product_id, status);
 CREATE INDEX idx_stressor_status ON stressor_history(status);
 CREATE INDEX idx_stripe_events_product ON stripe_events(product_id, processed);
-CREATE UNIQUE INDEX idx_structural_fact_live
-  ON structural_facts(subject_kind, subject_id, fact) WHERE superseded_at IS NULL;
+CREATE INDEX idx_structural_facts_subject ON structural_facts(subject_kind, subject_id);
 CREATE INDEX idx_substrate_evaluations ON substrate_evaluations(substrate, property);
 CREATE UNIQUE INDEX idx_support_channels_one_feed_per_provider
   ON support_channels(product_id, fed_by)
@@ -5368,6 +5378,8 @@ CREATE INDEX idx_workspaces_live ON workspaces(founder_id) WHERE destroyed_at IS
 CREATE INDEX owner_decision_reversals_subject
   ON owner_decision_reversals (subject_kind, subject_id);
 CREATE INDEX owner_exclusion_marks_value ON owner_exclusion_marks (kind, value);
+CREATE UNIQUE INDEX structural_facts_live
+  ON structural_facts(subject_kind, subject_id, fact) WHERE superseded_at IS NULL;
 CREATE TRIGGER acquisition_economics_guard
 BEFORE INSERT ON acquisition_economics
 BEGIN
@@ -9421,16 +9433,11 @@ BEGIN SELECT RAISE(ABORT,'stance_bearing:constitutional'); END;
 CREATE TRIGGER stance_bearings_constitutional_update
 BEFORE UPDATE ON stance_bearings
 BEGIN SELECT RAISE(ABORT,'stance_bearing:constitutional'); END;
-CREATE TRIGGER structural_fact_guard
+CREATE TRIGGER structural_fact_enforced_names_its_control
 BEFORE INSERT ON structural_facts
 BEGIN
-  SELECT RAISE(ABORT,'structural_fact:incomplete')
-    WHERE trim(NEW.subject_id) = '' OR trim(NEW.recognised_by) = '';
-  -- AN UNKNOWN HAS NO BASIS BUT UNKNOWN, AND A KNOWN ANSWER IS NOT UNKNOWN.
-  SELECT RAISE(ABORT,'structural_fact:unknown_means_unknown')
-    WHERE (NEW.present IS NULL) <> (NEW.basis = 'unknown');
-  SELECT RAISE(ABORT,'structural_fact:cannot_arrive_superseded')
-    WHERE NEW.superseded_at IS NOT NULL;
+  SELECT RAISE(ABORT,'structural_fact:enforced_names_nothing')
+    WHERE NEW.basis = 'enforced' AND (NEW.enforced_by IS NULL OR trim(NEW.enforced_by) = '');
 END;
 CREATE TRIGGER structural_fact_kinds_constitutional_delete
 BEFORE DELETE ON structural_fact_kinds
@@ -9441,13 +9448,6 @@ BEGIN SELECT RAISE(ABORT,'structural_fact_kind:constitutional'); END;
 CREATE TRIGGER structural_fact_kinds_constitutional_update
 BEFORE UPDATE ON structural_fact_kinds
 BEGIN SELECT RAISE(ABORT,'structural_fact_kind:constitutional'); END;
-CREATE TRIGGER structural_fact_supersede_only
-BEFORE UPDATE ON structural_facts
-BEGIN
-  SELECT RAISE(ABORT,'structural_fact:immutable_except_supersession')
-    WHERE NEW.present IS NOT OLD.present OR NEW.basis IS NOT OLD.basis
-       OR NEW.grounds IS NOT OLD.grounds OR NEW.fact IS NOT OLD.fact;
-END;
 CREATE TRIGGER support_channel_guard
 BEFORE INSERT ON support_channels
 BEGIN

@@ -59,18 +59,92 @@ const SYSTEM = [
 ].join('\n');
 
 /** The structural facts of a brief, which are properties of the recipe and not opinions. */
+/**
+ * WHAT A BRIEF ACTUALLY IS, and what kind of claim each line is.
+ *
+ * These are the premises the first-proof policy is evaluated against, and
+ * three of them used to be recipe INTENTIONS recorded as though somebody had
+ * checked. An independent reviewer traced the path — recipe to structural fact
+ * to policy verdict — and found nothing anywhere that said which was which.
+ *
+ *   "nothing kept beyond the order record" — the order record holds the
+ *   buyer's email address. That is personal information, kept. Saying it is
+ *   not kept does not make it not kept; it defines it away, and the owner
+ *   needs it carried honestly through the lifecycle rather than argued out of
+ *   existence.
+ *
+ *   "sells to businesses in the United States" — an intention. A public
+ *   payment link takes a card from anywhere, and nothing in this institution
+ *   refuses one.
+ *
+ *   "a refund on request instead of support" — a refund policy does not remove
+ *   delivery failures or the work of handling them. This institution proved,
+ *   one wave ago, that it carries exactly those obligations: a bounced
+ *   delivery is refunded, a buyer may ask for their money back through a
+ *   signed link, and where goods cannot go out the owner is asked to act.
+ *
+ * So each fact now says whether a control ENFORCES it, whether somebody
+ * OBSERVED it, or whether it is ASSUMED. The policy can then refuse to treat
+ * an assumption as a finding, which is the whole repair.
+ */
 export function briefFacts(): OfferShapePlan['facts'] {
   return {
-    recurring_billing: { present: 0, grounds: 'Charges: one-time; nothing renews' },
-    persistent_personal_data: { present: 0, grounds: 'Collects: the buyer\'s email for the one delivery and a refund on request; nothing kept beyond the order record' },
-    cross_border_selling: { present: 0, grounds: 'Sells to: businesses in the United States, written to once each' },
-    support_obligation: { present: 0, grounds: 'Delivers: one brief, once; a refund on request instead of support' },
-    manual_fulfilment: { present: 0, grounds: 'Delivers by: the hand sends the brief by email when the payment settles; nobody does anything by hand per sale' },
-    user_generated_content: { present: 0, grounds: 'Sells: a shortlist of public records with their addresses, nobody\'s words republished as the Workshop\'s own' },
-    account_system: { present: 0, grounds: 'Delivers by: email; no account with the Workshop' },
-    two_sided_marketplace: { present: 0, grounds: 'Sells to: one audience, the buyer' },
-    one_visit_delivery: { present: 1, grounds: 'Delivers by: a buyer pays and the brief arrives by email' },
-    front_loaded_attention: { present: 0, grounds: 'The brief is made from rows the eyes keep; nobody\'s attention is spent per edition' },
+    recurring_billing: {
+      present: 0, basis: 'enforced',
+      enforcedBy: 'validateExperimentPaymentLink refuses a recurring link before any offer goes out',
+      grounds: 'Charges: one-time; nothing renews, and the gate refuses a link that would',
+    },
+    // CHECKED, NOT INFERRED. A reviewer reasoned that an order record must
+    // hold the buyer's email, and that is a sound inference about most
+    //institutions and wrong about this one: `buyerAddressFor` reads the
+    // address from the provider at the moment of delivery, and the only
+    // durable trace is a keyed hash that exists to tell the owner's own
+    // payments apart from the market's. The claim survives being checked, so
+    // it stands — and the grounds now say what IS kept rather than implying
+    // nothing is.
+    persistent_personal_data: {
+      present: 0, basis: 'observed',
+      grounds: 'Collects: the buyer\'s email is read from the provider at delivery and not stored; '
+        + 'what stays is a keyed hash of it, which tells the owner\'s own payments from the '
+        + 'market\'s and cannot be read back into an address. No account, no profile, no tracking',
+    },
+    cross_border_selling: {
+      present: 0, basis: 'assumed',
+      grounds: 'Sells to: businesses in the United States, written to once each. That is who the '
+        + 'offer is written for and who is contacted; the public way to pay is not restricted by '
+        + 'country, so this is an intention rather than a boundary anything enforces',
+    },
+    // NOT ONGOING HELP — and not nothing either. The fact asks whether a buyer
+    // would reasonably expect continuing support; for one brief sold once with
+    // a refund link, they would not. What the institution DOES owe is named
+    // here rather than left out, because "a refund instead of support" read as
+    // though there were no obligations at all, and there are three.
+    support_obligation: {
+      present: 0, basis: 'observed',
+      grounds: 'Delivers: one brief, once; a refund on request instead of ongoing help. What is owed '
+        + 'is bounded and real: the brief itself, a refund when a delivery fails or a buyer asks '
+        + 'through the signed link, and a decision for the owner where goods cannot go out at all',
+    },
+    manual_fulfilment: {
+      present: 0, basis: 'observed',
+      grounds: 'Delivers by: the hand sends the brief by email when the payment settles; nobody does anything by hand per sale',
+    },
+    user_generated_content: {
+      present: 0, basis: 'observed',
+      grounds: 'Sells: a shortlist of public records with their addresses, nobody\'s words republished as the Workshop\'s own',
+    },
+    account_system: {
+      present: 0, basis: 'enforced',
+      enforcedBy: 'there is no account system in this institution for a buyer to be given one',
+      grounds: 'Delivers by: email; no account with the Workshop',
+    },
+    two_sided_marketplace: { present: 0, basis: 'observed', grounds: 'Sells to: one audience, the buyer' },
+    one_visit_delivery: { present: 1, basis: 'observed', grounds: 'Delivers by: a buyer pays and the brief arrives by email' },
+    front_loaded_attention: {
+      present: 0, basis: 'assumed',
+      grounds: 'The brief is made from rows the eyes keep; nobody\'s attention is spent per edition. '
+        + 'Assumed until an edition has actually been refreshed without him',
+    },
   };
 }
 

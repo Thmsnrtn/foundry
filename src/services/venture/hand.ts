@@ -378,7 +378,20 @@ export interface OfferShapePlan {
    */
   venue?: 'workshop';
   /** structural_fact_kinds.fact → present, with grounds; written as the pass would, basis offer_shape. */
-  facts: Record<string, { present: 0 | 1; grounds: string }>;
+  /**
+   * WHAT KIND OF CLAIM EACH ONE IS, not only what it claims. A recipe's
+   * intention satisfied a binding policy requirement exactly as an observation
+   * would, and nothing said which it was; `basis` is now carried from the
+   * composition to the record so the policy can tell them apart.
+   */
+  facts: Record<string, {
+    present: 0 | 1;
+    grounds: string;
+    /** enforced (a named control makes it true), observed (somebody looked), or assumed. */
+    basis?: 'enforced' | 'observed' | 'assumed';
+    /** For an enforced claim: the control that would refuse. Required by the rows. */
+    enforcedBy?: string;
+  }>;
   price: OfferPrice;
   offerSubject: string;
 }
@@ -402,10 +415,15 @@ export async function statedShapeAndFacts(e: ExperimentRow, productId: string, p
   for (const [fact, f] of Object.entries(plan.facts)) {
     const already = await one(`SELECT id FROM structural_facts WHERE subject_kind = 'company' AND subject_id = ? AND fact = ? AND superseded_at IS NULL`, [productId, fact]);
     if (already) continue;
+    // THE COMPOSITION'S OWN WORD FOR WHAT KIND OF CLAIM THIS IS. Where it does
+    // not say, the honest default is `assumed`: a fact nobody classified came
+    // from a recipe, and calling that `offer_shape` let it satisfy a binding
+    // requirement as if somebody had checked.
     await query(
-      `INSERT INTO structural_facts (id, founder_id, subject_kind, subject_id, fact, present, basis, grounds, recognised_by, evidence_mode)
-       VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      [`sf_${nanoid(8)}`, e.founderId, 'company', productId, fact, f.present, 'offer_shape', f.grounds, HAND, e.evidenceMode]);
+      `INSERT INTO structural_facts (id, founder_id, subject_kind, subject_id, fact, present, basis, grounds, enforced_by, recognised_by, evidence_mode)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+      [`sf_${nanoid(8)}`, e.founderId, 'company', productId, fact, f.present,
+        f.basis ?? 'assumed', f.grounds, f.enforcedBy ?? null, HAND, e.evidenceMode]);
   }
 }
 
