@@ -1614,6 +1614,21 @@ CREATE TABLE experiment_path_kinds (
   exists_after_approval INTEGER NOT NULL DEFAULT 0 CHECK (exists_after_approval IN (0,1)),
   sort_order  INTEGER NOT NULL
 );
+CREATE TABLE experiment_path_outages (
+  id            TEXT PRIMARY KEY,
+  experiment_id TEXT NOT NULL REFERENCES venture_experiments(id),
+  -- Carried as its siblings carry it, so the erasure walks it by founder.
+  founder_id    TEXT NOT NULL REFERENCES founders(id),
+  kind          TEXT NOT NULL REFERENCES experiment_path_kinds(kind),
+  -- When the path was first found not working, and in the owner's words what
+  -- was wrong. Neither is ever rewritten.
+  broke_at      TEXT NOT NULL,
+  broke_detail  TEXT NOT NULL,
+  -- When a working reading closed it, and what that reading said. Null while
+  -- the interval is still open.
+  mended_at     TEXT,
+  mended_detail TEXT
+);
 CREATE TABLE experiment_paths (
   experiment_id TEXT NOT NULL REFERENCES venture_experiments(id),
   -- Carried as its siblings carry it (`experiment_fulfilments`,
@@ -5027,6 +5042,8 @@ CREATE UNIQUE INDEX idx_experiment_exposure_ref
 CREATE INDEX idx_experiment_fulfilments ON experiment_fulfilments(experiment_id, status);
 CREATE UNIQUE INDEX idx_experiment_materials_live
   ON experiment_materials(experiment_id, kind) WHERE superseded_at IS NULL;
+CREATE INDEX idx_experiment_path_outages ON experiment_path_outages(experiment_id, kind, broke_at);
+CREATE INDEX idx_experiment_path_outages_open ON experiment_path_outages(experiment_id, kind, mended_at);
 CREATE INDEX idx_experiment_paths_broken ON experiment_paths(experiment_id, broken_since);
 CREATE INDEX idx_experiment_recipients ON experiment_recipients(experiment_id, review_status);
 CREATE INDEX idx_experiment_variants_experiment ON experiment_variants(experiment_id);
@@ -6462,6 +6479,35 @@ BEGIN SELECT RAISE(ABORT,'experiment_path_kind:constitutional'); END;
 CREATE TRIGGER experiment_path_kinds_constitutional_update
 BEFORE UPDATE ON experiment_path_kinds
 BEGIN SELECT RAISE(ABORT,'experiment_path_kind:constitutional'); END;
+CREATE TRIGGER experiment_path_outage_is_never_deleted
+BEFORE DELETE ON experiment_path_outages
+BEGIN
+  SELECT RAISE(ABORT,'path_outage:never_deleted') WHERE NOT EXISTS (
+    SELECT 1 FROM products p WHERE p.owner_id = OLD.founder_id AND p.erasure_scheduled_at IS NOT NULL);
+END;
+CREATE TRIGGER experiment_path_outage_is_not_rewritten
+BEFORE UPDATE ON experiment_path_outages
+BEGIN
+  -- WHAT WAS FOUND IS WHAT WAS FOUND. Only the mending may be added.
+  SELECT RAISE(ABORT,'path_outage:immutable')
+    WHERE NEW.id <> OLD.id OR NEW.experiment_id <> OLD.experiment_id
+       OR NEW.founder_id <> OLD.founder_id OR NEW.kind <> OLD.kind
+       OR NEW.broke_at <> OLD.broke_at OR NEW.broke_detail <> OLD.broke_detail;
+  -- A MENDING IS NEVER UN-SAID, and never moved once said.
+  SELECT RAISE(ABORT,'path_outage:mending_is_kept')
+    WHERE OLD.mended_at IS NOT NULL
+      AND (NEW.mended_at IS NULL OR NEW.mended_at <> OLD.mended_at);
+  -- AND NEVER PREDATES THE BREAK, which would make the interval a nonsense.
+  SELECT RAISE(ABORT,'path_outage:mended_before_broken')
+    WHERE NEW.mended_at IS NOT NULL AND NEW.mended_at < NEW.broke_at;
+END;
+CREATE TRIGGER experiment_path_outage_says_what_was_wrong
+BEFORE INSERT ON experiment_path_outages
+BEGIN
+  SELECT RAISE(ABORT,'path_outage:unsaid') WHERE trim(NEW.broke_detail) = '';
+  SELECT RAISE(ABORT,'path_outage:mended_before_broken')
+    WHERE NEW.mended_at IS NOT NULL AND NEW.mended_at < NEW.broke_at;
+END;
 CREATE TRIGGER experiment_recipient_contact_kind_guard
 BEFORE UPDATE OF contact_kind, contact_source ON experiment_recipients
 BEGIN

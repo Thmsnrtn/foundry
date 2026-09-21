@@ -80,6 +80,8 @@ export interface ExperimentView {
   exceptions: string[];
   /** What stood between this test's question and an answer (venture/the-instrument.ts). */
   instrumentDoubts: Array<import('../venture/the-instrument.js').InstrumentDoubt>;
+  /** Every interval a path this test depends on was not working, oldest first. */
+  instrumentOutages: Array<import('../venture/the-instrument.js').PathOutage>;
   timeline: TimelineEvent[];
   controls: { canStop: boolean; allowance: { budget: string; statement: string } | null; actId: string | null };
   details: Array<[string, string]>;
@@ -332,6 +334,15 @@ export async function getExperimentView(founderId: string, experimentId: string,
     instrumentDoubts: await (async () => {
       const { doubtsAboutTheInstrument } = await import('../venture/the-instrument.js');
       return doubtsAboutTheInstrument(experimentId);
+    })(),
+    // AND WHAT WAS BROKEN WHILE IT RAN, AFTER IT WAS MENDED. The reading above
+    // is about now; these are the intervals, open and closed, that the record
+    // keeps for good. A repair used to take them away, which left the owner
+    // reading a settled result with no way to know what it had been measured
+    // through.
+    instrumentOutages: await (async () => {
+      const { outagesAcross } = await import('../venture/the-instrument.js');
+      return outagesAcross(experimentId);
     })(),
     exceptions: await handExceptions(experimentId),
     timeline: await getExperimentTimeline(founderId, experimentId),

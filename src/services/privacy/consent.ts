@@ -1051,6 +1051,15 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
       + 'each of them never permits',
     onAccountErasure: { op: 'delete' },
   },
+  // EVERY INTERVAL A PATH ONE PERSON'S TEST DEPENDED ON WAS NOT WORKING. Kept
+  // so that a repair cannot take away what a settled result was measured
+  // through; it names his own channels and nobody else, and goes with the
+  // tests it belongs to. Its delete guard stands aside for exactly this.
+  experiment_path_outages: {
+    reason: 'the intervals one person\'s own channels were not working while their '
+      + 'own tests were asking the world',
+    onAccountErasure: { op: 'delete' },
+  },
   // WHETHER A REPLY TO HIS OWN WORKSHOP'S ADDRESS ARRIVES. Each row is one
   // message the institution sent to itself and looked for; the only address in
   // it is his Workshop's own advertised one, and no stranger appears in it at

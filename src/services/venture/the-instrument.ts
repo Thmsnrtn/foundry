@@ -177,6 +177,42 @@ export async function doubtsAboutTheInstrument(experimentId: string): Promise<In
       });
     }
   }
+
+  // ─── AND THE PATHS NO DAY RECORD COVERS ──────────────────────────────────
+  //
+  // `public_channel_days` watches the Workshop's channels. The way to pay, the
+  // way what was bought reaches a buyer, and the way a payment is heard about
+  // are not channels of the Workshop; they have no `observed_on`, so the loop
+  // above skips them — and a test whose way to pay was down for three of its
+  // seven days raised no doubt at all.
+  //
+  // Their record is the interval kept by `experiment_path_outages`, which is
+  // why that table had to exist before this question could be asked: until a
+  // repair stopped erasing the interval there was nothing here to read.
+  if (window) {
+    const overlapping = (await query(
+      `SELECT o.kind, o.broke_at, o.broke_detail, o.mended_at
+         FROM experiment_path_outages o
+         JOIN experiment_paths p ON p.experiment_id = o.experiment_id AND p.kind = o.kind
+         JOIN experiment_path_kinds k ON k.kind = o.kind
+        WHERE o.experiment_id = ? AND p.essential = 1 AND k.observed_on IS NULL
+          AND date(o.broke_at) <= ? AND (o.mended_at IS NULL OR date(o.mended_at) >= ?)
+        ORDER BY o.broke_at`, [experimentId, window.to, window.from]))
+      .rows as unknown as Row[];
+    for (const o of overlapping) {
+      const kind = String(o.kind) as PathKind;
+      const from = String(o.broke_at).slice(0, 10);
+      const to = o.mended_at == null ? null : String(o.mended_at).slice(0, 10);
+      out.push({
+        channel: kind === 'reply' ? 'reply' : 'payment',
+        sentence: `${PATH_NAMES[kind]} was not working from ${from}${to ? ` to ${to}` : ', and still is not'}`
+          + `, which overlaps the days this test was asking (${o.broke_detail == null ? '' : String(o.broke_detail)}).`,
+        doesNotEstablish: 'that the offer was refused: part of what it asked people to do was not there to be done, '
+          + 'and what they would have done with a working one is not in this result.',
+        daysBroken: 0, daysUnrecorded: 0,
+      });
+    }
+  }
   return out;
 }
 
@@ -419,6 +455,7 @@ export async function verifyInstrument(
         found.status, now.toISOString(), found.status,
         found.status, found.status === 'not_working' ? found.detail : null, found.status,
         experimentId, found.kind]);
+    await keepTheInterval(experimentId, String(e.founder_id), found, now);
     const row = (await query(
       `SELECT broken_since, broken_detail FROM experiment_paths WHERE experiment_id = ? AND kind = ?`, [experimentId, found.kind]))
       .rows[0] as Row | undefined;
@@ -427,6 +464,79 @@ export async function verifyInstrument(
       brokenDetail: row?.broken_detail == null ? null : String(row.broken_detail) });
   }
   return out;
+}
+
+/**
+ * AN OUTAGE IS KEPT AFTER IT ENDS.
+ *
+ * `experiment_paths` holds the CURRENT reading, and the morning the route came
+ * back it set `broken_since` to NULL — so the institution then held no record
+ * that anything had ever been wrong. That is the failure this whole campaign
+ * is about, committed by the machinery built to prevent it: what a result
+ * establishes depends on whether the instrument was working WHILE THE WORLD
+ * WAS ASKED, and a record whose only state is "now" cannot answer that.
+ *
+ * So the interval is opened when the path is first found not working and
+ * CLOSED when it comes back. Closing is not deleting. The current reading
+ * stays where it was; this is the history beside it, and nothing rewrites it.
+ */
+async function keepTheInterval(
+  experimentId: string, founderId: string,
+  found: { kind: string; status: PathStatus; detail: string }, now: Date,
+): Promise<void> {
+  const open = (await query(
+    `SELECT id FROM experiment_path_outages
+      WHERE experiment_id = ? AND kind = ? AND mended_at IS NULL
+      ORDER BY broke_at DESC LIMIT 1`, [experimentId, found.kind]))
+    .rows[0] as Row | undefined;
+  if (found.status === 'not_working') {
+    if (open) return; // one interval, still running
+    await query(
+      `INSERT INTO experiment_path_outages (id, experiment_id, founder_id, kind, broke_at, broke_detail)
+       VALUES (?,?,?,?,?,?)`,
+      [`epo_${experimentId}_${found.kind}_${now.getTime()}`, experimentId, founderId, found.kind,
+        now.toISOString(), found.detail || 'not working']);
+    return;
+  }
+  // AND ONLY A WORKING READING CLOSES IT, for the same reason a working
+  // reading is the only thing that clears `broken_since`: an unreadable pass
+  // is not a repair.
+  if (found.status === 'working' && open) {
+    await query(
+      `UPDATE experiment_path_outages SET mended_at = ?, mended_detail = ? WHERE id = ?`,
+      [now.toISOString(), found.detail || 'working', String(open.id)]);
+  }
+}
+
+export interface PathOutage {
+  kind: string;
+  /** The path's name in the owner's words. */
+  name: string;
+  brokeAt: string;
+  brokeDetail: string;
+  /** Null while it is still broken. */
+  mendedAt: string | null;
+  mendedDetail: string | null;
+}
+
+/**
+ * EVERY INTERVAL THIS TEST'S INSTRUMENT WAS BROKEN FOR, open and closed, oldest
+ * first. What a reader needs to decide what a settled result establishes, and
+ * the thing a repair used to take away.
+ */
+export async function outagesAcross(experimentId: string): Promise<PathOutage[]> {
+  const rows = (await query(
+    `SELECT kind, broke_at, broke_detail, mended_at, mended_detail
+       FROM experiment_path_outages WHERE experiment_id = ? ORDER BY broke_at`, [experimentId]))
+    .rows as unknown as Row[];
+  return rows.map((r) => ({
+    kind: String(r.kind),
+    name: PATH_NAMES[String(r.kind) as PathKind] ?? String(r.kind),
+    brokeAt: String(r.broke_at),
+    brokeDetail: String(r.broke_detail),
+    mendedAt: r.mended_at == null ? null : String(r.mended_at),
+    mendedDetail: r.mended_detail == null ? null : String(r.mended_detail),
+  }));
 }
 
 /**

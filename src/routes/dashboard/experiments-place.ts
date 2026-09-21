@@ -442,6 +442,16 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
     <h1>${v.assetName ?? 'The test'} <span class="state ${stateCls}">${v.stateLabel}</span></h1>
     ${notice(done, error)}
     <p class="lede">${v.stateDetail}</p>
+    ${/* WHAT WAS BROKEN WHILE IT RAN, WHETHER OR NOT IT STILL IS. The
+          institution used to hold only the current reading, so the morning a
+          path came back the record that this test had been measured through a
+          broken one was gone. These are the intervals, kept — and they are
+          here rather than beside the outcome because a test still running is
+          the one the owner can still act on. */ ''}
+    ${v.instrumentOutages.length ? html`<div class="noticed" role="note">
+      <p><strong>What was not working while it ran.</strong> A result is only evidence about the world if the world could have answered.</p>
+      <ul class="plain">${v.instrumentOutages.map((o) => html`<li>${o.name} — from ${dayOf(o.brokeAt)}${o.mendedAt ? html` to ${dayOf(o.mendedAt)}` : ', and still is'}: ${o.brokeDetail}</li>`)}</ul>
+    </div>` : ''}
     ${v.outcome.concluded ? html`<section class="panel exp-outcome" id="outcome" aria-label="What happened and why">
       <header><h2>${mark('experiment')}What happened and why</h2>${v.outcome.when ? html`<span class="dim">${dayOf(v.outcome.when)}</span>` : ''}</header>
       <p><span class="state ${stateCls}">${v.outcome.label}</span> ${v.outcome.meaning}</p>
