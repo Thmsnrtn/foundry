@@ -67,13 +67,41 @@ SELECT id, founder_id, subject_kind, subject_id, fact, present, basis, grounds,
 DROP TABLE structural_facts;
 ALTER TABLE structural_facts_new RENAME TO structural_facts;
 
-CREATE UNIQUE INDEX structural_facts_live
+CREATE UNIQUE INDEX idx_structural_fact_live
   ON structural_facts(subject_kind, subject_id, fact) WHERE superseded_at IS NULL;
-CREATE INDEX idx_structural_facts_subject ON structural_facts(subject_kind, subject_id);
 
-CREATE TRIGGER structural_fact_enforced_names_its_control
+-- ─── AND EVERY GUARD THE OLD TABLE CARRIED ──────────────────────────────────
+--
+-- A rebuild drops the triggers with the table, and the first version of this
+-- migration recreated one of them. The institution then accepted a fact whose
+-- basis said `unknown` while its answer said otherwise, and accepted an edit
+-- to a recorded fact in place — two guarantees quietly gone in a migration
+-- about honesty. The proof that holds them caught it.
+--
+-- Restated verbatim, with the new column folded into the one that governs it.
+
+CREATE TRIGGER structural_fact_guard
 BEFORE INSERT ON structural_facts
 BEGIN
+  SELECT RAISE(ABORT,'structural_fact:incomplete')
+    WHERE trim(NEW.subject_id) = '' OR trim(NEW.recognised_by) = '';
+  -- AN UNKNOWN HAS NO BASIS BUT UNKNOWN, AND A KNOWN ANSWER IS NOT UNKNOWN.
+  SELECT RAISE(ABORT,'structural_fact:unknown_means_unknown')
+    WHERE (NEW.present IS NULL) <> (NEW.basis = 'unknown');
+  SELECT RAISE(ABORT,'structural_fact:cannot_arrive_superseded')
+    WHERE NEW.superseded_at IS NOT NULL;
+  -- A CLAIM THAT SAYS SOMETHING ENFORCES IT MUST SAY WHAT. Without this,
+  -- `enforced` is `assumed` wearing a better word, and the word is the only
+  -- thing the policy has to go on.
   SELECT RAISE(ABORT,'structural_fact:enforced_names_nothing')
     WHERE NEW.basis = 'enforced' AND (NEW.enforced_by IS NULL OR trim(NEW.enforced_by) = '');
+END;
+
+CREATE TRIGGER structural_fact_supersede_only
+BEFORE UPDATE ON structural_facts
+BEGIN
+  SELECT RAISE(ABORT,'structural_fact:immutable_except_supersession')
+    WHERE NEW.present IS NOT OLD.present OR NEW.basis IS NOT OLD.basis
+       OR NEW.grounds IS NOT OLD.grounds OR NEW.fact IS NOT OLD.fact
+       OR NEW.enforced_by IS NOT OLD.enforced_by;
 END;

@@ -5309,7 +5309,8 @@ CREATE INDEX idx_stressor_product ON stressor_history(product_id);
 CREATE INDEX idx_stressor_product_active ON stressor_history(product_id, status);
 CREATE INDEX idx_stressor_status ON stressor_history(status);
 CREATE INDEX idx_stripe_events_product ON stripe_events(product_id, processed);
-CREATE INDEX idx_structural_facts_subject ON structural_facts(subject_kind, subject_id);
+CREATE UNIQUE INDEX idx_structural_fact_live
+  ON structural_facts(subject_kind, subject_id, fact) WHERE superseded_at IS NULL;
 CREATE INDEX idx_substrate_evaluations ON substrate_evaluations(substrate, property);
 CREATE UNIQUE INDEX idx_support_channels_one_feed_per_provider
   ON support_channels(product_id, fed_by)
@@ -5378,8 +5379,6 @@ CREATE INDEX idx_workspaces_live ON workspaces(founder_id) WHERE destroyed_at IS
 CREATE INDEX owner_decision_reversals_subject
   ON owner_decision_reversals (subject_kind, subject_id);
 CREATE INDEX owner_exclusion_marks_value ON owner_exclusion_marks (kind, value);
-CREATE UNIQUE INDEX structural_facts_live
-  ON structural_facts(subject_kind, subject_id, fact) WHERE superseded_at IS NULL;
 CREATE TRIGGER acquisition_economics_guard
 BEFORE INSERT ON acquisition_economics
 BEGIN
@@ -9433,9 +9432,19 @@ BEGIN SELECT RAISE(ABORT,'stance_bearing:constitutional'); END;
 CREATE TRIGGER stance_bearings_constitutional_update
 BEFORE UPDATE ON stance_bearings
 BEGIN SELECT RAISE(ABORT,'stance_bearing:constitutional'); END;
-CREATE TRIGGER structural_fact_enforced_names_its_control
+CREATE TRIGGER structural_fact_guard
 BEFORE INSERT ON structural_facts
 BEGIN
+  SELECT RAISE(ABORT,'structural_fact:incomplete')
+    WHERE trim(NEW.subject_id) = '' OR trim(NEW.recognised_by) = '';
+  -- AN UNKNOWN HAS NO BASIS BUT UNKNOWN, AND A KNOWN ANSWER IS NOT UNKNOWN.
+  SELECT RAISE(ABORT,'structural_fact:unknown_means_unknown')
+    WHERE (NEW.present IS NULL) <> (NEW.basis = 'unknown');
+  SELECT RAISE(ABORT,'structural_fact:cannot_arrive_superseded')
+    WHERE NEW.superseded_at IS NOT NULL;
+  -- A CLAIM THAT SAYS SOMETHING ENFORCES IT MUST SAY WHAT. Without this,
+  -- `enforced` is `assumed` wearing a better word, and the word is the only
+  -- thing the policy has to go on.
   SELECT RAISE(ABORT,'structural_fact:enforced_names_nothing')
     WHERE NEW.basis = 'enforced' AND (NEW.enforced_by IS NULL OR trim(NEW.enforced_by) = '');
 END;
@@ -9448,6 +9457,14 @@ BEGIN SELECT RAISE(ABORT,'structural_fact_kind:constitutional'); END;
 CREATE TRIGGER structural_fact_kinds_constitutional_update
 BEFORE UPDATE ON structural_fact_kinds
 BEGIN SELECT RAISE(ABORT,'structural_fact_kind:constitutional'); END;
+CREATE TRIGGER structural_fact_supersede_only
+BEFORE UPDATE ON structural_facts
+BEGIN
+  SELECT RAISE(ABORT,'structural_fact:immutable_except_supersession')
+    WHERE NEW.present IS NOT OLD.present OR NEW.basis IS NOT OLD.basis
+       OR NEW.grounds IS NOT OLD.grounds OR NEW.fact IS NOT OLD.fact
+       OR NEW.enforced_by IS NOT OLD.enforced_by;
+END;
 CREATE TRIGGER support_channel_guard
 BEFORE INSERT ON support_channels
 BEGIN

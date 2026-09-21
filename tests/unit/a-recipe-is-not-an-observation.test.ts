@@ -131,3 +131,45 @@ describe('what the policy does with each kind', () => {
     expect(String(kinds.sql), 'the old basis is still a value the column accepts').toContain("'offer_shape'");
   });
 });
+
+describe('and the rebuild did not quietly drop the guards it inherited', () => {
+  // A TABLE REBUILD TAKES ITS TRIGGERS WITH IT. The first version of this
+  // migration recreated one of the three, and for as long as that stood the
+  // institution would have accepted a fact whose basis said `unknown` while
+  // its answer said otherwise, and an edit to a recorded fact in place — two
+  // guarantees gone, in a migration about honesty. The proof that holds them
+  // caught it; this one holds them here too, where the rebuild happened.
+  it('an unknown has no basis but unknown, and a known answer is not unknown', async () => {
+    await expect(query(
+      `INSERT INTO structural_facts (id, founder_id, subject_kind, subject_id, fact, present, basis, recognised_by, evidence_mode)
+       VALUES (?,?,'opportunity','rf_o','custody_of_money',1,'unknown','test','real')`,
+      [`sf_u${String(Math.random()).slice(2, 8)}`, OWNER]))
+      .rejects.toThrow(/structural_fact:unknown_means_unknown/);
+  });
+
+  it('a recorded fact is superseded, never edited in place', async () => {
+    const id = `sf_e${String(Math.random()).slice(2, 8)}`;
+    await query(
+      `INSERT INTO structural_facts (id, founder_id, subject_kind, subject_id, fact, present, basis, grounds, recognised_by, evidence_mode)
+       VALUES (?,?,'opportunity','rf_o2','custody_of_money',0,'observed','somebody looked','test','real')`,
+      [id, OWNER]);
+    await expect(query(`UPDATE structural_facts SET present = 1 WHERE id = ?`, [id]))
+      .rejects.toThrow(/structural_fact:immutable_except_supersession/);
+    await expect(query(`UPDATE structural_facts SET basis = 'enforced' WHERE id = ?`, [id]))
+      .rejects.toThrow(/structural_fact:immutable_except_supersession/);
+    // And the new column is governed by the same rule as the ones beside it.
+    await expect(query(`UPDATE structural_facts SET enforced_by = 'something' WHERE id = ?`, [id]))
+      .rejects.toThrow(/structural_fact:immutable_except_supersession/);
+    // Superseding it is what is allowed, and still is.
+    await expect(query(`UPDATE structural_facts SET superseded_at = datetime('now') WHERE id = ?`, [id]))
+      .resolves.toBeDefined();
+  });
+
+  it('and a fact still cannot arrive already superseded', async () => {
+    await expect(query(
+      `INSERT INTO structural_facts (id, founder_id, subject_kind, subject_id, fact, present, basis, recognised_by, evidence_mode, superseded_at)
+       VALUES (?,?,'opportunity','rf_o3','custody_of_money',0,'observed','test','real',datetime('now'))`,
+      [`sf_s${String(Math.random()).slice(2, 8)}`, OWNER]))
+      .rejects.toThrow(/structural_fact:cannot_arrive_superseded/);
+  });
+});

@@ -75,17 +75,58 @@ export const PROOF2_PLAN: OfferShapePlan = {
     chargesHow: 'one-time, $14 through Etsy Payments, no subscription, refunded on request through the venue',
   },
   lighter: 'a single workbook listed on a venue that already has buyers, takes the money and delivers the file; no site, no account, no software, no sending',
+  // ─── AND WHAT KIND OF CLAIM EACH ONE IS ──────────────────────────────────
+  //
+  // A listing sells through somebody else's venue, so most of these are
+  // observations about what the venue does and what this institution keeps.
+  // `cross_border_selling` was already the honest one — present, because a
+  // marketplace listing cannot be limited to a state — and it is the model for
+  // the rest: say what is true and say how it is known.
   facts: {
-    recurring_billing: { present: 0, grounds: 'Charges: one-time, no subscription; nothing renews' },
-    persistent_personal_data: { present: 0, grounds: 'Collects: the venue holds the buyer relationship; Foundry records the order number and amounts and never the buyer' },
-    cross_border_selling: { present: 1, grounds: 'Sells to: wherever the venue sells; a marketplace listing cannot be limited to one state, and the venue handles the buyer, the payment and any tax it collects' },
-    support_obligation: { present: 0, grounds: 'Delivers: one file, once; a refund on request instead of support; questions answered through the venue\'s messages by a person' },
-    manual_fulfilment: { present: 0, grounds: 'Delivers by: the venue\'s instant download; nobody does anything by hand per sale' },
-    user_generated_content: { present: 0, grounds: 'Sells: the institution\'s own workbook, nobody else\'s words or images' },
-    account_system: { present: 0, grounds: 'Delivers by: the venue; a guest checkout receives the file by receipt email; no account with Apex Micro' },
-    two_sided_marketplace: { present: 0, grounds: 'Sells to: one audience, the buyer; the venue is somebody else\'s marketplace, not one this institution runs' },
-    one_visit_delivery: { present: 1, grounds: 'Delivers by: instant download; a buyer arrives, understands, pays and receives in one visit' },
-    front_loaded_attention: { present: 1, grounds: 'The owner\'s non-delegable work is spent once, before the listing: open the shop, attach the account, review the file and the words, list it; then three short readings' },
+    recurring_billing: {
+      present: 0, basis: 'observed',
+      grounds: 'Charges: one-time, no subscription; nothing renews',
+    },
+    persistent_personal_data: {
+      present: 0, basis: 'observed',
+      grounds: 'Collects: the venue holds the buyer relationship; Foundry records the order number and amounts and never the buyer',
+    },
+    cross_border_selling: {
+      present: 1, basis: 'observed',
+      grounds: 'Sells to: wherever the venue sells; a marketplace listing cannot be limited to one state, and the venue handles the buyer, the payment and any tax it collects',
+    },
+    // A PERSON ANSWERS MESSAGES, AND THAT IS NAMED. A buyer of one workbook
+    // would not reasonably expect continuing support, which is what this fact
+    // asks — but the owner does answer through the venue, and leaving that out
+    // would read as though nothing were owed at all.
+    support_obligation: {
+      present: 0, basis: 'observed',
+      grounds: 'Delivers: one file, once; a refund on request instead of support; questions answered through the venue\'s messages by a person',
+    },
+    manual_fulfilment: {
+      present: 0, basis: 'observed',
+      grounds: 'Delivers by: the venue\'s instant download; nobody does anything by hand per sale',
+    },
+    user_generated_content: {
+      present: 0, basis: 'observed',
+      grounds: 'Sells: the institution\'s own workbook, nobody else\'s words or images',
+    },
+    account_system: {
+      present: 0, basis: 'observed',
+      grounds: 'Delivers by: the venue; a guest checkout receives the file by receipt email; no account with Apex Micro',
+    },
+    two_sided_marketplace: {
+      present: 0, basis: 'observed',
+      grounds: 'Sells to: one audience, the buyer; the venue is somebody else\'s marketplace, not one this institution runs',
+    },
+    one_visit_delivery: {
+      present: 1, basis: 'observed',
+      grounds: 'Delivers by: instant download; a buyer arrives, understands, pays and receives in one visit',
+    },
+    front_loaded_attention: {
+      present: 1, basis: 'observed',
+      grounds: 'The owner\'s non-delegable work is spent once, before the listing: open the shop, attach the account, review the file and the words, list it; then three short readings',
+    },
   },
   price: {
     amountCents: PROOF2_PRICE_CENTS, currency: 'USD', lookupKey: 'foundry_proof2_bid_decision_workbook_one_time',
