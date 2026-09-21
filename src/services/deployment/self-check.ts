@@ -213,3 +213,81 @@ export async function observeSelf(now: Date = new Date()): Promise<SelfObservati
         + `${notCurrent.map((s) => `${s.about} — ${s.says}`).join('; ')}.`,
   };
 }
+
+// =============================================================================
+// HOW LONG COULD THIS BE GONE BEFORE ANYBODY NOTICED, and who is owed something
+// while it is.
+//
+// The header of this file already concedes the shape of the gap: a scheduler
+// that has stopped produces no errors, and silence and health are
+// indistinguishable from outside. What it did not do was SIZE the gap, and an
+// unsized gap reads as a caveat rather than as a number.
+//
+// The number is not a guess. `INSTITUTION_LOOPS` names a staleness bound for
+// every watched routine, and the tightest of those is the fastest anything in
+// here could possibly notice a stall - IF something is running to notice it.
+// When nothing is running, nothing notices at all, and the honest window is
+// "until you look at this page". Both facts are reported, because the first is
+// the one that sounds reassuring and the second is the one that is true.
+//
+// AND IT IS SAID BESIDE WHAT IS OWED. "Nothing would tell you" is a tolerable
+// sentence when nobody has paid for anything and an intolerable one when three
+// people are waiting for a brief. The promise is what makes the silence matter,
+// so the promise is in the same sentence.
+//
+// NOTHING HERE PUSHES. An outbound alert would have to leave this process, and
+// a process that has stopped cannot send one — which is why the answer to this
+// is a witness outside it, and a witness outside it is a third party, an
+// account and a bill. That is the owner's decision and it is recorded as one
+// rather than taken here.
+// =============================================================================
+
+export interface Unnoticed {
+  /** The last moment anything in here recorded itself finishing work. */
+  lastSignOfLife: string | null;
+  hoursSince: number | null;
+  /** The fastest any watched loop would be called stale — if anything were running. */
+  tightestBoundHours: number;
+  /** What is owed while it is silent. */
+  owedCount: number;
+  owedCents: number;
+  sentence: string;
+}
+
+export async function howLongCouldItBeGone(
+  founderId: string, now: Date = new Date(),
+): Promise<Unnoticed> {
+  const { INSTITUTION_LOOPS } = await import('../institution/loop-health.js');
+  const tightestBoundHours = Math.min(
+    ...Object.values(INSTITUTION_LOOPS).map((l) => l.staleAfterHours));
+
+  const last = (await query(
+    'SELECT MAX(last_success_at) AS t FROM job_health', []))
+    .rows[0] as Record<string, unknown> | undefined;
+  const lastSignOfLife = last?.t == null ? null : String(last.t);
+  const hoursSince = lastSignOfLife === null ? null
+    : Math.max(0, Math.round(
+      (now.getTime() - new Date(`${lastSignOfLife.replace(' ', 'T')}Z`).getTime()) / 3_600_000));
+
+  const { obligationsFor } = await import('../venture/obligations.js');
+  const open = await obligationsFor(founderId, now);
+  const owedCents = open.reduce((n, o) => n + o.amountCents, 0);
+
+  const promise = open.length === 0
+    ? 'Nobody is waiting on anything, so the silence costs nothing today.'
+    : `${String(open.length)} ${open.length === 1 ? 'person is' : 'people are'} waiting `
+      + `on ${dollarsOwed(owedCents)} of work meanwhile.`;
+
+  const sentence = `If this stopped now, nothing outside it would say so. From the inside a `
+    + `stalled routine is called stale after ${String(tightestBoundHours)} hours — but that `
+    + `reading is written by this same process, so a process that is gone produces no reading `
+    + `at all. The window is until you look. `
+    + `${lastSignOfLife === null ? 'Nothing here has ever recorded finishing a piece of work.'
+      : `The last thing that finished was ${String(hoursSince)} hours ago.`} ${promise}`;
+
+  return { lastSignOfLife, hoursSince, tightestBoundHours, owedCount: open.length, owedCents, sentence };
+}
+
+function dollarsOwed(cents: number): string {
+  return `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`;
+}

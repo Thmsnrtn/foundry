@@ -85,6 +85,8 @@ absenceRoutes.get('/foundry/absence', async (c: any) => {
 
   const readings = await absenceHorizons(founderId);
   const thinking = await cognitionEconomics(30);
+  const { howLongCouldItBeGone } = await import('../../services/deployment/self-check.js');
+  const gone = await howLongCouldItBeGone(founderId);
 
   const anyFailure = readings.some((r) => r.properties.some((p) => p.finding === 'DOES_NOT_HOLD'));
   const lede = anyFailure
@@ -98,6 +100,20 @@ absenceRoutes.get('/foundry/absence', async (c: any) => {
     <p class="lede">${lede}</p>
 
     <div class="absence-horizons">${readings.map(horizon)}</div>
+
+    ${/* AND THE ONE THING NONE OF THE FIVE PROPERTIES CAN ANSWER. Every
+         horizon above is read from records this process wrote; none of them
+         can be read if this process is gone, which is the failure an absent
+         owner actually meets. Sized, and said next to what is owed while it
+         is silent, because "nothing would tell you" means something different
+         when somebody has paid. */ ''}
+    <div class="know">
+      <h2>If it stopped while you were away</h2>
+      <p class="lede">${gone.sentence}</p>
+      <p class="quiet">Nothing here can fix that by itself: an alert has to leave this
+        process, and a process that has stopped cannot send one. A witness outside it is
+        a third party, an account and a bill &mdash; yours to decide, not mine to buy.</p>
+    </div>
 
     <div class="know cognition-economics">
       <h2>What thinking costs</h2>

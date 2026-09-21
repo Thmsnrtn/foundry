@@ -68,6 +68,11 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
   const pubs = await livePublications(founderId);
   const lists = await suppressionsOf(founderId, 50);
   const owed = await outstandingObligations(founderId);
+  // WHAT WOULD BE LEFT IF HE STOPPED, read before the decision rather than
+  // discovered after it. The pause below is the act; this is the answer to
+  // "and then what".
+  const { howThisWouldEnd } = await import('../../services/institution/winding-down.js');
+  const ending = await howThisWouldEnd(founderId);
   const receipts = await cloudflareReceipts(founderId, 25);
   const { continuationsFor } = await import('../../services/public-workshop/suppression.js');
   const answers = await continuationsFor(founderId, 50);
@@ -104,6 +109,17 @@ workshopRoutes.get('/foundry/public-workshop', async (c: any) => {
         <form method="POST" action="/foundry/public-workshop/resume"><button class="btn yes" type="submit">Resume</button></form>`
     : html`<p>Stops new offers, placements and tests without touching what is owed to anyone who already bought. The public site stays up; deliveries and refunds carry on${process.env.FOUNDRY_ENABLE_MONEY_TOOLS === 'true' ? '' : ' \u2014 though with this deployment\u2019s money-tools switch off, a refund waits for you'}.</p>
         <form method="POST" action="/foundry/public-workshop/pause" class="stack"><label>Why <input type="text" name="reason" required placeholder="one line, for the record" /></label><button class="btn" type="submit">Pause new economic activity</button></form>`}
+      ${/* AND WHAT WOULD BE LEFT. Stopping is only half a decision; the other
+           half is what stopping does not finish, and an owner who has to find
+           that out afterwards has been handed a surprise instead of a choice.
+           The uncomfortable half leads, whatever else is true. */ ''}
+      <h3>If you stopped now</h3>
+      <p>${ending.sentence}</p>
+      ${ending.itCannotSettle.length ? html`<ul>${ending.itCannotSettle.map((l) => html`<li><strong>${l.what}</strong> &mdash; ${l.because}.</li>`)}</ul>` : ''}
+      ${ending.stillAuthorised.length ? html`<p class="quiet">${String(ending.stillAuthorised.length)}
+        spending ${ending.stillAuthorised.length === 1 ? 'authority is' : 'authorities are'}
+        still live and would stay live: ${ending.stillAuthorised.map((a) => a.statement).join('; ')}.
+        Pausing does not withdraw them.</p>` : ''}
     </section>
 
     <section class="know" id="experiments"><h2>Public experiments</h2>

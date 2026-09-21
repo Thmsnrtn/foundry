@@ -45,10 +45,44 @@ export interface CompanyAutonomy {
   reach: number;
 }
 
+/**
+ * WHAT MAY HAPPEN WITHOUT HIM, BY KIND OF ACT RATHER THAN BY COMPANY.
+ *
+ * "Across everything, what can this thing do without me" has two honest
+ * answers, and this map only had one of them. Sorted by company, an estate's
+ * autonomy is its loosest point; sorted by KIND OF ACT it is something quite
+ * different, and more useful, because the kinds are not interchangeable.
+ * "It can spend without asking" and "it can publish without asking" are not the
+ * same sentence even when both are true of the same company, and an owner who
+ * reads only the company-shaped answer has to reconstruct the other one himself.
+ *
+ * THE KINDS ARE NOT A NEW TAXONOMY. They are the seven consequence rungs the
+ * door already gates on, read from the constitutional table with their own
+ * words, so there is nothing here to keep in step with anything. A rung that is
+ * not `absorbable` says so as a fact about the ladder rather than as a summary
+ * of the current state: no policy can ever pre-authorise it, and that does not
+ * change when the owner grants something.
+ */
+export interface ByConsequence {
+  rung: string;
+  /** The ladder's own words for what acts on this rung do. */
+  whatItMeans: string;
+  /** How many capabilities can reach this rung at all. */
+  capabilities: number;
+  /**
+   * Whether anything here can happen without him being asked, and why.
+   * 'never' is constitutional; the others are the current state.
+   */
+  standing: 'never' | 'nothing_can_do_this' | 'only_within_an_allowance' | 'where_you_allowed_it' | 'nowhere';
+  sentence: string;
+}
+
 export interface AutonomyMap {
   /** One sentence for the whole estate, led by its loosest point. */
   sentence: string;
   companies: CompanyAutonomy[];
+  /** The same estate read by kind of act rather than by company. */
+  byConsequence: ByConsequence[];
   /** True when nothing anywhere may act or spend without him. */
   nothingWithoutHim: boolean;
   /** Acts proposed and still waiting on him, across everything. */
@@ -112,7 +146,58 @@ export async function autonomyAcross(founderId: string): Promise<AutonomyMap> {
   const canSpend = readings.filter((r) => r.allowance && r.allowance.remainingCents > 0);
   const nothingWithoutHim = canAct.length === 0 && canSpend.length === 0;
 
-  return { sentence: sentenceFor(readings, canAct, canSpend, waitingOnHim), companies: readings, nothingWithoutHim, waitingOnHim };
+  return {
+    sentence: sentenceFor(readings, canAct, canSpend, waitingOnHim),
+    companies: readings,
+    byConsequence: await byConsequence(canAct, canSpend),
+    nothingWithoutHim, waitingOnHim,
+  };
+}
+
+async function byConsequence(
+  canAct: CompanyAutonomy[], canSpend: CompanyAutonomy[],
+): Promise<ByConsequence[]> {
+  const rungs = (await query(
+    `SELECT r.rung, r.what_it_means, r.absorbable,
+            (SELECT COUNT(*) FROM capabilities c WHERE c.rung = r.rung) AS n
+       FROM consequence_rungs r ORDER BY r.sort_order`, []))
+    .rows as unknown as Array<Record<string, unknown>>;
+
+  const where = (rows: CompanyAutonomy[]): string => rows.length === 1
+    ? rows[0].name : `${String(rows.length)} of them`;
+
+  return rungs.map((r) => {
+    const rung = String(r.rung);
+    const capabilities = Number(r.n);
+    const whatItMeans = String(r.what_it_means);
+    // NOT ABSORBABLE IS A PROPERTY OF THE LADDER, not of today. It is said the
+    // same way whether or not he has granted anything, because no grant can
+    // change it — and a sentence that softened when the estate got looser would
+    // be describing the estate rather than the rule.
+    if (Number(r.absorbable) === 0) {
+      return { rung, whatItMeans, capabilities, standing: 'never' as const,
+        sentence: `Never without asking you, wherever it is and whatever you have allowed `
+          + `elsewhere. Something that ${whatItMeans} is yours to decide one act at a time.` };
+    }
+    if (capabilities === 0) {
+      return { rung, whatItMeans, capabilities, standing: 'nothing_can_do_this' as const,
+        sentence: `Nothing here can do this at all yet, so there is nothing to allow.` };
+    }
+    if (rung === 'financial') {
+      return canSpend.length === 0
+        ? { rung, whatItMeans, capabilities, standing: 'nowhere' as const,
+          sentence: 'Nowhere. No allowance of yours is live, so anything that spends asks first.' }
+        : { rung, whatItMeans, capabilities, standing: 'only_within_an_allowance' as const,
+          sentence: `Only up to $${(canSpend.reduce((n, c) => n + (c.allowance?.remainingCents ?? 0), 0) / 100).toFixed(2)}, `
+            + `at ${where(canSpend)}, and only for what you said the allowance was for. `
+            + 'Past that it asks.' };
+    }
+    return canAct.length === 0
+      ? { rung, whatItMeans, capabilities, standing: 'nowhere' as const,
+        sentence: 'Nowhere on its own. Everything of this kind is proposed to you first.' }
+      : { rung, whatItMeans, capabilities, standing: 'where_you_allowed_it' as const,
+        sentence: `At ${where(canAct)}, within what you allowed there.` };
+  });
 }
 
 function sentenceFor(

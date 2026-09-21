@@ -193,6 +193,71 @@ export async function whatIsKept(): Promise<Array<{ name: string; bytes: number;
   } catch { return []; }
 }
 
+// =============================================================================
+// WHAT A COPY HAS TO CONTAIN TO BE WORTH HAVING.
+//
+// A COUNT OF TABLES IS A CLAIM ABOUT A SCHEMA, NOT ABOUT A LIABILITY. The
+// restore below used to answer "does it open, and are there founders in it",
+// which is a great deal better than "is there a file" and still not the
+// question somebody asks at four in the morning. That question is: if I
+// recovered from this, would I know who is owed something, what I hold of
+// theirs, what this institution is still allowed to spend, and which of my
+// assets is live?
+//
+// ONE STATEMENT, TWO CONNECTIONS, COMPARED. Each reading below is written once
+// and run against both the live database and the restored file, so there is no
+// second implementation to drift: a mismatch is a mismatch in the DATA, which
+// is the only thing a restore can get wrong. It is deliberately not a second
+// copy of the economic projection - that projection is canonical and this does
+// not restate it. What this establishes is narrower and honest: the rows the
+// projection stands on came back.
+//
+// AND IT IS SCOPED TO LIABILITY, NOT TO EVERYTHING. A restore that had to match
+// on every table would fail on the first row written between the copy and the
+// comparison, and an alarm that fires for a reason nobody believes is an alarm
+// nobody reads.
+//
+// NOT SCOPED TO AN OWNER, AND THAT IS DELIBERATE. A restore is asked whether
+// THE FILE came back, not whether one person's slice of it did. A founder
+// filter here would let a copy that lost somebody else's rows report a clean
+// recovery, which is the one answer this must never give.
+//
+// STANDING DOES NOT APPLY HERE EITHER, and for the same reason: a restore is
+// asked whether the FILE came back. An experimental asset is as much a part of
+// what was lost as an earned one, and a comparison that counted only earned
+// companies would report a clean recovery of a copy that had dropped every
+// test the institution was running.
+//
+// EACH ONE IS A TEMPLATE LITERAL, which is not a style choice: the vocabulary
+// gate reads a statement from its table name to the next backtick, so a
+// double-quoted statement lets the window run on into the next entry and
+// attribute one table's column to another. The gate was right and the string
+// was wrong.
+const THE_LIABILITIES: Array<{ what: string; sql: string }> = [
+  { what: 'what buyers are owed',
+    sql: `SELECT COUNT(*) AS n FROM experiment_fulfilments WHERE status IN ('owed','sent')` },
+  { what: 'money taken from buyers',
+    sql: `SELECT COALESCE(SUM(amount_cents),0) AS n FROM economic_events WHERE kind = 'charge'` },
+  { what: 'money returned to buyers',
+    sql: `SELECT COALESCE(SUM(amount_cents),0) AS n FROM economic_events WHERE kind = 'refund'` },
+  { what: 'what this institution may still spend',
+    sql: `SELECT COALESCE(SUM(amount_cents),0) AS n FROM owner_allowances WHERE withdrawn_at IS NULL` },
+  { what: 'assets that are live',
+    sql: `SELECT COUNT(*) AS n FROM products WHERE status = 'active' AND deleted_at IS NULL` },
+  { what: 'standing instructions the owner gave',
+    sql: `SELECT COUNT(*) AS n FROM owner_boundaries` },
+  { what: 'people who were contacted',
+    sql: `SELECT COUNT(*) AS n FROM experiment_exposures` },
+];
+
+export interface Recovered {
+  what: string;
+  /** What the live database says, and what the copy says. Equal, or it is not recovered. */
+  live: number;
+  inTheCopy: number;
+  same: boolean;
+}
+
 /**
  * PUT A COPY BACK, AND SAY WHAT CAME BACK WITH IT.
  *
@@ -207,7 +272,7 @@ export async function whatIsKept(): Promise<Array<{ name: string; bytes: number;
  */
 export async function restoreTheInstitution(
   copy: string, into: string,
-): Promise<{ bytes: number; tables: number; founders: number }> {
+): Promise<{ bytes: number; tables: number; founders: number; liabilities: Recovered[] }> {
   const live = databaseFile();
   if (live !== null && into === live) {
     throw new Error('keeping:will_not_restore_over_the_live_database');
@@ -226,7 +291,19 @@ export async function restoreTheInstitution(
       Record<string, unknown>).n);
     const founders = Number((((await restored.execute(
       'SELECT COUNT(*) AS n FROM founders')).rows[0]) as Record<string, unknown>).n);
-    return { bytes: (await stat(into)).size, tables, founders };
+    const liabilities: Recovered[] = [];
+    for (const l of THE_LIABILITIES) {
+      // A TABLE THE COPY PREDATES IS NOT A DISAGREEMENT. A copy taken before a
+      // migration added one of these reads as absent rather than as wrong, and
+      // saying "0 where live says 3" would be a lie about what happened.
+      let inTheCopy: number;
+      try {
+        inTheCopy = Number((((await restored.execute(l.sql)).rows[0]) as Record<string, unknown>).n);
+      } catch { continue; }
+      const live = Number((((await query(l.sql)).rows[0]) as Record<string, unknown>).n);
+      liabilities.push({ what: l.what, live, inTheCopy, same: live === inTheCopy });
+    }
+    return { bytes: (await stat(into)).size, tables, founders, liabilities };
   } finally {
     restored.close();
   }

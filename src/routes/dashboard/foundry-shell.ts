@@ -6618,7 +6618,17 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
         <p class="quiet">Thirty days: ${String(r.last30.proposed)} proposed, ${String(r.last30.approved)} approved,
           ${String(r.last30.refused)} refused${r.last30.pendingOutbound > 0 ? `, ${String(r.last30.pendingOutbound)} waiting on you` : ''}.
           <a href="/foundry/companies/${r.productId}/authority">Change what I may do here</a></p>
-      </li>`)}</ul>`}`)}
+      </li>`)}</ul>`}
+      ${/* AND THE SAME ESTATE BY KIND OF ACT. "It may spend without asking" and
+           "it may publish without asking" are not the same sentence even when
+           both are true of the same company, and the list above makes him work
+           that out for himself. The rungs are the door's own ladder, so the two
+           readings cannot disagree. */ ''}
+      <details class="fold"><summary><h3>By what it would do</h3>
+        <span class="gist">${String(autonomy.byConsequence.filter((b) => b.standing === 'never').length)} never on its own</span></summary>
+        <dl class="facts">${autonomy.byConsequence.map((b) => html`<dt>${b.whatItMeans}</dt>
+          <dd${b.standing === 'never' ? raw(' class="quiet"') : ''}>${b.sentence}</dd>`)}</dl>
+      </details>`)}
 
     <div id="charter" class="anchor"></div>
     ${charterCard}
