@@ -19,6 +19,16 @@ import { theRecordOf } from '../forge-deliberation.js';
 import { kindsFoundryCanMake, makeBrief } from './registry.js';
 import type { BriefSpec, Made } from './registry.js';
 
+/**
+ * THE ONLY SHAPE OF MONEY THE HANDS CAN CURRENTLY TAKE, named once so that
+ * anything reporting on it reports the number that is actually enforced.
+ *
+ * The prompt says it in words and the gate below says it in a comparison, and
+ * a third statement of it somewhere else would be a fourth thing to keep in
+ * step. Whatever reads this is reading the rule, not a copy of it.
+ */
+export const OFFER_BAND = { lowDollars: 5, highDollars: 49, exchange: 'upfront_price', recurs: false } as const;
+
 /** The kinds of source a brief may be built from: what the eyes keep, item by item. */
 const BRIEF_SOURCES = ['job_posting', 'app_store', 'community', 'review', 'directory'] as const;
 
@@ -181,7 +191,7 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
   const missing = need.filter((k) => str(raw, k) === null);
   if (missing.length) return { refused: `the offer left out ${missing.join(', ')}` };
   const price = Number(raw.price_dollars);
-  if (!Number.isInteger(price) || price < 5 || price > 49) return { refused: 'the price is not a whole number of dollars between 5 and 49' };
+  if (!Number.isInteger(price) || price < OFFER_BAND.lowDollars || price > OFFER_BAND.highDollars) return { refused: `the price is not a whole number of dollars between ${String(OFFER_BAND.lowDollars)} and ${String(OFFER_BAND.highDollars)}` };
   const sourceTypes = (Array.isArray(raw.source_types) ? raw.source_types.map(String) : []).filter((s): s is typeof BRIEF_SOURCES[number] => (BRIEF_SOURCES as readonly string[]).includes(s));
   if (sourceTypes.length === 0) return { refused: 'no source the eyes keep was named' };
   // THE WORDS ARE THE EYES' WORDS. The composed terms are used when they name

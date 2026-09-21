@@ -108,11 +108,49 @@ export async function portfolioNeeds(
   }));
 }
 
+// =============================================================================
+// SHARED IS NOT ONE THING, AND READING IT AS ONE MADE THE INSTITUTION WRONG.
+//
+// Every row of `exposure_dimensions` carries a single field, `if_it_fails`, and
+// every one of the twenty-one is phrased as harm. That is correct for the table
+// - it exists to answer what a single failure could reach - but a fit verdict
+// built on it alone says that selling a second thing to buyers you have already
+// proved you can find is the same kind of event as two businesses resting on
+// one provider. They are not the same. One is the cheapest customer Foundry
+// will ever acquire; the other is a single outage with two names.
+//
+// The distinction lives HERE, in code, and not in the table, for a reason the
+// table states itself: `exposure_dimensions` is constitutional and its write
+// triggers abort (migration 235). An `if_it_works` column would also be a claim
+// about every dimension at once, which is more than is known. This is a reading
+// of a small, named subset, and it is arguable, which is the right shape for a
+// judgement the owner can overrule.
+//
+// REACH IS THE NARROW SET AND DELIBERATELY SO. A channel, a kind of buyer and
+// an industry are the three axes where "we have been here before" is an
+// acquisition advantage rather than a coincidence. Geography is NOT here: a
+// jurisdiction changing its rules is a real common event, and knowing a market
+// is weaker than knowing how to reach it. Everything not named below is read
+// the way it always was.
+const REACH_ALREADY_PROVED = new Set(['acquisition_channel', 'customer_type', 'industry']);
+
 export interface PortfolioFit {
   /** The stated needs this would serve: an axis where it differs from a concentration. */
   serves: string[];
-  /** What adding this would deepen. */
+  /**
+   * What adding this would deepen in a way that makes one failure reach further.
+   * Shared reach is not here - it is in `reuses`.
+   */
   deepens: Concentration[];
+  /**
+   * Where this would go back over ground the portfolio has already paid to
+   * reach: the same channel, the same kind of buyer, the same industry.
+   *
+   * It is still a concentration and it is still reported. What it is not is a
+   * reason to refuse the candidate: it is the case where Foundry already knows
+   * where the buyers are.
+   */
+  reuses: Concentration[];
   /** Exposures nothing else in the portfolio has. */
   newGround: Array<{ dimension: string; value: string }>;
   /** The one sentence. */
@@ -153,15 +191,28 @@ export async function portfolioFitOf(input: {
       { name: String(row.name), guessed: String(row.how_known) === 'inferred' }]);
   }
 
+  // AND THE CANDIDATE'S OWN SIDE IS SCOPED THE SAME WAY THE PORTFOLIO'S IS.
+  // The query above filters by `evidence_mode`; this one did not, which meant a
+  // rehearsal candidate's declared exposures could be read into a real-world
+  // verdict - the exact fault the header of this file says must never happen,
+  // committed one query below the paragraph that forbids it. A filter that is
+  // right on one side of a comparison and absent on the other does not fail
+  // loudly; it agrees, quietly, about the wrong world.
   const its = (await query(
     `SELECT e.dimension, e.value, d.if_it_fails FROM portfolio_exposures e
        JOIN exposure_dimensions d ON d.dimension = e.dimension
-      WHERE e.subject_kind = 'opportunity' AND e.subject_id = ? AND e.retired_at IS NULL
-      ORDER BY d.sort_order`, [input.opportunityId]))
+      WHERE e.subject_kind = 'opportunity' AND e.subject_id = ?
+        AND e.retired_at IS NULL AND e.evidence_mode = ?
+      ORDER BY d.sort_order`, [input.opportunityId, world]))
     .rows as unknown as Array<Record<string, unknown>>;
 
   const deepens: Concentration[] = [];
+  const reuses: Concentration[] = [];
   const newGround: Array<{ dimension: string; value: string }> = [];
+  // Whether anything was set aside by the legal rule below, so that a candidate
+  // whose only known exposure is a liability can say so rather than report an
+  // empty verdict as though it had looked and found nothing.
+  let onlyLiability = its.length > 0;
   for (const row of its) {
     const dimension = String(row.dimension);
     const value = String(row.value);
@@ -172,8 +223,9 @@ export async function portfolioFitOf(input: {
     // a kind of liability nothing else does has not diversified anything, it
     // has added a way to be sued. It counts when it deepens, never as ground.
     if (dimension === 'legal_exposure' && already.length === 0) continue;
+    onlyLiability = false;
     if (already.length > 0) {
-      deepens.push({
+      (REACH_ALREADY_PROVED.has(dimension) ? reuses : deepens).push({
         dimension, value, carriedBy: already.map((c) => c.name),
         ifItFails: String(row.if_it_fails),
         guessed: already.some((c) => c.guessed),
@@ -184,8 +236,8 @@ export async function portfolioFitOf(input: {
   }
 
   // WORSE IS A JUDGEMENT WITH A STATED RULE, not a threshold pretending to be
-  // one: everything about how this would earn is something the portfolio
-  // already carries, so it adds no independence at all.
+  // one: something about how this would earn goes wrong at the same moment as
+  // something he already owns, and nothing about it is independent.
   //
   // AN EARLIER VERSION ALSO REQUIRED THE EXPOSURE TO BE SHARED BY TWO OR MORE
   // ALREADY, and the assembled-institution walk caught it: against a portfolio
@@ -193,7 +245,19 @@ export async function portfolioFitOf(input: {
   // no cause for concern. That is exactly the moment to say something — the
   // second business is where a concentration starts, and an institution that
   // only warns once the pattern is established would have watched it form.
-  const makesItWorse = its.length > 0 && newGround.length === 0;
+  //
+  // WHAT CHANGED SINCE, AND WHY IT MATTERED TWICE. The rule used to read
+  // `its.length > 0 && newGround.length === 0`, which counted every kind of
+  // sameness as fragility and produced two wrong answers. A candidate selling
+  // to buyers the portfolio already reaches was told it made things more
+  // fragile, when the shared channel is the one part of it that is cheap. And
+  // a real candidate whose only recorded exposure was a new legal surface -
+  // which is every real candidate, because `legal-surface.ts` is the only
+  // real-world writer of these rows - fell through the `continue` above with
+  // both lists empty and came out WORSE on the strength of having been read by
+  // a lawyer's eye at all. Neither is a portfolio judgement. Deepening a way
+  // to fail is.
+  const makesItWorse = deepens.length > 0 && newGround.length === 0;
 
   // SERVING A NEED is having a different answer on an axis where the portfolio
   // is concentrated - not merely being new, but being new where it matters.
@@ -204,23 +268,38 @@ export async function portfolioFitOf(input: {
       && String(row.value) !== n.value))
     .map((n) => n.need);
 
+  // Said in every verdict that has one, because reuse is never the whole
+  // answer: it is cheaper to sell and it is still a concentration, and an owner
+  // who is told only the first half of that has been sold something.
+  const reach = reuses.length === 0 ? ''
+    : ` It would go back over reach you have already paid for - `
+      + `${reuses.map((r) => r.value).join(', ')} - which makes the selling `
+      + 'cheaper and the portfolio no less concentrated.';
+
   const verdict = its.length === 0
     ? 'I do not know enough about how this would make money to say what it would '
       + 'do to your portfolio.'
-    : makesItWorse
-      ? `This would deepen ${deepens.map((d) => d.value).join(', ')} - which `
-        + `${deepens.some((d) => d.carriedBy.length > 1)
-          ? 'you already depend on across more than one business'
-          : 'you already carry'} - and brings nothing new. Another one of these is `
-        + 'not another income stream; it is another way the same failure hurts.'
-      : newGround.length > 0 && deepens.length === 0
-        ? `Everything about how this makes money is new ground for you: `
-          + `${newGround.map((n) => n.value).join(', ')}. That is the case for it, `
-          + 'separately from whether it is a good business.'
-        : `It would deepen ${deepens.map((d) => d.value).join(', ') || 'nothing'} `
-          + `and open ${newGround.map((n) => n.value).join(', ') || 'nothing'}.`;
+    : onlyLiability
+      ? 'The only thing recorded about how this would earn is a kind of liability '
+        + 'it would add, and that is not enough to say what it would do to your '
+        + 'portfolio. It is not a reason against it either.'
+      : makesItWorse
+        ? `This would deepen ${deepens.map((d) => d.value).join(', ')} - which `
+          + `${deepens.some((d) => d.carriedBy.length > 1)
+            ? 'you already depend on across more than one business'
+            : 'you already carry'} - and brings nothing new. Another one of these is `
+          + `not another income stream; it is another way the same failure hurts.${reach}`
+        : newGround.length > 0 && deepens.length === 0
+          ? `Everything about how this makes money is new ground for you: `
+            + `${newGround.map((n) => n.value).join(', ')}. That is the case for it, `
+            + `separately from whether it is a good business.${reach}`
+          : newGround.length === 0 && deepens.length === 0
+            ? 'Nothing about how this would earn is new to you, and nothing about it '
+              + `fails at the same moment as something you own.${reach}`
+            : `It would deepen ${deepens.map((d) => d.value).join(', ') || 'nothing'} `
+              + `and open ${newGround.map((n) => n.value).join(', ') || 'nothing'}.${reach}`;
 
-  return { serves, deepens, newGround, verdict, makesItWorse };
+  return { serves, deepens, reuses, newGround, verdict, makesItWorse };
 }
 
 /**

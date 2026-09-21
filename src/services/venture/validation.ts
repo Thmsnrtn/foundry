@@ -541,6 +541,32 @@ export async function whatStandsInTheWay(opportunityId: string): Promise<string[
     inTheWay.push('nothing has been claimed about it that could be checked');
   }
 
+  // WHO WOULD BUY IT AND HOW THEY WOULD BE FOUND, asked here rather than after
+  // the candidate has already won.
+  //
+  // Distribution used to enter this institution one step too late: as free text
+  // on the experiment DESIGN, written after a candidate had been selected on
+  // the strength of somebody's pain and a legal reading. A candidate could
+  // therefore be taken forward on the merits of a problem without one word on
+  // record about how its buyers would ever be reached - which is not a small
+  // omission in a portfolio whose whole thesis is small digital income. Being
+  // able to make the thing is not the same as being able to sell it.
+  //
+  // THE ANSWER IS AN EXPOSURE, NOT A NEW COLUMN. `acquisition_channel` already
+  // exists, is already what steering is applied against, and is already what
+  // the "how it earns" sentence reads. Requiring it here makes the channel a
+  // declared fact of the candidate at the same standing as how it charges,
+  // rather than a sentence composed about it later.
+  const channel = (await query(
+    `SELECT 1 FROM portfolio_exposures
+      WHERE subject_kind = 'opportunity' AND subject_id = ?
+        AND dimension = 'acquisition_channel' AND retired_at IS NULL LIMIT 1`,
+    [opportunityId])).rows.length > 0;
+  if (!channel) {
+    inTheWay.push('nothing is recorded about how its buyers would be reached — name '
+      + 'the channel it would be sold through before it can earn a company');
+  }
+
   // WHAT LIABILITY IT CREATES, before it can go anywhere. A candidate nobody
   // has asked that of, one that needs a qualified person to look, or one whose
   // legal picture is over six months old, waits - however good the rest reads.

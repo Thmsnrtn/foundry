@@ -91,17 +91,19 @@ export async function briefFor(input: {
  * how a discovery system ends up rediscovering the things somebody already
  * built.
  */
+export const BASE_TERMS = [
+  'doing this manually every',
+  'wrote a script to keep track',
+  'no tool does this',
+  'keep a spreadsheet for',
+  'have to check every week',
+] as const;
+
 async function termsFrom(
   concentratedOn: string[], shape: string | null,
   guidance: Array<{ kind: string; subject: string | null; dimension: string | null; statement: string }>,
 ): Promise<{ terms: string[]; from: string[] }> {
-  const base = [
-    'doing this manually every',
-    'wrote a script to keep track',
-    'no tool does this',
-    'keep a spreadsheet for',
-    'have to check every week',
-  ];
+  const base = [...BASE_TERMS];
   const terms: string[] = [];
   const from: string[] = [];
   // The shape is used only where the owner named one, and only to narrow the
@@ -168,7 +170,7 @@ async function termsFrom(
  * Triage is the honest limit of a regex. What the sentence MEANS is read
  * elsewhere, by something that can read.
  */
-const MARKERS: Array<{ kind: string; phrases: RegExp }> = [
+export const MARKERS: Array<{ kind: string; phrases: RegExp }> = [
   { kind: 'manual_workaround',
     phrases: /\b(by hand|manually|wrote a (little )?script|spreadsheet|copy.?paste|hacked together)\b/i },
   { kind: 'recurring_pain',
