@@ -1253,10 +1253,39 @@ export async function requestRefundByLink(fulfilmentId: string, token: string): 
 export interface HandReport { experimentId: string; offersPlanned: number; offersSent: number;
   deliveriesSent: number; reconciled: number; refundsIssued: number; settled: string | null;
   exceptions: string[];
+  /**
+   * WHO WAS NOT WRITTEN TO, AND WHY — the institution working, not failing.
+   *
+   * A recipient an owner exclusion covers, whose address is struck on another
+   * line of this list, who has said no, or who has heard from us too recently
+   * is not an error. Reported as an exception, each one turned the morning red
+   * for as long as the row existed, every hour, and the owner learned to read
+   * a red morning as noise — which is how a real failure gets missed. The
+   * recipients list already shows each of these rows and says which it is.
+   */
+  withheld: string[];
   /** What this pass achieved against the authorised act. Never inferred from
    *  the absence of a thrown error: see services/venture/run-state.ts. */
   state: import('./run-state.js').RunState;
   because: string | null }
+
+/**
+ * THE REFUSALS THAT ARE THE INSTITUTION WORKING.
+ *
+ * Each of these is a standing rule about the person who would receive the
+ * message, decided before this pass and unchanged by it: the owner's own
+ * exclusion, an address struck on another line of this test, somebody who has
+ * said no, somebody written to too recently. Retrying costs nothing and
+ * changes nothing, and the row stays in the approved set on purpose — the
+ * owner's list is where he sees it, beside the reason, rather than in an
+ * hourly report of things that went wrong.
+ *
+ * Everything else `planOffer` refuses is a defect or an incomplete design, and
+ * stays an exception.
+ */
+const WITHHELD_FROM = new Set([
+  'owner_excluded', 'recipient_struck_at_this_address', 'recipient_suppressed', 'contact_frequency',
+]);
 
 /**
  * HOW MANY GO OUT IN ONE PASS, AND WHY THE FIRST ONE IS SMALLER.
@@ -1335,7 +1364,7 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
   };
   for (const row of live) {
     const experimentId = String(row.id);
-    const report: HandReport = { experimentId, offersPlanned: 0, offersSent: 0, deliveriesSent: 0, reconciled: 0, refundsIssued: 0, settled: null, exceptions: [], state: 'noop_expected', because: null };
+    const report: HandReport = { experimentId, offersPlanned: 0, offersSent: 0, deliveriesSent: 0, reconciled: 0, refundsIssued: 0, settled: null, exceptions: [], withheld: [], state: 'noop_expected', because: null };
     reports.push(report);
     const e = await experimentRow(experimentId);
     if (!e?.productId) { report.exceptions.push('no asset'); continue; }
@@ -1443,6 +1472,10 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
           const sent = await executeAction(plan.id);
           if (sent.dispatched) report.offersSent += 1; else report.exceptions.push(`offer to ${recipient.counterpartyRef}: ${sent.refusedReason}`);
         } catch (error) {
+          if (error instanceof HandRefused && WITHHELD_FROM.has(error.code)) {
+            report.withheld.push(`${recipient.counterpartyRef}: ${error.message}`);
+            continue;
+          }
           report.exceptions.push(`offer: ${error instanceof Error ? error.message : String(error)}`);
           if (error instanceof HandRefused && (error.code === 'offer_quality' || error.code === 'offer_missing' || error.code === 'publication_gate')) break;
         }
@@ -1472,6 +1505,7 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
       intended: report.offersPlanned + report.deliveriesSent,
       achieved: report.offersSent + report.deliveriesSent + report.reconciled + report.refundsIssued,
       exceptions: report.exceptions,
+      withheld: report.withheld.length,
       attempting: report.offersPlanned > 0 || report.offersSent > 0
         ? 'writing to the businesses you approved'
         : 'carrying the test one step',
@@ -1494,7 +1528,7 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
       ORDER BY e.decided_at, e.rowid`, [...(input.founderId ? [input.founderId] : []), ...live.map((r) => String(r.id))]);
   for (const row of aftermath) {
     const experimentId = String(row.id);
-    const report: HandReport = { experimentId, offersPlanned: 0, offersSent: 0, deliveriesSent: 0, reconciled: 0, refundsIssued: 0, settled: null, exceptions: [], state: 'noop_expected', because: null };
+    const report: HandReport = { experimentId, offersPlanned: 0, offersSent: 0, deliveriesSent: 0, reconciled: 0, refundsIssued: 0, settled: null, exceptions: [], withheld: [], state: 'noop_expected', because: null };
     const x = await exposureOf(experimentId);
     if (x && x.withdrawnAt !== null) {
       const down = await takeDownExposure(experimentId).catch((err: unknown) => ({ done: false, reason: err instanceof Error ? err.message : String(err) }));

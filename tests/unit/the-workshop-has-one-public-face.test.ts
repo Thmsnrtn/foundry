@@ -35,6 +35,7 @@ import '../../src/services/integration/stripe-gateway.js';
 import '../../src/services/integration/cloudflare-gateway.js';
 import { handleWebhook } from '../../src/services/billing/stripe.js';
 import { providerStubs } from '../helpers/provider-stubs.js';
+import { outreachOnly } from '../helpers/world.js';
 import { PROOF1_PUBLIC, PROOF1_SLUG, PROOF1_TITLE, findProof1, reframeProof1UnderTheWorkshop, seedProof1 } from '../../src/services/venture/proof-1.js';
 import { addRecipients, approveRemaining, campaignActOf, materialOf, planOffer, prepareExposure, qualifyRecipient, recipientsOf, reviewRecipient, runHand, stopExperiment } from '../../src/services/venture/hand.js';
 import { getExperimentView } from '../../src/services/founder/experiment-view.js';
@@ -69,6 +70,8 @@ let ORIGINAL = ''; let X = ''; // Proof 1 as first seeded, and Experiment 001
 const page = async (path: string) => { const r = await app.request(path); return { status: r.status, text: await r.text() }; };
 const post = (path: string, fields: Record<string, string> = {}) => app.request(path, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(fields) });
 const redirectedTo = (r: Response) => r.headers.get('location') ?? '';
+/** What went to a stranger, which is never the Workshop's own reply-route check. */
+const offers = () => outreachOnly(state.sends);
 const publicGet = async (path: string) => { const r = await fetchStub(`https://apexmicro.ai${path}`); return { status: r.status, text: await r.text() }; };
 const pastDue = () => query(`UPDATE outbound_actions SET reconcile_after = '2026-01-01T00:00:00.000Z' WHERE status = 'executed' AND outcome_status = 'unresolved'`, []);
 const one = async (sql: string, params: unknown[] = []) => (await query(sql, params)).rows[0] as Record<string, unknown>;
@@ -108,7 +111,7 @@ describe('the Workshop exists as rows before it exists in the world', () => {
     await expect(query(`UPDATE public_workshop SET economic_pause_at = datetime('now'), economic_pause_reason = 'r', economic_pause_by = 'institution:hand' WHERE founder_id = ?`, [OWNER])).rejects.toThrow(/pause_is_the_owners/);
     // The capabilities exist, each with its consequence, and nothing that could transfer or delete.
     const caps = (await query(`SELECT capability_key, rung FROM capabilities WHERE family = 'public_workshop' ORDER BY sort_order`)).rows as unknown as Array<Record<string, unknown>>;
-    expect(caps.map((c) => `${String(c.capability_key)}:${String(c.rung)}`)).toEqual(['prepare_public_store:prepare', 'publish_public_page:public', 'sweep_public_store:reversible', 'operate_public_dns:reversible', 'retire_public_dns:reversible', 'deploy_public_workshop:public', 'attach_public_domain:public', 'route_public_mail:reversible', 'retire_public_mailbox:reversible']);
+    expect(caps.map((c) => `${String(c.capability_key)}:${String(c.rung)}`)).toEqual(['prepare_public_store:prepare', 'publish_public_page:public', 'sweep_public_store:reversible', 'operate_public_dns:reversible', 'retire_public_dns:reversible', 'deploy_public_workshop:public', 'attach_public_domain:public', 'route_public_mail:reversible', 'retire_public_mailbox:reversible', 'check_public_reply_route:reversible']);
     expect((await query(`SELECT tool FROM capability_providers WHERE provider = 'cloudflare' ORDER BY tool`)).rows.map((r) => String((r as Record<string, unknown>).tool)))
       .toEqual(['cloudflare_dns_delete', 'cloudflare_dns_upsert', 'cloudflare_domain_attach', 'cloudflare_email_destination_delete', 'cloudflare_email_route_upsert', 'cloudflare_kv_delete', 'cloudflare_kv_namespace_create', 'cloudflare_kv_put', 'cloudflare_worker_deploy']);
     expect(Object.keys(JOB_REGISTRY)).toContain('public_workshop_tick');
@@ -317,6 +320,16 @@ describe('Proof 1 is reframed under the Workshop without rewriting its history',
     expect(inboxHealth.detail).toContain('program that hears');
     expect(inboxHealth.detail).toContain("Workshop's own store");
     process.env.APP_URL = appUrl;
+    // AND A HEALTHY READING IS STILL NOT A WORKING ROUTE. Everything checked
+    // above is a read of how things are SET UP — a rule exists, a program is
+    // deployed, a store has an id — and all three were true on the morning
+    // nineteen people were invited to answer an address that went nowhere. So
+    // the test is held until a message actually sent to that address comes
+    // back, and the page says which path and why.
+    expect((await getExperimentView(OWNER, X, NOW))!.stateDetail)
+      .toContain('Nothing has ever been sent to this address');
+    const { completeTheReplyRoundTrip } = await import('../helpers/world.js');
+    await completeTheReplyRoundTrip(OWNER);
     // The postal address is his to supply; never invented.
     expect((await getExperimentView(OWNER, X, NOW))!.state).toBe('needs_you');
     expect(redirectedTo(await post('/foundry/public-workshop/postal', { address: 'PO Box 123, Example, MA 01000' }))).toContain('done=saved');
@@ -416,7 +429,10 @@ describe('Allow publishes the page; offers point at it and go out as the Worksho
   it('the hand writes as Apex Micro, never as a person, pointing at the page, with the Workshop\'s footer; the contact is on the Workshop\'s record', async () => {
     const reports = await runHand({ now: NOW, offersPerTick: 3 });
     expect(reports[0]).toMatchObject({ experimentId: X, offersSent: 3, exceptions: [] });
-    for (const s of state.sends) {
+    // WHAT WENT TO A STRANGER. The reply-route check is a message the Workshop
+    // sends to its own address to find out whether a reply arrives; it is an
+    // instrument reading, not an offer, and it is not what this test is about.
+    for (const s of offers()) {
       expect(s.from).toBe('Apex Micro <thomas@apexmicro.ai>');
       expect(s.reply_to).toBe('thomas@apexmicro.ai');
       expect(s.text).toContain(`https://apexmicro.ai/experiments/${PROOF1_SLUG}`);
@@ -433,7 +449,7 @@ describe('Allow publishes the page; offers point at it and go out as the Worksho
   });
 
   it('a no on the public page is a no to every test: synced from the store, swept, refused by the plan guard and by the door', async () => {
-    const victim = (await recipientsOf(X)).find((r) => r.reviewStatus === 'approved' && r.email && !state.sends.some((s) => s.to[0] === r.email))!;
+    const victim = (await recipientsOf(X)).find((r) => r.reviewStatus === 'approved' && r.email && !offers().some((s) => s.to[0] === r.email))!;
     const r = await fetchStub('https://apexmicro.ai/email/opt-out', { method: 'POST', body: new URLSearchParams({ email: victim.email! }).toString(), headers: { 'content-type': 'application/x-www-form-urlencoded' } });
     expect(r.status).toBe(200);
     expect(await r.text()).toContain('on the do-not-contact list');
@@ -452,18 +468,18 @@ describe('Allow publishes the page; offers point at it and go out as the Worksho
       [String(asset.id), JSON.stringify({ to: [victim.email], subject: 's', html: 'h' }), X, victim.id, act.id])).rejects.toThrow(/recipient_suppressed/);
     await expect(query(`DELETE FROM public_suppressions WHERE email = ?`, [victim.email])).rejects.toThrow(/append_only/);
     // A second test may not write to somebody the first wrote to this season.
-    const written = state.sends[0].to[0];
+    const written = offers()[0].to[0];
     const { contactFrequencyRefusal } = await import('../../src/services/public-workshop/suppression.js');
     expect(await contactFrequencyRefusal({ founderId: OWNER, email: written, experimentId: 'another', now: NOW })).toMatch(/waits 90 days/);
     expect(await contactFrequencyRefusal({ founderId: OWNER, email: written, experimentId: X, now: NOW })).toBeNull();
     // A bounce at the provider lands on the list too.
-    state.deliveryState.set(state.sends[1].id, 'bounced');
+    state.deliveryState.set(offers()[1].id, 'bounced');
     await pastDue();
     await runHand({ now: NOW, offersPerTick: 0 });
-    expect(await isSuppressed(OWNER, state.sends[1].to[0])).toMatchObject({ suppressed: true, reason: 'bounced' });
-    const before = state.sends.length;
+    expect(await isSuppressed(OWNER, offers()[1].to[0])).toMatchObject({ suppressed: true, reason: 'bounced' });
+    const before = offers().length;
     await runHand({ now: NOW, offersPerTick: 25 });
-    expect(state.sends.length).toBe(before + 7); // 11 approved, 3 written to, 1 opted out
+    expect(offers().length).toBe(before + 7); // 11 approved, 3 written to, 1 opted out
     expect((await page('/foundry/public-workshop')).text).toContain(victim.email!);
   });
 
@@ -535,23 +551,23 @@ describe('Allow publishes the page; offers point at it and go out as the Worksho
     await handleWebhook(p, s);
     expect(redirectedTo(await post('/foundry/public-workshop/pause', { reason: 'thinking it over' }))).toContain('done=paused');
     expect((await publicWorkshopOf(OWNER))!.economicPause).toMatchObject({ reason: 'thinking it over' });
-    const before = state.sends.length;
+    const before = offers().length;
     const r = await runHand({ now: NOW, offersPerTick: 5 });
     expect(r[0].exceptions.join(' ')).toMatch(/paused: thinking it over/);
     expect(r[0]).toMatchObject({ offersSent: 0, deliveriesSent: 1 });
-    expect(state.sends[state.sends.length - 1]).toMatchObject({ to: [buyer], subject: PROOF1_TITLE });
-    expect(state.sends.length).toBe(before + 1);
+    expect(offers()[offers().length - 1]).toMatchObject({ to: [buyer], subject: PROOF1_TITLE });
+    expect(offers().length).toBe(before + 1);
     expect(r[0].settled).toBeNull(); // nothing has been confirmed delivered yet
     // The row refuses an offer on its own while paused; a delivery it lets through.
     const asset = await one('SELECT id FROM products WHERE from_experiment_id = ?', [X]);
     const act = (await campaignActOf(X))!;
-    const target = (await recipientsOf(X)).find((x) => x.reviewStatus === 'approved' && x.email && !state.sends.some((m) => m.to[0] === x.email))!;
+    const target = (await recipientsOf(X)).find((x) => x.reviewStatus === 'approved' && x.email && !offers().some((m) => m.to[0] === x.email))!;
     await expect(query(
       `INSERT INTO outbound_actions (id, product_id, agent_name, integration_name, action_type, authority_level, status, parameters_json, preview_text, rationale, confidence, expires_at, effect_id, outcome_status, experiment_id, experiment_act, recipient_id, proposed_act_id)
        VALUES ('sneak_p', ?, 'institution:hand', 'resend', 'send_email', 0, 'pending_approval', ?, 'p', 'r', 1, '2030-01-01', 'sneak_p', 'unresolved', ?, 'offer', ?, ?)`,
       [String(asset.id), JSON.stringify({ to: [target.email], subject: 's', html: 'h' }), X, target.id, act.id])).rejects.toThrow(/workshop_paused/);
     // A refund asked for during the pause goes through the governed door.
-    const delivery = state.sends[state.sends.length - 1];
+    const delivery = offers()[offers().length - 1];
     const link = /\((http:\/\/localhost:8080\/share\/refund\/[^)]+)\)/.exec(delivery.text ?? '')![1];
     expect(await (await app.request(link.replace('http://localhost:8080', ''), { method: 'POST' })).text()).toContain('on its way back');
     expect(state.refunds).toHaveLength(1);

@@ -334,8 +334,16 @@ describe('Proof 1, reconsidered from first principles before anyone is written t
     state.nextDomainStatus = 'verified';
     await connectWorkshopSending(OWNER);
     await setPostalAddress(OWNER, 'PO Box 123, Example, MA 01000');
+    // AND THE WORKSHOP CAN HEAR, PROVEN RATHER THAN CONFIGURED. Every message
+    // this test sends invites a reply, and the institution will not offer the
+    // decision until a message sent to the advertised address has come back.
+    const { giveTheWorkshopEars } = await import('../helpers/world.js');
+    await giveTheWorkshopEars(OWNER);
     // Now, and only now, the decision surface offers the decision.
+    const { readiness: readinessOf } = await import('../../src/services/venture/hand.js');
+    const r = await readinessOf(X);
     const offered = await page(`/foundry/experiments/${X}/decide`);
+    expect(r.missing, 'the decision is offered only when nothing is in the way').toEqual([]);
     expect(offered.text).toContain('Your decision');
     expect(offered.text).toContain(`/foundry/experiments/${X}/allow`);
     expect(offered.text).toContain('Nothing is sent before you press it.');

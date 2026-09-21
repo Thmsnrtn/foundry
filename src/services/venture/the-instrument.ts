@@ -479,6 +479,71 @@ async function readOnePath(
   p: RequiredPath,
   ctx: { experimentId: string; founderId: string; health: WorkshopHealth | null; observedOn: Map<string, string | null>; now: Date },
 ): Promise<{ status: PathStatus; detail: string }> {
+  // ─── EVIDENCE OUTRANKS CONFIGURATION, FOR THE PATH THAT FAILED ───────────
+  //
+  // Everything the health reading can say about the reply route is a read of
+  // how things are SET UP: a rule exists, a program is deployed, a store has
+  // an id. All three were true on the morning nineteen people were invited to
+  // answer an address that went nowhere. So this path is not read from the
+  // configuration at all. It is read from whether a message sent to the
+  // advertised address actually arrived.
+  //
+  // AND `unknown` BLOCKS HERE, WHICH IT DOES NOWHERE ELSE IN THIS FILE.
+  // Everywhere else a path nobody could read is not a path that failed,
+  // deliberately. The owner has ruled the opposite for this one: where the
+  // route cannot be verified, the limitation stands and outreach that depends
+  // on it stays blocked. A rule that contradicts the doctrine around it has to
+  // carry its reason, so it carries it here.
+  if (p.kind === 'reply') {
+    // CONFIGURATION CAN DISPROVE; ONLY A MESSAGE CAN PROVE. A health reading
+    // that says the route is broken is a real observation of a real failure
+    // and is believed at once. The same reading saying everything is set up
+    // proves nothing, which is the entire lesson of this campaign — so it is
+    // not allowed to.
+    const signal = ctx.health?.replyInbox;
+    if (signal?.status === 'needs_attention') {
+      return { status: 'not_working', detail: signal.detail || 'the reply route is not working' };
+    }
+    // WHOSE MAILBOX IS IT? The rule above is a rule about a path THE
+    // INSTITUTION OPERATES — the Workshop's domain, its routing rule, its edge
+    // program, its intake — which is the path that failed and told nobody.
+    // Where there is no Workshop, a test writes from an address on the owner's
+    // own domain into a mailbox he keeps himself, and Foundry carries nothing:
+    // it has no way to send a message there and no standing to say whether one
+    // arrives. Calling that route broken would be a claim about somebody
+    // else's mail, so it is `unknown` and says why.
+    //
+    // This is not a way around the rule. Under a Workshop, `sendingReadiness`
+    // already refuses any From line that is not on the Workshop's own zone, so
+    // a test that writes to strangers under a Workshop invites a reply to the
+    // zone this probe checks — and the rule bites in full.
+    const { publicWorkshopOf } = await import('../public-workshop/settings.js');
+    const workshop = await publicWorkshopOf(ctx.founderId);
+    if (!workshop?.contactEmail) {
+      return {
+        status: 'unknown',
+        detail: 'Replies to this test go to an address on your own domain, in a mailbox you keep. '
+          + 'Foundry does not carry that mail and cannot tell you whether a reply would arrive.',
+      };
+    }
+    const { replyRouteEvidence, PROBE_ARRIVES_WITHIN_MINUTES } = await import('../public-workshop/reply-probe.js');
+    const e = await replyRouteEvidence(ctx.founderId, ctx.now);
+    // AND PROOF GOES STALE. A message that arrived three days ago says the
+    // route worked three days ago. The probe runs daily, so evidence older
+    // than two of its intervals is history rather than a present reading.
+    const staleAfterMs = 2 * 24 * 3_600_000 + PROBE_ARRIVES_WITHIN_MINUTES * 60_000;
+    const fresh = e.at != null
+      && ctx.now.getTime() - new Date(String(e.at).replace(' ', 'T') + (String(e.at).endsWith('Z') ? '' : 'Z')).getTime() < staleAfterMs;
+    if (e.grade === 'proven_external' && fresh) return { status: 'working', detail: e.sentence };
+    if (e.grade === 'proven_self' && fresh) {
+      return { status: 'working', detail: `${e.sentence} It does not show ${e.doesNotCover ?? ''}` };
+    }
+    if (e.at != null && !fresh) {
+      return { status: 'not_working', detail: `${e.sentence} That was ${String(e.at).slice(0, 10)}, and nothing since has shown the route still carries anything.` };
+    }
+    return { status: 'not_working', detail: e.sentence };
+  }
+
   // THE ONE READING FIRST. Where a channel covers the path, the Workshop's
   // health has already looked at the world and said what is wrong in a
   // sentence an owner can act on; restating it here would be a second reading

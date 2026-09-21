@@ -252,7 +252,7 @@ ${asking ? `<h2>Anything you'd like to say?</h2>
 <h2>Refunds, privacy and how to reach me</h2>
 ${refundLine ? `<p>${esc(refundLine)}</p>` : ''}
 <p>Stripe handles the payment and passes me your email address so I can send you the brief. That's all I use it for. There's no tracking in the email or on this site, so the only thing I know is what you choose to tell me — more on the <a href="/privacy">privacy page</a>.</p>
-<p>Anything else, <a href="/contact">just write to me</a>. Replies to anything I send come straight back to me.</p>
+<p>Anything else, <a href="/contact">just write to me</a>.${f.replyRouteProven ? ' Replies to anything I send come straight back to me.' : ''}</p>
 <p class="quiet">${x.openedOn ? `Opened ${esc(x.openedOn)}` : 'Not open yet'}${x.closedOn ? ` · Closed ${esc(x.closedOn)}` : ''} · Page updated ${esc(x.updatedOn)}</p>
 <p class="quiet"><a href="/experiments">Everything I've made</a></p>`;
   // WHAT IS FOR SALE, SAID IN THE FORM AN INDEX READS. Only while the thing is

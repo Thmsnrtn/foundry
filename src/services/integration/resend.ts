@@ -473,6 +473,72 @@ export async function sendEmailHandler(req: GatewayRequest): Promise<ResendSucce
   }
 }
 
+// ─── THE REPLY ROUTE'S OWN DIAGNOSTIC ────────────────────────────────────────
+//
+// A message the Workshop sends to its own public address to find out whether
+// the path a stranger's reply would travel is actually working. It is a
+// consequential effect — a real message really leaves the provider — so it
+// gets its own registered capability rather than borrowing the one that
+// writes to customers.
+//
+// WHY NOT `send_email`. That tool's policy requires a customer external id,
+// and this message has no customer. Passing the Workshop's own address as one
+// would be a small lie about what a customer is, in an institution whose
+// entire subject this quarter is not collapsing distinctions. A separate
+// capability is also separately auditable and separately refusable, which is
+// what you want for the one effect that exists to test the machinery.
+//
+// It carries no customer data, so its data class is general.
+async function replyProbeHandler(req: GatewayRequest): Promise<ResendSuccess | { logged: true }> {
+  const params = req.params as unknown as { to: string; subject: string; text: string };
+  // THE SAME SENDER RULE A REAL MESSAGE MEETS. A probe that went out under
+  // some other identity would prove the wrong path: what is being tested is
+  // whether a reply to THIS Workshop's address arrives, and a reply is
+  // addressed to whatever the From line said.
+  const sender = await resolveSender(req, { to: [params.to], subject: params.subject, html: '' });
+  const apiKey = sender.credential ?? process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    log.warn('resend.reply_probe.no_key', { productId: req.productId });
+    return { logged: true };
+  }
+  const response = await withRetry(
+    () => fetch('https://api.resend.com/emails', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+        'Idempotency-Key': req.dedupKey!,
+      },
+      body: JSON.stringify({
+        from: sender.from, to: [params.to], subject: params.subject, text: params.text,
+        // SAY WHAT IT IS, IN THE HEADERS A MAIL SYSTEM READS. An automated
+        // diagnostic that looks like ordinary mail invites an auto-reply, a
+        // vacation responder or a filter rule to answer it, and then the
+        // Workshop is in a conversation with a machine about nothing.
+        headers: {
+          'Auto-Submitted': 'auto-generated',
+          'X-Auto-Response-Suppress': 'All',
+          'X-Foundry-Diagnostic': 'reply-route-probe',
+        },
+      }),
+    }),
+    { timeoutMs: RESEND_TIMEOUT_MS, maxRetries: 1 },
+  );
+  const data = (await response.json()) as Record<string, unknown>;
+  if (!response.ok) throw new Error(`Resend API error ${response.status}: ${JSON.stringify(data)}`);
+  const messageId = data.id as string | undefined;
+  if (!messageId) throw new Error(`Resend response missing id: ${JSON.stringify(data)}`);
+  log.info('resend.reply_probe.sent', { productId: req.productId, messageId });
+  if (sender.identityUsed) await recordSendingIdentityAccepted(req.productId);
+  return { message_id: messageId, raw: data };
+}
+
+export const REPLY_PROBE_POLICY = {
+  actor: 'workshop_keeper', surface: 'public_workshop', dataClass: 'general',
+  requireDedupKey: true, requireCustomerExternalId: false,
+} as const;
+registerToolHandler('workshop_reply_probe', replyProbeHandler, REPLY_PROBE_POLICY);
+
 // Side-effect at module load: register the handler. The gateway's
 // registry is process-global; importing this module wires the tool.
 export const SEND_EMAIL_POLICY = {

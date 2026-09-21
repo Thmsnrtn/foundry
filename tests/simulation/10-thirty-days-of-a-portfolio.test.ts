@@ -23,7 +23,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import Stripe from 'stripe';
 import { query } from '../../src/db/client.js';
 import { providerStubs } from '../helpers/provider-stubs.js';
-import { OWNER, addCompanies, advanceDays, asText, giveTheWorkshopEars, outage, owner, ownerApp, routinesRanThisMorning, runMorning, seedProductionShape } from '../helpers/world.js';
+import { OWNER, addCompanies, advanceDays, asText, giveTheWorkshopEars, outage, owner, ownerApp, outreachOnly, routinesRanThisMorning, runMorning, seedProductionShape } from '../helpers/world.js';
 
 const { state, fetch: fetchStub } = providerStubs();
 vi.stubGlobal('fetch', fetchStub);
@@ -91,7 +91,7 @@ describe('day 2 — the mail provider is down the morning the hand writes', () =
     expect(hand.ok).toBe(false);
     expect(hand.error).toMatch(/Resend API error 503/);
     expect(ran.filter((r) => !r.ok && r.job !== 'experiment_hand_tick')).toEqual([]);
-    expect(state.sends).toHaveLength(0);
+    expect(outreachOnly(state.sends)).toHaveLength(0);
     const rows = await offers();
     expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((r) => r.status === 'failed')).toBe(true);
@@ -106,10 +106,10 @@ describe('day 2 — the mail provider is down the morning the hand writes', () =
     await advanceDays(1);
     outage(state, 'resend', false);
     await morning();
-    expect(state.sends.length).toBeGreaterThan(0);
+    expect(outreachOnly(state.sends).length).toBeGreaterThan(0);
     const rows = await offers();
     expect(rows.filter((r) => r.status === 'failed')).toHaveLength(0);
-    const to = state.sends.map((s) => s.to[0]);
+    const to = outreachOnly(state.sends).map((s) => s.to[0]);
     expect(new Set(to).size).toBe(to.length);
     const perRecipient = new Map<string, number>();
     for (const r of rows) perRecipient.set(r.recipient_id, (perRecipient.get(r.recipient_id) ?? 0) + 1);

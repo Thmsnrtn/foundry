@@ -24,7 +24,7 @@ process.env.FOUNDRY_INSTANCE_POSTURE = 'private_owner';
 process.env.FOUNDRY_OWNER_EMAIL = 'owner@example.com';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { query } from '../../src/db/client.js';
-import { HANDS, OWNER, advanceDays, asText, owner, ownerApp, runMorning, seedProductionShape } from '../helpers/world.js';
+import { HANDS, OWNER, advanceDays, asText, outreachOnly, owner, ownerApp, runMorning, seedProductionShape } from '../helpers/world.js';
 
 let app: Awaited<ReturnType<typeof ownerApp>>;
 let me: ReturnType<typeof owner>;
@@ -87,7 +87,12 @@ describe('the world is not asked through an instrument that is not working', () 
     expect(hand.error).toMatch(/could not proceed/);
     expect(hand.error).toMatch(/the way a person answers is not working/);
 
-    expect(providers.state.sends, 'nobody is written to through an instrument that cannot carry the answer').toHaveLength(0);
+    // WHAT WENT TO A STRANGER, which is not the same as what left the
+    // provider: the institution also sends itself one check to find out
+    // whether a reply to its own address arrives, and that check is the reason
+    // it is allowed to write to anybody at all.
+    expect(outreachOnly(providers.state.sends),
+      'nobody is written to through an instrument that cannot carry the answer').toHaveLength(0);
     const sent = (await query(
       `SELECT COUNT(*) AS n FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'offer'`, [X]))
       .rows[0] as Record<string, unknown>;
@@ -127,7 +132,8 @@ describe('the world is not asked through an instrument that is not working', () 
     await standUpWorkshop(OWNER, providers.fetch as unknown as typeof fetch);
     await advanceDays(1);
     await runMorning(HANDS);
-    expect(providers.state.sends.length, 'the offers go out once the world can answer').toBeGreaterThan(0);
+    expect(outreachOnly(providers.state.sends).length,
+      'the offers go out once the world can answer').toBeGreaterThan(0);
     const path = (await query(
       `SELECT verified_status, broken_since FROM experiment_paths WHERE experiment_id = ? AND kind = 'reply'`, [X]))
       .rows[0] as Record<string, unknown>;
@@ -139,10 +145,16 @@ describe('the world is not asked through an instrument that is not working', () 
 describe('what is not known is not treated as what is broken', () => {
   it('a path nobody could read does not stop the test', async () => {
     const { instrumentAgainst, pathsNotWorking } = await import('../../src/services/venture/the-instrument.js');
-    // No health reading at all: every path with a channel reads unknown.
+    // No health reading at all. A path whose only witness is the day's health
+    // reading therefore reads unknown. The paths that keep their own evidence
+    // — the provider's word about a link, a live event, a message that
+    // actually came back — answer from that evidence instead, which is the
+    // whole point of evidence: it does not go away because this pass could not
+    // take a reading.
+    const OWN_EVIDENCE = ['payment', 'refund', 'payment_observation', 'reply'];
     const readings = await instrumentAgainst(X, null);
     expect(readings.length).toBeGreaterThan(0);
-    expect(readings.every((r) => r.status === 'unknown' || r.kind === 'payment' || r.kind === 'refund' || r.kind === 'payment_observation')).toBe(true);
+    expect(readings.every((r) => r.status === 'unknown' || OWN_EVIDENCE.includes(r.kind))).toBe(true);
     expect(pathsNotWorking(readings).filter((r) => r.bearsOn !== 'obligation'),
       'unknown is not broken: a deployment that cannot read a path must not be stopped by it').toHaveLength(0);
   });

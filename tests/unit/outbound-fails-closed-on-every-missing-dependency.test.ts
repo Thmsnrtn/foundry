@@ -41,7 +41,7 @@ import { allowExperiment, approveRemaining, planOffer, qualifyRecipient, recipie
 import { establishPublicWorkshop, pauseNewEconomicActivity, publicWorkshopOf, resumeEconomicActivity, setPostalAddress } from '../../src/services/public-workshop/settings.js';
 import { connectWorkshopSending, standUpTheEars, standUpWorkshop } from '../../src/services/public-workshop/infrastructure.js';
 import { publicationGate } from '../../src/services/public-workshop/publication.js';
-import { recipientsOf } from '../../src/services/venture/hand.js';
+import { outreachOnly } from '../helpers/world.js';
 
 vi.setConfig({ testTimeout: 180_000 });
 const OWNER = 'fc_owner'; const FOUNDRY = 'fc_foundry';
@@ -68,12 +68,12 @@ async function withBroken(what: string, breakIt: () => Promise<void> | void, men
   // dedup key then suppresses the identical re-publish, so the divergence
   // persists. It fails closed — the gate refuses — which is why the assertions
   // below are about what did NOT happen rather than about a clean slate.
-  const sendsBefore = state.sends.length;
+  const sendsBefore = outreachOnly(state.sends).length;
   const writtenBefore = await sentCount();
   await breakIt();
   const report = (await runHand({ founderId: OWNER, now: NOW, offersPerTick: 3 }))[0];
   const gate = await publicationGate(X, { now: NOW });
-  expect(state.sends.length, `${what}: a message left while it was broken`).toBe(sendsBefore);
+  expect(outreachOnly(state.sends).length, `${what}: a message left while it was broken`).toBe(sendsBefore);
   expect(await sentCount(), `${what}: an offer was written while it was broken`).toBe(writtenBefore);
   expect(gate.ok, `${what}: the gate said everything was fine`).toBe(false);
   await mend();
@@ -106,6 +106,14 @@ beforeAll(async () => {
   await reconsiderProof1(OWNER);
   state.nextDomainStatus = 'verified';
   await connectWorkshopSending(OWNER);
+  // AND THE ROUND TRIP. Standing the ears up is configuration; the institution
+  // does not believe the route carries anything until a message sent to the
+  // advertised address has actually come back, so the world completes the
+  // trip the way the edge program would.
+  {
+    const { completeTheReplyRoundTrip } = await import('../helpers/world.js');
+    await completeTheReplyRoundTrip(OWNER);
+  }
   await setPostalAddress(OWNER, 'PO Box 123, Example, MA 01000');
   await allowExperiment({ founderId: OWNER, experimentId: X, by: 'owner' });
 });
@@ -119,7 +127,7 @@ describe('everything is ready, and one message goes out', () => {
     const report = (await runHand({ founderId: OWNER, now: NOW, offersPerTick: 1 }))[0]!;
     expect(report.exceptions).toEqual([]);
     expect(report.offersSent).toBe(1);
-    expect(state.sends).toHaveLength(1);
+    expect(outreachOnly(state.sends)).toHaveLength(1);
     const gate = await publicationGate(X, { now: NOW, verifyLive: false });
     expect(gate).toMatchObject({ ok: true, failures: [] });
     expect(gate.pageUrl).toBe(`https://apexmicro.ai/experiments/${PROOF1_SLUG}`);

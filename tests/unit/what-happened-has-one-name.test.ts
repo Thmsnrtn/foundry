@@ -18,7 +18,7 @@ process.env.ENCRYPTION_KEY = process.env.ENCRYPTION_KEY ?? '0'.repeat(64);
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { query } from '../../src/db/client.js';
-import { OWNER, asText, owner, ownerApp, seedProductionShape } from '../helpers/world.js';
+import { EXPERIMENT_001_AS_IT_WOULD_RUN_NOW, OWNER, asText, owner, ownerApp, seedProductionShape } from '../helpers/world.js';
 import { outcomeFromRow, outcomeOf } from '../../src/services/founder/what-happened.js';
 
 let app: Awaited<ReturnType<typeof ownerApp>>;
@@ -45,7 +45,7 @@ describe('one settled test, one word, one reason', () => {
     expect(o.settled).toBe(true);
     // THE WORLD'S OWN REASON: the sealed rule's sentence, in his words, from
     // what was actually sent and delivered — never an internal event name.
-    expect(o.reason).toContain('0 deliveries that counted out of 19 offers delivered');
+    expect(o.reason).toContain(`0 deliveries that counted out of ${EXPERIMENT_001_AS_IT_WOULD_RUN_NOW.delivered} offers delivered`);
     expect(o.reason).not.toMatch(/deliverys|offer_delivereds|_/);
     expect(o.meaning).not.toContain('Nothing was sent');
     expect(o.establishes).toContain('did not sell');
@@ -57,7 +57,7 @@ describe('one settled test, one word, one reason', () => {
     expect(t).toContain('Surprised');
     expect(t).toContain('What happened and why');
     expect(t).toContain('The prediction did not hold.');
-    expect(t).toContain('0 deliveries that counted out of 19 offers delivered');
+    expect(t).toContain(`0 deliveries that counted out of ${EXPERIMENT_001_AS_IT_WOULD_RUN_NOW.delivered} offers delivered`);
     expect(t).not.toContain('Nothing was sent');
     expect(t).toContain('What that establishes');
     expect(t).not.toMatch(RAW);
@@ -66,10 +66,10 @@ describe('one settled test, one word, one reason', () => {
   it('Experiments (Recently finished), History, Activity, the letter, Home and the next-test page say the same word', async () => {
     const index = asText(await me.page('/foundry/experiments'));
     expect(index).toContain('Surprised');
-    expect(index).toContain('0 deliveries that counted out of 19 offers delivered');
+    expect(index).toContain(`0 deliveries that counted out of ${EXPERIMENT_001_AS_IT_WOULD_RUN_NOW.delivered} offers delivered`);
     const history = asText(await me.page('/foundry/experiments/history'));
     expect(history).toContain('Surprised');
-    expect(history).toContain('0 deliveries that counted out of 19 offers delivered');
+    expect(history).toContain(`0 deliveries that counted out of ${EXPERIMENT_001_AS_IT_WOULD_RUN_NOW.delivered} offers delivered`);
     const activity = asText(await me.page('/foundry/activity?kind=experiment'));
     expect(activity).toContain('Experiment settled surprised');
     const { whileYouWereAway } = await import('../../src/services/founder/a-week-away.js');

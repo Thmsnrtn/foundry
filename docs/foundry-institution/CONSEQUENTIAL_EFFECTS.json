@@ -198,6 +198,13 @@
       "capability": "send_email capability handler"
     },
     {
+      "file": "src/services/integration/resend.ts",
+      "line": 505,
+      "detector": "external_post",
+      "status": "governed",
+      "capability": "send_email capability handler"
+    },
+    {
       "file": "src/services/integration/slack.ts",
       "line": 132,
       "detector": "external_post",

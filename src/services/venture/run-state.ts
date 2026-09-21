@@ -43,8 +43,17 @@ export function readRun(input: {
   achieved: number;
   exceptions: string[];
   attempting: string;
+  /**
+   * HOW MANY THE INSTITUTION DECLINED TO WRITE TO, by a standing rule about
+   * the person rather than by anything going wrong. Not a failure, and not
+   * nothing: a pass that wrote to nobody because it was not allowed to write
+   * to anybody is a quiet pass with a reason, and the reason belongs in the
+   * sentence rather than in an absence.
+   */
+  withheld?: number;
 }): RunReading {
   const { authorised, intended, achieved, exceptions, attempting } = input;
+  const withheld = input.withheld ?? 0;
   // "is not working" is the instrument's words for a path this test depends on
   // that the world says is down. It is the same kind of fact as an unplaceable
   // offer — something the institution depends on, unavailable — and reads as
@@ -73,7 +82,12 @@ export function readRun(input: {
       because: 'there was work to do and none of it happened, and nothing said why',
       ownerAction: null };
   }
-  if (achieved === 0) return { state: 'noop_expected', attempting, progressed: false };
+  if (achieved === 0) {
+    return { state: 'noop_expected', attempting, progressed: false,
+      because: withheld > 0
+        ? `nothing went out: ${withheld} ${withheld === 1 ? 'business is' : 'businesses are'} approved but held back by a rule about who may be written to`
+        : null };
+  }
   if (achieved < intended) {
     return { state: 'partial', attempting, progressed: true,
       because: exceptions.length ? exceptions.join('; ') : `${achieved} of ${intended} went through` };

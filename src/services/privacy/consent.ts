@@ -1051,6 +1051,16 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
       + 'each of them never permits',
     onAccountErasure: { op: 'delete' },
   },
+  // WHETHER A REPLY TO HIS OWN WORKSHOP'S ADDRESS ARRIVES. Each row is one
+  // message the institution sent to itself and looked for; the only address in
+  // it is his Workshop's own advertised one, and no stranger appears in it at
+  // all. It is evidence about how this institution served him, and it goes
+  // with him.
+  reply_route_probes: {
+    reason: 'the checks the institution ran on one person\'s own reply address, '
+      + 'and whether each of them came back',
+    onAccountErasure: { op: 'delete' },
+  },
   // WHETHER HIS OWN CHANNELS COULD CARRY AN ANSWER, DAY BY DAY. It carries no
   // product id, and it could not: the Workshop's reply path and sending
   // identity are one person's, standing behind whichever of their tests is

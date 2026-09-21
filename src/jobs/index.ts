@@ -3196,8 +3196,8 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       // first pass and larger once the outbound has shown it behaves.
       const reports = await runHand();
       for (const r of reports) {
-        logger.info(`experiment_hand_tick: ${r.experimentId} ${r.state} — offers ${r.offersSent}/${r.offersPlanned}, deliveries ${r.deliveriesSent}, reconciled ${r.reconciled}, refunds ${r.refundsIssued}, settled ${r.settled ?? 'not yet'}`,
-          { jobName: 'experiment_hand_tick', state: r.state, because: r.because, exceptions: r.exceptions });
+        logger.info(`experiment_hand_tick: ${r.experimentId} ${r.state} — offers ${r.offersSent}/${r.offersPlanned}, deliveries ${r.deliveriesSent}, reconciled ${r.reconciled}, refunds ${r.refundsIssued}, settled ${r.settled ?? 'not yet'}${r.withheld.length ? `, withheld from ${r.withheld.length}` : ''}`,
+          { jobName: 'experiment_hand_tick', state: r.state, because: r.because, exceptions: r.exceptions, withheld: r.withheld });
       }
       // A listing the owner placed himself has no act for the hand to carry;
       // the sealed rule still reads what the venue reported, on the same pass.
@@ -3262,6 +3262,26 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
               { jobName: 'public_workshop_tick' });
           }
         }
+        // ─── ASK THE REPLY ROUTE TO PROVE ITSELF ────────────────────────
+        //
+        // Once a day, one message to the Workshop's own advertised address,
+        // through its own governed capability, carrying a nonce. It is the
+        // only check in the institution that answers the question the others
+        // only approach: not whether a routing rule exists, but whether a
+        // message sent there arrives. Bounded by `probeIsDue`, so an hourly
+        // routine does not turn a diagnostic into a mailing list.
+        try {
+          const { probeIsDue, sendReplyProbe } = await import('../services/public-workshop/reply-probe.js');
+          if (await probeIsDue(founderId)) {
+            const probe = await sendReplyProbe(founderId);
+            logger.info(`public_workshop_tick: ${founderId} reply-route check ${'sent' in probe ? `sent (${probe.route})` : `not sent: ${probe.refused}`}`,
+              { jobName: 'public_workshop_tick' });
+          }
+        } catch (err) {
+          logger.warn(`public_workshop_tick: ${founderId} could not check the reply route: ${err instanceof Error ? err.message : String(err)}`,
+            { jobName: 'public_workshop_tick' });
+        }
+
         const health = await workshopHealth(founderId);
         logger.info(`public_workshop_tick: ${founderId} opt-outs +${opt.recorded}, answers +${opt.continuations}, swept ${opt.swept}; site ${health.site.status}, cloudflare ${health.cloudflare.status}, sending ${health.sending.status}, inbox ${health.replyInbox.status}`,
           { jobName: 'public_workshop_tick', failing: health.pagesFailing, optOutFailures: opt.failed });

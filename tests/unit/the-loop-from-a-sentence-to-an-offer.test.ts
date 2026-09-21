@@ -66,6 +66,11 @@ beforeAll(async () => {
     [OWNER, WS, 'Apex Micro', 'Thomas Norton', 'https://apexmicro.example', 'apexmicro.example', 'hello@apexmicro.example', 'A small workshop.', '', 'Apex Micro\n11 Example Drive\nMarlborough, MA 01752']);
   const { setSendingIdentity } = await import('../../src/services/outbound/sending-identity.js');
   await setSendingIdentity({ productId: WS, provider: 'resend', credential: 're_test', fromEmail: 'hello@apexmicro.example', fromName: 'Apex Micro' });
+  // A buyer who arrives on their own has one way to ask a question, and the
+  // institution will not put an offer in front of them until a message sent to
+  // that address has actually come back.
+  const { theReplyRouteHasBeenProven } = await import('../helpers/world.js');
+  await theReplyRouteHasBeenProven(OWNER);
   const { openMandate } = await import('../../src/services/venture/mandate.js');
   const m = await openMandate({ founderId: OWNER, statement: 'Small things for trades businesses', shape: null, evidenceMode: 'real' });
   if ('refused' in m) throw new Error(m.refused);

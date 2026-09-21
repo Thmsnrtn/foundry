@@ -80,6 +80,12 @@ export async function earsFor(intakeKey: string): Promise<string | null> {
 export interface Heard {
   id: string; duplicate: boolean; threadKey: string; reading: Reading; handling: Handling;
   from: string; experimentId: string | null; did: string[];
+  /**
+   * The institution's own diagnostic arriving, not somebody's mail. Nothing is
+   * stored for it and nothing downstream sees it; it exists as a return value
+   * so the intake can say what it did with the message.
+   */
+  probe?: true;
 }
 
 /**
@@ -103,6 +109,26 @@ export async function hearMail(input: {
   const to = normalise(input.to);
   const rfc = (input.rfcMessageId ?? '').trim();
   if (!rfc) throw new MailRefused('no_message_id', 'a message with no identity cannot be deduplicated');
+
+  // ─── OUR OWN DIAGNOSTIC, RECOGNISED BEFORE ANYTHING TOUCHES IT ───────────
+  //
+  // The Workshop sends one message to its own address to find out whether the
+  // path a stranger's reply travels is working. It arrives here like any other
+  // message, and it must not become one: not a conversation, not an item in
+  // the Inbox, not something the owner is asked about, not an answer the
+  // Workshop composes, not a suppression, not an observation of what anybody
+  // did. Matching is on the exact nonce this institution generated; a message
+  // that merely looks like a diagnostic belongs to whoever sent it and is
+  // kept.
+  //
+  // Before the dedup read, because a probe is not stored and so can never be a
+  // duplicate of anything.
+  const { matchProbeArrival } = await import('./reply-probe.js');
+  const ours = await matchProbeArrival(input.founderId, input.subject);
+  if (ours.matched) {
+    return { id: `probe:${rfc}`, duplicate: false, threadKey: rfc, reading: 'unknown',
+      handling: 'no_action', from, experimentId: null, did: ['the reply route answered'], probe: true };
+  }
 
   const already = await one('SELECT id FROM workshop_mail WHERE founder_id = ? AND rfc_message_id = ?', [input.founderId, rfc]);
   if (already) {

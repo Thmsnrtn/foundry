@@ -177,6 +177,10 @@ phones('the estate, journey by journey', () => {
     state.nextDomainStatus = 'verified';
     await connectWorkshopSending(OWNER);
     await setPostalAddress(OWNER, 'PO Box 123, Example, MA 01000');
+    // A test that invites a reply may not be allowed until a message sent to
+    // the advertised address has actually come back.
+    const { giveTheWorkshopEars } = await import('../helpers/world.js');
+    await giveTheWorkshopEars(OWNER);
     await allowExperiment({ founderId: OWNER, experimentId: X, by: 'owner' });
     await runHand({ now: NOW, offersPerTick: 2 });
     const seen = await onThePhone('/foundry');

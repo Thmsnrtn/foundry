@@ -66,6 +66,21 @@ export interface WorldOptions {
 /** What production's Experiment 001 came to: written to, delivered, bounced. */
 export const EXPERIMENT_001_IN_THE_WORLD = { written: 21, delivered: 19, bounced: 2 } as const;
 
+/**
+ * AND WHAT THE SAME MORNING PRODUCES NOW, which is not the same number.
+ *
+ * One of production's twenty-one sat at an email address that appears twice on
+ * the owner's own list — once under the name a public listing gives it and
+ * once under the name the cohort gives it — and one of those two rows was
+ * struck. The message went anyway. That is the breach two independent
+ * reviewers found, and the door now refuses it, so the world writes to twenty.
+ *
+ * The historical number above is not edited to match. What happened is what
+ * happened; this is what the institution does with the same list today, and
+ * the difference between the two is the repair.
+ */
+export const EXPERIMENT_001_AS_IT_WOULD_RUN_NOW = { written: 20, delivered: 18, bounced: 2 } as const;
+
 export const FIRST_DIRECTION = 'Find low-maintenance digital income opportunities.';
 
 /**
@@ -175,9 +190,79 @@ export async function giveTheWorkshopEars(founderId: string = OWNER): Promise<vo
   try {
     const { standUpTheEars } = await import('../../src/services/public-workshop/infrastructure.js');
     await standUpTheEars(founderId);
+    // AND THE ROUND TRIP, because a route that is set up is not a route that
+    // carries anything — which is the whole of what this campaign learned.
+    // The institution refuses to write to strangers until a message sent to
+    // its own advertised address has actually arrived, so a world where
+    // anybody is written to has to complete that trip. The probe goes out
+    // through the real door and comes back through the real intake: the
+    // provider stub carries it, and `hearMail` recognises its nonce exactly as
+    // it would in production.
+    await completeTheReplyRoundTrip(founderId);
   } finally {
     if (held === undefined) delete process.env.APP_URL; else process.env.APP_URL = held;
   }
+}
+
+/**
+ * SEND THE REPLY-ROUTE CHECK AND DELIVER IT, as the world would.
+ *
+ * The stub accepts the send; nothing in a laboratory actually routes mail, so
+ * the message is handed to the same intake the edge program hands a real one
+ * to. What is being exercised here is the institution's half — the send
+ * through the governed door, the nonce, the matcher in `hearMail`, the record
+ * and the grade — which is the half a test can honestly exercise.
+ */
+export async function completeTheReplyRoundTrip(founderId: string = OWNER): Promise<void> {
+  const { sendReplyProbe, PROBE_SUBJECT } = await import('../../src/services/public-workshop/reply-probe.js');
+  const sent = await sendReplyProbe(founderId);
+  if (!('sent' in sent)) throw new Error(`the world could not send the reply-route check: ${sent.refused}`);
+  const { publicWorkshopOf } = await import('../../src/services/public-workshop/settings.js');
+  const w = (await publicWorkshopOf(founderId))!;
+  const { hearMail } = await import('../../src/services/public-workshop/mail.js');
+  await hearMail({
+    founderId, to: w.contactEmail, from: w.contactEmail, subject: PROBE_SUBJECT(sent.nonce),
+    body: 'This is an automated check that replies to this address arrive.',
+    rfcMessageId: `<probe-${sent.nonce}@apexmicro.ai>`,
+  });
+}
+
+/**
+ * WHAT WENT TO A STRANGER — the provider's log without the Workshop's own
+ * reply-route check.
+ *
+ * The Workshop sends itself one message a day to find out whether a reply to
+ * its advertised address arrives. It is an instrument reading, not an offer,
+ * and the owner's condition on it was that it stay out of conversations,
+ * outreach counts and experiment results. A proof that counts what left the
+ * provider and calls the number outreach would quietly break that, so every
+ * proof that means outreach says so by reading through here.
+ */
+export function outreachOnly<T extends { subject: string }>(sends: readonly T[]): T[] {
+  return sends.filter((m) => !m.subject.startsWith('[Foundry reply-route check '));
+}
+
+/**
+ * THE REPLY ROUTE, PROVEN, FOR A FIXTURE THAT ASSEMBLES ITS WORKSHOP BY HAND.
+ *
+ * `completeTheReplyRoundTrip` is the faithful one: it sends through the
+ * governed door and hears the answer through the intake. A suite with no
+ * provider stub cannot send, and standing one up to prove a route it is not
+ * testing would be a larger fiction than this is. So the attempt is recorded
+ * and the arrival goes through the real matcher — the half that decides what
+ * the institution believes.
+ */
+export async function theReplyRouteHasBeenProven(founderId: string = OWNER, route: 'self' | 'external' = 'self'): Promise<void> {
+  const { publicWorkshopOf } = await import('../../src/services/public-workshop/settings.js');
+  const w = (await publicWorkshopOf(founderId));
+  if (!w?.contactEmail) throw new Error('there is no Workshop, so there is no address to prove');
+  const { matchProbeArrival, PROBE_SUBJECT } = await import('../../src/services/public-workshop/reply-probe.js');
+  const nonce = `fixture${Math.random().toString(36).slice(2, 10)}`;
+  await query(
+    `INSERT INTO reply_route_probes (id, founder_id, nonce, route, advertised, sent_at) VALUES (?,?,?,?,?,?)`,
+    [`rrp_fixture_${nonce}`, founderId, nonce, route, w.contactEmail, new Date().toISOString()]);
+  const m = await matchProbeArrival(founderId, PROBE_SUBJECT(nonce));
+  if (!m.matched) throw new Error('the matcher did not recognise the check it was given');
 }
 
 /** The three routines that carry a test through the world, in the order the morning runs them. */
@@ -252,7 +337,19 @@ async function settledByTheWorld(experimentId: string, providers: NonNullable<Wo
   }
   const e = (await query('SELECT ran_at, verdict FROM venture_experiments WHERE id = ?', [experimentId])).rows[0] as Record<string, unknown>;
   if (e.ran_at == null) throw new Error('the world did not settle Experiment 001 within fourteen mornings');
-  if (state.sends.length !== EXPERIMENT_001_IN_THE_WORLD.written) throw new Error(`the world wrote to ${String(state.sends.length)} businesses, not ${String(EXPERIMENT_001_IN_THE_WORLD.written)}`);
+  // WHAT WENT TO A STRANGER, not what left the provider: the Workshop also
+  // sends itself a reply-route check every morning, and counting those as
+  // businesses written to would make this number a fiction.
+  const written = outreachOnly(state.sends).length;
+  if (written !== EXPERIMENT_001_AS_IT_WOULD_RUN_NOW.written) {
+    const held = (await query(
+      `SELECT counterparty_ref, review_status, email FROM experiment_recipients
+        WHERE experiment_id = ? AND review_status = 'approved'
+          AND id NOT IN (SELECT recipient_id FROM outbound_actions WHERE experiment_id = ? AND recipient_id IS NOT NULL)`,
+      [experimentId, experimentId])).rows as unknown as Array<Record<string, unknown>>;
+    throw new Error(`the world wrote to ${String(written)} businesses, not ${String(EXPERIMENT_001_AS_IT_WOULD_RUN_NOW.written)}`
+      + ` (held back: ${held.map((h) => `${String(h.counterparty_ref)} <${String(h.email)}>`).join(', ') || 'nobody'})`);
+  }
 }
 
 /** The timestamp columns of the live schema, by table: read once from SQLite itself. */
@@ -367,8 +464,47 @@ export async function runMorning(only: readonly string[] = MORNING): Promise<Arr
       await recordJobFailure(job, e);
       out.push({ job, ok: false, error: e instanceof Error ? e.message : String(e) });
     }
+    if (job === 'public_workshop_tick') await theWorldCarriesTheReplyCheck();
   }
   return out;
+}
+
+/**
+ * THE WORLD CARRIES THE MAIL IT ACCEPTED, unless a test says it does not.
+ *
+ * The morning's tick sends the reply-route check; in the world outside, the
+ * provider then delivers it, the zone routes it and the edge program hands it
+ * to the intake. A stub accepts the send and stops there, so without this the
+ * laboratory models a route that is permanently broken — and every test that
+ * writes to people would be blocked for a reason that is an artefact of the
+ * laboratory rather than a fact about the institution.
+ *
+ * `theWorldStopsCarryingMail()` is how a test models the real failure.
+ */
+let worldCarriesMail = true;
+export function theWorldStopsCarryingMail(): void { worldCarriesMail = false; }
+export function theWorldCarriesMailAgain(): void { worldCarriesMail = true; }
+
+async function theWorldCarriesTheReplyCheck(): Promise<void> {
+  if (!worldCarriesMail) return;
+  const { query } = await import('../../src/db/client.js');
+  const waiting = (await query(
+    `SELECT founder_id, nonce FROM reply_route_probes
+      WHERE arrived_at IS NULL AND refused IS NULL ORDER BY sent_at`)).rows as unknown as Array<Record<string, unknown>>;
+  if (waiting.length === 0) return;
+  const { PROBE_SUBJECT } = await import('../../src/services/public-workshop/reply-probe.js');
+  const { publicWorkshopOf } = await import('../../src/services/public-workshop/settings.js');
+  const { hearMail } = await import('../../src/services/public-workshop/mail.js');
+  for (const p of waiting) {
+    const w = await publicWorkshopOf(String(p.founder_id));
+    if (!w?.contactEmail) continue;
+    await hearMail({
+      founderId: String(p.founder_id), to: w.contactEmail, from: w.contactEmail,
+      subject: PROBE_SUBJECT(String(p.nonce)),
+      body: 'This is an automated check that replies to this address arrive.',
+      rfcMessageId: `<probe-${String(p.nonce)}@${w.zoneName}>`,
+    });
+  }
 }
 
 /** The owner surface, mounted the way the harness and the proofs mount it, signed in as the owner. */

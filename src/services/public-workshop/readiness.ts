@@ -88,7 +88,11 @@ export async function externalReadiness(
   if (!x) say('public-safe projection', 'waiting', 'the experiment has no public identity yet (number, slug, public copy)');
   else {
     const { renderExperiment } = await import('./site.js');
-    const html = renderExperiment(workshopFacts(w), x);
+    // THE SAME FACTS THE PUBLISHER USES, or this render and the published one
+    // differ by a sentence and the page reads as stale on every pass.
+    const { replyRouteEvidence } = await import('./reply-probe.js');
+    const proven = (await replyRouteEvidence(w.founderId)).grade.startsWith('proven');
+    const html = renderExperiment(workshopFacts(w, { replyRouteProven: proven }), x);
     const leak = leakIn(html, await privateStringsOf(experimentId));
     if (leak) say('public-safe projection', 'blocked', `a private value would appear on the page (${leak.slice(0, 12)}…)`);
     else say('public-safe projection', 'ready', `${html.length} bytes, no private value present`, `/experiments/${x.slug}`);

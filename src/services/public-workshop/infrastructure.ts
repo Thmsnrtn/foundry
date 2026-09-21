@@ -174,6 +174,7 @@ export async function connectWorkshopSending(founderId: string, fetchImpl: typeo
     }
     identity = `${fromName} <${w.contactEmail}>`;
   }
+  await theRecordFollowsTheAct(founderId, fetchImpl);
   return { domain: after.name, status: after.status, records: written, identity, verified: after.status === 'verified' };
 }
 
@@ -235,7 +236,34 @@ export async function standUpTheEars(founderId: string): Promise<{ program: stri
     { zone_name: w.zoneName, to: w.contactEmail, worker: name,
       purpose: 'mail to the Workshop is kept by the Workshop and heard by the institution' },
     `public:${founderId}:route:hearing:${w.contactEmail}:${name}`);
+  await theRecordFollowsTheAct(founderId);
   return { program: name, hearing: Boolean((routed as { enabled?: boolean }).enabled), store };
+}
+
+/**
+ * AN ACT THAT CHANGES THE WORLD RE-READS IT.
+ *
+ * `public_workshop.health_json` is a snapshot, and several decisions are made
+ * from it rather than from a live read — the readiness gate an owner's Allow
+ * passes through is one. A snapshot taken before the owner connected sending
+ * and stood the ears up therefore refused a test for lacking exactly the
+ * things he had just supplied, and it did not refuse loudly: it agreed,
+ * quietly, about a world that no longer existed.
+ *
+ * So every act that changes what the reading is about takes a new one. It
+ * costs three provider calls at the moment of an owner's act, which is the
+ * cheapest place in the institution to spend them.
+ *
+ * Never fatal: a health read that fails must not undo an infrastructure change
+ * that succeeded. The stale snapshot then stands and the hourly tick replaces
+ * it, which is the same answer as before this existed.
+ */
+async function theRecordFollowsTheAct(founderId: string, fetchImpl?: typeof fetch): Promise<void> {
+  try {
+    const { recordWorkshopHealth } = await import('./settings.js');
+    const reading = await workshopHealth(founderId, { fetchImpl });
+    await recordWorkshopHealth(founderId, reading as unknown as Record<string, unknown>, new Date());
+  } catch { /* the snapshot stays as it was; the tick will take the next one */ }
 }
 
 /**

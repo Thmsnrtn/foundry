@@ -137,7 +137,12 @@ export interface SiteReport { published: string[]; unchanged: string[]; failed: 
 export async function publishSite(founderId: string, by: string, fetchImpl?: typeof fetch): Promise<SiteReport> {
   const w = await publicWorkshopOf(founderId);
   if (!w) throw new WorkshopRefused('no_workshop');
-  const facts = workshopFacts(w);
+  // WHAT THE PAGES MAY CLAIM ABOUT THE REPLY ROUTE, read once for the pass.
+  // The claim is made only where a message has actually arrived at the
+  // advertised address; a routing rule that exists is not evidence.
+  const { replyRouteEvidence } = await import('./reply-probe.js');
+  const proven = (await replyRouteEvidence(founderId)).grade.startsWith('proven');
+  const facts = workshopFacts(w, { replyRouteProven: proven });
   // ONLY AN APPROVED EXPERIMENT REACHES THE WORLD, and the guard on the row
   // says the same. Two are excluded, for different reasons: one still being
   // prepared has nothing to show yet, and one the owner declined before it ever
@@ -202,7 +207,9 @@ export async function previewExperimentPage(experimentId: string): Promise<{ htm
   const x = await projectExperiment(experimentId);
   if (!w || !x) return null;
   const { renderExperiment } = await import('./site.js');
-  return { html: renderExperiment(workshopFacts(w), x), path: x.path };
+  const { replyRouteEvidence } = await import('./reply-probe.js');
+  const proven = (await replyRouteEvidence(w.founderId)).grade.startsWith('proven');
+  return { html: renderExperiment(workshopFacts(w, { replyRouteProven: proven }), x), path: x.path };
 }
 
 // ─── The gate ────────────────────────────────────────────────────────────────
@@ -228,7 +235,9 @@ export async function publicationGate(experimentId: string, opts: { now?: Date; 
   let pub = await experimentPublication(experimentId);
   if (!pub) failures.push('the public page has not been published');
   else {
-    const facts = workshopFacts(w);
+    const { replyRouteEvidence } = await import('./reply-probe.js');
+    const proven = (await replyRouteEvidence(w.founderId)).grade.startsWith('proven');
+    const facts = workshopFacts(w, { replyRouteProven: proven });
     const { renderExperiment } = await import('./site.js');
     const current = digestOf(renderExperiment(facts, x));
     if (current !== pub.digest) failures.push('the published page is stale: the rows have changed since it was put up');

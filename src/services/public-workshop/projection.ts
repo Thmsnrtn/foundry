@@ -154,10 +154,27 @@ export interface PublicWorkshopFacts {
    */
   legalOperator: string; origin: string; tagline: string; statement: string; about: string;
   contactEmail: string; postalAddress: string | null; region: string;
+  /**
+   * WHETHER THE REPLY ROUTE HAS BEEN PROVEN TO WORK, by a message actually
+   * arriving at the advertised address rather than by a routing rule existing.
+   *
+   * The pages carry a sentence — "Replies to anything I send come straight
+   * back to me" — which was rendered on every experiment page including the
+   * one whose nineteen recipients could not reach anybody. It was false, and
+   * nothing in the institution was in a position to know it was false. A
+   * public claim is now bound to the evidence for it: where the route is not
+   * proven, the sentence is simply not made. Nothing is published in its
+   * place; an institution that cannot show something says nothing about it.
+   */
+  replyRouteProven: boolean;
 }
 
-export function workshopFacts(w: PublicWorkshop): PublicWorkshopFacts {
+export function workshopFacts(w: PublicWorkshop, opts: { replyRouteProven?: boolean } = {}): PublicWorkshopFacts {
   return {
+    // FALSE UNLESS SHOWN OTHERWISE. A caller that has not read the evidence
+    // does not get the claim by default, which is the right direction for a
+    // default to fail in.
+    replyRouteProven: opts.replyRouteProven === true,
     name: w.publicName, legalOperator: w.operatorName, origin: w.origin, tagline: 'a small digital workshop in Massachusetts',
     statement: w.statement, about: w.about, contactEmail: w.contactEmail,
     // THE NAME COMES OFF HERE, at the one boundary where the record becomes

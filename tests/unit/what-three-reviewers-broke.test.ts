@@ -50,16 +50,22 @@ describe('a record of a past measurement does not vanish when the instrument is 
   it('an unreadable pass does not erase a recorded broken interval', async () => {
     const { declareInstrument } = await import('../../src/services/venture/the-instrument.js');
     await declareInstrument(X);
+    // READ ON THE SENDING PATH, NOT THE REPLY PATH. The reply path no longer
+    // takes its reading from the day's health at all: it reads whether a
+    // message sent to the advertised address actually arrived, and that
+    // evidence does not become unreadable because a health read timed out.
+    // The rule under proof here is about a path whose only witness IS the
+    // health reading, and sending is one.
     await query(
-      `UPDATE experiment_paths SET verified_status = 'not_working', verified_detail = 'routing is not enabled',
-              broken_since = datetime('now','-3 days'), broken_detail = 'routing is not enabled'
-        WHERE experiment_id = ? AND kind = 'reply'`, [X]);
+      `UPDATE experiment_paths SET verified_status = 'not_working', verified_detail = 'the provider refused the domain',
+              broken_since = datetime('now','-3 days'), broken_detail = 'the provider refused the domain'
+        WHERE experiment_id = ? AND kind = 'sending'`, [X]);
     const { verifyInstrument } = await import('../../src/services/venture/the-instrument.js');
     // A health reading that says nothing about any channel: every path with a
     // channel reads unknown, which is what a provider timeout produces.
     await verifyInstrument(X, { health: {} as never });
     const row = (await query(
-      `SELECT verified_status, broken_since FROM experiment_paths WHERE experiment_id = ? AND kind = 'reply'`, [X]))
+      `SELECT verified_status, broken_since FROM experiment_paths WHERE experiment_id = ? AND kind = 'sending'`, [X]))
       .rows[0] as Record<string, unknown>;
     expect(row.verified_status).toBe('unknown');
     expect(row.broken_since, 'an absence of reading is not a repair').not.toBeNull();

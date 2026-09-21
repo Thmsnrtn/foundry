@@ -3715,6 +3715,25 @@ CREATE TABLE remediation_prs (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   resolved_at DATETIME
 );
+CREATE TABLE reply_route_probes (
+  id          TEXT PRIMARY KEY,
+  founder_id  TEXT NOT NULL REFERENCES founders(id),
+  -- What the message carries so its arrival can be recognised without reading
+  -- anybody else's mail: a random token in the subject, matched exactly.
+  nonce       TEXT NOT NULL,
+  -- Where it was sent from, which is what decides what its arrival proves.
+  route       TEXT NOT NULL CHECK (route IN ('self','external')),
+  -- The address it was sent TO: the advertised reply address at the time.
+  advertised  TEXT NOT NULL,
+  sent_at     TEXT NOT NULL DEFAULT (datetime('now')),
+  -- The provider's own name for the message, so a send can be traced.
+  provider_ref TEXT,
+  -- When it was seen arriving, or null while it has not been.
+  arrived_at  TEXT,
+  -- What was wrong, when the send itself failed.
+  refused     TEXT,
+  UNIQUE(founder_id, nonce)
+);
 CREATE TABLE research_sources (
   id             TEXT PRIMARY KEY,
   -- The person, not a company. Carried directly so erasure finds it.
@@ -5208,6 +5227,7 @@ CREATE UNIQUE INDEX idx_rejection_streak_unique
 CREATE INDEX idx_remediation_prs_audit ON remediation_prs(audit_score_id);
 CREATE INDEX idx_remediation_prs_product ON remediation_prs(product_id);
 CREATE INDEX idx_remediation_prs_status ON remediation_prs(status);
+CREATE INDEX idx_reply_route_probes ON reply_route_probes(founder_id, sent_at);
 CREATE UNIQUE INDEX idx_research_source_one_live
   ON research_sources(founder_id, source_type, named)
   WHERE disconnected_at IS NULL;
@@ -8641,6 +8661,16 @@ BEGIN
       AND x.expected_event_type LIKE 'reference_metric:%'
       AND NEW.observation_ref='signal_event:' || e.id
       AND datetime(e.created_at)<=datetime(x.created_at));
+END;
+CREATE TRIGGER reply_route_probe_is_an_attempt
+BEFORE UPDATE ON reply_route_probes
+BEGIN
+  SELECT RAISE(ABORT,'reply_route_probe:immutable')
+    WHERE NEW.founder_id <> OLD.founder_id OR NEW.nonce <> OLD.nonce
+       OR NEW.route <> OLD.route OR NEW.advertised <> OLD.advertised
+       OR NEW.sent_at <> OLD.sent_at;
+  SELECT RAISE(ABORT,'reply_route_probe:arrival_stands')
+    WHERE OLD.arrived_at IS NOT NULL AND NEW.arrived_at IS NULL;
 END;
 CREATE TRIGGER research_source_disconnect_is_one_way
 BEFORE UPDATE ON research_sources
