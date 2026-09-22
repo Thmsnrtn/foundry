@@ -414,7 +414,7 @@ settingsRoutes.get('/settings', async (c) => {
       <p style="font-size:0.82rem;color:var(--bad);margin:0 0 0.75rem;">${etsyError}</p>` : ''}
       <form method="POST" action="/settings/app-credential/etsy" style="margin-top:0.75rem;display:grid;gap:0.5rem;max-width:26rem;">
         <!-- VISIBLE ON PURPOSE, and only this half. The keystring is an
-             identifier, not a secret: it travels in the open as \`client_id\` on
+             identifier, not a secret: it travels in the open as the client_id on
              the very consent URL the owner is about to look at. Hiding it
              behind dots protects nothing and costs the one thing that matters
              when a 24-character string is being pasted on a phone — being able

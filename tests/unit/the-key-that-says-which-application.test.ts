@@ -43,7 +43,13 @@ import {
   appCredentialFor, etsyAppKey, etsyApiKeyHeader, forgetAppCredential, setAppCredential,
 } from '../../src/services/senses/app-credential.js';
 
-const GOOD = { keystring: 'vookyq7ml0orv2kh6r9o85wy'.replace(/./g, 'x'), sharedSecret: 'sssssssss' };
+// A SYNTHETIC PAIR, and the literal is synthetic too. This line used to hold
+// the owner's real keystring with `.replace(/./g, 'x')` after it — masked at
+// runtime, and fully present in the file and in git history. Masking a value
+// you have already written down is not redaction; it only looks like care.
+// Etsy keystrings are 24 characters, which is the only property any of these
+// tests depends on.
+const GOOD = { keystring: 'x'.repeat(24), sharedSecret: 'sssssssss' };
 
 beforeAll(async () => { await runMigrations(); });
 beforeEach(() => { PING = { status: 200, body: { application_id: 4242 } }; });

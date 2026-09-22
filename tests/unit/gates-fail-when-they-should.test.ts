@@ -709,6 +709,32 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('attempt_count');
   });
 
+  it('check-no-masked-literals fails on a literal that is masked away', () => {
+    // 22 September 2026. A fixture for the Etsy application key held the
+    // owner's real keystring with a whole-string masking call after it. At
+    // runtime it was x's, which was all the test needed; in the file, and in
+    // every clone of the history, it was the real value. The masking made it
+    // look handled while doing nothing about the only place it mattered.
+    //
+    // Assembled from fragments so this file does not carry the defect it
+    // plants: the gate scans tests/ too.
+    plant('src/services/_gate_fixture_m.ts',
+      j('export const k = ', "'", 'notarealkeystring000000', "'", '.replace(/', '.', '/g, ', "'x'", ');\n'));
+    const r = run('check-no-masked-literals.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('_gate_fixture_m');
+  });
+
+  it('check-no-masked-literals leaves a runtime-built subject alone', () => {
+    // `[_-]` matches two characters and the subject is built at runtime:
+    // normalising a tool name is not hiding a secret, and a gate that flagged
+    // it is a gate somebody turns off.
+    plant('src/services/_gate_fixture_m2.ts',
+      j('export const n = (t: string) => ', '`', '${t}', '`', '.replace(/[_-]/g, ', "' '", ');\n'));
+    const r = run('check-no-masked-literals.mjs');
+    expect(r.code, r.output).toBe(0);
+  });
+
   it('check-backticks-in-embedded-comments fails on a backtick in embedded SQL', () => {
     // Three parse errors in one campaign, each to somebody who had already
     // written the lesson down. The backtick closes the template literal and the
