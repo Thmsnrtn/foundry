@@ -273,13 +273,50 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
          JOIN venture_experiments e ON e.claim_id = o.claim_id
         WHERE e.id = ? AND o.source LIKE ?`, [experimentId, `${plan!.listing!.venue}:stats:%`]))
       .rows[0] as Record<string, unknown> | undefined;
-    conditions.push({
-      name: 'what the venue reports can be read',
-      verdict: provider && String(provider.maturity) !== 'declared' ? 'unproven' : 'waits_for_you',
-      because: readings && Number(readings.n) > 0
-        ? `${String(readings.n)} readings, each entered by you — nothing here reads ${venue} on its own`
-        : `nothing here reads ${venue} on its own, so an absence of sales would not be evidence of no sales`,
-    });
+    // AND IT IS THE READING CAPABILITY THAT ANSWERS THIS, NOT THE PUBLISHING
+    // ONE. This keyed on the maturity of `list_on_marketplace` — the capability
+    // that would PLACE the listing — which is the wrong row for the question
+    // "can what the venue reports be read". They are different acts with
+    // different credentials and different consequences, and tying them meant
+    // the reading condition could never improve until the publishing one did.
+    const eye = (await query(
+      `SELECT p.maturity FROM capability_providers p
+        WHERE p.capability_key = 'read_marketplace_account' AND lower(p.provider) = lower(?)`,
+      [plan!.listing!.venue])).rows[0] as Record<string, unknown> | undefined;
+    const connectedEye = (await query(
+      `SELECT c.id FROM sense_credentials c
+        WHERE c.provider = ? AND c.revoked_at IS NULL LIMIT 1`,
+      [plan!.listing!.venue])).rows[0] as Record<string, unknown> | undefined;
+    // What the venue tells this institution through the connection, as opposed
+    // to what the owner typed off a statistics page.
+    const readFor = (await query(
+      `SELECT COUNT(*) AS n FROM market_observations o
+         JOIN venture_experiments e ON e.claim_id = o.claim_id
+        WHERE e.id = ? AND o.source LIKE ? AND o.retrieval_id IS NOT NULL`,
+      [experimentId, `${plan!.listing!.venue}:shop:%`])).rows[0] as Record<string, unknown> | undefined;
+    const readCount = Number(readFor?.n ?? 0);
+    const typedCount = Number(readings?.n ?? 0);
+    // THE LIMIT IS PART OF THE ANSWER, PERMANENTLY. Etsy exposes no
+    // shop-statistics endpoint to anybody — no daily views, visits,
+    // favourites, impressions or search queries — so no connection will ever
+    // make those readable. Saying the venue "can be read" without that clause
+    // would overstate what the best possible integration buys.
+    const theLimit = `orders are what a connection can read; ${venue} reports no views, `
+      + 'visits or impressions to anyone, so those stay yours to enter by hand';
+    conditions.push(
+      connectedEye && readCount > 0
+        ? met('what the venue reports can be read',
+          `${String(readCount)} readings taken from ${venue} itself — ${theLimit}`)
+        : {
+          name: 'what the venue reports can be read',
+          verdict: connectedEye ? 'unproven'
+            : eye && String(eye.maturity) !== 'declared' ? 'unproven' : 'waits_for_you',
+          because: connectedEye
+            ? `${venue} is connected and has not been read yet — ${theLimit}`
+            : typedCount > 0
+              ? `${String(typedCount)} readings, each entered by you — nothing here reads ${venue} on its own yet`
+              : `nothing here reads ${venue} on its own, so an absence of sales would not be evidence of no sales`,
+        });
 
     // AND THE REMEDY, WHICH IS THE PROMISE THE SITE ALREADY MAKES. Recorded as
     // a condition rather than as prose, because `/refunds` promises a refund

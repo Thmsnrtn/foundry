@@ -3199,6 +3199,25 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
         logger.info(`experiment_hand_tick: ${r.experimentId} ${r.state} — offers ${r.offersSent}/${r.offersPlanned}, deliveries ${r.deliveriesSent}, reconciled ${r.reconciled}, refunds ${r.refundsIssued}, settled ${r.settled ?? 'not yet'}${r.withheld.length ? `, withheld from ${r.withheld.length}` : ''}`,
           { jobName: 'experiment_hand_tick', state: r.state, because: r.because, exceptions: r.exceptions, withheld: r.withheld });
       }
+      // AND WHERE THE VENUE CAN BE READ, IT IS READ BEFORE IT IS SETTLED.
+      //
+      // The owner: he does not intend to personally check external accounts or
+      // reconcile marketplace activity, and manually completing external
+      // platform workflows is not to be the normal operating model. This is
+      // the pass that takes the first of those off him. It runs only where a
+      // connection exists — with none it answers "no Etsy account is
+      // connected" and costs nothing — and it publishes nothing, because
+      // reading is all the credential it acts through can do.
+      const { bringTheVenueUpToDate, listingExperimentsToRead } =
+        await import('../services/senses/readers/etsy-shop.js');
+      for (const r of await listingExperimentsToRead()) {
+        const venue = await bringTheVenueUpToDate({ founderId: r.founderId, experimentId: r.experimentId });
+        if (venue.read) {
+          logger.info(`experiment_hand_tick: read ${venue.shopName ?? 'the shop'} for ${r.experimentId} — `
+            + `${String(venue.listings)} listings, ${String(venue.orders)} orders, ${String(venue.recorded)} new`,
+          { jobName: 'experiment_hand_tick' });
+        }
+      }
       // A listing the owner placed himself has no act for the hand to carry;
       // the sealed rule still reads what the venue reported, on the same pass.
       const { settleListings } = await import('../services/venture/proof-2.js');

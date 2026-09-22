@@ -428,7 +428,22 @@ export interface VenueOrder { orderRef: string; paidAt: string; grossCents: numb
  * the statement. The order reference is what classifies the counterparty as
  * somebody the owner is not; no buyer identity is stored.
  */
-export async function recordVenueOrder(input: { founderId: string; experimentId: string; order: VenueOrder }): Promise<{ paymentEventId: string; fulfilmentId: string; duplicate: boolean }> {
+export async function recordVenueOrder(input: {
+  founderId: string; experimentId: string; order: VenueOrder;
+  /**
+   * HOW THIS ORDER CAME TO BE KNOWN, and the default is the weaker claim on
+   * purpose. This used to hard-code `owner_entered`, which was true while the
+   * only writer was a form he typed into. A connected account reading Etsy's
+   * own receipts is `venue_reported` — the venue's record, read through a
+   * connection — and the difference decides what silence means: a channel
+   * nobody watches reporting nothing is evidence of nothing at all.
+   *
+   * `foundry_observed` is not offered here and could not be written if it
+   * were: migration 341 refuses it for any provider this deployment does not
+   * watch unprompted, and Etsy tells nobody anything until it is asked.
+   */
+  observedHow?: 'owner_entered' | 'venue_reported';
+}): Promise<{ paymentEventId: string; fulfilmentId: string; duplicate: boolean }> {
   const e = await experimentRow(input.experimentId);
   if (!e || e.founderId !== input.founderId) throw new HandRefused('experiment_not_found');
   if (e.decision !== 'approved') throw new HandRefused('not_approved');
@@ -470,7 +485,7 @@ export async function recordVenueOrder(input: { founderId: string; experimentId:
   await batch([
     { sql: `INSERT INTO experiment_fulfilments (id, founder_id, experiment_id, exposure_id, payment_event_id, provider, payment_ref, amount_cents, currency, observed_how)
             VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      args: [fulfilmentId, input.founderId, input.experimentId, x.id, paid.id, plan.listing.venue, ref, o.grossCents, currency, 'owner_entered'] },
+      args: [fulfilmentId, input.founderId, input.experimentId, x.id, paid.id, plan.listing.venue, ref, o.grossCents, currency, input.observedHow ?? 'owner_entered'] },
     { sql: `UPDATE experiment_fulfilments SET status = 'delivered', updated_at = datetime('now') WHERE id = ?`,
       args: [fulfilmentId] },
   ]);
