@@ -5,7 +5,7 @@
 // refused — at CALL time, so DNS rebinding after add-time approval is caught.
 // =============================================================================
 
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect } from 'vitest';
 import { assertUrlSafe, SSRFBlockedError } from '../../src/services/outbound/ssrf.js';
 
 describe('assertUrlSafe blocks the dangerous surface', () => {
@@ -151,5 +151,92 @@ describe('assertUrlSafe blocks the dangerous surface', () => {
   it('rejects garbage and empty input', async () => {
     await expect(assertUrlSafe('')).rejects.toBeInstanceOf(SSRFBlockedError);
     await expect(assertUrlSafe('not a url')).rejects.toBeInstanceOf(SSRFBlockedError);
+  });
+});
+
+// =============================================================================
+// A CREDENTIAL DOES NOT FOLLOW A REDIRECT TO A DIFFERENT ORIGIN.
+//
+// `safeFetch` screened every hop for SSRF and carried `init` — headers included
+// — onto each one unchanged. The screen asks "is this address private". It does
+// not ask "should this host be holding the owner's bearer token".
+//
+// An independent review found what that costs the moment a sense credential
+// goes through it: callers pass `Authorization` and provider API keys in
+// headers, so any PUBLIC host named in a `Location` — a misconfigured CDN, a
+// hijacked name, a compromised provider edge — was handed the credential, and
+// on 307/308 the request body with it. The Etsy adapter's own header claimed
+// the opposite: that it declined an exemption because `safeFetch` "re-screens
+// every redirect hop, and an adapter that carries a bearer token should not
+// follow a 302 to wherever a provider points". It did follow it.
+//
+// This is what every browser does, and for this reason.
+// =============================================================================
+
+describe('a redirect to another origin does not carry the credential', () => {
+  const realFetch = globalThis.fetch;
+  afterEach(() => { globalThis.fetch = realFetch; });
+
+  /** Records the headers each hop was actually given. */
+  function hops(chain: Array<{ status: number; location?: string }>): Array<Record<string, string>> {
+    const seen: Array<Record<string, string>> = [];
+    let i = 0;
+    globalThis.fetch = (async (_u: string, init?: RequestInit) => {
+      const h: Record<string, string> = {};
+      const given = init?.headers;
+      if (given && !Array.isArray(given) && !(given instanceof Headers)) {
+        for (const [k, v] of Object.entries(given)) h[k.toLowerCase()] = String(v);
+      }
+      seen.push(h);
+      const step = chain[Math.min(i, chain.length - 1)];
+      i += 1;
+      return {
+        status: step.status,
+        headers: { get: (n: string) => (n === 'location' ? step.location ?? null : null) },
+      } as unknown as Response;
+    }) as typeof globalThis.fetch;
+    return seen;
+  }
+
+  it('drops Authorization and the api key when the origin changes', async () => {
+    const { safeFetch } = await import('../../src/services/outbound/ssrf.js');
+    const seen = hops([
+      { status: 302, location: 'https://attacker.example/collect' },
+      { status: 200 },
+    ]);
+    await safeFetch('https://openapi.etsy.com/v3/application/users/me', {
+      headers: { Authorization: 'Bearer secret-token', 'x-api-key': 'app-key', accept: 'application/json' },
+    });
+    expect(seen).toHaveLength(2);
+    expect(seen[0].authorization, 'the host we chose gets the credential').toBe('Bearer secret-token');
+    expect(seen[1].authorization, 'the host IT chose does not').toBeUndefined();
+    expect(seen[1]['x-api-key']).toBeUndefined();
+    // And the request still goes, unauthenticated — which fails visibly at the
+    // far end rather than succeeding at the wrong one.
+    expect(seen[1].accept).toBe('application/json');
+  });
+
+  it('keeps them across a redirect within the same origin', async () => {
+    const { safeFetch } = await import('../../src/services/outbound/ssrf.js');
+    const seen = hops([
+      { status: 302, location: 'https://openapi.etsy.com/v3/application/users/me/' },
+      { status: 200 },
+    ]);
+    await safeFetch('https://openapi.etsy.com/v3/application/users/me', {
+      headers: { Authorization: 'Bearer secret-token' },
+    });
+    expect(seen[1].authorization).toBe('Bearer secret-token');
+  });
+
+  it('matches the header name however it is cased', async () => {
+    const { safeFetch } = await import('../../src/services/outbound/ssrf.js');
+    const seen = hops([
+      { status: 307, location: 'https://elsewhere.example/x' },
+      { status: 200 },
+    ]);
+    await safeFetch('https://openapi.etsy.com/v3/application/users/me', {
+      headers: { AUTHORIZATION: 'Bearer t', 'X-Api-Key': 'k', Cookie: 'c' },
+    });
+    expect(Object.keys(seen[1])).toHaveLength(0);
   });
 });

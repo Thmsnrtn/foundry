@@ -3211,11 +3211,29 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       const { bringTheVenueUpToDate, listingExperimentsToRead } =
         await import('../services/senses/readers/etsy-shop.js');
       for (const r of await listingExperimentsToRead()) {
-        const venue = await bringTheVenueUpToDate({ founderId: r.founderId, experimentId: r.experimentId });
-        if (venue.read) {
-          logger.info(`experiment_hand_tick: read ${venue.shopName ?? 'the shop'} for ${r.experimentId} — `
-            + `${String(venue.listings)} listings, ${String(venue.orders)} orders, ${String(venue.recorded)} new`,
-          { jobName: 'experiment_hand_tick' });
+        // A THIRD PARTY'S OUTAGE IS NOT THIS INSTITUTION'S FAILURE TO ACT.
+        //
+        // This loop was unwrapped, so a 429 or a 503 from Etsy threw straight
+        // out of the job — skipping `settleListings` for every founder, and
+        // skipping the deliberate throw below that exists to put "an
+        // authorised experiment could not proceed" into job health. Settlement
+        // does not depend on Etsy answering, and must not wait on it.
+        try {
+          const venue = await bringTheVenueUpToDate({ founderId: r.founderId, experimentId: r.experimentId });
+          if (venue.read) {
+            logger.info(`experiment_hand_tick: read ${venue.shopName ?? 'the shop'} for ${r.experimentId} — `
+              + `${String(venue.listings)} listings, ${String(venue.orders)} orders, ${String(venue.recorded)} new`
+              + `${venue.complete ? '' : ' — INCOMPLETE, so no absence is claimed from it'}`,
+            { jobName: 'experiment_hand_tick' });
+          } else {
+            // The refusal was discarded entirely before. A connected credential
+            // that has started failing said nothing at all.
+            logger.info(`experiment_hand_tick: did not read the venue for ${r.experimentId}: ${venue.because}`,
+              { jobName: 'experiment_hand_tick' });
+          }
+        } catch (err) {
+          logger.warn(`experiment_hand_tick: reading the venue for ${r.experimentId} threw: `
+            + `${err instanceof Error ? err.message : String(err)}`, { jobName: 'experiment_hand_tick' });
         }
       }
       // A listing the owner placed himself has no act for the hand to carry;

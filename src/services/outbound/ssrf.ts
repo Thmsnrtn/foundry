@@ -150,6 +150,27 @@ export async function assertUrlSafe(url: string, opts: SsrfOptions = {}): Promis
  * Deliberately small. This is not a network security platform — it is the
  * existing boundary made total, which is the whole of what is needed.
  */
+/**
+ * The headers a different origin must never be given. Matched case-insensitively,
+ * because a header name is case-insensitive and an attacker picks the casing.
+ */
+const CREDENTIAL_HEADERS = new Set([
+  'authorization', 'cookie', 'proxy-authorization',
+  'x-api-key', 'api-key', 'x-auth-token', 'x-access-token', 'stripe-account',
+]);
+
+function withoutCredentials(headers: RequestInit['headers']): RequestInit['headers'] {
+  if (!headers) return headers;
+  const kept: Record<string, string> = {};
+  const put = (k: string, v: string): void => {
+    if (!CREDENTIAL_HEADERS.has(k.toLowerCase())) kept[k] = v;
+  };
+  if (headers instanceof Headers) headers.forEach((v, k) => { put(k, v); });
+  else if (Array.isArray(headers)) for (const [k, v] of headers) put(k, v);
+  else for (const [k, v] of Object.entries(headers)) put(k, String(v));
+  return kept;
+}
+
 export async function safeFetch(
   url: string,
   init: RequestInit = {},
@@ -157,6 +178,7 @@ export async function safeFetch(
 ): Promise<Response> {
   const maxRedirects = opts.maxRedirects ?? 3;
   let target = (await assertUrlSafe(url, opts)).toString();
+  let origin = new URL(target).origin;
 
   for (let hop = 0; hop <= maxRedirects; hop += 1) {
     const response = await fetch(target, { ...init, redirect: 'manual' });
@@ -170,6 +192,26 @@ export async function safeFetch(
     // chose it. A redirect chain is exactly how a public host reaches a private
     // address without ever appearing to.
     target = (await assertUrlSafe(next, opts)).toString();
+
+    // A CREDENTIAL DOES NOT FOLLOW A REDIRECT TO A DIFFERENT ORIGIN.
+    //
+    // The SSRF screen above asks "is this address private". It does not ask
+    // "should this host be holding the owner's bearer token", and an
+    // independent review found what that costs: callers pass `Authorization`
+    // and provider API keys in `init.headers`, and `init` was carried onto
+    // every hop unchanged. Any PUBLIC host named in a `Location` — a
+    // misconfigured CDN, a hijacked name, a compromised provider edge — was
+    // handed the credential, and on 307/308 the body with it.
+    //
+    // This is what every browser does and the reason it does it. Same origin,
+    // the headers ride along; a different origin, they are dropped and the
+    // request continues unauthenticated, which fails visibly at the far end
+    // rather than succeeding at the wrong one.
+    const nextOrigin = new URL(target).origin;
+    if (nextOrigin !== origin) {
+      init = { ...init, headers: withoutCredentials(init.headers) };
+      origin = nextOrigin;
+    }
 
     // 303 and a 302 on POST become GET, per the specification and per what
     // every real client does; carrying the body onward would be a different

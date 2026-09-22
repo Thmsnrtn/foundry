@@ -1339,6 +1339,13 @@ rather than the first.
    button that would fail.
 3. **Register the redirect** Etsy sends you back to:
    `https://foundry-intel.fly.dev/foundry/senses/callback`.
+
+   One caveat worth knowing rather than discovering: that address is built from
+   the host your request actually arrives on, never from configuration — which
+   is deliberate, because a redirect target taken from a parameter is how an
+   attacker sends the code somewhere else. The practical consequence is that
+   you must be on `foundry-intel.fly.dev` when you tap connect. From any other
+   host Etsy is handed a redirect it was never given, and refuses.
 4. **Tap connect, once**, on the Apex Micro company page. Etsy shows you its
    own consent screen naming the three scopes. Foundry shows you the same three
    first, each with the reason it is asked for, assembled from the rows rather
@@ -1347,9 +1354,9 @@ rather than the first.
 ### What it permits
 
 `shops_r`, `listings_r`, `transactions_r`. Reading which shop the credential
-opens, what is listed in it, and the receipts — order number, date, amount.
-That is the entire request; the scope table is constitutional and nothing in
-the code can widen it.
+opens, what is listed in it, and the paid receipts — order number, date, amount,
+and the fee Etsy kept on each. That is the entire request; the scope table is
+constitutional and nothing in the code can widen it.
 
 ### What it cannot do, structurally rather than by promise
 
@@ -1368,17 +1375,29 @@ Contact a buyer. Not because this document says so, but because:
 
 ### What it would change, honestly
 
-Two of Experiment 002's five readiness conditions, and not the other three.
+**One condition on the tap, and a second after the first read.** An earlier
+draft of this entry said "two of five", and a review found both halves
+overstated.
 
-- **`the shop it would act on is confirmed`** becomes met — the shop's id and
-  name read back from the account rather than remembered. You renamed this shop
-  once already, which is exactly the event a remembered name gets wrong.
-- **`what the venue reports can be read`** becomes met for orders, with the
-  limit named in the same sentence.
+- **`the shop it would act on is confirmed`** becomes met the moment the
+  credential exists — the shop's id and name read back from the account rather
+  than remembered. You renamed this shop once already, which is exactly the
+  event a remembered name gets wrong. This is the only one the tap itself
+  changes.
+- **`what the venue reports can be read`** becomes `unproven` on connecting,
+  not met. It becomes met after the hourly pass has actually read the shop once
+  — because the condition counts readings taken from Etsy, and connecting is
+  not a reading.
 
 Unchanged, because they need a publication and a fee: `Etsy can be operated`,
 `the listing is live and its address is recorded`, and `a refund can be carried
 out`.
+
+And "five" was the listing-specific block only. Experiment 002 also carries the
+conditions every mechanism owes — something to deliver, the offer written, the
+prediction sealed, your approval, a bounded amount to spend, what it must not
+do. Connecting leaves most of the list where it was; it moves the two that are
+about whether this institution can see the venue at all.
 
 ### What it will never buy, however it is connected
 
@@ -1405,6 +1424,20 @@ Etsy's refresh token lasts **90 days**. Without a successful refresh inside that
 window the grant dies and you would have to consent again. A liveness probe
 exists so a grant that dies quietly is noticed rather than discovered at the
 worst moment; it is named here because it is a commitment, not a detail.
+
+### The likeliest way this fails, named in advance
+
+If Etsy's token response does not state which scopes it granted, the connection
+is **refused outright** and nothing is stored. That is deliberate: the adapter
+used to fill in the three scopes it asked for when the provider said nothing,
+which made the "what was granted is not what was asked" guard pass by
+construction and recorded a permission Etsy never confirmed. Silence is now an
+empty grant, and an empty grant fails closed.
+
+Whether Etsy states the scope on that response is not known here — no request
+in this codebase has ever had a reply from Etsy. If your tap ends with "Etsy
+granted less than I need", that is this, and it is the guard working rather
+than something broken. Tell me and I will read what Etsy actually returned.
 
 ### Not asked, and deliberately
 

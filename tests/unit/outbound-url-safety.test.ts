@@ -175,6 +175,11 @@ describe('posting to a URL somebody else chose', () => {
       // token on every call, and a 302 followed without re-screening is that
       // token sent wherever the redirect points.
       'src/services/senses/providers/etsy.ts',
+      // THE MARKETPLACE READ LEG, on the same terms as the adapter above it:
+      // a compiled-in host, and a bearer token on every call. `safeFetch` now
+      // drops credential headers on a cross-origin redirect, which is the
+      // property that makes carrying one through it defensible at all.
+      'src/services/senses/readers/etsy-shop.ts',
       // The first source that reads the real world. The host is compiled in and
       // the package name is checked before it reaches a path — so it could have
       // claimed the exemption above, and deliberately does not: it goes through

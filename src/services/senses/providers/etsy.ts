@@ -65,9 +65,11 @@ function apiKey(): string {
  * host here is compiled in and the only value that reaches a path is a shop id
  * Etsy itself returned, percent-encoded — so nothing a founder supplies chooses
  * a destination, which is the exemption the sibling Stripe adapter takes. It is
- * deliberately not taken: `safeFetch` re-screens every redirect hop, and an
- * adapter that carries a bearer token should not follow a 302 to wherever a
- * provider points without asking again.
+ * deliberately not taken: `safeFetch` re-screens every redirect hop for SSRF
+ * AND, since a review found that screening an address is not the same as
+ * deciding who may hold a credential, drops `Authorization` and the api key
+ * when a hop changes origin. An adapter that carries a bearer token should not
+ * hand it to wherever a provider's redirect points.
  */
 async function call(url: string, init: RequestInit): Promise<Record<string, unknown>> {
   let res: Response;

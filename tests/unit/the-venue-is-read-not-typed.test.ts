@@ -28,6 +28,8 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nanoid } from 'nanoid';
 
 /** Etsy's part, played by a double. Every shape is from its published v3 API. */
+const LISTING_ID = '9988776655';
+
 const ETSY: Record<string, unknown> = {
   'users/me': { user_id: 42, shop_id: 77770001 },
   'shops/77770001': { shop_id: 77770001, shop_name: 'ApexMicro', url: 'https://www.etsy.com/shop/ApexMicro' },
@@ -152,14 +154,22 @@ describe('the shop is read back from the account, never remembered', () => {
 
 /** One receipt, as Etsy returns it. The ledger is append-only, so each
  *  scenario uses its own order number rather than clearing the last one. */
-function receipt(id: string): void {
+function receipt(id: string, opts: { listingId?: string; feeMinor?: number } = {}): void {
   ETSY['shops/77770001/receipts'] = {
     count: 1,
     results: [{
       receipt_id: id,
+      is_paid: true,
       created_timestamp: Math.floor(Date.parse('2026-09-20T09:00:00Z') / 1000),
       grandtotal: { amount: 1400, divisor: 100, currency_code: 'USD' },
+      // Etsy names the listing each line of the receipt is for. Without it a
+      // shop-wide endpoint would file every other sale as this test's.
+      transactions: [{ listing_id: opts.listingId ?? LISTING_ID }],
     }],
+  };
+  ETSY[`shops/77770001/receipts/${id}/payments`] = {
+    count: 1,
+    results: [{ amount_fees: { amount: opts.feeMinor ?? 158, divisor: 100, currency_code: 'USD' } }],
   };
 }
 
@@ -170,6 +180,30 @@ async function listed(): Promise<void> {
   await recordListing({ founderId: OWNER, experimentId: X,
     url: 'https://www.etsy.com/listing/9988776655/bid-decision-workbook' }).catch(() => undefined);
 }
+
+describe('a silence is about orders and nothing else', () => {
+  it('records an absence of orders, and claims nothing about attention', async () => {
+    ETSY['shops/77770001/receipts'] = { count: 0, results: [] };
+    await connect(['shops_r', 'listings_r', 'transactions_r']);
+    await bringTheVenueUpToDate({ founderId: OWNER, experimentId: X });
+
+    const o = (await query(
+      `SELECT saw, from_absence, retrieval_id FROM market_observations
+        WHERE source LIKE 'etsy:shop:%' ORDER BY rowid DESC LIMIT 1`))
+      .rows[0] as Record<string, unknown>;
+    expect(Number(o.from_absence), 'no receipts IS evidence about orders').toBe(1);
+    // And the observation carries the instrument that took it, so what the
+    // instrument could not see travels with it.
+    expect(o.retrieval_id).not.toBeNull();
+    // THE SENTENCE THIS ONCE PINNED WAS FALSE, and a review caught both it and
+    // this assertion holding it in place. Etsy reports no DAILY figures — and
+    // it does report a listing's lifetime views, which this very reader
+    // fetches. An overclaim of ignorance is as dishonest as an overclaim of
+    // knowledge, and easier to miss.
+    expect(String(o.saw)).toMatch(/no daily view, visit or impression counts/);
+    expect(String(o.saw)).toMatch(/lifetime view and favourite counts are readable/);
+  });
+});
 
 describe('an order Etsy reported is not an order he typed', () => {
 
@@ -206,33 +240,144 @@ describe('an order Etsy reported is not an order he typed', () => {
     expect(Number(n.n)).toBe(1);
   });
 
-  it('invents no fee, because Etsy does not state one on a receipt', async () => {
-    receipt('3312345680');
+  it('reads the fee Etsy kept, because transactions_r reaches it', async () => {
+    // THIS TEST ASSERTED THE OPPOSITE, and the claim it pinned was false. The
+    // code said the fee sat "behind a scope this connection does not hold";
+    // `getShopPaymentByReceiptId` is under `transactions_r`, which the
+    // connection holds — and migration 338 says so in the very reason the
+    // owner is shown for granting it. The code was contradicting the
+    // institution's own constitutional record, and two reviews found it.
+    receipt('3312345680', { feeMinor: 158 });
     await connect(['shops_r', 'listings_r', 'transactions_r']);
     await listed();
     await bringTheVenueUpToDate({ founderId: OWNER, experimentId: X });
     const fee = (await query(
-      `SELECT COUNT(*) AS n FROM economic_events WHERE kind = 'provider_fee' AND provider = 'etsy'`))
+      `SELECT amount_cents FROM economic_events
+        WHERE kind = 'provider_fee' AND provider = 'etsy' AND provider_ref = '3312345680:fees'`))
+      .rows[0] as Record<string, unknown> | undefined;
+    expect(fee, 'the fee is read, not left for him to type').toBeTruthy();
+    expect(Number(fee!.amount_cents)).toBe(158);
+  });
+
+  it('still invents nothing when Etsy does not state a fee', async () => {
+    receipt('3312345681');
+    delete ETSY['shops/77770001/receipts/3312345681/payments'];
+    await connect(['shops_r', 'listings_r', 'transactions_r']);
+    await listed();
+    await bringTheVenueUpToDate({ founderId: OWNER, experimentId: X });
+    const fee = (await query(
+      `SELECT COUNT(*) AS n FROM economic_events
+        WHERE kind = 'provider_fee' AND provider_ref = '3312345681:fees'`))
       .rows[0] as Record<string, unknown>;
-    // A fee invented here would be a cost nobody paid.
+    // `recordVenueOrder` already accepts "not yet on the statement". A fee
+    // invented here would be a cost nobody paid.
     expect(Number(fee.n)).toBe(0);
   });
 });
 
-describe('a silence is about orders and nothing else', () => {
-  it('records an absence of orders, and claims nothing about attention', async () => {
-    ETSY['shops/77770001/receipts'] = { count: 0, results: [] };
-    await connect(['shops_r', 'listings_r', 'transactions_r']);
-    await bringTheVenueUpToDate({ founderId: OWNER, experimentId: X });
+// =============================================================================
+// WHAT TWO INDEPENDENT REVIEWS FOUND IN THE FIRST VERSION OF THIS.
+//
+// The reading worked. What it claimed about the reading did not, in five
+// separate ways — and every one of them was an evidential claim the institution
+// would have carried permanently, because observations are immutable and
+// fulfilments cannot be deleted.
+// =============================================================================
 
-    const o = (await query(
-      `SELECT saw, from_absence, retrieval_id FROM market_observations
-        WHERE source LIKE 'etsy:shop:%' ORDER BY rowid DESC LIMIT 1`))
+describe('a shop-wide endpoint is not this experiment\'s evidence', () => {
+  it('passes over a receipt for another listing in the same shop', async () => {
+    // THE WORST OF THE FIVE. `receipts` is shop-wide, and this filed every
+    // sale of every other thing the owner sells as THIS experiment's order —
+    // a charge in its ledger, a delivered fulfilment, and, because
+    // `settleFromTheWorld` counts events inside the exposure's window, a
+    // sealed prediction settled `as_predicted` on somebody else's sale.
+    receipt('9000000001', { listingId: '1111111111' });
+    await connect(['shops_r', 'listings_r', 'transactions_r']);
+    await listed();
+    const out = await bringTheVenueUpToDate({ founderId: OWNER, experimentId: X });
+    expect(out.read).toBe(true);
+    if (!out.read) return;
+    expect(out.orders, 'another listing\'s sale is not this test\'s order').toBe(0);
+    const n = (await query(
+      `SELECT COUNT(*) AS n FROM experiment_fulfilments WHERE payment_ref = '9000000001'`))
       .rows[0] as Record<string, unknown>;
-    expect(Number(o.from_absence), 'no receipts IS evidence about orders').toBe(1);
-    // And the observation carries the instrument that took it, so what the
-    // instrument could not see travels with it.
-    expect(o.retrieval_id).not.toBeNull();
-    expect(String(o.saw)).toMatch(/reports no view, visit or impression counts/);
+    expect(Number(n.n)).toBe(0);
+  });
+
+  it('passes over an unpaid receipt even when Etsy returns one', async () => {
+    // A receipt exists before the money does on Etsy's deferred methods. Taken
+    // as paid, it writes revenue, a delivered obligation and refund exposure
+    // for a sale that has not happened — with no path back, because a later
+    // cancellation hits the duplicate branch and is ignored.
+    receipt('9000000002');
+    (ETSY['shops/77770001/receipts'] as { results: Array<Record<string, unknown>> })
+      .results[0].is_paid = false;
+    await connect(['shops_r', 'listings_r', 'transactions_r']);
+    await listed();
+    const out = await bringTheVenueUpToDate({ founderId: OWNER, experimentId: X });
+    expect(out.read && out.orders).toBe(0);
+  });
+});
+
+describe('a partial read never becomes an absence', () => {
+  it('knows it was truncated, and says so', async () => {
+    // `limit=100` once, with no `offset` and no reading of `count`. A shop with
+    // a hundred and one receipts read as a shop with a hundred — and an empty
+    // list became an affirmative "nobody bought". The owner's rule, quoted in
+    // the readiness module: "Do not use the absence of recorded events as
+    // evidence of no external activity when the observation path was
+    // unavailable." A path that cannot tell it was truncated is unavailable and
+    // does not know it.
+    ETSY['shops/77770001/receipts'] = { count: 250, results: [] };
+    await connect(['shops_r', 'listings_r', 'transactions_r']);
+    const r = await readTheShop({ founderId: OWNER, productId: PRODUCT });
+    if ('failed' in r) throw new Error('expected a reading');
+    expect(r.saidOrders, 'the source\'s own count, which was thrown away before').toBe(250);
+    expect(r.complete).toBe(false);
+  });
+
+  it('counts a receipt it could not parse as a discard, not as nothing', async () => {
+    ETSY['shops/77770001/receipts'] = {
+      count: 1,
+      results: [{ receipt_id: '9000000003', is_paid: true, created_timestamp: 0, grandtotal: null,
+        transactions: [{ listing_id: LISTING_ID }] }],
+    };
+    await connect(['shops_r', 'listings_r', 'transactions_r']);
+    const r = await readTheShop({
+      founderId: OWNER, productId: PRODUCT, onlyListingId: LISTING_ID,
+    });
+    if ('failed' in r) throw new Error('expected a reading');
+    expect(r.orders).toHaveLength(0);
+    expect(r.discarded, 'a shape it could not read is not a shop with nothing in it').toBe(1);
+    expect(r.complete).toBe(false);
+  });
+});
+
+describe('what the reading bears on the claim, and how often it says so', () => {
+  it('files an empty shop as contradicting the claim that people will pay', async () => {
+    // `bearing` was hard-coded to `supports` even when nothing sold — so
+    // "nobody bought anything" accumulated as direct evidence FOR the claim.
+    // Worse: the guard that lets a claim be narrowed requires a `contradicts`
+    // observation, so the only mechanism that reads the venue could never
+    // produce one, and the claim could never be narrowed by what the venue
+    // said.
+    const o = (await query(
+      `SELECT bearing, from_absence FROM market_observations
+        WHERE source LIKE 'etsy:shop:%' ORDER BY rowid ASC LIMIT 1`))
+      .rows[0] as Record<string, unknown>;
+    expect(String(o.bearing)).toBe('contradicts');
+    expect(Number(o.from_absence)).toBe(1);
+  });
+
+  it('writes one observation for a day, not one for every tick', async () => {
+    // `observe` does not deduplicate and nothing constrains `source`, so the
+    // hourly pass wrote a fresh immutable row every tick: twenty-four a day,
+    // each counted by `standingOf` as direct supporting evidence and by the
+    // readiness reader as "readings taken from Etsy itself". The job running is
+    // not evidence.
+    const n = (await query(
+      `SELECT COUNT(*) AS n FROM market_observations WHERE source LIKE 'etsy:shop:%'`))
+      .rows[0] as Record<string, unknown>;
+    expect(Number(n.n), 'many passes, one day, one reading').toBe(1);
   });
 });

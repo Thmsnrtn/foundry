@@ -243,9 +243,14 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
     // a rename is exactly the event that turns a remembered name into a wrong
     // one, and acting on the wrong shop is not a mistake that can be undone by
     // noticing it afterwards.
-    const connected = (await query(
+    // The same scoping as the reading condition below, and for the same reason:
+    // this pre-existed unscoped and the new code copied it rather than fixing
+    // it, which a review caught.
+    const connected = productId ? (await query(
       `SELECT c.id FROM sense_credentials c
-        WHERE c.provider = 'etsy' AND c.revoked_at IS NULL LIMIT 1`)).rows[0] as Record<string, unknown> | undefined;
+         JOIN company_senses s ON s.id = c.company_sense_id AND s.disconnected_at IS NULL
+        WHERE lower(c.provider) = lower(?) AND c.product_id = ? AND c.revoked_at IS NULL LIMIT 1`,
+      [plan!.listing!.venue, productId])).rows[0] as Record<string, unknown> | undefined : undefined;
     conditions.push(connected
       ? met('the shop it would act on is confirmed', 'a connected Etsy account named its own shop')
       : { name: 'the shop it would act on is confirmed', verdict: 'waits_for_you',
@@ -283,10 +288,17 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
       `SELECT p.maturity FROM capability_providers p
         WHERE p.capability_key = 'read_marketplace_account' AND lower(p.provider) = lower(?)`,
       [plan!.listing!.venue])).rows[0] as Record<string, unknown> | undefined;
-    const connectedEye = (await query(
+    // SCOPED TO THIS ASSET, because a credential is connected to a company and
+    // not to a deployment. Unscoped, one Etsy connection anywhere made every
+    // listing experiment read as connected — while `readTheShop`, which
+    // resolves the credential through `connectedSenses(productId)`, correctly
+    // refused for the product that held none. The screen said connected and
+    // the reader said no account.
+    const connectedEye = productId ? (await query(
       `SELECT c.id FROM sense_credentials c
-        WHERE c.provider = ? AND c.revoked_at IS NULL LIMIT 1`,
-      [plan!.listing!.venue])).rows[0] as Record<string, unknown> | undefined;
+         JOIN company_senses s ON s.id = c.company_sense_id AND s.disconnected_at IS NULL
+        WHERE lower(c.provider) = lower(?) AND c.product_id = ? AND c.revoked_at IS NULL LIMIT 1`,
+      [plan!.listing!.venue, productId])).rows[0] as Record<string, unknown> | undefined : undefined;
     // What the venue tells this institution through the connection, as opposed
     // to what the owner typed off a statistics page.
     const readFor = (await query(

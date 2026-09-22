@@ -16,6 +16,7 @@ process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '7'.repeat(64);
 
 import { beforeAll, describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { whatItCannotSee, type SenseOffer } from '../../src/services/senses/index.js';
@@ -125,15 +126,31 @@ describe('the offer grants nothing, and cannot be widened', () => {
     expect(String(row.never_grants)).toMatch(/publishing|withdrawing/);
   });
 
-  it('is not in the family the readiness gate stands in the way of', async () => {
-    // `qualificationStandsInTheWay` falls back to the capability's family and
-    // gates `distribution`. Reading a shop puts nothing in front of anybody,
-    // and it is exactly when a test is NOT ready that somebody most needs to
-    // look at it.
+  it('cannot be stood in the way of by the readiness gate, and not because of its family', async () => {
+    // A CORRECTION TO THIS SUITE'S OWN REASONING. The commit that added this
+    // row said the family was load-bearing: that `qualificationStandsInTheWay`
+    // falls back to the capability's family and gates `distribution`, so
+    // `commerce` was what kept a read from being refused when a test is not
+    // ready. A review checked the mechanism and it does not apply.
+    //
+    // That fallback is keyed on `p.tool = ?`. This provider carries
+    // `tool = NULL`, so it is never the row that answers, whatever its family
+    // says. What actually keeps the read available is that it has no tool and
+    // therefore never arrives at the door at all.
+    //
+    // The family is still `commerce` and still right — reading a shop puts
+    // nothing in front of anybody — but the assertion now says what is true
+    // rather than guarding a path nothing can reach.
     const row = (await query(
-      `SELECT family, rung FROM capabilities WHERE capability_key = 'read_marketplace_account'`))
+      `SELECT c.family, c.rung, p.tool FROM capabilities c
+         JOIN capability_providers p ON p.capability_key = c.capability_key
+        WHERE c.capability_key = 'read_marketplace_account'`))
       .rows[0] as Record<string, unknown>;
-    expect(String(row.family)).not.toBe('distribution');
     expect(String(row.rung)).toBe('observe');
+    expect(String(row.family)).not.toBe('distribution');
+    // The property that actually does the work.
+    expect(row.tool, 'no tool means no door, which is why no gate applies').toBeNull();
+    const src = readFileSync('src/services/venture/qualification.ts', 'utf8');
+    expect(src, 'the fallback is keyed on the tool').toContain('WHERE p.tool = ?');
   });
 });
