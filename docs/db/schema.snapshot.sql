@@ -1579,7 +1579,8 @@ CREATE TABLE experiment_fulfilments (
   refund_requested_at TEXT,
   refund_ref          TEXT,
   created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, disputed_at TEXT, dispute_outcome TEXT CHECK (dispute_outcome IN ('won','lost')),
+  updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, disputed_at TEXT, dispute_outcome TEXT CHECK (dispute_outcome IN ('won','lost')), observed_how TEXT NOT NULL DEFAULT 'foundry_observed'
+  CHECK (observed_how IN ('foundry_observed','venue_reported','owner_entered','inferred')),
   UNIQUE(payment_event_id)
 );
 CREATE TABLE experiment_invalidity_kinds (

@@ -455,9 +455,9 @@ export async function recordVenueOrder(input: { founderId: string; experimentId:
   if ('refused' in delivered) throw new HandRefused('not_recorded', delivered.refused);
   const fulfilmentId = nanoid();
   await query(
-    `INSERT INTO experiment_fulfilments (id, founder_id, experiment_id, exposure_id, payment_event_id, provider, payment_ref, amount_cents, currency)
-     VALUES (?,?,?,?,?,?,?,?,?)`,
-    [fulfilmentId, input.founderId, input.experimentId, x.id, paid.id, plan.listing.venue, ref, o.grossCents, currency]);
+    `INSERT INTO experiment_fulfilments (id, founder_id, experiment_id, exposure_id, payment_event_id, provider, payment_ref, amount_cents, currency, observed_how)
+     VALUES (?,?,?,?,?,?,?,?,?,?)`,
+    [fulfilmentId, input.founderId, input.experimentId, x.id, paid.id, plan.listing.venue, ref, o.grossCents, currency, 'owner_entered']);
   await query(`UPDATE experiment_fulfilments SET status = 'delivered', updated_at = datetime('now') WHERE id = ?`, [fulfilmentId]);
   await recordEconomicEvent({ founderId: input.founderId, kind: 'charge', amountCents: o.grossCents, currency, occurredAt: paidAt,
     provider: plan.listing.venue, providerRef: ref, sourceEventId: paid.id, fulfilmentId, claimQuality: 'measured',
@@ -475,6 +475,51 @@ export async function recordVenueOrder(input: { founderId: string; experimentId:
  * the exposure, the fulfilment marked refunded, the ledger's refund row, and
  * the stop conditions read — a refund is one of them (migration 318).
  */
+/**
+ * A BUYER ON THE VENUE HAS ASKED FOR THEIR MONEY BACK, AND IT HAS NOT BEEN
+ * GIVEN YET.
+ *
+ * This could not be recorded at all. `recordVenueOrder` marks a venue
+ * fulfilment `delivered` on insert — correctly, because the venue hands the
+ * file over the moment payment confirms — and `recordVenueRefund` writes the
+ * request and the refund reference in one statement, for a refund already
+ * made. Between them there was no state for "owed and not yet paid", so
+ * `OPEN_OBLIGATION` could never be true for a marketplace sale and the site's
+ * promise of a refund with no form and no time limit rested on nothing the
+ * institution could see.
+ *
+ * It writes `refund_requested_at` and no refund reference, which is exactly
+ * what makes an obligation open. Foundry cannot discharge it — the only
+ * executor here is Stripe and this money is the venue's — so what this buys
+ * is that the thing is VISIBLE, dated, and attached to an order number the
+ * owner can act on. Naming an obligation he has to carry by hand is worth
+ * more than a promise nobody is tracking.
+ */
+export async function requestVenueRefund(input: {
+  founderId: string; experimentId: string; orderRef: string; askedAt?: string; because?: string;
+}): Promise<{ fulfilmentId: string; alreadyOpen: boolean }> {
+  const e = await experimentRow(input.experimentId);
+  if (!e || e.founderId !== input.founderId) throw new HandRefused('experiment_not_found');
+  const plan = await offerShapePlanOf(input.experimentId);
+  if (!plan?.listing) throw new HandRefused('not_a_listing');
+  const ref = input.orderRef.trim();
+  if (!ref) throw new HandRefused('bad_refund', 'the venue\'s order number is required');
+  const at = new Date(input.askedAt ?? new Date().toISOString());
+  if (Number.isNaN(at.getTime())) throw new HandRefused('bad_refund', 'the request needs the day it was made');
+  const f = (await query(
+    'SELECT id, refund_requested_at, refund_ref FROM experiment_fulfilments WHERE experiment_id = ? AND payment_ref = ?',
+    [input.experimentId, ref])).rows[0] as Record<string, unknown> | undefined;
+  if (!f) throw new HandRefused('no_such_order', 'record the order before a refund is asked for on it');
+  if (f.refund_ref != null) throw new HandRefused('already_refunded', 'that order has already been refunded');
+  // ALREADY OPEN IS NOT AN ERROR. A buyer who asks twice is a buyer who is
+  // still waiting, and the date that matters is the first one.
+  if (f.refund_requested_at != null) return { fulfilmentId: String(f.id), alreadyOpen: true };
+  await query(
+    `UPDATE experiment_fulfilments SET refund_requested_at = ?, updated_at = datetime('now') WHERE id = ?`,
+    [at.toISOString(), String(f.id)]);
+  return { fulfilmentId: String(f.id), alreadyOpen: false };
+}
+
 export async function recordVenueRefund(input: { founderId: string; experimentId: string; orderRef: string; refundedAt: string; amountCents: number }): Promise<{ stop: boolean; because: string[] }> {
   const e = await experimentRow(input.experimentId);
   if (!e || e.founderId !== input.founderId) throw new HandRefused('experiment_not_found');
