@@ -5878,28 +5878,33 @@ foundryShellRoutes.get('/foundry/senses/callback',
     // A failed read-back is not a failed connection. The grant is real and
     // stored; what could not be done is the first use of it, and saying so is
     // the difference between a connection he can trust and a word on a screen.
-    if (result.identity || result.identityProblem) {
-      const shop = result.identity?.label ?? result.identity?.ref ?? null;
-      const sensesMod = await import('../../services/senses/index.js');
-      const who = sensesMod.providerName(result.provider);
-      return c.html(page(result.identity ? 'Connected' : 'Connected, unproven', html`
-        <h1>${result.identity ? `I can see ${shop ?? 'the account'} now` : 'It is connected, and I have not used it yet'}</h1>
-        ${result.identity ? html`
-        <p class="lede">I asked ${who} which account this opens,
-          and it answered: ${result.identity.detail}.</p>
-        <p class="quiet">That is the account I will read from. If it is not the one you meant,
-          disconnect it here and connect the right one — I will not guess.</p>`
-    : html`
+    // ONLY THE CASE THAT NEEDS EXPLAINING GETS ITS OWN PAGE.
+    //
+    // This first intercepted every completed connection to report what the
+    // provider said. `the-life-of-a-credential` walks the whole lifecycle and
+    // expects to land back on the company — and it was right to. The company
+    // page now names the account the provider confirmed and says in the same
+    // breath that nothing has been read through it yet, so a successful
+    // read-back has nowhere to put an extra screen except between him and the
+    // thing he came for.
+    //
+    // A FAILED read-back is different. The grant is stored and the first use of
+    // it did not work, and that is a sentence the company page has no room for
+    // and no reason to carry afterwards. He is told once, here, while it is the
+    // thing that just happened.
+    if (result.identityProblem) {
+      return c.html(page('Connected, unproven', html`
+        <h1>It is connected, and I have not been able to use it yet</h1>
         <p class="lede">The grant is stored, and the first thing I tried with it did not work:
           ${result.identityProblem}.</p>
         <p class="quiet">Nothing is lost and nothing is pretended. I will keep trying, and until
-          something actually reads, I will not tell you this connection is working.</p>`}
+          something actually reads, I will not tell you this connection is working.</p>
         <div class="know">
           <h2>What this still does not let me do</h2>
           <p>Reading is all of it. Publishing, pricing, messaging a customer and moving money each
             need their own permission, and none of them was granted here.</p>
         </div>
-        <a class="btn go" href="/foundry/companies/${result.productId}">Back to ${'the company'}</a>`,
+        <a class="btn go" href="/foundry/companies/${result.productId}">Back to the company</a>`,
       'companies'));
     }
 

@@ -36,6 +36,7 @@ import { query } from '../../src/db/client.js';
 import { witnessAReading } from '../../src/services/senses/witness.js';
 import { identityFromProbe } from '../../src/services/senses/credentials.js';
 import { Hono } from 'hono';
+import { readFileSync } from 'node:fs';
 
 const F = 'f_witness', P = 'p_witness';
 
@@ -281,5 +282,38 @@ describe('authorised and never exercised does not read as working', () => {
     // Seeing is not permission to act, and that sentence is not optional
     // garnish — it is the one the owner agreed to.
     expect(await companyPage()).toContain('None of this lets me act');
+  });
+});
+
+describe('a grant that could not be used says so, once, where it happened', () => {
+  // EVIDENCE MATURITY, STATED RATHER THAN IMPLIED. The three assertions below
+  // read source, which proves the branch was WRITTEN and not that it is
+  // reachable — the weaker of the two kinds of proof in this file, and the
+  // exact distinction that let two defects through earlier today.
+  //
+  // PROOF DEBT: driving this branch needs a completed OAuth exchange whose
+  // subsequent probe fails, which means a registered adapter with a declared
+  // (provider, sense, mode) triple and a failing probe. That fixture is worth
+  // building when a second credentialed provider exists to share it; today it
+  // would exist only to serve this one test. Recorded here rather than left for
+  // someone to discover as an untested path.
+  const shell = readFileSync('src/routes/dashboard/foundry-shell.ts', 'utf8');
+
+  it('reserves the interstitial for the failure, not for every connection', () => {
+    // A successful read-back redirects, because the company page already names
+    // the account and says nothing has been read through it. An extra screen
+    // there is a tap between him and the thing he came for.
+    expect(shell).toContain('if (result.identityProblem) {');
+    expect(shell).not.toContain('if (result.identity || result.identityProblem) {');
+  });
+
+  it('says the grant is stored and the first use of it failed', () => {
+    const flat = shell.replace(/\s+/g, ' ');
+    expect(flat).toContain('The grant is stored, and the first thing I tried with it did not work');
+  });
+
+  it('refuses to call it working until something actually reads', () => {
+    const flat = shell.replace(/\s+/g, ' ');
+    expect(flat).toContain('until something actually reads, I will not tell you this connection is working');
   });
 });
