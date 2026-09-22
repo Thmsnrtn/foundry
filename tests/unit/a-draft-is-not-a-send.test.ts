@@ -76,10 +76,22 @@ describe('the second regime', () => {
   it('no longer has a send arm of its own', () => {
     const src = readFileSync('src/services/scp/actions/executor.ts', 'utf8');
     // The comment above the case quotes the old note on purpose; what must be
-    // gone is a RETURN of success from a path that contacted nobody. The whole
-    // file has exactly one send, and it is the gateway call.
+    // gone is a RETURN of success from a path that contacted nobody.
     expect(src).toContain('executeGovernedEmail');
-    expect(src.match(/invoke\(\{/g) ?? [], 'one send, in one place').toHaveLength(1);
+
+    // THIS USED TO COUNT TO ONE, and counting was the wrong invariant: the
+    // Slack arm beside it reached a person through a bare `fetch`, and a test
+    // that said "exactly one send" read that as compliance because the
+    // ungoverned send was not an `invoke` to count. What matters is that no
+    // arm of this switch carries its own transport to a person — so the
+    // assertion is now about the senders, not about their number, and a third
+    // governed sender may be added without editing a number, while a bare
+    // provider call brings the file back here.
+    expect(src).not.toContain('sendSlackNotification');
+    for (const governed of ['send_email', 'post_slack']) {
+      expect(src, `${governed} must reach its provider through the door`)
+        .toContain(`tool: '${governed}'`);
+    }
   });
 
   it('reaches the provider through the governed boundary', async () => {

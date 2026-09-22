@@ -8,7 +8,6 @@
 import { nanoid } from 'nanoid';
 import { query } from '../../../db/client.js';
 import { isPrincipalRef } from '../../outbound/acting-principal.js';
-import { sendSlackNotification } from '../../integration/slack.js';
 import { getIntegration } from '../../integration/fabric.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────

@@ -117,3 +117,65 @@ describe('the ungoverned browser is gone', () => {
     expect(pkg.devDependencies?.['playwright-core']).toBeTruthy();
   });
 });
+
+// ─── what the first pass at this missed ──────────────────────────────────────
+//
+// An independent adversarial cell read the commit that closed the executor's
+// Slack path and found it had closed one door of two. Both findings are pinned
+// here, in the suite that claimed the door was shut, because a correction is
+// code and gets the same reading.
+
+describe('the second door: the daily briefing', () => {
+  const slack = readFileSync('src/services/integration/slack.ts', 'utf8');
+  const sched = readFileSync('src/services/scp/scheduler.ts', 'utf8');
+
+  it('leaves no function here that both builds a briefing and sends it', () => {
+    // `sendAgentBriefing` formatted and then called the transport, so the
+    // hourly scheduler reached real people in a real workspace with a
+    // kill-switch check and nothing else: no rung, no budget, no dedup key, no
+    // audit row. Splitting them is what makes the caller unable to send.
+    // The name survives in the header, which explains what was wrong with it;
+    // what must be gone is the function.
+    expect(slack).not.toMatch(/export async function sendAgentBriefing/);
+    expect(slack).toContain('export function briefingMessage');
+  });
+
+  it('sends the briefing through invoke, not through the transport', () => {
+    expect(sched).toContain('briefingMessage');
+    expect(sched).toContain("tool: 'post_slack'");
+    // And the private kill-switch check it used to stand on is gone, because
+    // the door runs it — a second copy is how the two drift apart.
+    expect(sched).not.toContain("checkKillSwitch(productId, 'post_slack')");
+  });
+
+  it('carries a dedup key, so a retried tick cannot post the briefing twice', () => {
+    // There was no dedup key at all on this path. An hourly tick that retried
+    // after a lost response posted the same briefing into the room again.
+    expect(sched).toContain('dedupKey: `slack_briefing:');
+  });
+
+  it('is no longer claimed as governed-by-its-callers anywhere', () => {
+    const audit = readFileSync('scripts/audit-consequential-effects.mjs', 'utf8');
+    // "The callers check" is a claim about other files, and it is the claim
+    // that hid this. The map that carried it is empty.
+    expect(audit).toContain('const GUARD_IN_CALLERS = {}');
+  });
+});
+
+describe('a message that may have arrived is not reported as never sent', () => {
+  const slack = readFileSync('src/services/integration/slack.ts', 'utf8');
+
+  it('treats a 5xx as ambiguous rather than as a rejection', () => {
+    // `!resp.ok` covered every non-2xx and returned `provider_rejected`, which
+    // the door reads as `notAttempted` and the executor writes as
+    // `not_attempted` with `reconcile_after = null` — so nothing ever checked.
+    // A 500 or a 502 is the classic post-processing failure: accepted, posted,
+    // response lost.
+    expect(slack).toContain('resp.status >= 500');
+    expect(slack).toContain("certainty: 'ambiguous'");
+  });
+
+  it('keeps a 4xx definitive, because saying "it might have gone" is its own lie', () => {
+    expect(slack).toContain("if (!resp.ok) return { certainty: 'provider_rejected'");
+  });
+});

@@ -131,18 +131,63 @@ describe('it refuses the act, not merely the screen', () => {
     // refuse somebody their money back — "preserve existing customer
     // obligations even when new spending, outreach, publication, or experiment
     // authority is withdrawn", exactly inverted.
-    expect(await qualificationStandsInTheWay({ experimentId: X, tool: 'stripe_create_refund' })).toBeNull();
+    expect(await qualificationStandsInTheWay({
+      experimentId: X, tool: 'stripe_create_refund', kind: 'refund',
+    })).toBeNull();
   });
 
   it('never stands in the way of delivering what somebody already paid for', async () => {
-    expect(await qualificationStandsInTheWay({ experimentId: X, tool: 'send_email' })).toBeNull();
+    expect(await qualificationStandsInTheWay({
+      experimentId: X, tool: 'send_email', kind: 'delivery',
+    })).toBeNull();
   });
 
-  it('is keyed on a row rather than a hand-written list of tool names', () => {
+  // ── THE HOLE THIS SUITE USED TO CERTIFY ───────────────────────────────────
+  //
+  // The assertion above once read `{ tool: 'send_email' }` with no act, under
+  // this same title, and passed — because the gate was keyed on the
+  // capability's family and `send_email` is family `communication`. An
+  // independent review pointed out what that title was quietly covering: an
+  // OFFER goes out through the same tool. So an experiment blocked on an
+  // unsealed prediction or a missing allowance mailed strangers, and the gate
+  // was structurally unable to see it while a green test said obligations were
+  // safe.
+  //
+  // Both facts are now asserted next to each other, which is the only honest
+  // way to hold them: the same tool, the same experiment, opposite answers,
+  // decided by what the act says it is doing.
+  it('DOES stand in the way of an offer through that very same tool', async () => {
+    const stopped = await qualificationStandsInTheWay({
+      experimentId: X, tool: 'send_email', kind: 'offer',
+    });
+    expect(stopped, 'an unready test must not be able to offer').not.toBeNull();
+    expect(stopped!.refusal).toContain('not ready');
+  });
+
+  it('never refuses taking an exposure back down', async () => {
+    // Refusing a withdrawal because the test is not ready would strand a live
+    // payment link for exactly as long as the unreadiness lasted.
+    expect(await qualificationStandsInTheWay({
+      experimentId: X, tool: 'stripe_deactivate_payment_link', kind: 'withdrawal',
+    })).toBeNull();
+  });
+
+  it('is keyed on rows rather than a hand-written list of tool names', () => {
     const src = readFileSync('src/services/venture/qualification.ts', 'utf8');
+    // Two rows, and both of them facts: the act the hand wrote and migration
+    // 284 froze, and the capability's family where no act names the crossing.
     expect(src).toContain("String(fam.family) !== 'distribution'");
-    // No allow-list of tools anywhere: the family is the fact.
+    expect(src).toContain("kind === 'delivery'");
+    expect(src).toContain("kind !== 'offer'");
+    // No allow-list of tools anywhere.
     expect(src).not.toMatch(/new Set\(\[\s*'stripe_create/);
+  });
+
+  it('reads the act off the row, so a caller cannot declare its own', async () => {
+    const src = readFileSync('src/services/institution/standing-intent.ts', 'utf8');
+    // `experiment_act` comes back from the hand's own claimed outbound row.
+    expect(src).toContain('o.experiment_act');
+    expect(src).toContain("message.experiment_act === 'offer'");
   });
 });
 

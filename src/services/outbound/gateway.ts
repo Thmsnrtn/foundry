@@ -247,7 +247,9 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
   // here.
   if (experimentAct) {
     const { qualificationStandsInTheWay } = await import('../venture/qualification.js');
-    const notReady = await qualificationStandsInTheWay({ experimentId: experimentAct.experimentId, tool: req.tool });
+    const notReady = await qualificationStandsInTheWay({
+      experimentId: experimentAct.experimentId, tool: req.tool, kind: experimentAct.kind,
+    });
     if (notReady) {
       await recordGatewayInvocation({
         invocation_id: invocationId, product_id: req.productId, agent: policy.actor,

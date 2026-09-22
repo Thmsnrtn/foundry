@@ -36,11 +36,14 @@ import {
   PLAYBOOK_CATEGORY,
 } from '../../src/services/scp/playbooks/execution-engine.js';
 
-vi.mock('../../src/services/integration/slack.js', () => ({
-  sendSlackNotification: vi.fn(async () => ({
-    certainty: 'provider_acknowledged' as const, providerMessageTs: '1.0',
-  })),
-}));
+// The double keeps the door: registration is a property of the import graph,
+// so a factory returning only the sender would leave `post_slack` unhandled
+// and every standing order would fail at the gateway rather than at the
+// authority check this suite is about. See `tests/helpers/slack-door.ts`.
+vi.mock('../../src/services/integration/slack.js', async () => {
+  const { slackModuleDouble } = await import('../helpers/slack-door.js');
+  return slackModuleDouble();
+});
 const { sendSlackNotification: slackSpy } = await import('../../src/services/integration/slack.js') as
   { sendSlackNotification: ReturnType<typeof vi.fn> };
 

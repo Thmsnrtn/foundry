@@ -513,7 +513,28 @@ export async function boundaryStandingInTheWay(input: {
  * approved, valid and unsettled; the act is approved, unrevoked, unexpired,
  * measurement-critical, of this experiment, for this tool.
  */
-export interface ExperimentAct { experimentId: string; actId: string }
+/**
+ * WHAT THIS CROSSING IS DOING TO THE EXPERIMENT, not merely which tool it uses.
+ *
+ * The resolver already read the row that knows — `outbound_actions.experiment_act`
+ * is `'offer'` or `'delivery'`, immutable by trigger since migration 284 — and
+ * threw it away, returning only the experiment and the act id. That discard had
+ * a consequence: the qualification gate downstream could distinguish beginning
+ * exposure from discharging an obligation only by the capability's FAMILY, and
+ * an offer and a delivery go out through the same `send_email`, which is family
+ * `communication`. So an experiment blocked on an unsealed prediction, an
+ * absent allowance or a dead venue still sent offer mail to strangers, and the
+ * gate could not see it.
+ *
+ * `kind` is the fact that closes it. The resolver states what it found; the
+ * policy about what may be refused stays where policy lives. `null` means this
+ * crossing was matched by an owner-approved parameter fingerprint rather than
+ * by a row that names an act — there is nothing to report, and the reader falls
+ * back to the family.
+ */
+export type ExperimentActKind = 'offer' | 'delivery' | 'refund' | 'withdrawal';
+
+export interface ExperimentAct { experimentId: string; actId: string; kind: ExperimentActKind | null }
 
 export async function experimentActFor(input: { productId: string; tool: string; effectId: string | null; paramsFingerprint?: string | null }): Promise<ExperimentAct | null> {
   const standing = `e.decision = 'approved' AND e.validity = 'valid'
@@ -531,12 +552,12 @@ export async function experimentActFor(input: { productId: string; tool: string;
   // Messages and placements belong to a test still running; what a buyer is
   // owed outlives the test's settlement, so a refund needs only the act.
   const live = `e.ran_at IS NULL AND ${standing}`;
-  const found = (row: Record<string, unknown> | undefined): ExperimentAct | null =>
-    row ? { experimentId: String(row.experiment_id), actId: String(row.act_id) } : null;
+  const found = (row: Record<string, unknown> | undefined, kind: ExperimentActKind | null): ExperimentAct | null =>
+    row ? { experimentId: String(row.experiment_id), actId: String(row.act_id), kind } : null;
   // A MESSAGE: the hand's own planned, guarded, claimed outbound_actions row.
   if (input.effectId) {
     const message = (await query(
-      `SELECT o.experiment_id, o.proposed_act_id AS act_id
+      `SELECT o.experiment_id, o.proposed_act_id AS act_id, o.experiment_act
          FROM outbound_actions o
          JOIN venture_experiments e ON e.id = o.experiment_id
          JOIN products p ON p.id = o.product_id AND p.from_experiment_id = e.id AND p.standing = 'experimental'
@@ -547,7 +568,11 @@ export async function experimentActFor(input: { productId: string; tool: string;
           AND NOT (f.disputed_at IS NOT NULL AND f.dispute_outcome IS NULL)
           AND ${covering("coalesce(f.created_at, '9999-12-31')")}`,
       [input.productId, input.effectId, input.productId, input.tool])).rows[0] as Record<string, unknown> | undefined;
-    if (message) return found(message);
+    // The row's own word for what it is, carried rather than discarded.
+    if (message) {
+      return found(message, message.experiment_act === 'offer' || message.experiment_act === 'delivery'
+        ? message.experiment_act : null);
+    }
     // A REFUND: what is owed on a purchase the provider reported at this
     // experiment's exposure, asked for by the hand or by the buyer's link.
     const refund = (await query(
@@ -562,7 +587,7 @@ export async function experimentActFor(input: { productId: string; tool: string;
           AND ${covering('f.created_at')}
         ORDER BY a.decided_at, a.rowid LIMIT 1`,
       [input.productId, input.effectId, input.productId, input.tool])).rows[0] as Record<string, unknown> | undefined;
-    if (refund) return found(refund);
+    if (refund) return found(refund, 'refund');
     // THE OFFER COMING DOWN: an exposure this experiment withdrew, taken down
     // by the same act that placed it. What was placed may be unplaced.
     const takedown = (await query(
@@ -577,7 +602,7 @@ export async function experimentActFor(input: { productId: string; tool: string;
           AND a.decision = 'approved' AND a.revoked_at IS NULL AND datetime(a.expires_at) > datetime('now')
         ORDER BY a.decided_at, a.rowid LIMIT 1`,
       [input.productId, input.effectId, input.tool, input.productId])).rows[0] as Record<string, unknown> | undefined;
-    if (takedown) return found(takedown);
+    if (takedown) return found(takedown, 'withdrawal');
   }
   // THE EXACT ACT: the owner approved these parameters and no others.
   if (input.paramsFingerprint) {
@@ -589,7 +614,7 @@ export async function experimentActFor(input: { productId: string; tool: string;
         WHERE p.id = ? AND a.params_fingerprint = ? AND ${live}
         ORDER BY a.decided_at, a.rowid LIMIT 1`,
       [input.productId, input.paramsFingerprint, input.productId, input.tool])).rows[0] as Record<string, unknown> | undefined;
-    if (exact) return found(exact);
+    if (exact) return found(exact, null);
   }
   return null;
 }

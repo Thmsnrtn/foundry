@@ -22,6 +22,7 @@
 // apart, with the weakest one live.
 // =============================================================================
 
+import type { ExperimentAct } from '../institution/standing-intent.js';
 import { query } from '../../db/client.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -60,7 +61,7 @@ export async function checkKillSwitch(
   capability?: { deliverableWhilePaused?: boolean; paramsFingerprint?: string;
     /** The act an approved experiment carries for this effect, resolved by the
      * gateway from the rows. The only way an experimental asset reaches the world. */
-    experimentAct?: { experimentId: string; actId: string } | null },
+    experimentAct?: ExperimentAct | null },
 ): Promise<KillSwitchResult> {
   const productResult = await query(
     `SELECT status, scp_status, entitlement_paused_at, erasure_scheduled_at, disabled_tools,

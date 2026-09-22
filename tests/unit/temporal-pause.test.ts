@@ -36,12 +36,17 @@ import { query } from '../../src/db/client.js';
 const F = 'tp_f';
 const P = 'tp_p';
 
-const slackSpy = vi.fn(async () => ({
-  certainty: 'provider_acknowledged' as const, providerMessageTs: '1.0',
-}));
-vi.mock('../../src/services/integration/slack.js', () => ({
-  sendSlackNotification: slackSpy,
-}));
+// The double keeps the door registered — see `tests/helpers/slack-door.ts`.
+// That matters most here: this suite proves a PAUSE stops queued work, and the
+// pause is enforced at the gateway. A mock that removed the handler would make
+// every send fail for the wrong reason and the suite would pass while proving
+// nothing about the pause.
+vi.mock('../../src/services/integration/slack.js', async () => {
+  const { slackModuleDouble } = await import('../helpers/slack-door.js');
+  return slackModuleDouble();
+});
+const { sendSlackNotification: slackSpy } = await import('../../src/services/integration/slack.js') as
+  { sendSlackNotification: ReturnType<typeof vi.fn> };
 
 /** Queue an action while the company is still operating. */
 async function queueWhileOperating(): Promise<string> {

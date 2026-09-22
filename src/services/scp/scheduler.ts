@@ -156,20 +156,12 @@ export async function generateBriefingsForAllProducts(): Promise<void> {
 
 async function _sendBriefingToSlack(productId: string): Promise<void> {
   try {
-    const { sendAgentBriefing, isSlackConnected } = await import('../integration/slack.js');
+    // Importing the integration is what registers `post_slack` on the
+    // gateway's registry, so it is imported for the door as much as for the
+    // formatter.
+    const { briefingMessage, isSlackConnected } = await import('../integration/slack.js');
     const connected = await isSlackConnected(productId);
     if (!connected) return;
-
-    // A daily briefing is product work, not account mail. A company that is
-    // paused, unentitled or erased is one Foundry is not acting for, and this
-    // push went straight to the Slack sender without asking — the same second
-    // door the approved-action path had.
-    const { checkKillSwitch } = await import('../outbound/kill-switch.js');
-    const gate = await checkKillSwitch(productId, 'post_slack');
-    if (gate.blocked) {
-      logger.info(`slack briefing not sent: ${gate.reason}`, { productId });
-      return;
-    }
 
     // Load today's briefing
     const { query: dbQuery } = await import('../../db/client.js');
@@ -201,11 +193,36 @@ async function _sendBriefingToSlack(productId: string): Promise<void> {
         .map(c => (c.contribution as string ?? '').slice(0, 120));
     } catch { /* non-fatal */ }
 
-    await sendAgentBriefing(productId, {
+    const message = briefingMessage({
       date: today,
       health_score: healthScore,
       headline,
       key_points: keyPoints.length > 0 ? keyPoints : ['Briefing generated — view in Foundry for details'],
     });
+
+    // THROUGH THE DOOR, LIKE EVERY OTHER MESSAGE TO A PERSON.
+    //
+    // This called the transport directly behind a kill-switch check of its
+    // own, which covered the pause axes and nothing else. The door adds what
+    // the kill switch never could: the consequence rung on `post_to_channel`,
+    // the communication budget, the surface and data-class assertion, the
+    // owner's standing boundaries — `post_slack` is named in `REACHES_A_PERSON`
+    // and this path was invisible to it — and an audit row.
+    //
+    // The dedup key is the product and the day, which is the other thing that
+    // was missing: an hourly tick that retried after a lost response posted the
+    // same briefing twice into a room of people, and nothing recorded that it
+    // had already gone.
+    const { invoke } = await import('../outbound/gateway.js');
+    const res = await invoke({
+      productId,
+      tool: 'post_slack',
+      action: `daily briefing for ${today}`,
+      params: { text: message.text, blocks: message.blocks },
+      dedupKey: `slack_briefing:${productId}:${today}`,
+      surface: 'channel_outbound',
+      dataClass: 'customer',
+    });
+    if (!res.ok) logger.info(`slack briefing not sent: ${res.reason}`, { productId });
   } catch { /* non-fatal */ }
 }

@@ -38,6 +38,7 @@ import {
   SenseProviderError, registerSenseProvider,
   type GrantedCredential, type SenseProviderAdapter,
 } from './contract.js';
+import { safeFetch } from '../../outbound/ssrf.js';
 
 const AUTHORIZE = 'https://www.etsy.com/oauth/connect';
 const TOKEN = 'https://api.etsy.com/v3/public/oauth/token';
@@ -59,11 +60,19 @@ function apiKey(): string {
  * ETSY ANSWERS 200 WITH AN ERROR BODY OFTEN ENOUGH THAT STATUS ALONE IS NOT THE
  * TEST. Both are checked, and neither the raw body nor the token ever reaches
  * the owner's words.
+ *
+ * THROUGH `safeFetch`, THOUGH THIS FILE COULD HAVE CLAIMED AN EXEMPTION. Every
+ * host here is compiled in and the only value that reaches a path is a shop id
+ * Etsy itself returned, percent-encoded — so nothing a founder supplies chooses
+ * a destination, which is the exemption the sibling Stripe adapter takes. It is
+ * deliberately not taken: `safeFetch` re-screens every redirect hop, and an
+ * adapter that carries a bearer token should not follow a 302 to wherever a
+ * provider points without asking again.
  */
 async function call(url: string, init: RequestInit): Promise<Record<string, unknown>> {
   let res: Response;
   try {
-    res = await fetch(url, { ...init, signal: AbortSignal.timeout(15_000) });
+    res = await safeFetch(url, { ...init, signal: AbortSignal.timeout(15_000) });
   } catch {
     throw new SenseProviderError({
       ownerWords: 'I could not reach Etsy just now', recoverable: true,
@@ -228,11 +237,25 @@ const adapter: SenseProviderAdapter = {
   },
 };
 
-/** What Etsy says it granted, space-separated, or the read floor if it says nothing. */
+/**
+ * WHAT ETSY SAYS IT GRANTED, AND NOTHING ELSE.
+ *
+ * This used to answer the three read scopes when the token response carried no
+ * `scope` field at all — "the read floor if it says nothing". That was a lie
+ * told on the provider's behalf, and it defeated the one guard that exists to
+ * catch a grant narrower than the one asked for: `credentials.ts` computes
+ * `asked − granted` and raises whatever is missing, so substituting the asked
+ * set for silence made that difference empty by construction and recorded a
+ * credential as carrying permissions Etsy never confirmed.
+ *
+ * Silence is `[]`. That makes the guard fire and name the missing permission,
+ * which is what the owner needs to hear, rather than discovering it at the
+ * first request that comes back 403.
+ */
 function scopesFrom(payload: Record<string, unknown>): string[] {
   return typeof payload.scope === 'string' && payload.scope.trim()
     ? payload.scope.split(' ').filter(Boolean)
-    : ['shops_r', 'listings_r', 'transactions_r'];
+    : [];
 }
 
 registerSenseProvider(adapter);

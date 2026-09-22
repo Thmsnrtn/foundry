@@ -167,6 +167,14 @@ describe('posting to a URL somebody else chose', () => {
       'src/services/integrations/posthog.ts',
       'src/services/outbound/ssrf.ts',
       'src/services/scp/actions/executor.ts',
+      // THE MARKETPLACE SENSE, WHICH COULD HAVE CLAIMED THE EXEMPTION ABOVE
+      // AND DELIBERATELY DOES NOT. Its three hosts are compiled in and the
+      // only value reaching a path is a shop id Etsy itself returned,
+      // percent-encoded — the same argument the Stripe adapter makes two
+      // entries up. The difference is that this adapter carries a bearer
+      // token on every call, and a 302 followed without re-screening is that
+      // token sent wherever the redirect points.
+      'src/services/senses/providers/etsy.ts',
       // The first source that reads the real world. The host is compiled in and
       // the package name is checked before it reaches a path — so it could have
       // claimed the exemption above, and deliberately does not: it goes through

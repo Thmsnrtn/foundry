@@ -136,6 +136,23 @@ export async function sendSlackNotification(
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(10000),
     });
+    // A 5xx IS NOT A REJECTION, AND CALLING IT ONE LOSES A MESSAGE THAT MAY
+    // HAVE ARRIVED.
+    //
+    // `!resp.ok` covers every non-2xx, and this returned `provider_rejected`
+    // for all of them — which the door reads as `notAttempted`, writes as
+    // `not_attempted` with `reconcile_after = null`, and therefore never checks
+    // again. But 500, 502, 503 and 504, from Slack or from anything between, are
+    // the classic post-processing failure: the message can have been accepted
+    // and posted and the response lost. 408 and 504 are the same story with a
+    // clock on it.
+    //
+    // A 4xx is a real refusal — bad token, bad channel, rate limit — and stays
+    // definitive, because saying "it might have gone" about a message that
+    // certainly did not is its own kind of lie.
+    if (resp.status >= 500 || resp.status === 408) {
+      return { certainty: 'ambiguous', reason: `Slack HTTP ${resp.status}; it may or may not have posted` };
+    }
     if (!resp.ok) return { certainty: 'provider_rejected', reason: `Slack HTTP ${resp.status}` };
     const result = await resp.json() as SlackPostMessageResponse;
     if (!result.ok) return { certainty: 'provider_rejected', reason: result.error ?? 'Slack rejected message' };
@@ -145,22 +162,36 @@ export async function sendSlackNotification(
   }
 }
 
-/** Format a daily briefing, but keep transport and receipt semantics in the
- * single Slack sender above. */
-export async function sendAgentBriefing(
-  productId: string,
+/**
+ * A DAILY BRIEFING, FORMATTED AND NOT SENT.
+ *
+ * This used to be `sendAgentBriefing`, which formatted and then called the
+ * sender — and that was the second Slack door. The approved-action path was
+ * put behind `invoke`; this one, firing on the hourly scheduler into a
+ * workspace of real people, was left calling the transport directly. It
+ * checked the kill switch, so a paused company was covered, and nothing else
+ * was: no consequence rung, no communication budget, no dedup key at all
+ * (a retried tick posted twice), no surface or data-class assertion, and no
+ * audit row. The effects audit could not see it because it classifies by
+ * `file|detector`, and the file was already listed once.
+ *
+ * Splitting formatting from sending is what makes the caller unable to send:
+ * there is now no function here that both builds a briefing and puts it on the
+ * wire, so the scheduler has to cross the door to deliver one.
+ */
+export function briefingMessage(
   briefingData: { date: string; health_score: number; headline: string; key_points: string[] },
-): Promise<SlackDeliveryReceipt> {
+): { text: string; blocks: unknown[] } {
   const blocks: unknown[] = [
     { type: 'header', text: { type: 'plain_text', text: `Foundry Daily Briefing — ${briefingData.date}` } },
     { type: 'section', text: { type: 'mrkdwn', text: `*Company Health Score: ${briefingData.health_score}/100*\n${briefingData.headline}` } },
     { type: 'divider' },
     { type: 'section', text: { type: 'mrkdwn', text: briefingData.key_points.map((p) => `• ${p}`).join('\n') } },
   ];
-  return sendSlackNotification(productId, {
+  return {
     text: `Foundry Daily Briefing — ${briefingData.date}: Health Score ${briefingData.health_score}/100`,
     blocks,
-  });
+  };
 }
 
 /**

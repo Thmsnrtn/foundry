@@ -241,14 +241,14 @@
     },
     {
       "file": "src/services/scp/actions/executor.ts",
-      "line": 578,
+      "line": 577,
       "detector": "external_post",
       "status": "governed",
       "capability": "approved Linear action — kill-switch checked before dispatch, durable receipt after"
     },
     {
       "file": "src/services/scp/actions/executor.ts",
-      "line": 650,
+      "line": 649,
       "detector": "dynamic_webhook_post",
       "status": "governed",
       "capability": "approved custom webhook — kill-switch checked before dispatch, SSRF guard and durable receipt"

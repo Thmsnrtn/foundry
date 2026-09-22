@@ -66,9 +66,23 @@ const classifications = new Map(Object.entries({
   'src/services/integration/stripe-gateway.ts|external_post': ['governed', 'Stripe capability handlers'],
   'src/services/integration/github-gateway.ts|external_post': ['governed', 'GitHub capability handlers'],
   'src/services/integration/mcp-client.ts|dynamic_webhook_post': ['governed', 'MCP capability handler'],
-  // Both callers now check the kill switch before reaching this sender: the
-  // approved-action executor and the daily-briefing push. The sender itself
-  // stays the single place transport and receipt semantics live.
+  // ONE CALLER NOW, AND THIS IS THE LIMIT OF WHAT THIS AUDIT CAN SEE.
+  //
+  // The entry below once said "both callers check the kill switch", which was
+  // true and was not the claim that mattered: a kill-switch check is not the
+  // door. The approved-action executor was put behind `invoke`, and the
+  // daily-briefing push — firing hourly into a room of real people — was left
+  // calling the sender directly with a kill-switch check of its own, so it had
+  // no consequence rung, no budget, no dedup key and no audit row. An
+  // independent review found it, and the reason this file did not is worth
+  // recording here rather than in a commit message nobody re-reads: THIS AUDIT
+  // KEYS ON `file|detector`, so it sees effect SITES and never CALLERS. A
+  // second caller of a sender already listed once is invisible to it, however
+  // ungoverned. Callers are the reachability gate's job and the reviewer's.
+  //
+  // `sendSlackNotification` now has exactly one caller, the handler registered
+  // on the gateway in the same file, and the briefing path formats through
+  // `briefingMessage` and crosses the door like everything else.
   'src/services/integration/slack.ts|external_post': ['governed', 'post_slack capability handler. This line claimed "every caller kill-switch checked before dispatch" while the action executor called the sender directly, past the door — the one outbound-mutating integration that did. It is registered on the gateway now and bound to post_to_channel at rung public, so the claim and the code agree'],
   // Traced, not assumed. Both files POST to a GraphQL endpoint, which is what
   // the detector sees; every remaining operation is a QUERY. `read_only` is a
@@ -203,14 +217,17 @@ if (process.argv.includes('--write')) {
   // or in every caller of it, and when it is in the callers they are named
   // here — because "the callers check" is a claim about other files, and a
   // claim about other files is the kind that stops being true quietly.
-  const GUARD_IN_CALLERS = {
-    // One sender, transport and receipt semantics in one place; both callers
-    // check before they reach it.
-    'src/services/integration/slack.ts': [
-      'src/services/scp/actions/executor.ts',
-      'src/services/scp/scheduler.ts',
-    ],
-  };
+  // EMPTY, AND THAT IS THE POINT. Slack was the last entry: the sender's two
+  // callers each checked a guard of their own, which is exactly the shape this
+  // map exists to make visible — and exactly the shape that hid an ungoverned
+  // hourly push into a room of real people for as long as it did, because a
+  // kill-switch check in a caller is not the door. Both callers now cross
+  // `invoke`, the sender has one caller (the handler registered beside it), and
+  // the claim "the callers check" is not being made about any file.
+  //
+  // A new entry here should be argued, not added. It means an effect is
+  // governed somewhere other than where it happens.
+  const GUARD_IN_CALLERS = {};
   // Two ways a file proves it: it CALLS the kill switch itself, or it registers
   // a capability handler with the outbound gateway, which runs the kill switch
   // before dispatching to any handler.

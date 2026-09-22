@@ -36,10 +36,6 @@ import { query } from '../../src/db/client.js';
 const F = 'ae_f';
 const P = 'ae_p';
 
-const slackSpy = vi.fn(async () => ({
-  certainty: 'provider_acknowledged' as const, providerMessageTs: '1.0',
-}));
-
 // THE DOUBLE STANDS IN FOR THE WHOLE INTEGRATION, REGISTRATION INCLUDED.
 //
 // This file's own header says the finding: `action_executions` reached none of
@@ -49,17 +45,15 @@ const slackSpy = vi.fn(async () => ({
 // handler on the gateway's registry. A mock that returned only the sender left
 // the door answering `no_handler`, so the double registers too, exactly as the
 // module it replaces does.
+// It is one shared double now, because three suites were carrying their own
+// copy of it and a copy that drifts is a suite standing in for the gate it
+// claims to prove. See `tests/helpers/slack-door.ts`.
 vi.mock('../../src/services/integration/slack.js', async () => {
-  const { registerToolHandler } = await import('../../src/services/outbound/gateway.js');
-  registerToolHandler('post_slack', async () => {
-    const r = await slackSpy();
-    return { ts: r.providerMessageTs };
-  }, {
-    actor: 'action_executor', surface: 'channel_outbound', dataClass: 'customer',
-    requireDedupKey: true, requireCustomerExternalId: false,
-  });
-  return { sendSlackNotification: slackSpy };
+  const { slackModuleDouble } = await import('../helpers/slack-door.js');
+  return slackModuleDouble();
 });
+const { sendSlackNotification: slackSpy } = await import('../../src/services/integration/slack.js') as
+  { sendSlackNotification: ReturnType<typeof vi.fn> };
 
 async function execution(): Promise<string> {
   const id = nanoid();

@@ -35,6 +35,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
+import type { ExperimentActKind } from '../institution/standing-intent.js';
 
 export type ConditionVerdict =
   /** The row that decides it says yes. */
@@ -318,7 +319,7 @@ function stateFrom(conditions: QualificationCondition[], e: Record<string, unkno
  * has already learned once what over-reach at the door costs.
  */
 export async function qualificationStandsInTheWay(input: {
-  experimentId: string; tool: string;
+  experimentId: string; tool: string; kind?: ExperimentActKind | null;
 }): Promise<{ refusal: string; blocking: string[] } | null> {
   // IT GATES WHAT BEGINS EXPOSURE, AND NEVER WHAT DISCHARGES AN OBLIGATION.
   //
@@ -332,16 +333,42 @@ export async function qualificationStandsInTheWay(input: {
   // authority is withdrawn." Somebody who has already paid is owed their thing
   // whatever has since gone wrong with the machinery.
   //
-  // So the rule is keyed on the capability's FAMILY, which is a row rather
-  // than a guess: `distribution` is the family of putting something in front
-  // of people — listing on a marketplace, publishing a page, reaching out,
-  // buying attention. Commerce and communication are not asked, because a
-  // refund and a delivery belong to a customer who already exists.
-  const fam = (await query(
-    `SELECT c.family FROM capability_providers p
-       JOIN capabilities c ON c.capability_key = p.capability_key
-      WHERE p.tool = ?`, [input.tool])).rows[0] as Record<string, unknown> | undefined;
-  if (!fam || String(fam.family) !== 'distribution') return null;
+  // THE ACT FIRST, AND THE FAMILY ONLY WHERE THERE IS NO ACT TO READ.
+  //
+  // This was keyed on the capability's FAMILY alone — `distribution` being the
+  // family of putting something in front of people — and an independent review
+  // found the hole that leaves. An offer and a delivery both go out through
+  // `send_email`, whose family is `communication`, so the gate could not see an
+  // offer at all: an experiment blocked on an unsealed prediction, a missing
+  // allowance, an unrecorded boundary or a dead venue still sent offer mail to
+  // strangers. The institution's own `distribution` capability for that act —
+  // `reach_out` — has no provider and no tool, so it is never the tool at the
+  // door, and the family could never have answered.
+  //
+  // `outbound_actions.experiment_act` is the fact the resolver already had: the
+  // hand writes it when it plans the message, migration 284 makes it immutable,
+  // and it says `offer` or `delivery` in exactly those words. Keyed on that,
+  // the distinction the reasoning above depends on is a row rather than an
+  // inference from which provider happens to carry the message.
+  const kind = input.kind ?? null;
+  // Never in the way of discharging what a customer is already owed, whatever
+  // has since gone wrong with the machinery. This is the owner's rule — "Preserve
+  // existing customer obligations even when new spending, outreach, publication,
+  // or experiment authority is withdrawn" — and it is checked before anything
+  // else so that no later clause can reach it. A withdrawal is here too: taking
+  // an exposure DOWN because a test is not ready is the refusal doing the
+  // opposite of its job.
+  if (kind === 'delivery' || kind === 'refund' || kind === 'withdrawal') return null;
+  if (kind !== 'offer') {
+    // No act named this crossing — it was matched by an owner-approved
+    // parameter fingerprint. Fall back to the family, which is what governs
+    // listing on a marketplace and publishing a page.
+    const fam = (await query(
+      `SELECT c.family FROM capability_providers p
+         JOIN capabilities c ON c.capability_key = p.capability_key
+        WHERE p.tool = ?`, [input.tool])).rows[0] as Record<string, unknown> | undefined;
+    if (!fam || String(fam.family) !== 'distribution') return null;
+  }
 
   const r = await qualificationOf(input.experimentId);
   if (r.blocking.length === 0) return null;
