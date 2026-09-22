@@ -1646,7 +1646,19 @@ async function carryWhatIsOwed(experimentId: string, now: Date, report: HandRepo
   // A failed delivery is refunded; a refund the buyer asked for that could not
   // be issued (an outage, the door refusing) is tried again under the same
   // key; a refund that cannot be issued is the owner's.
+  //
+  // AND A VENUE REFUND IS NEVER THIS PASS'S TO TRY. `obligations.ts` states it
+  // as law — "A VENUE REFUND IS NEVER FOUNDRY'S TO TRY. Not after a day, not
+  // with the money switch on, not with the act standing: there is no door" —
+  // and this query, which is the pass that would have tried it, had no
+  // `provider` clause. A venue row carries no `charge_ref`, so every hourly
+  // pass reached `refundFulfilment`, came back `charge_unknown`, and pushed an
+  // exception that made the experiment read as blocked, for as long as the
+  // buyer waited. No money could move; the damage was to what the owner was
+  // told. The filter is in the SQL rather than in the loop because the loop is
+  // where somebody will forget it.
   for (const f of await rows(`SELECT id, status, refund_requested_at FROM experiment_fulfilments f WHERE f.experiment_id = ? AND f.refund_ref IS NULL AND f.status <> 'refunded'
+                                 AND f.provider = 'stripe'
                                  AND (f.status = 'failed' OR f.refund_requested_at IS NOT NULL) AND NOT (f.disputed_at IS NOT NULL AND f.dispute_outcome IS NULL)`, [experimentId])) {
     const r = await refundFulfilment({ fulfilmentId: String(f.id), reason: String(f.status) === 'failed' ? 'the brief could not be delivered' : 'buyer asked through the delivery link' });
     if (r.issued) report.refundsIssued += 1; else report.exceptions.push(`refund for ${String(f.id)}: ${r.refusedReason}`);

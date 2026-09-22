@@ -6409,6 +6409,18 @@ BEGIN
        AND x.experiment_id = NEW.experiment_id AND x.founder_id = NEW.founder_id
        AND b.provider = NEW.provider AND b.provider_event_ref = NEW.payment_ref);
 END;
+CREATE TRIGGER experiment_fulfilment_observation_is_honest
+BEFORE INSERT ON experiment_fulfilments
+BEGIN
+  SELECT RAISE(ABORT, 'experiment_fulfilment:not_a_channel_foundry_watches')
+   WHERE NEW.observed_how = 'foundry_observed' AND NEW.provider <> 'stripe';
+END;
+CREATE TRIGGER experiment_fulfilment_observation_is_immutable
+BEFORE UPDATE ON experiment_fulfilments
+BEGIN
+  SELECT RAISE(ABORT, 'experiment_fulfilment:observation_is_immutable')
+   WHERE NEW.observed_how <> OLD.observed_how;
+END;
 CREATE TRIGGER experiment_fulfilment_progress
 BEFORE UPDATE ON experiment_fulfilments
 BEGIN

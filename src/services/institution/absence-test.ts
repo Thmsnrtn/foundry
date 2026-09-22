@@ -397,8 +397,17 @@ async function bounded(founderId: string, days: number, now: Date): Promise<Prop
   const { obligationsFor: owedTo } = await import('../venture/obligations.js');
   const owedNow = await owedTo(founderId, now);
   const owedCents = owedNow.reduce((n, o) => n + o.amountCents, 0);
+  // WHOSE FEE, THOUGH. `obligationsFor` returns every open obligation across
+  // every channel, and this named Stripe's fee for all of them \u2014 the same leak
+  // the obligations module had, one file over. The sentence says "the
+  // processor's" where the buyers are on more than one channel, and names the
+  // one processor where they are not.
+  const channels = [...new Set(owedNow.map((o) => o.provider))];
+  const whoseFee = channels.length === 1
+    ? `${channels[0].charAt(0).toUpperCase()}${channels[0].slice(1)}\u2019s`
+    : 'the platform\u2019s';
   const owedLine = owedNow.length === 0 ? ''
-    : ` ${money(owedCents)} is owed to ${plural(owedNow.length, 'buyer', 'buyers')} besides: theirs, not yours, and a refund returns it (Stripe\u2019s fee on the sale is not returned).`;
+    : ` ${money(owedCents)} is owed to ${plural(owedNow.length, 'buyer', 'buyers')} besides: theirs, not yours, and a refund returns it (${whoseFee} fee on the sale is not returned).`;
   if (owedNow.length) evidence.push(`owed to buyers: ${money(owedCents)}, outside the ceiling because it is their money`);
   return {
     property: 'bounded',

@@ -23,7 +23,7 @@
 // =============================================================================
 
 import { nanoid } from 'nanoid';
-import { query, realCompany } from '../../db/client.js';
+import { batch, query, realCompany } from '../../db/client.js';
 import { currentMandate, openMandate, stopMandate } from './mandate.js';
 import { formClaim, observe } from './market-evidence.js';
 import { decideExperiment, designExperiment } from './validation.js';
@@ -454,11 +454,26 @@ export async function recordVenueOrder(input: { founderId: string; experimentId:
     provider: plan.listing.venue, providerRef: `${ref}:download-available`, payerReference: `order:${ref}`, arrivedVia: plan.listing.venue, exchange: 'upfront_price' });
   if ('refused' in delivered) throw new HandRefused('not_recorded', delivered.refused);
   const fulfilmentId = nanoid();
-  await query(
-    `INSERT INTO experiment_fulfilments (id, founder_id, experiment_id, exposure_id, payment_event_id, provider, payment_ref, amount_cents, currency, observed_how)
-     VALUES (?,?,?,?,?,?,?,?,?,?)`,
-    [fulfilmentId, input.founderId, input.experimentId, x.id, paid.id, plan.listing.venue, ref, o.grossCents, currency, 'owner_entered']);
-  await query(`UPDATE experiment_fulfilments SET status = 'delivered', updated_at = datetime('now') WHERE id = ?`, [fulfilmentId]);
+  // ONE TRANSACTION, BECAUSE THE GAP BETWEEN TWO STATEMENTS WAS REACHABLE.
+  //
+  // These ran as two separate writes. Anything that stopped between them left a
+  // venue row reading `owed`, which `OPEN_OBLIGATION` treats as open and the
+  // aftermath pass then tried to DELIVER — moving a marketplace download, which
+  // the venue already handed over, into a seven-day email promise nothing here
+  // could keep. A narrow window and a bad landing.
+  //
+  // It stays two statements, because `experiment_fulfilment_guard` refuses a
+  // fulfilment that ARRIVES settled, and that law is right: a row is born owing
+  // and is discharged by something that happened. Nothing about this correction
+  // is a reason to weaken it. What was missing was the transaction, so either
+  // both land or neither does.
+  await batch([
+    { sql: `INSERT INTO experiment_fulfilments (id, founder_id, experiment_id, exposure_id, payment_event_id, provider, payment_ref, amount_cents, currency, observed_how)
+            VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      args: [fulfilmentId, input.founderId, input.experimentId, x.id, paid.id, plan.listing.venue, ref, o.grossCents, currency, 'owner_entered'] },
+    { sql: `UPDATE experiment_fulfilments SET status = 'delivered', updated_at = datetime('now') WHERE id = ?`,
+      args: [fulfilmentId] },
+  ]);
   await recordEconomicEvent({ founderId: input.founderId, kind: 'charge', amountCents: o.grossCents, currency, occurredAt: paidAt,
     provider: plan.listing.venue, providerRef: ref, sourceEventId: paid.id, fulfilmentId, claimQuality: 'measured',
     evidenceMode: e.evidenceMode as 'real' | 'sandbox' | 'reference', because: `${plan.listing.venueName} order ${ref}, as the statement shows it` });
@@ -530,17 +545,82 @@ export async function recordVenueRefund(input: { founderId: string; experimentId
   const ref = input.orderRef.trim();
   const at = new Date(input.refundedAt);
   if (!ref || Number.isNaN(at.getTime()) || !Number.isInteger(input.amountCents) || input.amountCents <= 0) throw new HandRefused('bad_refund');
-  const f = (await query('SELECT id FROM experiment_fulfilments WHERE experiment_id = ? AND payment_ref = ?', [input.experimentId, ref])).rows[0] as Record<string, unknown> | undefined;
+  const f = (await query(
+    'SELECT id, amount_cents, currency, refund_requested_at FROM experiment_fulfilments WHERE experiment_id = ? AND payment_ref = ?',
+    [input.experimentId, ref])).rows[0] as Record<string, unknown> | undefined;
   if (!f) throw new HandRefused('no_such_order', 'record the order before its refund');
-  const refunded = await recordBusinessOutcome({ exposureId: x.id, kind: 'refund', amountCents: input.amountCents, currency: 'usd', observedAt: at,
-    provider: plan.listing.venue, providerRef: `${ref}:refund`, payerReference: `order:${ref}`, arrivedVia: plan.listing.venue, exchange: 'upfront_price' });
+
+  // A PARTIAL REFUND IS NOT A CLOSED OBLIGATION, AND THIS USED TO CLOSE IT.
+  //
+  // The amount was validated as a positive integer and never compared to what
+  // the buyer actually paid, so a $2 goodwill refund against a $14 order wrote
+  // `status = 'refunded'` and a `refund_ref`, which turns `OPEN_OBLIGATION`
+  // false on every clause: the buyer was still owed $12 and the institution
+  // reported nothing outstanding. The `refund_is_final` trigger then made it
+  // irreversible, and the second instalment was unrecordable, because the
+  // ledger dedupes on `(provider, ref, kind)` and the ref was a fixed
+  // `<order>:refund` — so it returned as if it had succeeded and wrote nothing
+  // at all.
+  //
+  // Three things close it. The refund cannot exceed what is left; each
+  // instalment gets its own reference; and `refunded` is reached only when the
+  // whole of it has gone back.
+  const gross = Number(f.amount_cents);
+  const currency = String(f.currency);
+  const prior = (await query(
+    `SELECT coalesce(SUM(amount_cents), 0) AS n, COUNT(*) AS c FROM economic_events
+      WHERE fulfilment_id = ? AND kind = 'refund'`, [String(f.id)])).rows[0] as Record<string, unknown>;
+  const refundedSoFar = Number(prior.n ?? 0);
+  const instalment = Number(prior.c ?? 0) + 1;
+  const remaining = gross - refundedSoFar;
+  if (remaining <= 0) throw new HandRefused('already_refunded', 'that order has already been refunded in full');
+  if (input.amountCents > remaining) {
+    throw new HandRefused('bad_refund',
+      `that is more than is left to refund on order ${ref} (${String(remaining)} cents of ${String(gross)})`);
+  }
+  // The first instalment keeps the plain reference, so a full refund reads the
+  // way it always did and nothing already recorded changes meaning.
+  const refundRef = instalment === 1 ? `${ref}:refund` : `${ref}:refund:${String(instalment)}`;
+
+  const refunded = await recordBusinessOutcome({ exposureId: x.id, kind: 'refund', amountCents: input.amountCents, currency, observedAt: at,
+    provider: plan.listing.venue, providerRef: refundRef, payerReference: `order:${ref}`, arrivedVia: plan.listing.venue, exchange: 'upfront_price' });
   if ('refused' in refunded) throw new HandRefused('not_recorded', refunded.refused);
   if (!refunded.duplicate) {
-    await query(`UPDATE experiment_fulfilments SET status = 'refunded', refund_requested_at = ?, refund_ref = ?, updated_at = datetime('now') WHERE id = ?`,
-      [at.toISOString(), `${ref}:refund`, String(f.id)]);
-    await recordEconomicEvent({ founderId: input.founderId, kind: 'refund', amountCents: input.amountCents, currency: 'usd', occurredAt: at,
-      provider: plan.listing.venue, providerRef: `${ref}:refund`, sourceEventId: refunded.id, claimQuality: 'measured',
-      evidenceMode: e.evidenceMode as 'real' | 'sandbox' | 'reference', because: `${plan.listing.venueName} refund on order ${ref}, as the statement shows it` });
+    const settled = input.amountCents === remaining;
+    // COALESCE, BECAUSE THE DATE THAT MATTERS IS THE FIRST ONE. This assigned
+    // the refund's own date to `refund_requested_at` unconditionally, which
+    // erased the moment the buyer asked at the moment they were paid — so the
+    // institution could never afterwards say how long it had made somebody
+    // wait. `hand.ts` and `settlement-intake.ts` both use the coalescing form;
+    // this was the one that did not.
+    if (settled) {
+      await query(
+        `UPDATE experiment_fulfilments
+            SET status = 'refunded', refund_requested_at = coalesce(refund_requested_at, ?),
+                refund_ref = ?, updated_at = datetime('now')
+          WHERE id = ?`,
+        [at.toISOString(), refundRef, String(f.id)]);
+    } else {
+      // A PART REFUND LEAVES THE OBLIGATION OPEN AND THE STATUS ALONE. No
+      // `refund_ref`, because that is the thing `OPEN_OBLIGATION` reads as
+      // "settled", and the buyer is still owed the rest.
+      await query(
+        `UPDATE experiment_fulfilments
+            SET refund_requested_at = coalesce(refund_requested_at, ?), updated_at = datetime('now')
+          WHERE id = ?`,
+        [at.toISOString(), String(f.id)]);
+    }
+    // LINKED TO THE FULFILMENT, like the charge and the fee beside it. Without
+    // it `unitContribution` reads the refund per-unit as zero and reports full
+    // contribution on a sale that was given back. Nothing enforced it: a refund
+    // is `is_unit_cost = 0`, so the guard that catches an unlinked unit cost
+    // does not fire.
+    await recordEconomicEvent({ founderId: input.founderId, kind: 'refund', amountCents: input.amountCents, currency, occurredAt: at,
+      provider: plan.listing.venue, providerRef: refundRef, sourceEventId: refunded.id, fulfilmentId: String(f.id), claimQuality: 'measured',
+      evidenceMode: e.evidenceMode as 'real' | 'sandbox' | 'reference',
+      because: settled
+        ? `${plan.listing.venueName} refund on order ${ref}, as the statement shows it`
+        : `${plan.listing.venueName} part refund ${String(instalment)} on order ${ref}, as the statement shows it` });
   }
   return stopConditionsMet(input.experimentId);
 }

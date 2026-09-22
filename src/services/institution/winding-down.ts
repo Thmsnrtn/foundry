@@ -136,8 +136,38 @@ export async function howThisWouldEnd(founderId: string): Promise<WindDown> {
         break;
       case 'deliver_or_refund_yourself':
         itCannotSettle.push(entry('you',
-          'no act of yours covers it any more, so it is yours in Stripe'));
+          'no act of yours covers it any more, so it is yours to settle in the '
+          + 'account the money is actually in'));
         break;
+      case 'refund_on_the_venue':
+        itCannotSettle.push(entry('you',
+          'the money is the marketplace\'s and there is no door here that could '
+          + 'move it, so the refund has to be given on the venue'));
+        break;
+      default: {
+        // A NEW KIND OF STUCK OBLIGATION MUST NOT FALL THROUGH TO SILENCE.
+        //
+        // This switch had no default. `refund_on_the_venue` was added to the
+        // obligations vocabulary and not here, so an obligation carrying it
+        // landed in neither list — and with it as the only open one, this
+        // reader told an owner "Nobody is owed anything. Stopping now would
+        // leave nothing outstanding" while a marketplace buyer was waiting for
+        // their money. The doc above this function claims a new kind appears
+        // here "the day it appears there rather than the day somebody
+        // remembers to add it". It did not, because nothing made it.
+        //
+        // `never` makes the compiler refuse the next one: an action added to
+        // `ObligationAction` without a case here will not typecheck. The
+        // runtime arm files it as unsettleable anyway, because the safe
+        // direction for an obligation nobody has classified is that somebody
+        // may still be owed.
+        const unhandled: never = o.action;
+        itCannotSettle.push(entry('you',
+          `this is an obligation the wind-down reading does not know how to `
+          + `classify (${String(unhandled)}), and one it cannot classify is not `
+          + `one it may call settled`));
+        break;
+      }
     }
   }
 

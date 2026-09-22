@@ -25,7 +25,7 @@ import {
   HandRefused, allowExperiment, approveRemaining, attachPaymentLinkByUrl, declineExperiment, markdownToHtml, offerShapePlanOf, prepareExposure,
   reviewRecipient, senderCompanyOf, stopExperiment,
 } from '../../services/venture/hand.js';
-import { approveListing, ownerActsForListing, recordListing, recordVenueOrder, recordVenueReading, recordVenueRefund } from '../../services/venture/proof-2.js';
+import { approveListing, ownerActsForListing, recordListing, recordVenueOrder, recordVenueReading, recordVenueRefund, requestVenueRefund } from '../../services/venture/proof-2.js';
 import { shelfCandidates } from '../../services/venture/shelves.js';
 import type { ShelfCandidate } from '../../services/venture/shelves.js';
 
@@ -586,7 +586,14 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
         <label>Gross charged, in cents <input type="number" name="gross_cents" min="1" step="1" required placeholder="1400" /></label>
         <label>Fees taken, in cents (leave blank if not yet on the statement) <input type="number" name="fee_cents" min="0" step="1" /></label>
         <button class="btn" type="submit">Record this order</button></form>
-      <h3>A refund</h3>
+      <h3>Somebody has asked for a refund</h3>
+      <p class="quiet">Record this when a buyer asks and before you have paid them, so what they are owed is visible, dated and attached to an order number — and so the wait is measured from when they asked rather than from when it was settled. Foundry cannot move ${listing.venueName}'s money and will not pretend to try.</p>
+      <form method="POST" action="/foundry/experiments/${id}/refund-asked" class="stack">
+        <label>Order number <input type="text" name="order_ref" required /></label>
+        <label>Asked on <input type="date" name="asked_at" /></label>
+        <button class="btn" type="submit">Record the request</button></form>
+      <h3>A refund you have given</h3>
+      <p class="quiet">A part refund leaves the rest owed and the obligation open; only the whole of it closes the order.</p>
       <form method="POST" action="/foundry/experiments/${id}/refund" class="stack">
         <label>Order number <input type="text" name="order_ref" required /></label>
         <label>Refunded on <input type="date" name="refunded_at" required /></label>
@@ -988,6 +995,35 @@ experimentRoutes.post('/foundry/experiments/:id/order', requireInstitutionOwner(
       orderRef: String(form.order_ref ?? ''), paidAt: String(form.paid_at ?? ''), grossCents: int(form.gross_cents) ?? 0, feeCents: int(form.fee_cents),
     } });
     return back(c, id, 'test', 'order');
+  } catch (e) { return back(c, id, 'test', null, said(e)); }
+});
+
+/**
+ * A BUYER HAS ASKED, AND HAS NOT BEEN PAID YET.
+ *
+ * This route did not exist, and its absence made an entire mechanism dead.
+ * `requestVenueRefund` was written, tested and shipped; `refund_on_the_venue`,
+ * the channel-aware remedy sentence and the whole `refund_requested` branch
+ * for a marketplace order hung off it — and nothing in the running system
+ * could call it. The only writer the owner had was `/refund`, which records a
+ * refund ALREADY GIVEN. So the one state the public refunds page promises to
+ * honour, "somebody asked and is waiting", was unreachable: the reachability
+ * gate walks module imports and cannot see an unreachable export inside a
+ * reachable module, and an independent review found it instead.
+ *
+ * It is separate from `/refund` on purpose. Asking and paying are two events
+ * with two dates, and collapsing them is what erased how long a buyer waited.
+ */
+experimentRoutes.post('/foundry/experiments/:id/refund-asked', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c); if (!founderId) return c.redirect('/onboarding');
+  const id = String(c.req.param('id'));
+  const form = await c.req.parseBody();
+  try {
+    const r = await requestVenueRefund({
+      founderId, experimentId: id, orderRef: String(form.order_ref ?? ''),
+      askedAt: String(form.asked_at ?? '') || undefined,
+    });
+    return back(c, id, 'test', r.alreadyOpen ? 'refund_already_asked' : 'refund_asked');
   } catch (e) { return back(c, id, 'test', null, said(e)); }
 });
 

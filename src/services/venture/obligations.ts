@@ -154,7 +154,13 @@ async function read(r: Row, now: Date, moneyToolsOn: boolean): Promise<Obligatio
       : 'Nothing you approved covers delivering or refunding it, so I do neither; it is yours, in Stripe.';
   } else if (disputed) {
     state = 'disputed'; action = 'respond_to_dispute';
-    sentence = `A buyer is contesting the ${amount} charge for ${title} (payment ${ref}) with their bank. Nothing is sent or refunded on it until the dispute is decided.`;
+    // THE SENTENCE HE READS FIRST HAS TO BE TRUE TOO. Only `asksHim` was made
+    // channel-aware here, so the two lines contradicted each other: a buyer on
+    // a marketplace opens a case with the marketplace, not with their bank,
+    // and telling him otherwise sends him looking in the wrong place.
+    sentence = venue
+      ? `A buyer on ${venueName} is contesting the ${amount} charge for ${title} (order ${ref}). Nothing is sent or refunded on it until ${venueName} decides the case.`
+      : `A buyer is contesting the ${amount} charge for ${title} (payment ${ref}) with their bank. Nothing is sent or refunded on it until the dispute is decided.`;
     asksHim = venue
       ? `Answering the case is yours, on ${venueName}; Foundry does not speak to a marketplace or a bank for you.`
       : 'Answering the dispute is yours, in your Stripe account; Foundry does not speak to a bank for you.';
@@ -175,8 +181,17 @@ async function read(r: Row, now: Date, moneyToolsOn: boolean): Promise<Obligatio
   } else if (String(r.status) === 'sent') {
     const hours = hoursSince(sentAt ?? String(r.updated_at), now);
     state = 'sent_unconfirmed'; action = hours >= CHECK_DELIVERY_AFTER_HOURS ? 'check_delivery' : 'nothing';
-    sentence = `${title} was sent to a buyer (payment ${ref}, ${amount}) on ${day(sentAt ?? String(r.updated_at))} and the mail provider has not confirmed it arrived. After ${String(UNCONFIRMED_IS_FAILED_AFTER_DAYS)} days without confirmation it is treated as undelivered and refunded.`;
-    asksHim = action === 'check_delivery' ? 'Worth a look: the provider has not confirmed this delivery in three days.' : null;
+    // THE SEVEN-DAY PROMISE IS A PROMISE NOTHING CAN KEEP FOR A VENUE ORDER.
+    // Nothing here watches the marketplace, and no pass refunds on it — the
+    // whole reason `refund_on_the_venue` exists. Saying it anyway is the exact
+    // shape this module already refuses elsewhere: a sentence the institution
+    // repeats about something that will never happen.
+    sentence = venue
+      ? `${title} was bought on ${venueName} (order ${ref}, ${amount}) on ${day(sentAt ?? String(r.updated_at))} and I have no reading of whether the buyer got it. I do not watch ${venueName}, so this will not resolve itself here.`
+      : `${title} was sent to a buyer (payment ${ref}, ${amount}) on ${day(sentAt ?? String(r.updated_at))} and the mail provider has not confirmed it arrived. After ${String(UNCONFIRMED_IS_FAILED_AFTER_DAYS)} days without confirmation it is treated as undelivered and refunded.`;
+    asksHim = venue
+      ? `Check the order on ${venueName}; nothing here can tell you whether it was delivered.`
+      : action === 'check_delivery' ? 'Worth a look: the provider has not confirmed this delivery in three days.' : null;
   } else {
     // A PROMISE THE INSTITUTION CANNOT KEEP IS WORSE THAN A REFUSAL IT
     // EXPLAINS — the rule an owner-withdrawn refund taught, met here a second
@@ -190,10 +205,23 @@ async function read(r: Row, now: Date, moneyToolsOn: boolean): Promise<Obligatio
       state = 'owed'; action = 'deliver_or_refund_yourself';
       sentence = `A buyer paid ${amount} for ${title} (payment ${ref}) on ${day(String(r.created_at))}, `
         + `and the delivery is refused: ${stuck}. Nothing I do on a later pass changes that, so I am not going to tell you it is coming.`;
-      asksHim = 'This one is yours: send them what they bought, or refund them in Stripe.';
+      // THE LAST HARD-CODED STRIPE IN THIS FILE. `putItRight` already says the
+      // true thing for both channels, and this branch is reachable for a venue
+      // order: `recordVenueOrder` inserts at the default status and marks it
+      // delivered, so anything that interrupts between those leaves a venue row
+      // reading `owed`.
+      asksHim = venue ? `This one is yours: ${putItRight}`
+        : 'This one is yours: send them what they bought, or refund them in Stripe.';
     } else {
-      state = 'owed'; action = 'nothing';
-      sentence = `A buyer paid ${amount} for ${title} (payment ${ref}) on ${day(String(r.created_at))}; the delivery goes out on the next pass.`;
+      state = 'owed';
+      // NO PASS DELIVERS A LISTING. The hand's delivery pass runs on acts this
+      // experiment does not have, so promising one for a venue order is a
+      // sentence that comes back every hour and never becomes true.
+      action = venue ? 'deliver_or_refund_yourself' : 'nothing';
+      sentence = venue
+        ? `A buyer paid ${amount} for ${title} on ${venueName} (order ${ref}) on ${day(String(r.created_at))}, and my record does not show it handed over. ${venueName} delivers its own downloads; nothing here does.`
+        : `A buyer paid ${amount} for ${title} (payment ${ref}) on ${day(String(r.created_at))}; the delivery goes out on the next pass.`;
+      asksHim = venue ? `Check order ${ref} on ${venueName}. ${putItRight}` : null;
     }
   }
   return { id: String(r.id), experimentId: String(r.experiment_id), experimentTitle: title, productId: r.product_id == null ? null : String(r.product_id),
