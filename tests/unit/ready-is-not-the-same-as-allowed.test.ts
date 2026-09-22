@@ -226,3 +226,52 @@ describe('it is a reading, not a register', () => {
     expect(src).toContain("readiness: sendingReadiness");
   });
 });
+
+// =============================================================================
+// AND THE READER HAD ONLY TWO MECHANISMS FOR A WORLD THAT HAS THREE.
+//
+// Enforcing this reading at the door found the falsehood inside it within one
+// full run: every offer Experiment 001 sends was refused with "the test is not
+// ready for this: how it reaches a customer is decided". Seventeen suites went
+// red, including the laboratory's own thirty-day simulations.
+//
+// The gate was right and the reader was wrong. `mechanism` was derived as
+// listing, workshop, or `unknown` — and `unknown` swallowed OUTREACH, which is
+// the shape of the only experiment this institution has actually run: no
+// listing, no page, Foundry's hand carrying an offer to businesses under an
+// approved act. `OfferShapePlan` had said so all along, in the doc on the
+// field: `listing` is "absent for one whose offer Foundry's hand carries".
+//
+// Worth keeping in view: this falsehood sat in the owner's readiness screen
+// harmlessly for as long as nothing acted on it. That is the whole argument
+// for his instruction that readiness "must not be merely a checklist displayed
+// in the owner interface" — a reading nothing enforces is a reading nobody
+// checks.
+// =============================================================================
+
+describe('outreach is a mechanism, not a gap in the list', () => {
+  it('names it rather than calling a real shape unknown', async () => {
+    const src = readFileSync('src/services/venture/qualification.ts', 'utf8');
+    expect(src).toContain("'outreach'");
+    // `unknown` now means what the word means: there is no plan at all.
+    expect(src).toContain("plan ? 'outreach' : 'unknown'");
+  });
+
+  it('asks an outreach test for the sending half and not for a page', () => {
+    const src = readFileSync('src/services/venture/qualification.ts', 'utf8');
+    // The publication gate belongs to the mechanism that publishes. Asking a
+    // test for a page it was never going to have is the ritual this module's
+    // header warns against.
+    const gateAt = src.indexOf('publicationGate(experimentId');
+    const workshopOnly = src.slice(src.indexOf("if (mechanism === 'workshop')"), gateAt);
+    expect(workshopOnly.length).toBeGreaterThan(0);
+    expect(src).toContain("if (mechanism === 'workshop' || mechanism === 'outreach')");
+  });
+
+  it('still refuses a plan-less test, which is what unknown was for', async () => {
+    const { qualificationOf } = await import('../../src/services/venture/qualification.js');
+    const r = await qualificationOf('no-such-experiment');
+    expect(r.mechanism).toBe('unknown');
+    expect(r.blocking.length).toBeGreaterThan(0);
+  });
+});

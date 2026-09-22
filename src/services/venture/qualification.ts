@@ -78,7 +78,7 @@ export type QualificationState =
 export interface Qualification {
   state: QualificationState;
   /** How this thing actually makes its money, which decides what it owes. */
-  mechanism: 'listing' | 'workshop' | 'unknown';
+  mechanism: 'listing' | 'workshop' | 'outreach' | 'unknown';
   conditions: QualificationCondition[];
   /** The conditions in the way, by name. Empty when nothing is. */
   blocking: string[];
@@ -105,8 +105,25 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
 
   const { offerShapePlanOf, materialOf } = await import('./hand.js');
   const plan = await offerShapePlanOf(experimentId);
-  const mechanism: Qualification['mechanism'] = plan?.listing ? 'listing' : plan?.venue === 'workshop' ? 'workshop'
-    : plan ? 'unknown' : 'unknown';
+  // THREE MECHANISMS, AND THE THIRD IS THE OLDEST.
+  //
+  // This read `listing`, `workshop`, and `unknown` for everything else — and
+  // everything else is OUTREACH, the shape of Experiment 001: no listing, no
+  // page, Foundry's own hand carrying an offer to businesses under an approved
+  // act. `OfferShapePlan` says so in as many words: `listing` is "absent for
+  // one whose offer Foundry's hand carries".
+  //
+  // Calling that `unknown` produced a blocking condition, "how it reaches a
+  // customer is decided", against the one experiment in this institution that
+  // has actually run. It was harmless while nothing enforced the reading, and
+  // it stopped being harmless the moment the door did: the laboratory's
+  // Experiment 001 could not send a single offer. Which is the gate working —
+  // it refused what the reader called unready — and the reader being wrong.
+  //
+  // `unknown` now means what it says: there is no plan at all.
+  const mechanism: Qualification['mechanism'] = plan?.listing ? 'listing'
+    : plan?.venue === 'workshop' ? 'workshop'
+      : plan ? 'outreach' : 'unknown';
 
   const conditions: QualificationCondition[] = [];
 
@@ -167,10 +184,19 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
       ? met('the page a buyer arrives at is up and current', 'the publication gate passes')
       : { name: 'the page a buyer arrives at is up and current', verdict: 'unproven', because: gate.failures.join('; ') });
 
-    // AND THE OTHER INSTRUMENT THAT ALREADY EXISTS. `hand.readiness` answers
-    // the sending half — who may be written to, and whether there is an
-    // identity to write as. Two readers, each authoritative over its own half,
-    // and this one asks rather than re-deriving.
+  }
+
+  // AND THE OTHER INSTRUMENT THAT ALREADY EXISTS, FOR BOTH MECHANISMS THAT
+  // SEND. `hand.readiness` answers the sending half — who may be written to,
+  // and whether there is an identity to write as. Two readers, each
+  // authoritative over its own half, and this one asks rather than re-deriving.
+  //
+  // Outreach owes this and NOT the publication gate, because nothing is
+  // published: no page, no price on a page, no reply route to prove. Asking a
+  // test for a page it was never going to have is the ritual this module's
+  // header warns against, and the distinction is the mechanism rather than a
+  // list of experiment ids.
+  if (mechanism === 'workshop' || mechanism === 'outreach') {
     const { readiness: sendingReadiness } = await import('./hand.js');
     const send = await sendingReadiness(experimentId);
     conditions.push(send.ok

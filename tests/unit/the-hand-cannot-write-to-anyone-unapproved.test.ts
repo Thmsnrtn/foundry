@@ -190,7 +190,12 @@ describe('the binding of an outbound action to the experiment', () => {
     await expect(ins({ refund_ref: 're_x' })).rejects.toThrow(/cannot_arrive_settled/);
     await expect(ins({ payment_event_id: arrived.id })).rejects.toThrow(/payment_invalid/);
     await expect(ins({ payment_ref: 'pi_other' })).rejects.toThrow(/payment_invalid/);
-    await expect(ins({ provider: 'paypal' })).rejects.toThrow(/payment_invalid/);
+    // `observed_how` is named here so this row reaches the check it is about.
+    // Migration 341 added a second, narrower law — a provider this deployment
+    // does not watch may not claim Foundry observed it — and with the column
+    // left to its default that law refuses a `paypal` row first, which would
+    // have quietly stopped this line proving anything about `payment_invalid`.
+    await expect(ins({ provider: 'paypal', observed_how: 'owner_entered' })).rejects.toThrow(/payment_invalid/);
     await expect(ins({ founder_id: OTHER })).rejects.toThrow(/payment_invalid/);
     await expect(ins({ amount_cents: 0 })).rejects.toThrow(/CHECK|check/);
     await expect(ins({ id: 'g_f1' })).resolves.toBeDefined();
