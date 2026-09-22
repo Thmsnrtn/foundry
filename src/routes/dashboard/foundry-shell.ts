@@ -6562,6 +6562,19 @@ foundryShellRoutes.get('/foundry/controls/connectors',
     // A Connectors page describing a company the owner does not own — with its
     // reference-world credential presented as one of his connections — is
     // exactly the confusion the boundary exists to prevent.
+    //
+    // STANDING DELIBERATELY DOES NOT APPLY, and this is baselined for it.
+    // `check-standing-scope` asks that a count of his companies, a roll-up of
+    // earnings, or anything that spends or acts exclude EXPERIMENTAL assets,
+    // because a test object is not an operating company. That rule is right and
+    // it is not this query.
+    //
+    // A connection belongs to whatever it is a connection to, whatever that
+    // asset's standing. The first real external connection this institution
+    // will ever hold is on an EXPERIMENT — Experiment 002, the Etsy workbook.
+    // Filtering by `standing = 'earned'` here would hide from the Connectors
+    // page the single connection the owner is currently trying to make, and
+    // the page would tell him he has none while he was looking at one.
     const owned = await query(
       `SELECT id, name FROM products WHERE owner_id = ? AND ${realCompany()} ORDER BY rowid LIMIT 1`,
       [String(founder.id)]);
@@ -6646,6 +6659,19 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
     // A Connectors page describing a company the owner does not own — with its
     // reference-world credential presented as one of his connections — is
     // exactly the confusion the boundary exists to prevent.
+    //
+    // STANDING DELIBERATELY DOES NOT APPLY, and this is baselined for it.
+    // `check-standing-scope` asks that a count of his companies, a roll-up of
+    // earnings, or anything that spends or acts exclude EXPERIMENTAL assets,
+    // because a test object is not an operating company. That rule is right and
+    // it is not this query.
+    //
+    // A connection belongs to whatever it is a connection to, whatever that
+    // asset's standing. The first real external connection this institution
+    // will ever hold is on an EXPERIMENT — Experiment 002, the Etsy workbook.
+    // Filtering by `standing = 'earned'` here would hide from the Connectors
+    // page the single connection the owner is currently trying to make, and
+    // the page would tell him he has none while he was looking at one.
     const owned = await query(
       `SELECT id, name FROM products WHERE owner_id = ? AND ${realCompany()} ORDER BY rowid LIMIT 1`,
       [String(founder.id)]);
