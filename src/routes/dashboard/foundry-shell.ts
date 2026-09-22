@@ -3416,6 +3416,7 @@ interface CompanyView {
     id: string; senseKey: string; wouldLearn: string; neverGrants: string;
     provider: string; providerName: string; shortName: string; mode: string;
     lastObservedAt: string | null; lastError: string | null;
+    accountLabel: string | null; accountRef: string | null; identityVerifiedAt: string | null;
   }>;
   /** What Foundry actually holds, so the disclosure can be checked rather than trusted. */
   keys: Array<{
@@ -3598,6 +3599,8 @@ export async function readCompany(productId: string, founderId: string): Promise
       providerName: senseSystem.providerName(sense.provider),
       shortName: sense.cannotSee, mode: sense.mode,
       lastObservedAt: sense.lastObservedAt, lastError: sense.lastError,
+      accountLabel: sense.providerAccountLabel, accountRef: sense.providerAccountRef,
+      identityVerifiedAt: sense.identityVerifiedAt,
     })),
     keys: keys.map((k) => ({
       senseId: k.senseId, provider: senseSystem.providerName(k.provider),
@@ -4269,8 +4272,15 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
            grantedScopes comes straight off a provider's token endpoint. Both
            are text a third party chooses, and this block used to build a
            string and hand it to raw(). */ ''}
+      ${/* WHICH ACCOUNT, AND WHETHER IT HAS EVER BEEN USED. Two separate
+           sentences on purpose. The account name is the provider's own answer,
+           recorded when the connection was made; "has not reported yet" is the
+           absence of a real reading. A connection can have the first and not
+           the second — authorised, never exercised — and that is precisely the
+           state the owner must not see described as working. */ ''}
       <ul>${view.senses.map((sense) => html`<li><strong>${sense.wouldLearn}</strong> —
-        from ${sense.providerName}${sense.mode === 'sandbox'
+        from ${sense.providerName}${sense.accountLabel || sense.accountRef
+    ? html` (${sense.accountLabel ?? sense.accountRef})` : ''}${sense.mode === 'sandbox'
     ? ', in test mode, so none of it is the world'
     : sense.mode === 'reference' ? ', so none of it is real' : ''}.
         ${sense.lastError
@@ -4278,7 +4288,10 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
           What I show you may be out of date.`
     : sense.lastObservedAt
       ? `Last reported ${sense.lastObservedAt.slice(0, 10)}.`
-      : 'It has not reported yet.'}</li>`)}</ul>
+      : sense.identityVerifiedAt
+        ? `${sense.providerName} confirmed the account on ${sense.identityVerifiedAt.slice(0, 10)}, `
+          + 'and nothing has been read through it yet.'
+        : 'It has not reported yet, and I have not confirmed which account it opens.'}</li>`)}</ul>
       <p class="quiet">None of this lets me act. I cannot
         ${view.senses.map((sense) => sense.neverGrants).join('; ')}.</p>
       ${view.keys.length ? html`<p class="quiet">What I actually hold:

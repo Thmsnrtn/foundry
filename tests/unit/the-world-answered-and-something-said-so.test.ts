@@ -28,12 +28,14 @@
 // =============================================================================
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '5'.repeat(64);
+process.env.FOUNDRY_OWNER_EMAIL = 'w@example.com';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { witnessAReading } from '../../src/services/senses/witness.js';
 import { identityFromProbe } from '../../src/services/senses/credentials.js';
+import { Hono } from 'hono';
 
 const F = 'f_witness', P = 'p_witness';
 
@@ -234,5 +236,50 @@ describe('a listing experiment can actually become ready', () => {
     // against a public promise on /refunds.
     expect(clause.slice(0, 200)).not.toContain("verdict: 'met'");
     expect(clause).toContain('rather than a condition on my readiness');
+  });
+});
+
+describe('authorised and never exercised does not read as working', () => {
+  // THE STATE THE DIRECTIVE SINGLES OUT: "a configured credential without a
+  // successful external read must not be presented as a fully operational
+  // connection." The connection above has an identity the provider confirmed
+  // and no reading at all. What the owner is shown has to say both.
+  let app: Hono;
+
+  beforeAll(async () => {
+    const { foundryShellRoutes } = await import('../../src/routes/dashboard/foundry-shell.js');
+    app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('founder', { id: F, email: 'w@example.com' }); await next();
+    });
+    app.route('/', foundryShellRoutes);
+  });
+
+  const companyPage = async (): Promise<string> => {
+    const res = await app.request(`/foundry/companies/${P}`);
+    expect(res.status, 'the company page did not render').toBe(200);
+    return res.text();
+  };
+
+  it('names the account the provider confirmed', async () => {
+    // Rendered, not grepped. The identity was captured from Etsy's own answer;
+    // a hard-coded shop name is what the directive forbids.
+    expect(await companyPage()).toContain('ApexMicro');
+  });
+
+  it('says nothing has been read through it, in the same breath', async () => {
+    const html = await companyPage();
+    expect(html).toContain('nothing has been read through it yet');
+  });
+
+  it('does not claim it last reported, because it never has', async () => {
+    const html = await companyPage();
+    expect(html).not.toContain('Last reported');
+  });
+
+  it('still says what the connection does not permit', async () => {
+    // Seeing is not permission to act, and that sentence is not optional
+    // garnish — it is the one the owner agreed to.
+    expect(await companyPage()).toContain('None of this lets me act');
   });
 });

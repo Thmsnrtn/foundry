@@ -79,6 +79,21 @@ export interface ConnectedSense {
   connectedAt: string;
   lastObservedAt: string | null;
   lastError: string | null;
+  /**
+   * WHICH ACCOUNT THIS OPENS, in the provider's own words, captured when the
+   * connection was made. Null when the provider was never successfully asked —
+   * which is a connection that has been authorised and never exercised, and the
+   * surface has to be able to say so rather than calling it operational.
+   */
+  providerAccountRef: string | null;
+  providerAccountLabel: string | null;
+  /**
+   * When the provider confirmed the identity. Deliberately NOT
+   * `lastObservedAt`: an authentication check and a real reading are two facts,
+   * and a panel that collapsed them would report a connection that has proved
+   * only that its token is live as one that is working.
+   */
+  identityVerifiedAt: string | null;
   channels: string[];
 }
 
@@ -102,6 +117,7 @@ export async function connectedSenses(productId: string): Promise<ConnectedSense
   return ((await query(
     `SELECT c.id, c.sense_key, c.provider, c.mode, c.connected_at,
             c.last_observed_at, c.last_error,
+            c.provider_account_ref, c.provider_account_label, c.identity_verified_at,
             s.cannot_see, s.would_learn, s.never_grants, s.channels_json
        FROM company_senses c
        JOIN senses s ON s.sense_key = c.sense_key
@@ -115,6 +131,9 @@ export async function connectedSenses(productId: string): Promise<ConnectedSense
     connectedAt: String(r.connected_at).slice(0, 10),
     lastObservedAt: r.last_observed_at == null ? null : String(r.last_observed_at),
     lastError: r.last_error == null ? null : String(r.last_error),
+    providerAccountRef: r.provider_account_ref == null ? null : String(r.provider_account_ref),
+    providerAccountLabel: r.provider_account_label == null ? null : String(r.provider_account_label),
+    identityVerifiedAt: r.identity_verified_at == null ? null : String(r.identity_verified_at),
     channels: JSON.parse(String(r.channels_json)) as string[],
   }));
 }
