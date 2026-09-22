@@ -28,6 +28,7 @@
 
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
+import { stripComments } from './lib/strip-comments.mjs';
 
 const ROOTS = ['src', 'tests', 'scripts'];
 const EXT = /\.(ts|tsx|mjs|js)$/;
@@ -49,16 +50,6 @@ const MASKED = new RegExp(
   'g',
 );
 
-/**
- * Comments are stripped before scanning, because this file and the record of
- * the mistake both have to be able to describe the pattern in prose without
- * the gate firing on the description.
- */
-function withoutComments(src) {
-  return src
-    .replace(/\/\*[\s\S]*?\*\//g, (m) => m.replace(/[^\n]/g, ' '))
-    .replace(/(^|[^:])\/\/[^\n]*/g, (m, p) => p + ' '.repeat(m.length - p.length));
-}
 
 function walk(dir, out) {
   for (const name of readdirSync(dir)) {
@@ -77,7 +68,14 @@ for (const root of ROOTS) {
   for (const file of files) {
     const rel = relative('.', file);
     if (rel === SELF) continue;
-    const src = withoutComments(readFileSync(file, 'utf8'));
+    // THE SHARED STRIPPER, never a hand-rolled one. `a-route-glob-is-not-a-comment`
+    // caught this gate rolling its own on its first full run, which is the
+    // exact defect that test exists for: `/*` inside a route string opens what
+    // a naive regex reads as a block comment, and it closes at the next real
+    // `*/` hundreds of lines later, blanking the code in between. Comments are
+    // stripped at all so this gate and the record of the mistake can describe
+    // the pattern in prose without firing on the description.
+    const src = stripComments(readFileSync(file, 'utf8'));
     for (const m of src.matchAll(MASKED)) {
       const line = src.slice(0, m.index).split('\n').length;
       found.push({ rel, line });
