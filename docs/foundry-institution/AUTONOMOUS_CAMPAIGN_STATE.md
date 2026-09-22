@@ -3108,3 +3108,83 @@ Three defects in one wave, each one an instance of the same thing: a sentence
 asserting a property that nothing checked.
 
 [deploy-private]
+
+---
+
+## The owner-experience release — what the instruments found that the tests did not
+
+Frozen at `975e1c46`. `npm run check` green on the frozen tree: **31 gates, 627
+test files, 5,477 tests, nothing red.**
+
+### What started it
+
+He entered his Etsy application key, submitted, and could not tell whether
+anything had been saved. He was looking at the SUCCESS path: the POST verifies
+the pair with Etsy, stores it, and redirects with `?etsy=placed&app=…` — which
+nothing read. The only thing that changed was a 0.82rem line in `--text-dim`
+and a button label, under four paragraphs of explanation.
+
+A state that is right and invisible is worse than one that is wrong. A wrong
+state can be argued with; an invisible one leaves him deciding whether to
+submit his secrets a second time.
+
+### What the wave built
+
+`journey.ts` reads all six connection states from the rows that already held
+them and stores nothing. The settings card leads with where the connection is
+rather than explaining itself first. Controls → Connectors exists, with the
+four permission facts rendered as four and a sentence saying that three being
+true tells you nothing about the fourth. `witnessAReading` moves the ladder on
+a witnessed real read, keyed on the OBSERVE rung so a reading can never promote
+a publishing capability.
+
+### The part worth keeping
+
+**Seven defects of mine, none found by me first.**
+
+- `check-no-masked-literals` — a real keystring in a fixture behind a mask that
+  redacted nothing, in a repository both parties had wrong in opposite
+  directions.
+- `a-route-glob-is-not-a-comment` — that same new gate, rolling its own comment
+  stripper, one hour after its own header explained the failure mode.
+- `check-write-only-columns` — an identity recorded with no reader.
+- `check-reality-scope` — Connectors picking whichever `products` row came
+  first, which can be the REFERENCE company. It would have shown him a company
+  he does not own and called its credential one of his connections.
+- `check-standing-scope` — the same queries, and the one gate that was RIGHT to
+  flag and WRONG to satisfy: filtering to `standing = 'earned'` would have
+  hidden the single connection he is trying to make, because the first real
+  connection this institution will hold is on an experiment.
+- `one-stylesheet-one-vocabulary` — `--ok` and `--text`, neither of which
+  exists. Every state colour on the pages built to make state visible would
+  have rendered with no colour at all, in the same wave as an instruction to
+  preserve one coherent design system.
+- `the-life-of-a-credential` — a journey test protecting a whole path, which
+  correctly rejected an interstitial that put a screen between him and the
+  thing he came for.
+
+And two of my own tests were found to be STALE PROXIES: source-string
+assertions that had quietly become false while the property they stood for
+stayed true. They do not fail when the implementation moves; they rot into
+confidence. The render-driven tests did not budge.
+
+### The doctrine this wave earned
+
+**An instrument that passes is not an instrument that looked.** The mobile gate
+returned exit 0 over an application the owner could not use, because it
+measured overflow and the doors and had never mounted the settings router at
+all — `/settings` answered 404 to every width it was ever asked about. It
+measures height, distance to the first action, words passed on the way, and
+every control under 44px now. Reported rather than gated: the ceiling is his to
+set, and a threshold invented here is one nobody agreed to.
+
+  /settings                  5,480px tall — fourteen phone screens
+  /foundry/absence           7,749px, 2,623 words
+  /foundry (home)            4,577px — eleven and a half screens
+  an experiment              first action 1,670px down, after 336 words
+
+**A page reachable only by typing its URL is a page that does not exist.**
+Connectors shipped with zero links to it. Found by asking whether the journey
+starts rather than whether the page renders.
+
+[deploy-private]
