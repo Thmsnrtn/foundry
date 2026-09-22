@@ -6219,6 +6219,25 @@ BEGIN
       SELECT 1 FROM business_outcome_events e
        WHERE e.id = NEW.source_event_id AND e.evidence_mode <> NEW.evidence_mode);
 END;
+CREATE TRIGGER economic_event_whose_money_is_this
+BEFORE INSERT ON economic_events
+BEGIN
+  -- The owner's own money is the owner's own evidence. A provider's payout
+  -- recorded under these kinds is the same gross counted a second time.
+  SELECT RAISE(ABORT, 'economic_event:owner_money_comes_from_the_owner')
+   WHERE NEW.kind IN ('owner_contribution', 'owner_distribution')
+     AND NEW.provider <> 'owner';
+
+  -- And nothing else may claim to be the owner moving money.
+  SELECT RAISE(ABORT, 'economic_event:only_owner_money_is_owners')
+   WHERE NEW.provider = 'owner'
+     AND NEW.kind NOT IN ('owner_contribution', 'owner_distribution');
+
+  -- A payout is about the balance, not about any single sale.
+  SELECT RAISE(ABORT, 'economic_event:a_payout_is_not_a_sale')
+   WHERE NEW.kind IN ('payout', 'payout_reversed')
+     AND (NEW.fulfilment_id IS NOT NULL OR NEW.source_event_id IS NOT NULL);
+END;
 CREATE TRIGGER economic_events_append_only_delete
 BEFORE DELETE ON economic_events
 BEGIN

@@ -400,3 +400,63 @@ the question actually open.
 - The disposition model has a price scale to read against when the day comes;
   nothing is built for buying or licensing, and the decision stays the
   owner's.
+
+## Four parties, and no intermediary between them (2026-09-22)
+
+The owner simplified Apex Micro's role, and the simplification is worth stating
+as architecture rather than as a preference, because three of the four parties
+below were already distinct in the code and nothing named the set.
+
+**The legal owner and operator.** A person, in a region, legally behind the
+business. Named on `/terms` and nowhere else the public can reach. Not a public
+figure; the Workshop is the only public voice.
+
+**The public-facing Apex Micro identity.** The business people deal with: a
+name, a portfolio, contact, and the policies a customer needs — refunds,
+privacy, terms. It is *not* a financial hub, a universal storefront, a payment
+processor, or an intermediary through which every portfolio transaction passes.
+
+**Private Foundry's delegated operating responsibilities.** The private
+institution: it connects directly, through authorized integrations, to the
+external platforms and financial systems the portfolio needs, and it privately
+observes and reconciles what they report. It is not a treasury either.
+
+**The external financial accounts and payment channels.** Etsy processes Etsy
+purchases and pays out to the owner's designated bank account. Stripe processes
+eligible direct purchases and pays out to the appropriate account. These are
+independent channels, and each asset uses the one its actual economic mechanism
+calls for.
+
+### What follows from it, and what deliberately does not
+
+**A limited public role is not a licence to drop an obligation.** What moves
+with the channel is the ROUTE a remedy takes, never the promise: `/refunds`
+says the same thing for a marketplace buyer as for a direct one — no form, no
+time limit, no explanation — and differs only in where the money goes back
+through. The marketplace has its own policy; the owner's is not limited by it.
+The legal, tax, privacy and customer-support pages stay for the same reason.
+
+**Foundry must be able to tell one economic activity from three observations of
+it.** A marketplace sale, its eventual payout, and the deposit landing in a bank
+are one activity seen three times. Counting them as three revenues is the
+failure mode, and it is not hypothetical: `owner_contribution` is
+`affects_cash = 1`, needs no source event, and `moneyHeld` adds the owner term
+with no `affects_cash` filter — deliberately, because it is the one term that
+records what the owner actually moved. So a payout recorded the natural way
+somebody records money arriving would have counted the same gross twice.
+
+Migration 342 makes the owner's own money the owner's own evidence: the
+`owner_contribution` and `owner_distribution` kinds may carry no provider but
+`owner`, nothing else may claim to be him moving money, and a payout may name
+neither a fulfilment nor a source event, because a payout is about a balance and
+never about one sale.
+
+**And what is still missing, named rather than built.** The ledger cannot yet
+express *this payout settles these charges*. `business_outcome_events` carries
+`settles_ref`; `economic_events` has no equivalent, and one TEXT column cannot
+name the many charges one payout covers. Nothing writes a payout today and
+nothing reads one, so building the representation now would ship a vocabulary
+for a state nothing can enter — the exact failure the preceding wave was
+convened to repair. The trigger for building it is the first provider payout
+this institution actually reads, and it must exist before any real financial
+data is.
