@@ -936,7 +936,7 @@ CREATE TABLE company_senses (
   last_error        TEXT,
   disconnected_at   TEXT,
   disconnect_reason TEXT
-, provider_account_ref TEXT, provider_account_label TEXT, identity_verified_at TEXT);
+, provider_account_ref TEXT, provider_account_label TEXT, identity_verified_at TEXT, identity_confirmed_at TEXT, identity_confirmed_by TEXT);
 CREATE TABLE company_situations (
   id             TEXT PRIMARY KEY,
   product_id     TEXT NOT NULL REFERENCES products(id),
@@ -5861,6 +5861,27 @@ WHEN COALESCE(OLD.channel_key,'') <> COALESCE(NEW.channel_key,'')
   OR COALESCE(OLD.product_id,'') <> COALESCE(NEW.product_id,'')
 BEGIN
   SELECT RAISE(ABORT,'observation_channel:immutable');
+END;
+CREATE TRIGGER company_sense_confirmation_follows_the_provider
+BEFORE UPDATE OF identity_confirmed_at, identity_confirmed_by ON company_senses
+BEGIN
+  SELECT RAISE(ABORT,'company_sense_confirmation:nothing_to_confirm')
+    WHERE NEW.identity_confirmed_at IS NOT NULL
+      AND (NEW.identity_verified_at IS NULL OR NEW.provider_account_ref IS NULL);
+
+  SELECT RAISE(ABORT,'company_sense_confirmation:needs_a_confirmer')
+    WHERE NEW.identity_confirmed_at IS NOT NULL
+      AND (NEW.identity_confirmed_by IS NULL OR trim(NEW.identity_confirmed_by) = '');
+
+  -- A CONFIRMATION IS NOT WITHDRAWN BY EDITING IT AWAY. Changing his mind about
+  -- a connection is disconnecting it, which is a governed act with its own
+  -- revocation and its own record. Blanking this column would leave a live
+  -- credential reaching a shop he has decided is not his, with nothing saying
+  -- so — the quietest possible version of the failure.
+  SELECT RAISE(ABORT,'company_sense_confirmation:disconnect_instead')
+    WHERE OLD.identity_confirmed_at IS NOT NULL
+      AND NEW.identity_confirmed_at IS NULL
+      AND NEW.disconnected_at IS NULL;
 END;
 CREATE TRIGGER company_sense_disconnect_is_one_way
 BEFORE UPDATE ON company_senses

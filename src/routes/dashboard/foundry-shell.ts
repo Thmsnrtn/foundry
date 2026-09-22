@@ -6657,6 +6657,48 @@ foundryShellRoutes.get('/foundry/controls/connectors',
   });
 
 /**
+ * HE SAYS IT IS HIS. The third of the five facts, and the only one he authors.
+ *
+ * Deliberately NOT a form with a text box asking him to type the shop name.
+ * That would make him the transcriber of a value Etsy already gave us, and a
+ * typo would read as a mismatch. He is being asked to RECOGNISE, which is one
+ * tap, and the thing he is recognising is on the screen above the button.
+ *
+ * Nothing here widens authority. It records a recognition; what that recognition
+ * unlocks is decided by `connectorsFor`, the charter and the outbound door,
+ * none of which this route touches.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/controls/connectors/:provider/confirm',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string; email?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const provider = c.req.param('provider');
+    const owned = await query(
+      `SELECT id FROM products WHERE owner_id = ? AND ${realCompany()} ORDER BY rowid LIMIT 1`,
+      [String(founder.id)]);
+    if (!owned.rows.length) return c.redirect('/foundry/controls/connectors');
+    const productId = String((owned.rows[0] as Record<string, unknown>).id);
+
+    // ONLY WHAT THE PROVIDER HAS ALREADY NAMED. The trigger refuses a
+    // confirmation with no verified identity behind it; asking for the row
+    // first means he is told why rather than shown a database error.
+    const sense = (await query(
+      `SELECT id, provider_account_ref FROM company_senses
+        WHERE product_id = ? AND provider = ? AND disconnected_at IS NULL
+          AND identity_verified_at IS NOT NULL AND identity_confirmed_at IS NULL
+        LIMIT 1`, [productId, provider])).rows[0] as Record<string, unknown> | undefined;
+    if (!sense) return c.redirect(`/foundry/controls/connectors/${provider}`);
+
+    await query(
+      `UPDATE company_senses SET identity_confirmed_at = datetime('now'),
+              identity_confirmed_by = ? WHERE id = ?`,
+      [`founder:${String(founder.id)}`, String(sense.id)]);
+
+    return c.redirect(`/foundry/controls/connectors/${provider}?confirmed=1`);
+  });
+
+/**
  * ONE CONNECTOR, IN FULL — the progressive disclosure the list page defers to.
  *
  * WHAT IS DELIBERATELY ABSENT: a disconnect control. The directive is explicit
@@ -6697,7 +6739,22 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
     const owned = await query(
       `SELECT id, name FROM products WHERE owner_id = ? AND ${realCompany()} ORDER BY rowid LIMIT 1`,
       [String(founder.id)]);
-    if (!owned.rows.length) return c.redirect('/foundry');
+    // The same explicit state as the list, for the same reason: landing
+    // somewhere else leaves him working out whether he mis-tapped.
+    if (!owned.rows.length) {
+      return c.html(page('Connectors', html`
+        <h1>Nothing to connect to yet</h1>
+        <p class="lede">There is no real company here for a connection to belong to.</p>
+        <p class="quiet">The reference company I rehearse against is deliberately not one of
+          yours, and I will not show you its connections as though they were.</p>
+        <a class="btn" href="/foundry">Back</a>`,
+      'controls', {
+        eyebrow: 'Controls',
+        crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: '/foundry/controls', label: 'Controls' },
+          { href: '/foundry/controls/connectors', label: 'Connectors' }],
+        scope: { kind: 'foundry', id: null, name: 'the estate' }, local: [], chips: [],
+      }));
+    }
     const productId = String((owned.rows[0] as Record<string, unknown>).id);
     const companyName = String((owned.rows[0] as Record<string, unknown>).name);
 
@@ -6741,6 +6798,34 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
             ${step.evidence ? html`<br /><span style="font-size:0.82rem;color:var(--text-muted);">${step.evidence}</span>` : ''}</span>
           </li>`)}
         </ol>
+      </div>` : ''}
+
+      ${/* THE ONE STEP THAT IS HIS. Etsy telling us which shop a grant reaches
+           is not the same as that shop being his, and no provider answer and no
+           constant in this source can close that gap. It is one question, asked
+           once, in the place he is already looking. */ ''}
+      ${one.accountVerified && !one.accountConfirmed ? html`
+      <div class="know" style="border-color:var(--accent);">
+        <h2>Is this your shop?</h2>
+        <p>${one.name} says this connection opens <strong>${one.account}</strong>.</p>
+        <p class="quiet">I can tell you which account the authorisation reaches. I cannot tell
+          whether it is the one you meant — a second account, or one somebody else
+          administers, would look exactly like this from here. Until you say, I will read it
+          to learn about it and will not act on your behalf through it.</p>
+        <form method="POST" action="/foundry/controls/connectors/${one.provider}/confirm"
+          style="margin-top:0.75rem;">
+          <button class="btn go" type="submit">Yes, ${one.account} is my shop</button>
+        </form>
+        <p class="quiet" style="margin-top:0.6rem;">If it is not, disconnect it on
+          ${companyName} and connect the right one — I will tell you whether ${one.name}
+          confirmed the revocation, and this connection keeps its record either way.</p>
+      </div>` : ''}
+      ${one.accountConfirmed ? html`
+      <div class="know">
+        <h2>Your shop</h2>
+        <p>You confirmed <strong>${one.account}</strong> is yours. That is what I act on behalf
+          of; ${one.name} granting access and you recognising the account stay two separate
+          facts, and the first is unchanged by the second.</p>
       </div>` : ''}
 
       ${/* THE FOUR FACTS, AS FOUR. Collapsing them into one green tick is the

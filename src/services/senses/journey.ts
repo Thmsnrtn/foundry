@@ -72,6 +72,7 @@ export type ConnectionStage =
   | 'authorization_pending'
   | 'connected'
   | 'identity_verified'
+  | 'identity_confirmed'
   | 'qualified';
 
 export interface ConnectionStep {
@@ -139,6 +140,18 @@ export interface Connector {
   granted: boolean;
   qualified: boolean;
   authorised: boolean;
+  /**
+   * THE PROVIDER'S ANSWER AND HIS, KEPT APART.
+   *
+   * `accountVerified` — the provider told us which account this reaches.
+   * `accountConfirmed` — he told us that account is the one he meant.
+   *
+   * Etsy can be entirely truthful and the connection still wrong: a second
+   * shop, one a collaborator administers, a mis-click on a consent screen. No
+   * provider answer can detect that, and no constant in the source should try.
+   */
+  accountVerified: boolean;
+  accountConfirmed: boolean;
   /** What stands between him and asking, when anything does. */
   standsBetween: 'no_adapter' | 'no_app_key' | 'not_configured' | null;
   /** The one thing to do next, or null. */
@@ -167,7 +180,7 @@ export async function etsyJourney(productId: string): Promise<ConnectionJourney>
 
   const sense = (await query(
     `SELECT id, connected_at, provider_account_ref, provider_account_label,
-            identity_verified_at, last_observed_at, last_error
+            identity_verified_at, identity_confirmed_at, last_observed_at, last_error
        FROM company_senses
       WHERE product_id = ? AND provider = 'etsy' AND disconnected_at IS NULL
       LIMIT 1`, [productId])).rows[0] as Record<string, unknown> | undefined;
@@ -215,6 +228,16 @@ export async function etsyJourney(productId: string): Promise<ConnectionJourney>
         : null,
     },
     {
+      stage: 'identity_confirmed',
+      title: 'You confirmed it is the shop you meant',
+      done: sense?.identity_confirmed_at != null,
+      evidence: sense?.identity_confirmed_at != null
+        ? `You confirmed it on ${String(sense.identity_confirmed_at).slice(0, 10)}`
+        : sense?.identity_verified_at != null
+          ? 'Etsy saying which shop this reaches is not the same as it being yours'
+          : null,
+    },
+    {
       stage: 'qualified',
       title: 'Reading your shop has actually been done',
       done: proven,
@@ -228,10 +251,11 @@ export async function etsyJourney(productId: string): Promise<ConnectionJourney>
 
   // The furthest step actually reached, never the furthest attempted.
   const stage: ConnectionStage = proven ? 'qualified'
-    : sense?.identity_verified_at != null ? 'identity_verified'
-      : sense != null ? 'connected'
-        : key != null ? 'authorization_pending'
-          : 'no_key';
+    : sense?.identity_confirmed_at != null ? 'identity_confirmed'
+      : sense?.identity_verified_at != null ? 'identity_verified'
+        : sense != null ? 'connected'
+          : key != null ? 'authorization_pending'
+            : 'no_key';
 
   const next = ((): ConnectionJourney['next'] => {
     if (stage === 'no_key') {
@@ -258,8 +282,16 @@ export async function etsyJourney(productId: string): Promise<ConnectionJourney>
       };
     }
     if (stage === 'identity_verified') {
+      // THE ONE STEP THAT IS HIS AND NOBODY ELSE'S. Etsy has told us which
+      // shop; only he can say it is the right one.
       return {
-        say: `I know this opens ${shop ?? 'the account'}, and I have not read anything through it yet.`,
+        say: `Etsy says this opens ${shop ?? 'an account'}. Is that your shop?`,
+        href: `/foundry/controls/connectors/etsy`,
+      };
+    }
+    if (stage === 'identity_confirmed') {
+      return {
+        say: `You confirmed ${shop ?? 'the account'} is yours. Nothing has been read through it yet — I will, on the next pass.`,
         href: null,
       };
     }
@@ -291,7 +323,7 @@ export async function connectorsFor(productId: string): Promise<Connector[]> {
 
   const live = (await query(
     `SELECT provider, connected_at, provider_account_ref, provider_account_label,
-            identity_verified_at, last_observed_at
+            identity_verified_at, identity_confirmed_at, last_observed_at
        FROM company_senses
       WHERE product_id = ? AND disconnected_at IS NULL`, [productId]))
     .rows as unknown as Array<Record<string, unknown>>;
@@ -313,10 +345,11 @@ export async function connectorsFor(productId: string): Promise<Connector[]> {
       sense.provider_account_ref == null ? null : String(sense.provider_account_ref)) : null;
 
     const stage: ConnectionStage = proven.has(provider) && sense ? 'qualified'
-      : sense?.identity_verified_at != null ? 'identity_verified'
-        : sense != null ? 'connected'
-          : standsBetween === null ? 'authorization_pending'
-            : 'no_key';
+      : sense?.identity_confirmed_at != null ? 'identity_confirmed'
+        : sense?.identity_verified_at != null ? 'identity_verified'
+          : sense != null ? 'connected'
+            : standsBetween === null ? 'authorization_pending'
+              : 'no_key';
 
     out.push({
       provider,
@@ -330,11 +363,19 @@ export async function connectorsFor(productId: string): Promise<Connector[]> {
       granted: sense != null,
       // Foundry has qualified it: the ladder says a real read was witnessed.
       qualified: proven.has(provider) && sense != null,
-      // THE OWNER'S AUTHORITY. Reading is what an owner-connected basis
-      // permits, and nothing here widens it. A write capability would answer
-      // this from `capability_access` and `consequenceAllows`, and none of
-      // the write providers can reach a door at all — their `tool` is NULL.
-      authorised: sense != null,
+      // THE OWNER'S AUTHORITY, WHICH NOW REQUIRES HIS CONFIRMATION.
+      //
+      // A grant proves Etsy let us in. It does not prove we were let into the
+      // right shop, and acting on behalf of his business through an account he
+      // has not recognised is the failure this distinction exists to prevent.
+      // So consequential operation waits on him.
+      //
+      // Establishing identity does NOT wait on him — that read is what
+      // produces the thing he is confirming, and requiring confirmation first
+      // would be a loop with no entrance.
+      authorised: sense?.identity_confirmed_at != null,
+      accountVerified: sense?.identity_verified_at != null,
+      accountConfirmed: sense?.identity_confirmed_at != null,
       standsBetween,
       next: standsBetween === 'no_adapter'
         ? { say: `I know ${providerName(provider)} could tell me things, and I cannot ask it for permission yet. Nothing is missing on your side.`, href: null }

@@ -180,3 +180,95 @@ describe('a connector that is connected reads differently from one that is not',
     expect(await get('/foundry/controls/connectors')).toContain('nothing read yet');
   });
 });
+
+describe('the provider says which account; he says whether it is the one', () => {
+  // "The first successful Etsy read can establish which account the
+  // authorization actually reaches. It cannot, by itself, establish that this
+  // is the shop I intended to connect." Two facts, two authors, two columns.
+  const confirm = async (): Promise<Response> => app.request(
+    '/foundry/controls/connectors/etsy/confirm', { method: 'POST' });
+
+  it('asks him, once the provider has named the account', async () => {
+    const html = await get('/foundry/controls/connectors/etsy');
+    expect(html).toContain('Is this your shop?');
+    expect(html).toContain('ApexMicro');
+    expect(html).toContain('Yes, ApexMicro is my shop');
+  });
+
+  it('will not act on his behalf through a shop he has not recognised', async () => {
+    const all = await connectorsFor(P);
+    const etsy = all.find((x) => x.provider === 'etsy')!;
+    expect(etsy.accountVerified).toBe(true);
+    expect(etsy.accountConfirmed).toBe(false);
+    // Authority waits on him. The grant is unaffected — it is a different fact.
+    expect(etsy.authorised).toBe(false);
+    expect(etsy.granted).toBe(true);
+  });
+
+  it('records the recognition, and says so afterwards', async () => {
+    const res = await confirm();
+    expect(res.status).toBe(302);
+    const html = await get('/foundry/controls/connectors/etsy');
+    expect(html).toContain('You confirmed');
+    expect(html).not.toContain('Is this your shop?');
+    const all = await connectorsFor(P);
+    const etsy = all.find((x) => x.provider === 'etsy')!;
+    expect(etsy.accountConfirmed).toBe(true);
+    expect(etsy.authorised).toBe(true);
+  });
+
+  it('does not erase or redefine the fact that Etsy granted access', async () => {
+    // Confirmation is additive. Anyone reconstructing an incident needs the
+    // original grant to still say what it said.
+    const row = (await query(
+      `SELECT connected_at, identity_verified_at, identity_confirmed_at, identity_confirmed_by
+         FROM company_senses WHERE id = 'cs_conn'`)).rows[0] as Record<string, unknown>;
+    expect(row.connected_at).toBeTruthy();
+    expect(row.identity_verified_at).toBeTruthy();
+    expect(row.identity_confirmed_at).toBeTruthy();
+    expect(String(row.identity_confirmed_by)).toContain('founder:');
+  });
+
+  it('confirming is still not qualification, and still not a licence to act', async () => {
+    const all = await connectorsFor(P);
+    const etsy = all.find((x) => x.provider === 'etsy')!;
+    // He has recognised the shop. Nothing has read it.
+    expect(etsy.qualified).toBe(false);
+    const html = await get('/foundry/controls/connectors/etsy');
+    expect(html).toContain('I have not yet done it for real');
+    expect(html.replace(/\s+/g, ' ')).toContain('none of them comes from this');
+  });
+
+  it('refuses a confirmation the provider has not named an account for', async () => {
+    // The trigger is the real guard; the route asks first so he gets a page
+    // rather than a database error. Proven against the DB directly.
+    // A SECOND REAL COMPANY, because migration 226 refuses a reference sense on
+    // a real company and the live Etsy slot on this one is taken — the unique
+    // index is (product_id, sense_key) where not disconnected.
+    await query('INSERT INTO products (id,name,owner_id,status) VALUES (?,?,?,?)',
+      ['p_conn2', 'Second', F, 'active']);
+    await query(
+      `INSERT INTO company_senses (id, product_id, sense_key, provider, mode, disclosure)
+       SELECT 'cs_unverified', 'p_conn2', sense_key, 'etsy', mode, 'I would read the shop.'
+         FROM sense_providers WHERE provider = 'etsy' LIMIT 1`);
+    await expect(query(
+      `UPDATE company_senses SET identity_confirmed_at = datetime('now'),
+              identity_confirmed_by = 'founder:x' WHERE id = 'cs_unverified'`))
+      .rejects.toThrow(/nothing_to_confirm/);
+  });
+
+  it('refuses a confirmation with nobody behind it', async () => {
+    await expect(query(
+      `UPDATE company_senses SET identity_confirmed_at = datetime('now'),
+              identity_confirmed_by = '' WHERE id = 'cs_conn'`))
+      .rejects.toThrow(/needs_a_confirmer/);
+  });
+
+  it('refuses to un-confirm by editing, because that is what disconnecting is', async () => {
+    // Blanking the column would leave a live credential reaching a shop he has
+    // decided is not his, with nothing saying so.
+    await expect(query(
+      "UPDATE company_senses SET identity_confirmed_at = NULL WHERE id = 'cs_conn'"))
+      .rejects.toThrow(/disconnect_instead/);
+  });
+});
