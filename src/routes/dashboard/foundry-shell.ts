@@ -6611,14 +6611,19 @@ foundryShellRoutes.get('/foundry/controls/connectors',
     // THE ONE LINE EACH, and it says where the thing actually is rather than
     // whether a row exists. `qualified` is the ladder's word and it is only
     // true when a real read was witnessed.
-    const where = (x: typeof all[number]): string => x.qualified
-      ? `Working — ${x.account ?? 'reading your account'}`
-      : x.stage === 'identity_verified' ? `${x.account ?? 'Connected'}, nothing read yet`
-        : x.stage === 'connected' ? 'Connected, not used yet'
-          : x.standsBetween === 'no_app_key' ? 'Needs its application key'
-            : x.standsBetween === 'no_adapter' ? 'Not connectable yet'
-              : x.standsBetween === 'not_configured' ? 'Not set up on this deployment'
-                : 'Ready to connect';
+    const where = (x: typeof all[number]): string => x.disputedAccount != null
+      // A DISPUTE OUTRANKS EVERY OTHER LINE, including 'Working'. A connection
+      // naming somebody else's account while the list calls it working is the
+      // exact sentence this page must never print.
+      ? `Not the account you recognised — I have stopped acting through it`
+      : x.qualified
+        ? `Working — ${x.account ?? 'reading your account'}`
+        : x.stage === 'identity_verified' ? `${x.account ?? 'Connected'}, nothing read yet`
+          : x.stage === 'connected' ? 'Connected, not used yet'
+            : x.standsBetween === 'no_app_key' ? 'Needs its application key'
+              : x.standsBetween === 'no_adapter' ? 'Not connectable yet'
+                : x.standsBetween === 'not_configured' ? 'Not set up on this deployment'
+                  : 'Ready to connect';
 
     const row = (x: typeof all[number]): unknown => html`
       <a href="/foundry/controls/connectors/${x.provider}" class="know"
@@ -6628,8 +6633,8 @@ foundryShellRoutes.get('/foundry/controls/connectors',
           <span style="display:block;font-weight:600;">${x.name}</span>
           <span style="display:block;font-size:0.84rem;color:var(--text-muted);">${where(x)}</span>
         </span>
-        <span aria-hidden="true" style="flex:0 0 auto;color:${x.qualified ? 'var(--good)' : x.granted ? 'var(--text-muted)' : 'var(--text-dim)'};">
-          ${x.qualified ? '\u25cf' : x.granted ? '\u25d0' : '\u25cb'}
+        <span aria-hidden="true" style="flex:0 0 auto;color:${x.disputedAccount != null ? 'var(--alert)' : x.qualified ? 'var(--good)' : x.granted ? 'var(--text-muted)' : 'var(--text-dim)'};">
+          ${x.disputedAccount != null ? '\u25b3' : x.qualified ? '\u25cf' : x.granted ? '\u25d0' : '\u25cb'}
         </span>
       </a>`;
 
@@ -6687,7 +6692,13 @@ foundryShellRoutes.post('/foundry/controls/connectors/:provider/confirm',
       `SELECT id, provider_account_ref FROM company_senses
         WHERE product_id = ? AND provider = ? AND disconnected_at IS NULL
           AND identity_verified_at IS NOT NULL AND identity_confirmed_at IS NULL
+          AND identity_disputed_at IS NULL
         LIMIT 1`, [productId, provider])).rows[0] as Record<string, unknown> | undefined;
+    // `identity_disputed_at IS NULL` is not tidiness. While the provider is
+    // naming a different account, the account on this page is not the one the
+    // connection reaches, so a confirmation here would record him recognising
+    // a shop this grant no longer opens. He is sent back to the page, which
+    // now leads with the disagreement rather than with the question.
     if (!sense) return c.redirect(`/foundry/controls/connectors/${provider}`);
 
     await query(
@@ -6781,6 +6792,25 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
     : one.granted ? 'Connected, and I have not confirmed which account it opens.'
       : one.wouldSee ? `Connecting it would let me understand ${one.wouldSee}.` : 'Not connected.'}</p>
 
+      ${/* THE DISAGREEMENT LEADS, because every other line on this page is
+           describing a connection he would reasonably assume is still pointing
+           where he left it. It says what happened, what was done about it
+           without him, and what is left for him — which is a choice between
+           two things he already understands, not a repair. */ ''}
+      ${journey?.dispute ? html`
+      <div class="know" style="border-color:var(--alert);">
+        <h2>This is not the account you recognised</h2>
+        <p>${one.name} is now naming a different account than the <strong>${one.account}</strong>
+          recorded for this connection. It said: ${journey.dispute.detail}</p>
+        <p>I stopped acting on your behalf through it on ${journey.dispute.since}. Nothing has
+          been changed, published or sent. Reading it to find out who it is, is all I have done.</p>
+        <p class="quiet">I have not rewritten what you recognised, and I will not. If this is a
+          change you made, disconnect this connection on ${companyName} and connect the account
+          you want — the new connection is a new grant and I will ask you about it once. If it is
+          not a change you made, the place to end it is ${one.name} itself.</p>
+        <a class="btn" href="/foundry/companies/${productId}">Open ${companyName}</a>
+      </div>` : ''}
+
       ${one.next ? html`
       <div class="know">
         <h2>Next</h2>
@@ -6804,7 +6834,7 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
            is not the same as that shop being his, and no provider answer and no
            constant in this source can close that gap. It is one question, asked
            once, in the place he is already looking. */ ''}
-      ${one.accountVerified && !one.accountConfirmed ? html`
+      ${one.accountVerified && !one.accountConfirmed && one.disputedAccount == null ? html`
       <div class="know" style="border-color:var(--accent);">
         <h2>Is this your shop?</h2>
         <p>${one.name} says this connection opens <strong>${one.account}</strong>.</p>
@@ -6820,12 +6850,18 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
           ${companyName} and connect the right one — I will tell you whether ${one.name}
           confirmed the revocation, and this connection keeps its record either way.</p>
       </div>` : ''}
-      ${one.accountConfirmed ? html`
+      ${one.accountConfirmed && one.disputedAccount == null ? html`
       <div class="know">
         <h2>Your shop</h2>
         <p>You confirmed <strong>${one.account}</strong> is yours. That is what I act on behalf
           of; ${one.name} granting access and you recognising the account stay two separate
           facts, and the first is unchanged by the second.</p>
+      </div>` : ''}
+      ${one.accountConfirmed && one.disputedAccount != null ? html`
+      <div class="know">
+        <h2>Your shop</h2>
+        <p>You confirmed <strong>${one.account}</strong> is yours, and that record stands exactly
+          as you made it. What has changed is what ${one.name} is answering, not what you said.</p>
       </div>` : ''}
 
       ${/* THE FOUR FACTS, AS FOUR. Collapsing them into one green tick is the

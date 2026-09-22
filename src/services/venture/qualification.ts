@@ -271,7 +271,8 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
     // already paid is owed their thing whatever has since gone wrong.
     const shopRow = productId ? (await query(
       `SELECT s.identity_verified_at, s.identity_confirmed_at,
-              s.provider_account_label, s.provider_account_ref
+              s.provider_account_label, s.provider_account_ref,
+              s.identity_disputed_at, s.identity_disputed_ref
          FROM sense_credentials c
          JOIN company_senses s ON s.id = c.company_sense_id AND s.disconnected_at IS NULL
         WHERE lower(c.provider) = lower(?) AND c.product_id = ? AND c.revoked_at IS NULL LIMIT 1`,
@@ -279,17 +280,32 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
     const shopName = shopRow
       ? String(shopRow.provider_account_label ?? shopRow.provider_account_ref ?? 'an account')
       : null;
+    // AND A RECOGNITION IS ABOUT ONE ACCOUNT (migration 348). The owner: "If the
+    // provider subsequently reports a materially different account identity
+    // … Foundry must not silently continue operating under the previous
+    // recognition." A confirmed connection whose provider has started naming
+    // somebody else is the MOST dangerous state this condition can be in — it
+    // reads as fully recognised and is pointing somewhere he never agreed to —
+    // so the disagreement is asked about before the confirmation is.
+    //
+    // It does not appear on a provider that merely went quiet. Nothing writes
+    // these columns except a probe that answered and named a different stable
+    // account reference; an outage, an unparseable answer and a rename each
+    // leave them null by construction, in `identity-pass.ts`.
     conditions.push(!shopRow
       ? { name: 'the shop it would act on is confirmed', verdict: 'waits_for_you',
         because: `no ${venue} account is connected, so which shop this would act on has never been read back from ${venue} — and a shop that has been renamed is exactly the case a remembered name gets wrong` }
       : shopRow.identity_verified_at == null
         ? { name: 'the shop it would act on is confirmed', verdict: 'waits_for_you',
           because: `a ${venue} account is connected and has not yet told me which shop it opens` }
-        : shopRow.identity_confirmed_at == null
+        : shopRow.identity_disputed_at != null
           ? { name: 'the shop it would act on is confirmed', verdict: 'waits_for_you',
-            because: `${venue} says this opens ${shopName}, and you have not said ${shopName} is your shop — a second account, or one somebody else administers, would look exactly like this from here` }
-          : met('the shop it would act on is confirmed',
-            `${venue} named ${shopName} and you confirmed it is yours`));
+            because: `${venue} has started naming a different account (${String(shopRow.identity_disputed_ref)}) than the ${shopName} recorded for this connection, so I do not know which shop this would act on` }
+          : shopRow.identity_confirmed_at == null
+            ? { name: 'the shop it would act on is confirmed', verdict: 'waits_for_you',
+              because: `${venue} says this opens ${shopName}, and you have not said ${shopName} is your shop — a second account, or one somebody else administers, would look exactly like this from here` }
+            : met('the shop it would act on is confirmed',
+              `${venue} named ${shopName} and you confirmed it is yours`));
 
     const exposure = (await query(
       `SELECT exposure_ref, withdrawn_at FROM experiment_exposures

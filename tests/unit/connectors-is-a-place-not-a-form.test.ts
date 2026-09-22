@@ -272,3 +272,57 @@ describe('the provider says which account; he says whether it is the one', () =>
       .rejects.toThrow(/disconnect_instead/);
   });
 });
+
+describe('the provider starts naming somebody else, and the page leads with it', () => {
+  // "Where identity evidence actually contradicts the recognized account, stop
+  // newly initiated consequential operations through that connection, preserve
+  // the relevant evidence, and surface the disagreement through the existing
+  // founder interface."
+  //
+  // `cs_conn` is verified AND confirmed by the block above — the most
+  // dangerous state a dispute can arrive in, because every surface reads as
+  // fully recognised while the account on the other end is somebody else's.
+  beforeAll(async () => {
+    await query(
+      `UPDATE company_senses SET identity_disputed_at = datetime('now'),
+              identity_disputed_ref = '99999999',
+              identity_disputed_detail = 'SomeoneElse (99999999)' WHERE id = 'cs_conn'`);
+  });
+
+  it('says it on the list, instead of the word Working', async () => {
+    const html = await get('/foundry/controls/connectors');
+    expect(html).toContain('Not the account you recognised');
+  });
+
+  it('leads the detail page with it, above everything else on the page', async () => {
+    const html = await get('/foundry/controls/connectors/etsy');
+    const flat = html.replace(/\s+/g, ' ');
+    expect(flat).toContain('This is not the account you recognised');
+    expect(flat).toContain('SomeoneElse (99999999)');
+    // Preserved and shown, rather than a state with no evidence behind it.
+    expect(flat).toContain('Nothing has been changed, published or sent');
+  });
+
+  it('takes the authority and leaves his recognition standing', async () => {
+    const etsy = (await connectorsFor(P)).find((x) => x.provider === 'etsy')!;
+    expect(etsy.authorised).toBe(false);
+    expect(etsy.accountConfirmed).toBe(true);
+    const html = await get('/foundry/controls/connectors/etsy');
+    expect(html).toContain('that record stands exactly');
+    expect(html).toContain('Nothing here is authorised');
+  });
+
+  it('will not take a confirmation while it stands', async () => {
+    // Confirming here would record him recognising a shop this grant no longer
+    // opens. He is sent back to the page, which now leads with the reason.
+    const res = await app.request('/foundry/controls/connectors/etsy/confirm', { method: 'POST' });
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe('/foundry/controls/connectors/etsy');
+  });
+
+  it('asks him for the smallest thing, which is a choice and not a repair', async () => {
+    const flat = (await get('/foundry/controls/connectors/etsy')).replace(/\s+/g, ' ');
+    expect(flat).toContain('disconnect this connection');
+    expect(flat).toContain('I will ask you about it once');
+  });
+});

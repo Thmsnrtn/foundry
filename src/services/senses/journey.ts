@@ -102,6 +102,17 @@ export interface ConnectionJourney {
    * exactly the collapse the institution refuses everywhere else.
    */
   grantsNothing: string;
+  /**
+   * THE DISAGREEMENT, WHEN THERE IS ONE, carried separately from the steps.
+   *
+   * It is not a step backwards: every step that was reached was reached, and
+   * the record of it stands. It is a fact about NOW — the provider is naming
+   * an account that is not the one this connection is about — and the page
+   * has to lead with it, because every other line on that page is describing
+   * a connection the owner would reasonably assume is still pointing where he
+   * left it.
+   */
+  dispute: { observedRef: string; detail: string; since: string } | null;
 }
 
 /**
@@ -152,6 +163,17 @@ export interface Connector {
    */
   accountVerified: boolean;
   accountConfirmed: boolean;
+  /**
+   * THE PROVIDER HAS STARTED NAMING SOMEBODY ELSE (migration 348).
+   *
+   * A sixth fact rather than a change to any of the five: he still confirmed
+   * what he confirmed, and the grant is still the grant. What has happened is
+   * that the account on the other end no longer matches the one the
+   * recognition is about, so `authorised` goes false while `accountConfirmed`
+   * stays true. Collapsing the two would erase his word from the record in
+   * order to describe the provider's behaviour.
+   */
+  disputedAccount: string | null;
   /** What stands between him and asking, when anything does. */
   standsBetween: 'no_adapter' | 'no_app_key' | 'not_configured' | null;
   /** The one thing to do next, or null. */
@@ -180,7 +202,8 @@ export async function etsyJourney(productId: string): Promise<ConnectionJourney>
 
   const sense = (await query(
     `SELECT id, connected_at, provider_account_ref, provider_account_label,
-            identity_verified_at, identity_confirmed_at, last_observed_at, last_error
+            identity_verified_at, identity_confirmed_at, last_observed_at, last_error,
+            identity_disputed_at, identity_disputed_ref, identity_disputed_detail
        FROM company_senses
       WHERE product_id = ? AND provider = 'etsy' AND disconnected_at IS NULL
       LIMIT 1`, [productId])).rows[0] as Record<string, unknown> | undefined;
@@ -201,6 +224,12 @@ export async function etsyJourney(productId: string): Promise<ConnectionJourney>
   // not real. Nothing else in this function could establish it.
   const proven = capability != null
     && ['reality_proven', 'reliable'].includes(String(capability.maturity));
+
+  const dispute = sense?.identity_disputed_at == null ? null : {
+    observedRef: String(sense.identity_disputed_ref),
+    detail: String(sense.identity_disputed_detail),
+    since: String(sense.identity_disputed_at).slice(0, 10),
+  };
 
   const steps: ConnectionStep[] = [
     {
@@ -232,7 +261,9 @@ export async function etsyJourney(productId: string): Promise<ConnectionJourney>
       title: 'You confirmed it is the shop you meant',
       done: sense?.identity_confirmed_at != null,
       evidence: sense?.identity_confirmed_at != null
-        ? `You confirmed it on ${String(sense.identity_confirmed_at).slice(0, 10)}`
+        ? dispute
+          ? `You confirmed ${shop ?? 'it'} on ${String(sense.identity_confirmed_at).slice(0, 10)} — and Etsy is no longer naming that account`
+          : `You confirmed it on ${String(sense.identity_confirmed_at).slice(0, 10)}`
         : sense?.identity_verified_at != null
           ? 'Etsy saying which shop this reaches is not the same as it being yours'
           : null,
@@ -258,6 +289,17 @@ export async function etsyJourney(productId: string): Promise<ConnectionJourney>
             : 'no_key';
 
   const next = ((): ConnectionJourney['next'] => {
+    // NOTHING ELSE MATTERS WHILE THIS STANDS, so it is asked first. And what
+    // it asks of him is small: look, and either recognise this account or
+    // disconnect. It does not ask him to repair anything.
+    if (dispute) {
+      return {
+        say: `Etsy is naming a different account than the ${shop ?? 'one'} recorded here — `
+          + `it said: ${dispute.detail}. I have stopped acting through this connection. `
+          + 'Nothing has been changed on your behalf.',
+        href: `/foundry/controls/connectors/etsy`,
+      };
+    }
     if (stage === 'no_key') {
       return {
         say: 'Put in the application key Etsy gave you. I check it with Etsy before keeping it.',
@@ -298,7 +340,7 @@ export async function etsyJourney(productId: string): Promise<ConnectionJourney>
     return null;
   })();
 
-  return { provider: 'etsy', stage, steps, next, grantsNothing };
+  return { provider: 'etsy', stage, steps, next, grantsNothing, dispute };
 }
 
 
@@ -323,7 +365,8 @@ export async function connectorsFor(productId: string): Promise<Connector[]> {
 
   const live = (await query(
     `SELECT provider, connected_at, provider_account_ref, provider_account_label,
-            identity_verified_at, identity_confirmed_at, last_observed_at
+            identity_verified_at, identity_confirmed_at, last_observed_at,
+            identity_disputed_at, identity_disputed_ref
        FROM company_senses
       WHERE product_id = ? AND disconnected_at IS NULL`, [productId]))
     .rows as unknown as Array<Record<string, unknown>>;
@@ -373,11 +416,21 @@ export async function connectorsFor(productId: string): Promise<Connector[]> {
       // Establishing identity does NOT wait on him — that read is what
       // produces the thing he is confirming, and requiring confirmation first
       // would be a loop with no entrance.
-      authorised: sense?.identity_confirmed_at != null,
+      // A DISPUTE TAKES THE AUTHORITY, NOT THE RECOGNITION. He confirmed an
+      // account; the provider has stopped naming it. Acting now would be
+      // acting through something he never agreed to, so this goes false —
+      // while `accountConfirmed` stays true, because his word is still his
+      // word and rewriting it would be the silent substitution the whole
+      // mechanism exists to refuse.
+      authorised: sense?.identity_confirmed_at != null && sense?.identity_disputed_at == null,
       accountVerified: sense?.identity_verified_at != null,
       accountConfirmed: sense?.identity_confirmed_at != null,
+      disputedAccount: sense?.identity_disputed_at == null ? null
+        : String(sense.identity_disputed_ref),
       standsBetween,
-      next: standsBetween === 'no_adapter'
+      next: sense?.identity_disputed_at != null
+        ? { say: `${providerName(provider)} has started naming a different account than the one you recognised. I have stopped acting through it.`, href: `/foundry/controls/connectors/${provider}` }
+        : standsBetween === 'no_adapter'
         ? { say: `I know ${providerName(provider)} could tell me things, and I cannot ask it for permission yet. Nothing is missing on your side.`, href: null }
         : standsBetween === 'not_configured'
           ? { say: `${providerName(provider)} needs a setting this deployment does not have. Not yours to supply.`, href: null }

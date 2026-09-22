@@ -936,7 +936,7 @@ CREATE TABLE company_senses (
   last_error        TEXT,
   disconnected_at   TEXT,
   disconnect_reason TEXT
-, provider_account_ref TEXT, provider_account_label TEXT, identity_verified_at TEXT, identity_confirmed_at TEXT, identity_confirmed_by TEXT);
+, provider_account_ref TEXT, provider_account_label TEXT, identity_verified_at TEXT, identity_confirmed_at TEXT, identity_confirmed_by TEXT, identity_disputed_at TEXT, identity_disputed_ref TEXT, identity_disputed_detail TEXT);
 CREATE TABLE company_situations (
   id             TEXT PRIMARY KEY,
   product_id     TEXT NOT NULL REFERENCES products(id),
@@ -5900,6 +5900,37 @@ BEGIN
     WHERE NEW.sense_key IS NOT OLD.sense_key OR NEW.provider IS NOT OLD.provider
        OR NEW.mode IS NOT OLD.mode OR NEW.product_id IS NOT OLD.product_id
        OR NEW.disclosure IS NOT OLD.disclosure;
+END;
+CREATE TRIGGER company_sense_dispute_is_a_disagreement
+BEFORE UPDATE OF identity_disputed_at, identity_disputed_ref, identity_disputed_detail
+ON company_senses
+BEGIN
+  -- The two halves move together, as in 346: a time without the account that
+  -- was named records that something happened and not what, and a named
+  -- account without a time is a claim with no moment behind it.
+  SELECT RAISE(ABORT,'company_sense_dispute:needs_both_halves')
+    WHERE (NEW.identity_disputed_at IS NULL) <> (NEW.identity_disputed_ref IS NULL);
+
+  -- Nothing to disagree WITH. A connection whose identity was never verified
+  -- has made no claim, so a provider naming an account is a recovery rather
+  -- than a contradiction, and filing it here would invent a conflict where
+  -- there was only an absence.
+  SELECT RAISE(ABORT,'company_sense_dispute:nothing_to_disagree_with')
+    WHERE NEW.identity_disputed_at IS NOT NULL
+      AND (NEW.identity_verified_at IS NULL OR NEW.provider_account_ref IS NULL);
+
+  -- AGREEMENT IS NOT A DISPUTE. Recording one when the provider named the
+  -- account we already hold would stop a connection over nothing, and would
+  -- make the blocked state unfalsifiable from the evidence stored with it.
+  SELECT RAISE(ABORT,'company_sense_dispute:that_is_the_same_account')
+    WHERE NEW.identity_disputed_ref IS NOT NULL
+      AND NEW.identity_disputed_ref = NEW.provider_account_ref;
+
+  -- The provider's own sentence is the evidence, and a dispute that stops
+  -- consequential work owes the owner the words it was based on.
+  SELECT RAISE(ABORT,'company_sense_dispute:needs_its_evidence')
+    WHERE NEW.identity_disputed_at IS NOT NULL
+      AND (NEW.identity_disputed_detail IS NULL OR trim(NEW.identity_disputed_detail) = '');
 END;
 CREATE TRIGGER company_sense_guard
 BEFORE INSERT ON company_senses

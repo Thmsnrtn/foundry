@@ -127,7 +127,15 @@ describe('the journey knows all six states, and keeps them apart', () => {
     const j = await etsyJourney(P);
     expect(j.stage).toBe('identity_verified');
     expect(j.steps.find((s) => s.stage === 'identity_verified')!.evidence).toContain('ApexMicro');
-    expect(j.next?.say).toContain('not read anything through it yet');
+    // WHAT THE NEXT THING IS, once Etsy has named the shop: his recognition.
+    // This asserted 'not read anything through it yet' — the sentence from
+    // before migration 347, when a verified identity was the end of the
+    // journey and the only thing left was waiting for a read. It is not: the
+    // provider naming a shop is precisely the moment the one question that is
+    // his becomes askable, and a stale assertion here would have kept passing
+    // while the page moved on without it.
+    expect(j.next?.say).toContain('Is that your shop?');
+    expect(j.next?.say).toContain('ApexMicro');
   });
 
   it('reaches qualified only when the capability was exercised for real', async () => {

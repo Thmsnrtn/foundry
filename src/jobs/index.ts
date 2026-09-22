@@ -2710,7 +2710,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   // Hourly, because a token that expires in an hour cannot be caught daily.
   sense_credential_tick: {
     fn: async () => {
-      const { renewCredentials, probeCredential } = await import(
+      const { renewCredentials } = await import(
         '../services/senses/credentials.js');
       const outcome = await renewCredentials();
       for (const broken of outcome.broke) {
@@ -2719,43 +2719,56 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
           { jobName: 'sense_credential_tick', productId: broken.productId });
       }
 
-      // AND THE ONES THAT DID NOT NEED RENEWING. A credential with no expiry is
-      // exactly the kind that can be revoked elsewhere without anything here
-      // noticing, so it is asked rather than assumed to be alive.
-      const live = await query(
-        `SELECT s.id, s.product_id, s.provider FROM company_senses s
-           JOIN sense_credentials c ON c.company_sense_id = s.id AND c.revoked_at IS NULL
-          WHERE s.disconnected_at IS NULL AND c.expires_at IS NULL
-          ORDER BY s.rowid`, []);
-      let dark = 0;
-      for (const row of live.rows as unknown as Array<Record<string, unknown>>) {
-        const senseId = String(row.id);
-        try {
-          const result = await probeCredential(senseId);
-          if (result && !result.ok) {
-            dark += 1;
-            const { noteSenseObserved } = await import('../services/senses/index.js');
-            await noteSenseObserved(String(row.product_id), String(row.provider),
-              result.detail);
-          }
-        } catch (err) {
-          logger.error(
-            `probing a sense failed for ${String(row.product_id)}: `
-            + `${err instanceof Error ? err.message : String(err)}`,
-            { jobName: 'sense_credential_tick' });
+      // AND THEN ASK EVERY LIVE CONNECTION WHOSE IT IS.
+      //
+      // TWO PROBE LOOPS BECAME ONE. This used to probe only the credentials
+      // with no expiry — "a credential with no expiry is exactly the kind that
+      // can be revoked elsewhere without anything here noticing" — and threw
+      // the provider's answer away after reading `ok`. That answer is also the
+      // only place the account's identity exists.
+      //
+      // `recoverIdentities` asks the same question of a superset, reads the
+      // answer for both facts, and writes each where it belongs: aliveness on
+      // the credential, identity on the sense. A second loop probing the same
+      // credentials in the same hour would be a second place a secret is read
+      // and a second answer about whether a connection is alive.
+      //
+      // WHAT IT DOES FOR THE OWNER, hourly, without him:
+      //   - a connection made before identity was recorded gets its account
+      //     read back, so there is something for him to recognise;
+      //   - a shop renamed keeps its recognition, because the comparison is on
+      //     the stable reference and never the display name;
+      //   - a provider naming a different account stops consequential work and
+      //     says so, rather than continuing under the old recognition;
+      //   - a disagreement that ends is cleared without asking him anything.
+      const { recoverIdentities } = await import('../services/senses/identity-pass.js');
+      const pass = await recoverIdentities();
+      const count = (o: string): number => pass.findings.filter((f) => f.outcome === o).length;
+      const dark = count('unavailable');
+      const { noteSenseObserved } = await import('../services/senses/index.js');
+      for (const f of pass.findings) {
+        // The sentence the owner reads on the company page before he is shown
+        // anything derived from this sense. `disputed` writes its own, in the
+        // pass, because the words are about identity rather than blindness.
+        if (f.outcome === 'unavailable') {
+          await noteSenseObserved(f.productId, f.provider, f.ownerWords);
         }
       }
       logger.info(
         `sense_credential_tick: renewed=${String(outcome.renewed)} `
         + `nothing_to_do=${String(outcome.nothingToDo)} failed=${String(outcome.failed)} `
-        + `gone_dark=${String(dark)}`,
+        + `gone_dark=${String(dark)} recovered=${String(count('recovered'))} `
+        + `renamed=${String(count('renamed'))} disputed=${String(count('disputed'))} `
+        + `resolved=${String(count('resolved'))} unnamed=${String(count('unnamed'))}`,
         { jobName: 'sense_credential_tick' });
     },
     schedule: '25 * * * *', // Hourly, off the hour so it does not collide
     description:
-      'Renew sense credentials near expiry and probe the ones that do not expire, so a '
-      + 'connection that has gone dark is said out loud before anything derived from it '
-      + 'is shown (hourly)',
+      'Renew sense credentials near expiry, then ask every live connection which account '
+      + 'it reaches — so a connection that has gone dark is said out loud before anything '
+      + 'derived from it is shown, an unrecorded account is read back for the owner to '
+      + 'recognise, and a provider that starts naming a different account stops work '
+      + 'rather than continuing under the old recognition (hourly)',
   },
   // A SENSE THAT WAS LET SEE, READS.
   //

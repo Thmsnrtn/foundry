@@ -2992,3 +2992,100 @@ candidate and a nudge key and nothing else.
 - **`absence-test.ts`** — the bound names what is owed to buyers as theirs; the waiting count is the queue's.
 - **Proofs**: `was-the-instrument-working`, `the-one-thing-reads-the-world`, plus the surface, journey and world suites.
 
+
+## A connection that changed hands: recovery, and the disagreement it can produce (2026-09-22)
+
+**The defect that started this was not in the new code.** `qualificationOf` had
+carried a condition named *the shop it would act on is confirmed* since the
+listing experiment was built, and it was `met` the moment a credential existed
+— on a comment claiming "a connected Etsy account named its own shop", which a
+connected account may not have done and which in any case is Etsy's statement
+rather than the owner's. **A condition whose name said confirmed and whose
+evidence said connected.** Correcting it, rather than building a parallel
+authorization system beside it, is why the recognition boundary is enforced at
+the outbound door for every origin at once.
+
+- **Migration 346** — `company_senses.provider_account_ref`,
+  `provider_account_label`, `identity_verified_at`, with
+  `company_sense_identity_is_whole_or_absent`: a verified time needs a
+  reference, a reference needs a time, and `immutable_once_set` refuses to
+  re-point a verified connection at a different account. A rename is permitted,
+  because a rename is a fact and not a failure.
+- **Migration 347** — `identity_confirmed_at`, `identity_confirmed_by`, with
+  `company_sense_confirmation_follows_the_provider`: `nothing_to_confirm`
+  without a verified identity, `needs_a_confirmer`, and `disconnect_instead`
+  rather than un-confirming by edit. Confirmation is **additive**: the
+  historical fact that the provider granted access on a date is unchanged.
+- **Migration 348** — `identity_disputed_at`, `identity_disputed_ref`,
+  `identity_disputed_detail`, with `company_sense_dispute_is_a_disagreement`:
+  both halves together, `nothing_to_disagree_with` on an unverified connection,
+  `that_is_the_same_account`, `needs_its_evidence`. 346's refusal meant a
+  re-point could never be laundered into agreement; what was missing was
+  somewhere to PUT the disagreement, on the row it is about, where the gate can
+  read it and the page can say it.
+- **`senses/identity-pass.ts`** — `recoverIdentities({productId?, provider?})`
+  and `disputeOn(senseId)`. Seven outcomes, because "it did not work" covers
+  three different things: `recovered`, `unchanged`, `renamed`, `disputed`,
+  `resolved`, `unnamed`, `unavailable`. It probes through the existing
+  `probeCredential`, parses through the existing `identityFromProbe`, and
+  writes only `346`'s columns — **recovery is never recognition**. A provider
+  that did not answer, or answered unparseably, writes nothing at all.
+- **`jobs/index.ts sense_credential_tick`** — two probe loops became one. It
+  used to probe only the credentials with no expiry and throw the provider's
+  answer away after reading `ok`; that answer is also the only place an
+  account's identity exists. The hourly tick now renews, then runs the identity
+  pass over every live connection, and reports
+  `recovered/renamed/disputed/resolved/unnamed` alongside `gone_dark`.
+- **`venture/qualification.ts`** — the shop condition is four states, not two:
+  no connection, connected-but-unnamed, **disputed**, unrecognised, confirmed.
+  The dispute is asked about BEFORE the confirmation, because a confirmed
+  connection whose provider has started naming somebody else is the most
+  dangerous state the condition can be in.
+- **`senses/journey.ts`** — `ConnectionJourney.dispute` and
+  `Connector.disputedAccount`. A dispute takes `authorised` and leaves
+  `accountConfirmed` standing: his word is still his word, and rewriting it to
+  describe the provider's behaviour would be the silent substitution the whole
+  mechanism refuses.
+- **`foundry-shell.ts`** — the Connectors list leads with *Not the account you
+  recognised* above any other line including *Working*; the detail page leads
+  with the disagreement, carries the provider's own sentence as evidence, and
+  suppresses the recognition question. `POST …/confirm` takes
+  `identity_disputed_at IS NULL`, because confirming there would record him
+  recognising a shop the grant no longer opens.
+
+**What the investigation of the execution boundary found, and why nothing was
+added.** An agent's proposed action is stored, approved and executed later — a
+queue in every respect that matters — and `executor.ts` calls the outbound
+door's `invoke` at EXECUTION, which resolves the experiment act and calls
+`qualificationStandsInTheWay` in the same call. The boundary is a READ of
+current rows, not a verdict captured at approval. `authority-is-read-when-the-act-happens`
+makes that a proven property rather than an observation about today's code.
+Execution cannot resolve to an arbitrary available connection either:
+`idx_company_sense_one_live` is unique on `(product_id, sense_key)` where not
+disconnected, so there is no set to pick from.
+
+**The obligation exemption's scope, inspected.** `delivery`, `refund` and
+`withdrawal` return null from the readiness gate before any clause is read —
+and `kind` reaches that gate only from `experimentActFor`, which resolves it
+from `outbound_actions.experiment_act` (immutable by trigger since 284), an
+`experiment_fulfilments` row, or a withdrawn exposure. `GatewayRequest` has no
+field for it. A caller cannot declare itself to be discharging an obligation,
+and the exemption covers one planned, guarded, claimed row rather than a mode.
+
+**Marketplace writes remain intentionally unavailable, by a harder guarantee
+than the recognition clause.** Every Etsy write provider carries `tool = NULL`,
+so `qualificationStandsInTheWay` resolves no capability family and the outbound
+door cannot resolve a tool that is not bound — the act is impossible one layer
+out. The recognition clause is therefore **not currently exercised on the
+marketplace-write path**; it is proven through the offer path, which reaches
+readiness by act kind. That is proof debt, recorded as such, and it becomes
+load-bearing the day a tool is bound.
+
+- **Proofs**: `a-connection-that-changed-hands` (22),
+  `authority-is-read-when-the-act-happens` (10),
+  `recognition-is-enforced-not-drawn` (11), `connectors-is-a-place-not-a-form`
+  (29, +5 for the dispute), `he-can-tell-whether-it-saved` (13).
+- **Proof debt**: no production behaviour has exercised any of this. Every
+  route requires the owner's session; route registration and a healthy boot are
+  evidence that code is deployed, not that a founder can complete the
+  interaction. The identity pass has never run against real Etsy.
