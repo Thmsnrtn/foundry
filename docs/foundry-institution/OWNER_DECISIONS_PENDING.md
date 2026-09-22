@@ -1320,3 +1320,94 @@ No public-site redesign, no commerce platform, no parallel publication system. N
 change to Experiment 001's sealed record or its dated clarification. No offer,
 price or checkout published for the Etsy asset. And no entry for anything that
 never reached a prospective customer — internal research stays internal.
+
+---
+
+## PENDING 25 — Register an Etsy app and connect the shop, at read scope: **OWNER** (2026-09-22)
+
+Everything that can be built without your account is built and proven. This is
+the one piece that cannot be, and it is deliberately the last thing asked
+rather than the first.
+
+### What you would do
+
+1. **Register an Etsy app** at `developer.etsy.com` — personal access, because
+   the shop is your own. Etsy issues a keystring.
+2. **Set it as a deployment secret**: `ETSY_API_KEY`. Never in chat, never in
+   a commit, never in a page. Until it is set, the connect button does not
+   appear, and the institution says so in those words rather than offering a
+   button that would fail.
+3. **Register the redirect** Etsy sends you back to:
+   `https://foundry-intel.fly.dev/foundry/senses/callback`.
+4. **Tap connect, once**, on the Apex Micro company page. Etsy shows you its
+   own consent screen naming the three scopes. Foundry shows you the same three
+   first, each with the reason it is asked for, assembled from the rows rather
+   than written into a template.
+
+### What it permits
+
+`shops_r`, `listings_r`, `transactions_r`. Reading which shop the credential
+opens, what is listed in it, and the receipts — order number, date, amount.
+That is the entire request; the scope table is constitutional and nothing in
+the code can widen it.
+
+### What it cannot do, structurally rather than by promise
+
+Create, publish, modify or withdraw a listing. Upload a file. Spend a cent.
+Contact a buyer. Not because this document says so, but because:
+
+- `listings_w` appears in no adapter, no scope row and no request;
+- `sense_provider_scopes` is closed by constitutional triggers, so no runtime
+  path can add a scope;
+- `draft_on_marketplace`, `upload_product_file` and `list_on_marketplace` carry
+  `tool = NULL` in the capability registry, which in this schema means they
+  have no door to arrive at — `consequenceAllows` refuses a tool bound to
+  nothing;
+- no Etsy write tool is registered on the outbound gateway, and a test asserts
+  it.
+
+### What it would change, honestly
+
+Two of Experiment 002's five readiness conditions, and not the other three.
+
+- **`the shop it would act on is confirmed`** becomes met — the shop's id and
+  name read back from the account rather than remembered. You renamed this shop
+  once already, which is exactly the event a remembered name gets wrong.
+- **`what the venue reports can be read`** becomes met for orders, with the
+  limit named in the same sentence.
+
+Unchanged, because they need a publication and a fee: `Etsy can be operated`,
+`the listing is live and its address is recorded`, and `a refund can be carried
+out`.
+
+### What it will never buy, however it is connected
+
+Etsy exposes no shop-statistics endpoint to anybody. No daily views, visits,
+favourites, impressions, search queries or traffic sources — withdrawn
+deliberately, after the data was used to infer Etsy's own financials ahead of
+its announcements. Those stay yours to enter by hand, permanently, and are
+recorded as an operating limitation rather than a gap someone will close later.
+
+Nor can anything here see Etsy Messages, which is where a buyer asks for a
+refund. That remains you relaying it, and the record says `owner_entered` when
+you do.
+
+### How you undo it
+
+Disconnect on the company page forgets it here. Etsy publishes no revocation
+endpoint this deployment could call, so **removing the app in your Etsy account
+settings is the act that actually kills it** — the institution says that
+plainly rather than reporting a revocation it could not confirm.
+
+### One operating limitation worth knowing before you agree
+
+Etsy's refresh token lasts **90 days**. Without a successful refresh inside that
+window the grant dies and you would have to consent again. A liveness probe
+exists so a grant that dies quietly is noticed rather than discovered at the
+worst moment; it is named here because it is a commitment, not a detail.
+
+### Not asked, and deliberately
+
+No write scope. No draft listing. No fee. No publication. When those are worth
+asking for, they will be separate questions with their own consequences, which
+is the entire reason the four acts are four rows rather than one.
