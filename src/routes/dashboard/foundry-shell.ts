@@ -5638,6 +5638,12 @@ foundryShellRoutes.get('/foundry/companies/:id/see/:sense',
       <h1>Let me see ${gap.cannotSee}?</h1>
       <p class="lede">Right now I cannot, so anything I told you about it would be invented.</p>
 
+      ${c.req.query('etsy_error') ? html`
+      <div class="know" style="border-color:var(--bad);">
+        <h2>That pair did not work</h2>
+        <p>${c.req.query('etsy_error')}</p>
+      </div>` : ''}
+
       <div class="know">
         <h2>What I would understand</h2>
         <p>${gap.wouldLearn}, for ${name}.</p>
@@ -5649,10 +5655,9 @@ foundryShellRoutes.get('/foundry/companies/:id/see/:sense',
       </div>
 
       ${raw(await Promise.all(gap.offers.map(async (offer) => {
-    const { requiredScopes } = await import('../../services/senses/credentials.js');
-    const { senseProvider } = await import('../../services/senses/providers/contract.js');
+    const { requiredScopes, whatStandsBetween } = await import('../../services/senses/credentials.js');
     const scopes = await requiredScopes(offer.provider, gap.key, offer.mode);
-    const canAsk = (await senseProvider(offer.provider)) !== null;
+    const standing = await whatStandsBetween(offer.provider);
     return `<div class="noticed">
       <h4>${senses.providerName(offer.provider)}${offer.mode === 'sandbox' ? ' — test mode' : ''}</h4>
       <p>Reads ${offer.reads}.</p>
@@ -5664,13 +5669,39 @@ foundryShellRoutes.get('/foundry/companies/:id/see/:sense',
     ? '<p class="quiet">Test mode runs everything the real connection runs against numbers '
       + 'that are not the world&rsquo;s. I will never count what I learn here as proof '
       + 'about a real business.</p>' : ''}
-      ${canAsk
+      ${standing === null
     ? `<form method="POST" action="/foundry/companies/${productId}/see/${gap.key}">
         <input type="hidden" name="provider" value="${offer.provider}" />
         <input type="hidden" name="mode" value="${offer.mode}" />
         <button class="btn go" type="submit">Let me see ${gap.cannotSee}</button>
       </form>`
-    : `<p class="quiet">I know ${senses.providerName(offer.provider)} could tell me this,
+    // THE ONE OBSTACLE HE CAN CLEAR WHERE HE IS STANDING. Sending him to a
+    // settings page to hunt for a card, then back here to finish, is two
+    // journeys for one intention — and he said so: the settings page is where
+    // this got lost. The form belongs in the sentence that needs it.
+    : standing === 'no_app_key'
+      ? `<div class="know" style="margin-top:0.75rem;">
+        <h4>One thing first: which application is asking</h4>
+        <p class="quiet">Etsy gives every application a <strong>keystring</strong> and a
+          <strong>shared secret</strong>. They are on your Etsy page under
+          <em>Your Apps</em>. They say which application is asking; they give no access to
+          any shop — this next step does that, and it has its own consent screen.</p>
+        <form method="POST" action="/settings/app-credential/etsy"
+          style="display:grid;gap:0.5rem;max-width:26rem;margin-top:0.6rem;">
+          <input type="hidden" name="back"
+            value="/foundry/companies/${productId}/see/${gap.key}" />
+          <input type="text" name="keystring" required autocomplete="off"
+            spellcheck="false" autocapitalize="off" placeholder="Keystring" />
+          <input type="password" name="shared_secret" required autocomplete="off"
+            placeholder="Shared secret" />
+          <p class="quiet" style="margin:0;">Paste each into its own box — not the joined
+            <code>keystring:secret</code> form Etsy shows in its examples. I check the pair
+            with Etsy before keeping it, so a wrong one is refused here rather than three
+            screens later. It is stored encrypted and never shown again.</p>
+          <button class="btn go" type="submit">Keep this, and bring me back here</button>
+        </form>
+      </div>`
+      : `<p class="quiet">I know ${senses.providerName(offer.provider)} could tell me this,
         and I cannot ask it for permission yet. Nothing is missing on your side.</p>`}
     </div>`;
   })).then((blocks) => blocks.join('')))}

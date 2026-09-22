@@ -2964,3 +2964,59 @@ sealed prediction settled `as_predicted` on somebody else's sale, immutably.
 
 `npm run check` green on the frozen tree: **622 files, 5384 tests, all 31
 gates**. Nothing connects, reads or publishes until he acts on PENDING 25.
+
+---
+
+## E2f — Registration is not readiness, and a prerequisite that sends you away has not finished helping
+
+He did his part. He registered the redirect at Etsy, came back to place the
+pair, and reported: *"the setting page it's kinda too complicated in foundry.
+Have no idea how to do that."*
+
+That is a defect report, and it lands on a promise this codebase had already
+written down. `senseProvider`'s own comment says a null adapter is returned so
+that a surface can name what is missing **"rather than offering a button that
+would fail."** Every surface honoured that by asking one question — *is there
+an adapter* — which was the whole story while every application key was a
+deployment fact set before boot. It stopped being the whole story the moment
+one of those keys became something the owner places by hand. The Etsy adapter
+registers whether or not a key exists. So the button appeared, and the tap
+threw, and the only way to satisfy the prerequisite was to leave the sentence
+that needed it, find one card among twenty on a settings page, and navigate
+back.
+
+**Registration is not readiness.** An adapter existing says a provider *can* be
+spoken to; it says nothing about whether this deployment holds what speaking
+requires. Those are two facts and they now have two answers: `whatStandsBetween`
+returns `no_adapter`, `no_app_key`, or null. The middle one matters because it
+is the only obstacle on that list the owner can clear himself — and collapsing
+it into the first would have told him to wait for something that was waiting
+for him.
+
+**A prerequisite that sends you elsewhere to satisfy it has not finished
+helping.** The two boxes are now in the sentence that needs them, on the connect
+page, and the form carries the way back so that satisfying the prerequisite
+lands where it started. The settings card stays, for replacing or forgetting the
+key later; it is no longer the place he has to find in order to begin.
+
+Two smaller things fell out of looking at the form as a thing a person uses
+rather than a thing that stores a value:
+
+- **Only the half that authenticates is hidden.** The keystring was behind
+  `type="password"`, and it is an identifier, not a secret — it travels in the
+  open as `client_id` on the consent screen he is about to read. Dots over it
+  protected nothing and cost him the one thing that matters when a 24-character
+  string is pasted on a phone: seeing that it arrived whole. The shared secret
+  stays hidden.
+- **A redirect target that arrives in a form field is a redirect target
+  somebody else can choose.** The way back is checked against a literal
+  `/foundry/` prefix rather than a leading slash, because `//evil.test` begins
+  with a slash and is not a path. `safeBackPath` exists as a named, exported
+  function for exactly one reason: so that case could be written down as a test
+  instead of trusted to a regex nobody reads twice.
+
+Seventeen proofs in `the-key-goes-where-the-hand-is`. The sentence in PENDING 25
+that claimed the connect button "does not appear" until the key is placed was
+aspirational when it was written and is true now — another instance of a claim
+that a test could have pinned in place, found by trying to walk the path it
+described.

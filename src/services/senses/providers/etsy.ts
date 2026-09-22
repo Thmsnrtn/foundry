@@ -150,6 +150,10 @@ async function whoseShop(accessToken: string, key: EtsyAppKey): Promise<{ shopId
 
 const adapter: SenseProviderAdapter = {
   provider: 'etsy',
+  // Every v3 request carries `x-api-key: keystring:shared_secret`, and the
+  // authorization URL carries the keystring as `client_id`. Without the pair
+  // there is no request to make, so there is nothing to offer either.
+  needsAppCredential: true,
 
   authorizeUrl({ scopes, state, redirectUri, codeChallenge, appCredential }) {
     const key = appKey(appCredential);

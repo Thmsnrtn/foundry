@@ -413,7 +413,15 @@ settingsRoutes.get('/settings', async (c) => {
       ${etsyError ? html`
       <p style="font-size:0.82rem;color:var(--bad);margin:0 0 0.75rem;">${etsyError}</p>` : ''}
       <form method="POST" action="/settings/app-credential/etsy" style="margin-top:0.75rem;display:grid;gap:0.5rem;max-width:26rem;">
-        <input type="password" name="keystring" required autocomplete="off" placeholder="Keystring" />
+        <!-- VISIBLE ON PURPOSE, and only this half. The keystring is an
+             identifier, not a secret: it travels in the open as \`client_id\` on
+             the very consent URL the owner is about to look at. Hiding it
+             behind dots protects nothing and costs the one thing that matters
+             when a 24-character string is being pasted on a phone — being able
+             to see that it arrived whole. The shared secret is the half that
+             authenticates, and it stays hidden. -->
+        <input type="text" name="keystring" required autocomplete="off"
+          spellcheck="false" autocapitalize="off" placeholder="Keystring" />
         <input type="password" name="shared_secret" required autocomplete="off" placeholder="Shared secret" />
         <p style="font-size:0.78rem;color:var(--text-dim);margin:0;">
           Paste each into its own box, not the joined <code>keystring:secret</code> form Etsy
@@ -645,6 +653,25 @@ settingsRoutes.post('/settings/sending-identity', requireCompanyCapability('can_
  * `openapi-ping` is what makes that possible: it takes the key, no OAuth token,
  * costs nothing and causes nothing, and answers with the application id.
  */
+/**
+ * WHERE HE MAY BE SENT AFTERWARDS, AND NOWHERE ELSE.
+ *
+ * A redirect target that arrives in a form field is a redirect target an
+ * attacker can choose, and the whole value of an open redirect is that the
+ * host in the address bar is still this one when the next page asks for
+ * something. So this does not sanitise a URL — it refuses anything that is not
+ * a path into the Foundry shell.
+ *
+ * `//evil.test` is the case worth naming: a browser reads it as a
+ * protocol-relative URL and leaves, while a check for a leading slash reads it
+ * as a path and lets it through. Requiring the literal prefix `/foundry/` and
+ * allowing only word characters, slashes and hyphens after it excludes that,
+ * a scheme, a backslash, and a `?` or `#` that would smuggle one.
+ */
+export function safeBackPath(asked: string): string {
+  return /^\/foundry\/[\w/-]*$/.test(asked) ? asked : '/settings';
+}
+
 settingsRoutes.post('/settings/app-credential/etsy', requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const body = await c.req.parseBody() as Record<string, string>;
@@ -657,10 +684,19 @@ settingsRoutes.post('/settings/app-credential/etsy', requireCompanyCapability('c
     },
     by: `founder:${String(founder.id)}`,
   });
+  // WHERE HE WAS WHEN HE NEEDED THIS. The key is a prerequisite of connecting a
+  // shop, so the form is offered inside that flow as well as here, and a
+  // prerequisite that dumps you somewhere else once you satisfy it has not
+  // finished helping. Only a path on this host, and never a protocol-relative
+  // one — `//evil.test` is a path to a browser and an open redirect to anyone
+  // else. An unrecognised `back` is not an error worth showing him; it just
+  // means he lands here.
+  const back = safeBackPath(String(body.back ?? ''));
+  const sep = back.includes('?') ? '&' : '?';
   if ('failed' in placed) {
-    return c.redirect(`/settings?etsy_error=${encodeURIComponent(placed.ownerWords)}`);
+    return c.redirect(`${back}${sep}etsy_error=${encodeURIComponent(placed.ownerWords)}`);
   }
-  return c.redirect(`/settings?etsy=placed&app=${encodeURIComponent(placed.providerAccountRef)}`);
+  return c.redirect(`${back}${sep}etsy=placed&app=${encodeURIComponent(placed.providerAccountRef)}`);
 });
 
 settingsRoutes.post('/settings/app-credential/etsy/forget', requireCompanyCapability('can_manage_company'), async (c) => {

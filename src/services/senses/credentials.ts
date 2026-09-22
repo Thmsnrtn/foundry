@@ -28,6 +28,30 @@ async function appKeyFor(provider: string): Promise<Record<string, string> | nul
   const c = await appCredentialFor(provider);
   return c ? c.secret : null;
 }
+
+/**
+ * WHAT STANDS BETWEEN THE OWNER AND ASKING THIS PROVIDER FOR PERMISSION.
+ *
+ * `senseProvider(p) !== null` was being read as "he can connect this", and the
+ * contract's own comment says a surface should name what is missing "rather
+ * than offering a button that would fail". That held while every application
+ * key was a deployment fact. It stopped holding the moment one of them became
+ * something the owner places by hand: the Etsy adapter registers whether or not
+ * a key exists, so the button appeared and the tap threw.
+ *
+ * Three answers, and the middle one is the useful one — it is the only
+ * obstacle on this list the owner can clear himself, in the place he is
+ * standing, which is why the surface offers him the form rather than an
+ * apology.
+ */
+export type StandsBetween = 'no_adapter' | 'no_app_key' | null;
+
+export async function whatStandsBetween(provider: string): Promise<StandsBetween> {
+  const adapter = await senseProvider(provider);
+  if (!adapter) return 'no_adapter';
+  if (adapter.needsAppCredential && !(await appCredentialFor(provider))) return 'no_app_key';
+  return null;
+}
 import { decryptCredentialPayload, encryptCredentialPayload } from '../encryption.js';
 import { SenseProviderError, senseProvider } from './providers/contract.js';
 import { disclosureFor, offerFor, type SourceMode } from './index.js';

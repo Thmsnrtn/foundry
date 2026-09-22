@@ -53,6 +53,18 @@ export class SenseProviderError extends Error {
 export interface SenseProviderAdapter {
   provider: string;
   /**
+   * WHETHER THIS DEPLOYMENT HAS TO HOLD AN APPLICATION KEY BEFORE ANYTHING CAN
+   * BE ASKED. `senseProvider` returning an adapter used to be read as "this can
+   * be authorised", and for Etsy that became untrue the moment the application
+   * key moved out of the environment and into something the owner places by
+   * hand: the adapter registers, so a button appeared, and the button threw.
+   *
+   * The comment on `senseProvider` below promises a surface that says what is
+   * missing "rather than offering a button that would fail". This is the fact
+   * that promise needs in order to stay true.
+   */
+  needsAppCredential?: boolean;
+  /**
    * Where to send the owner. The scopes come from the constitutional table and
    * the state is single-use; an adapter that added a scope of its own would be
    * asking for something nobody declared, which is why neither is derived here.

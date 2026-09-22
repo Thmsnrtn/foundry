@@ -1331,26 +1331,23 @@ rather than the first.
 
 ### What you would do
 
-*Revised 22 September 2026, after the app was registered. The original draft
-asked for a deployment secret set with `flyctl`; you asked instead to place it
-from inside Foundry, which is now how it works.*
+*Revised twice on 22 September 2026. The original draft asked for a deployment
+secret set with `flyctl`; you asked instead to place it from inside Foundry.
+Then you placed the redirect at Etsy, looked for where to put the pair, and
+said: "the setting page it's kinda too complicated in foundry. Have no idea how
+to do that." That was a fair report of a real defect, and the sequence below is
+the repaired one — it is now three steps rather than four, and two of them are
+already done.*
 
-1. **Register an Etsy app** at `developer.etsy.com` — done. `private-foundry`,
-   approved, 10 QPS / 10K QPD. Etsy issues a **keystring and a shared secret**,
-   and **both are needed**: every v3 request carries them joined by a colon in
-   the `x-api-key` header. That is not optional configuration — an earlier draft
-   of the adapter sent the keystring alone and every call would have been
-   refused.
-2. **Place the pair on the settings page**, each half in its own box. Foundry
-   asks Etsy whether the pair works before keeping it — `openapi-ping`, which
-   takes no OAuth token, costs nothing and causes nothing — so a mistyped pair
-   is refused while you still have it in front of you rather than at Etsy's
-   consent screen. It is stored encrypted and never shown again. Until it is
-   placed, the connect button does not appear, and the institution says so in
-   those words rather than offering a button that would fail.
-3. **Register the redirect** Etsy sends you back to:
-   `https://foundry-intel.fly.dev/foundry/senses/callback`. This is the one step
-   nothing here can do for you — it is a change to your Etsy app.
+1. ~~**Register an Etsy app** at `developer.etsy.com`~~ — **done.**
+   `private-foundry`, approved, 10 QPS / 10K QPD. Etsy issued a **keystring and
+   a shared secret**, and **both are needed**: every v3 request carries them
+   joined by a colon in the `x-api-key` header. That is not optional
+   configuration — an earlier draft of the adapter sent the keystring alone and
+   every call would have been refused.
+2. ~~**Register the redirect**~~ — **done**, 22 September:
+   `https://foundry-intel.fly.dev/foundry/senses/callback`. This was the one
+   step nothing here could do for you, because it is a change to your Etsy app.
 
    One caveat worth knowing rather than discovering: that address is built from
    the host your request actually arrives on, never from configuration — which
@@ -1358,10 +1355,28 @@ from inside Foundry, which is now how it works.*
    attacker sends the code somewhere else. The practical consequence is that
    you must be on `foundry-intel.fly.dev` when you tap connect. From any other
    host Etsy is handed a redirect it was never given, and refuses.
-4. **Tap connect, once**, on the Apex Micro company page. Etsy shows you its
-   own consent screen naming the three scopes. Foundry shows you the same three
-   first, each with the reason it is asked for, assembled from the rows rather
-   than written into a template.
+3. **Go to the Apex Micro company page and tap the sentence about what Foundry
+   cannot see.** Everything left happens on that one page, in order:
+
+   - It asks for the **keystring** and the **shared secret**, in two boxes,
+     right there. The keystring box is readable so you can see a long paste
+     arrived whole; it is an identifier that travels in the open as `client_id`
+     on the consent screen you are about to look at, so hiding it protects
+     nothing. The shared secret is the half that authenticates, and it stays
+     hidden.
+   - Foundry asks Etsy whether the pair works **before keeping it** —
+     `openapi-ping`, which takes no OAuth token, costs nothing and causes
+     nothing. A mistyped pair is refused on that same page while you still have
+     it in front of you, rather than three screens later at Etsy's consent
+     screen. It is stored encrypted and never shown again.
+   - The page then comes back to itself with the connect button where the form
+     was. **Tap connect, once.** Etsy shows you its own consent screen naming
+     the three scopes. Foundry shows you the same three first, each with the
+     reason it is asked for, assembled from the rows rather than written into a
+     template.
+
+   *The settings page still holds the same key, for replacing or forgetting it
+   later. It is no longer the place you have to find in order to start.*
 
 ### What it permits
 
