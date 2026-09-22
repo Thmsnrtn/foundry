@@ -6578,7 +6578,29 @@ foundryShellRoutes.get('/foundry/controls/connectors',
     const owned = await query(
       `SELECT id, name FROM products WHERE owner_id = ? AND ${realCompany()} ORDER BY rowid LIMIT 1`,
       [String(founder.id)]);
-    if (!owned.rows.length) return c.redirect('/foundry');
+    // AN EXPLICIT UNAVAILABLE STATE, NEVER A SILENT DISAPPEARANCE.
+    //
+    // The owner: "If the relevant real context is unavailable, show an explicit
+    // unavailable state rather than falling back to reference data." A redirect
+    // to `/foundry` does not fall back to reference data — but it is the other
+    // half of the same fault: he taps Connections, lands somewhere else, and is
+    // left to work out whether he mis-tapped, whether the page is broken, or
+    // whether he has no connections. Saying so is one sentence and it is owed.
+    if (!owned.rows.length) {
+      return c.html(page('Connectors', html`
+        <h1>Connectors</h1>
+        <p class="lede">There is no real company here to connect anything to yet.</p>
+        <p class="quiet">This is not a failure and nothing is missing on your side. Connections
+          belong to a company, and the reference company I rehearse against is deliberately not
+          one of yours \u2014 I will not show you its connections as though they were.</p>
+        <a class="btn" href="/foundry">Back</a>`,
+      'controls', {
+        eyebrow: 'Controls',
+        crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: '/foundry/controls', label: 'Controls' },
+          { href: '/foundry/controls/connectors', label: 'Connectors' }],
+        scope: { kind: 'foundry', id: null, name: 'the estate' }, local: [], chips: [],
+      }));
+    }
     const productId = String((owned.rows[0] as Record<string, unknown>).id);
 
     const { connectorsFor } = await import('../../services/senses/journey.js');
@@ -6606,7 +6628,7 @@ foundryShellRoutes.get('/foundry/controls/connectors',
           <span style="display:block;font-weight:600;">${x.name}</span>
           <span style="display:block;font-size:0.84rem;color:var(--text-muted);">${where(x)}</span>
         </span>
-        <span aria-hidden="true" style="flex:0 0 auto;color:${x.qualified ? 'var(--ok)' : x.granted ? 'var(--text-muted)' : 'var(--text-dim)'};">
+        <span aria-hidden="true" style="flex:0 0 auto;color:${x.qualified ? 'var(--good)' : x.granted ? 'var(--text-muted)' : 'var(--text-dim)'};">
           ${x.qualified ? '\u25cf' : x.granted ? '\u25d0' : '\u25cb'}
         </span>
       </a>`;
@@ -6691,8 +6713,8 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
 
     const fact = (yes: boolean, said: string, no: string): unknown => html`
       <li style="display:flex;gap:0.6rem;align-items:flex-start;padding:0.3rem 0;">
-        <span aria-hidden="true" style="flex:0 0 1.1rem;color:${yes ? 'var(--ok)' : 'var(--text-dim)'};">${yes ? '\u25cf' : '\u25cb'}</span>
-        <span style="color:${yes ? 'var(--text)' : 'var(--text-dim)'};">${yes ? said : no}</span>
+        <span aria-hidden="true" style="flex:0 0 1.1rem;color:${yes ? 'var(--good)' : 'var(--text-dim)'};">${yes ? '\u25cf' : '\u25cb'}</span>
+        <span style="color:${yes ? 'var(--text-primary)' : 'var(--text-dim)'};">${yes ? said : no}</span>
       </li>`;
 
     return c.html(page(one.name, html`
@@ -6714,8 +6736,8 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
         <ol style="list-style:none;padding:0;margin:0;display:grid;gap:0.5rem;">
           ${journey.steps.map((step) => html`
           <li style="display:flex;gap:0.6rem;align-items:flex-start;">
-            <span aria-hidden="true" style="flex:0 0 1.1rem;color:${step.done ? 'var(--ok)' : 'var(--text-dim)'};">${step.done ? '\u25cf' : '\u25cb'}</span>
-            <span><span style="color:${step.done ? 'var(--text)' : 'var(--text-dim)'};">${step.title}</span>
+            <span aria-hidden="true" style="flex:0 0 1.1rem;color:${step.done ? 'var(--good)' : 'var(--text-dim)'};">${step.done ? '\u25cf' : '\u25cb'}</span>
+            <span><span style="color:${step.done ? 'var(--text-primary)' : 'var(--text-dim)'};">${step.title}</span>
             ${step.evidence ? html`<br /><span style="font-size:0.82rem;color:var(--text-muted);">${step.evidence}</span>` : ''}</span>
           </li>`)}
         </ol>

@@ -175,12 +175,23 @@ describe('only the half that authenticates is hidden', () => {
     expect(flat).toContain('<input type="password" name="shared_secret"');
   });
 
-  it('still never renders a stored secret back', () => {
-    // Placing it is the last time either half is in a page. `appCredentialFor`
-    // returns the pair to code; the card shows the application id and a date.
+  it('still never reaches for either half of the stored pair', () => {
+    // THIS ASSERTION WAS A PROXY AND THE PROXY WENT STALE. It required the
+    // card to render `etsyApp.providerAccountRef` — true when the card read
+    // the credential row directly, and false once the journey reader took over
+    // and the application id began arriving as a step's evidence. The security
+    // property never changed; the string that stood in for it did.
+    //
+    // What is actually required is that this page never touches the secret.
+    // That half is asserted here, and the real proof — that neither half
+    // appears in a rendered response with a credential genuinely stored — is
+    // in `he-can-tell-whether-it-saved`, which drives the page rather than
+    // reading it.
     const flat = settings.replace(/\s+/g, ' ');
-    expect(flat).toContain('etsyApp.providerAccountRef');
     expect(flat).not.toContain('etsyApp.secret');
+    expect(flat).not.toContain('.sharedSecret');
+    // The card still knows whether a key is there, which is what it is for.
+    expect(flat).toContain('etsyApp ?');
   });
 });
 

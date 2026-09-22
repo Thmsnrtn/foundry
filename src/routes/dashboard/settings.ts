@@ -437,9 +437,9 @@ settingsRoutes.get('/settings', async (c) => {
       <ol style="list-style:none;padding:0;margin:0 0 1rem;display:grid;gap:0.45rem;">
         ${etsyWhere.steps.map((step) => html`
         <li style="display:flex;gap:0.6rem;align-items:flex-start;font-size:0.9rem;">
-          <span aria-hidden="true" style="flex:0 0 1.1rem;color:${step.done ? 'var(--ok)' : 'var(--text-dim)'};">${step.done ? '\u25cf' : '\u25cb'}</span>
+          <span aria-hidden="true" style="flex:0 0 1.1rem;color:${step.done ? 'var(--good)' : 'var(--text-dim)'};">${step.done ? '\u25cf' : '\u25cb'}</span>
           <span>
-            <span style="color:${step.done ? 'var(--text)' : 'var(--text-dim)'};">${step.title}</span>
+            <span style="color:${step.done ? 'var(--text-primary)' : 'var(--text-dim)'};">${step.title}</span>
             ${step.evidence ? html`<br /><span style="font-size:0.8rem;color:var(--text-muted);">${step.evidence}</span>` : ''}
           </span>
         </li>`)}
