@@ -1524,3 +1524,59 @@ account, his key, and his assessment of who can reach that transcript.
   transcript, or any sign of Etsy API use this institution did not make. The
   application id Etsy returned is recorded against the key, so a key swapped
   for a different application is a fact the institution notices.
+
+### Later the same day: the first of those bullets was false when it was written
+
+*Added 22 September 2026, after checking rather than assuming.*
+
+"The key is never written to this repository" was written into this record in
+commit `31661438`. The keystring was in that same commit, in a test fixture,
+followed by a call replacing every character with an `x`. At runtime it was
+twenty-four x's, which was all the test needed. In the file, and in every clone
+of the history, it was the real value.
+
+**Masking a value you have already written down is not redaction.** It is worse
+than not trying, because it looks handled and so stops anyone looking again. It
+is the same failure as the four false claims two review cells found in this
+wave: a sentence asserting a property nothing checked.
+
+**And the premise underneath was wrong too.** He said, correcting a claim made
+to him: *"Well the repo is private not public."* It is not. An unauthenticated
+request to `api.github.com/repos/Thmsnrtn/foundry` — no token, nothing from any
+session — returns `200` with `"private": false`. Both parties were operating on
+a belief neither had checked, in opposite directions, and only one of those
+errors put a real value in a world-readable place.
+
+**Scope, established rather than assumed.**
+
+- The **shared secret was never committed**: zero occurrences in the working
+  tree and zero across all history. That half exists only in the chat
+  transcript this record already describes.
+- The **keystring appears in one commit, one line**, now a synthetic literal.
+- It **cannot authenticate alone**. Etsy joins both halves in `x-api-key`, and
+  an OAuth authorization additionally needs PKCE and a redirect URI registered
+  to one host, which is his.
+
+**What he decided, asked directly on 22 September:** leave the history as it
+stands. The options put to him were making the repository private, rewriting
+the commit and force-pushing, registering a replacement Etsy app, or accepting
+it. He chose to accept it.
+
+**On the repository's visibility**, asked at the same time: private *"only if
+you are able to stay connected to it and continue working on it. If making it
+private changes that then keep it public."* Established since: the GitHub
+connection this institution's sessions use already lists two private
+repositories under the same account with push rights, so visibility does not
+gate access; nothing in the repository depends on being public — no Pages, no
+raw-content fetches, no badge URLs, no git-URL dependencies, and a Fly deploy
+that builds on the runner with a repo-scoped token. The one real cost is
+Actions minutes, unlimited while public and capped at 2,000/month on the
+GitHub Free plan, against a CI that fans five jobs out per push and a deploy
+chain measured at 37 and 44 minutes. **That decision is open**, and it turns on
+a plan tier only he can see.
+
+**What now enforces the bullet that was false.** `check-no-masked-literals`, in
+`lint:columns`, refuses a string literal with a whole-string masking call
+applied to it, with planted-defect tests in both directions. A comment saying
+"do not do this" did not stop it; the comment and the defect were written by
+the same hand in the same hour.
