@@ -109,6 +109,21 @@ describe('the verdict is issued now, from rows, every time it is asked for', () 
     expect(await blocks()).toBe(false);
   });
 
+  it('will not take a recognition made by somebody who does not own the company', async () => {
+    // `identity_confirmed_by` was written by the confirm route and read by
+    // nothing — provenance recorded for an incident and never used to decide
+    // anything. A recognition has an author, and an author who does not own
+    // this company has not given it authority here.
+    await query(
+      "UPDATE company_senses SET identity_confirmed_by = 'founder:somebody_else' WHERE id = 'cs_when'");
+    expect(await blocks()).toBe(true);
+    expect(await because()).toContain('does not own this company');
+    await query(
+      'UPDATE company_senses SET identity_confirmed_by = ? WHERE id = ?',
+      [`founder:${OWNER}`, 'cs_when']);
+    expect(await blocks()).toBe(false);
+  });
+
   it('stops when the connection is withdrawn, for work approved before it was', async () => {
     // THE QUEUED-WORK CASE, stated as the owner stated it. Everything above
     // this line was authorised while the connection stood. Disconnection is
@@ -208,5 +223,77 @@ describe('what the boundary must never stop', () => {
       'src/services/outbound/gateway.ts',
       'src/services/venture/qualification.ts',
     ]);
+  });
+});
+
+describe('the marketplace-write path, proved without enabling it', () => {
+  // The owner: "The current NULL capability mapping is an independent obstacle
+  // to Etsy write operations. Preserve that fail-closed behaviour until the
+  // capability mapping is intentionally implemented. Before enabling
+  // marketplace writes, prove that the actual Etsy execution path reaches the
+  // corrected recognition and qualification boundary… Do not rely exclusively
+  // on tests of the offer path as evidence that marketplace writes are
+  // protected."
+  //
+  // So the binding happens HERE, in this file's own in-memory database, and
+  // never in a migration. Production keeps `tool = NULL` on every Etsy write
+  // provider — `etsy-is-declared-and-cannot-act` asserts it, and nothing here
+  // touches that. What this proves is what WOULD happen on the day somebody
+  // binds one: the act arrives at the corrected boundary rather than at a
+  // gate that cannot see it.
+  it('is still fail-closed in the institution as shipped', async () => {
+    const bound = (await query(
+      `SELECT p.id, p.tool FROM capability_providers p
+        WHERE p.capability_key = 'list_on_marketplace'`))
+      .rows as unknown as Array<Record<string, unknown>>;
+    expect(bound.length).toBeGreaterThan(0);
+    for (const r of bound) expect(r.tool, String(r.id)).toBeNull();
+    // With nothing bound the gate resolves no family and returns null — the
+    // act was already impossible one layer out, because the outbound door
+    // cannot resolve a tool that is not bound.
+    expect(await qualificationStandsInTheWay({
+      experimentId: X, tool: 'post_listing', kind: null })).toBeNull();
+  });
+
+  it('reaches the recognition boundary the moment a tool is bound', async () => {
+    await query(
+      `UPDATE capability_providers SET tool = 'post_listing'
+        WHERE capability_key = 'list_on_marketplace' AND provider = 'etsy'`);
+    // `cs_when2` is the replacement connection from above: live, credentialed,
+    // and unrecognised. This is the state the owner asked to see refused.
+    const stood = await qualificationStandsInTheWay({
+      experimentId: X, tool: 'post_listing', kind: null });
+    expect(stood, 'a bound marketplace write did not reach the gate').not.toBeNull();
+    expect(stood!.blocking).toContain(SHOP);
+    expect(stood!.refusal).toContain('the test is not ready');
+  });
+
+  it('lets the recognition boundary go once he has recognised the account', async () => {
+    // The other half of the pair. Other conditions may still block this
+    // experiment — that is their job — but the SHOP condition, which is what
+    // recognition governs, is satisfied and stops appearing.
+    // IN LIFECYCLE ORDER, because the database enforces it: the provider names
+    // the shop, and only then can he recognise it. Confirming first is refused
+    // by `company_sense_confirmation:nothing_to_confirm`, which is the trigger
+    // doing exactly its job — a recognition with no named account behind it is
+    // an approval of whatever the connection later turns out to reach.
+    await query(
+      `UPDATE company_senses SET provider_account_ref = '12345678',
+              provider_account_label = 'ApexMicro',
+              identity_verified_at = datetime('now') WHERE id = 'cs_when2'`);
+    await query(
+      `UPDATE company_senses SET identity_confirmed_at = datetime('now'),
+              identity_confirmed_by = ? WHERE id = 'cs_when2'`, [`founder:${OWNER}`]);
+    const stood = await qualificationStandsInTheWay({
+      experimentId: X, tool: 'post_listing', kind: null });
+    if (stood) expect(stood.blocking).not.toContain(SHOP);
+    expect((await qualificationOf(X)).blocking).not.toContain(SHOP);
+  });
+
+  it('still never stands in the way of what a buyer is owed', async () => {
+    for (const kind of ['delivery', 'refund', 'withdrawal'] as const) {
+      expect(await qualificationStandsInTheWay({
+        experimentId: X, tool: 'post_listing', kind }), kind).toBeNull();
+    }
   });
 });

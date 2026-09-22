@@ -59,3 +59,49 @@ describe('the health endpoint says where institutional memory lives', () => {
     expect(body).not.toContain('turso.io');
   });
 });
+
+// =============================================================================
+// AND WHICH MIGRATIONS THAT DATABASE ACTUALLY HAS.
+//
+// The owner, 22 September 2026: "Verify the presence and expected structure of
+// migrations 346 and 347 directly through the appropriate migration records or
+// database metadata. Successful application boot is supporting evidence, not a
+// substitute for direct verification of schema state."
+//
+// He was right that it could not be answered. `storage` says WHERE memory
+// lives and the table count says A schema is applied; neither says WHICH, and
+// a database restored from an older snapshot behind a current image looks
+// identical from outside. This is the migrator's own record read back — the
+// only fact about deployed schema state obtainable without a credential
+// nobody should be handing out to ask a question.
+// =============================================================================
+describe('the health endpoint says which migrations are applied', () => {
+  const schema = async (): Promise<{ applied: number; highest: number }> => {
+    const res = await healthRoutes.request('/internal/health');
+    return (await res.json() as Record<string, unknown>).schema as { applied: number; highest: number };
+  };
+
+  it('reports the record the migrator itself wrote, not an inference from behaviour', async () => {
+    const { query } = await import('../../src/db/client.js');
+    const row = (await query('SELECT COUNT(*) AS n FROM schema_migrations'))
+      .rows[0] as Record<string, unknown>;
+    expect((await schema()).applied).toBe(Number(row.n));
+  });
+
+  it('names the highest migration number, which is what identifies a release', async () => {
+    const { readdirSync } = await import('node:fs');
+    const highest = Math.max(...readdirSync('src/db/migrations')
+      .filter((f) => f.endsWith('.sql'))
+      .map((f) => Number(f.split('_')[0])));
+    expect((await schema()).highest).toBe(highest);
+  });
+
+  it('publishes numbers and never a map of the schema', async () => {
+    // A filename list would be an inventory of every mechanism this
+    // institution has, handed to anyone who asks. Two integers answer "does
+    // the data match the code" and describe nothing.
+    const body = await (await healthRoutes.request('/internal/health')).text();
+    expect(body).not.toContain('.sql');
+    expect(body).not.toContain('company_senses');
+  });
+});

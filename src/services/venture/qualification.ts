@@ -272,9 +272,11 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
     const shopRow = productId ? (await query(
       `SELECT s.identity_verified_at, s.identity_confirmed_at,
               s.provider_account_label, s.provider_account_ref,
-              s.identity_disputed_at, s.identity_disputed_ref
+              s.identity_disputed_at, s.identity_disputed_ref,
+              s.identity_confirmed_by, 'founder:' || p.owner_id AS the_owner
          FROM sense_credentials c
          JOIN company_senses s ON s.id = c.company_sense_id AND s.disconnected_at IS NULL
+         JOIN products p ON p.id = c.product_id
         WHERE lower(c.provider) = lower(?) AND c.product_id = ? AND c.revoked_at IS NULL LIMIT 1`,
       [plan!.listing!.venue, productId])).rows[0] as Record<string, unknown> | undefined : undefined;
     const shopName = shopRow
@@ -304,8 +306,20 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
           : shopRow.identity_confirmed_at == null
             ? { name: 'the shop it would act on is confirmed', verdict: 'waits_for_you',
               because: `${venue} says this opens ${shopName}, and you have not said ${shopName} is your shop — a second account, or one somebody else administers, would look exactly like this from here` }
-            : met('the shop it would act on is confirmed',
-              `${venue} named ${shopName} and you confirmed it is yours`));
+            // A RECOGNITION HAS AN AUTHOR, AND THE AUTHOR HAS TO BE THIS
+            // COMPANY'S OWNER. `identity_confirmed_by` is written by the
+            // confirm route as `founder:<id>` and was, until this line, a
+            // column nothing consulted — provenance recorded for an incident
+            // and never used to decide anything, which is how a recognition
+            // made by one principal comes to confer authority to act for
+            // another's company. Moot in a single-owner institution and
+            // exactly the kind of thing that stops being moot without anybody
+            // revisiting the code that assumed it.
+            : shopRow.identity_confirmed_by !== shopRow.the_owner
+              ? { name: 'the shop it would act on is confirmed', verdict: 'waits_for_you',
+                because: `${shopName} was recognised by somebody who does not own this company, so that recognition is not authority to act here` }
+              : met('the shop it would act on is confirmed',
+                `${venue} named ${shopName} and you confirmed it is yours`));
 
     const exposure = (await query(
       `SELECT exposure_ref, withdrawn_at FROM experiment_exposures

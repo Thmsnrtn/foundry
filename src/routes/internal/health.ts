@@ -83,6 +83,46 @@ healthRoutes.get('/internal/health', async (c) => {
   }
   const degradedLoops = checks.loops === 'error';
 
+  // WHICH MIGRATIONS THIS DATABASE ACTUALLY HAS.
+  //
+  // The owner, 22 September 2026: "Verify the presence and expected structure
+  // of migrations 346 and 347 directly through the appropriate migration
+  // records or database metadata. Successful application boot is supporting
+  // evidence, not a substitute for direct verification of schema state."
+  //
+  // He is right, and until now there was no way to answer him. The table count
+  // above proves A schema is applied; it cannot say WHICH, and a boot that
+  // succeeds proves only that nothing threw. A build shipping a migration that
+  // silently did not apply — a volume restored from a snapshot, a deploy that
+  // rolled back its image but not its data — would look exactly like a healthy
+  // one from out here.
+  //
+  // `schema_migrations` is the record the migrator itself writes, so this is
+  // that record read back rather than an inference from behaviour. Reported as
+  // two numbers: how many rows it holds and the highest migration number among
+  // them. A number is not a map — no filenames, no columns, no table names —
+  // and the commit beside it already says which build this is, so the pair
+  // together answers "does the data match the code" without publishing either.
+  let schema: { applied: number; highest: number | null } = { applied: 0, highest: null };
+  try {
+    const row = (await query(
+      `SELECT COUNT(*) AS n,
+              MAX(CAST(substr(filename, 1, instr(filename, '_') - 1) AS INTEGER)) AS top
+         FROM schema_migrations`)).rows[0] as Record<string, unknown> | undefined;
+    schema = {
+      applied: Number(row?.n ?? 0),
+      highest: row?.top == null ? null : Number(row.top),
+    };
+  } catch {
+    // A database with no migration record is a database this build has never
+    // migrated. Said as an error rather than as a zero, which would read as
+    // 'none yet' on a deployment that has been running for months.
+    checks.schema = 'error';
+    healthy = false;
+  }
+  if (checks.schema !== 'error') checks.schema = schema.applied > 0 ? 'ok' : 'error';
+  if (checks.schema === 'error') healthy = false;
+
   // WHICH DATABASE IS ACTUALLY IN USE, WHICH IS NOT THE SAME AS WHICH ONE WAS
   // CONFIGURED.
   //
@@ -123,6 +163,7 @@ healthRoutes.get('/internal/health', async (c) => {
       checks,
       loops,
       storage,
+      schema,
     },
     healthy ? 200 : 503,
   );

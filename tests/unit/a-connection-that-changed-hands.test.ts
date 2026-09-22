@@ -312,7 +312,7 @@ describe('a replacement grant inherits nothing', () => {
     expect(e.authorised).toBe(false);
   });
 
-  it('keeps the old connection′s evidence, and keeps it out of the way', async () => {
+  it('keeps the old connection and its evidence, and keeps it out of the way', async () => {
     const old = (await query(
       `SELECT identity_confirmed_at, identity_confirmed_by, provider_account_ref,
               disconnected_at FROM company_senses WHERE id = ?`, [S]))
