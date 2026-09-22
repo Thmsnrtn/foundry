@@ -2911,3 +2911,56 @@ read.
 migration 342 — is on the branch, green on its own chain (620 files, 5355
 tests), and deliberately carries no release marker. It rides the next release
 rather than being stacked onto a deploy already building.
+
+---
+
+## Wave E2 — the first external operating capability, read-only
+
+The owner: establish "the first genuinely qualified external operating
+capability", using the ApexMicro Etsy shop and Experiment 002, and "move beyond
+source-code and simulated verification toward the smallest legitimate,
+controlled real-account qualification sequence" — without publishing the
+workbook or incurring listing fees to prove the integration works.
+
+Everything that can be built without his account is built and proven against a
+double playing Etsy's part. The one thing that cannot be is PENDING 25: an app
+registration, a deployment secret, and one consent at three read scopes.
+
+### What exploration changed about the plan
+
+The credential lifecycle was **already built and already controlled-proven** —
+offer page, authorization, a redirect URI derived from the request host, the
+real callback, disconnect, and a reference world that plays the provider's part
+specifically so the lifecycle is proven before a real key is requested. The gap
+was **one missing row**: the scopes were declared in migration 338 and
+`sense_providers` had no Etsy entry, so nothing could offer them. The button did
+not exist.
+
+And an external fact reshaped what the wave could honestly promise: **Etsy
+reports no shop statistics to anybody.** Orders are readable; the daily series
+never will be.
+
+### What two reviews cost it, and why that is the point
+
+Thirteen findings on a wave whose own tests passed, including **four false
+claims I had written into code comments and commit messages**. The read-only
+posture held — both cells verified independently that nothing can reach a write
+scope, spend, publish or contact. Almost everything about what the reading
+CLAIMED did not hold.
+
+The worst was not in this wave's code at all. `safeFetch` carried
+`Authorization` and provider API keys onto every redirect hop, screening each
+for SSRF and nothing else — so any public host named in a `Location` was handed
+the credential. Shared infrastructure, cited in a header I wrote as the reason
+carrying a bearer token through it was safe. It strips credentials on a
+cross-origin hop now, and Stripe and GitHub gain that with it.
+
+The second would have corrupted evidence permanently: `receipts` is shop-wide,
+so every sale of anything else in the owner's shop became this experiment's
+order — and, because settlement counts events inside the exposure's window, a
+sealed prediction settled `as_predicted` on somebody else's sale, immutably.
+
+### Where it stands
+
+`npm run check` green on the frozen tree: **622 files, 5384 tests, all 31
+gates**. Nothing connects, reads or publishes until he acts on PENDING 25.

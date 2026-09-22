@@ -749,3 +749,52 @@ caller of a sender already listed once is invisible to it. That is how an hourly
 Slack push into a room of real people stayed outside the door after the commit
 that claimed to close it. `GUARD_IN_CALLERS` is empty now, and a new entry in it
 should be argued rather than added.
+
+### The first external operating capability, and what two reviews cost it (22 September 2026)
+
+**Reading a marketplace account: `declared`.** Not `available`. The capability
+exists, is proven end to end against a double playing Etsy's part, and has never
+touched a real account — and `available` in this ladder means exercised, which a
+double does not settle. It moves on the first real read and not before.
+
+**What is now qualified, and what is not.** Etsy is askable (a
+`sense_providers` row; the scopes were declared four migrations earlier and
+nothing could offer them). The read capability is declared with `tool = NULL`,
+so it reaches no door. The credential lifecycle was already
+`controlled_proven` against the reference world and needed nothing. What remains
+unqualified is everything that publishes: the three write acts keep no tool, and
+`Etsy can be operated` stays `waits_for_you` because it reads the maturity of
+the capability that would PLACE a listing, which nothing here touches.
+
+**An operating limitation that no integration will ever close.** Etsy exposes no
+shop-statistics endpoint to anybody — no daily views, visits, favourites,
+impressions, search queries or traffic sources — withdrawn deliberately after
+the data was used to infer Etsy's own financials ahead of its announcements. A
+listing's LIFETIME view and favourite counts are readable and are read; the
+daily series is not and will not be. Recorded in the retrieval's own
+`cannot_see`, so it travels with every observation drawn from the read. Trigger
+for revisiting: Etsy publishing such an endpoint, which is not expected.
+
+**The 90-day refresh window** is an operating limitation, named in PENDING 25
+before the owner agrees rather than in a comment afterwards. `sense_credential_tick`
+renews within 24 hours of expiry and `renewCredentials` does not overwrite the
+stored grant, so a scope-silent refresh cannot blank it.
+
+### What two adversarial cells cost this wave, and what that says
+
+Thirteen findings on a wave whose own tests passed. Four of them were false
+claims in code comments and commit messages — statements about the system that
+the system itself disproved. The pattern is worth carrying:
+
+- **A test can pin a false sentence in place.** `saw` asserted Etsy reports no
+  views to anyone; the retrieval it was written into contained view counts; and
+  an assertion matched the false string. The suite made the error durable.
+- **An overclaim of ignorance is as dishonest as an overclaim of knowledge**,
+  and much easier to miss, because it reads as caution.
+- **A guard that screens one property is not a guard for another.** `safeFetch`
+  screened every redirect for SSRF and was cited, in a header I wrote, as the
+  reason carrying a bearer token through it was safe. Screening an address does
+  not decide who may hold a credential.
+- **A silence is only evidence when the instrument knows it saw everything.**
+  A truncated read and a parse failure both produced an empty list, and an
+  empty list became an affirmative finding about the world.
