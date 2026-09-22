@@ -148,6 +148,38 @@ export async function heldFrom(experimentId: string): Promise<string | null> {
   return null;
 }
 
+/**
+ * A PAGE FOR A THING SOLD SOMEWHERE THAT DOES NOT EXIST YET.
+ *
+ * Caught by a probe before a deploy, and it would have been ugly. Giving the
+ * workbook its public identity made it a member of the registry; nothing held
+ * it, because the owner's word no longer did; and its shape is `not_public`
+ * for want of any exposure, which is not one of the two shapes the entry
+ * renderer takes — so Apex Micro would have published the full six-section
+ * product page, carrying the $14 price, for a listing nobody can buy from.
+ * That is the exact thing his authorisation excludes: "no separate offer,
+ * price, checkout, payment link, or fulfilment process on Apex Micro".
+ *
+ * MECHANISM-AWARE, BECAUSE THE OPPOSITE RULE DEADLOCKED THE OTHER ASSET. A
+ * Workshop-carried offer's page IS its venue: it must go up before an offer
+ * can be placed, and holding it until something had reached somebody was the
+ * deadlock this file already learned about the hard way. A listing's page is a
+ * pointer, and a pointer at nothing is worse than no page. So this asks only
+ * of an offer that is carried elsewhere: is the elsewhere there yet.
+ */
+async function nothingToPointAt(experimentId: string): Promise<string | null> {
+  const { offerShapePlanOf } = await import('../venture/hand.js');
+  const plan = await offerShapePlanOf(experimentId);
+  if (!plan?.listing) return null;
+  const live = (await rows(
+    `SELECT id FROM experiment_exposures
+      WHERE experiment_id = ? AND provider = ? AND withdrawn_at IS NULL LIMIT 1`,
+    [experimentId, plan.listing.venue]))[0];
+  return live
+    ? null
+    : `it is sold on ${plan.listing.venueName} and there is no listing to point at yet, so a page here would advertise something nobody can buy`;
+}
+
 /** What the next pass would hold back, and why. Reads only; publishes nothing. */
 export async function heldFromPublishing(founderId: string): Promise<Array<{ path: string; title: string; reason: string }>> {
   const approved = await approvedSlugs(founderId);
@@ -155,7 +187,10 @@ export async function heldFromPublishing(founderId: string): Promise<Array<{ pat
   await indexSlugs(founderId, all);
   const out: Array<{ path: string; title: string; reason: string }> = [];
   for (const x of all) {
-    const reason = await heldFrom(experimentIdOf(x, all));
+    // THE SAME READING THE PASS USES, or the screen and the refusal disagree —
+    // which is the failure this whole surface exists to prevent.
+    const id = experimentIdOf(x, all);
+    const reason = await heldFrom(id) ?? await nothingToPointAt(id);
     if (reason !== null) out.push({ path: x.path, title: x.title, reason });
   }
   return out;
@@ -216,7 +251,7 @@ export async function publishSite(founderId: string, by: string, fetchImpl?: typ
   const registry: typeof all = [];
   const takeDown: typeof all = [];
   for (const x of all) {
-    const reason = await heldFrom(experimentIdOf(x, all));
+    const reason = await heldFrom(experimentIdOf(x, all)) ?? await nothingToPointAt(experimentIdOf(x, all));
     if (reason === null) { registry.push(x); continue; }
     held.push({ path: x.path, reason });
     // DROPPING IT FROM THE PASS IS NOT TAKING IT DOWN. A review found the
