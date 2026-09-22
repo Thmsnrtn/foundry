@@ -33,6 +33,17 @@ const AUTHORIZE = 'https://connect.stripe.com/oauth/authorize';
 const TOKEN = 'https://connect.stripe.com/oauth/token';
 const DEAUTHORIZE = 'https://connect.stripe.com/oauth/deauthorize';
 
+/**
+ * Whether the deployment fact this adapter depends on is actually there. The
+ * comment above says this adapter "refuses to build an authorize URL and says
+ * so in words the owner can act on, rather than sending him to a provider page
+ * that will reject him" — which was true of the throw and untrue of the
+ * surface, because nothing asked before drawing the button.
+ */
+function configured(): boolean {
+  return (process.env.STRIPE_CONNECT_CLIENT_ID ?? '').trim() !== '';
+}
+
 function clientId(): string {
   const id = (process.env.STRIPE_CONNECT_CLIENT_ID ?? '').trim();
   if (!id) {
@@ -89,6 +100,7 @@ async function post(url: string, body: URLSearchParams): Promise<Record<string, 
 
 const adapter: SenseProviderAdapter = {
   provider: 'stripe',
+  configured,
 
   authorizeUrl({ scopes, state, redirectUri }) {
     const params = new URLSearchParams({

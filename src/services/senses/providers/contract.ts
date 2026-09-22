@@ -65,6 +65,19 @@ export interface SenseProviderAdapter {
    */
   needsAppCredential?: boolean;
   /**
+   * THE OTHER PLACE A KEY CAN BE MISSING FROM. Stripe's application identity is
+   * a deployment fact in the environment rather than something the owner
+   * places, and it had the identical defect: the adapter registers, so the
+   * button appeared, and `clientId()` threw on the tap.
+   *
+   * Two questions rather than one, because the answers lead different places.
+   * A key the owner can place is an obstacle he can clear where he is standing;
+   * a key that belongs in the environment is genuinely not his to supply, and
+   * telling him so is the honest thing rather than handing him a form for a
+   * box that does not exist.
+   */
+  configured?: () => boolean;
+  /**
    * Where to send the owner. The scopes come from the constitutional table and
    * the state is single-use; an adapter that added a scope of its own would be
    * asking for something nobody declared, which is why neither is derived here.

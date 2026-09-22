@@ -3015,7 +3015,22 @@ rather than a thing that stores a value:
   function for exactly one reason: so that case could be written down as a test
   instead of trusted to a regex nobody reads twice.
 
-Seventeen proofs in `the-key-goes-where-the-hand-is`. The sentence in PENDING 25
+**The same defect was live on Stripe**, found by rendering the page rather than
+by reading it — the connect page offers Stripe on the same gap, its application
+identity is `STRIPE_CONNECT_CLIENT_ID`, and its own header already claimed it
+"refuses to build an authorize URL and says so in words the owner can act on,
+rather than sending him to a provider page that will reject him". True of the
+throw; untrue of the surface, because nothing asked before drawing the button.
+So adapters declare readiness two ways, because the answers lead different
+places: `needsAppCredential` for a key the owner places, `configured()` for one
+that belongs in the environment. He gets a form for the first and a plain
+sentence for the second, since a box for a value that is not his to supply
+would be worse than the button was.
+
+Twenty-two proofs in `the-key-goes-where-the-hand-is`, and the last five render
+the page through `app.request` rather than grepping the source — which is what
+caught Stripe. Everything above that line proves a branch was *written*;
+"reachable" was the entire complaint. The sentence in PENDING 25
 that claimed the connect button "does not appear" until the key is placed was
 aspirational when it was written and is true now — another instance of a claim
 that a test could have pinned in place, found by trying to walk the path it

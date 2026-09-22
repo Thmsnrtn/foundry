@@ -39,17 +39,21 @@ async function appKeyFor(provider: string): Promise<Record<string, string> | nul
  * something the owner places by hand: the Etsy adapter registers whether or not
  * a key exists, so the button appeared and the tap threw.
  *
- * Three answers, and the middle one is the useful one — it is the only
- * obstacle on this list the owner can clear himself, in the place he is
- * standing, which is why the surface offers him the form rather than an
- * apology.
+ * Four answers, and `no_app_key` is the useful one — it is the only obstacle on
+ * this list the owner can clear himself, in the place he is standing, which is
+ * why the surface offers him the form rather than an apology. The other three
+ * are all "not yours to supply", and saying that plainly is better than a
+ * button: `no_adapter` means nothing here can speak to this provider at all,
+ * and `not_configured` means its application identity belongs in the
+ * environment and is not set.
  */
-export type StandsBetween = 'no_adapter' | 'no_app_key' | null;
+export type StandsBetween = 'no_adapter' | 'no_app_key' | 'not_configured' | null;
 
 export async function whatStandsBetween(provider: string): Promise<StandsBetween> {
   const adapter = await senseProvider(provider);
   if (!adapter) return 'no_adapter';
   if (adapter.needsAppCredential && !(await appCredentialFor(provider))) return 'no_app_key';
+  if (adapter.configured && !adapter.configured()) return 'not_configured';
   return null;
 }
 import { decryptCredentialPayload, encryptCredentialPayload } from '../encryption.js';

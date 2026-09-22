@@ -20,6 +20,8 @@
 // =============================================================================
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '7'.repeat(64);
+process.env.FOUNDRY_OWNER_EMAIL = 'owner@example.com';
+delete process.env.STRIPE_CONNECT_CLIENT_ID;
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -29,10 +31,35 @@ import { whatStandsBetween } from '../../src/services/senses/credentials.js';
 import { safeBackPath } from '../../src/routes/dashboard/settings.js';
 import { senseProvider } from '../../src/services/senses/providers/contract.js';
 import { encryptCredentialPayload } from '../../src/services/encryption.js';
+import { Hono } from 'hono';
+
+const F = 'f_hand', P = 'p_hand';
+let app: Hono;
 
 beforeAll(async () => {
   await runMigrations();
+  await query('INSERT INTO founders (id,clerk_user_id,email) VALUES (?,?,?)',
+    [F, 'c_hand', 'owner@example.com']);
+  await query('INSERT INTO products (id,name,owner_id,status) VALUES (?,?,?,?)',
+    [P, 'Apex Micro', F, 'active']);
+  const { foundryShellRoutes } = await import('../../src/routes/dashboard/foundry-shell.js');
+  app = new Hono();
+  app.use('*', async (c, next) => {
+    c.set('founder', { id: F, email: 'owner@example.com' }); await next();
+  });
+  app.route('/', foundryShellRoutes);
 });
+
+/**
+ * RENDERED, NOT GREPPED. Everything above this line reads source strings, which
+ * proves a branch was written and not that it is reachable — and "reachable"
+ * is the entire complaint being answered.
+ */
+async function connectPage(): Promise<string> {
+  const res = await app.request(`/foundry/companies/${P}/see/revenue`);
+  expect(res.status, 'the connect page did not render for the owner').toBe(200);
+  return res.text();
+}
 
 describe('a provider says whether it can be asked anything yet', () => {
   it('names the missing application key rather than looking ready', async () => {
@@ -154,5 +181,52 @@ describe('only the half that authenticates is hidden', () => {
     const flat = settings.replace(/\s+/g, ' ');
     expect(flat).toContain('etsyApp.providerAccountRef');
     expect(flat).not.toContain('etsyApp.secret');
+  });
+});
+
+describe('the page he actually lands on', () => {
+  it('asks for the pair instead of drawing a button that would throw', async () => {
+    // The Etsy offer on this page, with no application key placed. Before this
+    // change the page drew "Let me see what it earns" and `appKey()` threw on
+    // the tap.
+    await query("DELETE FROM app_credentials WHERE provider = 'etsy'");
+    const html = await connectPage();
+    expect(html).toContain('One thing first: which application is asking');
+    expect(html).toContain('name="keystring"');
+    expect(html).toContain('name="shared_secret"');
+  });
+
+  it('carries the way back to this same page', async () => {
+    const html = await connectPage();
+    expect(html).toContain(`value="/foundry/companies/${P}/see/revenue"`);
+  });
+
+  it('does not offer a form for a key that belongs in the environment', async () => {
+    // Stripe is on this page too, and had the identical defect for the
+    // identical reason. It is not his to supply, so he is told that rather
+    // than handed a box for it.
+    const html = await connectPage();
+    expect(html).toContain('Nothing is missing on your side');
+    expect(html).not.toContain('name="stripe_client_id"');
+  });
+
+  it('draws the button once the key is there, and stops asking', async () => {
+    await query(
+      `INSERT INTO app_credentials (provider, secret_json, provider_account_ref,
+         verified_at, set_at, set_by)
+       VALUES ('etsy', ?, 'app_2', datetime('now'), datetime('now'), 'test')`,
+      [encryptCredentialPayload(JSON.stringify({
+        keystring: 'k'.repeat(24), sharedSecret: 's'.repeat(10),
+      }))],
+    );
+    const html = await connectPage();
+    expect(html).not.toContain('One thing first: which application is asking');
+    expect(html).toContain('Let me see what it earns');
+  });
+
+  it('never renders either half of a stored pair back into the page', async () => {
+    const html = await connectPage();
+    expect(html).not.toContain('k'.repeat(24));
+    expect(html).not.toContain('s'.repeat(10));
   });
 });
