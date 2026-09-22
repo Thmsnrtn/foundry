@@ -9450,7 +9450,8 @@ BEFORE UPDATE ON sense_provider_scopes
 BEGIN SELECT RAISE(ABORT,'sense_scope:constitutional'); END;
 CREATE TRIGGER sense_providers_constitutional_delete BEFORE DELETE ON sense_providers
 BEGIN SELECT RAISE(ABORT,'sense_provider:constitutional'); END;
-CREATE TRIGGER sense_providers_constitutional_insert BEFORE INSERT ON sense_providers
+CREATE TRIGGER sense_providers_constitutional_insert
+BEFORE INSERT ON sense_providers
 BEGIN SELECT RAISE(ABORT,'sense_provider:constitutional'); END;
 CREATE TRIGGER sense_providers_constitutional_update BEFORE UPDATE ON sense_providers
 BEGIN SELECT RAISE(ABORT,'sense_provider:constitutional'); END;

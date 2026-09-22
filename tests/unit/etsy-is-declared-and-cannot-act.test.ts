@@ -77,10 +77,15 @@ describe('the four acts are named and graded before anything can perform them', 
 
 describe('nothing declared here can reach the world', () => {
   it('binds no tool at all, which is how this schema says "cannot act"', async () => {
+    // EVERY Etsy provider, not a chosen subset. A later wave added a READ
+    // capability for the same account, and it carries no tool either — a read
+    // causes no external effect and has no business at a door built for
+    // mutations. So this assertion did not have to be relaxed to let it in,
+    // which is the test it was really facing.
     const rows = (await query(
       `SELECT id, tool, maturity FROM capability_providers WHERE provider = 'etsy'`))
       .rows as unknown as Array<Record<string, unknown>>;
-    expect(rows.length).toBe(3);
+    expect(rows.length).toBeGreaterThanOrEqual(3);
     for (const r of rows) {
       // `consequenceAllows` refuses a tool bound to nothing; a capability with
       // no tool has no door to arrive at.
