@@ -635,3 +635,65 @@ voice as one the institution enforces, and nothing would detect it being
 broken. Evidence maturity: **asserted, not observed.** It is recorded here
 rather than built around, and it moves on the same trigger as the four limits
 above — the second earned asset.
+
+### Stripe as a financial hub: investigated, and the answer is mostly no (22 September 2026)
+
+The owner asked whether Stripe could serve as a central financial hub for the
+private portfolio — specifically "whether an eligible Stripe financial account
+could serve as a suitable receiving and operating account" — while recognising
+that marketplaces run their own payment systems. He authorised no change to
+payout destinations, no account creation and no money movement.
+
+**The answer, from Stripe's own documentation.** A Stripe *financial account*
+is a Treasury product, and Treasury is sold to **platforms**, not to sellers.
+Its stated requirements: available only to platforms and connected accounts in
+the United States; **available only to platforms with B2B use cases**, with
+Stripe explicitly not offering financial accounts to consumers or for consumer
+purposes; supported only for connected accounts that do not use a Stripe-hosted
+dashboard, where the platform carries requirements collection and loss
+liability; and the platform must maintain a fraud risk management process.
+Prebuilt embedded finance additionally requires Accounts v2 and API version
+2026-04-22.
+
+Apex Micro is a sole operator selling downloads. It is not a platform with
+connected accounts, it carries no third party's loss liability, and it has no
+B2B platform use case. **It does not qualify, and pursuing it would mean
+becoming a different kind of business in order to get a bank account.** That is
+a larger change than the problem justifies, and it is the sort of turn worth
+refusing early rather than discovering late.
+
+**What is true instead, and already built.** Stripe can be the hub for
+*reconciliation* without being the hub for *money*. Etsy pays its proceeds to
+the owner's own bank account under its own schedule; Stripe pays its own
+balance to the owner's own bank account; neither needs to pass through the
+other. What the institution needs is not a routing change but an accurate
+account, and `economy/ledger.ts` already holds one — `recordVenueOrder` writes
+the gross charge and the venue's fee against the same fulfilment, each measured
+from the statement rather than estimated.
+
+**What is missing, stated as debt rather than built.** The ledger records a
+sale and a fee. It does not yet distinguish *pending payout* from *deposited*,
+does not model a reserve, and has no notion of available cash as against
+recognised revenue. The owner named exactly this: "Distinguish gross sales,
+platform fees, pending payouts, actual deposits, refunds, reserves, outstanding
+obligations and available cash." Those are four distinct observations of one
+economic activity, and recording a payout today would double-count against the
+charge already recorded.
+
+That work waits on a trigger, and the trigger is real rather than tidy: **the
+first venue payout actually observed.** Until money has moved once, a payout
+model is a guess about a schedule nobody has seen, and Etsy's own deposit
+timing (roughly 14 days for a new seller, weekly on Mondays by default, with a
+5-day hold after a bank change) is documented but unexercised. Building it
+before then would be the speculative infrastructure the owner told this
+campaign not to build.
+
+**Authority, kept separate as he asked.** Observing financial activity,
+authorising an operating expense, issuing a refund, changing a payout
+destination and transferring money are five different permissions. Today the
+institution holds only the first two in any real sense: it can read what it is
+told, and an allowance bounds what it may spend. It cannot change a payout
+destination or move money, and nothing in this wave moved it closer to either.
+The "limited financial allowance without exposing the whole balance" he wants
+is `owner_allowances` — which already bounds a test rather than an account, and
+is the right shape for it.
