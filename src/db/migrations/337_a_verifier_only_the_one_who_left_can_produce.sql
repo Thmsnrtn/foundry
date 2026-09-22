@@ -1,0 +1,22 @@
+-- =============================================================================
+-- A VERIFIER ONLY THE ONE WHO LEFT CAN PRODUCE.
+--
+-- The sense contract can start an OAuth authorization and finish it, and it
+-- carries no PKCE. That was adequate while the only real adapter was Stripe
+-- Connect, which does not require one. Etsy's Open API v3 does: "The Etsy Open
+-- API requires a PKCE on every authorization flow request", with a code
+-- verifier of 43 to 128 characters from `[A-Za-z0-9._~-]`.
+--
+-- WHY IT IS A COLUMN AND NOT A SECRET STORE. The verifier is not a credential:
+-- it is a nonce with a lifetime of one round trip, useless after the exchange
+-- and useless to anyone who did not also steal the `state`. It belongs beside
+-- the state, on the single-use authorization row that already expires, and
+-- nowhere else. Putting it in the credential vault would imply it outlives the
+-- flow, which is exactly what must not happen.
+--
+-- Nullable because it is per-provider: a provider that does not use PKCE
+-- records nothing, and "no verifier" is then a fact about the provider rather
+-- than a row that failed to fill itself in.
+-- =============================================================================
+
+ALTER TABLE sense_authorizations ADD COLUMN code_verifier TEXT;

@@ -4036,7 +4036,7 @@ CREATE TABLE sense_authorizations (
   started_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   expires_at     TEXT NOT NULL,
   consumed_at    TEXT
-);
+, code_verifier TEXT);
 CREATE TABLE sense_credentials (
   id                 TEXT PRIMARY KEY,
   company_sense_id   TEXT NOT NULL REFERENCES company_senses(id),

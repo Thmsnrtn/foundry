@@ -206,6 +206,24 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
       conditions.push(met(`${venue} can be operated`, `the ${venue} capability is ${String(provider.maturity)}`));
     }
 
+    // WHICH SHOP IT WOULD ACT ON, AND WHETHER ANYONE HAS CHECKED.
+    //
+    // The owner renamed his Etsy shop from Printbls4YouStudio to ApexMicro and
+    // said plainly: verify the actual shop URL and account identity during the
+    // authorised connection rather than assuming the previous name remains
+    // valid. So this asks for a connected credential that has READ the shop's
+    // own id and name back from Etsy. A name in a document is not an identity;
+    // a rename is exactly the event that turns a remembered name into a wrong
+    // one, and acting on the wrong shop is not a mistake that can be undone by
+    // noticing it afterwards.
+    const connected = (await query(
+      `SELECT c.id FROM sense_credentials c
+        WHERE c.provider = 'etsy' AND c.revoked_at IS NULL LIMIT 1`)).rows[0] as Record<string, unknown> | undefined;
+    conditions.push(connected
+      ? met('the shop it would act on is confirmed', 'a connected Etsy account named its own shop')
+      : { name: 'the shop it would act on is confirmed', verdict: 'waits_for_you',
+        because: 'no Etsy account is connected, so which shop this would act on has never been read back from Etsy — and a shop that has been renamed is exactly the case a remembered name gets wrong' });
+
     const exposure = (await query(
       `SELECT exposure_ref, withdrawn_at FROM experiment_exposures
         WHERE experiment_id = ? ORDER BY placed_at DESC, rowid DESC LIMIT 1`, [experimentId]))

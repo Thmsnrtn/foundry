@@ -57,9 +57,23 @@ export interface SenseProviderAdapter {
    * the state is single-use; an adapter that added a scope of its own would be
    * asking for something nobody declared, which is why neither is derived here.
    */
-  authorizeUrl(input: { scopes: string[]; state: string; redirectUri: string }): string;
+  authorizeUrl(input: {
+    scopes: string[]; state: string; redirectUri: string;
+    /**
+     * THE HALF OF THE PROOF THAT TRAVELS IN THE OPEN. The S256 hash of a
+     * verifier only the caller holds. A provider that does not use PKCE
+     * ignores it; one that requires it — Etsy requires it on every
+     * authorization request — puts it in the URL and demands the other half
+     * at the exchange.
+     */
+    codeChallenge: string | null;
+  }): string;
   /** Turn the code he came back with into a credential. */
-  exchange(input: { code: string; redirectUri: string }): Promise<GrantedCredential>;
+  exchange(input: {
+    code: string; redirectUri: string;
+    /** The other half, read back from the single-use authorization row. */
+    codeVerifier: string | null;
+  }): Promise<GrantedCredential>;
   /**
    * Renew it. Null means this provider's credentials do not expire and there is
    * nothing to renew — which is a different fact from "renewal failed" and the
@@ -90,6 +104,7 @@ async function load(): Promise<void> {
   // line, and nothing that only needs the TYPES drags in an HTTP client.
   await import('./reference.js');
   await import('./stripe.js');
+  await import('./etsy.js');
 }
 
 /**

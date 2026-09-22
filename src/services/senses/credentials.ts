@@ -14,7 +14,7 @@
 // =============================================================================
 
 import { nanoid } from 'nanoid';
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { query } from '../../db/client.js';
 import { decryptCredentialPayload, encryptCredentialPayload } from '../encryption.js';
 import { SenseProviderError, senseProvider } from './providers/contract.js';
@@ -97,12 +97,21 @@ export async function beginAuthorization(input: {
   // anyone can knock on, and the whole point of the row is that only the person
   // who left can come back.
   const state = randomBytes(24).toString('base64url');
+  // AND A VERIFIER ONLY THIS FLOW CAN PRODUCE. PKCE: the challenge travels in
+  // the open, the verifier never leaves this row, and a provider that requires
+  // one — Etsy requires it on every authorization request — will refuse an
+  // exchange that cannot present it. 32 bytes base64url is 43 characters, the
+  // minimum length Etsy's own documentation states, from its permitted
+  // alphabet. Generated for every provider because a nonce costs nothing and a
+  // flow that behaves differently per provider is a flow with two shapes.
+  const codeVerifier = randomBytes(32).toString('base64url');
+  const codeChallenge = createHash('sha256').update(codeVerifier).digest('base64url');
   const disclosure = disclosureFor(offer, input.companyName);
 
   let authorizeUrl: string;
   try {
     authorizeUrl = adapter.authorizeUrl({
-      scopes: scopes.map((s) => s.scope), state, redirectUri: input.redirectUri,
+      scopes: scopes.map((s) => s.scope), state, redirectUri: input.redirectUri, codeChallenge,
     });
   } catch (err) {
     return {
@@ -115,10 +124,10 @@ export async function beginAuthorization(input: {
   await query(
     `INSERT INTO sense_authorizations
        (state, product_id, founder_id, sense_key, provider, mode, scopes_json,
-        disclosure, expires_at)
-     VALUES (?,?,?,?,?,?,?,?, datetime('now', ?))`,
+        disclosure, code_verifier, expires_at)
+     VALUES (?,?,?,?,?,?,?,?,?, datetime('now', ?))`,
     [state, input.productId, input.founderId, input.senseKey, input.provider,
-      input.mode, JSON.stringify(scopes.map((s) => s.scope)), disclosure,
+      input.mode, JSON.stringify(scopes.map((s) => s.scope)), disclosure, codeVerifier,
       `+${String(AUTHORIZATION_MINUTES)} minutes`]);
 
   return { state, authorizeUrl, scopes, disclosure };
@@ -151,7 +160,7 @@ export async function completeAuthorization(input: {
   // is asked for — and that is the one shape this predicate must never take.
   const row = (await query(
     `SELECT a.state, a.product_id, a.sense_key, a.provider, a.mode, a.scopes_json,
-            a.disclosure, a.consumed_at, a.expires_at, p.name
+            a.disclosure, a.consumed_at, a.expires_at, a.code_verifier, p.name
        FROM sense_authorizations a
        JOIN products p ON p.id = a.product_id
       WHERE a.state = ? AND a.founder_id = ?`, [input.state, input.founderId]))
@@ -201,7 +210,7 @@ export async function completeAuthorization(input: {
 
   let granted;
   try {
-    granted = await adapter.exchange({ code: input.code, redirectUri: input.redirectUri });
+    granted = await adapter.exchange({ code: input.code, redirectUri: input.redirectUri, codeVerifier: row.code_verifier == null ? null : String(row.code_verifier) });
   } catch (err) {
     return {
       connected: false, productId,
