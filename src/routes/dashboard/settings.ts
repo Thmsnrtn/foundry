@@ -37,7 +37,7 @@ function controlsWhere(ctx: { title: string }): Where {
 const controlsPage = (ctx: { title: string }, body: Parameters<typeof page>[1]): ReturnType<typeof page> =>
   page(ctx.title, body, 'controls', controlsWhere(ctx));
 import { getLayoutContext, selectedProductId } from './_shared.js';
-import { requireCompanyCapability, requireOwner } from '../../middleware/rbac.js';
+import { requireCompanyCapability, requireInstitutionOwner, requireOwner } from '../../middleware/rbac.js';
 import { nanoid } from 'nanoid';
 import { randomBytes } from 'crypto';
 
@@ -672,7 +672,19 @@ export function safeBackPath(asked: string): string {
   return /^\/foundry\/[\w/-]*$/.test(asked) ? asked : '/settings';
 }
 
-settingsRoutes.post('/settings/app-credential/etsy', requireCompanyCapability('can_manage_company'), async (c) => {
+// THE INSTITUTION'S KEY, SO THE INSTITUTION'S OWNER — not whoever may manage
+// whichever company happens to be selected. `app_credentials` has no
+// `product_id` by construction, because an application key says which
+// application is asking and no company owns that. Gating it on a company
+// capability got the authority wrong in both directions: it asked a question
+// about the wrong object, and `requireCompanyCapability` refuses with a bare
+// 400 "No company selected" when no company cookie is set — which is a second
+// dead end at the exact step the owner already could not get through.
+//
+// This is narrower, not looser. A company capability can be held by a member
+// the owner delegated to; `requireInstitutionOwner` admits the owner and
+// nobody else.
+settingsRoutes.post('/settings/app-credential/etsy', requireInstitutionOwner(), async (c) => {
   const founder = c.get('founder');
   const body = await c.req.parseBody() as Record<string, string>;
   const { setAppCredential } = await import('../../services/senses/app-credential.js');
@@ -699,7 +711,7 @@ settingsRoutes.post('/settings/app-credential/etsy', requireCompanyCapability('c
   return c.redirect(`${back}${sep}etsy=placed&app=${encodeURIComponent(placed.providerAccountRef)}`);
 });
 
-settingsRoutes.post('/settings/app-credential/etsy/forget', requireCompanyCapability('can_manage_company'), async (c) => {
+settingsRoutes.post('/settings/app-credential/etsy/forget', requireInstitutionOwner(), async (c) => {
   const { forgetAppCredential } = await import('../../services/senses/app-credential.js');
   await forgetAppCredential('etsy', 'the owner removed it from settings');
   return c.redirect('/settings?etsy=forgotten');

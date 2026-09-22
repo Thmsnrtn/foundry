@@ -3027,7 +3027,18 @@ that belongs in the environment. He gets a form for the first and a plain
 sentence for the second, since a box for a value that is not his to supply
 would be worse than the button was.
 
-Twenty-two proofs in `the-key-goes-where-the-hand-is`, and the last five render
+**And a second dead end sat one step further along the same path.** The route
+that receives the pair was gated on `requireCompanyCapability`, which asks
+which company is selected and answers a bare 400 — *No company selected* — when
+no company cookie is set. `app_credentials` has no `product_id` by
+construction, because an application key says which application is asking and
+no company owns that. So the guard was asking a question about the wrong
+object, and failing it would have dropped him on raw JSON at the exact step he
+already could not get through. It is `requireInstitutionOwner` now: narrower,
+not looser — a company capability can be held by a member the owner delegated
+to, and this admits the owner and nobody else.
+
+Twenty-five proofs in `the-key-goes-where-the-hand-is`, and the last five render
 the page through `app.request` rather than grepping the source — which is what
 caught Stripe. Everything above that line proves a branch was *written*;
 "reachable" was the entire complaint. The sentence in PENDING 25

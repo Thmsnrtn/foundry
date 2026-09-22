@@ -255,7 +255,7 @@
     },
     {
       "file": "src/services/senses/providers/stripe.ts",
-      "line": 63,
+      "line": 74,
       "detector": "dynamic_webhook_post",
       "status": "control_path",
       "capability": "sense credential lifecycle — owner-authorised exchange, revocation and liveness probe, read-only scope"

@@ -230,3 +230,58 @@ describe('the page he actually lands on', () => {
     expect(html).not.toContain('s'.repeat(10));
   });
 });
+
+describe('the key belongs to the institution, so its owner places it', () => {
+  let posts: Hono;
+
+  beforeAll(async () => {
+    const { settingsRoutes } = await import('../../src/routes/dashboard/settings.js');
+    posts = new Hono();
+    posts.use('*', async (c, next) => {
+      const who = c.req.header('X-Who') ?? 'owner@example.com';
+      c.set('founder', { id: F, email: who });
+      await next();
+    });
+    posts.route('/', settingsRoutes);
+  });
+
+  /**
+   * DELIBERATELY EMPTY, so this suite never reaches Etsy. `setAppCredential`
+   * refuses a missing half before it pings anything, which is exactly the
+   * shape needed here: the guard either admits the caller or it does not, and
+   * a unit test has no business making a live request to a marketplace to find
+   * out which.
+   */
+  const place = (who: string): Promise<Response> => posts.request(
+    '/settings/app-credential/etsy',
+    {
+      method: 'POST', headers: { 'X-Who': who, 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ keystring: '', shared_secret: '' }).toString(),
+    },
+  );
+
+  it('does not ask which company is selected, because none of them owns it', async () => {
+    // `requireCompanyCapability` answers a bare 400 "No company selected" when
+    // no company cookie is set — a second dead end at the exact step he
+    // already could not get through. `app_credentials` has no `product_id`.
+    const res = await place('owner@example.com');
+    expect(res.status).not.toBe(400);
+    expect(res.status).not.toBe(403);
+    // Past the guard and into the handler, which refused the empty pair on its
+    // own terms and sent him back to say so.
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toContain('etsy_error=');
+  });
+
+  it('refuses anyone who is not the owner of this institution', async () => {
+    const res = await place('someone.else@example.com');
+    expect(res.status).toBe(403);
+  });
+
+  it('refuses them the forgetting too', async () => {
+    const res = await posts.request('/settings/app-credential/etsy/forget', {
+      method: 'POST', headers: { 'X-Who': 'someone.else@example.com' },
+    });
+    expect(res.status).toBe(403);
+  });
+});
