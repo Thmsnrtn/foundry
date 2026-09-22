@@ -936,7 +936,7 @@ CREATE TABLE company_senses (
   last_error        TEXT,
   disconnected_at   TEXT,
   disconnect_reason TEXT
-);
+, provider_account_ref TEXT, provider_account_label TEXT, identity_verified_at TEXT);
 CREATE TABLE company_situations (
   id             TEXT PRIMARY KEY,
   product_id     TEXT NOT NULL REFERENCES products(id),
@@ -5901,6 +5901,28 @@ BEGIN
   SELECT RAISE(ABORT,'company_sense:real_company_reference_sense')
     WHERE NEW.mode = 'reference'
       AND EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND reality = 'real');
+END;
+CREATE TRIGGER company_sense_identity_is_whole_or_absent
+BEFORE UPDATE OF provider_account_ref, provider_account_label, identity_verified_at
+ON company_senses
+BEGIN
+  SELECT RAISE(ABORT,'company_sense_identity:verified_needs_a_reference')
+    WHERE NEW.identity_verified_at IS NOT NULL
+      AND (NEW.provider_account_ref IS NULL OR trim(NEW.provider_account_ref) = '');
+
+  SELECT RAISE(ABORT,'company_sense_identity:a_reference_needs_a_time')
+    WHERE NEW.provider_account_ref IS NOT NULL
+      AND NEW.identity_verified_at IS NULL;
+
+  -- AN IDENTITY IS NOT RE-POINTED IN PLACE. If the provider starts answering
+  -- with a different account, that is not an edit to this connection — it is a
+  -- different connection, and the owner is owed the disconnect-and-reconnect
+  -- rather than a row that quietly changes what it was about. A rename is fine;
+  -- the adapter's own comment already says a rename is a fact, not a failure.
+  SELECT RAISE(ABORT,'company_sense_identity:immutable_once_set')
+    WHERE OLD.provider_account_ref IS NOT NULL
+      AND NEW.provider_account_ref IS NOT NULL
+      AND NEW.provider_account_ref <> OLD.provider_account_ref;
 END;
 CREATE TRIGGER company_situation_ends_once
 BEFORE UPDATE ON company_situations

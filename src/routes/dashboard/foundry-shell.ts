@@ -5854,6 +5854,42 @@ foundryShellRoutes.get('/foundry/senses/callback',
       'companies'));
     }
 
+    // WHAT THE PROVIDER SAID, NOT WHAT THE SOFTWARE DID.
+    //
+    // This redirected on the strength of a token exchange. An exchange proves a
+    // code was redeemed; it does not prove the credential can be used, that the
+    // account is the one he meant, or that anything is readable through it. So
+    // the connection now asks the provider who this is before he leaves the
+    // page, and he is shown the answer — including when there isn't one.
+    //
+    // A failed read-back is not a failed connection. The grant is real and
+    // stored; what could not be done is the first use of it, and saying so is
+    // the difference between a connection he can trust and a word on a screen.
+    if (result.identity || result.identityProblem) {
+      const shop = result.identity?.label ?? result.identity?.ref ?? null;
+      const sensesMod = await import('../../services/senses/index.js');
+      const who = sensesMod.providerName(result.provider);
+      return c.html(page(result.identity ? 'Connected' : 'Connected, unproven', html`
+        <h1>${result.identity ? `I can see ${shop ?? 'the account'} now` : 'It is connected, and I have not used it yet'}</h1>
+        ${result.identity ? html`
+        <p class="lede">I asked ${who} which account this opens,
+          and it answered: ${result.identity.detail}.</p>
+        <p class="quiet">That is the account I will read from. If it is not the one you meant,
+          disconnect it here and connect the right one — I will not guess.</p>`
+    : html`
+        <p class="lede">The grant is stored, and the first thing I tried with it did not work:
+          ${result.identityProblem}.</p>
+        <p class="quiet">Nothing is lost and nothing is pretended. I will keep trying, and until
+          something actually reads, I will not tell you this connection is working.</p>`}
+        <div class="know">
+          <h2>What this still does not let me do</h2>
+          <p>Reading is all of it. Publishing, pricing, messaging a customer and moving money each
+            need their own permission, and none of them was granted here.</p>
+        </div>
+        <a class="btn go" href="/foundry/companies/${result.productId}">Back to ${'the company'}</a>`,
+      'companies'));
+    }
+
     return c.redirect(
       `/foundry/companies/${result.productId}?done=seeing&sense=${result.senseKey}`);
   });

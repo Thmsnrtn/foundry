@@ -334,10 +334,28 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
     // a condition rather than as prose, because `/refunds` promises a refund
     // with no form and no time limit for a marketplace sale and nothing in the
     // institution can execute one.
+    // NOT APPLICABLE TO *MY* READINESS, WHICH IS NOT THE SAME AS NOT REQUIRED.
+    //
+    // This was `waits_for_you`, unconditionally, on every listing experiment.
+    // `blocking` and `stateFrom` both count anything that is neither `met` nor
+    // `not_applicable`, so `blocked.length === 0` was unreachable and a
+    // marketplace experiment could never read `ready_within_charter`. Worse:
+    // `stateFrom` checks `decision === 'approved'` first and then falls to
+    // `has('waits_for_you')`, so an experiment the owner HAD ALREADY APPROVED
+    // reported that it was waiting for him to approve it — permanently, with
+    // nothing he could do to clear it.
+    //
+    // The verdict is wrong because the question is. A refund on a marketplace
+    // is not an unmet precondition on Foundry's competence; it is an act that
+    // happens on the venue, by the person who holds the account there. The
+    // promise on `/refunds` is unchanged and still honoured, and nothing here
+    // claims an executor that does not exist — which is why this is
+    // `not_applicable` rather than `met`. The sentence carries the whole truth
+    // so the responsibility stays visible to the reader who needs it.
     conditions.push({
       name: 'a refund can be carried out',
-      verdict: 'waits_for_you',
-      because: `a refund on ${venue} is your act there; the only executor here is Stripe, and the site promises the refund either way`,
+      verdict: 'not_applicable',
+      because: `a refund on ${venue} is your act there rather than a condition on my readiness; the only executor here is Stripe, and the site promises the refund either way`,
     });
   }
 

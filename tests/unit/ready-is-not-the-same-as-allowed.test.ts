@@ -88,8 +88,34 @@ describe('what the Etsy workbook is actually waiting for, said plainly', () => {
     // whether anybody wants the thing.
     expect(by.get('what the venue reports can be read')!.because)
       .toContain('would not be evidence of no sales');
-    // The promise the site already makes, which nothing here can keep.
-    expect(by.get('a refund can be carried out')!.verdict).toBe('waits_for_you');
+    // THE PROMISE THE SITE MAKES, AND WHOSE ACT KEEPS IT.
+    //
+    // This asserted `waits_for_you`, and that verdict was pushed
+    // unconditionally on every listing experiment. `blocking` and `stateFrom`
+    // both count anything that is neither `met` nor `not_applicable`, so
+    // `blocked.length === 0` was unreachable: a marketplace experiment could
+    // never read `ready_within_charter`, and one the owner had ALREADY
+    // APPROVED reported that it was waiting for his approval, permanently.
+    //
+    // This test held that in place. A refund on a marketplace is not an unmet
+    // precondition on Foundry's competence — it is an act on the venue by the
+    // person who holds the account there. Not `met`, which would assert an
+    // executor that does not exist against a public promise; `not_applicable`,
+    // with the sentence carrying the whole truth so the responsibility stays
+    // visible.
+    expect(by.get('a refund can be carried out')!.verdict).toBe('not_applicable');
+    expect(by.get('a refund can be carried out')!.because)
+      .toContain('rather than a condition on my readiness');
+    expect(by.get('a refund can be carried out')!.because).toContain('promises the refund either way');
+  });
+
+  it('is blocked by things he can actually clear, and nothing else', async () => {
+    // The consequence of the above, stated as the property rather than the
+    // instance: every blocking condition has to be one that some act could
+    // satisfy. A permanent blocker is indistinguishable from a broken reader.
+    const r = await qualificationOf(X);
+    expect(r.blocking).not.toContain('a refund can be carried out');
+    expect(r.blocking.length).toBeGreaterThan(0);
   });
 
   it('gives him one word for it rather than a checklist', async () => {

@@ -176,7 +176,24 @@ export async function beginAuthorization(input: {
 
 export interface Connected {
   connected: true; senseId: string; senseKey: string; productId: string;
+  provider: string;
   grantedScopes: string[];
+  /**
+   * WHAT THE PROVIDER SAID WHEN ASKED WHO THIS IS — and it is not optional
+   * garnish. A connection used to end at the credential INSERT, so the owner
+   * was told "connected" on the strength of a token exchange and nothing else.
+   * The exchange proves a code was redeemed. It does not prove the credential
+   * can be used, that the account is the one he meant, or that anything is
+   * readable through it.
+   *
+   * Null when the provider was asked and did not answer. That is a CONNECTED
+   * state, not a failed one: the grant is real and stored, and the honest
+   * report is "I hold it and could not use it yet" rather than either
+   * pretending it works or throwing away a credential the owner just granted.
+   */
+  identity: { ref: string | null; label: string | null; detail: string } | null;
+  /** Said plainly when `identity` is null, for the page that has to explain it. */
+  identityProblem: string | null;
 }
 export type CompleteFailure = {
   connected: false; ownerWords: string; productId: string | null; recoverable: boolean;
@@ -190,6 +207,26 @@ export type CompleteFailure = {
  * back button or someone else — cannot bind a second credential. Marking it
  * after would leave a window exactly as wide as the provider's response time.
  */
+/**
+ * THE PROVIDER'S OWN SENTENCE, READ FOR A NAME AND A REFERENCE.
+ *
+ * `probe` returns a human sentence by contract — "Apex Micro (12345678) at
+ * https://…" for Etsy — because its first job is to be shown to the owner. The
+ * identity columns want the two halves separately, and the sentence is the only
+ * place they exist without widening the adapter contract for every provider.
+ *
+ * Deliberately conservative: anything it cannot parse yields a null ref, which
+ * writes no identity at all rather than a guess. A wrong shop id recorded
+ * against a connection is worse than none, because the next thing to read it
+ * would have no way of knowing it was invented here.
+ */
+export function identityFromProbe(detail: string): { ref: string | null; label: string | null } {
+  const m = /^(.*?)\s*\(([A-Za-z0-9_-]{1,64})\)/.exec(detail.trim());
+  if (!m) return { ref: null, label: null };
+  const label = m[1].trim();
+  return { ref: m[2], label: label.length ? label.slice(0, 200) : null };
+}
+
 export async function completeAuthorization(input: {
   state: string; code: string; founderId: string; redirectUri: string;
 }): Promise<Connected | CompleteFailure> {
@@ -306,9 +343,61 @@ export async function completeAuthorization(input: {
       encryptCredentialPayload(JSON.stringify(granted.secret)),
       granted.expiresAt?.toISOString() ?? null]);
 
+  // IT PROVES ITSELF NOW, NOT ON SOME LATER PASS.
+  //
+  // The owner's directive: "After connection, Foundry should perform its own
+  // independent read-back of the account identity and permitted capabilities",
+  // and "a configured credential without a successful external read must not be
+  // presented as a fully operational connection."
+  //
+  // Before this, the first evidence a connection worked arrived whenever a
+  // scheduled reader next happened to want something — which for a marketplace
+  // read depends on an experiment being in a particular state, so it might
+  // never arrive at all. The owner would have been looking at the word
+  // "connected" with nothing behind it.
+  //
+  // A FAILURE HERE DOES NOT UNDO THE CONNECTION. The grant is genuine and
+  // stored; what failed is the first use of it. Revoking on a probe failure
+  // would throw away an authorisation the owner gave because of a network
+  // hiccup, and would teach him that connecting is unreliable when it was not.
+  let identity: Connected['identity'] = null;
+  let identityProblem: string | null = null;
+  try {
+    const probe = await adapter.probe(granted.secret, await appKeyFor(provider));
+    if (probe.ok) {
+      const named = identityFromProbe(probe.detail);
+      identity = { ref: named.ref, label: named.label, detail: probe.detail };
+      if (named.ref) {
+        // Plaintext, and captured here rather than read back later: a page that
+        // decrypts a live credential in order to print a shop's name is a
+        // credential-access path on a render, reached every time the list draws.
+        await query(
+          `UPDATE company_senses
+              SET provider_account_ref = ?, provider_account_label = ?,
+                  identity_verified_at = datetime('now')
+            WHERE id = ?`,
+          [named.ref, named.label, connected.id]);
+      }
+      const { witnessAReading } = await import('./witness.js');
+      await witnessAReading({
+        provider, evidenceMode: mode === 'real' ? 'real' : mode === 'sandbox' ? 'sandbox' : 'reference',
+        to: 'available',
+        evidence: `an authenticated read reached ${provider}: ${probe.detail}`,
+        witnessedBy: `founder:${input.founderId}`,
+      });
+    } else {
+      identityProblem = probe.detail;
+    }
+  } catch (err) {
+    // Said, not swallowed. The connection stands; this is the first thing it
+    // could not do, and the surface above says so in the owner's words.
+    identityProblem = err instanceof SenseProviderError ? err.ownerWords
+      : `${provider} did not answer when I asked which account this is`;
+  }
+
   return {
-    connected: true, senseId: connected.id, senseKey, productId,
-    grantedScopes: granted.grantedScopes,
+    connected: true, senseId: connected.id, senseKey, productId, provider,
+    grantedScopes: granted.grantedScopes, identity, identityProblem,
   };
 }
 

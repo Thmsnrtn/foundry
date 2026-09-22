@@ -50,6 +50,7 @@ import { connectedSenses } from '../index.js';
 import { withSenseSecret } from '../credentials.js';
 import { recordRetrieval } from '../../venture/sources/index.js';
 import { etsyApiKeyHeader, etsyAppKey } from '../app-credential.js';
+import { log } from '../../../lib/logger.js';
 
 const API = 'https://openapi.etsy.com/v3/application';
 
@@ -445,6 +446,36 @@ export async function bringTheVenueUpToDate(input: {
     return { read: false, because: reading.ownerWords };
   }
   await noteSenseObserved(productId, 'etsy');
+
+  // THE WORLD ANSWERED, AND SOMETHING SAYS SO ON THE LADDER.
+  //
+  // `MATURITY_MAP.md` claimed of `read_marketplace_account` that "it moves on
+  // the first real read and not before". Nothing performed that move: the only
+  // general promoter, `checkTheSenses`, selects
+  // `WHERE supplies_source_type IS NOT NULL`, and migration 344 never set that
+  // column on `cp_etsy_read`. So the registry would have stayed at `declared`
+  // for as long as this ran, while `market_observations` filled with readings
+  // taken from the real shop — two records of the same thing, permanently
+  // disagreeing, and the registry is the one every other reader consults.
+  //
+  // `reality_proven` rather than `available`, because this is not a probe: the
+  // thing the connection exists for was actually read. The evidence mode comes
+  // from the experiment's own world, never from a caller, and the ladder's
+  // trigger refuses `reality_proven` for anything that is not real regardless.
+  const { witnessAReading } = await import('../witness.js');
+  const witnessed = await witnessAReading({
+    provider: 'etsy',
+    evidenceMode: String(e.evidence_mode ?? '') === 'real' ? 'real'
+      : String(e.evidence_mode ?? '') === 'sandbox' ? 'sandbox' : 'reference',
+    to: 'reality_proven',
+    evidence: `read ${reading.shop.shopName ?? 'the shop'} (${reading.shop.shopId}) from Etsy: `
+      + `${String(reading.listings.length)} listings, ${String(reading.orders.length)} paid orders`
+      + `${reading.complete ? '' : ', incompletely'}`,
+    witnessedBy: `experiment:${input.experimentId}`,
+  });
+  if (witnessed.promoted.length) {
+    log.info(`the venue read proved ${witnessed.promoted.join(', ')} against the real account`);
+  }
 
   let recorded = 0;
   if (e.claim_id) {
