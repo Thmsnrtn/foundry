@@ -3257,6 +3257,17 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
             const { keepProof1sRecordCurrent } = await import('../services/venture/proof-1.js');
             const record = await keepProof1sRecordCurrent(founderId);
             if (record === 'written') logger.info(`public_workshop_tick: ${founderId} added the authorised clarification to Experiment 001's record`, { jobName: 'public_workshop_tick' });
+            // AND THE BOUNDARY HE NARROWED BY NAME. `approveListing` writes the
+            // narrowed wording for any listing approved from here on and
+            // refuses to run twice, so it can never reach the row that already
+            // exists. This can, once, under his dated authorisation. A refusal
+            // is logged as loudly as the change: it means the live row is not
+            // the one he authorised narrowing, which is a thing to look at
+            // rather than a thing to retry quietly every hour.
+            const { keepProof2sEntryCurrent } = await import('../services/venture/proof-2.js');
+            const entry = await keepProof2sEntryCurrent(founderId);
+            if (entry === 'narrowed') logger.info(`public_workshop_tick: ${founderId} narrowed Experiment 002's publishing boundary to the entry he authorised, and gave the workbook its public identity`, { jobName: 'public_workshop_tick' });
+            else if (entry === 'not_the_boundary_he_narrowed' || entry === 'not_the_authorised_record') logger.warn(`public_workshop_tick: ${founderId} did not narrow Experiment 002's boundary: ${entry}`, { jobName: 'public_workshop_tick' });
             const program = await keepTheProgramCurrent(founderId);
             if (program === 'deployed') logger.info(`public_workshop_tick: ${founderId} program brought current with its reviewed text`, { jobName: 'public_workshop_tick' });
             const site = await publishSite(founderId, 'institution:public_workshop_tick');

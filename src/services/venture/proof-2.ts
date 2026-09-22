@@ -23,7 +23,7 @@
 // =============================================================================
 
 import { nanoid } from 'nanoid';
-import { query } from '../../db/client.js';
+import { query, realCompany } from '../../db/client.js';
 import { currentMandate, openMandate, stopMandate } from './mandate.js';
 import { formClaim, observe } from './market-evidence.js';
 import { decideExperiment, designExperiment } from './validation.js';
@@ -536,3 +536,186 @@ export async function settleListings(input: { founderId?: string; now?: Date } =
 
 /** The owner's acts, as the record states them, for the page. */
 export function ownerActsForListing(): string { return OWNER_ACTS_MD; }
+
+// ─── The portfolio entry he authorised ───────────────────────────────────────
+
+/**
+ * THE BOUNDARY AS IT WAS WRITTEN WHEN THE LISTING WAS APPROVED, and therefore
+ * the exact row the owner authorised narrowing. Matched literally below: if the
+ * live statement is not this, he has changed it himself since, and a narrowing
+ * authorised against different words is not authorised at all.
+ */
+const PUBLISH_NEVER_AS_WRITTEN =
+  'Foundry publishes nothing for this test; the listing is my own act on the venue';
+
+/**
+ * WHAT HE AUTHORISED, ON THE DAY HE AUTHORISED IT.
+ *
+ * Frozen here for the same reason `PROOF1_CLARIFICATION` is frozen: the
+ * repository held the mechanism, the wording and the proofs, and nowhere the
+ * permission. This is the permission, in his words, and the reconciler below
+ * will not act without it.
+ *
+ * His limits are part of the record, not a summary of it: no separate offer,
+ * price, checkout, payment link or fulfilment process on Apex Micro; Etsy
+ * remains the purchasing and delivery channel; and the authorisation does not
+ * generalise to any other experiment or asset.
+ */
+export const PROOF2_ENTRY_AUTHORISED = {
+  on: '2026-09-22',
+  said: 'I authorize narrowing Experiment 002’s existing publish: never boundary '
+    + 'solely to permit its concise Apex Micro portfolio entry. The entry may identify '
+    + 'the Etsy workbook, describe its intended use and audience, identify Apex Micro as '
+    + 'the responsible business where accurate, and link to the verified public Etsy '
+    + 'listing. This authorization does not extend to publishing a separate offer, price, '
+    + 'checkout, payment link, or fulfillment process on Apex Micro. Preserve the existing '
+    + 'Etsy sales and delivery arrangement, the private experiment records, and all other '
+    + 'applicable authority limits. Do not generalize this authorization to other '
+    + 'experiments or assets.',
+  /** The narrowed boundary itself, kept to his substance rather than paraphrased into ours. */
+  statement: 'A concise Apex Micro portfolio entry may be published for this test: what the '
+    + 'workbook is, what it is for and who it is for, that Apex Micro is responsible, and a '
+    + 'link to the Etsy listing. No separate offer, price, checkout, payment link or '
+    + 'fulfilment process is published on Apex Micro — Etsy remains the purchasing and '
+    + 'delivery channel.',
+} as const;
+
+/** The address the entry lives at, once there is one. */
+export const PROOF2_SLUG = 'bid-decision-workbook';
+
+/**
+ * THE ENTRY'S PUBLIC WORDS.
+ *
+ * Drawn from the listing the owner actually published on the venue
+ * (`LISTING_MD`), so the two describe one thing rather than two. It carries NO
+ * PRICE anywhere, which is his limit and is also enforced twice downstream:
+ * the projection nulls `price` and `payUrl` for an entry, and the publication
+ * gate re-reads the rendered bytes for a currency figure.
+ *
+ * `what`, `limits`, `sources`, `selection` and `note` are stored and not
+ * rendered by the entry shape — an entry is title, summary, who it is for,
+ * where to get it and the remedy. They are written truthfully anyway, because
+ * the row is the record and a field nobody reads today is still a claim.
+ *
+ * NO NAME. `check-the-owner-is-not-a-public-figure.mjs` sweeps this directory
+ * for the operator's literal name and this file is not in its sealed list —
+ * correctly, because a portfolio entry is not one of the two disclosures that
+ * carry it.
+ */
+export const PROOF2_PUBLIC = {
+  title: 'Bid Decision Workbook',
+  // THE DECISION, NOT THE FEATURE LIST. What a contractor wants to know in one
+  // line is which jobs are worth chasing; the sheets are how, and how comes
+  // second.
+  summary: 'A spreadsheet for deciding which jobs are worth bidding. You log the bids you '
+    + 'consider, and it works out from your own history how often you win from each lead '
+    + 'source, what a bid is worth once you allow for that, and whether the hours it takes '
+    + 'to bid are worth it.',
+  who: 'Small contractors and trade businesses who price their own work and decide, week by '
+    + 'week, which jobs to chase.',
+  what: 'One .xlsx file: a Bids sheet you fill in, a Summary that reads it back, a Settings '
+    + 'sheet with your rate and capacity, and a start-here page. It opens in Excel 2010 or '
+    + 'later, LibreOffice and Google Sheets.',
+  limits: 'It does not price or estimate a job, write proposals or invoices, schedule work, '
+    + 'or track costs on a job. No macros, no add-ins, no account, and nothing that phones '
+    + 'home.',
+  sources: 'Built from the way estimators already work — a bid log, win rates by lead '
+    + 'source, and the hours a bid costs — and from what comparable workbooks on the venue '
+    + 'already do and leave out.',
+  // NOBODY WAS WRITTEN TO, and the standing boundary on this test says so by
+  // name: `contact_people` is `never` for it.
+  selection: 'Nobody was written to about this. You found it on Etsy, or here.',
+  note: 'Apex Micro is a small digital workshop in Massachusetts. This workbook was designed '
+    + 'by Apex Micro with AI assistance in building the formulas and layout, and every '
+    + 'formula was checked by hand before it was listed.',
+} as const;
+
+export type EntryReconciliation =
+  /** The boundary was narrowed and the entry's identity written, this pass. */
+  | 'narrowed'
+  /** Already done; nothing to do. */
+  | 'already'
+  /** No such test on this founder's books. */
+  | 'no_record'
+  /** There is a test by that name, but it is not the listing this was authorised for. */
+  | 'not_the_authorised_record'
+  /** The live boundary is not the row he authorised narrowing. Nothing changed. */
+  | 'not_the_boundary_he_narrowed';
+
+/**
+ * THE OWNER'S AUTHORISED NARROWING, APPLIED ONCE.
+ *
+ * `approveListing` writes the narrowed wording for any listing approved from
+ * here on, but it refuses to run twice — so it can never reach the row that
+ * already exists in production. This is the only thing that can, and it exists
+ * because the alternative was asking him to retype his own sentence into a
+ * form to satisfy a mechanism rather than a purpose.
+ *
+ * IDEMPOTENT BY THE ROWS IT WRITES, not by a flag: a boundary already at
+ * `ask_first` and an identity already present are the two facts that mean
+ * "done", and both are read before anything is written.
+ *
+ * AND IT CANNOT GENERALISE, which he asked for by name. Four guards, each
+ * refusing rather than proceeding: the test is the one named in this file; its
+ * offer is shaped as a listing on this venue; it belongs to the founder whose
+ * tick is running; and the live boundary is the exact `never` row he
+ * authorised narrowing. The third matters because the hourly tick runs for
+ * every Workshop row, and the fourth because a boundary he has since reworded
+ * is a different boundary.
+ */
+export async function keepProof2sEntryCurrent(founderId: string): Promise<EntryReconciliation> {
+  // The asset is reached the way `experimentRow` reaches it — a subquery, not a
+  // column: `venture_experiments` carries no `product_id`, and a deliverable
+  // that has been superseded is not the current one.
+  //
+  // REAL, BUT DELIBERATELY NOT `earned`. `realCompany` is applied because this
+  // carries an owner authorisation onto a specific asset and a synthetic
+  // company must never receive one. Standing is NOT applied, and asking for it
+  // would break the only case this exists for: Experiment 002's asset is
+  // `experimental` by design — `276` says earned means the world paid, and
+  // nobody has. This resolves one named thing by its experiment; it feeds no
+  // count, no roll-up and no economics.
+  const e = (await query(
+    `SELECT e.id,
+            (SELECT p.id FROM products p
+               WHERE p.from_experiment_id = e.id AND p.deleted_at IS NULL AND ${realCompany('p')}) AS product_id
+       FROM venture_experiments e
+       JOIN experiment_materials m ON m.experiment_id = e.id
+        AND m.kind = 'deliverable' AND m.superseded_at IS NULL
+      WHERE e.founder_id = ? AND m.title = ? AND e.evidence_mode = 'real'
+      ORDER BY e.rowid LIMIT 1`, [founderId, PROOF2_TITLE])).rows[0] as Record<string, unknown> | undefined;
+  if (!e) return 'no_record';
+  const experimentId = String(e.id);
+  const productId = e.product_id == null ? null : String(e.product_id);
+  if (!productId) return 'not_the_authorised_record';
+
+  // IT IS THE LISTING, AND NOT MERELY A TEST WITH THE RIGHT TITLE. The
+  // authorisation is about a workbook sold on a venue; an offer the Workshop
+  // carries itself is a different thing wearing the same name.
+  const plan = await offerShapePlanOf(experimentId);
+  if (plan?.listing?.venue !== PROOF2_VENUE) return 'not_the_authorised_record';
+
+  const { boundariesFor } = await import('../institution/standing-intent.js');
+  const publishing = (await boundariesFor(productId)).filter((b) => b.subject === 'publish');
+  const narrowed = publishing.some((b) => b.statement === PROOF2_ENTRY_AUTHORISED.statement);
+  const asWritten = publishing.find((b) => b.statement === PUBLISH_NEVER_AS_WRITTEN && b.mode === 'never');
+
+  if (!narrowed) {
+    if (!asWritten) return 'not_the_boundary_he_narrowed';
+    await setBoundary({
+      productId, subject: 'publish', mode: 'ask_first',
+      statement: PROOF2_ENTRY_AUTHORISED.statement,
+    });
+  }
+
+  // AND THE ENTRY IT PERMITS, WHICH DID NOT EXIST. Nothing in this file ever
+  // gave the workbook a public identity, so narrowing the boundary alone would
+  // have unheld a page that was never written. `givePublicIdentity` returns the
+  // existing row untouched when there is one, so this is safe on every pass.
+  const { givePublicIdentity } = await import('../public-workshop/identity.js');
+  const identity = await givePublicIdentity({
+    experimentId, founderId, slug: PROOF2_SLUG, copy: PROOF2_PUBLIC, listed: true,
+  });
+
+  return narrowed && !identity.created ? 'already' : 'narrowed';
+}
