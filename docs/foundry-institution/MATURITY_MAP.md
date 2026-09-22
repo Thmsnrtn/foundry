@@ -697,3 +697,55 @@ destination or move money, and nothing in this wave moved it closer to either.
 The "limited financial allowance without exposing the whole balance" he wants
 is `owner_allowances` — which already bounds a test rather than an account, and
 is the right shape for it.
+
+### Two review cells, and the difference between a word and a mechanism (22 September 2026)
+
+Sixteen findings across two independent read-only cells. All repaired; the
+maturity claims that move are recorded here.
+
+**Readiness enforcement: `declared` → `controlled_proven`.** The reading is now
+refused at the outbound door on the act rather than on the capability's family,
+which is the discriminator the owner's standard actually requires — "the actual
+action must be refused when a required condition is missing", regardless of
+entry point. Evidence mode: simulated. It has never refused a real offer,
+because no real offer has been planned since it landed.
+
+**And the reading itself moved the other way, briefly.** Enforcing it revealed
+that `qualificationOf` classified outreach — the mechanism of the only
+experiment this institution has run — as `unknown`, and therefore blocked it.
+That is now three named mechanisms. The episode is the map's clearest instance
+of a general risk it should carry: **a reading nothing enforces is a reading
+nobody checks.** Any verdict this document grades as `reality_proven` on the
+strength of a screen rather than a refusal should be re-read with that in mind.
+
+**Customer obligations on a marketplace: `declared`, not `available`.** The
+previous wave graded the channel-aware obligation vocabulary as built. It was
+built and unreachable: `requestVenueRefund` had no caller, so the state
+`/refunds` promises to honour could not be entered by any means. It has a route
+and a form now, which makes it `available` — reachable, exercised only in test.
+Nothing here has yet recorded a real marketplace buyer asking for money back,
+because there has been no listing and no buyer.
+
+**Proof debt, restated and not paid.** Foundry still cannot DETECT a marketplace
+refund being owed. Nothing reads Etsy, and the buyer's request arrives in Etsy
+Messages, which nothing here can see. The owner relaying it is the only path,
+and the record says `owner_entered` rather than `foundry_observed` — migration
+341 now makes that impossible to misstate, at insert and for ever after.
+Trigger for revisiting: an authorized Etsy connection at read scope.
+
+**A structural gap named before it is reached.** `business_outcome_events`
+carries `settles_ref` so a refund can name the payment it returns.
+`economic_events` has no equivalent, so the ledger cannot express "this payout
+settles these charges" or "this deposit is these orders". The owner's direction —
+"A marketplace sale, its eventual payout and the receiving-account deposit may
+be different observations of one economic activity. Do not duplicate revenue" —
+is therefore currently unrepresentable in the money ledger. It is contained only
+because no reader exists for payouts, which is containment by absence rather
+than by rule. This must be built before any real financial data is read.
+
+**The effects audit's own blind spot, recorded where it happened.** It keys on
+`file|detector`, so it sees effect SITES and never CALLERS: a second, ungoverned
+caller of a sender already listed once is invisible to it. That is how an hourly
+Slack push into a room of real people stayed outside the door after the commit
+that claimed to close it. `GUARD_IN_CALLERS` is empty now, and a new entry in it
+should be argued rather than added.
