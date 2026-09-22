@@ -6556,8 +6556,14 @@ foundryShellRoutes.get('/foundry/controls/connectors',
   requireInstitutionOwner(), async (c: any) => {
     const founder = c.get('founder') as { id?: string } | undefined;
     if (!founder?.id) return c.redirect('/onboarding');
+    // THE REAL COMPANY, NEVER WHICHEVER ROW CAME FIRST. `check-reality-scope`
+    // caught this: taking `ORDER BY rowid LIMIT 1` off `products` can return
+    // the REFERENCE company, which is synthetic and exists to rehearse against.
+    // A Connectors page describing a company the owner does not own — with its
+    // reference-world credential presented as one of his connections — is
+    // exactly the confusion the boundary exists to prevent.
     const owned = await query(
-      'SELECT id, name FROM products WHERE owner_id = ? ORDER BY rowid LIMIT 1',
+      `SELECT id, name FROM products WHERE owner_id = ? AND ${realCompany()} ORDER BY rowid LIMIT 1`,
       [String(founder.id)]);
     if (!owned.rows.length) return c.redirect('/foundry');
     const productId = String((owned.rows[0] as Record<string, unknown>).id);
@@ -6634,8 +6640,14 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
   requireInstitutionOwner(), async (c: any) => {
     const founder = c.get('founder') as { id?: string } | undefined;
     if (!founder?.id) return c.redirect('/onboarding');
+    // THE REAL COMPANY, NEVER WHICHEVER ROW CAME FIRST. `check-reality-scope`
+    // caught this: taking `ORDER BY rowid LIMIT 1` off `products` can return
+    // the REFERENCE company, which is synthetic and exists to rehearse against.
+    // A Connectors page describing a company the owner does not own — with its
+    // reference-world credential presented as one of his connections — is
+    // exactly the confusion the boundary exists to prevent.
     const owned = await query(
-      'SELECT id, name FROM products WHERE owner_id = ? ORDER BY rowid LIMIT 1',
+      `SELECT id, name FROM products WHERE owner_id = ? AND ${realCompany()} ORDER BY rowid LIMIT 1`,
       [String(founder.id)]);
     if (!owned.rows.length) return c.redirect('/foundry');
     const productId = String((owned.rows[0] as Record<string, unknown>).id);
