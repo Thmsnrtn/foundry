@@ -68,6 +68,16 @@ export interface ExperimentView {
    * Empty whenever nothing is blocking, which is not the same as unknown.
    */
   blocking: string[];
+  /**
+   * WHETHER THE TEST IS QUALIFIED TO MEET ANYBODY, in one word and in pieces.
+   *
+   * Separate from `state`, which says where the test is in its own life, and
+   * separate again from authority. A test can be authorised and not ready, or
+   * ready and unauthorised, and the owner should never be told "no" for a
+   * reason that is not the reason. The same reading refuses the act at the
+   * outbound door, so this screen and that refusal cannot disagree.
+   */
+  qualification: { state: string; mechanism: string; blocking: string[]; conditions: Array<{ name: string; verdict: string; because: string }> };
   why: { whatWeDo: string; whatWeExpect: string; wouldDisprove: string; question: string };
   steps: Step[];
   allow: { possible: boolean; reason: string | null; explanation: string[] };
@@ -359,6 +369,11 @@ export async function getExperimentView(founderId: string, experimentId: string,
   return {
     id: experimentId, founderId, title: e.whatWeDo, productId: e.productId, assetName: asset ? String(asset.name) : null,
     state, stateLabel, stateDetail, outcome, concluded, concludedAt, supersededBy: e.supersededBy,
+    qualification: await (async () => {
+      const { qualificationOf } = await import('../venture/qualification.js');
+      const r = await qualificationOf(experimentId);
+      return { state: r.state, mechanism: r.mechanism, blocking: r.blocking, conditions: r.conditions };
+    })(),
     blocking: state === 'needs_you' ? ready.missing : listing && e.decision === 'approved' && (!x || withdrawn) && e.ranAt === null ? ['open the shop and list it', 'paste the listing address'] : [],
     why: { whatWeDo: e.whatWeDo, whatWeExpect: e.whatWeExpect, wouldDisprove: e.wouldDisprove, question: unknown ? String(unknown.question) : '' },
     steps, allow, exposure, money: moneyView, offer: offerView,

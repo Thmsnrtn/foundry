@@ -225,6 +225,38 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
       return { ok: false, invocation_id: invocationId, phase: 'policy', reason: verdict.reason };
     }
   }
+
+  // 2b. IS THE TEST BEHIND THIS ACT ACTUALLY READY TO MEET ANYBODY.
+  //
+  // The owner's standard: an assessment of readiness "must not be merely a
+  // checklist displayed in the owner interface. The actual action must be
+  // refused when a required condition is missing" — and refused the same way
+  // whether it came from Ask, a screen, an agent, a routine, an integration, a
+  // Sprite or a direct internal call. This door is where all of those meet, so
+  // it is the only honest place for it.
+  //
+  // READINESS IS NOT AUTHORITY, and this is deliberately a separate refusal
+  // from the rung above it and the boundary before that. A test can be
+  // authorised and not ready; it can be ready and unauthorised. Each is
+  // refused in its own words so the owner is never told "no" for a reason that
+  // is not the reason.
+  //
+  // The reader itself decides what it applies to — acts that put something in
+  // front of people, never acts that discharge what a customer is already
+  // owed — because that distinction belongs with its reasoning rather than
+  // here.
+  if (experimentAct) {
+    const { qualificationStandsInTheWay } = await import('../venture/qualification.js');
+    const notReady = await qualificationStandsInTheWay({ experimentId: experimentAct.experimentId, tool: req.tool });
+    if (notReady) {
+      await recordGatewayInvocation({
+        invocation_id: invocationId, product_id: req.productId, agent: policy.actor,
+        tool: req.tool, action: req.action, outcome: 'refused',
+        reason: `readiness: ${notReady.refusal}`,
+      });
+      return { ok: false, invocation_id: invocationId, phase: 'policy', reason: notReady.refusal };
+    }
+  }
   if (req.surface && req.surface !== policy.surface) {
     return refusePolicy(invocationId, req, `surface is fixed to '${policy.surface}'`);
   }

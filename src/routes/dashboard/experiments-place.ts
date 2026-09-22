@@ -29,6 +29,23 @@ import { approveListing, ownerActsForListing, recordListing, recordVenueOrder, r
 import { shelfCandidates } from '../../services/venture/shelves.js';
 import type { ShelfCandidate } from '../../services/venture/shelves.js';
 
+/**
+ * ONE WORD FOR WHETHER IT IS QUALIFIED, in his language rather than the
+ * reader's. The states come from `venture/qualification.ts`; these are the
+ * sentences he asked for — "tell me what is missing and what Foundry is doing
+ * about it" — rather than an enum shown raw on a page.
+ */
+const QUALIFICATION_WORDS: Record<string, string> = {
+  preparing: 'Still being put together. Nothing about it has been put to you yet.',
+  testing_capability: 'The machinery it depends on works here but has not yet done anything in the world.',
+  ready_for_review: 'Everything Foundry can settle is settled. It is yours to look at.',
+  ready_within_charter: 'Ready, and inside a charter that covers it.',
+  operating: 'It is out there.',
+  paused_dependency: 'It was ready, and something it depends on has stopped working.',
+  needs_owner_authorisation: 'Ready but for your word.',
+  needs_external_account: 'Ready but for an account only you can open or connect.',
+};
+
 export const experimentRoutes = new Hono();
 
 async function founderOf(c: any): Promise<string | null> {
@@ -515,6 +532,25 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
     ${'notNow' in decision && v.state === 'needs_you' ? html`<section class="know" id="notyet">
       <h2>Not yet</h2><ul>${decision.notNow.map((m) => html`<li>${m}</li>`)}</ul>
       <p class="quiet">Authorising is refused until then by the rows themselves, not only by this page.</p>
+    </section>` : ''}
+    ${/* IS IT QUALIFIED TO MEET ANYBODY, in one word, with the reasons a click
+          away. His standard: "I should not need to inspect a giant technical
+          checklist every time Foundry proposes an experiment… Allow me to
+          expand the object to understand the evidence, limits, and remaining
+          dependencies." So the state is a line and the conditions are a fold.
+
+          The same reading refuses the act at the outbound door, which is what
+          keeps this from being decoration: a page that says "not ready" while
+          the routine proceeds anyway is worse than no page at all. */ ''}
+    ${v.qualification.blocking.length ? html`<section class="know" id="qualification">
+      <h2>Ready for the world?</h2>
+      <p class="lead">${QUALIFICATION_WORDS[v.qualification.state] ?? v.qualification.state}</p>
+      <p class="quiet">This is not about whether you have authorised it — that is separate, and both are needed. It is about whether the machinery this test depends on has been shown to work. The same reading refuses the act itself, not just this page.</p>
+      <details class="fold"><summary><h3>What is still missing</h3><span class="gist">${String(v.qualification.blocking.length)} of ${String(v.qualification.conditions.length)}</span></summary>
+        <dl class="facts">${v.qualification.conditions.filter((c) => c.verdict !== 'met').map((c) => html`
+          <dt>${c.name}</dt><dd>${c.because}</dd>`)}</dl>
+        <p class="quiet">Already settled: ${v.qualification.conditions.filter((c) => c.verdict === 'met').map((c) => c.name).join('; ') || 'nothing yet'}.</p>
+      </details>
     </section>` : ''}
     ${v.exceptions.length ? html`<section class="know" id="exceptions"><h2>Needs your attention</h2>
       <ul>${v.exceptions.map((x) => html`<li>${x}</li>`)}</ul></section>` : ''}
