@@ -2789,3 +2789,94 @@ answers 404 and the registry names no marketplace product. The Etsy asset's
 live boundary row reads `never`, and code does not rewrite a boundary the owner
 set by name. The portfolio entry exists, is proven, and publishes nothing until
 he narrows that row through the door in his own words.
+
+---
+
+## Wave R2 — the two adversarial cells, and what enforcement found
+
+Two independent read-only cells reviewed the preceding wave: one on authority at
+the action boundary, one on money and customer obligations. Between them they
+returned sixteen findings. Every one is repaired, and two of them matter beyond
+their own fix.
+
+### The gate could not see the act it most needed to refuse
+
+`qualificationStandsInTheWay` was keyed on the capability's FAMILY. The
+reasoning was right — a refund and a delivery belong to a customer who already
+exists and must never be refused — and the key was wrong: an offer and a
+delivery both leave through `send_email`, family `communication`. So the gate
+was structurally blind to outreach. An experiment blocked on an unsealed
+prediction, a missing allowance, an unrecorded boundary or a dead venue still
+mailed offers to strangers.
+
+The institution's own `distribution` capability for that act, `reach_out`, has
+no provider row and no tool, so it is never the tool at the door. The family
+could never have answered.
+
+`outbound_actions.experiment_act` is the fact that closes it: the hand writes it
+when it plans the message, migration 284 freezes it, and it says `offer` or
+`delivery` in exactly those words. `experimentActFor` had read that row and
+thrown the column away.
+
+**And the suite had certified the hole.** An assertion titled *"never stands in
+the way of delivering what somebody already paid for"* passed on the tool alone.
+The same tool now carries both assertions, side by side, with opposite answers.
+
+### Enforcing the reading found the reading wrong, within one full run
+
+Closing that gap turned the readiness reading into a refusal — and seventeen
+suites went red at once, the laboratory's thirty-day simulations among them.
+Every offer Experiment 001 sends was refused: *"the test is not ready for this:
+how it reaches a customer is decided."*
+
+The gate was right and the reader was wrong. `mechanism` was derived as
+`listing`, `workshop`, or `unknown` for everything else — and everything else is
+OUTREACH, the shape of the only experiment this institution has actually run.
+`OfferShapePlan` had said so all along, in the doc comment on the field being
+checked.
+
+That falsehood sat in the owner's readiness screen, harmlessly, for as long as
+nothing acted on it. It is the clearest available argument for his own
+instruction — readiness "must not be merely a checklist displayed in the owner
+interface. The actual action must be refused when a required condition is
+missing." **A reading nothing enforces is a reading nobody checks.** The first
+thing enforcement did was catch a wrong one.
+
+### The obligations mechanism had no caller
+
+`requestVenueRefund` was written, tested and shipped. Nothing in the running
+system called it. The owner's only refund writer was `/refund`, which records a
+refund ALREADY GIVEN — so the one state `/refunds` promises to honour, *somebody
+asked and has not been paid*, could not be entered by any means, and
+`refund_on_the_venue` and the whole channel-aware remedy were reachable only
+from a test. `check-reachability.mjs` walks module imports and cannot see an
+unreachable export inside a reachable module.
+
+Five more findings were false records rather than wrong payments, which is worse
+because a wrong payment gets noticed: a part refund closed the whole obligation
+irreversibly and swallowed the second instalment; the refund was not linked to
+its fulfilment, so the unit reported full contribution on a sale given back; the
+currency was hard-coded; the date a buyer asked was destroyed at the moment they
+were paid; and the wind-down page would have said *"Nobody is owed anything"* to
+an owner who owed a marketplace buyer their money.
+
+### What this says about the method
+
+Three of the sixteen were introduced by the wave under review, and thirteen were
+older. The cells found them because the lens was the institution's promises
+rather than the diff. Two doctrines are earned here and recorded:
+
+- **A reading nothing enforces is a reading nobody checks.** Readiness,
+  obligations, provenance — a fact displayed and not acted on decays silently.
+- **A vocabulary is not a mechanism.** `refund_on_the_venue`, `observed_how` and
+  the channel-aware prose all landed complete and all described states nothing
+  could enter or write. Shipping the words is the easy half.
+
+### Where it stands
+
+`npm run check` green on the frozen tree: **619 files, 5345 tests, all 31
+gates**. Migration 341 makes a channel nobody watches unable to claim it was
+watched, and makes that claim immutable.
+
+**In production, nothing publishes for the Etsy asset yet**, and that is
+unchanged by this wave. Its live boundary row still reads `never`.
