@@ -3046,3 +3046,65 @@ that claimed the connect button "does not appear" until the key is placed was
 aspirational when it was written and is true now — another instance of a claim
 that a test could have pinned in place, found by trying to walk the path it
 described.
+
+---
+
+## E2f/E2g release — the path to the key, cleared of three blockers
+
+Frozen at `e0029bd0`. `npm run check` green on the frozen tree: **31 gates, 624
+test files, 5,424 tests, nothing red.**
+
+### What this release is for
+
+The owner registered the redirect URI at Etsy, came back to place the
+application key, and said the settings page was too complicated to work out.
+Walking that path properly found that his complaint was the *first* of three
+blockers stacked on it, and the other two would have hit him in sequence, each
+one after he had done the work to get past the last:
+
+1. **The form was where he could not find it** — one card among twenty on
+   `/settings`, reached from nowhere in particular.
+2. **The connect button drew itself with no key placed**, so the tap would have
+   thrown. `senseProvider`'s own comment promised a surface that names what is
+   missing "rather than offering a button that would fail"; that held while every
+   application key was a deployment fact and stopped holding the moment one
+   became something the owner places by hand.
+3. **The route receiving the pair asked which company was selected**, and
+   answers a bare `400 No company selected` when no company cookie is set. The
+   key belongs to no company — `app_credentials` has no `product_id` by
+   construction — so a correct paste would have landed on raw JSON.
+
+Two and three were found by rendering the page through `app.request` instead of
+reading its source. Everything a source-string assertion proves is that a branch
+was *written*; *reachable* was the entire complaint.
+
+### What it changed
+
+- `whatStandsBetween` answers `no_adapter`, `no_app_key`, `not_configured` or
+  null, and adapters declare readiness two ways because the answers lead
+  different places: `needsAppCredential` for a key the owner places (he gets the
+  form, where he is standing, carrying the way back), `configured()` for one that
+  belongs in the environment (he gets a sentence, because a box for a value that
+  is not his to supply would be worse than the button was).
+- **Stripe had the identical defect**, found the same way, fixed the same way.
+- `safeBackPath` checks a literal `/foundry/` prefix rather than a leading
+  slash, because `//evil.test` begins with a slash and is not a path. A named
+  export so that case is a test rather than a regex nobody reads twice.
+- The keystring box is readable; only the half that authenticates is hidden.
+- The route is `requireInstitutionOwner` — narrower than a company capability,
+  and about the right object.
+
+### What it cost to learn
+
+A real keystring sat in a test fixture behind a mask that redacted nothing, in a
+repository that is public — which both parties had wrong, in opposite
+directions. `check-no-masked-literals` now refuses that shape, and on its first
+full run `a-route-glob-is-not-a-comment` caught it rolling its own comment
+stripper: a gate written about the difference between looking careful and being
+careful, built the careless way, one hour after its own header explained the
+failure mode. It uses the shared stripper now.
+
+Three defects in one wave, each one an instance of the same thing: a sentence
+asserting a property that nothing checked.
+
+[deploy-private]
