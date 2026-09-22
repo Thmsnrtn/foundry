@@ -115,27 +115,54 @@ ${body}
 `;
 }
 
+/**
+ * CAN SOMEBODY ACTUALLY GET THIS TODAY.
+ *
+ * One predicate, used by the front page and by the record page, so the two
+ * cannot disagree about whether a thing is for sale. It is not a status: an
+ * `operating` asset whose offer came down is a test that ended well, and a
+ * listing that has been delisted has nowhere to send anybody. What makes a
+ * thing available is a live status AND somewhere to buy it.
+ */
+export const canBuy = (x: PublicExperiment): boolean =>
+  (x.status === 'testing' || x.status === 'operating') && (x.payUrl !== null || x.whereToGetIt !== null);
+
 // THE THING'S OWN NAME COMES FIRST. It read "Experiment 001 — Massachusetts
 // Millwork Bid Brief", which puts the filing reference in front of the product
-// on the front page. The number is how this workshop keeps its own order and it
-// still stands here, small, after the name.
-const item = (x: PublicExperiment): string => `<a class="item" href="${x.path}">
+// on the front page.
+//
+// AND ON THE FRONT PAGE THE NUMBER COMES OFF ENTIRELY. "No. 003" under a
+// product a customer might buy frames it as the third of a series of
+// experiments, which is the workshop's own filing and not the customer's
+// business. It stays on `/experiments`, where the lede promises these are
+// listed "in the order I made it" and the number is what makes that sentence
+// true.
+const item = (x: PublicExperiment, withNumber = true): string => `<a class="item" href="${x.path}">
   <div class="t">${esc(x.title)}<span class="pill">${x.statusLabel}</span></div>
-  <div class="s">${esc(x.summary)}</div>
-  <div class="s">No. ${String(x.number).padStart(3, '0')}</div>
+  <div class="s">${esc(x.summary)}</div>${withNumber ? `
+  <div class="s">No. ${String(x.number).padStart(3, '0')}</div>` : ''}
 </a>`;
 
-const listOf = (xs: PublicExperiment[], empty: string): string => xs.length ? `<div class="list">${xs.map(item).join('\n')}</div>` : `<p class="quiet">${empty}</p>`;
+const listOf = (xs: PublicExperiment[], empty: string, withNumber = true): string => xs.length ? `<div class="list">${xs.map((x) => item(x, withNumber)).join('\n')}</div>` : `<p class="quiet">${empty}</p>`;
 
 export function renderHome(f: PublicWorkshopFacts, registry: PublicExperiment[]): string {
   const listed = registry.filter((x) => x.listed);
   // WHAT IS MADE HERE COMES BEFORE HOW THE PLACE WORKS. A visitor should not
   // have to follow a business model to find out what is for sale.
+  //
+  // AND "WHAT'S HERE NOW" HAS TO MEAN THAT. It filtered on `listed` alone, so a
+  // closed test sat under that heading beside a thing somebody could buy —
+  // the front page saying "now" about a record. What belongs here is what a
+  // customer can actually get today; everything else is one line below, where
+  // the heading promises a history rather than a shop.
+  const available = listed.filter(canBuy);
+  const rest = listed.length - available.length;
   const body = `
 <h1>${esc(f.name)}</h1>
 <p class="lede">${esc(f.tagline.charAt(0).toUpperCase() + f.tagline.slice(1))}.</p>
 <h2>What's here now</h2>
-${listOf(listed, 'Nothing\'s open at the moment.')}
+${listOf(available, 'Nothing\'s open at the moment.', false)}
+${rest > 0 ? `<p class="quiet"><a href="/experiments">${rest === 1 ? 'One other thing I\'ve put out' : `${String(rest)} other things I've put out`}</a>, and what happened to each.</p>` : ''}
 <h2>About Apex Micro</h2>
 ${paras(f.statement)}
 <p><a href="/experiments">Everything I've put in front of people</a> · <a href="/about">More about me</a></p>`;
@@ -517,14 +544,14 @@ export function renderTerms(f: PublicWorkshopFacts): string {
 <p><strong>Refunds.</strong> In full, on request, as described on the <a href="/refunds">refunds page</a>.</p>
 <p><strong>Your information.</strong> As described on the <a href="/privacy">privacy page</a>.</p>
 <p><strong>Changes.</strong> Every page says when it was last updated. Closing something stops new sales and leaves what was already promised in force.</p>`;
-  return shell(f, 'Terms', '/terms', body, `Terms for experiments at ${f.name}.`, { path: '/terms' });
+  return shell(f, 'Terms', '/terms', body, `Terms for what ${f.name} sells.`, { path: '/terms' });
 }
 
 export function renderNotFound(f: PublicWorkshopFacts): string {
   const body = `
 <h1>Not here</h1>
 <p class="lede">There is no page at that address.</p>
-<p><a href="/">${esc(f.name)}</a> · <a href="/experiments">Experiments</a></p>`;
+<p><a href="/">${esc(f.name)}</a> · <a href="/experiments">What I've put out</a></p>`;
   return shell(f, 'Not found', '', body, 'No page at that address.', { path: '/404' });
 }
 
