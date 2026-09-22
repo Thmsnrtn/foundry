@@ -40,9 +40,26 @@ const slackSpy = vi.fn(async () => ({
   certainty: 'provider_acknowledged' as const, providerMessageTs: '1.0',
 }));
 
-vi.mock('../../src/services/integration/slack.js', () => ({
-  sendSlackNotification: slackSpy,
-}));
+// THE DOUBLE STANDS IN FOR THE WHOLE INTEGRATION, REGISTRATION INCLUDED.
+//
+// This file's own header says the finding: `action_executions` reached none of
+// the checks `outbound_actions` does, because `checkKillSwitch` had exactly one
+// caller. That is now closed — the Slack path goes through `invoke` like the
+// email path beside it — which means importing the integration is what puts the
+// handler on the gateway's registry. A mock that returned only the sender left
+// the door answering `no_handler`, so the double registers too, exactly as the
+// module it replaces does.
+vi.mock('../../src/services/integration/slack.js', async () => {
+  const { registerToolHandler } = await import('../../src/services/outbound/gateway.js');
+  registerToolHandler('post_slack', async () => {
+    const r = await slackSpy();
+    return { ts: r.providerMessageTs };
+  }, {
+    actor: 'action_executor', surface: 'channel_outbound', dataClass: 'customer',
+    requireDedupKey: true, requireCustomerExternalId: false,
+  });
+  return { sendSlackNotification: slackSpy };
+});
 
 async function execution(): Promise<string> {
   const id = nanoid();

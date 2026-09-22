@@ -396,11 +396,19 @@ bypass — which is the credential-mediation pattern anyway. The adapter exists,
 is shaped to those endpoints, refuses without a token, and is **declared, not
 available**, until a real machine has been created and destroyed under it.
 
-**Fly Sprites** — could not be evaluated from this environment: only the CLI
-installer was reachable, not the API or lifecycle documentation. They are
-recorded as a declared provider with no adapter, and stay that way until their
-documentation has been read. Sprites are not assumed correct because Foundry
-already uses Fly.
+**Fly Sprites** — an adapter now exists (`src/services/workshop/fly-sprites.ts`),
+implementing `create`, `run` and `destroy` against the published endpoints, with
+`checkpoint` and `restore` throwing by design because those endpoints were never
+read and refusing is better than guessing. It remains **declared**: the token has
+never been set, so not one request in it has received a reply, and every request
+shape it carries is marked unexercised in the file itself. `create` refuses any
+network policy but `open`, because the egress-narrowing endpoint was not read and
+recording a restriction nobody applies would be worse than admitting the gap.
+Sprites are not assumed correct because Foundry already uses Fly.
+
+*This paragraph said "a declared provider with no adapter" for longer than it was
+true. A governing document that is wrong about what exists is worse than one that
+is silent, because the reader who trusts it plans around a gap that has closed.*
 
 **The reference substrate** runs in-process and proves the whole lifecycle
 today, including the one rule that matters — a step that reaches past its

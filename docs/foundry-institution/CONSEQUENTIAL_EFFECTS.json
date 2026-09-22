@@ -206,10 +206,10 @@
     },
     {
       "file": "src/services/integration/slack.ts",
-      "line": 132,
+      "line": 133,
       "detector": "external_post",
       "status": "governed",
-      "capability": "Slack sender — every caller kill-switch checked before dispatch, effect receipts after"
+      "capability": "post_slack capability handler. This line claimed \"every caller kill-switch checked before dispatch\" while the action executor called the sender directly, past the door — the one outbound-mutating integration that did. It is registered on the gateway now and bound to post_to_channel at rung public, so the claim and the code agree"
     },
     {
       "file": "src/services/integration/stripe-gateway.ts",
@@ -241,14 +241,14 @@
     },
     {
       "file": "src/services/scp/actions/executor.ts",
-      "line": 565,
+      "line": 578,
       "detector": "external_post",
       "status": "governed",
       "capability": "approved Linear action — kill-switch checked before dispatch, durable receipt after"
     },
     {
       "file": "src/services/scp/actions/executor.ts",
-      "line": 637,
+      "line": 650,
       "detector": "dynamic_webhook_post",
       "status": "governed",
       "capability": "approved custom webhook — kill-switch checked before dispatch, SSRF guard and durable receipt"

@@ -406,7 +406,7 @@ async function executeAction(
 
   switch (payload.action_type) {
     case 'post_slack':
-      return executeSlack(productId, payload);
+      return executeSlack(productId, executionId, payload);
 
     case 'create_ticket':
       return executeLinearTicket(productId, payload);
@@ -492,30 +492,43 @@ async function executeAction(
 
 // ─── Integration Handlers ─────────────────────────────────────────────────────
 
-async function executeSlack(productId: string, payload: ActionPayload): Promise<ExecutionResult> {
+async function executeSlack(productId: string, executionId: string, payload: ActionPayload): Promise<ExecutionResult> {
   const text = payload.text ?? '';
-  const receipt = await sendSlackNotification(productId, {
-    channel: payload.channel,
-    text,
-    blocks: payload.blocks,
+  // THROUGH THE DOOR, LIKE THE EMAIL PATH TWENTY LINES ABOVE. This called the
+  // sender directly, which is how a message to a person came to be the one
+  // outbound effect in the institution that no kill switch, budget, dedup key,
+  // consequence rung or audit row ever saw. Importing the integration is what
+  // registers the capability on the gateway's process-global registry.
+  await import('../../integration/slack.js');
+  const { invoke } = await import('../../outbound/gateway.js');
+  const res = await invoke({
+    productId,
+    tool: 'post_slack',
+    action: `channel message: ${text.slice(0, 120)}`,
+    params: { channel: payload.channel, text, blocks: payload.blocks },
+    dedupKey: `action_execution:${executionId}`,
+    surface: 'channel_outbound',
+    dataClass: 'customer',
   });
 
-  if (receipt.certainty === 'provider_acknowledged') {
+  if (res.ok) {
     return {
       success: true,
       integration_response: {
         note: `Message sent to ${payload.channel ?? 'default channel'}`,
         text,
-        provider_message_ts: receipt.providerMessageTs,
+        provider_message_ts: (res.result as { ts?: string | null } | undefined)?.ts ?? null,
       },
-      effect_certainty: receipt.certainty,
+      effect_certainty: 'provider_acknowledged',
     };
   }
+  // 'execution' is the only phase where something may have reached the outside
+  // world; every other refusal is definitively nothing attempted.
   return {
     success: false,
-    error: 'reason' in receipt ? receipt.reason : 'Slack notification failed',
-    effect_certainty: receipt.certainty,
-    reconcile_after: receipt.certainty === 'ambiguous'
+    error: res.reason,
+    effect_certainty: res.phase === 'execution' ? 'ambiguous' : 'not_attempted',
+    reconcile_after: res.phase === 'execution'
       ? new Date(Date.now() + 15 * 60 * 1000).toISOString()
       : null,
   };

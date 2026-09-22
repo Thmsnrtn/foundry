@@ -6,6 +6,7 @@
 
 import { query } from '../../db/client.js';
 import { storeEvent, getIntegration, getIntegrationCredentials } from './fabric.js';
+import { registerToolHandler } from '../outbound/gateway.js';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -220,3 +221,45 @@ async function slackGet<T>(endpoint: string, botToken: string): Promise<T | null
   if (!resp.ok) return null;
   return resp.json() as Promise<T>;
 }
+
+// ─── The door ────────────────────────────────────────────────────────────────
+
+/**
+ * `post_slack`, AS A GOVERNED CAPABILITY RATHER THAN A BARE `fetch`.
+ *
+ * A reconstruction found this the one outbound-mutating integration that did
+ * not pass the outbound door. The email path beside it in the same executor —
+ * same approval, same table, same founder — went through `invoke`; this one
+ * called the sender directly, so a paused company, a disabled tool, the
+ * communication budget, dedup, the audit row and the owner's own standing
+ * boundaries were all bypassed. `post_slack` is already named in
+ * `REACHES_A_PERSON`, so the contact boundary was written to cover it and
+ * could not see it.
+ *
+ * The handler itself does nothing new: it is the existing sender, behind the
+ * door, translating its receipt into what the door expects. A receipt that is
+ * `not_attempted` is raised as a refusal carrying `notAttempted`, because the
+ * door's one irreplaceable distinction is between nothing having left the
+ * building and nobody knowing.
+ */
+async function postSlackHandler(req: { productId: string; params: Record<string, unknown> }): Promise<{ ts: string | null }> {
+  const p = req.params as { channel?: string; text?: string; blocks?: unknown[] };
+  const receipt = await sendSlackNotification(req.productId, {
+    channel: p.channel, text: String(p.text ?? ''), blocks: p.blocks,
+  });
+  if (receipt.certainty === 'provider_acknowledged') return { ts: receipt.providerMessageTs ?? null };
+  const reason = 'reason' in receipt ? receipt.reason : 'Slack rejected the message';
+  const err = new Error(`slack: ${reason}`) as Error & { notAttempted?: boolean };
+  // `ambiguous` is the one case where the message may have arrived. Everything
+  // else the sender reports as `not_attempted` or `provider_rejected` is
+  // definitively nothing sent, and saying so lets the door release its
+  // reservation and its budget hold rather than burning both on a refusal.
+  if (receipt.certainty !== 'ambiguous') err.notAttempted = true;
+  throw err;
+}
+
+export const POST_SLACK_POLICY = {
+  actor: 'action_executor', surface: 'channel_outbound', dataClass: 'customer',
+  requireDedupKey: true, requireCustomerExternalId: false,
+} as const;
+registerToolHandler('post_slack', postSlackHandler, POST_SLACK_POLICY);

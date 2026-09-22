@@ -69,7 +69,7 @@ const classifications = new Map(Object.entries({
   // Both callers now check the kill switch before reaching this sender: the
   // approved-action executor and the daily-briefing push. The sender itself
   // stays the single place transport and receipt semantics live.
-  'src/services/integration/slack.ts|external_post': ['governed', 'Slack sender — every caller kill-switch checked before dispatch, effect receipts after'],
+  'src/services/integration/slack.ts|external_post': ['governed', 'post_slack capability handler. This line claimed "every caller kill-switch checked before dispatch" while the action executor called the sender directly, past the door — the one outbound-mutating integration that did. It is registered on the gateway now and bound to post_to_channel at rung public, so the claim and the code agree'],
   // Traced, not assumed. Both files POST to a GraphQL endpoint, which is what
   // the detector sees; every remaining operation is a QUERY. `read_only` is a
   // real classification and deliberately not `governed` — a read does not need
