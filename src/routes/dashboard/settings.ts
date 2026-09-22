@@ -68,8 +68,20 @@ settingsRoutes.get('/settings', async (c) => {
     : null;
   const sendingError = c.req.query('sending_error') ?? null;
   const etsyError = c.req.query('etsy_error') ?? null;
+  // THE OUTCOME THE REDIRECT ALREADY CARRIED, AND NOBODY READ. The POST
+  // verifies the pair with Etsy, stores it, and redirects with
+  // `?etsy=placed&app=…`. Nothing consumed that, so a successful save changed
+  // one dim line and a button label — and the owner, reasonably, could not tell
+  // whether to submit his secrets again.
+  const etsyPlaced = c.req.query('etsy') === 'placed' ? (c.req.query('app') ?? '') : null;
+  const etsyForgotten = c.req.query('etsy') === 'forgotten';
   const { appCredentialFor } = await import('../../services/senses/app-credential.js');
   const etsyApp = await appCredentialFor('etsy');
+  // WHERE THE WHOLE CONNECTION ACTUALLY IS, not just whether this card's own
+  // row exists. The six states are separate on purpose and each surface used to
+  // know about one of them.
+  const { etsyJourney } = await import('../../services/senses/journey.js');
+  const etsyWhere = productId ? await etsyJourney(productId) : null;
   const comps = productId
     ? await query('SELECT * FROM competitors WHERE product_id = ?', [productId])
     : { rows: [] };
@@ -402,16 +414,41 @@ settingsRoutes.get('/settings', async (c) => {
         shop \u2014 connecting a shop is a separate act, with its own consent screen and its own
         read-only permissions. Both halves are needed: Etsy checks the pair on every request.
       </p>
-      ${etsyApp ? html`
-      <p style="font-size:0.82rem;color:var(--text-dim);margin:0 0 0.75rem;">
-        Placed, and Etsy confirmed it as application ${etsyApp.providerAccountRef}
-        on ${etsyApp.verifiedAt.slice(0, 10)}. Stored encrypted; it is never shown again.
-      </p>` : html`
-      <p style="font-size:0.82rem;color:var(--text-dim);margin:0 0 0.75rem;">
-        Not placed \u2014 nothing here can ask Etsy anything until it is.
-      </p>`}
+      ${/* THE STATE FIRST, AND AT A SIZE HE CAN SEE. This card used to open with
+           four paragraphs of explanation and report its state in 0.82rem
+           `--text-dim` underneath them. What a person needs on arriving is
+           where they are; what a thing means is what they need once they are
+           deciding, and that is what the prose below is for. */ ''}
+      ${etsyPlaced !== null ? html`
+      <div class="state ok" style="display:block;padding:0.7rem 0.9rem;margin-bottom:0.9rem;border-radius:8px;font-size:0.9rem;">
+        <strong>Saved.</strong> Etsy checked the pair and confirmed it as application
+        ${etsyPlaced}. It is stored encrypted and will not be shown again.
+      </div>` : ''}
+      ${etsyForgotten ? html`
+      <div class="state" style="display:block;padding:0.7rem 0.9rem;margin-bottom:0.9rem;border-radius:8px;font-size:0.9rem;">
+        <strong>Forgotten.</strong> Nothing here can ask Etsy anything now.
+      </div>` : ''}
       ${etsyError ? html`
-      <p style="font-size:0.82rem;color:var(--bad);margin:0 0 0.75rem;">${etsyError}</p>` : ''}
+      <div class="state bad" style="display:block;padding:0.7rem 0.9rem;margin-bottom:0.9rem;border-radius:8px;font-size:0.9rem;">
+        <strong>Not saved.</strong> ${etsyError}
+      </div>` : ''}
+
+      ${etsyWhere ? html`
+      <ol style="list-style:none;padding:0;margin:0 0 1rem;display:grid;gap:0.45rem;">
+        ${etsyWhere.steps.map((step) => html`
+        <li style="display:flex;gap:0.6rem;align-items:flex-start;font-size:0.9rem;">
+          <span aria-hidden="true" style="flex:0 0 1.1rem;color:${step.done ? 'var(--ok)' : 'var(--text-dim)'};">${step.done ? '\u25cf' : '\u25cb'}</span>
+          <span>
+            <span style="color:${step.done ? 'var(--text)' : 'var(--text-dim)'};">${step.title}</span>
+            ${step.evidence ? html`<br /><span style="font-size:0.8rem;color:var(--text-muted);">${step.evidence}</span>` : ''}
+          </span>
+        </li>`)}
+      </ol>
+      ${etsyWhere.next ? html`
+      <p style="font-size:0.9rem;margin:0 0 1rem;">
+        <strong>Next:</strong> ${etsyWhere.next.say}
+        ${etsyWhere.next.href ? html` <a href="${etsyWhere.next.href}">Do that</a>.` : ''}
+      </p>` : ''}` : ''}
       <form method="POST" action="/settings/app-credential/etsy" style="margin-top:0.75rem;display:grid;gap:0.5rem;max-width:26rem;">
         <!-- VISIBLE ON PURPOSE, and only this half. The keystring is an
              identifier, not a secret: it travels in the open as the client_id on
