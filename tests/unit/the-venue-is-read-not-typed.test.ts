@@ -22,7 +22,6 @@
 // =============================================================================
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = 'c'.repeat(64);
-process.env.ETSY_API_KEY = 'test-app-key';
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { nanoid } from 'nanoid';
@@ -49,13 +48,31 @@ vi.mock('../../src/services/outbound/ssrf.js', () => ({
 
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { encryptCredentialPayload } from '../../src/services/encryption.js';
+import { encrypt, encryptCredentialPayload } from '../../src/services/encryption.js';
 import { approveListing, seedProof2 } from '../../src/services/venture/proof-2.js';
 import { readTheShop, bringTheVenueUpToDate, CANNOT_SEE } from '../../src/services/senses/readers/etsy-shop.js';
 
 const OWNER = 'rv_owner';
 let PRODUCT = '';
 let X = '';
+
+/**
+ * The application key, placed as `setAppCredential` places it — encrypted, with
+ * the verification Etsy gave — without the round trip to Etsy's ping.
+ */
+async function placeAppKey(): Promise<void> {
+  await query(
+    `INSERT INTO app_credentials (provider, secret_json, provider_account_ref, verified_at, set_by)
+     VALUES ('etsy', ?, '4242', datetime('now'), 'test')
+     ON CONFLICT(provider) DO UPDATE SET secret_json = excluded.secret_json, forgotten_at = NULL`,
+    [encrypt(JSON.stringify({ keystring: 'test-keystring', sharedSecret: 'test-secret' }))]);
+}
+
+async function forgetAppKey(): Promise<void> {
+  await query(
+    `UPDATE app_credentials SET forgotten_at = datetime('now'), forget_reason = 'scenario'
+      WHERE provider = 'etsy' AND forgotten_at IS NULL`);
+}
 
 /** A connection of the shape `completeAuthorization` writes, without the round trip. */
 async function connect(scopes: string[]): Promise<string> {
@@ -97,6 +114,7 @@ beforeAll(async () => {
   await approveListing({ founderId: OWNER, experimentId: X });
   PRODUCT = String(((await query(
     'SELECT id FROM products WHERE from_experiment_id = ?', [X])).rows[0] as Record<string, unknown>).id);
+  await placeAppKey();
 });
 
 beforeEach(forget);
@@ -107,13 +125,12 @@ describe('every failure is an answer, never an empty result', () => {
     expect('failed' in r && r.ownerWords).toMatch(/no Etsy account is connected/);
   });
 
-  it('says the deployment has no app rather than failing at the provider', async () => {
+  it('says no application key has been placed rather than failing at the provider', async () => {
     await connect(['shops_r', 'listings_r', 'transactions_r']);
-    const key = process.env.ETSY_API_KEY;
-    delete process.env.ETSY_API_KEY;
+    await forgetAppKey();
     const r = await readTheShop({ founderId: OWNER, productId: PRODUCT });
-    process.env.ETSY_API_KEY = key;
-    expect('failed' in r && r.ownerWords).toMatch(/no Etsy app registered/);
+    await placeAppKey();
+    expect('failed' in r && r.ownerWords).toMatch(/no Etsy application key/);
   });
 
   it('refuses a grant narrower than the one asked for, BEFORE reading', async () => {

@@ -49,6 +49,7 @@ import { query } from '../../../db/client.js';
 import { connectedSenses } from '../index.js';
 import { withSenseSecret } from '../credentials.js';
 import { recordRetrieval } from '../../venture/sources/index.js';
+import { etsyApiKeyHeader, etsyAppKey } from '../app-credential.js';
 
 const API = 'https://openapi.etsy.com/v3/application';
 
@@ -175,10 +176,16 @@ export async function readTheShop(input: {
   if (!sense) {
     return { failed: true, ownerWords: 'no Etsy account is connected, so there is nothing to read' };
   }
-  const apiKey = (process.env.ETSY_API_KEY ?? '').trim();
-  if (!apiKey) {
-    return { failed: true, ownerWords: 'this deployment has no Etsy app registered, so it cannot ask Etsy anything' };
+  // THE APPLICATION KEY, FROM THE ONE PLACE IT LIVES. This read an environment
+  // variable; the owner places it through the institution's own surface now,
+  // verified against Etsy before it was kept.
+  const key = await etsyAppKey();
+  if (!key) {
+    return { failed: true, ownerWords: 'no Etsy application key has been placed yet, so nothing here can ask Etsy anything' };
   }
+  // Etsy wants both halves joined by a colon on every v3 request. Sending the
+  // keystring alone, as this did, is refused by every endpoint.
+  const apiKey = etsyApiKeyHeader(key);
 
   // THE GRANT IS CHECKED BEFORE IT IS USED, because a credential issued against
   // fewer scopes than were asked for fails at the third request rather than the

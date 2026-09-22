@@ -67,6 +67,9 @@ settingsRoutes.get('/settings', async (c) => {
     ? await getSendingIdentitySummary(String(firstProduct.id))
     : null;
   const sendingError = c.req.query('sending_error') ?? null;
+  const etsyError = c.req.query('etsy_error') ?? null;
+  const { appCredentialFor } = await import('../../services/senses/app-credential.js');
+  const etsyApp = await appCredentialFor('etsy');
   const comps = productId
     ? await query('SELECT * FROM competitors WHERE product_id = ?', [productId])
     : { rows: [] };
@@ -392,6 +395,41 @@ settingsRoutes.get('/settings', async (c) => {
       </form>
     </div>` : ''}
 
+    <div class="card">
+      <h3>Etsy application key</h3>
+      <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:0.75rem;">
+        This says which application is asking. It does <strong>not</strong> give access to any
+        shop \u2014 connecting a shop is a separate act, with its own consent screen and its own
+        read-only permissions. Both halves are needed: Etsy checks the pair on every request.
+      </p>
+      ${etsyApp ? html`
+      <p style="font-size:0.82rem;color:var(--text-dim);margin:0 0 0.75rem;">
+        Placed, and Etsy confirmed it as application ${etsyApp.providerAccountRef}
+        on ${etsyApp.verifiedAt.slice(0, 10)}. Stored encrypted; it is never shown again.
+      </p>` : html`
+      <p style="font-size:0.82rem;color:var(--text-dim);margin:0 0 0.75rem;">
+        Not placed \u2014 nothing here can ask Etsy anything until it is.
+      </p>`}
+      ${etsyError ? html`
+      <p style="font-size:0.82rem;color:var(--bad);margin:0 0 0.75rem;">${etsyError}</p>` : ''}
+      <form method="POST" action="/settings/app-credential/etsy" style="margin-top:0.75rem;display:grid;gap:0.5rem;max-width:26rem;">
+        <input type="password" name="keystring" required autocomplete="off" placeholder="Keystring" />
+        <input type="password" name="shared_secret" required autocomplete="off" placeholder="Shared secret" />
+        <p style="font-size:0.78rem;color:var(--text-dim);margin:0;">
+          Paste each into its own box, not the joined <code>keystring:secret</code> form Etsy
+          shows in its examples. I check the pair with Etsy before keeping it, so a wrong one
+          is refused here rather than at the consent screen.
+        </p>
+        <button type="submit" class="btn btn-secondary btn-sm">
+          ${etsyApp ? 'Replace the key' : 'Place the key'}
+        </button>
+      </form>
+      ${etsyApp ? html`
+      <form method="POST" action="/settings/app-credential/etsy/forget" style="margin-top:0.5rem;">
+        <button type="submit" class="btn btn-secondary btn-sm">Forget it</button>
+      </form>` : ''}
+    </div>
+
     ${productId ? html`
     <div class="card">
       <h3>Systems that report to you</h3>
@@ -592,6 +630,43 @@ settingsRoutes.post('/settings/sending-identity', requireCompanyCapability('can_
     return c.redirect(`/settings?sending_error=${encodeURIComponent(err.message)}`);
   }
   return c.redirect('/settings?sending=connected');
+});
+
+/**
+ * THE APPLICATION KEY FOR A MARKETPLACE, PLACED BY HAND AND VERIFIED FIRST.
+ *
+ * It identifies this deployment to Etsy. It grants access to no shop: that is a
+ * separate act with its own consent screen and its own scopes. So this refuses
+ * to store anything until Etsy confirms the pair works — the same rule the
+ * sending identity above follows, for the same reason. "He typed something" and
+ * "the provider accepts it" are different facts, and only the second is worth
+ * keeping.
+ *
+ * `openapi-ping` is what makes that possible: it takes the key, no OAuth token,
+ * costs nothing and causes nothing, and answers with the application id.
+ */
+settingsRoutes.post('/settings/app-credential/etsy', requireCompanyCapability('can_manage_company'), async (c) => {
+  const founder = c.get('founder');
+  const body = await c.req.parseBody() as Record<string, string>;
+  const { setAppCredential } = await import('../../services/senses/app-credential.js');
+  const placed = await setAppCredential({
+    provider: 'etsy',
+    secret: {
+      keystring: String(body.keystring ?? ''),
+      sharedSecret: String(body.shared_secret ?? ''),
+    },
+    by: `founder:${String(founder.id)}`,
+  });
+  if ('failed' in placed) {
+    return c.redirect(`/settings?etsy_error=${encodeURIComponent(placed.ownerWords)}`);
+  }
+  return c.redirect(`/settings?etsy=placed&app=${encodeURIComponent(placed.providerAccountRef)}`);
+});
+
+settingsRoutes.post('/settings/app-credential/etsy/forget', requireCompanyCapability('can_manage_company'), async (c) => {
+  const { forgetAppCredential } = await import('../../services/senses/app-credential.js');
+  await forgetAppCredential('etsy', 'the owner removed it from settings');
+  return c.redirect('/settings?etsy=forgotten');
 });
 
 settingsRoutes.post('/settings/sending-identity/disconnect', requireCompanyCapability('can_manage_company'), async (c) => {

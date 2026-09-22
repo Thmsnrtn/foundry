@@ -180,11 +180,21 @@ describe('the adapter exists and refuses cleanly with no app registered', () => 
     expect(adapter!.provider).toBe('etsy');
   });
 
-  it('will not build an authorize URL without an Etsy app, and says why', async () => {
+  it('will not build an authorize URL without an application key, and says why', async () => {
+    // The key is HANDED IN now rather than read from the environment — the one
+    // thing this adapter used to choose for itself, while its scopes were
+    // handed to it precisely so it could not.
     const adapter = (await senseProvider('etsy'))!;
-    delete process.env.ETSY_API_KEY;
     expect(() => adapter.authorizeUrl({
-      scopes: ['shops_r'], state: 's', redirectUri: 'https://example.com/cb', codeChallenge: 'c',
-    })).toThrow(/no Etsy app registered/);
+      scopes: ['shops_r'], state: 's', redirectUri: 'https://example.com/cb',
+      codeChallenge: 'c', appCredential: null,
+    })).toThrow(/no Etsy application key/);
+  });
+
+  it('cannot reach for a key it was not given', () => {
+    const src = readFileSync('src/services/senses/providers/etsy.ts', 'utf8');
+    // Named in the header to explain the absence; absent from the code.
+    expect(codeOf('src/services/senses/providers/etsy.ts')).not.toContain('process.env');
+    expect(src).toContain('appKey(appCredential)');
   });
 });

@@ -16,6 +16,18 @@
 import { nanoid } from 'nanoid';
 import { createHash, randomBytes } from 'node:crypto';
 import { query } from '../../db/client.js';
+import { appCredentialFor } from './app-credential.js';
+
+/**
+ * WHICH APPLICATION IS ASKING. Resolved here, once per operation, and handed to
+ * the adapter — which cannot reach for it, by design: the provider modules are
+ * given their scopes rather than choosing them, and a credential is the same
+ * kind of fact. Null when this deployment holds no key for that provider.
+ */
+async function appKeyFor(provider: string): Promise<Record<string, string> | null> {
+  const c = await appCredentialFor(provider);
+  return c ? c.secret : null;
+}
 import { decryptCredentialPayload, encryptCredentialPayload } from '../encryption.js';
 import { SenseProviderError, senseProvider } from './providers/contract.js';
 import { disclosureFor, offerFor, type SourceMode } from './index.js';
@@ -112,6 +124,7 @@ export async function beginAuthorization(input: {
   try {
     authorizeUrl = adapter.authorizeUrl({
       scopes: scopes.map((s) => s.scope), state, redirectUri: input.redirectUri, codeChallenge,
+      appCredential: await appKeyFor(input.provider),
     });
   } catch (err) {
     return {
@@ -210,7 +223,11 @@ export async function completeAuthorization(input: {
 
   let granted;
   try {
-    granted = await adapter.exchange({ code: input.code, redirectUri: input.redirectUri, codeVerifier: row.code_verifier == null ? null : String(row.code_verifier) });
+    granted = await adapter.exchange({
+      code: input.code, redirectUri: input.redirectUri,
+      codeVerifier: row.code_verifier == null ? null : String(row.code_verifier),
+      appCredential: await appKeyFor(provider),
+    });
   } catch (err) {
     return {
       connected: false, productId,
@@ -356,7 +373,7 @@ export async function renewCredentials(withinHours = 24): Promise<RenewalOutcome
     if (!adapter || !secret) { outcome.failed += 1; continue; }
 
     try {
-      const renewed = await adapter.refresh(secret);
+      const renewed = await adapter.refresh(secret, await appKeyFor(provider));
       if (renewed === null) { outcome.nothingToDo += 1; continue; }
       await query(
         `UPDATE sense_credentials
@@ -456,7 +473,7 @@ export async function probeCredential(senseId: string): Promise<{
   if (!adapter || !secret) {
     return { ok: false, detail: 'I can no longer read the stored authorisation' };
   }
-  const result = await adapter.probe(secret);
+  const result = await adapter.probe(secret, await appKeyFor(credential.provider));
   if (!result.ok) {
     await query(
       `UPDATE sense_credentials SET failures = failures + 1, last_failure = ?

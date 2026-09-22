@@ -1331,14 +1331,26 @@ rather than the first.
 
 ### What you would do
 
-1. **Register an Etsy app** at `developer.etsy.com` — personal access, because
-   the shop is your own. Etsy issues a keystring.
-2. **Set it as a deployment secret**: `ETSY_API_KEY`. Never in chat, never in
-   a commit, never in a page. Until it is set, the connect button does not
-   appear, and the institution says so in those words rather than offering a
-   button that would fail.
+*Revised 22 September 2026, after the app was registered. The original draft
+asked for a deployment secret set with `flyctl`; you asked instead to place it
+from inside Foundry, which is now how it works.*
+
+1. **Register an Etsy app** at `developer.etsy.com` — done. `private-foundry`,
+   approved, 10 QPS / 10K QPD. Etsy issues a **keystring and a shared secret**,
+   and **both are needed**: every v3 request carries them joined by a colon in
+   the `x-api-key` header. That is not optional configuration — an earlier draft
+   of the adapter sent the keystring alone and every call would have been
+   refused.
+2. **Place the pair on the settings page**, each half in its own box. Foundry
+   asks Etsy whether the pair works before keeping it — `openapi-ping`, which
+   takes no OAuth token, costs nothing and causes nothing — so a mistyped pair
+   is refused while you still have it in front of you rather than at Etsy's
+   consent screen. It is stored encrypted and never shown again. Until it is
+   placed, the connect button does not appear, and the institution says so in
+   those words rather than offering a button that would fail.
 3. **Register the redirect** Etsy sends you back to:
-   `https://foundry-intel.fly.dev/foundry/senses/callback`.
+   `https://foundry-intel.fly.dev/foundry/senses/callback`. This is the one step
+   nothing here can do for you — it is a change to your Etsy app.
 
    One caveat worth knowing rather than discovering: that address is built from
    the host your request actually arrives on, never from configuration — which
@@ -1425,6 +1437,22 @@ window the grant dies and you would have to consent again. A liveness probe
 exists so a grant that dies quietly is noticed rather than discovered at the
 worst moment; it is named here because it is a commitment, not a detail.
 
+### Two things that were wrong, found before you acted
+
+Reading Etsy's published contract to write this entry found two defects in the
+adapter that would have made the first connection fail. Both are fixed, and
+they are recorded here because the adapter's own header promised that "the day
+the owner connects a shop should be a day nothing new is discovered about how
+the system should work" — this is that promise being kept, not broken.
+
+- **`x-api-key` needed both halves**, joined by a colon. It sent the keystring
+  alone. Every request would have been refused, and the failure would have
+  looked like a bad key rather than a bad header.
+- **The token exchange had to be form-encoded.** It posted JSON.
+
+And one thing it had right: no `client_secret` in the exchange. PKCE stands in
+for one, which is why Etsy requires PKCE on every authorization.
+
 ### The likeliest way this fails, named in advance
 
 If Etsy's token response does not state which scopes it granted, the connection
@@ -1444,3 +1472,40 @@ than something broken. Tell me and I will read what Etsy actually returned.
 No write scope. No draft listing. No fee. No publication. When those are worth
 asking for, they will be separate questions with their own consequences, which
 is the entire reason the four acts are four rows rather than one.
+
+
+---
+
+## RESOLVED 11 — The Etsy application key was shared in chat, and he chose not to rotate it (2026-09-22)
+
+He pasted the `private-foundry` keystring and shared secret into a Foundry chat
+session, saying: *"I'm not worried about it being in this chat and will take
+precautions. Nobody else will have access to private foundry or my Etsy
+account."*
+
+**What was put to him.** That the pair now sits in a session transcript stored
+on disk outside both his control and Foundry's, that this repository is public
+(PENDING 23), and that Etsy allows a keystring to be regenerated from the same
+Seller Apps page at no cost. Rotation was recommended.
+
+**What he decided.** Use this pair, with no rotation planned.
+
+**Why this is written down rather than left as a footnote.** An accepted risk
+that is recorded is a decision; the same risk unrecorded is indistinguishable
+from an oversight six months later, and the person reading the incident would
+have no way to tell which it was. The decision is his to make — it is his
+account, his key, and his assessment of who can reach that transcript.
+
+**What follows from it.**
+
+- The key is never written to this repository, a log, an error message, a
+  retrieval row or an observation. `setAppCredential` takes it, verifies it,
+  encrypts it, and the plaintext does not outlive the request.
+- What it can do if it ever leaks is bounded by what it is: an application key
+  identifies the application. It grants access to no shop. Reading his shop
+  needs the OAuth grant as well, which is a separate secret, separately
+  encrypted, and revocable by removing the app in his Etsy settings.
+- **The trigger for revisiting this**: any change in who can reach that
+  transcript, or any sign of Etsy API use this institution did not make. The
+  application id Etsy returned is recorded against the key, so a key swapped
+  for a different application is a fact the institution notices.

@@ -60,6 +60,16 @@ export interface SenseProviderAdapter {
   authorizeUrl(input: {
     scopes: string[]; state: string; redirectUri: string;
     /**
+     * WHICH APPLICATION IS ASKING, handed in for the same reason the scopes
+     * are: what a credential is, is decided outside the adapter. The Etsy
+     * adapter used to reach into `process.env` for it, which made it the one
+     * thing in this contract an adapter could choose for itself.
+     *
+     * Null when this deployment holds no key for the provider; the adapter
+     * refuses and says so, rather than building a URL that would be rejected.
+     */
+    appCredential: Record<string, string> | null;
+    /**
      * THE HALF OF THE PROOF THAT TRAVELS IN THE OPEN. The S256 hash of a
      * verifier only the caller holds. A provider that does not use PKCE
      * ignores it; one that requires it — Etsy requires it on every
@@ -73,20 +83,21 @@ export interface SenseProviderAdapter {
     code: string; redirectUri: string;
     /** The other half, read back from the single-use authorization row. */
     codeVerifier: string | null;
+    appCredential: Record<string, string> | null;
   }): Promise<GrantedCredential>;
   /**
    * Renew it. Null means this provider's credentials do not expire and there is
    * nothing to renew — which is a different fact from "renewal failed" and the
    * caller must be able to tell them apart.
    */
-  refresh(secret: Record<string, unknown>): Promise<GrantedCredential | null>;
+  refresh(secret: Record<string, unknown>, appCredential: Record<string, string> | null): Promise<GrantedCredential | null>;
   /**
    * Tell the provider to forget it. Throwing means the provider did not confirm,
    * and the caller records the revocation as local-only rather than pretending.
    */
   revoke(secret: Record<string, unknown>): Promise<void>;
   /** Is this credential still good? Used to notice a key that died quietly. */
-  probe(secret: Record<string, unknown>): Promise<{ ok: boolean; detail: string }>;
+  probe(secret: Record<string, unknown>, appCredential: Record<string, string> | null): Promise<{ ok: boolean; detail: string }>;
 }
 
 const adapters = new Map<string, SenseProviderAdapter>();

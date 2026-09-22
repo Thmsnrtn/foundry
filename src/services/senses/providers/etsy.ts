@@ -29,9 +29,19 @@
 // different shop entirely — is a fact this institution notices rather than a
 // mismatch it carries silently.
 //
-// CONFIGURATION IS A DEPLOYMENT FACT. Without `ETSY_API_KEY` this adapter
-// refuses to build an authorize URL and says so in words the owner can act on,
-// rather than sending him to a provider page that will reject him.
+// THE APPLICATION KEY IS HANDED IN, NOT FETCHED. This file read
+// `process.env.ETSY_API_KEY` — the one thing in it the adapter chose for
+// itself, while its scopes were handed to it precisely so it could not. The
+// owner places the key through the institution's own surface now, verified
+// against Etsy before it is kept, and this adapter has no way to obtain one it
+// was not given. Without a key it refuses to build an authorize URL and says so
+// in words he can act on, rather than sending him to a page that will reject him.
+//
+// TWO THINGS IN HERE WERE WRONG AGAINST ETSY'S PUBLISHED CONTRACT, and finding
+// them before he connected anything is the entire reason this adapter was
+// written before it was needed. `x-api-key` carries the keystring AND the
+// shared secret joined by a colon, not the keystring alone; and the token
+// request is form-encoded, not JSON. Every call would have been refused.
 // =============================================================================
 
 import {
@@ -39,21 +49,32 @@ import {
   type GrantedCredential, type SenseProviderAdapter,
 } from './contract.js';
 import { safeFetch } from '../../outbound/ssrf.js';
+import { etsyApiKeyHeader, type EtsyAppKey } from '../app-credential.js';
 
 const AUTHORIZE = 'https://www.etsy.com/oauth/connect';
 const TOKEN = 'https://api.etsy.com/v3/public/oauth/token';
 const API = 'https://openapi.etsy.com/v3/application';
 
-function apiKey(): string {
-  const key = (process.env.ETSY_API_KEY ?? '').trim();
-  if (!key) {
+/**
+ * THE APPLICATION, HANDED IN RATHER THAN FETCHED.
+ *
+ * This read `process.env.ETSY_API_KEY` — the one thing in this adapter it chose
+ * for itself, while its scopes were handed to it precisely so it could not.
+ * The owner now places the key through the institution's own surface, so it
+ * arrives the same way the scopes do and this file has no way to obtain one it
+ * was not given.
+ */
+function appKey(given: Record<string, string> | null): EtsyAppKey {
+  const keystring = (given?.keystring ?? '').trim();
+  const sharedSecret = (given?.sharedSecret ?? '').trim();
+  if (!keystring || !sharedSecret) {
     throw new SenseProviderError({
-      ownerWords: 'this deployment has no Etsy app registered, so I cannot ask '
-        + 'Etsy for permission to read your shop yet',
+      ownerWords: 'this deployment has no Etsy application key yet, so I cannot ask '
+        + 'Etsy for permission to read your shop',
       recoverable: false,
     });
   }
-  return key;
+  return { keystring, sharedSecret };
 }
 
 /**
@@ -96,8 +117,17 @@ async function call(url: string, init: RequestInit): Promise<Record<string, unkn
   return body;
 }
 
-const auth = (accessToken: string): Record<string, string> => ({
-  'x-api-key': apiKey(), Authorization: `Bearer ${accessToken}`,
+/**
+ * ETSY WANTS BOTH HALVES OF THE APPLICATION KEY IN ONE HEADER. Its
+ * documentation: "Every request to a v3 endpoint must include an `x-api-key`
+ * header containing your keystring and shared secret separated by a colon."
+ *
+ * This sent the keystring alone. Every call would have been refused — found by
+ * reading Etsy's own contract before the owner connected anything, which is the
+ * entire reason this adapter was written before it was needed.
+ */
+const auth = (accessToken: string, key: EtsyAppKey): Record<string, string> => ({
+  'x-api-key': etsyApiKeyHeader(key), Authorization: `Bearer ${accessToken}`,
 });
 
 /**
@@ -106,11 +136,11 @@ const auth = (accessToken: string): Record<string, string> => ({
  * every probe, because the answer can change under the institution's feet and
  * the owner has already renamed one shop while this was being built.
  */
-async function whoseShop(accessToken: string): Promise<{ shopId: string | null; shopName: string | null; url: string | null }> {
-  const me = await call(`${API}/users/me`, { headers: auth(accessToken) });
+async function whoseShop(accessToken: string, key: EtsyAppKey): Promise<{ shopId: string | null; shopName: string | null; url: string | null }> {
+  const me = await call(`${API}/users/me`, { headers: auth(accessToken, key) });
   const shopId = me.shop_id == null ? null : String(me.shop_id);
   if (!shopId) return { shopId: null, shopName: null, url: null };
-  const shop = await call(`${API}/shops/${encodeURIComponent(shopId)}`, { headers: auth(accessToken) });
+  const shop = await call(`${API}/shops/${encodeURIComponent(shopId)}`, { headers: auth(accessToken, key) });
   return {
     shopId,
     shopName: typeof shop.shop_name === 'string' ? shop.shop_name : null,
@@ -121,7 +151,8 @@ async function whoseShop(accessToken: string): Promise<{ shopId: string | null; 
 const adapter: SenseProviderAdapter = {
   provider: 'etsy',
 
-  authorizeUrl({ scopes, state, redirectUri, codeChallenge }) {
+  authorizeUrl({ scopes, state, redirectUri, codeChallenge, appCredential }) {
+    const key = appKey(appCredential);
     if (!codeChallenge) {
       throw new SenseProviderError({
         ownerWords: 'I cannot start an Etsy connection without the proof Etsy requires',
@@ -129,7 +160,11 @@ const adapter: SenseProviderAdapter = {
       });
     }
     const params = new URLSearchParams({
-      response_type: 'code', client_id: apiKey(), redirect_uri: redirectUri,
+      // THE KEYSTRING ALONE, never the joined pair: `client_id` identifies the
+      // application and `x-api-key` authenticates the request, and they are not
+      // the same string. Storing the two halves apart is what makes that
+      // distinction impossible to get wrong here.
+      response_type: 'code', client_id: key.keystring, redirect_uri: redirectUri,
       // Exactly what the constitutional table declared. Nothing here widens it,
       // and every one of them is a read.
       scope: scopes.join(' '),
@@ -138,19 +173,24 @@ const adapter: SenseProviderAdapter = {
     return `${AUTHORIZE}?${params.toString()}`;
   },
 
-  async exchange({ code, redirectUri, codeVerifier }) {
+  async exchange({ code, redirectUri, codeVerifier, appCredential }) {
+    const key = appKey(appCredential);
     if (!codeVerifier) {
       throw new SenseProviderError({
         ownerWords: 'that Etsy connection cannot be completed; please start it again',
         recoverable: true,
       });
     }
+    // FORM-ENCODED, WHICH IS WHAT ETSY DOCUMENTS. This posted JSON. Etsy's own
+    // example is `Content-Type: application/x-www-form-urlencoded`, and there is
+    // no `client_secret` in it — PKCE stands in for one, which is why Etsy
+    // requires PKCE on every authorization.
     const payload = await call(TOKEN, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'authorization_code', client_id: apiKey(),
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'authorization_code', client_id: key.keystring,
         redirect_uri: redirectUri, code, code_verifier: codeVerifier,
-      }),
+      }).toString(),
     });
     const access = payload.access_token;
     if (typeof access !== 'string') {
@@ -162,7 +202,7 @@ const adapter: SenseProviderAdapter = {
     // THE IDENTITY IS READ, NOT ASSUMED, and this is the whole reason the shop
     // rename is not a problem: what is recorded is what the account says it is
     // at the moment it is connected.
-    const shop = await whoseShop(access);
+    const shop = await whoseShop(access, key);
     // Etsy access tokens last an hour; the refresh token lasts ninety days,
     // which is an operating limitation named in the maturity map rather than
     // buried here.
@@ -178,16 +218,17 @@ const adapter: SenseProviderAdapter = {
     } satisfies GrantedCredential;
   },
 
-  async refresh(secret) {
+  async refresh(secret, appCredential) {
+    const key = appKey(appCredential);
     const refreshToken = secret.refresh_token;
     // NULL MEANS THERE IS NOTHING TO RENEW, a different fact from a renewal
     // that failed, and the caller must be able to tell them apart.
     if (typeof refreshToken !== 'string' || !refreshToken) return null;
     const payload = await call(TOKEN, {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'refresh_token', client_id: apiKey(), refresh_token: refreshToken,
-      }),
+      method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        grant_type: 'refresh_token', client_id: key.keystring, refresh_token: refreshToken,
+      }).toString(),
     });
     const access = payload.access_token;
     if (typeof access !== 'string') {
@@ -223,11 +264,11 @@ const adapter: SenseProviderAdapter = {
     });
   },
 
-  async probe(secret) {
+  async probe(secret, appCredential) {
     const access = secret.access_token;
     if (typeof access !== 'string' || !access) return { ok: false, detail: 'no access token' };
     try {
-      const shop = await whoseShop(access);
+      const shop = await whoseShop(access, appKey(appCredential));
       if (!shop.shopId) return { ok: true, detail: 'the account answers, and has no shop' };
       // A RENAME IS A FACT, NOT A FAILURE. The probe reports what the shop is
       // called now; whether that matches what was recorded is the caller's

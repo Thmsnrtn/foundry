@@ -272,7 +272,7 @@ export async function establishReferenceCompany(input: {
     });
     if (!connected || !adapter) continue;
     const code = issueReferenceCode(`${productId}:${senseKey}`, ['reference:read']);
-    const granted = await adapter.exchange({ code, redirectUri: 'internal', codeVerifier: null });
+    const granted = await adapter.exchange({ code, redirectUri: 'internal', codeVerifier: null, appCredential: null });
     await query(
       `INSERT INTO sense_credentials
          (id, company_sense_id, product_id, provider, granted_scopes_json,

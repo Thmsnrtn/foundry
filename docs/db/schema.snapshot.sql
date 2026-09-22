@@ -384,6 +384,26 @@ CREATE TABLE api_keys (
   last_used_at DATETIME,
   revoked_at DATETIME
 , product_id TEXT, role TEXT, scopes TEXT, created_by TEXT, expires_at TEXT);
+CREATE TABLE app_credentials (
+  provider             TEXT PRIMARY KEY,
+  -- Encrypted. For Etsy: {"keystring": "...", "sharedSecret": "..."} — two
+  -- values rather than one pre-joined string, because `x-api-key` wants them
+  -- joined by a colon and `client_id` wants the keystring alone, and a stored
+  -- form that has to be split to be used is a parsing bug waiting for a key
+  -- with a colon in it.
+  secret_json          TEXT NOT NULL,
+  -- What the provider said this key IS, read back at verification. Etsy returns
+  -- an `application_id`; recording it means a key swapped for a different app's
+  -- is a fact this institution notices rather than a surprise later.
+  provider_account_ref TEXT NOT NULL,
+  -- When the provider last confirmed it. Not when it was typed.
+  verified_at          TEXT NOT NULL,
+  set_at               TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  -- Who placed it. A credential with no author is one nobody can ask about.
+  set_by               TEXT NOT NULL,
+  forgotten_at         TEXT,
+  forget_reason        TEXT
+);
 CREATE TABLE asset_money_spent (
   id            TEXT PRIMARY KEY,
   product_id    TEXT NOT NULL REFERENCES products(id),
@@ -5471,6 +5491,31 @@ BEFORE UPDATE OF product_id ON ai_spend_reservations
 WHEN NEW.product_id IS NOT NULL
  AND EXISTS (SELECT 1 FROM products WHERE id = NEW.product_id AND standing = 'experimental')
 BEGIN SELECT RAISE(ABORT,'products:experimental_has_no_company_spend'); END;
+CREATE TRIGGER app_credential_forgetting_is_said_out_loud
+BEFORE UPDATE ON app_credentials
+BEGIN
+  SELECT RAISE(ABORT,'app_credential:forget_needs_reason')
+    WHERE NEW.forgotten_at IS NOT NULL AND trim(coalesce(NEW.forget_reason,'')) = '';
+  -- The provider a row is for never changes. A key replaced for the same
+  -- provider is the same row rewritten; a key for a different provider is a
+  -- different row.
+  SELECT RAISE(ABORT,'app_credential:provider_is_immutable')
+    WHERE NEW.provider <> OLD.provider;
+  SELECT RAISE(ABORT,'app_credential:must_be_encrypted')
+    WHERE NEW.secret_json NOT GLOB '*:*:*';
+END;
+CREATE TRIGGER app_credential_guard
+BEFORE INSERT ON app_credentials
+BEGIN
+  SELECT RAISE(ABORT,'app_credential:incomplete')
+    WHERE trim(NEW.secret_json) = '' OR trim(NEW.set_by) = ''
+       OR trim(NEW.provider_account_ref) = '' OR trim(NEW.verified_at) = '';
+  -- `iv:ciphertext:authTag`. Three hex parts, two colons.
+  SELECT RAISE(ABORT,'app_credential:must_be_encrypted')
+    WHERE NEW.secret_json NOT GLOB '*:*:*';
+  SELECT RAISE(ABORT,'app_credential:cannot_arrive_forgotten')
+    WHERE NEW.forgotten_at IS NOT NULL;
+END;
 CREATE TRIGGER asset_money_is_append_only
 BEFORE UPDATE ON asset_money_spent
 BEGIN SELECT RAISE(ABORT,'asset_money:append_only'); END;
