@@ -87,6 +87,25 @@ describe('the list answers his four questions and stops', () => {
   });
 });
 
+describe('he can find it, which is the first thing', () => {
+  // A page reachable only by typing its URL is a page that does not exist.
+  // The Connectors route shipped with zero links to it — the same defect as
+  // the buried form, one layer up, and caught the same way: by asking whether
+  // the journey starts rather than whether the destination renders.
+  it('is linked from Controls, which is where he would look', async () => {
+    const html = await get('/foundry/controls');
+    expect(html).toContain('href="/foundry/controls/connectors"');
+  });
+
+  it('counts real connections rather than a typed repository URL', async () => {
+    // The card read `product.github_repo_url ? ['its code'] : []` — it told an
+    // owner with a live credential that he was connected to nothing.
+    const html = await get('/foundry/controls');
+    expect(html).toContain('Nothing connected');
+    expect(html).not.toContain('I have no way to see your code, your money or your customers');
+  });
+});
+
 describe('the detail keeps four facts as four', () => {
   it('renders all four, separately, with nothing placed', async () => {
     const html = await get('/foundry/controls/connectors/etsy');

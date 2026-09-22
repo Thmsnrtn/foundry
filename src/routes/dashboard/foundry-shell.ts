@@ -6731,6 +6731,11 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
 
   const { acquisitionsHeld } = await import('../../services/institution/acquisition.js');
   const held = await acquisitionsHeld(s.ownerId);
+  // Counted from the canonical reader, never from a text column.
+  const { connectorsFor } = await import('../../services/senses/journey.js');
+  const connectors = await connectorsFor(s.productId);
+  const connectorsGranted = connectors.filter((x) => x.granted).length;
+  const connectorsWorking = connectors.filter((x) => x.qualified).length;
 
   // WHO SET THE LIMIT, NOT JUST WHAT IT IS.
   //
@@ -6904,9 +6909,27 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
       </dl>
       <details class="fold"><summary><h3>How this works</h3></summary><p class="quiet">The binding ceiling is the lowest of what stands: the charter's daily rate once you sign one, $${(PRE_CHARTER_THINKING_CENTS / 100).toFixed(0)} a day until then, and this deployment's own caps. The same number is handed to the door that buys thinking, so what you read here is what refuses the call. Watching costs nothing — comparing my own records uses no thinking.${ceiling == null ? '' : ' The metered ceiling is separate from any plan: agreeing to a subscription is not agreeing to unlimited computing.'}</p></details>`)}
 
-    ${card('watching', 'Connected to', s.connectedSenses.length === 0
-    ? html`<p><strong>Nothing.</strong> I have no way to see your code, your money or your customers.</p>`
-    : html`<ul>${raw(s.connectedSenses.map((x) => `<li>${x}</li>`).join(''))}</ul>`)}
+    ${/* THE DOOR TO CONNECTORS, AND A CARD THAT NOW TELLS THE TRUTH.
+         Two defects in one place. It had no link, so the Connectors page could
+         only be reached by typing its URL — a page nobody can find is a page
+         that does not exist, which is the whole complaint one layer up. And it
+         read `s.connectedSenses`, which is `product.github_repo_url ? ['its
+         code'] : []` — a typed text column, not a connection. It said "Nothing"
+         to an owner with a live credential, and "its code" to one who had only
+         ever pasted a repository URL.
+         It counts real rows now, and the summary is one line because the
+         detail is one tap away. */ ''}
+    ${card('watching', 'Connections', connectors.length === 0
+    ? html`<p><strong>Nothing I could connect.</strong> No external source is declared yet.</p>`
+    : html`
+      <p>${connectorsWorking > 0
+    ? html`<strong>${String(connectorsWorking)} working</strong> — read and proven against the real account.`
+    : connectorsGranted > 0
+      ? html`<strong>${String(connectorsGranted)} connected</strong>, and nothing has been read through ${connectorsGranted === 1 ? 'it' : 'them'} yet.`
+      : html`<strong>Nothing connected.</strong> I cannot see your money, your customers or your shop.`}
+        ${connectors.length - connectorsGranted > 0
+    ? html`${String(connectors.length - connectorsGranted)} more could be.` : ''}</p>
+      <a class="btn go" href="/foundry/controls/connectors">Connections</a>`)}
 
     ${held.length === 0 ? '' : card('box', 'Things I hold', html`
       <details class="fold"><summary><h3>How this works</h3></summary><p class="quiet">Each of these is something you said I could have. Stopping one
