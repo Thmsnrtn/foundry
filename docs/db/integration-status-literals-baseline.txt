@@ -1,1 +1,6 @@
-
+src/routes/dashboard/foundry-shell.ts:6576
+src/services/senses/journey.ts:204
+src/services/senses/journey.ts:232
+src/services/senses/journey.ts:249
+src/services/senses/journey.ts:317
+src/services/senses/journey.ts:73

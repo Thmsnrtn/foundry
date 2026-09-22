@@ -1,0 +1,163 @@
+// =============================================================================
+// CONNECTORS IS A PLACE, NOT THE SETTINGS FORM MOVED.
+//
+// The owner, 22 September 2026: "Do not simply relocate the existing settings
+// form. Design the complete interaction around establishing, understanding,
+// managing, and governing real external account connections."
+//
+// And the thing it must never do: "Distinguish four separate facts: the
+// provider supports an operation; the connection grants the necessary technical
+// permissions; Foundry has qualified the capability to perform the operation
+// reliably; my current institutional authority permits the operation. Do not
+// collapse these into a single green Connected status."
+//
+// So this drives the real routes and checks the four facts are four, that the
+// list is short enough to be a list, and that no disconnect control ships
+// before the dependency reading the directive requires in front of it.
+// =============================================================================
+process.env.TURSO_DATABASE_URL = 'file::memory:';
+process.env.ENCRYPTION_KEY = '6'.repeat(64);
+process.env.FOUNDRY_OWNER_EMAIL = 'owner@example.com';
+
+import { beforeAll, describe, expect, it } from 'vitest';
+import { Hono } from 'hono';
+import { runMigrations } from '../../src/db/migrate.js';
+import { query } from '../../src/db/client.js';
+import { connectorsFor } from '../../src/services/senses/journey.js';
+
+const F = 'f_conn', P = 'p_conn';
+let app: Hono;
+
+beforeAll(async () => {
+  await runMigrations();
+  await query('INSERT INTO founders (id,clerk_user_id,email) VALUES (?,?,?)',
+    [F, 'c_conn', 'owner@example.com']);
+  await query('INSERT INTO products (id,name,owner_id,status) VALUES (?,?,?,?)',
+    [P, 'Apex Micro', F, 'active']);
+  const { foundryShellRoutes } = await import('../../src/routes/dashboard/foundry-shell.js');
+  app = new Hono();
+  app.use('*', async (c, next) => {
+    c.set('founder', { id: F, email: 'owner@example.com' }); await next();
+  });
+  app.route('/', foundryShellRoutes);
+});
+
+const get = async (path: string): Promise<string> => {
+  const res = await app.request(path);
+  expect(res.status, `${path} did not render`).toBe(200);
+  return res.text();
+};
+
+describe('the list answers his four questions and stops', () => {
+  it('renders, from a door that already exists', async () => {
+    // Controls → Connectors. No new bottom-nav item: the phone path is
+    // More → Controls → Connectors, and the five-door assertion is what keeps
+    // that a fact rather than an intention.
+    const html = await get('/foundry/controls/connectors');
+    expect(html).toContain('Connectors');
+  });
+
+  it('names every provider the institution has declared, not only the coded ones', async () => {
+    const all = await connectorsFor(P);
+    expect(all.length).toBeGreaterThan(1);
+    expect(all.map((x) => x.provider)).toContain('etsy');
+  });
+
+  it('says where each one is in one line, rather than explaining itself first', async () => {
+    const html = await get('/foundry/controls/connectors');
+    // The state Etsy is actually in with nothing placed.
+    expect(html).toContain('Needs its application key');
+  });
+
+  it('keeps the list a list — the restraint is the feature', async () => {
+    // The page he could not use explained itself before it showed him
+    // anything. A word count is a blunt instrument and it is the right one
+    // here: this page exists to be scanned.
+    const html = await get('/foundry/controls/connectors');
+    const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    expect(text.split(' ').length).toBeLessThan(220);
+  });
+
+  it('still says a connection never confers the power to act', async () => {
+    // Whitespace-normalised: the copy wraps in the source and a line break is
+    // not a change of meaning.
+    const flat = (await get('/foundry/controls/connectors')).replace(/\s+/g, ' ');
+    expect(flat).toContain('It never lets me act');
+    expect(flat).toContain('moving money each need');
+  });
+});
+
+describe('the detail keeps four facts as four', () => {
+  it('renders all four, separately, with nothing placed', async () => {
+    const html = await get('/foundry/controls/connectors/etsy');
+    expect(html).toContain('offers a way to read this');
+    expect(html).toContain('You have not granted me any permission');
+    expect(html).toContain('I have not yet done it for real');
+    expect(html).toContain('Nothing here is authorised');
+  });
+
+  it('says out loud that they are four different things', async () => {
+    const html = await get('/foundry/controls/connectors/etsy');
+    expect(html).toContain('These are four different things');
+    expect(html).toContain('tells you nothing about the fourth');
+  });
+
+  it('shows the journey for the provider that has one', async () => {
+    const html = await get('/foundry/controls/connectors/etsy');
+    expect(html).toContain('Where this has got to');
+    expect(html).toContain('Application key saved, and checked with Etsy');
+  });
+
+  it('does not invent a journey for a provider that has none', async () => {
+    const all = await connectorsFor(P);
+    const other = all.find((x) => x.provider !== 'etsy')!;
+    const html = await get(`/foundry/controls/connectors/${other.provider}`);
+    expect(html).not.toContain('Where this has got to');
+  });
+
+  it('ships no disconnect control, because the dependency reading does not exist yet', async () => {
+    // "Before disconnecting a consequential service, show the affected assets
+    // and operating responsibilities." That reading is not built. Shipping the
+    // button without it is the one thing the directive forbids shipping bare,
+    // so the control stays where it already lives with its revocation
+    // reporting, and this asserts the absence rather than trusting it.
+    const html = await get('/foundry/controls/connectors/etsy');
+    expect(html).not.toContain('/disconnect');
+  });
+
+  it('refuses a provider that does not exist', async () => {
+    const res = await app.request('/foundry/controls/connectors/nonesuch');
+    expect(res.status).toBe(404);
+  });
+});
+
+describe('a connector that is connected reads differently from one that is not', () => {
+  beforeAll(async () => {
+    const r = (await query(
+      "SELECT sense_key, mode FROM sense_providers WHERE provider = 'etsy' LIMIT 1"))
+      .rows[0] as Record<string, unknown>;
+    await query(
+      `INSERT INTO company_senses (id, product_id, sense_key, provider, mode, disclosure)
+       VALUES (?,?,?,?,?,?)`,
+      ['cs_conn', P, String(r.sense_key), 'etsy', String(r.mode), 'I would read the shop.']);
+    await query(
+      `UPDATE company_senses SET provider_account_ref = ?, provider_account_label = ?,
+              identity_verified_at = datetime('now') WHERE id = 'cs_conn'`,
+      ['12345678', 'ApexMicro']);
+  });
+
+  it('names the account on the list, not just the provider', async () => {
+    expect(await get('/foundry/controls/connectors')).toContain('ApexMicro');
+  });
+
+  it('separates granted from qualified, which is the whole point', async () => {
+    const html = await get('/foundry/controls/connectors/etsy');
+    // Granted: he authorised it. Qualified: nothing has actually been read.
+    expect(html).toContain('You have granted me the permission to');
+    expect(html).toContain('I have not yet done it for real');
+  });
+
+  it('says nothing has been read yet rather than calling it working', async () => {
+    expect(await get('/foundry/controls/connectors')).toContain('nothing read yet');
+  });
+});

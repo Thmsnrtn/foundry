@@ -6528,6 +6528,196 @@ foundryShellRoutes.post('/foundry/companies/:id/understanding/:responsibilityId'
  * ceiling really applied, a stop that really stops.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+/**
+ * CONTROLS → CONNECTORS, and what it is deliberately not.
+ *
+ * It is not the settings form relocated. The owner: "Do not simply relocate
+ * the existing settings form. Design the complete interaction around
+ * establishing, understanding, managing, and governing real external account
+ * connections."
+ *
+ * So the first screen answers his four questions and nothing else — what is
+ * connected, what Foundry can do with it, what it is using it for, does
+ * anything need him — one line per connector, and the mechanics live one tap
+ * away. That restraint is the feature. The page he could not use was a page
+ * that explained itself before it showed him anything.
+ *
+ * FOUR FACTS, FOUR MARKS, NEVER ONE TICK. The provider supports it; the
+ * connection grants it; Foundry has qualified it; his authority permits it.
+ * Every one is a different row, and this renders them as four so that a
+ * connection cannot be read as more than it is.
+ *
+ * NO NEW DOOR. The phone path is More → Controls → Connectors. The bottom bar
+ * holds five and the exact-order assertion in `five-doors-under-the-thumb`
+ * is what keeps that a fact rather than an intention.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.get('/foundry/controls/connectors',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const owned = await query(
+      'SELECT id, name FROM products WHERE owner_id = ? ORDER BY rowid LIMIT 1',
+      [String(founder.id)]);
+    if (!owned.rows.length) return c.redirect('/foundry');
+    const productId = String((owned.rows[0] as Record<string, unknown>).id);
+
+    const { connectorsFor } = await import('../../services/senses/journey.js');
+    const all = await connectorsFor(productId);
+    const connected = all.filter((x) => x.granted);
+    const rest = all.filter((x) => !x.granted);
+
+    // THE ONE LINE EACH, and it says where the thing actually is rather than
+    // whether a row exists. `qualified` is the ladder's word and it is only
+    // true when a real read was witnessed.
+    const where = (x: typeof all[number]): string => x.qualified
+      ? `Working — ${x.account ?? 'reading your account'}`
+      : x.stage === 'identity_verified' ? `${x.account ?? 'Connected'}, nothing read yet`
+        : x.stage === 'connected' ? 'Connected, not used yet'
+          : x.standsBetween === 'no_app_key' ? 'Needs its application key'
+            : x.standsBetween === 'no_adapter' ? 'Not connectable yet'
+              : x.standsBetween === 'not_configured' ? 'Not set up on this deployment'
+                : 'Ready to connect';
+
+    const row = (x: typeof all[number]): unknown => html`
+      <a href="/foundry/controls/connectors/${x.provider}" class="know"
+         style="display:flex;gap:0.75rem;align-items:center;justify-content:space-between;
+                padding:0.85rem 1rem;min-height:56px;text-decoration:none;">
+        <span style="min-width:0;">
+          <span style="display:block;font-weight:600;">${x.name}</span>
+          <span style="display:block;font-size:0.84rem;color:var(--text-muted);">${where(x)}</span>
+        </span>
+        <span aria-hidden="true" style="flex:0 0 auto;color:${x.qualified ? 'var(--ok)' : x.granted ? 'var(--text-muted)' : 'var(--text-dim)'};">
+          ${x.qualified ? '\u25cf' : x.granted ? '\u25d0' : '\u25cb'}
+        </span>
+      </a>`;
+
+    return c.html(page('Connectors', html`
+      <h1>Connectors</h1>
+      <p class="lede">What I am plugged into, and what each one actually lets me do.</p>
+
+      ${connected.length ? html`
+      <h2 style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-dim);margin:1.25rem 0 0.5rem;">Connected</h2>
+      <div style="display:grid;gap:0.5rem;">${connected.map(row)}</div>` : ''}
+
+      <h2 style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-dim);margin:1.25rem 0 0.5rem;">
+        ${connected.length ? 'Not connected' : 'Available'}</h2>
+      <div style="display:grid;gap:0.5rem;">${rest.map(row)}</div>
+
+      <p class="quiet" style="margin-top:1.25rem;">Connecting something lets me read it. It never
+        lets me act — publishing, pricing, messaging a customer and moving money each need
+        their own permission, and none of them comes from a connection.</p>`,
+    'controls', {
+      eyebrow: 'Controls',
+      crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: '/foundry/controls', label: 'Controls' },
+        { href: '/foundry/controls/connectors', label: 'Connectors' }],
+      scope: { kind: 'foundry', id: null, name: 'the estate' }, local: [], chips: [],
+    }));
+  });
+
+/**
+ * ONE CONNECTOR, IN FULL — the progressive disclosure the list page defers to.
+ *
+ * WHAT IS DELIBERATELY ABSENT: a disconnect control. The directive is explicit
+ * that before disconnecting a consequential service the owner must be shown the
+ * assets and obligations that depend on it — "Do not silently disconnect a
+ * service and leave live assets in an apparently healthy operating state" —
+ * and that dependency reading does not exist yet. Shipping the button without
+ * it is the one thing this section forbids shipping bare.
+ *
+ * So the way to stop seeing something is still the company page, where the
+ * control has always lived with its revocation-confirmed reporting. When the
+ * dependency reading exists, the control moves here with it.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.get('/foundry/controls/connectors/:provider',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const owned = await query(
+      'SELECT id, name FROM products WHERE owner_id = ? ORDER BY rowid LIMIT 1',
+      [String(founder.id)]);
+    if (!owned.rows.length) return c.redirect('/foundry');
+    const productId = String((owned.rows[0] as Record<string, unknown>).id);
+    const companyName = String((owned.rows[0] as Record<string, unknown>).name);
+
+    const { connectorsFor, etsyJourney } = await import('../../services/senses/journey.js');
+    const provider = c.req.param('provider');
+    const one = (await connectorsFor(productId)).find((x) => x.provider === provider);
+    if (!one) return c.notFound();
+
+    // Only Etsy has a step-by-step journey today, because only Etsy has an
+    // application key the owner places by hand. Saying that rather than
+    // inventing four generic steps for every provider.
+    const journey = provider === 'etsy' ? await etsyJourney(productId) : null;
+
+    const fact = (yes: boolean, said: string, no: string): unknown => html`
+      <li style="display:flex;gap:0.6rem;align-items:flex-start;padding:0.3rem 0;">
+        <span aria-hidden="true" style="flex:0 0 1.1rem;color:${yes ? 'var(--ok)' : 'var(--text-dim)'};">${yes ? '\u25cf' : '\u25cb'}</span>
+        <span style="color:${yes ? 'var(--text)' : 'var(--text-dim)'};">${yes ? said : no}</span>
+      </li>`;
+
+    return c.html(page(one.name, html`
+      <h1>${one.name}</h1>
+      <p class="lede">${one.account
+    ? `This connection opens ${one.account}.`
+    : one.granted ? 'Connected, and I have not confirmed which account it opens.'
+      : one.wouldSee ? `Connecting it would let me understand ${one.wouldSee}.` : 'Not connected.'}</p>
+
+      ${one.next ? html`
+      <div class="know">
+        <h2>Next</h2>
+        <p>${one.next.say}${one.next.href ? html` <a href="${one.next.href}">Do that</a>.` : ''}</p>
+      </div>` : ''}
+
+      ${journey ? html`
+      <div class="know">
+        <h2>Where this has got to</h2>
+        <ol style="list-style:none;padding:0;margin:0;display:grid;gap:0.5rem;">
+          ${journey.steps.map((step) => html`
+          <li style="display:flex;gap:0.6rem;align-items:flex-start;">
+            <span aria-hidden="true" style="flex:0 0 1.1rem;color:${step.done ? 'var(--ok)' : 'var(--text-dim)'};">${step.done ? '\u25cf' : '\u25cb'}</span>
+            <span><span style="color:${step.done ? 'var(--text)' : 'var(--text-dim)'};">${step.title}</span>
+            ${step.evidence ? html`<br /><span style="font-size:0.82rem;color:var(--text-muted);">${step.evidence}</span>` : ''}</span>
+          </li>`)}
+        </ol>
+      </div>` : ''}
+
+      ${/* THE FOUR FACTS, AS FOUR. Collapsing them into one green tick is the
+           thing the directive names first and refuses hardest, because each is
+           a different row and three of them being true says nothing about the
+           fourth. */ ''}
+      <div class="know">
+        <h2>What that means I can do</h2>
+        <ul style="list-style:none;padding:0;margin:0;">
+          ${fact(one.supported, `${one.name} offers a way to read this`, `${one.name} offers nothing I could read`)}
+          ${fact(one.granted, 'You have granted me the permission to', 'You have not granted me any permission')}
+          ${fact(one.qualified, 'I have actually done it against your real account', 'I have not yet done it for real')}
+          ${fact(one.authorised, 'Your standing authority permits the reading', 'Nothing here is authorised')}
+        </ul>
+        <p class="quiet" style="margin-top:0.6rem;">These are four different things. Three of them
+          being true tells you nothing about the fourth.</p>
+      </div>
+
+      <div class="know">
+        <h2>What it still does not let me do</h2>
+        <p>Reading is all of it. Publishing a listing, changing a price, messaging a customer and
+          moving money each need their own permission, and none of them comes from this.</p>
+      </div>
+
+      ${one.granted ? html`
+      <p class="quiet">To stop seeing it, open ${companyName} and use the control there — it tells
+        you whether ${one.name} confirmed the revocation, which a button here could not.</p>
+      <a class="btn" href="/foundry/companies/${productId}">Open ${companyName}</a>` : ''}`,
+    'controls', {
+      eyebrow: 'Controls',
+      crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: '/foundry/controls', label: 'Controls' },
+        { href: '/foundry/controls/connectors', label: 'Connectors' },
+        { href: `/foundry/controls/connectors/${one.provider}`, label: one.name }],
+      scope: { kind: 'foundry', id: null, name: 'the estate' }, local: [], chips: [],
+    }));
+  });
+
 foundryShellRoutes.get('/foundry/controls', async (c: any) => {
   let s: OwnerState | null;
   try {

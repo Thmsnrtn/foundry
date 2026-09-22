@@ -51,6 +51,20 @@ import { query } from '../../db/client.js';
 /**
  * The six states, in the order they are reached. A connection is at exactly
  * one, and everything before it is also true.
+ *
+ * ON THE WORD 'connected', WHICH THIS FILE IS BASELINED FOR.
+ * `check-integration-status-vocabulary` refuses that literal because it was
+ * twice written into `integrations.status`, where every reader honours
+ * 'active' — an integration stored that way is one no sync will ever pick up.
+ * That gate is right and it should stay.
+ *
+ * These are a different thing entirely, and the gate's own message asks that
+ * the difference be written down rather than assumed. Nothing here is a status
+ * column: `ConnectionStage` is derived on every read from `app_credentials`,
+ * `company_senses` and `capability_providers`, and is never stored anywhere.
+ * The word is also the owner's and the directive's — "Shop connected" — and
+ * renaming the institution's vocabulary to dodge a gate about another table
+ * would make the product worse to read in order to make a linter quieter.
  */
 export type ConnectionStage =
   | 'no_key'
@@ -87,6 +101,48 @@ export interface ConnectionJourney {
    * exactly the collapse the institution refuses everywhere else.
    */
   grantsNothing: string;
+}
+
+/**
+ * EVERY CONNECTOR THE OWNER COULD HAVE, AND WHERE EACH ONE ACTUALLY IS.
+ *
+ * The directive's first four questions, in order: what is connected, what can
+ * Foundry actually do with it, what is it using the connection for, does
+ * anything need my attention. This answers the first and third; the second is
+ * the four permission facts below, which are four separate rows and must not
+ * collapse into one green tick.
+ *
+ * Composed, never reimplemented. `whatStandsBetween` is the only status reader
+ * and stays the only one; `connectedSenses` is the only list of live
+ * connections; the ladder is the only record of what has been proven. A second
+ * answer to any of those is the defect this repository already chains a gate
+ * against.
+ */
+export interface Connector {
+  provider: string;
+  name: string;
+  /** What connecting it would let Foundry understand, from the offer rows. */
+  wouldSee: string | null;
+  stage: ConnectionStage;
+  /** The account, when the provider has told us which one. */
+  account: string | null;
+  /**
+   * FOUR FACTS THAT MUST NOT BECOME ONE.
+   *
+   * "Distinguish four separate facts: the provider supports an operation; the
+   * connection grants the necessary technical permissions; Foundry has
+   * qualified the capability to perform the operation reliably; my current
+   * institutional authority permits the operation. Do not collapse these into
+   * a single green Connected status."
+   */
+  supported: boolean;
+  granted: boolean;
+  qualified: boolean;
+  authorised: boolean;
+  /** What stands between him and asking, when anything does. */
+  standsBetween: 'no_adapter' | 'no_app_key' | 'not_configured' | null;
+  /** The one thing to do next, or null. */
+  next: { say: string; href: string | null } | null;
 }
 
 /** A shop name is the provider's answer; an id alone is still an answer. */
@@ -211,4 +267,83 @@ export async function etsyJourney(productId: string): Promise<ConnectionJourney>
   })();
 
   return { provider: 'etsy', stage, steps, next, grantsNothing };
+}
+
+
+/**
+ * Every provider this institution has declared, with its real state.
+ *
+ * WHY THE DECLARED LIST RATHER THAN THE REGISTERED ONE. An adapter existing in
+ * the import graph is a fact about the code; `sense_providers` is what the
+ * institution has said it could learn from, which is the question the owner is
+ * asking. A provider with rows and no adapter is a real state — "I know this
+ * could tell me things and cannot ask it yet" — and hiding it would misreport
+ * the institution as smaller than it is.
+ */
+export async function connectorsFor(productId: string): Promise<Connector[]> {
+  const declared = (await query(
+    `SELECT p.provider, MIN(s.would_learn) AS would_learn
+       FROM sense_providers p JOIN senses s ON s.sense_key = p.sense_key
+      GROUP BY p.provider ORDER BY p.provider`)).rows as unknown as Array<Record<string, unknown>>;
+
+  const { whatStandsBetween } = await import('./credentials.js');
+  const { providerName } = await import('./index.js');
+
+  const live = (await query(
+    `SELECT provider, connected_at, provider_account_ref, provider_account_label,
+            identity_verified_at, last_observed_at
+       FROM company_senses
+      WHERE product_id = ? AND disconnected_at IS NULL`, [productId]))
+    .rows as unknown as Array<Record<string, unknown>>;
+
+  // The ladder, once, for every provider — rather than a query per row.
+  const proven = new Set(((await query(
+    `SELECT DISTINCT p.provider FROM capability_providers p
+       JOIN capabilities c ON c.capability_key = p.capability_key
+      WHERE c.rung = 'observe' AND p.maturity IN ('reality_proven','reliable')`))
+    .rows as unknown as Array<Record<string, unknown>>).map((r) => String(r.provider)));
+
+  const out: Connector[] = [];
+  for (const d of declared) {
+    const provider = String(d.provider);
+    const sense = live.find((l) => String(l.provider) === provider);
+    const standsBetween = await whatStandsBetween(provider);
+    const account = sense ? named(
+      sense.provider_account_label == null ? null : String(sense.provider_account_label),
+      sense.provider_account_ref == null ? null : String(sense.provider_account_ref)) : null;
+
+    const stage: ConnectionStage = proven.has(provider) && sense ? 'qualified'
+      : sense?.identity_verified_at != null ? 'identity_verified'
+        : sense != null ? 'connected'
+          : standsBetween === null ? 'authorization_pending'
+            : 'no_key';
+
+    out.push({
+      provider,
+      name: providerName(provider),
+      wouldSee: d.would_learn == null ? null : String(d.would_learn),
+      stage,
+      account,
+      // The provider documents the operation: it has declared rows at all.
+      supported: true,
+      // The connection grants it: a live credential exists for this company.
+      granted: sense != null,
+      // Foundry has qualified it: the ladder says a real read was witnessed.
+      qualified: proven.has(provider) && sense != null,
+      // THE OWNER'S AUTHORITY. Reading is what an owner-connected basis
+      // permits, and nothing here widens it. A write capability would answer
+      // this from `capability_access` and `consequenceAllows`, and none of
+      // the write providers can reach a door at all — their `tool` is NULL.
+      authorised: sense != null,
+      standsBetween,
+      next: standsBetween === 'no_adapter'
+        ? { say: `I know ${providerName(provider)} could tell me things, and I cannot ask it for permission yet. Nothing is missing on your side.`, href: null }
+        : standsBetween === 'not_configured'
+          ? { say: `${providerName(provider)} needs a setting this deployment does not have. Not yours to supply.`, href: null }
+          : sense == null
+            ? { say: `Connect ${providerName(provider)}.`, href: `/foundry/companies/${productId}` }
+            : null,
+    });
+  }
+  return out;
 }

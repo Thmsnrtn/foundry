@@ -309,6 +309,14 @@ async function main(): Promise<void> {
   app.route('/', placeRoutes as never);
   const { inboxRoutes } = await import('../src/routes/dashboard/inbox-place.js');
   app.route('/', inboxRoutes as never);
+  // SETTINGS, WHICH THIS GATE HAS NEVER MOUNTED AND THEREFORE NEVER MEASURED.
+  // `/settings` answered 404 to every width it was ever asked about — so the
+  // page where the owner's Etsy key goes, and which he described as "overly
+  // verbose, difficult to navigate on mobile, and structured more like a
+  // technical document than a coherent application", has never once been
+  // opened at phone width by the instrument built to catch exactly that.
+  const { settingsRoutes } = await import('../src/routes/dashboard/settings.js');
+  app.route('/', settingsRoutes as never);
   const { moneyRoutes } = await import('../src/routes/dashboard/money-place.js');
   app.route('/', moneyRoutes as never);
   const { roadmapRoutes } = await import('../src/routes/dashboard/roadmap-place.js');
@@ -325,6 +333,16 @@ async function main(): Promise<void> {
     `/foundry/companies/${REFERENCE_COMPANY}`, '/foundry/controls',
     '/foundry/experiments', `/foundry/experiments/${PROOF1}`, `/foundry/experiments/${PROOF1}/recipients`,
     '/foundry/public-workshop',
+    // THE PAGES HE ACTUALLY STRUGGLED WITH, and which this gate had never
+    // measured. He entered his Etsy application key on `/settings`, could not
+    // tell whether it had saved, and described the page as "overly verbose,
+    // difficult to navigate on mobile, and structured more like a technical
+    // document than a coherent application". A mobile gate that never opened
+    // the page where the owner's real work got stuck was measuring the pages
+    // that were designed most carefully — the exact failure its own header
+    // warns about one screen above.
+    '/settings',
+    `/foundry/companies/${COMPANY}/see/revenue`,
     // THE DEEPER SURFACES, because a gate that only measures the front page
     // measures the page that was designed most carefully. These are where the
     // owner goes when he wants the subtraction, the load, the queue, the
@@ -372,6 +390,8 @@ async function main(): Promise<void> {
   const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
   const failures: string[] = [];
   const rows: string[] = [];
+  /** How much reading stands between the owner and the first thing he can do. */
+  const reading: string[] = [];
 
   // ACCESSIBILITY IS PART OF THE MEASUREMENT, not a later pass. A layout that
   // holds at 17px and breaks at 34px is a layout that breaks for anyone who has
@@ -478,6 +498,64 @@ async function main(): Promise<void> {
           return { n: all.length, clipped: all.filter((d) => d.clipped).map((d) => d.label), overlaps,
             small: all.filter((d) => d.w < 44 || d.h < 44).map((d) => d.label), lit: all.filter((d) => d.lit).length, sheet };
         })(),
+        // HOW FAR DOWN THE FIRST THING HE CAN DO IS.
+        //
+        // "Actions can be buried in lengthy explanations", and "avoid placing
+        // several screens' worth of technical explanations ahead of the primary
+        // action". Both are measurable and neither was measured: this gate
+        // knew about overflow and doors, so a page could pass it green while
+        // putting four paragraphs between the owner and the button.
+        //
+        // The nav is excluded deliberately — it is always at the top and
+        // always actionable, and counting it would report every page as
+        // instantly usable.
+        reading: (() => {
+          const main = document.querySelector('main') ?? document.body;
+          // INLINE, NEVER A NAMED HELPER. The script runner names function
+          // values on the way in and emits a `__name` call the page cannot
+          // resolve — the same trap this file already warns about one
+          // measurement above, which I walked straight into.
+          // FROM THE PAGE'S OWN HEADING, not from the top of the document.
+          // Measured from the document, every page reported its first action
+          // at 13px after 7 words — the shell's own first link, identical
+          // everywhere, which measured the frame rather than the page. What
+          // the owner meant by "actions buried in lengthy explanations" is
+          // what stands between the heading and the first thing he can press.
+          const h1 = main.querySelector('h1');
+          const acts = [...main.querySelectorAll('a[href], button, input:not([type=hidden]), select, textarea, summary')]
+            .filter((e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== 'hidden' && !e.closest('nav')
+              && (!h1 || (h1.compareDocumentPosition(e) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0); });
+          const first = acts[0];
+          const words = (main.textContent ?? '').trim().split(/\s+/).filter(Boolean).length;
+          // Words the eye passes before the first control. Counted from the
+          // text that precedes it in document order, which is what reading
+          // actually is.
+          let before = 0;
+          if (first) {
+            const walk = document.createTreeWalker(main, NodeFilter.SHOW_TEXT);
+            let n = walk.nextNode();
+            let started = h1 === null;
+            while (n) {
+              if (!started) {
+                if (h1 && (h1.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_CONTAINED_BY)) started = true;
+              } else if (first.compareDocumentPosition(n) & Node.DOCUMENT_POSITION_PRECEDING) {
+                before += (n.textContent ?? '').trim().split(/\s+/).filter(Boolean).length;
+              } else break;
+              n = walk.nextNode();
+            }
+          }
+          return {
+            words,
+            wordsBeforeFirstAction: before,
+            firstActionAt: first ? Math.round(first.getBoundingClientRect().top + window.scrollY) : -1,
+            height: Math.round(document.documentElement.scrollHeight),
+            // Every control a thumb has to hit, not only the nav's. 44px is
+            // Apple's own floor and this gate already holds the doors to it.
+            small: acts.filter((e) => { const r = e.getBoundingClientRect(); return r.height < 44 && e.tagName !== 'SUMMARY' && e.tagName !== 'A'; })
+              .map((e) => `${e.tagName.toLowerCase()}:${((e.textContent ?? (e as HTMLInputElement).placeholder ?? '').trim() || '?').slice(0, 24)}`)
+              .slice(0, 6),
+          };
+        })(),
         // The widest element on the page, named, so a failure says what to fix
         // rather than only that something is too wide.
         widest: (() => {
@@ -544,6 +622,18 @@ async function main(): Promise<void> {
       rows.push(`${String(width).padStart(4)} ${desktop ? ' desk' : scale === 1 ? ' 100%' : ' 200%'}  ${String(status)}  `
         + `scrollWidth ${String(m.scrollWidth).padStart(4)} vs ${String(m.innerWidth).padStart(4)}  `
         + `${verdict.padEnd(9)} ${path}`);
+      // READING BURDEN, reported rather than failed. These are not yet a gate:
+      // the right ceiling is a design decision the owner has not made, and a
+      // number invented here would be a threshold nobody agreed to. Printed at
+      // one width so the report stays readable, and so the pages that are
+      // documents rather than screens are visible at a glance.
+      if (!desktop && scale === 1 && width === 390) {
+        reading.push(`${String(m.reading.height).padStart(6)}px tall  `
+          + `first action at ${String(m.reading.firstActionAt).padStart(5)}px after `
+          + `${String(m.reading.wordsBeforeFirstAction).padStart(4)} words  `
+          + `${String(m.reading.words).padStart(5)} words total  `
+          + `${m.reading.small.length ? `under 44px: ${m.reading.small.join(', ')}  ` : ''}${path}`);
+      }
       if (verdict === 'OVERFLOW') {
         failures.push(`${path} at ${String(width)}px ${String(scale * 100)}% text: +${String(overflow)}px `
           + `(widest ${m.widest.tag} reaching ${String(m.widest.w)}px)`);
@@ -627,6 +717,11 @@ async function main(): Promise<void> {
 
   console.log('\nwidth  text  http  document vs window            verdict   path');
   console.log(rows.join('\n'));
+  if (reading.length) {
+    console.log('\nHOW MUCH READING STANDS BETWEEN HIM AND THE FIRST THING HE CAN DO'
+      + '\n(390px, 100% text. Reported, not gated — the ceiling is his to set.)\n');
+    console.log([...reading].sort((a, b) => Number.parseInt(b, 10) - Number.parseInt(a, 10)).join('\n'));
+  }
   if (failures.length) {
     console.log('\nWHAT FAILED:\n' + failures.map((f) => '  ' + f).join('\n'));
     process.exit(1);
