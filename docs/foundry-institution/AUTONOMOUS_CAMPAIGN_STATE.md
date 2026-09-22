@@ -2880,3 +2880,34 @@ watched, and makes that claim immutable.
 
 **In production, nothing publishes for the Etsy asset yet**, and that is
 unchanged by this wave. Its live boundary row still reads `never`.
+
+### Read back from production (22 September 2026, 03:23 UTC)
+
+`foundry-intel` runs **`e8876d58`** — read from `/internal/health`, which stamps
+the commit into the image at build time so the deployed process can say what it
+is rather than being asked from the repository. Status `ok`; database, AI, Clerk
+and scheduler `ok`; loops `ok` with none stopped; storage `volume`.
+
+All nine Workshop pages answer 200. `apexmicro.ai/foundry` answers 404.
+`apexmicro.ai/experiments/bid-decision-workbook` answers 404, which is still
+correct: the listing does not exist, and the entry publishes nothing until it
+does and the owner narrows the boundary through the door in his own words.
+
+**Experiment 001's page is byte-identical to the capture taken before the
+deploy, and this time that is the expected answer rather than a caveat.** The
+previous release changed public copy, so an identical read meant only that the
+hourly pass had not run yet. This wave changed the outbound door, the Slack
+path, the refund mechanism, the obligations prose and the qualification reader —
+all private surfaces. Nothing in it should move a public byte, and nothing did.
+"Clarification, 21 September 2026" is present and unchanged.
+
+One thing this read cannot yet show: `lastCompletedPass` is `03:20:00` and the
+deploy landed at `03:22`, so the pass that has run most recently was the
+previous image's. The first pass under `e8876d58` is the one that would exercise
+the repaired paths in production, and it has not happened at the time of this
+read.
+
+**What is NOT deployed.** Commit `5a93a1fe` — the four-party reconciliation and
+migration 342 — is on the branch, green on its own chain (620 files, 5355
+tests), and deliberately carries no release marker. It rides the next release
+rather than being stacked onto a deploy already building.
