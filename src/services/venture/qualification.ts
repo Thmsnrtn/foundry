@@ -246,15 +246,50 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
     // The same scoping as the reading condition below, and for the same reason:
     // this pre-existed unscoped and the new code copied it rather than fixing
     // it, which a review caught.
-    const connected = productId ? (await query(
-      `SELECT c.id FROM sense_credentials c
+    // A CONDITION WHOSE NAME SAID `confirmed` AND WHOSE EVIDENCE SAID
+    // `connected`. It was `met` the moment a credential existed, on the
+    // strength of a comment claiming "a connected Etsy account named its own
+    // shop" — which a connected account may not have done, and which in any
+    // case is Etsy's statement rather than his.
+    //
+    // Three facts, and the name of this condition has always meant the third:
+    //
+    //   connected  — a live credential exists
+    //   verified   — Etsy answered which account it reaches (migration 346)
+    //   confirmed  — HE said that account is the one he meant (migration 347)
+    //
+    // Etsy can be entirely truthful and the connection still wrong: a second
+    // shop, one somebody else administers, a mis-click on a consent screen. No
+    // provider answer detects that. So the condition asks for all three, and
+    // because `qualificationStandsInTheWay` refuses on any blocking condition,
+    // the recognition boundary is enforced AT THE OUTBOUND DOOR for every
+    // origin — a route, a queued job, a retry, a scheduled pass, an agent —
+    // rather than only being drawn on a page.
+    //
+    // NOT in the way of a delivery, a refund or a withdrawal: that gate returns
+    // null for those before it ever reaches here, because somebody who has
+    // already paid is owed their thing whatever has since gone wrong.
+    const shopRow = productId ? (await query(
+      `SELECT s.identity_verified_at, s.identity_confirmed_at,
+              s.provider_account_label, s.provider_account_ref
+         FROM sense_credentials c
          JOIN company_senses s ON s.id = c.company_sense_id AND s.disconnected_at IS NULL
         WHERE lower(c.provider) = lower(?) AND c.product_id = ? AND c.revoked_at IS NULL LIMIT 1`,
       [plan!.listing!.venue, productId])).rows[0] as Record<string, unknown> | undefined : undefined;
-    conditions.push(connected
-      ? met('the shop it would act on is confirmed', 'a connected Etsy account named its own shop')
-      : { name: 'the shop it would act on is confirmed', verdict: 'waits_for_you',
-        because: 'no Etsy account is connected, so which shop this would act on has never been read back from Etsy — and a shop that has been renamed is exactly the case a remembered name gets wrong' });
+    const shopName = shopRow
+      ? String(shopRow.provider_account_label ?? shopRow.provider_account_ref ?? 'an account')
+      : null;
+    conditions.push(!shopRow
+      ? { name: 'the shop it would act on is confirmed', verdict: 'waits_for_you',
+        because: `no ${venue} account is connected, so which shop this would act on has never been read back from ${venue} — and a shop that has been renamed is exactly the case a remembered name gets wrong` }
+      : shopRow.identity_verified_at == null
+        ? { name: 'the shop it would act on is confirmed', verdict: 'waits_for_you',
+          because: `a ${venue} account is connected and has not yet told me which shop it opens` }
+        : shopRow.identity_confirmed_at == null
+          ? { name: 'the shop it would act on is confirmed', verdict: 'waits_for_you',
+            because: `${venue} says this opens ${shopName}, and you have not said ${shopName} is your shop — a second account, or one somebody else administers, would look exactly like this from here` }
+          : met('the shop it would act on is confirmed',
+            `${venue} named ${shopName} and you confirmed it is yours`));
 
     const exposure = (await query(
       `SELECT exposure_ref, withdrawn_at FROM experiment_exposures
