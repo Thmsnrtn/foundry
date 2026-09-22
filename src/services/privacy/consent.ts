@@ -1277,6 +1277,19 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   stance_bearings: 'which ways of knowing can support or contradict which kind of hypothesis, and why; constitutional, naming nobody — a missing row means that source says nothing',
   reality_only_questions: 'the questions no amount of reading can settle — whether somebody will pay, switch, click or come back — and what each is settled by instead; constitutional, naming nobody',
   consequence_rungs: 'the ladder of consequence an act can have, constitutional and the same for every owner',
+  // A SECRET, AND STILL NOT A PERSON'S. This one is worth saying at length
+  // because it is the first table in this bucket that holds a credential.
+  //
+  // An application key identifies THIS DEPLOYMENT to a provider. It names no
+  // person, belongs to no company, and grants access to nobody's account —
+  // reading a shop needs the owner's separate OAuth grant, which lives in
+  // `sense_credentials` and is company-scoped and erased with one. So erasing a
+  // founder or a company must not take this with it: the deployment would stop
+  // being able to identify itself to Etsy because somebody unrelated left.
+  //
+  // It is encrypted at rest and it is not personal data, which are two
+  // different claims, and only the second one decides which bucket it is in.
+  app_credentials: 'the application key that identifies this deployment to an external provider, encrypted; it names no person, belongs to no company, and grants access to no account — the owner\'s own grant to a shop is a separate, company-scoped credential',
   capability_access: 'on what basis this institution may look at each kind of source — public, or something only the owner can connect — and what looking never grants; constitutional, naming nobody',
   capability_fulfilled_through: 'which capability carries out another — a change to software is produced by running work in an isolated computer — so a substrate is never named by the capabilities above it; constitutional, naming nobody',
   change_production_isolation: 'which kinds of isolation a real change to software may be produced in, and why; constitutional, naming nobody',
