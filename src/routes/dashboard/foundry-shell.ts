@@ -3109,8 +3109,15 @@ foundryShellRoutes.get('/foundry', async (c) => {
            belongs inside it.
            It keeps its own panel when it is anything other than fine, because
            a stopped institution is not a footnote to a calm one. */ ''}
-      ${needsN === 0 ? html`<p class="lines"><span class="state ${estate.cls}">${READINGS.health} ${estate.word.toLowerCase()}</span> <span class="state ${autonomy.nothingWithoutHim ? 'ok' : 'watch'}">Autonomy ${autonomy.nothingWithoutHim ? 'asks first' : 'within grants'}</span> <span class="state ${pulseCls}">${pulse.word}</span></p>` : ''}
-      ${pulseCls === 'ok' ? '' : html`<p class="quiet">${pulse.sentence}</p>`}
+      ${needsN === 0 ? html`<p class="lines"><span class="state ${estate.cls}">${READINGS.health} ${estate.word.toLowerCase()}</span> <span class="state ${autonomy.nothingWithoutHim ? 'ok' : 'watch'}">Autonomy ${autonomy.nothingWithoutHim ? 'asks first' : 'within grants'}</span></p>` : ''}
+      ${/* THE WHOLE PULSE, NOT A CHIP OF IT.
+           The first pass carried only the word — "Working", "Not yet" — and
+           dropped the sentence and the time of the last completed pass. That
+           reads tidier and tells him less: whether the institution has been
+           awake, and when it last was, is the evidence this card's claim rests
+           on, and a gate written months ago says so in as many words. Saying a
+           thing ONCE is not the same as saying less of it. */ ''}
+      <p class="pulse-line" id="pulse"><span class="state ${pulseCls}">${pulse.word}</span> ${pulse.sentence}${pulse.state !== 'stopped' && pulse.lastPassAt ? html` <span class="dim">Last completed pass ${sinceThen(pulse.lastPassAt, new Date())}.</span>` : ''}</p>
     </section>` : '';
 
   // ASK IS A FIRST-CLASS SURFACE, NOT A BOLTED-ON TEXTAREA. When he asked

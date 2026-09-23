@@ -2027,3 +2027,7 @@ a.know:hover{background:var(--card-2)}
    top border so consecutive folds read as a list; as the only child of a card
    that border is a line floating under the card's own edge. */
 .know>details.fold:first-child{border-top:0}
+
+/* THE PULSE INSIDE THE CALM CARD. Its own line, quieter than the claim above
+   it, because it is the evidence for that claim rather than a second claim. */
+.panel.calm .pulse-line{margin:.55rem 0 0;color:var(--ink-2);font-size:.93rem;line-height:1.45}
