@@ -814,6 +814,57 @@ footer a:hover,footer a:focus-visible{text-decoration:underline}
   --os-mint-line:rgba(37,100,84,.14);
 }
 
+/* DARK WAS PARTLY GREEN, AND HAD BEEN ALL ALONG.
+
+   These twenty tokens were declared for the bare `:root` — which is the green
+   appearance — and for `[data-theme="light"]`, and nowhere for
+   `[data-theme="dark"]`. They are read about eighty times across the
+   stylesheet. So every one of those eighty declarations resolved to the GREEN
+   value whenever the owner chose dark: `--os-panel` a dark green `#101713`
+   card on a `#0A0A0B` ground, green-tinted hairlines, a green mint wash
+   behind the body.
+
+   It is the exact mirror of the defect a few hundred lines above, where green
+   was half light. That one was found on a screenshot and fixed where it was
+   seen; nobody then asked the general question, which is whether any family
+   is incomplete for any appearance. It was, in the other direction, the whole
+   time.
+
+   Nothing caught it because both instruments compare within an appearance.
+   The skin check asks whether a palette answers to the device preference
+   behind the owner's back — in dark mode it does not, it answers green under
+   both, so it passes. The shape check asks whether an appearance moves
+   anything — a wrong colour moves nothing. A gate now asks the question those
+   two cannot: every colour the bare `:root` declares must be declared by every
+   explicit appearance.
+
+   The values mirror green's structure exactly — the same alphas, the same
+   roles — with the green hue replaced by the dark palette's own neutrals, so
+   this introduces no new colour decision, only the missing half of an
+   existing one. */
+:root[data-theme="dark"]{
+  --os-bg:#0A0A0B;
+  --os-rail:#0E0E10;
+  --os-panel:#131315;
+  --os-panel-raised:#1A1A1D;
+  --os-panel-soft:#1D1D21;
+  --os-command:rgba(19,19,21,.92);
+  --os-mobile-chrome:rgba(10,10,11,.94);
+  --os-fade:rgba(10,10,11,.99);
+  --os-line:rgba(255,255,255,.10);
+  --os-line-strong:rgba(255,255,255,.18);
+  --os-sheen:rgba(255,255,255,.018);
+  --os-sheen-strong:rgba(255,255,255,.035);
+  --os-dim-fill:rgba(255,255,255,.025);
+  --os-command-fill:rgba(0,0,0,.08);
+  --os-shadow:0 20px 60px rgba(0,0,0,.42);
+  --os-shadow-soft:0 8px 24px rgba(0,0,0,.30);
+  --os-gold:rgba(217,168,94,.55);
+  --os-gold-soft:rgba(217,168,94,.065);
+  --os-mint-soft:rgba(95,192,149,.105);
+  --os-mint-line:rgba(95,192,149,.16);
+}
+
 body{
   background:
     radial-gradient(circle at 78% -10%,var(--os-mint-soft),transparent 34rem),

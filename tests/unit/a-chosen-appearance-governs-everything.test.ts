@@ -76,4 +76,55 @@ describe('a device preference may only speak when the owner has not chosen', () 
     // overridden: it has no selector of its own to win with.
     expect(text).toMatch(/:root\{[\s\S]{0,300}?--bg:/);
   });
+
+  // ===========================================================================
+  // EVERY COLOUR THE DEFAULT DECLARES, EVERY APPEARANCE DECLARES.
+  //
+  // The assertions above were written for the defect they were shown: green
+  // flipping light because a guard named the wrong theme. They were not the
+  // general question, and the general question had a different answer.
+  //
+  // Twenty `--os-*` colours were declared on the bare `:root` — which IS the
+  // green appearance — and under `[data-theme="light"]`, and nowhere under
+  // `[data-theme="dark"]`. They are read about eighty times. So DARK MODE WAS
+  // PARTLY GREEN: a `#101713` card on a `#0A0A0B` ground, green-tinted
+  // hairlines, a green wash behind the body — the exact mirror of the defect
+  // this file was created for, in the other direction, all along.
+  //
+  // Neither instrument could see it. The browser review's skin check asks
+  // whether a palette answers to the device preference behind the owner's
+  // back; in dark mode it does not — it answers green under both preferences,
+  // so it passes. Its shape check asks whether an appearance moves anything,
+  // and a wrong colour moves nothing.
+  //
+  // So this asks the question they cannot, and asks it of the family rather
+  // than of the symptom: a colour the default declares is a colour every
+  // explicit appearance must declare, or the default leaks into it.
+  // ===========================================================================
+  it('lets no colour of the default appearance leak into an explicit one', () => {
+    const text = css().replace(/\/\*[\s\S]*?\*\//g, '');
+    /** Every declaration in every block with this exact selector, unioned. */
+    const union = (selector: string): Map<string, string> => {
+      const out = new Map<string, string>();
+      const at = new RegExp(`${selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*\\{([^{}]*)\\}`, 'g');
+      for (const block of text.matchAll(at)) {
+        for (const d of block[1]!.matchAll(/(--[\w-]+)\s*:\s*([^;}]+)/g)) {
+          out.set(d[1]!, d[2]!.trim());
+        }
+      }
+      return out;
+    };
+    const isColour = (v: string): boolean => /#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\(/.test(v);
+    const base = union(':root');
+    const coloured = [...base].filter(([, v]) => isColour(v)).map(([k]) => k);
+    expect(coloured.length, 'no colours found on :root — the reader stopped reading')
+      .toBeGreaterThan(20);
+    for (const mode of ['light', 'dark']) {
+      const declared = union(`:root[data-theme="${mode}"]`);
+      const leaking = coloured.filter((k) => !declared.has(k));
+      expect(leaking, `${mode} inherits ${String(leaking.length)} colours from the default `
+        + `appearance, so choosing ${mode} leaves part of the application green`)
+        .toEqual([]);
+    }
+  });
 });
