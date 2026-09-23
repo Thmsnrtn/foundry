@@ -1386,10 +1386,41 @@ const ROUTE_WORDS: Record<string, string> = {
  * the queue. Home shows it under the one thing; Decisions shows it as the
  * whole page. Two renderings of one queue would drift, and did.
  */
-export function waitingList(queue: import('../../services/founder/attention.js').AttentionItem[], afterTheOneThing: boolean): HtmlEscapedString | Promise<HtmlEscapedString> | '' {
+export function waitingList(queue: import('../../services/founder/attention.js').AttentionItem[], afterTheOneThing: boolean, dense = false): HtmlEscapedString | Promise<HtmlEscapedString> | '' {
   return queue.length ? html`<section class="know queue" id="waiting">
-    <h2>${afterTheOneThing ? 'Also waiting on you' : 'Waiting on you'} <span class="pill">${String(queue.length)}</span></h2>
-    ${queue.map((item) => html`<div class="noticed qitem">
+    ${dense ? html`<div class="ev-sec"><h2>${afterTheOneThing ? 'Also waiting on you' : 'Waiting on you'}</h2>
+      <a href="/foundry/decisions">All ${String(queue.length)} \u203a</a></div>`
+    : html`<h2>${afterTheOneThing ? 'Also waiting on you' : 'Waiting on you'} <span class="pill">${String(queue.length)}</span></h2>`}
+    ${/* ONE QUEUE, TWO DENSITIES, AND DELIBERATELY NOT TWO RENDERINGS.
+         The header above this function says what happened the last time there
+         were two: "Two renderings of one queue would drift, and did." That is
+         still true and this is not that. It is one function reading one
+         queue; what the surface chooses is how much of each item it draws.
+
+         On Decisions the queue IS the page, so every item keeps its detail
+         and both its answers. On Home it sits beneath the one thing that
+         already has the owner's attention, and four full cards below a
+         decision card is the filing cabinet the first screen is not allowed
+         to become. There it is rows: what it is, whose it is, what it would
+         touch, and a way in. The answers are one tap away on the item, which
+         is where the board puts them too — its Owner Attention list is rows
+         with chevrons, and only the focused decision carries Approve.
+
+         Nothing is hidden that was not already a tap away: every row links to
+         the same place its buttons posted to. */ ''}
+    ${dense ? html`<ul class="ev-list">${queue.map((item) => html`
+      <li><a class="ev-item" href="${item.open?.href ?? item.href}">
+        <span class="body"><span class="t">${item.summary}</span>
+          <span class="s">${item.companyName} \u00b7 ${
+  item.kind === 'act' ? 'an act' : item.kind === 'advice' ? 'advice'
+    : item.kind === 'experiment' ? 'a real test' : item.kind === 'charter' ? 'the charter'
+      : item.kind === 'obligation' ? 'somebody owed something' : 'something I noticed'}</span></span>
+        ${item.effect ? html`<span class="ev-tag ${item.effect === 'internal' ? 'ok' : 'watch'}">${
+  item.effect === 'internal' ? 'internal' : item.effect === 'person' ? 'person-facing'
+    : item.effect === 'public' ? 'public' : item.effect === 'provider' ? 'provider-facing'
+      : 'account-facing'}</span>` : ''}
+        <span class="go" aria-hidden="true">\u203a</span></a></li>`)}</ul>`
+    : queue.map((item) => html`<div class="noticed qitem">
       <p class="quiet"><a href="${item.href}">${item.companyName}</a> · ${
     item.kind === 'act' ? 'an act' : item.kind === 'advice' ? 'advice' : item.kind === 'experiment' ? 'a real test' : item.kind === 'charter' ? 'the charter' : item.kind === 'obligation' ? 'somebody owed something' : 'something I noticed'}</p>
       <p><strong>${item.summary}</strong>${item.effect ? html` <span class="pill ${item.effect === 'internal' ? 'ok' : 'warn'}">${item.effect === 'internal' ? 'internal' : item.effect === 'person' ? 'person-facing' : item.effect === 'public' ? 'public' : item.effect === 'provider' ? 'provider-facing' : 'account-facing'}</span>` : ''}</p>
@@ -3165,7 +3196,8 @@ foundryShellRoutes.get('/foundry', async (c) => {
   // rest used to be a count on a chip and a page away. Now each is one tap,
   // through the same forms its own page posts, so a morning's decisions are
   // made on the first screen rather than found one company at a time.
-  const alsoWaiting = waitingList(queue, attention !== null);
+  // Home draws the queue as rows; Decisions, where it is the page, draws it whole.
+  const alsoWaiting = waitingList(queue, attention !== null, true);
 
   // ── THE INSTRUMENTS BESIDE THE DECISION ──────────────────────────────────
   //

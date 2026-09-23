@@ -749,8 +749,20 @@ footer a:hover,footer a:focus-visible{text-decoration:underline}
 }
 
 /* The explicit theme selector wins exactly as it does in owner.css. */
+/* ONE APPEARANCE AT A TIME.
+   This guarded on `:not([data-theme="dark"])`, which is not the same question
+   as "has he chosen an appearance". Green is not dark, so on a phone set to
+   light the whole `--os-*` palette flipped light while `--bg`, `--card` and
+   `--ink` stayed green — two palettes inside one appearance. The decision
+   card on Home is `--os-panel`, so it rendered as a white block in a dark
+   green application, and it has been doing that in every screenshot of green
+   mode this campaign produced.
+   The main palette a few hundred lines above already asks the right question:
+   apply the device's preference only when the owner has chosen nothing. This
+   one asks it now too. "Changing appearance should never change what Foundry
+   can do" is not satisfied by a mode that half-changes. */
 @media (prefers-color-scheme:light){
-  :root:not([data-theme="dark"]){
+  :root:not([data-theme]){
     --os-bg:#f3f4f1;
     --os-rail:#ecefe9;
     --os-panel:#ffffff;
@@ -1205,7 +1217,7 @@ body{background:var(--v3-bg)}
     linear-gradient(180deg,#0a1512 0,#07100d 34rem,#050a08 100%);
   background-color:var(--v3-bg);
 }
-@media (prefers-color-scheme:light){:root:not([data-theme="dark"]) body::before{display:none}
+@media (prefers-color-scheme:light){:root:not([data-theme]) body::before{display:none}
   :root:not([data-theme="dark"]) main[data-place="money"] .facts.money{background:var(--card)}
   :root:not([data-theme="dark"]) .ask{background:var(--card)}
   :root:not([data-theme="dark"]) .sheet-more{background:var(--card)}
@@ -1217,7 +1229,7 @@ body{background:var(--v3-bg)}
 :root[data-theme="light"] .sheet-more{background:var(--card)}
 :root[data-theme="light"] .btn.go,:root[data-theme="light"] .btn.btn-primary{background:var(--accent-fill);border-color:var(--accent-fill);color:var(--accent-fill-ink)}
 :root[data-theme="light"] h2.rank i,:root[data-theme="light"] .stepper li.done i{color:#FFFFFF}
-@media (prefers-color-scheme:light){:root:not([data-theme="dark"]) body::before{display:none}
+@media (prefers-color-scheme:light){:root:not([data-theme]) body::before{display:none}
   :root:not([data-theme="dark"]) main[data-place="money"] .facts.money{background:var(--card)}
   :root:not([data-theme="dark"]) .ask{background:var(--card)}
   :root:not([data-theme="dark"]) .sheet-more{background:var(--card)}
@@ -1352,7 +1364,12 @@ main[data-place="money"] .mline.total{margin:.25rem -.65rem 0;padding:.95rem .65
   .wrap{padding:13px 13px calc(5.2rem + env(safe-area-inset-bottom))}
   .brand{margin-bottom:.95rem;text-transform:none;letter-spacing:0}
   .brand-copy>b{font-size:1.18rem}.brand-copy>small{font-size:.48rem;max-width:14rem}
-  h1{font-size:1.9rem;line-height:1.04}
+  /* THE GREETING IS A GREETING, NOT A HEADLINE. At 1.9rem "Good afternoon,
+     Thomas." took two lines and a fifth of the first screen before saying
+     anything about the estate. The approved board sets it around 1.4rem: big
+     enough to be warm, small enough that the readings are above the fold.
+     What follows it is what he came for. */
+  h1{font-size:1.45rem;line-height:1.12}
   .glance{grid-template-columns:repeat(2,minmax(0,1fr));gap:7px}
   .tile{min-height:6.85rem;padding:.76rem}
   .tile dd.v{font-size:1.28rem}
