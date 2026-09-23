@@ -3099,7 +3099,18 @@ foundryShellRoutes.get('/foundry', async (c) => {
       <p class="act">Owner action</p>
       <h2>${needsN === 0 ? 'None required' : `${String(needsN)} waiting`}</h2>
       <p class="quiet">${needsN === 0 ? 'Nothing is waiting on your judgment.' : 'Nothing asks for you first; the rest is listed below.'}</p>
-      ${needsN === 0 ? html`<p class="lines"><span class="state ${estate.cls}">${READINGS.health} ${estate.word.toLowerCase()}</span> <span class="state ${autonomy.nothingWithoutHim ? 'ok' : 'watch'}">Autonomy ${autonomy.nothingWithoutHim ? 'asks first' : 'within grants'}</span></p>` : ''}
+      ${/* WHETHER I AM RUNNING, SAID HERE RATHER THAN AGAIN.
+           The screen opened with three cards saying the same thing in three
+           ways: a greeting line ("Nothing needs you"), a pulse panel, and
+           then this. An owner who reads all three learns what he knew after
+           the first, and the two he did not need pushed the estate below the
+           fold. The pulse is EVIDENCE for this card's claim — "nothing needs
+           you, and here is whether I have been awake to know that" — so it
+           belongs inside it.
+           It keeps its own panel when it is anything other than fine, because
+           a stopped institution is not a footnote to a calm one. */ ''}
+      ${needsN === 0 ? html`<p class="lines"><span class="state ${estate.cls}">${READINGS.health} ${estate.word.toLowerCase()}</span> <span class="state ${autonomy.nothingWithoutHim ? 'ok' : 'watch'}">Autonomy ${autonomy.nothingWithoutHim ? 'asks first' : 'within grants'}</span> <span class="state ${pulseCls}">${pulse.word}</span></p>` : ''}
+      ${pulseCls === 'ok' ? '' : html`<p class="quiet">${pulse.sentence}</p>`}
     </section>` : '';
 
   // ASK IS A FIRST-CLASS SURFACE, NOT A BOLTED-ON TEXTAREA. When he asked
@@ -3140,7 +3151,16 @@ foundryShellRoutes.get('/foundry', async (c) => {
       // on a long page or with the text at 200% it is not short at all.
       : html`<p class="lede${key ? ' quiet' : ''}"><a href="#the-one-thing">${orientation}</a></p>`
     : ''}
-    ${pulseLine}
+    ${/* ONE PLACE, NOT TWO. The first attempt hid this panel only when the
+         pulse was fine — which left the exact case it was meant to fix,
+         "Foundry has not completed a scheduled pass yet", rendering here AND
+         inside the calm card below. Two cards, the same sentence, four lines
+         apart.
+         Whenever the calm card is on screen it carries the pulse: as a chip
+         always, and as a sentence when the pulse is anything other than fine.
+         A contradiction between "nothing needs you" and "I have not been
+         awake" belongs INSIDE the card making the claim, not above it. */ ''}
+    ${attention === null ? '' : pulseLine}
     ${portfolioState}
     ${/* THE ONE THING HE CAME FOR, BEFORE ANYTHING HE DID NOT.
          This was rendered last: after what changed, after ninety lines of
@@ -3233,7 +3253,16 @@ foundryShellRoutes.get('/foundry', async (c) => {
       <p class="quiet">Or <a href="/foundry/companies#rehearsal">see what I do with one first</a>.</p>
     </div>`
     : s.notLooking ? html`<div class="know">
-      <h2>I am not looking for anything</h2>
+      ${/* AN OFFER IS NOT A DECISION, SO IT DOES NOT GET A DECISION'S ROOM.
+           This was the tallest thing on the Brief: a heading, a lede, a full
+           text field, a button and a warning — a whole search-composing
+           surface on the screen whose job is to say what needs him. Nothing is
+           removed; it is folded, with its own state on the summary, so the
+           answer to "am I looking for anything" is one line and composing a
+           search is one tap. */ ''}
+      <details class="fold"><summary><h2>I am not looking for anything</h2>
+        <span class="gist">${s.notLooking.canSeeThrough.length
+    ? `${String(s.notLooking.canSeeThrough.length)} to look through` : 'nothing to look through'}</span></summary>
       <p class="lede">One sentence: what you are after, and anything I should not do.</p>
       <form class="inline" method="POST" action="/foundry/ask">
         <input type="text" name="said" required maxlength="300"
@@ -3249,6 +3278,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
         looking through</strong> &mdash; ${s.notLooking.canSeeThrough.join('; ')}.</p>`
     : html`<p class="gap">I would be starting blind &mdash; I have nothing
         to look through yet.</p>`}
+      </details>
     </div>` : ''}
     ${s.search ? html`<details class="fold" id="search"><summary><h2>${s.search.invented ? 'A search I made up' : 'What I am looking for'}</h2>
       <span class="gist">${s.search.blocked ? 'stuck' : `${String(s.search.looked)} looked at · ${String(s.search.candidates.filter((cand) => cand.earnedAttention).length)} worth your attention`}</span></summary>
