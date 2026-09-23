@@ -1466,7 +1466,12 @@ main[data-place="money"] .mline.total{margin:.25rem -.65rem 0;padding:.95rem .65
 @media (max-width:359px){.glance{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .tile{display:flex;flex-direction:column;min-height:6.6rem;padding:.7rem .7rem .62rem}
 .tile dt.k{display:flex;align-items:center;font-size:.66rem;letter-spacing:.02em;text-transform:none;font-weight:500;color:var(--ink-2);line-height:1.2;
-  overflow:hidden;white-space:nowrap;text-overflow:ellipsis;padding-right:.9rem}
+  /* IT WAS LOSING LETTERS TO STAY ON ONE LINE. "Last healthy" arrived four
+     pixels wider than its tile and came out "Last health…". A tile key is
+     two words naming what the figure underneath is; a second line costs a few
+     pixels of height, and a clipped one costs the word. Same decision as the
+     fold summary, for the same reason. */
+  padding-right:.9rem;overflow-wrap:anywhere}
 .tile dd.v{font-size:1.32rem;margin-top:.45rem;line-height:1.05}
 .tile dd.v .dim{font-size:.72rem;font-family:var(--sans);color:var(--ink-3)}
 .tile dd.d{margin-top:auto;padding-top:.5rem;font-size:.66rem;line-height:1.3;color:var(--ink-3);
@@ -2026,7 +2031,28 @@ a.know:hover{background:var(--card-2)}
    left and shrinks rather than wrapping. */
 .fold>summary{flex-wrap:nowrap}
 .fold>summary h2,.fold>summary h3{flex:1 1 auto;min-width:0}
-.fold .gist{flex:0 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* A SUMMARY MAY TAKE TWO LINES; IT MAY NOT LOSE WORDS.
+   This carried `nowrap; overflow:hidden; text-overflow:ellipsis` so a fold's
+   summary would always be one row. That is tidier and it is how "now:
+   answering nothing" became "now: answering not…" on a 390px screen, and how
+   the searching fold read "nothing to loo…". The instrument could not see it
+   either, because a clip inside a component is not a document overflow.
+   Wrapping is the honest failure mode: a two-line summary still says
+   everything, and a one-line one that lost the end says something else. */
+/* TWO THINGS ON ONE ROW ONLY WHILE THEY BOTH FIT.
+   A summary is a name and a state. Side by side they were fighting for a
+   390px row: "Start one" broke into two lines in its own corner, and "How
+   much I answer for myself" wrapped to three while "now: answering nothing"
+   took two beside it. Neither was clipped — that was the earlier fix — but
+   four lines of summary is a card pretending to be a fold.
+   On a phone they stack: the name, then the state under it, each on as many
+   lines as it needs. Above that width the row is wide enough for both. */
+.fold .gist{flex:0 1 auto;min-width:0;overflow-wrap:anywhere}
+.fold>summary>h2,.fold>summary>h3{min-width:0;overflow-wrap:anywhere}
+@media (max-width:480px){
+  .fold>summary{flex-wrap:wrap}
+  .fold .gist{flex:1 0 100%;text-align:left;margin-top:2px}
+}
 
 /* A FOLD THAT OPENS A CARD NEEDS NO RULE ABOVE IT. `details.fold` carries a
    top border so consecutive folds read as a list; as the only child of a card
@@ -2083,3 +2109,147 @@ main input[type="checkbox"],main input[type="radio"]{
 main label:has(> input[type="checkbox"]),
 main label:has(> input[type="radio"]){
   display:inline-flex;align-items:center;gap:.55rem;min-height:40px}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   EVENTIDE — THE COMPOSITION VOCABULARY
+   ═══════════════════════════════════════════════════════════════════════════
+
+   The owner, on 23 September, with photographs of the live application: "The
+   current application still looks and feels substantially like the original
+   Foundry interface with updated colors and typography… Do not simply adjust
+   padding, fonts, button sizes, or colors on the existing templates."
+
+   He was right, and the reason is visible in what came before this block. The
+   campaign migrated TOKENS — palette, type, touch floor — across thirteen
+   surfaces, and migrated no COMPOSITION. A screen can pass every gate this
+   repository owns while being a 2019 dashboard painted forest green.
+
+   What the approved boards actually use, and what none of these surfaces had:
+     · a compact four-up measure strip — a number and a caption, not a card
+     · sections headed by a title and one "See all" affordance
+     · rows: mark, name, one line under it, a state, a chevron
+     · choices as rows you can read, not options crushed into pills
+     · decisions that carry their two answers on the card
+
+   These are defined once and used by every surface, because "changing
+   appearance should never change what Foundry can do" only holds if there is
+   one component system for appearance to change.
+
+   NOTHING HERE DECIDES ANYTHING. Every value still comes from the readers it
+   came from; this is the shape it arrives in. ═══════════════════════════════ */
+
+/* ─── THE MEASURE STRIP ──────────────────────────────────────────────────────
+   Four readings across one row. The boards put a number where this product
+   put a paragraph: "24 / Total Ideas", not a card explaining what ideas are.
+   At 390 each cell is ~86px, which is the width the board draws and is enough
+   for a figure and two short words. */
+.ev-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 0 1.1rem}
+.ev-cell{display:flex;flex-direction:column;gap:2px;align-items:flex-start;
+  padding:.6rem .5rem;border:1px solid var(--line);border-radius:12px;
+  background:var(--card);color:var(--ink);text-decoration:none;min-height:76px}
+a.ev-cell:hover{border-color:var(--line-2)}
+a.ev-cell:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ev-cell .n{font-size:1.25rem;font-weight:600;line-height:1.15;color:var(--ink);
+  font-family:var(--display)}
+.ev-cell .n.sm{font-size:.95rem}
+.ev-cell .c{font-size:.68rem;line-height:1.25;color:var(--ink-3);
+  letter-spacing:.01em;overflow-wrap:anywhere}
+.ev-cell .dot{width:7px;height:7px;border-radius:50%;background:var(--good);flex:0 0 auto}
+.ev-cell .dot.watch{background:var(--alert)}
+.ev-cell .dot.bad{background:var(--bad)}
+.ev-cell .top{display:flex;align-items:center;gap:5px}
+
+/* ─── A SECTION, AND THE ONE WAY OUT OF IT ───────────────────────────────────
+   "ESTATE AT A GLANCE" was a caps label with nothing to press. The boards head
+   every section with a name and a single "See all", which is where the rest of
+   the information went when it left the default screen. */
+.ev-sec{display:flex;align-items:baseline;justify-content:space-between;
+  gap:.75rem;margin:0 0 .55rem}
+.ev-sec h2,.ev-sec h3{font-size:1rem;font-weight:600;margin:0;font-family:var(--display);
+  color:var(--ink);letter-spacing:0;min-width:0;overflow-wrap:anywhere}
+.ev-sec a{font-size:.8rem;color:var(--ink-3);text-decoration:none;white-space:nowrap;
+  display:inline-flex;align-items:center;min-height:40px}
+.ev-sec a:hover{color:var(--accent)}
+.ev-sec a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* ─── THE ROW ────────────────────────────────────────────────────────────────
+   The dominant content shape on every board: a mark, a name, one line beneath
+   it, a state, somewhere to go. This replaces paragraphs describing objects
+   that could simply be listed. */
+.ev-list{display:flex;flex-direction:column;gap:8px;margin:0 0 1.1rem;padding:0;list-style:none}
+.ev-item{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:.7rem;
+  padding:.65rem .8rem;border:1px solid var(--line);border-radius:12px;
+  background:var(--card);color:var(--ink);text-decoration:none;min-height:56px}
+a.ev-item:hover{border-color:var(--line-2)}
+a.ev-item:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.ev-item .mark{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;
+  background:var(--card-2);border:1px solid var(--line);flex:0 0 auto}
+.ev-item .mark svg{width:17px;height:17px}
+.ev-item .body{min-width:0}
+.ev-item .t{font-size:.92rem;font-weight:500;color:var(--ink);display:block;
+  overflow-wrap:anywhere}
+.ev-item .s{font-size:.78rem;color:var(--ink-3);display:block;margin-top:1px;
+  overflow-wrap:anywhere}
+.ev-item .go{color:var(--ink-3);font-size:1rem;flex:0 0 auto}
+
+/* ─── A STATE, SAID ONCE ─────────────────────────────────────────────────────
+   Small, and never the only thing said — the row's own line still carries the
+   fact in words. */
+.ev-tag{display:inline-flex;align-items:center;gap:5px;padding:3px 9px;border-radius:999px;
+  font-size:.72rem;white-space:nowrap;border:1px solid var(--line);
+  background:var(--card-2);color:var(--ink-2)}
+.ev-tag.ok{color:var(--good);border-color:color-mix(in srgb,var(--good) 35%,transparent)}
+.ev-tag.watch{color:var(--alert);border-color:color-mix(in srgb,var(--alert) 35%,transparent)}
+.ev-tag.bad{color:var(--bad);border-color:color-mix(in srgb,var(--bad) 35%,transparent)}
+
+/* ─── A CHOICE YOU CAN READ ──────────────────────────────────────────────────
+   THE DEFECT THIS EXISTS FOR. Correspondence mode was three options and their
+   explanations crammed into three pills on a 390px screen; the owner
+   photographed the third one with "answers ordinary messages itself" running
+   off the end of its own box. The control could not be made to fit, because
+   the information genuinely does not fit that shape.
+
+   Three modes decide whether Foundry writes to a stranger on his behalf. That
+   is not a segmented control's worth of consequence. It is a list of choices,
+   each with room for the sentence that says what it does. */
+.ev-choice{display:flex;flex-direction:column;gap:8px;margin:0 0 .9rem;padding:0;border:0}
+.ev-opt{display:grid;grid-template-columns:auto 1fr;gap:.7rem;align-items:start;
+  padding:.7rem .8rem;border:1px solid var(--line);border-radius:12px;
+  background:var(--card);cursor:pointer;min-height:56px}
+.ev-opt:hover{border-color:var(--line-2)}
+.ev-opt:has(input:checked){border-color:var(--accent);background:var(--accent-soft)}
+.ev-opt:has(input:focus-visible){outline:2px solid var(--accent);outline-offset:2px}
+.ev-opt input{position:absolute;opacity:0;width:1px;height:1px;margin:0}
+.ev-opt .pip{width:19px;height:19px;border-radius:50%;border:2px solid var(--line-2);
+  margin-top:1px;flex:0 0 auto;display:grid;place-items:center}
+.ev-opt:has(input:checked) .pip{border-color:var(--accent)}
+.ev-opt:has(input:checked) .pip::after{content:"";width:9px;height:9px;border-radius:50%;
+  background:var(--accent)}
+.ev-opt .t{font-size:.92rem;font-weight:500;color:var(--ink);display:block}
+.ev-opt .s{font-size:.78rem;color:var(--ink-3);display:block;margin-top:2px;line-height:1.35}
+.ev-opt .now{font-size:.68rem;color:var(--accent);display:block;margin-top:3px}
+
+/* ─── A DECISION CARRIES ITS ANSWERS ─────────────────────────────────────────
+   The dark board's "Needs Your Review" card puts Reject and Approve on the
+   card itself. Home showed a paragraph and left the owner to find where the
+   answer was given. */
+.ev-decide{border:1px solid var(--accent);border-radius:14px;padding:.9rem;
+  background:var(--accent-soft);margin:0 0 1.1rem}
+.ev-decide .hd{display:flex;align-items:center;gap:.6rem;margin:0 0 .5rem}
+.ev-decide h2{font-size:1.05rem;margin:0;font-family:var(--display);color:var(--ink)}
+.ev-decide p{font-size:.86rem;color:var(--ink-2);margin:0 0 .75rem;line-height:1.45}
+.ev-answers{display:grid;grid-template-columns:1fr 1fr;gap:.55rem}
+.ev-answers .btn{width:100%;margin:0}
+.ev-answers form{display:contents}
+
+/* ─── THE HEADER THE BOARDS DRAW ─────────────────────────────────────────────
+   Mark, wordmark, and the owner. The shipped header spent a whole line on
+   "PRIVATE LAB FOR DIGITAL INCOME STREAMS" above a screen whose first job is
+   to say what needs him. The institution's description belongs where somebody
+   is asking what the institution is. */
+.ev-top{display:flex;align-items:center;justify-content:space-between;gap:.75rem;
+  padding:.55rem 0 .35rem}
+.ev-greet{margin:0 0 1.15rem}
+.ev-greet h1{font-size:1.6rem;line-height:1.15;margin:0 0 .2rem;font-family:var(--display);
+  font-weight:600;letter-spacing:-.01em;color:var(--ink)}
+.ev-greet p{font-size:.92rem;color:var(--ink-3);margin:0}

@@ -112,17 +112,39 @@ describe('a button cannot be wider than what contains it', () => {
     //   loses its tail inside the door rather than lying over the next one —
     //   which is exactly what the owner's screenshot showed when it wrapped.
     //
-    //   IT CLIPS ITSELF, AND IT IS THE SHORTER HALF. `.fold .gist` is the state
-    //   on a disclosure summary — "0 of 5 done", "1 of 4" — sitting beside a
-    //   heading that takes the room it needs. It carries `overflow:hidden` and
-    //   an ellipsis on the same rule, so a long state loses its tail rather
-    //   than pushing itself onto a second line: the summary was wrapping into
-    //   two rows, which turned a two-word fold into four lines of card.
+    //   `.fold .gist` WAS ON THIS LIST AND IS NOT ANY MORE. It clipped itself
+    //   with an ellipsis so a long state would lose its tail rather than take
+    //   a second line. That reasoning was wrong, and the owner's photographs
+    //   are why: the Inbox summary read "now: answering not…" and the
+    //   searching fold read "nothing to loo…". A summary that has lost its
+    //   last word is not tidier than one on two lines, it is a different
+    //   sentence. It wraps now, and nothing here excuses a clip again.
+    //
+    //   `.tile dt.k` CAME OFF THIS LIST FOR THE SAME REASON. It clipped
+    //   itself with an ellipsis, and "Last healthy" arrived four pixels wider
+    //   than its tile and rendered "Last health…". A key naming what the
+    //   figure below it is can take a second line; it cannot afford to lose a
+    //   word. Two entries have now been removed on this argument, which is
+    //   the rule: clipping is not a tidier failure, it is a quieter one.
+    //
+    //   IT IS TWO WORDS AND AN ARROW. `.ev-sec a` is the one way out of a
+    //   section — "Controls ›", "See all ›" — in the corner opposite a heading
+    //   that carries `min-width:0`, so the heading yields first and this never
+    //   pushes anything. A two-word affordance broken across two lines in the
+    //   corner of a header reads as a fault in the page.
+    //
+    //   A PILL THAT WRAPS STOPS BEING A PILL. `.ev-tag` is a state on a row —
+    //   "Connected", "Needs you" — one or two words inside a rounded border.
+    //   It sits in a grid track that takes its own width beside a body with
+    //   `min-width:0`, so the sentence yields and the tag does not. And it is
+    //   never the only place the fact is said: the row's own line underneath
+    //   carries it in words, which is what makes shortening it safe.
     //
     // Anything else added to this list needs one of those sentences.
     const named = [...phoneOnly(css()).matchAll(/(?:^|\n)([^\n{]*)\{[^}]*white-space:\s*nowrap/g)]
       .map((m) => m[1].trim())
       .filter((s) => !s.startsWith('@'));
-    expect(named.sort()).toEqual(['.filters a', '.fold .gist', '.local a', '.mline dd', '.sr', '.tile dt.k', 'nav.places a'].sort());
+    expect(named.sort()).toEqual(['.ev-sec a', '.ev-tag', '.filters a', '.local a',
+      '.mline dd', '.sr', 'nav.places a'].sort());
   });
 });

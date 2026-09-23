@@ -60,17 +60,40 @@ const read = async (path: string): Promise<string> => {
 const labels = (html: string, re: RegExp): string[] => [...html.matchAll(re)].map((m) => m[1]!.trim());
 
 describe('Home is the Founder Cockpit', () => {
-  it('has six instruments, each with a mark, in the canonical order', async () => {
+  it('keeps all six readings, and every one of them a door', async () => {
+    // SIX CAPABILITIES, NOT SIX EQUAL CARDS.
+    //
+    // This pinned six `.tile` elements with marks in a fixed order, which is
+    // the composition the owner looked at on his phone and rejected: "The six
+    // Brief capabilities must remain available, but they do not necessarily
+    // need six equally prominent cards… do not preserve its existing UI
+    // components or page composition merely because they already exist."
+    //
+    // So the requirement is restated as the thing that actually matters. Four
+    // of the readings are figures he scans, in a strip; two are sentences that
+    // were being truncated inside 86px tiles, and are rows now. What must not
+    // change is that all six are on the first screen and all six are doors —
+    // and that is what is asserted, against the rendered page, without
+    // deciding for the designer which shape each one takes.
     const body = await read('/foundry');
-    const glance = /<dl class="glance"[\s\S]*?<\/dl>/.exec(body)?.[0] ?? '';
-    const tiles = labels(glance, /<dt class="k"><i class="mk"[^>]*>[\s\S]*?<\/i>([^<]+)<\/dt>/g);
-    // ONE WORD FOR ONE PLACE (views/owner/labels.ts): what Controls calls
-    // Health, Home called Estate, and a reviewer read them as two readings.
-    expect(tiles.slice(0, 3)).toEqual(['Health', 'Autonomy', 'Needs you']);
-    expect(tiles[3]).toMatch(/^Experiments?$/);
-    expect(tiles.slice(4)).toEqual(['Yours', 'Watching']);
-    // Every tile is a door: the whole tile is the link.
-    expect((glance.match(/class="door"/g) ?? []).length).toBe(6);
+    const head = body.slice(0, body.indexOf('class="cockpit"') + 1 || body.length);
+    for (const [reading, where] of [
+      ['needs you', '/foundry/decisions'],
+      ['yours', '/foundry/money'],
+      ['health', '/foundry/controls'],
+      ['company', '/foundry/companies'],
+      ['autonomy', '/foundry/charter'],
+      ['experiment', '/foundry/experiments'],
+    ] as Array<[string, string]>) {
+      expect(head.toLowerCase(), `${reading} is not on the first screen`)
+        .toContain(reading);
+      expect(head, `${reading} has no door`).toContain(where.split('/')[2]!);
+    }
+    // Every reading is reachable, not merely printed: the strip cells and the
+    // rows are links, and there are at least as many as there are readings.
+    const doors = (head.match(/class="ev-cell" href=|class="ev-item" href=/g) ?? []).length;
+    expect(doors, 'a reading he cannot open is a label, not an instrument')
+      .toBeGreaterThanOrEqual(6);
   });
 
   it('puts the decision beside cash movement and live activity, in that order', async () => {

@@ -2951,56 +2951,94 @@ foundryShellRoutes.get('/foundry', async (c) => {
   // map's sentence: inside it a test launches and spends with no tap from him.
   const { envelopeReading } = await import('../../services/institution/charter.js');
   const envelope = await envelopeReading(s.ownerId);
-  const portfolioState = html`<dl class="glance" aria-label="At a glance">
-      <div class="tile door"><dt class="k">${mark('estate')}${READINGS.health}</dt>
-        <dd class="v"><span class="state ${estate.cls}">${estate.word}</span></dd>
-        <dd class="d">${estate.detail}</dd><a class="door" href="/foundry/controls" aria-label="Controls"></a></div>
-      <div class="tile door"><dt class="k">${mark('autonomy')}Autonomy</dt>
-        <dd class="v"><span class="state ${envelope ? 'watch' : autonomy.nothingWithoutHim ? 'ok' : 'watch'}">${envelope ? 'Chartered' : autonomy.nothingWithoutHim ? 'Asks first' : 'Granted'}</span></dd>
-        <dd class="d">${envelope ? `$${(envelope.remainingCents / 100).toFixed(0)} of $${(envelope.charter.monthlyCents / 100).toFixed(0)} left` : autonomy.nothingWithoutHim ? 'asks first, always' : 'within grants'}</dd>
-        <a class="door" href="/foundry/charter" aria-label="The charter"></a></div>
-      <div class="tile door"><dt class="k">${mark('owner')}Needs you</dt>
-        <dd class="v">${needsN === 0 ? html`<span class="state quiet none">None</span>` : html`<span class="state watch">${String(needsN)}</span>`}</dd>
-        <dd class="d">${needsN === 0 ? 'none waiting' : needsN === 1 ? 'one decision' : `${String(needsN)} decisions`}</dd>
-        <a class="door" href="${attention === null ? '/foundry/decisions' : '#the-one-thing'}" aria-label="Decisions"></a></div>
-      <div class="tile door"><dt class="k">${mark('experiment')}${live ? 'Experiment' : lastOutcome ? 'Last test' : 'Experiments'}</dt>
-        <dd class="v">${live ? html`<span class="state ${live.state === 'running' ? 'ok' : 'watch'}">${live.stateLabel}</span>`
-    : lastOutcome ? html`<span class="state ${lastOutcome.word === 'surprised' ? 'bad' : lastOutcome.word === 'partly' ? 'watch' : lastOutcome.word === 'as predicted' ? 'ok' : 'quiet'}">${lastOutcome.label}</span>`
-      : html`<span class="state quiet none">None</span>`}</dd>
-        ${/* THE WORD CARRIES ITS DOUBT. A settled test whose reply path was
-              not working while it asked is still settled — the rule is sealed
-              — but showing the word alone, in a tile, is how a result taken on
-              a broken instrument becomes a fact the owner remembers. */ ''}
-        <dd class="d">${live ? `${String(live.exposure.sent)} of ${String(live.exposure.approved)} written to`
-    : lastOutcome ? `${lastOutcome.settled ? 'settled' : 'ended'} ${lastOutcome.when ? lastOutcome.when.slice(0, 10) : ''}${lastDoubt ? ' — on a channel that may not have carried a reply' : '; nothing running'}`
-      : 'nothing running'}</dd>
-        <a class="door" href="${live ? `/foundry/experiments/${live.id}` : lastDone ? `/foundry/experiments/${lastDone.id}` : '/foundry/experiments'}" aria-label="${live ? live.title : lastOutcome ? `The last test: ${lastOutcome.label}` : 'Experiments'}"></a></div>
-      ${/* THIS TILE SHOWED GROSS AND CALLED IT "Settled".
-           The figure it drew is what buyers were charged for tests. It is not what is
-           settled and it is not the owner's: Stripe takes a fee at the moment
-           of the charge, the work may be owed and not yet delivered, and the
-           refunds page promises no time limit on asking for it back. Showing
-           gross on the first screen is exactly the gross-as-net conflation the
-           economic ledger was built to end, so the tile now shows the end of
-           the subtraction and keeps the gross in the line beneath it, where it
-           can be checked rather than mistaken for the answer. */ ''}
-      <div class="tile door"><dt class="k">${mark('cash')}Yours</dt>
-        <dd class="v">${yours.figure.cents === null ? html`<span class="unknown">not known</span>`
-    : html`${money(yours.figure.cents)}${yours.figure.quality === 'estimated' ? html` <span class="dim">est.</span>` : ''}`}</dd>
-        <dd class="d">${paidCents > 0 ? `of ${money(paidCents)} charged`
-    : (yours.authorisedCapital.cents ?? 0) > 0 ? `${money(yours.authorisedCapital.cents ?? 0)} set aside for tests, nothing paid yet`
-      : 'nothing paid yet'}</dd>
-        <a class="door" href="/foundry/money" aria-label="Money"></a></div>
-      <div class="tile door"><dt class="k">${mark('watching')}Watching</dt>
-        <dd class="v">${String(s.watching.real)} <span class="dim">${s.watching.real === 1 ? 'company' : 'companies'}</span></dd>
-        ${/* THE SHARED THING, BY NAME. "a shared dependency" told him a
-              concentration existed and not what it was, so the one fact that
-              would make him act — which provider or channel they all stand on
-              — was a click away on a page he had no reason to open. */ ''}
-        <dd class="d">${s.watching.real === 0 ? 'name one to start'
-    : glance.concentration ? glance.concentration : s.watching.real > 1 ? 'no shared dependency' : s.watching.itself ? 'and myself' : 'all my attention'}</dd>
-        <a class="door" href="/foundry/companies" aria-label="Portfolio"></a></div>
-    </dl>`;
+  const portfolioState = html`
+      ${/* SIX EQUAL CARDS BECAME FOUR READINGS AND TWO ROWS.
+           The owner, with a photograph of this screen: "The six Brief
+           capabilities must remain available, but they do not necessarily need
+           six equally prominent cards."
+
+           All six are here. What changed is that four of them are figures he
+           scans — what needs him, what is his, what is wrong, what he owns —
+           and two of them are sentences. The two sentences were the ones being
+           cut off: "Last test / settled 2026-09-…; nothing…" in a tile 86px
+           wide, because a date, an outcome and a caveat will not fit where a
+           number does. They are rows now, and the caveat that a result came in
+           on a channel which may not have carried a reply finally has somewhere
+           to be read.
+
+           Every one is still a door, and every value still comes from the
+           reader it came from. */ ''}
+      <div class="ev-strip" aria-label="At a glance">
+        <a class="ev-cell" href="${attention === null ? '/foundry/decisions' : '#the-one-thing'}">
+          <span class="top">${needsN === 0 ? '' : html`<span class="dot watch"></span>`}
+            <span class="n">${needsN === 0 ? 'None' : String(needsN)}</span></span>
+          <span class="c">${READINGS.needsYou.toLowerCase()}</span></a>
+
+        ${/* THIS SHOWED GROSS AND CALLED IT "Settled". The figure it drew is
+              what buyers were charged for tests — not what is settled and not
+              the owner's: the provider takes a fee at the moment of the
+              charge, the work may be owed and not yet delivered, and the
+              refunds page promises no time limit on asking for it back. The
+              end of the subtraction is the figure; the gross stays one tap
+              away on Money, where it can be checked rather than mistaken for
+              the answer. */ ''}
+        <a class="ev-cell" href="/foundry/money">
+          <span class="n${(yours.figure.cents ?? 0) >= 100000 ? ' sm' : ''}">${
+  yours.figure.cents === null ? 'n/k' : money(yours.figure.cents)}</span>
+          <span class="c">yours${yours.figure.quality === 'estimated' ? ', est.' : ''}</span></a>
+
+        <a class="ev-cell" href="/foundry/controls">
+          <span class="top"><span class="dot ${estate.cls === 'ok' ? '' : estate.cls === 'bad' ? 'bad' : 'watch'}"></span>
+            <span class="n sm">${estate.word}</span></span>
+          <span class="c">${READINGS.health.toLowerCase()}</span></a>
+
+        <a class="ev-cell" href="/foundry/companies">
+          <span class="n">${String(s.watching.real)}</span>
+          <span class="c">${s.watching.real === 1 ? 'company' : 'companies'}</span></a>
+      </div>
+
+      <div class="ev-sec"><h2>How I am working</h2>
+        <a href="/foundry/controls">Controls ›</a></div>
+      <ul class="ev-list">
+        <li><a class="ev-item" href="/foundry/charter">
+          <span class="mark" aria-hidden="true">${mark('autonomy')}</span>
+          ${/* THE CANONICAL WORD, KEPT. The first cut of this row made the
+                state the title — "Asks first" — and dropped "Autonomy"
+                altogether, which is the divergence `views/owner/labels.ts`
+                exists to prevent: Controls would call it Autonomy and Home
+                would call it nothing. The name leads, the state is a tag
+                beside it, and the sentence underneath says what it means. */ ''}
+          <span class="body"><span class="t">Autonomy <span class="ev-tag ${
+  autonomy.nothingWithoutHim && !envelope ? 'ok' : 'watch'}">${envelope ? 'Chartered'
+    : autonomy.nothingWithoutHim ? 'Asks first' : 'Granted'}</span></span>
+            <span class="s">${envelope
+    ? `$${(envelope.remainingCents / 100).toFixed(0)} of $${(envelope.charter.monthlyCents / 100).toFixed(0)} left this term`
+    : autonomy.nothingWithoutHim ? 'nothing happens without you saying so'
+      : 'within the grants you have given'}</span></span>
+          <span class="go" aria-hidden="true">›</span></a></li>
+
+        <li><a class="ev-item" href="${live ? `/foundry/experiments/${live.id}`
+    : lastDone ? `/foundry/experiments/${lastDone.id}` : '/foundry/experiments'}">
+          <span class="mark" aria-hidden="true">${mark('experiment')}</span>
+          <span class="body"><span class="t">${live ? 'Experiment'
+    : lastOutcome ? 'Last test' : 'Experiments'} <span class="ev-tag ${
+  live ? (live.state === 'running' ? 'ok' : 'watch')
+    : lastOutcome ? (lastOutcome.word === 'surprised' ? 'bad'
+      : lastOutcome.word === 'partly' ? 'watch'
+        : lastOutcome.word === 'as predicted' ? 'ok' : '') : ''}">${live ? live.stateLabel
+    : lastOutcome ? lastOutcome.label : 'none running'}</span></span>
+            ${/* THE WORD CARRIES ITS DOUBT. A settled test whose reply path was
+                  not working while it asked is still settled — the rule is
+                  sealed — but showing the word alone is how a result taken on
+                  a broken instrument becomes a fact the owner remembers. In a
+                  tile this sentence was truncated; here it is not. */ ''}
+            <span class="s">${live
+    ? `${String(live.exposure.sent)} of ${String(live.exposure.approved)} written to`
+    : lastOutcome
+      ? `${lastOutcome.settled ? 'settled' : 'ended'} ${lastOutcome.when ? lastOutcome.when.slice(0, 10) : ''}${lastDoubt ? ' — on a channel that may not have carried a reply' : ''}`
+      : 'nothing running'}</span></span>
+          <span class="go" aria-hidden="true">›</span></a></li>
+      </ul>`;
 
   // WHERE THINGS ARE, FROM THE FIRST SCREEN. Not doors: addresses, reached
   // from here and from context, with a count only where one is honest.

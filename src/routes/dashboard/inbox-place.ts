@@ -121,25 +121,77 @@ inboxRoutes.get('/foundry/inbox', async (c: any) => {
   const body = html`
     <h1>Inbox</h1>
     ${done === 'cleared' ? html`<p class="noticed"><strong>Put away.</strong> ${String(c.req.query('n') ?? '0')} ${String(c.req.query('n') ?? '0') === '1' ? 'conversation' : 'conversations'} you had dealt with. Each keeps its record and can be put back from <a href="/foundry/inbox?show=archived">Put away</a>.</p>` : done ? html`<p class="noticed">Recorded.</p>` : ''}
-    <p class="lede">What people wrote to ${voice}, and what Foundry made of it. Your own mailbox is untouched; this is the institution's reading, not a copy of your email.</p>
+    ${/* ONE SENTENCE, AND THE REASSURANCE IT CARRIES. This was four lines of
+         prose above the first real thing on the page. What the owner needs on
+         arriving is what this place is and that it has not touched his email;
+         what Foundry "made of it" is visible in every row below, so saying it
+         here as well was the page explaining its own contents. */ ''}
+    <p class="lede">What people wrote to ${voice}. Your own mailbox is untouched.</p>
 
-    <section class="panel mode-panel" aria-label="Correspondence mode">
-      <header><h2>${mark('mail')}Correspondence mode</h2><span class="dim">${speaking.answered} answered · ${speaking.sent} sent · ${speaking.escalated} left for you${speaking.failed ? ` · ${speaking.failed} failed to send` : ''}</span></header>
-      <div class="segments" role="group" aria-label="How much the Workshop answers for itself">
-        ${MODES.map(([m, label, gloss]) => html`<span class="seg${speaking.mode === m ? ' on' : ''}"${speaking.mode === m ? raw(' aria-current="true"') : ''}><b>${label}</b><small>${gloss}</small></span>`)}
+    <section class="panel" aria-label="Correspondence mode">
+      <div class="ev-sec"><h2>Correspondence</h2>
+        <a href="/foundry/activity">Activity ›</a></div>
+
+      ${/* FOUR READINGS, AS FOUR. This was one dim run-on line —
+           "7 answered · 1 sent · 2 left for you · 1 failed to send" — in
+           which the only number that needs him, the one that failed, was the
+           least visible thing on the row. */ ''}
+      <div class="ev-strip">
+        <div class="ev-cell"><span class="n">${String(speaking.answered)}</span>
+          <span class="c">answered</span></div>
+        <div class="ev-cell"><span class="n">${String(speaking.sent)}</span>
+          <span class="c">sent</span></div>
+        <a class="ev-cell" href="/foundry/inbox?show=needs">
+          <span class="top">${speaking.escalated ? html`<span class="dot watch"></span>` : ''}
+          <span class="n">${String(speaking.escalated)}</span></span>
+          <span class="c">for you</span></a>
+        <div class="ev-cell"><span class="top">${speaking.failed ? html`<span class="dot bad"></span>` : ''}
+          <span class="n">${String(speaking.failed)}</span></span>
+          <span class="c">failed</span></div>
       </div>
-      <details class="fold change-mode"><summary><h3>Change it</h3><span class="gist">now: ${MODE_WORD[speaking.mode]}</span></summary>
+
+      ${/* THE CROWDED CONTROL, AND WHY IT COULD NOT BE FIXED IN PLACE.
+           The owner photographed this: three pills, each holding a mode and
+           the sentence explaining it, on a 390px screen, with "answers
+           ordinary messages itself" running off the end of its own box. It
+           could not be made to fit, because the information does not fit that
+           shape — and underneath it sat a SECOND control, a fold with a
+           <select>, which is what actually changed the mode. Two components
+           for one concept: the pills said where you were and could not take
+           you anywhere.
+
+           One control now. The summary carries the state, which is all the
+           default screen owes him; opening it gives each mode the room to say
+           what it does, in the order of how much it lets Foundry do without
+           asking. The reason stays required, because a change to what may be
+           written to a stranger on his behalf is a change worth a line in the
+           record. */ ''}
+      <details class="fold">
+        <summary><h3>How much I answer for myself</h3>
+          <span class="gist">now: ${MODE_WORD[speaking.mode]}</span></summary>
+        ${/* `stack` is this application's form layout, and dropping it when this
+             form was rebuilt left the reason field an inline 20px line box —
+             a control the touch floor could not reach because the floor
+             applies to the input and the label was what a thumb would hit. */ ''}
         <form method="POST" action="/foundry/inbox/mode" class="stack">
-          <label>Mode
-            <select name="mode">
-              <option value="off" ${speaking.mode === 'off' ? 'selected' : ''}>Answer nothing — everything waits for me</option>
-              <option value="draft" ${speaking.mode === 'draft' ? 'selected' : ''}>Write answers but send nothing</option>
-              <option value="autonomous" ${speaking.mode === 'autonomous' ? 'selected' : ''}>Answer ordinary messages without asking me</option>
-            </select></label>
-          <label>Why <input type="text" name="because" required placeholder="one line, for the record" /></label>
-          <button class="btn" type="submit">Set it</button>
+          <fieldset class="ev-choice">
+            <legend class="sr">How much the Workshop answers for itself</legend>
+            ${MODES.map(([m, label, gloss]) => html`
+            <label class="ev-opt">
+              <input type="radio" name="mode" value="${m}"${
+  speaking.mode === m ? raw(' checked') : ''} />
+              <span class="pip" aria-hidden="true"></span>
+              <span><span class="t">${label}</span><span class="s">${gloss}</span>${
+  speaking.mode === m ? html`<span class="now">This is how I work now</span>` : ''}</span>
+            </label>`)}
+          </fieldset>
+          <label>Why <input type="text" name="because" required
+            placeholder="one line, for the record" /></label>
+          <button class="btn go" type="submit">Set it</button>
         </form>
-        <p class="quiet">Whatever this says, a message can never grant Foundry authority it does not already have. Legal and security messages, anything claiming your approval, new commitments and anything it could not read confidently always come to you.</p>
+        <p class="quiet">Whatever this says, a message can never grant Foundry authority it
+          does not already have. Legal and security messages, anything claiming your approval,
+          new commitments and anything it could not read confidently always come to you.</p>
       </details>
     </section>
 

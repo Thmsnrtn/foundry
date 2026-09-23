@@ -161,7 +161,7 @@ for (const width of [390, 1280]) {
       // that does not exist in the browser, and the page dies with
       // `__name is not defined`. This campaign learned that once already, in
       // `measure-mobile.mts`, and I wrote the same defect again here.
-      const seen = await page.evaluate(() => {
+      const seen = await page.evaluate((nav: boolean) => {
         return ({
         theme: document.documentElement.getAttribute('data-theme'),
         ground: getComputedStyle(document.body).backgroundColor,
@@ -211,20 +211,138 @@ for (const width of [390, 1280]) {
             smallest: controls.slice(0, 8),
           };
         })(),
+        // TEXT CLIPPED INSIDE A COMPONENT, which the document-overflow check
+        // cannot see. The owner photographed a segmented control whose third
+        // option read "answers ordinary message itself" with the words running
+        // off the end of their own pill, and this instrument had called that
+        // page clean: the document did not overflow, so nothing complained.
+        // A box narrower than the words in it is a defect wherever it is.
+        clipped: Array.from(document.querySelectorAll('body *'))
+          .filter((e) => {
+            const style = getComputedStyle(e);
+            if (style.overflowX === 'auto' || style.overflowX === 'scroll') return false;
+            // A SCREEN-READER LABEL IS CLIPPED ON PURPOSE. It is one pixel of
+            // box holding a whole sentence, for a reader that never sees a
+            // box. Counting it would teach the instrument's user to ignore
+            // the instrument, which is worse than not measuring at all.
+            const r0 = e.getBoundingClientRect();
+            if (r0.width <= 2 || r0.height <= 2) return false;
+            if (style.clipPath !== 'none' || style.position === 'absolute') return false;
+            if (e.scrollWidth <= e.clientWidth + 1) return false;
+            // Only where there is text of its own to lose.
+            return Array.from(e.childNodes)
+              .some((n) => n.nodeType === 3 && (n.textContent ?? '').trim().length > 1);
+          })
+          .map((e) => ({
+            t: `${e.tagName.toLowerCase()}.${e.className || '-'}`.slice(0, 40),
+            by: e.scrollWidth - e.clientWidth,
+            say: (e.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 40),
+          }))
+          .slice(0, 8),
+        // CONTENT UNDER THE BOTTOM NAV. The nav is fixed, so it sits on top of
+        // whatever the page put at that height, and a full-page screenshot
+        // shows the collision the way the owner meets it: tabs half-hidden
+        // behind "Home Portfolio Experiments". Nothing measured this either.
+        // CONTENT UNDER THE FIXED BAR — ADVISORY, AND NOT YET TRUSTED.
+        //
+        // This has produced three separate classes of false positive: asking
+        // at the top of the page (everything below the fold straddles the
+        // bar), counting containers whose children merely reach that far, and
+        // counting the Ask composer, which is fixed furniture sitting where it
+        // means to sit. Each was fixed and another appeared.
+        //
+        // The page reserves 88px and the bar measures 63px, so the clearance
+        // exists and the remaining readings are probably a fourth kind of
+        // mistake rather than a defect. Probably is not good enough to change
+        // a stylesheet on, and it is certainly not good enough to fail a run
+        // on: a gate that cries wolf is how a real finding gets ignored. So it
+        // reports and does not judge, and it stays out of the failure count
+        // until somebody proves what it is seeing. Set EVENTIDE_NAV=1 to make
+        // it speak; silence here is "unproven", not "clean".
+        //
+        // CONTENT UNDER THE FIXED BAR, ASKED AT THE BOTTOM OF THE PAGE.
+        //
+        // The first form of this asked it at the top and answered yes on every
+        // page, because everything below the fold has a bottom edge past the
+        // bar's top edge. That is not occlusion, it is a page being longer
+        // than a screen. The question is only meaningful once the owner has
+        // scrolled as far as he can: if content still sits under the bar
+        // there, the bar is covering it permanently — which is how the Inbox
+        // tabs came to be half-hidden behind "Home Portfolio Experiments".
+        pad: (() => {
+          const m = document.querySelector('main.wrap');
+          const bar = Array.from(document.querySelectorAll('nav,footer'))
+            .find((e) => getComputedStyle(e).position === 'fixed');
+          return {
+            padBottom: m ? getComputedStyle(m).paddingBottom : 'none',
+            chrome: getComputedStyle(document.documentElement).getPropertyValue('--chrome').trim(),
+            barH: bar ? Math.round(bar.getBoundingClientRect().height) : 0,
+          };
+        })(),
+        occluded: (() => {
+          if (!nav) return [];
+          const bars = Array.from(document.querySelectorAll('nav,footer,[class*="bottom"]'))
+            .filter((e) => getComputedStyle(e).position === 'fixed'
+              && e.getBoundingClientRect().bottom > window.innerHeight - 4);
+          if (bars.length === 0) return [];
+          window.scrollTo(0, document.body.scrollHeight);
+          const top = Math.min(...bars.map((b) => b.getBoundingClientRect().top));
+          if (!isFinite(top) || top <= 0) return [];
+          const hit = Array.from(document.querySelectorAll('main *'))
+            .filter((e) => {
+              if (bars.some((b) => b.contains(e))) return false;
+              // ANYTHING ELSE PINNED TO THE SCREEN IS CHROME, NOT CONTENT.
+              // The Ask composer is `position:fixed` above the bar and is not
+              // in the bar, so it read as page content being painted over. It
+              // is not: it is another piece of furniture, sitting where it
+              // means to sit. Walking the ancestors is the only way to know,
+              // because the fixed element may be several levels up.
+              for (let a: Element | null = e; a; a = a.parentElement) {
+                if (getComputedStyle(a).position === 'fixed') return false;
+              }
+              const r = e.getBoundingClientRect();
+              if (r.width < 4 || r.height < 4) return false;
+              // ITS OWN WORDS, NOT ITS CHILDREN'S. A container wrapping the
+              // whole page straddles the bar on every page by construction,
+              // which is a page being long, not a bar covering anything. Only
+              // an element with a text node of its own can have that text
+              // hidden behind the bar.
+              const mine = Array.from(e.childNodes)
+                .some((n) => n.nodeType === 3 && (n.textContent ?? '').trim().length > 0);
+              if (!mine) return false;
+              return r.bottom > top + 2 && r.top < top;
+            })
+            .map((e) => ({
+              t: `${e.tagName.toLowerCase()}.${e.className || '-'}`.slice(0, 40),
+              by: Math.round(e.getBoundingClientRect().bottom - top),
+            }));
+          window.scrollTo(0, 0);
+          return hit.slice(0, 4);
+        })(),
         });
-      });
+      }, Boolean(process.env.EVENTIDE_NAV));
       const over = seen.scrollW > seen.clientW;
       if (over) failures += 1;
       if (seen.theme !== mode) { failures += 1; }
+      // A CLIP IS A FAILURE, NOT A FOOTNOTE. It was reported as neither for
+      // the whole campaign, which is how a page with words running off the
+      // edge of a button kept being called clean.
+      if (seen.clipped.length > 0) failures += 1;
       await page.screenshot({
         path: `${dir}/${p.name}-${mode}-${String(width)}.png`,
         fullPage: width === 390,
       });
       console.log(`  ${over || seen.theme !== mode ? '✗' : '·'} ${p.name.padEnd(16)} ${mode.padEnd(5)} ${String(width).padEnd(5)} `
         + `theme=${String(seen.theme)} ground=${seen.ground} h=${String(seen.height)}px `
-        + `under38=${String(seen.small)}${seen.inline ? ` inline=${String(seen.inline)}` : ''}${over ? ` OVERFLOW ${String(seen.scrollW)}>${String(seen.clientW)}` : ''}`
+        + `under38=${String(seen.small)}${seen.inline ? ` inline=${String(seen.inline)}` : ''}${
+          seen.clipped.length ? ` CLIPPED ${String(seen.clipped.length)}` : ''}${
+          seen.occluded.length ? ` UNDER-NAV ${String(seen.occluded[0].by)}px [${seen.occluded.map((x) => x.t).join(', ')}]` : ''}${over ? ` OVERFLOW ${String(seen.scrollW)}>${String(seen.clientW)}` : ''}`
+        + (process.env.EVENTIDE_SMALL
+          ? `\n      pad=${seen.pad.padBottom} chrome=${seen.pad.chrome || 'unset'} bar=${String(seen.pad.barH)}px` : '')
         + (process.env.EVENTIDE_SMALL && seen.smallest.length
-          ? `\n      ${seen.smallest.map((x) => `${x.t} ${String(x.w)}x${String(x.h)}`).join('\n      ')}` : ''));
+          ? `\n      ${seen.smallest.map((x) => `${x.t} ${String(x.w)}x${String(x.h)}`).join('\n      ')}` : '')
+        + (seen.clipped.length
+          ? `\n      clipped: ${seen.clipped.map((x) => `${x.t} by ${String(x.by)}px “${x.say}”`).join('\n      clipped: ')}` : ''));
     }
   }
   await context.close();
