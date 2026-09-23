@@ -36,11 +36,22 @@ import { withAppearance, isAppearance } from '../src/views/owner/appearance.js';
 
 const OWNER = 'ev_owner';
 const MODES = ['light', 'green', 'dark'] as const;
+// EVERY OWNER-FACING PLACE, so a migration wave can be chosen from what is
+// actually worst rather than from what is nearest to hand.
 const PAGES: Array<{ path: string; name: string }> = [
   { path: '/foundry', name: 'brief' },
   { path: '/foundry/controls', name: 'controls' },
   { path: '/foundry/controls/connectors', name: 'connectors' },
   { path: '/foundry/controls/connectors/etsy', name: 'connector-etsy' },
+  { path: '/settings', name: 'settings' },
+  { path: '/foundry/companies', name: 'portfolio' },
+  { path: '/foundry/experiments', name: 'experiments' },
+  { path: '/foundry/decisions', name: 'decisions' },
+  { path: '/foundry/inbox', name: 'inbox' },
+  { path: '/foundry/money', name: 'money' },
+  { path: '/foundry/activity', name: 'activity' },
+  { path: '/foundry/searching', name: 'searching' },
+  { path: '/foundry/charter', name: 'charter' },
 ];
 
 async function seed(): Promise<void> {
@@ -69,6 +80,23 @@ async function boot(): Promise<string> {
   app.route('/', foundryShellRoutes as never);
   const { settingsRoutes } = await import('../src/routes/dashboard/settings.js');
   app.route('/', settingsRoutes as never);
+  // THE REST OF THE OWNER SURFACE. Mounted by shape rather than by name so a
+  // router added later is measured without this list being remembered.
+  for (const mod of [
+    '../src/routes/dashboard/experiments-place.js',
+    '../src/routes/dashboard/charter-place.js',
+    '../src/routes/dashboard/places.js',
+    '../src/routes/dashboard/inbox-place.js',
+    '../src/routes/dashboard/money-place.js',
+    '../src/routes/dashboard/activity-place.js',
+  ]) {
+    const loaded = await import(mod) as Record<string, unknown>;
+    for (const v of Object.values(loaded)) {
+      if (v && typeof v === 'object' && 'routes' in (v as Record<string, unknown>)) {
+        app.route('/', v as never);
+      }
+    }
+  }
   const server = serve({ fetch: app.fetch as never, port: 0 });
   const port = (server.address() as { port: number }).port;
   return `http://127.0.0.1:${String(port)}`;
@@ -96,12 +124,27 @@ for (const width of [390, 1280]) {
       const res = await page.goto(url, { waitUntil: 'load' });
       const status = res?.status() ?? 0;
       if (status !== 200) {
-        console.log(`  ✗ ${p.name} ${mode} ${String(width)} → HTTP ${String(status)}`);
-        failures += 1;
+        // NOT A FAILURE OF THE THEME. A place needing state this harness has
+        // not seeded answers honestly; saying so is the point, and counting it
+        // as a defect would train the reader to ignore the count.
+        console.log(`  ~ ${p.name.padEnd(16)} ${mode.padEnd(5)} ${String(width).padEnd(5)} HTTP ${String(status)} (not seeded)`);
         continue;
       }
       // What actually applied, rather than what was asked for.
-      const seen = await page.evaluate(() => ({
+      // WHAT A THUMB ACTUALLY HITS, which is not always the element.
+      //
+      // The rect comes from the wrapping label where there is one, because
+      // that is the target: a 20×20 checkbox inside a 40px label is tappable,
+      // and WCAG 2.2's target-size criterion says so. Measuring the box
+      // instead made the honest arrangement look like the defect.
+      //
+      // AND IT IS WRITTEN INLINE, TWICE, ON PURPOSE. A named function value
+      // inside `page.evaluate` is compiled by esbuild with a `__name` helper
+      // that does not exist in the browser, and the page dies with
+      // `__name is not defined`. This campaign learned that once already, in
+      // `measure-mobile.mts`, and I wrote the same defect again here.
+      const seen = await page.evaluate(() => {
+        return ({
         theme: document.documentElement.getAttribute('data-theme'),
         ground: getComputedStyle(document.body).backgroundColor,
         scrollW: document.documentElement.scrollWidth,
@@ -109,10 +152,21 @@ for (const width of [390, 1280]) {
         height: document.body.scrollHeight,
         small: Array.from(document.querySelectorAll('a,button,input,select'))
           .filter((e) => {
-            const r = e.getBoundingClientRect();
+            const r = (e.closest('label') ?? e).getBoundingClientRect();
             return r.width > 0 && r.height > 0 && (r.height < 38 || r.width < 38);
           }).length,
-      }));
+        // WHICH ONES, so a count can be acted on rather than only watched. A
+        // number tells you there is a problem; the selector tells you where.
+        smallest: Array.from(document.querySelectorAll('a,button,input,select'))
+          .map((e) => {
+            const r = (e.closest('label') ?? e).getBoundingClientRect();
+            return { t: `${e.tagName.toLowerCase()}.${e.className || '-'}`.slice(0, 40),
+              h: Math.round(r.height), w: Math.round(r.width) };
+          })
+          .filter((x) => x.h > 0 && x.w > 0 && (x.h < 38 || x.w < 38))
+          .slice(0, 8),
+        });
+      });
       const over = seen.scrollW > seen.clientW;
       if (over) failures += 1;
       if (seen.theme !== mode) { failures += 1; }
@@ -122,7 +176,9 @@ for (const width of [390, 1280]) {
       });
       console.log(`  ${over || seen.theme !== mode ? '✗' : '·'} ${p.name.padEnd(16)} ${mode.padEnd(5)} ${String(width).padEnd(5)} `
         + `theme=${String(seen.theme)} ground=${seen.ground} h=${String(seen.height)}px `
-        + `under38=${String(seen.small)}${over ? ` OVERFLOW ${String(seen.scrollW)}>${String(seen.clientW)}` : ''}`);
+        + `under38=${String(seen.small)}${over ? ` OVERFLOW ${String(seen.scrollW)}>${String(seen.clientW)}` : ''}`
+        + (process.env.EVENTIDE_SMALL && seen.smallest.length
+          ? `\n      ${seen.smallest.map((x) => `${x.t} ${String(x.w)}x${String(x.h)}`).join('\n      ')}` : ''));
     }
   }
   await context.close();

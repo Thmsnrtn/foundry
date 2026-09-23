@@ -2031,3 +2031,35 @@ a.know:hover{background:var(--card-2)}
 /* THE PULSE INSIDE THE CALM CARD. Its own line, quieter than the claim above
    it, because it is the evidence for that claim rather than a second claim. */
 .panel.calm .pulse-line{margin:.55rem 0 0;color:var(--ink-2);font-size:.93rem;line-height:1.45}
+
+/* THE SETTINGS INDEX — a way down a long page, and the shape Eventide uses
+   wherever a short set of destinations is better shown than hidden. Wraps
+   rather than scrolls, because seven items that fit should not need a gesture
+   to discover. */
+.settings-index{display:flex;flex-wrap:wrap;gap:var(--s1);margin:0 0 var(--s3)}
+.settings-index a{display:inline-flex;align-items:center;min-height:38px;
+  padding:.4rem .75rem;border:1px solid var(--line);border-radius:999px;
+  background:var(--card);color:var(--ink-2);text-decoration:none;font-size:.86rem}
+.settings-index a:hover{color:var(--ink);border-color:var(--line-2)}
+.settings-index a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* A CONTROL ON A PHONE IS PRESSED WITH A THUMB.
+   Settings carried twenty-one of them under 38px — buttons shrunk by inline
+   `font-size:0.8rem` with no padding to compensate, in the one place an owner
+   goes to change something. WCAG 2.2 sets 24px as the floor and 44 is the
+   design target; this is the floor being enforced where the markup forgot it,
+   without touching a hundred inline styles. */
+main .card button,main .card .btn,main .card input:not([type="checkbox"]):not([type="radio"]),
+main .card select{min-height:40px}
+main .card button,main .card .btn{padding-inline:.85rem}
+
+/* A CHECKBOX IS A CONTROL TOO. These rendered at the browser's default 13×13
+   in Settings — a third of the floor, in the one place an owner goes to change
+   something, and small enough that a thumb hits the label or nothing. The box
+   grows, and the label around it becomes the target, which is what makes the
+   difference on a phone. */
+main .card input[type="checkbox"],main .card input[type="radio"]{
+  width:20px;height:20px;accent-color:var(--accent)}
+main .card label:has(> input[type="checkbox"]),
+main .card label:has(> input[type="radio"]){
+  display:inline-flex;align-items:center;gap:.55rem;min-height:40px}

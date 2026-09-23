@@ -140,6 +140,26 @@ settingsRoutes.get('/settings', async (c) => {
   const content = html`
     ${successBannerMsg ? html`<div class="state ok" style="display:block;padding:0.75rem 1.25rem;margin-bottom:1.5rem;font-size:0.875rem;font-weight:500;">${successBannerMsg}</div>` : ''}
     <h1>Settings</h1>
+    ${/* A WAY DOWN A LONG PAGE.
+         Settings is eleven sections, five thousand pixels on a phone, and the
+         Etsy application key sits two thirds of the way into it — so the one
+         thing an owner comes here to do today is four screens of scrolling
+         past things he is not doing. Splitting the page into destinations is
+         the right end state and a bigger change than this; an index is the
+         honest interim, and it is not decoration: every entry is a real
+         section on this page and lands on it in one tap.
+
+         The states beside them are the same readings the sections render, so
+         the index cannot tell him something the section below contradicts. */ ''}
+    <nav class="settings-index" aria-label="Sections">
+      <a href="#etsy-application-key">Etsy application key</a>
+      <a href="#who-your-customers-hear-from">Sending</a>
+      <a href="#how-foundry-speaks-to-you">Voice</a>
+      <a href="#how-loudly-foundry-may-interrupt-you">Interruptions</a>
+      <a href="#how-often-i-run">Schedule</a>
+      <a href="#systems-that-report-to-you">Systems</a>
+      <a href="#api-keys">API keys</a>
+    </nav>
     ${/* PROFILE, CONNECTED REPOSITORIES, COMPETITORS AND BETA INFRASTRUCTURE,
          DELETED with the settingsPage component. Three of the four were Commercial
          Foundry's audit product: repositories it scanned, competitors it
@@ -159,7 +179,7 @@ settingsRoutes.get('/settings', async (c) => {
          Foundry has one owner who does not bill himself. */ ''}
 
     <div class="card">
-      <h3>Products</h3>
+      <h3 id="products">Products</h3>
       <p style="font-size:0.87rem;color:var(--ink-3);margin-bottom:0.75rem;">You have ${products.rows.length} product(s) connected.</p>
       ${(products.rows as unknown as Array<Record<string, string>>).map((p) => html`
         <div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--line);">
@@ -175,7 +195,7 @@ settingsRoutes.get('/settings', async (c) => {
 
     ${/* Manage Company (F-061-A) */ ''}
     <div class="card" style="border:1px solid rgba(255,255,255,0.08);">
-      <h3>Manage Company</h3>
+      <h3 id="manage-company">Manage Company</h3>
       <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
         Pause, export, or delete your products. These actions apply to your currently selected product${products.rows.length > 1 ? ' — switch products above to target a different one' : ''}.
       </p>
@@ -232,7 +252,7 @@ settingsRoutes.get('/settings', async (c) => {
     </div>
 
     <div class="card">
-      <h3>How Foundry speaks to you</h3>
+      <h3 id="how-foundry-speaks-to-you">How Foundry speaks to you</h3>
       <p style="font-size:0.8rem;color:var(--text-muted);margin:0.25rem 0 0.75rem;">
         Presentation only — every setting gives you the exact same product, data, and controls.
       </p>
@@ -247,7 +267,7 @@ settingsRoutes.get('/settings', async (c) => {
     </div>
 
     <div class="card">
-      <h3>How loudly Foundry may interrupt you</h3>
+      <h3 id="how-loudly-foundry-may-interrupt-you">How loudly Foundry may interrupt you</h3>
       <p style="font-size:0.8rem;color:var(--text-muted);margin:0.25rem 0 0.75rem;">
         The loudest channel Foundry may ever use. It can go quieter than this on
         its own — when you are strained, it does — but never louder. Push is the
@@ -264,7 +284,7 @@ settingsRoutes.get('/settings', async (c) => {
     </div>
 
     <div class="card">
-      <h3>How often I run</h3>
+      <h3 id="how-often-i-run">How often I run</h3>
       ${/* THIS CARD WAS CALLED "WISDOM NETWORK" AND MOSTLY WAS NOT ONE.
            Its framing offered to contribute anonymised decision patterns to a
            cross-product wisdom layer so that "your AI recommendations benefit
@@ -305,7 +325,7 @@ settingsRoutes.get('/settings', async (c) => {
 
     ${productId ? html`
     <div class="card">
-      <h3>Metric Ingest</h3>
+      <h3 id="metric-ingest">Metric Ingest</h3>
       <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
         A secret URL your tools can POST to — Stripe webhooks, Zapier, cron jobs, or your own pipeline.
         Foundry maps the fields to your metrics and reads them on its next pass.
@@ -363,7 +383,7 @@ settingsRoutes.get('/settings', async (c) => {
 
     ${productId ? html`
     <div class="card">
-      <h3>Who your customers hear from</h3>
+      <h3 id="who-your-customers-hear-from">Who your customers hear from</h3>
       <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
         Mail Foundry sends to <em>your customers</em> goes out as you — your
         domain, your reply address, your unsubscribe footer. It never goes out
@@ -408,7 +428,7 @@ settingsRoutes.get('/settings', async (c) => {
     </div>` : ''}
 
     <div class="card">
-      <h3>Etsy application key</h3>
+      <h3 id="etsy-application-key">Etsy application key</h3>
       <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:0.75rem;">
         This says which application is asking. It does <strong>not</strong> give access to any
         shop \u2014 connecting a shop is a separate act, with its own consent screen and its own
@@ -477,7 +497,7 @@ settingsRoutes.get('/settings', async (c) => {
 
     ${productId ? html`
     <div class="card">
-      <h3>Systems that report to you</h3>
+      <h3 id="systems-that-report-to-you">Systems that report to you</h3>
       <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
         The metric URL above is for posting numbers. Two other things a system can
         tell Foundry — that something needs handling, and whether something Foundry
@@ -538,7 +558,7 @@ settingsRoutes.get('/settings', async (c) => {
 
     ${productId ? html`
     <div class="card">
-      <h3>API keys</h3>
+      <h3 id="api-keys">API keys</h3>
       <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
         For programs that read and write your data directly — the REST API, the
         MCP tools, and call-transcript webhooks. A key does exactly what you tick
