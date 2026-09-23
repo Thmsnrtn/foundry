@@ -141,6 +141,7 @@ let failures = 0;
 // compare: if green looks different to a phone set to light than to one set
 // to dark, the phone is overruling him.
 const grounds = new Map<string, string>();
+const shapes = new Map<string, { mode: string; h: number }>();
 for (const width of [390, 1280]) {
  for (const prefers of ['light', 'dark'] as const) {
   const context = await browser.newContext({
@@ -151,8 +152,23 @@ for (const width of [390, 1280]) {
     colorScheme: prefers,
   });
   const page = await context.newPage();
-  for (const mode of MODES) {
-    for (const p of PAGES) {
+  // PAGE OUTSIDE, APPEARANCE INSIDE — because the order was being reported as
+  // if it were the appearance.
+  //
+  // This ran all fourteen pages in light, then all fourteen in green, then all
+  // fourteen in dark, and printed Home at 1,565px in light and 2,190px in
+  // green and dark. That reads exactly like the Green-mode defect the owner
+  // asked to be checked for. It was not: rendering Home on its own gives
+  // 1,565px in all three. Thirteen pages of browsing had put activity on the
+  // page, and the instrument attributed the growth to the mode that happened
+  // to be rendering when it appeared.
+  //
+  // With the page outside, a page's three appearances are measured two visits
+  // apart instead of twenty-six, so a difference between them is the
+  // appearance's doing. An instrument whose passes are ordered reports the
+  // order, not the thing.
+  for (const p of PAGES) {
+    for (const mode of MODES) {
       const url = `${base}${p.path}${p.path.includes('?') ? '&' : '?'}mode=${mode}`;
       const res = await page.goto(url, { waitUntil: 'load' });
       const status = res?.status() ?? 0;
@@ -176,7 +192,7 @@ for (const width of [390, 1280]) {
       // that does not exist in the browser, and the page dies with
       // `__name is not defined`. This campaign learned that once already, in
       // `measure-mobile.mts`, and I wrote the same defect again here.
-      const seen = await page.evaluate((nav: boolean) => {
+      const seen = await page.evaluate(({ nav, touch }: { nav: boolean; touch: boolean }) => {
         return ({
         theme: document.documentElement.getAttribute('data-theme'),
         ground: getComputedStyle(document.body).backgroundColor,
@@ -251,7 +267,17 @@ for (const width of [390, 1280]) {
                 h: Math.round(r.height * 10) / 10, w: Math.round(r.width * 10) / 10,
                 sentence };
             })
-            .filter((x) => x.h >= 1 && x.w >= 1 && (x.h < 38 || x.w < 38));
+            // THE FLOOR IS THE INPUT'S FLOOR, NOT ONE NUMBER FOR BOTH.
+            //
+            // 38px is the thumb's floor and it belongs to the phone. Applied
+            // at the desk it reported the Home orientation line — a link that
+            // is a whole paragraph, 169px wide and 22px tall — as a control
+            // too small to hit with a mouse, which is not a thing. But the
+            // link IS under WCAG 2.2's 24px minimum, and the exemption for a
+            // target "in a sentence" does not cover a link that is the entire
+            // sentence. One floor hid a real 2px failure inside a false one.
+            .filter((x) => x.h >= 1 && x.w >= 1
+              && (x.h < (touch ? 38 : 24) || x.w < (touch ? 38 : 24)));
           const controls = judged.filter((x) => !x.sentence);
           return {
             small: controls.length,
@@ -380,7 +406,7 @@ for (const width of [390, 1280]) {
           return hit.slice(0, 4);
         })(),
         });
-      }, Boolean(process.env.EVENTIDE_NAV));
+      }, { nav: Boolean(process.env.EVENTIDE_NAV), touch: width === 390 });
       // THE SAME MODE MUST LOOK THE SAME WHATEVER THE DEVICE PREFERS.
       const key = `${p.name} ${mode} ${String(width)}`;
       const was = grounds.get(key);
@@ -389,6 +415,28 @@ for (const width of [390, 1280]) {
         failures += 1;
         console.log(`  ✗ ${key}: the device preference changed the paint — `
           + `${was.split(' ').filter((x, j) => x !== seen.skin.split(' ')[j]).join('; ')} → ${seen.skin.split(' ').filter((x, j) => x !== was.split(' ')[j]).join('; ')}`);
+      }
+      // AN APPEARANCE CHANGES THE PAINT, NOT THE SHAPE.
+      //
+      // The owner's instruction is that a chosen theme governs the whole
+      // component system. The half of that which is already checked is the
+      // skin: `grounds`, above, catches a palette that reads the device
+      // preference behind the owner's back. The other half is that choosing
+      // green must not move anything — a mode that reflows the page is a
+      // second layout to maintain, and the one that gets looked at least.
+      //
+      // Measured across all fourteen surfaces at both widths under both device
+      // preferences, the three appearances agree to the pixel, so this is
+      // stated exactly rather than with a tolerance: any drift at all is
+      // either a defect or a change nobody meant to make, and both want
+      // saying.
+      const shapeKey = `${p.name} ${String(width)} ${prefers}`;
+      const firstShape = shapes.get(shapeKey);
+      if (firstShape === undefined) shapes.set(shapeKey, { mode, h: seen.height });
+      else if (firstShape.h !== seen.height) {
+        failures += 1;
+        console.log(`  ✗ ${shapeKey}: the appearance changed the shape — `
+          + `${firstShape.mode} ${String(firstShape.h)}px vs ${mode} ${String(seen.height)}px`);
       }
       const over = seen.scrollW > seen.clientW;
       if (over) failures += 1;
