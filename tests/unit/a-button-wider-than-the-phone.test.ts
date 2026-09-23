@@ -112,10 +112,17 @@ describe('a button cannot be wider than what contains it', () => {
     //   loses its tail inside the door rather than lying over the next one —
     //   which is exactly what the owner's screenshot showed when it wrapped.
     //
+    //   IT CLIPS ITSELF, AND IT IS THE SHORTER HALF. `.fold .gist` is the state
+    //   on a disclosure summary — "0 of 5 done", "1 of 4" — sitting beside a
+    //   heading that takes the room it needs. It carries `overflow:hidden` and
+    //   an ellipsis on the same rule, so a long state loses its tail rather
+    //   than pushing itself onto a second line: the summary was wrapping into
+    //   two rows, which turned a two-word fold into four lines of card.
+    //
     // Anything else added to this list needs one of those sentences.
     const named = [...phoneOnly(css()).matchAll(/(?:^|\n)([^\n{]*)\{[^}]*white-space:\s*nowrap/g)]
       .map((m) => m[1].trim())
       .filter((s) => !s.startsWith('@'));
-    expect(named.sort()).toEqual(['.filters a', '.local a', '.mline dd', '.sr', '.tile dt.k', 'nav.places a'].sort());
+    expect(named.sort()).toEqual(['.filters a', '.fold .gist', '.local a', '.mline dd', '.sr', '.tile dt.k', 'nav.places a'].sort());
   });
 });
