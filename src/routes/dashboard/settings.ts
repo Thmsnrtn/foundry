@@ -720,6 +720,28 @@ settingsRoutes.post('/settings/app-credential/etsy', requireInstitutionOwner(), 
   return c.redirect(`${back}${sep}etsy=placed&app=${encodeURIComponent(placed.providerAccountRef)}`);
 });
 
+/**
+ * ASK ETSY AGAIN, ON DEMAND.
+ *
+ * "Verified" with no date is a claim; `verified_at` with a date is a fact
+ * about a moment that may have passed. A key can be revoked at Etsy and
+ * nothing here would know until the next real call failed. This is the free,
+ * read-only ping the placement already uses, offered to the owner so the
+ * question "does this still work" has an answer he can get himself rather
+ * than one he has to ask me to remember.
+ */
+settingsRoutes.post('/settings/app-credential/etsy/recheck', requireInstitutionOwner(), async (c) => {
+  const body = await c.req.parseBody() as Record<string, string>;
+  const { recheckAppCredential } = await import('../../services/senses/app-credential.js');
+  const said = await recheckAppCredential('etsy');
+  const asked = String(body.back ?? '').trim();
+  const back = asked === '' ? '/foundry/controls/connectors/etsy' : safeBackPath(asked);
+  const sep = back.includes('?') ? '&' : '?';
+  return c.redirect('failed' in said
+    ? `${back}${sep}etsy_error=${encodeURIComponent(said.ownerWords)}`
+    : `${back}${sep}etsy=checked&app=${encodeURIComponent(said.applicationId)}`);
+});
+
 settingsRoutes.post('/settings/app-credential/etsy/forget', requireInstitutionOwner(), async (c) => {
   const body = await c.req.parseBody() as Record<string, string>;
   const { forgetAppCredential } = await import('../../services/senses/app-credential.js');

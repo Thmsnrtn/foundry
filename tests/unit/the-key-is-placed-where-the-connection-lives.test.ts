@@ -138,8 +138,79 @@ describe('the placement block is one block', () => {
   });
 });
 
+describe('the connector answers what is on file, without being asked twice', () => {
+  // THE DISCREPANCY THIS EXISTS FOR. The owner: "Earlier you reported that my
+  // application credentials had been verified and saved, while recent reports
+  // say no key is placed." Both were claims I could not establish — I cannot
+  // authenticate to production, so I never read the row either time.
+  //
+  // The repair is not a more careful guess. It is the institution answering
+  // from the row, with the dates on it, where he is already standing.
+  it('says plainly when nothing has ever been placed', async () => {
+    await query("DELETE FROM app_credentials WHERE provider = 'etsy'");
+    const html = await get(HERE);
+    expect(html).toContain('No application key on file');
+    expect(html).toContain('this table has no row for it');
+  });
+
+  it('shows the application, who placed it and when Etsy last confirmed it', async () => {
+    await query("DELETE FROM app_credentials WHERE provider = 'etsy'");
+    await query(
+      `INSERT INTO app_credentials (provider, secret_json, provider_account_ref,
+         verified_at, set_at, set_by)
+       VALUES ('etsy', ?, '11223344', '2026-09-20 08:00:00', '2026-09-19 07:00:00', ?)`,
+      [encrypt(JSON.stringify({ keystring: 'k', sharedSecret: 's' })), `founder:${F}`]);
+    const html = await get(HERE);
+    expect(html).toContain('The application key on file');
+    expect(html).toContain('11223344');
+    expect(html).toContain('2026-09-19 07:00:00');
+    expect(html).toContain('2026-09-20 08:00:00');
+    expect(html).toContain(`founder:${F}`);
+  });
+
+  it('does not let a date stand in for proof that it still works', async () => {
+    // A key can be revoked at Etsy and nothing here would know until a real
+    // call failed. The page says so, and offers the free read-only ping.
+    const html = await get(HERE);
+    expect(html).toContain('not proof it still would');
+    expect(html).toContain('action="/settings/app-credential/etsy/recheck"');
+  });
+
+  it('keeps a forgotten key visible, because removed is not the same as never', async () => {
+    await forgetAppCredential('etsy', 'the owner removed it');
+    const html = await get(HERE);
+    expect(html).toContain('Forgotten');
+    expect(html).toContain('the owner removed it');
+    expect(html, 'a removed key reads as one that never existed')
+      .not.toContain('this table has no row for it');
+  });
+
+  it('never puts either half of the pair on the page', async () => {
+    // THE VALUES, NOT THE FIELD NAMES. The first form of this asserted the
+    // page contained no "keystring" and failed on `name="keystring"` — the
+    // input he types into. A word search cannot tell a secret from a label
+    // for where a secret goes; only the stored values can be checked, so
+    // they are what is stored and what is looked for.
+    await query("DELETE FROM app_credentials WHERE provider = 'etsy'");
+    await query(
+      `INSERT INTO app_credentials (provider, secret_json, provider_account_ref,
+         verified_at, set_by)
+       VALUES ('etsy', ?, '55667788', datetime('now'), ?)`,
+      [encrypt(JSON.stringify({ keystring: 'KEY-abc-123', sharedSecret: 'SECRET-xyz-789' })),
+        `founder:${F}`]);
+    const html = await get(HERE);
+    expect(html, 'the keystring reached the browser').not.toContain('KEY-abc-123');
+    expect(html, 'the shared secret reached the browser').not.toContain('SECRET-xyz-789');
+    expect(html, 'nor did the ciphertext').not.toContain('55667788:');
+  });
+});
+
 describe('asking which application is placed does not open the envelope', () => {
   it('answers null when there is none, like the decrypting reader does', async () => {
+    // Its own precondition, stated rather than inherited: this file places
+    // and forgets keys above, and a test that only passes when it runs first
+    // is a test that will fail for a reason nobody can find.
+    await query("DELETE FROM app_credentials WHERE provider = 'etsy'");
     expect(await placedApplicationRef('etsy')).toBeNull();
   });
 
@@ -152,6 +223,7 @@ describe('asking which application is placed does not open the envelope', () => 
     // outright. A row that could only exist in a test is not a fixture for
     // behaviour that must hold in production, and the schema said so before
     // this test could pretend otherwise.
+    await query("DELETE FROM app_credentials WHERE provider = 'etsy'");
     await query(
       `INSERT INTO app_credentials (provider, secret_json, provider_account_ref, verified_at, set_by)
        VALUES ('etsy', ?, '55443322', ?, ?)`,

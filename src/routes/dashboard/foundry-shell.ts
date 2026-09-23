@@ -7042,6 +7042,14 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
       ? await (await import('../../services/senses/app-credential.js'))
         .placedApplicationRef('etsy')
       : null;
+    // THE RECORD, SO THE ANSWER DOES NOT DEPEND ON ANYBODY'S MEMORY.
+    // Includes a forgotten key, because "placed once and removed" and "never
+    // placed" are different histories and an empty page makes them look the
+    // same.
+    const placement = provider === 'etsy'
+      ? await (await import('../../services/senses/app-credential.js'))
+        .placementRecord('etsy')
+      : null;
 
     const fact = (yes: boolean, said: string, no: string): unknown => html`
       <li style="display:flex;gap:0.6rem;align-items:flex-start;padding:0.3rem 0;">
@@ -7116,6 +7124,42 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
            that is where the journey got lost. The placement block is one
            module rendered on every surface that needs it, so the three
            descriptions of how this secret is handled cannot drift apart. */ ''}
+      ${/* WHAT IS ACTUALLY ON FILE, SAID BEFORE ANYTHING ELSE.
+           The owner asked me to reconcile a discrepancy: I had reported his
+           credentials verified and saved, and later reported that no key was
+           placed. I could not establish either — I cannot authenticate to
+           production, so I never read the row. The institution can, and this
+           is where it says so, with the dates, so the question stops being
+           one he has to ask me. */ ''}
+      ${placement ? html`
+      <div class="know">
+        <h2>The application key on file</h2>
+        <dl class="facts">
+          <dt>State</dt><dd>${placement.forgottenAt
+    ? html`<span class="ev-tag">Forgotten</span> removed ${placement.forgottenAt}${
+  placement.forgetReason ? ` — ${placement.forgetReason}` : ''}`
+    : html`<span class="ev-tag ok">Placed</span>`}</dd>
+          <dt>Application</dt><dd>${placement.applicationId}</dd>
+          <dt>Placed</dt><dd>${placement.setAt} by ${placement.setBy}</dd>
+          <dt>Etsy last confirmed it</dt><dd>${placement.verifiedAt}</dd>
+        </dl>
+        ${c.req.query('etsy') === 'checked' ? html`
+        <p class="noticed"><strong>Checked just now.</strong> Etsy answered, and confirmed it
+          as application ${c.req.query('app') ?? ''}.</p>` : ''}
+        ${placement.forgottenAt ? '' : html`
+        <p class="quiet">That date is when Etsy last answered, not proof it still would: a
+          key can be revoked at Etsy and nothing here would know until a real call failed.</p>
+        <form method="POST" action="/settings/app-credential/etsy/recheck">
+          <input type="hidden" name="back" value="/foundry/controls/connectors/etsy" />
+          <button class="btn btn-secondary btn-sm" type="submit">Ask Etsy again now</button>
+        </form>`}
+      </div>` : html`
+      <div class="know">
+        <h2>No application key on file</h2>
+        <p>Nothing has ever been placed for Etsy on this deployment. Not removed, not
+          expired — this table has no row for it.</p>
+      </div>`}
+
       ${journey?.stage === 'no_key' ? html`
       <div class="know" style="border-color:var(--accent);">
         <h2>First, at Etsy</h2>

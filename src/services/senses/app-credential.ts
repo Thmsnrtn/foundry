@@ -128,6 +128,84 @@ export async function setAppCredential(input: {
 }
 
 /**
+ * THE WHOLE RECORD OF A PLACEMENT, AND NOTHING OF THE SECRET.
+ *
+ * WHY THIS EXISTS. The owner asked me to reconcile a discrepancy: I had once
+ * reported his application credentials verified and saved, and later reported
+ * that no key was placed. Neither statement was something I could establish.
+ * I cannot authenticate to production, so I could not read this table either
+ * time; the first claim was repeating what the act was supposed to do, and
+ * the later ones hardened "nothing in this session placed one" into "no key
+ * is placed", which is a different sentence about a system I was not reading.
+ *
+ * The fix is not for me to guess more carefully. It is for the institution to
+ * answer the question where the owner is already standing, from the row, with
+ * the dates on it — so the answer does not depend on anybody's memory of what
+ * was done in a chat window.
+ *
+ * Forgotten keys are included on purpose. A key that was placed and then
+ * removed is a different history from one that never existed, and showing
+ * only the living row makes them look identical.
+ */
+export interface PlacementRecord {
+  provider: string;
+  /** The provider's own id for the application. Never a secret. */
+  applicationId: string;
+  /** When the PROVIDER last confirmed the pair. Not when it was typed. */
+  verifiedAt: string;
+  setAt: string;
+  setBy: string;
+  forgottenAt: string | null;
+  forgetReason: string | null;
+}
+
+export async function placementRecord(provider: string): Promise<PlacementRecord | null> {
+  const row = (await query(
+    `SELECT provider, provider_account_ref, verified_at, set_at, set_by,
+            forgotten_at, forget_reason
+       FROM app_credentials WHERE provider = ?`, [provider]))
+    .rows[0] as Record<string, unknown> | undefined;
+  if (!row) return null;
+  return {
+    provider: String(row.provider),
+    applicationId: String(row.provider_account_ref),
+    verifiedAt: String(row.verified_at),
+    setAt: String(row.set_at),
+    setBy: String(row.set_by),
+    forgottenAt: row.forgotten_at == null ? null : String(row.forgotten_at),
+    forgetReason: row.forget_reason == null ? null : String(row.forget_reason),
+  };
+}
+
+/**
+ * ASK THE PROVIDER AGAIN, NOW.
+ *
+ * `verified_at` records when Etsy last confirmed the pair, which may be weeks
+ * ago and says nothing about whether the key still works — a key can be
+ * revoked at Etsy without anything here noticing. This re-asks, using the same
+ * free, read-only, no-OAuth ping the placement used, and writes the answer
+ * down. It changes no secret and grants nothing; the worst it can do is
+ * discover that a key stopped working, which is the point.
+ */
+export async function recheckAppCredential(provider: string):
+Promise<{ ok: true; applicationId: string; at: string } | PlacementFailure> {
+  const held = await appCredentialFor(provider);
+  if (!held) return { failed: true, ownerWords: 'There is no key to check.' };
+  if (provider !== 'etsy') {
+    return { failed: true, ownerWords: `I have no way to check a ${provider} key.` };
+  }
+  const key = await etsyAppKey();
+  if (!key) return { failed: true, ownerWords: 'There is no key to check.' };
+  const who = await askEtsyWhoThisIs(key);
+  if ('failed' in who) return who;
+  const at = new Date().toISOString();
+  await query(
+    `UPDATE app_credentials SET verified_at = ?, provider_account_ref = ?
+      WHERE provider = ? AND forgotten_at IS NULL`, [at, who.applicationId, provider]);
+  return { ok: true, applicationId: who.applicationId, at };
+}
+
+/**
  * WHICH APPLICATION IS PLACED, WITHOUT OPENING THE ENVELOPE.
  *
  * A surface that only has to say "the key is placed, and Etsy calls it
