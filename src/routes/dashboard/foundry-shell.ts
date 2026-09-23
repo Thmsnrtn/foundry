@@ -3110,7 +3110,14 @@ foundryShellRoutes.get('/foundry', async (c) => {
            belongs inside it.
            It keeps its own panel when it is anything other than fine, because
            a stopped institution is not a footnote to a calm one. */ ''}
-      ${needsN === 0 ? html`<p class="lines"><span class="state ${estate.cls}">${READINGS.health} ${estate.word.toLowerCase()}</span> <span class="state ${autonomy.nothingWithoutHim ? 'ok' : 'watch'}">Autonomy ${autonomy.nothingWithoutHim ? 'asks first' : 'within grants'}</span></p>` : ''}
+      ${/* TWO CHIPS REMOVED, NOT TWO FACTS.
+           This drew "Health healthy" and "Autonomy asks first" as chips — the
+           same two readings the first two tiles of the glance carry, with
+           less detail and no door, two hundred pixels above. The glance is
+           always rendered and this card appears only when it is, so these
+           could never be the only place he read them.
+           The claim, the evidence for it, and the glance are three different
+           jobs; this was the card doing the glance's again. */ ''}
       ${/* THE WHOLE PULSE, NOT A CHIP OF IT.
            The first pass carried only the word — "Working", "Not yet" — and
            dropped the sentence and the time of the last completed pass. That
@@ -3268,9 +3275,18 @@ foundryShellRoutes.get('/foundry', async (c) => {
            removed; it is folded, with its own state on the summary, so the
            answer to "am I looking for anything" is one line and composing a
            search is one tap. */ ''}
+      ${/* A REASON TO OPEN IT, NOT THE HEADING AGAIN. With nothing to look
+           through this read "I am not looking for anything — nothing to
+           loo…": the summary is one row, so a gist that only restated the
+           heading was clipped mid-word to make room for itself. Saying it
+           twice and saying it badly, for the same space.
+           But a fold whose label gives no reason to open it is a fold nobody
+           opens, so the answer is not to drop the gist — it is to make it
+           earn the row. A count when there is something to count; what
+           opening it is FOR when there is not. */ ''}
       <details class="fold"><summary><h2>I am not looking for anything</h2>
         <span class="gist">${s.notLooking.canSeeThrough.length
-    ? `${String(s.notLooking.canSeeThrough.length)} to look through` : 'nothing to look through'}</span></summary>
+    ? `${String(s.notLooking.canSeeThrough.length)} to look through` : 'Start one'}</span></summary>
       <p class="lede">One sentence: what you are after, and anything I should not do.</p>
       <form class="inline" method="POST" action="/foundry/ask">
         <input type="text" name="said" required maxlength="300"

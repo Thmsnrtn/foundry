@@ -106,7 +106,49 @@ describe('what is folded is still there', () => {
 
   it('says on the summary what the fold would tell him', async () => {
     // A fold whose label gives no reason to open it is a fold nobody opens.
+    //
+    // It used to read "nothing to look through" when there was nothing, which
+    // is the heading again in different words — and the summary is one row, so
+    // the browser clipped it to "nothing to loo…" to make room for the
+    // repetition. Said twice and said badly, for the same space. The gist has
+    // to earn its row either way: a count when there is something to count,
+    // and what opening it is for when there is not.
+    //
+    // READ THE GIST, NOT THE PAGE. The first form of this assertion searched
+    // the whole document for "nothing to look through" and failed on the
+    // fold's own body — "I would be starting blind, I have nothing to look
+    // through yet" — which is a true sentence that belongs there. A phrase
+    // search cannot tell a summary from the prose underneath it, so it reads
+    // the one span that is actually the summary.
     const html = await brief();
-    expect(html.replace(/\s+/g, ' ')).toMatch(/to look through|nothing to look through/);
+    const gists = [...html.matchAll(/<span class="gist">([^<]*)<\/span>/g)]
+      .map((m) => m[1].replace(/\s+/g, ' ').trim());
+    expect(gists.length, 'no fold summary rendered at all').toBeGreaterThan(0);
+    expect(gists.some((g) => /^\d+ to look through$|^Start one$/.test(g)),
+      `no gist earned its row; got ${JSON.stringify(gists)}`).toBe(true);
+    expect(gists, 'a gist restates its own heading instead of adding to it')
+      .not.toContain('nothing to look through');
+  });
+
+  it('does not restate the glance inside the card that sits under it', async () => {
+    // "Health healthy" and "Autonomy asks first" were chips on the calm card
+    // and the first two tiles of the glance directly above it. The glance is
+    // always rendered and the calm card appears only when it is, so the chips
+    // could never be the only place he read them.
+    const html = await brief();
+    expect(times(html, 'Health healthy'),
+      'the calm card restates the health tile').toBe(0);
+    expect(times(html, 'Autonomy asks first'),
+      'the calm card restates the autonomy tile').toBe(0);
+  });
+
+  it('still shows both readings, at the glance, as doors', async () => {
+    // Removing two chips must not remove two facts. The tiles carry them with
+    // more detail than the chips did, and each is a door the chips were not.
+    const html = await brief();
+    expect(html).toContain('Healthy');
+    expect(html).toContain('Asks first');
+    expect(html).toContain('href="/foundry/controls"');
+    expect(html).toContain('href="/foundry/charter"');
   });
 });
