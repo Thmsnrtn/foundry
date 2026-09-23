@@ -128,12 +128,27 @@ const base = await boot();
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 let failures = 0;
 
+// BOTH ANSWERS THE PHONE CAN GIVE, FOR EVERY MODE HE CAN CHOOSE.
+//
+// This rendered each appearance once, on a browser whose colour preference
+// happened to be one value, and so it could not see the defect it most needed
+// to: the `--os-*` family flipping light in GREEN mode because the device
+// preferred light, which put a white decision card in a dark green
+// application and did it in every screenshot this campaign produced.
+//
+// An owner-chosen appearance must survive either answer. Rendering both is
+// the only way to know, and the ground colour is the cheapest thing to
+// compare: if green looks different to a phone set to light than to one set
+// to dark, the phone is overruling him.
+const grounds = new Map<string, string>();
 for (const width of [390, 1280]) {
+ for (const prefers of ['light', 'dark'] as const) {
   const context = await browser.newContext({
     viewport: { width, height: width === 390 ? 844 : 900 },
     deviceScaleFactor: 2,
     isMobile: width === 390,
     hasTouch: width === 390,
+    colorScheme: prefers,
   });
   const page = await context.newPage();
   for (const mode of MODES) {
@@ -165,6 +180,39 @@ for (const width of [390, 1280]) {
         return ({
         theme: document.documentElement.getAttribute('data-theme'),
         ground: getComputedStyle(document.body).backgroundColor,
+        // A FINGERPRINT, BECAUSE THE GROUND WAS NOT ENOUGH.
+        //
+        // The first form of this compared `body`'s background across the two
+        // device preferences and proved nothing: the defect it was written
+        // for lives in `--os-panel`, which paints the decision card, while
+        // the body is painted from `--v3-bg`. Reintroducing the bug on
+        // purpose, the CSS gate caught it and this did not — an instrument
+        // that passes is not an instrument that looked.
+        //
+        // So it samples the surfaces an appearance actually colours. If any
+        // answers differently because the phone prefers light, the phone is
+        // overruling a chosen appearance somewhere.
+        // EVERY TOKEN, NOT A HANDFUL OF SURFACES.
+        //
+        // The second form of this sampled the background colour of six
+        // elements and still did not catch the bug, because the decision card
+        // is painted with a gradient: `--os-panel` changed underneath it and
+        // `backgroundColor` stayed `rgba(0,0,0,0)` throughout. Two instruments
+        // in a row that agreed with a defect I had deliberately put back.
+        //
+        // So it reads the resolved custom properties off the root. That is the
+        // palette itself, not a guess at where the palette shows, and it
+        // catches any family — `--os-*`, `--v3-*`, or one nobody has written
+        // yet — that answers differently because of what the phone prefers.
+        skin: (() => {
+          const cs = getComputedStyle(document.documentElement);
+          const out: string[] = [];
+          for (let i = 0; i < cs.length; i += 1) {
+            const name = cs.item(i);
+            if (name.startsWith('--')) out.push(`${name}=${cs.getPropertyValue(name).trim()}`);
+          }
+          return out.sort().join(' ');
+        })(),
         scrollW: document.documentElement.scrollWidth,
         clientW: document.documentElement.clientWidth,
         height: document.body.scrollHeight,
@@ -321,6 +369,15 @@ for (const width of [390, 1280]) {
         })(),
         });
       }, Boolean(process.env.EVENTIDE_NAV));
+      // THE SAME MODE MUST LOOK THE SAME WHATEVER THE DEVICE PREFERS.
+      const key = `${p.name} ${mode} ${String(width)}`;
+      const was = grounds.get(key);
+      if (was === undefined) grounds.set(key, seen.skin);
+      else if (was !== seen.skin) {
+        failures += 1;
+        console.log(`  ✗ ${key}: the device preference changed the paint — `
+          + `${was.split(' ').filter((x, j) => x !== seen.skin.split(' ')[j]).join('; ')} → ${seen.skin.split(' ').filter((x, j) => x !== was.split(' ')[j]).join('; ')}`);
+      }
       const over = seen.scrollW > seen.clientW;
       if (over) failures += 1;
       if (seen.theme !== mode) { failures += 1; }
@@ -332,6 +389,8 @@ for (const width of [390, 1280]) {
         path: `${dir}/${p.name}-${mode}-${String(width)}.png`,
         fullPage: width === 390,
       });
+      if (prefers === 'dark') continue; // One line per page and mode; the
+      // second pass exists to compare, not to print the whole table twice.
       console.log(`  ${over || seen.theme !== mode ? '✗' : '·'} ${p.name.padEnd(16)} ${mode.padEnd(5)} ${String(width).padEnd(5)} `
         + `theme=${String(seen.theme)} ground=${seen.ground} h=${String(seen.height)}px `
         + `under38=${String(seen.small)}${seen.inline ? ` inline=${String(seen.inline)}` : ''}${
@@ -346,6 +405,7 @@ for (const width of [390, 1280]) {
     }
   }
   await context.close();
+ }
 }
 await browser.close();
 console.log(failures === 0 ? '\nEventide: every page rendered, themed and fitted.' : `\nEventide: ${String(failures)} problem(s).`);

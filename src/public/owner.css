@@ -1190,7 +1190,7 @@ body{background-color:var(--bg)}
    invisible. A reviewer on a light-mode phone could read nothing but the grey.
    The gradient is the dark theme's; light gets the flat ground its tokens name. */
 body{background:var(--v3-bg)}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) body{
+@media (prefers-color-scheme:dark){:root:not([data-theme]) body{
   background:
     radial-gradient(ellipse at 70% -8%,rgba(190,147,72,.10),transparent 30rem),
     radial-gradient(ellipse at 58% 0%,rgba(52,113,88,.13),transparent 46rem),
@@ -1203,7 +1203,7 @@ body{background:var(--v3-bg)}
    invisible. A reviewer on a light-mode phone could read nothing but the grey.
    The gradient is the dark theme's; light gets the flat ground its tokens name. */
 body{background:var(--v3-bg)}
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) body{
+@media (prefers-color-scheme:dark){:root:not([data-theme]) body{
   background:
     radial-gradient(ellipse at 70% -8%,rgba(190,147,72,.10),transparent 30rem),
     radial-gradient(ellipse at 58% 0%,rgba(52,113,88,.13),transparent 46rem),
@@ -1218,11 +1218,11 @@ body{background:var(--v3-bg)}
   background-color:var(--v3-bg);
 }
 @media (prefers-color-scheme:light){:root:not([data-theme]) body::before{display:none}
-  :root:not([data-theme="dark"]) main[data-place="money"] .facts.money{background:var(--card)}
-  :root:not([data-theme="dark"]) .ask{background:var(--card)}
-  :root:not([data-theme="dark"]) .sheet-more{background:var(--card)}
-  :root:not([data-theme="dark"]) .btn.go,:root:not([data-theme="dark"]) .btn.btn-primary{background:var(--accent-fill);border-color:var(--accent-fill);color:var(--accent-fill-ink)}
-  :root:not([data-theme="dark"]) h2.rank i,:root:not([data-theme="dark"]) .stepper li.done i{color:#FFFFFF}}
+  :root:not([data-theme]) main[data-place="money"] .facts.money{background:var(--card)}
+  :root:not([data-theme]) .ask{background:var(--card)}
+  :root:not([data-theme]) .sheet-more{background:var(--card)}
+  :root:not([data-theme]) .btn.go,:root:not([data-theme]) .btn.btn-primary{background:var(--accent-fill);border-color:var(--accent-fill);color:var(--accent-fill-ink)}
+  :root:not([data-theme]) h2.rank i,:root:not([data-theme]) .stepper li.done i{color:#FFFFFF}}
 :root[data-theme="light"] body::before{display:none}
 :root[data-theme="light"] main[data-place="money"] .facts.money{background:var(--card)}
 :root[data-theme="light"] .ask{background:var(--card)}
@@ -1230,11 +1230,11 @@ body{background:var(--v3-bg)}
 :root[data-theme="light"] .btn.go,:root[data-theme="light"] .btn.btn-primary{background:var(--accent-fill);border-color:var(--accent-fill);color:var(--accent-fill-ink)}
 :root[data-theme="light"] h2.rank i,:root[data-theme="light"] .stepper li.done i{color:#FFFFFF}
 @media (prefers-color-scheme:light){:root:not([data-theme]) body::before{display:none}
-  :root:not([data-theme="dark"]) main[data-place="money"] .facts.money{background:var(--card)}
-  :root:not([data-theme="dark"]) .ask{background:var(--card)}
-  :root:not([data-theme="dark"]) .sheet-more{background:var(--card)}
-  :root:not([data-theme="dark"]) .btn.go,:root:not([data-theme="dark"]) .btn.btn-primary{background:var(--accent-fill);border-color:var(--accent-fill);color:var(--accent-fill-ink)}
-  :root:not([data-theme="dark"]) h2.rank i,:root:not([data-theme="dark"]) .stepper li.done i{color:#FFFFFF}}
+  :root:not([data-theme]) main[data-place="money"] .facts.money{background:var(--card)}
+  :root:not([data-theme]) .ask{background:var(--card)}
+  :root:not([data-theme]) .sheet-more{background:var(--card)}
+  :root:not([data-theme]) .btn.go,:root:not([data-theme]) .btn.btn-primary{background:var(--accent-fill);border-color:var(--accent-fill);color:var(--accent-fill-ink)}
+  :root:not([data-theme]) h2.rank i,:root:not([data-theme]) .stepper li.done i{color:#FFFFFF}}
 :root[data-theme="light"] body::before{display:none}
 :root[data-theme="light"] main[data-place="money"] .facts.money{background:var(--card)}
 :root[data-theme="light"] .ask{background:var(--card)}
