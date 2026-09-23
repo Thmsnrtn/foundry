@@ -417,7 +417,21 @@ export async function recordVenueReading(input: { founderId: string; experimentI
   return { observationId };
 }
 
-export interface VenueOrder { orderRef: string; paidAt: string; grossCents: number; feeCents: number | null; currency?: string }
+export interface VenueOrder {
+  orderRef: string; paidAt: string; grossCents: number; feeCents: number | null; currency?: string;
+  /**
+   * WHETHER THE WHOLE RECEIPT WAS THIS TEST'S LISTING, defaulting to the
+   * stronger claim because an order typed in by hand is one the owner is
+   * describing as this test's sale. The reader sets it false when Etsy's
+   * receipt carried other items too, and then `grossCents` is this listing's
+   * lines alone and the receipt's shared components are not apportioned.
+   *
+   * It changes no arithmetic here. It changes what the ledger row SAYS it is,
+   * which is the difference between a number somebody can audit and a number
+   * that looks like a whole sale and is not.
+   */
+  whollyThisListing?: boolean;
+}
 
 /**
  * AN ORDER, AS THE VENUE'S STATEMENT SHOWS IT. Recorded as the provider's
@@ -461,14 +475,38 @@ export async function recordVenueOrder(input: {
   const paid = await recordBusinessOutcome({ exposureId: x.id, kind: 'payment', amountCents: o.grossCents, currency, observedAt: paidAt,
     provider: plan.listing.venue, providerRef: ref, payerReference: `order:${ref}`, arrivedVia: plan.listing.venue, exchange: 'upfront_price' });
   if ('refused' in paid) throw new HandRefused('not_recorded', paid.refused);
-  if (paid.duplicate) {
-    const f = (await query('SELECT id FROM experiment_fulfilments WHERE payment_event_id = ?', [paid.id])).rows[0] as Record<string, unknown> | undefined;
-    return { paymentEventId: paid.id, fulfilmentId: f ? String(f.id) : '', duplicate: true };
-  }
+  // A DUPLICATE PAYMENT MEANT ALL THE DOWNSTREAM WORK WAS DONE. IT DID NOT.
+  //
+  // This returned here the moment the payment event already existed, and
+  // everything after it — the delivery event, the fulfilment, the charge and
+  // the fee — was only ever written on the very first pass. So a failure
+  // ANYWHERE below this line left a payment on the record with no fulfilment,
+  // no ledger row and no obligation, and every replay took this branch and
+  // returned as if the order were complete. The reader's hourly pass would
+  // have re-read the same receipt forever and repaired nothing. It also meant
+  // a fee Etsy had not published when the order was first read — which
+  // `feeCents: null` exists to express — could never be added when it
+  // appeared, because the second read hit this return.
+  //
+  // So there is no branch now. Every step below converges: each is either
+  // idempotent on a natural key the provider gave us, or looked up before it
+  // is written. `recordBusinessOutcome` dedupes on (provider, ref); the
+  // ledger's `record` dedupes on (provider, ref, kind); the fulfilment is the
+  // one row with no provider key of its own, so it is found by the payment it
+  // belongs to. Replaying a complete order writes nothing and says so.
+  //
+  // `duplicate` still means what it always meant — this payment was already
+  // known — and is still what the reader counts. What it no longer means is
+  // "and therefore everything else exists".
+  const alreadyKnown = paid.duplicate;
   const delivered = await recordBusinessOutcome({ exposureId: x.id, kind: 'delivery', amountCents: null, currency, observedAt: paidAt,
     provider: plan.listing.venue, providerRef: `${ref}:download-available`, payerReference: `order:${ref}`, arrivedVia: plan.listing.venue, exchange: 'upfront_price' });
   if ('refused' in delivered) throw new HandRefused('not_recorded', delivered.refused);
-  const fulfilmentId = nanoid();
+  const held = (await query(
+    'SELECT id FROM experiment_fulfilments WHERE payment_event_id = ?', [paid.id]))
+    .rows[0] as Record<string, unknown> | undefined;
+  const fulfilmentId = held ? String(held.id) : nanoid();
+  if (!held) {
   // ONE TRANSACTION, BECAUSE THE GAP BETWEEN TWO STATEMENTS WAS REACHABLE.
   //
   // These ran as two separate writes. Anything that stopped between them left a
@@ -483,21 +521,25 @@ export async function recordVenueOrder(input: {
   // is a reason to weaken it. What was missing was the transaction, so either
   // both land or neither does.
   await batch([
-    { sql: `INSERT INTO experiment_fulfilments (id, founder_id, experiment_id, exposure_id, payment_event_id, provider, payment_ref, amount_cents, currency, observed_how)
+      { sql: `INSERT INTO experiment_fulfilments (id, founder_id, experiment_id, exposure_id, payment_event_id, provider, payment_ref, amount_cents, currency, observed_how)
             VALUES (?,?,?,?,?,?,?,?,?,?)`,
-      args: [fulfilmentId, input.founderId, input.experimentId, x.id, paid.id, plan.listing.venue, ref, o.grossCents, currency, input.observedHow ?? 'owner_entered'] },
-    { sql: `UPDATE experiment_fulfilments SET status = 'delivered', updated_at = datetime('now') WHERE id = ?`,
-      args: [fulfilmentId] },
-  ]);
+        args: [fulfilmentId, input.founderId, input.experimentId, x.id, paid.id, plan.listing.venue, ref, o.grossCents, currency, input.observedHow ?? 'owner_entered'] },
+      { sql: `UPDATE experiment_fulfilments SET status = 'delivered', updated_at = datetime('now') WHERE id = ?`,
+        args: [fulfilmentId] },
+    ]);
+  }
   await recordEconomicEvent({ founderId: input.founderId, kind: 'charge', amountCents: o.grossCents, currency, occurredAt: paidAt,
     provider: plan.listing.venue, providerRef: ref, sourceEventId: paid.id, fulfilmentId, claimQuality: 'measured',
-    evidenceMode: e.evidenceMode as 'real' | 'sandbox' | 'reference', because: `${plan.listing.venueName} order ${ref}, as the statement shows it` });
+    evidenceMode: e.evidenceMode as 'real' | 'sandbox' | 'reference',
+    because: o.whollyThisListing === false
+      ? `${plan.listing.venueName} order ${ref}: this listing's lines only — the receipt carried other items, and its fee, tax, discount and shipping are shared and not apportioned`
+      : `${plan.listing.venueName} order ${ref}, as the statement shows it` });
   if (o.feeCents !== null && Number.isInteger(o.feeCents) && o.feeCents >= 0) {
     await recordEconomicEvent({ founderId: input.founderId, kind: 'provider_fee', amountCents: o.feeCents, currency, occurredAt: paidAt,
       provider: plan.listing.venue, providerRef: `${ref}:fees`, fulfilmentId, claimQuality: 'measured',
       evidenceMode: e.evidenceMode as 'real' | 'sandbox' | 'reference', because: `${plan.listing.venueName} fees on order ${ref}, as the statement shows them` });
   }
-  return { paymentEventId: paid.id, fulfilmentId, duplicate: false };
+  return { paymentEventId: paid.id, fulfilmentId, duplicate: alreadyKnown };
 }
 
 /**

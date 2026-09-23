@@ -552,6 +552,20 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
         <p class="quiet">Already settled: ${v.qualification.conditions.filter((c) => c.verdict === 'met').map((c) => c.name).join('; ') || 'nothing yet'}.</p>
       </details>
     </section>` : ''}
+    ${/* WHO CARRIES A CUSTOMER, RENDERED OUTSIDE THE BLOCK ABOVE ON PURPOSE.
+         That section only draws while something is still missing, so it
+         disappears at exactly the moment this matters most: when the test is
+         ready and about to meet people. Readiness says the machinery works.
+         It says nothing about whether anybody would hear a buyer ask for
+         help, and on a marketplace whose messages Foundry cannot read, the
+         answer is that they would reach the owner and nobody else. */ ''}
+    ${v.qualification.care ? html`<section class="know" id="care">
+      <h2>If a customer needs something</h2>
+      <p class="lead">${v.qualification.care.carriedBy === 'you'
+    ? 'This one is yours to answer, not mine.'
+    : 'I carry this one.'}</p>
+      <p>${v.qualification.care.because}</p>
+    </section>` : ''}
     ${v.exceptions.length ? html`<section class="know" id="exceptions"><h2>Needs your attention</h2>
       <ul>${v.exceptions.map((x) => html`<li>${x}</li>`)}</ul></section>` : ''}
     ${watch}

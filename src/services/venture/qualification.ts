@@ -82,6 +82,28 @@ export interface Qualification {
   conditions: QualificationCondition[];
   /** The conditions in the way, by name. Empty when nothing is. */
   blocking: string[];
+  /**
+   * WHO CARRIES A CUSTOMER WHO ASKS FOR HELP — which is not a condition, and
+   * was therefore not said anywhere.
+   *
+   * `a refund can be carried out` is `not_applicable` because executing one on
+   * a marketplace is an act at the marketplace, by the person who holds the
+   * account there. That is right, and it answers the wrong half of the
+   * question. The half it does not answer is whether anybody would KNOW: the
+   * Etsy reader cannot see Messages, so a buyer who writes to the shop asking
+   * for their money back is invisible to this institution entirely.
+   *
+   * Nothing is blocked by this, deliberately. An asset whose customer care is
+   * the owner's by hand is a legitimate thing to operate — it is an assisted
+   * asset, not an unattended one — and refusing to sell until the care is
+   * automated would stop the first proof for a capability the proof is meant
+   * to tell us whether we need. What must not happen is the institution
+   * reporting itself ready and letting `ready` be read as `covered`.
+   *
+   * So it is reported beside readiness rather than folded into it: who
+   * responds, and what this cannot see.
+   */
+  care: { carriedBy: 'you' | 'foundry'; canHear: boolean; because: string } | null;
 }
 
 const met = (name: string, because: string): QualificationCondition => ({ name, verdict: 'met', because });
@@ -98,7 +120,7 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
     .rows[0] as Record<string, unknown> | undefined;
   if (!e) {
     return {
-      state: 'preparing', mechanism: 'unknown', blocking: ['there is no such test'],
+      state: 'preparing', mechanism: 'unknown', blocking: ['there is no such test'], care: null,
       conditions: [{ name: 'there is no such test', verdict: 'missing', because: 'no row' }],
     };
   }
@@ -126,6 +148,7 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
       : plan ? 'outreach' : 'unknown';
 
   const conditions: QualificationCondition[] = [];
+  let care: Qualification['care'] = null;
 
   // ─── What every mechanism owes ─────────────────────────────────────────────
 
@@ -422,6 +445,26 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
       verdict: 'not_applicable',
       because: `a refund on ${venue} is your act there rather than a condition on my readiness; the only executor here is Stripe, and the site promises the refund either way`,
     });
+
+    // AND WHO WOULD KNOW A CUSTOMER HAD ASKED.
+    //
+    // The condition above answers who EXECUTES a refund. Nothing answered who
+    // would hear the request — and the Etsy connection cannot read messages,
+    // so a buyer writing to the shop is invisible here. Said beside readiness
+    // rather than as a condition, because an assisted asset is a legitimate
+    // thing to operate and blocking on it would stop the very proof that tells
+    // us whether the automation is worth building. What it must not do is go
+    // unsaid while the institution reports itself ready.
+    care = {
+      carriedBy: 'you',
+      canHear: false,
+      because: `I cannot read ${venue} messages — the connection grants reading the shop, its `
+        + 'listings and its paid receipts, and nothing else — so a buyer who writes to ask for '
+        + `help or for their money back reaches you at ${venue} and not me. I would not know they `
+        + 'had asked. If you record the request here I will carry it as an open obligation and '
+        + 'keep saying so until it is settled; until then this is an asset you assist, not one I '
+        + 'run unattended.',
+    };
   }
 
   if (mechanism === 'unknown') {
@@ -433,7 +476,7 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
 
   const blocking = conditions.filter((c) => c.verdict !== 'met' && c.verdict !== 'not_applicable').map((c) => c.name);
 
-  return { state: stateFrom(conditions, e), mechanism, conditions, blocking };
+  return { state: stateFrom(conditions, e), mechanism, conditions, blocking, care };
 }
 
 /**

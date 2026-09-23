@@ -1580,3 +1580,53 @@ a plan tier only he can see.
 applied to it, with planted-defect tests in both directions. A comment saying
 "do not do this" did not stop it; the comment and the defect were written by
 the same hand in the same hour.
+
+---
+
+## PENDING 26 — How much of a refund promise to hold in cash
+
+**Raised 23 September 2026,** by an independent review's finding and confirmed
+against the code. Nothing has been changed by raising it, and nothing will be
+without his word.
+
+**What the institution promises.** `/refunds` offers a refund with no form and
+no time limit. That promise is not in question here and is not being narrowed.
+
+**What the institution does about it today.** `refundExposure` counts every
+delivered, unrefunded unit at its full price, with no decay, and
+`distributableSurplus` deducts all of it. So a $14 sale that nets $12.22 after
+Etsy's fees reduces what he may take by $14 — **−$1.78 before any other
+reserve**. The review read that as the sale losing money. It is not: it is a
+fully-backed sale, and the arithmetic is the backing rather than the sale.
+
+**Why it is worth asking.** Reporting only the exposure made a policy look like
+an inevitability. Nobody revisits a number they were never shown was theirs to
+set. `Surplus` now carries `refundExposure` and `refundReserve` as two figures —
+equal today, and not the same fact — with the reserve's sentence saying in the
+owner's words that holding all of it is a choice.
+
+**The three options, and what each costs.**
+
+1. **Hold all of it** (today). Every promise is cash-backed. Distributions from
+   marketplace sales are impossible until refund exposure decays, which under a
+   no-time-limit promise it never does. Cost: this asset can never distribute.
+2. **Hold a stated fraction** — say the observed refund rate plus a margin, or a
+   flat percentage. Residual risk is retained rather than cancelled, and the
+   promise is unchanged: a buyer who asks still gets their money. Cost: an
+   unusual run of refunds would have to be met from elsewhere.
+3. **Hold all of it for a stated period, then decay.** Keeps full backing where
+   refunds actually cluster. Cost: needs a decay curve nothing has evidence for
+   yet, because no unit has ever been sold.
+
+**What the evidence supports.** None of them. There is no refund history
+because there is no sale history. Option 2 and option 3 both want a rate this
+institution has never observed. **The honest recommendation is to keep option 1
+until there is something to measure**, and to revisit it at the first ten
+settled sales — not because full backing is optimal, but because choosing
+anything else now would be choosing a number out of the air and calling it
+prudence.
+
+**What is NOT being asked.** Nothing here proposes narrowing what a buyer is
+owed, shortening the window, or applying any change to sales already made. A
+lower reserve changes what the owner may take, never what a customer may ask
+for.

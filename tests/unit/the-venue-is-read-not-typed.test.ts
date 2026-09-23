@@ -202,6 +202,14 @@ describe('a silence is about orders and nothing else', () => {
   it('records an absence of orders, and claims nothing about attention', async () => {
     ETSY['shops/77770001/receipts'] = { count: 0, results: [] };
     await connect(['shops_r', 'listings_r', 'transactions_r']);
+    // LISTED FIRST, WHICH THIS FILE NEVER DID. `listed()` sat unused here and
+    // every observation in it was therefore filed against a shop with nothing
+    // of the test's in it for sale. An independent review found the reader
+    // labelling that silence as evidence CONTRADICTING the claim that buyers
+    // would pay; the reader now files nothing until the test is exposed, and
+    // these assertions are about the state where an absence genuinely is an
+    // answer — so the fixture has to put the test in that state.
+    await listed();
     await bringTheVenueUpToDate({ founderId: OWNER, experimentId: X });
 
     const o = (await query(
@@ -372,6 +380,10 @@ describe('a partial read never becomes an absence', () => {
 
 describe('what the reading bears on the claim, and how often it says so', () => {
   it('files an empty shop as contradicting the claim that people will pay', async () => {
+    // An EXPOSED test whose shop is empty. Before exposure the reader files
+    // nothing at all, because a shop with nothing in it for sale has not been
+    // asked the question.
+    await listed();
     // `bearing` was hard-coded to `supports` even when nothing sold — so
     // "nobody bought anything" accumulated as direct evidence FOR the claim.
     // Worse: the guard that lets a claim be narrowed requires a `contradicts`

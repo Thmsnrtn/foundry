@@ -3089,3 +3089,70 @@ load-bearing the day a tool is bound.
   route requires the owner's session; route registration and a healthy boot are
   evidence that code is deployed, not that a founder can complete the
   interaction. The identity pass has never run against real Etsy.
+
+## An independent review, verified against HEAD rather than believed (2026-09-23)
+
+A read-only strategic and institutional review (Astra, 22 September 2026)
+inspected this repository at `d6033cbc` — source only, no execution, no
+authenticated production, no test run — and named six areas. Every one was
+re-checked against HEAD before anything was changed. **Disposition:**
+
+| | Finding | Verdict | What was done |
+|---|---|---|---|
+| F1 | venue ingestion returns early on a duplicate payment and never repairs what is missing downstream | **CONFIRMED by inspection** | `recordVenueOrder` no longer branches. Every step converges. |
+| F2 | a receipt containing this listing books the whole basket to this asset | **CONFIRMED** | Line-level attribution; shared components explicitly unknown. |
+| F3 | zero orders filed as `contradicts` before the test is exposed | **CONFIRMED — the worst of them** | No observation is filed against the claim until a listing is live. |
+| F4 | marketplace customer care is displaced to the owner and nothing says so | **CONFIRMED as stated, not as a gate** | `Qualification.care` reports it beside readiness. |
+| F5 | financial meanings not provider-neutral; exposure conflated with reserve | **PARTLY** — see below | Language, currency guard, reserve separated, owner decision raised. |
+| F6 | owner experience and doctrine contradictions | **PARTLY — already in flight** | Connectors work shipped 22 Sep; Settings is the next task. |
+
+**F1.** The early return on `paid.duplicate` sat above the delivery event, the
+fulfilment, the charge and the fee. A crash anywhere below it left a payment on
+the record with nothing else, and every replay — including the hourly reader's —
+returned as though the order were complete, with `fulfilmentId: ''`. A fee Etsy
+had not yet published could never be added when it appeared. There is no branch
+now: `recordBusinessOutcome` dedupes on (provider, ref), the ledger's `record`
+on (provider, ref, kind), and the fulfilment is found by the payment it belongs
+to. `duplicate` still means the payment was already known; it no longer means
+everything else exists.
+
+**F2.** `readTheShop` kept a receipt if ANY line named the listing and then took
+`grandtotal`. A mixed basket is now attributed from Etsy's own stated line price
+and quantity, and the receipt's fee is **not read at all** for such a receipt —
+apportioning it needs a rule nobody has decided. `ShopOrder.whollyThisListing`
+carries the fact into the ledger's `because`. `unitContribution` already turned
+an unread fee into an unavailable contribution rather than margin, so the
+unknown lands where the institution already treats unknowns honestly.
+
+**F3.** The row's own sentence said "no listing of this test is live, so no
+order is attributed to it" while `bearing` was `contradicts` and `from_absence`
+was true — the institution's strongest form of negative evidence, manufactured
+daily about a shop with nothing in it for sale. `market_observations.bearing`
+admits only `supports` and `contradicts` (migration 236), so there is no neutral
+word to file; the reading is therefore not filed against the claim until the
+test is exposed. The read still happens and the ladder is still witnessed on it.
+**Two tests in `the-venue-is-read-not-typed` had to be repaired**: the file
+carried a `listed()` helper it never called, so every observation it asserted
+had been filed in exactly the state the defect describes.
+
+**F5, precisely.** Three of its parts did **not** reproduce and are now asserted
+so they stay fixed: a payout cannot count as a second sale
+(`economic_event_kinds.affects_cash = 1` excludes it from `moneyHeld`); a
+missing fee cannot become margin (`unitContribution` returns unavailable); and
+the reserve, obligations, exposure, tax and authorised capital were already
+separate figures. What did reproduce: `moneyHeld` said "ours in Stripe's
+balance" while summing Etsy charges — two things wrong, since it is not a
+balance anybody asked a provider for and it is not Stripe's; and every sum was
+`SUM(amount_cents)` with no currency grouping, reachable the first time somebody
+outside the US buys. Both fixed. `Surplus.refundReserve` now stands beside
+`refundExposure` — equal today, not the same fact — and **PENDING 26** puts the
+policy to the owner without changing it.
+
+**What the review could not see, and was right to say so.** It ran nothing,
+reached no authenticated page, and was blocked from `/internal/health`. Its
+snapshot predates the recognition, identity-recovery and mismatch work of 22–23
+September. Nothing resolved there was reopened.
+
+- **Proofs**: `the-first-proof-must-not-be-corrupted` (18).
+- **Proof debt unchanged**: no real Etsy account has been read, no unit sold,
+  and marketplace writes remain unavailable by construction.

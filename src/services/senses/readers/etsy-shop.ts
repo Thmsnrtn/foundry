@@ -63,6 +63,22 @@ const USER_AGENT = 'FoundryResearch/1.0 (+https://apexmicro.ai; research@apexmic
 
 export interface ShopOrder {
   orderRef: string; paidAt: string; grossCents: number; feeCents: number | null; currency: string;
+  /**
+   * WHETHER THIS RECEIPT WAS WHOLLY THIS TEST'S LISTING.
+   *
+   * A receipt was kept if ANY line on it named the experiment's listing, and
+   * `grandtotal` — the whole basket — then became the order's amount. A buyer
+   * who put the workbook and something else in one basket would have had the
+   * entire receipt booked as this asset's result, with the receipt's fee
+   * against it.
+   *
+   * False means the amount here is the sum of THIS listing's lines and nothing
+   * else, and that the receipt's shared components — its fee, its tax, any
+   * basket-level discount and its shipping — are NOT apportioned, because no
+   * rule for apportioning them has been decided. They are unknown rather than
+   * divided, and `feeCents` is null for exactly that reason.
+   */
+  whollyThisListing: boolean;
 }
 
 export interface ShopListing {
@@ -282,11 +298,49 @@ export async function readTheShop(input: {
       // than discarded — it is not a shape this reader failed to parse, it is
       // somebody else's sale, and counting it as a discard would poison the
       // completeness reading with rows that were never ours.
+      //
+      // AND MEMBERSHIP IS NOT ATTRIBUTION, which is the harder half. A receipt
+      // was kept if any line named the listing, and then `grandtotal` — the
+      // whole basket — was booked as this asset's result. One buyer buying the
+      // workbook and a second thing in a single order would have credited this
+      // test with both.
+      //
+      // So a mixed receipt is attributed at the LINE, from Etsy's own stated
+      // line price and quantity, and its shared components are left alone. The
+      // receipt fee, the tax, a basket discount and shipping belong to the
+      // whole basket; dividing them would need an apportionment rule nobody
+      // has decided, and inventing one here would put a number in the ledger
+      // that no statement supports. `unknown` is the honest treatment and the
+      // institution already has a word for it: `feeCents: null`, which
+      // `unitContribution` turns into an unavailable contribution rather than
+      // into margin.
+      let wholly = true;
+      let gross = money(r.grandtotal);
       if (input.onlyListingId) {
         const lines = Array.isArray(r.transactions) ? r.transactions as Array<Record<string, unknown>> : [];
-        if (!lines.some((t) => String(t.listing_id ?? '') === input.onlyListingId)) continue;
+        const mine = lines.filter((t) => String(t.listing_id ?? '') === input.onlyListingId);
+        if (mine.length === 0) continue;
+        wholly = mine.length === lines.length;
+        if (!wholly) {
+          let cents = 0;
+          let currency: string | null = gross ? gross.currency : null;
+          let readable = true;
+          for (const t of mine) {
+            const each = money(t.price);
+            const n = Number(t.quantity ?? 1);
+            if (!each || !Number.isInteger(n) || n <= 0
+              || (currency !== null && each.currency !== currency)) { readable = false; break; }
+            currency = each.currency;
+            cents += each.minorUnits * n;
+          }
+          // A MIXED RECEIPT WHOSE LINES CANNOT BE READ IS NOT AN ORDER OF A
+          // KNOWN SIZE. It is counted as a discard, which is what makes the
+          // reading incomplete — so nothing downstream reads this shop's
+          // silence as an absence while a sale sits in it unattributed.
+          gross = (readable && cents > 0 && currency !== null)
+            ? { minorUnits: cents, currency } : null;
+        }
       }
-      const gross = money(r.grandtotal);
       const ref = String(r.receipt_id ?? '');
       const at = Number(r.created_timestamp);
       // EVERY DISCARD IS COUNTED. A receipt dropped for a shape this reader
@@ -303,7 +357,11 @@ export async function readTheShop(input: {
       // accepts as "not yet on the statement"; a fee invented would be a cost
       // nobody paid.
       let feeCents: number | null = null;
-      try {
+      // NOT READ AT ALL ON A MIXED RECEIPT. The fee Etsy reports is the
+      // receipt's, covering items that are not this asset's; recording it
+      // against this asset's lines would overstate its cost exactly as
+      // `grandtotal` overstated its revenue.
+      if (wholly) try {
         const pay = await get(
           `${API}/shops/${encodeURIComponent(shopId)}/receipts/${encodeURIComponent(ref)}/payments`,
           token, apiKey);
@@ -322,6 +380,7 @@ export async function readTheShop(input: {
         grossCents: gross.minorUnits,
         feeCents,
         currency: gross.currency,
+        whollyThisListing: wholly,
       });
     }
 
@@ -478,7 +537,28 @@ export async function bringTheVenueUpToDate(input: {
   }
 
   let recorded = 0;
-  if (e.claim_id) {
+  // NO LISTING OF THIS TEST IS LIVE MEANS THE SHOP SAYS NOTHING ABOUT IT.
+  //
+  // The bearing below was `orders.length > 0 ? 'supports' : 'contradicts'`,
+  // and the very sentence it filed said "no listing of this test is live, so
+  // no order is attributed to it" — in the same breath as filing the absence
+  // of orders as evidence AGAINST the claim that buyers would pay. An empty
+  // shop with nothing in it for sale is not a market's answer. It is a shop
+  // with nothing in it.
+  //
+  // Worse, `fromAbsence` was true for exactly that row, so the institution's
+  // strongest form of negative evidence — a complete reading that found
+  // nothing — was being manufactured before the test had ever been exposed,
+  // immutably, once a day.
+  //
+  // `market_observations.bearing` admits only `supports` and `contradicts`
+  // (migration 236); there is no neutral word to file. So the reading is not
+  // filed against the claim at all until the test is actually exposed. The
+  // read itself is not lost — it has its own retrieval record, and the
+  // capability ladder is witnessed above regardless — and once a listing IS
+  // live, a complete reading of zero orders is a real contradiction and is
+  // filed as one.
+  if (e.claim_id && listingId) {
     const { observe } = await import('../../venture/market-evidence.js');
     const day = new Date().toISOString().slice(0, 10);
     const source = `etsy:shop:${reading.shop.shopId}:${day}`;

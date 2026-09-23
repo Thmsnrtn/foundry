@@ -77,7 +77,9 @@ export interface ExperimentView {
    * reason that is not the reason. The same reading refuses the act at the
    * outbound door, so this screen and that refusal cannot disagree.
    */
-  qualification: { state: string; mechanism: string; blocking: string[]; conditions: Array<{ name: string; verdict: string; because: string }> };
+  qualification: { state: string; mechanism: string; blocking: string[]; conditions: Array<{ name: string; verdict: string; because: string }>;
+    /** Who answers a customer who asks for help, and whether I would hear them. */
+    care: { carriedBy: 'you' | 'foundry'; canHear: boolean; because: string } | null };
   why: { whatWeDo: string; whatWeExpect: string; wouldDisprove: string; question: string };
   steps: Step[];
   allow: { possible: boolean; reason: string | null; explanation: string[] };
@@ -372,7 +374,12 @@ export async function getExperimentView(founderId: string, experimentId: string,
     qualification: await (async () => {
       const { qualificationOf } = await import('../venture/qualification.js');
       const r = await qualificationOf(experimentId);
-      return { state: r.state, mechanism: r.mechanism, blocking: r.blocking, conditions: r.conditions };
+      // `care` TRAVELS WITH READINESS, because the danger is precisely that
+      // `ready` gets read as `covered`. Foundry cannot see marketplace
+      // messages, so a buyer asking for help reaches the owner and not the
+      // institution — an assisted asset rather than an unattended one, and the
+      // page has to say which it is holding.
+      return { state: r.state, mechanism: r.mechanism, blocking: r.blocking, conditions: r.conditions, care: r.care };
     })(),
     blocking: state === 'needs_you' ? ready.missing : listing && e.decision === 'approved' && (!x || withdrawn) && e.ranAt === null ? ['open the shop and list it', 'paste the listing address'] : [],
     why: { whatWeDo: e.whatWeDo, whatWeExpect: e.whatWeExpect, wouldDisprove: e.wouldDisprove, question: unknown ? String(unknown.question) : '' },

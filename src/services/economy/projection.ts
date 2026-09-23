@@ -88,6 +88,28 @@ async function totalOf(founderId: string, kind: string): Promise<number> {
  * shared Stripe account has. Zero here is a real answer.
  */
 export async function moneyHeld(founderId: string): Promise<Figure> {
+  // UNLIKE CURRENCIES DO NOT ADD UP, AND NOTHING STOPPED THEM.
+  //
+  // Every sum here is `SUM(amount_cents)` with no grouping, so a single order
+  // in another currency would silently be added to dollars as though a euro
+  // cent were a cent. Etsy sells in the buyer's currency; this is reachable
+  // the first time somebody outside the United States buys.
+  //
+  // It is not converted, because converting needs a rate on a date and that is
+  // a fact nothing here holds. It is refused: the figure becomes unavailable
+  // and says what it found, which is a state the whole surface already knows
+  // how to render and which `distributableSurplus` already propagates.
+  const monies = await query(
+    `SELECT DISTINCT currency FROM economic_events
+      WHERE founder_id = ? AND evidence_mode = 'real'`, [founderId]);
+  if (monies.rows.length > 1) {
+    const names = (monies.rows as unknown as Array<Record<string, unknown>>)
+      .map((r) => String(r.currency).toUpperCase()).sort().join(', ');
+    return unavailable(
+      `Money has come in in more than one currency (${names}), and I will not add `
+      + 'them together as though they were the same money. What each is worth in the '
+      + 'others needs a rate on a date, which nothing here holds.');
+  }
   const inflow = await sum(
     `SELECT COALESCE(SUM(e.amount_cents), 0) AS total FROM economic_events e
        JOIN economic_event_kinds k ON k.kind = e.kind
@@ -111,11 +133,25 @@ export async function moneyHeld(founderId: string): Promise<Figure> {
   const reported = await sum(
     `SELECT COUNT(*) AS total FROM experiment_fulfilments f JOIN business_outcome_events b ON b.id = f.payment_event_id
       WHERE f.founder_id = ? AND b.evidence_mode = 'real'`, [founderId]);
+  // NOT "OURS IN STRIPE'S BALANCE", WHICH IS TWO THINGS WRONG.
+  //
+  // It is not a balance: nothing here has ever asked a provider what it is
+  // holding. It is an accumulation of the events this institution has written
+  // down, which is a different fact that can differ from the provider's own
+  // figure by anything not yet read.
+  //
+  // And it is not Stripe's. The first real asset sells on Etsy, whose charges
+  // and fees are written to this same ledger with `provider = 'etsy'`, and
+  // were being summed under a sentence naming a company with no part in them.
+  // The money's language has to be provider-neutral or it becomes false the
+  // moment a second provider exists — which it now does.
   return measured(held, held === 0
     ? (reported > 0
-      ? `${String(reported)} ${reported === 1 ? 'payment was' : 'payments were'} reported at a test's page, and Stripe's charge for ${reported === 1 ? 'it' : 'them'} has not been read yet, so nothing is counted as held.`
+      ? `${String(reported)} ${reported === 1 ? 'payment was' : 'payments were'} reported at a test's page, and the provider's own charge record for ${reported === 1 ? 'it' : 'them'} has not been read yet, so nothing is counted yet.`
       : 'Nobody has paid for anything, and the owner has neither put money in nor taken any out.')
-    : "What buyers paid, less what Stripe took and what went back, plus or minus what the owner has moved himself.");
+    : 'What buyers were charged, less what the providers took and what went back, '
+      + 'plus or minus what the owner has moved himself. This is what the records add '
+      + 'up to, not a balance any provider has been asked for.');
 }
 
 /**
@@ -129,8 +165,10 @@ export async function moneyHeld(founderId: string): Promise<Figure> {
  */
 export async function moneyBanked(): Promise<Figure> {
   return unavailable(
-    'The Stripe account is shared with the land sales and AcreOS, so a payout from it is not this '
-    + "institution's money to claim. What has reached a bank is only what the owner records moving.");
+    'No provider balance has been reconciled to a bank deposit here. The Stripe account is shared '
+    + 'with the land sales and AcreOS, so a payout from it is not this institution\'s money to '
+    + 'claim; a marketplace pays out on its own schedule and nothing has read one yet. What has '
+    + 'reached a bank is only what the owner records moving.');
 }
 
 /** Gross charged, before the provider took anything. */
@@ -331,7 +369,27 @@ export interface Surplus {
   /** What is ours in the provider's balance. Not a bank balance. */
   held: Figure;
   obligations: Figure;
+  /** The most that could be asked back. A ceiling, not a decision. */
   refundExposure: Figure;
+  /**
+   * WHAT IS ACTUALLY BEING HELD BACK AGAINST THAT, AND WHY IT IS THAT MUCH.
+   *
+   * These were one number and they are two facts. The maximum a buyer
+   * population could ask back is arithmetic; how much of it an institution
+   * keeps unspent is a choice its owner makes. Today the choice is all of it —
+   * so the two are equal, and the surplus is the smaller for it.
+   *
+   * Equal is not the same as identical. Reporting only the exposure made a
+   * deliberate policy look like an inevitability, which is exactly how a
+   * decision stops being one: nobody can revisit a number they were never
+   * shown was theirs to set. A $14 sale that nets $12.22 and reserves $14
+   * reads as a loss-making sale, and it is not — it is a fully-backed sale.
+   *
+   * Nothing here proposes reducing it. A smaller reserve would leave more
+   * distributable and would not shrink the promise by a cent: the refunds page
+   * offers a refund with no form and no time limit, and that stands.
+   */
+  refundReserve: Figure;
   taxReserve: TaxReserve;
   operatingReserve: Figure;
   authorisedCapital: Figure;
@@ -384,13 +442,23 @@ export async function distributableSurplus(founderId: string): Promise<Surplus> 
     ? 'No allowance is standing, so nothing is already authorised to be spent.'
     : 'Allowances the owner has left standing, which the institution may spend without asking.');
 
+  const refundReserve: Figure = exposure.cents === null ? exposure : {
+    cents: exposure.cents,
+    quality: exposure.quality,
+    because: exposure.cents === 0
+      ? 'Nothing has been delivered, so nothing is being held back against a refund.'
+      : 'All of what could be asked back is being held back. That is a policy choice and not '
+        + 'arithmetic: holding less would leave more of this yours to take and would not change '
+        + 'the promise, which is a refund with no form and no time limit.',
+  };
+
   const parts = [held, obligations, exposure, tax, operatingReserve, authorisedCapital];
   const missing = parts.filter((p) => p.cents === null);
   if (missing.length > 0) {
     const figure = unavailable(
       `Not known, and deliberately not guessed: ${missing.map((m) => m.because).join(' ')}`);
     return {
-      figure, held, obligations, refundExposure: exposure, taxReserve: tax,
+      figure, held, obligations, refundExposure: exposure, refundReserve, taxReserve: tax,
       operatingReserve, authorisedCapital,
       sentence: 'I cannot say what is yours to take, and I will not estimate it. '
         + missing.map((m) => m.because).join(' '),
@@ -404,10 +472,11 @@ export async function distributableSurplus(founderId: string): Promise<Surplus> 
     // One estimate in the sum makes the sum an estimate. Saying "measured"
     // here would launder the tax assumption into a fact.
     quality: tax.quality === 'estimated' ? 'estimated' : 'measured',
-    because: "What is ours in Stripe's balance, less what is owed, what could be refunded, tax held back, the operating floor, and capital already authorised.",
+    because: 'What the records add up to, less what is owed, what could be asked back, tax held '
+      + 'back, the operating floor, and capital already authorised.',
   };
   return {
-    figure, held, obligations, refundExposure: exposure, taxReserve: tax,
+    figure, held, obligations, refundExposure: exposure, refundReserve, taxReserve: tax,
     operatingReserve, authorisedCapital,
     sentence: sentenceFor(figure, held),
   };
