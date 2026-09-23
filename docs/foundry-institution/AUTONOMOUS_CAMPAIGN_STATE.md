@@ -3188,3 +3188,85 @@ Connectors shipped with zero links to it. Found by asking whether the journey
 starts rather than whether the page renders.
 
 [deploy-private]
+
+## Wave: the instruments were not looking
+
+Four defects this wave, and the shape of all four is the same: something that
+reported on the application had a gap exactly the width of what got through.
+
+**The review was reporting the order, not the appearance.** It rendered all
+fourteen surfaces in light, then all fourteen in green, then all fourteen in
+dark, and printed Home at 1,565px in light and 2,190px in green and dark. That
+reads precisely like the Green-mode defect the owner had just asked to be
+checked for. It was not one: rendering Home alone gives 1,565px in all three.
+Thirteen pages of browsing had put activity on the first screen, and the
+instrument attributed the growth to whichever appearance happened to be
+rendering when it appeared. The page is the outer loop now, so a page's three
+appearances are measured two visits apart instead of twenty-six.
+
+With that true, the second half of the owner's first point became a check
+rather than an inspection: **an appearance changes the paint, not the shape.**
+Across seventeen surfaces, two widths and both device preferences, the three
+appearances agree to the pixel, so it is asserted exactly rather than with a
+tolerance.
+
+**One touch floor for two inputs hid a real failure inside a false one.** 38px
+is the thumb's floor and belongs to the phone; applied at the desk it called
+Home's orientation line a control too small for a mouse, which is not a thing.
+But WCAG 2.2's floor for a pointer is 24px, and its exemption covers a target
+*in* a sentence, not a link that IS the sentence. At 22px that line had been
+2px under the real minimum, at the desk, the whole time.
+
+**The colour gate knew one spelling of a colour.** Its header says "no owner
+page hard-codes a colour". It matched `#rrggbb`. Sixty-two `rgba(...)`
+literals sat behind it across the Letter, Privacy, Connections and Settings —
+thirty-four of them the same row separator,
+`border-top:1px solid rgba(255,255,255,0.05)`. A five-percent white film is a
+dark-mode idiom: a hairline over a dark card, invisible over a light one. On
+the appearance most likely on a bright phone, every row separator on those
+pages was missing. The stylesheet gates could not see it because they read the
+stylesheet and these colours are in the markup.
+
+This is also the answer to the owner's question about whether another palette
+family can independently override the canonical appearance. It can — and not
+through a rival `--var` family (`--text-primary` and its siblings alias
+`--ink`, which is theme-governed). An inline literal outranks every token
+there is.
+
+**Three owner surfaces had never been rendered by anything.** The Letter is one
+tap from every screen — the shell's footer carries "Advanced — inspect the
+system" on every page. Privacy is linked from Controls and from Settings'
+delete control. Neither was in the review's page list, and adding them found,
+on the first pass, that **the four consent switches on the Privacy page were
+not switches**: `toggle()` returned a plain string of markup into an `html`
+template, which escapes one, so each control printed its own source as visible
+text and there was nothing to set. The owner could not record a privacy
+preference at all. It also made the page 11,525px tall; rendered properly it is
+3,187px.
+
+Three instruments were watching that page and none had looked at it. The route
+answered 200 with a body containing the right words.
+`a-privacy-toggle-that-governs-nothing` posts to the route and reads the
+ledger — every assertion true, because the semantics were right and the control
+was absent. The browser review was not pointed at the page.
+
+### Evidence maturity
+
+- **Witnessed.** The appearance-shape invariant, the target floors, the
+  sixty-two replaced literals, the consent controls: all read off rendered
+  pages in a real browser, in three appearances, at two widths, under both
+  device preferences. The consent proof was run against the defective code
+  first and fails there.
+- **Established.** `npm run check` — 636 files, 5,625 tests, twelve gates.
+- **Proof debt.** The review harness is still not part of `npm run check`: it
+  needs a browser binary, so it is run before a release by discipline rather
+  than by a gate. That is the one place in this wave where an instrument
+  depends on somebody remembering — the same shape as the defect that started
+  the campaign.
+
+### The doctrine this wave earned
+
+**An instrument whose passes are ordered reports the order, not the thing.**
+
+**A gate that checks one spelling of the thing it names is not a gate, it is a
+habit.**
