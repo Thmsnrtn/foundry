@@ -136,12 +136,21 @@ the criticism that the institution has enormous machinery and no revenue. The
 test is not "is this good engineering". It is "whose `a` does this reduce".
 
 **(c) It resolves the attention question exactly.** What matters is not hours
-spent but whether the curve is **front-loaded and decaying** or **flat**. A
-listing that costs twenty hours once and then distributes forever has an `a`
-approaching zero. A channel needing a weekly post has a flat `a` — trivial at
-one asset and eighteen hours a week at nine. **Prefer any asset whose
-non-delegable share is spent once, at birth. Refuse assets with a flat curve,
-however good their revenue looks in year one.**
+spent but whether the curve is **front-loaded and decaying** or **flat**, and —
+the correction above, which this paragraph used to contradict two pages
+later — **what the flat part is actually like**. A listing that costs twenty
+hours once and then distributes forever has an `a` approaching zero. A channel
+needing a weekly post has a flat `a` — trivial at one asset and eighteen hours
+a week at nine.
+
+**Prefer any asset whose non-delegable share is spent once, at birth.** Where
+an asset does carry a flat share, the test is the four facts, not the shape
+alone: frequency, duration, urgency and unpredictability. Ten predictable
+minutes a year is an excellent thing to own. An unpredictable hour that arrives
+without warning, on somebody else's schedule, may not be — and it is the last
+two facts that make a small total expensive. The earlier categorical refusal of
+flat curves is withdrawn; it was asserted here while being corrected in §1, and
+an active document may not hold both.
 
 ## 3. Elastic: effort follows prediction error
 
@@ -316,3 +325,53 @@ somewhere else — that work really ran on a computer this institution is not,
 that a real provider really billed for it, that a real workspace really came
 back or really went away. Only a real external substrate answers that, and
 maturity advances only for exactly what was proven.
+
+## 8. Operating and allocating, not producing (2026-09-23)
+
+An independent review put a sentence to this institution that it had not quite
+said to itself: **the mature form of Foundry selects, operates, improves,
+allocates among and sometimes retires economic assets. It does not maximize
+the number of things it has made.** Product count is an output, not an
+objective, and a portfolio of nine is not nine times as good as one if the
+nine share a channel, an account and a single point of failure.
+
+This is a clarification of §1's objective, not a replacement for it. Flow is
+still the concept. What changes is which verbs count as work:
+
+- **Selection** — deciding which customer problems and income mechanisms
+  deserve investigation at all, including deciding not to.
+- **Production or acquisition** — assembling a verified solution *or* buying
+  one, with the rights to operate it.
+- **Distribution** — obtaining access to buyers at an acceptable all-in cost.
+- **Stewardship** — delivering, supporting, reconciling, remedying, retiring.
+- **Allocation** — comparing the next use of cash and capacity against every
+  alternative, **including doing nothing and distributing to the owner**.
+- **Learning** — improving the next choice with scoped, falsifiable results.
+
+**Holding is a decision.** So is leaving a quiet asset alone, and so is
+retiring one that earns less than it costs to carry. An institution that can
+only build has one move; the point of the other five is that an unnecessary
+improvement can destroy a quiet asset, and that the best available action is
+often to spend nothing.
+
+**The River of Nickels is unchanged, and was never a count.** Many small
+flows remain the shape. What this rules out is manufacturing unrelated
+products to make the portfolio look diversified: nine listings on one
+marketplace account are not independent of that account failing. Economically
+coherent clusters, shared distribution, licensing, partnerships and genuinely
+independent assets all stay available — **according to evidence, and in that
+order of cheapness to try**.
+
+**What this does NOT authorize.** No new factories, no acquisition machinery,
+no treasury, no second economic system. The economic-form and marketplace
+library stays what it is: institutional knowledge for comparing mechanisms
+before one is chosen, not a build list. A production capability earns its
+construction when a *selected* opportunity needs it and the reuse or the saved
+burden pays for it — never before.
+
+**The measure that keeps this honest.** The first qualified external asset is
+to be judged on three separate outcomes, never compressed into one: **market
+response, operational reliability, and the burden its operation places on the
+owner.** A commercially weak result can still prove the machinery. A
+commercially strong one can still reveal a support burden that makes the asset
+not worth owning. Neither answer is available from the other.
