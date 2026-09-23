@@ -3270,3 +3270,83 @@ was absent. The browser review was not pointed at the page.
 
 **A gate that checks one spelling of the thing it names is not a gate, it is a
 habit.**
+
+## Wave: the general question, asked late
+
+The previous wave repaired four instruments. This one asked, of each repair,
+what the general form of it was — and three of the three general forms had a
+live defect sitting in them.
+
+**Dark mode was partly green.** Twenty `--os-*` colours were declared on the
+bare `:root`, which IS the green appearance, and under `[data-theme="light"]`,
+and nowhere under `[data-theme="dark"]`. The stylesheet reads them about
+eighty times, so choosing dark gave a `#101713` green card on a `#0A0A0B`
+ground, green-tinted hairlines and a green wash behind the body.
+
+It is the exact mirror of the Green-mode defect repaired earlier in this
+campaign, where green went half light. That one was found on a screenshot and
+fixed where it was seen. The general question — is any family incomplete for
+any appearance — was never asked, and its answer had been yes, in the other
+direction, the whole time.
+
+Neither instrument could have caught it. The browser review's skin check asks
+whether a palette answers to the device preference behind the owner's back; in
+dark mode it does not, it answers green under both, so it passed. Its shape
+check asks whether an appearance moves anything, and a wrong colour moves
+nothing. The gate now asks of the family: a colour the default appearance
+declares is a colour every explicit appearance must declare.
+
+**The page list was a memory.** Fourteen paths under a comment promising every
+owner-facing place. Adding three by hand had found the consent switches. So it
+is read off the booted app's routing table now: thirty-three surfaces measured
+instead of seventeen, and nine more named aloud on every run rather than
+dropped — four whose parameter the seed cannot fill, five that answer 404 for
+want of state.
+
+Its first run then reported a defect the product does not have. Six surfaces
+came back with no `data-theme`, which reads exactly like an appearance that
+does not govern. They were redirects: the harness carried the appearance in
+`?mode=` and a query string does not survive a hop, while production reads the
+owner's `appearance` column on the row `auth.ts` already loads. Establishing
+which before writing it up changed what the fix was — an instrument that
+measures its own convention will report the convention.
+
+**A page reachable only by typing its URL is a page that does not exist** —
+this campaign's own sentence, written about Connectors, and then true again of
+`/connections`: the tool-server door, where an MCP server's tools are made
+reachable, where each tool's grant is issued, and where a grant is revoked.
+Mounted, behind auth and CSRF, rendering, and linked from nowhere. The revoke
+half is the serious one: an authority the owner cannot reach to withdraw is
+worse than one he never granted. It has a row on Controls now, and the
+sentence is a gate.
+
+**The absence review** answered "how long can I be gone before something
+breaks" fifteen readings deep, at 7,392px. A three-cell strip answers it now,
+and inside each horizon what holds is folded while what does not hold is not —
+a failing property carries a repair instruction, and an action he cannot see
+is an action he does not have. 5,790px.
+
+### Evidence maturity
+
+- **Witnessed.** Every appearance's resolved palette read out of a real
+  browser in all four appearances under both device preferences; thirty-three
+  surfaces rendered, themed and fitted. Each new gate was run against the
+  defect it describes and reported it by name before being trusted: the
+  palette gate names all twenty leaking tokens, the door gate names
+  `/connections`, the fold gate names six hidden actions.
+- **Established.** `npm run check` — 639 files, 5,635 tests, twelve gates.
+- **Proof debt.** The door gate asks its question only of pages with no
+  parameter. A company's economics page is linked from that company only when
+  that company has economics, and the fixture seeds one empty company, so every
+  parameterised sub-page would read as an orphan for a reason that is not the
+  defect. Covering them needs a populated fixture — a company with each
+  dimension, an experiment at each state, a thread — and that fixture does not
+  exist yet. The browser review is still outside `npm run check` for want of a
+  browser binary.
+
+### The doctrine this wave earned
+
+**Fixing the symptom you were shown is not the same as fixing the class, and
+the difference is a second wave.**
+
+**An instrument that measures its own convention will report the convention.**
