@@ -152,8 +152,31 @@ describe('Controls is the owner envelope', () => {
     expect(stop).toBeGreaterThan(0);
     expect(grid).toBeGreaterThan(stop);
     expect(body).toMatch(/action="\/autopilot\/panic"[^>]*data-confirm=/);
-    for (const card of ['Health', 'What I may do on my own', 'Communication mode', 'Money', 'Owner exclusions']) {
-      expect(body, card).toContain(`</i>${card}</h2>`);
+    // THE READINGS, NOT THE CARDS THEY HAPPENED TO SIT IN.
+    //
+    // This required five `<h2>` headings, which pinned Controls to one card
+    // per concern. Two of those concerns changed shape and neither went away:
+    // "Communication mode" was a card that drew the three correspondence
+    // modes as pills and then told him to go to the Inbox to change one — the
+    // same display-only control the owner photographed running off the edge
+    // of its own box — and it is now a reading in the strip with the Inbox as
+    // its door. "Owner exclusions" is a disclosure inside Standing
+    // arrangements, because it explains why a control does not exist rather
+    // than offering one.
+    //
+    // What must hold is that Controls still answers each question somewhere
+    // on the page, and that the stop comes first. That is what is asserted.
+    for (const card of ['Health', 'What I may do on my own', 'Money']) {
+      expect(body, `${card} is no longer a card of its own`)
+        .toContain(`</i>${card}</h2>`);
+    }
+    for (const reading of ['Correspondence', 'Owner exclusions', 'Connections', 'Authority']) {
+      expect(body, `${reading} is not answered anywhere on Controls`)
+        .toContain(reading);
+    }
+    // And each reading is reachable, not merely printed.
+    for (const door of ['/foundry/inbox', '/foundry/controls/connectors', '/foundry/charter']) {
+      expect(body, `${door} has no door from Controls`).toContain(door);
     }
   });
 });

@@ -7394,14 +7394,61 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
   // the door. Everything he needs to read before signing lives at /foundry/charter.
   const { envelopeReading, charterSentence } = await import('../../services/institution/charter.js');
   const envelope = await envelopeReading(s.ownerId);
-  const card = (name: string, title: string, inner: HtmlEscapedString | Promise<HtmlEscapedString>, cls = '') =>
-    html`<section class="panel ctl${cls}"><header><h2>${mark(name)}${title}</h2></header>${inner}</section>`;
+  // `at` gives a card an anchor, so a reading in the strip above can send him
+  // to the card that explains it rather than to another page.
+  const card = (name: string, title: string, inner: HtmlEscapedString | Promise<HtmlEscapedString>, cls = '', at = '') =>
+    html`<section class="panel ctl${cls}"${at ? raw(` id="${at}"`) : ''}><header><h2>${mark(name)}${title}</h2></header>${inner}</section>`;
   const charterCard = card('charter', 'The charter', html`
       <p class="lines"><span class="state ${envelope ? 'watch' : 'quiet none'}">${envelope ? (envelope.charter.daysLeft <= 7 ? 'Expiring' : 'Active') : 'None'}</span> <span class="quiet">${envelope ? charterSentence(envelope) : 'every real test waits for you'}</span></p>
       <p class="row"><a class="btn btn-sm" href="/foundry/charter">The charter</a></p>`);
   const body = html`
     <h1>Controls</h1>
     <p class="lede">Authority, safety and boundaries. What I may do on my own, what stops me, and the lines you drew.</p>
+
+    ${/* THE POSTURE FIRST, THE DETAIL WHEN HE ASKS FOR IT.
+         The owner: "concise operating overview first, fuller detail when I
+         choose to inspect it." Controls was eleven cards in a stack, each
+         opening with its own state sentence, so the four readings that answer
+         "what am I allowed to do right now" were spread down 3,400 pixels in
+         four different shapes. They are one row now, in the same vocabulary
+         Home uses, and every card below is still exactly where it was for the
+         owner who has come to change something rather than to check. */ ''}
+    <div class="ev-strip" aria-label="Where authority stands">
+      <a class="ev-cell" href="/foundry/charter">
+        <span class="c">Authority</span>
+        <span class="top"><span class="dot ${envelope ? 'watch' : ''}"></span>
+          <span class="n sm">${envelope
+    ? (envelope.charter.daysLeft <= 7 ? 'Expiring' : 'Chartered') : 'Asks first'}</span></span>
+        <span class="d">${envelope
+    ? `$${(envelope.remainingCents / 100).toFixed(0)} of $${(envelope.charter.monthlyCents / 100).toFixed(0)} left this term`
+    : 'every real test waits for you'}</span></a>
+
+      <a class="ev-cell" href="#money">
+        <span class="c">Thinking today</span>
+        <span class="n sm">$${(s.thinking.spentTodayCents / 100).toFixed(2)}</span>
+        <span class="d">of $${(s.thinking.bindingCents / 100).toFixed(2)}; the door refuses the
+          call that would pass it</span></a>
+
+      <a class="ev-cell" href="/foundry/controls/connectors">
+        <span class="c">Connections</span>
+        <span class="top">${connectorsWorking > 0 ? html`<span class="dot"></span>` : ''}
+          <span class="n sm">${connectorsWorking > 0 ? `${String(connectorsWorking)} working`
+    : connectorsGranted > 0 ? `${String(connectorsGranted)} connected` : 'None'}</span></span>
+        <span class="d">${connectorsWorking > 0 ? 'proven against the real account'
+    : connectorsGranted > 0 ? 'nothing read through them yet'
+      : 'I cannot see your money, your customers or your shop'}</span></a>
+
+      ${/* THE LAST OF THE CROWDED SEGMENTED CONTROLS. This drew the three
+           correspondence modes as three pills and then told him to go to the
+           Inbox to change one — the same display-only copy of a control that
+           the Inbox itself has, in the shape the owner photographed running
+           off the edge of its own box. One reading, one door. */ ''}
+      <a class="ev-cell" href="/foundry/inbox">
+        <span class="c">Correspondence</span>
+        <span class="n sm">${MODE_WORD[speaking.mode]}</span>
+        <span class="d">${String(speaking.answered)} answered · ${
+  String(speaking.escalated)} left for you</span></a>
+    </div>
 
     ${stopped ? html`<p class="noticed">Stopped. I will not use it again. If you are
       paying for it, that has not stopped &mdash; end it in your account with them.</p>` : ''}
@@ -7468,12 +7515,11 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
     <div id="charter" class="anchor"></div>
     ${charterCard}
 
-    ${card('mail', 'Communication mode', html`
-      <div class="segments" role="group" aria-label="How the Workshop answers">
-        ${(['off', 'draft', 'autonomous'] as const).map((m) => html`<span class="seg${speaking.mode === m ? ' on' : ''}"${speaking.mode === m ? raw(' aria-current="true"') : ''}><b>${MODE_WORD[m]}</b></span>`)}
-      </div>
-      <p class="quiet">${MODE_GLOSS[speaking.mode] ?? speaking.mode}. ${speaking.answered} answered · ${speaking.sent} sent · ${speaking.escalated} left for you.</p>
-      <p class="quiet"><a href="/foundry/inbox">Change it in the Inbox</a>, with a reason for the record.</p>`)}
+    ${/* THE CARD THIS REPLACED said the mode three times — as three pills, as
+         a gloss, and as a sentence pointing at the Inbox — and could change
+         none of them. The strip above carries the reading and the door; what
+         the mode MEANS belongs where it is chosen, which is the one control
+         on the Inbox that both shows it and sets it. */ ''}
 
     ${card('cash', 'Money', html`
       <p class="lines"><b class="num">$${(s.thinking.spentTodayCents / 100).toFixed(2)}</b> <span class="quiet">of $${(s.thinking.bindingCents / 100).toFixed(2)} thought today</span></p>
@@ -7486,7 +7532,7 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
     ? `set by you on ${String(ceiling.authorized_at).slice(0, 10)}`
     : html`set by <span class="mono">${String(ceiling.authorized_by)}</span> on ${String(ceiling.authorized_at).slice(0, 10)} &mdash; if that was not you, it is worth asking why`}</dd>`}
       </dl>
-      <details class="fold"><summary><h3>How this works</h3></summary><p class="quiet">The binding ceiling is the lowest of what stands: the charter's daily rate once you sign one, $${(PRE_CHARTER_THINKING_CENTS / 100).toFixed(0)} a day until then, and this deployment's own caps. The same number is handed to the door that buys thinking, so what you read here is what refuses the call. Watching costs nothing — comparing my own records uses no thinking.${ceiling == null ? '' : ' The metered ceiling is separate from any plan: agreeing to a subscription is not agreeing to unlimited computing.'}</p></details>`)}
+      <details class="fold"><summary><h3>How this works</h3></summary><p class="quiet">The binding ceiling is the lowest of what stands: the charter's daily rate once you sign one, $${(PRE_CHARTER_THINKING_CENTS / 100).toFixed(0)} a day until then, and this deployment's own caps. The same number is handed to the door that buys thinking, so what you read here is what refuses the call. Watching costs nothing — comparing my own records uses no thinking.${ceiling == null ? '' : ' The metered ceiling is separate from any plan: agreeing to a subscription is not agreeing to unlimited computing.'}</p></details>`, '', 'money')}
 
     ${/* THE DOOR TO CONNECTORS, AND A CARD THAT NOW TELLS THE TRUTH.
          Two defects in one place. It had no link, so the Connectors page could
@@ -7540,35 +7586,85 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
           <button class="btn btn-sm" type="submit">Stop this</button>
         </form></div>`)}`)}
 
-    ${workshop ? card('sent', 'The Workshop', html`
-      <p class="lines"><span class="state ${workshop.economicPause ? 'watch' : 'ok'}">${workshop.economicPause ? 'Paused' : 'Live'}</span> <span class="quiet">${workshop.zoneName} · speaks as ${workshop.publicName}</span></p>
-      ${workshop.economicPause ? html`<p class="quiet"><strong>New economic activity is paused</strong> since ${workshop.economicPause.at.slice(0, 10)}: ${workshop.economicPause.reason}. What is owed still goes out.</p>` : ''}
-      <details class="fold"><summary><h3>What I may do there</h3></summary>
-      <p class="quiet">I may publish pages, deploy the one program that serves them, keep the Workshop's own DNS records, and forward its mail to you. Each change leaves a receipt with what was there before. I cannot transfer the domain, change its nameservers, delete a zone, or touch any other domain: those tools do not exist.</p>
-      <p class="quiet">Tests write to strangers only as ${workshop.publicName}, from ${workshop.contactEmail}, pointing at a page I have read back from the world. Your name is on the terms page and, in Experiment 001's sealed public copy, on that test's page; that copy is a record and is not rewritten. Nowhere else.</p></details>
-      <p class="row"><a class="btn btn-sm" href="/foundry/public-workshop">The Workshop</a></p>`) : ''}
+    ${/* FOUR PANELS BECAME ONE, AND THE MEASUREMENT IS WHY.
+         I folded these four first, on the reasoning that a card reporting a
+         standing fact should open on a tap. It saved twenty-five pixels.
+         Measuring the page block by block said why: a closed `<details>`
+         inside a `.panel` is still 169px, because the panel's own chrome —
+         border, padding, a full-size heading — is nearly the whole card. The
+         fold was the wrong instrument; four panels was the thing that cost.
 
-    ${card('stop', 'Owner exclusions', exclusions.length === 0
-    ? html`<p class="quiet">No business, person or topic is excluded by name. An exclusion outranks every score, recommendation and opportunity.</p>`
-    : html`<ul class="exclusions">${exclusions.map((x) => html`<li><span class="pill refused">Protected</span> <b>${x.entity}</b>
-        <span class="quiet">Foundry will not contact this business under any circumstances${x.marks.length ? ` · ${String(x.marks.length)} ${x.marks.length === 1 ? 'mark' : 'marks'} on record` : ''}.</span></li>`)}</ul>`)}
+         So they are one panel of rows. Everything is still here: the three
+         places the remaining controls live are three rows with somewhere to
+         go, and the two that explain why a control does NOT exist keep their
+         prose behind a disclosure, because "there is no button, and here is
+         why" is an argument the owner is owed and not a destination.
 
-    ${watching + beyondWatching === 0 ? '' : card('autonomy', 'Acting on its own', beyondWatching === 0
-    ? html`<p class="lines"><span class="state ok">Watching only</span> <span class="quiet">${count(watching, 'kind')} of work, none ever above it</span></p>
-      <details class="fold"><summary><h3>Why there is no button</h3></summary><p class="quiet">Marketing,
-        reaching out, changing a product, answering a customer: each is a kind of work I
-        could in principle be allowed to do without asking, and every one is set to
-        watching only. There is no button here to change that, because changing it would
-        not do anything: the part of me that would act on such a grant is no longer
-        running. If that comes back, this becomes a real choice and I will ask you for it
-        properly, one kind of work at a time.</p></details>`
-    : html`<p><strong>${count(beyondWatching, 'kind')} of work</strong> ${beyondWatching === 1 ? 'is' : 'are'}
-        set above watching only, and ${count(watching, 'other')} ${watching === 1 ? 'is' : 'are'} not.
-        This is worth reading closely &mdash; it says I may do something without asking.</p>`)}
+         The lesson is the general one this campaign keeps relearning: shorten
+         what is actually long, which is not reliably what looks long. */ ''}
+    <section class="panel ctl">
+      <header><h2>${mark('box')}Standing arrangements</h2></header>
+      <ul class="ev-list">
+        ${workshop ? html`<li><a class="ev-item" href="/foundry/public-workshop">
+          <span class="mark" aria-hidden="true">${mark('sent')}</span>
+          <span class="body"><span class="t">The Workshop</span>
+            <span class="s">${workshop.zoneName} · speaks as ${workshop.publicName}${
+  workshop.economicPause
+    ? ` · new economic activity paused since ${workshop.economicPause.at.slice(0, 10)}`
+    : ''}</span></span>
+          <span class="ev-tag ${workshop.economicPause ? 'watch' : 'ok'}">${
+  workshop.economicPause ? 'Paused' : 'Live'}</span>
+          <span class="go" aria-hidden="true">›</span></a></li>` : ''}
+        <li><a class="ev-item" href="/settings">
+          <span class="mark" aria-hidden="true">${mark('box')}</span>
+          <span class="body"><span class="t">Settings</span>
+            <span class="s">how I speak to you, how often I run, and the keys that let
+              anything act</span></span>
+          <span class="go" aria-hidden="true">›</span></a></li>
+        <li><a class="ev-item" href="/privacy">
+          <span class="mark" aria-hidden="true">${mark('stop')}</span>
+          <span class="body"><span class="t">Privacy and data</span>
+            <span class="s">consent, where the data lives, taking a copy, deleting it</span></span>
+          <span class="go" aria-hidden="true">›</span></a></li>
+        <li><a class="ev-item" href="/foundry/workshop">
+          <span class="mark" aria-hidden="true">${mark('box')}</span>
+          <span class="body"><span class="t">The isolated workshop</span>
+            <span class="s">where anything that runs, runs</span></span>
+          <span class="go" aria-hidden="true">›</span></a></li>
+      </ul>
 
-    ${card('box', 'The rest of the controls', html`
-      <p class="quiet">Settings holds how I speak to you, how often I run, and the keys that let anything act; Privacy holds consent, where the data lives, taking a copy, and deleting it.</p>
-      <p class="row"><a class="btn btn-sm" href="/settings">Settings</a><a class="btn btn-sm" href="/privacy">Privacy and data</a><a class="btn btn-sm" href="/foundry/workshop">The isolated workshop</a></p>`)}
+      ${/* NO DESTINATION, SO NOT A ROW. Both of these explain why a control
+           the owner might look for does not exist. That is an argument, and
+           an argument with a chevron is a promise of a page that is not
+           there. */ ''}
+      ${watching + beyondWatching === 0 ? '' : html`
+      <details class="fold"><summary><h3>Acting on its own</h3><span class="gist">${
+  beyondWatching === 0 ? 'Watching only' : `${count(beyondWatching, 'kind')} above watching`}</span></summary>
+        ${beyondWatching === 0
+    ? html`<p class="quiet">Marketing, reaching out, changing a product, answering a
+        customer: each is a kind of work I could in principle be allowed to do without
+        asking, and every one is set to watching only. There is no button here to change
+        that, because changing it would not do anything: the part of me that would act on
+        such a grant is no longer running. If that comes back, this becomes a real choice
+        and I will ask you for it properly, one kind of work at a time.</p>`
+    : html`<p><strong>${count(beyondWatching, 'kind')} of work</strong> ${
+  beyondWatching === 1 ? 'is' : 'are'} set above watching only, and ${
+  count(watching, 'other')} ${watching === 1 ? 'is' : 'are'} not. This is worth reading
+        closely — it says I may do something without asking.</p>`}
+      </details>`}
+
+      <details class="fold"><summary><h3>Owner exclusions</h3><span class="gist">${
+  exclusions.length === 0 ? 'None by name' : count(exclusions.length, 'protected')}</span></summary>
+        ${exclusions.length === 0
+    ? html`<p class="quiet">No business, person or topic is excluded by name. An exclusion
+        outranks every score, recommendation and opportunity.</p>`
+    : html`<ul class="exclusions">${exclusions.map((x) => html`<li>
+        <span class="pill refused">Protected</span> <b>${x.entity}</b>
+        <span class="quiet">Foundry will not contact this business under any
+          circumstances${x.marks.length ? ` · ${String(x.marks.length)} ${
+  x.marks.length === 1 ? 'mark' : 'marks'} on record` : ''}.</span></li>`)}</ul>`}
+      </details>
+    </section>
     </div>`;
 
   const controlsFrame: Where = {

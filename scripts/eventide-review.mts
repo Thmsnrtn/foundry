@@ -327,6 +327,18 @@ for (const width of [390, 1280]) {
             barH: bar ? Math.round(bar.getBoundingClientRect().height) : 0,
           };
         })(),
+        // WHERE THE PIXELS ACTUALLY ARE. Twice now I have shortened a page by
+        // guessing which block was long and been wrong. A tall page has a
+        // reason and the reason is measurable.
+        blocks: Array.from(document.querySelectorAll('main.wrap > *, .ctl-grid > *, .cockpit > *'))
+          .map((e) => ({
+            t: `${e.tagName.toLowerCase()}.${(e.className || '-').toString().slice(0, 26)}`,
+            h: Math.round(e.getBoundingClientRect().height),
+            say: (e.querySelector('h1,h2,h3')?.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 30),
+          }))
+          .filter((x) => x.h > 0)
+          .sort((a, b) => b.h - a.h)
+          .slice(0, 10),
         occluded: (() => {
           if (!nav) return [];
           const bars = Array.from(document.querySelectorAll('nav,footer,[class*="bottom"]'))
@@ -396,6 +408,8 @@ for (const width of [390, 1280]) {
         + `under38=${String(seen.small)}${seen.inline ? ` inline=${String(seen.inline)}` : ''}${
           seen.clipped.length ? ` CLIPPED ${String(seen.clipped.length)}` : ''}${
           seen.occluded.length ? ` UNDER-NAV ${String(seen.occluded[0].by)}px [${seen.occluded.map((x) => x.t).join(', ')}]` : ''}${over ? ` OVERFLOW ${String(seen.scrollW)}>${String(seen.clientW)}` : ''}`
+        + (process.env.EVENTIDE_BLOCKS
+          ? `\n      ${seen.blocks.map((b) => `${String(b.h).padStart(5)}px ${b.t} ${b.say}`).join('\n      ')}` : '')
         + (process.env.EVENTIDE_SMALL
           ? `\n      pad=${seen.pad.padBottom} chrome=${seen.pad.chrome || 'unset'} bar=${String(seen.pad.barH)}px` : '')
         + (process.env.EVENTIDE_SMALL && seen.smallest.length
