@@ -150,6 +150,27 @@ describe('the detail keeps four facts as four', () => {
   });
 });
 
+describe('the one thing he has to do at Etsy, where he would look for it', () => {
+  // He cannot guess this value and nothing was telling him. Etsy refuses an
+  // authorization whose redirect_uri is not registered on the application, and
+  // Foundry derives that address from the host the request arrived on — never
+  // from configuration, because an attacker who could choose it could send the
+  // authorization code somewhere else. Without it on the page he would paste
+  // both secrets correctly and meet a provider error with no idea which was
+  // wrong.
+  it('shows the exact address to register while the connection is still unmade', async () => {
+    const html = await get('/foundry/controls/connectors/etsy');
+    expect(html).toContain('First, at Etsy');
+    expect(html).toContain('/foundry/senses/callback');
+  });
+
+  it('works it out from the address he is reading it on, not from a setting', async () => {
+    const res = await app.request('https://example.test/foundry/controls/connectors/etsy');
+    expect(res.status).toBe(200);
+    expect(await res.text()).toContain('https://example.test/foundry/senses/callback');
+  });
+});
+
 describe('a connector that is connected reads differently from one that is not', () => {
   beforeAll(async () => {
     const r = (await query(

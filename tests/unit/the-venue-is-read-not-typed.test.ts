@@ -181,7 +181,18 @@ function receipt(id: string, opts: { listingId?: string; feeMinor?: number } = {
       grandtotal: { amount: 1400, divisor: 100, currency_code: 'USD' },
       // Etsy names the listing each line of the receipt is for. Without it a
       // shop-wide endpoint would file every other sale as this test's.
-      transactions: [{ listing_id: opts.listingId ?? LISTING_ID }],
+      //
+      // AND THE LINE CARRIES ITS PRICE, which this fixture omitted and Etsy
+      // never does. The omission mattered once the reader stopped taking
+      // `grandtotal` as revenue: that total is what the buyer paid, including
+      // the sales tax Etsy remits to a state, and the seller's revenue is the
+      // lines. A double that answers less than the real provider does hides
+      // exactly the field the correction depends on.
+      transactions: [{
+        listing_id: opts.listingId ?? LISTING_ID,
+        quantity: 1,
+        price: { amount: 1400, divisor: 100, currency_code: 'USD' },
+      }],
     }],
   };
   ETSY[`shops/77770001/receipts/${id}/payments`] = {

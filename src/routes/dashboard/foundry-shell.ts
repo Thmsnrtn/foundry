@@ -5669,6 +5669,11 @@ foundryShellRoutes.get('/foundry/companies/:id/see/:sense',
 
       ${raw(await Promise.all(gap.offers.map(async (offer) => {
     const { requiredScopes, whatStandsBetween } = await import('../../services/senses/credentials.js');
+    // THE ADDRESS THE PROVIDER WILL SEND HIM BACK TO, worked out exactly as
+    // `senseCallbackUri` works it out for the authorization itself: from the
+    // host this request arrived on. Shown rather than described, because it is
+    // the one value he has to paste somewhere else and cannot derive.
+    const redirectHere = `${new URL(String(c.req.url)).origin}/foundry/senses/callback`;
     const scopes = await requiredScopes(offer.provider, gap.key, offer.mode);
     const standing = await whatStandsBetween(offer.provider);
     return `<div class="noticed">
@@ -5699,6 +5704,10 @@ foundryShellRoutes.get('/foundry/companies/:id/see/:sense',
           <strong>shared secret</strong>. They are on your Etsy page under
           <em>Your Apps</em>. They say which application is asking; they give no access to
           any shop — this next step does that, and it has its own consent screen.</p>
+        <p class="quiet">While you are there: add
+          <code style="overflow-wrap:anywhere;">${redirectHere}</code> to the app&rsquo;s
+          redirect URIs. Etsy will not send you back to an address it has not been told
+          about, and that is the step that otherwise fails after both secrets were right.</p>
         <form method="POST" action="/settings/app-credential/etsy"
           style="display:grid;gap:0.5rem;max-width:26rem;margin-top:0.6rem;">
           <input type="hidden" name="back"
@@ -6815,6 +6824,27 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
       <div class="know">
         <h2>Next</h2>
         <p>${one.next.say}${one.next.href ? html` <a href="${one.next.href}">Do that</a>.` : ''}</p>
+      </div>` : ''}
+
+      ${/* THE ONE THING HE MUST DO AT ETSY, AND THE ONLY PLACE HE COULD LEARN
+           IT. Etsy refuses an authorization whose `redirect_uri` is not
+           registered on the application, and Foundry derives that value from
+           the host the request arrived on — never from configuration, because
+           an attacker who could choose it could send the code elsewhere. So
+           the owner cannot guess it and nothing was telling him: he would have
+           pasted the key, tapped connect, and met a provider error screen with
+           no idea which of his two secrets was wrong. Shown while it is still
+           useful, and gone once the connection exists. */ ''}
+      ${journey && (journey.stage === 'no_key' || journey.stage === 'authorization_pending') ? html`
+      <div class="know">
+        <h2>First, at Etsy</h2>
+        <p>Open your app under <em>Your Apps</em> and add this exact address to its
+          redirect URIs:</p>
+        <p><code style="display:block;overflow-wrap:anywhere;padding:0.5rem 0;">${new URL(String(c.req.url)).origin}/foundry/senses/callback</code></p>
+        <p class="quiet">Etsy refuses to send you back to an address it has not been told
+          about, and I work this one out from the address you are reading this on rather
+          than from a setting — so it is right by construction, and it is the one to paste.
+          Come back here afterwards; nothing below will work until this is done.</p>
       </div>` : ''}
 
       ${journey ? html`

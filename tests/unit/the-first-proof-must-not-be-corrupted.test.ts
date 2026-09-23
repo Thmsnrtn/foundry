@@ -74,7 +74,10 @@ let PRODUCT = '';
 let X = '';
 
 /** A receipt as Etsy states one, with the lines it actually carries. */
-const receipt = (id: string, total: number, lines: Array<[string, number, number]>): Record<string, unknown> => ({
+const receipt = (
+  id: string, total: number, lines: Array<[string, number, number]>,
+  extra: Record<string, unknown> = {},
+): Record<string, unknown> => ({
   receipt_id: id,
   is_paid: true,
   created_timestamp: 1760000000,
@@ -83,6 +86,7 @@ const receipt = (id: string, total: number, lines: Array<[string, number, number
     listing_id: listingId, quantity,
     price: { amount: price, divisor: 100, currency_code: 'USD' },
   })),
+  ...extra,
 });
 
 async function connect(): Promise<void> {
@@ -196,6 +200,54 @@ describe('a receipt this listing appears on is not a receipt that is all ours', 
     // that are not ours; apportioning it needs a rule nobody has decided, and
     // inventing one would put a number in the ledger no statement supports.
     expect(r.orders[0].feeCents).toBeNull();
+  });
+
+  it('never books the sales tax Etsy remits to a state as this asset\'s revenue', async () => {
+    // THE DEEPER HALF, and it was true even for a receipt entirely ours.
+    // `grandtotal` is what the BUYER PAID: items, shipping, gift wrap, and the
+    // sales tax Etsy collects as marketplace facilitator. The tax is never the
+    // seller's money — and booking it would have inflated the first real sale
+    // by whatever the buyer's state levies AND reserved cash against it, since
+    // refund exposure is taken at full price.
+    ETSY['shops/77770001/receipts'] = {
+      count: 1,
+      results: [receipt('TAX1', 1638, [[LISTING_ID, 1400, 1]], {
+        total_tax_cost: { amount: 118, divisor: 100, currency_code: 'USD' },
+        total_shipping_cost: { amount: 120, divisor: 100, currency_code: 'USD' },
+      })],
+    };
+    const r = await readTheShop({ founderId: OWNER, productId: PRODUCT, onlyListingId: LISTING_ID });
+    if ('failed' in r) throw new Error('read failed');
+    expect(r.orders[0].grossCents, 'the buyer paid 16.38; the asset earned 14.00').toBe(1400);
+    expect(r.orders[0].whollyThisListing).toBe(true);
+  });
+
+  it('takes a shop discount off, because that one really is the seller\'s', async () => {
+    ETSY['shops/77770001/receipts'] = {
+      count: 1,
+      results: [receipt('DISC1', 1200, [[LISTING_ID, 1400, 1]], {
+        discount_amt: { amount: 200, divisor: 100, currency_code: 'USD' },
+      })],
+    };
+    const r = await readTheShop({ founderId: OWNER, productId: PRODUCT, onlyListingId: LISTING_ID });
+    if ('failed' in r) throw new Error('read failed');
+    expect(r.orders[0].grossCents).toBe(1200);
+  });
+
+  it('will not attribute a mixed basket that also carried a discount', async () => {
+    // Shared between items, and apportioning it needs a rule nobody has
+    // decided. Unattributable rather than attributed generously — and counted
+    // as a gap so the incompleteness is visible.
+    ETSY['shops/77770001/receipts'] = {
+      count: 1,
+      results: [receipt('DISC2', 3200, [[LISTING_ID, 1400, 1], [OTHER_ID, 2000, 1]], {
+        discount_amt: { amount: 200, divisor: 100, currency_code: 'USD' },
+      })],
+    };
+    const r = await readTheShop({ founderId: OWNER, productId: PRODUCT, onlyListingId: LISTING_ID });
+    if ('failed' in r) throw new Error('read failed');
+    expect(r.orders).toHaveLength(0);
+    expect(r.complete).toBe(false);
   });
 
   it('counts quantity, because two of ours is twice ours', async () => {

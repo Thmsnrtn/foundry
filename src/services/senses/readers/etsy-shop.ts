@@ -77,6 +77,14 @@ export interface ShopOrder {
    * basket-level discount and its shipping — are NOT apportioned, because no
    * rule for apportioning them has been decided. They are unknown rather than
    * divided, and `feeCents` is null for exactly that reason.
+   *
+   * `grossCents` is ALWAYS this listing's own lines, whichever this is. It is
+   * never Etsy's `grandtotal`, which is what the buyer paid: items plus
+   * shipping plus gift wrap plus the sales tax Etsy collects as marketplace
+   * facilitator and remits to a state. None of that last part is the seller's
+   * money, and booking it here would have inflated the first real sale by
+   * whatever the buyer's state levies — and reserved cash against it, since
+   * refund exposure is taken at full price.
    */
   whollyThisListing: boolean;
 }
@@ -314,32 +322,59 @@ export async function readTheShop(input: {
       // institution already has a word for it: `feeCents: null`, which
       // `unitContribution` turns into an unavailable contribution rather than
       // into margin.
-      let wholly = true;
-      let gross = money(r.grandtotal);
-      if (input.onlyListingId) {
-        const lines = Array.isArray(r.transactions) ? r.transactions as Array<Record<string, unknown>> : [];
-        const mine = lines.filter((t) => String(t.listing_id ?? '') === input.onlyListingId);
-        if (mine.length === 0) continue;
-        wholly = mine.length === lines.length;
-        if (!wholly) {
-          let cents = 0;
-          let currency: string | null = gross ? gross.currency : null;
-          let readable = true;
-          for (const t of mine) {
-            const each = money(t.price);
-            const n = Number(t.quantity ?? 1);
-            if (!each || !Number.isInteger(n) || n <= 0
-              || (currency !== null && each.currency !== currency)) { readable = false; break; }
-            currency = each.currency;
-            cents += each.minorUnits * n;
-          }
-          // A MIXED RECEIPT WHOSE LINES CANNOT BE READ IS NOT AN ORDER OF A
-          // KNOWN SIZE. It is counted as a discard, which is what makes the
-          // reading incomplete — so nothing downstream reads this shop's
-          // silence as an absence while a sale sits in it unattributed.
-          gross = (readable && cents > 0 && currency !== null)
-            ? { minorUnits: cents, currency } : null;
+      //
+      // AND `grandtotal` IS NOT REVENUE AT ALL, which is the deeper half and
+      // was true even for a receipt that was entirely this listing's.
+      //
+      // Etsy's `grandtotal` is what the BUYER PAID: items, plus shipping, plus
+      // gift wrap, plus the sales tax Etsy collects as marketplace facilitator
+      // and remits to a state. That tax is never the seller's money and never
+      // was. Booking it as this asset's charge would have inflated the first
+      // real sale's revenue by whatever the buyer's state levies, put money
+      // this institution never received into `moneyHeld`, and — because
+      // refund exposure is taken at full price — reserved cash against it too.
+      //
+      // So the amount comes from the LINES, always, and never from the
+      // receipt's total. A transaction's `price` × `quantity` is the item
+      // revenue Etsy states, and it cannot contain tax, shipping or gift wrap
+      // because those are not line items. One path, one meaning, and the money
+      // collected for somebody else is excluded by construction rather than by
+      // subtraction from a total nobody decomposed.
+      const lines = Array.isArray(r.transactions) ? r.transactions as Array<Record<string, unknown>> : [];
+      const mine = input.onlyListingId
+        ? lines.filter((t) => String(t.listing_id ?? '') === input.onlyListingId)
+        : lines;
+      if (input.onlyListingId && mine.length === 0) continue;
+      const wholly = mine.length === lines.length && lines.length > 0;
+      let gross: { minorUnits: number; currency: string } | null = null;
+      {
+        let cents = 0;
+        let currency: string | null = null;
+        let readable = mine.length > 0;
+        for (const t of mine) {
+          const each = money(t.price);
+          const n = Number(t.quantity ?? 1);
+          if (!each || !Number.isInteger(n) || n <= 0
+            || (currency !== null && each.currency !== currency)) { readable = false; break; }
+          currency = each.currency;
+          cents += each.minorUnits * n;
         }
+        // A DISCOUNT IS THE SELLER'S, AND IT IS NOT IN THE LINE PRICE. Etsy
+        // carries a shop coupon at the receipt, so it comes off here. On a
+        // mixed basket it is shared between items and apportioning it needs a
+        // rule nobody has decided — so such a receipt is not attributable at
+        // all rather than attributed generously.
+        const discount = money(r.discount_amt);
+        if (readable && discount && discount.minorUnits > 0) {
+          if (!wholly || (currency !== null && discount.currency !== currency)) readable = false;
+          else cents -= discount.minorUnits;
+        }
+        // AN ORDER WHOSE SIZE CANNOT BE READ IS NOT AN ORDER OF ZERO. It is
+        // counted as a discard, which makes the reading incomplete — so
+        // nothing downstream reads this shop's silence as an absence while a
+        // sale sits in it unattributed.
+        gross = (readable && cents > 0 && currency !== null)
+          ? { minorUnits: cents, currency } : null;
       }
       const ref = String(r.receipt_id ?? '');
       const at = Number(r.created_timestamp);
