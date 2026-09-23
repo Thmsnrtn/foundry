@@ -31,6 +31,7 @@
 
 import { Hono } from 'hono';
 import { html, raw } from 'hono/html';
+import { etsyKeyPlacement } from '../../views/owner/etsy-key.js';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import { query, realCompany, referenceCompany } from '../../db/client.js';
 import { PRE_CHARTER_THINKING_CENTS } from '../../services/institution/charter.js';
@@ -5734,32 +5735,17 @@ foundryShellRoutes.get('/foundry/companies/:id/see/:sense',
     // THE ONE OBSTACLE HE CAN CLEAR WHERE HE IS STANDING. Sending him to a
     // settings page to hunt for a card, then back here to finish, is two
     // journeys for one intention — and he said so: the settings page is where
-    // this got lost. The form belongs in the sentence that needs it.
+    // this got lost. The form belongs in the sentence that needs it, and it is
+    // now the same module the Etsy connector renders, so the two cannot come
+    // to describe the handling of this secret differently.
     : standing === 'no_app_key'
       ? `<div class="know" style="margin-top:0.75rem;">
         <h4>One thing first: which application is asking</h4>
-        <p class="quiet">Etsy gives every application a <strong>keystring</strong> and a
-          <strong>shared secret</strong>. They are on your Etsy page under
-          <em>Your Apps</em>. They say which application is asking; they give no access to
-          any shop — this next step does that, and it has its own consent screen.</p>
-        <p class="quiet">While you are there: add
-          <code style="overflow-wrap:anywhere;">${redirectHere}</code> to the app&rsquo;s
-          redirect URIs. Etsy will not send you back to an address it has not been told
-          about, and that is the step that otherwise fails after both secrets were right.</p>
-        <form method="POST" action="/settings/app-credential/etsy"
-          style="display:grid;gap:0.5rem;max-width:26rem;margin-top:0.6rem;">
-          <input type="hidden" name="back"
-            value="/foundry/companies/${productId}/see/${gap.key}" />
-          <input type="text" name="keystring" required autocomplete="off"
-            spellcheck="false" autocapitalize="off" placeholder="Keystring" />
-          <input type="password" name="shared_secret" required autocomplete="off"
-            placeholder="Shared secret" />
-          <p class="quiet" style="margin:0;">Paste each into its own box — not the joined
-            <code>keystring:secret</code> form Etsy shows in its examples. I check the pair
-            with Etsy before keeping it, so a wrong one is refused here rather than three
-            screens later. It is stored encrypted and never shown again.</p>
-          <button class="btn go" type="submit">Keep this, and bring me back here</button>
-        </form>
+        ${etsyKeyPlacement({
+    placedAs: null,
+    back: `/foundry/companies/${productId}/see/${gap.key}`,
+    redirectUri: redirectHere,
+  })}
       </div>`
       : `<p class="quiet">I know ${senses.providerName(offer.provider)} could tell me this,
         and I cannot ask it for permission yet. Nothing is missing on your side.</p>`}
@@ -6854,6 +6840,11 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
     // application key the owner places by hand. Saying that rather than
     // inventing four generic steps for every provider.
     const journey = provider === 'etsy' ? await etsyJourney(productId) : null;
+    // Read without decrypting: this page names the application, it never uses it.
+    const placedApp = provider === 'etsy'
+      ? await (await import('../../services/senses/app-credential.js'))
+        .placedApplicationRef('etsy')
+      : null;
 
     const fact = (yes: boolean, said: string, no: string): unknown => html`
       <li style="display:flex;gap:0.6rem;align-items:flex-start;padding:0.3rem 0;">
@@ -6896,13 +6887,23 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
 
            And the action is a BUTTON. It is the one thing on this page he is
            meant to press, and Eventide puts the owner's hand in gold. */ ''}
-      ${(journey?.next ?? one.next) ? html`
+      ${/* A BUTTON THAT GOES WHERE YOU ARE IS NOT A NEXT STEP. Now that the
+           application key is placed on this page, the journey's own `next`
+           points here at the `no_key` stage — correct from the Connectors
+           list, and on this page a control that reloads it. The sentence is
+           still worth saying; the button is not, because the thing to press
+           is the form below it. */ ''}
+      ${(journey?.next ?? one.next) ? (() => {
+    const step = (journey?.next ?? one.next)!;
+    const here = `/foundry/controls/connectors/${one.provider}`;
+    const elsewhere = step.href != null && step.href !== here;
+    return html`
       <div class="know" style="border-color:var(--accent);">
         <h2>Next</h2>
-        <p>${(journey?.next ?? one.next)!.say}</p>
-        ${(journey?.next ?? one.next)!.href
-    ? html`<a class="btn go" href="${(journey?.next ?? one.next)!.href}">Do that</a>` : ''}
-      </div>` : ''}
+        <p>${step.say}</p>
+        ${elsewhere ? html`<a class="btn go" href="${step.href}">Do that</a>` : ''}
+      </div>`;
+  })() : ''}
 
       ${/* THE ONE THING HE MUST DO AT ETSY, AND THE ONLY PLACE HE COULD LEARN
            IT. Etsy refuses an authorization whose `redirect_uri` is not
@@ -6913,16 +6914,42 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
            pasted the key, tapped connect, and met a provider error screen with
            no idea which of his two secrets was wrong. Shown while it is still
            useful, and gone once the connection exists. */ ''}
-      ${journey && (journey.stage === 'no_key' || journey.stage === 'authorization_pending') ? html`
-      <div class="know">
+      ${/* THE STEP IS TAKEN WHERE IT IS NAMED. This card used to describe the
+           application key and send him to Settings to place it; the owner said
+           that is where the journey got lost. The placement block is one
+           module rendered on every surface that needs it, so the three
+           descriptions of how this secret is handled cannot drift apart. */ ''}
+      ${journey?.stage === 'no_key' ? html`
+      <div class="know" style="border-color:var(--accent);">
         <h2>First, at Etsy</h2>
-        <p>Open your app under <em>Your Apps</em> and add this exact address to its
-          redirect URIs:</p>
-        <p><code style="display:block;overflow-wrap:anywhere;padding:0.5rem 0;">${new URL(String(c.req.url)).origin}/foundry/senses/callback</code></p>
-        <p class="quiet">Etsy refuses to send you back to an address it has not been told
-          about, and I work this one out from the address you are reading this on rather
-          than from a setting — so it is right by construction, and it is the one to paste.
-          Come back here afterwards; nothing below will work until this is done.</p>
+        ${raw(etsyKeyPlacement({
+    placedAs: null,
+    back: '/foundry/controls/connectors/etsy',
+    savedAs: c.req.query('etsy') === 'placed' ? (c.req.query('app') ?? null) : null,
+    error: c.req.query('etsy_error') ?? null,
+    redirectUri: `${new URL(String(c.req.url)).origin}/foundry/senses/callback`,
+  }))}
+      </div>` : ''}
+
+      ${/* PLACED, SO FOLDED. The key is behind a disclosure once it is in:
+           what he came back for is the consent step above, and a filled-in
+           credential form standing open next to it reads as unfinished work.
+           The redirect URI stays visible inside, because it is the half of
+           this step that happens at Etsy and it is not yet provably done. */ ''}
+      ${journey && journey.stage !== 'no_key' ? html`
+      <div class="know">
+        <details class="fold"${c.req.query('etsy_error') != null ? ' open' : ''}><summary><h2>The application key</h2><span class="gist">${
+  journey.stage === 'authorization_pending' ? 'Placed, not yet used' : 'Placed'}</span></summary>
+        ${raw(etsyKeyPlacement({
+    placedAs: placedApp ?? 'this deployment',
+    back: '/foundry/controls/connectors/etsy',
+    savedAs: c.req.query('etsy') === 'placed' ? (c.req.query('app') ?? null) : null,
+    forgotten: c.req.query('etsy') === 'forgotten',
+    error: c.req.query('etsy_error') ?? null,
+    redirectUri: journey.stage === 'authorization_pending'
+      ? `${new URL(String(c.req.url)).origin}/foundry/senses/callback` : null,
+  }))}
+        </details>
       </div>` : ''}
 
       ${/* THE STEPS BEHIND A FOLD, with where it has got to on the summary.
@@ -7162,7 +7189,11 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
         <dt>Owner action</dt><dd>${health.ownerAction ?? 'none'}</dd>
         <dt>Last healthy</dt><dd>${health.lastHealthy ? health.lastHealthy.slice(0, 16).replace('T', ' ') : health.didNotDoTheDay.length ? 'not today — the day\u2019s work is not done' : 'not recorded'}</dd>
       </dl>
-      <p class="quiet"><a href="/foundry/absence">If you stepped away</a></p>`)}
+      ${/* A DOOR, NOT AN AFTERTHOUGHT. Absence is a whole surface and this is
+           its only way in from Controls; it was a 16px line of quiet text.
+           `.more-link` is the pattern this application already uses for
+           "there is more this way", and it carries the touch floor. */ ''}
+      <p><a class="more-link" href="/foundry/absence">If you stepped away →</a></p>`)}
 
     ${card('autonomy', 'What I may do on my own', html`
       <p class="lines"><span class="state ${autonomy.nothingWithoutHim ? 'ok' : 'watch'}">${autonomy.nothingWithoutHim ? 'Asks first' : 'Granted'}</span></p>

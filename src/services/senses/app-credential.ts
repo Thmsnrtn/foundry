@@ -127,6 +127,30 @@ export async function setAppCredential(input: {
   return { placed: true, providerAccountRef: who.applicationId };
 }
 
+/**
+ * WHICH APPLICATION IS PLACED, WITHOUT OPENING THE ENVELOPE.
+ *
+ * A surface that only has to say "the key is placed, and Etsy calls it
+ * 12345678" was reaching for `appCredentialFor`, which decrypts both halves to
+ * answer a question neither half is needed for. Every decryption is a moment
+ * the plaintext exists in this process, and a moment it could be logged, put
+ * in an error, or read off a heap dump. So the cheap question gets a cheap
+ * answer: the provider's own public id for the application, straight off the
+ * row, and nothing else.
+ *
+ * Null means no key is placed, which is the same null the decrypting reader
+ * returns — the two answers cannot disagree about whether there is one.
+ */
+export async function placedApplicationRef(provider: string): Promise<string | null> {
+  const row = (await query(
+    `SELECT provider_account_ref FROM app_credentials
+      WHERE provider = ? AND forgotten_at IS NULL`, [provider]))
+    .rows[0] as Record<string, unknown> | undefined;
+  if (!row) return null;
+  const ref = row.provider_account_ref;
+  return ref == null ? null : String(ref);
+}
+
 /** The key this deployment holds for a provider, or null. Decrypts on the way out. */
 export async function appCredentialFor(provider: string): Promise<AppCredential | null> {
   const row = (await query(

@@ -303,7 +303,13 @@ export async function etsyJourney(productId: string): Promise<ConnectionJourney>
     if (stage === 'no_key') {
       return {
         say: 'Put in the application key Etsy gave you. I check it with Etsy before keeping it.',
-        href: `/foundry/companies/${productId}/see/revenue`,
+        // WHERE THE FORM IS. This pointed at the revenue gap, which offers the
+        // form too, but the owner who has set out to connect Etsy is standing
+        // in Connectors — and sending him from the connection's own page to a
+        // company's revenue page to satisfy the connection's prerequisite is
+        // the detour that lost him. The gap keeps its own copy for the owner
+        // who arrives there wanting a number.
+        href: '/foundry/controls/connectors/etsy',
       };
     }
     if (stage === 'authorization_pending') {

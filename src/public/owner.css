@@ -342,7 +342,10 @@ dd{margin:0;min-width:0;overflow-wrap:break-word}
    is already what it does. */
 .btn.btn-ghost{background:none;border-color:transparent;color:var(--ink-2)}
 .btn.btn-ghost:hover{color:var(--ink);border-color:var(--line)}
-.btn.btn-sm{width:auto;font-size:.85rem;padding:8px 14px;min-height:36px}
+.btn.btn-sm{width:auto;font-size:.85rem;padding:8px 14px;min-height:40px}
+/* 36px rendered as 37 with its border and sat one pixel under the floor, where
+   it beat the content-wide rule on specificity and so never got the 40. A
+   button called small is still a button a thumb has to find. */
 
 /* ── THE SWITCH, ONCE ────────────────────────────────────────────────────────
    Two pages draw one: the pace control in Controls and the six consent
@@ -527,7 +530,9 @@ h1 .dim{color:var(--ink-3);font-weight:400}
    is; Activity's say what it is showing, so they are links, and the one in
    force is marked rather than merely darker — a difference of shade is not a
    state anyone can be sure of. Tall enough for a thumb. */
-a.chip{text-decoration:none;min-height:32px;line-height:22px}
+/* A chip and a `more` link are controls he taps, and both sat at 32px — the
+   old floor, kept after the floor moved. */
+a.chip{text-decoration:none;min-height:40px;line-height:22px}
 a.chip.on{border-color:var(--accent);color:var(--accent)}
 
 /* ── THE STREAM ───────────────────────────────────────────────────────────────
@@ -1480,7 +1485,7 @@ main[data-place="foundry"]>.glance::before{top:-1.25rem}
 .panel>header h2,.panel h2{margin:0;font-family:var(--display);font-size:.95rem;font-weight:600;letter-spacing:-.01em;color:var(--ink);text-transform:none}
 .panel h2 .mk{margin-right:.4rem}
 .panel h2 .dim{font-family:var(--sans);font-size:.72rem;color:var(--ink-3)}
-.more-link{flex:0 0 auto;font-size:.76rem;color:var(--ink-2);text-decoration:none;display:inline-flex;align-items:center;gap:.25rem;min-height:32px}
+.more-link{flex:0 0 auto;font-size:.76rem;color:var(--ink-2);text-decoration:none;display:inline-flex;align-items:center;gap:.25rem;min-height:40px}
 .more-link .mk{color:var(--ink-3)}
 .more-link:hover{color:var(--ink)}
 .panel .quiet{font-size:.8rem;margin:0;line-height:1.45}
@@ -2048,18 +2053,33 @@ a.know:hover{background:var(--card-2)}
    `font-size:0.8rem` with no padding to compensate, in the one place an owner
    goes to change something. WCAG 2.2 sets 24px as the floor and 44 is the
    design target; this is the floor being enforced where the markup forgot it,
-   without touching a hundred inline styles. */
-main .card button,main .card .btn,main .card input:not([type="checkbox"]):not([type="radio"]),
-main .card select{min-height:40px}
-main .card button,main .card .btn{padding-inline:.85rem}
+   without touching a hundred inline styles.
+
+   AND IT IS NOT A PROPERTY OF THE BOX. This was written `main .card ...`,
+   which fixed the page it was written for and nowhere else: moving the Etsy
+   key form from a `.card` on Settings to a `.know` on the connector turned two
+   40px inputs into two 21px ones, with no markup changed. Whether a thumb can
+   hit a control is not decided by which container it landed in, so the rule is
+   scoped to the owner's content and not to one of its two idioms — which is
+   the whole point of there being one component system rather than thirteen
+   pages that each solved this. */
+main button,main .btn,main input:not([type="checkbox"]):not([type="radio"]),
+main select{min-height:40px}
+main button,main .btn{padding-inline:.85rem}
+
+/* THE ONE THAT WAS ON EVERY PAGE. The shell's footer link out to the Letter
+   rendered as a 220x17 line of text — the last control on all thirteen
+   surfaces, and the only one every page had in common. Counted once per page
+   it read as noise in the measurement; it was one defect, thirteen times. */
+main footer a{display:inline-flex;align-items:center;min-height:40px}
 
 /* A CHECKBOX IS A CONTROL TOO. These rendered at the browser's default 13×13
    in Settings — a third of the floor, in the one place an owner goes to change
    something, and small enough that a thumb hits the label or nothing. The box
    grows, and the label around it becomes the target, which is what makes the
    difference on a phone. */
-main .card input[type="checkbox"],main .card input[type="radio"]{
+main input[type="checkbox"],main input[type="radio"]{
   width:20px;height:20px;accent-color:var(--accent)}
-main .card label:has(> input[type="checkbox"]),
-main .card label:has(> input[type="radio"]){
+main label:has(> input[type="checkbox"]),
+main label:has(> input[type="radio"]){
   display:inline-flex;align-items:center;gap:.55rem;min-height:40px}

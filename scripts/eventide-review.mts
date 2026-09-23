@@ -52,7 +52,20 @@ const PAGES: Array<{ path: string; name: string }> = [
   { path: '/foundry/activity', name: 'activity' },
   { path: '/foundry/searching', name: 'searching' },
   { path: '/foundry/charter', name: 'charter' },
-];
+].filter((p, _i, all) => {
+  // POINTABLE AT WHAT CHANGED. A wave that touches two surfaces should not
+  // have to render thirty-nine pages to find out what it did to them, and an
+  // instrument too slow to run is an instrument that stops being run.
+  // No argument still means all of them, so the release measurement is
+  // unchanged and cannot be narrowed by forgetting.
+  const want = process.argv.slice(2).filter((a) => !a.startsWith('-'));
+  if (want.length === 0) return true;
+  const known = new Set(all.map((x) => x.name));
+  for (const w of want) {
+    if (!known.has(w)) throw new Error(`no page named ${w}; known: ${[...known].join(', ')}`);
+  }
+  return want.includes(p.name);
+});
 
 async function seed(): Promise<void> {
   await runMigrations();
@@ -150,21 +163,49 @@ for (const width of [390, 1280]) {
         scrollW: document.documentElement.scrollWidth,
         clientW: document.documentElement.clientWidth,
         height: document.body.scrollHeight,
-        small: Array.from(document.querySelectorAll('a,button,input,select'))
-          .filter((e) => {
-            const r = (e.closest('label') ?? e).getBoundingClientRect();
-            return r.width > 0 && r.height > 0 && (r.height < 38 || r.width < 38);
-          }).length,
-        // WHICH ONES, so a count can be acted on rather than only watched. A
-        // number tells you there is a problem; the selector tells you where.
-        smallest: Array.from(document.querySelectorAll('a,button,input,select'))
-          .map((e) => {
-            const r = (e.closest('label') ?? e).getBoundingClientRect();
-            return { t: `${e.tagName.toLowerCase()}.${e.className || '-'}`.slice(0, 40),
-              h: Math.round(r.height), w: Math.round(r.width) };
-          })
-          .filter((x) => x.h > 0 && x.w > 0 && (x.h < 38 || x.w < 38))
-          .slice(0, 8),
+        // ONE LIST, AND THE COUNT IS ITS LENGTH.
+        //
+        // This was two expressions of the same rule, and they disagreed:
+        // Portfolio reported five controls under the floor and then named
+        // none of them, because the count admitted anything with a non-zero
+        // box while the list rounded heights to whole pixels and dropped
+        // everything under half of one. A sub-pixel element is not a tap
+        // target a thumb can miss — it is not on the screen — so the floor of
+        // 1px is right and the count was wrong. Now there is nothing for the
+        // two to disagree about.
+        //
+        // AND INLINE LINKS ARE NOT CONTROLS. WCAG 2.2's target-size criterion
+        // exempts a target "in a sentence or whose size is otherwise
+        // constrained by the line-height of non-target text", and it is right
+        // to: making a mid-sentence link 40px tall breaks the paragraph it is
+        // a word in. They are counted separately rather than quietly dropped,
+        // because an exemption nobody can see is indistinguishable from an
+        // instrument that stopped looking.
+        ...(() => {
+          const judged = Array.from(document.querySelectorAll('a,button,input,select'))
+            .map((e) => {
+              const target = e.closest('label') ?? e;
+              const r = target.getBoundingClientRect();
+              const parent = e.parentElement;
+              const sentence = e.tagName === 'A' && parent != null
+                && (parent.textContent ?? '').trim().length
+                  > (e.textContent ?? '').trim().length;
+              // The text too, because a bare `a.-` names nothing an author can
+              // find. A measurement you have to go hunting to act on gets
+              // watched instead of fixed.
+              return { t: `${e.tagName.toLowerCase()}.${e.className || '-'} “${
+                (e.textContent ?? '').trim().slice(0, 32)}”`.slice(0, 64),
+                h: Math.round(r.height * 10) / 10, w: Math.round(r.width * 10) / 10,
+                sentence };
+            })
+            .filter((x) => x.h >= 1 && x.w >= 1 && (x.h < 38 || x.w < 38));
+          const controls = judged.filter((x) => !x.sentence);
+          return {
+            small: controls.length,
+            inline: judged.length - controls.length,
+            smallest: controls.slice(0, 8),
+          };
+        })(),
         });
       });
       const over = seen.scrollW > seen.clientW;
@@ -176,7 +217,7 @@ for (const width of [390, 1280]) {
       });
       console.log(`  ${over || seen.theme !== mode ? '✗' : '·'} ${p.name.padEnd(16)} ${mode.padEnd(5)} ${String(width).padEnd(5)} `
         + `theme=${String(seen.theme)} ground=${seen.ground} h=${String(seen.height)}px `
-        + `under38=${String(seen.small)}${over ? ` OVERFLOW ${String(seen.scrollW)}>${String(seen.clientW)}` : ''}`
+        + `under38=${String(seen.small)}${seen.inline ? ` inline=${String(seen.inline)}` : ''}${over ? ` OVERFLOW ${String(seen.scrollW)}>${String(seen.clientW)}` : ''}`
         + (process.env.EVENTIDE_SMALL && seen.smallest.length
           ? `\n      ${seen.smallest.map((x) => `${x.t} ${String(x.w)}x${String(x.h)}`).join('\n      ')}` : ''));
     }

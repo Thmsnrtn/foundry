@@ -67,21 +67,12 @@ settingsRoutes.get('/settings', async (c) => {
     ? await getSendingIdentitySummary(String(firstProduct.id))
     : null;
   const sendingError = c.req.query('sending_error') ?? null;
-  const etsyError = c.req.query('etsy_error') ?? null;
-  // THE OUTCOME THE REDIRECT ALREADY CARRIED, AND NOBODY READ. The POST
-  // verifies the pair with Etsy, stores it, and redirects with
-  // `?etsy=placed&app=…`. Nothing consumed that, so a successful save changed
-  // one dim line and a button label — and the owner, reasonably, could not tell
-  // whether to submit his secrets again.
+  // WHETHER, NOT WHAT. Settings no longer carries the form, so it no longer
+  // needs the secret — and a page that decrypts a credential in order to print
+  // one sentence about it has paid a real price for a cosmetic answer.
+  const { placedApplicationRef } = await import('../../services/senses/app-credential.js');
+  const etsyApp = await placedApplicationRef('etsy');
   const etsyPlaced = c.req.query('etsy') === 'placed' ? (c.req.query('app') ?? '') : null;
-  const etsyForgotten = c.req.query('etsy') === 'forgotten';
-  const { appCredentialFor } = await import('../../services/senses/app-credential.js');
-  const etsyApp = await appCredentialFor('etsy');
-  // WHERE THE WHOLE CONNECTION ACTUALLY IS, not just whether this card's own
-  // row exists. The six states are separate on purpose and each surface used to
-  // know about one of them.
-  const { etsyJourney } = await import('../../services/senses/journey.js');
-  const etsyWhere = productId ? await etsyJourney(productId) : null;
   const comps = productId
     ? await query('SELECT * FROM competitors WHERE product_id = ?', [productId])
     : { rows: [] };
@@ -428,71 +419,30 @@ settingsRoutes.get('/settings', async (c) => {
     </div>` : ''}
 
     <div class="card">
+      ${/* THIS WAS NEVER A SETTING.
+           An application key is one half of a connection, and the owner who
+           needs it is the owner standing in Connectors trying to connect Etsy
+           — not the owner adjusting how loudly Foundry may interrupt him. It
+           had drifted here because Settings is where forms go when nobody
+           decides where they belong, and he told us what that cost: the
+           journey got lost on this page.
+
+           The form itself now lives on the Etsy connector, beside the consent
+           step it is a prerequisite of and beside the redirect URI it fails
+           without. What stays here is the pointer, because someone who
+           remembers placing a key here should not conclude it was deleted. */ ''}
       <h3 id="etsy-application-key">Etsy application key</h3>
       <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:0.75rem;">
-        This says which application is asking. It does <strong>not</strong> give access to any
-        shop \u2014 connecting a shop is a separate act, with its own consent screen and its own
-        read-only permissions. Both halves are needed: Etsy checks the pair on every request.
+        ${etsyPlaced !== null || etsyApp
+    ? html`A key is placed. It says which application is asking; it gives access to no shop.`
+    : html`No key is placed yet. It says which application is asking; it gives access to
+        no shop — connecting one is a separate act, with its own consent screen.`}
       </p>
-      ${/* THE STATE FIRST, AND AT A SIZE HE CAN SEE. This card used to open with
-           four paragraphs of explanation and report its state in 0.82rem
-           `--text-dim` underneath them. What a person needs on arriving is
-           where they are; what a thing means is what they need once they are
-           deciding, and that is what the prose below is for. */ ''}
-      ${etsyPlaced !== null ? html`
-      <div class="state ok" style="display:block;padding:0.7rem 0.9rem;margin-bottom:0.9rem;border-radius:8px;font-size:0.9rem;">
-        <strong>Saved.</strong> Etsy checked the pair and confirmed it as application
-        ${etsyPlaced}. It is stored encrypted and will not be shown again.
-      </div>` : ''}
-      ${etsyForgotten ? html`
-      <div class="state" style="display:block;padding:0.7rem 0.9rem;margin-bottom:0.9rem;border-radius:8px;font-size:0.9rem;">
-        <strong>Forgotten.</strong> Nothing here can ask Etsy anything now.
-      </div>` : ''}
-      ${etsyError ? html`
-      <div class="state bad" style="display:block;padding:0.7rem 0.9rem;margin-bottom:0.9rem;border-radius:8px;font-size:0.9rem;">
-        <strong>Not saved.</strong> ${etsyError}
-      </div>` : ''}
-
-      ${etsyWhere ? html`
-      <ol style="list-style:none;padding:0;margin:0 0 1rem;display:grid;gap:0.45rem;">
-        ${etsyWhere.steps.map((step) => html`
-        <li style="display:flex;gap:0.6rem;align-items:flex-start;font-size:0.9rem;">
-          <span aria-hidden="true" style="flex:0 0 1.1rem;color:${step.done ? 'var(--good)' : 'var(--text-dim)'};">${step.done ? '\u25cf' : '\u25cb'}</span>
-          <span>
-            <span style="color:${step.done ? 'var(--text-primary)' : 'var(--text-dim)'};">${step.title}</span>
-            ${step.evidence ? html`<br /><span style="font-size:0.8rem;color:var(--text-muted);">${step.evidence}</span>` : ''}
-          </span>
-        </li>`)}
-      </ol>
-      ${etsyWhere.next ? html`
-      <p style="font-size:0.9rem;margin:0 0 1rem;">
-        <strong>Next:</strong> ${etsyWhere.next.say}
-        ${etsyWhere.next.href ? html` <a href="${etsyWhere.next.href}">Do that</a>.` : ''}
-      </p>` : ''}` : ''}
-      <form method="POST" action="/settings/app-credential/etsy" style="margin-top:0.75rem;display:grid;gap:0.5rem;max-width:26rem;">
-        <!-- VISIBLE ON PURPOSE, and only this half. The keystring is an
-             identifier, not a secret: it travels in the open as the client_id on
-             the very consent URL the owner is about to look at. Hiding it
-             behind dots protects nothing and costs the one thing that matters
-             when a 24-character string is being pasted on a phone — being able
-             to see that it arrived whole. The shared secret is the half that
-             authenticates, and it stays hidden. -->
-        <input type="text" name="keystring" required autocomplete="off"
-          spellcheck="false" autocapitalize="off" placeholder="Keystring" />
-        <input type="password" name="shared_secret" required autocomplete="off" placeholder="Shared secret" />
-        <p style="font-size:0.78rem;color:var(--text-dim);margin:0;">
-          Paste each into its own box, not the joined <code>keystring:secret</code> form Etsy
-          shows in its examples. I check the pair with Etsy before keeping it, so a wrong one
-          is refused here rather than at the consent screen.
-        </p>
-        <button type="submit" class="btn btn-secondary btn-sm">
-          ${etsyApp ? 'Replace the key' : 'Place the key'}
-        </button>
-      </form>
-      ${etsyApp ? html`
-      <form method="POST" action="/settings/app-credential/etsy/forget" style="margin-top:0.5rem;">
-        <button type="submit" class="btn btn-secondary btn-sm">Forget it</button>
-      </form>` : ''}
+      <p style="font-size:0.87rem;">Place, replace or forget it where the connection lives.</p>
+      ${/* A DESTINATION, NOT A WORD IN A SENTENCE. This was an inline link in
+           prose, which is 18px tall and asks a thumb to hit a phrase. An entry
+           point to another surface is a control, and looks like one. */ ''}
+      <a class="btn btn-secondary btn-sm" href="/foundry/controls/connectors/etsy">Connectors &rarr; Etsy</a>
     </div>
 
     ${productId ? html`
@@ -769,9 +719,15 @@ settingsRoutes.post('/settings/app-credential/etsy', requireInstitutionOwner(), 
 });
 
 settingsRoutes.post('/settings/app-credential/etsy/forget', requireInstitutionOwner(), async (c) => {
+  const body = await c.req.parseBody() as Record<string, string>;
   const { forgetAppCredential } = await import('../../services/senses/app-credential.js');
-  await forgetAppCredential('etsy', 'the owner removed it from settings');
-  return c.redirect('/settings?etsy=forgotten');
+  await forgetAppCredential('etsy', 'the owner removed it');
+  // Home is wherever he was. The control is offered on the connector now, and
+  // landing on Settings after pressing it there would read as a mis-tap.
+  // `safeBackPath` is the same guard the placement uses: a path on this host,
+  // never protocol-relative, never off-site.
+  const back = safeBackPath(String(body.back ?? ''));
+  return c.redirect(`${back}${back.includes('?') ? '&' : '?'}etsy=forgotten`);
 });
 
 settingsRoutes.post('/settings/sending-identity/disconnect', requireCompanyCapability('can_manage_company'), async (c) => {
