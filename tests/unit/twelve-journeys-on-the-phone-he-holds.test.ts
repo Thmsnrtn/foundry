@@ -80,7 +80,21 @@ async function onThePhone(path: string, act?: (page: any) => Promise<void>): Pro
     return await page.evaluate(() => {
       const H = innerHeight;
       // WHAT IS IN THE FIRST VIEWPORT: elements whose top edge is on screen.
-      const firstScreen = [...document.querySelectorAll('h1,h2,dt,dd,p,a,button,span.state')]
+      // THE PARTS OF A READING, WHATEVER TAG THEY WEAR.
+      //
+      // This listed `dt,dd` because the glance was a description list, and
+      // every assertion below is written as "Label | Value" — the two halves
+      // arriving as separate entries. The glance is a strip of cells now, and
+      // its label, figure and sentence are spans, so the same reading
+      // concatenated into one entry and "Health | Healthy" stopped matching
+      // a screen that still says exactly that.
+      //
+      // So the parts are named in their new shape and the assertions are left
+      // alone. The cell itself is dropped from the list, because counting both
+      // the container and its children would say everything twice.
+      const firstScreen = [...document.querySelectorAll(
+        'h1,h2,dt,dd,p,a,button,span.state,.ev-cell .c,.ev-cell .n,.ev-cell .d')]
+        .filter((e) => !e.classList.contains('ev-cell'))
         .filter((e) => { const r = e.getBoundingClientRect(); return r.top >= 0 && r.top < H && r.height > 0; })
         .map((e) => e.textContent?.replace(/\s+/g, ' ').trim() ?? '').filter(Boolean).join(' | ');
       const de = document.documentElement;

@@ -38,6 +38,18 @@ function lines(html: string): number {
   // and the prose is what has to stay short.
   return html.replace(/<script[\s\S]*?<\/script>/g, '').replace(/<style[\s\S]*?<\/style>/g, '')
     .replace(/<dl class="glance"[\s\S]*?<\/dl>/g, '')
+    // AND THE INSTRUMENT PANEL KEPT ITS JOB WHEN IT CHANGED SHAPE. The glance
+    // was six `<dl class="glance">` tiles and is now a strip of readings and a
+    // short list of rows. Same state, read from the same readers, drawn
+    // differently — so the exemption follows the instrument rather than the
+    // markup it happened to use. Without this the count jumped from 62 to 91
+    // and called a denser first screen a filing cabinet.
+    .replace(/<div class="ev-strip"[\s\S]*?<\/div>/g, '')
+    .replace(/<ul class="ev-list"[\s\S]*?<\/ul>/g, '')
+    // A section's own heading and its one way out are furniture, like the
+    // tiles' labels were. What this count is for is cases piling up in the
+    // body, not the frame around them being named.
+    .replace(/<div class="ev-sec">[\s\S]*?<\/div>/g, '')
     // Nor are the other instruments: the strip of Now, Next and Carrying, the
     // cash movement and the live activity are rows read from the ledger and
     // the event stream, drawn as a panel each. They are state, like the tiles.

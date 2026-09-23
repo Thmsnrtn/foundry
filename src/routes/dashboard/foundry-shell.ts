@@ -2968,39 +2968,71 @@ foundryShellRoutes.get('/foundry', async (c) => {
 
            Every one is still a door, and every value still comes from the
            reader it came from. */ ''}
+      ${/* THE LABEL LEADS, AND THE SENTENCE SURVIVES.
+           Two corrections to the first cut of this strip, both found by the
+           chain rather than by looking at it.
+
+           The figure came first and the name second, so the estate read
+           "Healthy — health" where every other surface says "Health:
+           Healthy". One word for one place is the rule `labels.ts` exists for.
+
+           And the sentence under each reading was dropped to make four cells
+           fit a phone row. "set aside for tests, nothing paid yet" is the
+           difference between money authorised and money spent — the exact
+           conflation the economic ledger was built to end — and it is said
+           nowhere else on this screen. A layout that loses that is not a
+           hierarchy decision. The cells take the width a sentence needs and
+           the row breaks to two. */ ''}
       <div class="ev-strip" aria-label="At a glance">
         <a class="ev-cell" href="${attention === null ? '/foundry/decisions' : '#the-one-thing'}">
+          <span class="c">${READINGS.needsYou}</span>
           <span class="top">${needsN === 0 ? '' : html`<span class="dot watch"></span>`}
             <span class="n">${needsN === 0 ? 'None' : String(needsN)}</span></span>
-          <span class="c">${READINGS.needsYou.toLowerCase()}</span></a>
+          <span class="d">${needsN === 0 ? 'none waiting'
+    : needsN === 1 ? 'one decision' : `${String(needsN)} decisions`}</span></a>
 
         ${/* THIS SHOWED GROSS AND CALLED IT "Settled". The figure it drew is
               what buyers were charged for tests — not what is settled and not
               the owner's: the provider takes a fee at the moment of the
               charge, the work may be owed and not yet delivered, and the
               refunds page promises no time limit on asking for it back. The
-              end of the subtraction is the figure; the gross stays one tap
-              away on Money, where it can be checked rather than mistaken for
-              the answer. */ ''}
+              end of the subtraction is the figure; the gross is the line
+              under it, where it can be checked rather than mistaken for the
+              answer. */ ''}
         <a class="ev-cell" href="/foundry/money">
+          <span class="c">Yours</span>
           <span class="n${(yours.figure.cents ?? 0) >= 100000 ? ' sm' : ''}">${
-  yours.figure.cents === null ? 'n/k' : money(yours.figure.cents)}</span>
-          <span class="c">yours${yours.figure.quality === 'estimated' ? ', est.' : ''}</span></a>
+  yours.figure.cents === null ? 'not known' : money(yours.figure.cents)}${
+  yours.figure.quality === 'estimated' ? html` <span class="dim">est.</span>` : ''}</span>
+          <span class="d">${paidCents > 0 ? `of ${money(paidCents)} charged`
+    : (yours.authorisedCapital.cents ?? 0) > 0
+      ? `${money(yours.authorisedCapital.cents ?? 0)} set aside for tests, nothing paid yet`
+      : 'nothing paid yet'}</span></a>
 
         <a class="ev-cell" href="/foundry/controls">
+          <span class="c">${READINGS.health}</span>
           <span class="top"><span class="dot ${estate.cls === 'ok' ? '' : estate.cls === 'bad' ? 'bad' : 'watch'}"></span>
             <span class="n sm">${estate.word}</span></span>
-          <span class="c">${READINGS.health.toLowerCase()}</span></a>
+          <span class="d">${estate.detail}</span></a>
 
+        ${/* THE SHARED THING, BY NAME. "a shared dependency" told him a
+              concentration existed and not what it was, so the one fact that
+              would make him act — which provider or channel they all stand
+              on — was a click away on a page he had no reason to open. */ ''}
         <a class="ev-cell" href="/foundry/companies">
-          <span class="n">${String(s.watching.real)}</span>
-          <span class="c">${s.watching.real === 1 ? 'company' : 'companies'}</span></a>
+          <span class="c">Watching</span>
+          <span class="n">${String(s.watching.real)} <span class="dim">${
+  s.watching.real === 1 ? 'company' : 'companies'}</span></span>
+          <span class="d">${s.watching.real === 0 ? 'name one to start'
+    : glance.concentration ? glance.concentration
+      : s.watching.real > 1 ? 'no shared dependency'
+        : s.watching.itself ? 'and myself' : 'all my attention'}</span></a>
       </div>
 
       <div class="ev-sec"><h2>How I am working</h2>
         <a href="/foundry/controls">Controls ›</a></div>
       <ul class="ev-list">
-        <li><a class="ev-item" href="/foundry/charter">
+        <li><a class="ev-item" href="/foundry/charter" aria-label="The charter">
           <span class="mark" aria-hidden="true">${mark('autonomy')}</span>
           ${/* THE CANONICAL WORD, KEPT. The first cut of this row made the
                 state the title — "Asks first" — and dropped "Autonomy"

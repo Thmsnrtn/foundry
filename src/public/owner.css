@@ -2143,7 +2143,18 @@ main label:has(> input[type="radio"]){
    put a paragraph: "24 / Total Ideas", not a card explaining what ideas are.
    At 390 each cell is ~86px, which is the width the board draws and is enough
    for a figure and two short words. */
-.ev-strip{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:0 0 1.1rem}
+/* FOUR ACROSS WHERE FOUR FIT, TWO WHERE THEY DO NOT.
+   The boards put four metric cells on a phone row, and their captions are two
+   words: "Total Ideas", "Active Tasks". Foundry's readings carry sentences the
+   boards' do not — "set aside for tests, nothing paid yet" is the difference
+   between money authorised and money spent, and the first cut of this strip
+   dropped it to make four cells fit. That is not a hierarchy decision, it is
+   losing an economic fact to a layout.
+   So the cells claim the width a sentence needs and the row breaks to two when
+   they cannot all have it. Four across on a desk, two by two on a phone, and
+   nothing said is unsaid. */
+.ev-strip{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.25rem,1fr));
+  gap:8px;margin:0 0 1.1rem}
 .ev-cell{display:flex;flex-direction:column;gap:2px;align-items:flex-start;
   padding:.6rem .5rem;border:1px solid var(--line);border-radius:12px;
   background:var(--card);color:var(--ink);text-decoration:none;min-height:76px}
@@ -2152,8 +2163,13 @@ a.ev-cell:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .ev-cell .n{font-size:1.25rem;font-weight:600;line-height:1.15;color:var(--ink);
   font-family:var(--display)}
 .ev-cell .n.sm{font-size:.95rem}
-.ev-cell .c{font-size:.68rem;line-height:1.25;color:var(--ink-3);
+.ev-cell .c{font-size:.72rem;line-height:1.25;color:var(--ink-2);
   letter-spacing:.01em;overflow-wrap:anywhere}
+/* The sentence under the figure: what the number means, or what to do about
+   it. Never the only place a fact is said where it is said elsewhere, and the
+   only place it is said where it is not. */
+.ev-cell .d{font-size:.68rem;line-height:1.3;color:var(--ink-3);margin-top:2px;
+  overflow-wrap:anywhere}
 .ev-cell .dot{width:7px;height:7px;border-radius:50%;background:var(--good);flex:0 0 auto}
 .ev-cell .dot.watch{background:var(--alert)}
 .ev-cell .dot.bad{background:var(--bad)}
