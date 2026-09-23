@@ -7493,7 +7493,20 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
     <div class="ctl-grid">
     ${card('estate', READINGS.health, html`
       <p class="lines"><span class="state ${health.state === 'ok' ? 'ok' : health.state === 'degraded' ? 'watch' : 'bad'}">${health.word}</span></p>
-      <dl class="facts">
+      ${/* SEVEN DIAGNOSTIC ROWS, SIX OF WHICH SAY "nothing" ON A GOOD DAY.
+           This is the second-tallest card on Controls and most of it is the
+           absence of trouble, written out. Folded when there is no trouble,
+           with the word still above it; open the moment there is any, and
+           "any" is deliberately generous — anything failed, anything owed of
+           him, or a state that is not plainly ok.
+
+           The same rule as the company list below: calm when it is calm, and
+           loud when it is not. A disclosure that would hide a failure to look
+           tidy is the defect, not the design. */ ''}
+      ${(() => {
+    const calm = health.state === 'ok' && health.failed.length === 0
+      && (health.ownerAction ?? null) === null;
+    const facts = html`<dl class="facts">
         <dt>What failed</dt><dd>${health.failed.length ? health.failed.join('; ') : 'nothing'}</dd>
         <dt>Recovering</dt><dd>${health.recovering}</dd>
         <dt>Data loss</dt><dd>${health.dataLoss}</dd>
@@ -7501,7 +7514,12 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
         <dt>Money at risk</dt><dd>${health.moneyAtRisk}</dd>
         <dt>Owner action</dt><dd>${health.ownerAction ?? 'none'}</dd>
         <dt>Last healthy</dt><dd>${health.lastHealthy ? health.lastHealthy.slice(0, 16).replace('T', ' ') : health.didNotDoTheDay.length ? 'not today — the day\u2019s work is not done' : 'not recorded'}</dd>
-      </dl>
+      </dl>`;
+    return calm
+      ? html`<details class="fold"><summary><h3>What is and is not wrong</h3>
+        <span class="gist">Nothing failed</span></summary>${facts}</details>`
+      : facts;
+  })()}
       ${/* A DOOR, NOT AN AFTERTHOUGHT. Absence is a whole surface and this is
            its only way in from Controls; it was a 16px line of quiet text.
            `.more-link` is the pattern this application already uses for
@@ -7514,7 +7532,22 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
       ${autonomy.nothingWithoutHim ? html`<details class="fold"><summary><h3>How this works</h3></summary><p class="quiet">Each of those would be something you
         allow separately, for a set time, and could take back whenever you wanted. I ask on the
         front page when I have earned the right to.</p></details>` : ''}
-      ${autonomy.companies.length === 0 ? '' : html`<ul class="reach">${autonomy.companies.map((r) => html`<li>
+      ${/* THE PER-COMPANY DETAIL, FOLDED ONLY WHEN THERE IS NOTHING STANDING.
+           This list is the bulk of the tallest card on Controls, and most of
+           it is inspection material: thirty-day counts, what is shut, where to
+           change it. Behind a disclosure that costs one tap and nothing else,
+           because it stays on this page with a summary naming what is inside
+           — which is the difference between folding something and the three
+           capabilities this campaign lost by compressing cards.
+
+           EXCEPT WHEN A GRANT IS STANDING. If any company has given Foundry
+           leave to act without asking, that is the fact the owner most needs
+           in front of him, and it stays open. Calm when it is calm, and loud
+           when it is not: a disclosure that hides the dangerous state to look
+           tidy is the defect, not the design. */ ''}
+      ${(() => {
+    const standing = autonomy.companies.reduce((n, r) => n + r.grants.length, 0);
+    const list = html`<ul class="reach">${autonomy.companies.map((r) => html`<li>
         <b>${r.name}</b> — ${r.sentence}
         ${r.allowance ? html`<span class="quiet">$${(r.allowance.remainingCents / 100).toFixed(2)} of
           $${(r.allowance.amountCents / 100).toFixed(2)} left: “${r.allowance.statement}”</span>` : ''}
@@ -7525,7 +7558,13 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
         <p class="quiet">Thirty days: ${String(r.last30.proposed)} proposed, ${String(r.last30.approved)} approved,
           ${String(r.last30.refused)} refused${r.last30.pendingOutbound > 0 ? `, ${String(r.last30.pendingOutbound)} waiting on you` : ''}.
           <a href="/foundry/companies/${r.productId}/authority">Change what I may do here</a></p>
-      </li>`)}</ul>`}
+      </li>`)}</ul>`;
+    if (autonomy.companies.length === 0) return '';
+    if (standing > 0) return list;
+    return html`<details class="fold"><summary><h3>Company by company</h3>
+      <span class="gist">${count(autonomy.companies.length, 'company')} \u00b7 nothing standing</span></summary>
+      ${list}</details>`;
+  })()}
       ${/* AND THE SAME ESTATE BY KIND OF ACT. "It may spend without asking" and
            "it may publish without asking" are not the same sentence even when
            both are true of the same company, and the list above makes him work
@@ -7549,14 +7588,30 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
     ${card('cash', 'Money', html`
       <p class="lines"><b class="num">$${(s.thinking.spentTodayCents / 100).toFixed(2)}</b> <span class="quiet">of $${(s.thinking.bindingCents / 100).toFixed(2)} thought today</span></p>
       <p class="quiet">I stop thinking at $${(s.thinking.bindingCents / 100).toFixed(2)} today: ${s.thinking.because}. The door refuses the call that would pass it.</p>
-      <dl class="facts">
+      ${/* THE OTHER CEILINGS ARE REFERENCE; THE BINDING ONE IS THE READING.
+           What refuses the call is the line above. What else stands, what
+           thirty days cost, and the note he set are things he checks when he
+           is asking a question, not when he is passing through.
+
+           OPEN WHEN SOMEBODY ELSE SET A CEILING. One of these rows can read
+           "set by <someone> — if that was not you, it is worth asking why".
+           That is not reference; it is the one line here that might mean a
+           person he did not authorise has bounded what this institution may
+           spend. It stays in front of him. */ ''}
+      ${(() => {
+    const someoneElse = ceiling != null && !ceilingSetByHim;
+    const facts = html`<dl class="facts">
         <dt>Also standing</dt><dd>${s.thinking.ceilings.filter((c) => c.cents !== s.thinking.bindingCents || c.name !== s.thinking.ceilings[0].name).map((c) => `${c.name}: $${(c.cents / 100).toFixed(2)} ${c.per}`).join(' · ')}</dd>
         <dt>Thirty days</dt><dd>$${s.spent30d.toFixed(2)} of thinking, from the same ledger the door reads</dd>
         ${s.budgetMonthly !== null ? html`<dt>Your note</dt><dd>$${String(s.budgetMonthly)} a month is a note you set for ${s.companyName}, not a limit: nothing reads it to stop me. The ceilings above do.</dd>` : ''}
         ${ceiling == null ? '' : html`<dt>Outside myself</dt><dd>$${(Number(ceiling.cents_per_month) / 100).toFixed(2)} a month of metered use, ${ceilingSetByHim
     ? `set by you on ${String(ceiling.authorized_at).slice(0, 10)}`
     : html`set by <span class="mono">${String(ceiling.authorized_by)}</span> on ${String(ceiling.authorized_at).slice(0, 10)} &mdash; if that was not you, it is worth asking why`}</dd>`}
-      </dl>
+      </dl>`;
+    return someoneElse ? facts
+      : html`<details class="fold"><summary><h3>The other ceilings</h3>
+        <span class="gist">${count(s.thinking.ceilings.length, 'standing')}</span></summary>${facts}</details>`;
+  })()}
       <details class="fold"><summary><h3>How this works</h3></summary><p class="quiet">The binding ceiling is the lowest of what stands: the charter's daily rate once you sign one, $${(PRE_CHARTER_THINKING_CENTS / 100).toFixed(0)} a day until then, and this deployment's own caps. The same number is handed to the door that buys thinking, so what you read here is what refuses the call. Watching costs nothing — comparing my own records uses no thinking.${ceiling == null ? '' : ' The metered ceiling is separate from any plan: agreeing to a subscription is not agreeing to unlimited computing.'}</p></details>`, '', 'money')}
 
     ${/* THE DOOR TO CONNECTORS, AND A CARD THAT NOW TELLS THE TRUTH.
