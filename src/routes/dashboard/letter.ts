@@ -67,7 +67,7 @@ import { html as _html } from 'hono/html';
 
 /** The point-of-use advice disclaimer strip (LIABILITY-AUDIT.md). */
 const adviceStrip = (f: Parameters<typeof adviceFooter>[0]) => _html`
-  <p style="margin-top:1.5rem;padding-top:0.75rem;border-top:1px solid rgba(255,255,255,0.06);font-size:0.72rem;color:var(--text-muted);">
+  <p style="margin-top:1.5rem;padding-top:0.75rem;border-top:1px solid var(--line);font-size:0.72rem;color:var(--text-muted);">
     ${adviceFooter(f)}
   </p>`;
 import { connectionRoutes } from './connections.js';
@@ -97,7 +97,7 @@ const developmentRecordLine = (
 const section = (label: string, items: string[]) => items.length === 0 ? '' : html`
   <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">${label}</div>
-    ${items.map((i) => html`<div style="font-size:0.9rem;color:var(--text-primary);padding:0.35rem 0;border-top:1px solid rgba(255,255,255,0.05);">${i}</div>`)}
+    ${items.map((i) => html`<div style="font-size:0.9rem;color:var(--text-primary);padding:0.35rem 0;border-top:1px solid var(--line);">${i}</div>`)}
   </div>`;
 
 // Why a thing needs the founder, in one line of their language. Coming back
@@ -122,7 +122,7 @@ const responsibilitySection = (
   <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">${label}</div>
     ${items.map((item) => html`
-      <div style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+      <div style="padding:0.55rem 0;border-top:1px solid var(--line);">
         <div style="font-size:0.9rem;color:var(--text-primary);">${item.title} — ${item.state}</div>
         <a href="/letter/responsibilities/${item.responsibilityId}/understanding"
           style="font-size:0.72rem;color:var(--text-muted);">What I understand about this</a>
@@ -171,7 +171,7 @@ const judgmentSection = (
     ${record ? html`
       <div style="font-size:0.82rem;color:var(--text-muted);padding-bottom:0.5rem;">${judgmentRecordLine(record)}</div>` : ''}
     ${items.map((j) => html`
-      <div style="padding:0.6rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+      <div style="padding:0.6rem 0;border-top:1px solid var(--line);">
         <div style="font-size:0.9rem;color:var(--text-primary);">${j.title}</div>
         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">${j.description}</div>
         ${j.limit ? html`
@@ -252,7 +252,7 @@ const doNotContactSection = (
     ${items.length === 0 ? html`
       <div style="font-size:0.78rem;color:var(--text-muted);">Nobody yet. If someone tells you to stop, tell me and I will not write to them again — whatever else you have given me permission to do.</div>`
     : items.map((item) => html`
-      <div style="padding:0.4rem 0;border-top:1px solid rgba(255,255,255,0.05);font-size:0.82rem;color:var(--text-primary);">
+      <div style="padding:0.4rem 0;border-top:1px solid var(--line);font-size:0.82rem;color:var(--text-primary);">
         ${item.email}
         <span style="color:var(--text-muted);font-size:0.75rem;"> — ${labels[item.reason] ?? item.reason}, since ${item.recordedAt.slice(0, 10)}</span>
       </div>`)}
@@ -289,7 +289,7 @@ const setAsideSection = (
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Set aside</div>
     <div style="font-size:0.72rem;color:var(--text-muted);margin-bottom:0.5rem;">You skipped these. I have not asked again and I will not. They are here in case you want to answer one now.</div>
     ${items.map((item) => html`
-      <div style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+      <div style="padding:0.55rem 0;border-top:1px solid var(--line);">
         <div style="font-size:0.72rem;color:var(--text-muted);">About ${item.responsibilityTitle}</div>
         <div style="font-size:0.88rem;color:var(--text-primary);margin-top:0.15rem;">${item.question}</div>
         <form method="POST" action="/letter/evidence/${item.requestId}/answer"
@@ -340,7 +340,7 @@ const outcomeSection = (
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Did that work?</div>
     ${items.map((item) => html`
       <form method="POST" action="/letter/effects/${item.effectId}/outcome"
-        style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+        style="padding:0.55rem 0;border-top:1px solid var(--line);">
         <div style="font-size:0.9rem;color:var(--text-primary);">${item.title}</div>
         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">${item.preview}</div>
         <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;margin-top:0.45rem;">
@@ -381,7 +381,7 @@ const customerMessageSection = (
   <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Someone wrote in</div>
     ${items.map((item) => html`
-      <div style="padding:0.6rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+      <div style="padding:0.6rem 0;border-top:1px solid var(--line);">
         <div style="font-size:0.78rem;color:var(--text-muted);">
           ${item.contactEmail} — about ${item.responsibilityTitle}
         </div>
@@ -459,7 +459,7 @@ const supportChannelSection = (
   <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">How customers reach you</div>
     ${existing.filter((c) => !c.revoked).map((c) => html`
-      <div style="padding:0.4rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+      <div style="padding:0.4rem 0;border-top:1px solid var(--line);">
         <div style="font-size:0.84rem;color:var(--text-primary);">${c.label}
           <span style="color:var(--text-muted);font-size:0.72rem;"> — ${c.responsibilityTitle}</span>
         </div>
@@ -485,7 +485,7 @@ const supportChannelSection = (
       </div>`)}
     ${candidates.map((item) => html`
       <form method="POST" action="/letter/responsibilities/${item.responsibilityId}/channel"
-        style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;margin-top:0.5rem;padding-top:0.4rem;border-top:1px solid rgba(255,255,255,0.05);">
+        style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;margin-top:0.5rem;padding-top:0.4rem;border-top:1px solid var(--line);">
         <span style="font-size:0.8rem;color:var(--text-muted);flex-basis:100%;">${item.title}</span>
         <input name="label" required maxlength="120" placeholder="What is it? (e.g. the quotes@ inbox)"
           style="flex:1;min-width:220px;" />
@@ -534,7 +534,7 @@ const disputedSection = (
   <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">People disagree about this</div>
     ${items.map((item) => html`
-      <div style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+      <div style="padding:0.55rem 0;border-top:1px solid var(--line);">
         <div style="font-size:0.9rem;color:var(--text-primary);">${item.title}</div>
         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">${item.preview}</div>
         ${item.reports.map((r) => html`
@@ -748,7 +748,7 @@ const loopsStoppedSection = (
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--alert);margin-bottom:0.6rem;">Part of me has stopped</div>
     <div style="font-size:0.82rem;color:var(--text-primary);">Some of what I do runs on a schedule. Some of it is failing, so what you read below may be out of date — not because nothing happened, but because I have not been able to look.</div>
     ${items.map((item) => html`
-      <div style="padding:0.45rem 0;border-top:1px solid rgba(255,255,255,0.05);font-size:0.8rem;color:var(--text-muted);">
+      <div style="padding:0.45rem 0;border-top:1px solid var(--line);font-size:0.8rem;color:var(--text-muted);">
         ${item.label} — ${item.stoppedRunning
     ? 'has not run when it should have'
     : `failed ${String(item.consecutiveFailures)} ${item.consecutiveFailures === 1 ? 'time' : 'times'} in a row`}${item.lastSuccessAt ? `, last worked ${item.lastSuccessAt.slice(0, 10)}` : ', and has never yet worked'}.
@@ -770,7 +770,7 @@ const uncarriedNoticeSection = (
   <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Written, not sent</div>
     ${items.map((item) => html`
-      <div style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+      <div style="padding:0.55rem 0;border-top:1px solid var(--line);">
         <div style="font-size:0.78rem;color:var(--text-muted);">To ${item.recipient} — about ${item.responsibilityTitle}</div>
         <div style="font-size:0.88rem;color:var(--text-primary);margin-top:0.15rem;">${item.subject}</div>
         <div style="font-size:0.82rem;color:var(--text-muted);white-space:pre-wrap;margin-top:0.2rem;">${item.body}</div>
@@ -791,7 +791,7 @@ const noticeSection = (
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Tell someone something</div>
     ${assisting.map((item) => html`
       <form method="POST" action="/letter/responsibilities/${item.responsibilityId}/notice"
-        style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+        style="padding:0.55rem 0;border-top:1px solid var(--line);">
         <div style="font-size:0.9rem;color:var(--text-primary);margin-bottom:0.35rem;">${item.title}</div>
         <div style="display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
           <input name="recipient" required maxlength="320" placeholder="Who? (email)" style="width:200px;" />
@@ -851,7 +851,7 @@ const cannotCarrySection = (
       permission, and you should not wait for me to.
     </div>
     ${items.map((item) => html`
-      <div style="padding:0.4rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+      <div style="padding:0.4rem 0;border-top:1px solid var(--line);">
         <div style="font-size:0.88rem;color:var(--text-primary);">${item.title}</div>
         <div style="font-size:0.74rem;color:var(--text-muted);margin-top:0.15rem;">
           I keep watching it and I will tell you what I see. Acting on it stays
@@ -887,7 +887,7 @@ const cannotWatchSection = (items: Array<{ responsibilityId: string; title: stri
       have nothing to form an expectation against.
     </div>
     ${items.map((item) => html`
-      <div style="padding:0.3rem 0;border-top:1px solid rgba(255,255,255,0.05);font-size:0.86rem;color:var(--text-primary);">${item.title}</div>`)}
+      <div style="padding:0.3rem 0;border-top:1px solid var(--line);font-size:0.86rem;color:var(--text-primary);">${item.title}</div>`)}
     <div style="font-size:0.74rem;color:var(--text-muted);margin-top:0.5rem;">
       Connect a tool, or post a reading to the ingest URL on
       <a href="/settings" style="color:var(--text-muted);">Settings</a>, and I
@@ -903,7 +903,7 @@ const metricWatchSection = (
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">What would you expect to see?</div>
     ${items.map((item) => html`
       <form method="POST" action="/letter/responsibilities/${item.responsibilityId}/watch"
-        style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
+        style="padding:0.55rem 0;border-top:1px solid var(--line);display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
         <div style="font-size:0.9rem;color:var(--text-primary);width:100%;">${item.title}</div>
         <span style="font-size:0.78rem;color:var(--text-muted);">If this is being handled, I'd expect</span>
         <select name="field" aria-label="Which measure this is about" style="font-size:0.78rem;">
@@ -935,7 +935,7 @@ const darkenedWatchSection = (
   <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">I have stopped watching</div>
     ${items.map((item) => html`
-      <div style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+      <div style="padding:0.55rem 0;border-top:1px solid var(--line);">
         <div style="font-size:0.9rem;color:var(--text-primary);">${item.title}</div>
         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">You disconnected ${item.channelLabel}, which is how I was watching this. I have stopped, and it will not go any further until you give me another way to see it.</div>
       </div>`)}
@@ -957,7 +957,7 @@ const silentWatchSection = (
   <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">I am watching, and nothing is coming in</div>
     ${items.map((item) => html`
-      <div style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+      <div style="padding:0.55rem 0;border-top:1px solid var(--line);">
         <div style="font-size:0.9rem;color:var(--text-primary);">${item.title}</div>
         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">You asked me to watch this on ${item.watchingSince.slice(0, 10)}, through ${item.channelLabel}. ${item.lastReadingAt
           ? `Nothing has come in on it since ${item.lastReadingAt.slice(0, 10)}.`
@@ -978,7 +978,7 @@ const developmentWatchSection = (
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">What would you expect to see?</div>
     ${items.map((item) => html`
       <form method="POST" action="/letter/responsibilities/${item.responsibilityId}/watch-check"
-        style="padding:0.55rem 0;border-top:1px solid rgba(255,255,255,0.05);display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
+        style="padding:0.55rem 0;border-top:1px solid var(--line);display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
         <div style="font-size:0.9rem;color:var(--text-primary);width:100%;">${item.title}</div>
         <span style="font-size:0.78rem;color:var(--text-muted);">If this is being handled, I'd expect</span>
         <select name="check" aria-label="Which check this is about" style="font-size:0.78rem;">
@@ -1008,7 +1008,7 @@ const observationChannelSection = (
   <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Something you count</div>
     ${existing.filter((c) => !c.revoked).map((c) => html`
-      <div style="font-size:0.82rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid rgba(255,255,255,0.05);display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
+      <div style="font-size:0.82rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid var(--line);display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
         <span style="flex:1;min-width:200px;">${c.label}${c.unit ? html` <span style="color:var(--text-muted);">(${c.unit})</span>` : ''}
         <span style="color:var(--text-muted);font-size:0.72rem;"> — post as <code>${c.channelKey}</code></span></span>
         ${/* A DOOR OUT. The revoke function existed, exported, with no route:
@@ -1070,7 +1070,7 @@ const permissionSection = (
   <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
     <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Things I could start helping with</div>
     ${items.map((item) => html`
-      <div style="padding:0.6rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+      <div style="padding:0.6rem 0;border-top:1px solid var(--line);">
         <div style="font-size:0.9rem;color:var(--text-primary);">${item.title}</div>
         <div style="font-size:0.78rem;color:var(--text-muted);margin-top:0.15rem;">I've been watching this and have ${item.comparisons === 1 ? 'one check' : `${item.comparisons} checks`} to show for it.${item.deviations > 0 ? ` I got ${item.deviations === 1 ? 'one of them' : `${item.deviations} of them`} wrong.` : ''}${item.lastWatchedAt ? ` The last thing I actually saw about this arrived ${item.lastWatchedAt.slice(0, 10)}.` : ''}</div>
         ${item.verifiedFailures > 0 ? html`
@@ -1204,7 +1204,7 @@ letterRoutes.get('/letter', async (c) => {
         <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid var(--accent);">
           <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--accent);margin-bottom:0.4rem;">What needs you — ranked across the fleet</div>
           ${fleet.needsYou.map((n, i) => html`
-          <div style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0;${i > 0 ? 'border-top:1px solid rgba(255,255,255,0.05);' : ''}flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:0.6rem;padding:0.45rem 0;${i > 0 ? 'border-top:1px solid var(--line);' : ''}flex-wrap:wrap;">
             <span style="font-size:0.72rem;color:var(--text-muted);min-width:1.2rem;">${i + 1}.</span>
             <div style="flex:1;min-width:200px;">
               <div style="font-size:0.92rem;color:var(--text-primary);">${n.what}</div>
@@ -1249,9 +1249,9 @@ letterRoutes.get('/letter', async (c) => {
         </div>` : ''}
 
         ${fleet.system.length > 0 ? html`
-        <div class="card" style="padding:1.1rem 1.25rem;margin-bottom:0.9rem;border:1px solid rgba(255,179,71,0.35);">
+        <div class="card" style="padding:1.1rem 1.25rem;margin-bottom:0.9rem;border:1px solid var(--alert);">
           <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--alert);margin-bottom:0.4rem;">Your machine</div>
-          ${fleet.system.map((s) => html`<div style="font-size:0.85rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid rgba(255,255,255,0.05);">${s}</div>`)}
+          ${fleet.system.map((s) => html`<div style="font-size:0.85rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid var(--line);">${s}</div>`)}
         </div>` : ''}
 
         ${/* The ACTIVE company is skipped here: it renders in full below, and
@@ -1269,11 +1269,11 @@ letterRoutes.get('/letter', async (c) => {
              ...p.letter.learned.map((l) => ({ tag: 'learned', l })),
              ...p.letter.noted.map((l) => ({ tag: 'noted', l })),
              ...p.letter.trust.map((l) => ({ tag: 'trust', l }))].map((row) => html`
-            <div style="font-size:0.85rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+            <div style="font-size:0.85rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid var(--line);">
               <span style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-right:0.5rem;">${row.tag}</span>${row.l}
             </div>`)}
           ${Object.entries(p.responsibilities).flatMap(([classification, items]) => items.map((item) => html`
-            <div style="font-size:0.85rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+            <div style="font-size:0.85rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid var(--line);">
               <span style="font-size:0.68rem;text-transform:uppercase;letter-spacing:0.08em;color:var(--text-muted);margin-right:0.5rem;">${classification.replaceAll('_', ' ')}</span>${item.title}
             </div>`))}
         </div>`))}
@@ -1608,7 +1608,7 @@ letterRoutes.get('/letter', async (c) => {
       <div class="card" style="padding:1.25rem;margin-bottom:1rem;">
         <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">What I'm allowed to change right now</div>
         ${development.permitted.map((p) => html`
-          <div style="font-size:0.85rem;color:var(--text-primary);padding:0.35rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+          <div style="font-size:0.85rem;color:var(--text-primary);padding:0.35rem 0;border-top:1px solid var(--line);">
             I may ${p.what}, only under ${p.where.join(', ')}, until ${p.until}.
           </div>`)}
         <div style="font-size:0.72rem;color:var(--text-muted);margin-top:0.4rem;">You can withdraw this at any time in Controls.</div>
@@ -1618,7 +1618,7 @@ letterRoutes.get('/letter', async (c) => {
         <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.6rem;">Possible responsibilities requiring your judgment</div>
         ${responsibilityCandidates.map((candidate)=>html`
           <form method="POST" action="/letter/responsibility-candidates/${candidate.id}/promote"
-            style="padding:0.5rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+            style="padding:0.5rem 0;border-top:1px solid var(--line);">
             <div style="font-size:0.9rem;color:var(--text-primary);">${candidate.proposedResponsibility}</div>
             <div style="font-size:0.72rem;color:var(--text-muted);">${candidate.epistemicStatus} evidence · confirming recognizes the responsibility but grants no authority</div>
             <button type="submit" class="btn btn-ghost" style="margin-top:0.35rem;font-size:0.72rem;padding:0.25rem 0.5rem;">Recognize responsibility</button>

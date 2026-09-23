@@ -55,7 +55,7 @@ async function urlAllowed(u: string): Promise<boolean> {
   } catch { return false; }
 }
 
-const INPUT_STYLE = 'width:100%;padding:0.5rem 0.75rem;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text-primary);font-size:0.85rem;';
+const INPUT_STYLE = 'width:100%;padding:0.5rem 0.75rem;background:var(--card-2);border:1px solid var(--line-2);border-radius:6px;color:var(--text-primary);font-size:0.85rem;';
 const LABEL_STYLE = 'display:block;font-size:0.75rem;color:var(--text-muted);margin-bottom:0.25rem;';
 
 connectionRoutes.get('/connections', async (c) => {
@@ -122,7 +122,7 @@ connectionRoutes.get('/connections', async (c) => {
         ${serverGrants.length === 0 ? html`
           <div style="font-size:0.82rem;color:var(--text-muted);">Nothing yet — Foundry can see this tool but may not use it until you allow something below.</div>
         ` : serverGrants.map((g) => html`
-          <div style="display:flex;align-items:center;gap:0.6rem;font-size:0.82rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid rgba(255,255,255,0.05);flex-wrap:wrap;">
+          <div style="display:flex;align-items:center;gap:0.6rem;font-size:0.82rem;color:var(--text-primary);padding:0.3rem 0;border-top:1px solid var(--line);flex-wrap:wrap;">
             <code style="font-size:0.8rem;">${String(g.tool_pattern) === '*' ? (fluency === 'technical' ? '*' : 'any tool') : String(g.tool_pattern)}</code>
             <span style="color:var(--text-muted);">${g.calls_used}/${g.max_calls} calls used · expires ${String(g.expires_at).slice(0, 10)}</span>
             <form method="POST" action="/connections/grants/${g.id}/revoke" style="margin-left:auto;">
@@ -147,14 +147,14 @@ connectionRoutes.get('/connections', async (c) => {
           <button type="submit" class="btn btn-secondary" style="font-size:0.8rem;">Allow</button>
         </form>
 
-        <form method="POST" action="/connections/envelope" style="display:flex;gap:0.5rem;margin-top:0.75rem;align-items:center;flex-wrap:wrap;border-top:1px solid rgba(255,255,255,0.05);padding-top:0.6rem;">
+        <form method="POST" action="/connections/envelope" style="display:flex;gap:0.5rem;margin-top:0.75rem;align-items:center;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:0.6rem;">
           <input type="hidden" name="server_name" value="${s.name}" />
           <span style="font-size:0.78rem;color:var(--text-muted);">
             ${fluency === 'technical' ? 'Weekly envelope' : 'Weekly limit, no matter what'}:
             <strong style="color:var(--text-primary);">${env.used}/${env.cap}</strong> used this week
           </span>
           <input type="number" name="weekly_cap" value="${env.cap}" min="0" max="100000"
-            style="width:90px;padding:0.3rem 0.5rem;background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);border-radius:6px;color:var(--text-primary);font-size:0.8rem;" />
+            style="width:90px;padding:0.3rem 0.5rem;background:var(--card-2);border:1px solid var(--line-2);border-radius:6px;color:var(--text-primary);font-size:0.8rem;" />
           <button type="submit" class="btn btn-ghost" style="font-size:0.75rem;padding:0.25rem 0.6rem;">Set</button>
         </form>
       </div>
@@ -166,7 +166,7 @@ connectionRoutes.get('/connections', async (c) => {
     try { action = (JSON.parse(r.input_context ?? '{}') as { action?: string }).action ?? ''; } catch { /* leave blank */ }
     const color = r.outcome === 'allowed' || r.outcome === 'cached' ? 'var(--accent)' : 'var(--bad)';
     return html`
-      <div style="display:flex;gap:0.75rem;font-size:0.8rem;padding:0.35rem 0;border-top:1px solid rgba(255,255,255,0.05);">
+      <div style="display:flex;gap:0.75rem;font-size:0.8rem;padding:0.35rem 0;border-top:1px solid var(--line);">
         <span style="color:${color};min-width:60px;">${r.outcome}</span>
         <span style="color:var(--text-primary);flex:1;">${action}</span>
         <span style="color:var(--text-muted);">${String(r.created_at).slice(0, 16)}</span>

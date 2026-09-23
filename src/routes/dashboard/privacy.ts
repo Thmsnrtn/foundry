@@ -6,7 +6,8 @@
 import { Hono } from 'hono';
 import { csvCell, csvRow } from '../../lib/csv.js';
 import { clientIp } from '../../middleware/rate-limit.js';
-import { html } from 'hono/html';
+import { html, raw } from 'hono/html';
+import type { HtmlEscapedString } from 'hono/utils/html';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { page } from '../../views/owner/shell.js';
 import type { Where } from '../../views/owner/shell.js';
@@ -88,13 +89,29 @@ function logRetentionLabel(days: number): string {
 
 // ─── Toggle Component ─────────────────────────────────────────────────────────
 
-function toggle(name: string, checked: boolean, id: string): string {
+function toggle(name: string, checked: boolean, id: string): HtmlEscapedString | Promise<HtmlEscapedString> {
   // The switch lives in `public/owner.css` now — one rule for this page and the
   // pace control in Controls. What stood here was forty inline declarations
   // drawing the same thing, with an ON colour of #4ecca3 that appears in no
   // palette this deployment ships.
-  return `<label class="toggle" for="${id}">
-    <input type="checkbox" id="${id}" name="${name}" value="1"${checked ? ' checked' : ''} data-submits>
+  //
+  // AND IT RETURNED A PLAIN STRING INTO AN `html` TEMPLATE, WHICH ESCAPES ONE.
+  //
+  // So the four consent switches on this page were not switches. Each one
+  // rendered its own source — `<label class="toggle" for="toggle-benchmarking">`
+  // — as visible text, and there was no control to set. The owner could not
+  // record a consent preference here at all.
+  //
+  // Nothing caught it because nothing had ever rendered this page: it is not
+  // in the review harness's list, and the tests that cover consent post to
+  // `/privacy/consent` directly rather than reading what the page draws. A
+  // route that answers 200 with its own markup quoted back at the reader is
+  // indistinguishable, to everything that was watching, from one that works.
+  //
+  // It returns an `html` fragment now rather than a string handed to `raw()`,
+  // because the second is a thing a later edit can drop and this is not.
+  return html`<label class="toggle" for="${id}">
+    <input type="checkbox" id="${id}" name="${name}" value="1"${checked ? raw(' checked') : ''} data-submits>
     <span class="toggle-track"></span>
     <span class="toggle-thumb"></span>
   </label>`;
@@ -216,7 +233,7 @@ privacySettings.get('/privacy', async (c) => {
     const detailsId = `details-${item.name}`;
 
     return html`
-    <div style="padding:1.25rem;border-bottom:1px solid rgba(255,255,255,0.05);">
+    <div style="padding:1.25rem;border-bottom:1px solid var(--line);">
       <form method="POST" action="/privacy/consent" style="display:contents;">
         <input type="hidden" name="consent_type" value="${item.name}" />
         <div style="display:flex;align-items:flex-start;gap:1rem;">
@@ -231,7 +248,7 @@ privacySettings.get('/privacy', async (c) => {
               <summary style="font-size:0.78rem;color:var(--accent);cursor:pointer;list-style:none;display:inline-flex;align-items:center;gap:0.3rem;user-select:none;">
                 Learn more
               </summary>
-              <p style="margin:0.5rem 0 0;font-size:0.8rem;color:var(--text-dim);line-height:1.5;background:rgba(255,255,255,0.03);padding:0.625rem 0.875rem;border-radius:6px;border-left:2px solid rgba(255,255,255,0.1);">
+              <p style="margin:0.5rem 0 0;font-size:0.8rem;color:var(--text-dim);line-height:1.5;background:var(--card-2);padding:0.625rem 0.875rem;border-radius:6px;border-left:2px solid var(--line-2);">
                 ${item.learnMore}
               </p>
             </details>
@@ -286,7 +303,7 @@ privacySettings.get('/privacy', async (c) => {
 
     ${/* Section 1: Data Sharing & Consent */ ''}
     <div class="card" style="padding:0;overflow:hidden;margin-bottom:1.5rem;">
-      <div style="padding:1rem 1.25rem;border-bottom:1px solid rgba(255,255,255,0.07);background:rgba(255,255,255,0.02);">
+      <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--line);background:var(--card-2);">
         <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.2rem;">Section 1</div>
         <h2 style="margin:0;font-size:1rem;font-weight:700;">Data Sharing &amp; Consent</h2>
         <p style="margin:0.25rem 0 0;font-size:0.8rem;color:var(--text-dim);">Toggle each data sharing preference. Changes take effect immediately.</p>
@@ -296,7 +313,7 @@ privacySettings.get('/privacy', async (c) => {
 
     ${/* Section 2: Data Residency */ ''}
     <div class="card" style="padding:0;overflow:hidden;margin-bottom:1.5rem;">
-      <div style="padding:1rem 1.25rem;border-bottom:1px solid rgba(255,255,255,0.07);background:rgba(255,255,255,0.02);">
+      <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--line);background:var(--card-2);">
         <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.2rem;">Section 2</div>
         <h2 style="margin:0;font-size:1rem;font-weight:700;">Data Residency</h2>
         <p style="margin:0.25rem 0 0;font-size:0.8rem;color:var(--text-dim);">Choose where your data is stored and how long it is retained.</p>
@@ -360,7 +377,7 @@ privacySettings.get('/privacy', async (c) => {
 
     ${/* Section 3: Your Data */ ''}
     <div class="card" style="padding:0;overflow:hidden;margin-bottom:1.5rem;">
-      <div style="padding:1rem 1.25rem;border-bottom:1px solid rgba(255,255,255,0.07);background:rgba(255,255,255,0.02);">
+      <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--line);background:var(--card-2);">
         <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.2rem;">Section 3</div>
         <h2 style="margin:0;font-size:1rem;font-weight:700;">Your Data</h2>
         <p style="margin:0.25rem 0 0;font-size:0.8rem;color:var(--text-dim);">Export or delete your product data at any time.</p>
@@ -378,7 +395,7 @@ privacySettings.get('/privacy', async (c) => {
           </div>
         </div>
 
-        <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:1.25rem;display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
+        <div style="border-top:1px solid var(--line);padding-top:1.25rem;display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
           <div style="flex:1;min-width:200px;">
             <div style="font-size:0.875rem;font-weight:600;color:var(--text-primary);margin-bottom:0.25rem;">Export What Foundry Holds About You</div>
             <p style="margin:0;font-size:0.8rem;color:var(--text-dim);line-height:1.5;">Not a company &mdash; you. Your profile and preferences, how you like to be worked with, your devices and connections, your referrals, and your own activity inside companies you do not own. Credentials are shown as present, never as their value.</p>
@@ -390,7 +407,7 @@ privacySettings.get('/privacy', async (c) => {
         </div>
 
         ${ctx.allProducts.length > 1 ? html`
-        <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:1.25rem;display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
+        <div style="border-top:1px solid var(--line);padding-top:1.25rem;display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
           <div style="flex:1;min-width:200px;">
             <div style="font-size:0.875rem;font-weight:600;color:var(--accent);margin-bottom:0.25rem;">Export All Products (Fleet)</div>
             <p style="margin:0;font-size:0.8rem;color:var(--text-dim);line-height:1.5;">Download data across all ${ctx.allProducts.length} products in a single file. Includes metrics, briefings, decisions, customers, and agent configuration for every product.</p>
@@ -402,7 +419,7 @@ privacySettings.get('/privacy', async (c) => {
         </div>
         ` : ''}
 
-        <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:1.25rem;display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
+        <div style="border-top:1px solid var(--line);padding-top:1.25rem;display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
           <div style="flex:1;min-width:200px;">
             <div style="font-size:0.875rem;font-weight:600;color:var(--bad);margin-bottom:0.25rem;">Request Product Deletion</div>
             <p style="margin:0;font-size:0.8rem;color:var(--text-dim);line-height:1.5;">Permanently delete this product and all associated data, after a 30-day grace period. You can stop it during those 30 days; once it runs it cannot be undone. Please export your data first.</p>
@@ -419,7 +436,7 @@ privacySettings.get('/privacy', async (c) => {
         </div>
 
         ${ctx.allProducts.length > 1 ? html`
-        <div style="border-top:1px solid rgba(255,255,255,0.05);padding-top:1.25rem;display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
+        <div style="border-top:1px solid var(--line);padding-top:1.25rem;display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
           <div style="flex:1;min-width:200px;">
             <div style="font-size:0.875rem;font-weight:600;color:var(--bad);margin-bottom:0.25rem;">Delete All Products (Fleet)</div>
             <p style="margin:0;font-size:0.8rem;color:var(--text-dim);line-height:1.5;">Schedule deletion for all ${ctx.allProducts.length} products and all associated data. You will see a confirmation listing every product before proceeding.</p>
@@ -460,7 +477,7 @@ privacySettings.get('/privacy', async (c) => {
         <div style="display:flex;gap:0.75rem;justify-content:flex-end;">
           <button type="button" class="btn btn-ghost" data-close>Cancel</button>
           <form method="POST" action="/privacy/delete" style="display:inline;">
-            <button type="submit" class="btn" style="color:var(--bad);border-color:var(--bad);background:rgba(255,107,107,0.1);">
+            <button type="submit" class="btn" style="color:var(--bad);border-color:var(--bad);background:var(--bad-soft);">
               Yes, Delete ${ctx.productName}
             </button>
           </form>
@@ -767,11 +784,11 @@ privacySettings.get('/settings/delete-all-products', async (c) => {
       </p>
 
       <div class="card" style="margin-bottom:1.5rem;padding:0;overflow:hidden;">
-        <div style="padding:0.75rem 1rem;background:rgba(255,107,107,0.08);border-bottom:1px solid rgba(255,107,107,0.15);">
+        <div style="padding:0.75rem 1rem;background:var(--bad-soft);border-bottom:1px solid var(--bad);">
           <div style="font-size:0.75rem;font-weight:700;text-transform:uppercase;letter-spacing:0.1em;color:var(--bad);">Products to be deleted</div>
         </div>
         ${productList.map((p) => html`
-          <div style="padding:0.75rem 1rem;border-bottom:1px solid rgba(255,255,255,0.05);display:flex;align-items:center;gap:0.75rem;">
+          <div style="padding:0.75rem 1rem;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:0.75rem;">
             <span style="width:8px;height:8px;border-radius:50%;background:var(--bad);flex-shrink:0;"></span>
             <span style="font-size:0.875rem;color:var(--text-primary);">${p.name}</span>
             <span style="font-size:0.72rem;color:var(--text-muted);font-family:monospace;">${p.id}</span>
@@ -786,7 +803,7 @@ privacySettings.get('/settings/delete-all-products', async (c) => {
       <div style="display:flex;gap:0.75rem;">
         <a href="/privacy" class="btn btn-ghost">Cancel</a>
         <form method="POST" action="/settings/delete-all-products">
-          <button type="submit" class="btn" style="color:var(--bad);border-color:var(--bad);background:rgba(255,107,107,0.1);">
+          <button type="submit" class="btn" style="color:var(--bad);border-color:var(--bad);background:var(--bad-soft);">
             Yes, Delete All ${productList.length} Product${productList.length > 1 ? 's' : ''}
           </button>
         </form>

@@ -57,6 +57,9 @@ const PAGES: Array<{ path: string; name: string }> = [
   { path: '/foundry/activity', name: 'activity' },
   { path: '/foundry/searching', name: 'searching' },
   { path: '/foundry/charter', name: 'charter' },
+  { path: '/letter', name: 'letter' },
+  { path: '/privacy', name: 'privacy' },
+  { path: '/connections', name: 'connections' },
 ].filter((p, _i, all) => {
   // POINTABLE AT WHAT CHANGED. A wave that touches two surfaces should not
   // have to render thirty-nine pages to find out what it did to them, and an
@@ -107,6 +110,22 @@ async function boot(): Promise<string> {
     '../src/routes/dashboard/inbox-place.js',
     '../src/routes/dashboard/money-place.js',
     '../src/routes/dashboard/activity-place.js',
+    // NEVER ONCE RENDERED BY THIS INSTRUMENT, AND ONE TAP FROM EVERY PAGE.
+    //
+    // The shell's footer carries "Advanced — inspect the system" on every
+    // owner screen, and it goes to the Letter: 2,596 lines, 348 inline style
+    // attributes and, until this wave, twenty-nine hard-coded colours. Privacy
+    // is linked from Controls and from Settings' delete control. Neither had
+    // ever been rendered in any appearance, at any width, by anything.
+    //
+    // The comment above says the mounting is "by shape rather than by name so
+    // a router added later is measured without this list being remembered".
+    // That is true of the inner loop and false of this list, which is names,
+    // and which forgot three. Saying so rather than deleting the sentence:
+    // the gap it describes is the gap it had.
+    '../src/routes/dashboard/letter.js',
+    '../src/routes/dashboard/privacy.js',
+    '../src/routes/dashboard/connections.js',
   ]) {
     const loaded = await import(mod) as Record<string, unknown>;
     for (const v of Object.values(loaded)) {

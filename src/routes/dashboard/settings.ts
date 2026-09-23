@@ -184,7 +184,7 @@ settingsRoutes.get('/settings', async (c) => {
     </div>
 
     ${/* Manage Company (F-061-A) */ ''}
-    <div class="card" style="border:1px solid rgba(255,255,255,0.08);">
+    <div class="card" style="border:1px solid var(--line-2);">
       <h3 id="manage-company">Manage Company</h3>
       <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
         Pause, export, or delete your products. These actions apply to your currently selected product${products.rows.length > 1 ? ' — switch products above to target a different one' : ''}.
@@ -193,7 +193,7 @@ settingsRoutes.get('/settings', async (c) => {
       ${productId ? html`
       <div style="display:flex;flex-direction:column;gap:1rem;">
         ${/* Pause / Resume */ ''}
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.06);">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;background:var(--card-2);border-radius:8px;border:1px solid var(--line);">
           <div>
             <div style="font-size:0.875rem;font-weight:600;color:var(--text-primary);">Pause Product</div>
             <div style="font-size:0.78rem;color:var(--text-dim);">Suspend all agent activity and data ingestion. Your data is preserved.</div>
@@ -207,7 +207,7 @@ settingsRoutes.get('/settings', async (c) => {
         </div>
 
         ${/* Export Data */ ''}
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;background:rgba(255,255,255,0.03);border-radius:8px;border:1px solid rgba(255,255,255,0.06);">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;background:var(--card-2);border-radius:8px;border:1px solid var(--line);">
           <div>
             <div style="font-size:0.875rem;font-weight:600;color:var(--text-primary);">Export Data</div>
             <div style="font-size:0.78rem;color:var(--text-dim);">Download all metrics, decisions, briefings, and configuration.</div>
@@ -219,7 +219,7 @@ settingsRoutes.get('/settings', async (c) => {
         </div>
 
         ${/* Delete */ ''}
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;background:rgba(255,107,107,0.04);border-radius:8px;border:1px solid rgba(255,107,107,0.12);">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;background:var(--bad-soft);border-radius:8px;border:1px solid var(--bad);">
           <div>
             <div style="font-size:0.875rem;font-weight:600;color:var(--bad);">Delete Product</div>
             <div style="font-size:0.78rem;color:var(--text-dim);">Permanently remove this product and all data after a 30-day grace period.</div>
@@ -229,7 +229,7 @@ settingsRoutes.get('/settings', async (c) => {
 
         ${products.rows.length > 1 ? html`
         ${/* Fleet-wide actions */ ''}
-        <div style="border-top:1px solid rgba(255,255,255,0.06);padding-top:1rem;margin-top:0.25rem;">
+        <div style="border-top:1px solid var(--line);padding-top:1rem;margin-top:0.25rem;">
           <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.5rem;">Fleet-wide</div>
           <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
             <a href="/settings/export-all" class="btn btn-ghost btn-sm" aria-label="Export all products data">Export All Products</a>

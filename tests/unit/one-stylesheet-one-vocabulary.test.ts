@@ -85,7 +85,27 @@ describe('the owner surface speaks one stylesheet', () => {
     expect([...new Set(missing)]).toEqual([]);
   });
 
-  it('hard-codes no colour outside the two theme-color metas', () => {
+  // A COLOUR HAS MORE THAN ONE SPELLING, AND THIS GATE KNEW ONE.
+  //
+  // The paragraph above says "no owner page hard-codes a colour". It checked
+  // `#rrggbb` and nothing else, and sixty-two `rgba(...)` literals sat behind
+  // it across the Letter, Privacy, Connections and Settings for the whole
+  // campaign — thirty-four of them the same row separator,
+  // `border-top:1px solid rgba(255,255,255,0.05)`.
+  //
+  // That is not a tidiness complaint. A five-percent white film is a DARK-MODE
+  // IDIOM: it reads as a hairline over a dark card and disappears completely
+  // over the light one. So on the appearance the owner is most likely to pick
+  // on a bright phone, every row separator on those pages was simply absent,
+  // and no instrument in this repository could see it — the stylesheet gates
+  // read the stylesheet, and these colours are in the markup.
+  //
+  // It is also the answer to the owner's question about whether another
+  // palette can override the canonical appearance. It can, and not through a
+  // rival `--var` family: an inline literal outranks every token there is.
+  //
+  // So the gate now knows every spelling a colour has.
+  it('hard-codes no colour, in any spelling, outside the two theme-color metas', () => {
     const offenders: string[] = [];
     for (const [name, raw] of FILES) {
       const src = stripComments(raw)
@@ -95,6 +115,16 @@ describe('the owner surface speaks one stylesheet', () => {
         // is parsed, so it cannot read a token and must carry the literal.
         .replace(/<meta name="theme-color"[^>]*>/g, '');
       for (const m of src.matchAll(/(?:^|[^&\w])(#[0-9a-fA-F]{3,8})\b/g)) {
+        offenders.push(`${name}: ${m[1]}`);
+      }
+      // The functional notations. `color-mix()` and `color()` are included
+      // because a literal inside either is still a literal, and leaving a
+      // spelling out is how this gate came to be half a gate.
+      for (const m of src.matchAll(
+        /(?:^|[^\w-])((?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color|color-mix)\([^)]*\))/g)) {
+        // `rgb(var(--x))` and `color-mix(in srgb, var(--a), var(--b))` name no
+        // colour of their own — they compose ones the palette already owns.
+        if (/var\(\s*--/.test(m[1])) continue;
         offenders.push(`${name}: ${m[1]}`);
       }
     }
