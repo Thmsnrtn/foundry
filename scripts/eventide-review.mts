@@ -330,7 +330,7 @@ for (const width of [390, 1280]) {
         // WHERE THE PIXELS ACTUALLY ARE. Twice now I have shortened a page by
         // guessing which block was long and been wrong. A tall page has a
         // reason and the reason is measurable.
-        blocks: Array.from(document.querySelectorAll('main.wrap > *, .ctl-grid > *, .cockpit > *'))
+        blocks: Array.from(document.querySelectorAll('main.wrap > *, .ctl-grid > *, .cockpit > *, main.wrap > form > *, .settings-grid > *'))
           .map((e) => ({
             t: `${e.tagName.toLowerCase()}.${(e.className || '-').toString().slice(0, 26)}`,
             h: Math.round(e.getBoundingClientRect().height),

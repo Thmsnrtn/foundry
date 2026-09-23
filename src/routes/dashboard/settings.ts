@@ -467,6 +467,13 @@ settingsRoutes.get('/settings', async (c) => {
         </tbody>
       </table>` : ''}
 
+      ${/* THE SAME DIVISION AS THE KEYS BELOW. What already reports to this
+           institution is a standing arrangement and stays in view; letting
+           another one report is an act he performs rarely, and it sat open
+           underneath forever. */ ''}
+      <details class="fold"><summary><h3>Let another system report</h3>
+        <span class="gist">${credentials.length === 0 ? 'None yet'
+    : `${String(credentials.length)} reporting`}</span></summary>
       <form method="POST" action="/settings/ingest-credentials">
         <input type="text" name="label" maxlength="80" required
           placeholder="Which system is this for?"
@@ -481,6 +488,7 @@ settingsRoutes.get('/settings', async (c) => {
           Issue credential
         </button>
       </form>
+      </details>
     </div>` : ''}
 
     ${productId ? html`
@@ -517,6 +525,20 @@ settingsRoutes.get('/settings', async (c) => {
         </tbody>
       </table>` : ''}
 
+      ${/* WHAT STANDS IS SHOWN; HOW TO ADD MORE IS FOLDED.
+           API keys is the tallest card on Settings at 872px, and the
+           measurement says most of that is the form for issuing one — a rare
+           act — sitting permanently open beneath the list of keys that
+           actually exist.
+
+           The keys themselves stay visible, always, because a live key reads
+           and writes the owner's data and that is a standing grant of access:
+           the same reasoning that keeps a company's standing permissions open
+           on Controls while its thirty-day counts fold. Issuing is one tap
+           away on the same page, which is where a rare act belongs. */ ''}
+      <details class="fold"><summary><h3>Issue a key</h3>
+        <span class="gist">${apiKeys.length === 0 ? 'None live yet'
+    : `${String(apiKeys.length)} live`}</span></summary>
       <form method="POST" action="/settings/api-keys">
         <input type="text" name="label" maxlength="80" required
           placeholder="What is this key for?"
@@ -533,8 +555,9 @@ settingsRoutes.get('/settings', async (c) => {
           <input type="number" name="days" min="1" max="365" value="90"
             style="width:5rem;font-size:0.82rem;" /> days
         </label>
-        <button type="submit" class="btn btn-secondary btn-sm">Issue API key</button>
+        <button type="submit" class="btn go btn-sm">Issue API key</button>
       </form>
+      </details>
     </div>` : ''}
   `;
   return c.html(controlsPage(ctx, content));
