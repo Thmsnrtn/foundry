@@ -123,6 +123,22 @@ describe('text on every surface, in both themes', () => {
     }
   });
 
+  it('the filled primary button is readable in all three, which is a separate pair', () => {
+    // `--accent` must work as INK on a card, which on a light ground forces it
+    // dark enough to read brown. Eventide fills the primary button with warm
+    // gold and sets dark text ON it — the opposite arrangement — so the fill
+    // is its own pair and needs its own check. Text on a button is text: AA.
+    for (const theme of ['light', 'dark', 'green'] as const) {
+      const p = palette(theme);
+      const fill = p['--accent-fill']; const ink = p['--accent-fill-ink'];
+      expect(fill, `--accent-fill is defined (${theme})`).toBeDefined();
+      expect(ink, `--accent-fill-ink is defined (${theme})`).toBeDefined();
+      const r = ratio(String(ink), String(fill));
+      expect(r, `${String(ink)} on ${String(fill)} (${theme}) is ${r.toFixed(2)}:1`)
+        .toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
   it('the categorical ramp is made of no token that means anything', () => {
     // A revenue series painted in "this is good" or "look at this" tells him
     // something about the series that is not true.

@@ -434,9 +434,16 @@ export async function connectorsFor(productId: string): Promise<Connector[]> {
         ? { say: `I know ${providerName(provider)} could tell me things, and I cannot ask it for permission yet. Nothing is missing on your side.`, href: null }
         : standsBetween === 'not_configured'
           ? { say: `${providerName(provider)} needs a setting this deployment does not have. Not yours to supply.`, href: null }
-          : sense == null
-            ? { say: `Connect ${providerName(provider)}.`, href: `/foundry/companies/${productId}` }
-            : null,
+          : standsBetween === 'no_app_key'
+            // THE STEP BEFORE THE STEP. This fell through to "Connect it",
+            // which is an instruction he cannot follow: without the
+            // application key there is nothing to connect WITH, and the
+            // button would have taken him to a page that asks for the key
+            // instead — the right destination under the wrong sentence.
+            ? { say: `${providerName(provider)} needs its application key before anything can be connected.`, href: `/foundry/companies/${productId}` }
+            : sense == null
+              ? { say: `Connect ${providerName(provider)}.`, href: `/foundry/companies/${productId}` }
+              : null,
     });
   }
   return out;

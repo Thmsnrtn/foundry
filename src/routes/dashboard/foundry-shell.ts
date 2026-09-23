@@ -6850,10 +6850,21 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
         <a class="btn" href="/foundry/companies/${productId}">Open ${companyName}</a>
       </div>` : ''}
 
-      ${one.next ? html`
-      <div class="know">
+      ${/* THE JOURNEY'S OWN NEXT STEP WINS, WHERE THERE IS A JOURNEY.
+           The list-level `next` knows whether a connection exists; the
+           journey knows which of six states it is in. Showing the first while
+           the second exists put "Connect Etsy" on a page whose very next card
+           explained that the application key had not been placed yet — two
+           cards, one screen, disagreeing about what to do.
+
+           And the action is a BUTTON. It is the one thing on this page he is
+           meant to press, and Eventide puts the owner's hand in gold. */ ''}
+      ${(journey?.next ?? one.next) ? html`
+      <div class="know" style="border-color:var(--accent);">
         <h2>Next</h2>
-        <p>${one.next.say}${one.next.href ? html` <a href="${one.next.href}">Do that</a>.` : ''}</p>
+        <p>${(journey?.next ?? one.next)!.say}</p>
+        ${(journey?.next ?? one.next)!.href
+    ? html`<a class="btn go" href="${(journey?.next ?? one.next)!.href}">Do that</a>` : ''}
       </div>` : ''}
 
       ${/* THE ONE THING HE MUST DO AT ETSY, AND THE ONLY PLACE HE COULD LEARN
@@ -6877,9 +6888,15 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
           Come back here afterwards; nothing below will work until this is done.</p>
       </div>` : ''}
 
+      ${/* THE STEPS BEHIND A FOLD, with where it has got to on the summary.
+           Five states stacked open is a progress report; the owner needs the
+           CURRENT one, and the history of it only when he doubts the current
+           one. `.fold` is the disclosure this surface already uses, so this
+           costs no new component. */ ''}
       ${journey ? html`
       <div class="know">
-        <h2>Where this has got to</h2>
+        <details class="fold"><summary><h2>Where this has got to</h2><span class="gist">${
+  journey.steps.filter((x) => x.done).length} of ${journey.steps.length} done</span></summary>
         <ol style="list-style:none;padding:0;margin:0;display:grid;gap:0.5rem;">
           ${journey.steps.map((step) => html`
           <li style="display:flex;gap:0.6rem;align-items:flex-start;">
@@ -6888,6 +6905,7 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
             ${step.evidence ? html`<br /><span style="font-size:0.82rem;color:var(--text-muted);">${step.evidence}</span>` : ''}</span>
           </li>`)}
         </ol>
+        </details>
       </div>` : ''}
 
       ${/* THE ONE STEP THAT IS HIS. Etsy telling us which shop a grant reaches
@@ -6928,8 +6946,13 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
            thing the directive names first and refuses hardest, because each is
            a different row and three of them being true says nothing about the
            fourth. */ ''}
+      ${/* FOUR FACTS, SUMMARISED AS FOUR AND OPENED AS FOUR. The summary says
+           how many are true, which is the scannable form of the thing the
+           directive refuses to collapse — it is a count, never a verdict, and
+           it takes one tap to see which. */ ''}
       <div class="know">
-        <h2>What that means I can do</h2>
+        <details class="fold"><summary><h2>What that means I can do</h2><span class="gist">${
+  [one.supported, one.granted, one.qualified, one.authorised].filter(Boolean).length} of 4</span></summary>
         <ul style="list-style:none;padding:0;margin:0;">
           ${fact(one.supported, `${one.name} offers a way to read this`, `${one.name} offers nothing I could read`)}
           ${fact(one.granted, 'You have granted me the permission to', 'You have not granted me any permission')}
@@ -6938,12 +6961,14 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
         </ul>
         <p class="quiet" style="margin-top:0.6rem;">These are four different things. Three of them
           being true tells you nothing about the fourth.</p>
+        </details>
       </div>
 
       <div class="know">
-        <h2>What it still does not let me do</h2>
-        <p>Reading is all of it. Publishing a listing, changing a price, messaging a customer and
+        <details class="fold"><summary><h2>What it still does not let me do</h2><span class="gist">Reading is all of it</span></summary>
+        <p>Publishing a listing, changing a price, messaging a customer and
           moving money each need their own permission, and none of them comes from this.</p>
+        </details>
       </div>
 
       ${one.granted ? html`

@@ -30,7 +30,14 @@
 :root{
   --bg:#061310; --card:#0D2019; --card-2:#143026; --line:#1D3A30; --line-2:#284C3F;
   --ink:#E9F1EC; --ink-2:#A9C0B4; --ink-3:#8CA497;
+  /* A FILLED GOLD BUTTON AND GOLD TEXT ARE TWO DIFFERENT COLOURS.
+     `--accent` has to meet contrast as INK on a card, which on a light ground
+     forces it dark enough to read brown. Eventide fills its primary button
+     with warm gold and sets dark text on it — the opposite arrangement. So
+     the fill is its own pair, equal to the accent wherever the ground is
+     dark and lighter where it is not. */
   --accent:#D9B07B; --accent-ink:#1A1206; --accent-soft:#2A2115;
+  --accent-fill:#D9B07B; --accent-fill-ink:#1A1206;
   --good:#5FC095; --good-soft:#12291F;
   --alert:#E3B36A; --alert-soft:#2B2214;
   --bad:#E58C7C; --bad-soft:#2E1B17;
@@ -82,6 +89,7 @@
   --bg:#F7F6F2; --card:#FFFFFF; --card-2:#FBFAF6; --line:#E6E3DB; --line-2:#D3CFC4;
   --ink:#14201B; --ink-2:#4B564F; --ink-3:#666F68;
   --accent:#8A5A12; --accent-ink:#FFFFFF; --accent-soft:#F6EEE1;
+  --accent-fill:#D9B07B; --accent-fill-ink:#1A1206;
   --good:#1F7A55; --good-soft:#E2F1EA;
   --alert:#8A5A12; --alert-soft:#F7EFE2;
   --bad:#A33D2B; --bad-soft:#F8E5E1;
@@ -96,6 +104,7 @@
   --bg:#F7F6F2; --card:#FFFFFF; --card-2:#FBFAF6; --line:#E6E3DB; --line-2:#D3CFC4;
   --ink:#14201B; --ink-2:#4B564F; --ink-3:#666F68;
   --accent:#8A5A12; --accent-ink:#FFFFFF; --accent-soft:#F6EEE1;
+  --accent-fill:#D9B07B; --accent-fill-ink:#1A1206;
   --good:#1F7A55; --good-soft:#E2F1EA;
   --alert:#8A5A12; --alert-soft:#F7EFE2;
   --bad:#A33D2B; --bad-soft:#F8E5E1;
@@ -116,6 +125,7 @@
   --bg:#061310; --card:#0D2019; --card-2:#143026; --line:#1D3A30; --line-2:#284C3F;
   --ink:#E9F1EC; --ink-2:#A9C0B4; --ink-3:#8CA497;
   --accent:#D9B07B; --accent-ink:#1A1206; --accent-soft:#2A2115;
+  --accent-fill:#D9B07B; --accent-fill-ink:#1A1206;
   --good:#5FC095; --good-soft:#12291F;
   --alert:#E3B36A; --alert-soft:#2B2214;
   --bad:#E58C7C; --bad-soft:#2E1B17;
@@ -130,6 +140,7 @@
   --bg:#0A0A0B; --card:#131315; --card-2:#1A1A1D; --line:#26262B; --line-2:#323239;
   --ink:#ECECEE; --ink-2:#ADADB4; --ink-3:#8E8E96;
   --accent:#D9B07B; --accent-ink:#1A1206; --accent-soft:#272219;
+  --accent-fill:#D9B07B; --accent-fill-ink:#1A1206;
   --good:#5FC095; --good-soft:#15211C;
   --alert:#E3B36A; --alert-soft:#262014;
   --bad:#E58C7C; --bad-soft:#281B18;
@@ -311,7 +322,7 @@ dd{margin:0;min-width:0;overflow-wrap:break-word}
   display:inline-flex;align-items:center;justify-content:center;
   border-radius:12px;padding:13px 20px;min-height:48px;
   border:1px solid var(--line-2);background:var(--card);color:var(--ink)}
-.btn.go,.btn.btn-primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.btn.go,.btn.btn-primary{background:var(--accent-fill);border-color:var(--accent-fill);color:var(--accent-fill-ink)}
 
 /* ── THE BUTTON MODIFIERS THE OTHER STYLESHEET NAMED ─────────────────────────
    Seventy-odd buttons across the Letter, Controls and Privacy carry
@@ -1187,25 +1198,25 @@ body{background:var(--v3-bg)}
   :root:not([data-theme="dark"]) main[data-place="money"] .facts.money{background:var(--card)}
   :root:not([data-theme="dark"]) .ask{background:var(--card)}
   :root:not([data-theme="dark"]) .sheet-more{background:var(--card)}
-  :root:not([data-theme="dark"]) .btn.go,:root:not([data-theme="dark"]) .btn.btn-primary{background:var(--v3-mint);border-color:var(--v3-mint);color:#FFFFFF}
+  :root:not([data-theme="dark"]) .btn.go,:root:not([data-theme="dark"]) .btn.btn-primary{background:var(--accent-fill);border-color:var(--accent-fill);color:var(--accent-fill-ink)}
   :root:not([data-theme="dark"]) h2.rank i,:root:not([data-theme="dark"]) .stepper li.done i{color:#FFFFFF}}
 :root[data-theme="light"] body::before{display:none}
 :root[data-theme="light"] main[data-place="money"] .facts.money{background:var(--card)}
 :root[data-theme="light"] .ask{background:var(--card)}
 :root[data-theme="light"] .sheet-more{background:var(--card)}
-:root[data-theme="light"] .btn.go,:root[data-theme="light"] .btn.btn-primary{background:var(--v3-mint);border-color:var(--v3-mint);color:#FFFFFF}
+:root[data-theme="light"] .btn.go,:root[data-theme="light"] .btn.btn-primary{background:var(--accent-fill);border-color:var(--accent-fill);color:var(--accent-fill-ink)}
 :root[data-theme="light"] h2.rank i,:root[data-theme="light"] .stepper li.done i{color:#FFFFFF}
 @media (prefers-color-scheme:light){:root:not([data-theme="dark"]) body::before{display:none}
   :root:not([data-theme="dark"]) main[data-place="money"] .facts.money{background:var(--card)}
   :root:not([data-theme="dark"]) .ask{background:var(--card)}
   :root:not([data-theme="dark"]) .sheet-more{background:var(--card)}
-  :root:not([data-theme="dark"]) .btn.go,:root:not([data-theme="dark"]) .btn.btn-primary{background:var(--v3-mint);border-color:var(--v3-mint);color:#FFFFFF}
+  :root:not([data-theme="dark"]) .btn.go,:root:not([data-theme="dark"]) .btn.btn-primary{background:var(--accent-fill);border-color:var(--accent-fill);color:var(--accent-fill-ink)}
   :root:not([data-theme="dark"]) h2.rank i,:root:not([data-theme="dark"]) .stepper li.done i{color:#FFFFFF}}
 :root[data-theme="light"] body::before{display:none}
 :root[data-theme="light"] main[data-place="money"] .facts.money{background:var(--card)}
 :root[data-theme="light"] .ask{background:var(--card)}
 :root[data-theme="light"] .sheet-more{background:var(--card)}
-:root[data-theme="light"] .btn.go,:root[data-theme="light"] .btn.btn-primary{background:var(--v3-mint);border-color:var(--v3-mint);color:#FFFFFF}
+:root[data-theme="light"] .btn.go,:root[data-theme="light"] .btn.btn-primary{background:var(--accent-fill);border-color:var(--accent-fill);color:var(--accent-fill-ink)}
 :root[data-theme="light"] h2.rank i,:root[data-theme="light"] .stepper li.done i{color:#FFFFFF}
 
 body::before{
@@ -1268,7 +1279,13 @@ main[data-place="foundry"]>.glance::before{
 .facts{background:rgba(0,0,0,.08);border-color:var(--v3-line)}
 .do{background:rgba(0,0,0,.08);border-color:var(--v3-line)}
 .btn{border-radius:8px;border-color:var(--v3-line-strong);background:#102019}
-.btn.go,.btn.btn-primary{background:#69e2b1;color:#07100d;border-color:#69e2b1}
+/* THE PRIMARY BUTTON RESOLVES THROUGH THE TOKEN, and for a long time it did
+   not: this line was `background:#69e2b1` — a mint literal that overrode the
+   palette in every mode, so the one control Eventide paints gold came out
+   green whatever `--accent` said. A hex in the stylesheet is the same defect
+   as a hex in the markup; the gate that catches the second does not read the
+   first, which is how this survived a theme change. */
+.btn.go,.btn.btn-primary{background:var(--accent-fill);color:var(--accent-fill-ink);border-color:var(--accent-fill)}
 
 /* Experiments: probes, not projects. */
 .experiment-index-item{position:relative;overflow:hidden}
@@ -1975,7 +1992,7 @@ p.lede,.one .lead{font-family:var(--display);font-weight:400;letter-spacing:-.00
   background:var(--card-2);border:1px solid var(--line);border-radius:999px}
 .seg button{flex:1;min-height:38px;padding:.4rem .5rem;border:0;border-radius:999px;
   background:transparent;color:var(--ink-2);font:500 .86rem/1 var(--sans);cursor:pointer}
-.seg button.on{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.seg button.on{background:var(--accent-fill);color:var(--accent-fill-ink);font-weight:600}
 .seg button:not(.on):hover{color:var(--ink)}
 .seg button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 
@@ -1997,3 +2014,16 @@ a.know{display:flex;align-items:center;justify-content:space-between;gap:var(--s
   padding:var(--s2) var(--s3);margin-bottom:var(--s1);min-height:56px;
   text-decoration:none;transition:border-color .12s ease,background .12s ease}
 a.know:hover{background:var(--card-2)}
+
+/* A DISCLOSURE SUMMARY IS ONE ROW. `.gist` was `flex:1 1 8rem`, so a heading
+   of any length pushed the state onto a second line and a two-word fold
+   occupied four. The heading takes the room it needs; the state takes what is
+   left and shrinks rather than wrapping. */
+.fold>summary{flex-wrap:nowrap}
+.fold>summary h2,.fold>summary h3{flex:1 1 auto;min-width:0}
+.fold .gist{flex:0 1 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* A FOLD THAT OPENS A CARD NEEDS NO RULE ABOVE IT. `details.fold` carries a
+   top border so consecutive folds read as a list; as the only child of a card
+   that border is a line floating under the card's own edge. */
+.know>details.fold:first-child{border-top:0}
