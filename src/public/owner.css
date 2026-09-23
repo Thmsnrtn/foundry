@@ -87,32 +87,38 @@
 }
 @media (prefers-color-scheme:light){:root:not([data-theme]){
   --bg:#F7F6F2; --card:#FFFFFF; --card-2:#FBFAF6; --line:#E6E3DB; --line-2:#D3CFC4;
-  --ink:#14201B; --ink-2:#4B564F; --ink-3:#666F68;
+  --ink:#14201B; --ink-2:#4B564F; --ink-3:#5B635D;
   --accent:#8A5A12; --accent-ink:#FFFFFF; --accent-soft:#F6EEE1;
   --accent-fill:#D9B07B; --accent-fill-ink:#1A1206;
-  --good:#1F7A55; --good-soft:#E2F1EA;
-  --alert:#8A5A12; --alert-soft:#F7EFE2;
-  --bad:#A33D2B; --bad-soft:#F8E5E1;
+  --good:#14603F; --good-soft:#E2F1EA;
+  --alert:#774D0F; --alert-soft:#F7EFE2;
+  --bad:#8A3121; --bad-soft:#F8E5E1;
   --c1:#123D33; --c2:#2F7D68; --c3:#7FB8A2; --c4:#CADED6;
   --v3-bg:#F7F6F2; --v3-rail:#F0EEE8; --v3-panel:#FFFFFF; --v3-panel-2:#FBFAF6;
   --v3-line:rgba(20,32,27,.14); --v3-line-strong:rgba(20,32,27,.26);
-  --v3-mint:#1F7A55; --v3-mint-soft:rgba(31,122,85,.10); --v3-gold:#8A5A12; --v3-gold-soft:rgba(138,90,18,.10);
-  --v3-red:#A33D2B; --v3-shadow:0 14px 38px rgba(20,32,27,.08);
+  /* ONE STATE PALETTE, NOT TWO. `--v3-mint`, `--v3-gold` and `--v3-red`
+     held their own copies of good, accent and bad — identical values in
+     green and dark, and in light a copy that had not been corrected when
+     the canonical ones were. The chips read from this family, so a fix to
+     `--good` reached everything except the chips. They alias now: one
+     definition per appearance, and no way for the two to disagree. */
+  --v3-mint:var(--good); --v3-mint-soft:rgba(31,122,85,.10); --v3-gold:var(--accent); --v3-gold-soft:rgba(138,90,18,.10);
+  --v3-red:var(--bad); --v3-shadow:0 14px 38px rgba(20,32,27,.08);
   color-scheme:light;
 }}
 :root[data-theme="light"]{
   --bg:#F7F6F2; --card:#FFFFFF; --card-2:#FBFAF6; --line:#E6E3DB; --line-2:#D3CFC4;
-  --ink:#14201B; --ink-2:#4B564F; --ink-3:#666F68;
+  --ink:#14201B; --ink-2:#4B564F; --ink-3:#5B635D;
   --accent:#8A5A12; --accent-ink:#FFFFFF; --accent-soft:#F6EEE1;
   --accent-fill:#D9B07B; --accent-fill-ink:#1A1206;
-  --good:#1F7A55; --good-soft:#E2F1EA;
-  --alert:#8A5A12; --alert-soft:#F7EFE2;
-  --bad:#A33D2B; --bad-soft:#F8E5E1;
+  --good:#14603F; --good-soft:#E2F1EA;
+  --alert:#774D0F; --alert-soft:#F7EFE2;
+  --bad:#8A3121; --bad-soft:#F8E5E1;
   --c1:#123D33; --c2:#2F7D68; --c3:#7FB8A2; --c4:#CADED6;
   --v3-bg:#F7F6F2; --v3-rail:#F0EEE8; --v3-panel:#FFFFFF; --v3-panel-2:#FBFAF6;
   --v3-line:rgba(20,32,27,.14); --v3-line-strong:rgba(20,32,27,.26);
-  --v3-mint:#1F7A55; --v3-mint-soft:rgba(31,122,85,.10); --v3-gold:#8A5A12; --v3-gold-soft:rgba(138,90,18,.10);
-  --v3-red:#A33D2B; --v3-shadow:0 14px 38px rgba(20,32,27,.08);
+  --v3-mint:var(--good); --v3-mint-soft:rgba(31,122,85,.10); --v3-gold:var(--accent); --v3-gold-soft:rgba(138,90,18,.10);
+  --v3-red:var(--bad); --v3-shadow:0 14px 38px rgba(20,32,27,.08);
   color-scheme:light;
 }
 
@@ -132,8 +138,8 @@
   --c1:#BFE7D4; --c2:#7FC8A9; --c3:#4C8B73; --c4:#2B5244;
   --v3-bg:#061310; --v3-rail:#081A14; --v3-panel:#0D2019; --v3-panel-2:#143026;
   --v3-line:rgba(160,214,190,.15); --v3-line-strong:rgba(160,214,190,.27);
-  --v3-mint:#5FC095; --v3-mint-soft:rgba(95,192,149,.11); --v3-gold:#D9B07B; --v3-gold-soft:rgba(217,176,123,.12);
-  --v3-red:#E58C7C; --v3-shadow:0 14px 38px rgba(0,0,0,.30);
+  --v3-mint:var(--good); --v3-mint-soft:rgba(95,192,149,.11); --v3-gold:var(--accent); --v3-gold-soft:rgba(217,176,123,.12);
+  --v3-red:var(--bad); --v3-shadow:0 14px 38px rgba(0,0,0,.30);
   color-scheme:dark;
 }
 :root[data-theme="dark"]{
@@ -147,8 +153,8 @@
   --c1:#CFCFD6; --c2:#9A9AA4; --c3:#6A6A74; --c4:#43434B;
   --v3-bg:#0A0A0B; --v3-rail:#0E0E10; --v3-panel:#131315; --v3-panel-2:#1A1A1D;
   --v3-line:rgba(255,255,255,.10); --v3-line-strong:rgba(255,255,255,.18);
-  --v3-mint:#5FC095; --v3-mint-soft:rgba(95,192,149,.10); --v3-gold:#D9B07B; --v3-gold-soft:rgba(217,176,123,.11);
-  --v3-red:#E58C7C; --v3-shadow:0 14px 38px rgba(0,0,0,.40);
+  --v3-mint:var(--good); --v3-mint-soft:rgba(95,192,149,.10); --v3-gold:var(--accent); --v3-gold-soft:rgba(217,176,123,.11);
+  --v3-red:var(--bad); --v3-shadow:0 14px 38px rgba(0,0,0,.40);
   color-scheme:dark;
 }
 
@@ -277,6 +283,29 @@ a:visited{color:var(--accent)}
    without touching the line it sits on. */
 .lede a{color:inherit;text-decoration:none;border-bottom:1px solid var(--line);padding-top:3px;padding-bottom:1px}
 .lede a:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:3px}
+
+/* A LINK THAT IS THE WHOLE PARAGRAPH IS A CONTROL, NOT A WORD IN A SENTENCE.
+
+   Same reasoning as `.lede a` above, generalised once rather than patched
+   three more times. The review found "Every decision, in one place" on a
+   company's work page, "Live tests" on the experiment history and the
+   Workshop preview's one link, each a bare anchor alone in its paragraph at
+   17-19px tall — against a 38px thumb. WCAG 2.2 exempts a target constrained
+   by the line-height of the text AROUND it; there is no text around these.
+
+   The floor is asked of the input rather than of the width, which is what
+   `(pointer:coarse)` is for. Vertical padding on an inline box grows it
+   without moving the line it sits on, so nothing reflows.
+
+   WHAT THIS DOES NOT REACH, so the comment does not claim more than the rule
+   does: `.why` and `.more-link` still measure 28.9px and 25.4px on a phone,
+   although both declare a 40-44px floor of their own a few hundred lines
+   above. Something later wins and I have not yet found it. The measurement
+   names them on every run; they are the next thing, not a solved thing. */
+p>a:only-child{display:inline-block;padding-block:3px;min-height:18px}
+@media (pointer:coarse){
+  p>a:only-child{min-height:32px;padding-block:8px}
+}
 
 /* THE ONE THING. Never more than one on a page, and the only gold border on
    it: everything else is --line, so the thing that needs him is where the eye
@@ -545,7 +574,12 @@ h1 .dim{color:var(--ink-3);font-weight:400}
 /* A chip and a `more` link are controls he taps, and both sat at 32px — the
    old floor, kept after the floor moved. */
 a.chip{text-decoration:none;min-height:40px;line-height:22px}
-a.chip.on{border-color:var(--accent);color:var(--accent)}
+/* A SELECTED CHIP IS INVERTED — `.chip.on` paints `--ink` behind `--bg`.
+   This rule is more specific for an anchor, so the background inverted and
+   the text stayed accent: gold on near-black ink at 1.7:1, and the light
+   palette's brown on its ink at 2.84:1. The border is what this rule is
+   for; the colours belong to the inversion. */
+a.chip.on{border-color:var(--accent)}
 
 /* ── THE STREAM ───────────────────────────────────────────────────────────────
    Event rows, under the day they happened on. Three lines at most: when and
@@ -1235,8 +1269,8 @@ body{background-color:var(--bg)}
 :root{
   --v3-bg:#061310; --v3-rail:#081A14; --v3-panel:#0D2019; --v3-panel-2:#143026;
   --v3-line:rgba(160,214,190,.15); --v3-line-strong:rgba(160,214,190,.27);
-  --v3-mint:#5FC095; --v3-mint-soft:rgba(95,192,149,.11); --v3-gold:#D9B07B; --v3-gold-soft:rgba(217,176,123,.12);
-  --v3-red:#E58C7C; --v3-shadow:0 14px 38px rgba(0,0,0,.30);
+  --v3-mint:var(--good); --v3-mint-soft:rgba(95,192,149,.11); --v3-gold:var(--accent); --v3-gold-soft:rgba(217,176,123,.12);
+  --v3-red:var(--bad); --v3-shadow:0 14px 38px rgba(0,0,0,.30);
   --v3-radius:10px;
   --v3-rail-w:15.6rem;
 }
@@ -1328,9 +1362,15 @@ body::before{
 
 h1{font-weight:400;letter-spacing:-.035em;text-wrap:balance}
 .lede{color:var(--ink-2);max-width:54rem}
-.state.ok{color:var(--v3-mint);background:rgba(26,112,82,.32)}
-.state.watch{color:var(--v3-gold);background:rgba(111,78,25,.26)}
-.state.bad{color:var(--v3-red);background:rgba(119,42,37,.24)}
+/* THE STATE CHIPS SAY WHICH STATE, SO THEY READ FROM THE STATE TOKENS.
+   `watch` was painted with `--v3-gold`, which is the accent — the colour of a
+   link, not of a warning — and its ground was `rgba(111,78,25,.26)`, a literal
+   that is the same brown in all three appearances. On the light palette that
+   came out at 3.91:1, under AA. The soft grounds are declared per appearance
+   and say what they mean. */
+.state.ok{color:var(--good);background:var(--good-soft)}
+.state.watch{color:var(--alert);background:var(--alert-soft)}
+.state.bad{color:var(--bad);background:var(--bad-soft)}
 
 /* Home / Founder Cockpit. Six true glance facts become the dense state row seen
    in the handoff; Now/Next remains separately legible because it is causality,
@@ -1358,7 +1398,14 @@ main[data-place="foundry"]>.glance::before{
 .one h2{font-size:clamp(1.3rem,2vw,1.75rem);font-weight:400}
 .facts{background:rgba(0,0,0,.08);border-color:var(--v3-line)}
 .do{background:rgba(0,0,0,.08);border-color:var(--v3-line)}
-.btn{border-radius:8px;border-color:var(--v3-line-strong);background:#102019}
+/* AND THE BUTTON, WHICH WAS WORSE. `#102019` here painted every secondary
+   button dark green in every appearance. In light mode that is
+   `rgb(20,32,27)` ink on `rgb(16,32,25)`: 1.01:1, which is not low
+   contrast, it is an invisible label on every secondary button in the
+   application. The comment below records the same defect being found on
+   the PRIMARY button of this very line and fixed there, and the default
+   button's literal being left beside it. */
+.btn{border-radius:8px;border-color:var(--v3-line-strong);background:var(--os-panel-raised)}
 /* THE PRIMARY BUTTON RESOLVES THROUGH THE TOKEN, and for a long time it did
    not: this line was `background:#69e2b1` — a mint literal that overrode the
    palette in every mode, so the one control Eventide paints gold came out
@@ -1395,7 +1442,8 @@ main[data-place="money"] .mline.total{margin:.25rem -.65rem 0;padding:.95rem .65
 .reach li>p{grid-column:2}
 .dial{padding:4px;border:1px solid var(--v3-line);border-radius:9px;background:rgba(0,0,0,.10)}
 .dial .mark{border-color:transparent;background:transparent}
-.dial .mark.on{background:#102019;border-color:var(--v3-line-strong);box-shadow:var(--v3-shadow)}
+/* THE SAME GREEN LITERAL, THREE MORE TIMES. A raised panel is a token. */
+.dial .mark.on{background:var(--os-panel-raised);border-color:var(--v3-line-strong);box-shadow:var(--v3-shadow)}
 
 /* Portfolio / River: estate cross-section. */
 .layer{position:relative;margin-left:.35rem;border-left:2px solid rgba(102,229,180,.24);border-radius:0 var(--v3-radius) var(--v3-radius) 0;background:var(--v3-panel)}
@@ -1440,11 +1488,16 @@ main[data-place="money"] .mline.total{margin:.25rem -.65rem 0;padding:.95rem .65
   /* FIVE DOORS. The label is sized to the viewport, not the root, so at 200%
      text the five still fit their tracks; the icon and the 52px target are
      absolute. A label that would not fit is clipped, never overlapped. */
-  nav.places{background:rgba(5,12,9,.97);border-color:var(--v3-line);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);padding:5px 4px calc(5px + env(safe-area-inset-bottom))}
+  /* THE BAR FOLLOWS THE APPEARANCE. This was `rgba(5,12,9,.97)` — a dark
+     green painted in every mode — so in light mode the five doors sat on a
+     dark bar wearing the LIGHT palette's grey labels: 3.62:1, under AA, on
+     the navigation of the whole application. `--os-mobile-chrome` is the
+     token that exists for exactly this and is declared for all three. */
+  nav.places{background:var(--os-mobile-chrome);border-color:var(--v3-line);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);padding:5px 4px calc(5px + env(safe-area-inset-bottom))}
   nav.places div{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));max-width:none;margin:0}
   nav.places a{min-height:52px;padding:4px 2px;gap:3px;font-size:clamp(9px,2.85vw,12px);line-height:1.1;color:var(--ink-3);white-space:nowrap;overflow:hidden}
   nav.places a svg{width:20px;height:20px;flex:0 0 auto}
-  nav.places a.on{color:var(--v3-mint)}
+  nav.places a.on{color:var(--accent)}
   nav.places .desk{display:none}
   nav.places .sub,nav.places .more{display:none!important}
   nav.places a b{top:0;right:calc(50% - 17px);transform:scale(.88)}
@@ -1834,7 +1887,7 @@ main[data-place="experiments"] h1 .state{font-size:.72rem;vertical-align:middle;
 .seg{flex:1 1 0;min-width:0;display:grid;gap:1px;text-align:center;padding:.5rem .4rem;border-radius:7px;border:1px solid transparent;color:var(--ink-3)}
 .seg b{font-weight:500;font-size:.86rem;color:inherit}
 .seg small{font-size:.62rem;line-height:1.2;color:var(--ink-3)}
-.seg.on{background:#102019;border-color:rgba(102,229,180,.28);color:var(--v3-mint);box-shadow:var(--v3-shadow)}
+.seg.on{background:var(--os-panel-raised);border-color:rgba(102,229,180,.28);color:var(--v3-mint);box-shadow:var(--v3-shadow)}
 .seg.on small{color:var(--ink-2)}
 .change-mode{border-top:1px solid var(--v3-line);margin-top:.4rem}
 .change-mode>summary{padding:.55rem 0}
@@ -1846,7 +1899,7 @@ main[data-place="experiments"] h1 .state{font-size:.72rem;vertical-align:middle;
 .mailrow.needs{border-left:2px solid var(--v3-gold)}
 .mailrow .open{position:absolute;inset:0;border-radius:inherit}
 .mailrow .open:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
-.avatar{display:inline-flex;align-items:center;justify-content:center;width:2.2rem;height:2.2rem;border-radius:50%;background:#102019;border:1px solid var(--v3-line-strong);font:600 .74rem/1 var(--sans);color:var(--ink-2);flex:0 0 auto}
+.avatar{display:inline-flex;align-items:center;justify-content:center;width:2.2rem;height:2.2rem;border-radius:50%;background:var(--os-panel-raised);border:1px solid var(--v3-line-strong);font:600 .74rem/1 var(--sans);color:var(--ink-2);flex:0 0 auto}
 .mailrow .avatar{grid-row:1/4}
 .mailrow .who{font-size:.86rem;color:var(--ink);overflow:hidden;text-overflow:ellipsis}
 .mailrow .who .dim{font-size:.72rem}

@@ -32,8 +32,26 @@ import { mkdirSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { runMigrations } from '../src/db/migrate.js';
 import { query } from '../src/db/client.js';
-import { withAppearance, isAppearance } from '../src/views/owner/appearance.js';
+import { withAppearance } from '../src/views/owner/appearance.js';
 import type { Appearance } from '../src/views/owner/appearance.js';
+// THE LABORATORY, NOT A SECOND COPY OF IT.
+//
+// This booted its own Hono app and listed ten owner routers by name — a
+// hand-maintained copy of what `src/index.ts` assembles, and one that had
+// already drifted: three surfaces were missing from it last wave.
+// `tests/helpers/world.ts` learned that same lesson first, in its own words:
+// "a review instrument that is missing parts of the thing it reviews produces
+// findings that are not true and hides findings that are". Its `ownerApp()`
+// mounts `letterRoutes`, which carries the whole owner surface exactly as
+// production does, so there is one assembly rather than two that can differ.
+//
+// `seedProductionShape()` comes with it, and that is the larger half. The old
+// seed was one founder and one empty company, so nine owner surfaces answered
+// 404 for want of state and every height was measured against an institution
+// with nothing in it. This is Experiment 001, the Workshop, a sending
+// identity, a public page — production's shape, which is the only shape worth
+// measuring.
+import { COMPANY, ownerApp, seedProductionShape } from '../tests/helpers/world.js';
 
 const OWNER = 'ev_owner';
 const MODES = ['light', 'green', 'dark'] as const;
@@ -76,15 +94,36 @@ const NAMES: Record<string, string> = {
   '/foundry/charter': 'charter',
 };
 
-// WHAT A PARAMETER STANDS FOR, given what `seed()` actually put in the
-// database. Where there is no honest value the route is still listed — as a
-// surface this harness cannot reach — rather than dropped, because a silent
-// omission is how the first list came to be wrong.
+// WHAT A PARAMETER STANDS FOR, given what the seed actually put in the
+// database. Keyed by the route first and by the bare token second, because
+// `:id` is a company on one path and an experiment on another and one table
+// cannot say both. Where there is no honest value the route is still listed —
+// as a surface this harness cannot reach — rather than dropped, because a
+// silent omission is how the first list came to be wrong.
 const PARAM: Record<string, string> = {
   ':provider': 'etsy',
-  ':id': 'ev_apex',
+  ':id': COMPANY,
   ':sense': 'sales',
 };
+
+// THE PUBLIC FACE, SEEN FROM INSIDE THE OWNER APPLICATION.
+//
+// A preview of a Workshop page is a preview of what a CUSTOMER sees: the
+// public site's palette, and the visitor's own device preference deciding
+// between its light and dark, because a stranger has no owner appearance to
+// have chosen. The instrument reported it three ways at once — no
+// `data-theme`, a ground that is neither of the owner's, a palette that
+// answers to the device — and all three were the page being correct.
+//
+// So the appearance rules do not apply here and the fit rules still do: it is
+// rendered, measured, and checked for clipping, overflow and targets, and
+// only the three owner-appearance questions are not asked of it. Naming the
+// exception is the point; an instrument that quietly stops asking is the
+// failure this whole wave is about.
+const PUBLIC_FACE = new Set([
+  '/foundry/public-workshop/preview/:experimentId',
+]);
+const publicFace = new Set<string>();
 
 // GETs that answer with a file or a redirect rather than a page. Each is here
 // for a stated reason; the default is that a GET is a page.
@@ -107,10 +146,12 @@ Array<{ path: string; name: string }> {
     if (NOT_A_PAGE.has(r.path) || r.path.includes('*')) continue;
     if (seen.has(r.path)) continue;
     seen.add(r.path);
-    const filled = r.path.replace(/:[A-Za-z_]+/g, (m) => PARAM[m] ?? m);
+    const filled = r.path.replace(/:[A-Za-z_]+/g,
+      (m) => PARAM[`${r.path} ${m}`] ?? PARAM[m] ?? m);
     if (filled.includes(':')) { unreachable.push(r.path); continue; }
     const derived = filled.replace(/^\//, '').replace(/\//g, '-');
     const name = NAMES[r.path] ?? (derived === '' ? 'root' : derived);
+    if (PUBLIC_FACE.has(r.path)) publicFace.add(name);
     out.push({ path: filled, name });
   }
   return out;
@@ -132,80 +173,20 @@ Array<{ path: string; name: string }> {
   return all.filter((p) => want.includes(p.name));
 }
 
-async function seed(): Promise<void> {
-  await runMigrations();
-  await query('INSERT INTO founders (id,clerk_user_id,email,name) VALUES (?,?,?,?)',
-    [OWNER, 'clerk_ev', 'owner@example.com', 'Thomas Norton']);
-  await query('INSERT INTO products (id,name,owner_id,status) VALUES (?,?,?,?)',
-    ['ev_apex', 'Apex Micro', OWNER, 'active']);
-}
-
 async function boot(): Promise<{ base: string; app: Hono }> {
-  const app = new Hono();
-  // The founder as the real middleware attaches him, and the appearance as the
-  // real middleware carries it — from `?mode=`, so one running process can be
-  // photographed in all three without restarting.
-  app.use('*', async (c, next) => {
-    c.set('founder' as never,
-      { id: OWNER, email: 'owner@example.com', name: 'Thomas Norton' } as never);
-    c.set('csrfToken' as never, 'review' as never);
-    // THE APPEARANCE IS CARRIED THE WAY PRODUCTION CARRIES IT.
-    //
-    // This read `?mode=` off the URL, and six owner surfaces came back with no
-    // `data-theme` at all — reading, correctly, as an appearance that does not
-    // govern. They were redirects: a company with no economics yet 302s, the
-    // browser follows, and the query string does not survive the hop. In
-    // production nothing depends on a query string. `auth.ts` reads the
-    // owner's `appearance` column on the row it already loads for every
-    // authenticated request, so the mode holds across a redirect by
-    // construction.
-    //
-    // So the harness holds it the same way: for the whole render, not for the
-    // URL. An instrument that loses the thing it is measuring halfway through
-    // a hop reports a defect the product does not have.
-    void isAppearance;
-    return withAppearance(rendering, async () => next());
-  });
-  const { staticAssetHandler } = await import('../src/routes/public/static-assets.js');
-  app.get('/static/:file', staticAssetHandler(resolve(import.meta.dirname, '../src')) as never);
-  const { foundryShellRoutes } = await import('../src/routes/dashboard/foundry-shell.js');
-  app.route('/', foundryShellRoutes as never);
-  const { settingsRoutes } = await import('../src/routes/dashboard/settings.js');
-  app.route('/', settingsRoutes as never);
-  // THE REST OF THE OWNER SURFACE. Mounted by shape rather than by name so a
-  // router added later is measured without this list being remembered.
-  for (const mod of [
-    '../src/routes/dashboard/experiments-place.js',
-    '../src/routes/dashboard/charter-place.js',
-    '../src/routes/dashboard/places.js',
-    '../src/routes/dashboard/inbox-place.js',
-    '../src/routes/dashboard/money-place.js',
-    '../src/routes/dashboard/activity-place.js',
-    // NEVER ONCE RENDERED BY THIS INSTRUMENT, AND ONE TAP FROM EVERY PAGE.
-    //
-    // The shell's footer carries "Advanced — inspect the system" on every
-    // owner screen, and it goes to the Letter: 2,596 lines, 348 inline style
-    // attributes and, until this wave, twenty-nine hard-coded colours. Privacy
-    // is linked from Controls and from Settings' delete control. Neither had
-    // ever been rendered in any appearance, at any width, by anything.
-    //
-    // The comment above says the mounting is "by shape rather than by name so
-    // a router added later is measured without this list being remembered".
-    // That is true of the inner loop and false of this list, which is names,
-    // and which forgot three. Saying so rather than deleting the sentence:
-    // the gap it describes is the gap it had.
-    '../src/routes/dashboard/letter.js',
-    '../src/routes/dashboard/privacy.js',
-    '../src/routes/dashboard/connections.js',
-  ]) {
-    const loaded = await import(mod) as Record<string, unknown>;
-    for (const v of Object.values(loaded)) {
-      if (v && typeof v === 'object' && 'routes' in (v as Record<string, unknown>)) {
-        app.route('/', v as never);
-      }
-    }
-  }
-  const server = serve({ fetch: app.fetch as never, port: 0 });
+  const app = await ownerApp();
+  // THE APPEARANCE WRAPS THE WHOLE REQUEST, INCLUDING A REDIRECT'S SECOND HOP.
+  //
+  // `ownerApp()` registers its own middleware before it mounts anything, so a
+  // `use('*')` added here would never run for those routes. Wrapping `fetch`
+  // puts the appearance outside everything the app does, which is also where
+  // production puts it: `auth.ts` reads the owner's `appearance` column on the
+  // row it already loads for every authenticated request. It is not in the
+  // URL, so a 302 keeps it.
+  const inner = app.fetch.bind(app);
+  const fetch = ((req: Request, ...rest: unknown[]) =>
+    withAppearance(rendering, () => inner(req, ...(rest as [])))) as typeof app.fetch;
+  const server = serve({ fetch: fetch as never, port: 0 });
   const port = (server.address() as { port: number }).port;
   return { base: `http://127.0.0.1:${String(port)}`, app };
 }
@@ -213,7 +194,13 @@ async function boot(): Promise<{ base: string; app: Hono }> {
 const dir = resolve(import.meta.dirname, '../.eventide');
 mkdirSync(dir, { recursive: true });
 
-await seed();
+const { experimentId } = await seedProductionShape();
+// The experiment the institution actually ran, so its detail, its decision and
+// its recipients are surfaces this instrument can reach at all.
+PARAM['/foundry/experiments/:id :id'] = experimentId;
+PARAM['/foundry/experiments/:id/decide :id'] = experimentId;
+PARAM['/foundry/experiments/:id/recipients :id'] = experimentId;
+PARAM['/foundry/public-workshop/preview/:experimentId :experimentId'] = experimentId;
 const { base, app: booted } = await boot();
 const PAGES = chosen(pagesFrom(booted.routes));
 if (unreachable.length > 0) {
@@ -246,6 +233,8 @@ const grounds = new Map<string, string>();
  */
 let rendering: Appearance | null = null;
 const shapes = new Map<string, { mode: string; h: number }>();
+/** Pages that render differently twice running: nothing about them compares. */
+const unsteady = new Set<string>();
 for (const width of [390, 1280]) {
  for (const prefers of ['light', 'dark'] as const) {
   const context = await browser.newContext({
@@ -272,6 +261,40 @@ for (const width of [390, 1280]) {
   // appearance's doing. An instrument whose passes are ordered reports the
   // order, not the thing.
   for (const p of PAGES) {
+    // ONE VISIT BEFORE THE THREE THAT COUNT.
+    //
+    // Some pages grow the first time they are opened — an activity row gets
+    // written, something is marked seen — and with the page outside and the
+    // appearance inside, that growth lands on whichever appearance renders
+    // first and reads as "the appearance changed the shape". It did exactly
+    // that on a company's work page the moment the seed became production's
+    // shape: light 934px, green and dark 1,256px, and nothing to do with any
+    // of the three.
+    //
+    // So the page is opened twice in the SAME appearance before anything is
+    // measured, and the two heights compared. If they differ, this page is
+    // not idempotent to read — it writes something when looked at — and no
+    // comparison across appearances can mean anything for it. That is said
+    // out loud and the shape check is not applied, rather than the page being
+    // quietly dropped or the drift being reported as an appearance defect.
+    //
+    // Which is not hypothetical: a company's work page moves by twenty pixels
+    // between two identical renders, and with the page outside and the
+    // appearance inside, that lands on whichever appearance went first and
+    // reads exactly like "green is taller than light". The second time this
+    // instrument has had to stop measuring its own visit.
+    rendering = MODES[0] ?? null;
+    const twice: number[] = [];
+    for (let k = 0; k < 2; k += 1) {
+      const r0 = await page.goto(`${base}${p.path}`, { waitUntil: 'load' }).catch(() => null);
+      if (r0?.status() === 200) {
+        twice.push(await page.evaluate(() => document.body.scrollHeight));
+      }
+    }
+    const steady = twice.length === 2 && twice[0] === twice[1];
+    if (!steady && twice.length === 2) {
+      unsteady.add(p.name);
+    }
     for (const mode of MODES) {
       rendering = mode;
       const res = await page.goto(`${base}${p.path}`, { waitUntil: 'load' });
@@ -388,6 +411,86 @@ for (const width of [390, 1280]) {
             inline: judged.length - controls.length,
             smallest: controls.slice(0, 8),
           };
+        })(),
+        // TEXT NOBODY CAN READ, MEASURED WHERE IT IS PAINTED.
+        //
+        // `every-colour-is-readable` computes ratios between TOKENS, which is
+        // the right check for the palette and blind to everything else. The
+        // stylesheet also paints with eighty-nine literal colours inside
+        // ordinary rules, and one of them is `.btn{background:#102019}` — a
+        // dark green, applied in every appearance. In light mode that put
+        // `rgb(20,32,27)` ink on an `rgb(16,32,25)` button: dark green on dark
+        // green, on the appearance most likely on a bright phone, on every
+        // secondary button in the application.
+        //
+        // No token pair says that, because neither colour is a token. So this
+        // asks the browser what was actually painted: the ink as computed, the
+        // ground composited up through every transparent ancestor, and the
+        // ratio between them against WCAG AA — 3:1 for large text, 4.5:1 for
+        // the rest.
+        //
+        // Written with no named function values anywhere, because esbuild
+        // gives those a `__name` helper that does not exist in the page.
+        unreadable: (() => {
+          const out: Array<{ t: string; say: string; ratio: number; ink: string; on: string }> = [];
+          for (const e of Array.from(document.querySelectorAll('body *'))) {
+            const own = Array.from(e.childNodes)
+              .filter((n) => n.nodeType === 3 && (n.textContent ?? '').trim().length > 1);
+            if (own.length === 0) continue;
+            const cs = getComputedStyle(e);
+            if (cs.visibility === 'hidden' || cs.display === 'none' || cs.opacity === '0') continue;
+            const box = e.getBoundingClientRect();
+            if (box.width < 2 || box.height < 2) continue;
+            const ink = (/rgba?\(([^)]+)\)/.exec(cs.color)?.[1] ?? '')
+              .split(',').map(Number);
+            if (ink.length < 3) continue;
+            const inkA = ink.length > 3 ? (ink[3] ?? 1) : 1;
+            if (inkA < 0.95) continue; // deliberately faded; a different question
+            // The ground: composite every ancestor's background upward until
+            // it is opaque. The page's own ground is the base.
+            let rr = 255; let gg = 255; let bb = 255; let settled = false;
+            const chain: Element[] = [];
+            for (let n: Element | null = e; n !== null; n = n.parentElement) chain.push(n);
+            chain.push(document.documentElement);
+            for (const n of chain.reverse()) {
+              const nb = (/rgba?\(([^)]+)\)/.exec(getComputedStyle(n).backgroundColor)?.[1] ?? '')
+                .split(',').map(Number);
+              if (nb.length < 3) continue;
+              const a = nb.length > 3 ? (nb[3] ?? 1) : 1;
+              if (a === 0) continue;
+              rr = (nb[0] ?? 0) * a + rr * (1 - a);
+              gg = (nb[1] ?? 0) * a + gg * (1 - a);
+              bb = (nb[2] ?? 0) * a + bb * (1 - a);
+              settled = true;
+            }
+            if (!settled) continue;
+            const lum: number[] = [];
+            for (const trio of [[ink[0] ?? 0, ink[1] ?? 0, ink[2] ?? 0], [rr, gg, bb]]) {
+              let acc = 0;
+              const weight = [0.2126, 0.7152, 0.0722];
+              for (let k = 0; k < 3; k += 1) {
+                const c = (trio[k] ?? 0) / 255;
+                acc += (weight[k] ?? 0) * (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+              }
+              lum.push(acc);
+            }
+            const hi = Math.max(lum[0] ?? 0, lum[1] ?? 0);
+            const lo = Math.min(lum[0] ?? 0, lum[1] ?? 0);
+            const ratio = (hi + 0.05) / (lo + 0.05);
+            const size = parseFloat(cs.fontSize);
+            const bold = Number(cs.fontWeight) >= 700;
+            const floor = size >= 24 || (size >= 18.66 && bold) ? 3 : 4.5;
+            if (ratio + 0.02 < floor) {
+              out.push({
+                t: `${e.tagName.toLowerCase()}.${(e.className || '-').toString().slice(0, 22)}`,
+                say: (e.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, 34),
+                ratio: Math.round(ratio * 100) / 100,
+                ink: `rgb(${String(Math.round(ink[0] ?? 0))},${String(Math.round(ink[1] ?? 0))},${String(Math.round(ink[2] ?? 0))})`,
+                on: `rgb(${String(Math.round(rr))},${String(Math.round(gg))},${String(Math.round(bb))})`,
+              });
+            }
+          }
+          return out.sort((a, b) => a.ratio - b.ratio).slice(0, 6);
         })(),
         // TEXT CLIPPED INSIDE A COMPONENT, which the document-overflow check
         // cannot see. The owner photographed a segmented control whose third
@@ -512,10 +615,11 @@ for (const width of [390, 1280]) {
         });
       }, { nav: Boolean(process.env.EVENTIDE_NAV), touch: width === 390 });
       // THE SAME MODE MUST LOOK THE SAME WHATEVER THE DEVICE PREFERS.
+      const owners = !publicFace.has(p.name);
       const key = `${p.name} ${mode} ${String(width)}`;
       const was = grounds.get(key);
       if (was === undefined) grounds.set(key, seen.skin);
-      else if (was !== seen.skin) {
+      else if (was !== seen.skin && owners) {
         failures += 1;
         console.log(`  ✗ ${key}: the device preference changed the paint — `
           + `${was.split(' ').filter((x, j) => x !== seen.skin.split(' ')[j]).join('; ')} → ${seen.skin.split(' ').filter((x, j) => x !== was.split(' ')[j]).join('; ')}`);
@@ -535,30 +639,35 @@ for (const width of [390, 1280]) {
       // either a defect or a change nobody meant to make, and both want
       // saying.
       const shapeKey = `${p.name} ${String(width)} ${prefers}`;
+      const comparable = owners && !unsteady.has(p.name);
       const firstShape = shapes.get(shapeKey);
       if (firstShape === undefined) shapes.set(shapeKey, { mode, h: seen.height });
-      else if (firstShape.h !== seen.height) {
+      else if (firstShape.h !== seen.height && comparable) {
         failures += 1;
         console.log(`  ✗ ${shapeKey}: the appearance changed the shape — `
           + `${firstShape.mode} ${String(firstShape.h)}px vs ${mode} ${String(seen.height)}px`);
       }
       const over = seen.scrollW > seen.clientW;
       if (over) failures += 1;
-      if (seen.theme !== mode) { failures += 1; }
+      if (seen.theme !== mode && owners) { failures += 1; }
       // A CLIP IS A FAILURE, NOT A FOOTNOTE. It was reported as neither for
       // the whole campaign, which is how a page with words running off the
       // edge of a button kept being called clean.
       if (seen.clipped.length > 0) failures += 1;
+      // A CONTRAST FAILURE IS A FAILURE. It is the one defect on this list
+      // that makes a page unusable rather than untidy.
+      if (seen.unreadable.length > 0) failures += 1;
       await page.screenshot({
         path: `${dir}/${p.name}-${mode}-${String(width)}.png`,
         fullPage: width === 390,
       });
       if (prefers === 'dark') continue; // One line per page and mode; the
       // second pass exists to compare, not to print the whole table twice.
-      console.log(`  ${over || seen.theme !== mode ? '✗' : '·'} ${p.name.padEnd(16)} ${mode.padEnd(5)} ${String(width).padEnd(5)} `
-        + `theme=${String(seen.theme)} ground=${seen.ground} h=${String(seen.height)}px `
+      console.log(`  ${over || (seen.theme !== mode && owners) ? '✗' : '·'} ${p.name.padEnd(16)} ${mode.padEnd(5)} ${String(width).padEnd(5)} `
+        + `${owners ? `theme=${String(seen.theme)}` : 'public face'} ground=${seen.ground} h=${String(seen.height)}px `
         + `under38=${String(seen.small)}${seen.inline ? ` inline=${String(seen.inline)}` : ''}${
           seen.clipped.length ? ` CLIPPED ${String(seen.clipped.length)}` : ''}${
+          seen.unreadable.length ? ` UNREADABLE ${String(seen.unreadable.length)}` : ''}${
           seen.occluded.length ? ` UNDER-NAV ${String(seen.occluded[0].by)}px [${seen.occluded.map((x) => x.t).join(', ')}]` : ''}${over ? ` OVERFLOW ${String(seen.scrollW)}>${String(seen.clientW)}` : ''}`
         + (process.env.EVENTIDE_BLOCKS
           ? `\n      ${seen.blocks.map((b) => `${String(b.h).padStart(5)}px ${b.t} ${b.say}`).join('\n      ')}` : '')
@@ -567,12 +676,19 @@ for (const width of [390, 1280]) {
         + (process.env.EVENTIDE_SMALL && seen.smallest.length
           ? `\n      ${seen.smallest.map((x) => `${x.t} ${String(x.w)}x${String(x.h)}`).join('\n      ')}` : '')
         + (seen.clipped.length
-          ? `\n      clipped: ${seen.clipped.map((x) => `${x.t} by ${String(x.by)}px “${x.say}”`).join('\n      clipped: ')}` : ''));
+          ? `\n      clipped: ${seen.clipped.map((x) => `${x.t} by ${String(x.by)}px “${x.say}”`).join('\n      clipped: ')}` : '')
+        + (seen.unreadable.length
+          ? `\n      unreadable: ${seen.unreadable.map((x) =>
+    `${x.t} ${String(x.ratio)}:1 ${x.ink} on ${x.on} “${x.say}”`).join('\n      unreadable: ')}` : ''));
     }
   }
   await context.close();
  }
 }
 await browser.close();
+if (unsteady.size > 0) {
+  console.log(`\n  ! ${String(unsteady.size)} page(s) render differently twice running, so their `
+    + `appearances cannot be compared: ${[...unsteady].join(', ')}`);
+}
 console.log(failures === 0 ? '\nEventide: every page rendered, themed and fitted.' : `\nEventide: ${String(failures)} problem(s).`);
 process.exit(failures === 0 ? 0 : 1);
