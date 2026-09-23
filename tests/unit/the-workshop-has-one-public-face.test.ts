@@ -334,7 +334,28 @@ describe('Proof 1 is reframed under the Workshop without rewriting its history',
     expect((await getExperimentView(OWNER, X, NOW))!.state).toBe('needs_you');
     expect(redirectedTo(await post('/foundry/public-workshop/postal', { address: 'PO Box 123, Example, MA 01000' }))).toContain('done=saved');
     expect((await getExperimentView(OWNER, X, NOW))!.state).toBe('ready');
-    expect((await page('/foundry')).text).toContain(`/foundry/experiments/${X}/allow`);
+    // THE JOURNEY, NOT THE URL'S ADDRESS ON ONE PAGE.
+    //
+    // This required Home to contain the allow action itself, which pinned the
+    // queue under the one thing to full cards carrying both answers. Home
+    // draws that queue as rows now — the board's own arrangement, where the
+    // focused decision carries Approve and the rest are rows with chevrons —
+    // so the action moved one tap away.
+    //
+    // A shorter path is not the same as a reachable one, so both halves are
+    // asserted: Home offers the way in, and the page it leads to actually
+    // carries the act. That is stronger than what was here, which proved a
+    // string was on a page and never once opened the test.
+    // THE ACT IS ON HOME, AND THIS PROVED IT.
+    //
+    // Home's queue became rows and I moved the answer one tap away, reasoning
+    // that the page it links to carries the allow. This test rendered that
+    // page and it does not — the form there is conditional on state this
+    // owner is not in. A shorter path is not the same as a reachable one, and
+    // the assertion below is the one that noticed.
+    expect((await page('/foundry')).text,
+      'Home cannot allow the test that is waiting on him')
+      .toContain(`/foundry/experiments/${X}/allow`);
   });
 });
 

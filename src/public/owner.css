@@ -2230,6 +2230,11 @@ a.ev-item:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .ev-item .s{font-size:.78rem;color:var(--ink-3);display:block;margin-top:1px;
   overflow-wrap:anywhere}
 .ev-item .go{color:var(--ink-3);font-size:1rem;flex:0 0 auto}
+/* THE ACT UNDER THE ROW. A decision's yes can be a whole sentence —
+   "Allow — up to $100" — so it goes beneath rather than beside, where it has
+   the width to say what it does. */
+.ev-act-row{display:flex;flex-direction:column;gap:6px}
+.ev-act-row .btn{width:100%}
 
 /* ─── A STATE, SAID ONCE ─────────────────────────────────────────────────────
    Small, and never the only thing said — the row's own line still carries the

@@ -1408,8 +1408,21 @@ export function waitingList(queue: import('../../services/founder/attention.js')
 
          Nothing is hidden that was not already a tap away: every row links to
          the same place its buttons posted to. */ ''}
+    ${/* THE ROW KEEPS THE ANSWER. My first cut of this made each item a row
+         with a chevron, on the board's arrangement — the focused decision
+         carries Approve, the rest are rows you open. I checked the source,
+         saw an allow form on the experiment page, and called the journey
+         complete one tap longer.
+         It was not. `the-workshop-has-one-public-face` asserted the rendered
+         page and it does not carry that action in this state: the form at
+         line 839 is conditional. So the row had quietly removed the only
+         place the owner could say yes — the third capability this campaign
+         has dropped while compressing a card, after the economic sentence and
+         the reversibility fact.
+         The row stays a row: one line of what it is, one of whose it is, and
+         the act itself underneath, which is the part that cannot move. */ ''}
     ${dense ? html`<ul class="ev-list">${queue.map((item) => html`
-      <li><a class="ev-item" href="${item.open?.href ?? item.href}">
+      <li class="ev-act-row"><a class="ev-item" href="${item.open?.href ?? item.href}">
         <span class="body"><span class="t">${item.summary}</span>
           <span class="s">${item.companyName} \u00b7 ${
   item.kind === 'act' ? 'an act' : item.kind === 'advice' ? 'advice'
@@ -1419,7 +1432,19 @@ export function waitingList(queue: import('../../services/founder/attention.js')
   item.effect === 'internal' ? 'internal' : item.effect === 'person' ? 'person-facing'
     : item.effect === 'public' ? 'public' : item.effect === 'provider' ? 'provider-facing'
       : 'account-facing'}</span>` : ''}
-        <span class="go" aria-hidden="true">\u203a</span></a></li>`)}</ul>`
+        <span class="go" aria-hidden="true">\u203a</span></a>
+        ${/* AND THE NAMED STEP IS ALSO AN ACT. An item that is not yet a yes
+             carries `open`, whose LABEL is the next thing to do — "Review who
+             may be contacted", not "Open". The row showed the summary and a
+             chevron, so the instruction disappeared and the owner was left to
+             infer it from a title. Same defect as the missing yes, one line
+             further down. */ ''}
+        ${item.open ? html`<a class="btn go btn-sm" href="${item.open.href}">${
+  item.open.label}</a>` : html`<form method="POST" action="${item.yes.action}">${
+  Object.entries(item.yes.fields ?? {}).map(([k, v]) =>
+    html`<input type="hidden" name="${k}" value="${v}" />`)}
+          <button class="btn go btn-sm" type="submit">${item.yes.label}</button></form>`}
+      </li>`)}</ul>`
     : queue.map((item) => html`<div class="noticed qitem">
       <p class="quiet"><a href="${item.href}">${item.companyName}</a> · ${
     item.kind === 'act' ? 'an act' : item.kind === 'advice' ? 'advice' : item.kind === 'experiment' ? 'a real test' : item.kind === 'charter' ? 'the charter' : item.kind === 'obligation' ? 'somebody owed something' : 'something I noticed'}</p>
@@ -7632,6 +7657,34 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
             <span class="s">where anything that runs, runs</span></span>
           <span class="go" aria-hidden="true">›</span></a></li>
       </ul>
+
+      ${/* WHAT I MAY DO THERE, WHICH THE ROW DROPPED.
+           Turning the Workshop card into a row kept its state and lost the
+           fold underneath it — the two paragraphs naming exactly what Foundry
+           may and may not do with a domain it controls, ending "I cannot
+           transfer the domain, change its nameservers, delete a zone, or
+           touch any other domain: those tools do not exist."
+
+           That is a safety boundary, and `the-workshop-has-one-public-face`
+           failed on its absence. It is the third time in this campaign that
+           compressing a card to a row kept the reading and dropped the
+           sentence that bounds it: the economic "set aside for tests", then
+           "Partly reversible", now this. The row says where it is; the
+           disclosure says what it may do; and what it may NOT do is never the
+           part that gets shortened. */ ''}
+      ${workshop ? html`
+      <details class="fold"><summary><h3>What I may do at the Workshop</h3>
+        <span class="gist">Publish, deploy, keep DNS</span></summary>
+        <p class="quiet">I may publish pages, deploy the one program that serves them, keep
+          the Workshop's own DNS records, and forward its mail to you. Each change leaves a
+          receipt with what was there before. I cannot transfer the domain, change its
+          nameservers, delete a zone, or touch any other domain: those tools do not
+          exist.</p>
+        <p class="quiet">Tests write to strangers only as ${workshop.publicName}, from
+          ${workshop.contactEmail}, pointing at a page I have read back from the world.
+          Your name is on the terms page and, in Experiment 001's sealed public copy, on
+          that test's page; that copy is a record and is not rewritten. Nowhere else.</p>
+      </details>` : ''}
 
       ${/* NO DESTINATION, SO NOT A ROW. Both of these explain why a control
            the owner might look for does not exist. That is an argument, and
