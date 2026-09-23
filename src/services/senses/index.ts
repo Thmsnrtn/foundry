@@ -35,8 +35,31 @@ export type SourceMode = 'real' | 'sandbox' | 'reference';
  * else is already a name people use, so this map is deliberately tiny rather
  * than a full display layer nobody needs.
  */
+/**
+ * A PROVIDER'S NAME AS A PERSON WRITES IT.
+ *
+ * This returned the database key, so a page titled with it said "etsy" and
+ * "stripe" — lowercase, in the owner's own product, about companies that
+ * capitalise their own names everywhere else. A key is an identifier; a name
+ * is what you call something in a sentence.
+ *
+ * Names that are not simply capitalised are listed; everything else takes the
+ * general rule, so a provider added tomorrow reads correctly without anybody
+ * remembering this function exists.
+ */
+const NAMES: Record<string, string> = {
+  reference_world: 'the reference world',
+  etsy: 'Etsy',
+  stripe: 'Stripe',
+  github: 'GitHub',
+  cloudflare: 'Cloudflare',
+  openrouter: 'OpenRouter',
+};
+
 export function providerName(provider: string): string {
-  return provider === 'reference_world' ? 'the reference world' : provider;
+  const known = NAMES[provider];
+  if (known !== undefined) return known;
+  return provider.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
 /** The observation channel a reading from this mode belongs on. */

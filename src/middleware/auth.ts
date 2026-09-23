@@ -276,7 +276,21 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     // Update last_seen_at (fire-and-forget)
     query('UPDATE founders SET last_seen_at = CURRENT_TIMESTAMP WHERE id = ?', [founder.id]).catch((err) => { logger.error(`last_seen_at update failed: ${err}`); });
 
-    await next();
+    // WHICH OF THE THREE HE READS IN, CARRIED FOR THE WHOLE REQUEST.
+    //
+    // Here because this is the one place every authenticated owner request
+    // already loads his row, and the column is on it. The shell puts it on
+    // <html> so the first paint is already his mode: applying a theme in
+    // script after load is a flash of the wrong palette on every navigation,
+    // which on a phone at night is the difference between an application and
+    // a website.
+    //
+    // Null when he has never chosen, and null renders no attribute at all —
+    // so the stylesheet's own `prefers-color-scheme` block answers instead of
+    // us asserting a preference he never expressed.
+    const { withAppearance, isAppearance } = await import('../views/owner/appearance.js');
+    const chosen = (row as unknown as Record<string, unknown>).appearance;
+    return withAppearance(isAppearance(chosen) ? chosen : null, async () => next());
   } catch {
     if (isBrowserRequest(accept)) {
       return c.redirect('/auth/login');

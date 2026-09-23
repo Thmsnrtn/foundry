@@ -28,19 +28,25 @@
 /* DARK IS THE GROUND. The light palette is the alternate, and the toggle wins
    in both directions: an explicit data-theme beats the system preference. */
 :root{
-  --bg:#0B100E; --card:#121915; --card-2:#172019; --line:#243029; --line-2:#2E3C34;
-  --ink:#EAEFEA; --ink-2:#A8B2AA; --ink-3:#7F8A81;
-  --accent:#8FD1B8; --accent-ink:#0B100E; --accent-soft:#1B2A23;
-  --good:#7FCBA8; --good-soft:#16261F;
-  --alert:#D9A85E; --alert-soft:#2A2214;
-  --bad:#E08A7A; --bad-soft:#2C1B18;
+  --bg:#061310; --card:#0D2019; --card-2:#143026; --line:#1D3A30; --line-2:#284C3F;
+  --ink:#E9F1EC; --ink-2:#A9C0B4; --ink-3:#8CA497;
+  --accent:#D9B07B; --accent-ink:#1A1206; --accent-soft:#2A2115;
+  --good:#5FC095; --good-soft:#12291F;
+  --alert:#E3B36A; --alert-soft:#2B2214;
+  --bad:#E58C7C; --bad-soft:#2E1B17;
   --s1:6px; --s2:12px; --s3:18px; --s4:28px; --s5:44px;
   --r:18px; --r2:12px;
   /* CATEGORIES ARE NOT MEANINGS: one hue at four separations, none of which
      says good or bad. */
-  --c1:#B7E4D0; --c2:#7FC3A8; --c3:#4A8570; --c4:#2A4C40;
+  --c1:#BFE7D4; --c2:#7FC8A9; --c3:#4C8B73; --c4:#2B5244;
   --serif:"Newsreader","Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
   --sans:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  /* THE FAMILY THE APPLICATION SPEAKS IN. Eventide keeps the serif for the
+     wordmark and nothing else: a private operating application is not a
+     document, and literary headings on every routine screen made it read like
+     one. One token, so the decision is in a single place rather than
+     twenty-eight rules. */
+  --display:var(--sans);
   --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
 
   /* ── THE NAMES THE INSPECT DEPTH ALREADY USES ────────────────────────────
@@ -72,33 +78,67 @@
 
   color-scheme:dark;
 }
-@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){
-  --bg:#F3F4F1; --card:#FFFFFF; --card-2:#F8F9F6; --line:#E2E6DE; --line-2:#CFD6CD;
-  --ink:#151C18; --ink-2:#4C554E; --ink-3:#68716A;
-  --accent:#256454; --accent-ink:#FFFFFF; --accent-soft:#DDEBE4;
-  --good:#2E7D5B; --good-soft:#E3F1EA;
-  --alert:#96601A; --alert-soft:#F6EBDD;
-  --bad:#A8412F; --bad-soft:#F7E4E0;
+@media (prefers-color-scheme:light){:root:not([data-theme]){
+  --bg:#F7F6F2; --card:#FFFFFF; --card-2:#FBFAF6; --line:#E6E3DB; --line-2:#D3CFC4;
+  --ink:#14201B; --ink-2:#4B564F; --ink-3:#666F68;
+  --accent:#8A5A12; --accent-ink:#FFFFFF; --accent-soft:#F6EEE1;
+  --good:#1F7A55; --good-soft:#E2F1EA;
+  --alert:#8A5A12; --alert-soft:#F7EFE2;
+  --bad:#A33D2B; --bad-soft:#F8E5E1;
   --c1:#123D33; --c2:#2F7D68; --c3:#7FB8A2; --c4:#CADED6;
-  --v3-bg:#F3F4F1; --v3-rail:#ECEEE9; --v3-panel:#FFFFFF; --v3-panel-2:#F8F9F6;
-  --v3-line:rgba(18,61,51,.16); --v3-line-strong:rgba(18,61,51,.30);
-  --v3-mint:#256454; --v3-mint-soft:rgba(37,100,84,.10); --v3-gold:#96601A; --v3-gold-soft:rgba(150,96,26,.10);
-  --v3-red:#A8412F; --v3-shadow:0 14px 38px rgba(0,0,0,.08);
+  --v3-bg:#F7F6F2; --v3-rail:#F0EEE8; --v3-panel:#FFFFFF; --v3-panel-2:#FBFAF6;
+  --v3-line:rgba(20,32,27,.14); --v3-line-strong:rgba(20,32,27,.26);
+  --v3-mint:#1F7A55; --v3-mint-soft:rgba(31,122,85,.10); --v3-gold:#8A5A12; --v3-gold-soft:rgba(138,90,18,.10);
+  --v3-red:#A33D2B; --v3-shadow:0 14px 38px rgba(20,32,27,.08);
   color-scheme:light;
 }}
 :root[data-theme="light"]{
-  --bg:#F3F4F1; --card:#FFFFFF; --card-2:#F8F9F6; --line:#E2E6DE; --line-2:#CFD6CD;
-  --ink:#151C18; --ink-2:#4C554E; --ink-3:#68716A;
-  --accent:#256454; --accent-ink:#FFFFFF; --accent-soft:#DDEBE4;
-  --good:#2E7D5B; --good-soft:#E3F1EA;
-  --alert:#96601A; --alert-soft:#F6EBDD;
-  --bad:#A8412F; --bad-soft:#F7E4E0;
+  --bg:#F7F6F2; --card:#FFFFFF; --card-2:#FBFAF6; --line:#E6E3DB; --line-2:#D3CFC4;
+  --ink:#14201B; --ink-2:#4B564F; --ink-3:#666F68;
+  --accent:#8A5A12; --accent-ink:#FFFFFF; --accent-soft:#F6EEE1;
+  --good:#1F7A55; --good-soft:#E2F1EA;
+  --alert:#8A5A12; --alert-soft:#F7EFE2;
+  --bad:#A33D2B; --bad-soft:#F8E5E1;
   --c1:#123D33; --c2:#2F7D68; --c3:#7FB8A2; --c4:#CADED6;
-  --v3-bg:#F3F4F1; --v3-rail:#ECEEE9; --v3-panel:#FFFFFF; --v3-panel-2:#F8F9F6;
-  --v3-line:rgba(18,61,51,.16); --v3-line-strong:rgba(18,61,51,.30);
-  --v3-mint:#256454; --v3-mint-soft:rgba(37,100,84,.10); --v3-gold:#96601A; --v3-gold-soft:rgba(150,96,26,.10);
-  --v3-red:#A8412F; --v3-shadow:0 14px 38px rgba(0,0,0,.08);
+  --v3-bg:#F7F6F2; --v3-rail:#F0EEE8; --v3-panel:#FFFFFF; --v3-panel-2:#FBFAF6;
+  --v3-line:rgba(20,32,27,.14); --v3-line-strong:rgba(20,32,27,.26);
+  --v3-mint:#1F7A55; --v3-mint-soft:rgba(31,122,85,.10); --v3-gold:#8A5A12; --v3-gold-soft:rgba(138,90,18,.10);
+  --v3-red:#A33D2B; --v3-shadow:0 14px 38px rgba(20,32,27,.08);
   color-scheme:light;
+}
+
+/* EVENTIDE, EXPLICITLY CHOSEN — three modes, one component system.
+   Green is the signature and the bare :root, so it is what an owner who has
+   never touched the switch sees at night. Each explicit mode restates its
+   palette in full, exactly as light already did, because a token declared in
+   only one place is a theme that changes when he presses the switch. */
+:root[data-theme="green"]{
+  --bg:#061310; --card:#0D2019; --card-2:#143026; --line:#1D3A30; --line-2:#284C3F;
+  --ink:#E9F1EC; --ink-2:#A9C0B4; --ink-3:#8CA497;
+  --accent:#D9B07B; --accent-ink:#1A1206; --accent-soft:#2A2115;
+  --good:#5FC095; --good-soft:#12291F;
+  --alert:#E3B36A; --alert-soft:#2B2214;
+  --bad:#E58C7C; --bad-soft:#2E1B17;
+  --c1:#BFE7D4; --c2:#7FC8A9; --c3:#4C8B73; --c4:#2B5244;
+  --v3-bg:#061310; --v3-rail:#081A14; --v3-panel:#0D2019; --v3-panel-2:#143026;
+  --v3-line:rgba(160,214,190,.15); --v3-line-strong:rgba(160,214,190,.27);
+  --v3-mint:#5FC095; --v3-mint-soft:rgba(95,192,149,.11); --v3-gold:#D9B07B; --v3-gold-soft:rgba(217,176,123,.12);
+  --v3-red:#E58C7C; --v3-shadow:0 14px 38px rgba(0,0,0,.30);
+  color-scheme:dark;
+}
+:root[data-theme="dark"]{
+  --bg:#0A0A0B; --card:#131315; --card-2:#1A1A1D; --line:#26262B; --line-2:#323239;
+  --ink:#ECECEE; --ink-2:#ADADB4; --ink-3:#8E8E96;
+  --accent:#D9B07B; --accent-ink:#1A1206; --accent-soft:#272219;
+  --good:#5FC095; --good-soft:#15211C;
+  --alert:#E3B36A; --alert-soft:#262014;
+  --bad:#E58C7C; --bad-soft:#281B18;
+  --c1:#CFCFD6; --c2:#9A9AA4; --c3:#6A6A74; --c4:#43434B;
+  --v3-bg:#0A0A0B; --v3-rail:#0E0E10; --v3-panel:#131315; --v3-panel-2:#1A1A1D;
+  --v3-line:rgba(255,255,255,.10); --v3-line-strong:rgba(255,255,255,.18);
+  --v3-mint:#5FC095; --v3-mint-soft:rgba(95,192,149,.10); --v3-gold:#D9B07B; --v3-gold-soft:rgba(217,176,123,.11);
+  --v3-red:#E58C7C; --v3-shadow:0 14px 38px rgba(0,0,0,.40);
+  color-scheme:dark;
 }
 
 *,*::before,*::after{box-sizing:border-box}
@@ -113,12 +153,12 @@ body{margin:0;background:var(--bg);color:var(--ink);
 .wrap{max-width:34rem;margin:0 auto;
   padding:var(--s3) var(--s3)
     calc(var(--chrome,calc(11rem + env(safe-area-inset-bottom))) + var(--s3) + 8px)}
-h1{font-family:var(--serif);font-size:2rem;line-height:1.15;font-weight:500;
+h1{font-family:var(--display);font-size:1.6rem;line-height:1.2;font-weight:600;letter-spacing:-.02em;
   letter-spacing:-.01em;margin:0 0 var(--s2)}
 .brand{display:flex;align-items:center;gap:10px;margin:0 0 var(--s4);color:var(--ink-2);font-size:.95rem}
 .brand>b{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;
   border-radius:50%;background:var(--card);border:1px solid var(--line);
-  font-family:var(--serif);font-weight:500;color:var(--ink);font-size:1.05rem}
+  font-family:var(--display);font-weight:500;color:var(--ink);font-size:1.05rem}
 
 /* ─── WATCH: the glance ───────────────────────────────────────────────────── */
 /* One fact per row on a phone; two across when there is room; three on a
@@ -130,7 +170,7 @@ h1{font-family:var(--serif);font-size:2rem;line-height:1.15;font-weight:500;
 .tile{background:var(--card);border:1px solid var(--line);border-radius:var(--r2);
   padding:var(--s2) var(--s2) 10px;min-width:0;position:relative}
 .tile dt.k{font-size:.78rem;color:var(--ink-3);margin:0 0 4px;line-height:1.25}
-.tile dd.v{font-family:var(--serif);font-size:1.35rem;line-height:1.1;font-weight:500;
+.tile dd.v{font-family:var(--display);font-size:1.5rem;line-height:1.05;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.02em;
   margin:0 0 4px;overflow-wrap:break-word}
 .tile dd.d{font-size:.78rem;color:var(--ink-2);margin:0;line-height:1.3}
 .tile .d.up{color:var(--good)} .tile .d.down{color:var(--alert)}
@@ -168,7 +208,7 @@ h1{font-family:var(--serif);font-size:2rem;line-height:1.15;font-weight:500;
 .layer .t{flex:1 1 auto;min-width:0}
 .layer .t b{display:block;font-size:.72rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);font-weight:700}
 .layer .t span{font-size:.93rem;color:var(--ink-2)}
-.layer .n{font-family:var(--serif);font-size:1.3rem;color:var(--ink);flex:0 0 auto}
+.layer .n{font-family:var(--display);font-size:1.3rem;color:var(--ink);flex:0 0 auto}
 .bar{display:flex;height:10px;border-radius:999px;overflow:hidden;background:var(--line);margin:var(--s2) 0 var(--s1)}
 /* A SEAM BETWEEN SEGMENTS: four steps of one hue cannot reach 3:1 alone. */
 .bar i{display:block;height:100%;box-shadow:inset 1px 0 0 var(--card)}
@@ -194,7 +234,7 @@ h1{font-family:var(--serif);font-size:2rem;line-height:1.15;font-weight:500;
 .pill.warn{background:var(--alert-soft);color:var(--alert);border-color:transparent}
 .pill.ok{background:var(--accent-soft);color:var(--accent);border-color:transparent}
 .hero{background:var(--card);border:1px solid var(--line);border-radius:var(--r);padding:var(--s3);margin:0 0 var(--s3)}
-.hero h2{font-family:var(--serif);font-size:1.45rem;line-height:1.2;font-weight:500;margin:0 0 var(--s1)}
+.hero h2{font-family:var(--display);font-size:1.25rem;line-height:1.25;font-weight:600;letter-spacing:-.015em;margin:0 0 var(--s1)}
 .hero p{margin:0;color:var(--ink-2)}
 .hero.alert{border-color:var(--alert)}
 .quiet{color:var(--ink-2);font-size:.93rem}
@@ -227,7 +267,7 @@ a:visited{color:var(--accent)}
 .one{background:var(--card);border:1px solid var(--alert);border-radius:var(--r);margin:0 0 var(--s4);overflow:hidden}
 .one.alert{border-color:var(--alert)}
 .one-in{padding:var(--s3)}
-.one h2{font-family:var(--serif);font-size:1.45rem;line-height:1.2;font-weight:500;margin:0 0 var(--s1)}
+.one h2{font-family:var(--display);font-size:1.25rem;line-height:1.25;font-weight:600;letter-spacing:-.015em;margin:0 0 var(--s1)}
 .act{font-size:.7rem;letter-spacing:.13em;text-transform:uppercase;font-weight:700;color:var(--alert);margin:0 0 var(--s1)}
 .one .lead{font-size:1.02rem;margin:0 0 var(--s2)}
 .standing{background:var(--card);border:1px solid var(--accent);border-radius:var(--r);
@@ -885,10 +925,10 @@ a.item .pill{flex:0 0 auto}
 }
 .mline{border-color:var(--os-line);padding:.85rem .15rem}
 .mline dt{font-size:.86rem;color:var(--ink-2)}
-.mline dd{font-family:var(--serif);font-size:1.15rem;letter-spacing:-.01em}
+.mline dd{font-family:var(--display);font-size:1.15rem;letter-spacing:-.01em}
 .mline.total{padding:1.1rem .15rem;border-color:var(--os-line-strong)}
-.mline.total dd,.mline.total dt{font-family:var(--serif);font-size:1.35rem;letter-spacing:-.02em;color:var(--ink)}
-.unknown{font-family:var(--serif);font-style:italic;color:var(--ink-3)}
+.mline.total dd,.mline.total dt{font-family:var(--display);font-size:1.35rem;letter-spacing:-.02em;color:var(--ink)}
+.unknown{font-family:var(--display);font-style:italic;color:var(--ink-3)}
 .why-money{margin-top:.7rem}
 
 /* --------------------------------------------------------------------------
@@ -941,7 +981,7 @@ a.item .pill{flex:0 0 auto}
 /* Dense sections become calm report sections instead of repeated visual boxes. */
 .know{margin-top:2.25rem}
 .know>h2:first-child{
-  font-family:var(--serif);
+  font-family:var(--display);
   font-size:1.4rem;
   letter-spacing:-.015em;
   padding-bottom:.55rem;
@@ -1002,7 +1042,7 @@ a.item .pill{flex:0 0 auto}
   nav.places div::before{
     content:"PRIVATE FOUNDRY\A OWNER OS";
     white-space:pre;
-    font-family:var(--serif);
+    font-family:var(--display);
     font-size:1.18rem;
     line-height:1.2;
     letter-spacing:-.015em;
@@ -1058,7 +1098,7 @@ a.item .pill{flex:0 0 auto}
   main[data-place="experiments"]>a.item{
     max-width:min(56rem,100%);
   }
-  main[data-place="experiments"]>a.item p:first-child strong{font-family:var(--serif);font-size:1.2rem;font-weight:500}
+  main[data-place="experiments"]>a.item p:first-child strong{font-family:var(--display);font-size:1.2rem;font-weight:500}
 
   /* Money is allowed to use width for arithmetic, while explanations remain
      readable. */
@@ -1102,20 +1142,12 @@ body{background-color:var(--bg)}
    ============================================================================= */
 
 :root{
-  --v3-bg:#07100d;
-  --v3-rail:#08120f;
-  --v3-panel:#0b1713;
-  --v3-panel-2:#0e1c17;
-  --v3-line:rgba(151,210,184,.16);
-  --v3-line-strong:rgba(151,210,184,.28);
-  --v3-mint:#66e5b4;
-  --v3-mint-soft:rgba(102,229,180,.11);
-  --v3-gold:#e0b45e;
-  --v3-gold-soft:rgba(224,180,94,.10);
-  --v3-red:#ec766c;
+  --v3-bg:#061310; --v3-rail:#081A14; --v3-panel:#0D2019; --v3-panel-2:#143026;
+  --v3-line:rgba(160,214,190,.15); --v3-line-strong:rgba(160,214,190,.27);
+  --v3-mint:#5FC095; --v3-mint-soft:rgba(95,192,149,.11); --v3-gold:#D9B07B; --v3-gold-soft:rgba(217,176,123,.12);
+  --v3-red:#E58C7C; --v3-shadow:0 14px 38px rgba(0,0,0,.30);
   --v3-radius:10px;
   --v3-rail-w:15.6rem;
-  --v3-shadow:0 14px 38px rgba(0,0,0,.22);
 }
 
 /* THE GROUND FOLLOWS THE THEME. This layer painted a dark gradient on the body
@@ -1252,12 +1284,12 @@ main[data-place="activity"] .ev.money::before{background:var(--v3-mint)}
 main[data-place="activity"] .ev.boundary::before,
 main[data-place="activity"] .ev.obligation::before{background:var(--v3-gold)}
 main[data-place="activity"] .ev.search::before{background:var(--v3-mint)}
-main[data-place="activity"] .ev>p:nth-child(2){font-family:var(--serif);font-size:1.01rem;font-weight:400}
+main[data-place="activity"] .ev>p:nth-child(2){font-family:var(--display);font-size:1.01rem;font-weight:400}
 
 /* Economics: arithmetic first, explanations inspectable. */
 main[data-place="money"] .facts.money{max-width:58rem;background:rgba(7,16,13,.55);border-color:var(--v3-line);padding:.2rem .95rem}
 main[data-place="money"] .mline{padding:.72rem .08rem;border-color:var(--v3-line)}
-main[data-place="money"] .mline dd{font-family:var(--serif);font-size:1.12rem}
+main[data-place="money"] .mline dd{font-family:var(--display);font-size:1.12rem}
 main[data-place="money"] .mline.total{margin:.25rem -.65rem 0;padding:.95rem .65rem;border-top:1px solid rgba(102,229,180,.32);border-radius:7px;background:var(--v3-mint-soft)}
 
 /* Controls / authority are reach maps, not implementation settings. */
@@ -1277,13 +1309,13 @@ main[data-place="money"] .mline.total{margin:.25rem -.65rem 0;padding:.95rem .65
 /* Absence and Roadmap: compare horizons / show load. */
 .absence-horizons{display:grid;gap:9px;margin-top:1.15rem}
 .absence-horizons .horizon{margin:0;padding:.9rem;border:1px solid var(--v3-line);background:var(--v3-panel)}
-.absence-horizons .horizon>h2:first-child{font-family:var(--serif);font-size:1.12rem;font-weight:400;letter-spacing:-.02em;margin:0 0 .45rem;padding-bottom:.58rem;border-bottom:1px solid var(--v3-line)}
+.absence-horizons .horizon>h2:first-child{font-family:var(--display);font-size:1.12rem;font-weight:400;letter-spacing:-.02em;margin:0 0 .45rem;padding-bottom:.58rem;border-bottom:1px solid var(--v3-line)}
 .absence-horizons .horizon>.lede{font-size:.82rem;line-height:1.42;margin:.5rem 0 .65rem}
 .absence-horizons .horizon .sales>li{padding:.65rem 0}
 .cognition-economics{max-width:64rem}
 .roadmap-open .sales,.roadmap-closed .sales{list-style:none;padding:0;display:grid;gap:8px}
 .roadmap-open .sales>li{padding:.9rem;border:1px solid var(--v3-line);background:var(--v3-panel)}
-.roadmap-open .sales>li>b{font-family:var(--serif);font-weight:400;font-size:1rem}
+.roadmap-open .sales>li>b{font-family:var(--display);font-weight:400;font-size:1rem}
 .roadmap-closed{opacity:.78}.roadmap-note{max-width:var(--os-reading);opacity:.74}
 
 /* Ask must not consume the phone viewport. It is a dedicated owner action on
@@ -1428,7 +1460,7 @@ main[data-place="foundry"]>.glance::before{top:-1.25rem}
 .panel{background:linear-gradient(180deg,rgba(255,255,255,.018),transparent 50%),var(--v3-panel);
   border:1px solid var(--v3-line);border-radius:var(--v3-radius);padding:.8rem .85rem;margin:0 0 .6rem;min-width:0}
 .panel>header{display:flex;align-items:baseline;justify-content:space-between;gap:.6rem;margin:0 0 .5rem}
-.panel>header h2,.panel h2{margin:0;font-family:var(--serif);font-size:1.05rem;font-weight:400;letter-spacing:-.01em;color:var(--ink);text-transform:none}
+.panel>header h2,.panel h2{margin:0;font-family:var(--display);font-size:.95rem;font-weight:600;letter-spacing:-.01em;color:var(--ink);text-transform:none}
 .panel h2 .mk{margin-right:.4rem}
 .panel h2 .dim{font-family:var(--sans);font-size:.72rem;color:var(--ink-3)}
 .more-link{flex:0 0 auto;font-size:.76rem;color:var(--ink-2);text-decoration:none;display:inline-flex;align-items:center;gap:.25rem;min-height:32px}
@@ -1468,7 +1500,7 @@ main[data-place="foundry"]>.glance::before{top:-1.25rem}
 .nownext.panel dt.k{display:flex;align-items:center;gap:.4rem;font-size:.62rem;letter-spacing:.12em;text-transform:uppercase;color:var(--ink-3);margin:0 0 .35rem}
 .nownext.panel dt.k .state{margin-left:auto;font-size:.68rem;text-transform:none;letter-spacing:0;padding:2px 8px}
 .nownext.panel dd{display:grid;gap:.3rem;font-size:.86rem}
-.nownext.panel .nm{display:block;font-family:var(--serif);font-size:1.02rem;font-weight:400;letter-spacing:-.01em;color:var(--ink);line-height:1.25}
+.nownext.panel .nm{display:block;font-family:var(--display);font-size:1.02rem;font-weight:400;letter-spacing:-.01em;color:var(--ink);line-height:1.25}
 .nownext.panel .plainlink{color:inherit;text-decoration:none}
 .nownext.panel .plainlink:hover .nm{text-decoration:underline}
 .nownext.panel .quiet{font-size:.78rem;line-height:1.4}
@@ -1531,7 +1563,7 @@ main[data-place="foundry"]>.glance::before{top:-1.25rem}
 .one .means{margin:.35rem 0 0}
 .one .means p{font-size:.86rem;color:var(--ink-2);margin:0 0 .3rem;line-height:1.45}
 .one .means p:last-child{margin-bottom:0}
-.one .lead{font-family:var(--serif);font-size:1.12rem;line-height:1.3;color:var(--ink);margin:0 0 .35rem}
+.one .lead{font-family:var(--display);font-size:1.12rem;line-height:1.3;color:var(--ink);margin:0 0 .35rem}
 .one h2{font-size:1.02rem;font-family:var(--sans);font-weight:500;color:var(--ink-2);letter-spacing:0;margin:0 0 .3rem}
 .one dl.facts{display:grid;grid-template-columns:minmax(6.5rem,32%) minmax(0,1fr);gap:0 var(--s2);padding:.2rem var(--s3) .35rem;font-size:.86rem;margin:0}
 .one dl.facts dt{padding:.5rem 0;border-top:1px solid var(--v3-line);color:var(--ink-3);font-size:.78rem;font-weight:500;line-height:1.35}
@@ -1553,7 +1585,7 @@ main[data-place="foundry"]>.glance::before{top:-1.25rem}
 .decisions-head a.chip b{font-weight:600;color:var(--ink);background:rgba(255,255,255,.06);border-radius:999px;padding:0 7px;font-size:.74rem;line-height:20px}
 .decisions-head a.chip.hot b{background:rgba(236,118,108,.22);color:var(--v3-red)}
 .decisions-head a.chip.on{border-color:var(--v3-mint);color:var(--v3-mint)}
-h2.rank{display:flex;align-items:center;gap:.55rem;margin:1.4rem 0 .6rem;font-family:var(--serif);font-size:1.12rem;font-weight:400;letter-spacing:-.01em;text-transform:none;color:var(--ink)}
+h2.rank{display:flex;align-items:center;gap:.55rem;margin:1.4rem 0 .6rem;font-family:var(--display);font-size:1rem;font-weight:600;letter-spacing:-.01em;text-transform:none;color:var(--ink)}
 h2.rank i{display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;font:600 .7rem/1 var(--sans);font-style:normal;color:#07100d;background:var(--v3-mint)}
 h2.rank i.hot{background:var(--v3-red)}
 h2.rank i.warm{background:var(--v3-gold)}
@@ -1580,10 +1612,10 @@ h2.rank .dim{margin-left:auto;font-family:var(--sans);font-size:.74rem;color:var
 .exp-hero>header h2 .state{font-size:.7rem}
 .exp-q{font-size:.92rem;color:var(--ink-2);line-height:1.45;margin:0 0 .8rem;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
 .exp-prog{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:.2rem .9rem;align-items:end;margin:0 0 .8rem}
-.exp-prog .big{margin:0;font-family:var(--serif);font-size:1.7rem;line-height:1;color:var(--ink)}
+.exp-prog .big{margin:0;font-family:var(--display);font-size:1.7rem;line-height:1;color:var(--ink)}
 .exp-prog .big .quiet{font-family:var(--sans);font-size:.8rem}
 .exp-prog .prog{grid-column:1;height:8px;margin:0}
-.exp-prog .exp-n{grid-column:2;grid-row:1/3;margin:0;text-align:right;font-family:var(--serif);font-size:1.25rem;color:var(--ink);line-height:1.1;align-self:center;padding-left:.9rem;border-left:1px solid var(--v3-line)}
+.exp-prog .exp-n{grid-column:2;grid-row:1/3;margin:0;text-align:right;font-family:var(--display);font-size:1.25rem;color:var(--ink);line-height:1.1;align-self:center;padding-left:.9rem;border-left:1px solid var(--v3-line)}
 .exp-prog .exp-n .quiet{display:block;font-family:var(--sans);font-size:.72rem}
 .exp-numbers{grid-template-columns:repeat(2,minmax(0,1fr));gap:6px;margin:0 0 .7rem;padding:0;border-top:0}
 .exp-numbers .tile{min-height:0;padding:.55rem .6rem}
@@ -1677,7 +1709,7 @@ main[data-place="experiments"] h1 .state{font-size:.72rem;vertical-align:middle;
 .ledger li .mk{grid-row:1/4;margin-top:.15rem;color:var(--ink-3)}
 .ledger li.in .mk{color:var(--v3-mint)}
 .ledger .what{font-size:.9rem;color:var(--ink)}
-.ledger .amt{grid-column:3;grid-row:1;font-family:var(--serif);font-size:1.05rem;font-variant-numeric:tabular-nums;text-align:right;color:var(--ink)}
+.ledger .amt{grid-column:3;grid-row:1;font-family:var(--display);font-size:1.05rem;font-variant-numeric:tabular-nums;text-align:right;color:var(--ink)}
 .ledger li.in .amt{color:var(--v3-mint)}
 .ledger .when{grid-column:2;font-size:.72rem;color:var(--ink-3)}
 .ledger .why-row{grid-column:2/4;border:0;margin:0}
@@ -1736,7 +1768,7 @@ main[data-place="activity"] .ev .when{grid-column:1;grid-row:1/3;margin:0;font-s
 main[data-place="activity"] .ev .dot{grid-column:2;grid-row:1/3;display:inline-flex;margin-top:.05rem;color:var(--ink-3)}
 main[data-place="activity"] .ev.outward .dot,main[data-place="activity"] .ev.money .dot{color:var(--v3-mint)}
 main[data-place="activity"] .ev.authority .dot,main[data-place="activity"] .ev.boundary .dot,main[data-place="activity"] .ev.obligation .dot{color:var(--v3-gold)}
-main[data-place="activity"] .ev .what{grid-column:3;margin:0;font-family:var(--serif);font-size:1rem;line-height:1.3;color:var(--ink)}
+main[data-place="activity"] .ev .what{grid-column:3;margin:0;font-family:var(--display);font-size:1rem;line-height:1.3;color:var(--ink)}
 main[data-place="activity"] .ev .what a{color:inherit;text-decoration:none}
 main[data-place="activity"] .ev .what a:hover{text-decoration:underline}
 main[data-place="activity"] .ev>.quiet{grid-column:3;margin:0;font-size:.8rem;line-height:1.4}
@@ -1750,7 +1782,7 @@ main[data-place="activity"] .ev .pill.kind{grid-column:3;justify-self:start;marg
 /* ── Controls: the owner envelope as cards, stop first ──────────────────── */
 .stop-all{display:grid;grid-template-columns:1.6rem minmax(0,1fr);gap:.35rem .7rem;align-items:center;border-color:rgba(236,118,108,.38);background:radial-gradient(circle at 0 0,rgba(236,118,108,.10),transparent 16rem),var(--v3-panel);margin-bottom:1rem}
 .stop-all>.mk{width:1.6rem;height:1.6rem;color:var(--v3-red);grid-row:1/3}
-.stop-all h2{margin:0 0 .15rem;font-family:var(--serif);font-size:1.15rem;font-weight:400;color:var(--ink)}
+.stop-all h2{margin:0 0 .15rem;font-family:var(--display);font-size:1.15rem;font-weight:400;color:var(--ink)}
 .stop-all .quiet{margin:0}
 .stop-all form{grid-column:2;margin:.2rem 0 0}
 .btn.danger{width:auto;background:rgba(119,42,37,.32);border-color:rgba(236,118,108,.45);color:var(--v3-red);font-weight:600;min-height:44px}
@@ -1762,7 +1794,7 @@ main[data-place="activity"] .ev .pill.kind{grid-column:3;justify-self:start;marg
 .ctl .facts dt{font-size:.76rem}
 .ctl>p{font-size:.9rem;margin:0 0 .5rem}
 .ctl .lines{display:flex;flex-wrap:wrap;align-items:baseline;gap:.5rem;margin:0 0 .5rem}
-.ctl .num{font-family:var(--serif);font-size:1.6rem;color:var(--ink);line-height:1}
+.ctl .num{font-family:var(--display);font-size:1.6rem;color:var(--ink);line-height:1}
 .ctl .prog{margin:.2rem 0 .1rem}
 .ctl .prog-n{display:block;margin-bottom:.5rem}
 .ctl ul{margin:0 0 .4rem;padding-left:1.1rem;color:var(--ink-2);font-size:.9rem}
@@ -1845,7 +1877,7 @@ main[data-place="foundry"]:has(.ask-surface)>.glance{margin-top:1.4rem}
 .charter label.term{display:inline-flex;align-items:center;gap:.4rem;min-height:44px;padding:6px 12px;
   border:1px solid var(--v3-line);border-radius:999px;color:var(--ink-2);font-size:.85rem;font-weight:400;margin:0}
 .charter label.term:has(input:checked){border-color:var(--v3-mint);color:var(--v3-mint)}
-.total-exposure{font-family:var(--serif);font-size:1.25rem;margin:.2rem 0 .6rem}
+.total-exposure{font-family:var(--display);font-size:1.25rem;margin:.2rem 0 .6rem}
 .total-exposure b{font-weight:600}
 
 /* THE SHELVES. A candidate at a glance, and the sentence that filed it there.
@@ -1883,3 +1915,85 @@ details.fold.steer{border-top:0;margin-top:.4rem}
 .owed-to-buyers li{padding:.55rem 0;border-top:1px solid var(--os-line)}
 .owed-to-buyers li:first-child{border-top:0}
 .owed-to-buyers strong{display:block;margin-top:.2rem;color:var(--ink)}
+
+/* =============================================================================
+   EVENTIDE — the application speaks in one modern voice.
+
+   The serif stays where a serif belongs: the wordmark. Everywhere else this is
+   an operating application, and a literary heading on a routine screen made it
+   read like a report about a business rather than a tool for running one.
+
+   These are corrections to weight and rhythm, not a second palette: every
+   colour still resolves through the tokens above, so all three modes carry
+   them without a rule of their own.
+   ============================================================================= */
+
+/* NUMBERS LINE UP OR THEY ARE HARDER TO COMPARE THAN PROSE. Tabular figures on
+   every money and count surface, so a column of them reads as a column. */
+.mline dd,.mline.total dd,.ledger .amt,.ctl .num,.exp-prog .big,.exp-prog .exp-n,
+.total-exposure,.layer .n{font-variant-numeric:tabular-nums}
+
+/* THE CARD IS THE UNIT OF THE APPLICATION.
+   `.know` was a margin and nothing else, so every screen was a single column
+   of prose on the ground — the "long technical document with navigation
+   attached" the owner described. Eventide composes from surfaces: a bounded
+   thing with a label, a state and an action, that the eye can take in and
+   move past. One rule here gives that to every screen at once, which is what
+   a shared component is for.
+
+   `.know .know` is flattened, because a card inside a card is a box somebody
+   drew twice rather than a hierarchy anybody reads. */
+.know{margin:0 0 var(--s3);padding:var(--s3);background:var(--card);
+  border:1px solid var(--line);border-radius:var(--r)}
+.know .know{padding:0;background:none;border:0;border-radius:0}
+.know>*:last-child{margin-bottom:0}
+
+/* SECTION HEADINGS ARE LABELS, NOT ANNOUNCEMENTS. They were set in uppercase
+   at .72rem with .12em of tracking — an eyebrow, which reads as shouting once
+   it carries a real sentence like "What that means I can do". Sentence case,
+   quiet, and small enough that the eye lands on the state below rather than
+   on the word above it. */
+.know>h2,.know>h3,section.know>h2{font-family:var(--display);font-size:.9rem;
+  font-weight:600;letter-spacing:0;text-transform:none;color:var(--ink);
+  margin:0 0 .5rem}
+
+/* THE LEDE CARRIES THE STATE, so it is the one line allowed to be larger than
+   the heading above it. */
+p.lede,.one .lead{font-family:var(--display);font-weight:400;letter-spacing:-.005em}
+
+/* GOLD IS THE OWNER'S HAND. Eventide makes the primary action gold and leaves
+   green to mean healthy — which is why `--accent` moved. A filled gold button
+   and a soft gold chip are the same hue doing two jobs, and the weight is what
+   separates them. */
+.btn.go,button[type="submit"]{font-weight:600;letter-spacing:.005em}
+
+/* A SEGMENTED CONTROL — one choice from a short, visible set.
+   Eventide uses this shape wherever the options are few enough to show: the
+   answer and the alternatives are on screen together, so nothing has to be
+   opened to find out what was chosen. */
+.seg{display:flex;gap:2px;padding:3px;margin:.5rem 0 .4rem;
+  background:var(--card-2);border:1px solid var(--line);border-radius:999px}
+.seg button{flex:1;min-height:38px;padding:.4rem .5rem;border:0;border-radius:999px;
+  background:transparent;color:var(--ink-2);font:500 .86rem/1 var(--sans);cursor:pointer}
+.seg button.on{background:var(--accent);color:var(--accent-ink);font-weight:600}
+.seg button:not(.on):hover{color:var(--ink)}
+.seg button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* GOLD IS AN ACTION, NOT A HYPERLINK.
+   `a{color:var(--accent)}` was written when the accent was mint and meant
+   "direction". Eventide makes the accent the OWNER'S HAND — the filled button
+   he presses — so leaving every anchor gold painted service names, list rows
+   and breadcrumbs in the colour reserved for "this is yours to do". A card
+   that is entirely a link is a row, and a row's title is text.
+
+   Inline anchors inside prose keep the accent: there the colour is doing the
+   work of saying "this is a link" in a place nothing else would. */
+a.know,a.item,a.row{color:var(--ink)}
+a.know:hover,a.item:hover{border-color:var(--line-2)}
+
+/* A ROW IS A ROW, not a paragraph with a border. Eventide's connector list is
+   scannable because each line is one height and the eye can run down it. */
+a.know{display:flex;align-items:center;justify-content:space-between;gap:var(--s2);
+  padding:var(--s2) var(--s3);margin-bottom:var(--s1);min-height:56px;
+  text-decoration:none;transition:border-color .12s ease,background .12s ease}
+a.know:hover{background:var(--card-2)}

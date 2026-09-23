@@ -1970,7 +1970,7 @@ CREATE TABLE "founders" (
   wisdom_network_consent_date TEXT,
   referred_by_code TEXT,
   trial_ends_at TEXT
-, paid_through TEXT);
+, paid_through TEXT, appearance TEXT);
 CREATE TABLE founding_story_artifacts (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL REFERENCES products(id),
@@ -6951,6 +6951,20 @@ BEGIN
       AND x.expected_event_type LIKE 'external_metric:%'
       AND NEW.observation_ref='signal_event:' || e.id
       AND datetime(e.created_at)<=datetime(x.created_at));
+END;
+CREATE TRIGGER founder_appearance_is_one_the_stylesheet_has
+BEFORE UPDATE OF appearance ON founders
+BEGIN
+  SELECT RAISE(ABORT,'founder_appearance:not_a_mode')
+    WHERE NEW.appearance IS NOT NULL
+      AND NEW.appearance NOT IN ('light','green','dark');
+END;
+CREATE TRIGGER founder_appearance_is_one_the_stylesheet_has_at_birth
+BEFORE INSERT ON founders
+BEGIN
+  SELECT RAISE(ABORT,'founder_appearance:not_a_mode')
+    WHERE NEW.appearance IS NOT NULL
+      AND NEW.appearance NOT IN ('light','green','dark');
 END;
 CREATE TRIGGER founder_assertion_guard
 BEFORE INSERT ON signal_events WHEN NEW.source='founder_assertion'

@@ -19,3 +19,4 @@ foundry.db
 # stops is an interrupted run becoming a commit.
 _gate_fixture_*.ts
 node_modules
+.eventide/

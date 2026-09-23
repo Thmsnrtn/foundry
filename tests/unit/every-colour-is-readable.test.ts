@@ -37,21 +37,47 @@ function tokens(block: string): Record<string, string> {
   return out;
 }
 
-/** The dark palette is the bare :root; light is the override, twice over. */
-function palette(which: 'light' | 'dark'): Record<string, string> {
-  const dark = /:root\{([\s\S]*?)\}/.exec(CSS)?.[1] ?? '';
-  if (which === 'dark') return tokens(dark);
+/**
+ * THREE MODES, AND EVERY ONE OF THEM READ.
+ *
+ * Eventide made the bare `:root` the signature GREEN palette and added a
+ * neutral `dark` beside it, so there are three to check rather than two.
+ *
+ * AND A LESSON ABOUT THIS FUNCTION ITSELF. It used to find the light palette
+ * with a regex naming the old media selector, `:root:not([data-theme="dark"])`.
+ * When that selector changed to `:root:not([data-theme])` — so that an
+ * explicit choice beats the system in all three directions — the regex matched
+ * nothing, `media` became '', the comparison loop ran over no keys, and the
+ * function returned the DARK tokens spread under a light label. Twenty
+ * assertions went green while testing the same palette twice.
+ *
+ * So every extraction now has to hit. A gate that cannot find what it is
+ * checking must fail loudly, not quietly agree.
+ */
+function must(re: RegExp, what: string): string {
+  const m = re.exec(CSS);
+  if (!m?.[1]) throw new Error(`the stylesheet no longer contains ${what}; this gate was reading nothing`);
+  return m[1];
+}
+
+function palette(which: 'light' | 'dark' | 'green'): Record<string, string> {
+  const green = tokens(must(/:root\{([\s\S]*?)\n\}/, 'the bare :root palette'));
+  if (which === 'green') return green;
+  if (which === 'dark') {
+    return { ...green, ...tokens(must(/:root\[data-theme="dark"\]\{([\s\S]*?)\n\}/, 'the dark palette')) };
+  }
   // The light palette is declared twice — once for the system preference and
   // once for an explicit toggle — and BOTH are read, because a token defined
   // in only one of them is a theme that changes when he presses the switch.
-  const media = /prefers-color-scheme:light\)\{:root:not\(\[data-theme="dark"\]\)\{([\s\S]*?)\}\}/
-    .exec(CSS)?.[1] ?? '';
-  const explicit = /:root\[data-theme="light"\]\{([\s\S]*?)\}/.exec(CSS)?.[1] ?? '';
-  const a = tokens(media); const b = tokens(explicit);
-  for (const k of Object.keys(a)) {
-    if (b[k] !== a[k]) throw new Error(`light token ${k} differs between the media query and the toggle: ${String(a[k])} vs ${String(b[k])}`);
+  const media = tokens(must(
+    /prefers-color-scheme:light\)\{:root:not\(\[data-theme\]\)\{([\s\S]*?)\n\}\}/,
+    'the light palette under the system preference'));
+  const explicit = tokens(must(
+    /:root\[data-theme="light"\]\{([\s\S]*?)\n\}/, 'the light palette under the toggle'));
+  for (const k of Object.keys(media)) {
+    if (explicit[k] !== media[k]) throw new Error(`light token ${k} differs between the media query and the toggle: ${String(media[k])} vs ${String(explicit[k])}`);
   }
-  return { ...tokens(dark), ...a };
+  return { ...green, ...media };
 }
 
 function luminance(hex: string): number {
@@ -70,7 +96,7 @@ const SURFACES = ['--bg', '--card', '--card-2'];
 const TEXT = ['--ink', '--ink-2', '--ink-3'];
 
 describe('text on every surface, in both themes', () => {
-  for (const theme of ['light', 'dark'] as const) {
+  for (const theme of ['light', 'dark', 'green'] as const) {
     for (const ink of TEXT) {
       for (const surface of SURFACES) {
         it(`${ink} on ${surface} (${theme}) meets AA`, () => {
@@ -87,7 +113,7 @@ describe('text on every surface, in both themes', () => {
   }
 
   it('the two states colour carries meaning with are readable too', () => {
-    for (const theme of ['light', 'dark'] as const) {
+    for (const theme of ['light', 'dark', 'green'] as const) {
       const p = palette(theme);
       for (const token of ['--good', '--alert', '--accent']) {
         const r = ratio(String(p[token]), String(p['--card']));

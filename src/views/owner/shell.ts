@@ -28,6 +28,7 @@
 // =============================================================================
 
 import { html, raw } from 'hono/html';
+import { CHROME, currentAppearance, type Appearance } from './appearance.js';
 import { OWNER_STYLESHEET } from '../../lib/owner-stylesheet.js';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import type { CompanyPlace, DimensionKey } from '../../services/founder/place.js';
@@ -309,8 +310,13 @@ export const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscape
 
 const page2 = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString>,
   active: Place, where: Where | null, counts: DoorCounts, lit: Place,
+) => shellFor(currentAppearance(), title, body, active, where, counts, lit);
+
+const shellFor = (theme: Appearance | null,
+  title: string, body: HtmlEscapedString | Promise<HtmlEscapedString>,
+  active: Place, where: Where | null, counts: DoorCounts, lit: Place,
 ) => html`<!DOCTYPE html>
-<html lang="en">
+<html lang="en"${theme ? raw(` data-theme="${theme}"`) : ''}>
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
@@ -324,8 +330,13 @@ ${/* ON THE HOME SCREEN, IT IS HIS PRODUCT. The owner's surface was the one
 <link rel="apple-touch-icon" href="/static/icon-192.png" />
 <meta name="apple-mobile-web-app-capable" content="yes" />
 <meta name="apple-mobile-web-app-title" content="Foundry" />
-<meta name="theme-color" content="#0B100E" media="(prefers-color-scheme: dark)" />
-<meta name="theme-color" content="#F3F4F1" media="(prefers-color-scheme: light)" />
+${/* THE PHONE'S OWN BARS FOLLOW THE APP. One colour when he has chosen a
+     mode, and the pair of system-conditional ones when he has not — because
+     an unset appearance genuinely is two answers depending on the device. */ ''}
+${theme
+    ? (CHROME[theme] ? html`<meta name="theme-color" content="${CHROME[theme]}" />` : '')
+    : (CHROME.green && CHROME.light ? html`<meta name="theme-color" content="${CHROME.green}" media="(prefers-color-scheme: dark)" />
+<meta name="theme-color" content="${CHROME.light}" media="(prefers-color-scheme: light)" />` : '')}
 <link rel="stylesheet" href="${OWNER_STYLESHEET}" />
 </head>
 <body>

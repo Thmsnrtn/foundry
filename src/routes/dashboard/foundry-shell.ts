@@ -1153,6 +1153,7 @@ export function whatNeedsHim(s: OwnerState): Attention {
 // now and every place consumes them from there. Re-exported here so the five
 // consumers that imported them from this file keep working; the removal path
 // is to point them at the shell and delete these lines.
+import { currentAppearance } from '../../views/owner/appearance.js';
 export { ADDRESSES, LABELS, READINGS, page, placeHead, frameFor } from '../../views/owner/shell.js';
 export type { Where, Place, DoorCounts } from '../../views/owner/shell.js';
 import type { Where } from '../../views/owner/shell.js';
@@ -6561,6 +6562,35 @@ foundryShellRoutes.post('/foundry/companies/:id/understanding/:responsibilityId'
  * is what keeps that a fact rather than an intention.
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
+/**
+ * THREE MODES, AND NOTHING ELSE CHANGES.
+ *
+ * The only control on the Controls page that touches no institutional
+ * authority, which is why it is the only one that needs no confirmation and no
+ * governed act. It writes one column on his own row — not `owner_preferences`,
+ * which holds governed economic statements a later reader is entitled to treat
+ * as instructions, and a display setting has no business in there.
+ *
+ * 'system' clears the column rather than storing a fourth value. Following the
+ * device is the absence of a choice, and recording it as one would make an
+ * owner who never expressed a preference look like he had.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/controls/appearance',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const form = await c.req.parseBody();
+    const mode = String(form.mode ?? '');
+    const { isAppearance } = await import('../../views/owner/appearance.js');
+    if (mode !== 'system' && !isAppearance(mode)) {
+      return c.redirect('/foundry/controls');
+    }
+    await query('UPDATE founders SET appearance = ? WHERE id = ?',
+      [mode === 'system' ? null : mode, String(founder.id)]);
+    return c.redirect('/foundry/controls#appearance');
+  });
+
 foundryShellRoutes.get('/foundry/controls/connectors',
   requireInstitutionOwner(), async (c: any) => {
     const founder = c.get('founder') as { id?: string } | undefined;
@@ -6947,6 +6977,10 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
   const connectors = await connectorsFor(s.productId);
   const connectorsGranted = connectors.filter((x) => x.granted).length;
   const connectorsWorking = connectors.filter((x) => x.qualified).length;
+  // WHAT HE IS READING THIS IN, read from the same request store the shell
+  // painted the page from — never from a second copy that could disagree with
+  // what his eyes are already telling him.
+  const appearanceNow = currentAppearance();
 
   // WHO SET THE LIMIT, NOT JUST WHAT IT IS.
   //
@@ -7141,6 +7175,26 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
         ${connectors.length - connectorsGranted > 0
     ? html`${String(connectors.length - connectorsGranted)} more could be.` : ''}</p>
       <a class="btn go" href="/foundry/controls/connectors">Connections</a>`)}
+
+    ${/* APPEARANCE IS THE ONE CONTROL HERE THAT CHANGES NOTHING FOUNDRY DOES.
+         Deliberately said on the card, because every other control on this
+         page alters what the institution may do and an owner is entitled to
+         know which of them is which. Three modes, one component system: the
+         same rows, the same numbers, the same authority, painted differently.
+         The choice is stored on him rather than on the device, so the phone
+         and the desk agree. */ ''}
+    ${card('eye', 'Appearance', html`
+      <p>Three modes, one application. Changing this changes nothing about what
+        I may do, what anything costs, or what is connected.</p>
+      <form method="POST" action="/foundry/controls/appearance" class="seg">
+        ${['light', 'green', 'dark'].map((m) => html`<button type="submit" name="mode" value="${m}"
+          class="${appearanceNow === m ? 'on' : ''}"${appearanceNow === m ? raw(' aria-current="true"') : ''}>${m === 'light' ? 'Light' : m === 'green' ? 'Green' : 'Dark'}</button>`)}
+        <button type="submit" name="mode" value="system"
+          class="${appearanceNow === null ? 'on' : ''}"${appearanceNow === null ? raw(' aria-current="true"') : ''}>System</button>
+      </form>
+      <p class="quiet">${appearanceNow === null
+    ? 'Following this device. Your phone and your desk may differ, which is what following the device means.'
+    : `Set to ${appearanceNow}, on every device you open Foundry on.`}</p>`)}
 
     ${held.length === 0 ? '' : card('box', 'Things I hold', html`
       <details class="fold"><summary><h3>How this works</h3></summary><p class="quiet">Each of these is something you said I could have. Stopping one
