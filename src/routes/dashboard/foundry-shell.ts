@@ -7706,6 +7706,26 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
           <span class="body"><span class="t">Privacy and data</span>
             <span class="s">consent, where the data lives, taking a copy, deleting it</span></span>
           <span class="go" aria-hidden="true">›</span></a></li>
+        ${/* A PAGE REACHABLE ONLY BY TYPING ITS URL IS A PAGE THAT DOES NOT
+             EXIST — and this one grants tool authority.
+
+             `/connections` is the tool-server door: paste an MCP server's URL
+             and its tools become reachable, then every tool needs a grant of
+             its own, scoped and capped and revocable. It is mounted, it is
+             behind auth and CSRF, it renders, and nothing in the product
+             linked to it. Its own breadcrumb says Controls, which is where it
+             thought it was.
+
+             The revoke controls are the half that matters. An authority the
+             owner cannot reach to withdraw is worse than one he never granted,
+             and it had been that way since the Letter's connect link was moved
+             off this page to Controls and nothing brought the page with it. */ ''}
+        <li><a class="ev-item" href="/connections">
+          <span class="mark" aria-hidden="true">${mark('autonomy')}</span>
+          <span class="body"><span class="t">Tool servers</span>
+            <span class="s">what Foundry can reach, what each grant lets it do there,
+              and how to take one back</span></span>
+          <span class="go" aria-hidden="true">›</span></a></li>
         <li><a class="ev-item" href="/foundry/workshop">
           <span class="mark" aria-hidden="true">${mark('box')}</span>
           <span class="body"><span class="t">The isolated workshop</span>

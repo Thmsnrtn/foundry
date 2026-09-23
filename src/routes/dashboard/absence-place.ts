@@ -66,15 +66,69 @@ function property(p: PropertyReading) {
   </li>`;
 }
 
+/** The one word this horizon answers with, and the dot that colours it. */
+function reads(r: AbsenceReading): { word: string; dot: string } {
+  const bad = r.properties.filter((p) => p.finding === 'DOES_NOT_HOLD').length;
+  const unsure = r.properties.filter((p) => p.finding === 'CANNOT_ESTABLISH').length;
+  if (bad > 0) return { word: `${String(bad)} would not hold`, dot: ' bad' };
+  if (unsure > 0) return { word: `${String(unsure)} I cannot tell`, dot: ' watch' };
+  return { word: 'All five hold', dot: '' };
+}
+
+// THE THREE ANSWERS FIRST, THEN THE WORKING.
+//
+// This page was 7,392px and three quarters of it was this block: three
+// horizons, five properties each, every property's full reading permanently
+// open whether or not it had anything to report. The question the owner comes
+// here with — how long can I be gone before something breaks — was answered
+// fifteen readings deep.
+//
+// So the strip answers it in three cells, and inside each horizon the
+// properties that DO NOT HOLD, and the ones the institution cannot establish,
+// stay open where he lands. Only the ones that hold are folded, and the count
+// is on the summary so a fold never hides how many there are.
+//
+// Which way round that goes is the whole point. A disclosure that hides a
+// failure to look tidy is the defect, not the design: what is wrong stays in
+// front of him, with its evidence and what would fix it, and what is fine is
+// one tap away.
+function horizonStrip(readings: AbsenceReading[]) {
+  return html`<div class="ev-strip">${readings.map((r) => {
+    const { word, dot } = reads(r);
+    return html`<a class="ev-cell" href="#h${String(r.days)}">
+      <span class="c">${String(r.days)} days</span>
+      <span class="top"><span class="dot${dot}"></span>
+        <span class="n sm">${word}</span></span>
+      <span class="d">back on ${r.returnsOn}</span>
+    </a>`;
+  })}</div>`;
+}
+
 function horizon(r: AbsenceReading) {
-  const failing = r.properties.filter((p) => p.finding === 'DOES_NOT_HOLD').length;
-  return html`<div class="know horizon horizon-${String(r.days)}">
+  const failing = r.properties.filter((p) => p.finding === 'DOES_NOT_HOLD');
+  const unsure = r.properties.filter((p) => p.finding === 'CANNOT_ESTABLISH');
+  const holds = r.properties.filter((p) => p.finding === 'HOLDS');
+  return html`<div class="know horizon horizon-${String(r.days)}" id="h${String(r.days)}">
     <h2>${String(r.days)} days — back on ${r.returnsOn}</h2>
     <p class="lede">${r.verdict}</p>
-    <ul class="sales">${r.properties.map(property)}</ul>
-    ${failing === 0 ? '' : html`<p class="quiet">${String(failing)} of five would not hold over
-      this long. A property that holds for a week and fails at ninety days is not a property
-      that holds; it is one nobody had asked the longer question.</p>`}
+    ${failing.length === 0 ? '' : html`<ul class="sales">${failing.map(property)}</ul>`}
+    ${/* "I cannot tell" is not a softer failure and it is not a fine one
+         either: it means the institution has no evidence over this horizon.
+         It folds, but the count is on the summary and in the strip above, so
+         he is told the number without being handed the readings — which is
+         what being told it is for. What DOES NOT HOLD never folds: it has a
+         `wouldFixIt`, which is to say an action, and an action he cannot see
+         is an action he does not have. */ ''}
+    ${unsure.length === 0 ? '' : html`<details class="fold"><summary><h3>What I cannot tell</h3>
+      <span class="gist">${String(unsure.length)} of five</span></summary>
+      <ul class="sales">${unsure.map(property)}</ul></details>`}
+    ${holds.length === 0 ? '' : html`<details class="fold"><summary><h3>What holds</h3>
+      <span class="gist">${holds.length === r.properties.length
+    ? 'all five' : `${String(holds.length)} of five`}</span></summary>
+      <ul class="sales">${holds.map(property)}</ul></details>`}
+    ${failing.length === 0 ? '' : html`<p class="quiet">${String(failing.length)} of five would not
+      hold over this long. A property that holds for a week and fails at ninety days is not a
+      property that holds; it is one nobody had asked the longer question.</p>`}
   </div>`;
 }
 
@@ -98,6 +152,8 @@ absenceRoutes.get('/foundry/absence', async (c: any) => {
   const body = html`
     <h1>If you stepped away</h1>
     <p class="lede">${lede}</p>
+
+    ${horizonStrip(readings)}
 
     <div class="absence-horizons">${readings.map(horizon)}</div>
 
