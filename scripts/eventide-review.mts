@@ -33,47 +33,104 @@ import { resolve } from 'node:path';
 import { runMigrations } from '../src/db/migrate.js';
 import { query } from '../src/db/client.js';
 import { withAppearance, isAppearance } from '../src/views/owner/appearance.js';
+import type { Appearance } from '../src/views/owner/appearance.js';
 
 const OWNER = 'ev_owner';
 const MODES = ['light', 'green', 'dark'] as const;
 // EVERY OWNER-FACING PLACE, so a migration wave can be chosen from what is
 // actually worst rather than from what is nearest to hand.
-const PAGES: Array<{ path: string; name: string }> = [
-  { path: '/foundry', name: 'brief' },
-  { path: '/foundry/controls', name: 'controls' },
-  { path: '/foundry/controls/connectors', name: 'connectors' },
-  { path: '/foundry/controls/connectors/etsy', name: 'connector-etsy' },
-  { path: '/settings', name: 'settings' },
-  { path: '/foundry/companies', name: 'portfolio' },
-  // THE COMPANY ITSELF, not only the list of them. A card was added to this
-  // page and the measurement could not see it: "portfolio" is the index, and
-  // the detail — where a company's senses, its sending identity and its
-  // authority all live — was the one owner surface nothing measured.
-  { path: '/foundry/companies/ev_apex', name: 'company' },
-  { path: '/foundry/experiments', name: 'experiments' },
-  { path: '/foundry/decisions', name: 'decisions' },
-  { path: '/foundry/inbox', name: 'inbox' },
-  { path: '/foundry/money', name: 'money' },
-  { path: '/foundry/activity', name: 'activity' },
-  { path: '/foundry/searching', name: 'searching' },
-  { path: '/foundry/charter', name: 'charter' },
-  { path: '/letter', name: 'letter' },
-  { path: '/privacy', name: 'privacy' },
-  { path: '/connections', name: 'connections' },
-].filter((p, _i, all) => {
+// EVERY OWNER-FACING PLACE, DERIVED RATHER THAN REMEMBERED.
+//
+// This was a list of fourteen paths, under a comment promising "every
+// owner-facing place, so a migration wave can be chosen from what is actually
+// worst rather than from what is nearest to hand". It was not every place. It
+// was missing the Letter — which the shell's footer links from every single
+// owner screen — along with Privacy, Connections, the absence review, the
+// Workshop, the roadmap, the public workshop, every company sub-surface, every
+// experiment sub-surface, a thread in the Inbox, and the why-page. Twenty-odd
+// surfaces that nothing had ever rendered in any appearance at any width.
+//
+// Adding the three most obvious of those by hand found, on the first pass,
+// that the four consent switches on Privacy were printing their own source as
+// text and could not be set at all. A list that has to be remembered will be
+// missing exactly the pages nobody is thinking about, which are the pages
+// where that sort of thing survives.
+//
+// So the list is read off the booted app's routing table. A page that is
+// mounted is a page that is measured, and one added later is measured without
+// anybody updating this file.
+const NAMES: Record<string, string> = {
+  '/foundry': 'brief',
+  '/foundry/controls': 'controls',
+  '/foundry/controls/connectors': 'connectors',
+  '/foundry/controls/connectors/:provider': 'connector-etsy',
+  '/settings': 'settings',
+  '/foundry/companies': 'portfolio',
+  '/foundry/companies/:id': 'company',
+  '/foundry/experiments': 'experiments',
+  '/foundry/decisions': 'decisions',
+  '/foundry/inbox': 'inbox',
+  '/foundry/money': 'money',
+  '/foundry/activity': 'activity',
+  '/foundry/searching': 'searching',
+  '/foundry/charter': 'charter',
+};
+
+// WHAT A PARAMETER STANDS FOR, given what `seed()` actually put in the
+// database. Where there is no honest value the route is still listed — as a
+// surface this harness cannot reach — rather than dropped, because a silent
+// omission is how the first list came to be wrong.
+const PARAM: Record<string, string> = {
+  ':provider': 'etsy',
+  ':id': 'ev_apex',
+  ':sense': 'sales',
+};
+
+// GETs that answer with a file or a redirect rather than a page. Each is here
+// for a stated reason; the default is that a GET is a page.
+const NOT_A_PAGE = new Set([
+  '/static/:file',                  // the stylesheet and the script
+  '/privacy/export',                // a CSV download
+  '/privacy/export-account',        // a JSON download
+  '/settings/export-all',           // a CSV download
+  '/foundry/senses/callback',       // an OAuth landing that redirects
+]);
+
+const unreachable: string[] = [];
+
+function pagesFrom(routes: ReadonlyArray<{ method: string; path: string }>):
+Array<{ path: string; name: string }> {
+  const out: Array<{ path: string; name: string }> = [];
+  const seen = new Set<string>();
+  for (const r of routes) {
+    if (r.method !== 'GET') continue;
+    if (NOT_A_PAGE.has(r.path) || r.path.includes('*')) continue;
+    if (seen.has(r.path)) continue;
+    seen.add(r.path);
+    const filled = r.path.replace(/:[A-Za-z_]+/g, (m) => PARAM[m] ?? m);
+    if (filled.includes(':')) { unreachable.push(r.path); continue; }
+    const derived = filled.replace(/^\//, '').replace(/\//g, '-');
+    const name = NAMES[r.path] ?? (derived === '' ? 'root' : derived);
+    out.push({ path: filled, name });
+  }
+  return out;
+}
+
+function chosen(all: Array<{ path: string; name: string }>):
+Array<{ path: string; name: string }> {
   // POINTABLE AT WHAT CHANGED. A wave that touches two surfaces should not
-  // have to render thirty-nine pages to find out what it did to them, and an
+  // have to render every page to find out what it did to them, and an
   // instrument too slow to run is an instrument that stops being run.
   // No argument still means all of them, so the release measurement is
   // unchanged and cannot be narrowed by forgetting.
   const want = process.argv.slice(2).filter((a) => !a.startsWith('-'));
-  if (want.length === 0) return true;
+  if (want.length === 0) return all;
   const known = new Set(all.map((x) => x.name));
   for (const w of want) {
     if (!known.has(w)) throw new Error(`no page named ${w}; known: ${[...known].join(', ')}`);
   }
-  return want.includes(p.name);
-});
+  return all.filter((p) => want.includes(p.name));
+}
 
 async function seed(): Promise<void> {
   await runMigrations();
@@ -83,7 +140,7 @@ async function seed(): Promise<void> {
     ['ev_apex', 'Apex Micro', OWNER, 'active']);
 }
 
-async function boot(): Promise<string> {
+async function boot(): Promise<{ base: string; app: Hono }> {
   const app = new Hono();
   // The founder as the real middleware attaches him, and the appearance as the
   // real middleware carries it — from `?mode=`, so one running process can be
@@ -92,8 +149,22 @@ async function boot(): Promise<string> {
     c.set('founder' as never,
       { id: OWNER, email: 'owner@example.com', name: 'Thomas Norton' } as never);
     c.set('csrfToken' as never, 'review' as never);
-    const asked = new URL(c.req.url).searchParams.get('mode');
-    return withAppearance(isAppearance(asked) ? asked : null, async () => next());
+    // THE APPEARANCE IS CARRIED THE WAY PRODUCTION CARRIES IT.
+    //
+    // This read `?mode=` off the URL, and six owner surfaces came back with no
+    // `data-theme` at all — reading, correctly, as an appearance that does not
+    // govern. They were redirects: a company with no economics yet 302s, the
+    // browser follows, and the query string does not survive the hop. In
+    // production nothing depends on a query string. `auth.ts` reads the
+    // owner's `appearance` column on the row it already loads for every
+    // authenticated request, so the mode holds across a redirect by
+    // construction.
+    //
+    // So the harness holds it the same way: for the whole render, not for the
+    // URL. An instrument that loses the thing it is measuring halfway through
+    // a hop reports a defect the product does not have.
+    void isAppearance;
+    return withAppearance(rendering, async () => next());
   });
   const { staticAssetHandler } = await import('../src/routes/public/static-assets.js');
   app.get('/static/:file', staticAssetHandler(resolve(import.meta.dirname, '../src')) as never);
@@ -136,14 +207,23 @@ async function boot(): Promise<string> {
   }
   const server = serve({ fetch: app.fetch as never, port: 0 });
   const port = (server.address() as { port: number }).port;
-  return `http://127.0.0.1:${String(port)}`;
+  return { base: `http://127.0.0.1:${String(port)}`, app };
 }
 
 const dir = resolve(import.meta.dirname, '../.eventide');
 mkdirSync(dir, { recursive: true });
 
 await seed();
-const base = await boot();
+const { base, app: booted } = await boot();
+const PAGES = chosen(pagesFrom(booted.routes));
+if (unreachable.length > 0) {
+  // SAID OUT LOUD, EVERY RUN. These are owner surfaces this harness cannot
+  // reach because `seed()` has nothing for their parameter — an experiment
+  // that does not exist, a thread nobody has written. They are not measured,
+  // and the right response is to widen the seed, not to stop printing them.
+  console.log(`  ! ${String(unreachable.length)} surface(s) the seed cannot reach: ${
+    unreachable.join(', ')}`);
+}
 const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
 let failures = 0;
 
@@ -160,6 +240,11 @@ let failures = 0;
 // compare: if green looks different to a phone set to light than to one set
 // to dark, the phone is overruling him.
 const grounds = new Map<string, string>();
+/**
+ * The appearance the current render is in, held for the request the way the
+ * owner's row holds it in production rather than in the address.
+ */
+let rendering: Appearance | null = null;
 const shapes = new Map<string, { mode: string; h: number }>();
 for (const width of [390, 1280]) {
  for (const prefers of ['light', 'dark'] as const) {
@@ -188,8 +273,8 @@ for (const width of [390, 1280]) {
   // order, not the thing.
   for (const p of PAGES) {
     for (const mode of MODES) {
-      const url = `${base}${p.path}${p.path.includes('?') ? '&' : '?'}mode=${mode}`;
-      const res = await page.goto(url, { waitUntil: 'load' });
+      rendering = mode;
+      const res = await page.goto(`${base}${p.path}`, { waitUntil: 'load' });
       const status = res?.status() ?? 0;
       if (status !== 200) {
         // NOT A FAILURE OF THE THEME. A place needing state this harness has
