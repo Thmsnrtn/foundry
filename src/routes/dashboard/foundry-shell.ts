@@ -1250,22 +1250,50 @@ interface Decision {
   alert?: boolean;
 }
 
-const decisionCard = (d: Decision): HtmlEscapedString | Promise<HtmlEscapedString> => html`
+/**
+ * THE ANSWER SITS WITH THE QUESTION.
+ *
+ * The owner photographed this card and called it what it is: a wall of prose
+ * where a modern product would put a summary and two buttons. The order was
+ * the whole defect. It opened with an eyebrow, a question, a lead and every
+ * paragraph of meaning; then the facts; then the lists; then, below all of
+ * it, the thing he had come to press.
+ *
+ * The approved board's decision card is the argument: title, one short
+ * description, Reject and Approve, and everything else behind "Key Details".
+ * Nothing is removed here — every paragraph, every fact, every list is still
+ * on the page, and the first paragraph of meaning still leads, because a
+ * decision with no stated consequence is a button asking for a signature.
+ * What changed is that the rest waits behind a disclosure and the answers
+ * come first.
+ *
+ * WHY THE FIRST PARAGRAPH STAYS OPEN. `meaning` is ordered: its first line is
+ * what agreeing does, and the ones after it are the qualifications. Folding
+ * all of them would put the consequence behind a tap, which is the one thing
+ * this card may never do.
+ */
+const decisionCard = (d: Decision): HtmlEscapedString | Promise<HtmlEscapedString> => {
+  const [says, ...alsoSays] = d.meaning;
+  const more = alsoSays.length > 0 || (d.lists ?? []).length > 0;
+  return html`
   <section id="the-one-thing" class="one${d.alert ? ' alert' : ''}" aria-labelledby="d-title">
     <div class="one-in">
       <p class="act">${d.act}</p>
       <h2 id="d-title">${d.question}</h2>
       <p class="lead">${d.title}</p>
-      <div class="means">${raw(d.meaning.map((m) => `<p>${m}</p>`).join(''))}</div>
+      ${says ? html`<div class="means"><p>${says}</p></div>` : ''}
     </div>
-    <dl class="facts">${raw(d.facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join(''))}</dl>
-    ${(d.lists ?? []).map((l) => html`<div class="know">
-      <h2>${l.heading}</h2>
-      <ul>${l.items.map((i) => html`<li>${i}</li>`)}</ul>
-    </div>`)}
-    ${d.why ? html`<details><summary>Why?</summary><div class="inner">
-      ${d.why.map((w) => html`<p>${w}</p>`)}
-    </div></details>` : ''}
+    ${/* THE FACTS STAY OPEN, AND THE FIRST CUT OF THIS FOLDED THEM.
+         They are the board's "Key Details", and on the board those are an
+         owner, an impact and a rollout — informational, fairly folded. Here
+         one of them is "Partly reversible". Whether an act can be undone is
+         not detail; it is the thing a person most needs before agreeing, and
+         a test caught it disappearing behind a tap. An institution that will
+         not let a caller declare its own safety cannot let a layout hide it
+         either. They are a compact list of pairs; they cost little and they
+         sit above the answers, where they are read before the press. */ ''}
+    ${d.facts.length ? html`<dl class="facts">${
+  raw(d.facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join(''))}</dl>` : ''}
     <div class="do">
       ${d.open ? html`<a class="btn go" href="${d.open.href}">${d.open.label}</a>` : d.primary ? html`<form method="POST" action="${d.primary.action}">
         <input type="hidden" name="return_to" value="foundry" />
@@ -1280,12 +1308,32 @@ const decisionCard = (d: Decision): HtmlEscapedString | Promise<HtmlEscapedStrin
         <button class="btn" type="submit" style="width:auto">${d.secondary.label}</button>
       </form>` : ''}
     </div>
-    ${d.showWork ? html`<p class="row" style="padding:0 var(--s3) var(--s2)">
+    ${d.showWork ? html`<p class="row" style="padding:var(--s2) var(--s3) 0">
       <a class="why" href="${d.showWork}">Show your work</a></p>` : ''}
+    ${/* EVERYTHING HE MIGHT CHECK, IN ONE PLACE INSTEAD OF THREE STACKED
+         OPEN. The qualifications, the facts and the lists were three separate
+         blocks between the question and the answer; they are one disclosure
+         now, and the summary says how much is inside so the fold is worth
+         opening. */ ''}
+    ${more ? html`
+    <details class="fold"><summary><h3>What else is true</h3><span class="gist">${
+  alsoSays.length ? `${String(alsoSays.length)} note${alsoSays.length === 1 ? '' : 's'}`
+    : 'the detail'}</span></summary>
+      ${alsoSays.length ? html`<div class="means">${
+  raw(alsoSays.map((m) => `<p>${m}</p>`).join(''))}</div>` : ''}
+      ${(d.lists ?? []).map((l) => html`<div class="know">
+        <h2>${l.heading}</h2>
+        <ul>${l.items.map((i) => html`<li>${i}</li>`)}</ul>
+      </div>`)}
+    </details>` : ''}
+    ${d.why ? html`<details><summary>Why?</summary><div class="inner">
+      ${d.why.map((w) => html`<p>${w}</p>`)}
+    </div></details>` : ''}
     <details><summary>Technical details</summary><div class="inner">
       <p class="mono">${d.technical}</p>
     </div></details>
   </section>`;
+};
 
 /**
  * WHAT A YES IS CALLED, where the generic word would hide what he is agreeing
