@@ -710,7 +710,15 @@ settingsRoutes.post('/settings/app-credential/etsy', requireInstitutionOwner(), 
   // one — `//evil.test` is a path to a browser and an open redirect to anyone
   // else. An unrecognised `back` is not an error worth showing him; it just
   // means he lands here.
-  const back = safeBackPath(String(body.back ?? ''));
+  // AND WHEN NOTHING SAID WHERE, THE CONNECTION. `safeBackPath` falls back to
+  // Settings, which was right while Settings held this form and is wrong now
+  // that it holds a pointer: a submit with no `back` would land him on a page
+  // that cannot tell him whether his secret was kept. Every form supplies one;
+  // this is the case where none arrived. A `back` that arrived and was refused
+  // still lands on Settings, because that is a rejected value and not a
+  // journey.
+  const asked = String(body.back ?? '').trim();
+  const back = asked === '' ? '/foundry/controls/connectors/etsy' : safeBackPath(asked);
   const sep = back.includes('?') ? '&' : '?';
   if ('failed' in placed) {
     return c.redirect(`${back}${sep}etsy_error=${encodeURIComponent(placed.ownerWords)}`);
@@ -726,7 +734,8 @@ settingsRoutes.post('/settings/app-credential/etsy/forget', requireInstitutionOw
   // landing on Settings after pressing it there would read as a mis-tap.
   // `safeBackPath` is the same guard the placement uses: a path on this host,
   // never protocol-relative, never off-site.
-  const back = safeBackPath(String(body.back ?? ''));
+  const asked = String(body.back ?? '').trim();
+  const back = asked === '' ? '/foundry/controls/connectors/etsy' : safeBackPath(asked);
   return c.redirect(`${back}${back.includes('?') ? '&' : '?'}etsy=forgotten`);
 });
 

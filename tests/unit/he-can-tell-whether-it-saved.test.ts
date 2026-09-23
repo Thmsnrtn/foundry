@@ -52,12 +52,30 @@ beforeAll(async () => {
   app.use('*', async (c, next) => {
     c.set('founder', { id: F, email: 'owner@example.com' }); await next();
   });
+  const { foundryShellRoutes } = await import('../../src/routes/dashboard/foundry-shell.js');
   app.route('/', settingsRoutes);
+  app.route('/', foundryShellRoutes);
 });
 
 const settings = async (qs = ''): Promise<string> => {
   const res = await app.request(`/settings${qs}`);
   expect(res.status, `/settings${qs} did not render`).toBe(200);
+  return res.text();
+};
+
+/**
+ * THE PAGE HE SUBMITTED INTO, which is no longer Settings.
+ *
+ * The application key is one half of a connection, so the form moved to the
+ * connection, and the redirect follows the form. Every property this file
+ * asserts about that page is unchanged — it acknowledges a save, it says
+ * plainly when Etsy refused, it shows where the connection has actually got
+ * to, and it does so from rows rather than a flash. Only the address changed.
+ */
+const landed = async (qs = ''): Promise<string> => {
+  const at = `/foundry/controls/connectors/etsy${qs}`;
+  const res = await app.request(at);
+  expect(res.status, `${at} did not render`).toBe(200);
   return res.text();
 };
 
@@ -73,7 +91,11 @@ describe('the journey knows all six states, and keeps them apart', () => {
   it('starts with no key, and the next thing is his to do', async () => {
     const j = await etsyJourney(P);
     expect(j.stage).toBe('no_key');
-    expect(j.next?.href).toContain(`/foundry/companies/${P}/see/`);
+    // Where the form is. It pointed at the company's revenue gap, which also
+    // offers it; the owner who has set out to connect Etsy is in Connectors,
+    // and sending him to a revenue page to satisfy a connection's
+    // prerequisite is the detour that lost him.
+    expect(j.next?.href).toBe('/foundry/controls/connectors/etsy');
     // Not a technical instruction. The directive: "Make the next legitimate
     // action immediately discoverable."
     expect(j.next?.say).toContain('application key');
@@ -168,19 +190,19 @@ describe('the page he submitted into tells him what happened', () => {
   it('acknowledges the save that the redirect already carried', async () => {
     // The whole defect: this parameter was written by the POST and read by
     // nothing.
-    const html = await settings('?etsy=placed&app=9988776');
+    const html = await landed('?etsy=placed&app=9988776');
     expect(html).toContain('Saved.');
     expect(html).toContain('9988776');
   });
 
   it('says plainly when it was not saved, rather than looking identical', async () => {
-    const html = await settings('?etsy_error=Etsy%20refused%20that%20pair');
+    const html = await landed('?etsy_error=Etsy%20refused%20that%20pair');
     expect(html).toContain('Not saved.');
     expect(html).toContain('Etsy refused that pair');
   });
 
   it('shows where the connection actually is, on the page itself', async () => {
-    const html = await settings();
+    const html = await landed();
     expect(html).toContain('Application key saved, and checked with Etsy');
     expect(html).toContain('Shop identity read back');
   });
@@ -188,19 +210,31 @@ describe('the page he submitted into tells him what happened', () => {
   it('never returns either half of the stored pair to the browser', async () => {
     // "Never display the stored shared secret or expose it through logs,
     // rendered HTML, or the browser response." Asserted against the real
-    // response body, with a credential genuinely stored.
+    // response body, with a credential genuinely stored — on both pages, since
+    // both now read the placement and only one of them used to.
     for (const qs of ['', '?etsy=placed&app=9988776']) {
-      const html = await settings(qs);
-      expect(html, qs).not.toContain(SECRET);
-      expect(html, qs).not.toContain(KEYSTRING);
+      for (const html of [await landed(qs), await settings(qs)]) {
+        expect(html, qs).not.toContain(SECRET);
+        expect(html, qs).not.toContain(KEYSTRING);
+      }
     }
   });
 
   it('survives a refresh, because the state is rows and not a flash', async () => {
     // The banner is a response to an action and goes; the journey is derived
     // from rows and stays. Refreshing must not make him wonder again.
-    const plain = await settings();
+    const plain = await landed();
     expect(plain).not.toContain('Saved.');
     expect(plain).toContain('Application key saved, and checked with Etsy');
+  });
+
+  it('leaves Settings able to say a key is placed, so it does not read as deleted', async () => {
+    // Settings gave the form up; it did not give up knowing. An owner who
+    // remembers placing a key there and finds nothing would reasonably
+    // conclude it was lost.
+    const html = await settings();
+    expect(html).toContain('Etsy application key');
+    expect(html).toContain('A key is placed');
+    expect(html).toContain('/foundry/controls/connectors/etsy');
   });
 });

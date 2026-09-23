@@ -102,23 +102,17 @@ describe('the form is offered in the sentence that needs it', () => {
     expect(shell).not.toContain('const canAsk = (await senseProvider(');
   });
 
-  it('puts both halves of the pair on the connect page itself', () => {
-    const flat = shell.replace(/\s+/g, ' ');
-    expect(flat).toContain("name=\"keystring\"");
-    expect(flat).toContain("name=\"shared_secret\"");
-    expect(flat).toContain('action="/settings/app-credential/etsy"');
-  });
-
-  it('carries the way back, so satisfying a prerequisite lands where it started', () => {
-    const flat = shell.replace(/\s+/g, ' ');
-    expect(flat).toContain('name="back"');
-    expect(flat).toContain('/foundry/companies/${productId}/see/${gap.key}');
-  });
-
-  it('says the key grants no access to any shop, which is the fact he is owed', () => {
-    const flat = shell.replace(/\s+/g, ' ');
-    expect(flat).toContain('they give no access to');
-  });
+  // THREE PROXIES REMOVED, NOT THREE PROPERTIES.
+  //
+  // These read `foundry-shell.ts` for the literal markup of the form and
+  // broke the day the form became one module that three surfaces render.
+  // Nothing they protected changed. What broke was the proxy — the same
+  // failure this file annotates eighty lines below and did not generalise
+  // from, so it is generalised here: a grep proves a string was typed
+  // somewhere in a 7,000-line module; only a render proves the owner meets
+  // it. Each of the three is now asserted against the rendered page, in
+  // `the page he actually lands on`, which clears the key first so the form
+  // is genuinely being offered rather than incidentally absent.
 
   it('shows a refusal where he typed, not on a page he has left', () => {
     expect(shell).toContain("c.req.query('etsy_error')");
@@ -162,18 +156,10 @@ describe('the way back cannot be aimed somewhere else', () => {
 describe('only the half that authenticates is hidden', () => {
   const settings = readFileSync('src/routes/dashboard/settings.ts', 'utf8');
 
-  it('leaves the keystring readable, because it is an identifier', () => {
-    // It travels in the open as `client_id` on the consent URL he is about to
-    // look at. Dots over it protect nothing and cost him the ability to see
-    // that a 24-character paste arrived whole.
-    const flat = settings.replace(/\s+/g, ' ');
-    expect(flat).toContain('<input type="text" name="keystring"');
-  });
-
-  it('keeps the shared secret hidden', () => {
-    const flat = settings.replace(/\s+/g, ' ');
-    expect(flat).toContain('<input type="password" name="shared_secret"');
-  });
+  // WHICH HALF IS MASKED is asserted against the rendered page below, for the
+  // same reason: `settings.ts` no longer draws this form. Settings points at
+  // the connection now, and where markup lives is an arrangement — that the
+  // authenticating half is hidden and the identifier is not is the property.
 
   it('still never reaches for either half of the stored pair', () => {
     // THIS ASSERTION WAS A PROXY AND THE PROXY WENT STALE. It required the
@@ -209,7 +195,29 @@ describe('the page he actually lands on', () => {
 
   it('carries the way back to this same page', async () => {
     const html = await connectPage();
-    expect(html).toContain(`value="/foundry/companies/${P}/see/revenue"`);
+    expect(html).toContain(`name="back" value="/foundry/companies/${P}/see/revenue"`);
+  });
+
+  it('posts to the one place that verifies a pair before keeping it', async () => {
+    expect(await connectPage()).toContain('action="/settings/app-credential/etsy"');
+  });
+
+  it('says the key grants no access to any shop, which is the fact he is owed', async () => {
+    // The sentence he needs before typing a secret into a box: this names an
+    // application, it does not open a shop, and opening one is a separate act
+    // with its own consent screen.
+    const flat = (await connectPage()).replace(/\s+/g, ' ');
+    expect(flat).toContain('give access to any shop');
+  });
+
+  it('leaves the keystring readable and hides only the half that authenticates', async () => {
+    // The keystring travels in the open as `client_id` on the consent URL he
+    // is about to look at. Dots over it protect nothing and cost him the one
+    // thing that matters when a 24-character string is pasted on a phone —
+    // seeing that it arrived whole.
+    const flat = (await connectPage()).replace(/\s+/g, ' ');
+    expect(flat).toContain('<input type="text" name="keystring"');
+    expect(flat).toContain('<input type="password" name="shared_secret"');
   });
 
   it('does not offer a form for a key that belongs in the environment', async () => {
