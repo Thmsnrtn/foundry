@@ -708,6 +708,11 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
         'country_code', 'local_currency', 'ppp_factor', 'referred_by_code',
         'cohort_id', 'lifestyle_mode', 'lifestyle_target_mrr',
         'wisdom_network_consent_date',
+        // WHICH OF THE THREE HE READ IN. A display setting is a small thing to
+        // erase and it is still his: it says he was here and what he preferred
+        // while he was. Cleared rather than kept, because "kept because it
+        // seemed harmless" is how a redaction becomes partial.
+        'appearance',
         'last_seen_at', 'onboarding_completed_at',
       ],
       // NOT NULL, so they are RESET rather than cleared — and the value is not
