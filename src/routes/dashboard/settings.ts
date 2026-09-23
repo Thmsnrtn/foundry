@@ -66,7 +66,6 @@ settingsRoutes.get('/settings', async (c) => {
   const sendingIdentity = firstProduct
     ? await getSendingIdentitySummary(String(firstProduct.id))
     : null;
-  const sendingError = c.req.query('sending_error') ?? null;
   // WHETHER, NOT WHAT. Settings no longer carries the form, so it no longer
   // needs the secret — and a page that decrypts a credential in order to print
   // one sentence about it has paid a real price for a cosmetic answer.
@@ -374,48 +373,26 @@ settingsRoutes.get('/settings', async (c) => {
 
     ${productId ? html`
     <div class="card">
+      ${/* THE SECOND SECTION HERE THAT WAS NEVER A SETTING.
+           This is not a preference; it is a per-company credential deciding
+           whose name arrives in a stranger's inbox, and it sat on the one page
+           that holds none of a company's other facts while the company page
+           said nothing about it at all.
+           It went to the company, under "What I can see" — not to Connectors,
+           where the application key went and where the symmetry pointed.
+           Connectors is the reading surface and says so in as many words:
+           messaging a customer needs its own permission, and none of it comes
+           from there. A sending identity IS that permission. */ ''}
       <h3 id="who-your-customers-hear-from">Who your customers hear from</h3>
-      <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
-        Mail Foundry sends to <em>your customers</em> goes out as you — your
-        domain, your reply address, your unsubscribe footer. It never goes out
-        as Foundry. That means it needs your own email provider account, so the
-        sending domain is one you have verified and the delivery reputation is
-        yours. Mail Foundry sends to <em>you</em> — briefings, alerts, billing
-        — still comes from Foundry.
+      <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:0.75rem;">
+        ${sendingIdentity
+    ? html`Customer mail goes out as <strong>${sendingIdentity.fromEmail}</strong>. It never
+        goes out as Foundry.`
+    : html`No sending address is connected, so mail to your customers is refused. Mail to
+        <em>you</em> — briefings, alerts, billing — still comes from Foundry.`}
       </p>
-      ${sendingIdentity ? html`
-      <p style="font-size:0.87rem;margin:0 0 0.5rem;">
-        Sending as <strong>${sendingIdentity.fromName
-          ? `${sendingIdentity.fromName} <${sendingIdentity.fromEmail}>`
-          : sendingIdentity.fromEmail}</strong> via ${sendingIdentity.provider}.
-      </p>
-      <p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 0.75rem;">
-        ${sendingIdentity.lastAcceptedAt
-          ? `Last accepted by the provider ${sendingIdentity.lastAcceptedAt}.`
-          : 'Connected, but nothing has been sent through it yet — so it has not been proved to work.'}
-      </p>
-      <form method="POST" action="/settings/sending-identity/disconnect">
-        <button type="submit" class="btn btn-ghost btn-sm">Disconnect</button>
-      </form>
-      <p style="font-size:0.75rem;color:var(--text-dim);margin:0.5rem 0 0;">
-        Disconnecting stops customer mail. It does not send it as Foundry instead.
-      </p>
-      ` : html`
-      <p style="font-size:0.82rem;color:var(--text-dim);margin:0 0 0.75rem;">
-        Not connected — mail to your customers is refused until it is.
-      </p>`}
-      ${sendingError ? html`
-      <p style="font-size:0.82rem;color:var(--bad);margin:0 0 0.75rem;">${sendingError}</p>` : ''}
-      <form method="POST" action="/settings/sending-identity" style="margin-top:0.75rem;display:grid;gap:0.5rem;max-width:26rem;">
-        <input type="email" name="from_email" required placeholder="you@yourdomain.com"
-               value="${sendingIdentity?.fromEmail ?? ''}" />
-        <input type="text" name="from_name" placeholder="Display name (optional)"
-               value="${sendingIdentity?.fromName ?? ''}" />
-        <input type="password" name="credential" required placeholder="Your Resend API key" />
-        <button type="submit" class="btn btn-secondary btn-sm">
-          ${sendingIdentity ? 'Replace sending address' : 'Connect sending address'}
-        </button>
-      </form>
+      <a class="btn btn-secondary btn-sm" href="/foundry/companies/${productId}">Open ${
+  firstProduct?.name ?? 'the company'}</a>
     </div>` : ''}
 
     <div class="card">
@@ -622,6 +599,22 @@ settingsRoutes.post('/settings/ingest-credentials', requireCompanyCapability('ca
 // handling. Foundry cannot verify domain ownership and does not pretend to;
 // the provider can, and refuses anything it has not verified.
 
+/**
+ * WHERE HE WAS WHEN HE FILLED THIS IN.
+ *
+ * These forms are rendered on the company page now, so a handler that always
+ * redirected to Settings would take him somewhere he did not come from and
+ * show him a page that no longer holds the form he just submitted. An absent
+ * `back` means the company page is not where he was, so Settings is right;
+ * a `back` that arrives and is refused also lands on Settings, because that
+ * is a rejected value rather than a journey.
+ */
+const backTo = (body: Record<string, string>): string => {
+  const asked = String(body.back ?? '').trim();
+  return asked === '' ? '/settings' : safeBackPath(asked);
+};
+const joiner = (path: string): string => (path.includes('?') ? '&' : '?');
+
 settingsRoutes.post('/settings/sending-identity', requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
@@ -642,9 +635,10 @@ settingsRoutes.post('/settings/sending-identity', requireCompanyCapability('can_
     // The founder gets the reason. A form that silently does nothing is how
     // the Mark Reviewed button spent its whole life.
     if (!(err instanceof SendingIdentityError)) throw err;
-    return c.redirect(`/settings?sending_error=${encodeURIComponent(err.message)}`);
+    return c.redirect(`${backTo(body)}${joiner(backTo(body))}sending_error=${
+      encodeURIComponent(err.message)}`);
   }
-  return c.redirect('/settings?sending=connected');
+  return c.redirect(`${backTo(body)}${joiner(backTo(body))}sending=connected`);
 });
 
 /**
@@ -744,11 +738,13 @@ settingsRoutes.post('/settings/sending-identity/disconnect', requireCompanyCapab
   const ctx = await getLayoutContext(founder, 'settings', 'Settings', undefined, c);
   if (!ctx.productId) return c.redirect('/settings');
 
+  const body = await c.req.parseBody() as Record<string, string>;
   const { clearSendingIdentity } = await import('../../services/outbound/sending-identity.js');
   const removed = await clearSendingIdentity(ctx.productId);
   // Said plainly: after this, mail to your customers stops rather than going
   // out under somebody else's name.
-  return c.redirect(removed ? '/settings?sending=disconnected' : '/settings');
+  const back = backTo(body);
+  return c.redirect(removed ? `${back}${joiner(back)}sending=disconnected` : back);
 });
 
 settingsRoutes.post('/settings/ingest-credentials/:id/revoke', requireCompanyCapability('can_manage_company'), async (c) => {

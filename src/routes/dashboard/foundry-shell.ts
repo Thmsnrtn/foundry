@@ -32,6 +32,7 @@
 import { Hono } from 'hono';
 import { html, raw } from 'hono/html';
 import { etsyKeyPlacement } from '../../views/owner/etsy-key.js';
+import { sendingIdentityPlacement } from '../../views/owner/sending-identity.js';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import { query, realCompany, referenceCompany } from '../../db/client.js';
 import { PRE_CHARTER_THINKING_CENTS } from '../../services/institution/charter.js';
@@ -4075,6 +4076,10 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
   const { placeOf } = await import('../../services/founder/place.js');
   const place = await placeOf(String(founder.id), view.id);
   const frame = place ? frameFor(place, 'overview') : null;
+  // WHOSE NAME ARRIVES IN A STRANGER'S INBOX, read for this company rather
+  // than for whichever one Settings had selected.
+  const { getSendingIdentitySummary } = await import('../../services/outbound/sending-identity.js');
+  const sendingHere = await getSendingIdentitySummary(view.id);
 
   // A QUESTION ASKED HERE IS ABOUT HERE, AND SAYS SO. The composer on this page
   // carries the company as its scope; the answer is rendered at the top with
@@ -4360,6 +4365,32 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
         <button class="btn" type="submit">Stop seeing ${sense.shortName}</button>
       </form>`)}
     </details>` : ''}
+
+    ${/* READING, THEN ACTING, IN THAT ORDER AND SIDE BY SIDE.
+         "Who your customers hear from" is a per-company fact that decides
+         whose name arrives in a stranger's inbox, and it lived on Settings
+         while this page — the one place an owner goes to ask what is true of
+         a business — said nothing about it. It is here, under the senses,
+         because the pair is the lesson: what I can see, and then the separate
+         permission that lets me write to somebody.
+
+         It did NOT go to Connectors, where the application key went and where
+         the symmetry pointed. Connectors is the reading surface and says so:
+         "messaging a customer needs its own permission, and none of it comes
+         from this." A sending identity IS that permission. Filing it there
+         would have made that sentence false on the page that says it. */ ''}
+    <details class="know fold"><summary><h3>Who your customers hear from</h3>
+      <span class="gist">${sendingHere
+    ? (sendingHere.lastAcceptedAt ? 'Connected and proved' : 'Connected, unproved')
+    : 'Not connected'}</span></summary>
+      ${raw(sendingIdentityPlacement({
+    identity: sendingHere,
+    action: '/settings/sending-identity',
+    disconnectAction: '/settings/sending-identity/disconnect',
+    back: `/foundry/companies/${view.id}`,
+    error: c.req.query('sending_error') ?? null,
+  }))}
+    </details>
 
     <details class="know fold"><summary><h3>What I cannot see</h3><span class="gist">${view.blind.length === 0 ? 'nothing I know how to look at' : count(view.blind.length, 'thing')}</span></summary>
       ${view.blind.length === 0

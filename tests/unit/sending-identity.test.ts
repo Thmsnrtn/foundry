@@ -21,6 +21,10 @@
 
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
+// The owner surface refuses a caller who is not the institution's owner, and
+// this file's founder is the one it seeds. Declared here so the reachability
+// test below can drive the real page rather than read the source of one.
+process.env.FOUNDRY_OWNER_EMAIL = 'ada@company.example';
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { readFileSync } from 'fs';
@@ -245,12 +249,39 @@ describe('the founder can reach the control', () => {
     expect(routes).toMatch(/post\('\/settings\/sending-identity\/disconnect'/);
   });
 
-  it('renders the form on the settings page', () => {
-    expect(routes).toMatch(/action="\/settings\/sending-identity"/);
+  it('renders the form where the company is', async () => {
+    // "A rule the person it binds cannot satisfy is not a rule, it is an
+    // outage" — and reaching it is the property, not which file holds the
+    // markup. This read `settings.ts` for the form's action and broke the day
+    // the form moved to the company page, where a per-company credential
+    // belongs and where the owner goes to ask what is true of a business.
+    //
+    // It drives the page instead. A grep proves a string was typed; a render
+    // proves the founder can reach the control, which is what the rule needs.
+    // This file's own founder and company, rather than a second pair: an
+    // `INSERT OR IGNORE` for a founder whose email is already taken skips
+    // silently, and the product that referenced it then failed a foreign key.
+    const { Hono } = await import('hono');
+    const { foundryShellRoutes } = await import('../../src/routes/dashboard/foundry-shell.js');
+    const app = new Hono();
+    app.use('*', async (c: never, next: () => Promise<void>) => {
+      (c as { set: (k: string, v: unknown) => void })
+        .set('founder', { id: F, email: FOUNDER_EMAIL });
+      await next();
+    });
+    app.route('/', foundryShellRoutes);
+    const res = await app.request(`/foundry/companies/${P}`);
+    expect(res.status).toBe(200);
+    const html = await res.text();
+    expect(html).toContain('action="/settings/sending-identity"');
+    expect(html).toContain('name="from_email"');
   });
 
   it('shows the founder why a rejected address was rejected', () => {
     // The Mark Reviewed button spent its whole life silently doing nothing.
+    // The parameter is still written by the handler; it is read on the page
+    // that now draws the form, which `who-your-customers-hear-from-lives-with-
+    // the-company` asserts against a render.
     expect(routes).toMatch(/sending_error/);
   });
 });

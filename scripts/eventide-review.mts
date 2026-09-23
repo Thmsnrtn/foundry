@@ -45,6 +45,11 @@ const PAGES: Array<{ path: string; name: string }> = [
   { path: '/foundry/controls/connectors/etsy', name: 'connector-etsy' },
   { path: '/settings', name: 'settings' },
   { path: '/foundry/companies', name: 'portfolio' },
+  // THE COMPANY ITSELF, not only the list of them. A card was added to this
+  // page and the measurement could not see it: "portfolio" is the index, and
+  // the detail — where a company's senses, its sending identity and its
+  // authority all live — was the one owner surface nothing measured.
+  { path: '/foundry/companies/ev_apex', name: 'company' },
   { path: '/foundry/experiments', name: 'experiments' },
   { path: '/foundry/decisions', name: 'decisions' },
   { path: '/foundry/inbox', name: 'inbox' },
