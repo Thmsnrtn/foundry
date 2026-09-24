@@ -3350,3 +3350,79 @@ is an action he does not have. 5,790px.
 the difference is a second wave.**
 
 **An instrument that measures its own convention will report the convention.**
+
+## Wave: what the page painted, and what the instrument was standing on
+
+**Light mode had a button nobody could read.** `.btn{background:#102019}` — a
+dark green literal in an ordinary rule, applied in every appearance — put
+`rgb(20,32,27)` ink on an `rgb(16,32,25)` button: 1.01:1. Not low contrast;
+the label on every secondary button in the application was invisible in light
+mode. The comment on the line below records the identical defect being found
+on the PRIMARY button of that very line and fixed there, with the default
+button's literal left beside it.
+
+`every-colour-is-readable` computes ratios between TOKENS, which is right for
+the palette and blind to everything else, and the stylesheet paints with
+eighty-nine literal colours inside ordinary rules. So the browser review now
+measures what was actually painted: computed ink, ground composited up through
+every transparent ancestor, against WCAG AA. It reported 126 failures on the
+first run.
+
+- The button, above.
+- 130 instances at 3.56-3.62:1: `nav.places{background:rgba(5,12,9,.97)}`,
+  another green literal in every appearance, so in light mode the five doors
+  of the whole application sat on a dark bar wearing the light palette's grey
+  labels. `--os-mobile-chrome` is the token that exists for that.
+- The state chips, which read from a SECOND state palette. `--v3-mint`,
+  `--v3-gold` and `--v3-red` held their own copies of good, accent and bad:
+  identical in green and dark, and in light a copy that had not been corrected
+  when the canonical ones were. Correcting `--good` reached everything except
+  the chips. That is how two palettes fail — not by disagreeing loudly. They
+  alias the canonical tokens now.
+- `a.chip.on` setting accent text over the inversion's `--ink` background:
+  gold on near-black, 1.7:1.
+
+126 → 0, across thirty-three surfaces, three appearances, two widths, both
+device preferences.
+
+**And the instrument was standing on an emulated pointer that does not survive
+a navigation.** Chromium reports `(pointer:coarse)` on the first page loaded
+in a context and `false` on every one after it, same viewport, same
+`isMobile`. So from the second render onward the stylesheet's thumb rules
+stopped applying and every control called too small on a phone was measured
+against the desk rules. That is why the same link read 29.7px in the review
+and 39.7px opened by hand, and why counts differed between appearances of one
+page — both of which had been put down to the product. Each appearance renders
+on a fresh page now, and the applied floor is printed beside `coarse=`.
+
+**The floor added the wave before was lowering two that were already higher.**
+`p>a:only-child` outranks `.why` (44px) and `.more-link` (40px) and pulled
+both to its own 32; the measurement then reported those two components as
+defective and they were written up as such. It was the rule.
+`p>a:where(:only-child)` has no specificity at all, so it reaches the anchors
+nobody has named and yields to every control that declares its own floor.
+
+With both corrected, one real target remained on the whole surface and it was
+customer-facing: the two standing links at the foot of every public Workshop
+page, 17px. The public stylesheet gets the same rule.
+
+### Evidence maturity
+
+- **Witnessed.** Every figure here is read out of a real browser: the painted
+  contrast on thirty-three surfaces in three appearances at two widths under
+  both device preferences, the resolved palette per appearance, and the
+  applied target floor printed beside every measurement.
+- **Established.** `npm run check` — 639 files, 5,635 tests, twelve gates.
+- **Proof debt.** The contrast measurement lives in the browser review, which
+  is still outside `npm run check` for want of a browser binary. A literal
+  colour can therefore return to the stylesheet and only a release-time run
+  will say so. The door gate still cannot ask its question of parameterised
+  pages.
+
+### The doctrine this wave earned
+
+**A gate that reads the palette cannot see what the page painted.**
+
+**A floor that overrides a higher floor is not a floor.**
+
+**Before believing a measurement, check what the instrument was standing on.**
