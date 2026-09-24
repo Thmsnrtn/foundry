@@ -235,6 +235,8 @@ let rendering: Appearance | null = null;
 const shapes = new Map<string, { mode: string; h: number }>();
 /** Pages that render differently twice running: nothing about them compares. */
 const unsteady = new Set<string>();
+/** Per page and context, every element's paint in each appearance. */
+const paints = new Map<string, Map<string, string[]>>();
 for (const width of [390, 1280]) {
  for (const prefers of ['light', 'dark'] as const) {
   const context = await browser.newContext({
@@ -452,6 +454,39 @@ for (const width of [390, 1280]) {
         //
         // Written with no named function values anywhere, because esbuild
         // gives those a `__name` helper that does not exist in the page.
+        // WHAT THIS ELEMENT IS PAINTED, SO THREE RENDERS CAN BE COMPARED.
+        //
+        // Every check here so far asks whether an appearance changes something
+        // it should not: the shape, or the answer to the device preference.
+        // None of them asks the opposite question — whether it changes what it
+        // SHOULD. An element painted with a literal looks identical in all
+        // three appearances, which is the defect, and it passes every one of
+        // them quietly.
+        //
+        // So each element that carries text or a ground of its own reports its
+        // computed ink and background against a key stable across renders.
+        // Comparing the three then names the elements that did not move.
+        paint: (() => {
+          const out: Array<{ k: string; v: string }> = [];
+          let i = 0;
+          for (const e of Array.from(document.querySelectorAll('body *'))) {
+            i += 1;
+            const cs = getComputedStyle(e);
+            if (cs.visibility === 'hidden' || cs.display === 'none') continue;
+            const r = e.getBoundingClientRect();
+            if (r.width < 8 || r.height < 8) continue;
+            const bg = cs.backgroundColor;
+            const opaque = bg !== 'rgba(0, 0, 0, 0)' && bg !== 'transparent';
+            const text = Array.from(e.childNodes)
+              .some((n) => n.nodeType === 3 && (n.textContent ?? '').trim().length > 1);
+            if (!opaque && !text) continue;
+            out.push({
+              k: `${String(i)}:${e.tagName.toLowerCase()}.${(e.className || '-').toString().slice(0, 24)}`,
+              v: `${text ? cs.color : '-'}|${opaque ? bg : '-'}|${cs.borderTopColor}`,
+            });
+          }
+          return out;
+        })(),
         unreadable: (() => {
           const out: Array<{ t: string; say: string; ratio: number; ink: string; on: string }> = [];
           for (const e of Array.from(document.querySelectorAll('body *'))) {
@@ -659,6 +694,15 @@ for (const width of [390, 1280]) {
       // stated exactly rather than with a tolerance: any drift at all is
       // either a defect or a change nobody meant to make, and both want
       // saying.
+      // WHAT DID NOT MOVE WHEN THE APPEARANCE DID. Collected per page and
+      // compared once its three renders are in.
+      const paintKey = `${p.name} ${String(width)} ${prefers}`;
+      if (!paints.has(paintKey)) paints.set(paintKey, new Map());
+      for (const { k, v } of seen.paint) {
+        const per = paints.get(paintKey)!;
+        if (!per.has(k)) per.set(k, []);
+        per.get(k)!.push(`${mode}=${v}`);
+      }
       const shapeKey = `${p.name} ${String(width)} ${prefers}`;
       const comparable = owners && !unsteady.has(p.name);
       const firstShape = shapes.get(shapeKey);
@@ -708,6 +752,51 @@ for (const width of [390, 1280]) {
  }
 }
 await browser.close();
+// ELEMENTS THE APPEARANCE DID NOT REACH.
+//
+// An element whose ink, ground and border are byte-identical in light, green
+// and dark is painted by something the appearance does not govern — a literal
+// in a rule, almost always. It is not necessarily unreadable, and the contrast
+// check will not see it: a dark green panel on a light page can pass AA and
+// still be a dark green panel on a light page, which is precisely what the
+// owner asked not to happen.
+//
+// Reported rather than gated, and the reading it needs is why. Run against the
+// owner surface as it stands, everything it names is CORRECT: the primary
+// button, whose `--accent-fill` is declared identically in all five palette
+// blocks on purpose, because the one control Eventide paints gold stays gold.
+// The public Workshop preview is excluded outright — it wears the customer's
+// palette and is not asked to follow the owner's.
+//
+// So this finds nothing today and would have found `.btn{background:#102019}`,
+// `nav.places{background:rgba(5,12,9,.97)}` and the whole `--v3-*` divergence
+// the moment each was written. Gating it would mean enumerating every
+// deliberate constant, which is a list that rots; reading fourteen lines after
+// a wave does not.
+{
+  const unmoved = new Map<string, number>();
+  for (const [where, per] of paints) {
+    if (!where.includes(' 390 light')) continue; // one context; the rest repeat it
+    // The public face is not the owner's appearance and is not asked to be.
+    if (publicFace.has(where.slice(0, where.indexOf(' ')))) continue;
+    for (const [k, vals] of per) {
+      if (vals.length !== MODES.length) continue;
+      const only = new Set(vals.map((v) => v.slice(v.indexOf('=') + 1)));
+      if (only.size === 1) {
+        const name = k.slice(k.indexOf(':') + 1);
+        unmoved.set(`${name}  ${[...only][0] ?? ''}`,
+          (unmoved.get(`${name}  ${[...only][0] ?? ''}`) ?? 0) + 1);
+      }
+    }
+  }
+  if (unmoved.size > 0) {
+    console.log(`\n  ! ${String(unmoved.size)} element shape(s) paint identically in all three `
+      + 'appearances, so the appearance does not reach them:');
+    for (const [what, n] of [...unmoved].sort((x, y) => y[1] - x[1]).slice(0, 14)) {
+      console.log(`      ${String(n).padStart(3)}x ${what}`);
+    }
+  }
+}
 if (unsteady.size > 0) {
   console.log(`\n  ! ${String(unsteady.size)} page(s) render differently twice running, so their `
     + `appearances cannot be compared: ${[...unsteady].join(', ')}`);
