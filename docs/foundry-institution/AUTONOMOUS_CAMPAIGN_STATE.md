@@ -3426,3 +3426,48 @@ page, 17px. The public stylesheet gets the same rule.
 **A floor that overrides a higher floor is not a floor.**
 
 **Before believing a measurement, check what the instrument was standing on.**
+
+## Incident: the runners stopped, and two releases did not ship
+
+At 01:13 UTC on 24 September every job queued for this repository began
+failing within seconds with no runner assigned and no log written. It is
+recorded here because a release that does not ship is an institutional fact,
+and because the record should say what was established rather than what was
+assumed.
+
+  · 961b1be8, pushed 00:54 — CI ran 22 minutes and passed.
+  · ac28143f, pushed 00:50 — the deploy's verify job ran the full chain for 21
+    minutes and passed; the deploy job that followed failed in 4 seconds with
+    no runner and no steps.
+  · 2950747f, pushed 01:13 — all three workflows failed in 3-5 seconds. All
+    five CI jobs failed. No logs exist for any of them: HTTP 404, because a
+    job that never starts writes none.
+
+A job that fails in seconds with no runner and no log has been refused, not
+run. Everything queued before roughly 01:11 completed normally, so this is not
+the branch, the diff or the chain. The likeliest cause is the account's Actions
+spending limit or included minutes, which is the owner's to clear and which
+this process cannot read.
+
+WHAT THIS PROCESS CONTRIBUTED. Every push to the campaign branch fires three
+workflows, and two of them — `ci.yml` and `deploy-private.yml`'s verify job —
+run `npm run check` independently against the same commit. That is upwards of
+forty minutes of runner time per push, and this session pushed ten times.
+
+The duplication is real and worth removing. It is NOT being removed while the
+runners are down: no workflow change can be verified without a runner, and the
+one path that ships production is not a thing to edit blind. When Actions
+returns, the shape is to have the deploy gate on CI's conclusion for the same
+SHA rather than re-run the identical chain — every gate still runs exactly once
+per commit, at half the minutes. Skipping CI on a marked commit is NOT the
+answer: CI also runs the build, the audit, the column drift, the schema
+snapshot and the eval net, so skipping it would remove coverage from precisely
+the commits that ship.
+
+Held, unshipped, chain-green locally at 640 files and 5,638 tests: the light
+mode contrast repairs, the target-size floors, and the literal-colour ratchet.
+Production remains on 1d907fab.
+
+One thing the outage did not touch: `forge_tick` recovered on schedule at its
+07:00 window, as forecast when the incident was first recorded, and health has
+read `ok` since.
