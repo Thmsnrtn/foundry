@@ -9,7 +9,7 @@ import { getCookie } from 'hono/cookie';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
 import { createBillingPortalSession, createCheckoutSession } from '../../services/billing/stripe.js';
-import { page } from '../../views/owner/shell.js';
+import { mark, page } from '../../views/owner/shell.js';
 import type { Where } from '../../views/owner/shell.js';
 
 /**
@@ -186,58 +186,75 @@ settingsRoutes.get('/settings', async (c) => {
     ${/* Manage Company (F-061-A) */ ''}
     <div class="card" style="border:1px solid var(--line-2);">
       <h3 id="manage-company">Manage Company</h3>
-      <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
-        Pause, export, or delete your products. These actions apply to your currently selected product${products.rows.length > 1 ? ' — switch products above to target a different one' : ''}.
-      </p>
+      ${/* SAID ONCE. This paragraph listed the three acts — "Pause, export, or
+           delete your products" — immediately above three rows that each name
+           their act and explain it. What it carried that the rows do not is
+           WHICH company they land on, and that is the half worth keeping. */ ''}
+      ${products.rows.length > 1 ? html`<p class="quiet" style="margin-bottom:.75rem;">
+        These act on the company selected above.</p>` : ''}
 
+      ${/* THREE ACTS ON ONE COMPANY, IN THE VOCABULARY THE REST OF THE
+           APPLICATION USES.
+
+           This was three hand-rolled flex rows, eighteen inline style
+           attributes between them, at 711px — the tallest card on Settings by
+           a margin. `.ev-item` is the row Controls and the Brief already use:
+           a mark, a title and its sentence, and whatever acts on it. Nothing
+           is dropped and nothing is folded.
+
+           The delete row keeps its full sentence in front of him, open, for
+           the reason this campaign has written down three times: what bounds
+           an act is never the part that gets shortened. "after a 30-day grace
+           period" is the difference between a button he can recover from and
+           one he cannot. */ ''}
       ${productId ? html`
-      <div style="display:flex;flex-direction:column;gap:1rem;">
-        ${/* Pause / Resume */ ''}
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;background:var(--card-2);border-radius:8px;border:1px solid var(--line);">
-          <div>
-            <div style="font-size:0.875rem;font-weight:600;color:var(--text-primary);">Pause Product</div>
-            <div style="font-size:0.78rem;color:var(--text-dim);">Suspend all agent activity and data ingestion. Your data is preserved.</div>
-          </div>
+      <ul class="ev-list">
+        <li class="ev-item">
+          <span class="mark" aria-hidden="true">${mark('changed')}</span>
+          <span class="body"><span class="t">Pause</span>
+            <span class="s">Suspend all agent activity and data ingestion. Your data is
+              preserved.</span></span>
           <form method="POST" action="/settings/toggle-product-status">
             <input type="hidden" name="product_id" value="${productId}" />
-            <button type="submit" class="btn btn-secondary btn-sm" aria-label="Pause or resume product">
-              ${(firstProduct as Record<string, string> | null)?.scp_status === 'paused' ? 'Resume' : 'Pause'}
-            </button>
+            <button type="submit" class="btn btn-secondary btn-sm"
+              aria-label="Pause or resume product">${
+  (firstProduct as Record<string, string> | null)?.scp_status === 'paused' ? 'Resume' : 'Pause'}</button>
           </form>
-        </div>
-
-        ${/* Export Data */ ''}
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;background:var(--card-2);border-radius:8px;border:1px solid var(--line);">
-          <div>
-            <div style="font-size:0.875rem;font-weight:600;color:var(--text-primary);">Export Data</div>
-            <div style="font-size:0.78rem;color:var(--text-dim);">Download all metrics, decisions, briefings, and configuration.</div>
-          </div>
-          <div style="display:flex;gap:0.5rem;">
-            <a href="/privacy/export" class="btn btn-secondary btn-sm" aria-label="Export product data as JSON">JSON</a>
-            <a href="/privacy/export?format=csv" class="btn btn-secondary btn-sm" aria-label="Export product data as CSV">CSV</a>
-          </div>
-        </div>
-
-        ${/* Delete */ ''}
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:0.75rem 1rem;background:var(--bad-soft);border-radius:8px;border:1px solid var(--bad);">
-          <div>
-            <div style="font-size:0.875rem;font-weight:600;color:var(--bad);">Delete Product</div>
-            <div style="font-size:0.78rem;color:var(--text-dim);">Permanently remove this product and all data after a 30-day grace period.</div>
-          </div>
-          <a href="/privacy" class="btn btn-sm" style="color:var(--bad);border-color:var(--bad);" aria-label="Go to privacy settings to delete product">Delete</a>
-        </div>
-
+        </li>
+        <li class="ev-item">
+          <span class="mark" aria-hidden="true">${mark('box')}</span>
+          <span class="body"><span class="t">Take a copy</span>
+            <span class="s">Every metric, decision, briefing and setting, as a file you
+              keep.</span></span>
+          <span class="ev-act-row">
+            <a href="/privacy/export" class="btn btn-secondary btn-sm"
+              aria-label="Export product data as JSON">JSON</a>
+            <a href="/privacy/export?format=csv" class="btn btn-secondary btn-sm"
+              aria-label="Export product data as CSV">CSV</a>
+          </span>
+        </li>
+        <li class="ev-item bad">
+          <span class="mark" aria-hidden="true">${mark('warn')}</span>
+          <span class="body"><span class="t">Delete</span>
+            <span class="s">Permanently removes this company and all of its data, after a
+              30-day grace period in which you can still stop it.</span></span>
+          <a href="/privacy" class="btn btn-sm"
+            style="color:var(--bad);border-color:var(--bad);"
+            aria-label="Go to privacy settings to delete product">Delete</a>
+        </li>
         ${products.rows.length > 1 ? html`
-        ${/* Fleet-wide actions */ ''}
-        <div style="border-top:1px solid var(--line);padding-top:1rem;margin-top:0.25rem;">
-          <div style="font-size:0.72rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.5rem;">Fleet-wide</div>
-          <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
-            <a href="/settings/export-all" class="btn btn-ghost btn-sm" aria-label="Export all products data">Export All Products</a>
-            <a href="/settings/delete-all-products" class="btn btn-ghost btn-sm" style="color:var(--bad);" aria-label="Delete all products">Delete All Products</a>
-          </div>
-        </div>
-        ` : ''}
-      </div>
+        <li class="ev-item">
+          <span class="mark" aria-hidden="true">${mark('estate')}</span>
+          <span class="body"><span class="t">All companies at once</span>
+            <span class="s">The same two acts, across every company you own.</span></span>
+          <span class="ev-act-row">
+            <a href="/settings/export-all" class="btn btn-ghost btn-sm"
+              aria-label="Export all products data">Copy all</a>
+            <a href="/settings/delete-all-products" class="btn btn-ghost btn-sm"
+              style="color:var(--bad);" aria-label="Delete all products">Delete all</a>
+          </span>
+        </li>` : ''}
+      </ul>
       ` : html`<p style="font-size:0.87rem;color:var(--text-dim);">No product selected.</p>`}
     </div>
 
