@@ -297,14 +297,20 @@ a:visited{color:var(--accent)}
    `(pointer:coarse)` is for. Vertical padding on an inline box grows it
    without moving the line it sits on, so nothing reflows.
 
-   WHAT THIS DOES NOT REACH, so the comment does not claim more than the rule
-   does: `.why` and `.more-link` still measure 28.9px and 25.4px on a phone,
-   although both declare a 40-44px floor of their own a few hundred lines
-   above. Something later wins and I have not yet found it. The measurement
-   names them on every run; they are the next thing, not a solved thing. */
-p>a:only-child{display:inline-block;padding-block:3px;min-height:18px}
+   AND IT IS WRAPPED IN `:where()`, WHICH IS THE WHOLE DIFFERENCE.
+
+   Written as `p>a:only-child` this outranked `.why` (44px) and `.more-link`
+   (40px) and LOWERED them to its own 32, which the measurement then reported
+   as those two components being under the floor. I read that as a defect in
+   them and wrote it up as unsolved; it was this rule. A floor that overrides
+   a higher floor is not a floor.
+
+   `:where()` contributes no specificity, so this is `p a` — weaker than any
+   class — and it applies to the anchors nobody has named while every named
+   control keeps whatever it declares. */
+p>a:where(:only-child){display:inline-block;padding-block:3px;min-height:18px}
 @media (pointer:coarse){
-  p>a:only-child{min-height:32px;padding-block:8px}
+  p>a:where(:only-child){min-height:38px;padding-block:8px}
 }
 
 /* THE ONE THING. Never more than one on a page, and the only gold border on

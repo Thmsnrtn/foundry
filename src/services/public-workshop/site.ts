@@ -60,6 +60,16 @@ header{padding-top:1.25rem;display:flex;flex-wrap:wrap;gap:.5rem 1.25rem;align-i
 header a.name{font-weight:700;text-decoration:none;color:var(--ink);font-size:1.05rem}
 nav{display:flex;flex-wrap:wrap;gap:.25rem 1rem}nav a{color:var(--soft);text-decoration:none;padding:.35rem 0;min-height:44px;display:inline-flex;align-items:center}
 nav a[aria-current]{color:var(--ink);border-bottom:2px solid var(--accent)}
+/* A LINK THAT IS THE WHOLE PARAGRAPH IS A CONTROL. The nav links and the
+   button already carry a 44-48px floor; the two standing links at the foot of
+   a page — "Everything I've put in front of people", "More about me" — were
+   bare anchors at 17px, which is well under WCAG 2.2's minimum and is a
+   customer's thumb on a phone. The :where() wrapper keeps this weaker than
+   any class (and a backtick in here would close the template literal this CSS
+   lives in, which is what check-backticks-in-embedded-comments exists for),
+   so nothing that names its own floor is lowered to this one. */
+p>a:where(:only-child){display:inline-block;padding-block:3px}
+@media (pointer:coarse){p>a:where(:only-child){min-height:38px;padding-block:9px}}
 h1{font-family:Georgia,"Times New Roman",serif;font-weight:400;font-size:2rem;line-height:1.2;margin:2rem 0 .5rem}
 h2{font-family:Georgia,"Times New Roman",serif;font-weight:400;font-size:1.4rem;margin:2.25rem 0 .5rem}
 p{margin:.6rem 0}.lede{font-size:1.15rem;color:var(--soft)}.quiet{color:var(--soft);font-size:.95rem}

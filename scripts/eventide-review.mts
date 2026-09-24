@@ -244,7 +244,7 @@ for (const width of [390, 1280]) {
     hasTouch: width === 390,
     colorScheme: prefers,
   });
-  const page = await context.newPage();
+  let page = await context.newPage();
   // PAGE OUTSIDE, APPEARANCE INSIDE — because the order was being reported as
   // if it were the appearance.
   //
@@ -297,6 +297,22 @@ for (const width of [390, 1280]) {
     }
     for (const mode of MODES) {
       rendering = mode;
+      // A FRESH PAGE, BECAUSE THE EMULATED POINTER DOES NOT SURVIVE ONE.
+      //
+      // Chromium reports `(pointer:coarse)` on the first navigation in a
+      // context and `false` on every one after it, with the same viewport and
+      // the same `isMobile`. So the stylesheet's own thumb rules — everything
+      // guarded on `(pointer:coarse)` — stopped applying from the second
+      // render onward, and every target this instrument called too small was
+      // measured against the desk rules on a phone-sized screen. The numbers
+      // were not wrong about the page; they were about a page the owner will
+      // never see.
+      //
+      // One page per render costs a few seconds across the whole run and makes
+      // the media features mean what they say. `coarse=` is printed beside the
+      // floor under EVENTIDE_SMALL so the two can never drift again silently.
+      await page.close().catch(() => null);
+      page = await context.newPage();
       const res = await page.goto(`${base}${p.path}`, { waitUntil: 'load' });
       const status = res?.status() ?? 0;
       if (status !== 200) {
@@ -356,6 +372,11 @@ for (const width of [390, 1280]) {
           }
           return out.sort().join(' ');
         })(),
+        // WHICH FLOOR THE PAGE ITSELF THINKS IT IS UNDER. The stylesheet asks
+        // `(pointer:coarse)`; this asks the same question in the same context,
+        // so a disagreement between the rule and the measurement is visible
+        // rather than inferred.
+        coarse: matchMedia('(pointer:coarse)').matches,
         scrollW: document.documentElement.scrollWidth,
         clientW: document.documentElement.clientWidth,
         height: document.body.scrollHeight,
@@ -672,7 +693,8 @@ for (const width of [390, 1280]) {
         + (process.env.EVENTIDE_BLOCKS
           ? `\n      ${seen.blocks.map((b) => `${String(b.h).padStart(5)}px ${b.t} ${b.say}`).join('\n      ')}` : '')
         + (process.env.EVENTIDE_SMALL
-          ? `\n      pad=${seen.pad.padBottom} chrome=${seen.pad.chrome || 'unset'} bar=${String(seen.pad.barH)}px` : '')
+          ? `\n      pad=${seen.pad.padBottom} chrome=${seen.pad.chrome || 'unset'} bar=${String(seen.pad.barH)}px`
+            + ` coarse=${String(seen.coarse)} floor=${width === 390 ? '38' : '24'}px` : '')
         + (process.env.EVENTIDE_SMALL && seen.smallest.length
           ? `\n      ${seen.smallest.map((x) => `${x.t} ${String(x.w)}x${String(x.h)}`).join('\n      ')}` : '')
         + (seen.clipped.length
