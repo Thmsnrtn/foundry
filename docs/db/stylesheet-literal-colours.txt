@@ -1,0 +1,59 @@
+# EVERY LITERAL COLOUR STILL PAINTING A READABILITY-BEARING PROPERTY.
+#
+# A colour written into a rule rather than taken from a token paints the
+# same in all three appearances. That is how the secondary button came to
+# be dark green on a light page at 1.01:1, and how the five doors came to
+# sit on a dark bar wearing the light palette. The browser review measures
+# what was painted and says none of these is currently unreadable; they are
+# latent, not harmless.
+#
+# This is a RATCHET. The count may fall and never rise. A new pair fails
+# the gate by name; removing one means editing this file down, which is a
+# deliberate act rather than a silent drift.
+#
+# Gradients are excluded: a gradient stop is a shape, and the tokens it
+# blends are checked where they are declared. Shadows and sheens are not
+# listed because they do not carry text.
+#
+# count	file	property: value
+1	src/public/owner.css	background: #0b1713
+2	src/public/owner.css	background: rgba(0,0,0,.08)
+1	src/public/owner.css	background: rgba(0,0,0,.10)
+1	src/public/owner.css	background: rgba(0,0,0,.12)
+2	src/public/owner.css	background: rgba(0,0,0,.14)
+1	src/public/owner.css	background: rgba(0,0,0,.6)
+1	src/public/owner.css	background: rgba(102,229,180,.10)
+1	src/public/owner.css	background: rgba(111,78,25,.24)
+1	src/public/owner.css	background: rgba(119,42,37,.08)
+1	src/public/owner.css	background: rgba(119,42,37,.22)
+1	src/public/owner.css	background: rgba(119,42,37,.32)
+1	src/public/owner.css	background: rgba(119,42,37,.5)
+1	src/public/owner.css	background: rgba(12,27,22,.78)
+1	src/public/owner.css	background: rgba(224,180,94,.08)
+1	src/public/owner.css	background: rgba(236,118,108,.22)
+1	src/public/owner.css	background: rgba(255,255,255,.03)
+1	src/public/owner.css	background: rgba(255,255,255,.04)
+2	src/public/owner.css	background: rgba(255,255,255,.06)
+1	src/public/owner.css	background: rgba(26,112,82,.28)
+1	src/public/owner.css	background: rgba(7,16,13,.55)
+1	src/public/owner.css	background: rgba(7,16,13,.96)
+1	src/public/owner.css	background: rgba(7,16,13,.97)
+1	src/public/owner.css	background: rgba(9,20,16,.86)
+1	src/public/owner.css	border-color: rgba(102,229,180,.16)
+1	src/public/owner.css	border-color: rgba(102,229,180,.22)
+2	src/public/owner.css	border-color: rgba(102,229,180,.28)
+1	src/public/owner.css	border-color: rgba(102,229,180,.3)
+1	src/public/owner.css	border-color: rgba(143,209,184,.34)
+1	src/public/owner.css	border-color: rgba(224,180,94,.3)
+1	src/public/owner.css	border-color: rgba(224,180,94,.44)
+1	src/public/owner.css	border-color: rgba(224,180,94,.48)
+1	src/public/owner.css	border-color: rgba(236,118,108,.3)
+1	src/public/owner.css	border-color: rgba(236,118,108,.38)
+1	src/public/owner.css	border-color: rgba(236,118,108,.45)
+1	src/public/owner.css	border-left: #444
+1	src/public/owner.css	border-left: rgba(102,229,180,.24)
+1	src/public/owner.css	border-top: rgba(102,229,180,.32)
+1	src/public/owner.css	border: rgba(236,118,108,.28)
+2	src/public/owner.css	color: #07100d
+4	src/public/owner.css	color: #ffffff
+1	src/services/public-workshop/site.ts	color: #fff
