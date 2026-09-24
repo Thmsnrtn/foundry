@@ -23,7 +23,7 @@
 
 import { Hono } from 'hono';
 import { html, raw } from 'hono/html';
-import { page } from './foundry-shell.js';
+import { count, page } from './foundry-shell.js';
 import type { Where } from './foundry-shell.js';
 import {
   absenceHorizons, type AbsenceReading, type Finding, type PropertyReading,
@@ -104,13 +104,46 @@ function horizonStrip(readings: AbsenceReading[]) {
   })}</div>`;
 }
 
-function horizon(r: AbsenceReading) {
-  const failing = r.properties.filter((p) => p.finding === 'DOES_NOT_HOLD');
-  const unsure = r.properties.filter((p) => p.finding === 'CANNOT_ESTABLISH');
-  const holds = r.properties.filter((p) => p.finding === 'HOLDS');
+/** What this property says, as one comparable string. */
+const says = (p: PropertyReading): string => `${p.finding}|${p.sentence}`;
+
+// A LONGER ABSENCE ONLY HAS TO SAY WHAT IS DIFFERENT ABOUT IT.
+//
+// The page exists because "a week is one question and three months is
+// another". Measured against the institution as it stands, that is true of
+// TWO of the five properties: `truthful` and `bounded` change with the length
+// of the absence, and `understandable`, `recoverable` and `only_real_decisions`
+// read identically at seven days, thirty and ninety. So the page was rendering
+// fifteen readings to carry nine facts, and the six repeats were pushing the
+// two that actually move further down the page.
+//
+// Each horizon after the first now shows only what CHANGED from the one
+// before, and names the rest rather than repeating them. That is how the
+// question is actually asked — at a week, here is the picture; at a month,
+// here is what is different — and it puts the properties that depend on
+// duration where a page about duration should put them.
+//
+// The first horizon still shows everything, because it is the baseline the
+// others are differences from, and nothing is hidden anywhere: a property
+// that stops holding at ninety days appears at ninety days, open, with what
+// would fix it.
+function horizon(r: AbsenceReading, prev: AbsenceReading | null) {
+  const moved = prev === null ? r.properties : r.properties.filter((p) => {
+    const before = prev.properties.find((q) => q.property === p.property);
+    return before === undefined || says(before) !== says(p);
+  });
+  const held = prev === null ? [] : r.properties.filter((p) => !moved.includes(p));
+  const failing = moved.filter((p) => p.finding === 'DOES_NOT_HOLD');
+  const unsure = moved.filter((p) => p.finding === 'CANNOT_ESTABLISH');
+  const holds = moved.filter((p) => p.finding === 'HOLDS');
   return html`<div class="know horizon horizon-${String(r.days)}" id="h${String(r.days)}">
     <h2>${String(r.days)} days — back on ${r.returnsOn}</h2>
     <p class="lede">${r.verdict}</p>
+    ${prev === null || moved.length > 0 ? '' : html`<p class="quiet">Nothing changes between
+      ${String(prev.days)} days and ${String(r.days)}: all five read exactly as they do above.</p>`}
+    ${held.length === 0 ? '' : html`<p class="quiet">${held.length === r.properties.length ? 'Every'
+    : `The other ${count(held.length, 'property')}`} reads exactly as at ${String(prev?.days ?? 0)}
+      days: ${held.map((p) => p.question).join('; ')}.</p>`}
     ${failing.length === 0 ? '' : html`<ul class="sales">${failing.map(property)}</ul>`}
     ${/* "I cannot tell" is not a softer failure and it is not a fine one
          either: it means the institution has no evidence over this horizon.
@@ -126,7 +159,7 @@ function horizon(r: AbsenceReading) {
       <span class="gist">${holds.length === r.properties.length
     ? 'all five' : `${String(holds.length)} of five`}</span></summary>
       <ul class="sales">${holds.map(property)}</ul></details>`}
-    ${failing.length === 0 ? '' : html`<p class="quiet">${String(failing.length)} of five would not
+    ${failing.length === 0 || prev !== null ? '' : html`<p class="quiet">${String(failing.length)} of five would not
       hold over this long. A property that holds for a week and fails at ninety days is not a
       property that holds; it is one nobody had asked the longer question.</p>`}
   </div>`;
@@ -155,7 +188,8 @@ absenceRoutes.get('/foundry/absence', async (c: any) => {
 
     ${horizonStrip(readings)}
 
-    <div class="absence-horizons">${readings.map(horizon)}</div>
+    <div class="absence-horizons">${readings.map((r, i) =>
+    horizon(r, i === 0 ? null : (readings[i - 1] ?? null)))}</div>
 
     ${/* AND THE ONE THING NONE OF THE FIVE PROPERTIES CAN ANSWER. Every
          horizon above is read from records this process wrote; none of them
