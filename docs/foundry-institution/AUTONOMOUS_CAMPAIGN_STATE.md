@@ -3471,3 +3471,20 @@ Production remains on 1d907fab.
 One thing the outage did not touch: `forge_tick` recovered on schedule at its
 07:00 window, as forecast when the incident was first recorded, and health has
 read `ok` since.
+
+### PENDING 23 decided, for a stated reason and a stated term
+
+24 September: the owner made the repository public to unblock the runners,
+having been shown what that exposes — the Etsy keystring in two commits of
+history (removed from the working tree on 22 September, permanent in the
+commits), his postal address in four files including a test fixture, his name
+in seventy-three and his email in thirteen, and the whole institutional
+corpus. He chose not to rotate the key and asked that the work continue.
+
+It is written here because an accepted risk that is recorded is a decision and
+the same risk unrecorded is indistinguishable from an oversight. His stated
+term is "a little while until this development is finished", so this is a
+temporary state with an end he has not dated. What would make it permanent is
+nobody revisiting it; what would close it is going private again, or rotating
+the keystring and scrubbing the address, whichever he prefers when the
+development is done.
