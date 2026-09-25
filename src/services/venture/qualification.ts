@@ -344,6 +344,27 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
               : met('the shop it would act on is confirmed',
                 `${venue} named ${shopName} and you confirmed it is yours`));
 
+    // WHETHER A BUYER COULD FIND IT AT ALL. A shop can be connected, confirmed
+    // and read, and still be hidden from the venue's own search — Developer
+    // Mode did that to ApexMicro, and nothing the connection reads says so.
+    // A listing nobody can find turns the test's silence into a fact about the
+    // shop, so he is asked, and the latest thing he said decides.
+    if (productId) {
+      const { findabilityOf } = await import('./findability.js');
+      const said = await findabilityOf(productId, plan!.listing!.venue);
+      const where = shopName ?? `your ${venue} shop`;
+      conditions.push(said?.findable && said.byTheOwner
+        ? met('buyers can find the shop', `you said on ${said.saidAt.slice(0, 10)} that buyers can find ${where} in ${venue} search`)
+        : { name: 'buyers can find the shop', verdict: 'waits_for_you',
+          because: said && !said.byTheOwner
+            ? `whether buyers can find ${where} was last said by somebody who does not own this company now, so it has not been said by you`
+            : said
+            ? `you said on ${said.saidAt.slice(0, 10)} that buyers cannot find ${where} in ${venue} search, so no sale would mean nothing`
+            : `you have not said whether buyers can find ${where} in ${venue} search. ${venue} can hide a whole shop — `
+              + 'Developer Mode, or vacation — and I cannot see either, so a test there could end with no sale '
+              + 'that nobody was able to make' });
+    }
+
     const exposure = (await query(
       `SELECT exposure_ref, withdrawn_at FROM experiment_exposures
         WHERE experiment_id = ? ORDER BY placed_at DESC, rowid DESC LIMIT 1`, [experimentId]))
@@ -496,7 +517,7 @@ function stateFrom(conditions: QualificationCondition[], e: Record<string, unkno
   if (e.ran_at != null) return 'operating';
   if (blocked.length === 0) return 'ready_within_charter';
 
-  const account = conditions.find((c) => c.verdict === 'waits_for_you' && /can be operated|listing is live/.test(c.name));
+  const account = conditions.find((c) => c.verdict === 'waits_for_you' && /can be operated|listing is live|can find the shop/.test(c.name));
   if (account) return 'needs_external_account';
   if (has('unproven')) return 'testing_capability';
   if (has('waits_for_you')) return 'needs_owner_authorisation';

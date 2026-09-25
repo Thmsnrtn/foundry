@@ -4584,6 +4584,15 @@ CREATE TABLE venture_opportunities (
   decided_at    TEXT
 , revisit_if TEXT, lighter_architecture TEXT, from_seed_id TEXT
   REFERENCES opportunity_seeds(id));
+CREATE TABLE venue_findability (
+  id          TEXT PRIMARY KEY,
+  founder_id  TEXT NOT NULL REFERENCES founders(id),
+  product_id  TEXT NOT NULL REFERENCES products(id),
+  provider    TEXT NOT NULL CHECK (provider = lower(provider) AND length(provider) > 0),
+  findable    INTEGER NOT NULL CHECK (findable IN (0, 1)),
+  said_by     TEXT NOT NULL CHECK (said_by = 'founder:' || founder_id),
+  said_at     TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE venue_orders_after_settlement (
   id               TEXT PRIMARY KEY,
   founder_id       TEXT NOT NULL REFERENCES founders(id),
@@ -5427,6 +5436,7 @@ CREATE INDEX idx_workspaces_live ON workspaces(founder_id) WHERE destroyed_at IS
 CREATE INDEX owner_decision_reversals_subject
   ON owner_decision_reversals (subject_kind, subject_id);
 CREATE INDEX owner_exclusion_marks_value ON owner_exclusion_marks (kind, value);
+CREATE INDEX venue_findability_by_shop ON venue_findability (product_id, provider, said_at);
 CREATE TRIGGER acquisition_economics_guard
 BEFORE INSERT ON acquisition_economics
 BEGIN
@@ -10130,6 +10140,9 @@ BEGIN
      WHERE m.id = NEW.mandate_id AND m.evidence_mode = NEW.evidence_mode
        AND m.founder_id = NEW.founder_id);
 END;
+CREATE TRIGGER venue_findability_is_as_said
+BEFORE UPDATE ON venue_findability
+BEGIN SELECT RAISE(ABORT, 'venue_findability:said_is_said'); END;
 CREATE TRIGGER venue_order_after_settlement_guard
 BEFORE INSERT ON venue_orders_after_settlement
 BEGIN

@@ -119,3 +119,75 @@ describe('with the key saved, the page says so and offers the next thing', () =>
     expect(html).not.toContain('s3cr3t');
   });
 });
+
+describe('once the shop is his, it asks whether a buyer can find it', () => {
+  // Etsy hid ApexMicro from its own search in Developer Mode and told no app.
+  // The page is the only place the owner can say so, so the question is on
+  // it, in view, as soon as there is a confirmed shop for it to be about.
+  const say = async (findable: string): Promise<Response> => app.request(
+    `https://foundry.test${HERE}/findable`,
+    { method: 'POST', body: new URLSearchParams({ findable }),
+      headers: { 'content-type': 'application/x-www-form-urlencoded' } });
+  const said = async (): Promise<number> => Number(((await query(
+    'SELECT COUNT(*) AS n FROM venue_findability WHERE product_id = ?', [P])).rows[0] as Record<string, unknown>).n);
+
+  beforeAll(async () => {
+    const r = (await query(
+      "SELECT sense_key, mode FROM sense_providers WHERE provider = 'etsy' LIMIT 1"))
+      .rows[0] as Record<string, unknown>;
+    await query(
+      `INSERT INTO company_senses (id, product_id, sense_key, provider, mode, disclosure)
+       VALUES (?,?,?,?,?,?)`,
+      ['cs_find', P, String(r.sense_key), 'etsy', String(r.mode), 'I would read the shop.']);
+    await query(
+      `UPDATE company_senses SET provider_account_ref = '77770001', provider_account_label = 'ApexMicro',
+              identity_verified_at = datetime('now') WHERE id = 'cs_find'`);
+  });
+
+  it('does not ask, and records nothing, about a shop he has not confirmed', async () => {
+    expect(await get()).not.toContain('Can buyers find');
+    const res = await say('no');
+    expect(res.status).toBe(302);
+    expect(res.headers.get('location')).toBe(HERE);
+    expect(await said()).toBe(0);
+  });
+
+  it('asks in view once he has confirmed it, with both answers', async () => {
+    await query(
+      `UPDATE company_senses SET identity_confirmed_at = datetime('now'),
+              identity_confirmed_by = ? WHERE id = 'cs_find'`, [`founder:${F}`]);
+    const top = inView(await get());
+    expect(top).toContain('Can buyers find ApexMicro in Etsy search?');
+    expect(top).toContain('Developer Mode');
+    expect(top).toContain('name="findable" value="yes"');
+    expect(top).toContain('name="findable" value="no"');
+  });
+
+  it('records "hidden" as his, and the page says what that holds back', async () => {
+    const res = await say('no');
+    expect(res.headers.get('location')).toBe(`${HERE}?findable=no`);
+    expect(await said()).toBe(1);
+    const row = (await query('SELECT findable, said_by FROM venue_findability WHERE product_id = ?', [P]))
+      .rows[0] as Record<string, unknown>;
+    expect(Number(row.findable)).toBe(0);
+    expect(row.said_by).toBe(`founder:${F}`);
+    const top = inView(await get());
+    expect(top).toContain('ApexMicro is hidden from Etsy search');
+    expect(top).toContain('No Etsy test starts while it is');
+    expect(top).toContain('Buyers can find it again');
+  });
+
+  it('records "findable" beside it rather than over it', async () => {
+    await say('yes');
+    expect(await said()).toBe(2);
+    const top = inView(await get());
+    expect(top).toContain('Findable in Etsy search');
+    expect(top).not.toContain('is hidden from Etsy search');
+  });
+
+  it('writes nothing for an answer that is neither', async () => {
+    await say('maybe');
+    await say('');
+    expect(await said()).toBe(2);
+  });
+});

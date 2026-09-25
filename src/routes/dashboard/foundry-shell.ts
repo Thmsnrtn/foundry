@@ -7050,6 +7050,41 @@ foundryShellRoutes.post('/foundry/controls/connectors/:provider/confirm',
   });
 
 /**
+ * HE SAYS WHETHER BUYERS CAN FIND THE SHOP. Etsy can hide a whole shop from
+ * its own search and does not tell an app, so this is asked of the one person
+ * who can see it. Only for a shop he has already confirmed is his: a statement
+ * about a shop nobody has recognised would be about nothing in particular.
+ * What it unlocks is decided by `qualificationOf` and the settlement, never here.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/controls/connectors/:provider/findable',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const provider = String(c.req.param('provider')).toLowerCase();
+    const here = `/foundry/controls/connectors/${encodeURIComponent(provider)}`;
+    const owned = await query(
+      `SELECT id FROM products WHERE owner_id = ? AND ${realCompany()} ORDER BY rowid LIMIT 1`,
+      [String(founder.id)]);
+    if (!owned.rows.length) return c.redirect('/foundry/controls/connectors');
+    const productId = String((owned.rows[0] as Record<string, unknown>).id);
+    const confirmed = (await query(
+      `SELECT 1 FROM company_senses
+        WHERE product_id = ? AND provider = ? AND disconnected_at IS NULL
+          AND identity_confirmed_at IS NOT NULL AND identity_disputed_at IS NULL LIMIT 1`,
+      [productId, provider])).rows.length > 0;
+    if (!confirmed) return c.redirect(here);
+    const body = await c.req.parseBody();
+    const answer = String(body.findable ?? '');
+    if (answer !== 'yes' && answer !== 'no') return c.redirect(here);
+    const { sayWhetherFindable } = await import('../../services/venture/findability.js');
+    const r = await sayWhetherFindable({ productId, provider, findable: answer === 'yes',
+      saidBy: `founder:${String(founder.id)}` });
+    if ('refused' in r) return c.redirect(here);
+    return c.redirect(`${here}?findable=${answer}`);
+  });
+
+/**
  * ONE CONNECTOR, IN FULL — the progressive disclosure the list page defers to.
  *
  * WHAT IS DELIBERATELY ABSENT: a disconnect control. The directive is explicit
@@ -7286,6 +7321,44 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
       return '';
     })();
 
+    // CAN A BUYER FIND IT. Asked only once the shop is confirmed as his, and
+    // asked of him because nothing the connection reads can answer it: Etsy
+    // hid ApexMicro from its own search in Developer Mode and told no app.
+    // Two forms rather than two named buttons in one, so the answer travels
+    // as a field and not as whichever button the browser chose to send.
+    // A statement by somebody who no longer owns the company is not his, so
+    // the page asks him again rather than showing him their answer as his.
+    const lastSaid = one.accountConfirmed && !journey?.dispute
+      ? await (await import('../../services/venture/findability.js')).findabilityOf(productId, one.provider)
+      : undefined;
+    const findable = lastSaid && !lastSaid.byTheOwner ? null : lastSaid;
+    const answer = (value: 'yes' | 'no', label: string, cls: string): unknown => html`
+        <form method="POST" action="/foundry/controls/connectors/${one.provider}/findable">
+          <input type="hidden" name="findable" value="${value}" />
+          <button class="${cls}" type="submit">${label}</button>
+        </form>`;
+    const findCard = findable === undefined ? '' : findable === null ? html`
+      <section class="task" aria-labelledby="find-h">
+        <h2 id="find-h">Can buyers find ${one.account} in ${one.name} search?</h2>
+        <p>${one.name} can hide a whole shop — Developer Mode, or vacation — and doesn’t tell
+          apps. No ${one.name} test starts until you say.</p>
+        <div class="stack">
+          ${answer('yes', 'Yes, buyers can find it', 'btn go wide')}
+          ${answer('no', 'No, it’s hidden', 'btn btn-secondary wide')}
+        </div>
+      </section>` : !findable.findable ? html`
+      <section class="task bad" aria-labelledby="find-h">
+        <h2 id="find-h">${one.account} is hidden from ${one.name} search</h2>
+        <p>You said so on ${findable.saidAt.slice(0, 10)}. No ${one.name} test starts while it is,
+          and no sale while it is hidden counts as “nobody wanted it”.</p>
+        ${answer('yes', 'Buyers can find it again', 'btn go wide')}
+      </section>` : html`
+      <section class="task done" aria-labelledby="find-h">
+        <h2 id="find-h"><span aria-hidden="true">✓</span> Findable in ${one.name} search</h2>
+        <p>You said so on ${findable.saidAt.slice(0, 10)}.</p>
+        ${answer('no', 'It’s hidden now', 'btn btn-secondary btn-sm')}
+      </section>`;
+
     return c.html(page(one.name, html`
       <h1>${one.name}</h1>
       <p class="lede">${status}</p>
@@ -7310,6 +7383,7 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
       </ol>` : ''}
 
       ${task}
+      ${findCard}
 
       <div class="inspect">
         ${placement || journey ? html`

@@ -1053,3 +1053,45 @@ observation is still external: the Etsy shop is connected and read, but no
 natural order has occurred. When one does, it is reported as witnessed only
 then. Proofs 2–5 need real buyers, real periods and a second asset; code
 cannot supply them.
+
+### A hidden shop is not a quiet market (25 September 2026)
+
+**What happened.** After connecting, the owner found Etsy's notice on ApexMicro:
+the shop was in Developer Mode, which "makes your shop's listings not
+discoverable via search". Nothing in Foundry could have seen it. The reader
+asks Etsy which shop, what is listed and what was paid. It never asks whether a
+buyer can find any of it, and Etsy is not known to tell an app. A listing test
+in that shop would have closed its window with no sale, and the settlement
+would have written "Not as predicted" about a market nobody could reach.
+
+**The repair (migration 353, `findability.ts`).** The fact is asked of the one
+person who can see it and held to three things:
+
+- **Readiness.** A listing test gains the condition "buyers can find the shop".
+  It waits for him until he has said so, and again whenever he says the shop is
+  hidden. It reads as an external-account state, like the listing not being
+  live yet.
+- **Evidence.** `invalidateByObservation` now also asks `shopHiddenDuring`. A
+  silent window that overlaps anything he said was hidden is invalid, with the
+  kind that already existed for it (`offer_not_published`: the offer never
+  appeared where people could see it). A test with a sale in it is never
+  invalidated this way. Nothing said at all is not "hidden", because an absence
+  of record is not a record of failure; that is why readiness asks first.
+- **Record.** `venue_findability` is append-only. Each row is one thing he
+  said, with its time, and `said_by` must be the founder the row belongs to.
+  The service refuses anybody but the company's owner. The Etsy page asks the
+  question once the shop is confirmed as his, with two answers, and shows what
+  he last said.
+
+**Maturity.** **`tested`** (`a-hidden-shop-is-not-a-quiet-market`, 13;
+`the-connection-page-is-the-task`, 5 more). The settlement test was proven red
+against the previous settlement code, which wrote a verdict.
+
+**Proof debt.**
+- The fact rests on the owner's word, because nothing reads it. If Etsy's API
+  is found to report Developer Mode or vacation (`is_vacation` exists on the
+  shop resource), reading it becomes the stronger evidence, and his word should
+  then be checked against it rather than replaced by it.
+- ApexMicro is hidden today. Restoration was requested from Etsy on
+  25 September 2026 and has not been confirmed. The owner still has to answer
+  the question on the Etsy page himself; no statement was written for him.

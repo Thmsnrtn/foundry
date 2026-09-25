@@ -361,17 +361,25 @@ export async function invalidateByObservation(input: {
   }
   const { measurementGapIn } = await import('./the-instrument.js');
   const gaps = await measurementGapIn(input.experimentId, input.from, input.to);
-  if (gaps.length === 0) {
+  // AND A SHOP NOBODY COULD FIND. Not a broken path — every path can be well
+  // and the venue can still be hiding the listing from its own search, which
+  // is what Developer Mode did to ApexMicro. The record here is what the owner
+  // said, because nothing else can see it; the kind is the one that already
+  // existed for exactly this: the offer never appeared where people could see it.
+  const { shopHiddenDuring } = await import('./findability.js');
+  const hidden = await shopHiddenDuring(input.experimentId, input.from, input.to);
+  if (gaps.length === 0 && hidden === null) {
     return { refused: 'the record shows no day on which an answer could not have reached us' };
   }
-  const because = gaps.map((g) => g.sentence).join('; ')
+  const because = [...(hidden === null ? [] : [hidden]), ...gaps.map((g) => g.sentence)].join('; ')
     + '. Nobody bought, and this cannot say whether anybody would have: it did not measure.';
   try {
     const r = await query(
       `UPDATE venture_experiments
-          SET validity = 'invalid', invalid_because = 'instrumentation_defect',
+          SET validity = 'invalid', invalid_because = ?,
               invalidated_by = 'the record', invalidated_at = datetime('now')
-        WHERE id = ? AND validity = 'valid' AND ran_at IS NULL`, [input.experimentId]);
+        WHERE id = ? AND validity = 'valid' AND ran_at IS NULL`,
+      [hidden === null ? 'instrumentation_defect' : 'offer_not_published', input.experimentId]);
     if (r.rowsAffected === 0) return { refused: 'no such experiment, or it is already settled or invalid' };
   } catch (err) {
     return { refused: err instanceof Error ? err.message : String(err) };

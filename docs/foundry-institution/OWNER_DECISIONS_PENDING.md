@@ -1550,8 +1550,15 @@ listing test run while the shop is hidden would record a silence that no
 buyer could have broken. That silence is not evidence about demand, and it
 must not be read as such. Foundry cannot see this mode — the reader asks Etsy
 nothing about whether buyers can find the shop, and Etsy is not known to
-report Developer Mode to an app — so until something checks it, the fact
-rests on your word. Tell me when Etsy confirms, and the date is recorded here.
+report Developer Mode to an app — so the fact rests on your word.
+
+**What you do now:** on the Etsy page in Foundry, answer "Can buyers find
+ApexMicro in Etsy search?" with **No, it's hidden**. When Etsy confirms the shop
+is back in normal sales mode, press **Buyers can find it again**. Until you
+say findable, no Etsy test counts as ready. Any test whose window overlaps a
+"hidden" answer, and ends with no sale, is recorded as not having measured
+rather than as nobody wanting it. Tell me when Etsy confirms, and the date is
+recorded here.
 
 
 ---

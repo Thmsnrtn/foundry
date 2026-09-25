@@ -1832,6 +1832,10 @@ const PERSON_ACROSS_COMPANIES: Record<string, PersonInOthersCompany> = {
     op: 'delete', columns: ['founder_id'],
     reason: 'what that person\'s test owed after a payment; names no buyer and goes with the test',
   },
+  venue_findability: {
+    op: 'delete', columns: ['founder_id'],
+    reason: 'what that person said about whether buyers could find their shop; it was their word about their shop',
+  },
   venue_orders_after_settlement: {
     op: 'delete', columns: ['founder_id'],
     reason: 'a paid order the venue reported after that person\'s test settled; names no buyer and goes with the test',
