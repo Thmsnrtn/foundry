@@ -3488,3 +3488,46 @@ temporary state with an end he has not dated. What would make it permanent is
 nobody revisiting it; what would close it is going private again, or rotating
 the keystring and scrubbing the address, whichever he prefers when the
 development is done.
+
+## Wave: two cards that were saying things twice
+
+**Manage Company** was three hand-rolled flex rows with eighteen inline style
+attributes between them, at 711px — the tallest card on Settings. They are
+`.ev-item` rows now, the component Controls and the Brief already use.
+
+Converting it made the card FOUR PIXELS TALLER, which is the third time in this
+campaign that I have reorganised something and assumed the number would follow.
+What brought it to 646px was deleting the paragraph above the rows, which
+listed the three acts immediately above three rows that each name their act and
+explain it. The half of that sentence worth keeping — which company they land
+on — stays, and only when there is more than one company to be confused about.
+
+The delete row says more than it did: "after a 30-day grace period in which you
+can still stop it". Three journeys in this campaign were broken by compressing
+a card and keeping the reading while dropping the sentence that bounded it.
+
+**The absence review** existed because "a week is one question and three months
+is another". Measured: that is true of TWO of its five properties. `truthful`
+and `bounded` change with the length of the absence; `understandable`,
+`recoverable` and `only_real_decisions` read identically at seven days, thirty
+and ninety. So the page rendered fifteen readings to carry nine facts, and the
+six repeats pushed the two that move further down.
+
+Each horizon after the first now shows only what CHANGED from the one before
+and names the rest. 7,392 → 5,272px across the two waves that touched it.
+
+### Evidence maturity
+
+- **Witnessed.** Both checked against the rendered page: every act on Manage
+  Company (the pause form and the product id it carries, both export formats,
+  the delete door, the pause consequence, the 30-day bound), and per-horizon on
+  absence — five of five readings at seven days, three at thirty and ninety,
+  all five questions named at every horizon, every failing property shown at
+  every horizon.
+- **Established.** The previous release is verified IN PRODUCTION rather than
+  reported: the served stylesheet paints `.btn` with `var(--os-panel-raised)`
+  and `nav.places` with `var(--os-mobile-chrome)`, and the two literals that
+  remain in the file are inside the comments explaining them.
+- **Proof debt.** Unchanged: the browser review needs a browser binary and so
+  sits outside `npm run check`; the door gate cannot ask its question of
+  parameterised pages for want of a populated fixture.
