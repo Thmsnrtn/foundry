@@ -1136,3 +1136,49 @@ no record, decides nothing and grants nothing.
   say it is not assessed yet.
 - Question 6's recoverability is assessed only where Foundry holds no write
   access, which makes the answer trivially "nothing to recover".
+
+### An unreadable venue is not a quiet one (25 September 2026)
+
+**Governing requirement.** Integrated plan §9 asks for three degraded conditions
+to be rehearsed. This is the first: Etsy becomes unreadable. While it is,
+duties continue, "no sales" and "all clear" claims are suppressed, and the
+point where a human must look is named.
+
+**Before, reproduced in a test.**
+- A 401, 429 or 503 from Etsy, or a dropped connection, threw out of
+  `readTheShop`, past the only place that writes a sense's `last_error`, into
+  a job loop that logged a warning.
+- Readiness kept "what the venue reports can be read" as met on past readings.
+- The absence reading looked only at earned companies, so a listing asset
+  (still `experimental`) was invisible to it.
+- A listing test whose window closed while Etsy was failing settled "Not as
+  predicted".
+
+**The repair (no schema change).**
+- **Recording.** `bringTheVenueUpToDate` catches a thrown read and writes it to
+  the connection as "Etsy could not be read: …", returning a refusal instead of
+  a throw. A successful read clears it.
+- **Readiness.** The readability condition fails while the sense's last word is
+  an error, and says when and why.
+- **Settlement.** `settleFromTheWorld` does not conclude a silent window while
+  the exposure's venue sense is failing. It waits, and writes nothing, so the
+  first pass after recovery settles by the sealed rule as it would have. Events
+  that were observed still settle as before.
+- **The asset's record.** Question 3 names the failure and the human backstop:
+  "check orders and messages on Etsy yourself — nothing here is seeing them".
+  Question 4 does not call that silence evidence.
+- **Absence.** The truthful property counts a failing venue on any listed
+  asset, of any standing, as something quiet for a reason that is not calm.
+
+**Maturity.** **`tested`** (`an-unreadable-venue-is-not-a-quiet-one`, 8:
+healthy, 503, network error, readiness, record, absence, settlement withheld,
+recovery that clears everything and then settles). Red before the repair on all
+seven degraded assertions.
+
+**Proof debt.**
+- An outage that outlasts a window leaves the test unsettled for as long as it
+  lasts. That is the chosen trade: waiting over concluding. Nothing yet tells
+  the owner that a closed window is waiting on a reader.
+- Rehearsals B (the model provider unavailable) and C (the owner away while a
+  buyer needs a remedy, with new commitments paused) are still owed.
+- Not observed against real Etsy failures.

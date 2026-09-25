@@ -580,6 +580,22 @@ export async function settleFromTheWorld(experimentId: string, now = new Date())
   // here: the door goes and reads the day-by-day record itself, refuses when
   // there is no gap, and refuses outright for a result with events in it.
   if (verdict === 'surprised' && event === 0) {
+    // A VENUE THAT CANNOT BE READ RIGHT NOW HAS NOT SAID NOBODY BOUGHT. When
+    // the connection the orders arrive through is failing, the silence is the
+    // reader's. This waits rather than invalidates: an outage is usually
+    // temporary, and the next read that works either finds an order or makes
+    // the silence evidence. Nothing is written, so the pass that follows a
+    // recovery settles the test by its sealed rule exactly as it would have.
+    const venueBlind = (await query(
+      `SELECT s.provider, s.last_error FROM company_senses s
+         JOIN experiment_exposures x ON x.id = ? AND lower(s.provider) = lower(x.provider)
+        WHERE s.product_id = x.product_id AND s.disconnected_at IS NULL AND s.last_error IS NOT NULL
+        LIMIT 1`, [String(e.exposure_id)])).rows[0] as Record<string, unknown> | undefined;
+    if (venueBlind) {
+      return { settled: null, earned: false, counted,
+        because: `the window has closed with nothing counted, and ${String(venueBlind.provider)} could not be read on `
+          + `the last pass (${String(venueBlind.last_error)}), so no conclusion is drawn from its silence until it reads again` };
+    }
     const gap = await invalidateByObservation({ experimentId, from: placedAt, to: closesAt, countedEvents: event });
     if ('invalidated' in gap) return none(gap.because);
   }

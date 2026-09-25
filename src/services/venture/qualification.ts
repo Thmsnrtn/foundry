@@ -404,7 +404,7 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
     // refused for the product that held none. The screen said connected and
     // the reader said no account.
     const connectedEye = productId ? (await query(
-      `SELECT c.id FROM sense_credentials c
+      `SELECT c.id, s.last_error, s.last_observed_at FROM sense_credentials c
          JOIN company_senses s ON s.id = c.company_sense_id AND s.disconnected_at IS NULL
         WHERE lower(c.provider) = lower(?) AND c.product_id = ? AND c.revoked_at IS NULL LIMIT 1`,
       [plan!.listing!.venue, productId])).rows[0] as Record<string, unknown> | undefined : undefined;
@@ -424,8 +424,16 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
     // would overstate what the best possible integration buys.
     const theLimit = `orders are what a connection can read; ${venue} reports no views, `
       + 'visits or impressions to anyone, so those stay yours to enter by hand';
-    conditions.push(
-      connectedEye && readCount > 0
+    // PAST READINGS DO NOT MAKE A DEAD READER READABLE. This passed on
+    // `readCount > 0` alone, so a connection whose token had started answering
+    // 401 — or a shop in an outage — went on reading "can be read" for ever on
+    // the strength of what it saw before. The sense's own last word decides.
+    const failing = connectedEye?.last_error != null;
+    conditions.push(failing
+      ? { name: 'what the venue reports can be read', verdict: 'unproven',
+        because: `the last read of ${venue} failed on ${String(connectedEye!.last_observed_at ?? '').slice(0, 10)} `
+          + `(${String(connectedEye!.last_error)}), so a silence there means nothing until it reads again` }
+      : connectedEye && readCount > 0
         ? met('what the venue reports can be read',
           `${String(readCount)} readings taken from ${venue} itself — ${theLimit}`)
         : {

@@ -562,10 +562,22 @@ export async function bringTheVenueUpToDate(input: {
   const listingId = exposure
     ? (/\/listing\/(\d+)/.exec(exposure.exposureRef)?.[1] ?? null) : null;
 
-  const reading = await readTheShop({
-    founderId: input.founderId, productId, onlyListingId: listingId,
-  });
   const { noteSenseObserved } = await import('../index.js');
+  // A THROWN FAILURE IS STILL A FAILURE TO SEE. `readTheShop` returns `failed`
+  // only for the cases it recognises before asking Etsy anything; a 401, a
+  // 429, a 503 or a dropped connection THROWS from inside the read. Those went
+  // past this function entirely — nothing wrote `last_error`, so readiness,
+  // the asset's record, the absence reading and settlement all went on as if
+  // the shop had simply been quiet. It is written here, in the same words the
+  // owner is shown, and answered as a refusal rather than rethrown.
+  let reading: Awaited<ReturnType<typeof readTheShop>>;
+  try {
+    reading = await readTheShop({ founderId: input.founderId, productId, onlyListingId: listingId });
+  } catch (err) {
+    const because = `Etsy could not be read: ${err instanceof Error ? err.message : String(err)}`;
+    await noteSenseObserved(productId, 'etsy', because);
+    return { read: false, because };
+  }
   if ('failed' in reading) {
     // A SENSE GOING BLIND SAYS SO. `renewCredentials` writes its failures here
     // for a reason its own header gives: a sense must say "I have stopped

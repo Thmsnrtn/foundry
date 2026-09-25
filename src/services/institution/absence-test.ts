@@ -308,9 +308,31 @@ async function truthful(founderId: string, days: number): Promise<PropertyReadin
       + 'under the continuing asset');
   }
 
+  // A VENUE THAT CANNOT BE READ, on an asset this reading otherwise skips.
+  // `companies` above is earned companies only, and the asset behind a
+  // listing is usually still `experimental` — so a shop whose reader had
+  // started failing was invisible here, and its silence read as calm. Any
+  // asset that has been listed counts, withdrawn or not: Foundry withdrawing
+  // an exposure is its own bookkeeping, not the listing coming down.
+  const blindVenues = (await query(
+    `SELECT DISTINCT p.name, s.provider, s.last_error
+       FROM company_senses s
+       JOIN products p ON p.id = s.product_id
+      WHERE p.owner_id = ? AND p.deleted_at IS NULL AND p.standing <> 'earned' AND ${realCompany('p')}
+        AND s.disconnected_at IS NULL AND s.last_error IS NOT NULL
+        AND EXISTS (SELECT 1 FROM experiment_exposures x WHERE x.product_id = p.id)`, [founderId]))
+    .rows as unknown as Array<Record<string, unknown>>;
+  for (const v of blindVenues) {
+    const venue = String(v.provider).charAt(0).toUpperCase() + String(v.provider).slice(1);
+    evidence.push(`${String(v.name)}: ${String(v.last_error).startsWith(`${venue} could not be read`)
+      ? String(v.last_error) : `${venue} could not be read: ${String(v.last_error)}`} — its orders and `
+      + `messages are not being seen here`);
+    wouldFixIt.push(`get ${venue} reading again for ${String(v.name)}, or check its orders and messages there yourself`);
+  }
+
   const selfStale = self.signals.filter((x) => x.state !== 'current').length;
   const broken = blind.length + erroring.length + loops.length + alsoFailing + selfStale
-    + checksFailing + unwatchedVenueOrders.length;
+    + checksFailing + unwatchedVenueOrders.length + blindVenues.length;
   return {
     property: 'truthful',
     question: `After ${String(days)} days, would anything I show you assert more than I actually know?`,

@@ -75,6 +75,14 @@ export async function operatingContractOf(productId: string, founderId: string):
   const journey = listing?.venue === 'etsy'
     ? await (await import('../senses/journey.js')).etsyJourney(productId) : null;
   const venueRead = journey?.stage === 'qualified';
+  // AND WHETHER IT CAN STILL BE READ. A read that has worked before and fails
+  // now is the state this record most needs to say, because everything else
+  // on it was last true when the read last worked.
+  const blind = listing ? (await query(
+    `SELECT last_error, last_observed_at FROM company_senses
+      WHERE product_id = ? AND provider = ? AND disconnected_at IS NULL AND last_error IS NOT NULL LIMIT 1`,
+    [productId, listing.venue])).rows[0] as Row | undefined : undefined;
+  const blindSince = blind ? String(blind.last_observed_at ?? '').slice(0, 10) : '';
 
   const answers: ContractAnswer[] = [];
   const say = (i: number, answer: string, known: Known): void => {
@@ -124,12 +132,15 @@ export async function operatingContractOf(productId: string, founderId: string):
     // something has been read.
     const limits = journey.grantsNothing.replace(/^Reading is all of it\. /, '');
     const connected = journey.stage === 'identity_confirmed' || journey.stage === 'identity_verified' || venueRead;
-    say(2, venueRead
+    say(2, blind
+      ? `The last read of ${venueName} failed on ${blindSince} (${String(blind.last_error)}). Until it reads again, `
+        + `check orders and messages on ${venueName} yourself — nothing here is seeing them. ${limits}`
+      : venueRead
       ? `Reading the shop, its listings and its paid receipts has worked for this account, and reading is all of it. ${limits}`
       : connected
         ? `An ${venueName} account is connected for it and has not been read successfully yet; connected, it can only read. ${limits}`
         : `No ${venueName} account is connected for it, so nothing has been shown to work there — it has not been read at all. Connected, it could only read. ${limits}`,
-    venueRead ? 'known' : connected ? 'partly' : 'unknown');
+    blind ? 'partly' : venueRead ? 'known' : connected ? 'partly' : 'unknown');
   } else {
     say(2, 'Not assessed here for this kind of asset yet; its readiness on the test\'s page says what it depends on.', 'unknown');
   }
@@ -153,10 +164,12 @@ export async function operatingContractOf(productId: string, founderId: string):
     [experimentId, founderId])).rows[0] as Row : null;
   const charges = Number(m?.charges ?? 0);
   if (charges === 0) {
-    say(3, listing && !venueRead
-      ? `No sale has been recorded against it — and nothing reads ${venueName} for it yet, so that is not evidence that nobody bought.`
-      : 'No sale has been recorded against it.',
-    listing && !venueRead ? 'unknown' : 'known');
+    say(3, listing && blind
+      ? `No sale has been recorded against it — and the last read of ${venueName} failed, so that is not evidence that nobody bought.`
+      : listing && !venueRead
+        ? `No sale has been recorded against it — and nothing reads ${venueName} for it yet, so that is not evidence that nobody bought.`
+        : 'No sale has been recorded against it.',
+    listing && (blind || !venueRead) ? 'unknown' : 'known');
   } else {
     const unread = Number(m?.fees_unread ?? 0);
     const parts = [
