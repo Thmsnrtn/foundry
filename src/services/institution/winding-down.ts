@@ -37,7 +37,7 @@ import type { Figure } from '../economy/projection.js';
 import { newEconomicActivityPaused } from '../public-workshop/settings.js';
 
 /** Who has to do something about it, when Foundry cannot. */
-export type Whose = 'foundry' | 'you' | 'the buyer\'s bank';
+export type Whose = 'foundry' | 'you';
 
 export interface LeftOver {
   what: string;
@@ -130,9 +130,15 @@ export async function howThisWouldEnd(founderId: string): Promise<WindDown> {
         itCannotSettle.push(entry('you',
           'the door keeps refusing the refund, so it has to be issued by hand'));
         break;
+      // ANSWERED WHERE IT WAS OPENED, AND BY HIM. This was filed under "the
+      // buyer's bank" for every channel. An Etsy buyer opens a case with Etsy,
+      // not a bank, and in both cases the one who must act is the owner —
+      // naming the bank as "whose" told him it was somebody else's to carry.
       case 'respond_to_dispute':
-        itCannotSettle.push(entry('the buyer\'s bank',
-          'only you can answer a chargeback, and nothing here can do it for you'));
+        itCannotSettle.push(entry('you', o.provider === 'stripe'
+          ? 'only you can answer a chargeback, in your Stripe account; nothing here can do it for you'
+          : `only you can answer the buyer's case, on ${o.provider === 'etsy' ? 'Etsy' : o.provider}; `
+            + 'Foundry does not speak to a marketplace for you'));
         break;
       case 'deliver_or_refund_yourself':
         itCannotSettle.push(entry('you',

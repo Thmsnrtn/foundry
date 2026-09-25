@@ -408,6 +408,12 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
   // decision rests on — behind a summary, because a wall of evidence at first
   // glance is how a page stops being read. Nothing is hidden; it is ordered.
   const decision = await firstContactDecision(id);
+  // THE LISTING'S LIFE AFTER THE TEST, on the test's page and apart from its
+  // evidence: later sales are the asset's, and an order nothing has recorded
+  // yet is said here as well as in the queue.
+  const { afterTheTest } = await import('../../services/venture/proof-2.js');
+  const after = await afterTheTest(id);
+  const usd = (cents: number): string => `$${(cents / 100).toFixed(2)}`;
   // WHAT THE INSTITUTION IS STOPPED ON, if anything. An authorised experiment
   // that cannot proceed must say so on its own page rather than look idle.
   // WHAT ACTUALLY HAPPENED, COUNTED FROM THE ROWS. Behind a summary, because
@@ -630,6 +636,19 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
       <ul class="plain">${short.lines.map((l) => html`<li>${l}</li>`)}</ul>
       <p class="quiet">${short.sealed ? 'This was written before you decided and sealed when you did, so it cannot be edited to match the result.' : 'Written before this runs. It seals when you decide.'} <a class="why" href="/foundry/experiments/${id}/decide">Before you decide</a> · <a class="why" href="/foundry/why/experiment/${id}">Show your work</a></p>
     </div>`, v.state === 'needs_you' || v.state === 'ready') : ''}
+
+    ${after.recorded.length + after.open.length + after.resolved.length > 0 ? fold('after', 'After the test settled',
+    after.open.length > 0 ? `${String(after.open.length)} not yet recorded`
+      : `${String(after.recorded.length)} sold as the asset's`, html`
+      <p class="quiet">The listing kept selling after the test settled. These are the asset's sales, not the test's
+        evidence: its prediction, verdict and counts are as they were sealed.</p>
+      ${after.open.length ? html`<ul class="plain">${after.open.map((o) => html`<li><strong>Order ${o.orderRef}</strong>,
+        ${usd(o.grossCents)}, paid ${o.paidAt.slice(0, 10)} — not recorded here yet. ${o.unknown}</li>`)}</ul>` : ''}
+      ${after.recorded.length ? html`<ul class="plain">${after.recorded.map((r) => html`<li><strong>Order ${r.orderRef}</strong>,
+        ${usd(r.amountCents)}, recorded ${r.since.slice(0, 10)} — ${r.status}</li>`)}</ul>` : ''}
+      ${after.resolved.length ? html`<ul class="plain">${after.resolved.map((r) => html`<li class="quiet">Order ${r.orderRef}
+        was raised as unrecorded and closed ${r.resolvedAt.slice(0, 10)}: ${r.because}.</li>`)}</ul>` : ''}`,
+    after.open.length > 0) : ''}
 
     ${fold('what', 'What this tests', v.why.question ? 'the question, the act, the prediction' : '', html`<dl class="facts">
       <dt>Question</dt><dd>${v.why.question || v.title}</dd>

@@ -464,16 +464,53 @@ export async function recordVenueOrder(input: {
   const plan = await offerShapePlanOf(input.experimentId);
   if (!plan?.listing) throw new HandRefused('not_a_listing');
   const x = await exposureOf(input.experimentId);
-  if (!x || x.withdrawnAt !== null) throw new HandRefused('not_listed', 'record where the test is listed before recording an order');
+  if (!x) throw new HandRefused('not_listed', 'record where the test is listed before recording an order');
   const o = input.order;
   const ref = o.orderRef.trim();
   if (!ref) throw new HandRefused('bad_order', 'the venue\'s order number is required');
+  // A WITHDRAWN EXPOSURE IS FOUNDRY'S BOOKKEEPING, NOT THE LISTING COMING DOWN.
+  //
+  // Two cases reach here through it, and this refused both.
+  //
+  // THE TEST'S OWN ORDER, READ AGAIN. Etsy's receipts are shop-wide with no
+  // date filter, so every read after settlement returns the orders the test
+  // already recorded. This check ran before the dedupe below, so each of them
+  // was refused as `not_listed` and filed by the reader as an unrecorded sale
+  // after settlement — a false alarm about an order already on the record,
+  // raised the first hour a real shop was read. An order already recorded
+  // here converges exactly as it would have before settlement.
+  //
+  // A LATER ORDER, ON A LISTING STILL SELLING. Once the test has settled and
+  // its asset is still operating, the sale is the ASSET'S: recorded once, on
+  // the same exposure (it is the same listing), marked `after_settlement` so
+  // no reader of the test's evidence counts it (migration 351), and with the
+  // buyer's duties, fees and refunds exactly as for any order. Where there is
+  // no operating asset to take it — the test stopped rather than settled, or
+  // the owner retired the asset — it is still refused, and the reader raises
+  // it for him: a paid order with nothing to carry it is his.
+  let afterSettlement = false;
+  if (x.withdrawnAt !== null) {
+    const known = (await query(
+      `SELECT after_settlement FROM business_outcome_events
+        WHERE provider = ? AND provider_event_ref = ? AND exposure_id = ?`,
+      [plan.listing.venue, ref, x.id])).rows[0] as Record<string, unknown> | undefined;
+    if (known) {
+      afterSettlement = Number(known.after_settlement) === 1;
+    } else {
+      const operating = e.ranAt !== null && e.productId !== null && (await query(
+        `SELECT 1 FROM products WHERE id = ? AND status = 'active' AND deleted_at IS NULL`,
+        [e.productId])).rows.length > 0;
+      if (!operating) throw new HandRefused('not_listed', 'record where the test is listed before recording an order');
+      afterSettlement = true;
+    }
+  }
   if (!Number.isInteger(o.grossCents) || o.grossCents <= 0) throw new HandRefused('bad_order', 'the amount charged must be a whole number of cents above zero');
   const paidAt = new Date(o.paidAt);
   if (Number.isNaN(paidAt.getTime())) throw new HandRefused('bad_order', 'the order needs the date it was paid');
   const currency = (o.currency ?? 'usd').toLowerCase();
   const paid = await recordBusinessOutcome({ exposureId: x.id, kind: 'payment', amountCents: o.grossCents, currency, observedAt: paidAt,
-    provider: plan.listing.venue, providerRef: ref, payerReference: `order:${ref}`, arrivedVia: plan.listing.venue, exchange: 'upfront_price' });
+    provider: plan.listing.venue, providerRef: ref, payerReference: `order:${ref}`, arrivedVia: plan.listing.venue, exchange: 'upfront_price',
+    afterSettlement });
   if ('refused' in paid) throw new HandRefused('not_recorded', paid.refused);
   // A DUPLICATE PAYMENT MEANT ALL THE DOWNSTREAM WORK WAS DONE. IT DID NOT.
   //
@@ -500,7 +537,8 @@ export async function recordVenueOrder(input: {
   // "and therefore everything else exists".
   const alreadyKnown = paid.duplicate;
   const delivered = await recordBusinessOutcome({ exposureId: x.id, kind: 'delivery', amountCents: null, currency, observedAt: paidAt,
-    provider: plan.listing.venue, providerRef: `${ref}:download-available`, payerReference: `order:${ref}`, arrivedVia: plan.listing.venue, exchange: 'upfront_price' });
+    provider: plan.listing.venue, providerRef: `${ref}:download-available`, payerReference: `order:${ref}`, arrivedVia: plan.listing.venue, exchange: 'upfront_price',
+    afterSettlement });
   if ('refused' in delivered) throw new HandRefused('not_recorded', delivered.refused);
   const held = (await query(
     'SELECT id FROM experiment_fulfilments WHERE payment_event_id = ?', [paid.id]))
@@ -521,9 +559,9 @@ export async function recordVenueOrder(input: {
   // is a reason to weaken it. What was missing was the transaction, so either
   // both land or neither does.
   await batch([
-      { sql: `INSERT INTO experiment_fulfilments (id, founder_id, experiment_id, exposure_id, payment_event_id, provider, payment_ref, amount_cents, currency, observed_how)
-            VALUES (?,?,?,?,?,?,?,?,?,?)`,
-        args: [fulfilmentId, input.founderId, input.experimentId, x.id, paid.id, plan.listing.venue, ref, o.grossCents, currency, input.observedHow ?? 'owner_entered'] },
+      { sql: `INSERT INTO experiment_fulfilments (id, founder_id, experiment_id, exposure_id, payment_event_id, provider, payment_ref, amount_cents, currency, observed_how, after_settlement)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
+        args: [fulfilmentId, input.founderId, input.experimentId, x.id, paid.id, plan.listing.venue, ref, o.grossCents, currency, input.observedHow ?? 'owner_entered', afterSettlement ? 1 : 0] },
       { sql: `UPDATE experiment_fulfilments SET status = 'delivered', updated_at = datetime('now') WHERE id = ?`,
         args: [fulfilmentId] },
     ]);
@@ -531,13 +569,30 @@ export async function recordVenueOrder(input: {
   await recordEconomicEvent({ founderId: input.founderId, kind: 'charge', amountCents: o.grossCents, currency, occurredAt: paidAt,
     provider: plan.listing.venue, providerRef: ref, sourceEventId: paid.id, fulfilmentId, claimQuality: 'measured',
     evidenceMode: e.evidenceMode as 'real' | 'sandbox' | 'reference',
-    because: o.whollyThisListing === false
+    because: (o.whollyThisListing === false
       ? `${plan.listing.venueName} order ${ref}: this listing's lines only — the receipt carried other items, and its fee, tax, discount and shipping are shared and not apportioned`
-      : `${plan.listing.venueName} order ${ref}, as the statement shows it` });
+      : `${plan.listing.venueName} order ${ref}, as the statement shows it`)
+      + (afterSettlement ? ' — sold after the test settled, so the continuing asset\'s and not the test\'s' : '') });
   if (o.feeCents !== null && Number.isInteger(o.feeCents) && o.feeCents >= 0) {
     await recordEconomicEvent({ founderId: input.founderId, kind: 'provider_fee', amountCents: o.feeCents, currency, occurredAt: paidAt,
       provider: plan.listing.venue, providerRef: `${ref}:fees`, fulfilmentId, claimQuality: 'measured',
       evidenceMode: e.evidenceMode as 'real' | 'sandbox' | 'reference', because: `${plan.listing.venueName} fees on order ${ref}, as the statement shows them` });
+  }
+  // THE INCIDENT CLOSES ON INTAKE, AND SAYS WHAT CLOSED IT. The containment
+  // (migration 350) raised this order while nothing could record it; once it
+  // is recorded, and its duties sit where every buyer's do, the incident is
+  // resolved with the rows that replaced it named. What is NOT claimed: that
+  // the buyer downloaded the file. The venue provides it; nothing here sees it.
+  if (afterSettlement) {
+    await query(
+      `UPDATE venue_orders_after_settlement
+          SET resolved_at = datetime('now'),
+              resolved_because = ?
+        WHERE provider = ? AND order_ref = ? AND resolved_at IS NULL`,
+      [`recorded under the continuing asset: payment ${paid.id}, fulfilment ${fulfilmentId}; `
+        + `a refund or dispute on it is owed and tracked like any buyer's, and the file's `
+        + `availability is ${plan.listing.venueName}'s to provide, not observed here`,
+        plan.listing.venue, ref]);
   }
   return { paymentEventId: paid.id, fulfilmentId, duplicate: alreadyKnown };
 }
@@ -900,4 +955,39 @@ export async function keepProof2sEntryCurrent(founderId: string): Promise<EntryR
   });
 
   return narrowed && !identity.created ? 'already' : 'narrowed';
+}
+
+/**
+ * WHAT HAPPENED AT THE VENUE AFTER THE TEST SETTLED, for the test's own page.
+ *
+ * Two kinds of row, and they are kept apart. A sale recorded as the
+ * continuing asset's (migration 351) carries its duties like any buyer's and
+ * is not the test's evidence. An order the containment raised (migration 350)
+ * is either still open — paid at the venue, nothing here has recorded it — or
+ * resolved, with the reason it closed. That reason is what the owner reads:
+ * which rows replaced the incident, and what is still not observed.
+ */
+export interface AfterTheTest {
+  recorded: Array<{ orderRef: string; amountCents: number; currency: string; since: string; status: string }>;
+  open: Array<{ orderRef: string; grossCents: number; currency: string; paidAt: string; unknown: string }>;
+  resolved: Array<{ orderRef: string; resolvedAt: string; because: string }>;
+}
+
+export async function afterTheTest(experimentId: string): Promise<AfterTheTest> {
+  const recorded = (await query(
+    `SELECT payment_ref, amount_cents, currency, created_at, status FROM experiment_fulfilments
+      WHERE experiment_id = ? AND after_settlement = 1 ORDER BY created_at`, [experimentId]))
+    .rows as unknown as Array<Record<string, unknown>>;
+  const incidents = (await query(
+    `SELECT order_ref, gross_cents, currency, paid_at, unknown, resolved_at, resolved_because
+       FROM venue_orders_after_settlement WHERE experiment_id = ? ORDER BY paid_at`, [experimentId]))
+    .rows as unknown as Array<Record<string, unknown>>;
+  return {
+    recorded: recorded.map((r) => ({ orderRef: String(r.payment_ref), amountCents: Number(r.amount_cents),
+      currency: String(r.currency), since: String(r.created_at), status: String(r.status) })),
+    open: incidents.filter((r) => r.resolved_at == null).map((r) => ({ orderRef: String(r.order_ref),
+      grossCents: Number(r.gross_cents), currency: String(r.currency), paidAt: String(r.paid_at), unknown: String(r.unknown) })),
+    resolved: incidents.filter((r) => r.resolved_at != null).map((r) => ({ orderRef: String(r.order_ref),
+      resolvedAt: String(r.resolved_at), because: String(r.resolved_because) })),
+  };
 }

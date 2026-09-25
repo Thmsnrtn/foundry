@@ -3618,6 +3618,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
         '../services/venture/outcome.js');
       const due = await whatTheWorldOwes();
       let settled = 0;
+      const failed: string[] = [];
       for (const experimentId of due) {
         try {
           const s = await settleFromTheWorld(experimentId);
@@ -3628,13 +3629,23 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
               { jobName: 'business_outcome_tick' });
           }
         } catch (err) {
-          logger.error(`business_outcome_tick failed for ${experimentId}: `
-            + `${err instanceof Error ? err.message : String(err)}`, { jobName: 'business_outcome_tick' });
+          const why = err instanceof Error ? err.message : String(err);
+          failed.push(`${experimentId} (${why})`);
+          logger.error(`business_outcome_tick failed for ${experimentId}: ${why}`, { jobName: 'business_outcome_tick' });
         }
       }
       const retired = await retireWhatFailed();
       logger.info(`business_outcome_tick: due=${String(due.length)}, settled=${String(settled)}, `
         + `retired=${String(retired.length)}`, { jobName: 'business_outcome_tick' });
+      // A PASS THAT COULD NOT SETTLE A DUE TEST DID NOT SUCCEED — the rule its
+      // sibling `experiment_hand_tick` already keeps. This caught every failure
+      // and recorded a healthy run, so a settlement failing every hour looked
+      // identical to one with nothing due. Throwing puts it in job_health; the
+      // rest of the pass still ran, and the next pass retries (and, since case
+      // 2's repair, finishes whatever an interruption left).
+      if (failed.length > 0) {
+        throw new Error(`${String(failed.length)} due test(s) could not settle: ${failed.join('; ')}`);
+      }
     },
     schedule: '35 * * * *', // Hourly
     description:

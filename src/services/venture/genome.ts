@@ -111,7 +111,7 @@ export async function genomeOf(experimentId: string): Promise<Genome | null> {
         WHERE o.experiment_id = ? LIMIT 1`, [experimentId]),
     rows(
       `SELECT COUNT(*) AS delivered FROM experiment_fulfilments
-        WHERE experiment_id = ?`, [experimentId]),
+        WHERE experiment_id = ? AND after_settlement = 0`, [experimentId]),
   ]);
 
   const r = recipients[0] ?? {};

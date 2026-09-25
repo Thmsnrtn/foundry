@@ -946,3 +946,68 @@ cannot be silently unreachable the same way. **Maturity: `tested`** (3 cases,
 The consent screen itself and the callback remain unwitnessed until the owner
 connects his real shop, which also needs the callback address registered at
 Etsy.
+
+### Proof 1, continued: the first asset's care and truth (25 September 2026)
+
+Three slices from the integrated plan, each proved red first against a
+controlled case and then green. None is an external observation: the Etsy
+shop is connected and has been read, but no natural paid order has occurred,
+so every sentence below is **`tested`**, not witnessed.
+
+**Slice B: a later order is the asset's (migration 351).** The containment
+(migration 350) made a paid order on a settled listing visible and recorded
+nothing, because every canonical sale record hangs off an experiment's
+exposure. Research across the schema found three constraints that settle the
+design:
+- no table can hold a charge, fee or fulfilment without an exposure;
+- the listing's exposure address is unique, so a second exposure is
+  impossible;
+- nearly every reader of a test's evidence counts by experiment with no time
+  bound.
+
+So order B is recorded on the same exposure (it is the same listing),
+flagged `after_settlement`. The database admits that flag only after a real
+settlement, keeps a fulfilment on the same side as its payment, and never
+lets it move. The readers that say what the test observed exclude it: reached,
+purchases, first closure, the genome. The readers that protect a buyer keep
+counting it: obligations, refunds, the Workshop's refund-route rule, and the
+strings that must never be published. The timeline test runs A read → settle →
+B read twice with its fee unpublished → the fee arrives and converges once →
+a venue refund requested and recorded twice → absence read. The sealed
+prediction, verdict, explanation and the test's counts are byte-identical
+throughout. The incident closes on intake, with the rows that replaced it and
+a plain statement that the file's availability is Etsy's and not observed
+here. The test's own page gains "After the test settled". A post-settlement
+order on a retired asset is still refused and raised.
+
+**A latent defect this found.** Etsy's receipts come back shop-wide with no
+date filter, and the withdrawn-exposure refusal ran before the dedupe. So
+every read after settlement would have filed the test's own earlier orders as
+"unrecorded sales after settlement". This became live when the owner's shop
+connected. Fixed: an order already on the record converges as it always did.
+
+**Cases 7 and 9: a waiting buyer is not a quiet absence.** A buyer owed
+something only the owner can give now makes `only_real_decisions` DOES_NOT_HOLD
+instead of "all of them would still be there when you got back". The evidence
+says when the duty opened and that no deadline is on record; it does not
+invent one. The wind-down reading answers a dispute where it was opened: an
+Etsy case on Etsy, a chargeback in Stripe, and always as the owner's. It never
+says "the buyer's bank".
+
+**Cases 2 and 8: settlement finishes what it starts, and a failing pass says
+so.**
+- The answer, the budget's withdrawal and the unknown's answer are now one
+  transaction.
+- The claim's observation, the grade and the earning are done only if
+  missing. The observation is looked for first; the grade and the earning
+  already refuse a repeat.
+- The hourly work-list now includes answered-but-unfinished world
+  settlements.
+- `business_outcome_tick` throws when any due test could not settle, as its
+  sibling already did.
+
+The tests inject the failure for real, with a trigger that makes one write
+fail and is then removed. **Deployment note:** the first pass after this ships
+will finish any world settlement production left half-done. A grade may appear
+for such a test, computed from the words it sealed; its sealed text is never
+touched.

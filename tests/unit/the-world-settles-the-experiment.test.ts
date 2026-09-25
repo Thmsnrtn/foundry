@@ -536,3 +536,83 @@ describe('the reference world', () => {
       .rejects.toThrow();
   });
 });
+
+// =============================================================================
+// A SETTLEMENT INTERRUPTED HALFWAY FINISHES ON THE NEXT PASS (Gate 1, case 2),
+// AND A PASS THAT COULD NOT SETTLE SAYS SO (case 8).
+//
+// Settlement wrote `ran_at` and then five more effects as separate statements.
+// Anything that stopped between them left a test answered but ungraded, its
+// claim unobserved and its asset unearned — and every retry returned "already
+// settled", while the hourly job only ever looked at tests with no `ran_at`.
+// The failure is injected for real: a trigger makes one downstream write fail,
+// then is removed, and the next pass has to finish what was left, once.
+// =============================================================================
+describe('a settlement interrupted halfway', () => {
+  const count = async (sql: string, args: unknown[]): Promise<number> =>
+    Number(((await query(sql, args)).rows[0] as Record<string, unknown>).n);
+
+  it('finishes what was left, once, on the next pass', async () => {
+    const e = await exposed('real');
+    await event(e.exposureId, 'payment', { payer: 'cus_interrupted' });
+    await event(e.exposureId, 'delivery');
+    await query(`CREATE TRIGGER t_observations_down BEFORE INSERT ON market_observations
+      BEGIN SELECT RAISE(ABORT, 'the observation store is down'); END`);
+    await expect(settleFromTheWorld(e.experimentId)).rejects.toThrow();
+    await query('DROP TRIGGER t_observations_down');
+
+    // The answer was written; the grade and the earning were not.
+    const row = (await query('SELECT ran_at FROM venture_experiments WHERE id = ?', [e.experimentId]))
+      .rows[0] as Record<string, unknown>;
+    expect(row.ran_at).not.toBeNull();
+    expect(await count(`SELECT COUNT(*) AS n FROM prediction_resolutions WHERE prediction_id = ?`, [e.experimentId])).toBe(0);
+
+    // THE NEXT PASS FINDS IT, instead of skipping it for ever.
+    expect(await whatTheWorldOwes(), 'an interrupted settlement is never picked up again').toContain(e.experimentId);
+    await settleFromTheWorld(e.experimentId);
+    expect(await count(`SELECT COUNT(*) AS n FROM prediction_resolutions WHERE prediction_id = ?`, [e.experimentId])).toBe(1);
+    expect(await count(`SELECT COUNT(*) AS n FROM market_observations WHERE claim_id = ? AND source = ?`,
+      [e.claimId, `experiment_exposure:${e.exposureId}`])).toBe(1);
+    expect(String(((await query('SELECT standing FROM products WHERE id = ?', [e.productId])).rows[0] as Record<string, unknown>).standing))
+      .toBe('earned');
+
+    // AND ONCE IS ONCE: finished, it leaves the work-list, and a replay writes nothing.
+    expect(await whatTheWorldOwes()).not.toContain(e.experimentId);
+    await settleFromTheWorld(e.experimentId);
+    expect(await count(`SELECT COUNT(*) AS n FROM market_observations WHERE claim_id = ? AND source = ?`,
+      [e.claimId, `experiment_exposure:${e.exposureId}`])).toBe(1);
+  });
+
+  it('writes the answer and its own bookkeeping together, or not at all', async () => {
+    const e = await exposed('real');
+    await event(e.exposureId, 'payment', { payer: 'cus_atomic' });
+    await event(e.exposureId, 'delivery');
+    await query(`CREATE TRIGGER t_unknowns_down BEFORE UPDATE ON market_unknowns
+      BEGIN SELECT RAISE(ABORT, 'the unknowns table is locked'); END`);
+    await expect(settleFromTheWorld(e.experimentId)).rejects.toThrow();
+    await query('DROP TRIGGER t_unknowns_down');
+    const row = (await query('SELECT ran_at FROM venture_experiments WHERE id = ?', [e.experimentId]))
+      .rows[0] as Record<string, unknown>;
+    expect(row.ran_at, 'the answer was written without its bookkeeping').toBeNull();
+
+    const s = await settleFromTheWorld(e.experimentId);
+    expect(s.settled).toBe('as_predicted');
+    const u = (await query('SELECT answered_at FROM market_unknowns WHERE id = ?', [e.unknownId])).rows[0] as Record<string, unknown>;
+    expect(u.answered_at).not.toBeNull();
+  });
+
+  it('a pass that could not settle a due test reports failure, not success', async () => {
+    const { JOB_REGISTRY } = await import('../../src/jobs/index.js');
+    const e = await exposed('real');
+    await event(e.exposureId, 'payment', { payer: 'cus_job' });
+    await event(e.exposureId, 'delivery');
+    await query(`CREATE TRIGGER t_job_down BEFORE UPDATE ON market_unknowns
+      BEGIN SELECT RAISE(ABORT, 'the unknowns table is locked'); END`);
+    try {
+      await expect(JOB_REGISTRY.business_outcome_tick.fn(), 'a failed settlement recorded as a healthy pass')
+        .rejects.toThrow(/could not settle/);
+    } finally {
+      await query('DROP TRIGGER t_job_down');
+    }
+  });
+});

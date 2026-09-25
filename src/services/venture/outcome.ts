@@ -30,7 +30,7 @@
 
 import { createHmac } from 'node:crypto';
 import { nanoid } from 'nanoid';
-import { query } from '../../db/client.js';
+import { batch, query } from '../../db/client.js';
 import { earnAsset, retireExperimentalAsset } from './asset.js';
 import { observe } from './market-evidence.js';
 
@@ -200,6 +200,10 @@ export async function recordBusinessOutcome(input: {
   /** The payment this event reverses or contests, by the provider's reference,
    * so a refund that arrives before its payment still says what it returns. */
   settlesRef?: string | null;
+  /** Recorded after this exposure's experiment settled, as the continuing
+   * asset's and not the test's (migration 351). The database refuses it for a
+   * test that has not settled. */
+  afterSettlement?: boolean;
 }): Promise<{ id: string; counterparty: Counterparty; duplicate: boolean } | { refused: string }> {
   const x = (await query(
     `SELECT founder_id, evidence_mode, withdrawn_at FROM experiment_exposures WHERE id = ?`,
@@ -221,12 +225,13 @@ export async function recordBusinessOutcome(input: {
     await query(
       `INSERT INTO business_outcome_events
          (id, founder_id, exposure_id, kind, amount_cents, currency, observed_at, provider,
-          provider_event_ref, evidence_mode, counterparty, arrived_via, exchange, settles_ref)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          provider_event_ref, evidence_mode, counterparty, arrived_via, exchange, settles_ref,
+          after_settlement)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [id, String(x.founder_id), input.exposureId, input.kind, input.amountCents ?? null,
         input.currency ?? 'usd', input.observedAt.toISOString(), input.provider.trim(),
         input.providerRef.trim(), evidenceMode, counterparty, input.arrivedVia ?? null,
-        input.exchange ?? null, input.settlesRef ?? null]);
+        input.exchange ?? null, input.settlesRef ?? null, input.afterSettlement ? 1 : 0]);
   } catch (err) {
     return { refused: err instanceof Error ? err.message : String(err) };
   }
@@ -509,7 +514,17 @@ export async function settleFromTheWorld(experimentId: string, now = new Date())
   if (!e) return none('no such experiment');
   if (String(e.decision ?? '') !== 'approved') return none('not approved');
   if (String(e.validity) === 'invalid') return none('the test is invalid; it is re-run, not read');
-  if (e.ran_at != null) return none('already settled');
+  // ALREADY ANSWERED IS NOT ALREADY FINISHED. The answer and its own
+  // bookkeeping land in one transaction below, but three effects are
+  // functions with their own reads — the claim's observation, the grade, the
+  // asset's earning — and anything that stops between the answer and them
+  // used to be skipped for ever: every retry returned here, and the hourly
+  // job never looked at an answered test again. Each is now done only if it
+  // is missing, so a replay finishes what was left and writes nothing twice.
+  if (e.ran_at != null) {
+    await finishSettlement(experimentId);
+    return none('already settled');
+  }
   const rule = parseSettlementRule(e.settles_when);
   if (rule === null) return none('no settlement rule was sealed with the prediction; only the owner can settle it');
   if (e.exposure_id == null) return none('the offer has not been placed anywhere');
@@ -578,32 +593,76 @@ export async function settleFromTheWorld(experimentId: string, now = new Date())
       + '(the owner\'s own, internal, a test account, or nobody the provider could say)' : '')
     + `. ${verdict === 'as_predicted' ? 'As predicted.' : verdict === 'partly' ? 'Partly: some, fewer than predicted.' : 'Not as predicted.'}`;
 
-  // THE ROW. The column admits two words; 'partly' is not as predicted and is
-  // written as such, with the grade carrying the finer distinction.
-  await query(
-    `UPDATE venture_experiments SET ran_at = ?, what_happened = ?, verdict = ? WHERE id = ?`,
-    [now.toISOString(), because, verdict === 'as_predicted' ? 'as_predicted' : 'surprised', experimentId]);
-  // ITS BUDGET ENDS WITH ITS ANSWER, on this path too. The owner's own
-  // settlement (`recordResult`) withdrew the allowance; the world's did not,
-  // so a test the sealed rule settled kept "may spend $100 more" standing
-  // for the rest of its horizon. A month of ownership run in the laboratory
-  // found it on day ten.
-  await query(
-    `UPDATE owner_allowances SET withdrawn_at = datetime('now'),
-            withdraw_reason = 'the test settled; its budget ended with its answer'
-      WHERE withdrawn_at IS NULL
-        AND product_id IN (SELECT id FROM products WHERE from_experiment_id = ?)`, [experimentId]);
+  // THE ROW, ITS BUDGET AND ITS UNKNOWN, IN ONE TRANSACTION. The column
+  // admits two words; 'partly' is not as predicted and is written as such,
+  // with the grade carrying the finer distinction. The budget ends with the
+  // answer (the owner's own settlement always withdrew it; the world's did
+  // not, until a month in the laboratory found it on day ten). These were
+  // three statements, and a failure between them left an answered test still
+  // holding its budget and its question open, with nothing to finish it.
+  await batch([
+    { sql: `UPDATE venture_experiments SET ran_at = ?, what_happened = ?, verdict = ? WHERE id = ?`,
+      args: [now.toISOString(), because, verdict === 'as_predicted' ? 'as_predicted' : 'surprised', experimentId] },
+    { sql: `UPDATE owner_allowances SET withdrawn_at = datetime('now'),
+              withdraw_reason = 'the test settled; its budget ended with its answer'
+            WHERE withdrawn_at IS NULL
+              AND product_id IN (SELECT id FROM products WHERE from_experiment_id = ?)`, args: [experimentId] },
+    { sql: `UPDATE market_unknowns SET answered_at = datetime('now'), answer = ? WHERE id = ? AND answered_at IS NULL`,
+      args: [because, String(e.unknown_id)] },
+  ]);
+  const { earned } = await finishSettlement(experimentId, now);
+  return { settled: verdict, because, earned, counted };
+}
+
+/** The grade this function wrote into `what_happened`, read back for a replay. */
+function gradeWritten(whatHappened: string): 'as_predicted' | 'partly' | 'surprised' | null {
+  if (whatHappened.endsWith('As predicted.')) return 'as_predicted';
+  if (whatHappened.endsWith('Partly: some, fewer than predicted.')) return 'partly';
+  if (whatHappened.endsWith('Not as predicted.')) return 'surprised';
+  return null;
+}
+
+/**
+ * THE REST OF A WORLD SETTLEMENT, EACH PART ONLY IF IT IS MISSING.
+ *
+ * The claim's observation, the grade and the asset's earning are functions
+ * with their own reads, so they cannot share the answer's transaction. They
+ * are made safe to repeat instead: the observation is looked for before it is
+ * written, the grade refuses a second resolution, and earning an earned asset
+ * changes nothing. Only a settlement this module wrote is finished here — its
+ * grade is read back from the words it sealed — never one the owner recorded.
+ */
+async function finishSettlement(experimentId: string, now = new Date()): Promise<{ earned: boolean }> {
+  const e = (await query(
+    `SELECT e.founder_id, e.claim_id, e.decided_at, e.evidence_mode, e.what_happened, e.unknown_id,
+            (SELECT x.id FROM experiment_exposures x WHERE x.experiment_id = e.id
+              ORDER BY x.placed_at DESC LIMIT 1) AS exposure_id,
+            (SELECT p.id FROM products p WHERE p.from_experiment_id = e.id AND p.deleted_at IS NULL) AS product_id
+       FROM venture_experiments e WHERE e.id = ? AND e.ran_at IS NOT NULL`, [experimentId]))
+    .rows[0] as Record<string, unknown> | undefined;
+  if (!e || e.exposure_id == null) return { earned: false };
+  const verdict = gradeWritten(String(e.what_happened ?? ''));
+  if (verdict === null) return { earned: false };
+  const because = String(e.what_happened);
+  const world = String(e.evidence_mode) as OutcomeWorld;
+  const source = `experiment_exposure:${String(e.exposure_id)}`;
+  // The unknown too, for a settlement answered before this was one transaction.
   await query(
     `UPDATE market_unknowns SET answered_at = datetime('now'), answer = ? WHERE id = ? AND answered_at IS NULL`,
     [because, String(e.unknown_id)]);
   if (e.claim_id != null) {
-    await observe({
-      founderId: String(e.founder_id), claimId: String(e.claim_id),
-      sourceType: world === 'reference' ? 'reference_world' : 'provider_api',
-      source: `experiment_exposure:${String(e.exposure_id)}`, saw: because,
-      bearing: verdict === 'surprised' ? 'contradicts' : 'supports',
-      directness: 'direct', observedAt: now, evidenceMode: world,
-    });
+    const seen = (await query(
+      'SELECT 1 FROM market_observations WHERE claim_id = ? AND source = ? LIMIT 1',
+      [String(e.claim_id), source])).rows.length > 0;
+    if (!seen) {
+      await observe({
+        founderId: String(e.founder_id), claimId: String(e.claim_id),
+        sourceType: world === 'reference' ? 'reference_world' : 'provider_api',
+        source, saw: because,
+        bearing: verdict === 'surprised' ? 'contradicts' : 'supports',
+        directness: 'direct', observedAt: now, evidenceMode: world,
+      });
+    }
   }
   // THE GRADE, BY THE WORLD. The reference world is not graded: a rehearsal
   // of the return leg may not move a hit rate the owner will rely on.
@@ -611,23 +670,21 @@ export async function settleFromTheWorld(experimentId: string, now = new Date())
     const { resolvePrediction } = await import('../institution/calibration.js');
     await resolvePrediction({
       founderId: String(e.founder_id), kind: 'venture_experiment', predictionId: experimentId,
-      resolvedBy: 'business_outcome', evidenceRef: `experiment_exposure:${String(e.exposure_id)}`,
+      resolvedBy: 'business_outcome', evidenceRef: source,
       verdict, because, predictedAt: String(e.decided_at),
     });
   }
-
   // AND IF SOMEBODY UNMATCHED PAID AND RECEIVED, REALITY HAS RECOGNISED THE
   // ASSET. Earned means that and only that.
   let earned = false;
   if (verdict !== 'surprised' && e.product_id != null && world === 'real') {
     const closed = await paidAndReceived(String(e.exposure_id), world);
     if (closed) {
-      const r = await earnAsset({ productId: String(e.product_id),
-        by: `business_outcome:${String(e.exposure_id)}`, because });
+      const r = await earnAsset({ productId: String(e.product_id), by: `business_outcome:${source.split(':')[1]}`, because });
       earned = r.earned;
     }
   }
-  return { settled: verdict, because, earned, counted };
+  return { earned };
 }
 
 async function paidAndReceived(exposureId: string, world: OutcomeWorld): Promise<boolean> {
@@ -671,15 +728,16 @@ export async function firstClosureOf(founderId: string): Promise<FirstClosure> {
     `SELECT e.id AS experiment_id, x.product_id, x.id AS exposure_id,
             (SELECT SUM(b.amount_cents) FROM business_outcome_events b
               JOIN business_outcome_event_kinds k ON k.kind = b.kind
-              WHERE b.exposure_id = x.id AND k.is_payment = 1 AND b.counterparty = 'unmatched_external') AS paid_cents,
+              WHERE b.exposure_id = x.id AND k.is_payment = 1 AND b.counterparty = 'unmatched_external'
+                AND b.after_settlement = 0) AS paid_cents,
             (SELECT COUNT(*) FROM business_outcome_events b
               JOIN business_outcome_event_kinds k ON k.kind = b.kind
-              WHERE b.exposure_id = x.id AND k.is_delivery = 1) AS delivered,
+              WHERE b.exposure_id = x.id AND k.is_delivery = 1 AND b.after_settlement = 0) AS delivered,
             (SELECT COUNT(*) FROM prediction_resolutions p
               WHERE p.kind = 'venture_experiment' AND p.prediction_id = e.id
                 AND p.resolved_by = 'business_outcome' AND p.verdict IN ('as_predicted','partly')) AS settled,
             (SELECT COUNT(*) FROM business_outcome_events b
-              WHERE b.exposure_id = x.id AND b.kind IN ('refund','dispute')) AS reversed
+              WHERE b.exposure_id = x.id AND b.kind IN ('refund','dispute') AND b.after_settlement = 0) AS reversed
        FROM venture_experiments e
        JOIN experiment_exposures x ON x.experiment_id = e.id
       WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.validity = 'valid'
@@ -717,13 +775,34 @@ export async function firstClosureOf(founderId: string): Promise<FirstClosure> {
 
 /** Approved, valid, unsettled experiments with a sealed rule and a live exposure. */
 export async function whatTheWorldOwes(): Promise<string[]> {
-  return ((await query(
+  const due = ((await query(
     `SELECT e.id FROM venture_experiments e
        JOIN experiment_exposures x ON x.experiment_id = e.id AND x.withdrawn_at IS NULL
       WHERE e.decision = 'approved' AND e.validity = 'valid' AND e.ran_at IS NULL
         AND e.settles_when IS NOT NULL
       ORDER BY x.placed_at`, []))
     .rows as unknown as Array<Record<string, unknown>>).map((r) => String(r.id));
+  // AND WHAT WAS ANSWERED BUT NOT FINISHED. A settlement this module wrote
+  // (its sealed words end the way only it writes them) whose question is
+  // still open, whose real grade is missing, or whose claim was never told.
+  // Before this, an interruption after the answer was invisible to the job.
+  const unfinished = ((await query(
+    `SELECT e.id FROM venture_experiments e
+      WHERE e.decision = 'approved' AND e.validity = 'valid' AND e.ran_at IS NOT NULL
+        AND e.settles_when IS NOT NULL
+        AND (e.what_happened LIKE '%As predicted.' OR e.what_happened LIKE '%Partly: some, fewer than predicted.'
+             OR e.what_happened LIKE '%Not as predicted.')
+        AND (EXISTS (SELECT 1 FROM market_unknowns u WHERE u.id = e.unknown_id AND u.answered_at IS NULL)
+          OR (e.evidence_mode = 'real' AND e.decided_at IS NOT NULL AND NOT EXISTS (
+                SELECT 1 FROM prediction_resolutions p
+                 WHERE p.kind = 'venture_experiment' AND p.prediction_id = e.id))
+          OR (e.claim_id IS NOT NULL AND NOT EXISTS (
+                SELECT 1 FROM market_observations o
+                  JOIN experiment_exposures x ON o.source = 'experiment_exposure:' || x.id
+                 WHERE o.claim_id = e.claim_id AND x.experiment_id = e.id)))
+      ORDER BY e.ran_at`, []))
+    .rows as unknown as Array<Record<string, unknown>>).map((r) => String(r.id));
+  return [...due, ...unfinished.filter((id) => !due.includes(id))];
 }
 
 /**

@@ -660,11 +660,24 @@ async function onlyRealDecisions(
       + 'that fall inside the absence');
   }
 
-  // A BUYER OWED SOMETHING ONLY HE CAN GIVE waits for him too, and does not
-  // expire: it is there when he returns, and the buyer waits with it.
+  // A BUYER OWED SOMETHING ONLY HE CAN GIVE IS NOT A DECISION THAT WAITS.
+  //
+  // This counted it as "waiting" — beside a proposal that sits harmlessly
+  // until he is back — so the horizon read HOLDS and "all of them would still
+  // be there when you got back", while this same property's wouldFixIt said
+  // settle it before you go. A proposal waits; a buyer waits too, on a
+  // provider's clock this institution does not hold: an Etsy case, a bank's
+  // dispute window, a buyer's patience. So it compromises the absence.
+  //
+  // WITHOUT A DATE WE DO NOT HAVE. No obligation carries the provider's
+  // deadline, and inventing one would be a second false comfort. It says when
+  // the duty opened and that no deadline is on record.
   const { obligationsFor: owedTo } = await import('../venture/obligations.js');
   const owedHim = (await owedTo(founderId, now)).filter((o) => o.asksHim !== null);
-  for (const o of owedHim) evidence.push(`a buyer is owed something only you can give: ${o.sentence}`);
+  for (const o of owedHim) {
+    evidence.push(`a buyer is owed something only you can give, since ${o.since.slice(0, 10)}: `
+      + `${o.sentence} No deadline is on record for it, and the provider's own process may not wait.`);
+  }
   if (owedHim.length > 0) wouldFixIt.push(`settle ${plural(owedHim.length, 'buyer\'s refund or dispute', 'buyers\' refunds or disputes')} before you go`);
   // AND WHAT THE QUEUE COUNTS. This asked its own question of its own rows and
   // answered "nothing is waiting for you" while Home said one thing was: two
@@ -672,16 +685,21 @@ async function onlyRealDecisions(
   const { waitingOn } = await import('../founder/attention.js');
   const queue = await waitingOn(founderId);
   for (const q of queue) evidence.push(`waiting on you: ${q.summary}`);
-  const waiting = Math.max(proposals.length + waitingTests + owedHim.length, queue.length);
-  const compromised = lapsing.length + overdue.length;
+  const waiting = Math.max(proposals.length + waitingTests, queue.length);
+  const compromised = lapsing.length + overdue.length + owedHim.length;
   return {
     property: 'only_real_decisions',
     question: `After ${String(days)} days, would the things waiting for me be mine — and still be there?`,
     finding: compromised === 0 ? 'HOLDS' : 'DOES_NOT_HOLD',
     sentence: compromised > 0
-      ? `${plural(compromised, 'thing', 'things')} would be settled by the calendar rather than by you: `
-        + `${plural(lapsing.length, 'proposal that lapses', 'proposals that lapse')} and `
-        + `${plural(overdue.length, 'date that passes', 'dates that pass')} while you are gone.`
+      ? [owedHim.length > 0
+        ? `${plural(owedHim.length, 'buyer is', 'buyers are')} owed something only you can give, and would wait for you with no deadline on record.`
+        : null,
+      lapsing.length + overdue.length > 0
+        ? `${plural(lapsing.length + overdue.length, 'thing', 'things')} would be settled by the calendar rather than by you: `
+          + `${plural(lapsing.length, 'proposal that lapses', 'proposals that lapse')} and `
+          + `${plural(overdue.length, 'date that passes', 'dates that pass')} while you are gone.`
+        : null].filter(Boolean).join(' ')
       : waiting === 0
         ? 'Nothing is waiting for you, and nothing would expire unanswered while you were away.'
         : `${plural(waiting, 'thing is', 'things are')} waiting for you, every one of them yours to `

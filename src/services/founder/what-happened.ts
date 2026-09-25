@@ -225,12 +225,14 @@ export function outcomeFromRow(r: OutcomeRow): Outcome {
  */
 export const REACHED_SQL = `(SELECT COUNT(*) FROM business_outcome_events b
    JOIN experiment_exposures xe ON xe.id = b.exposure_id
-  WHERE xe.experiment_id = e.id AND b.kind = 'offer_delivered')`;
+  WHERE xe.experiment_id = e.id AND b.kind = 'offer_delivered' AND b.after_settlement = 0)`;
 
-/** And how many of them bought, which is what decides whether "silence" is a word this result may use. */
+/** And how many of them bought, which is what decides whether "silence" is a word this result may use.
+ *  Both count only what the TEST saw: a sale recorded after it settled is the
+ *  continuing asset's (migration 351) and does not rewrite a sealed result. */
 export const PURCHASES_SQL = `(SELECT COUNT(*) FROM business_outcome_events b
    JOIN experiment_exposures xe ON xe.id = b.exposure_id
-  WHERE xe.experiment_id = e.id AND b.kind = 'payment')`;
+  WHERE xe.experiment_id = e.id AND b.kind = 'payment' AND b.after_settlement = 0)`;
 
 /** The SQL that reads the grade the world wrote beside a test's verdict. */
 export const GRADE_SQL = `(SELECT g.verdict FROM prediction_resolutions g

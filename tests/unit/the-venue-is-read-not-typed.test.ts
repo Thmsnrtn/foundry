@@ -452,79 +452,125 @@ describe('what the reading bears on the claim, and how often it says so', () => 
 // of the suite.
 // =============================================================================
 describe('a listing outlives its experiment', () => {
-  it('keeps reading a settled listing, never folds a later order into the sealed test, and raises it once', async () => {
+  /** Etsy's receipts as it returns them: shop-wide, every paid order at once,
+   *  with no date filter — so a settled test's own earlier orders come back on
+   *  every read too. `feeMinor: null` is a fee Etsy has not published yet. */
+  function receipts(list: Array<{ id: string; feeMinor?: number | null }>): void {
+    ETSY['shops/77770001/receipts'] = {
+      count: list.length,
+      results: list.map((r) => ({
+        receipt_id: r.id, is_paid: true,
+        created_timestamp: Math.floor(Date.now() / 1000) - 60,
+        grandtotal: { amount: 1400, divisor: 100, currency_code: 'USD' },
+        transactions: [{ listing_id: LISTING_ID, quantity: 1,
+          price: { amount: 1400, divisor: 100, currency_code: 'USD' } }],
+      })),
+    };
+    for (const r of list) {
+      const key = `shops/77770001/receipts/${r.id}/payments`;
+      if (r.feeMinor === null) delete ETSY[key];
+      else ETSY[key] = { count: 1, results: [{ amount_fees: { amount: r.feeMinor ?? 158, divisor: 100, currency_code: 'USD' } }] };
+    }
+  }
+  const A = '7700000001', B = '7700000002';
+  const one = async (sql: string, args: unknown[]): Promise<number> =>
+    Number(((await query(sql, args)).rows[0] as Record<string, unknown>).n);
+  /** What the TEST observed, as the owner's reading of its outcome counts it. */
+  async function testEvidence(): Promise<Record<string, unknown>> {
+    const { REACHED_SQL, PURCHASES_SQL } = await import('../../src/services/founder/what-happened.js');
+    return (await query(
+      `SELECT ran_at, verdict, what_happened, ${REACHED_SQL} AS reached, ${PURCHASES_SQL} AS purchases
+         FROM venture_experiments e WHERE e.id = ?`, [X])).rows[0] as Record<string, unknown>;
+  }
+
+  it('records a later order once under the continuing asset, converges its corrections, and leaves the sealed test exactly as it was', async () => {
     // ORDER A closes the trial.
-    receipt('7700000001');
+    receipts([{ id: A }]);
     await connect(['shops_r', 'listings_r', 'transactions_r']);
     await listed();
     const first = await bringTheVenueUpToDate({ founderId: OWNER, experimentId: X });
     expect(first.read && first.recorded, 'A is recorded normally, before settlement').toBe(1);
 
     await settleTheTest();
-    const sealedBefore = (await query(
-      `SELECT ran_at, verdict, what_happened FROM venture_experiments WHERE id = ?`, [X]))
-      .rows[0] as Record<string, unknown>;
-    const fulfilmentsBefore = (await query(
-      `SELECT COUNT(*) AS n FROM experiment_fulfilments WHERE experiment_id = ?`, [X]))
-      .rows[0] as Record<string, unknown>;
+    const sealed = await testEvidence();
 
-    // ORDER B, for the SAME still-live listing, after the trial closed.
-    receipt('7700000002');
+    // THE DEPLOYED CONTAINMENT HAD ALREADY RAISED B AS AN INCIDENT — the row
+    // the previous release wrote. Intake must resolve it, not leave it open.
+    await query(
+      `INSERT INTO venue_orders_after_settlement (id, founder_id, experiment_id, product_id, provider,
+         order_ref, gross_cents, currency, paid_at, evidence_mode, unknown)
+       VALUES ('vo_b', ?, ?, ?, 'etsy', ?, 1400, 'usd', datetime('now','-1 minute'), 'real',
+               'paid at Etsy after the test settled; not yet recorded here')`,
+      [OWNER, X, PRODUCT, B]);
+
+    // ORDER B, same live listing, after the trial — its fee not yet published.
+    // Etsy returns A again beside it, as it always will.
+    receipts([{ id: A }, { id: B, feeMinor: null }]);
     const second = await bringTheVenueUpToDate({ founderId: OWNER, experimentId: X });
-    expect(second.read, 'the venue is still read after its experiment has settled').toBe(true);
-    if (!second.read) return;
-    // B is not folded into the ledger: the sealed prediction may not be
-    // written to again, so `recordVenueOrder` still refuses it.
-    expect(second.recorded, 'B is not written as a charge under a concluded prediction').toBe(0);
+    expect(second.read).toBe(true);
 
-    // But a refusal caught and forgotten is a real sale nobody ever sees. B is
-    // a durable, owner-visible fact instead.
-    const incident = (await query(
-      `SELECT founder_id, experiment_id, product_id, gross_cents, currency, resolved_at
-         FROM venue_orders_after_settlement WHERE provider = 'etsy' AND order_ref = '7700000002'`))
-      .rows[0] as Record<string, unknown> | undefined;
-    expect(incident, 'the second order is surfaced, not silently dropped').toBeTruthy();
-    expect(String(incident!.founder_id)).toBe(OWNER);
-    expect(String(incident!.experiment_id)).toBe(X);
-    expect(Number(incident!.gross_cents)).toBe(1400);
-    expect(incident!.resolved_at).toBeNull();
+    // A, RE-READ, IS NOT A NEW INCIDENT. Its payment is already on the record.
+    expect(await one(`SELECT COUNT(*) AS n FROM venue_orders_after_settlement WHERE order_ref = ?`, [A]),
+      'the settled test\'s own earlier order was filed as an unrecorded sale').toBe(0);
 
-    // A's own sealed prediction and evidence counts are untouched — B did not
-    // rewrite them.
-    const sealedAfter = (await query(
-      `SELECT ran_at, verdict, what_happened FROM venture_experiments WHERE id = ?`, [X]))
+    // B IS RECORDED, ONCE, CANONICALLY: payment, fulfilment, charge.
+    expect(await one(`SELECT COUNT(*) AS n FROM business_outcome_events WHERE provider = 'etsy' AND provider_event_ref = ?`, [B])).toBe(1);
+    expect(await one(`SELECT COUNT(*) AS n FROM experiment_fulfilments WHERE payment_ref = ?`, [B])).toBe(1);
+    expect(await one(`SELECT COUNT(*) AS n FROM economic_events WHERE provider = 'etsy' AND provider_ref = ? AND kind = 'charge'`, [B])).toBe(1);
+    // The fee is unknown, so no fee row — never a zero.
+    expect(await one(`SELECT COUNT(*) AS n FROM economic_events WHERE provider_ref = ? AND kind = 'provider_fee'`, [`${B}:fees`])).toBe(0);
+
+    // AND THE INCIDENT IS RESOLVED, with the reason on it.
+    const inc = (await query(`SELECT resolved_at, resolved_because FROM venue_orders_after_settlement WHERE order_ref = ?`, [B]))
       .rows[0] as Record<string, unknown>;
-    expect(sealedAfter).toEqual(sealedBefore);
-    const fulfilmentsAfter = (await query(
-      `SELECT COUNT(*) AS n FROM experiment_fulfilments WHERE experiment_id = ?`, [X]))
-      .rows[0] as Record<string, unknown>;
-    expect(fulfilmentsAfter.n).toEqual(fulfilmentsBefore.n);
+    expect(inc.resolved_at, 'intake left the incident open').not.toBeNull();
+    expect(String(inc.resolved_because)).toMatch(/continuing asset/);
 
-    // A repeated read of the same unresolved receipt raises it once, not once
-    // an hour for as long as it goes unresolved.
-    const third = await bringTheVenueUpToDate({ founderId: OWNER, experimentId: X });
-    expect(third.read).toBe(true);
-    const n = (await query(
-      `SELECT COUNT(*) AS n FROM venue_orders_after_settlement WHERE provider = 'etsy' AND order_ref = '7700000002'`))
-      .rows[0] as Record<string, unknown>;
-    expect(Number(n.n), 'many passes, one incident').toBe(1);
+    // THE CORRECTION ARRIVES: Etsy publishes the fee. Read twice.
+    receipts([{ id: A }, { id: B, feeMinor: 158 }]);
+    await bringTheVenueUpToDate({ founderId: OWNER, experimentId: X });
+    await bringTheVenueUpToDate({ founderId: OWNER, experimentId: X });
+    expect(await one(`SELECT COUNT(*) AS n FROM economic_events WHERE provider_ref = ? AND kind = 'provider_fee'`, [`${B}:fees`]),
+      'the fee converged once').toBe(1);
+    expect(await one(`SELECT COUNT(*) AS n FROM economic_events WHERE provider = 'etsy' AND provider_ref = ? AND kind = 'charge'`, [B]),
+      'many passes, one charge').toBe(1);
+    expect(await one(`SELECT COUNT(*) AS n FROM experiment_fulfilments WHERE payment_ref = ?`, [B])).toBe(1);
 
-    // AND THE ABSENCE HORIZON STOPS DESCRIBING THIS AS CALM. `truthful` asks
-    // whether silence would be mistaken for calm; a paid order at a venue
-    // nothing here has reconciled is exactly that silence.
+    // THE BUYER ASKS FOR THEIR MONEY BACK, AND IS OWED IT — visibly, as the
+    // asset's duty, not the test's.
+    const { requestVenueRefund, recordVenueRefund } = await import('../../src/services/venture/proof-2.js');
+    await requestVenueRefund({ founderId: OWNER, experimentId: X, orderRef: B });
+    const { obligationsFor } = await import('../../src/services/venture/obligations.js');
+    const owed = (await obligationsFor(OWNER)).find((o) => o.paymentRef === B);
+    expect(owed, 'the buyer\'s refund is not an obligation anybody can see').toBeTruthy();
+    expect(owed!.productId).toBe(PRODUCT);
+    expect(owed!.action).toBe('refund_on_the_venue');
+
+    // Given on the venue, recorded twice: it converges.
+    await recordVenueRefund({ founderId: OWNER, experimentId: X, orderRef: B, refundedAt: new Date().toISOString(), amountCents: 1400 });
+    await recordVenueRefund({ founderId: OWNER, experimentId: X, orderRef: B, refundedAt: new Date().toISOString(), amountCents: 1400 })
+      .catch(() => undefined);
+    expect((await obligationsFor(OWNER)).some((o) => o.paymentRef === B), 'a refunded buyer still reads as owed').toBe(false);
+    expect(await one(`SELECT COUNT(*) AS n FROM economic_events WHERE kind = 'refund' AND provider_ref LIKE ?`, [`${B}:refund%`]),
+      'one refund, however many times it was recorded').toBe(1);
+
+    // THE SEALED TEST IS EXACTLY AS IT WAS: prediction, verdict, explanation,
+    // and what the test observed — B is the asset's, not the test's.
+    expect(await testEvidence()).toEqual(sealed);
+
+    // AND THE TEST'S OWN PAGE SAYS IT: B as the asset's sale, and the
+    // incident closed with what replaced it.
+    const { afterTheTest } = await import('../../src/services/venture/proof-2.js');
+    const after = await afterTheTest(X);
+    expect(after.recorded.map((r) => r.orderRef)).toEqual([B]);
+    expect(after.open).toEqual([]);
+    expect(after.resolved[0]?.because).toMatch(/continuing asset/);
+    expect(after.resolved[0]?.because).toMatch(/not observed here/);
+
+    // AND THE ABSENCE HORIZON NO LONGER NAMES B AS UNRECONCILED.
     const { absenceReading } = await import('../../src/services/institution/absence-test.js');
-    const reading = await absenceReading(OWNER, 7, new Date());
-    const truth = reading.properties.find((p) => p.property === 'truthful');
-    expect(truth, 'the truthful property is read').toBeTruthy();
-    expect(truth!.evidence.join(' ')).toContain('7700000002');
-    expect(truth!.evidence.join(' ')).toContain('already settled');
-    expect(truth!.wouldFixIt.join(' ')).toContain('bring it under the continuing asset');
-
-    // WHAT THIS DOES NOT YET PROVE. B is not recorded under the continuing
-    // asset — no charge, no fee, no obligation — because that asset-scoped
-    // intake path is its own, larger piece of work and is not built here. A
-    // fee correction or a refund on B has nothing to attach to yet for the
-    // same reason. Proof debt, named rather than hidden.
+    const truth = (await absenceReading(OWNER, 7, new Date())).properties.find((p) => p.property === 'truthful')!;
+    expect(truth.evidence.join(' ')).not.toContain(B);
   });
 
   it('watches a settled listing while its asset is active, and stops once the asset is retired', async () => {
@@ -547,5 +593,13 @@ describe('a listing outlives its experiment', () => {
     const afterRetirement = await settledListingsStillLive();
     expect(afterRetirement.some((r) => r.experimentId === X),
       'a retired asset is not watched for ever').toBe(false);
+
+    // AND IF AN ORDER STILL ARRIVES ON A RETIRED ASSET, IT IS NOT QUIETLY
+    // ADOPTED: there is no continuing asset to take it, so it is refused and
+    // the reader raises it for the owner.
+    const { recordVenueOrder } = await import('../../src/services/venture/proof-2.js');
+    await expect(recordVenueOrder({ founderId: OWNER, experimentId: X,
+      order: { orderRef: '7700000003', paidAt: new Date().toISOString(), grossCents: 1400, feeCents: 158 } }))
+      .rejects.toMatchObject({ code: 'not_listed' });
   });
 });

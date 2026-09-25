@@ -598,7 +598,7 @@ CREATE TABLE business_outcome_events (
   -- inferred. Public distribution provenance strengthens independence.
   arrived_via    TEXT,
   recorded_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-, exchange TEXT REFERENCES probe_exchanges(exchange), settles_ref TEXT);
+, exchange TEXT REFERENCES probe_exchanges(exchange), settles_ref TEXT, after_settlement INTEGER NOT NULL DEFAULT 0 CHECK (after_settlement IN (0, 1)));
 CREATE TABLE call_transcripts (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL,
@@ -1600,7 +1600,7 @@ CREATE TABLE experiment_fulfilments (
   refund_ref          TEXT,
   created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, disputed_at TEXT, dispute_outcome TEXT CHECK (dispute_outcome IN ('won','lost')), observed_how TEXT NOT NULL DEFAULT 'foundry_observed'
-  CHECK (observed_how IN ('foundry_observed','venue_reported','owner_entered','inferred')),
+  CHECK (observed_how IN ('foundry_observed','venue_reported','owner_entered','inferred')), after_settlement INTEGER NOT NULL DEFAULT 0 CHECK (after_settlement IN (0, 1)),
   UNIQUE(payment_event_id)
 );
 CREATE TABLE experiment_invalidity_kinds (
@@ -5623,6 +5623,16 @@ CREATE TRIGGER business_actor_owner_is_not_portable
 BEFORE INSERT ON business_actors
 WHEN NEW.kind = 'owner' AND NEW.portable = 1
 BEGIN SELECT RAISE(ABORT,'business_actor:owner_is_not_portable'); END;
+CREATE TRIGGER business_outcome_after_settlement_is_true
+BEFORE INSERT ON business_outcome_events
+WHEN NEW.after_settlement = 1
+BEGIN
+  SELECT RAISE(ABORT, 'business_outcome_event:not_after_a_settlement')
+   WHERE NOT EXISTS (
+     SELECT 1 FROM experiment_exposures x
+       JOIN venture_experiments e ON e.id = x.experiment_id
+      WHERE x.id = NEW.exposure_id AND e.ran_at IS NOT NULL);
+END;
 CREATE TRIGGER business_outcome_event_guard
 BEFORE INSERT ON business_outcome_events
 BEGIN
@@ -6538,6 +6548,19 @@ BEGIN
     WHERE NEW.product_id IS NOT NULL
       AND NOT EXISTS (SELECT 1 FROM products p
                        WHERE p.id = NEW.product_id AND p.from_experiment_id = NEW.experiment_id);
+END;
+CREATE TRIGGER experiment_fulfilment_after_settlement_is_fixed
+BEFORE UPDATE OF after_settlement ON experiment_fulfilments
+WHEN NEW.after_settlement IS NOT OLD.after_settlement
+BEGIN
+  SELECT RAISE(ABORT, 'experiment_fulfilment:after_settlement_is_fixed');
+END;
+CREATE TRIGGER experiment_fulfilment_after_settlement_matches
+BEFORE INSERT ON experiment_fulfilments
+BEGIN
+  SELECT RAISE(ABORT, 'experiment_fulfilment:after_settlement_mismatch')
+   WHERE NEW.after_settlement <> COALESCE(
+     (SELECT b.after_settlement FROM business_outcome_events b WHERE b.id = NEW.payment_event_id), 0);
 END;
 CREATE TRIGGER experiment_fulfilment_closed_on_arrival
 AFTER INSERT ON experiment_fulfilments
