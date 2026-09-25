@@ -1095,3 +1095,44 @@ against the previous settlement code, which wrote a verdict.
 - ApexMicro is hidden today. Restoration was requested from Etsy on
   25 September 2026 and has not been confirmed. The owner still has to answer
   the question on the Etsy page himself; no statement was written for him.
+
+### Each live asset answers seven questions (25 September 2026)
+
+**Governing requirement.** Integrated plan §5: for each live asset the
+institution must answer seven questions:
+- who the customer is and what was promised;
+- where buyers can actually meet it;
+- which provider operations have been shown to work for this account;
+- what money was charged, deducted, refunded, paid out and seen in a bank;
+- what is owed, by whom and by when;
+- what may be done, and what happens if it is interrupted;
+- what the owner decides versus what Foundry carries.
+
+**Before.** The answers existed in seven readers keyed by experiment or by
+founder, across four pages. Several were silently absent: buyer rights, a due
+date, per-asset fees and payouts, and what the account had been shown to do.
+
+**The repair (`operating-contract.ts`, no schema change).**
+`operatingContractOf(productId, founderId)` asks the readers that already decide
+each fact and marks each answer `known`, `partly` or `unknown`. Where nothing
+can answer, it says so in a sentence rather than leaving a blank:
+- No buyer licence is recorded.
+- No payout is attributable to one asset, and payouts are not read.
+- No deadline is on record for a duty.
+- Etsy messages are not read.
+- An unread venue is not evidence that nobody bought.
+
+Real money only. A rehearsal charge cannot even be written against a real sale;
+the database refuses it, and the test asserts the refusal. It is shown on the
+company page as a fold, "What it owes and holds", with "N of 7 known". It adds
+no record, decides nothing and grants nothing.
+
+**Maturity.** **`tested`** (`each-asset-answers-seven-questions`, 15).
+
+**Proof debt.**
+- Every answer is controlled. The first real answer comes when ApexMicro's
+  listing is live, the shop is findable, and Etsy has been read for it.
+- Question 3 is assessed for Etsy listings only. Workshop and outreach assets
+  say it is not assessed yet.
+- Question 6's recoverability is assessed only where Foundry holds no write
+  access, which makes the answer trivially "nothing to recover".

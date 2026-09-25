@@ -4351,6 +4351,13 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
       + `<p class="d${cls}">${n.movement}</p>${spark.svg}</div>`;
   }).join('');
 
+  // WHAT THIS ASSET OWES AND HOLDS, in seven answers that each say how much
+  // of them is known. Only for an asset a test made: that is where a buyer, a
+  // listing and a duty can exist.
+  const contract = view.existence.experimentId
+    ? await (await import('../../services/venture/operating-contract.js')).operatingContractOf(view.id, String(founder.id))
+    : null;
+
   const body = html`
     ${placeHead(frame, view.name)}
     ${askedHere}
@@ -4380,6 +4387,15 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
       (${view.existence.earned.by.startsWith('founder:') ? 'your call' : 'settled by what happened'}).
       That says it exists; it does not say it is worth keeping.</p>` : ''}
     ${view.existence.retiredBecause ? html`<p class="gap">Retired: ${view.existence.retiredBecause}</p>` : ''}
+    ${contract ? html`<details class="fold">
+      <summary><h2>What it owes and holds</h2><span class="gist">${String(
+    contract.answers.filter((a) => a.known === 'known').length)} of 7 known</span></summary>
+      <dl class="facts">
+        ${contract.answers.map((a) => html`<dt>${a.question} <span class="ev-tag${
+    a.known === 'known' ? ' ok' : ''}">${a.known === 'known' ? 'Known' : a.known === 'partly' ? 'Partly known' : 'Unknown'}</span></dt>
+        <dd>${a.answer}</dd>`)}
+      </dl>
+    </details>` : ''}
     ${done === 'added' ? html`<div class="done"><p><strong>Added.</strong> I know it exists and
       that it is yours. I cannot see anything about it yet.</p></div>` : ''}
     ${done === 'steered' ? html`<div class="done"><p><strong>Noted.</strong> I will weigh that
