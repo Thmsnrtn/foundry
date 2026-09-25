@@ -35,7 +35,14 @@ of this file, with the authorisation quoted. **Two more were added the same day*
 Clerk key running in production). Both came
 out of verifying an independent review's claims against the live deployment
 rather than accepting them, and both are external or account decisions rather
-than engineering ones. Neither blocks anything.
+than engineering ones. Neither blocked anything.
+
+**PENDING 23 was decided on 2026-09-24**: public, for a term he set in words,
+with the Etsy keystring left as it is. It is recorded in place rather than moved
+to the resolved section, because what it exposes and the one thing I told him
+imprecisely both belong next to the decision they informed. **PENDING 24 remains
+open** and still blocks nothing, though a development Clerk instance that Clerk
+does not guarantee the durability of is a thing the institution depends on.
 
 **Counsel debt is a kind of proof debt** (`PROOF_PROGRAM.md`): a conclusion
 software cannot responsibly draw. Each item below states the question, what
@@ -1085,7 +1092,50 @@ available.
 
 ---
 
-## PENDING 23 — The repository that holds all of this is public: **OWNER** (2026-09-21)
+## PENDING 23 — The repository that holds all of this is public: **DECIDED 2026-09-24**
+
+**He decided it: public, for a term he set in words rather than a date — "a
+little while until this development is finished" — and with the key left as it
+is.**
+
+He decided it to unblock a runner, not as a disclosure judgement. GitHub Actions
+stopped allocating runners for the account at 01:11 UTC on 24 September; every
+job failed in seconds with no log, and eight commits of verified work sat
+unshipped. Public repositories get unmetered Actions minutes, so the setting was
+the fastest route. I told him that before he flipped it, along with what it
+exposes, and he chose to proceed and asked that the work continue.
+
+**What I told him it exposes**, checked rather than asserted: the Etsy app
+keystring in two commits of 22 September (removed from the working tree the same
+day, permanent in the commits); his postal address in four tracked files,
+including `tests/helpers/world.ts` where the test world sets it as the
+Workshop's address; his name in seventy-three files and his email in thirteen;
+and the whole institutional corpus, this file included.
+
+**WHERE I WAS IMPRECISE, AND IT MATTERS.** I put the keystring exposure to him
+as prospective — as something flipping to public would cause. This entry, dated
+three days earlier, records the repository as ALREADY public on 21 September and
+says plainly that it made no claim about history. The keystring commits are
+dated 22 September. So the exposure may have begun then and run for whatever
+period preceded the repository being made private, which is a window nobody
+here can date: GitHub does not expose a visibility history, and I did not
+establish one.
+
+That changes what the decision was about. "Leave it as is" was taken as a
+choice about a risk not yet run. It may instead be a choice about a risk
+already run for an unknown number of days. It is still his to take, and he took
+it knowing the key is in history; he did not know, because I did not say, that
+the history may already have been readable.
+
+**What would close this.** Going private again, or rotating the keystring and
+scrubbing the address from the fixtures — whichever he prefers when the
+development is finished. What would make it permanent is nobody revisiting it,
+which is why the term he set is recorded here in his own words rather than as a
+date I invented.
+
+---
+
+## The state it was in when he decided (2026-09-21)
 
 An independent review asserted it, and I checked rather than repeating it. The
 GitHub API reports `"private": false, "visibility": "public"` for the
