@@ -1538,6 +1538,21 @@ No write scope. No draft listing. No fee. No publication. When those are worth
 asking for, they will be separate questions with their own consequences, which
 is the entire reason the four acts are four rows rather than one.
 
+### The shop was in Developer Mode (25 September 2026)
+
+After connecting, you found Etsy's notice on your shop: **ApexMicro is in
+Developer Mode**, which "makes your shop's listings not discoverable via
+search". You emailed `developer@etsy.com` the same day asking for it to be
+restored to normal sales mode. **Open until Etsy confirms.**
+
+Why it matters here: the connection and the read are unaffected, but a
+listing test run while the shop is hidden would record a silence that no
+buyer could have broken. That silence is not evidence about demand, and it
+must not be read as such. Foundry cannot see this mode — the reader asks Etsy
+nothing about whether buyers can find the shop, and Etsy is not known to
+report Developer Mode to an app — so until something checks it, the fact
+rests on your word. Tell me when Etsy confirms, and the date is recorded here.
+
 
 ---
 
