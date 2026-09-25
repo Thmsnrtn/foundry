@@ -511,3 +511,17 @@ describe('what running this has cost', () => {
     expect(s.figure.cents).toBe(0);
   });
 });
+
+// GATE 1, CASE 11: A LEDGER SUM IS NOT A WITHDRAWAL. "$X is yours to take" was
+// said of what the recorded events add up to, while the only bank-real figure
+// here is permanently unavailable. Charge, fee, payout, deposit and reserve are
+// different facts; this sentence may only claim the one it has.
+describe('what the ledger adds up to is not money in a bank', () => {
+  it('never says "yours to take" of an unreconciled sum', async () => {
+    const { surplusSentence } = await import('../../src/services/economy/projection.js');
+    const s = surplusSentence({ cents: 2_000, quality: 'measured', because: 'x' }, { cents: 2_900, quality: 'measured', because: 'x' });
+    expect(s).not.toMatch(/yours to take/);
+    expect(s).toMatch(/not money seen in a bank/);
+    expect(s).toMatch(/\$20\.00/);
+  });
+});

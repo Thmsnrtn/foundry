@@ -100,7 +100,11 @@ describe('reach already paid for, told apart from a fault already carried', () =
     expect(fit.makesItWorse).toBe(true);
     // BOTH HALVES OR NEITHER. Cheaper to sell, and no more independent.
     expect(fit.verdict).toContain('ground you already stand on');
-    expect(fit.verdict).toContain('makes the selling cheaper');
+    // AN INFERENCE, SAID AS ONE (Gate 1, case 12). A label match cannot show
+    // a later sale became cheaper; it can say it might, and what would show it.
+    expect(fit.verdict).toContain('might make the selling cheaper');
+    expect(fit.verdict).toMatch(/inferred from the labels, not measured/);
+    expect(fit.verdict).not.toMatch(/which makes the selling cheaper/);
     expect(fit.verdict).toContain('adds no independence at all');
   });
 

@@ -142,32 +142,50 @@ const measured = (cents: number, because: string): Figure => ({ cents, quality: 
  * join is how a sale reaches the thing that made it without anybody writing
  * the number down twice.
  */
-async function flowOf(founderId: string, productId: string): Promise<{ flow: Figure; charges: number }> {
+async function flowOf(founderId: string, productId: string): Promise<{ flow: Figure; charges: number; feesUnread: number }> {
+  // THE SAME THIRTY DAYS AS THE COST (Gate 1, case 10). This summed every sale
+  // the asset ever made and set it against a month of cost, so one good month
+  // long ago could call an asset "earning its keep" for ever.
+  //
+  // AND A FEE NOBODY HAS READ IS NOT A FEE OF ZERO. A charge whose provider
+  // fee has not been read is counted, and said to be before that fee; the
+  // verdict below will not call an asset earning its keep on it.
   const row = (await query(
     `SELECT
        COALESCE(SUM(CASE WHEN e.kind = 'charge' THEN e.amount_cents ELSE 0 END), 0) AS took_in,
        COALESCE(SUM(CASE WHEN e.kind = 'refund_fee_returned' THEN e.amount_cents ELSE 0 END), 0) AS came_back,
        COALESCE(SUM(CASE WHEN e.kind IN ('provider_fee','unit_cost','refund','dispute_withdrawal','dispute_fee')
                          THEN e.amount_cents ELSE 0 END), 0) AS went_out,
-       COUNT(CASE WHEN e.kind = 'charge' THEN 1 END) AS charges
+       COUNT(CASE WHEN e.kind = 'charge' THEN 1 END) AS charges,
+       COUNT(CASE WHEN e.kind = 'charge' AND NOT EXISTS (
+               SELECT 1 FROM economic_events g
+                WHERE g.fulfilment_id = e.fulfilment_id AND g.kind = 'provider_fee') THEN 1 END) AS fees_unread
        FROM economic_events e
        JOIN experiment_fulfilments f ON f.id = e.fulfilment_id
        JOIN venture_experiments x ON x.id = f.experiment_id
        JOIN products p ON p.from_experiment_id = x.id
-      WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND p.id = ?`,
-    [founderId, productId])).rows[0] as Record<string, unknown>;
+      WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND p.id = ?
+        AND datetime(e.occurred_at) >= datetime('now', ?)`,
+    [founderId, productId, `-${String(DAYS)} days`])).rows[0] as Record<string, unknown>;
   const charges = Number(row.charges ?? 0);
+  const feesUnread = Number(row.fees_unread ?? 0);
   const cents = Number(row.took_in ?? 0) + Number(row.came_back ?? 0) - Number(row.went_out ?? 0);
   if (charges === 0) {
     return {
-      charges,
+      charges, feesUnread,
       // AN EMPTY TILL IS AN ABSENCE. Whether it is evidence depends on whether
       // the thing that would have recorded a sale was working, which the
       // instrument already answers for the institution as a whole.
-      flow: unavailable('nobody has paid for this, and no sale has been recorded against it'),
+      flow: unavailable(`nobody has paid for this in the last ${String(DAYS)} days, and no sale has been recorded against it in that time`),
     };
   }
-  return { charges, flow: measured(cents, `what ${String(charges)} sale${charges === 1 ? '' : 's'} left after fees, refunds and what each unit cost`) };
+  const sales = `${String(charges)} sale${charges === 1 ? '' : 's'} in the last ${String(DAYS)} days`;
+  return {
+    charges, feesUnread,
+    flow: measured(cents, feesUnread > 0
+      ? `what ${sales} took in, less the fees read so far — the fee on ${String(feesUnread)} of them has not been read, so this is before that fee`
+      : `what ${sales} left after fees, refunds and what each unit cost`),
+  };
 }
 
 /**
@@ -248,19 +266,22 @@ export async function burdenFor(founderId: string): Promise<Burden[]> {
     const aiCostCents = Math.round(Number(c.ai_usd) * 100);
     const aiSeen = c.ai_raw != null;
 
-    const { flow, charges } = await flowOf(founderId, productId);
+    const { flow, charges, feesUnread } = await flowOf(founderId, productId);
     const cost = await costOf(productId, aiCostCents, aiSeen);
     const cadence: Cadence = mrrCents != null && charges > 0 ? 'mixed'
       : mrrCents != null ? 'recurring' : charges > 0 ? 'one_time' : 'not_yet';
 
-    // THE RECURRING READING IS PART OF THE FLOW, NOT A RIVAL TO IT. An asset
-    // that bills monthly has its month's worth counted; one that sold a thing
-    // once has what the sale left. Both are money this asset brought in.
-    const flowCents = flow.cents == null ? (mrrCents ?? null)
-      : flow.cents + (mrrCents ?? 0);
+    // THE RECURRING READING IS NOT ADDED TO SALES THAT MAY ALREADY HOLD IT
+    // (Gate 1, case 10). A month of subscription was stacked on top of the
+    // ledger's charges, and nothing marks which of those charges were that
+    // subscription's — so the same money could be counted twice. Where both
+    // exist the ledger is the figure and the subscription reading is named
+    // beside it, not summed into it.
+    const flowCents = flow.cents == null ? (mrrCents ?? null) : flow.cents;
     const flowFigure: Figure = flowCents == null ? flow
       : { cents: flowCents, quality: 'measured',
-        because: cadence === 'mixed' ? 'a month of subscription, and what its sales left'
+        because: cadence === 'mixed'
+          ? `${flow.because}; a subscription reading of $${((mrrCents ?? 0) / 100).toFixed(0)} a month is not added, because these sales may already include it`
           : cadence === 'recurring' ? 'a month of subscription' : flow.because };
 
     const contribution: Figure = flowFigure.cents == null || cost.cents == null
@@ -272,15 +293,18 @@ export async function burdenFor(founderId: string): Promise<Burden[]> {
 
     // THE RULE, STATED, AND IT NEEDS EVIDENCE TO BE KIND. A favourable verdict
     // on an unmeasured asset is the defect this file was rebuilt for.
+    // A missing fee can only make the contribution smaller, so a loss stands
+    // with or without it; a gain does not, and is not called one.
     const verdict: Burden['verdict'] = contribution.cents == null ? 'not enough to say'
-      : contribution.cents < 0 ? 'costs more than it earns' : 'earning its keep';
+      : contribution.cents < 0 ? 'costs more than it earns'
+        : feesUnread > 0 ? 'not enough to say' : 'earning its keep';
     // HIS TIME, SEPARATELY, AT EVERY LEVEL OF REVENUE.
     const burden: BurdenOnHim = interruptions === 0 ? 'has not needed you'
       : interruptions >= OFTEN ? 'needs you often' : 'needs you now and then';
 
     const $ = (cents: number): string => `$${(cents / 100).toFixed(0)}`;
     const money = flowFigure.cents == null ? 'I cannot see what it earns'
-      : cadence === 'one_time' ? `has brought in ${$(flowFigure.cents)} in sales`
+      : cadence === 'one_time' ? `has brought in ${$(flowFigure.cents)} in sales in the last ${String(DAYS)} days`
         : `earns about ${$(flowFigure.cents)} a month`;
     const spent = cost.cents == null ? 'and nothing has been recorded of what it costs'
       : cost.cents === 0 ? 'costs nothing recorded' : `costs about ${$(cost.cents)}`;

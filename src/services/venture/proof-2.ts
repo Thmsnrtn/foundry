@@ -536,7 +536,13 @@ export async function recordVenueOrder(input: {
   // known — and is still what the reader counts. What it no longer means is
   // "and therefore everything else exists".
   const alreadyKnown = paid.duplicate;
-  const delivered = await recordBusinessOutcome({ exposureId: x.id, kind: 'delivery', amountCents: null, currency, observedAt: paidAt,
+  // AVAILABLE BY THE VENUE'S RULE, NOT OBSERVED (migration 352, Gate 1 case 4).
+  // This wrote `delivery` — "what they paid for reached them" — at the
+  // payment's own time. The venue makes the file available on payment; nobody
+  // here saw it collected. Its time is the payment's because that is when the
+  // rule makes it available. It still completes the exchange for earning, by
+  // the owner's decision, and every sentence built on it says what it is.
+  const delivered = await recordBusinessOutcome({ exposureId: x.id, kind: 'made_available', amountCents: null, currency, observedAt: paidAt,
     provider: plan.listing.venue, providerRef: `${ref}:download-available`, payerReference: `order:${ref}`, arrivedVia: plan.listing.venue, exchange: 'upfront_price',
     afterSettlement });
   if ('refused' in delivered) throw new HandRefused('not_recorded', delivered.refused);

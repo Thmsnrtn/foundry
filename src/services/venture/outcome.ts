@@ -687,23 +687,38 @@ async function finishSettlement(experimentId: string, now = new Date()): Promise
   return { earned };
 }
 
+/**
+ * ONE BUYER PAID, AND WHAT THAT BUYER BOUGHT WAS DELIVERED (Gate 1, case 3).
+ *
+ * This counted payments and deliveries as two unrelated tallies on the
+ * exposure, so one person's payment beside somebody else's delivery — the
+ * owner's own copy, a second buyer's — read as "paid and received" and earned
+ * the asset. The link is the fulfilment: it names the payment it discharges,
+ * and it becomes `delivered` only when the provider confirmed that delivery
+ * (the hand's mail receipt) or, for a venue, when the venue's own rule made it
+ * available on payment — the owner's decision, said as such in every sentence.
+ */
+export const PAID_AND_DELIVERED = (exposure: string, counterparty: string): string =>
+  `(SELECT COUNT(*) FROM experiment_fulfilments f
+      JOIN business_outcome_events p ON p.id = f.payment_event_id
+     WHERE f.exposure_id = ${exposure} AND p.counterparty = ${counterparty}
+       AND p.after_settlement = 0 AND f.status = 'delivered' AND f.refund_ref IS NULL)`;
+
 async function paidAndReceived(exposureId: string, world: OutcomeWorld): Promise<boolean> {
   // PAID MEANS STILL PAID. Money that went back, or is contested, is not a
   // stranger's money kept; the ledger records refunds and disputes and this
   // is where they are read.
   const r = (await query(
     `SELECT
-       (SELECT COUNT(*) FROM business_outcome_events b JOIN business_outcome_event_kinds k ON k.kind = b.kind
-         WHERE b.exposure_id = ? AND k.is_payment = 1 AND b.counterparty = ?) AS paid,
-       (SELECT COUNT(*) FROM business_outcome_events b JOIN business_outcome_event_kinds k ON k.kind = b.kind
-         WHERE b.exposure_id = ? AND k.is_delivery = 1) AS delivered,
+       ${PAID_AND_DELIVERED('?', '?')} AS paid,
+       1 AS delivered,
        (SELECT COUNT(*) FROM business_outcome_events b
          WHERE b.exposure_id = ? AND (b.kind = 'refund'
            -- A dispute the buyer lost is money still paid; the row says so.
            OR (b.kind = 'dispute' AND NOT EXISTS (
              SELECT 1 FROM experiment_fulfilments f WHERE f.exposure_id = b.exposure_id
                AND f.dispute_outcome = 'won' AND b.settles_ref IN (f.payment_ref, coalesce(f.charge_ref, '')))))) AS reversed`,
-    [exposureId, world === 'reference' ? 'reference' : 'unmatched_external', exposureId, exposureId]))
+    [exposureId, world === 'reference' ? 'reference' : 'unmatched_external', exposureId]))
     .rows[0] as Record<string, unknown>;
   return Number(r.paid) > 0 && Number(r.delivered) > 0 && Number(r.reversed) === 0;
 }
@@ -723,9 +738,31 @@ export interface FirstClosure {
  * external counterparty who paid and received, and a prediction the world
  * settled. Read from the ledger, never asserted. Real world only.
  */
+/**
+ * THE SENTENCE FOR ONE BUYER'S COMPLETED EXCHANGE, saying exactly which claim
+ * it rests on. Through the hand, the mail provider confirmed the delivery; on
+ * a venue, the venue's rule made the file available on payment and nobody
+ * here saw it collected (Gate 1, case 4). Neither says the buyer used it.
+ */
+export function closureSentence(input: { cents: number; venue: string | null; settled: boolean }): string {
+  const dollars = (input.cents / 100).toFixed(2);
+  const exchange = input.venue
+    ? `Somebody the provider could not match to you paid $${dollars} on ${input.venue}; ${input.venue} makes the `
+      + 'file available on payment, and the download itself is not observed'
+    : `Somebody the provider could not match to you paid $${dollars} and received what they paid for — the `
+      + 'provider confirmed the delivery';
+  return input.settled
+    ? `${exchange}. The prediction settled on it. That is an unmatched external counterparty, not a proven `
+      + 'stranger; and an asset that exists, not a business.'
+    : `${exchange}. The prediction has not settled yet.`;
+}
+
 export async function firstClosureOf(founderId: string): Promise<FirstClosure> {
   const r = (await query(
     `SELECT e.id AS experiment_id, x.product_id, x.id AS exposure_id,
+            ${PAID_AND_DELIVERED('x.id', "'unmatched_external'")} AS exchanged,
+            (SELECT f.provider FROM experiment_fulfilments f WHERE f.exposure_id = x.id AND f.after_settlement = 0
+              ORDER BY f.created_at LIMIT 1) AS sold_through,
             (SELECT SUM(b.amount_cents) FROM business_outcome_events b
               JOIN business_outcome_event_kinds k ON k.kind = b.kind
               WHERE b.exposure_id = x.id AND k.is_payment = 1 AND b.counterparty = 'unmatched_external'
@@ -744,23 +781,23 @@ export async function firstClosureOf(founderId: string): Promise<FirstClosure> {
         AND x.evidence_mode = 'real'
       ORDER BY e.ran_at IS NULL, e.ran_at`, [founderId]))
     .rows as unknown as Array<Record<string, unknown>>;
-  const closed = r.find((row) => Number(row.paid_cents ?? 0) > 0 && Number(row.delivered) > 0
+  const venueOf = (row: Record<string, unknown>): string | null =>
+    row.sold_through != null && String(row.sold_through) !== 'stripe'
+      ? (String(row.sold_through) === 'etsy' ? 'Etsy' : String(row.sold_through)) : null;
+  const closed = r.find((row) => Number(row.exchanged) > 0
     && Number(row.settled) > 0 && Number(row.reversed) === 0);
   if (closed) {
-    const dollars = (Number(closed.paid_cents) / 100).toFixed(2);
     return { reached: true, experimentId: String(closed.experiment_id),
       productId: closed.product_id == null ? null : String(closed.product_id),
-      sentence: `Somebody the provider could not match to you paid $${dollars} and received what they paid `
-        + 'for, and the prediction settled on it. That is an unmatched external counterparty, not a proven '
-        + 'stranger; and an asset that exists, not a business.' };
+      sentence: closureSentence({ cents: Number(closed.paid_cents ?? 0), venue: venueOf(closed), settled: true }) };
   }
   const paid = r.find((row) => Number(row.paid_cents ?? 0) > 0);
   if (paid) {
     return { reached: false, experimentId: String(paid.experiment_id),
       productId: paid.product_id == null ? null : String(paid.product_id),
-      sentence: Number(paid.delivered) > 0
-        ? 'Somebody unmatched paid and received; the prediction has not settled yet.'
-        : 'Somebody unmatched paid; nothing says they received what they paid for yet.' };
+      sentence: Number(paid.exchanged) > 0
+        ? closureSentence({ cents: Number(paid.paid_cents ?? 0), venue: venueOf(paid), settled: false })
+        : 'Somebody unmatched paid; nothing links a delivery to that payment yet.' };
   }
   if (r.length > 0) {
     return { reached: false, experimentId: String(r[0]?.experiment_id ?? ''),

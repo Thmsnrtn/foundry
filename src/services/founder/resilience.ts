@@ -286,10 +286,17 @@ export async function portfolioFitOf(input: {
   // Said in every verdict that has one, because reuse is never the whole
   // answer: it is cheaper to sell and it is still a concentration, and an owner
   // who is told only the first half of that has been sold something.
+  // AN INFERENCE FROM LABELS, SAID AS ONE (Gate 1, case 12). A match on a
+  // channel, buyer or industry label cannot show that a later sale actually
+  // cost less to make; it can say it might, and what would show it. And
+  // `guessed` was carried here and never read: a label that was itself inferred
+  // is one more step from the fact.
+  const inferred = `inferred from the labels, not measured${reuses.some((r) => r.guessed)
+    ? ', and at least one of those labels was itself guessed' : ''}; what a buyer actually cost to reach would show it`;
   const reach = reuses.length === 0 ? ''
     : ` It would go back over reach you have already paid for - `
-      + `${reuses.map((r) => r.value).join(', ')} - which makes the selling `
-      + 'cheaper and the portfolio no less concentrated.';
+      + `${reuses.map((r) => r.value).join(', ')} - which might make the selling `
+      + `cheaper (${inferred}) and leaves the portfolio no less concentrated.`;
 
   const verdict = its.length === 0
     ? 'I do not know enough about how this would make money to say what it would '
@@ -303,8 +310,8 @@ export async function portfolioFitOf(input: {
         // is real, and then the thing that matters: nothing here fails for a
         // different reason than what he already owns.
         ? `This would go back over ground you already stand on — `
-          + `${reuses.map((r) => r.value).join(', ')} — which makes the selling `
-          + 'cheaper and adds no independence at all. Another one of these is not '
+          + `${reuses.map((r) => r.value).join(', ')} — which might make the selling `
+          + `cheaper (${inferred}) and adds no independence at all. Another one of these is not `
           + 'another income stream; it is another way the same failure hurts.'
         : makesItWorse
           ? `This would deepen ${deepens.map((d) => d.value).join(', ')} - which `

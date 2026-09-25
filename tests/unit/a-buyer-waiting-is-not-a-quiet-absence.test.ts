@@ -97,3 +97,24 @@ describe('a dispute is answered where it was opened', () => {
     expect(JSON.stringify(w)).not.toContain('buyer\'s bank');
   });
 });
+
+// GATE 1, CASE 4: A VENUE ORDER'S FILE IS AVAILABLE BY THE VENUE'S RULE; NOBODY
+// HERE SAW IT COLLECTED. It was recorded as a `delivery` — "what they paid for
+// reached them" — at the payment's own time.
+describe('what a venue order says about delivery', () => {
+  it('records availability by the venue\'s rule, not an observed delivery', async () => {
+    const r = (await query(
+      `SELECT kind FROM business_outcome_events WHERE provider_event_ref = '4000000001:download-available'`))
+      .rows[0] as Record<string, unknown>;
+    expect(String(r.kind)).toBe('made_available');
+  });
+
+  it('says so when it describes the exchange', async () => {
+    const { closureSentence } = await import('../../src/services/venture/outcome.js');
+    const s = closureSentence({ cents: 1400, venue: 'Etsy', settled: true });
+    expect(s).toMatch(/Etsy makes the file available on payment/);
+    expect(s).toMatch(/download itself is not observed/);
+    expect(s).not.toMatch(/received what they paid for/);
+    expect(closureSentence({ cents: 500, venue: null, settled: true })).toMatch(/received what they paid for/);
+  });
+});

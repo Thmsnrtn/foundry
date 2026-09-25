@@ -1011,3 +1011,45 @@ fail and is then removed. **Deployment note:** the first pass after this ships
 will finish any world settlement production left half-done. A grade may appear
 for such a test, computed from the words it sealed; its sealed text is never
 touched.
+
+**Cases 3, 4, 5 and 6: one exchange, correctly described.** All four are
+**`tested`**.
+- **Case 3.** "Paid and received" now means one buyer's exchange: a payment,
+  its own fulfilment, and that fulfilment delivered. It used to be two unrelated
+  tallies on the exposure, so one person's payment beside somebody else's
+  delivery earned the asset.
+- **Case 4 (migration 352).** A venue order no longer writes "delivery — what
+  they paid for reached them" at the payment's own time. It writes
+  `made_available`: the venue's rule makes the file available on payment, and
+  nobody here saw it collected. By the owner's decision of 25 September 2026
+  ("yes, labelled"), it still completes the exchange for earning. The closure
+  sentence says "Etsy makes the file available on payment, and the download
+  itself is not observed".
+- **Case 5.** "Reached" counts distinct people, by the address each delivered
+  offer went to, not delivery receipts. The sealed rule's own sentence still
+  counts offers delivered, which is its unit.
+- **Case 6.** A surprised result with a purchase no longer says "did not sell".
+  The test that pinned that sentence was changed.
+
+**Cases 10, 11 and 12: money and resilience words that match their evidence.**
+All three are **`tested`**.
+- **Case 10.**
+  - An asset's sales are now read over the same thirty days as its cost.
+  - A subscription reading is shown beside ledger sales, not stacked on them.
+  - A charge whose fee has not been read is said to be before that fee, and can
+    no longer produce "earning its keep". A loss still stands, since a missing
+    fee only makes it worse.
+- **Case 11.** The surplus no longer says "$X is yours to take" of a ledger
+  sum. It says the amount of recorded sales not spoken for is "not money seen
+  in a bank", because no payout or deposit has been reconciled. It grants
+  nothing.
+- **Case 12.** Reuse of a proven channel, buyer or industry "might make the
+  selling cheaper (inferred from the labels, not measured …; what a buyer
+  actually cost to reach would show it)". It also names when a label was itself
+  guessed.
+
+**What Proof 1 still owes.** Every case above is controlled. The first real
+observation is still external: the Etsy shop is connected and read, but no
+natural order has occurred. When one does, it is reported as witnessed only
+then. Proofs 2–5 need real buyers, real periods and a second asset; code
+cannot supply them.

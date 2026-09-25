@@ -105,7 +105,13 @@ describe('a surprised result is not always a silence', () => {
       what_happened: 'the kill number was breached before anybody paid',
       placed: true, reached: 26, purchases: 1,
     });
-    expect(o.establishes).toContain('did not sell');
+    // AND IT DOES NOT SAY "DID NOT SELL" (Gate 1, case 6). This asserted the
+    // opposite — it locked the defect in. A test that took a sale and still
+    // breached its kill number failed its prediction; it did not fail to sell.
+    // The sealed verdict stands; the sentence about the world is corrected.
+    expect(o.establishes).not.toContain('did not sell');
+    expect(o.establishes).toContain('did not hold');
+    expect(o.establishes).toMatch(/1 purchase/);
     expect(o.establishes).not.toContain('received it');
     expect(o.establishes).not.toContain('silence');
   });

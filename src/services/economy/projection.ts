@@ -478,11 +478,20 @@ export async function distributableSurplus(founderId: string): Promise<Surplus> 
   return {
     figure, held, obligations, refundExposure: exposure, refundReserve, taxReserve: tax,
     operatingReserve, authorisedCapital,
-    sentence: sentenceFor(figure, held),
+    sentence: surplusSentence(figure, held),
   };
 }
 
-function sentenceFor(figure: Figure, held: Figure): string {
+/**
+ * WHAT THE SUBTRACTION MAY CLAIM (Gate 1, case 11). This said "$X is yours to
+ * take" of what the recorded events add up to, while `moneyBanked` — the only
+ * figure here that would mean money in a bank — is permanently unavailable.
+ * A charge, the provider's fee, a pending payout, a provider balance, a bank
+ * deposit and a permitted distribution are different facts, and this sum is
+ * only the first few of them. It says what it is: not spoken for, and not seen
+ * in a bank. Nothing here is permission to move it.
+ */
+export function surplusSentence(figure: Figure, held: Figure): string {
   if ((held.cents ?? 0) === 0) {
     return 'Nobody has paid for anything yet, so there is nothing to take out. '
       + 'This is what would be shown when somebody has.';
@@ -490,7 +499,8 @@ function sentenceFor(figure: Figure, held: Figure): string {
   if ((figure.cents ?? 0) <= 0) {
     return 'Nothing is yours to take yet — everything that has settled is already spoken for.';
   }
-  return `${dollars(figure.cents ?? 0)} is yours to take, after everything already spoken for.`;
+  return `${dollars(figure.cents ?? 0)} of recorded sales is not spoken for. That is what the ledger adds up to — `
+    + 'not money seen in a bank: no payout or deposit has been reconciled here, so it is not yet something to withdraw.';
 }
 
 /** Cents as a person reads them. Never rounded to hide a difference. */

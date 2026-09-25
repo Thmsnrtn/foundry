@@ -326,6 +326,37 @@ describe('Foundry operates: offers, receipts, exposures', () => {
   });
 });
 
+// GATE 1, CASE 5: "REACHED" IS PEOPLE, SO IT COUNTS PEOPLE. The prose built on
+// it says "N people received it" and bounds a silence by N; it counted delivery
+// receipts. Nothing stops one address from sitting on two recipient rows, and
+// a second delivered offer to somebody already reached is a second receipt,
+// not a second person.
+describe('reached counts the people an offer reached, not the receipts', () => {
+  it('a second delivered offer to somebody already reached does not raise it', async () => {
+    const { REACHED_SQL } = await import('../../src/services/founder/what-happened.js');
+    const reached = async (): Promise<number> => Number(((await query(
+      `SELECT ${REACHED_SQL} AS n FROM venture_experiments e WHERE e.id = ?`, [X])).rows[0] as Record<string, unknown>).n);
+    const before = await reached();
+    const first = (await query(
+      `SELECT recipient_id, product_id, proposed_act_id, parameters_json FROM outbound_actions
+        WHERE experiment_id = ? AND experiment_act = 'offer' AND outcome_status = 'verified_success' LIMIT 1`, [X]))
+      .rows[0] as Record<string, unknown>;
+    await query(
+      `INSERT INTO outbound_actions (id, product_id, agent_name, integration_name, action_type, authority_level, status,
+         parameters_json, preview_text, rationale, confidence, expires_at, effect_id, outcome_status, outcome_evidence_ref,
+         experiment_id, experiment_act, proposed_act_id, recipient_id)
+       VALUES ('again', ?, 'institution:hand', 'resend', 'send_email', 0, 'pending_approval', ?, 'p', 'r', 1, '2030-01-01',
+         'again', 'verified_success', 'resend:msg_again:delivered', ?, 'offer', ?, ?)`,
+      [String(first.product_id), String(first.parameters_json), X, String(first.proposed_act_id), String(first.recipient_id)]);
+    const x = (await exposureOf(X))!;
+    const { recordBusinessOutcome } = await import('../../src/services/venture/outcome.js');
+    const r = await recordBusinessOutcome({ exposureId: x.id, kind: 'offer_delivered', observedAt: new Date(),
+      provider: 'resend', providerRef: 'msg_again', arrivedVia: 'email' });
+    expect('refused' in r ? r.refused : 'ok').toBe('ok');
+    expect(await reached(), 'one person, two receipts, counted as two people').toBe(before);
+  });
+});
+
 describe('Foundry operates: purchase, delivery, refund, settlement', () => {
   it('a stale brief is never delivered: the quality gate fails closed and the page says why', async () => {
     const buyer = 'info@hamelwoodworks.com';
@@ -414,7 +445,11 @@ describe('Foundry operates: purchase, delivery, refund, settlement', () => {
     expect(r[0].settled).toBe('as_predicted');
     const e = (await query('SELECT verdict, what_happened, ran_at FROM venture_experiments WHERE id = ?', [X])).rows[0] as Record<string, unknown>;
     expect(e.verdict).toBe('as_predicted');
-    expect(String(e.what_happened)).toMatch(/1 delivery that counted out of 10 offers delivered within 7 days.*As predicted\./);
+    // ELEVEN OFFERS DELIVERED, TO TEN PEOPLE: the sealed rule's unit is the
+    // offer delivered, and case 5's second offer to somebody already reached
+    // is one of them. What it must not do is make eleven people — see
+    // "reached counts the people" above.
+    expect(String(e.what_happened)).toMatch(/1 delivery that counted out of 11 offers delivered within 7 days.*As predicted\./);
     const v = (await getExperimentView(OWNER, X, NOW))!;
     expect(v.state).toBe('completed');
     expect(v.learned.headline).toBe('The prediction held.');
@@ -793,3 +828,4 @@ describe('what a buyer is owed outlives order, expiry, settlement and a stop', (
   });
 
 });
+

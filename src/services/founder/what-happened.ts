@@ -151,6 +151,17 @@ function establishing(word: 'as predicted' | 'partly' | 'surprised', cannotProve
     const s = couldNotHaveSeen(reached);
     return s === null ? '' : ` ${s}`;
   })();
+  // A SURPRISE WITH A SALE IN IT DID SELL (Gate 1, case 6). Only the size
+  // sentence was gated on the count; this one said "did not sell" beside a
+  // recorded purchase. The sealed verdict is untouched — the prediction failed —
+  // and the sentence about the world says what actually happened.
+  if (word === 'surprised' && (purchases ?? 0) > 0) {
+    const n = purchases ?? 0;
+    return {
+      establishes: `that the prediction did not hold as it was sealed for this offer, population and window — though ${String(n)} ${n === 1 ? 'purchase' : 'purchases'} did happen, so it sold, just not the way the rule required.`,
+      doesNotEstablish: `that nobody wants it, or that it would sell at scale; one result, not a formula.${limit}`,
+    };
+  }
   if (word === 'surprised') {
     return {
       establishes: `that this offer, to that population, through that channel, in that window, did not sell.${size}`,
@@ -223,8 +234,20 @@ export function outcomeFromRow(r: OutcomeRow): Outcome {
  * that bounced reached nobody, and counting it would inflate the denominator in
  * the direction that makes a null result look stronger than it is.
  */
-export const REACHED_SQL = `(SELECT COUNT(*) FROM business_outcome_events b
+/* REACHED IS PEOPLE, BECAUSE THE PROSE SAYS PEOPLE (Gate 1, case 5). It
+ * counted delivery receipts, and the sentence built on it says "N people
+ * received it" and bounds a silence by N. Nothing stops one address sitting on
+ * two recipient rows, or a second offer reaching somebody already reached.
+ * Each receipt is joined to the offer that produced it and the address it went
+ * to; a receipt that cannot be joined is counted as itself, which can only
+ * overstate by the receipts nothing here can attribute — never merge two
+ * people into one. */
+export const REACHED_SQL = `(SELECT COUNT(DISTINCT coalesce(lower(r.email), 'receipt:' || b.id))
+   FROM business_outcome_events b
    JOIN experiment_exposures xe ON xe.id = b.exposure_id
+   LEFT JOIN outbound_actions o ON o.experiment_id = e.id AND o.experiment_act = 'offer'
+        AND o.outcome_evidence_ref LIKE 'resend:' || b.provider_event_ref || ':%'
+   LEFT JOIN experiment_recipients r ON r.id = o.recipient_id
   WHERE xe.experiment_id = e.id AND b.kind = 'offer_delivered' AND b.after_settlement = 0)`;
 
 /** And how many of them bought, which is what decides whether "silence" is a word this result may use.

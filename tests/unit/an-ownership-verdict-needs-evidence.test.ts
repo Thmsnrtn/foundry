@@ -80,7 +80,8 @@ async function asked(productId: string, n: number): Promise<void> {
  * read from the same figures Economics shows him.
  */
 async function anAssetThatSold(
-  name: string, sales: Array<{ charge: number; fee: number }>, opts: { aiUsd?: number | null } = {},
+  name: string, sales: Array<{ charge: number; fee: number; daysAgo?: number }>,
+  opts: { aiUsd?: number | null; mrrCents?: number | null } = {},
 ): Promise<string> {
   const n = ++seq;
   const experimentId = `bv_x${n}`;
@@ -107,14 +108,15 @@ async function anAssetThatSold(
   // AN ASSET OUT OF A TEST ARRIVES EXPERIMENTAL and earns its standing from
   // the world. That is the frontier, and it is where every real sale this
   // institution has ever made lives.
-  const productId = await anAsset(name, { aiUsd: opts.aiUsd, fromExperiment: experimentId, standing: 'experimental' });
+  const productId = await anAsset(name, { aiUsd: opts.aiUsd, mrrCents: opts.mrrCents, fromExperiment: experimentId, standing: 'experimental' });
   for (const sale of sales) {
     const k = ++seq;
+    const when = `-${String(sale.daysAgo ?? 3)} day`;
     await query(
       `INSERT INTO business_outcome_events (id, founder_id, exposure_id, kind, amount_cents, currency, observed_at,
                                             provider, provider_event_ref, evidence_mode, counterparty, arrived_via)
-       VALUES (?,?,?,'payment',?,'usd',datetime('now','-3 day'),'stripe',?,'real','unmatched_external','payment_link')`,
-      [`bv_ev${k}`, OWNER, `bv_e${n}`, sale.charge, `pi_bv_${k}`]);
+       VALUES (?,?,?,'payment',?,'usd',datetime('now',?),'stripe',?,'real','unmatched_external','payment_link')`,
+      [`bv_ev${k}`, OWNER, `bv_e${n}`, sale.charge, when, `pi_bv_${k}`]);
     await query(
       `INSERT INTO experiment_fulfilments (id, founder_id, experiment_id, exposure_id, payment_event_id, provider, payment_ref, amount_cents, currency, status)
        VALUES (?,?,?,?,?,'stripe',?,?,'usd','owed')`,
@@ -126,8 +128,8 @@ async function anAssetThatSold(
       await query(
         `INSERT INTO economic_events (id, founder_id, kind, amount_cents, currency, occurred_at, provider, provider_ref,
                                       fulfilment_id, source_event_id, claim_quality, evidence_mode, because)
-         VALUES (?,?,?,?,'usd',datetime('now','-3 day'),'stripe',?,?,?,'measured','real','the provider said so')`,
-        [`bv_ec${++seq}`, OWNER, kind, cents, `ch_bv_${k}_${kind}`, `bv_f${k}`, `bv_ev${k}`]);
+         VALUES (?,?,?,?,'usd',datetime('now',?),'stripe',?,?,?,'measured','real','the provider said so')`,
+        [`bv_ec${++seq}`, OWNER, kind, cents, when, `ch_bv_${k}_${kind}`, `bv_f${k}`, `bv_ev${k}`]);
     };
     await event('charge', sale.charge);
     if (sale.fee > 0) await event('provider_fee', sale.fee);
@@ -251,5 +253,32 @@ describe('the shapes of business an ownership verdict has to be able to read', (
     expect((await of(constant)).burden).toBe('needs you often');
     // Same money, same verdict on the money, different thing to own.
     expect((await of(rare)).verdict).toBe((await of(constant)).verdict);
+  });
+});
+
+// GATE 1, CASE 10: A VERDICT ON MONEY COMPARES LIKE WITH LIKE. Lifetime sales
+// were set against thirty days of cost; a monthly subscription figure was added
+// on top of ledger sales that may already contain it; and a sale whose fee had
+// not been read counted as fee-free while still being called "after fees".
+describe('money is compared over one period, with what is actually known', () => {
+  it('does not let an old sale pay for this month', async () => {
+    const id = await anAssetThatSold('Sold Long Ago Ltd', [{ charge: 5_000, fee: 175, daysAgo: 60 }], { aiUsd: 2 });
+    const b = await of(id);
+    expect(b.verdict, 'a sale two months ago was set against thirty days of cost').not.toBe('earning its keep');
+  });
+
+  it('does not call an unread fee zero, or a sale "after fees" while one is missing', async () => {
+    const id = await anAssetThatSold('Fee Unread Ltd', [{ charge: 2_900, fee: 0 }], { aiUsd: 1 });
+    const b = await of(id);
+    expect(b.verdict, 'a sale whose fee was never read earned its keep on a fee of zero').not.toBe('earning its keep');
+    expect(b.flow.because).not.toMatch(/after fees/);
+    expect(b.flow.because).toMatch(/fee/);
+  });
+
+  it('does not add a subscription reading on top of sales that may already contain it', async () => {
+    const id = await anAssetThatSold('Both Ways Ltd', [{ charge: 2_900, fee: 117 }], { aiUsd: 1, mrrCents: 4_000 });
+    const b = await of(id);
+    expect(b.flow.cents, 'the month of subscription was stacked on the ledger').toBe(2_900 - 117);
+    expect(b.flow.because).toMatch(/subscription/);
   });
 });

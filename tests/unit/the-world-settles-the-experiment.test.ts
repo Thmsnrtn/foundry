@@ -144,6 +144,21 @@ async function event(exposureId: string, kind: string, opts: {
   return r;
 }
 
+/** A SALE AS ONE EXCHANGE: a payment, its own fulfilment, and the delivery
+ *  the provider confirmed for that fulfilment — the linkage `paidAndReceived`
+ *  now requires (Gate 1, case 3), and the shape the intake and the hand write. */
+async function sold(exposureId: string, experimentId: string, payer: string): Promise<void> {
+  const p = await event(exposureId, 'payment', { payer });
+  const ref = String(((await query('SELECT provider_event_ref FROM business_outcome_events WHERE id = ?', [p.id]))
+    .rows[0] as Record<string, unknown>).provider_event_ref);
+  const fid = 'f_' + nanoid(6);
+  await query(
+    `INSERT INTO experiment_fulfilments (id, founder_id, experiment_id, exposure_id, payment_event_id, provider, payment_ref, amount_cents, currency)
+     VALUES (?,?,?,?,?,'stripe',?,500,'usd')`, [fid, OWNER, experimentId, exposureId, p.id, ref]);
+  await event(exposureId, 'delivery');
+  await query(`UPDATE experiment_fulfilments SET status = 'delivered' WHERE id = ?`, [fid]);
+}
+
 let askedFirst = false;
 async function anAct(productId: string, experimentId: string, critical: boolean): Promise<string> {
   // A proposal exists only against a standing "ask me first"; the owner asked
@@ -276,8 +291,7 @@ describe('settlement by the world', () => {
     let closure = await firstClosureOf(OWNER);
     expect(closure.reached).toBe(false);
 
-    await event(e.exposureId, 'payment', { payer: 'cus_someone_else' });
-    await event(e.exposureId, 'delivery');
+    await sold(e.exposureId, e.experimentId, 'cus_someone_else');
     s = await settleFromTheWorld(e.experimentId);
     expect(s.settled).toBe('as_predicted');
     expect(s.earned).toBe(true);
@@ -342,8 +356,7 @@ describe('settlement by the world', () => {
     expect((await settleFromTheWorld(quiet.experimentId, later)).settled).toBe('surprised');
 
     const some = await exposed('real', { ...RULE, atLeast: 3 });
-    await event(some.exposureId, 'payment', { payer: 'cus_a' });
-    await event(some.exposureId, 'delivery');
+    await sold(some.exposureId, some.experimentId, 'cus_a');
     expect((await settleFromTheWorld(some.experimentId)).settled).toBeNull();
     const s3 = await settleFromTheWorld(some.experimentId, later);
     expect(s3.settled).toBe('partly');
@@ -554,8 +567,7 @@ describe('a settlement interrupted halfway', () => {
 
   it('finishes what was left, once, on the next pass', async () => {
     const e = await exposed('real');
-    await event(e.exposureId, 'payment', { payer: 'cus_interrupted' });
-    await event(e.exposureId, 'delivery');
+    await sold(e.exposureId, e.experimentId, 'cus_interrupted');
     await query(`CREATE TRIGGER t_observations_down BEFORE INSERT ON market_observations
       BEGIN SELECT RAISE(ABORT, 'the observation store is down'); END`);
     await expect(settleFromTheWorld(e.experimentId)).rejects.toThrow();
@@ -585,8 +597,7 @@ describe('a settlement interrupted halfway', () => {
 
   it('writes the answer and its own bookkeeping together, or not at all', async () => {
     const e = await exposed('real');
-    await event(e.exposureId, 'payment', { payer: 'cus_atomic' });
-    await event(e.exposureId, 'delivery');
+    await sold(e.exposureId, e.experimentId, 'cus_atomic');
     await query(`CREATE TRIGGER t_unknowns_down BEFORE UPDATE ON market_unknowns
       BEGIN SELECT RAISE(ABORT, 'the unknowns table is locked'); END`);
     await expect(settleFromTheWorld(e.experimentId)).rejects.toThrow();
@@ -604,8 +615,7 @@ describe('a settlement interrupted halfway', () => {
   it('a pass that could not settle a due test reports failure, not success', async () => {
     const { JOB_REGISTRY } = await import('../../src/jobs/index.js');
     const e = await exposed('real');
-    await event(e.exposureId, 'payment', { payer: 'cus_job' });
-    await event(e.exposureId, 'delivery');
+    await sold(e.exposureId, e.experimentId, 'cus_job');
     await query(`CREATE TRIGGER t_job_down BEFORE UPDATE ON market_unknowns
       BEGIN SELECT RAISE(ABORT, 'the unknowns table is locked'); END`);
     try {
@@ -614,5 +624,22 @@ describe('a settlement interrupted halfway', () => {
     } finally {
       await query('DROP TRIGGER t_job_down');
     }
+  });
+});
+
+// GATE 1, CASE 3: PAID AND RECEIVED IS ONE BUYER'S EXCHANGE. Payment and
+// delivery were counted as two unrelated tallies on the exposure, then
+// reported as "paid and received what they paid for" — so one person's payment
+// beside somebody else's delivery earned the asset.
+describe('paid and received is one exchange', () => {
+  it('a payment beside a delivery that belongs to no payment does not earn the asset', async () => {
+    const e = await exposed('real');
+    await event(e.exposureId, 'payment', { payer: 'cus_paid_only' });
+    await event(e.exposureId, 'delivery');
+    const s = await settleFromTheWorld(e.experimentId);
+    expect(s.settled).toBe('as_predicted');
+    expect(s.earned, 'two unrelated events were read as one buyer paid and received').toBe(false);
+    expect(String(((await query('SELECT standing FROM products WHERE id = ?', [e.productId])).rows[0] as Record<string, unknown>).standing))
+      .toBe('experimental');
   });
 });

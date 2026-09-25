@@ -169,7 +169,9 @@ describe('the owner\'s part is one approval, then his own acts outside', () => {
     expect(redirectedTo(await post(`/foundry/experiments/${X}/order`, { order_ref: '3456789012', paid_at: iso(3), gross_cents: '1400', fee_cents: '178' }))).toContain('done=order');
     const x = (await exposureOf(X))!;
     const events = (await query(`SELECT kind, counterparty, amount_cents FROM business_outcome_events WHERE exposure_id = ? ORDER BY kind`, [x.id])).rows;
-    expect(events).toEqual([expect.objectContaining({ kind: 'delivery' }), expect.objectContaining({ kind: 'payment', counterparty: 'unmatched_external', amount_cents: 1400 })]);
+    // AVAILABLE BY THE VENUE'S RULE, NOT AN OBSERVED DELIVERY (Gate 1, case 4):
+    // Etsy makes the file available on payment; nobody here saw it collected.
+    expect(events).toEqual([expect.objectContaining({ kind: 'made_available' }), expect.objectContaining({ kind: 'payment', counterparty: 'unmatched_external', amount_cents: 1400 })]);
     expect((await query(`SELECT status, provider, payment_ref FROM experiment_fulfilments WHERE experiment_id = ?`, [X])).rows[0]).toMatchObject({ status: 'delivered', provider: 'etsy', payment_ref: '3456789012' });
     const ledger = (await query(`SELECT kind, amount_cents, claim_quality FROM economic_events WHERE provider = 'etsy' ORDER BY kind`)).rows;
     expect(ledger).toEqual([expect.objectContaining({ kind: 'charge', amount_cents: 1400, claim_quality: 'measured' }), expect.objectContaining({ kind: 'provider_fee', amount_cents: 178 })]);
