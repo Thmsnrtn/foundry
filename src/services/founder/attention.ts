@@ -174,8 +174,29 @@ export async function waitingOn(founderId: string): Promise<AttentionItem[]> {
     why: null, href: `/foundry/experiments/${o.experimentId}`, open: { label: 'Open the test', href: `/foundry/experiments/${o.experimentId}` },
     effect: 'person',
   }));
+  // A PAID ORDER THE VENUE REPORTS AFTER ITS EXPERIMENT ALREADY SETTLED
+  // (migration 350). Not yet a ledger obligation — nothing here has recorded a
+  // charge, a fee or a delivery for it — but a real payment sitting unseen is
+  // exactly the kind of thing this queue exists to stop being silent about.
+  const unresolvedVenueOrders = await rows(
+    `SELECT v.id, v.experiment_id, v.product_id, v.gross_cents, v.currency, v.order_ref, v.unknown, e.what_we_do
+       FROM venue_orders_after_settlement v JOIN venture_experiments e ON e.id = v.experiment_id
+      WHERE v.founder_id = ? AND v.resolved_at IS NULL ORDER BY v.observed_at`, [founderId]);
+  const venueOrderItems: AttentionItem[] = unresolvedVenueOrders.map((v) => ({
+    kind: 'obligation', id: String(v.id), productId: v.product_id == null ? '' : String(v.product_id),
+    companyName: String(v.what_we_do),
+    summary: `Etsy reports a ${(Number(v.gross_cents) / 100).toFixed(2)} ${String(v.currency).toUpperCase()} `
+      + `order (${String(v.order_ref)}) on a listing whose test has already settled.`,
+    detail: String(v.unknown),
+    yes: { label: 'Open the test', action: `/foundry/experiments/${String(v.experiment_id)}` },
+    no: { label: 'Later', action: `/foundry/experiments/${String(v.experiment_id)}` },
+    why: null, href: `/foundry/experiments/${String(v.experiment_id)}`,
+    open: { label: 'Open the test', href: `/foundry/experiments/${String(v.experiment_id)}` },
+    effect: 'person',
+  }));
   return [
     ...owedToBuyers,
+    ...venueOrderItems,
     ...tests,
     ...workshop,
     ...actItems,

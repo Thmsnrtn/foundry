@@ -4584,6 +4584,29 @@ CREATE TABLE venture_opportunities (
   decided_at    TEXT
 , revisit_if TEXT, lighter_architecture TEXT, from_seed_id TEXT
   REFERENCES opportunity_seeds(id));
+CREATE TABLE venue_orders_after_settlement (
+  id               TEXT PRIMARY KEY,
+  founder_id       TEXT NOT NULL REFERENCES founders(id),
+  experiment_id    TEXT NOT NULL REFERENCES venture_experiments(id),
+  -- The asset this listing belonged to, read at the moment this row is
+  -- written. Not a live join: the asset can be archived later, and the row
+  -- must still say which one this order was about.
+  product_id       TEXT REFERENCES products(id),
+  provider         TEXT NOT NULL,
+  -- The venue's own order number. Not a Foundry reference: nothing here has
+  -- recorded this order, which is the entire reason the row exists.
+  order_ref        TEXT NOT NULL,
+  gross_cents      INTEGER NOT NULL,
+  currency         TEXT NOT NULL,
+  paid_at          TEXT NOT NULL,
+  observed_at      TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  evidence_mode    TEXT NOT NULL CHECK (evidence_mode IN ('real','sandbox','reference')),
+  -- WHAT THIS ROW CANNOT YET SAY, named on the row rather than assumed: a
+  -- payment with no fee read, no delivery confirmed, no obligation opened.
+  unknown          TEXT NOT NULL,
+  resolved_at      TEXT,
+  resolved_because TEXT
+);
 CREATE TABLE voice_conversations (
   id                  TEXT PRIMARY KEY,
   product_id          TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -5368,6 +5391,10 @@ CREATE UNIQUE INDEX idx_venture_mandate_one_open
   ON venture_mandates(founder_id) WHERE closed_at IS NULL;
 CREATE INDEX idx_venture_opportunities_open
   ON venture_opportunities(mandate_id) WHERE verdict IS NULL;
+CREATE UNIQUE INDEX idx_venue_order_after_settlement_once
+  ON venue_orders_after_settlement(provider, order_ref);
+CREATE INDEX idx_venue_orders_after_settlement_open
+  ON venue_orders_after_settlement(founder_id) WHERE resolved_at IS NULL;
 CREATE INDEX idx_voice_conversations_founder
   ON voice_conversations(founder_id, created_at DESC);
 CREATE INDEX idx_voice_conversations_product
@@ -10079,6 +10106,40 @@ BEGIN
     SELECT 1 FROM venture_mandates m
      WHERE m.id = NEW.mandate_id AND m.evidence_mode = NEW.evidence_mode
        AND m.founder_id = NEW.founder_id);
+END;
+CREATE TRIGGER venue_order_after_settlement_guard
+BEFORE INSERT ON venue_orders_after_settlement
+BEGIN
+  SELECT RAISE(ABORT,'venue_order_after_settlement:incomplete')
+    WHERE trim(NEW.order_ref) = '' OR trim(NEW.provider) = '' OR trim(NEW.unknown) = '';
+  SELECT RAISE(ABORT,'venue_order_after_settlement:bad_amount')
+    WHERE NEW.gross_cents <= 0;
+  SELECT RAISE(ABORT,'venue_order_after_settlement:cannot_arrive_resolved')
+    WHERE NEW.resolved_at IS NOT NULL OR NEW.resolved_because IS NOT NULL;
+END;
+CREATE TRIGGER venue_order_after_settlement_no_delete
+BEFORE DELETE ON venue_orders_after_settlement
+BEGIN
+  SELECT RAISE(ABORT,'venue_order_after_settlement:immutable')
+    WHERE OLD.product_id IS NOT NULL AND EXISTS (
+      SELECT 1 FROM products p WHERE p.id = OLD.product_id AND p.erasure_scheduled_at IS NULL);
+END;
+CREATE TRIGGER venue_order_after_settlement_resolved_once
+BEFORE UPDATE ON venue_orders_after_settlement
+BEGIN
+  SELECT RAISE(ABORT,'venue_order_after_settlement:already_resolved')
+    WHERE OLD.resolved_at IS NOT NULL;
+  SELECT RAISE(ABORT,'venue_order_after_settlement:resolve_needs_reason')
+    WHERE NEW.resolved_at IS NOT NULL AND trim(coalesce(NEW.resolved_because,'')) = '';
+  SELECT RAISE(ABORT,'venue_order_after_settlement:immutable')
+    WHERE NEW.founder_id IS NOT OLD.founder_id
+       OR NEW.experiment_id IS NOT OLD.experiment_id
+       OR NEW.provider IS NOT OLD.provider
+       OR NEW.order_ref IS NOT OLD.order_ref
+       OR NEW.gross_cents IS NOT OLD.gross_cents
+       OR NEW.currency IS NOT OLD.currency
+       OR NEW.paid_at IS NOT OLD.paid_at
+       OR NEW.unknown IS NOT OLD.unknown;
 END;
 CREATE TRIGGER workshop_continuation_append_only_delete
 BEFORE DELETE ON workshop_continuations

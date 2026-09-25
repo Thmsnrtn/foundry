@@ -209,6 +209,21 @@ async function listed(): Promise<void> {
     url: 'https://www.etsy.com/listing/9988776655/bid-decision-workbook' }).catch(() => undefined);
 }
 
+/**
+ * THE SHAPE `settleFromTheWorld` WRITES WHEN A TEST SETTLES, without its
+ * prediction machinery: this file plays only the venue, not the verdict, so
+ * the sealed rows are written directly, the same way `connect()` above plays
+ * the shape `completeAuthorization` writes without the round trip.
+ */
+async function settleTheTest(): Promise<void> {
+  await query(
+    `UPDATE venture_experiments SET ran_at = datetime('now'), verdict = 'as_predicted',
+            what_happened = 'the workbook sold, as predicted' WHERE id = ?`, [X]);
+  const { exposureOf, withdrawExposure } = await import('../../src/services/venture/outcome.js');
+  const x = await exposureOf(X);
+  if (x && x.withdrawnAt === null) await withdrawExposure(x.id);
+}
+
 describe('a silence is about orders and nothing else', () => {
   it('records an absence of orders, and claims nothing about attention', async () => {
     ETSY['shops/77770001/receipts'] = { count: 0, results: [] };
@@ -419,5 +434,118 @@ describe('what the reading bears on the claim, and how often it says so', () => 
       `SELECT COUNT(*) AS n FROM market_observations WHERE source LIKE 'etsy:shop:%'`))
       .rows[0] as Record<string, unknown>;
     expect(Number(n.n), 'many passes, one day, one reading').toBe(1);
+  });
+});
+
+// =============================================================================
+// A LISTING OUTLIVES ITS EXPERIMENT (migration 350).
+//
+// Every scenario above proves this reader is thorough. None of them ever
+// settles the test and reads the venue again — which is exactly why the seam
+// below went unnoticed: `settleListings` withdraws the Foundry exposure the
+// moment a test settles, and the experiment then drops out of
+// `listingExperimentsToRead` for ever. A stranger can still pay the listing
+// after that; this is the one place that fact used to go to die.
+//
+// DELIBERATELY RUNS LAST IN THIS FILE. It settles the shared experiment `X`,
+// which `venture_experiment:already_run` then makes irreversible for the rest
+// of the suite.
+// =============================================================================
+describe('a listing outlives its experiment', () => {
+  it('keeps reading a settled listing, never folds a later order into the sealed test, and raises it once', async () => {
+    // ORDER A closes the trial.
+    receipt('7700000001');
+    await connect(['shops_r', 'listings_r', 'transactions_r']);
+    await listed();
+    const first = await bringTheVenueUpToDate({ founderId: OWNER, experimentId: X });
+    expect(first.read && first.recorded, 'A is recorded normally, before settlement').toBe(1);
+
+    await settleTheTest();
+    const sealedBefore = (await query(
+      `SELECT ran_at, verdict, what_happened FROM venture_experiments WHERE id = ?`, [X]))
+      .rows[0] as Record<string, unknown>;
+    const fulfilmentsBefore = (await query(
+      `SELECT COUNT(*) AS n FROM experiment_fulfilments WHERE experiment_id = ?`, [X]))
+      .rows[0] as Record<string, unknown>;
+
+    // ORDER B, for the SAME still-live listing, after the trial closed.
+    receipt('7700000002');
+    const second = await bringTheVenueUpToDate({ founderId: OWNER, experimentId: X });
+    expect(second.read, 'the venue is still read after its experiment has settled').toBe(true);
+    if (!second.read) return;
+    // B is not folded into the ledger: the sealed prediction may not be
+    // written to again, so `recordVenueOrder` still refuses it.
+    expect(second.recorded, 'B is not written as a charge under a concluded prediction').toBe(0);
+
+    // But a refusal caught and forgotten is a real sale nobody ever sees. B is
+    // a durable, owner-visible fact instead.
+    const incident = (await query(
+      `SELECT founder_id, experiment_id, product_id, gross_cents, currency, resolved_at
+         FROM venue_orders_after_settlement WHERE provider = 'etsy' AND order_ref = '7700000002'`))
+      .rows[0] as Record<string, unknown> | undefined;
+    expect(incident, 'the second order is surfaced, not silently dropped').toBeTruthy();
+    expect(String(incident!.founder_id)).toBe(OWNER);
+    expect(String(incident!.experiment_id)).toBe(X);
+    expect(Number(incident!.gross_cents)).toBe(1400);
+    expect(incident!.resolved_at).toBeNull();
+
+    // A's own sealed prediction and evidence counts are untouched — B did not
+    // rewrite them.
+    const sealedAfter = (await query(
+      `SELECT ran_at, verdict, what_happened FROM venture_experiments WHERE id = ?`, [X]))
+      .rows[0] as Record<string, unknown>;
+    expect(sealedAfter).toEqual(sealedBefore);
+    const fulfilmentsAfter = (await query(
+      `SELECT COUNT(*) AS n FROM experiment_fulfilments WHERE experiment_id = ?`, [X]))
+      .rows[0] as Record<string, unknown>;
+    expect(fulfilmentsAfter.n).toEqual(fulfilmentsBefore.n);
+
+    // A repeated read of the same unresolved receipt raises it once, not once
+    // an hour for as long as it goes unresolved.
+    const third = await bringTheVenueUpToDate({ founderId: OWNER, experimentId: X });
+    expect(third.read).toBe(true);
+    const n = (await query(
+      `SELECT COUNT(*) AS n FROM venue_orders_after_settlement WHERE provider = 'etsy' AND order_ref = '7700000002'`))
+      .rows[0] as Record<string, unknown>;
+    expect(Number(n.n), 'many passes, one incident').toBe(1);
+
+    // AND THE ABSENCE HORIZON STOPS DESCRIBING THIS AS CALM. `truthful` asks
+    // whether silence would be mistaken for calm; a paid order at a venue
+    // nothing here has reconciled is exactly that silence.
+    const { absenceReading } = await import('../../src/services/institution/absence-test.js');
+    const reading = await absenceReading(OWNER, 7, new Date());
+    const truth = reading.properties.find((p) => p.property === 'truthful');
+    expect(truth, 'the truthful property is read').toBeTruthy();
+    expect(truth!.evidence.join(' ')).toContain('7700000002');
+    expect(truth!.evidence.join(' ')).toContain('already settled');
+    expect(truth!.wouldFixIt.join(' ')).toContain('bring it under the continuing asset');
+
+    // WHAT THIS DOES NOT YET PROVE. B is not recorded under the continuing
+    // asset — no charge, no fee, no obligation — because that asset-scoped
+    // intake path is its own, larger piece of work and is not built here. A
+    // fee correction or a refund on B has nothing to attach to yet for the
+    // same reason. Proof debt, named rather than hidden.
+  });
+
+  it('watches a settled listing while its asset is active, and stops once the asset is retired', async () => {
+    // X was settled by the previous test; this is the selection the hourly
+    // job actually calls (`settledListingsStillLive`), not a direct read —
+    // proving the job would still find this listing to read at all, which the
+    // test above (calling `bringTheVenueUpToDate` directly) does not.
+    const { settledListingsStillLive } = await import('../../src/services/senses/readers/etsy-shop.js');
+    const stillWatched = await settledListingsStillLive();
+    expect(stillWatched.some((r) => r.experimentId === X),
+      'a settled listing whose asset is still active is still watched').toBe(true);
+
+    // THE OWNER'S OWN ACT — retiring the asset — is what stops it, not a
+    // guessed time window. Written directly, the shape `retireExperimentalAsset`
+    // writes, without its open-obligation guard: that guard is its own
+    // function's business, not this predicate's.
+    await query(
+      `UPDATE products SET status = 'archived', retired_because = 'the owner took the listing down'
+        WHERE id = ?`, [PRODUCT]);
+    const afterRetirement = await settledListingsStillLive();
+    expect(afterRetirement.some((r) => r.experimentId === X),
+      'a retired asset is not watched for ever').toBe(false);
   });
 });

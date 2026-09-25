@@ -3531,3 +3531,119 @@ and names the rest. 7,392 → 5,272px across the two waves that touched it.
 - **Proof debt.** Unchanged: the browser review needs a browser binary and so
   sits outside `npm run check`; the door gate cannot ask its question of
   parameterised pages for want of a populated fixture.
+
+## Wave: a listing outlives its experiment (25 September 2026)
+
+The owner's intelligence-and-stewardship directive asked for one thing first:
+mark its Gate 1 cases at current HEAD as fixed, reproduced, unverified or
+inapplicable, distinguish deployed behaviour from HEAD, and repair the single
+highest-consequence still-open case rather than turn the document into a
+backlog. Twelve claims were verified read-only against `7c33db9f` (= production,
+by `git diff --stat` against the deployed commit): all twelve reproduced, none
+already fixed. This wave repairs one: the decisive lifecycle seam the directive
+itself named — *"after the first paid Etsy order settles the experiment, can a
+SECOND order for the same still-live listing still be observed and recorded?"*
+
+**The seam, exactly.** `settleListings` withdraws the Foundry exposure the
+moment a test settles — correctly, the sealed prediction is done — and
+`listingExperimentsToRead` selects on `ran_at IS NULL`, so the settled
+experiment drops out of the hourly read for ever. `recordVenueOrder` then
+refuses any further order against the withdrawn exposure with `not_listed` —
+also correctly — but that refusal was caught in `bringTheVenueUpToDate`'s order
+loop and logged beside routine noise. A real paid order at Etsy and a bug in
+this institution read identically in an operator log nobody reads.
+
+**The repair is containment, not intake — deliberately the smaller of two
+possible slices.** `settledListingsStillLive` (migration 350) keeps a settled
+experiment in the hourly venue read while its asset stays `active`, stopping on
+its own the day the owner retires it (`retireExperimentalAsset` already
+refuses to retire an asset with an open buyer obligation, so nothing goes
+quiet while there is a reason to keep listening). `bringTheVenueUpToDate`'s
+`not_listed` catch now distinguishes this one case and writes a durable,
+deduplicated row to `venue_orders_after_settlement` instead of a log line — no
+charge, no fee, no fulfilment, no obligation, because folding a post-settlement
+order into the concluded experiment's own counts would be fabricating economic
+evidence, and recording it under the *continuing* asset runs into a gap this
+map already named: `experiment_exposures.experiment_id` is `NOT NULL`, so an
+earned asset has nowhere to hang a sale yet. That larger piece — asset-scoped
+intake — is not built here and is named as proof debt rather than implied.
+
+**Made owner-visible in two places already built for exactly this kind of
+fact**, not a new page: `founder/attention.ts`'s `waitingOn()` (the one queue
+Home and the absence reader both read), and `absence-test.ts`'s `truthful`
+property — "would silence be mistaken for calm?" — which is precisely what an
+unrecorded paid order at a settled listing is. A controlled sequence proves it:
+order A settles the test; order B arrives on the same still-live listing; two
+repeated reads surface B once, not twice; A's `ran_at`, verdict and fulfilment
+count are byte-identical before and after, so B never rewrites A's sealed
+prediction; and the absence horizon's evidence now names the order and the
+fix, where it previously said nothing. Proved red against the prior code
+first — the old catch-all swallowed the refusal into a log line and the new
+table stayed empty — then green after the repair.
+
+### Evidence maturity
+
+- **Witnessed, in a controlled world.** The full sequence above runs against
+  the existing Etsy double in `the-venue-is-read-not-typed.test.ts`, which
+  covers reading thoroughly (venue-reported vs owner-entered, idempotency, fee
+  present and absent, shop-wide receipts, truncated reads) but had never once
+  settled the test and read the venue again — which is why this seam went
+  unnoticed through every prior wave that touched this file.
+- **Established.** `npm run check`, full chain, this commit.
+- **Unverified, and cannot be verified here.** No Etsy shop is connected in
+  production; whether a real receipt arrives in a shape this reader has not
+  seen is unproven until PENDING 25 closes (the owner's redirect-URI
+  registration, the pasted key pair, the connection, the shop recognised).
+  Nothing in this wave changes that credential's state: no rotation, no
+  visibility change, as he decided.
+
+### The doctrine this wave earned
+
+**Withdrawing Foundry's own bookkeeping is not the same as taking the listing
+down.** The exposure's `withdrawn_at` says the sealed prediction is closed; it
+says nothing about whether a stranger can still pay, and code that reads the
+one as the other goes blind exactly when a real sale is most likely.
+
+**A refusal caught and logged is a sale nobody sees.** The guard was right
+every time it fired; the defect was entirely in what happened to the
+information the guard produced on its way out.
+
+**Deferring the larger repair is not the same as deferring the visibility of
+what it would repair.** Slice A's whole value is that the smaller half — see
+it, and say it — does not require solving the larger half first.
+
+### What the check chain caught in this wave's own migration
+
+Two defects the full chain found in `venue_orders_after_settlement` itself,
+neither hypothetical — both proved by running the founder-erasure suite red,
+then green.
+
+**An unconditional `no_delete` trigger silently failed EVERY OTHER table's
+erasure, not just this one's.** `eraseFounderAccount` schedules a product's
+erasure, then deletes across every table the schema can derive a `product_id`
+or `founder_id` relation for; a single table's `DELETE` throwing aborts the
+whole sweep before the founder-scoped and cross-company passes ever run.
+Copying the "no_delete" idiom from an append-only record (`market_unknowns`,
+`company_situations`) without also copying its erasure exception
+(`p.erasure_scheduled_at IS NULL`) meant this ONE new table's guard blocked
+forty-four unrelated founder-scoped tables from ever being cleared —
+`erasure-leaves-no-trace.test.ts` reported all forty-four as leaking the
+founder's id, and the product was never archived either, because
+`eraseOneProduct` threw before reaching either step. Migration 335 already
+named this exact failure mode once, for a different table; this wave repeated
+it rather than reading that migration's own title again before writing a new
+one. Fixed by mirroring `company_situations_no_delete` exactly: the guard
+holds during ordinary operation and stands aside once the owning product is
+scheduled for erasure.
+
+**A table with both `product_id` and `founder_id` needs the cross-company
+classification too, not just the by-product one.** `PERSON_ACROSS_COMPANIES`
+is a separate, total classification from `tablesToErase()`'s schema-derived
+sweep — a table can be correctly swept by product and still be
+`UNCLASSIFIED` against "does a person who is not the owner appear here",
+which `erasure-reaches-the-person-not-the-owner.test.ts` checks independently.
+Added, matching `experiment_fulfilments`'s and `experiment_exposures`' own
+entries: `op: 'delete'`, no buyer named, goes with the test.
+
+Both were caught by the chain before commit, exactly as the discipline
+requires — not shipped and found later.

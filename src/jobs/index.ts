@@ -3221,7 +3221,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       // connection exists — with none it answers "no Etsy account is
       // connected" and costs nothing — and it publishes nothing, because
       // reading is all the credential it acts through can do.
-      const { bringTheVenueUpToDate, listingExperimentsToRead } =
+      const { bringTheVenueUpToDate, listingExperimentsToRead, settledListingsStillLive } =
         await import('../services/senses/readers/etsy-shop.js');
       for (const r of await listingExperimentsToRead()) {
         // A THIRD PARTY'S OUTAGE IS NOT THIS INSTITUTION'S FAILURE TO ACT.
@@ -3246,6 +3246,25 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
           }
         } catch (err) {
           logger.warn(`experiment_hand_tick: reading the venue for ${r.experimentId} threw: `
+            + `${err instanceof Error ? err.message : String(err)}`, { jobName: 'experiment_hand_tick' });
+        }
+      }
+      // A LISTING DOES NOT GO QUIET WHEN ITS EXPERIMENT DOES. `settleListings`
+      // below withdraws the exposure the moment a test settles, and without
+      // this second pass that same withdrawal is what drops the experiment out
+      // of `listingExperimentsToRead` for ever — so a listing the owner has
+      // not taken down at Etsy goes unread as soon as its trial concludes.
+      // Same read, same tolerance for a third party's outage; the only
+      // difference is which experiments are asked for.
+      for (const r of await settledListingsStillLive()) {
+        try {
+          const venue = await bringTheVenueUpToDate({ founderId: r.founderId, experimentId: r.experimentId });
+          if (venue.read) {
+            logger.info(`experiment_hand_tick: read ${venue.shopName ?? 'the shop'} for settled test ${r.experimentId} — `
+              + `${String(venue.orders)} orders, ${String(venue.recorded)} new`, { jobName: 'experiment_hand_tick' });
+          }
+        } catch (err) {
+          logger.warn(`experiment_hand_tick: reading the venue for settled test ${r.experimentId} threw: `
             + `${err instanceof Error ? err.message : String(err)}`, { jobName: 'experiment_hand_tick' });
         }
       }

@@ -798,3 +798,52 @@ the system itself disproved. The pattern is worth carrying:
 - **A silence is only evidence when the instrument knows it saw everything.**
   A truncated read and a parse failure both produced an empty list, and an
   empty list became an affirmative finding about the world.
+
+### A listing outlives its experiment: contained, not yet completed (25 September 2026)
+
+The owner's intelligence-and-stewardship directive named this the decisive
+lifecycle seam: `settleListings` withdraws the Foundry exposure the moment a
+test settles — correctly, because the sealed prediction is done — but that
+withdrawal does not take the listing down at Etsy. `listingExperimentsToRead`
+selects on `ran_at IS NULL`, so the settled experiment drops out of the hourly
+read for ever, and `recordVenueOrder`'s `not_listed` refusal for any order
+after that was caught and logged beside routine noise. A real paid order and a
+bug in this institution read identically in the operator log, which nobody
+reads.
+
+**What was built: containment, the smaller of two halves.** `settledListingsStillLive`
+(migration 350) keeps a settled experiment in the hourly read while its asset
+is still `active` — stopping on its own the day the owner retires it, since
+`retireExperimentalAsset` already refuses to retire an asset with an open
+buyer obligation. A `not_listed` refusal at that point is no longer a log line:
+`venue_orders_after_settlement` is a durable, deduplicated, owner-visible fact
+(one row per venue order number, resolved once with a reason), surfaced in the
+attention queue (`founder/attention.ts`) and — the part the directive's own
+acceptance line asked for — in the absence horizon's `truthful` property: a
+paid order at a venue nothing has reconciled is exactly the silence that
+property exists to catch, and it now fails the horizon rather than reading as
+calm.
+
+**What was deliberately not built: the asset-scoped intake.** This table is
+not a ledger row. No charge, no fee, no fulfilment and no obligation is
+written for the order it names — folding it into the concluded experiment's
+own counts would be fabricating economic evidence (`reached` and `purchases`
+are sealed with the prediction), and recording it as a real transaction under
+the *continuing* asset runs straight into the structural gap this document
+already named at line 508: `experiment_exposures.experiment_id` is `NOT NULL`,
+so an earned, non-experimental asset has nowhere to hang a sale today. A fee
+correction or a refund on the second order has nothing to attach to for the
+same reason. **Reading a post-settlement venue order: `declared`.** Recording
+one under the continuing asset: not built. Trigger for the next slice: the
+same one already on file for the payout work — the first real Etsy order,
+which requires PENDING 25 (an owner act at Etsy, still open).
+
+**Proved against a double, not witnessed at the venue.** The controlled
+sequence — order A settles the test, order B arrives on the same still-live
+listing, two repeated reads surface B once and not twice, A's `ran_at`,
+verdict and fulfilment count are byte-identical before and after, and the
+absence reading's evidence names the order and the fix — runs in
+`the-venue-is-read-not-typed.test.ts` against the file's existing Etsy double,
+proved red against the prior code before the repair. No shop is connected in
+production; whether Etsy's real receipts arrive in a shape this reader has not
+seen remains unverified until PENDING 25 closes.

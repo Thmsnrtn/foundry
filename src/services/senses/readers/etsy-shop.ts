@@ -44,8 +44,9 @@
 // that took it.
 // =============================================================================
 
+import { nanoid } from 'nanoid';
 import { safeFetch } from '../../outbound/ssrf.js';
-import { query } from '../../../db/client.js';
+import { query, realCompany } from '../../../db/client.js';
 import { connectedSenses } from '../index.js';
 import { withSenseSecret } from '../credentials.js';
 import { recordRetrieval } from '../../venture/sources/index.js';
@@ -481,6 +482,38 @@ export async function readTheShop(input: {
 }
 
 /**
+ * A PAID ORDER THE VENUE REPORTS FOR A LISTING WHOSE EXPERIMENT ALREADY
+ * SETTLED. `recordVenueOrder` refuses it correctly — the sealed prediction is
+ * done, and nothing may write to its evidence again — but a refusal caught
+ * and logged is a real sale nobody outside an operator log ever sees. This is
+ * the difference: a durable, owner-visible fact instead.
+ *
+ * NOT A LEDGER ROW. No charge, no fee, no fulfilment, no obligation is
+ * written here — recording this order under the continuing asset is its own,
+ * larger piece of work, not yet done. This is the smaller half: see it, and
+ * say it.
+ *
+ * Deduplicated on the venue's own order number (migration 350), so an hourly
+ * read that keeps finding the same unresolved receipt raises this once.
+ */
+async function noteVenueOrderAfterSettlement(input: {
+  founderId: string; experimentId: string; productId: string | null;
+  evidenceMode: string; order: ShopOrder;
+}): Promise<void> {
+  await query(
+    `INSERT INTO venue_orders_after_settlement
+       (id, founder_id, experiment_id, product_id, provider, order_ref,
+        gross_cents, currency, paid_at, evidence_mode, unknown)
+     VALUES (?,?,?,?,'etsy',?,?,?,?,?,?)
+     ON CONFLICT(provider, order_ref) DO NOTHING`,
+    [nanoid(), input.founderId, input.experimentId, input.productId,
+      input.order.orderRef, input.order.grossCents, input.order.currency, input.order.paidAt,
+      input.evidenceMode,
+      'the experiment that listed this had already settled, so nothing here has recorded a '
+        + 'charge, a fee, a delivery or a buyer obligation for it']);
+}
+
+/**
  * READ THE VENUE AND WRITE DOWN WHAT IT SAID.
  *
  * The owner: he does not intend to personally collect listing URLs, check
@@ -516,9 +549,17 @@ export async function bringTheVenueUpToDate(input: {
   // WHICH LISTING THIS TEST IS, TAKEN FROM ITS OWN EXPOSURE. The address the
   // owner recorded carries the id; `receipts` is shop-wide and without this
   // every other sale in his shop would be filed as this experiment's.
+  //
+  // TAKEN WHETHER OR NOT THE EXPOSURE IS WITHDRAWN. Withdrawal is Foundry's
+  // own bookkeeping saying the sealed prediction is done; it is not Etsy
+  // taking the listing down. This used to read `null` for a withdrawn
+  // exposure, which stopped this file identifying the one listing to read the
+  // moment its experiment settled — and reading the whole shop unfiltered
+  // instead would have filed every other sale in it as this test's, exactly
+  // the defect `onlyListingId` exists to prevent.
   const { exposureOf } = await import('../../venture/outcome.js');
   const exposure = await exposureOf(input.experimentId);
-  const listingId = exposure && exposure.withdrawnAt === null
+  const listingId = exposure
     ? (/\/listing\/(\d+)/.exec(exposure.exposureRef)?.[1] ?? null) : null;
 
   const reading = await readTheShop({
@@ -638,6 +679,7 @@ export async function bringTheVenueUpToDate(input: {
   }
 
   const { recordVenueOrder } = await import('../../venture/proof-2.js');
+  const { HandRefused } = await import('../../venture/hand.js');
   const refusals: string[] = [];
   for (const o of reading.orders) {
     try {
@@ -647,11 +689,28 @@ export async function bringTheVenueUpToDate(input: {
       });
       if (!r.duplicate) recorded += 1;
     } catch (err) {
-      // NOT A BARE SWALLOW. The designed state of this pass — no listing
-      // recorded yet — makes `recordVenueOrder` refuse every order, and the
-      // empty `catch` made that indistinguishable from the ledger rejecting a
-      // charge. They are collected and reported.
-      refusals.push(err instanceof Error ? err.message : String(err));
+      // A PAID ORDER AFTER THE EXPERIMENT SETTLED IS A FACT, NOT NOISE.
+      //
+      // `recordVenueOrder` throws `not_listed` for exactly this listing, once
+      // its exposure is withdrawn — correctly: the sealed prediction is done
+      // and nothing may write to its evidence again. But this refusal used to
+      // be caught here with every other one and logged beside routine noise,
+      // where a real paid order at the venue and a bug in this institution
+      // read identically. This raises it as a durable, owner-visible fact
+      // instead; every other refusal (a bad shape, an unapproved test) still
+      // goes to the log, which is where a defect in THIS pass belongs.
+      if (err instanceof HandRefused && err.code === 'not_listed') {
+        await noteVenueOrderAfterSettlement({
+          founderId: input.founderId, experimentId: input.experimentId, productId,
+          evidenceMode: String(e.evidence_mode), order: o,
+        });
+      } else {
+        // NOT A BARE SWALLOW. The designed state of this pass — no listing
+        // recorded yet — makes `recordVenueOrder` refuse every order, and the
+        // empty `catch` made that indistinguishable from the ledger rejecting a
+        // charge. They are collected and reported.
+        refusals.push(err instanceof Error ? err.message : String(err));
+      }
     }
   }
   if (refusals.length) {
@@ -682,6 +741,58 @@ export async function listingExperimentsToRead(): Promise<Array<{ founderId: str
     `SELECT e.id, e.founder_id FROM venture_experiments e
       WHERE e.decision = 'approved' AND e.ran_at IS NULL
         AND e.validity = 'valid' AND e.evidence_mode = 'real'
+        AND EXISTS (SELECT 1 FROM experiment_materials m
+                     WHERE m.experiment_id = e.id AND m.kind = 'offer_shape')
+      ORDER BY e.decided_at, e.rowid`)).rows as unknown as Array<Record<string, unknown>>;
+  const out: Array<{ founderId: string; experimentId: string }> = [];
+  for (const r of rows) {
+    const { offerShapePlanOf } = await import('../../venture/hand.js');
+    const plan = await offerShapePlanOf(String(r.id));
+    if (plan?.listing?.venue === 'etsy') {
+      out.push({ founderId: String(r.founder_id), experimentId: String(r.id) });
+    }
+  }
+  return out;
+}
+
+/**
+ * A LISTING DOES NOT GO QUIET WHEN ITS EXPERIMENT DOES.
+ *
+ * `settleListings` withdraws the Foundry exposure the moment an experiment
+ * settles — correctly, because the sealed prediction is done and nothing may
+ * write to its evidence again. But withdrawing Foundry's own bookkeeping does
+ * not take the listing down at Etsy: that is the owner's act, and until he
+ * takes it a stranger can still pay. Without this, the settled experiment
+ * drops out of `listingExperimentsToRead` the moment it settles and nothing
+ * ever reads that listing again — a paid order at a venue nothing is watching.
+ *
+ * DELIBERATELY A SEPARATE FUNCTION FROM `listingExperimentsToRead`, whose own
+ * doc comment says it "must run BEFORE a listing exists" — a different
+ * moment in the same listing's life, not a second case folded into one query.
+ *
+ * STOPS ON ITS OWN. The moment the owner retires the asset (`status`
+ * leaves `'active'`), this selection no longer names it —
+ * `retireExperimentalAsset` already refuses to retire an asset while a buyer
+ * is owed anything, so nothing here goes quiet while there is a reason to
+ * keep listening.
+ *
+ * STANDING DOES NOT APPLY, deliberately not read here (`obligations.ts`
+ * carries the same exception, for the same reason). The asset behind a
+ * listing that just settled is very often still `experimental` — it earns
+ * `earned` only when a business outcome resolves it, which is not guaranteed
+ * by the sale that closed the trial. A buyer at a marketplace does not care
+ * which word the institution uses for what it sold him, and filtering this to
+ * earned companies would stop watching the exact listings most likely to
+ * still be receiving strangers' money.
+ */
+export async function settledListingsStillLive(): Promise<Array<{ founderId: string; experimentId: string }>> {
+  const rows = (await query(
+    `SELECT e.id, e.founder_id FROM venture_experiments e
+       JOIN products p ON p.from_experiment_id = e.id AND p.deleted_at IS NULL
+      WHERE e.ran_at IS NOT NULL AND e.evidence_mode = 'real' AND p.status = 'active'
+        AND ${realCompany('p')}
+        AND EXISTS (SELECT 1 FROM experiment_exposures x
+                     WHERE x.experiment_id = e.id AND x.withdrawn_at IS NOT NULL)
         AND EXISTS (SELECT 1 FROM experiment_materials m
                      WHERE m.experiment_id = e.id AND m.kind = 'offer_shape')
       ORDER BY e.decided_at, e.rowid`)).rows as unknown as Array<Record<string, unknown>>;

@@ -286,9 +286,31 @@ async function truthful(founderId: string, days: number): Promise<PropertyReadin
   evidence.push('the ledger refuses an estimate with no written policy behind it, '
     + 'and refuses a measurement that carries one');
 
+  // A PAID ORDER AT A VENUE NOTHING IS WATCHING is exactly the failure this
+  // property exists to catch: the experiment settled, the listing stayed
+  // live, and a stranger's payment produced nothing anywhere an owner would
+  // look — a silence that is not calm — until it is raised here (migration
+  // 350). Independent of `p.standing`, deliberately: the asset behind a
+  // settled listing is very often still `experimental`, and the buyer who
+  // paid does not care which word the institution uses for what it sold him.
+  const unwatchedVenueOrders = (await query(
+    `SELECT v.order_ref, v.gross_cents, v.currency, e.what_we_do
+       FROM venue_orders_after_settlement v JOIN venture_experiments e ON e.id = v.experiment_id
+      WHERE v.founder_id = ? AND v.resolved_at IS NULL`, [founderId]))
+    .rows as unknown as Array<Record<string, unknown>>;
+  for (const u of unwatchedVenueOrders) {
+    evidence.push(`${String(u.what_we_do)}: a ${(Number(u.gross_cents) / 100).toFixed(2)} `
+      + `${String(u.currency).toUpperCase()} order (${String(u.order_ref)}) at the venue, after the test that `
+      + 'listed it had already settled — nothing here has recorded a charge, a fee or a delivery for it');
+  }
+  if (unwatchedVenueOrders.length > 0) {
+    wouldFixIt.push('record or reconcile the order at the venue, and either retire the listing or bring it '
+      + 'under the continuing asset');
+  }
+
   const selfStale = self.signals.filter((x) => x.state !== 'current').length;
   const broken = blind.length + erroring.length + loops.length + alsoFailing + selfStale
-    + checksFailing;
+    + checksFailing + unwatchedVenueOrders.length;
   return {
     property: 'truthful',
     question: `After ${String(days)} days, would anything I show you assert more than I actually know?`,
