@@ -57,6 +57,10 @@ function lines(html: string): number {
     // Nor are the doors: the shell's navigation is the same on every screen
     // and grows with the canonical set, not with what this page has to say.
     .replace(/<nav class="places[\s\S]*?<\/nav>/g, '')
+    // Nor the four ways in under the greeting: Ask, Decisions, Searching and
+    // Connectors are doors drawn as tiles, the same four on every morning,
+    // and say nothing about what this morning holds.
+    .replace(/<nav class="quick"[\s\S]*?<\/nav>/g, '')
     // Nor the More sheet: the rest of the places, closed until the door is pressed.
     .replace(/<section class="sheet-more"[\s\S]*?<\/section>/g, '')
     .replace(/<[^>]+>/g, '\n').split('\n').map((l) => l.trim()).filter(Boolean).length;

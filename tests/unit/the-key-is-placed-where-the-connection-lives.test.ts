@@ -149,8 +149,10 @@ describe('the connector answers what is on file, without being asked twice', () 
   it('says plainly when nothing has ever been placed', async () => {
     await query("DELETE FROM app_credentials WHERE provider = 'etsy'");
     const html = await get(HERE);
-    expect(html).toContain('No application key on file');
-    expect(html).toContain('this table has no row for it');
+    // Said as a person would say it: the first form of this read "this table
+    // has no row for it", which was the database talking.
+    expect(html).toContain('No key has ever been placed');
+    expect(html).toContain('never placed');
   });
 
   it('shows the application, who placed it and when Etsy last confirmed it', async () => {
@@ -161,7 +163,7 @@ describe('the connector answers what is on file, without being asked twice', () 
        VALUES ('etsy', ?, '11223344', '2026-09-20 08:00:00', '2026-09-19 07:00:00', ?)`,
       [encrypt(JSON.stringify({ keystring: 'k', sharedSecret: 's' })), `founder:${F}`]);
     const html = await get(HERE);
-    expect(html).toContain('The application key on file');
+    expect(html).toContain('Etsy last confirmed it');
     expect(html).toContain('11223344');
     expect(html).toContain('2026-09-19 07:00:00');
     expect(html).toContain('2026-09-20 08:00:00');
@@ -182,7 +184,7 @@ describe('the connector answers what is on file, without being asked twice', () 
     expect(html).toContain('Forgotten');
     expect(html).toContain('the owner removed it');
     expect(html, 'a removed key reads as one that never existed')
-      .not.toContain('this table has no row for it');
+      .not.toContain('No key has ever been placed');
   });
 
   it('never puts either half of the pair on the page', async () => {

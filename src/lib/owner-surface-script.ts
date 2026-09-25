@@ -98,7 +98,9 @@ export const OWNER_SURFACE_SCRIPT =
   + `  document.addEventListener('submit',function(e){var f=e.target;if(!f)return;\n`
   + `    var q=f.getAttribute&&f.getAttribute('data-confirm');`
   + `if(q&&!window.confirm(q)){e.preventDefault();return;}\n`
-  + `    if(f.dataset.busy)return;f.dataset.busy='1';\n`
+  // An icon-only control (the appearance switch) keeps its icons: "Working…"
+  // written into a 34px button is a smear, and the page reloads at once.
+  + `    if(f.dataset.busy||f.hasAttribute('data-nobusy'))return;f.dataset.busy='1';\n`
   + `    var b=f.querySelector('button[type=submit],button:not([type])');if(!b)return;\n`
   + `    setTimeout(function(){b.disabled=true;b.textContent='Working…';},120);},true);\n`
   // FOUR SMALL BEHAVIOURS THAT WERE FIFTEEN INLINE HANDLERS.
@@ -117,7 +119,7 @@ export const OWNER_SURFACE_SCRIPT =
   + `    if(!t||!t.hasAttribute||!t.hasAttribute('data-submits'))return;\n`
   + `    var f=t.closest('form');if(!f)return;`
   + `if(f.requestSubmit)f.requestSubmit();else f.submit();});\n`
-  + `  document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a.ask-fab');`
+  + `  document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a.ask-fab,a[data-ask]');`
   + `if(!a)return;setTimeout(function(){var f=document.querySelector('#ask-foundry input,#ask-foundry textarea');if(f)f.focus();},0);});\n`
   + `  document.addEventListener('click',function(e){\n`
   + `    var t=e.target&&e.target.closest&&e.target.closest(`
@@ -130,7 +132,24 @@ export const OWNER_SURFACE_SCRIPT =
   + `    var g=document.getElementById(t.getAttribute('data-copy'));\n`
   + `    if(!g||!navigator.clipboard)return;\n`
   + `    navigator.clipboard.writeText(g.value).then(function(){var w=t.textContent;\n`
-  + `      t.textContent='Copied';setTimeout(function(){t.textContent=w;},1500);});});\n`;
+  + `      t.textContent='Copied';setTimeout(function(){t.textContent=w;},1500);});});\n`
+  // WHAT HE SENT DID NOT ARRIVE, AND THE PAGE SAYS SO.
+  //
+  // When his sign-in has to be renewed in the middle of a form post, the post
+  // cannot be carried through — its body may hold a secret — so the server
+  // returns him to the page he sent it from with `lapsed=1`. Before, it sent
+  // him Home and said nothing, and a saved key looked saved. Fixed words only,
+  // set as text: nothing in the address becomes markup. The flag leaves the
+  // address once read, so a reload does not repeat it.
+  + `  (function(){var q=new URLSearchParams(location.search);if(q.get('lapsed')!=='1')return;\n`
+  + `    var m=document.querySelector('main');if(!m)return;var d=document.createElement('div');\n`
+  + `    d.className='state bad';d.setAttribute('role','alert');d.style.display='block';\n`
+  + `    d.style.padding='0.7rem 0.9rem';d.style.margin='0 0 0.9rem';d.style.borderRadius='8px';\n`
+  + `    d.textContent='Your sign-in had to be renewed before that reached Foundry, so it was not saved. '`
+  + `+'Please send it again.';\n`
+  + `    var h=m.querySelector('.brand');if(h&&h.nextSibling)m.insertBefore(d,h.nextSibling);else m.prepend(d);\n`
+  + `    q.delete('lapsed');var s=q.toString();`
+  + `history.replaceState(null,'',location.pathname+(s?'?'+s:'')+location.hash);})();\n`;
 
 /** Its CSP source expression. Recomputed from the constant, never hand-written. */
 export const OWNER_SURFACE_SCRIPT_HASH =

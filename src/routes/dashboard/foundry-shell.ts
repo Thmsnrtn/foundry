@@ -31,7 +31,7 @@
 
 import { Hono } from 'hono';
 import { html, raw } from 'hono/html';
-import { etsyKeyPlacement } from '../../views/owner/etsy-key.js';
+import { callbackAddress, etsyKeyPlacement } from '../../views/owner/etsy-key.js';
 import { sendingIdentityPlacement } from '../../views/owner/sending-identity.js';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import { query, realCompany, referenceCompany } from '../../db/client.js';
@@ -1160,7 +1160,33 @@ export { ADDRESSES, LABELS, READINGS, page, placeHead, frameFor } from '../../vi
 export type { Where, Place, DoorCounts } from '../../views/owner/shell.js';
 import type { Where } from '../../views/owner/shell.js';
 import { consequenceOfAct, effectInWords, labelFor } from '../../services/founder/what-it-would-do.js';
-import { ADDRESSES, LABELS, READINGS, page, placeHead, frameFor, mark, ago } from '../../views/owner/shell.js';
+import { ADDRESSES, ICONS, LABELS, READINGS, page, placeHead, frameFor, mark, ago } from '../../views/owner/shell.js';
+
+/**
+ * FOUR WAYS IN, UNDER THE GREETING.
+ *
+ * The owner's Eventide boards open Home with a row of four square tiles —
+ * capture, create, explore, insight — beneath the greeting and above the
+ * readings. His four are what this institution actually does for him: ask it
+ * something, answer what it is waiting on, look for the next thing, and plug
+ * in what it cannot yet see. Each is a place that already exists; the tiles
+ * add no capability and hide none, and the count on Decisions is the same
+ * number the reading beside it shows.
+ */
+function quickTiles(needsN: number): ReturnType<typeof html> {
+  const tile = (href: string, icon: string, label: string, badge = 0, ask = false) => html`
+    <a class="qt" href="${href}"${ask ? raw(' data-ask') : ''}>
+      <span class="qt-ic" aria-hidden="true">${raw(icon)}</span>
+      <span class="qt-l">${label}</span>${badge > 0 ? html`<b class="qt-n">${String(badge)}</b>` : ''}</a>`;
+  return html`<nav class="quick" aria-label="Ways in">
+    ${tile('#ask-foundry', ICONS.ask, 'Ask Foundry', 0, true)}
+    ${tile(ADDRESSES.decisions, ICONS.decisions, LABELS.decisions, needsN)}
+    ${tile(ADDRESSES.discover, ICONS.discover, LABELS.discover)}
+    ${tile('/foundry/controls/connectors', CONNECT_ICON, 'Connectors')}
+  </nav>`;
+}
+const CONNECT_ICON = '<svg viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/>'
+  + '<path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg>';
 type H = HtmlEscapedString | Promise<HtmlEscapedString>;
 
 /**
@@ -3089,7 +3115,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
            the row breaks to two. */ ''}
       <div class="ev-strip" aria-label="At a glance">
         <a class="ev-cell" href="${attention === null ? '/foundry/decisions' : '#the-one-thing'}">
-          <span class="c">${READINGS.needsYou}</span>
+          <span class="c"><span class="ev-ic" aria-hidden="true">${raw(ICONS.decisions)}</span>${READINGS.needsYou}</span>
           <span class="top">${needsN === 0 ? '' : html`<span class="dot watch"></span>`}
             <span class="n">${needsN === 0 ? 'None' : String(needsN)}</span></span>
           <span class="d">${needsN === 0 ? 'none waiting'
@@ -3104,7 +3130,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
               under it, where it can be checked rather than mistaken for the
               answer. */ ''}
         <a class="ev-cell" href="/foundry/money">
-          <span class="c">Yours</span>
+          <span class="c"><span class="ev-ic" aria-hidden="true">${raw(ICONS.money)}</span>Yours</span>
           <span class="n${(yours.figure.cents ?? 0) >= 100000 ? ' sm' : ''}">${
   yours.figure.cents === null ? 'not known' : money(yours.figure.cents)}${
   yours.figure.quality === 'estimated' ? html` <span class="dim">est.</span>` : ''}</span>
@@ -3114,7 +3140,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
       : 'nothing paid yet'}</span></a>
 
         <a class="ev-cell" href="/foundry/controls">
-          <span class="c">${READINGS.health}</span>
+          <span class="c"><span class="ev-ic" aria-hidden="true">${raw(ICONS.activity)}</span>${READINGS.health}</span>
           <span class="top"><span class="dot ${estate.cls === 'ok' ? '' : estate.cls === 'bad' ? 'bad' : 'watch'}"></span>
             <span class="n sm">${estate.word}</span></span>
           <span class="d">${estate.detail}</span></a>
@@ -3124,7 +3150,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
               would make him act — which provider or channel they all stand
               on — was a click away on a page he had no reason to open. */ ''}
         <a class="ev-cell" href="/foundry/companies">
-          <span class="c">Watching</span>
+          <span class="c"><span class="ev-ic" aria-hidden="true">${raw(ICONS.portfolio)}</span>Watching</span>
           <span class="n">${String(s.watching.real)} <span class="dim">${
   s.watching.real === 1 ? 'company' : 'companies'}</span></span>
           <span class="d">${s.watching.real === 0 ? 'name one to start'
@@ -3352,6 +3378,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
          A contradiction between "nothing needs you" and "I have not been
          awake" belongs INSIDE the card making the claim, not above it. */ ''}
     ${attention === null ? '' : pulseLine}
+    ${key ? '' : quickTiles(needsN)}
     ${portfolioState}
     ${/* THE ONE THING HE CAME FOR, BEFORE ANYTHING HE DID NOT.
          This was rendered last: after what changed, after ninety lines of
@@ -6833,6 +6860,20 @@ foundryShellRoutes.post('/foundry/controls/appearance',
     }
     await query('UPDATE founders SET appearance = ? WHERE id = ?',
       [mode === 'system' ? null : mode, String(founder.id)]);
+    // BACK TO WHERE IT WAS PRESSED, when that was the header switch. The page
+    // is the Referer, and it is followed only when it is a path on this host —
+    // never `//elsewhere`, never a sign-in page — by the same rule sign-in
+    // uses for its own return address. Anything else lands on Controls, as
+    // the Controls card always has.
+    if (String(form.back ?? '') === 'here') {
+      const { safeNext } = await import('../../middleware/session-lapse.js');
+      try {
+        const from = new URL(String(c.req.header('referer') ?? ''));
+        if (from.host === new URL(String(c.req.url)).host) {
+          return c.redirect(safeNext(from.pathname + from.search));
+        }
+      } catch { /* no usable referer: Controls */ }
+    }
     return c.redirect('/foundry/controls#appearance');
   });
 
@@ -6909,17 +6950,16 @@ foundryShellRoutes.get('/foundry/controls/connectors',
                 : x.standsBetween === 'not_configured' ? 'Not set up on this deployment'
                   : 'Ready to connect';
 
+    // A TILE PER CONNECTOR, as the boards draw them: a mark, the name, one
+    // line of where it is, and a dot whose colour is the same four states the
+    // line already names. The dot never says more than the words beside it.
+    const tone = (x: typeof all[number]): string => x.disputedAccount != null ? 'alert'
+      : x.qualified ? 'ok' : x.granted ? 'part' : 'idle';
     const row = (x: typeof all[number]): unknown => html`
-      <a href="/foundry/controls/connectors/${x.provider}" class="know"
-         style="display:flex;gap:0.75rem;align-items:center;justify-content:space-between;
-                padding:0.85rem 1rem;min-height:56px;text-decoration:none;">
-        <span style="min-width:0;">
-          <span style="display:block;font-weight:600;">${x.name}</span>
-          <span style="display:block;font-size:0.84rem;color:var(--text-muted);">${where(x)}</span>
-        </span>
-        <span aria-hidden="true" style="flex:0 0 auto;color:${x.disputedAccount != null ? 'var(--alert)' : x.qualified ? 'var(--good)' : x.granted ? 'var(--text-muted)' : 'var(--text-dim)'};">
-          ${x.disputedAccount != null ? '\u25b3' : x.qualified ? '\u25cf' : x.granted ? '\u25d0' : '\u25cb'}
-        </span>
+      <a href="/foundry/controls/connectors/${x.provider}" class="conn-tile ${tone(x)}">
+        <span class="conn-mono" aria-hidden="true">${x.name.replace(/^the /i, '').slice(0, 1).toUpperCase()}</span>
+        <span class="conn-name">${x.name}</span>
+        <span class="conn-where"><span class="conn-dot" aria-hidden="true"></span>${where(x)}</span>
       </a>`;
 
     return c.html(page('Connectors', html`
@@ -6928,11 +6968,11 @@ foundryShellRoutes.get('/foundry/controls/connectors',
 
       ${connected.length ? html`
       <h2 style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-dim);margin:1.25rem 0 0.5rem;">Connected</h2>
-      <div style="display:grid;gap:0.5rem;">${connected.map(row)}</div>` : ''}
+      <div class="conn-grid">${connected.map(row)}</div>` : ''}
 
       <h2 style="font-size:0.82rem;text-transform:uppercase;letter-spacing:0.06em;color:var(--text-dim);margin:1.25rem 0 0.5rem;">
         ${connected.length ? 'Not connected' : 'Available'}</h2>
-      <div style="display:grid;gap:0.5rem;">${rest.map(row)}</div>
+      <div class="conn-grid">${rest.map(row)}</div>
 
       <p class="quiet" style="margin-top:1.25rem;">Connecting something lets me read it. It never
         lets me act — publishing, pricing, messaging a customer and moving money each need
@@ -7077,234 +7117,259 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
       : null;
 
     const fact = (yes: boolean, said: string, no: string): unknown => html`
-      <li style="display:flex;gap:0.6rem;align-items:flex-start;padding:0.3rem 0;">
-        <span aria-hidden="true" style="flex:0 0 1.1rem;color:${yes ? 'var(--good)' : 'var(--text-dim)'};">${yes ? '\u25cf' : '\u25cb'}</span>
-        <span style="color:${yes ? 'var(--text-primary)' : 'var(--text-dim)'};">${yes ? said : no}</span>
-      </li>`;
+      <li><span aria-hidden="true" class="${yes ? 'yes' : 'no'}">${yes ? '●' : '○'}</span>
+        <span class="${yes ? '' : 'quiet'}">${yes ? said : no}</span></li>`;
+
+    // ─── THE PAGE IS THE TASK ───────────────────────────────────────────────
+    //
+    // The owner opened this page to connect Etsy and met four stacked cards of
+    // explanation before a single box to type into, then saved his key and
+    // could not tell it had worked: the only acknowledgement was inside a fold
+    // that the save itself had closed. So the page is built the other way up —
+    // where it has got to in three marks, the one thing to do now, and every
+    // explanation folded underneath for when he doubts the one thing. Nothing
+    // below is new policy; it is the same facts, in the order he needs them.
+    const here = `/foundry/controls/connectors/${one.provider}`;
+    const origin = new URL(String(c.req.url)).origin;
+    const callback = `${origin}/foundry/senses/callback`;
+    const stage = journey?.stage ?? null;
+    const saved = c.req.query('etsy') === 'placed' ? (c.req.query('app') ?? null) : null;
+    const refused = c.req.query('etsy_error') ?? null;
+    const shop = one.account ?? null;
+
+    // THE CONNECT BUTTON, WHERE THE CONNECTION IS. It used to be a link to the
+    // company's revenue page, whose own button began the authorisation — a
+    // detour between wanting to connect and connecting. The form posts to the
+    // same route with the same two fields that page's button does, so the
+    // disclosure stored with the grant, the scopes asked for and the state that
+    // guards the callback are all still derived on the server from the offer,
+    // exactly as before; this page only shows what that offer reads.
+    let connectOffer: { key: string; reads: string; neverGrants: string;
+      scopes: Array<{ scope: string; because: string }> } | null = null;
+    if (stage === 'authorization_pending') {
+      const senses = await import('../../services/senses/index.js');
+      const { requiredScopes } = await import('../../services/senses/credentials.js');
+      for (const gap of await senses.whatItCannotSee(productId)) {
+        const offer = gap.offers.find((o) => o.provider === one.provider && o.mode === 'real');
+        if (!offer) continue;
+        connectOffer = { key: gap.key, reads: offer.reads, neverGrants: gap.neverGrants,
+          scopes: await requiredScopes(offer.provider, gap.key, offer.mode) };
+        break;
+      }
+    }
+
+    // AUTHORISED, NOT YET NAMED: past the consent screen, before Etsy has said
+    // which shop. Put as what has happened rather than as the stage's name,
+    // which is also a word the integration-status lint rightly watches for.
+    const pastConsent = journey != null && stage !== 'no_key' && stage !== 'authorization_pending';
+    const awaitingShop = pastConsent && !one.accountVerified && !one.accountConfirmed
+      && journey?.dispute == null;
+
+    const marks = journey ? [
+      { title: 'App key', done: stage !== 'no_key',
+        gist: placedApp ? `Checked · app ${placedApp}` : 'From Etsy' },
+      { title: 'Connect shop',
+        done: pastConsent,
+        gist: 'Read-only consent' },
+      { title: 'Confirm it’s yours',
+        done: stage === 'identity_confirmed' || stage === 'qualified',
+        gist: shop ?? 'One tap' },
+    ] : [];
+    const nowAt = marks.findIndex((m) => !m.done);
+
+    const status = journey?.dispute ? `${one.name} is naming a different account`
+      : stage === 'no_key' ? 'Not connected yet. Three steps, a few minutes.'
+        : stage === 'authorization_pending' ? 'App key saved. Next, connect your shop.'
+          : awaitingShop ? 'Shop authorised. Finding out which shop it is.'
+            : stage === 'identity_verified' ? `Etsy says this opens ${shop ?? 'an account'}. Is it yours?`
+              : stage === 'identity_confirmed' ? `Connected to ${shop ?? 'your shop'}.`
+                : stage === 'qualified' ? `Connected to ${shop ?? 'your shop'}, and read for real.`
+                  : one.account ? `This connection opens ${one.account}.`
+                    : one.granted ? 'Connected, and I have not confirmed which account it opens.'
+                      : one.wouldSee ? `Connecting it would let me understand ${one.wouldSee}.`
+                        : 'Not connected.';
+
+    // THE ONE THING TO DO NOW. Each arm is the whole of what that stage asks of
+    // him; where it asks nothing, it says so rather than inventing a button.
+    const task = ((): unknown => {
+      if (journey?.dispute) {
+        return html`
+      <section class="task bad" aria-labelledby="task-h">
+        <h2 id="task-h">This is not the account you recognised</h2>
+        <p>${one.name} is now naming a different account than <strong>${one.account}</strong>.
+          It said: ${journey.dispute.detail}</p>
+        <p>I stopped acting through it on ${journey.dispute.since}. Nothing has been changed,
+          published or sent.</p>
+        ${one.accountConfirmed ? html`<p>You confirmed <strong>${one.account}</strong> is yours,
+          and that record stands exactly as you made it.</p>` : ''}
+        <p class="hint">If you made this change, disconnect this connection on ${companyName}
+          and connect the account you want; that is a new grant and I will ask you about it once.
+          If you did not, end it at ${one.name} itself.</p>
+        <a class="btn go" href="/foundry/companies/${productId}">Open ${companyName}</a>
+      </section>`;
+      }
+      if (stage === 'no_key') {
+        return html`
+      <section class="task" aria-labelledby="task-h">
+        <p class="task-step">Step 1 of 3</p>
+        <h2 id="task-h">Add your Etsy app key</h2>
+        ${raw(etsyKeyPlacement({ placedAs: null, back: here, redirectUri: callback }))}
+      </section>`;
+      }
+      if (stage === 'authorization_pending') {
+        return html`
+      <section class="task" aria-labelledby="task-h">
+        <p class="task-step">Step 2 of 3</p>
+        <h2 id="task-h">Connect your Etsy shop</h2>
+        <p>Etsy will show you a consent screen. It asks to read, never to change anything.</p>
+        ${raw(callbackAddress(callback))}
+        ${connectOffer ? html`
+        <form method="POST" action="/foundry/companies/${productId}/see/${connectOffer.key}">
+          <input type="hidden" name="provider" value="${one.provider}" />
+          <input type="hidden" name="mode" value="real" />
+          <button class="btn go wide" type="submit">Connect Etsy shop</button>
+        </form>
+        <p class="hint">Read-only. It cannot ${connectOffer.neverGrants}.</p>` : html`
+        <p class="hint">${journey?.next?.say ?? ''}</p>
+        ${journey?.next?.href && journey.next.href !== here
+    ? html`<a class="btn go wide" href="${journey.next.href}">Connect Etsy shop</a>` : ''}`}
+      </section>`;
+      }
+      if (awaitingShop) {
+        return html`
+      <section class="task quiet-task" aria-labelledby="task-h">
+        <p class="task-step">Step 3 of 3</p>
+        <h2 id="task-h">Nothing to do yet</h2>
+        <p>${journey?.next?.say ?? ''}</p>
+      </section>`;
+      }
+      if (one.accountVerified && !one.accountConfirmed && one.disputedAccount == null) {
+        return html`
+      <section class="task" aria-labelledby="task-h">
+        <p class="task-step">Step 3 of 3</p>
+        <h2 id="task-h">Is this your shop?</h2>
+        <p class="shopname">${one.account}</p>
+        <p>Etsy says the connection opens this shop. Only you can say it is the one you
+          meant. Until you do, I only read it.</p>
+        <form method="POST" action="/foundry/controls/connectors/${one.provider}/confirm">
+          <button class="btn go wide" type="submit">Yes, ${one.account} is my shop</button>
+        </form>
+        <p class="hint">Not yours? Disconnect it on
+          <a href="/foundry/companies/${productId}">${companyName}</a> and connect the right one.</p>
+      </section>`;
+      }
+      if (one.accountConfirmed) {
+        return html`
+      <section class="task done" aria-labelledby="task-h">
+        <h2 id="task-h"><span aria-hidden="true">✓</span> ${one.account}</h2>
+        <p>You confirmed ${one.account} is yours${one.disputedAccount != null
+    ? ', and that record stands exactly as you made it' : ''}.
+          ${stage === 'identity_confirmed' ? 'I will read it on the next pass.' : ''}</p>
+      </section>`;
+      }
+      return '';
+    })();
 
     return c.html(page(one.name, html`
       <h1>${one.name}</h1>
-      <p class="lede">${one.account
-    ? `This connection opens ${one.account}.`
-    : one.granted ? 'Connected, and I have not confirmed which account it opens.'
-      : one.wouldSee ? `Connecting it would let me understand ${one.wouldSee}.` : 'Not connected.'}</p>
+      <p class="lede">${status}</p>
 
-      ${/* THE DISAGREEMENT LEADS, because every other line on this page is
-           describing a connection he would reasonably assume is still pointing
-           where he left it. It says what happened, what was done about it
-           without him, and what is left for him — which is a choice between
-           two things he already understands, not a repair. */ ''}
-      ${journey?.dispute ? html`
-      <div class="know" style="border-color:var(--alert);">
-        <h2>This is not the account you recognised</h2>
-        <p>${one.name} is now naming a different account than the <strong>${one.account}</strong>
-          recorded for this connection. It said: ${journey.dispute.detail}</p>
-        <p>I stopped acting on your behalf through it on ${journey.dispute.since}. Nothing has
-          been changed, published or sent. Reading it to find out who it is, is all I have done.</p>
-        <p class="quiet">I have not rewritten what you recognised, and I will not. If this is a
-          change you made, disconnect this connection on ${companyName} and connect the account
-          you want — the new connection is a new grant and I will ask you about it once. If it is
-          not a change you made, the place to end it is ${one.name} itself.</p>
-        <a class="btn" href="/foundry/companies/${productId}">Open ${companyName}</a>
-      </div>` : ''}
+      ${saved ? html`<div class="state ok flash" role="status"><strong>Saved.</strong>
+        Etsy checked the pair and confirmed it as application ${saved}.</div>` : ''}
+      ${refused ? html`<div class="state bad flash" role="alert"><strong>Not saved.</strong>
+        ${refused}</div>` : ''}
+      ${c.req.query('etsy') === 'forgotten' ? html`<div class="state flash" role="status">
+        <strong>Forgotten.</strong> Nothing here can ask Etsy anything now.</div>` : ''}
+      ${c.req.query('etsy') === 'checked' ? html`<div class="state ok flash" role="status">
+        <strong>Checked just now.</strong> Etsy answered, and confirmed it as application
+        ${c.req.query('app') ?? ''}.</div>` : ''}
 
-      ${/* THE JOURNEY'S OWN NEXT STEP WINS, WHERE THERE IS A JOURNEY.
-           The list-level `next` knows whether a connection exists; the
-           journey knows which of six states it is in. Showing the first while
-           the second exists put "Connect Etsy" on a page whose very next card
-           explained that the application key had not been placed yet — two
-           cards, one screen, disagreeing about what to do.
+      ${marks.length ? html`
+      <ol class="trail" aria-label="Progress">
+        ${marks.map((m, i) => html`
+        <li class="${m.done ? 'done' : i === nowAt ? 'now' : ''}"${i === nowAt ? html` aria-current="step"` : ''}>
+          <b><span class="n" aria-hidden="true">${m.done ? '✓' : String(i + 1)}</span>${m.title}</b>
+          <small>${m.done ? m.gist : i === nowAt ? 'Now' : m.gist}</small>
+        </li>`)}
+      </ol>` : ''}
 
-           And the action is a BUTTON. It is the one thing on this page he is
-           meant to press, and Eventide puts the owner's hand in gold. */ ''}
-      ${/* A BUTTON THAT GOES WHERE YOU ARE IS NOT A NEXT STEP. Now that the
-           application key is placed on this page, the journey's own `next`
-           points here at the `no_key` stage — correct from the Connectors
-           list, and on this page a control that reloads it. The sentence is
-           still worth saying; the button is not, because the thing to press
-           is the form below it. */ ''}
-      ${(journey?.next ?? one.next) ? (() => {
-    const step = (journey?.next ?? one.next)!;
-    const here = `/foundry/controls/connectors/${one.provider}`;
-    const elsewhere = step.href != null && step.href !== here;
-    return html`
-      <div class="know" style="border-color:var(--accent);">
-        <h2>Next</h2>
-        <p>${step.say}</p>
-        ${elsewhere ? html`<a class="btn go" href="${step.href}">Do that</a>` : ''}
-      </div>`;
-  })() : ''}
+      ${task}
 
-      ${/* THE ONE THING HE MUST DO AT ETSY, AND THE ONLY PLACE HE COULD LEARN
-           IT. Etsy refuses an authorization whose `redirect_uri` is not
-           registered on the application, and Foundry derives that value from
-           the host the request arrived on — never from configuration, because
-           an attacker who could choose it could send the code elsewhere. So
-           the owner cannot guess it and nothing was telling him: he would have
-           pasted the key, tapped connect, and met a provider error screen with
-           no idea which of his two secrets was wrong. Shown while it is still
-           useful, and gone once the connection exists. */ ''}
-      ${/* THE STEP IS TAKEN WHERE IT IS NAMED. This card used to describe the
-           application key and send him to Settings to place it; the owner said
-           that is where the journey got lost. The placement block is one
-           module rendered on every surface that needs it, so the three
-           descriptions of how this secret is handled cannot drift apart. */ ''}
-      ${/* WHAT IS ACTUALLY ON FILE, SAID BEFORE ANYTHING ELSE.
-           The owner asked me to reconcile a discrepancy: I had reported his
-           credentials verified and saved, and later reported that no key was
-           placed. I could not establish either — I cannot authenticate to
-           production, so I never read the row. The institution can, and this
-           is where it says so, with the dates, so the question stops being
-           one he has to ask me. */ ''}
-      ${placement ? html`
-      <div class="know">
-        <h2>The application key on file</h2>
-        <dl class="facts">
-          <dt>State</dt><dd>${placement.forgottenAt
+      <div class="inspect">
+        ${placement || journey ? html`
+        <details class="fold"${refused != null && stage !== 'no_key' ? ' open' : ''}>
+          <summary><h2>The application key</h2><span class="gist">${placement
+    ? placement.forgottenAt ? 'Forgotten' : 'Placed' : 'None yet'}</span></summary>
+          ${placement ? html`
+          <dl class="facts">
+            <dt>State</dt><dd>${placement.forgottenAt
     ? html`<span class="ev-tag">Forgotten</span> removed ${placement.forgottenAt}${
   placement.forgetReason ? ` — ${placement.forgetReason}` : ''}`
     : html`<span class="ev-tag ok">Placed</span>`}</dd>
-          <dt>Application</dt><dd>${placement.applicationId}</dd>
-          <dt>Placed</dt><dd>${placement.setAt} by ${placement.setBy}</dd>
-          <dt>Etsy last confirmed it</dt><dd>${placement.verifiedAt}</dd>
-        </dl>
-        ${c.req.query('etsy') === 'checked' ? html`
-        <p class="noticed"><strong>Checked just now.</strong> Etsy answered, and confirmed it
-          as application ${c.req.query('app') ?? ''}.</p>` : ''}
-        ${placement.forgottenAt ? '' : html`
-        <p class="quiet">That date is when Etsy last answered, not proof it still would: a
-          key can be revoked at Etsy and nothing here would know until a real call failed.</p>
-        <form method="POST" action="/settings/app-credential/etsy/recheck">
-          <input type="hidden" name="back" value="/foundry/controls/connectors/etsy" />
-          <button class="btn btn-secondary btn-sm" type="submit">Ask Etsy again now</button>
-        </form>`}
-      </div>` : html`
-      <div class="know">
-        <h2>No application key on file</h2>
-        <p>Nothing has ever been placed for Etsy on this deployment. Not removed, not
-          expired — this table has no row for it.</p>
-      </div>`}
+            <dt>Application</dt><dd>${placement.applicationId}</dd>
+            <dt>Placed</dt><dd>${placement.setAt} by ${placement.setBy}</dd>
+            <dt>Etsy last confirmed it</dt><dd>${placement.verifiedAt}</dd>
+          </dl>
+          ${placement.forgottenAt ? '' : html`
+          <p class="hint">That is when Etsy last answered, not proof it still would.</p>
+          <form method="POST" action="/settings/app-credential/etsy/recheck">
+            <input type="hidden" name="back" value="${here}" />
+            <button class="btn btn-secondary btn-sm" type="submit">Ask Etsy again now</button>
+          </form>`}` : html`
+          <p class="hint">No key has ever been placed for Etsy here: not removed, not
+            expired, never placed.</p>`}
+          ${journey && stage !== 'no_key' ? raw(etsyKeyPlacement({
+    placedAs: placedApp ?? 'this deployment', back: here,
+  })) : ''}
+        </details>` : ''}
 
-      ${journey?.stage === 'no_key' ? html`
-      <div class="know" style="border-color:var(--accent);">
-        <h2>First, at Etsy</h2>
-        ${raw(etsyKeyPlacement({
-    placedAs: null,
-    back: '/foundry/controls/connectors/etsy',
-    savedAs: c.req.query('etsy') === 'placed' ? (c.req.query('app') ?? null) : null,
-    error: c.req.query('etsy_error') ?? null,
-    redirectUri: `${new URL(String(c.req.url)).origin}/foundry/senses/callback`,
-  }))}
-      </div>` : ''}
-
-      ${/* PLACED, SO FOLDED. The key is behind a disclosure once it is in:
-           what he came back for is the consent step above, and a filled-in
-           credential form standing open next to it reads as unfinished work.
-           The redirect URI stays visible inside, because it is the half of
-           this step that happens at Etsy and it is not yet provably done. */ ''}
-      ${journey && journey.stage !== 'no_key' ? html`
-      <div class="know">
-        <details class="fold"${c.req.query('etsy_error') != null ? ' open' : ''}><summary><h2>The application key</h2><span class="gist">${
-  journey.stage === 'authorization_pending' ? 'Placed, not yet used' : 'Placed'}</span></summary>
-        ${raw(etsyKeyPlacement({
-    placedAs: placedApp ?? 'this deployment',
-    back: '/foundry/controls/connectors/etsy',
-    savedAs: c.req.query('etsy') === 'placed' ? (c.req.query('app') ?? null) : null,
-    forgotten: c.req.query('etsy') === 'forgotten',
-    error: c.req.query('etsy_error') ?? null,
-    redirectUri: journey.stage === 'authorization_pending'
-      ? `${new URL(String(c.req.url)).origin}/foundry/senses/callback` : null,
-  }))}
-        </details>
-      </div>` : ''}
-
-      ${/* THE STEPS BEHIND A FOLD, with where it has got to on the summary.
-           Five states stacked open is a progress report; the owner needs the
-           CURRENT one, and the history of it only when he doubts the current
-           one. `.fold` is the disclosure this surface already uses, so this
-           costs no new component. */ ''}
-      ${journey ? html`
-      <div class="know">
+        ${journey ? html`
         <details class="fold"><summary><h2>Where this has got to</h2><span class="gist">${
   journey.steps.filter((x) => x.done).length} of ${journey.steps.length} done</span></summary>
-        <ol style="list-style:none;padding:0;margin:0;display:grid;gap:0.5rem;">
-          ${journey.steps.map((step) => html`
-          <li style="display:flex;gap:0.6rem;align-items:flex-start;">
-            <span aria-hidden="true" style="flex:0 0 1.1rem;color:${step.done ? 'var(--good)' : 'var(--text-dim)'};">${step.done ? '\u25cf' : '\u25cb'}</span>
-            <span><span style="color:${step.done ? 'var(--text-primary)' : 'var(--text-dim)'};">${step.title}</span>
-            ${step.evidence ? html`<br /><span style="font-size:0.82rem;color:var(--text-muted);">${step.evidence}</span>` : ''}</span>
-          </li>`)}
-        </ol>
-        </details>
-      </div>` : ''}
+          <ul class="facts-list">
+            ${journey.steps.map((step) => html`
+            <li><span aria-hidden="true" class="${step.done ? 'yes' : 'no'}">${step.done ? '●' : '○'}</span>
+              <span><span class="${step.done ? '' : 'quiet'}">${step.title}</span>
+              ${step.evidence ? html`<br /><small class="quiet">${step.evidence}</small>` : ''}</span></li>`)}
+          </ul>
+        </details>` : ''}
 
-      ${/* THE ONE STEP THAT IS HIS. Etsy telling us which shop a grant reaches
-           is not the same as that shop being his, and no provider answer and no
-           constant in this source can close that gap. It is one question, asked
-           once, in the place he is already looking. */ ''}
-      ${one.accountVerified && !one.accountConfirmed && one.disputedAccount == null ? html`
-      <div class="know" style="border-color:var(--accent);">
-        <h2>Is this your shop?</h2>
-        <p>${one.name} says this connection opens <strong>${one.account}</strong>.</p>
-        <p class="quiet">I can tell you which account the authorisation reaches. I cannot tell
-          whether it is the one you meant — a second account, or one somebody else
-          administers, would look exactly like this from here. Until you say, I will read it
-          to learn about it and will not act on your behalf through it.</p>
-        <form method="POST" action="/foundry/controls/connectors/${one.provider}/confirm"
-          style="margin-top:0.75rem;">
-          <button class="btn go" type="submit">Yes, ${one.account} is my shop</button>
-        </form>
-        <p class="quiet" style="margin-top:0.6rem;">If it is not, disconnect it on
-          ${companyName} and connect the right one — I will tell you whether ${one.name}
-          confirmed the revocation, and this connection keeps its record either way.</p>
-      </div>` : ''}
-      ${one.accountConfirmed && one.disputedAccount == null ? html`
-      <div class="know">
-        <h2>Your shop</h2>
-        <p>You confirmed <strong>${one.account}</strong> is yours. That is what I act on behalf
-          of; ${one.name} granting access and you recognising the account stay two separate
-          facts, and the first is unchanged by the second.</p>
-      </div>` : ''}
-      ${one.accountConfirmed && one.disputedAccount != null ? html`
-      <div class="know">
-        <h2>Your shop</h2>
-        <p>You confirmed <strong>${one.account}</strong> is yours, and that record stands exactly
-          as you made it. What has changed is what ${one.name} is answering, not what you said.</p>
-      </div>` : ''}
-
-      ${/* THE FOUR FACTS, AS FOUR. Collapsing them into one green tick is the
-           thing the directive names first and refuses hardest, because each is
-           a different row and three of them being true says nothing about the
-           fourth. */ ''}
-      ${/* FOUR FACTS, SUMMARISED AS FOUR AND OPENED AS FOUR. The summary says
-           how many are true, which is the scannable form of the thing the
-           directive refuses to collapse — it is a count, never a verdict, and
-           it takes one tap to see which. */ ''}
-      <div class="know">
+        ${/* THE FOUR FACTS, AS FOUR. Collapsing them into one green tick is
+             the thing the directive refuses hardest; the summary is a count,
+             never a verdict, and one tap shows which. */ ''}
         <details class="fold"><summary><h2>What that means I can do</h2><span class="gist">${
   [one.supported, one.granted, one.qualified, one.authorised].filter(Boolean).length} of 4</span></summary>
-        <ul style="list-style:none;padding:0;margin:0;">
-          ${fact(one.supported, `${one.name} offers a way to read this`, `${one.name} offers nothing I could read`)}
-          ${fact(one.granted, 'You have granted me the permission to', 'You have not granted me any permission')}
-          ${fact(one.qualified, 'I have actually done it against your real account', 'I have not yet done it for real')}
-          ${fact(one.authorised, 'Your standing authority permits the reading', 'Nothing here is authorised')}
-        </ul>
-        <p class="quiet" style="margin-top:0.6rem;">These are four different things. Three of them
-          being true tells you nothing about the fourth.</p>
+          <ul class="facts-list">
+            ${fact(one.supported, `${one.name} offers a way to read this`, `${one.name} offers nothing I could read`)}
+            ${fact(one.granted, 'You have granted me the permission to', 'You have not granted me any permission')}
+            ${fact(one.qualified, 'I have actually done it against your real account', 'I have not yet done it for real')}
+            ${fact(one.authorised, 'Your standing authority permits the reading', 'Nothing here is authorised')}
+          </ul>
+          <p class="hint">These are four different things.
+            Three of them being true tells you nothing about the fourth.</p>
         </details>
-      </div>
 
-      <div class="know">
+        ${connectOffer ? html`
+        <details class="fold"><summary><h2>What connecting reads</h2><span class="gist">${
+  connectOffer.scopes.length} read-only permissions</span></summary>
+          <p>${connectOffer.reads}.</p>
+          ${connectOffer.scopes.length ? html`<ul class="facts-list">${connectOffer.scopes.map((sc) => html`
+            <li><code>${sc.scope}</code><span class="quiet">${sc.because}</span></li>`)}</ul>
+          <p class="hint">That is the whole request; nothing here can ask Etsy for more.</p>` : ''}
+        </details>` : ''}
+
         <details class="fold"><summary><h2>What it still does not let me do</h2><span class="gist">Reading is all of it</span></summary>
-        <p>Publishing a listing, changing a price, messaging a customer and
-          moving money each need their own permission, and none of them comes from this.</p>
+          <p>Publishing a listing, changing a price, messaging a customer and
+            moving money each need their own permission, and none of them comes from this.</p>
         </details>
-      </div>
 
-      ${one.granted ? html`
-      <p class="quiet">To stop seeing it, open ${companyName} and use the control there — it tells
-        you whether ${one.name} confirmed the revocation, which a button here could not.</p>
-      <a class="btn" href="/foundry/companies/${productId}">Open ${companyName}</a>` : ''}`,
+        ${one.granted ? html`
+        <details class="fold"><summary><h2>Disconnecting</h2><span class="gist">On ${companyName}</span></summary>
+          <p>To stop seeing it, open ${companyName} and use the control there. It tells you
+            whether ${one.name} confirmed the revocation, which a button here could not.</p>
+          <a class="btn" href="/foundry/companies/${productId}">Open ${companyName}</a>
+        </details>` : ''}
+      </div>`,
     'controls', {
       eyebrow: 'Controls',
       crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: '/foundry/controls', label: 'Controls' },

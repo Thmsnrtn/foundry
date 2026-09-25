@@ -2413,3 +2413,186 @@ a.ev-item:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .ev-greet h1{font-size:1.6rem;line-height:1.15;margin:0 0 .2rem;font-family:var(--display);
   font-weight:600;letter-spacing:-.01em;color:var(--ink)}
 .ev-greet p{font-size:.92rem;color:var(--ink-3);margin:0}
+
+/* --------------------------------------------------------------------------
+   A CONNECTION AS A TASK — where it has got to, the one thing to do now,
+   and everything else folded. The owner read the Etsy page as a wall of
+   explanation in front of two boxes; these are the pieces it is rebuilt from.
+   -------------------------------------------------------------------------- */
+.hint{font-size:.84rem;line-height:1.45;color:var(--ink-3);margin:.5rem 0 0}
+.hint a{color:var(--ink-2)}
+.flash{display:block;padding:.7rem .9rem;margin:0 0 .9rem;border-radius:8px;font-size:.92rem}
+.trail{list-style:none;margin:.4rem 0 1.1rem;padding:0;display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));gap:.45rem}
+.trail li{border-top:3px solid var(--v3-line-strong);padding-top:.5rem;min-width:0}
+.trail li.done{border-top-color:var(--v3-mint)}
+.trail li.now{border-top-color:var(--accent)}
+.trail b{display:flex;align-items:center;gap:.35rem;font-size:.84rem;font-weight:600;
+  color:var(--ink-3);line-height:1.25}
+.trail li.done b,.trail li.now b{color:var(--ink)}
+.trail .n{flex:0 0 auto;width:1.25rem;height:1.25rem;border-radius:50%;display:inline-flex;
+  align-items:center;justify-content:center;font-size:.68rem;border:1px solid var(--line-2)}
+.trail li.done .n{background:var(--v3-mint);border-color:transparent;color:var(--bg)}
+.trail li.now .n{background:var(--accent);border-color:transparent;color:var(--accent-ink)}
+.trail small{display:block;margin-top:.2rem;font-size:.72rem;color:var(--ink-3);
+  line-height:1.35;overflow-wrap:anywhere}
+.trail li.now small{color:var(--accent)}
+.task{border:1px solid var(--accent);border-radius:var(--r);padding:1rem 1rem 1.1rem;
+  background:var(--card);margin:0 0 1rem}
+.task.done{border-color:var(--v3-mint)}
+.task.bad{border-color:var(--alert)}
+.task.quiet-task{border-color:var(--line-2)}
+.task-step{font-size:.72rem;letter-spacing:.08em;text-transform:uppercase;font-weight:700;
+  color:var(--accent);margin:0 0 .25rem}
+.task h2{font-family:var(--display);font-size:1.3rem;line-height:1.2;letter-spacing:-.01em;
+  text-transform:none;color:var(--ink);font-weight:600;margin:0 0 .5rem}
+.task.done h2 span{color:var(--v3-mint)}
+.task>p{color:var(--ink-2);font-size:.95rem;margin:0 0 .7rem}
+.task .shopname{font-size:1.15rem;font-weight:600;color:var(--ink);margin:0 0 .4rem;
+  overflow-wrap:anywhere}
+.task form{margin:.8rem 0 0}
+.btn.wide{width:100%;justify-content:center}
+.key-form{max-width:none;margin-top:.8rem}
+.key-form label{font-weight:500;color:var(--ink-2)}
+.key-form .btn{width:100%;justify-self:stretch;justify-content:center}
+.key-form .hint{margin:0}
+.copyrow{margin:.8rem 0 0;display:grid;gap:.3rem}
+.copyrow label{font-size:.84rem;color:var(--ink-2);font-weight:500}
+.copyrow-field{display:flex;gap:.4rem;min-width:0}
+.copyrow-field input{flex:1 1 auto;min-width:0;font:inherit;font-family:var(--mono);
+  font-size:max(16px,.85rem);padding:9px 11px;min-height:44px;border:1px solid var(--line-2);
+  border-radius:10px;background:var(--bg);color:var(--ink);text-overflow:ellipsis}
+.copyrow-field .btn{flex:0 0 auto;width:auto;min-height:44px}
+.facts-list{list-style:none;padding:0;margin:0;display:grid;gap:.45rem}
+.facts-list li{display:flex;gap:.6rem;align-items:flex-start;font-size:.92rem}
+.facts-list .yes{color:var(--good)}
+.facts-list .no{color:var(--ink-3)}
+.inspect .fold>ul.facts-list{padding-left:0}
+.trail li.done{background:none;border:0;border-top:3px solid var(--v3-mint);
+  border-radius:0;padding:.5rem 0 0;margin:0}
+.flash::before{display:none}
+/* THE FOLD'S + STAYS IN ITS CORNER. On a phone a summary stacks name over
+   state, and the marker, a flex item like them, wrapped onto a third line of
+   its own — a two-word fold four rows tall with a lone "+" at the bottom. */
+@media (max-width:480px){
+  .fold>summary{position:relative;padding-right:1.9rem}
+  .fold>summary::after{position:absolute;right:.1rem;top:50%;transform:translateY(-50%)}
+}
+.task>p.hint{font-size:.84rem;color:var(--ink-3);margin:.55rem 0 0}
+
+/* ==========================================================================
+   EVENTIDE, AS THE OWNER'S BOARDS DRAW IT
+   A sun on the horizon beside a serif name; the three modes one tap away at
+   the top of every screen; a gold horizon glow over the ground; square tiles
+   for the ways in and for the connectors; a stepper whose steps are joined.
+   Every colour below resolves through the mode's own tokens, so light, green
+   and dark stay one component system.
+   ========================================================================== */
+.forge-mark{width:38px;height:29px;color:var(--accent-fill)}
+.forge-mark svg{stroke-width:1.7;filter:drop-shadow(0 0 6px rgba(217,176,123,.35))}
+.rail-brand .forge-mark{width:34px;height:26px}
+.brand-copy>b{font-family:var(--serif);font-weight:500;font-size:1.42rem;letter-spacing:-.02em}
+.brand-copy>small{letter-spacing:.14em}
+
+/* THE SWITCH. Three icon buttons in one pill; the pressed one is filled. */
+.modes{display:inline-flex;align-items:center;gap:2px;padding:3px;margin:0 0 0 auto;
+  border:1px solid var(--v3-line-strong);border-radius:999px;background:var(--card)}
+.modes button{appearance:none;border:0;background:transparent;color:var(--ink-3);cursor:pointer;
+  width:32px;height:32px;border-radius:999px;display:inline-grid;place-items:center;padding:0}
+.modes button svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.7;
+  stroke-linecap:round;stroke-linejoin:round}
+.modes button[aria-pressed="true"]{background:var(--accent-fill);color:var(--accent-fill-ink)}
+.modes button:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+.brand .modes+.ask-fab{margin-left:8px}
+.brand{flex-wrap:nowrap}
+@media (max-width:370px){.brand-copy>small{display:none}}
+
+/* THE HORIZON. A warm glow and the faint edge of a planet at the top of the
+   ground, strongest in green, quieter in dark, a wash of gold in light. */
+:root[data-theme="green"] body,:root:not([data-theme]) body{
+  background:
+    radial-gradient(ellipse 170% 22rem at 86% -18.6rem,transparent 97.4%,rgba(233,196,140,.5) 98.5%,rgba(233,196,140,.06) 99.6%,transparent 100%),
+    radial-gradient(ellipse 60% 18rem at 88% -3rem,rgba(217,176,123,.24),transparent 70%),
+    radial-gradient(ellipse 110% 30rem at 50% -8rem,rgba(46,125,100,.26),transparent 72%),
+    var(--bg);
+  background-repeat:no-repeat}
+:root[data-theme="dark"] body{
+  background:
+    radial-gradient(ellipse 170% 22rem at 86% -18.6rem,transparent 97.4%,rgba(233,196,140,.38) 98.5%,rgba(233,196,140,.05) 99.6%,transparent 100%),
+    radial-gradient(ellipse 60% 18rem at 88% -3rem,rgba(217,176,123,.16),transparent 70%),
+    var(--bg);
+  background-repeat:no-repeat}
+:root[data-theme="light"] body{
+  background:
+    radial-gradient(ellipse 60% 16rem at 88% -4rem,rgba(217,176,123,.22),transparent 72%),
+    var(--bg);
+  background-repeat:no-repeat}
+@media (prefers-color-scheme:light){:root:not([data-theme]) body{
+  background:radial-gradient(ellipse 60% 16rem at 88% -4rem,rgba(217,176,123,.22),transparent 72%),var(--bg);
+  background-repeat:no-repeat}}
+
+/* THE GREETING speaks in the wordmark's voice, as on the boards. */
+main[data-place="foundry"]>h1{font-family:var(--serif);font-weight:500;letter-spacing:-.02em}
+
+/* FOUR WAYS IN. */
+.quick{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:.5rem;margin:.2rem 0 1.1rem}
+.qt{position:relative;display:grid;justify-items:center;align-content:center;gap:.4rem;min-height:84px;
+  padding:.7rem .3rem;border:1px solid var(--v3-line-strong);border-radius:14px;
+  background:var(--card);color:var(--ink);text-decoration:none;text-align:center}
+.qt:hover{border-color:var(--accent)}
+.qt-ic{width:30px;height:30px;display:grid;place-items:center;border-radius:50%;
+  border:1px solid var(--accent);color:var(--accent)}
+.qt-ic svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.qt-l{font-size:.74rem;line-height:1.2;color:var(--ink-2);overflow-wrap:anywhere}
+.qt-n{position:absolute;top:6px;right:6px;min-width:18px;height:18px;padding:0 5px;border-radius:999px;
+  background:var(--accent-fill);color:var(--accent-fill-ink);font-size:.66rem;display:grid;place-items:center}
+
+/* CONNECTORS AS TILES. */
+.conn-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:.55rem}
+@media (min-width:720px){.conn-grid{grid-template-columns:repeat(3,minmax(0,1fr))}}
+.conn-tile{display:grid;gap:.35rem;align-content:start;min-height:112px;padding:.8rem;
+  border:1px solid var(--v3-line-strong);border-radius:14px;background:var(--card);
+  color:var(--ink);text-decoration:none}
+.conn-tile:hover{border-color:var(--accent)}
+.conn-mono{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;
+  font:600 1rem/1 var(--serif);background:var(--card-2);border:1px solid var(--line-2);color:var(--accent)}
+.conn-name{font-weight:600;font-size:.95rem;overflow-wrap:anywhere}
+.conn-where{display:flex;gap:.4rem;align-items:baseline;font-size:.76rem;line-height:1.35;color:var(--ink-3)}
+.conn-dot{flex:0 0 auto;width:7px;height:7px;border-radius:50%;background:var(--ink-3);transform:translateY(-1px)}
+.conn-tile.ok .conn-dot{background:var(--good)}
+.conn-tile.part .conn-dot{background:var(--accent)}
+.conn-tile.alert{border-color:var(--alert)}
+.conn-tile.alert .conn-dot{background:var(--alert)}
+.conn-tile.idle .conn-dot{background:transparent;border:1px solid var(--ink-3)}
+
+/* THE STEPPER, JOINED. Circles on a line; done is green with a tick, the
+   current step gold, the rest outlined — the boards' Connect · Authorize ·
+   Configure · Complete, applied to key · connect · confirm. */
+.trail{grid-template-columns:repeat(3,minmax(0,1fr));gap:0;margin:.6rem 0 1.2rem}
+.trail li,.trail li.done{border:0;background:none;padding:0;margin:0;position:relative;
+  display:grid;justify-items:center;text-align:center;border-radius:0}
+.trail li::before{content:"";position:absolute;top:14px;left:-50%;width:100%;height:2px;
+  background:var(--v3-line-strong);z-index:0}
+.trail li:first-child::before{display:none}
+.trail li.done::before,.trail li.now::before{background:var(--v3-mint)}
+.trail b{display:grid;justify-items:center;gap:.35rem;font-size:.8rem;position:relative;z-index:1}
+.trail .n{width:30px;height:30px;font-size:.8rem;background:var(--bg);border:2px solid var(--v3-line-strong)}
+.trail li.done .n{border-color:var(--v3-mint)}
+.trail li.now .n{border-color:var(--accent-fill);box-shadow:0 0 0 4px var(--v3-gold-soft)}
+.trail small{text-align:center}
+.ev-cell .c{display:flex;align-items:center;gap:.4rem}
+.ev-ic{width:22px;height:22px;flex:0 0 auto;display:grid;place-items:center;border-radius:7px;
+  background:var(--v3-gold-soft);color:var(--accent)}
+.ev-ic svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+/* THE OLD BAND RETIRES. A fixed 25rem strip with a diagonal hairline and a
+   darkened bottom edge drew a visible seam across every wide screen; the
+   horizon above is its replacement, so both are not painted at once. */
+body::before{display:none}
+/* ON A WIDE SCREEN THE HORIZON SITS TO THE RIGHT, above the page rather than
+   through the Ask bar, and the switch rides under the name in the rail. */
+nav.places form.rail-modes{display:none}
+@media (min-width:900px){
+  :root[data-theme="green"] body,:root:not([data-theme]) body,:root[data-theme="dark"] body{
+    background-position:0 -3.5rem,0 0,0 0,0 0}
+  nav.places form.rail-modes{display:inline-flex;align-self:flex-start;margin:-.35rem .38rem .8rem}
+}

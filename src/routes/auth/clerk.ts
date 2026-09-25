@@ -7,6 +7,7 @@ import { OWNER_STYLESHEET } from '../../lib/owner-stylesheet.js';
 import { query } from '../../db/client.js';
 import { nanoid } from 'nanoid';
 import { verifiedPrimaryEmail } from '../../middleware/auth.js';
+import { CLEAR_KEPT_SESSION } from '../../middleware/session-lapse.js';
 import { log } from '../../lib/logger.js';
 import { mayBeAdmitted } from '../../lib/instance-posture.js';
 import { createCustomer } from '../../services/billing/stripe.js';
@@ -96,14 +97,26 @@ authRoutes.get('/auth/login', (c) => {
   </div>
   <script>
     const pk = "${publishableKey}";
+    // BACK TO WHERE HE WAS GOING, NOT HOME. This sent every signed-in arrival
+    // to /foundry, so a session that lapsed mid-page turned any tap into a trip
+    // Home and any form post into nothing at all. The same rule as the server's
+    // safeNext: a path on this host, never //host, never a backslash, never
+    // these sign-in pages (a loop). Read from the address, never written into
+    // this script, so nothing a request carries becomes code.
+    const asked = new URLSearchParams(window.location.search);
+    const raw = asked.get("next") || "";
+    const next = /^\\/(?![\\/\\\\])[^\\s\\\\]*$/.test(raw) && raw.length <= 2000
+      && raw !== "/auth" && raw.indexOf("/auth/") !== 0 ? raw : "/foundry";
+    const target = asked.get("lapsed") === "1"
+      ? next + (next.indexOf("?") === -1 ? "?" : "&") + "lapsed=1" : next;
     async function initClerk() {
       const m = await import("https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/+esm");
       const clerk = new m.Clerk(pk);
       await clerk.load();
-      if (clerk.user) { window.location.href = "/foundry"; return; }
+      if (clerk.user) { window.location.replace(target); return; }
       clerk.mountSignIn(document.getElementById("sign-in"), {
-        forceRedirectUrl: "/foundry",
-        fallbackRedirectUrl: "/foundry",
+        forceRedirectUrl: target,
+        fallbackRedirectUrl: target,
       });
     }
     initClerk().catch(e => {
@@ -134,6 +147,9 @@ authRoutes.get('/auth/login', (c) => {
 authRoutes.get('/auth/logout', (c) => {
   const publishableKey = process.env.CLERK_PUBLISHABLE_KEY ?? '';
   c.header('Set-Cookie', '__session=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax', { append: true });
+  // The kept copy goes too. Clerk would refuse it anyway once the session has
+  // ended; a sign-out should not have to rely on that to be complete.
+  c.header('Set-Cookie', CLEAR_KEPT_SESSION, { append: true });
   c.header('Set-Cookie', 'foundry_csrf=; Path=/; HttpOnly; Max-Age=0; SameSite=Lax', { append: true });
   return c.html(`<!DOCTYPE html>
 <html lang="en">

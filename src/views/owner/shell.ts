@@ -249,7 +249,37 @@ export type DoorCounts = Partial<Record<Place, number>>;
 import { ADDRESSES, LABELS, READINGS } from './labels.js';
 export { ADDRESSES, LABELS, READINGS };
 
-const ICONS = {
+/**
+ * THE MARK: A SUN ON THE HORIZON. The owner's Eventide boards set the name in
+ * a serif beside a half-sun over three horizon lines — "a calmer, more
+ * independent tomorrow" drawn rather than said. The forge glyph it replaces
+ * was a leftover from the commercial product's identity.
+ */
+const SUNRISE = '<svg viewBox="0 0 40 30"><path d="M9 18a11 11 0 0 1 22 0"/>'
+  + '<path d="M3 18h34M8.5 22.5h23M14 27h12"/></svg>';
+
+const MODE_ICONS = {
+  light: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2.5v2.2M12 19.3v2.2M2.5 12h2.2M19.3 12h2.2M5.3 5.3l1.6 1.6M17.1 17.1l1.6 1.6M5.3 18.7l1.6-1.6M17.1 6.9l1.6-1.6"/></svg>',
+  green: '<svg viewBox="0 0 24 24"><path d="M5 19c0-8 5-13 14-14 0 9-5 14-13 14"/><path d="M5 19c3-4 6-7 10-9"/></svg>',
+  dark: '<svg viewBox="0 0 24 24"><path d="M19.5 14.5A8 8 0 0 1 9.5 4.5a8 8 0 1 0 10 10Z"/></svg>',
+} as const;
+
+/**
+ * THE THREE MODES, ONE TAP FROM ANYWHERE.
+ *
+ * The switch lived only on Controls, three screens from wherever he noticed
+ * the light. The boards put it at the top of every screen. It posts to the
+ * same route the Controls card does — one writer for one column — and asks to
+ * come back to the page it was pressed on, which that route checks is a path
+ * on this host before it follows it.
+ */
+function modeSwitch(theme: Appearance | null, extra = ''): H {
+  const names: Record<Appearance, string> = { light: 'Light', green: 'Green', dark: 'Dark' };
+  return html`<form class="modes${extra ? ` ${extra}` : ''}" method="POST" action="/foundry/controls/appearance" data-nobusy aria-label="Appearance">
+<input type="hidden" name="back" value="here" />${(['light', 'green', 'dark'] as const).map((m) => html`<button type="submit" name="mode" value="${m}" aria-label="${names[m]}" aria-pressed="${theme === m ? 'true' : 'false'}">${raw(MODE_ICONS[m])}</button>`)}</form>`;
+}
+
+export const ICONS = {
   home: '<svg viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5 10v10h14V10"/></svg>',
   decisions: '<svg viewBox="0 0 24 24"><path d="M4 12l5 5L20 6"/></svg>',
   experiments: '<svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6L4 19h16l-6-10V3"/></svg>',
@@ -341,7 +371,7 @@ ${theme
 </head>
 <body>
 <main class="wrap" data-place="${active}">
-<div class="brand"><span class="forge-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M16 3v26M7 10c5 0 9 6 9 6s-4 6-9 6c0-6 4-12 9-12Zm18 0c-5 0-9 6-9 6s4 6 9 6c0-6-4-12-9-12Z"/></svg></span><span class="brand-copy"><b>Foundry</b><small>Private Lab for Digital Income Streams</small></span><a class="ask-fab" href="#ask-foundry" aria-label="Ask Foundry">${raw(ICONS.ask)}Ask</a></div>
+<div class="brand"><span class="forge-mark" aria-hidden="true">${raw(SUNRISE)}</span><span class="brand-copy"><b>Foundry</b><small>Ideas to income. Privately.</small></span>${modeSwitch(theme)}<a class="ask-fab" href="#ask-foundry" aria-label="Ask Foundry">${raw(ICONS.ask)}Ask</a></div>
 ${crumbsOf(where)}
 ${body}
 ${active === 'advanced' ? '' : html`<footer><a href="/letter">Advanced — inspect the system</a></footer>`}
@@ -365,7 +395,8 @@ ${/* ONE ENTRANCE. This was a GET to /foundry?q=, which reaches the question
 </main>
 ${companyBar(where)}
 <nav class="places${where && where.scope.kind === 'company' && where.local.length ? ' behind' : ''}" aria-label="Places"><div>
-  <header class="rail-brand"><span class="forge-mark" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M16 3v26M7 10c5 0 9 6 9 6s-4 6-9 6c0-6 4-12 9-12Zm18 0c-5 0-9 6-9 6s4 6 9 6c0-6-4-12-9-12Z"/></svg></span><span><b>Foundry</b><small>Private Lab for Digital Income Streams</small></span></header>
+  <header class="rail-brand"><span class="forge-mark" aria-hidden="true">${raw(SUNRISE)}</span><span><b>Foundry</b><small>Ideas to income. Privately.</small></span></header>
+  ${modeSwitch(theme, 'rail-modes')}
   ${door(ADDRESSES.foundry, 'foundry', LABELS.foundry, ICONS.home, lit, counts)}
   ${door(ADDRESSES.decisions, 'decisions', LABELS.decisions, ICONS.decisions, lit, counts, true)}
   ${door(ADDRESSES.companies, 'companies', LABELS.companies, ICONS.portfolio, lit, counts)}

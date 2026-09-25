@@ -3647,3 +3647,26 @@ entries: `op: 'delete'`, no buyer named, goes with the test.
 
 Both were caught by the chain before commit, exactly as the discipline
 requires — not shipped and found later.
+
+## The save that went Home, and the page that explained instead of asking (25 September 2026)
+
+Owner report: placing the Etsy key and pressing save returned him to Home and
+Etsy did not read as connected; the UI "still seems like the older text heavy
+ui". Diagnosis and repair are recorded in `MATURITY_MAP.md` under the same
+date. In short: a sixty-second Clerk token with nothing on the owner's
+surface to renew it (fixed by an HttpOnly kept copy honoured only on Clerk's
+live word, twelve-hour bound, `lapsed=1` return with a stated "not saved"),
+and a connector page that led with prose and hid its own save
+acknowledgement in a closed fold (rebuilt as progress trail → one action →
+folds, with the Connect button on the page).
+
+Tests: `a-minute-of-reading-is-not-a-sign-out.test.ts` (13),
+`the-connection-page-is-the-task.test.ts` (8); three existing tests changed
+wording they pinned ("this table has no row for it" was the database
+talking; "First, at Etsy" is now "Add your Etsy app key"), and the
+connectors-list word count now excludes the page's hashed script, which is
+markup and had grown by the lapse notice.
+
+Next owner act: retry the save on the phone; register
+`https://foundry-intel.fly.dev/foundry/senses/callback` at Etsy (the page now
+offers it with a Copy button); press Connect; confirm the shop.

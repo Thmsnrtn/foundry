@@ -847,3 +847,85 @@ absence reading's evidence names the order and the fix — runs in
 proved red against the prior code before the repair. No shop is connected in
 production; whether Etsy's real receipts arrive in a shape this reader has not
 seen remains unverified until PENDING 25 closes.
+
+### A minute of reading is not a sign-out; the connection page is the task (25 September 2026)
+
+The owner placed his Etsy keystring and shared secret, pressed save, and the
+page "just reloads back to the Home Screen and it doesn't say Etsy is
+connected". Two defects, one report.
+
+**The save never ran.** Clerk's `__session` token lives sixty seconds and is
+renewed only by Clerk's browser SDK, which the owner's surface deliberately
+does not load (strict hashed CSP, no CDN). A form that took more than a minute
+to fill reached the server with a lapsed token, was sent to `/auth/login`,
+and sign-in, finding him signed in at Clerk, sent him to `/foundry`. Nothing
+was said and nothing was saved. `session-lapse.ts` keeps the last verified
+token in an HttpOnly cookie of Foundry's own and, when `__session` has
+lapsed, admits the request only on Clerk's live word (`sessions.getSession`:
+status `active`, same user as the token's `sub`), cached for thirty seconds,
+never more than twelve hours past expiry. Sign-out and revocation end it at
+once; the script-readable `__session` is never exchanged under the grace;
+Bearer clients keep Clerk's sixty seconds. Where it cannot be honoured, a
+navigation returns to the page it was for and a lost POST returns to the page
+it came from with `lapsed=1`, which the page states in words ("…so it was not
+saved. Please send it again.") — the body is not carried through sign-in,
+because it may hold a secret. `safeNext` refuses `//host`, backslashes,
+foreign referers and the sign-in pages. **Maturity: `tested` against a Clerk
+double (13 cases, 5 red against the old middleware); not yet witnessed
+against real Clerk on the owner's phone.** Proof debt: one real save after
+more than a minute on the page.
+
+**The page answered with an essay.** Four stacked cards of explanation came
+before the first box; after a save the acknowledgement rendered inside the
+key fold, which a placed key closes; and the next step, connecting the shop,
+was a sentence and a link to the revenue page whose button began the
+authorisation. Rebuilt task-first: a three-mark progress trail (app key,
+connect shop, confirm it's yours), the one current action as a card, flashes
+in view, and every explanation (the key on file, the five-step record, the
+four facts, what connecting reads, what it cannot do, disconnecting) folded
+below. The Connect button posts the same two fields to the same route the
+revenue page's button does, so the disclosure stored with the grant, the
+constitutional scopes and the callback state stay server-derived; the form
+carries a choice, not a request. The key form itself lost three paragraphs
+for one line, gained labels, and shows the callback address as a copyable
+field. **Maturity: `tested` (8 new cases, 6 red against the old page; 390px
+screenshots, no horizontal overflow, no CSP violations).** Not yet seen on
+the owner's phone.
+
+### Eventide, as the owner's boards draw it (25 September 2026)
+
+The owner sent the Eventide boards (light, green, dark; phone and desktop;
+component sheet) with "this is what we were going for, but also with the
+light/green/dark mode toggling". Against them, the palettes were already
+right and the three modes already worked; what was missing was the identity
+layer. Built, as one component system across all three modes:
+
+- **The mark and name.** A half-sun over three horizon lines in gold beside a
+  serif "Foundry", with "Ideas to income. Privately." It replaces the forge
+  glyph and "Private Lab for Digital Income Streams", which came from the
+  commercial product.
+- **The switch on every screen.** Three icon buttons (light, green, dark) in
+  the phone header and under the name on the desktop rail. They post to the
+  existing appearance route (one writer for one column) and return to the
+  page they were pressed on. That return address is the Referer, followed
+  only when it is a path on this host, checked by the same `safeNext` rule
+  sign-in uses. `//host`, foreign referers and sign-in paths all land
+  elsewhere, and there is a test for each.
+- **The horizon.** A gold glow and the faint edge of a planet at the top of
+  the ground: strongest in green, quieter in dark, a wash in light. The old
+  fixed 25rem band that drew a seam across wide screens is retired.
+- **Home.** The greeting is in the wordmark's serif. Four square ways in sit
+  under it (Ask, Decisions, Searching, Connectors), each an existing place.
+  The four readings carry gold icons.
+- **Connectors as tiles.** Two or three to a row, each with a monogram, the
+  one line of where it is, and a dot that never says more than the line.
+- **The stepper, joined.** Circles on a line (done green with a tick,
+  current gold), used by the Etsy connection page.
+
+No capability, permission or wording of a fact changed. The three-mode words
+test still holds: the switch is labelled, not worded. Two rules were
+honoured rather than loosened: new colours come from palette tokens, and the
+first-screen line budget treats the four tiles as doors, like the navigation
+it already exempts. **Maturity: `tested`** (screens at 390 and 1280 in all
+three modes, no overflow, no CSP violations; 8 new cases). Not yet seen on
+the owner's phone.

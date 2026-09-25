@@ -53,6 +53,18 @@ const note = (kind: string, lead: string, rest: string): string =>
   `<div class="state ${kind}" style="display:block;padding:0.7rem 0.9rem;margin-bottom:0.9rem;`
   + `border-radius:8px;font-size:0.9rem;"><strong>${lead}</strong> ${rest}</div>`;
 
+/**
+ * The address Etsy must be told about, as something to copy rather than read.
+ * Derived from the request host by the caller, never from a setting.
+ */
+export function callbackAddress(uri: string): string {
+  return '<div class="copyrow"><label for="etsy-callback">Callback URL &mdash; add it to '
+    + 'your Etsy app&rsquo;s redirect URIs</label><div class="copyrow-field">'
+    + `<input id="etsy-callback" type="text" readonly data-select value="${esc(uri)}" />`
+    + '<button type="button" class="btn btn-sm" data-copy="etsy-callback">Copy</button>'
+    + '</div></div>';
+}
+
 export function etsyKeyPlacement(s: EtsyKeyPlacement): string {
   const parts: string[] = [];
 
@@ -76,35 +88,26 @@ export function etsyKeyPlacement(s: EtsyKeyPlacement): string {
       + 'and will not be shown again.'));
   }
 
+  // ONE LINE OF WHY, NOT THREE PARAGRAPHS. The owner read this block as a wall
+  // of text in front of two boxes. What he needs before typing a secret is
+  // where the values are and what they do not grant; the rest was the
+  // institution explaining itself to itself.
   parts.push(
-    '<p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:0.75rem;">'
-    + 'Etsy gives every application a <strong>keystring</strong> and a <strong>shared '
-    + 'secret</strong>, on your Etsy page under <em>Your Apps</em>. They say which '
-    + 'application is asking. They do <strong>not</strong> give access to any shop &mdash; '
-    + 'connecting a shop is a separate act, with its own consent screen and its own '
-    + 'read-only permissions. Both halves are needed: Etsy checks the pair on every '
-    + 'request.</p>');
+    '<p class="hint">From <a href="https://www.etsy.com/developers/your-apps" '
+    + 'target="_blank" rel="noopener noreferrer">Your Apps</a> on Etsy. They name the app '
+    + 'and do not give access to any shop &mdash; connecting the shop is its own step, '
+    + 'with its own read-only consent.</p>');
 
   // THE STEP AT ETSY THAT NOTHING HERE CAN DO, said while he is still standing
   // at Etsy with the app open. Etsy refuses an authorization whose redirect_uri
   // is not registered, and that refusal arrives after both secrets were right —
-  // the most expensive possible moment to learn it.
-  if (s.redirectUri) {
-    parts.push(
-      '<p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:0.4rem;">'
-      + 'While you are there, add this exact address to the app&rsquo;s redirect URIs:</p>'
-      + `<p><code style="display:block;overflow-wrap:anywhere;padding:0.5rem 0;">${
-        esc(s.redirectUri)}</code></p>`
-      + '<p style="font-size:0.78rem;color:var(--text-dim);margin:0 0 0.75rem;">Etsy will not '
-      + 'send you back to an address it has not been told about. I work this one out from the '
-      + 'address you are reading it on rather than from a setting, so it is right by '
-      + 'construction &mdash; and it is the step that otherwise fails after both secrets '
-      + 'were correct.</p>');
-  }
+  // the most expensive possible moment to learn it. A read-only field with a
+  // Copy button, because on a phone a long address in running text is
+  // something to select by hand and get wrong.
+  if (s.redirectUri) parts.push(callbackAddress(s.redirectUri));
 
   parts.push(
-    '<form method="POST" action="/settings/app-credential/etsy" '
-    + 'style="margin-top:0.75rem;display:grid;gap:0.5rem;max-width:26rem;">'
+    '<form method="POST" action="/settings/app-credential/etsy" class="stack key-form">'
     + `<input type="hidden" name="back" value="${esc(s.back)}" />`
     // VISIBLE ON PURPOSE, and only this half. The keystring is an identifier,
     // not a secret: it travels in the open as the client_id on the very consent
@@ -112,16 +115,15 @@ export function etsyKeyPlacement(s: EtsyKeyPlacement): string {
     // and costs the one thing that matters when a 24-character string is being
     // pasted on a phone — being able to see that it arrived whole. The shared
     // secret is the half that authenticates, and it stays hidden.
+    + '<label>Keystring'
     + '<input type="text" name="keystring" required autocomplete="off" spellcheck="false" '
-    + 'autocapitalize="off" placeholder="Keystring" />'
+    + 'autocapitalize="off" placeholder="Paste the keystring" /></label>'
+    + '<label>Shared secret'
     + '<input type="password" name="shared_secret" required autocomplete="off" '
-    + 'placeholder="Shared secret" />'
-    + '<p style="font-size:0.78rem;color:var(--text-dim);margin:0;">Paste each into its own '
-    + 'box, not the joined <code>keystring:secret</code> form Etsy shows in its examples. '
-    + 'I check the pair with Etsy before keeping it, so a wrong one is refused here rather '
-    + 'than at the consent screen.</p>'
+    + 'placeholder="Paste the shared secret" /></label>'
+    + '<p class="hint">Each into its own box. I check the pair with Etsy before keeping it.</p>'
     + `<button type="submit" class="btn go">${
-      s.placedAs ? 'Replace the key' : 'Place the key'}</button>`
+      s.placedAs ? 'Replace the key' : 'Save and check with Etsy'}</button>`
     + '</form>');
 
   if (s.placedAs) {

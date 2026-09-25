@@ -74,7 +74,9 @@ describe('the list answers his four questions and stops', () => {
     // anything. A word count is a blunt instrument and it is the right one
     // here: this page exists to be scanned.
     const html = await get('/foundry/controls/connectors');
-    const text = html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    // Words he reads: the page's one hashed script is markup, not prose, and
+    // counting it made a behaviour added to every page look like verbosity here.
+    const text = html.replace(/<script[\s\S]*?<\/script>/g, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
     expect(text.split(' ').length).toBeLessThan(220);
   });
 
@@ -160,7 +162,7 @@ describe('the one thing he has to do at Etsy, where he would look for it', () =>
   // wrong.
   it('shows the exact address to register while the connection is still unmade', async () => {
     const html = await get('/foundry/controls/connectors/etsy');
-    expect(html).toContain('First, at Etsy');
+    expect(html).toContain('Add your Etsy app key');
     expect(html).toContain('/foundry/senses/callback');
   });
 

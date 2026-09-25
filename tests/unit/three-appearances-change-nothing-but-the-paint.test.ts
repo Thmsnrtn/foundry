@@ -68,6 +68,8 @@ beforeAll(async () => {
     c.set('founder', { id: F, email: 'paint@example.com' }); await next();
   });
   app.route('/', foundryShellRoutes);
+  const { placeRoutes } = await import('../../src/routes/dashboard/places.js');
+  app.route('/', placeRoutes);
 });
 
 describe('the three are the three, everywhere', () => {
@@ -185,5 +187,69 @@ describe('the paint changes and the application does not', () => {
     expect(res.status).toBe(302);
     expect((await query('SELECT appearance FROM founders WHERE id = ?', [F])).rows[0])
       .toMatchObject({ appearance: 'green' });
+  });
+});
+
+describe('the switch is on every page, and returns him to it', () => {
+  // The boards put the three modes at the top of every screen; it had lived
+  // only on Controls, three screens from wherever he noticed the light.
+  const post = (form: Record<string, string>, referer?: string): Promise<Response> =>
+    withAppearance(null, async () => app.request('http://foundry.test/foundry/controls/appearance', {
+      method: 'POST', body: new URLSearchParams(form),
+      headers: referer ? { Referer: referer } : {},
+    }));
+
+  it('renders on an ordinary page, with the current mode pressed', async () => {
+    const html = await render('/foundry/controls/connectors', 'green');
+    expect(html).toContain('class="modes"');
+    expect(html).toMatch(/value="green" aria-label="Green" aria-pressed="true"/);
+    expect(html).toMatch(/value="light" aria-label="Light" aria-pressed="false"/);
+  });
+
+  it('presses nothing when he has never chosen', async () => {
+    const html = await render('/foundry/controls/connectors', null);
+    expect(html).not.toContain('aria-pressed="true"');
+  });
+
+  it('comes back to the page it was pressed on', async () => {
+    const res = await post({ mode: 'light', back: 'here' },
+      'http://foundry.test/foundry/controls/connectors/etsy?etsy=placed');
+    expect(res.headers.get('location')).toBe('/foundry/controls/connectors/etsy?etsy=placed');
+    expect((await query('SELECT appearance FROM founders WHERE id = ?', [F])).rows[0])
+      .toMatchObject({ appearance: 'light' });
+  });
+
+  it('never follows a referer to another host', async () => {
+    const res = await post({ mode: 'dark', back: 'here' }, 'https://evil.test/phish');
+    expect(res.headers.get('location')).toBe('/foundry/controls#appearance');
+  });
+
+  it('never follows a same-host referer out through a protocol-relative path', async () => {
+    const res = await post({ mode: 'dark', back: 'here' }, 'http://foundry.test//evil.test/x');
+    expect(res.headers.get('location')).toBe('/foundry');
+  });
+
+  it('keeps the Controls card landing where it always did', async () => {
+    const res = await post({ mode: 'green' }, 'http://foundry.test/foundry/somewhere');
+    expect(res.headers.get('location')).toBe('/foundry/controls#appearance');
+  });
+});
+
+describe('Home opens with four ways in, as the boards draw it', () => {
+  it('each tile is a place that already exists, and every one of them renders', async () => {
+    const html = await render('/foundry', 'green');
+    const nav = /<nav class="quick"[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '';
+    const hrefs = [...nav.matchAll(/href="([^"]+)"/g)].map((m) => m[1] ?? '');
+    expect(hrefs).toEqual(['#ask-foundry', '/foundry/decisions', expect.stringMatching(/^\/foundry\//),
+      '/foundry/controls/connectors']);
+    for (const h of hrefs.slice(1)) {
+      const res = await withAppearance('green', async () => app.request(h));
+      expect(res.status, `${h} is a tile that goes nowhere`).toBeLessThan(400);
+    }
+  });
+
+  it('opens the Ask box rather than jumping to it and leaving him to find it', async () => {
+    const html = await render('/foundry', 'green');
+    expect(html).toMatch(/<a class="qt" href="#ask-foundry" data-ask>/);
   });
 });

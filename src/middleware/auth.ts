@@ -68,38 +68,49 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
 
   const accept = c.req.header('Accept');
 
-  // Extract token from Authorization header or __session cookie
-  let token: string | null = null;
+  // A BEARER TOKEN IS CHECKED STRICTLY, AND A BROWSER'S SESSION IS KEPT ALIVE.
+  // An API client presents its own token and gets exactly Clerk's sixty
+  // seconds. A browser presents cookies, and a lapsed `__session` is admitted
+  // only on Clerk's live word that the session is still his — see
+  // session-lapse.ts for why a minute was sending him Home.
   const authHeader = c.req.header('Authorization');
+  const issuer = (iss: string) => iss.includes('clerk');
+  let payload: { sub?: string } | null = null;
   if (authHeader?.startsWith('Bearer ')) {
-    token = authHeader.slice(7);
+    const bearerToken = authHeader.slice(7);
+    payload = bearerToken
+      ? await verifyToken(bearerToken, { secretKey, issuer } satisfies VerifyTokenOptions).catch(() => null)
+      : null;
   } else {
-    // Try cookie
-    const cookie = c.req.header('Cookie');
-    if (cookie) {
-      const sessionCookie = cookie
-        .split(';')
-        .map((c) => c.trim())
-        .find((c) => c.startsWith('__session='));
-      if (sessionCookie) {
-        token = sessionCookie.split('=')[1] ?? null;
+    const { resolveBrowserSession, keptSessionCookie } = await import('./session-lapse.js');
+    const resolved = await resolveBrowserSession(c.req.header('Cookie'), {
+      verify: (t, lapseGraceMs) => verifyToken(t, {
+        secretKey, issuer, ...(lapseGraceMs ? { clockSkewInMs: lapseGraceMs } : {}),
+      } satisfies VerifyTokenOptions),
+      liveSession: async (sid) => {
+        const s = await ClerkBackend({ secretKey }).sessions.getSession(sid);
+        return { status: s.status, userId: s.userId };
+      },
+      now: () => Date.now(),
+    });
+    if (resolved) {
+      payload = resolved.claims;
+      if (resolved.keep) {
+        c.header('Set-Cookie', keptSessionCookie(resolved.keep, process.env.NODE_ENV === 'production'),
+          { append: true });
       }
     }
   }
 
-  if (!token) {
+  if (!payload) {
     if (isBrowserRequest(accept)) {
-      return c.redirect('/auth/login');
+      const { loginPathFor } = await import('./session-lapse.js');
+      return c.redirect(loginPathFor(c.req.method, c.req.url, c.req.header('Referer')));
     }
-    return c.json({ error: 'Authentication required' }, 401);
+    return c.json({ error: 'Invalid or expired session' }, 401);
   }
 
   try {
-    const payload = await verifyToken(token, {
-      secretKey,
-      issuer: (iss: string) => iss.includes('clerk'),
-    } satisfies VerifyTokenOptions);
-
     const clerkUserId = payload.sub;
     if (!clerkUserId) {
       if (isBrowserRequest(accept)) {
