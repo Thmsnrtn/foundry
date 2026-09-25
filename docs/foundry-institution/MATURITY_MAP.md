@@ -929,3 +929,20 @@ first-screen line budget treats the four tiles as doors, like the navigation
 it already exempts. **Maturity: `tested`** (screens at 390 and 1280 in all
 three modes, no overflow, no CSP violations; 8 new cases). Not yet seen on
 the owner's phone.
+
+### Connect could not reach Etsy (25 September 2026)
+
+After the save fix the owner placed his key ("it's actually worked") and was
+then "stuck on step 2": Connect did nothing. The owner surface's policy said
+`form-action 'self'`, and a browser applies form-action to every hop of a
+form's redirect chain. Connect's whole job is one such hop, to the provider's
+consent screen, so the browser refused it silently. Reproduced in Chromium
+against the full app; the console said "Refused to send form data … form-action
+'self'". The policy now names exactly the provider consent screens
+(`https://www.etsy.com`, `https://connect.stripe.com`) and nothing else. A test
+holds that list to each adapter's own `AUTHORIZE` address, so a later provider
+cannot be silently unreachable the same way. **Maturity: `tested`** (3 cases,
+2 red before; the browser reproduction now reaches `www.etsy.com/oauth/connect`).
+The consent screen itself and the callback remain unwitnessed until the owner
+connects his real shop, which also needs the callback address registered at
+Etsy.

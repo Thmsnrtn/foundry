@@ -6,6 +6,9 @@
 import { createMiddleware } from 'hono/factory';
 import { OWNER_SURFACE_SCRIPT_HASH, isOwnerSurface } from '../lib/owner-surface-script.js';
 
+/** The provider consent screens Connect redirects to. Held to the adapters by a test. */
+const CONSENT_SCREENS = ['https://www.etsy.com', 'https://connect.stripe.com'] as const;
+
 export const securityHeaders = createMiddleware(async (c, next) => {
   await next();
 
@@ -75,8 +78,14 @@ export const securityHeaders = createMiddleware(async (c, next) => {
     "font-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",
-    // Nothing on the owner's surface posts anywhere but here, so nothing may.
-    ...(strict ? ["form-action 'self'", "frame-ancestors 'none'"] : []),
+    // Nothing on the owner's surface posts anywhere but here — but a browser
+    // applies form-action to every hop of a form's redirect chain, and
+    // Connect's whole job is one such hop: to the provider's consent screen.
+    // With 'self' alone the owner saved his Etsy key and then pressed Connect
+    // to no effect at all, the browser refusing the redirect in the console.
+    // So the provider consent screens are named, and nothing else is; a test
+    // holds this list to each adapter's own AUTHORIZE address.
+    ...(strict ? [`form-action 'self' ${CONSENT_SCREENS.join(' ')}`, "frame-ancestors 'none'"] : []),
   ].join('; '));
 
   // HSTS (only in production to avoid dev issues)

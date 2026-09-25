@@ -5961,7 +5961,7 @@ foundryShellRoutes.get('/foundry/companies/:id/see/:sense',
     // `senseCallbackUri` works it out for the authorization itself: from the
     // host this request arrived on. Shown rather than described, because it is
     // the one value he has to paste somewhere else and cannot derive.
-    const redirectHere = `${new URL(String(c.req.url)).origin}/foundry/senses/callback`;
+    const redirectHere = senseCallbackUri(c);
     const scopes = await requiredScopes(offer.provider, gap.key, offer.mode);
     const standing = await whatStandsBetween(offer.provider);
     return `<div class="noticed">
@@ -6068,8 +6068,24 @@ foundryShellRoutes.post('/foundry/companies/:id/see/:sense',
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function senseCallbackUri(c: any): string {
-  const url = new URL(String(c.req.url));
-  return `${url.origin}/foundry/senses/callback`;
+  return senseCallbackUriFor(String(c.req.url));
+}
+
+/**
+ * THE HOST THE REQUEST ARRIVED ON, AND HTTPS IN PRODUCTION.
+ *
+ * Fly terminates TLS in front of the app, so the request the app sees says
+ * http — and this was built from it, putting "http://foundry-intel…" on the
+ * owner's screen under "add it to your Etsy app's redirect URIs" and into the
+ * authorisation Etsy compares exactly. Production is only ever served over
+ * TLS, so the scheme is fixed there rather than read from a header a caller
+ * could send. The host still comes from the request, for the reason above:
+ * nothing configurable decides where a code is sent.
+ */
+export function senseCallbackUriFor(requestUrl: string): string {
+  const url = new URL(requestUrl);
+  const scheme = process.env.NODE_ENV === 'production' ? 'https:' : url.protocol;
+  return `${scheme}//${url.host}/foundry/senses/callback`;
 }
 
 /**
@@ -7130,8 +7146,8 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
     // explanation folded underneath for when he doubts the one thing. Nothing
     // below is new policy; it is the same facts, in the order he needs them.
     const here = `/foundry/controls/connectors/${one.provider}`;
-    const origin = new URL(String(c.req.url)).origin;
-    const callback = `${origin}/foundry/senses/callback`;
+    // The address Etsy will be told, from the one function that tells it.
+    const callback = senseCallbackUri(c);
     const stage = journey?.stage ?? null;
     const saved = c.req.query('etsy') === 'placed' ? (c.req.query('app') ?? null) : null;
     const refused = c.req.query('etsy_error') ?? null;
