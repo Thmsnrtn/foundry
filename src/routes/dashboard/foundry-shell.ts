@@ -362,7 +362,9 @@ export interface OwnerState {
    * Invented companies are counted separately and never folded into the real
    * ones — the whole point of them is that they are not his.
    */
-  watching: { real: number; itself: boolean; invented: number };
+  watching: { real: number; itself: boolean; invented: number;
+    /** Of the real ones, how many have something connected that could see them. */
+    observed?: number };
   routinesFailing: string[];
   checks: Array<{ check: string; result: string; detail: string; observedAt: string }>;
   responsibilities: Array<{ id: string; title: string; state: string; check: string | null }>;
@@ -658,10 +660,23 @@ async function readOwnerState(
            FROM products p
           WHERE p.owner_id = ? AND p.status = 'active' AND p.standing = 'earned' AND p.deleted_at IS NULL`,
         [founderId])).rows[0] as Record<string, unknown> | undefined;
+      // OWNED IS NOT WATCHED. "N companies watched" counted the companies he
+      // owns, whether or not anything was connected that could see them — so a
+      // week with nothing observing any of them read "Healthy · 1 company
+      // watched", while the absence reading called the same company blind.
+      // Watched means a sense is connected and its last word was not an error.
+      const observed = (await query(
+        `SELECT COUNT(DISTINCT p.id) AS n FROM products p
+           JOIN company_senses s ON s.product_id = p.id AND s.disconnected_at IS NULL AND s.last_error IS NULL
+          WHERE p.owner_id = ? AND p.status = 'active' AND p.standing = 'earned' AND p.deleted_at IS NULL
+            AND ${realCompany('p')}
+            AND p.id NOT IN (SELECT product_id FROM system_identities WHERE identity_key = 'foundry')`,
+        [founderId])).rows[0] as Record<string, unknown> | undefined;
       return {
         real: Number(counted?.real ?? 0),
         itself: Number(counted?.itself ?? 0) > 0,
         invented: Number(counted?.invented ?? 0),
+        observed: Number(observed?.n ?? 0),
       };
     })(),
     routinesFailing: failing.map((r) => String(r.job_name)),
@@ -3032,7 +3047,11 @@ foundryShellRoutes.get('/foundry', async (c) => {
         // outranks a nuisance in the plumbing, and showing whichever came
         // first turned the one into the other on the owner's first screen.
         detail: health.didNotDoTheDay[0] ?? (health.recovering === 'automatically' ? 'recovering on its own' : health.ownerAction ?? 'needs a look') }
-        : { word: 'Healthy', cls: 'ok', detail: s.watching.real > 0 ? `${count(s.watching.real, 'company', 'companies')} watched` : 'nothing to watch yet' };
+        : { word: 'Healthy', cls: 'ok', detail: s.watching.real === 0 ? 'nothing to watch yet'
+          : (s.watching.observed ?? 0) === 0 ? `nothing connected can see ${s.watching.real === 1 ? 'your company' : `your ${String(s.watching.real)} companies`}`
+            : (s.watching.observed ?? 0) < s.watching.real
+              ? `${String(s.watching.observed)} of ${count(s.watching.real, 'company', 'companies')} watched`
+              : `${count(s.watching.real, 'company', 'companies')} watched` };
   // NOW AND NEXT, from the records. Now is what the live test is doing; Next is
   // when the hand passes again. Neither is a forecast.
   const nextPass = new Date(health.nextPass ?? Date.now());

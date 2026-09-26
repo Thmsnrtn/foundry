@@ -1367,3 +1367,36 @@ building a second record.
 **Proof debt.** "Freshness" of each observation is its `observed_at`, shown
 beside it. No rule refuses a seal on evidence older than some age; none has
 been asked for.
+
+### The three journeys the plan names, walked (26 September 2026)
+
+**Governing requirement.** Integrated plan §8 asks for three journeys:
+- a quiet return after a week;
+- a stale Etsy read with a known buyer remedy;
+- a new direction followed by a binding Controls change.
+
+"A shorter page that yields a wrong answer fails."
+
+**Walked** (`the-three-journeys-the-plan-names`, 4) through the owner's real
+routes. The first two were read from the first viewport of a 390px browser.
+
+1. **Quiet week: found a wrong answer.** Home's Health read "Healthy · 1 company
+   watched" for a company with nothing connected to it. "Watched" counted the
+   companies he owns, not the ones anything could see, while the absence reading
+   called the same company blind. Fixed: watched now means a connected sense
+   whose last word was not an error. The cell says "nothing connected can see
+   your company", or "N of M companies watched".
+2. **Stale Etsy with a refund owed.** Leads with "One thing needs you" and the
+   exact refund to make on Etsy, and says "Etsy could not be read since …". It
+   never says Healthy. No horizontal scroll at 390px. The Health half of this
+   was the repair shipped earlier today.
+3. **Direction, then a spending limit.**
+   - A spoken direction is shown before it binds, binds only on confirm, and
+     grants no money.
+   - A spending limit then binds on confirm, reads back on the company page
+     ("Up to $30"), and leaves the direction as it was.
+   - The preview the plan asks for already existed: the confirm step re-reads
+     his sentence and refuses if the reading has moved since he was shown it.
+
+**Maturity.** **`tested`** in a browser and through routes. Not yet walked by
+him, on his phone, signed in; that is the plan's own final proof and it is his.
