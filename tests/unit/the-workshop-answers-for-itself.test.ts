@@ -136,6 +136,27 @@ describe('what a message may cause is decided by policy, never by the message', 
     }
   });
 
+  it('says WHY nothing was understood — the reader down is not the message unclear (plan §9)', async () => {
+    // On a day the model is down, every message goes to him unread. That is
+    // safe, and it is a different fact from a message nobody could make sense
+    // of: he should know the reader failed, not that strangers turned vague.
+    raw = null; threw = true;
+    const down = await interpret('Refund please', 'I would like my money back.');
+    threw = false;
+    expect(down.unread).toBe('unreachable');
+    const d = decide(down, ctx());
+    expect(d.decision).toBe('escalate');
+    expect(d.because).toMatch(/could not be reached/);
+    raw = 'not json at all';
+    const garbled = await interpret('x', 'y');
+    raw = null;
+    expect(garbled.unread).toBe('unusable');
+    expect(decide(garbled, ctx()).because).toMatch(/answered with nothing usable/);
+    // A reading the model did make carries no such mark.
+    reading = { intent: 'unclear' };
+    expect((await interpret('x', 'y')).unread).toBeNull();
+  });
+
   it('an unclear or low-confidence reading goes to a person, and a hostile one causes nothing', () => {
     expect(decide(u({ intent: 'unclear' }), ctx()).decision).toBe('escalate');
     expect(decide(u({ intent: 'asks_about_price', confidence: 'low' }), ctx()).decision).toBe('escalate');

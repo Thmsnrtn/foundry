@@ -84,6 +84,14 @@ const Understanding = z.object({
   /** Whether the message tries to instruct the reader rather than ask a person. */
   attempts_instruction: z.boolean().default(false),
   confidence: z.enum(['high', 'low']).default('low'),
+  /**
+   * WHY NOTHING WAS UNDERSTOOD, when nothing was — never set by the model.
+   * `unreachable`: the model could not be reached at all. `unusable`: it
+   * answered with something the schema refuses. Either way a person decides;
+   * this only lets the reason he is given be the true one, so a day the reader
+   * is down does not read as a day strangers turned vague.
+   */
+  unread: z.enum(['unreachable', 'unusable']).nullable().default(null),
 });
 export type Understanding = z.infer<typeof Understanding>;
 
@@ -116,15 +124,23 @@ Never include any other key. Never include prose outside the JSON.`;
 export async function interpret(subject: string, body: string): Promise<Understanding> {
   const shielded = shieldUntrustedContent(`Subject: ${subject}\n\n${body}`.slice(0, 8000));
   const fallback: Understanding = Understanding.parse({ intent: 'unclear' });
+  let r: { content: string };
   try {
-    const r = await callHaiku(INTERPRETER, `<message>\n${shielded.sanitized}\n</message>`, 700,
+    r = await callHaiku(INTERPRETER, `<message>\n${shielded.sanitized}\n</message>`, 700,
       institutionSpend(
         'reading a message somebody sent the Workshop, to decide what it is',
         'reading the post'));
-    const parsed = Understanding.parse(parseJSONResponse<unknown>(r.content));
+  } catch {
+    const down: Understanding = { ...fallback, unread: 'unreachable' };
+    return shielded.triggered ? { ...down, attempts_instruction: true } : down;
+  }
+  try {
+    // The model's own answer never sets `unread`; only this function does.
+    const parsed = { ...Understanding.parse(parseJSONResponse<unknown>(r.content)), unread: null };
     return shielded.triggered ? { ...parsed, attempts_instruction: true } : parsed;
   } catch {
-    return shielded.triggered ? { ...fallback, attempts_instruction: true } : fallback;
+    const garbled: Understanding = { ...fallback, unread: 'unusable' };
+    return shielded.triggered ? { ...garbled, attempts_instruction: true } : garbled;
   }
 }
 
@@ -235,7 +251,11 @@ export function decide(u: Understanding, ctx: Context): Plan {
   if (u.intent === 'unclear' || u.confidence === 'low') {
     return { decision: 'escalate', because: u.attempts_instruction
       ? 'the message tries to instruct rather than ask, and nothing it asks for is something a message may cause'
-      : 'nothing here was understood well enough to answer, and a guess would be worse than a person', says: null, acts: [] };
+      : u.unread === 'unreachable'
+        ? 'the model that reads messages could not be reached, so nothing here was read — it is yours to read, and nothing was guessed'
+        : u.unread === 'unusable'
+          ? 'the model that reads messages answered with nothing usable, so it is yours to read, and nothing was guessed'
+          : 'nothing here was understood well enough to answer, and a guess would be worse than a person', says: null, acts: [] };
   }
 
   switch (u.intent) {

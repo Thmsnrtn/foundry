@@ -1439,3 +1439,26 @@ The existing `the-brief-says-each-thing-once` gate still holds.
 shell. What does not is the 403 guard page, the auth pages and the error page
 for non-owner paths; the guard page's dead link is now fixed. The auth pages sit
 before a session exists and are deliberately plain.
+
+### A message the reader could not read says so (26 September 2026)
+
+Closes the proof debt left by "No new promise while a buyer waits on the owner".
+When the model that interprets Workshop mail could not be reached, or answered
+with nothing the schema accepts, the message still went to the owner — safe.
+But it went with the same reason as a message nobody could make sense of, so a
+day the reader was down read as a day strangers turned vague.
+
+`interpret` now marks the reading `unread`, and the model can never set it.
+Only the function sets it, and only on those two paths:
+- `unreachable`: the model call failed;
+- `unusable`: its answer failed the schema.
+
+`decide` gives him the true reason:
+- "the model that reads messages could not be reached, so nothing here was read
+  — it is yours to read, and nothing was guessed";
+- or "… answered with nothing usable …".
+
+A reading the model did make carries no mark.
+
+**Maturity.** **`tested`** (`the-workshop-answers-for-itself`, +1). Red before:
+there was no such field. The 19 files that read Workshop mail still pass.
