@@ -61,7 +61,7 @@ const LABEL_STYLE = 'display:block;font-size:0.75rem;color:var(--text-muted);mar
 connectionRoutes.get('/connections', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'connections', 'Connections', undefined, c);
-  if (!ctx.productId) return c.redirect('/dashboard');
+  if (!ctx.productId) return c.redirect('/foundry');
   const fluency = getFluency(founder);
 
   const [servers, grants, recentCalls] = await Promise.all([
@@ -228,7 +228,7 @@ connectionRoutes.post('/connections/add',
   requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'connections', 'Connections', undefined, c);
-  if (!ctx.productId) return c.redirect('/dashboard');
+  if (!ctx.productId) return c.redirect('/foundry');
 
   const body = await c.req.parseBody();
   const name = String(body.name ?? '').trim().toLowerCase();
@@ -265,7 +265,7 @@ connectionRoutes.post('/connections/grant',
   requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'connections', 'Connections', undefined, c);
-  if (!ctx.productId) return c.redirect('/dashboard');
+  if (!ctx.productId) return c.redirect('/foundry');
 
   const body = await c.req.parseBody();
   const serverName = String(body.server_name ?? '').trim().toLowerCase();
@@ -293,7 +293,7 @@ connectionRoutes.post('/connections/envelope',
   requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'connections', 'Connections', undefined, c);
-  if (!ctx.productId) return c.redirect('/dashboard');
+  if (!ctx.productId) return c.redirect('/foundry');
 
   const body = await c.req.parseBody();
   const serverName = String(body.server_name ?? '').trim().toLowerCase();
@@ -311,7 +311,7 @@ connectionRoutes.post('/connections/envelope',
 connectionRoutes.post('/connections/grants/:id/revoke', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'connections', 'Connections', undefined, c);
-  if (!ctx.productId) return c.redirect('/dashboard');
+  if (!ctx.productId) return c.redirect('/foundry');
   await revokeGrant(c.req.param('id'), ctx.productId);
   return c.redirect('/connections');
 });
@@ -319,7 +319,7 @@ connectionRoutes.post('/connections/grants/:id/revoke', async (c) => {
 connectionRoutes.post('/connections/:name/disconnect', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'connections', 'Connections', undefined, c);
-  if (!ctx.productId) return c.redirect('/dashboard');
+  if (!ctx.productId) return c.redirect('/foundry');
   await query(
     `UPDATE integrations SET status = 'revoked', updated_at = CURRENT_TIMESTAMP
      WHERE product_id = ? AND provider = 'mcp' AND name = ?`,

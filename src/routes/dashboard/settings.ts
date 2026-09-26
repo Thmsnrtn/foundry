@@ -142,13 +142,14 @@ settingsRoutes.get('/settings', async (c) => {
          The states beside them are the same readings the sections render, so
          the index cannot tell him something the section below contradicts. */ ''}
     <nav class="settings-index" aria-label="Sections">
-      <a href="#etsy-application-key">Etsy application key</a>
-      <a href="#who-your-customers-hear-from">Sending</a>
+      <a href="#manage-company">Company</a>
       <a href="#how-foundry-speaks-to-you">Voice</a>
       <a href="#how-loudly-foundry-may-interrupt-you">Interruptions</a>
       <a href="#how-often-i-run">Schedule</a>
+      <a href="#metric-ingest">Metrics</a>
       <a href="#systems-that-report-to-you">Systems</a>
       <a href="#api-keys">API keys</a>
+      <a href="#moved">Moved</a>
     </nav>
     ${/* PROFILE, CONNECTED REPOSITORIES, COMPETITORS AND BETA INFRASTRUCTURE,
          DELETED with the settingsPage component. Three of the four were Commercial
@@ -168,19 +169,15 @@ settingsRoutes.get('/settings', async (c) => {
          still here, one environment variable away from rendering. Private
          Foundry has one owner who does not bill himself. */ ''}
 
+    ${/* ONE ROW, NOT A SECOND PORTFOLIO. This listed every product with its
+         repository and site and a View button — the Portfolio, again, on the
+         page for how Foundry behaves. What belongs here is how many there are
+         and the door to them, and the door to add one. */ ''}
     <div class="card">
       <h3 id="products">Products</h3>
-      <p style="font-size:0.87rem;color:var(--ink-3);margin-bottom:0.75rem;">You have ${products.rows.length} product(s) connected.</p>
-      ${(products.rows as unknown as Array<Record<string, string>>).map((p) => html`
-        <div style="display:flex;justify-content:space-between;align-items:center;padding:0.5rem 0;border-bottom:1px solid var(--line);">
-          <div>
-            <strong>${p.name}</strong>
-            ${p.github_repo_url ? html`<span style="font-size:0.75rem;color:var(--ink-3);margin-left:0.5rem;">${p.github_repo_url}</span>` : ''}
-            ${p.website_url ? html`<span style="font-size:0.75rem;color:var(--ink-3);margin-left:0.5rem;">${p.website_url}</span>` : ''}
-          </div>
-          <a href="/foundry/companies/${p.id}" class="btn btn-secondary btn-sm" style="font-size:0.75rem;">View</a>
-        </div>`)}
-      <a href="/onboarding" class="btn btn-primary btn-sm" style="margin-top:0.75rem;">+ Add Product</a>
+      <p class="quiet">${products.rows.length === 1 ? 'One product' : `${String(products.rows.length)} products`} —
+        <a href="/foundry/companies">open them in Portfolio</a>.</p>
+      <a href="/onboarding" class="btn btn-secondary btn-sm">+ Add Product</a>
     </div>
 
     ${/* Manage Company (F-061-A) */ ''}
@@ -332,7 +329,10 @@ settingsRoutes.get('/settings', async (c) => {
 
     ${productId ? html`
     <div class="card">
-      <h3 id="metric-ingest">Metric Ingest</h3>
+      ${/* A RARE ACT, FOLDED. The URL is set up once; what it is for and how
+           to regenerate it are one tap away rather than always open. */ ''}
+      <details class="fold"><summary><h3 id="metric-ingest">Metric Ingest</h3>
+        <span class="gist">${ingestToken ? 'URL set' : 'None yet'}</span></summary>
       <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
         A secret URL your tools can POST to — Stripe webhooks, Zapier, cron jobs, or your own pipeline.
         Foundry maps the fields to your metrics and reads them on its next pass.
@@ -386,69 +386,13 @@ settingsRoutes.get('/settings', async (c) => {
       <form method="POST" action="/settings/generate-ingest">
         <button type="submit" class="btn btn-secondary btn-sm">Generate ingest URL</button>
       </form>`}
+      </details>
     </div>` : ''}
-
-    ${productId ? html`
-    <div class="card">
-      ${/* THE SECOND SECTION HERE THAT WAS NEVER A SETTING.
-           This is not a preference; it is a per-company credential deciding
-           whose name arrives in a stranger's inbox, and it sat on the one page
-           that holds none of a company's other facts while the company page
-           said nothing about it at all.
-           It went to the company, under "What I can see" — not to Connectors,
-           where the application key went and where the symmetry pointed.
-           Connectors is the reading surface and says so in as many words:
-           messaging a customer needs its own permission, and none of it comes
-           from there. A sending identity IS that permission. */ ''}
-      <h3 id="who-your-customers-hear-from">Who your customers hear from</h3>
-      <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:0.75rem;">
-        ${sendingIdentity
-    ? html`Customer mail goes out as <strong>${sendingIdentity.fromEmail}</strong>. It never
-        goes out as Foundry.`
-    : html`No sending address is connected, so mail to your customers is refused. Mail to
-        <em>you</em> — briefings, alerts, billing — still comes from Foundry.`}
-      </p>
-      <a class="btn btn-secondary btn-sm" href="/foundry/companies/${productId}">Open ${
-  firstProduct?.name ?? 'the company'}</a>
-    </div>` : ''}
-
-    <div class="card">
-      ${/* THIS WAS NEVER A SETTING.
-           An application key is one half of a connection, and the owner who
-           needs it is the owner standing in Connectors trying to connect Etsy
-           — not the owner adjusting how loudly Foundry may interrupt him. It
-           had drifted here because Settings is where forms go when nobody
-           decides where they belong, and he told us what that cost: the
-           journey got lost on this page.
-
-           The form itself now lives on the Etsy connector, beside the consent
-           step it is a prerequisite of and beside the redirect URI it fails
-           without. What stays here is the pointer, because someone who
-           remembers placing a key here should not conclude it was deleted. */ ''}
-      <h3 id="etsy-application-key">Etsy application key</h3>
-      <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:0.75rem;">
-        ${etsyPlaced !== null || etsyApp
-    ? html`A key is placed. It says which application is asking; it gives access to no shop.`
-    : html`No key is placed yet. It says which application is asking; it gives access to
-        no shop — connecting one is a separate act, with its own consent screen.`}
-      </p>
-      <p style="font-size:0.87rem;">Place, replace or forget it where the connection lives.</p>
-      ${/* A DESTINATION, NOT A WORD IN A SENTENCE. This was an inline link in
-           prose, which is 18px tall and asks a thumb to hit a phrase. An entry
-           point to another surface is a control, and looks like one. */ ''}
-      <a class="btn btn-secondary btn-sm" href="/foundry/controls/connectors/etsy">Connectors &rarr; Etsy</a>
-    </div>
 
     ${productId ? html`
     <div class="card">
       <h3 id="systems-that-report-to-you">Systems that report to you</h3>
-      <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
-        The metric URL above is for posting numbers. Two other things a system can
-        tell Foundry — that something needs handling, and whether something Foundry
-        sent actually worked — need their own credential, so a tool you gave a
-        metrics URL to cannot do either. Each credential says what that system may
-        say. None of them authorises anything.
-      </p>
+      ${credentials.length === 0 ? html`<p class="quiet">None yet.</p>` : ''}
 
       ${mintedSecret ? html`
       <div style="margin-bottom:1rem;padding:0.75rem;border:1px solid var(--line);border-radius:6px;">
@@ -491,6 +435,13 @@ settingsRoutes.get('/settings', async (c) => {
       <details class="fold"><summary><h3>Let another system report</h3>
         <span class="gist">${credentials.length === 0 ? 'None yet'
     : `${String(credentials.length)} reporting`}</span></summary>
+      <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
+        The metric URL is for posting numbers. Two other things a system can
+        tell Foundry — that something needs handling, and whether something Foundry
+        sent actually worked — need their own credential, so a tool you gave a
+        metrics URL to cannot do either. Each credential says what that system may
+        say. None of them authorises anything.
+      </p>
       <form method="POST" action="/settings/ingest-credentials">
         <input type="text" name="label" maxlength="80" required
           placeholder="Which system is this for?"
@@ -511,12 +462,7 @@ settingsRoutes.get('/settings', async (c) => {
     ${productId ? html`
     <div class="card">
       <h3 id="api-keys">API keys</h3>
-      <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
-        For programs that read and write your data directly — the REST API, the
-        MCP tools, and call-transcript webhooks. A key does exactly what you tick
-        and nothing else, and every key expires. It is shown once when you issue
-        it, because only a hash of it is stored.
-      </p>
+      ${apiKeys.length === 0 ? html`<p class="quiet">None live.</p>` : ''}
 
       ${apiKeys.length ? html`
       <table style="width:100%;font-size:0.82rem;margin-bottom:1rem;">
@@ -556,6 +502,12 @@ settingsRoutes.get('/settings', async (c) => {
       <details class="fold"><summary><h3>Issue a key</h3>
         <span class="gist">${apiKeys.length === 0 ? 'None live yet'
     : `${String(apiKeys.length)} live`}</span></summary>
+      <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
+        For programs that read and write your data directly — the REST API, the
+        MCP tools, and call-transcript webhooks. A key does exactly what you tick
+        and nothing else, and every key expires. It is shown once when you issue
+        it, because only a hash of it is stored.
+      </p>
       <form method="POST" action="/settings/api-keys">
         <input type="text" name="label" maxlength="80" required
           placeholder="What is this key for?"
@@ -576,6 +528,22 @@ settingsRoutes.get('/settings', async (c) => {
       </form>
       </details>
     </div>` : ''}
+
+    ${/* WHAT USED TO BE HERE, AND WHERE IT LIVES NOW. Two sections were never
+         settings — a sending identity is a company's permission to write to
+         its customers, and an application key is half of a connection — and
+         each moved to the place it belongs. They stay named here, as one
+         short panel with the state and the door, so someone who remembers
+         placing either on this page does not conclude it was deleted. */ ''}
+    <div class="card" id="moved">
+      <p class="quiet" style="margin-bottom:.5rem;">Moved to where they belong:</p>
+      ${productId ? html`<p><strong id="who-your-customers-hear-from">Who your customers hear from</strong> —
+        ${sendingIdentity ? html`mail goes out as ${sendingIdentity.fromEmail}.` : 'no sending address is connected.'}
+        <a href="/foundry/companies/${productId}">Open ${firstProduct?.name ?? 'the company'} &rarr;</a></p>` : ''}
+      <p><strong id="etsy-application-key">Etsy application key</strong> —
+        ${etsyPlaced !== null || etsyApp ? 'A key is placed. It gives access to no shop.' : 'No key is placed yet.'}
+        <a href="/foundry/controls/connectors/etsy">Connectors &rarr; Etsy</a></p>
+    </div>
   `;
   return c.html(controlsPage(ctx, content));
 });

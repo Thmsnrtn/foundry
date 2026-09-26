@@ -1400,3 +1400,42 @@ routes. The first two were read from the first viewport of a 390px browser.
 
 **Maturity.** **`tested`** in a browser and through routes. Not yet walked by
 him, on his phone, signed in; that is the plan's own final proof and it is his.
+
+### Settings shorter; no door into a wall (26 September 2026)
+
+**Settings (task S2).** Measured at 390px through the real route: 3,739px
+before, 2,955px after (−21%). No control was removed.
+- Products is one row and a door to Portfolio, where the per-product list
+  already lives.
+- The two sections that moved elsewhere (who customers hear from, the Etsy
+  application key) are one short "Moved to where they belong" panel with state
+  and door. The pinned phrases are kept.
+- The explanatory paragraphs for the metric URL, reporting systems and API keys
+  fold under the rare act they explain. What stands (the credentials and keys
+  that exist) stays in view.
+- The section index names only sections that exist.
+
+**No door leads to an address nobody serves.** `/dashboard` is not mounted,
+and production answers it 404. Thirteen places still sent the owner there:
+- the redirect when no company is selected, on six Connections and Letter
+  routes;
+- two notification buttons ("View Signal", "See the week");
+- the page a member sees when their access does not include something.
+
+All now go to Home. A source test
+(`no-door-leads-to-an-address-nobody-serves`) keeps it so, and was red before.
+
+**Brief hierarchy (task "say each fact once"), reviewed, not changed.** The
+remaining repeats on Home are either different facts or doors:
+- The local Decisions count is the Decisions page's own list. "Needs you" also
+  counts buyer duties.
+- The obligation card's "N more buyers" points to where each is listed.
+- The Health detail's "watched" count was the one real overclaim, fixed earlier
+  today.
+
+The existing `the-brief-says-each-thing-once` gate still holds.
+
+**Eventide wave 3, found nearly done.** Every owner GET renders through the
+shell. What does not is the 403 guard page, the auth pages and the error page
+for non-owner paths; the guard page's dead link is now fixed. The auth pages sit
+before a session exists and are deliberately plain.

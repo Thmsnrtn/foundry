@@ -212,7 +212,7 @@ export function requireCompanyCapability(capability: MemberCapability) {
           + 'margin:100px auto;text-align:center;">'
           + '<h2>Not available to you</h2>'
           + '<p>Your access to this company does not include this.</p>'
-          + '<a href="/dashboard">&#8592; Back to Dashboard</a></body></html>', 403);
+          + '<a href="/foundry">&#8592; Back to Foundry</a></body></html>', 403);
       }
       return c.json({ error: 'Not permitted for your access to this company' }, 403);
     }

@@ -1160,7 +1160,7 @@ async function whatItCanDoNow(): Promise<HtmlEscapedString | ''> {
 letterRoutes.get('/letter', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'letter', 'The Letter', undefined, c);
-  if (!ctx.productId) return c.redirect('/dashboard');
+  if (!ctx.productId) return c.redirect('/foundry');
 
   const fluency = getFluency(founder);
 
@@ -1881,7 +1881,7 @@ letterRoutes.post('/autopilot/development/grant', requireOwner(), async (c) => {
   const founder = c.get('founder');
   const back = backTo((await c.req.parseBody()).return_to);
   const ctx = await getLayoutContext(founder, 'autopilot', 'Controls', undefined, c);
-  if (!ctx.productId) return c.redirect('/dashboard');
+  if (!ctx.productId) return c.redirect('/foundry');
   const body = await c.req.parseBody() as Record<string, string>;
   const responsibilityId = String(body.responsibility_id ?? '');
 
@@ -1919,7 +1919,7 @@ letterRoutes.post('/autopilot/development/grant', requireOwner(), async (c) => {
 letterRoutes.post('/autopilot/development/revoke', requireOwner(), async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'autopilot', 'Controls', undefined, c);
-  if (!ctx.productId) return c.redirect('/dashboard');
+  if (!ctx.productId) return c.redirect('/foundry');
   const body = await c.req.parseBody() as Record<string, string>;
   const { revokeDevelopmentAuthority } = await import('../../services/institution/development-authority.js');
   await revokeDevelopmentAuthority(ctx.productId, String(body.consent_id ?? ''), String(founder.id));
@@ -1929,7 +1929,7 @@ letterRoutes.post('/autopilot/development/revoke', requireOwner(), async (c) => 
 letterRoutes.post('/autopilot/panic', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'autopilot', 'Controls', undefined, c);
-  if (!ctx.productId) return c.redirect('/dashboard');
+  if (!ctx.productId) return c.redirect('/foundry');
   await panicStop(ctx.productId, founder.id as string);
   return c.redirect(`${backTo((await c.req.parseBody()).return_to)}?done=stopped`);
 });

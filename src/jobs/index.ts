@@ -743,7 +743,7 @@ export async function signalAlertCheck(): Promise<void> {
         const { deliver } = await import('../services/ux/interruption.js');
         await deliver(p.owner_id, p.id, {
           importance: 'action_needed',
-          title, body, actionUrl: '/dashboard', actionLabel: 'View Signal',
+          title, body, actionUrl: '/foundry', actionLabel: 'View Signal',
         }, await founderPrefs(p.owner_id) as never);
         logger.info(`signal_alert_check: alert created for ${p.name} — drop ${drop}pts, tier: ${prevTier} → ${signal.tier}`, { jobName: 'signal_alert_check' });
       }
@@ -2285,7 +2285,7 @@ export async function founderPulseCheck(): Promise<void> {
           importance: 'info',
           title: 'A note about your week',
           body: pulse.message,
-          actionUrl: '/dashboard', actionLabel: 'See the week',
+          actionUrl: '/foundry', actionLabel: 'See the week',
         }, await founderPrefs(p.owner_id) as never);
       }
     } catch (err) {
