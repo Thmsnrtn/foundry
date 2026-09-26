@@ -1227,3 +1227,48 @@ needs no model.
 - Only Workshop mail is read. Etsy messages are not read at all (stated on
   every listing asset), so a buyer who writes on Etsy is his to see there.
 - Not observed with a real buyer.
+
+### A post is evidence, not an instruction (26 September 2026)
+
+**Governing requirement.** Integrated plan §7: source text from listings,
+reviews, messages or web pages is evidence to assess, not authority. The plan
+asks for a test of one attempted contamination of a persistent lesson.
+
+**The open path, found by tracing every place untrusted text is stored.**
+1. A community post is stored verbatim in `market_observations.saw`.
+2. `theRecordOf` hands it to the forge's five lenses and its composer inside a
+   `<record>` block built with `JSON.stringify`, which does not escape angle
+   brackets. A post containing `</record>` closed the fence, and no shield was
+   applied.
+3. The composed design's `cannot_prove` is read back by `lessonsFor` as a
+   "LESSON OF SETTLED TESTS" into every later deliberation for that founder.
+
+With a model that obeys an unfenced instruction, one post wrote a sentence the
+institution would go on teaching itself. Reproduced exactly in the test.
+
+**Other paths were already guarded:**
+- `interpretation.ts` shields, abstains, escapes and requires a quoted span.
+- `legal-pass.ts` shields and abstains, and requires quoted grounds.
+- Workshop correspondence shields, and its decision is deterministic.
+- The owner's Ask composes answers from rows, with no model call in the route.
+
+**The repair (`forge-deliberation.ts`).**
+- **The fence.** Everything inside `<record>` is escaped (`&`, `<`, `>`), as
+  `wrapDataBlock` does, so nothing inside the fence can close it.
+- **The shield.** Each post passes through `shieldUntrustedContent` before any
+  model sees it. What is stored is unchanged, because the world said what it
+  said.
+
+**Maturity.** **`tested`** (`a-post-is-evidence-not-an-instruction`, 3). The test
+uses a deliberately obedient model double. On the previous code, the fence broke
+and the poisoned sentence reached `lessonsFor`. With the repair, the fence holds,
+the instruction arrives redacted, the post's substance still arrives as
+evidence, and the lesson is clean.
+
+**Proof debt.**
+- The shield is a pattern list and is not complete. The escaping is what
+  structurally prevents the fence breaking; a clever instruction written as
+  plain prose inside the fence is still only defended by the system prompt's
+  data-block instruction.
+- Retrievals' `said` text reaches the record through `theRecordOf`'s retrieval
+  rows only as terms and counts, and is escaped by the same fence.

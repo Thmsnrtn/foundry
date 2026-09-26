@@ -40,6 +40,7 @@ import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 import { callOpus, callSonnet } from '../ai/client.js';
 import { dataBlockInstruction } from '../ai/sanitize.js';
+import { shieldUntrustedContent } from '../ai/prompt-shield.js';
 import { institutionSpend } from '../ai/what-it-is-for.js';
 import {
   amendDesign, designOf, designStandsInTheWay, exchanges, recordDesign, sealDesign,
@@ -106,7 +107,11 @@ export async function theRecordOf(experimentId: string): Promise<TheRecord | nul
         AND o.evidence_mode = 'real'
       ORDER BY o.observed_at DESC, o.rowid DESC LIMIT 40`, [opportunityId, opportunityId])).map((r) => ({
     sourceType: String(r.source_type), stance: r.epistemic_stance == null ? null : String(r.epistemic_stance),
-    bearing: String(r.bearing), saw: String(r.saw).slice(0, 400), source: String(r.source),
+    // WHAT A STRANGER WROTE IS EVIDENCE, NOT AN ORDER. A post is stored as the
+    // world said it, and that is right; what reaches a model is shielded here,
+    // so text addressed to the model arrives as a redaction it can see rather
+    // than as an instruction it might follow. The fence below does the rest.
+    bearing: String(r.bearing), saw: shieldUntrustedContent(String(r.saw).slice(0, 400)).sanitized, source: String(r.source),
     observedAt: String(r.observed_at).slice(0, 10), fromAbsence: Number(r.from_absence) === 1,
   }));
   const retrievals = (await rows(
@@ -173,7 +178,14 @@ const MAY_NOT_INVENT = [
 ].join('\n');
 
 function recordBlock(r: TheRecord): string {
-  const j = (v: unknown): string => JSON.stringify(v, null, 1);
+  // THE FENCE HOLDS ONLY IF NOTHING INSIDE IT CAN CLOSE IT. `JSON.stringify`
+  // escapes quotes and not angle brackets, so a post containing `</record>`
+  // ended the block and everything after it read as prompt, not data — and
+  // what the model then wrote came back as a lesson into every later
+  // deliberation. Everything between the tags is escaped, as `wrapDataBlock`
+  // escapes its content; the model reads `&lt;` as the character it stands for.
+  const j = (v: unknown): string => JSON.stringify(v, null, 1)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
   return [
     '<record>',
     `CANDIDATE: ${j(r.candidate)}`,
