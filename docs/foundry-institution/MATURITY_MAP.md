@@ -1182,3 +1182,48 @@ seven degraded assertions.
 - Rehearsals B (the model provider unavailable) and C (the owner away while a
   buyer needs a remedy, with new commitments paused) are still owed.
 - Not observed against real Etsy failures.
+
+### No new promise while a buyer waits on the owner (26 September 2026)
+
+**Governing requirement.** Integrated plan §9 lists three rehearsals; this
+covers the second and third, "the model provider is unavailable" and "the
+owner is away while a buyer needs a remedy". Existing care continues, unsafe
+new commitments stop first, and no "all clear" is given.
+
+**Before, reproduced in tests.**
+- The hand sent five offers to strangers while a buyer was waiting on
+  something only the owner could give. `mayWrite` stopped only for his pause, a
+  failed placement, a broken instrument path, stop conditions or the fulfilment
+  cap, and every offer carries a money-back promise.
+- The absence reading's "only real decisions" held with a buyer's refund
+  request sitting in the Workshop's mail, because it never read the mail. On a
+  day the model is down, a message nobody could interpret is escalated to him,
+  and it was invisible to the absence reading.
+
+**The repair.**
+- **One reader for both places a wait can be recorded.**
+  `buyersWaitingOnHim(founderId)` covers obligations whose `asksHim` is set,
+  and Workshop mail routed to him (`needs_owner`, not archived) whose reading
+  is `wants_money_back` or `owed_something`. That mail reading is by keyword and
+  needs no model, so a refund request is recognised with the model down.
+- **The hand holds new offers.** While anyone is waiting, it holds the offers
+  and says so in its report ("holding new offers: 1 buyer is waiting on you —
+  …"). Deliveries, the refunds Foundry can issue, and the verdict all run as
+  before. The hold lifts by itself once the wait is answered.
+- **Absence counts it.** A buyer who wrote makes "only real decisions" DOES_NOT
+  HOLD, with the same no-deadline wording as an owed obligation.
+
+**Maturity.** **`tested`**. Red before on both:
+- the hand sent 5 offers where it now sends 0;
+- the absence reading held where it now does not.
+
+The model-down path uses the Workshop's own intake (`hearMail`), whose reading
+needs no model.
+
+**Proof debt.**
+- There is still no marker distinguishing "escalated because the model was
+  down" from "escalated because it was genuinely unclear". Both reach him the
+  same way, which is safe but less informative.
+- Only Workshop mail is read. Etsy messages are not read at all (stated on
+  every listing asset), so a buyer who writes on Etsy is his to see there.
+- Not observed with a real buyer.

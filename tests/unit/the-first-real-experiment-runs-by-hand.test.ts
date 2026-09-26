@@ -264,6 +264,36 @@ describe('the owner\'s part is three acts on one page', () => {
   });
 });
 
+describe('no new promise while an old one waits on him (plan §9, rehearsal C)', () => {
+  // The owner is away; a buyer has written asking for their money back, and
+  // only he can answer. Every offer carries the money-back promise, so writing
+  // to strangers now widens exactly the exposure nobody is there to carry.
+  // The hand holds the WRITING and nothing else, and says why.
+  it('sends no offer while a buyer waits on him, and resumes once the wait is answered', async () => {
+    // The buyer's message arrives through the Workshop's own intake, which
+    // reads it by keyword — no model — and routes it to him. The Workshop row
+    // exists only for the message to arrive at; this experiment is outreach,
+    // and the row is removed again so nothing else about it changes.
+    await query(
+      `INSERT INTO public_workshop (founder_id, product_id, public_name, operator_name, origin, zone_name, contact_email, statement, about, postal_address)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      [OWNER, FOUNDRY, 'Apex Micro', 'Thomas Norton', 'https://apexmicro.example', 'apexmicro.example',
+        'hello@apexmicro.example', 'A small workshop.', '', 'Apex Micro\n11 Example Drive\nMarlborough, MA 01752']);
+    const { hearMail } = await import('../../src/services/public-workshop/mail.js');
+    await hearMail({ founderId: OWNER, to: 'hello@apexmicro.example', from: 'buyer@buyer.example',
+      subject: 'About my order', body: 'It was not what I needed. I would like a refund please.', rfcMessageId: '<h_wait@buyer.example>' });
+    await query('DELETE FROM public_workshop WHERE founder_id = ?', [OWNER]);
+    const before = state.sends.length;
+    const [held] = await runHand({ now: NOW });
+    expect(held.offersSent).toBe(0);
+    expect(held.exceptions.join('\n')).toMatch(/holding new offers: 1 buyer is waiting on you/);
+    expect(state.sends.length).toBe(before);
+    // Answered, the hold lifts on its own; nothing about the test changed.
+    await query(`UPDATE workshop_mail SET archived_at = datetime('now'), archived_because = 'answered' WHERE founder_id = ?`, [OWNER]);
+    expect(await stageSize(X)).toBe(FIRST_STAGE);
+  });
+});
+
 describe('Foundry operates: offers, receipts, exposures', () => {
   it('the hourly hand sends paced governed offers only to approved businesses, as the owner, once each', async () => {
     // THE FIRST STAGE IS SMALL ON PURPOSE, and nobody passes it a number: the

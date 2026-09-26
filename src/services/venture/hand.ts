@@ -1468,6 +1468,22 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
       if (capacity.over) { report.exceptions.push(`holding the offer: ${capacity.owed} purchases owed against a cap of ${capacity.cap} until they are delivered`); mayWrite = false; }
     }
 
+    // NO NEW PROMISE WHILE AN OLD ONE WAITS ON HIM. Every offer carries the
+    // Workshop's money-back promise; a buyer already waiting on something only
+    // the owner can give is that promise not yet kept. Writing to strangers
+    // meanwhile would widen exactly the exposure he is not there to carry —
+    // and when he is away, nobody is. Only the WRITING stops: deliveries,
+    // refunds Foundry can issue, and the verdict all run below as before.
+    if (mayWrite) {
+      const { buyersWaitingOnHim } = await import('./obligations.js');
+      const waiting = await buyersWaitingOnHim(e.founderId, now);
+      if (waiting.length > 0) {
+        report.exceptions.push(`holding new offers: ${String(waiting.length)} buyer${waiting.length === 1 ? ' is' : 's are'} `
+          + `waiting on you — ${waiting[0].sentence}`);
+        mayWrite = false;
+      }
+    }
+
     // A PROVIDER OUTAGE IS NOT A REFUSAL. An offer the provider could not take
     // (a 503, a timeout) was written as failed and its recipient counted as
     // done, so one bad morning silently dropped those people from the test

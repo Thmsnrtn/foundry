@@ -294,3 +294,35 @@ export async function owesAnybody(experimentId: string): Promise<boolean> {
   const r = (await rows(`SELECT COUNT(*) AS n FROM experiment_fulfilments f WHERE f.experiment_id = ? AND ${OPEN_OBLIGATION('f')}`, [experimentId]))[0];
   return Number(r?.n ?? 0) > 0;
 }
+
+/**
+ * EVERY BUYER WHO IS WAITING ON HIM, from both places a wait can be recorded.
+ *
+ * `asksHim` on an obligation is the institution's own finding: a refund only he
+ * can issue, a dispute only he can answer. But a buyer who WRITES asking for
+ * their money back, or saying the thing never arrived, lands in the Workshop's
+ * mail as `needs_owner` — and nothing here read that as a buyer waiting. It
+ * mattered most on the day the model is down, because a message nobody could
+ * interpret is escalated to him; the reading below is the mail's own keyword
+ * reading, which needs no model, so a refund request is recognised either way.
+ *
+ * Read by the absence reading, which must not call a buyer's wait calm, and by
+ * the hand, which must not make new promises while an old one is unkept.
+ */
+export async function buyersWaitingOnHim(founderId: string, now = new Date()): Promise<Array<{ since: string; sentence: string }>> {
+  const waiting = (await obligationsFor(founderId, now))
+    .filter((o) => o.asksHim !== null)
+    .map((o) => ({ since: o.since, sentence: o.asksHim! }));
+  const wrote = await rows(
+    `SELECT received_at, reading FROM workshop_mail
+      WHERE founder_id = ? AND handling = 'needs_owner' AND archived_at IS NULL
+        AND reading IN ('wants_money_back','owed_something')
+      ORDER BY received_at, rowid`, [founderId]);
+  for (const m of wrote) {
+    waiting.push({ since: String(m.received_at),
+      sentence: String(m.reading) === 'wants_money_back'
+        ? `somebody wrote on ${String(m.received_at).slice(0, 10)} asking for their money back, and only you can answer it`
+        : `somebody wrote on ${String(m.received_at).slice(0, 10)} saying what they paid for has not arrived, and only you can answer it` });
+  }
+  return waiting;
+}

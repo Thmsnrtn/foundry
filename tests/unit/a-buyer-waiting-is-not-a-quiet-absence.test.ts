@@ -118,3 +118,51 @@ describe('what a venue order says about delivery', () => {
     expect(closureSentence({ cents: 500, venue: null, settled: true })).toMatch(/received what they paid for/);
   });
 });
+
+describe('a buyer who wrote is waiting too — even on a day no model read the message', () => {
+  // Integrated plan §9, rehearsal C with B inside it: the owner is away, a
+  // buyer writes asking for their money back, and the model that would have
+  // interpreted the message is down, so it is escalated to him unread. The
+  // mail's own keyword reading needs no model; the absence reading has to
+  // count it as a buyer waiting on him, and it did not read the mail at all.
+  const WROTE = 'aw_wrote';
+  // Through the Workshop's own intake, which reads it by keyword — no model —
+  // and routes a refund request to him as `needs_owner`.
+  const mail = async (id: string, body: string): Promise<void> => {
+    const { hearMail } = await import('../../src/services/public-workshop/mail.js');
+    await hearMail({ founderId: WROTE, to: 'hello@apexmicro.example', from: 'buyer@buyer.example',
+      subject: 'About my order', body, rfcMessageId: `<${id}@buyer.example>` });
+  };
+  const waiting = async () => (await absenceReading(WROTE, 30)).properties
+    .find((p) => p.property === 'only_real_decisions')!;
+
+  beforeAll(async () => {
+    await query('INSERT INTO founders (id,clerk_user_id,email,name) VALUES (?,?,?,?)',
+      [WROTE, 'clerk_aw_wrote', 'wrote@example.com', 'Owner']);
+    await query("INSERT INTO products (id, name, owner_id, status) VALUES ('aw_ws','Apex Micro',?,'active')", [WROTE]);
+    await query(
+      `INSERT INTO public_workshop (founder_id, product_id, public_name, operator_name, origin, zone_name, contact_email, statement, about, postal_address)
+       VALUES (?,?,?,?,?,?,?,?,?,?)`,
+      [WROTE, 'aw_ws', 'Apex Micro', 'Apex Micro', 'https://apexmicro.example', 'apexmicro.example',
+        'hello@apexmicro.example', 'A small workshop.', '', 'Apex Micro\n11 Example Drive\nMarlborough, MA 01752']);
+  });
+
+  it('holds while nobody has written', async () => {
+    expect((await waiting()).finding).toBe('HOLDS');
+  });
+
+  it('does not hold once a buyer has written asking for their money back', async () => {
+    await mail('m_refund', 'It was not what I needed. I would like a refund please.');
+    const p = await waiting();
+    expect(p.finding).toBe('DOES_NOT_HOLD');
+    expect(p.evidence.join('\n')).toMatch(/asking for their money back, and only you can answer it/);
+    expect(p.wouldFixIt.join('\n')).toMatch(/answer 1 buyer who wrote before you go/);
+    expect(p.sentence).toMatch(/1 buyer is owed something only you can give/);
+  });
+
+  it('is not raised by mail that is not a buyer waiting', async () => {
+    await query(`UPDATE workshop_mail SET archived_at = datetime('now'), archived_because = 'answered' WHERE founder_id = ?`, [WROTE]);
+    await mail('m_question', 'Thanks, this was useful.');
+    expect((await waiting()).finding).toBe('HOLDS');
+  });
+});

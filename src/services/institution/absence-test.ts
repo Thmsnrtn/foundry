@@ -701,6 +701,14 @@ async function onlyRealDecisions(
       + `${o.sentence} No deadline is on record for it, and the provider's own process may not wait.`);
   }
   if (owedHim.length > 0) wouldFixIt.push(`settle ${plural(owedHim.length, 'buyer\'s refund or dispute', 'buyers\' refunds or disputes')} before you go`);
+  // AND A BUYER WHO WROTE. A refund request in the Workshop's mail is a buyer
+  // waiting on him exactly as an obligation is, and it was invisible here — most
+  // of all on a day the model is down, when such a message is escalated to him
+  // unread. Read through the same reader the hand uses to hold new offers.
+  const { buyersWaitingOnHim } = await import('../venture/obligations.js');
+  const wroteToHim = (await buyersWaitingOnHim(founderId, now)).slice(owedHim.length);
+  for (const w of wroteToHim) evidence.push(`a buyer is waiting on you: ${w.sentence}. No deadline is on record for it.`);
+  if (wroteToHim.length > 0) wouldFixIt.push(`answer ${plural(wroteToHim.length, 'buyer who wrote', 'buyers who wrote')} before you go`);
   // AND WHAT THE QUEUE COUNTS. This asked its own question of its own rows and
   // answered "nothing is waiting for you" while Home said one thing was: two
   // readings of one fact, which is the defect this institution keeps finding.
@@ -708,14 +716,14 @@ async function onlyRealDecisions(
   const queue = await waitingOn(founderId);
   for (const q of queue) evidence.push(`waiting on you: ${q.summary}`);
   const waiting = Math.max(proposals.length + waitingTests, queue.length);
-  const compromised = lapsing.length + overdue.length + owedHim.length;
+  const compromised = lapsing.length + overdue.length + owedHim.length + wroteToHim.length;
   return {
     property: 'only_real_decisions',
     question: `After ${String(days)} days, would the things waiting for me be mine — and still be there?`,
     finding: compromised === 0 ? 'HOLDS' : 'DOES_NOT_HOLD',
     sentence: compromised > 0
-      ? [owedHim.length > 0
-        ? `${plural(owedHim.length, 'buyer is', 'buyers are')} owed something only you can give, and would wait for you with no deadline on record.`
+      ? [owedHim.length + wroteToHim.length > 0
+        ? `${plural(owedHim.length + wroteToHim.length, 'buyer is', 'buyers are')} owed something only you can give, and would wait for you with no deadline on record.`
         : null,
       lapsing.length + overdue.length > 0
         ? `${plural(lapsing.length + overdue.length, 'thing', 'things')} would be settled by the calendar rather than by you: `
