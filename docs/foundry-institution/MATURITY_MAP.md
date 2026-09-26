@@ -1272,3 +1272,34 @@ evidence, and the lesson is clean.
   data-block instruction.
 - Retrievals' `said` text reaches the record through `theRecordOf`'s retrieval
   rows only as terms and counts, and is escaped by the same fence.
+
+### The first screen does not call an unreadable shop healthy (26 September 2026)
+
+**Governing requirement.** Integrated plan §8: the Brief answers condition →
+change → decision → evidence, and "a failed reader or overdue buyer remedy
+outranks research activity". One of the three journeys the plan names is "a
+stale Etsy read with a known buyer remedy".
+
+**Found by rendering that journey.** Home was given a listing, a paid order, a
+refund the owner must make on Etsy, and an Etsy connection that had been
+failing for three days. It led correctly with the refund ("One thing needs
+you"). Its Health reading said **"Healthy — nothing to watch yet"**. `healthOf`
+read loops, blocked passes, the Workshop's channels and the day's undone work,
+and nothing about a failing venue reader on a listing asset.
+
+**The repair (`founder/health.ts`).**
+- A failing sense on any listed real asset, of any standing, is the day's
+  undone work, said first: "Etsy could not be read since YYYY-MM-DD — check its
+  orders and messages on Etsy yourself".
+- The estate reads "degraded", the count includes it, and it does not claim to
+  have last been right today.
+- It clears when a read succeeds.
+
+**Maturity.** **`tested`** (`an-unreadable-venue-is-not-a-quiet-one`, +1: the
+health reading and Home's own HTML). Red before: the state was `ok`.
+
+**Proof debt.** The journey was rendered as HTML through the owner's real
+route, not measured in a phone browser; the 390px browser suite still covers
+the other journeys. The other two named journeys have not been built here:
+- a quiet return after a week (partly covered by "back after a day away");
+- a new direction followed by a binding Controls change.

@@ -13,7 +13,7 @@
 // not a default.
 // =============================================================================
 
-import { query } from '../../db/client.js';
+import { query, realCompany } from '../../db/client.js';
 import { getFailingInstitutionLoops } from '../institution/loop-health.js';
 import { whatIsBlocked } from '../venture/run-state.js';
 
@@ -112,6 +112,29 @@ export async function healthOf(founderId: string, now: Date = new Date()): Promi
   // as waiting, with the reason, never as healthy.
   const undone = await whatTheDayRequired(founderId, now);
 
+  // A SHOP NOBODY CAN READ IS WORK THE DAY REQUIRED AND DID NOT GET. When the
+  // connection a listing's orders arrive through is failing, "Healthy —
+  // nothing to watch yet" was the first screen's word for a shop whose buyers
+  // nobody could see. It is said as the day's undone work, first, with the
+  // one thing that covers it until the reader recovers: his own eyes on the
+  // venue. Any listed real asset, of any standing — a listing asset is usually
+  // still experimental. STANDING DELIBERATELY DOES NOT APPLY, and this is
+  // baselined for it: the buyers of an experimental asset are real people, and
+  // a shop they cannot be seen in is the frontier shown as the frontier.
+  const blindVenues = (await query(
+    `SELECT DISTINCT s.provider, s.last_observed_at
+       FROM company_senses s JOIN products p ON p.id = s.product_id
+      WHERE p.owner_id = ? AND p.deleted_at IS NULL AND ${realCompany('p')}
+        AND s.disconnected_at IS NULL AND s.last_error IS NOT NULL
+        AND EXISTS (SELECT 1 FROM experiment_exposures x WHERE x.product_id = p.id)`, [founderId]))
+    .rows as unknown as Array<Record<string, unknown>>;
+  const venueNeeds = blindVenues.map((v) => {
+    const venue = String(v.provider).charAt(0).toUpperCase() + String(v.provider).slice(1);
+    return `${venue} could not be read since ${String(v.last_observed_at ?? '').slice(0, 10)} — `
+      + `check its orders and messages on ${venue} yourself`;
+  });
+  undone.unshift(...venueNeeds);
+
   const failed = [
     ...blocked.map((b) => `${b.attempting} — ${b.because ?? 'blocked'}`),
     ...loops.map((l) => l.stoppedRunning ? `${l.label} has not run for longer than it should` : `${l.label} failed ${String(l.consecutiveFailures)} times running`),
@@ -151,7 +174,7 @@ export async function healthOf(founderId: string, now: Date = new Date()): Promi
     state,
     word: state === 'ok' ? 'Healthy'
       : state === 'blocked' ? `${String(blocked.length)} ${blocked.length === 1 ? 'pass' : 'passes'} blocked`
-        : `${String(loops.length + workshopNeeds.length)} ${loops.length + workshopNeeds.length === 1 ? 'thing needs' : 'things need'} looking at`,
+        : `${String(loops.length + workshopNeeds.length + venueNeeds.length)} ${loops.length + workshopNeeds.length + venueNeeds.length === 1 ? 'thing needs' : 'things need'} looking at`,
     failed,
     recovering: state === 'ok' ? 'nothing to recover' : ownerAction ? 'stuck' : 'automatically',
     dataLoss: 'none',

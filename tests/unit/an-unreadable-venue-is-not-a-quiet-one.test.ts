@@ -25,6 +25,7 @@
 // =============================================================================
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = 'e'.repeat(64);
+process.env.FOUNDRY_OWNER_EMAIL = 'uv@example.com';
 
 import { beforeAll, describe, expect, it, vi } from 'vitest';
 import { nanoid } from 'nanoid';
@@ -146,6 +147,24 @@ describe('when Etsy stops answering', () => {
     expect(truthful.evidence.join('\n')).toMatch(/Etsy could not be read/);
   });
 
+  it('does not let Home call the estate healthy — the first screen names it and who must look', async () => {
+    const { healthOf } = await import('../../src/services/founder/health.js');
+    const h = await healthOf(OWNER);
+    expect(h.state).toBe('degraded');
+    expect(h.word).toMatch(/1 thing needs looking at/);
+    expect(h.didNotDoTheDay[0]).toMatch(/Etsy could not be read since \d{4}-\d{2}-\d{2}/);
+    expect(h.didNotDoTheDay[0]).toMatch(/check its orders and messages on Etsy yourself/);
+    expect(h.lastHealthy).toBeNull();
+    const { Hono } = await import('hono');
+    const { foundryShellRoutes } = await import('../../src/routes/dashboard/foundry-shell.js');
+    const app = new Hono();
+    app.use('*', async (c, next) => { c.set('founder' as never, { id: OWNER, email: 'uv@example.com' } as never); await next(); });
+    app.route('/', foundryShellRoutes);
+    const text = (await (await app.request('https://f.test/foundry')).text()).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    expect(text).not.toMatch(/Health Healthy/);
+    expect(text).toMatch(/Etsy could not be read since/);
+  });
+
   it('does not settle a silent window while Etsy cannot be read', async () => {
     await query(`UPDATE experiment_exposures SET placed_at = datetime('now', ?) WHERE experiment_id = ?`,
       [`-${String(PROOF2_WINDOW_DAYS + 1)} days`, X]);
@@ -169,6 +188,8 @@ describe('when Etsy answers again, it all clears on its own', () => {
     expect((await operatingContractOf(PRODUCT, OWNER))!.answers[2].answer).not.toMatch(/failed/);
     const truthful = (await absenceReading(OWNER, 14)).properties.find((p) => p.property === 'truthful')!;
     expect(truthful.evidence.join('\n')).not.toMatch(/Etsy could not be read/);
+    const { healthOf } = await import('../../src/services/founder/health.js');
+    expect((await healthOf(OWNER)).didNotDoTheDay.join('\n')).not.toMatch(/Etsy could not be read/);
     // Etsy read the window and saw nobody buy: now the silence is evidence.
     const [r] = await settleListings({ founderId: OWNER, now: new Date(Date.now() + 10 * 60_000) });
     expect(r.settled).toBe('surprised');
