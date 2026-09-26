@@ -1333,3 +1333,37 @@ on all four; 22 files that set rules still pass.
 **Proof debt.** The read-back after a successful change is shown on the pages
 that make it, but "preview a changed rule before it binds" is not built. A change
 binds when he submits it, as it did before.
+
+### The decision record the plan asks for already exists, and is not duplicated (26 September 2026)
+
+**Governing requirement.** Integrated plan §7: for a consequential new
+allocation, keep a compact decision record, and "never fill in the unchosen
+alternative's result". The record holds:
+- the options;
+- source-backed observations and their freshness;
+- the binding limit;
+- the expected result as a range or scenarios;
+- the rejected alternative;
+- the stopping rule;
+- what would reverse the choice.
+
+**Finding, from reading the schema (no code changed).** Each part is already a
+row of the sealed test design:
+
+| The plan asks for | Where it already lives |
+|---|---|
+| Options | `probe_designs.exchange`, with the exchanges not chosen in `probe_alternatives` |
+| Expected result | `what_we_expect`, with scenarios in `probe_interpretations` |
+| What would reverse it | `would_disprove` |
+| Stopping rule | `probe_stop_conditions` |
+| Binding limit | the allowance, and the charter carve |
+| Evidence with dates | the forge's point-in-time record (Wave 3) |
+
+A rejected alternative has only `not_chosen_because`: there is no column in
+which a result could be written for it. Nothing can be added once the design is
+sealed. The plan's "prefer simpler equivalent architecture" is honoured by not
+building a second record.
+
+**Proof debt.** "Freshness" of each observation is its `observed_at`, shown
+beside it. No rule refuses a seal on evidence older than some age; none has
+been asked for.
