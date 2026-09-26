@@ -1303,3 +1303,33 @@ route, not measured in a phone browser; the 390px browser suite still covers
 the other journeys. The other two named journeys have not been built here:
 - a quiet return after a week (partly covered by "back after a day away");
 - a new direction followed by a binding Controls change.
+
+### A failed change keeps the old rule (26 September 2026)
+
+**Governing requirement.** Integrated plan §8, Controls: "Preview a changed rule
+and confirm the durable effective value. An insert failure must retain the prior
+enforceable rule."
+
+**Before, reproduced.** Every standing rule the owner changes was replaced in
+two statements: retire the live one, then write the new one. When the write was
+refused, the retirement had already happened, and he was left with no rule at
+all. Four cases were each shown in a test:
+- a boundary with no words: "ask me before contacting anyone" was gone, and
+  nothing stood in its place;
+- a budget of nothing: the $40 ceiling was withdrawn, and none replaced it;
+- a direction with nothing in it: the live direction was retired;
+- a charter the row refused: the signed charter was ended.
+
+A stricter rule failing to save must never become a looser one than before.
+
+**The repair.** `setBoundary`, `setAllowance` and `setObjective` in
+`standing-intent.ts`, and `signCharter`, each run the retirement and the write as
+one transaction (`batch`). Either both happen or neither does. `setPolicy` in the
+ledger was already safe: it writes the new policy before superseding the old.
+
+**Maturity.** **`tested`** (`a-failed-change-keeps-the-old-rule`, 6). Red before
+on all four; 22 files that set rules still pass.
+
+**Proof debt.** The read-back after a successful change is shown on the pages
+that make it, but "preview a changed rule before it binds" is not built. A change
+binds when he submits it, as it did before.

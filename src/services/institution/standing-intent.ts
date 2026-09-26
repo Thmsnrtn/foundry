@@ -28,7 +28,7 @@
 import { createHash } from 'node:crypto';
 import { OPEN_OBLIGATION } from '../venture/obligations.js';
 import { nanoid } from 'nanoid';
-import { query, realCompany } from '../../db/client.js';
+import { batch, query, realCompany } from '../../db/client.js';
 
 // ─── the vocabulary, in his words ────────────────────────────────────────────
 
@@ -337,15 +337,20 @@ export async function setBoundary(input: {
   // A repeat is still idempotent. A change is recorded the way every other
   // change of mind is recorded here: the old one lifted, the new one written,
   // both kept.
-  if (live) {
-    if (String(live.mode) === (input.mode ?? 'never')) return String(live.id);
-    await liftBoundary(String(live.id), 'you replaced it with something different');
-  }
+  if (live && String(live.mode) === (input.mode ?? 'never')) return String(live.id);
 
+  // ONE TRANSACTION, SO A REFUSED CHANGE LEAVES THE OLD RULE STANDING. This
+  // lifted the live boundary and then wrote the new one as two statements;
+  // when the write was refused, the lift had already happened and he was left
+  // with no boundary at all — a stricter rule failing to save became a looser
+  // one than before. Now either both happen or neither does.
   const id = nanoid();
-  await query(
-    'INSERT INTO owner_boundaries (id, product_id, subject, statement, mode) VALUES (?,?,?,?,?)',
-    [id, input.productId, input.subject, input.statement.trim(), input.mode ?? 'never']);
+  await batch([
+    ...(live ? [{ sql: "UPDATE owner_boundaries SET lifted_at = datetime('now'), lifted_reason = ? WHERE id = ?",
+      args: ['you replaced it with something different', String(live.id)] }] : []),
+    { sql: 'INSERT INTO owner_boundaries (id, product_id, subject, statement, mode) VALUES (?,?,?,?,?)',
+      args: [id, input.productId, input.subject, input.statement.trim(), input.mode ?? 'never'] },
+  ]);
   return id;
 }
 
@@ -365,14 +370,16 @@ export async function liftBoundary(id: string, reason: string): Promise<void> {
 export async function setObjective(input: {
   productId: string; statement: string; channels: string[];
 }): Promise<string> {
-  await query(
-    `UPDATE owner_objectives SET retired_at = datetime('now'),
-            retired_reason = 'the owner said something else'
-      WHERE product_id = ? AND retired_at IS NULL`, [input.productId]);
+  // One transaction: a direction that cannot be written leaves the old one
+  // standing rather than none (see `setBoundary`).
   const id = nanoid();
-  await query(
-    'INSERT INTO owner_objectives (id, product_id, statement, focus_json) VALUES (?,?,?,?)',
-    [id, input.productId, input.statement.trim(), JSON.stringify(input.channels)]);
+  await batch([
+    { sql: `UPDATE owner_objectives SET retired_at = datetime('now'),
+              retired_reason = 'the owner said something else'
+        WHERE product_id = ? AND retired_at IS NULL`, args: [input.productId] },
+    { sql: 'INSERT INTO owner_objectives (id, product_id, statement, focus_json) VALUES (?,?,?,?)',
+      args: [id, input.productId, input.statement.trim(), JSON.stringify(input.channels)] },
+  ]);
   return id;
 }
 
@@ -1082,22 +1089,24 @@ export async function setAllowance(input: {
 }): Promise<string> {
   // Replacing rather than refusing: saying a new number is how a person changes
   // a budget, and making him withdraw the old one first would be machinery.
-  await query(
-    `UPDATE owner_allowances SET withdrawn_at = datetime('now'),
-            withdraw_reason = 'the owner set a different amount'
-      WHERE product_id = ? AND withdrawn_at IS NULL`, [input.productId]);
+  // One transaction: a budget that cannot be written leaves the old ceiling
+  // standing rather than none (see `setBoundary`).
   const id = nanoid();
   // EVERY CEILING SAYS WHEN IT STOPS, OR WHY IT DOES NOT. A budget the owner
   // typed as a standing sentence genuinely has no end date, and that is a fact
   // worth writing down rather than a null worth inheriting: the $100 that got
   // written on 10 September had no horizon because nobody had ever had to say.
-  await query(
-    `INSERT INTO owner_allowances
-       (id, product_id, purpose, statement, amount_cents, until, unbounded_because)
-     VALUES (?,?,?,?,?,?,?)`,
-    [id, input.productId, input.purpose.trim(), input.statement.trim(), input.amountCents,
+  await batch([
+    { sql: `UPDATE owner_allowances SET withdrawn_at = datetime('now'),
+              withdraw_reason = 'the owner set a different amount'
+        WHERE product_id = ? AND withdrawn_at IS NULL`, args: [input.productId] },
+    { sql: `INSERT INTO owner_allowances
+         (id, product_id, purpose, statement, amount_cents, until, unbounded_because)
+       VALUES (?,?,?,?,?,?,?)`,
+    args: [id, input.productId, input.purpose.trim(), input.statement.trim(), input.amountCents,
       input.until ?? null,
-      input.until ? null : 'he said it in his own words and named no end to it']);
+      input.until ? null : 'he said it in his own words and named no end to it'] },
+  ]);
   return id;
 }
 

@@ -16,7 +16,7 @@
 // This file asks those rows and says the answers in his words.
 // =============================================================================
 import { nanoid } from 'nanoid';
-import { query } from '../../db/client.js';
+import { batch, query } from '../../db/client.js';
 
 type Row = Record<string, unknown>;
 const rows = async (sql: string, params: unknown[]): Promise<Row[]> =>
@@ -111,17 +111,22 @@ export async function signCharter(input: {
   const days = Math.min(92, Math.max(1, Math.round(input.days)));
   const total = Math.max(1, Math.round(input.testsTotalCents));
   const standing = await liveCharter(input.founderId);
-  if (standing) await withdrawCharter({ founderId: input.founderId, reason: 'replaced by a new signature' });
   const id = nanoid();
-  await query(
-    `INSERT INTO portfolio_envelopes
+  // ONE TRANSACTION. The standing charter is ended and the new one written
+  // together, in that order because only one may be live; a signature the row
+  // refuses leaves the one he already signed in force, rather than none.
+  await batch([
+    ...(standing ? [{ sql: `UPDATE portfolio_envelopes SET withdrawn_at = datetime('now'), withdraw_reason = ?
+        WHERE id = ? AND withdrawn_at IS NULL`, args: ['replaced by a new signature', standing.id] }] : []),
+    { sql: `INSERT INTO portfolio_envelopes
        (id, founder_id, tests_total_cents, monthly_cents, probes_in_flight, cognition_cents_per_day,
         contact_rules, public_voice, statement, signed_by, expires_at)
      VALUES (?,?,?,?,?,?,?,?,?,?, datetime('now', ?))`,
     // The month is written equal to the total so the older clause is subsumed.
-    [id, input.founderId, total, total, Math.round(input.probesInFlight),
+    args: [id, input.founderId, total, total, Math.round(input.probesInFlight),
       Math.round(input.cognitionCentsPerDay), (input.contactRules ?? SEALED_CONTACT_RULES).trim(),
-      input.publicVoice.trim(), input.statement.trim(), `founder:${input.founderId}`, `+${String(days)} days`]);
+      input.publicVoice.trim(), input.statement.trim(), `founder:${input.founderId}`, `+${String(days)} days`] },
+  ]);
   return id;
 }
 
