@@ -52,7 +52,7 @@ vi.mock('../../src/services/outbound/ssrf.js', () => ({
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { encrypt, encryptCredentialPayload } from '../../src/services/encryption.js';
-import { approveListing, recordListing, seedProof2 } from '../../src/services/venture/proof-2.js';
+import { approveListing, PROOF2_WINDOW_DAYS, recordListing, seedProof2, settleListings } from '../../src/services/venture/proof-2.js';
 import { bringTheVenueUpToDate } from '../../src/services/senses/readers/etsy-shop.js';
 import { qualificationOf } from '../../src/services/venture/qualification.js';
 
@@ -151,3 +151,26 @@ describe('Etsy shows the sealed offer again', () => {
     expect((await log()).map((r) => Number(r.seen))).toEqual([1, 1, 0, 1]);
   });
 });
+
+describe('a window in which Etsy showed another offer is not a verdict', () => {
+  it('voids the silence of a window during which the listing was at another price', async () => {
+    await new Promise((r) => setTimeout(r, 1100));
+    await query(`UPDATE experiment_exposures SET placed_at = datetime('now', ?) WHERE experiment_id = ?`,
+      [`-${String(PROOF2_WINDOW_DAYS + 1)} days`, X]);
+    // Read, part-way through the window, at $19 — and later back at $14.
+    await query(`INSERT INTO venue_listing_readings (id, product_id, provider, listing_id, seen, price_cents, currency, observed_at)
+      VALUES (?,?,'etsy',?,1,1900,'usd',datetime('now','-20 days'))`, [nanoid(), PRODUCT, String(LISTING)]);
+    await query(`INSERT INTO venue_listing_readings (id, product_id, provider, listing_id, seen, price_cents, currency, observed_at)
+      VALUES (?,?,'etsy',?,1,1400,'usd',datetime('now','-10 days'))`, [nanoid(), PRODUCT, String(LISTING)]);
+    const [r] = await settleListings({ founderId: OWNER, now: new Date(Date.now() + 10 * 60_000) });
+    expect(r.settled).toBeNull();
+    const e = (await query('SELECT validity, invalid_because, verdict FROM venture_experiments WHERE id = ?', [X]))
+      .rows[0] as Record<string, unknown>;
+    expect(e.validity).toBe('invalid');
+    expect(e.invalid_because).toBe('offer_not_published');
+    expect(e.verdict).toBeNull();
+    expect(r.because).toMatch(/\$19\.00/);
+    expect(r.because).toMatch(/sealed at \$14\.00/);
+  });
+});
+

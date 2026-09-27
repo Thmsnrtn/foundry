@@ -35,7 +35,9 @@ vi.mock('../../src/services/outbound/ssrf.js', () => ({
     const bodies: Record<string, unknown> = {
       'users/me': { user_id: 43, shop_id: 77770002 },
       'shops/77770002': shop,
-      'shops/77770002/listings': { count: 0, results: [] },
+      // The test's own listing, at its sealed price, so vacation is the only thing that varies.
+      'shops/77770002/listings': { count: 1, results: [{ listing_id: 9988776656, title: 'Workbook', state: 'active',
+        price: { amount: 1400, divisor: 100, currency_code: 'USD' } }] },
       'shops/77770002/receipts': { count: 0, results: [] },
     };
     const body = bodies[path];

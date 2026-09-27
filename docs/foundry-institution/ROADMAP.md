@@ -24,7 +24,8 @@ in the maturity map.
 | A3 + A4 | Rehearsals: the model down; the owner away while a buyer waits | `f7b176ac` |
 | G6 | `npm run check` from about 22 minutes to 10.5 | `6a76b6e6` |
 | D1 | Each product type's sourced facts, its unknowns, and what can serve it | `582c0438` |
-| B2 | The listing Etsy shows is checked against the sealed offer's price, and against being listed at all | this commit |
+| B2 | The listing Etsy shows is checked against the sealed offer's price, and against being listed at all | `4ca70f81` |
+| B2b | A window in which Etsy showed another price, or no listing, is not a verdict | this commit |
 
 ## Next
 

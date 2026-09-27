@@ -160,21 +160,57 @@ export async function shopHiddenDuring(experimentId: string, from: Date, to: Dat
       ORDER BY datetime(observed_at), rowid`,
     [productId, provider, from.toISOString(), to.toISOString()])).rows as unknown as Array<Record<string, unknown>>;
   const away = [...vacationInForce, ...vacationDuring].filter((r) => Number(r.on_vacation) === 1);
-  if (hidden.length === 0 && away.length === 0) return null;
+
+  // AND WHETHER WHAT THE VENUE SHOWED WAS THE OFFER THAT WAS SEALED. A listing
+  // at another price, or gone from the shop's active listings, for any part of
+  // the window: the sealed offer was not what buyers could see.
+  const { exposureOf } = await import('./outcome.js');
+  const exposure = await exposureOf(experimentId);
+  const listingId = exposure ? /\/listing\/(\d+)/.exec(exposure.exposureRef)?.[1] ?? null : null;
+  let offered: string | null = null;
+  if (listingId) {
+    const shownInForce = (await query(
+      `SELECT seen, price_cents, currency, observed_at FROM venue_listing_readings
+        WHERE product_id = ? AND provider = ? AND listing_id = ? AND datetime(observed_at) <= datetime(?)
+        ORDER BY datetime(observed_at) DESC, rowid DESC LIMIT 1`,
+      [productId, provider, listingId, from.toISOString()])).rows as unknown as Array<Record<string, unknown>>;
+    const shownDuring = (await query(
+      `SELECT seen, price_cents, currency, observed_at FROM venue_listing_readings
+        WHERE product_id = ? AND provider = ? AND listing_id = ?
+          AND datetime(observed_at) > datetime(?) AND datetime(observed_at) <= datetime(?)
+        ORDER BY datetime(observed_at), rowid`,
+      [productId, provider, listingId, from.toISOString(), to.toISOString()])).rows as unknown as Array<Record<string, unknown>>;
+    const sealedCents = plan.price.amountCents;
+    const sealedCurrency = plan.price.currency.toLowerCase();
+    const other = [...shownInForce, ...shownDuring].filter((r) => Number(r.seen) === 0
+      || Number(r.price_cents) !== sealedCents || String(r.currency ?? '') !== sealedCurrency);
+    if (other.length > 0) {
+      const money = (c: number) => `$${(c / 100).toFixed(2)}`;
+      const what = [...new Set(other.map((r) => Number(r.seen) === 0 ? 'not among the shop\'s active listings'
+        : r.price_cents == null ? 'at no readable price' : `at ${money(Number(r.price_cents))}`))].join(', then ');
+      const dates = [...new Set(other.map((r) => String(r.observed_at).slice(0, 10)))].join(', ');
+      offered = `${plan.listing.venueName} showed listing ${listingId} ${what} for at least part of this window `
+        + `(read on ${dates}), not the offer sealed at ${money(sealedCents)}`;
+    }
+  }
+  if (hidden.length === 0 && away.length === 0 && offered === null) return null;
 
   const shop = (await query(
     `SELECT provider_account_label FROM company_senses
       WHERE product_id = ? AND provider = ? AND provider_account_label IS NOT NULL
       ORDER BY rowid DESC LIMIT 1`, [productId, provider])).rows[0] as Record<string, unknown> | undefined;
   const shopName = shop ? String(shop.provider_account_label) : 'the shop';
-  if (hidden.length === 0) {
+  const parts: string[] = [];
+  if (away.length > 0) {
     const dates = [...new Set(away.map((r) => String(r.observed_at).slice(0, 10)))].join(', ');
-    return `${plan.listing.venueName} reported ${shopName} on vacation for at least part of this window `
-      + `— read on ${dates} — so nobody could have bought`;
+    parts.push(`${plan.listing.venueName} reported ${shopName} on vacation for at least part of this window `
+      + `— read on ${dates} — so nobody could have bought`);
   }
+  if (offered !== null) parts.push(offered);
+  if (hidden.length === 0) return parts.join('; ');
   const dates = [...new Set(hidden.map((r) => String(r.said_at).slice(0, 10)))].join(', ');
-  return `buyers could not find ${shopName} in ${plan.listing.venueName} search for at least part `
-    + `of this window — you said so on ${dates}`;
+  return [...parts, `buyers could not find ${shopName} in ${plan.listing.venueName} search for at least part `
+    + `of this window — you said so on ${dates}`].join('; ');
 }
 
 // ─── What the venue shows for a test's listing ──────────────────────────────
