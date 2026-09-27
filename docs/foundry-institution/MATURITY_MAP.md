@@ -1462,3 +1462,30 @@ A reading the model did make carries no mark.
 
 **Maturity.** **`tested`** (`the-workshop-answers-for-itself`, +1). Red before:
 there was no such field. The 19 files that read Workshop mail still pass.
+
+### The shelves can say "a workbook" (27 September 2026)
+
+The owner shared a promotional list, *20 Digital Products That Sell in 2026*.
+Its figures are the seller's own and are not evidence; ECONOMICS.md grades it D
+and repeats none of them. What it did show was a gap in the words: the one
+real test on Etsy is a workbook, and no economic form could name a download.
+A bid-decision workbook read as "other".
+
+Five forms are added before the software forms, each with `upfront_price` as
+its only exchange (the exchange a listing runs):
+- `template_pack`: Notion, Canva and spreadsheet templates, SOPs, swipe files,
+  email sequences, content calendars;
+- `guide`: workbooks, ebooks, guides, cheatsheets, playbooks, checklists;
+- `printable`: planners, trackers, journals, worksheets;
+- `course`: short courses and lessons;
+- `asset_pack`: icons, fonts, UI kits, illustrations.
+
+A form recognises and presents; it never causes a candidate to exist. Every
+form that was already right still wins its own words: "a free calculator" is a
+free resource, "a bid calculator" a calculator, "a subscription dashboard"
+software.
+
+**Maturity.** **`tested`** (`economic-forms-name-the-four-questions`, +4). Red
+before: the workbook read as `other`. The shelf tests still pass. **Proof
+debt:** whether a download shelf sells is exactly what the Etsy test exists to
+find out. Nothing here says it does.

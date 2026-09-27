@@ -57,6 +57,38 @@ export const ECONOMIC_FORMS: EconomicForm[] = [
     whatItIs: 'Somebody else’s data or work, licensed, and sold on in a form they do not offer.',
     needsExchange: ['license'],
     words: ['license the', 'licensed from', 'licensed in', 'license in', 'resell it', 'resold', 'bought the rights', 'under license'] },
+  // THE DIGITAL DOWNLOADS, added 27 September 2026. The owner shared a
+  // vendor's list of "20 digital products that sell"; its sales figures are
+  // the vendor's own and are evidence of nothing here, and nothing below
+  // repeats them. What it showed was a gap in the WORDS: the one real test on
+  // Etsy is a workbook, and no shelf could say so. These recognise a
+  // download once the search has found and believed one — sold once, at a
+  // price, the exchange a marketplace listing runs — and cause nothing.
+  // Read before the software forms, so "a spreadsheet template" is the
+  // template it says it is rather than the data it mentions.
+  { key: 'template_pack', label: 'A template people fill in',
+    whatItIs: 'A ready-made board, sheet, document or set of procedures a buyer copies and fills in.',
+    needsExchange: ['upfront_price'],
+    words: ['notion template', 'canva template', 'spreadsheet template', 'sheets template', 'excel template',
+      'template pack', 'templates', 'sop', 'sops', 'standard operating procedure', 'swipe file',
+      'email sequence', 'content calendar', 'welcome pack', 'onboarding pack'] },
+  { key: 'guide', label: 'A short guide or workbook',
+    whatItIs: 'A practical document that gets one outcome done — a workbook, a guide, a checklist.',
+    needsExchange: ['upfront_price'],
+    words: ['workbook', 'ebook', 'e book', 'guide', 'cheatsheet', 'cheat sheet', 'playbook', 'checklist',
+      'prompt guide', 'prompt library', 'handbook'] },
+  { key: 'printable', label: 'A printable planner or tracker',
+    whatItIs: 'Pages printed or filled in on a tablet — planners, trackers, journals.',
+    needsExchange: ['upfront_price'],
+    words: ['printable', 'planner', 'habit tracker', 'budget tracker', 'journal', 'worksheet'] },
+  { key: 'course', label: 'A short course',
+    whatItIs: 'A few lessons toward one outcome, with the templates and checklists that go with them.',
+    needsExchange: ['upfront_price'],
+    words: ['course', 'micro course', 'mini course', 'lessons', 'video lessons', 'masterclass'] },
+  { key: 'asset_pack', label: 'A pack of design assets',
+    whatItIs: 'Fonts, icons, illustrations or kits other people build with.',
+    needsExchange: ['upfront_price'],
+    words: ['icon pack', 'icons', 'fonts', 'ui kit', 'illustrations', 'asset pack', 'mockups', 'presets'] },
   { key: 'saas', label: 'Software people subscribe to',
     whatItIs: 'Something people log into and pay for every month.',
     needsExchange: ['subscription'],

@@ -52,3 +52,41 @@ describe('every unknown is one of four questions', () => {
     expect(fourQuestionsOf('the weather')).toBe('demand');
   });
 });
+
+describe('the digital-download forms (a list the owner shared, 27 September 2026)', () => {
+  // The owner shared a vendor's list of "20 digital products that sell". Its
+  // sales figures are the vendor's own and are evidence of nothing here. What
+  // it did show is a gap in the vocabulary: the one real test on Etsy is a
+  // workbook, and the shelves had no word for a workbook, a template, a
+  // printable, a short course or an asset pack. These forms RECOGNISE such
+  // candidates once the search has found and believed them; like every form,
+  // they never cause one to exist.
+  const form = (said: string) => formOf([{ said, where: 'its headline' }]).form;
+
+  it('names the workbook Foundry is actually testing', () => {
+    expect(form('A bid-decision workbook for small contractors')).toBe('guide');
+  });
+
+  it('recognises each kind by the words a candidate would use', () => {
+    expect(form('a Notion template for client onboarding')).toBe('template_pack');
+    expect(form('an SOP pack for small restaurants')).toBe('template_pack');
+    expect(form('a printable habit tracker')).toBe('printable');
+    expect(form('a short course on quoting jobs')).toBe('course');
+    expect(form('an icon pack for trades websites')).toBe('asset_pack');
+  });
+
+  it('is sold once, at a price — the exchange a listing can run', () => {
+    for (const key of ['template_pack', 'guide', 'printable', 'course', 'asset_pack']) {
+      const f = ECONOMIC_FORMS.find((x) => x.key === key);
+      expect(f, key).toBeDefined();
+      expect(f!.needsExchange).toEqual(['upfront_price']);
+    }
+  });
+
+  it('takes nothing from the forms that were already right', () => {
+    expect(form('A free calculator that brings people to a paid brief')).toBe('free_resource');
+    expect(form('a bid calculator for shops')).toBe('calculator');
+    expect(form('a monthly subscription dashboard')).toBe('saas');
+    expect(form('nothing recognisable here')).toBe('other');
+  });
+});
