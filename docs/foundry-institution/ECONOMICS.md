@@ -461,3 +461,40 @@ for a state nothing can enter — the exact failure the preceding wave was
 convened to repair. The trigger for building it is the first provider payout
 this institution actually reads, and it must exist before any real financial
 data is.
+
+## What each form takes (2026-09-27)
+
+`economic-forms.ts` recognises a form. `form-knowledge.ts` now says what one
+involves, as far as a source has shown it. Each fact carries its source, the
+day it was read and a grade on the scale above. Grade D is refused, so the
+vendor list the owner shared contributes the words and none of the facts.
+Every aspect nobody has shown is returned as unknown, never assumed:
+- who buys it and why;
+- what a sale costs and when the money arrives;
+- what may be sold;
+- how buyers find it;
+- what it asks after the sale;
+- how it ends.
+
+What can serve a form today is read from the institution's own state when it
+is asked, not stored.
+
+New sources, all Etsy's own pages, read on 2026-09-15 for the workbook's
+listing and already recorded there as observations:
+
+| Source | Mechanism | Depends on | Grade | Applies now |
+|---|---|---|---|---|
+| Etsy, *Fees & Payments Policy*, etsy.com/legal/fees | A sale pays $0.20 listing (renewed on the sale), 6.5% transaction, 3% + $0.25 processing; Offsite Ads take 15% of an order they bring, opt-out allowed until $10,000 of orders in 365 days. | Etsy's current schedule; it changes. | A — the platform's own rule | Yes: the download forms' pricing. |
+| Etsy, *Creativity Standards*, etsy.com/legal/creativity | Seller-designed downloads made with AI assistance are allowed only with a disclosure; AI prompt bundles are prohibited. | The listing saying so. | A | Yes: the download forms' rights. |
+| Etsy Help, *When can I leave a review for my order* | A buyer must download before opening a not-as-described case; the seller may refund at any time. | Etsy Payments. | A | Yes: the download forms' burden. |
+| Etsy Help, *How to receive your Etsy Payments deposit* | New sellers are paid about 14 days after a sale, weekly by default; digital orders are not held in reserve. | Identity verified; a matching bank account. | A | Yes: when the money arrives. |
+| Etsy Help, *Shop Stats glossary* | The seller sees per-listing views, visits, orders and traffic sources; no statistic reports a download. | The seller's own Stats page, not the API. | A | Yes: how buyers find it, and what cannot be seen. |
+
+The rows from 21 September are reused where they apply:
+- Walling: utility and plugin.
+- McKenzie: calculator.
+- Google's scaled-content policy: every form found through search.
+- Vohra: software people subscribe to.
+
+The Flippa row is not reused, because its page could not be located at a
+checkable address. Acquisition therefore stays unknown.

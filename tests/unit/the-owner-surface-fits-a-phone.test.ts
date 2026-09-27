@@ -117,5 +117,6 @@ phones('the surfaces that changed, on a 390px phone', () => {
     const explore = await onThePhone('/foundry/experiments/explore');
     expect(explore.overflowX).toBe(0);
     expect(explore.text).toContain('Tested before:');
+    expect(explore.text).toContain('What this kind of thing takes');
   });
 });

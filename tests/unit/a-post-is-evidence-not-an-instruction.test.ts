@@ -115,6 +115,10 @@ describe('a post that tries to close the record and give orders', () => {
     for (const p of withRecord) {
       expect(p.split('</record>').length - 1, 'a post closed the record block').toBe(1);
       expect(p).not.toMatch(/Ignore all previous instructions/i);
+      // What the kind of thing takes rides inside the same fence, and says
+      // what nobody has shown rather than filling it in.
+      expect(p).toContain('WHAT THIS KIND OF THING TAKES');
+      expect(p).toMatch(/"notKnown"/);
     }
   });
 

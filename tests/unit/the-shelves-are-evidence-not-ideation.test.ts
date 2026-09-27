@@ -53,6 +53,9 @@ describe('with nothing found', () => {
     // And the only thing an empty shelf offers is to point the search there.
     expect(t).toContain('Look for something like this');
     expect(t).toContain('value="Explore something other software calls"');
+    // Knowledge about a form sits beside what was found, never in place of it.
+    expect(shelves.every((s) => s.takes === null)).toBe(true);
+    expect(t).not.toContain('What this kind of thing takes');
   });
 
   it('the page is alive without inventing anything to be busy about', async () => {
@@ -96,6 +99,18 @@ describe('with something found and believed', () => {
     // The seed's own words put it there — not a category Foundry chose for it.
     expect(k?.because).toBe('endpoint');
     expect(k?.where).toBe('the sentence that started it');
+  });
+
+  it('a shelf with something on it says what that kind of thing takes, and what nobody has shown', async () => {
+    const api = (await shelfCandidates(OWNER)).find((s) => s.key === 'api');
+    expect(api?.takes).not.toBeNull();
+    // Nothing sourced is known about this kind yet, and every aspect says so.
+    expect(api?.takes?.known).toEqual([]);
+    expect(api?.takes?.unknown.length).toBe(6);
+    const t = (await page('/foundry/experiments/explore')).text;
+    expect(t).toContain('What this kind of thing takes');
+    expect(t).toMatch(/Not known yet: who buys it and why/);
+    expect(t).toMatch(/Foundry cannot take usage yet|Foundry can take usage/);
   });
 
   it('evidence is said in words, and never as a score', async () => {

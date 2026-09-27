@@ -84,6 +84,13 @@ export interface TheRecord {
   exchanges: Array<{ exchange: Exchange; whatItIs: string; reveals: string; confounds: string; available: boolean }>;
   costDimensions: Array<{ dimension: string; whatItIs: string }>;
   stopKinds: Array<{ kind: StopKind; whatItIs: string }>;
+  /**
+   * WHAT THIS KIND OF THING TAKES, as far as a source has shown it
+   * (`form-knowledge.ts`): the form its own sentences name, each sourced fact
+   * with its grade, the aspects nobody has shown, and what could serve it
+   * today. Institution-written, never a model's; demand is never among it.
+   */
+  form: { kind: string; known: string[]; notKnown: string[]; canServe: string };
 }
 
 /** Only rows. Nothing here is written by a model, and nothing a model wrote elsewhere is read as fact. */
@@ -145,6 +152,14 @@ export async function theRecordOf(experimentId: string): Promise<TheRecord | nul
     .map((r) => ({ dimension: String(r.dimension), whatItIs: String(r.what_it_is) }));
   const stopKinds = (await rows('SELECT kind, what_it_is FROM probe_stop_kinds ORDER BY sort_order', []))
     .map((r) => ({ kind: String(r.kind) as StopKind, whatItIs: String(r.what_it_is) }));
+  // The form the candidate's own sentences name, as its shelf names it.
+  const { formOf } = await import('./economic-forms.js');
+  const { whatAFormTakes, ASPECT_WORDS } = await import('./form-knowledge.js');
+  const takes = await whatAFormTakes(formOf([
+    { said: String(e.headline), where: 'its headline' },
+    { said: String(e.the_problem), where: 'the problem it names' },
+    { said: String(e.why_it_might), where: 'why it might work' },
+  ]).form, founderId);
   return {
     founderId,
     experiment: { id: String(e.id), opportunityId, whatWeDo: String(e.what_we_do), whatWeExpect: String(e.what_we_expect),
@@ -158,6 +173,8 @@ export async function theRecordOf(experimentId: string): Promise<TheRecord | nul
       contactRules: envelope.charter.contactRules, publicVoice: envelope.charter.publicVoice } : null,
     exchanges: x.map((f) => ({ exchange: f.exchange, whatItIs: f.whatItIs, reveals: f.reveals, confounds: f.confounds, available: f.available })),
     costDimensions, stopKinds,
+    form: { kind: takes.label, known: takes.known.map((k) => `${k.claim} (${k.source.title}, read ${k.read}, grade ${k.grade})`),
+      notKnown: takes.unknown.map((a) => ASPECT_WORDS[a]), canServe: takes.canServe },
   };
 }
 
@@ -198,6 +215,7 @@ function recordBlock(r: TheRecord): string {
     `LEGAL PICTURE: ${j(r.legal)}`,
     `THE CHARTER (null means none is standing and the owner decides each test himself): ${j(r.charter)}`,
     `EXCHANGES (only "available": true can be run today): ${j(r.exchanges)}`,
+    `WHAT THIS KIND OF THING TAKES (sourced and graded; "notKnown" is unknown and must not be assumed; none of it is evidence of demand): ${j(r.form)}`,
     `COST DIMENSIONS: ${j(r.costDimensions)}`,
     `STOP KINDS: ${j(r.stopKinds)}`,
     '</record>',

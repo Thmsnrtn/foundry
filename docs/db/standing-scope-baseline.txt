@@ -37,5 +37,6 @@ src/services/senses/credentials.ts 1
 src/services/senses/read.ts 1
 src/services/senses/readers/etsy-shop.ts 1
 src/services/team/members.ts 2
+src/services/venture/form-knowledge.ts 1
 src/services/venture/obligations.ts 1
 src/services/venture/proof-2.ts 1

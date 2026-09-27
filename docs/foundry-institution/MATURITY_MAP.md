@@ -1641,3 +1641,44 @@ test:serial` keeps the old single queue.
 check is a heuristic: `writeFileSync` without `mkdtempSync`. A test that
 writes some other way, or through a helper, would not be caught. Shards are
 split by file, not by time, so a slow file added to one shard lengthens it.
+
+### What each product type takes, as far as anyone has shown it (27 September 2026)
+
+Roadmap D1, and plan §6's "economic-forms library as decision knowledge". The
+owner prompted it with a vendor's list of digital products. The list stays
+grade D and contributes no facts.
+
+`src/services/venture/form-knowledge.ts` holds sourced facts per form in six
+aspects: buyers, pricing, rights, channels, burden and exit. Each fact carries
+a source, the day it was read and a grade. Grade D is refused. Nothing
+unsourced is written down, so an aspect with no fact is returned as unknown.
+`whatAFormTakes` also says what could serve a test of the form today, read
+live:
+- whether Foundry can take the payment it needs;
+- for downloads, whether an Etsy shop he has confirmed is connected, and that
+  the connection is read-only.
+
+It is read in two places, and causes nothing in either:
+- **On the Explore page**, "What this kind of thing takes" appears only on a
+  shelf that already has a candidate.
+- **In the design deliberation's record**, the same content sits inside the
+  escaped fence, labelled as not evidence of demand.
+
+The facts are Etsy's own pages from 15 September for the download forms, and
+the 21 September ECONOMICS rows where they apply. Every other aspect is
+unknown, including who buys a workbook.
+
+**Maturity.** **`tested`**:
+- `a-form-is-known-only-as-far-as-it-is-sourced`, 9: red first. A planted
+  grade-D demand claim turned it red.
+- `the-shelves-are-evidence-not-ideation`, +2: red without the change.
+- `a-post-is-evidence-not-an-instruction`, +2 assertions.
+- `the-owner-surface-fits-a-phone`, +1.
+
+**Proof debt:**
+- Platform rules change. Each fact carries its read date, and nothing re-reads
+  it: Etsy refuses automated fetches (HTTP 403), so re-reading is by hand.
+- None of this is market evidence. That remains Experiment 001's null and
+  whatever the Etsy listing yields.
+- The demand guard is a word pattern. A demand claim in other words would
+  pass it.

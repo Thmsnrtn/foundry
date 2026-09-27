@@ -21,6 +21,7 @@ import { renderDecision } from './decision-control.js';
 import { consequenceOfApproving, firstContactDecision } from '../../services/founder/what-it-would-do.js';
 import { experimentLedger, getExperimentView, listExperiments } from '../../services/founder/experiment-view.js';
 import type { ExperimentView } from '../../services/founder/experiment-view.js';
+import { ASPECT_WORDS } from '../../services/venture/form-knowledge.js';
 import {
   HandRefused, allowExperiment, approveRemaining, attachPaymentLinkByUrl, declineExperiment, markdownToHtml, offerShapePlanOf, prepareExposure,
   reviewRecipient, senderCompanyOf, stopExperiment,
@@ -241,6 +242,12 @@ experimentRoutes.get('/foundry/experiments/explore', async (c: any) => {
       <summary><span class="gist"><b>${sh.label}</b> <span class="dim">${sh.candidates.length ? String(sh.candidates.length) : 'nothing yet'}</span></span></summary>
       <p class="quiet">${sh.whatItIs}</p>
       ${sh.cannotTestYet ? html`<p class="quiet"><b>${sh.cannotTestYet}</b></p>` : ''}
+      ${sh.takes ? html`<details class="fold">
+        <summary><span class="gist">What this kind of thing takes</span></summary>
+        <ul>${sh.takes.known.map((k) => html`<li>${k.claim} <span class="dim">(<a href="${k.source.url}" rel="noopener">${k.source.title}</a>, read ${k.read}, grade ${k.grade})</span></li>`)}</ul>
+        ${sh.takes.unknown.length ? html`<p class="quiet">Not known yet: ${sh.takes.unknown.map((a) => ASPECT_WORDS[a]).join('; ')}.</p>` : ''}
+        <p class="quiet">${sh.takes.canServe}</p>
+      </details>` : ''}
       ${sh.candidates.length === 0
     ? html`<p class="quiet">Nothing found so far looks like this.</p>
         <form method="POST" action="/foundry/ask">

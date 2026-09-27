@@ -50,6 +50,13 @@ export interface Shelf {
   candidates: ShelfCandidate[];
   /** Named when a test of this form could not be run today, else null. */
   cannotTestYet: string | null;
+  /**
+   * What this kind of thing takes, as far as a source has shown it, and what
+   * could serve it today (`form-knowledge.ts`). Only on a shelf with something
+   * on it: knowledge about a form sits beside what was found, never in place
+   * of it.
+   */
+  takes: import('./form-knowledge.js').WhatAFormTakes | null;
 }
 
 /**
@@ -173,7 +180,8 @@ export async function shelfCandidates(founderId: string): Promise<Shelf[]> {
     };
   });
 
-  return ECONOMIC_FORMS.map((f) => {
+  const { whatAFormTakes } = await import('./form-knowledge.js');
+  return Promise.all(ECONOMIC_FORMS.map(async (f) => {
     const mine = placed.filter((p) => p.form === f.key);
     const missing = f.needsExchange.filter((x) => exchanges.get(x) !== true);
     return {
@@ -184,6 +192,7 @@ export async function shelfCandidates(founderId: string): Promise<Shelf[]> {
       cannotTestYet: mine.length > 0 && missing.length === f.needsExchange.length && missing.length > 0
         ? `I cannot run a test of this kind yet: it would need ${missing.join(' or ').replace(/_/g, ' ')}.`
         : null,
+      takes: mine.length > 0 ? await whatAFormTakes(f.key, founderId) : null,
     };
-  });
+  }));
 }
