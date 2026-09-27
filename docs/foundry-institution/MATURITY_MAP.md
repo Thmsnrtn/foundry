@@ -1566,3 +1566,39 @@ The first real renewal after he connects will show it, and the date follows
 whatever it shows. A connection made before this change has no date recorded
 until Etsy next rotates the token. If Etsy never rotates, that connection
 shows no warning and still ends. Reconnecting once records the date.
+
+### The two remaining rehearsals: the model down, and the owner away (27 September 2026)
+
+Integrated plan §9 names three degraded conditions. Etsy unreadable was
+rehearsed on 26 September. These are the other two. Both are timelines built
+from pieces that were already proved one at a time. Neither needed a code
+change. Each was checked against a seeded fault it had to catch.
+
+**B: the model provider unavailable** (`when-the-model-is-down`, 5). With every
+model call failing:
+- deliberation throws, leaving no design, no lens findings and no decision;
+- the design loop records itself failing, and the Brief reads "degraded", with
+  "designing and attacking tests … failed 2 times running";
+- a listing with a sale still settles by its sealed rule;
+- a buyer waiting on the owner is still named.
+
+When the model answers again, the next pass designs the test and the loop
+clears. Seeded fault: a `recordJobFailure` that records nothing. The test went
+red.
+
+**C: the owner away while a buyer waits** (`the-owner-away-while-a-buyer-waits`,
+8). A buyer asks for a refund on Etsy the day he leaves:
+- on days 1, 7 and 30 the buyer is still named to him, with the order and
+  where to act;
+- the absence reading never says all clear;
+- no deadline is invented;
+- the wait ends only when the refund is actually recorded.
+
+Holding new offers meanwhile is `the-first-real-experiment-runs-by-hand`.
+Seeded fault: a waiting-buyer reader that drops buyers after five days. The
+test went red.
+
+**Maturity.** **`tested`**, as rehearsals, not repairs. **Proof debt:**
+controlled only. No real outage or real absence has been observed. Workshop
+mail during an outage is covered by `the-workshop-answers-for-itself`, not by
+this timeline.
