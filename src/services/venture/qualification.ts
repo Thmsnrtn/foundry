@@ -107,6 +107,7 @@ export interface Qualification {
 }
 
 const met = (name: string, because: string): QualificationCondition => ({ name, verdict: 'met', because });
+const NAME_SEALED_OFFER = 'the listing Etsy shows is the offer that was sealed';
 
 /**
  * WHAT THIS EXPERIMENT OWES BEFORE IT TOUCHES ANYBODY, and which of those it
@@ -381,6 +382,29 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
       : { name: 'the listing is live and its address is recorded', verdict: 'waits_for_you',
         because: exposure ? 'the listing was placed and has been taken down' : `nothing has been placed on ${venue} yet` });
 
+    // WHAT THE VENUE SHOWS IS THE OFFER THAT WAS SEALED. He places the listing
+    // by hand; a different price, or a listing gone from the shop, tests
+    // something else or nothing. Said only once the venue has been read for it:
+    // before that, "can be read" below is the condition that is open.
+    const listingId = exposure ? /\/listing\/(\d+)/.exec(String(exposure.exposure_ref))?.[1] ?? null : null;
+    if (listingId && productId) {
+      const { listingAsShown } = await import('./findability.js');
+      const shown = await listingAsShown(productId, plan!.listing!.venue, listingId);
+      if (shown) {
+        const sealed = plan!.price;
+        const dollars = (c: number, cur: string | null) => `${cur && cur !== 'usd' ? `${cur.toUpperCase()} ` : '$'}${(c / 100).toFixed(2)}`;
+        const on = shown.observedAt.slice(0, 10);
+        const same = shown.seen && shown.priceCents === sealed.amountCents
+          && (shown.currency ?? '') === sealed.currency.toLowerCase();
+        conditions.push(same
+          ? met(NAME_SEALED_OFFER, `${venue} shows listing ${listingId} active at ${dollars(sealed.amountCents, sealed.currency.toLowerCase())}, the price the test was sealed at (read ${on})`)
+          : { name: NAME_SEALED_OFFER, verdict: 'waits_for_you',
+            because: !shown.seen
+              ? `listing ${listingId} is not among ${venue}'s active listings for the shop (read ${on}) — it may have expired, sold out or been deactivated; relist it, or the test measures nothing`
+              : `${venue} shows listing ${listingId} at ${shown.priceCents === null ? 'no readable price' : dollars(shown.priceCents, shown.currency)}, but the test was sealed at ${dollars(sealed.amountCents, sealed.currency.toLowerCase())} (read ${on}) — change the listing back, or the test measures a different offer` });
+      }
+    }
+
     // WHAT THE EXPERIMENT INTENDS TO LEARN, AND WHETHER IT COULD. The owner:
     // "Do not use the absence of recorded events as evidence of no external
     // activity when the observation path was unavailable." A venue Foundry
@@ -532,7 +556,7 @@ function stateFrom(conditions: QualificationCondition[], e: Record<string, unkno
   if (e.ran_at != null) return 'operating';
   if (blocked.length === 0) return 'ready_within_charter';
 
-  const account = conditions.find((c) => c.verdict === 'waits_for_you' && /can be operated|listing is live|can find the shop/.test(c.name));
+  const account = conditions.find((c) => c.verdict === 'waits_for_you' && /can be operated|listing is live|can find the shop|is the offer that was sealed/.test(c.name));
   if (account) return 'needs_external_account';
   if (has('unproven')) return 'testing_capability';
   if (has('waits_for_you')) return 'needs_owner_authorisation';

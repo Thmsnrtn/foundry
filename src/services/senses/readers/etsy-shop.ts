@@ -92,6 +92,8 @@ export interface ShopOrder {
 
 export interface ShopListing {
   listingId: string; title: string; state: string;
+  /** The listing's price as Etsy states it, in minor units; null when Etsy sent none it could read. */
+  priceCents: number | null; currency: string | null;
   /** Etsy reports this as a LIFETIME total, never as a daily figure. */
   lifetimeViews: number | null;
   favourites: number | null;
@@ -115,6 +117,8 @@ export interface ShopReading {
   saidOrders: number;
   /** Receipts fetched and then dropped — a shape this reader could not parse. */
   discarded: number;
+  /** Whether every listing Etsy said it had was fetched: the only read from which "not listed" may be concluded. */
+  listingsComplete: boolean;
   /**
    * WHETHER SILENCE MEANS ANYTHING. False when the read was truncated or
    * anything was discarded: a path that cannot tell it was partial must never
@@ -291,6 +295,8 @@ export async function readTheShop(input: {
       listingId: String(l.listing_id ?? ''),
       title: typeof l.title === 'string' ? l.title : '',
       state: typeof l.state === 'string' ? l.state : 'unknown',
+      priceCents: money(l.price)?.minorUnits ?? null,
+      currency: money(l.price)?.currency ?? null,
       lifetimeViews: Number.isFinite(Number(l.views)) ? Number(l.views) : null,
       favourites: Number.isFinite(Number(l.num_favorers)) ? Number(l.num_favorers) : null,
       url: typeof l.url === 'string' ? l.url : null,
@@ -437,6 +443,7 @@ export async function readTheShop(input: {
       },
       listings, orders,
       saidListings: rawListings.said, saidOrders: rawOrders.said, discarded,
+      listingsComplete: rawListings.said <= listings.length,
       // COMPLETE MEANS ALL THREE: nothing left unfetched on either endpoint,
       // and nothing fetched that this reader could not read. A discard is a
       // receipt that exists and was not understood, which is exactly the
@@ -606,6 +613,16 @@ export async function bringTheVenueUpToDate(input: {
   if (reading.shop.onVacation !== null) {
     const { noteVenueVisibility } = await import('../../venture/findability.js');
     await noteVenueVisibility(productId, 'etsy', reading.shop.onVacation);
+  }
+  // WHAT ETSY SHOWS FOR THIS TEST'S LISTING: among the active ones, at what
+  // price. Absent is concluded only from a read that reached every listing.
+  if (listingId) {
+    const shown = reading.listings.find((l) => l.listingId === listingId);
+    if (shown || reading.listingsComplete) {
+      const { noteListingAsShown } = await import('../../venture/findability.js');
+      await noteListingAsShown({ productId, provider: 'etsy', listingId,
+        seen: shown !== undefined, priceCents: shown?.priceCents ?? null, currency: shown?.currency ?? null });
+    }
   }
 
   // THE WORLD ANSWERED, AND SOMETHING SAYS SO ON THE LADDER.

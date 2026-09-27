@@ -1682,3 +1682,35 @@ unknown, including who buys a workbook.
   whatever the Etsy listing yields.
 - The demand guard is a word pattern. A demand claim in other words would
   pass it.
+
+### The listing Etsy shows is the offer that was sealed, or the test says not (27 September 2026)
+
+Roadmap B2. A listing test seals a prediction about one offer at one price,
+and the owner places the listing by hand. Nothing checked that what Etsy then
+shows is that offer. A workbook listed at $19 instead of $14, or a listing that
+expired out of the shop, tests something else or nothing, and a silent window
+would still have been read as the market's answer.
+
+Each read now keeps what Etsy shows for the test's own listing in
+`venue_listing_readings` (migration 356): whether it is among the shop's
+active listings, and at what price. Only a change is a new row, and nothing
+rewrites one. "Not shown" is written only from a read that reached every
+listing Etsy said it had. A truncated read concludes nothing.
+
+Readiness gains "the listing Etsy shows is the offer that was sealed":
+- **met** when Etsy shows the listing active at the sealed price;
+- **waits on the owner** when Etsy shows a different price (naming both) or no
+  longer shows the listing, with what to do in each case.
+
+It is said only once Etsy has been read for the listing. Before that, "can be
+read" is the open condition.
+
+**Maturity.** **`tested`** (`the-listing-etsy-shows-is-the-offer-sealed`, 8,
+red first). **Proof debt:**
+- Not observed against the real listing.
+- The title is not compared: he may word the listing differently from the
+  sealed offer, and a wording is not a different offer. The file is not
+  checked either; that is roadmap B3.
+- A price change during a running window is recorded but does not yet void
+  the window's silence the way a hidden shop does. That is the next piece of
+  this seam.

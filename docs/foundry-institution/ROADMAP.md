@@ -23,14 +23,16 @@ in the maturity map.
 | B4 | The Brief warns 14 days before Etsy's refresh permission ends | `61cb94d0` |
 | A3 + A4 | Rehearsals: the model down; the owner away while a buyer waits | `f7b176ac` |
 | G6 | `npm run check` from about 22 minutes to 10.5 | `6a76b6e6` |
-| D1 | Each product type's sourced facts, its unknowns, and what can serve it | this commit |
+| D1 | Each product type's sourced facts, its unknowns, and what can serve it | `582c0438` |
+| B2 | The listing Etsy shows is checked against the sealed offer's price, and against being listed at all | this commit |
 
 ## Next
 
-After D1, the roadmap's order is D2 (which venues can sell which forms), then
-B1 to B3 (the per-task Etsy qualification record, listing identity and file
-identity), then E1 (the deliberation against one strong model, on frozen
-cases).
+Next in order: B3 (the listing's file matches the version Foundry built, as
+far as the API shows it), B1 (one per-task qualification record, extending
+`qualification.ts`), then E1 (the deliberation against one strong model, on
+frozen cases). D2, which venues can sell which forms, waits on sources Foundry
+can actually read: Etsy refuses automated fetches.
 
 ## A. Pay the proof debt already written down (code only)
 

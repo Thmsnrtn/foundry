@@ -4593,6 +4593,17 @@ CREATE TABLE venue_findability (
   said_by     TEXT NOT NULL CHECK (said_by = 'founder:' || founder_id),
   said_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE venue_listing_readings (
+  id           TEXT PRIMARY KEY,
+  product_id   TEXT NOT NULL REFERENCES products(id),
+  provider     TEXT NOT NULL CHECK (provider = lower(provider) AND length(provider) > 0),
+  listing_id   TEXT NOT NULL CHECK (length(listing_id) > 0),
+  seen         INTEGER NOT NULL CHECK (seen IN (0, 1)),
+  price_cents  INTEGER CHECK (price_cents IS NULL OR price_cents >= 0),
+  currency     TEXT CHECK (currency IS NULL OR currency = lower(currency)),
+  observed_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  CHECK (seen = 1 OR (price_cents IS NULL AND currency IS NULL))
+);
 CREATE TABLE venue_orders_after_settlement (
   id               TEXT PRIMARY KEY,
   founder_id       TEXT NOT NULL REFERENCES founders(id),
@@ -5444,6 +5455,7 @@ CREATE INDEX owner_decision_reversals_subject
   ON owner_decision_reversals (subject_kind, subject_id);
 CREATE INDEX owner_exclusion_marks_value ON owner_exclusion_marks (kind, value);
 CREATE INDEX venue_findability_by_shop ON venue_findability (product_id, provider, said_at);
+CREATE INDEX venue_listing_readings_by_listing ON venue_listing_readings (product_id, provider, listing_id, observed_at);
 CREATE INDEX venue_visibility_readings_by_shop ON venue_visibility_readings (product_id, provider, observed_at);
 CREATE TRIGGER acquisition_economics_guard
 BEFORE INSERT ON acquisition_economics
@@ -10151,6 +10163,9 @@ END;
 CREATE TRIGGER venue_findability_is_as_said
 BEFORE UPDATE ON venue_findability
 BEGIN SELECT RAISE(ABORT, 'venue_findability:said_is_said'); END;
+CREATE TRIGGER venue_listing_readings_are_as_read
+BEFORE UPDATE ON venue_listing_readings
+BEGIN SELECT RAISE(ABORT, 'venue_listing_readings:read_is_read'); END;
 CREATE TRIGGER venue_order_after_settlement_guard
 BEFORE INSERT ON venue_orders_after_settlement
 BEGIN

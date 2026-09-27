@@ -176,3 +176,43 @@ export async function shopHiddenDuring(experimentId: string, from: Date, to: Dat
   return `buyers could not find ${shopName} in ${plan.listing.venueName} search for at least part `
     + `of this window — you said so on ${dates}`;
 }
+
+// ─── What the venue shows for a test's listing ──────────────────────────────
+//
+// A listing test seals a prediction about one offer at one price. The owner
+// places the listing by hand, so what the venue actually shows is read on each
+// pass and kept as a change log (`venue_listing_readings`, migration 356).
+
+export interface ListingAsShown {
+  seen: boolean; priceCents: number | null; currency: string | null;
+  /** When the venue was read showing it so, `YYYY-MM-DD HH:MM:SS`, UTC. */
+  observedAt: string;
+}
+
+/** Keep what the venue showed for a listing. Only a change is a new row. */
+export async function noteListingAsShown(input: {
+  productId: string; provider: string; listingId: string;
+  seen: boolean; priceCents: number | null; currency: string | null;
+}): Promise<void> {
+  const p = input.provider.toLowerCase();
+  const price = input.seen ? input.priceCents : null;
+  const currency = input.seen && input.currency ? input.currency.toLowerCase() : null;
+  const last = await listingAsShown(input.productId, p, input.listingId);
+  if (last && last.seen === input.seen && last.priceCents === price && last.currency === currency) return;
+  await query(
+    `INSERT INTO venue_listing_readings (id, product_id, provider, listing_id, seen, price_cents, currency)
+     VALUES (?,?,?,?,?,?,?)`,
+    [nanoid(), input.productId, p, input.listingId, input.seen ? 1 : 0, price, currency]);
+}
+
+/** What the venue last showed for a listing, or null when it has never been read. */
+export async function listingAsShown(productId: string, provider: string, listingId: string): Promise<ListingAsShown | null> {
+  const r = (await query(
+    `SELECT seen, price_cents, currency, observed_at FROM venue_listing_readings
+      WHERE product_id = ? AND provider = ? AND listing_id = ?
+      ORDER BY datetime(observed_at) DESC, rowid DESC LIMIT 1`,
+    [productId, provider.toLowerCase(), listingId])).rows[0] as Record<string, unknown> | undefined;
+  return r ? { seen: Number(r.seen) === 1, priceCents: r.price_cents == null ? null : Number(r.price_cents),
+    currency: r.currency == null ? null : String(r.currency), observedAt: String(r.observed_at) } : null;
+}
+
