@@ -7116,6 +7116,12 @@ foundryShellRoutes.post('/foundry/controls/connectors/:provider/findable',
     const r = await sayWhetherFindable({ productId, provider, findable: answer === 'yes',
       saidBy: `founder:${String(founder.id)}` });
     if ('refused' in r) return c.redirect(here);
+    // Back in search: read it now rather than at the next pass.
+    if (answer === 'yes' && provider === 'etsy') {
+      const { readHisShopNow } = await import('../../services/senses/readers/etsy-shop.js');
+      const now = await readHisShopNow(String(founder.id)).catch(() => ({ tried: 1, read: 0, because: null }));
+      if (now.tried > 0) return c.redirect(`${here}?findable=yes&read=${now.read > 0 && now.read === now.tried ? 'ok' : 'failed'}`);
+    }
     return c.redirect(`${here}?findable=${answer}`);
   });
 
@@ -7367,16 +7373,30 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
       ? await (await import('../../services/venture/findability.js')).findabilityOf(productId, one.provider)
       : undefined;
     const findable = lastSaid && !lastSaid.byTheOwner ? null : lastSaid;
+    // What the venue itself last reported about vacation, which outranks his word.
+    const away = lastSaid === undefined ? null
+      : await (await import('../../services/venture/findability.js')).venueSaysOnVacation(productId, one.provider);
     const answer = (value: 'yes' | 'no', label: string, cls: string): unknown => html`
         <form method="POST" action="/foundry/controls/connectors/${one.provider}/findable">
           <input type="hidden" name="findable" value="${value}" />
           <button class="${cls}" type="submit">${label}</button>
         </form>`;
-    const findCard = findable === undefined ? '' : findable === null ? html`
+    // What reading it just now found, when he has just said it is back.
+    const readNow = c.req.query('read');
+    const readError = readNow === 'failed' ? ((await query(
+      `SELECT last_error FROM company_senses WHERE product_id = ? AND provider = ? AND disconnected_at IS NULL
+        AND last_error IS NOT NULL ORDER BY rowid DESC LIMIT 1`, [productId, one.provider]))
+      .rows[0] as Record<string, unknown> | undefined)?.last_error as string | undefined : undefined;
+    const findCard = findable === undefined ? '' : away?.onVacation ? html`
+      <section class="task bad" aria-labelledby="find-h">
+        <h2 id="find-h">${one.name} reports ${one.account} is on vacation</h2>
+        <p>Read on ${away.observedAt.slice(0, 10)}. Nobody can buy while it is, so no ${one.name} test
+          starts. Turn vacation mode off in ${one.name}; the next read will see it.</p>
+      </section>` : findable === null ? html`
       <section class="task" aria-labelledby="find-h">
         <h2 id="find-h">Can buyers find ${one.account} in ${one.name} search?</h2>
-        <p>${one.name} can hide a whole shop — Developer Mode, or vacation — and doesn’t tell
-          apps. No ${one.name} test starts until you say.</p>
+        <p>${one.name} can hide a whole shop. Vacation I read from ${one.name}; Developer Mode it
+          doesn’t tell apps. No ${one.name} test starts until you say.</p>
         <div class="stack">
           ${answer('yes', 'Yes, buyers can find it', 'btn go wide')}
           ${answer('no', 'No, it’s hidden', 'btn btn-secondary wide')}
@@ -7402,6 +7422,11 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
         Etsy checked the pair and confirmed it as application ${saved}.</div>` : ''}
       ${refused ? html`<div class="state bad flash" role="alert"><strong>Not saved.</strong>
         ${refused}</div>` : ''}
+      ${readNow === 'ok' ? html`<div class="state ok flash" role="status">
+        <strong>Read ${one.name} just now.</strong> What it reports is below.</div>` : ''}
+      ${readNow === 'failed' ? html`<div class="state bad flash" role="alert">
+        <strong>Could not read ${one.name} just now.</strong> ${readError ?? 'It did not answer.'}
+        Nothing is concluded from its silence; check orders and messages on ${one.name} yourself.</div>` : ''}
       ${c.req.query('etsy') === 'forgotten' ? html`<div class="state flash" role="status">
         <strong>Forgotten.</strong> Nothing here can ask Etsy anything now.</div>` : ''}
       ${c.req.query('etsy') === 'checked' ? html`<div class="state ok flash" role="status">

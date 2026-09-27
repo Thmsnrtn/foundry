@@ -99,7 +99,15 @@ export interface ShopListing {
 }
 
 export interface ShopReading {
-  shop: { shopId: string; shopName: string | null; url: string | null };
+  shop: {
+    shopId: string; shopName: string | null; url: string | null;
+    /**
+     * WHETHER ETSY SAYS THE SHOP IS ON VACATION, which takes no orders. Null
+     * when Etsy did not send the field: an absent field is not "open". This is
+     * the only visibility fact Etsy tells an app. Developer Mode is not one.
+     */
+    onVacation: boolean | null;
+  };
   listings: ShopListing[];
   orders: ShopOrder[];
   /** What Etsy said it had, which is not the same as what was fetched. */
@@ -425,6 +433,7 @@ export async function readTheShop(input: {
         shopId,
         shopName: typeof shop.shop_name === 'string' ? shop.shop_name : null,
         url: typeof shop.url === 'string' ? shop.url : null,
+        onVacation: typeof shop.is_vacation === 'boolean' ? shop.is_vacation : null,
       },
       listings, orders,
       saidListings: rawListings.said, saidOrders: rawOrders.said, discarded,
@@ -593,6 +602,11 @@ export async function bringTheVenueUpToDate(input: {
     return { read: false, because: reading.ownerWords };
   }
   await noteSenseObserved(productId, 'etsy');
+  // WHAT ETSY SAID ABOUT VACATION, KEPT AS ETSY'S. Only a change is a new row.
+  if (reading.shop.onVacation !== null) {
+    const { noteVenueVisibility } = await import('../../venture/findability.js');
+    await noteVenueVisibility(productId, 'etsy', reading.shop.onVacation);
+  }
 
   // THE WORLD ANSWERED, AND SOMETHING SAYS SO ON THE LADDER.
   //
@@ -817,4 +831,26 @@ export async function settledListingsStillLive(): Promise<Array<{ founderId: str
     }
   }
   return out;
+}
+
+/**
+ * READ HIS SHOP NOW, BECAUSE HE JUST SAID BUYERS CAN FIND IT AGAIN.
+ *
+ * The moment a hidden shop comes back is the moment its first real read
+ * matters most, and waiting for the next scheduled pass would leave him
+ * looking at a page that has not checked. The same read as the scheduled
+ * pass, over the same two work lists, only this owner's; it publishes
+ * nothing. A failure is kept against the connection, exactly as there.
+ */
+export async function readHisShopNow(founderId: string): Promise<{ tried: number; read: number; because: string | null }> {
+  const mine = [...await listingExperimentsToRead(), ...await settledListingsStillLive()]
+    .filter((r) => r.founderId === founderId);
+  let read = 0;
+  let because: string | null = null;
+  for (const r of mine) {
+    const v = await bringTheVenueUpToDate({ founderId, experimentId: r.experimentId });
+    if (v.read) read += 1;
+    else because = because ?? v.because;
+  }
+  return { tried: mine.length, read, because };
 }

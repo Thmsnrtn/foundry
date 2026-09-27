@@ -79,15 +79,35 @@ async function whatTheDayRequired(founderId: string, now: Date): Promise<string[
   }
   // A test whose window has closed and which the rule has not settled: the
   // settlement is the day's work and it did not happen.
+  // One that waits on a venue nobody can read is not overdue work: settlement
+  // is refusing, correctly, to read that silence. It is said as waiting, with
+  // the venue, so the owner knows it is the reader he is waiting on.
   const overdue = (await query(
-    `SELECT COUNT(*) AS n FROM venture_experiments e
+    `SELECT e.id,
+            (SELECT s.provider || '|' || COALESCE(s.last_observed_at, '') FROM experiment_exposures x
+               JOIN company_senses s ON s.product_id = x.product_id AND lower(s.provider) = lower(x.provider)
+              WHERE x.experiment_id = e.id AND s.disconnected_at IS NULL AND s.last_error IS NOT NULL
+              ORDER BY x.placed_at DESC, x.rowid DESC LIMIT 1) AS blind
+       FROM venture_experiments e
       WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.decision = 'approved'
         AND e.ran_at IS NULL AND e.retired_at IS NULL AND e.validity = 'valid'
         AND e.settles_when IS NOT NULL
         AND EXISTS (SELECT 1 FROM experiment_exposures x WHERE x.experiment_id = e.id
                      AND datetime(x.placed_at, '+' || COALESCE(json_extract(e.settles_when, '$.withinDays'), 30) || ' days') < datetime(?))`,
-    [founderId, now.toISOString()])).rows[0] as Record<string, unknown>;
-  const n = Number(overdue.n);
+    [founderId, now.toISOString()])).rows as unknown as Array<Record<string, unknown>>;
+  const waiting = overdue.filter((r) => r.blind != null);
+  const n = overdue.length - waiting.length;
+  const byVenue = new Map<string, { count: number; since: string }>();
+  for (const w of waiting) {
+    const [provider, since] = String(w.blind).split('|');
+    const venue = provider.charAt(0).toUpperCase() + provider.slice(1);
+    const had = byVenue.get(venue);
+    byVenue.set(venue, { count: (had?.count ?? 0) + 1, since: had?.since || since });
+  }
+  for (const [venue, w] of byVenue) {
+    out.push(`${String(w.count)} ${w.count === 1 ? "test's window has closed and it waits" : "tests' windows have closed and they wait"} `
+      + `on ${venue}, which could not be read${w.since ? ` since ${w.since.slice(0, 10)}` : ''} — nothing is concluded from its silence until it reads again`);
+  }
   if (n > 0) out.push(`${String(n)} ${n === 1 ? 'test has' : 'tests have'} passed the window the sealed rule was given and ${n === 1 ? 'has' : 'have'} not been settled`);
   return out;
 }

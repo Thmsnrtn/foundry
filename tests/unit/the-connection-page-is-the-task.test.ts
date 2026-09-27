@@ -190,4 +190,15 @@ describe('once the shop is his, it asks whether a buyer can find it', () => {
     await say('');
     expect(await said()).toBe(2);
   });
+
+  it('puts what Etsy reports about vacation above what he said', async () => {
+    const { noteVenueVisibility } = await import('../../src/services/venture/findability.js');
+    await noteVenueVisibility(P, 'etsy', true);
+    const top = inView(await get());
+    expect(top).toContain('Etsy reports ApexMicro is on vacation');
+    expect(top).toContain('Turn vacation mode off in Etsy');
+    expect(top).not.toContain('Findable in Etsy search');
+    await noteVenueVisibility(P, 'etsy', false);
+    expect(inView(await get())).toContain('Findable in Etsy search');
+  });
 });

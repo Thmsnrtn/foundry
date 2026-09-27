@@ -16,6 +16,13 @@
 //   `invalidateByObservation` — a silent window that overlaps anything he said
 //                              was hidden did not measure, and is not a verdict.
 //
+// AND WHAT ETSY SAYS, WHERE IT SAYS ANYTHING. Etsy tells an app one visibility
+// fact: whether the shop is on vacation. That is read on every venue read and
+// kept here as Etsy's (`venue_visibility_readings`, migration 354). A vacation
+// Etsy reports refuses readiness and voids an overlapping window whatever he
+// last said. Developer Mode is not reported to apps, so his word stays the
+// only witness of it, and a reading of "open" never overrides his "hidden".
+//
 // WHAT THIS IS NOT. It is his statement, recorded as his, and it is only ever
 // used to REFUSE a conclusion — never to reach one. "Findable" does not make a
 // silence meaningful on its own say-so: it removes one reason a silence could
@@ -61,6 +68,35 @@ export async function sayWhetherFindable(input: {
      VALUES (?,?,?,?,?,?)`,
     [id, founderId, input.productId, input.provider.toLowerCase(), input.findable ? 1 : 0, input.saidBy]);
   return { id };
+}
+
+export interface VenueVisibility {
+  onVacation: boolean;
+  /** When the venue was read saying so, `YYYY-MM-DD HH:MM:SS`, UTC. */
+  observedAt: string;
+}
+
+/**
+ * KEEP WHAT THE VENUE SAID ABOUT VACATION, AS THE VENUE'S. Only a change is a
+ * new row: the same state read again is not a new fact.
+ */
+export async function noteVenueVisibility(productId: string, provider: string, onVacation: boolean): Promise<void> {
+  const p = provider.toLowerCase();
+  const last = await venueSaysOnVacation(productId, p);
+  if (last && last.onVacation === onVacation) return;
+  await query(
+    `INSERT INTO venue_visibility_readings (id, product_id, provider, on_vacation) VALUES (?,?,?,?)`,
+    [nanoid(), productId, p, onVacation ? 1 : 0]);
+}
+
+/** What the venue last said about vacation, or null when it has never said. */
+export async function venueSaysOnVacation(productId: string, provider: string): Promise<VenueVisibility | null> {
+  const r = (await query(
+    `SELECT on_vacation, observed_at FROM venue_visibility_readings
+      WHERE product_id = ? AND provider = ?
+      ORDER BY datetime(observed_at) DESC, rowid DESC LIMIT 1`,
+    [productId, provider.toLowerCase()])).rows[0] as Record<string, unknown> | undefined;
+  return r ? { onVacation: Number(r.on_vacation) === 1, observedAt: String(r.observed_at) } : null;
 }
 
 /** What he said most recently, or null when he has never been asked. */
@@ -110,13 +146,32 @@ export async function shopHiddenDuring(experimentId: string, from: Date, to: Dat
       ORDER BY datetime(said_at), rowid`,
     [productId, provider, from.toISOString(), to.toISOString()])).rows as unknown as Array<Record<string, unknown>>;
   const hidden = [...inForce, ...during].filter((r) => Number(r.findable) === 0);
-  if (hidden.length === 0) return null;
+
+  // What the venue itself reported over the same window, read the same way.
+  const vacationInForce = (await query(
+    `SELECT on_vacation, observed_at FROM venue_visibility_readings
+      WHERE product_id = ? AND provider = ? AND datetime(observed_at) <= datetime(?)
+      ORDER BY datetime(observed_at) DESC, rowid DESC LIMIT 1`,
+    [productId, provider, from.toISOString()])).rows as unknown as Array<Record<string, unknown>>;
+  const vacationDuring = (await query(
+    `SELECT on_vacation, observed_at FROM venue_visibility_readings
+      WHERE product_id = ? AND provider = ?
+        AND datetime(observed_at) > datetime(?) AND datetime(observed_at) <= datetime(?)
+      ORDER BY datetime(observed_at), rowid`,
+    [productId, provider, from.toISOString(), to.toISOString()])).rows as unknown as Array<Record<string, unknown>>;
+  const away = [...vacationInForce, ...vacationDuring].filter((r) => Number(r.on_vacation) === 1);
+  if (hidden.length === 0 && away.length === 0) return null;
 
   const shop = (await query(
     `SELECT provider_account_label FROM company_senses
       WHERE product_id = ? AND provider = ? AND provider_account_label IS NOT NULL
       ORDER BY rowid DESC LIMIT 1`, [productId, provider])).rows[0] as Record<string, unknown> | undefined;
   const shopName = shop ? String(shop.provider_account_label) : 'the shop';
+  if (hidden.length === 0) {
+    const dates = [...new Set(away.map((r) => String(r.observed_at).slice(0, 10)))].join(', ');
+    return `${plan.listing.venueName} reported ${shopName} on vacation for at least part of this window `
+      + `— read on ${dates} — so nobody could have bought`;
+  }
   const dates = [...new Set(hidden.map((r) => String(r.said_at).slice(0, 10)))].join(', ');
   return `buyers could not find ${shopName} in ${plan.listing.venueName} search for at least part `
     + `of this window — you said so on ${dates}`;

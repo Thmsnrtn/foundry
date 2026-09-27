@@ -177,6 +177,58 @@ describe('when Etsy stops answering', () => {
     expect(e.verdict).toBeNull();
     expect(e.validity).toBe('valid');
   });
+
+  it('says on the Brief that the closed test waits on Etsy, not merely that it is unsettled', async () => {
+    const { healthOf } = await import('../../src/services/founder/health.js');
+    const all = (await healthOf(OWNER, new Date(Date.now() + 10 * 60_000))).didNotDoTheDay.join('\n');
+    expect(all).toMatch(/1 test's window has closed and it waits on Etsy/);
+    expect(all).toMatch(/nothing is concluded from its silence/);
+    expect(all).not.toMatch(/has not been settled/);
+  });
+});
+
+describe('when he says buyers can find the shop again, Etsy is read at once', () => {
+  const HERE = '/foundry/controls/connectors/etsy';
+  let app: { request: (u: string, init?: RequestInit) => Promise<Response> };
+  beforeAll(async () => {
+    await query(`UPDATE company_senses SET provider_account_ref = '77770001', provider_account_label = 'ApexMicro',
+      identity_verified_at = datetime('now'), identity_confirmed_at = datetime('now'), identity_confirmed_by = ?
+      WHERE product_id = ? AND provider = 'etsy'`, [`founder:${OWNER}`, PRODUCT]);
+    const { Hono } = await import('hono');
+    const { foundryShellRoutes } = await import('../../src/routes/dashboard/foundry-shell.js');
+    const a = new Hono();
+    a.use('*', async (c, next) => { c.set('founder' as never, { id: OWNER, email: 'uv@example.com' } as never); await next(); });
+    a.route('/', foundryShellRoutes);
+    app = a;
+  });
+  const sayFindable = () => app.request(`https://f.test${HERE}/findable`, {
+    method: 'POST', body: new URLSearchParams({ findable: 'yes' }),
+    headers: { 'content-type': 'application/x-www-form-urlencoded' } });
+  const page = async (q: string) => (await (await app.request(`https://f.test${HERE}?${q}`)).text())
+    .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+
+  it('tries, and says plainly when Etsy still cannot be read', async () => {
+    mode = '503';
+    const r = await sayFindable();
+    const to = r.headers.get('location') ?? '';
+    expect(to).toMatch(/findable=yes/);
+    expect(to).toMatch(/read=failed/);
+    const text = await page(to.split('?')[1]);
+    expect(text).toMatch(/Could not read Etsy just now/);
+    expect(text).toMatch(/503/);
+  });
+
+  it('reads, and says so, when Etsy answers', async () => {
+    mode = 'ok';
+    const r = await sayFindable();
+    const to = r.headers.get('location') ?? '';
+    expect(to).toMatch(/read=ok/);
+    expect(await lastError()).toBeNull();
+    expect(await page(to.split('?')[1])).toMatch(/Read Etsy just now/);
+    // Put the outage back, so what follows recovers from it as before.
+    mode = '503';
+    await read();
+  });
 });
 
 describe('when Etsy answers again, it all clears on its own', () => {

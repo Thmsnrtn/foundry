@@ -1489,3 +1489,51 @@ software.
 before: the workbook read as `other`. The shelf tests still pass. **Proof
 debt:** whether a download shelf sells is exactly what the Etsy test exists to
 find out. Nothing here says it does.
+
+### Etsy says when the shop is on vacation, and that is read (27 September 2026)
+
+Pays part of the proof debt in "A hidden shop is not a quiet market". Etsy's
+shop resource carries `is_vacation`, and a shop on vacation takes no orders.
+The reader fetched that resource on every read and dropped the field.
+
+Now each read keeps what Etsy said, in `venue_visibility_readings`
+(migration 354). Only a change is a new row, and nothing rewrites one. A field
+Etsy did not send is no reading at all, never "open". A vacation Etsy reports:
+- stops a listing test being ready, whatever the owner last said, with the
+  reason naming Etsy as the one saying it;
+- voids a silent window it overlapped;
+- is shown on the connection page above his own answer.
+
+When Etsy reports the vacation over, his word decides again. Developer Mode,
+which is what actually hid ApexMicro, is still not reported to apps. His word
+stays the only witness of it, and a reading of "open" never overrides his
+"hidden".
+
+**Maturity.** **`tested`** (`etsy-says-when-the-shop-is-on-vacation`, 8;
+`the-connection-page-is-the-task`, +1). Both were red first. **Proof debt:**
+the field's presence and meaning on the real ApexMicro shop are unobserved.
+That the Etsy v3 shop resource includes `is_vacation` is documented, but not
+yet seen in a real read here.
+
+### The shop is read the moment he says it is back, and a waiting test says what it waits on (27 September 2026)
+
+Two gaps around the moment ApexMicro returns to search.
+
+**Read at once.** When the owner taps "Buyers can find it again", the shop was
+not read until the next scheduled pass, so the page he was looking at had not
+checked. Now the same read runs straight away, over the same two work lists,
+for his tests only. It is read-only and publishes nothing. The page says either
+"Read Etsy just now" or "Could not read Etsy just now", with Etsy's own error
+and who has to look in the meantime. A failure is kept against the connection,
+exactly as on a scheduled pass.
+
+**Waiting, said as waiting.** A test whose window closed while Etsy could not
+be read is correctly left unsettled. The Brief used to count it among tests
+that "have not been settled", which reads as the institution's own lapse. Now
+it says "1 test's window has closed and it waits on Etsy, which could not be
+read since DATE — nothing is concluded from its silence until it reads again".
+A test that is overdue for any other reason is still counted as before.
+
+**Maturity.** **`tested`** (`an-unreadable-venue-is-not-a-quiet-one`, +3,
+red first). **Proof debt:** the read-on-restore has not run against the real
+shop. Its first real run is the owner's tap when Etsy confirms the restore.

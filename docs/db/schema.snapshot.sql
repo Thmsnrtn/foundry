@@ -4616,6 +4616,13 @@ CREATE TABLE venue_orders_after_settlement (
   resolved_at      TEXT,
   resolved_because TEXT
 );
+CREATE TABLE venue_visibility_readings (
+  id           TEXT PRIMARY KEY,
+  product_id   TEXT NOT NULL REFERENCES products(id),
+  provider     TEXT NOT NULL CHECK (provider = lower(provider) AND length(provider) > 0),
+  on_vacation  INTEGER NOT NULL CHECK (on_vacation IN (0, 1)),
+  observed_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE voice_conversations (
   id                  TEXT PRIMARY KEY,
   product_id          TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -5437,6 +5444,7 @@ CREATE INDEX owner_decision_reversals_subject
   ON owner_decision_reversals (subject_kind, subject_id);
 CREATE INDEX owner_exclusion_marks_value ON owner_exclusion_marks (kind, value);
 CREATE INDEX venue_findability_by_shop ON venue_findability (product_id, provider, said_at);
+CREATE INDEX venue_visibility_readings_by_shop ON venue_visibility_readings (product_id, provider, observed_at);
 CREATE TRIGGER acquisition_economics_guard
 BEFORE INSERT ON acquisition_economics
 BEGIN
@@ -10177,6 +10185,9 @@ BEGIN
        OR NEW.paid_at IS NOT OLD.paid_at
        OR NEW.unknown IS NOT OLD.unknown;
 END;
+CREATE TRIGGER venue_visibility_readings_are_as_read
+BEFORE UPDATE ON venue_visibility_readings
+BEGIN SELECT RAISE(ABORT, 'venue_visibility_readings:read_is_read'); END;
 CREATE TRIGGER workshop_continuation_append_only_delete
 BEFORE DELETE ON workshop_continuations
 BEGIN

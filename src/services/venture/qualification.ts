@@ -350,10 +350,17 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
     // A listing nobody can find turns the test's silence into a fact about the
     // shop, so he is asked, and the latest thing he said decides.
     if (productId) {
-      const { findabilityOf } = await import('./findability.js');
+      const { findabilityOf, venueSaysOnVacation } = await import('./findability.js');
       const said = await findabilityOf(productId, plan!.listing!.venue);
       const where = shopName ?? `your ${venue} shop`;
-      conditions.push(said?.findable && said.byTheOwner
+      // What the venue itself reports comes first: a vacation it reports
+      // refuses the test whatever he last said.
+      const away = await venueSaysOnVacation(productId, plan!.listing!.venue);
+      conditions.push(away?.onVacation
+        ? { name: 'buyers can find the shop', verdict: 'waits_for_you',
+          because: `${venue} itself reports ${where} is on vacation (read ${away.observedAt.slice(0, 10)}), so nobody `
+            + `can buy from it — turn vacation mode off in ${venue}, and the next read will see it` }
+        : said?.findable && said.byTheOwner
         ? met('buyers can find the shop', `you said on ${said.saidAt.slice(0, 10)} that buyers can find ${where} in ${venue} search`)
         : { name: 'buyers can find the shop', verdict: 'waits_for_you',
           because: said && !said.byTheOwner
@@ -361,7 +368,7 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
             : said
             ? `you said on ${said.saidAt.slice(0, 10)} that buyers cannot find ${where} in ${venue} search, so no sale would mean nothing`
             : `you have not said whether buyers can find ${where} in ${venue} search. ${venue} can hide a whole shop — `
-              + 'Developer Mode, or vacation — and I cannot see either, so a test there could end with no sale '
+              + 'Developer Mode, or vacation — and I cannot see Developer Mode at all, and see vacation only once the shop is read, so a test there could end with no sale '
               + 'that nobody was able to make' });
     }
 
