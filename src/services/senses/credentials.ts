@@ -336,12 +336,13 @@ export async function completeAuthorization(input: {
   await query(
     `INSERT INTO sense_credentials
        (id, company_sense_id, product_id, provider, granted_scopes_json,
-        secret_json, expires_at)
-     VALUES (?,?,?,?,?,?,?)`,
+        secret_json, expires_at, refresh_expires_at)
+     VALUES (?,?,?,?,?,?,?,?)`,
     [nanoid(), connected.id, productId, provider,
       JSON.stringify(granted.grantedScopes),
       encryptCredentialPayload(JSON.stringify(granted.secret)),
-      granted.expiresAt?.toISOString() ?? null]);
+      granted.expiresAt?.toISOString() ?? null,
+      granted.refreshExpiresAt?.toISOString() ?? null]);
 
   // IT PROVES ITSELF NOW, NOT ON SOME LATER PASS.
   //
@@ -495,10 +496,14 @@ export async function renewCredentials(withinHours = 24): Promise<RenewalOutcome
       await query(
         `UPDATE sense_credentials
             SET secret_json = ?, expires_at = ?, refreshed_at = datetime('now'),
-                failures = 0, last_failure = NULL
+                failures = 0, last_failure = NULL,
+                refresh_expires_at = CASE WHEN ? = 1 THEN ? ELSE refresh_expires_at END
           WHERE id = ?`,
         [encryptCredentialPayload(JSON.stringify(renewed.secret)),
-          renewed.expiresAt?.toISOString() ?? null, credentialId]);
+          renewed.expiresAt?.toISOString() ?? null,
+          // Undefined is "nothing new is known", and keeps the date it had.
+          renewed.refreshExpiresAt === undefined ? 0 : 1,
+          renewed.refreshExpiresAt?.toISOString() ?? null, credentialId]);
       outcome.renewed += 1;
     } catch (err) {
       const why = err instanceof SenseProviderError ? err.ownerWords

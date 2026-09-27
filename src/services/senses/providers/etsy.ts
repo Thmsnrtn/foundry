@@ -53,6 +53,8 @@ import { etsyApiKeyHeader, type EtsyAppKey } from '../app-credential.js';
 
 const AUTHORIZE = 'https://www.etsy.com/oauth/connect';
 const TOKEN = 'https://api.etsy.com/v3/public/oauth/token';
+/** Etsy's stated life of a refresh token, in days. */
+const REFRESH_LIFE_DAYS = 90;
 const API = 'https://openapi.etsy.com/v3/application';
 
 /**
@@ -211,14 +213,16 @@ const adapter: SenseProviderAdapter = {
     // which is an operating limitation named in the maturity map rather than
     // buried here.
     const expires = typeof payload.expires_in === 'number' ? payload.expires_in : 3600;
+    const refresh = typeof payload.refresh_token === 'string' ? payload.refresh_token : null;
     return {
       secret: {
         access_token: access,
-        refresh_token: typeof payload.refresh_token === 'string' ? payload.refresh_token : null,
+        refresh_token: refresh,
         shop_id: shop.shopId, shop_name: shop.shopName, shop_url: shop.url,
       },
       grantedScopes: scopesFrom(payload),
       expiresAt: new Date(Date.now() + expires * 1000),
+      refreshExpiresAt: refresh ? new Date(Date.now() + REFRESH_LIFE_DAYS * 86_400_000) : null,
     } satisfies GrantedCredential;
   },
 
@@ -242,6 +246,9 @@ const adapter: SenseProviderAdapter = {
       });
     }
     const expires = typeof payload.expires_in === 'number' ? payload.expires_in : 3600;
+    // A NEW REFRESH TOKEN IS A NEW NINETY DAYS; the same one, or none, is not.
+    // Nothing here assumes which Etsy does: the date moves only on evidence.
+    const rotated = typeof payload.refresh_token === 'string' && payload.refresh_token !== refreshToken;
     return {
       secret: {
         access_token: access,
@@ -251,6 +258,7 @@ const adapter: SenseProviderAdapter = {
       },
       grantedScopes: scopesFrom(payload),
       expiresAt: new Date(Date.now() + expires * 1000),
+      ...(rotated ? { refreshExpiresAt: new Date(Date.now() + REFRESH_LIFE_DAYS * 86_400_000) } : {}),
     } satisfies GrantedCredential;
   },
 

@@ -30,6 +30,12 @@ export interface GrantedCredential {
   grantedScopes: string[];
   /** When the access token dies, if it does. */
   expiresAt?: Date | null;
+  /**
+   * When the REFRESH token dies, which is when the owner must grant it again.
+   * Undefined means "nothing new is known": a renewal that handed back the
+   * same refresh token leaves the date it had.
+   */
+  refreshExpiresAt?: Date | null;
 }
 
 export interface ProviderFailure {

@@ -155,6 +155,30 @@ export async function healthOf(founderId: string, now: Date = new Date()): Promi
   });
   undone.unshift(...venueNeeds);
 
+  // A CONNECTION WITH AN END DATE SAYS SO BEFORE IT ARRIVES. Two weeks ahead,
+  // because reconnecting is his to do and a shop gone dark is the alternative.
+  // Any connected real company, listed or not: a connection nobody warns about
+  // ends the same way either way. STANDING DELIBERATELY DOES NOT APPLY, and
+  // this is baselined for it: an experimental asset's connection goes dark on
+  // the same date as an earned one's.
+  const ending = (await query(
+    `SELECT s.provider, s.provider_account_label, c.refresh_expires_at
+       FROM sense_credentials c
+       JOIN company_senses s ON s.id = c.company_sense_id
+       JOIN products p ON p.id = s.product_id
+      WHERE p.owner_id = ? AND p.deleted_at IS NULL AND ${realCompany('p')}
+        AND s.disconnected_at IS NULL AND c.revoked_at IS NULL
+        AND c.refresh_expires_at IS NOT NULL
+        AND datetime(c.refresh_expires_at) <= datetime(?, '+14 days')
+      ORDER BY datetime(c.refresh_expires_at), c.rowid`, [founderId, now.toISOString()]))
+    .rows as unknown as Array<Record<string, unknown>>;
+  for (const e of ending) {
+    const venue = String(e.provider).charAt(0).toUpperCase() + String(e.provider).slice(1);
+    const what = e.provider_account_label == null ? `your ${venue} account` : String(e.provider_account_label);
+    undone.push(`${venue}'s permission to read ${what} ends on ${String(e.refresh_expires_at).slice(0, 10)} — `
+      + `connect it again before then, from Connectors, or it goes dark`);
+  }
+
   const failed = [
     ...blocked.map((b) => `${b.attempting} — ${b.because ?? 'blocked'}`),
     ...loops.map((l) => l.stoppedRunning ? `${l.label} has not run for longer than it should` : `${l.label} failed ${String(l.consecutiveFailures)} times running`),

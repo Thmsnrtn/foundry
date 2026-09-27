@@ -4082,7 +4082,7 @@ CREATE TABLE sense_credentials (
   -- a live token at the other end is not a revocation, and saying it was would
   -- be the most dangerous lie this table could tell.
   revoked_at_provider INTEGER NOT NULL DEFAULT 0
-);
+, refresh_expires_at TEXT);
 CREATE TABLE sense_provider_scopes (
   provider   TEXT NOT NULL,
   sense_key  TEXT NOT NULL REFERENCES senses(sense_key),

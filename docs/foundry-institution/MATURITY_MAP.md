@@ -1537,3 +1537,32 @@ A test that is overdue for any other reason is still counted as before.
 **Maturity.** **`tested`** (`an-unreadable-venue-is-not-a-quiet-one`, +3,
 red first). **Proof debt:** the read-on-restore has not run against the real
 shop. Its first real run is the owner's tap when Etsy confirms the restore.
+
+### Etsy says when it must be connected again, before it happens (27 September 2026)
+
+Roadmap B4. **What was already right:**
+- The hour-long access token is renewed every hour (`sense_credential_tick`,
+  at :25).
+- A failed renewal writes `last_error` against the connection, so the shop
+  reads as unreadable and the Brief says so.
+- `the-life-of-a-credential` proves this.
+
+**What was missing** was the refresh token's own life. Etsy gives it ninety
+days. If Etsy hands back a fresh one on each renewal, the connection lives as
+long as it is used. If it does not, the connection ends on a date fixed at the
+moment he connected, and the first sign would have been the shop going dark.
+
+`sense_credentials.refresh_expires_at` (migration 355) records that date. It is
+set at the grant, moved only when Etsy actually hands back a *different*
+refresh token, and kept when Etsy hands back the same one or none. Nothing
+assumes which of the two Etsy does. Fourteen days before the date, the Brief
+says "Etsy's permission to read ApexMicro ends on DATE — connect it again
+before then, from Connectors, or it goes dark". A connection he has ended says
+nothing.
+
+**Maturity.** **`tested`** (`etsy-says-when-it-must-be-connected-again`, 7, red
+first). **Proof debt:** whether Etsy rotates the refresh token is unobserved.
+The first real renewal after he connects will show it, and the date follows
+whatever it shows. A connection made before this change has no date recorded
+until Etsy next rotates the token. If Etsy never rotates, that connection
+shows no warning and still ends. Reconnecting once records the date.
