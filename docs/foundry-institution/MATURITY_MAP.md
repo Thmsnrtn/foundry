@@ -1602,3 +1602,42 @@ test went red.
 controlled only. No real outage or real absence has been observed. Workshop
 mail during an outage is covered by `the-workshop-answers-for-itself`, not by
 this timeline.
+
+### The check costs a third of what it did (27 September 2026)
+
+Roadmap G6. Every slice waits on `npm run check`, which took about twenty
+minutes. Of the 868 seconds of test time, 365 were a single file,
+`gates-fail-when-they-should`. Since 21 September it plants its defects into a
+throwaway copy of the tree, so the reason it shared one serial queue with
+everything else was already gone.
+
+`npm run test:ci` is now `scripts/run-suite.mjs`, in two phases:
+1. Three processes run at once: the gates file, and every other file in two
+   `--shard`s. Each process is still serial inside.
+2. The four files that briefly write into the real tree then run alone. They
+   are listed in `scripts/suite-plan.mjs`.
+
+The script fails if any process fails, and it calls vitest with no shell in
+between.
+
+**Measured:**
+- serial: 1157 s;
+- the gates file beside one other process: 783 s;
+- beside two shards: 441 s.
+
+Every run had the same 655 files and 5790 tests. The whole check, including
+typecheck and lints, dropped from about 22 minutes to 630 s (10.5 minutes)
+wall time on its first real run.
+
+**Guarded.** `the-suite-runs-in-parallel-safely` fails when a test writes a
+file without making a temporary directory first, unless it is listed. It was
+red when a listed file was removed. The runner is itself a gate chained into
+the check, so `gates-fail-when-they-should` plants a failing test and asserts
+the runner exits 1 (and 0 for a passing one). The runner is narrowed to that
+one file by `FOUNDRY_SUITE_ONLY` and goes through the same verdict. `npm run
+test:serial` keeps the old single queue.
+
+**Maturity.** **`measured`**. **Proof debt:** the "writes into the real tree"
+check is a heuristic: `writeFileSync` without `mkdtempSync`. A test that
+writes some other way, or through a helper, would not be caught. Shards are
+split by file, not by time, so a slow file added to one shard lengthens it.

@@ -34,6 +34,14 @@ export default defineConfig({
     // replaying 361 migrations (`scripts/measure-suite-cost.mjs`). Flipping
     // this flag is worth measuring again now that the per-file cost is mostly
     // the tests themselves; it stays off until a measured run says otherwise.
+    //
+    // AND ACROSS PROCESSES, IT NOW RUNS IN PARALLEL (27 Sep 2026). Inside one
+    // process files stay serial, but `npm run test:ci` runs three processes at
+    // once: the gates file, and the rest in two shards
+    // (`scripts/run-suite.mjs`). Measured: 1157s serial → 441s, same 655 files
+    // and 5790 tests. The files that write into the real tree run afterwards
+    // on their own (`scripts/suite-plan.mjs`). `npm run test:serial` is the
+    // old single queue.
     fileParallelism: false,
   },
   resolve: {

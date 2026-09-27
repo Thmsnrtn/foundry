@@ -1342,6 +1342,38 @@ describe('every gate refuses the defect it exists for', () => {
   });
 });
 
+describe('the suite runner', () => {
+  // `npm run test:ci` is scripts/run-suite.mjs, which runs vitest in several
+  // processes at once and must fail when any of them does. Narrowed to one
+  // planted file so this costs seconds, through the same verdict.
+  const suite = (file: string): { code: number; output: string } => {
+    try {
+      const output = execFileSync('node', [resolve(ROOT, 'scripts', 'run-suite.mjs')],
+        { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, FOUNDRY_SUITE_ONLY: file } });
+      return { code: 0, output };
+    } catch (err) {
+      const e = err as { status?: number; stdout?: string; stderr?: string };
+      return { code: e.status ?? 1, output: `${e.stdout ?? ''}${e.stderr ?? ''}` };
+    }
+  };
+
+  it('exits 1 when a test fails', () => {
+    plant('tests/unit/_gate_fixture_suite.test.ts',
+      j("import { expect, it } from 'vit", "est';\n", "it('fails', () => { expect(1).toBe(2); });\n"));
+    const r = suite('tests/unit/_gate_fixture_suite.test.ts');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('FAILED in only');
+  });
+
+  it('exits 0 when it passes', () => {
+    plant('tests/unit/_gate_fixture_suite.test.ts',
+      j("import { expect, it } from 'vit", "est';\n", "it('passes', () => { expect(1).toBe(1); });\n"));
+    const r = suite('tests/unit/_gate_fixture_suite.test.ts');
+    expect(r.code, r.output).toBe(0);
+    expect(r.output).toContain('every phase passed');
+  });
+});
+
 describe('and passes on a clean tree', () => {
   it('every gate is green with nothing planted', () => {
     // The other half of the mutation: a gate that always fails is as useless as
