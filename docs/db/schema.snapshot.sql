@@ -4602,6 +4602,17 @@ CREATE TABLE venture_opportunities (
   decided_at    TEXT
 , revisit_if TEXT, lighter_architecture TEXT, from_seed_id TEXT
   REFERENCES opportunity_seeds(id));
+CREATE TABLE venue_care_checks (
+  id           TEXT PRIMARY KEY,
+  founder_id   TEXT NOT NULL REFERENCES founders(id),
+  product_id   TEXT NOT NULL REFERENCES products(id),
+  provider     TEXT NOT NULL CHECK (provider = lower(provider) AND length(provider) > 0),
+  account_ref  TEXT,
+  every_days   INTEGER NOT NULL CHECK (typeof(every_days) = 'integer' AND every_days BETWEEN 1 AND 30),
+  while_away   INTEGER NOT NULL CHECK (while_away IN (0, 1)),
+  said_by      TEXT NOT NULL CHECK (said_by = 'founder:' || founder_id),
+  said_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE venue_findability (
   id          TEXT PRIMARY KEY,
   founder_id  TEXT NOT NULL REFERENCES founders(id),
@@ -5475,6 +5486,7 @@ CREATE INDEX owner_decision_reversals_subject
   ON owner_decision_reversals (subject_kind, subject_id);
 CREATE INDEX owner_exclusion_marks_value ON owner_exclusion_marks (kind, value);
 CREATE INDEX owner_minutes_by_test ON owner_minutes (experiment_id, on_day);
+CREATE INDEX venue_care_checks_by_shop ON venue_care_checks (product_id, provider, said_at);
 CREATE INDEX venue_findability_by_shop ON venue_findability (product_id, provider, said_at);
 CREATE INDEX venue_listing_readings_by_listing ON venue_listing_readings (product_id, provider, listing_id, observed_at);
 CREATE INDEX venue_visibility_readings_by_shop ON venue_visibility_readings (product_id, provider, observed_at);
@@ -10198,6 +10210,11 @@ BEGIN
     SELECT 1 FROM venture_mandates m
      WHERE m.id = NEW.mandate_id AND m.evidence_mode = NEW.evidence_mode
        AND m.founder_id = NEW.founder_id);
+END;
+CREATE TRIGGER venue_care_checks_said_is_said
+BEFORE UPDATE ON venue_care_checks
+BEGIN
+  SELECT RAISE(ABORT, 'venue_care_checks:said_is_said');
 END;
 CREATE TRIGGER venue_findability_is_as_said
 BEFORE UPDATE ON venue_findability

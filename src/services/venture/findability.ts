@@ -87,6 +87,79 @@ async function confirmedAccountOf(productId: string, provider: string): Promise<
   return r ? String(r.provider_account_ref) : null;
 }
 
+// ─── Who checks the buyer's messages ─────────────────────────────────────────
+//
+// A venue that does not let an app read its messages (Etsy) leaves one person
+// who can: whoever checks them. The owner's handoff of 28 September: the
+// absence reading "must say exactly who checks it and when", and never
+// silently certify unattended care. So he says it, once (migration 362).
+
+/** Venues whose buyer messages Foundry cannot read. */
+export const MESSAGES_UNREAD_AT = new Set(['etsy']);
+
+export interface MessageChecks {
+  everyDays: number;
+  whileAway: boolean;
+  saidAt: string;
+}
+
+/**
+ * HE SAYS HOW OFTEN HE CHECKS THE VENUE'S MESSAGES. Only the company's owner,
+ * as himself, the same rule as `sayWhetherFindable`, and about the shop
+ * confirmed as his now.
+ */
+export async function sayHowMessagesAreChecked(input: {
+  productId: string; provider: string; everyDays: number; whileAway: boolean; saidBy: string;
+}): Promise<{ id: string } | { refused: string }> {
+  const m = /^founder:(.+)$/.exec(input.saidBy);
+  if (!m) return { refused: 'only the owner can say who checks the messages' };
+  const founderId = m[1];
+  const owned = (await query(
+    `SELECT owner_id FROM products WHERE id = ? AND deleted_at IS NULL`, [input.productId]))
+    .rows[0] as Record<string, unknown> | undefined;
+  if (!owned) return { refused: 'there is no such company' };
+  if (String(owned.owner_id) !== founderId) {
+    return { refused: 'only the owner of this company can say who checks its messages' };
+  }
+  if (!Number.isInteger(input.everyDays) || input.everyDays < 1 || input.everyDays > 30) {
+    return { refused: 'say a whole number of days from 1 to 30' };
+  }
+  const provider = input.provider.toLowerCase();
+  const id = nanoid();
+  await query(
+    `INSERT INTO venue_care_checks (id, founder_id, product_id, provider, account_ref, every_days, while_away, said_by)
+     VALUES (?,?,?,?,?,?,?,?)`,
+    [id, founderId, input.productId, provider, await confirmedAccountOf(input.productId, provider),
+      input.everyDays, input.whileAway ? 1 : 0, input.saidBy]);
+  return { id };
+}
+
+/**
+ * What he last said about checking the messages of the shop connected now, or
+ * null when he has not said. A statement about another shop does not carry
+ * (roadmap G4); one that named no shop still counts.
+ */
+export async function howMessagesAreChecked(productId: string, provider: string): Promise<MessageChecks | null> {
+  const p = provider.toLowerCase();
+  const account = await confirmedAccountOf(productId, p);
+  const r = (await query(
+    `SELECT c.every_days, c.while_away, c.said_at
+       FROM venue_care_checks c JOIN products p ON p.id = c.product_id
+      WHERE c.product_id = ? AND c.provider = ?
+        AND c.said_by = 'founder:' || p.owner_id
+        AND (c.account_ref IS NULL OR c.account_ref = ?)
+      ORDER BY datetime(c.said_at) DESC, c.rowid DESC LIMIT 1`, [productId, p, account])).rows[0] as Record<string, unknown> | undefined;
+  return r ? { everyDays: Number(r.every_days), whileAway: Number(r.while_away) === 1, saidAt: String(r.said_at) } : null;
+}
+
+/** The sentence for it, in one place, for every surface that says it. */
+export function messageChecksSentence(venueName: string, c: MessageChecks | null): string {
+  return c === null
+    ? `${venueName} messages are not read here, and nobody has said who checks them`
+    : `you check them every ${String(c.everyDays)} ${c.everyDays === 1 ? 'day' : 'days'}, `
+      + `${c.whileAway ? 'including while away' : 'but not while you are away'} (you said so on ${c.saidAt.slice(0, 10)})`;
+}
+
 export interface VenueVisibility {
   onVacation: boolean;
   /** When the venue was read saying so, `YYYY-MM-DD HH:MM:SS`, UTC. */

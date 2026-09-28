@@ -7165,6 +7165,36 @@ foundryShellRoutes.post('/foundry/controls/connectors/:provider/findable',
     return c.redirect(`${here}?findable=${answer}`);
   });
 
+// WHO CHECKS THE SHOP'S MESSAGES, AND HOW OFTEN (the owner's handoff of 28
+// September). Same guards as the findability answer: his company, a shop he
+// has confirmed, and a value in range; anything else records nothing.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/controls/connectors/:provider/messages',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const provider = String(c.req.param('provider')).toLowerCase();
+    const here = `/foundry/controls/connectors/${encodeURIComponent(provider)}`;
+    const owned = await query(
+      `SELECT id FROM products WHERE owner_id = ? AND ${realCompany()} ORDER BY rowid LIMIT 1`,
+      [String(founder.id)]);
+    if (!owned.rows.length) return c.redirect('/foundry/controls/connectors');
+    const productId = String((owned.rows[0] as Record<string, unknown>).id);
+    const confirmed = (await query(
+      `SELECT 1 FROM company_senses
+        WHERE product_id = ? AND provider = ? AND disconnected_at IS NULL
+          AND identity_confirmed_at IS NOT NULL AND identity_disputed_at IS NULL LIMIT 1`,
+      [productId, provider])).rows.length > 0;
+    if (!confirmed) return c.redirect(here);
+    const body = await c.req.parseBody();
+    const every = Number(String(body.every_days ?? '').trim());
+    if (!Number.isInteger(every)) return c.redirect(here);
+    const { sayHowMessagesAreChecked } = await import('../../services/venture/findability.js');
+    const r = await sayHowMessagesAreChecked({ productId, provider, everyDays: every,
+      whileAway: String(body.while_away ?? '') === 'yes', saidBy: `founder:${String(founder.id)}` });
+    return c.redirect('refused' in r ? here : `${here}?messages=saved`);
+  });
+
 /**
  * ONE CONNECTOR, IN FULL — the progressive disclosure the list page defers to.
  *
@@ -7454,6 +7484,25 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
         ${answer('no', 'It’s hidden now', 'btn btn-secondary btn-sm')}
       </section>`;
 
+    // WHO CHECKS ITS MESSAGES, once the shop is his: nothing here can read
+    // them, so the absence reading needs his word on who does and how often.
+    const { MESSAGES_UNREAD_AT, howMessagesAreChecked } = await import('../../services/venture/findability.js');
+    const checks = one.accountConfirmed && !journey?.dispute && MESSAGES_UNREAD_AT.has(one.provider)
+      ? await howMessagesAreChecked(productId, one.provider) : undefined;
+    const everyOptions = [1, 2, 3, 7, 14, 30];
+    const messagesCard = checks === undefined ? '' : html`
+      <section class="task${checks ? ' done' : ''}" aria-labelledby="msg-h">
+        <h2 id="msg-h">${checks ? html`<span aria-hidden="true">✓</span> ` : ''}Who checks ${one.name} messages?</h2>
+        <p>${checks
+    ? `You check ${one.name} messages every ${String(checks.everyDays)} ${checks.everyDays === 1 ? 'day' : 'days'}, ${checks.whileAway ? 'including while away' : 'but not while away'} (said ${checks.saidAt.slice(0, 10)}).`
+    : `${one.name} does not let apps read them, so a buyer who writes there reaches only you. Say how often you look, so a week away is not read as covered when it is not.`}</p>
+        <form method="POST" action="/foundry/controls/connectors/${one.provider}/messages" class="stack">
+          <label>Every <select name="every_days">${everyOptions.map((d) => html`<option value="${String(d)}"${(checks?.everyDays ?? 2) === d ? raw(' selected') : ''}>${String(d)} ${d === 1 ? 'day' : 'days'}</option>`)}</select></label>
+          <label><input type="checkbox" name="while_away" value="yes"${checks === null || checks.whileAway ? raw(' checked') : ''} /> Including while I am away</label>
+          <button class="btn${checks ? ' btn-secondary btn-sm' : ' go wide'}" type="submit">${checks ? 'Change it' : 'That is how often I check'}</button>
+        </form>
+      </section>`;
+
     // WHAT THE VENUE LAST SHOWED, once the shop is his: every listing test's
     // venue checks, word for word as readiness says them, and when the
     // permission to read ends.
@@ -7479,6 +7528,8 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
         Etsy checked the pair and confirmed it as application ${saved}.</div>` : ''}
       ${refused ? html`<div class="state bad flash" role="alert"><strong>Not saved.</strong>
         ${refused}</div>` : ''}
+      ${c.req.query('messages') === 'saved' ? html`<div class="state ok flash" role="status">
+        <strong>Saved.</strong> The absence reading now counts on it.</div>` : ''}
       ${readNow === 'ok' ? html`<div class="state ok flash" role="status">
         <strong>Read ${one.name} just now.</strong> What it reports is below.</div>` : ''}
       ${readNow === 'failed' ? html`<div class="state bad flash" role="alert">
@@ -7501,6 +7552,7 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
 
       ${task}
       ${findCard}
+      ${messagesCard}
       ${shownCard}
 
       <div class="inspect">

@@ -219,8 +219,15 @@ export async function operatingContractOf(productId: string, founderId: string):
       duties.push(`order ${String(r.order_ref)} was paid at ${venueName ?? 'the venue'} and is not yet recorded here (seen ${String(r.observed_at).slice(0, 10)})`);
     }
   }
+  // AND WHO CHECKS THEM, AND WHEN (the owner's handoff of 28 September): his
+  // word, or the plain fact that nobody has said.
+  const { howMessagesAreChecked, messageChecksSentence, MESSAGES_UNREAD_AT } = await import('./findability.js');
+  const checks = listing && MESSAGES_UNREAD_AT.has(listing.venue) ? await howMessagesAreChecked(productId, listing.venue) : null;
   const unheard = listing
-    ? ` ${venueName} messages are not read here, so a buyer who asks for help or a refund reaches you there, and I would not know.`
+    ? ` ${venueName} messages are not read here, so a buyer who asks for help or a refund reaches you there, and I would not know`
+      + (MESSAGES_UNREAD_AT.has(listing.venue)
+        ? (checks ? `; ${messageChecksSentence(venueName ?? 'the venue', checks)}.` : '; nobody has said who checks them.')
+        : '.')
     : '';
   say(4, duties.length
     ? `${duties.join('; ')}. No deadline is on record for any of it, and the provider's own process may not wait.${unheard}`
@@ -263,6 +270,9 @@ export async function operatingContractOf(productId: string, founderId: string):
 
   // ─── 7. His, and Foundry's ────────────────────────────────────────────────
   const his = [
+    ...(listing && MESSAGES_UNREAD_AT.has(listing.venue) && exposure && !exposure.withdrawnAt
+      ? [checks ? `checking ${venueName} messages every ${String(checks.everyDays)} ${checks.everyDays === 1 ? 'day' : 'days'}`
+        : `saying who checks ${venueName} messages, and how often`] : []),
     ...(q?.conditions.filter((c) => c.verdict === 'waits_for_you').map((c) => c.name) ?? []),
     ...(experimentId ? (await (await import('./obligations.js')).obligationsOf(experimentId))
       .filter((o) => o.asksHim).map((o) => o.asksHim!) : []),

@@ -202,3 +202,39 @@ describe('once the shop is his, it asks whether a buyer can find it', () => {
     expect(inView(await get())).toContain('Findable in Etsy search');
   });
 });
+
+describe('once the shop is his, it asks who checks its messages', () => {
+  // The owner's handoff of 28 September: Etsy does not show an app a buyer's
+  // message, so somebody has to say who checks them and how often, or a week
+  // away reads as covered while buyers wait unseen.
+  const tell = async (fields: Record<string, string>): Promise<Response> => app.request(
+    `https://foundry.test${HERE}/messages`,
+    { method: 'POST', body: new URLSearchParams(fields),
+      headers: { 'content-type': 'application/x-www-form-urlencoded' } });
+  const rows = async () => (await query(
+    'SELECT every_days, while_away, said_by FROM venue_care_checks WHERE product_id = ? ORDER BY rowid', [P]))
+    .rows as unknown as Array<Record<string, unknown>>;
+
+  it('asks in view, and says why only he can answer', async () => {
+    const top = inView(await get());
+    expect(top).toContain('Who checks Etsy messages?');
+    expect(top).toContain('Etsy does not let apps read them');
+    expect(top).toContain('name="every_days"');
+    expect(top).toContain('name="while_away"');
+  });
+
+  it('records what he says as his, and the page says it back', async () => {
+    const res = await tell({ every_days: '2', while_away: 'yes' });
+    expect(res.headers.get('location')).toBe(`${HERE}?messages=saved`);
+    const r = await rows();
+    expect(r.map((x) => [Number(x.every_days), Number(x.while_away), x.said_by])).toEqual([[2, 1, `founder:${F}`]]);
+    const top = inView(await get());
+    expect(top).toContain('You check Etsy messages every 2 days, including while away');
+  });
+
+  it('writes nothing for an answer out of range', async () => {
+    await tell({ every_days: '0', while_away: 'yes' });
+    await tell({ every_days: 'often' });
+    expect((await rows()).length).toBe(1);
+  });
+});

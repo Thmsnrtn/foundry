@@ -709,6 +709,48 @@ async function onlyRealDecisions(
   const wroteToHim = (await buyersWaitingOnHim(founderId, now)).slice(owedHim.length);
   for (const w of wroteToHim) evidence.push(`a buyer is waiting on you: ${w.sentence}. No deadline is on record for it.`);
   if (wroteToHim.length > 0) wouldFixIt.push(`answer ${plural(wroteToHim.length, 'buyer who wrote', 'buyers who wrote')} before you go`);
+  // AND BUYERS WHO WRITE WHERE NOTHING HERE CAN READ. The owner's handoff of
+  // 28 September: where a venue does not expose a buyer's message to Foundry,
+  // this reading "must say exactly who checks it and when" and must not
+  // silently certify unattended care. It named Etsy's messages only when a
+  // READ failed; a shop read perfectly well still hides every message from
+  // here. So each live listing on such a venue holds only if what the owner
+  // said about checking its messages covers the absence (migration 362).
+  // STANDING DELIBERATELY DOES NOT APPLY: the asset behind a live listing is
+  // usually still `experimental`, and a buyer who writes to it is owed an
+  // answer whatever word the institution uses for what it sold them.
+  const { MESSAGES_UNREAD_AT, howMessagesAreChecked } = await import('../venture/findability.js');
+  const unreadVenues = (await query(
+    `SELECT DISTINCT x.product_id, lower(x.provider) AS provider, p.name
+       FROM experiment_exposures x JOIN products p ON p.id = x.product_id
+      WHERE p.owner_id = ? AND p.deleted_at IS NULL AND ${realCompany('p')} AND x.withdrawn_at IS NULL`, [founderId]))
+    .rows as unknown as Array<Record<string, unknown>>;
+  let uncheckedVenues = 0;
+  for (const v of unreadVenues.filter((u) => MESSAGES_UNREAD_AT.has(String(u.provider)))) {
+    const venue = String(v.provider).charAt(0).toUpperCase() + String(v.provider).slice(1);
+    const checks = await howMessagesAreChecked(String(v.product_id), String(v.provider));
+    const where = `${venue} messages for ${String(v.name)}`;
+    if (checks === null) {
+      uncheckedVenues++;
+      evidence.push(`${where} are not read here, and nobody has said who checks them — a buyer who writes there `
+        + `would wait unseen for the whole ${String(days)} days`);
+    } else if (!checks.whileAway) {
+      uncheckedVenues++;
+      evidence.push(`${where}: you check them every ${String(checks.everyDays)} days, but not while you are away, `
+        + `so a buyer who writes there would wait unseen for the whole ${String(days)} days`);
+    } else if (checks.everyDays > days) {
+      uncheckedVenues++;
+      evidence.push(`${where}: you check them every ${String(checks.everyDays)} days, so over ${String(days)} days `
+        + 'a buyer who writes there might not be seen at all');
+    } else {
+      evidence.push(`you check ${where} every ${String(checks.everyDays)} ${checks.everyDays === 1 ? 'day' : 'days'}, `
+        + `including while away — you said so on ${checks.saidAt.slice(0, 10)}; nothing here reads them`);
+    }
+  }
+  if (uncheckedVenues > 0) {
+    wouldFixIt.push(`say how often you check Etsy messages while you are away, on the Etsy connection page — `
+      + 'or pause the listing before you go');
+  }
   // AND WHAT THE QUEUE COUNTS. This asked its own question of its own rows and
   // answered "nothing is waiting for you" while Home said one thing was: two
   // readings of one fact, which is the defect this institution keeps finding.
@@ -716,7 +758,7 @@ async function onlyRealDecisions(
   const queue = await waitingOn(founderId);
   for (const q of queue) evidence.push(`waiting on you: ${q.summary}`);
   const waiting = Math.max(proposals.length + waitingTests, queue.length);
-  const compromised = lapsing.length + overdue.length + owedHim.length + wroteToHim.length;
+  const compromised = lapsing.length + overdue.length + owedHim.length + wroteToHim.length + uncheckedVenues;
   return {
     property: 'only_real_decisions',
     question: `After ${String(days)} days, would the things waiting for me be mine — and still be there?`,
@@ -729,6 +771,10 @@ async function onlyRealDecisions(
         ? `${plural(lapsing.length + overdue.length, 'thing', 'things')} would be settled by the calendar rather than by you: `
           + `${plural(lapsing.length, 'proposal that lapses', 'proposals that lapse')} and `
           + `${plural(overdue.length, 'date that passes', 'dates that pass')} while you are gone.`
+        : null,
+      uncheckedVenues > 0
+        ? `${plural(uncheckedVenues, 'live listing takes', 'live listings take')} buyer messages nothing here can read, `
+          + 'and nobody is set to check them while you are away.'
         : null].filter(Boolean).join(' ')
       : waiting === 0
         ? 'Nothing is waiting for you, and nothing would expire unanswered while you were away.'

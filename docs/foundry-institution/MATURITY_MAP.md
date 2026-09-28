@@ -2181,3 +2181,43 @@ Recognition **`tested`** (`an-entrepreneurial-mandate` +2, red first).
 - A simulated phone, not his. F1's test on his own device is still his to do.
 - Typing is not counted as taps. On a real keyboard it is most of the effort.
 
+### The handoff of 28 September: the record reconciled, and who checks the messages
+
+The owner's handoff on digital products asks that the record be reconciled
+first, then that the first buyer relationship be closed before any new
+product. Two findings from checking it against the code:
+
+**The record said something false.** `OBJECTIVE.md` read "the first real thing
+this institution ever sold was a $29 one-time brief". Experiment 001 wrote to
+21 businesses and settled on 19 September with 0 payments. It now reads
+"offered for sale", with a dated amendment note. The argument it made about
+the MRR rule never depended on a sale.
+
+**A week away could certify care nobody was giving.** Etsy lets no app read a
+shop's messages. The absence reading named that only when a read had
+*failed*. For a live listing on a shop that read perfectly well, seven days
+away read as covered while every buyer who wrote on Etsy waited unseen. The
+handoff: *"the owner-facing obligation and seven-day absence reading must say
+exactly who checks it and when. Do not silently certify unattended care."*
+
+- The owner says, once, how often he checks Etsy messages and whether he does
+  while away (migration 362, `venue_care_checks`). It follows the findability
+  rules: only the company's owner, as himself; about the shop confirmed now
+  (G4); from 1 to 30 days; kept as said.
+- The absence reading (`only_real_decisions`) holds for a live Etsy listing
+  only when what he said covers the absence (while away, and at least once
+  within it). Otherwise it says exactly what is missing: "nobody has said who
+  checks them", "not while you are away", or "every 10 days", and the fix.
+- The asset's record says it in "what is owed" and in "what is yours".
+- The Etsy connection page asks it, in view, once the shop is his.
+
+**Maturity.** **`tested`** (`who-checks-the-messages`, 8;
+`the-connection-page-is-the-task` +3; red first).
+**Commercial maturity** of the Etsy test is unchanged: CE0 for Proof 2, since
+no buyer has arrived.
+**Proof debt:**
+- What he says is a statement, not an observation. Nothing here can tell
+  whether he actually looked.
+- Messages are one channel. A buyer who opens an Etsy case instead is covered
+  only by the obligations reader, and only once an order exists.
+

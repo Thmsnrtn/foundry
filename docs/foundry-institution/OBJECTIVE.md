@@ -76,10 +76,17 @@ already has:
 a doctrine reaching operation.** The ownership verdict in
 `services/founder/burden.ts` read monthly recurring revenue and nothing else,
 so an asset that sells a thing once, licenses it, or is paid on an event
-earned nothing it could see. The first real thing this institution ever sold
-was a **$29 one-time brief**. Under the rule this paragraph licensed, Foundry's
-own first encounter with economic reality was unreadable — "too early to say",
-for ever.
+earned nothing it could see. The first real thing this institution ever
+offered for sale was a **$29 one-time brief**. Under the rule this paragraph
+licensed, Foundry's own first encounter with economic reality would have been
+unreadable — "too early to say", for ever.
+
+*Amended 28 September 2026.* This read "the first real thing this institution
+ever sold". Nothing was sold: Experiment 001 wrote to 21 businesses and
+settled on 19 September with 0 payments (`OWNER_OS_MIGRATION.md`, "Experiment
+001, settled by the ledger"). The sentence was flagged by the owner's handoff
+of 28 September as disagreeing with the ledger, and the ledger is right. The
+argument about the MRR rule does not depend on a sale and stands.
 
 **ROI and durability are different instruments and they conflict if pooled.**
 Growth can always be bought at terrible ROI. The converse claim this document
