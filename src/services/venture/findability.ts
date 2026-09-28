@@ -219,8 +219,12 @@ export async function shopHiddenDuring(experimentId: string, from: Date, to: Dat
 // places the listing by hand, so what the venue actually shows is read on each
 // pass and kept as a change log (`venue_listing_readings`, migration 356).
 
+export interface ListingFile { filename: string; sizeBytes: number | null }
+
 export interface ListingAsShown {
   seen: boolean; priceCents: number | null; currency: string | null;
+  /** The files as last read on this row; null when they were not read on that pass. */
+  files: ListingFile[] | null;
   /** When the venue was read showing it so, `YYYY-MM-DD HH:MM:SS`, UTC. */
   observedAt: string;
 }
@@ -229,26 +233,55 @@ export interface ListingAsShown {
 export async function noteListingAsShown(input: {
   productId: string; provider: string; listingId: string;
   seen: boolean; priceCents: number | null; currency: string | null;
+  /** Null when the files were not read on this pass: then they are not compared, and not written. */
+  files?: ListingFile[] | null;
 }): Promise<void> {
   const p = input.provider.toLowerCase();
   const price = input.seen ? input.priceCents : null;
   const currency = input.seen && input.currency ? input.currency.toLowerCase() : null;
+  const files = input.seen && input.files ? JSON.stringify(input.files) : null;
   const last = await listingAsShown(input.productId, p, input.listingId);
-  if (last && last.seen === input.seen && last.priceCents === price && last.currency === currency) return;
+  const lastFiles = await filesAsShown(input.productId, p, input.listingId);
+  const filesChanged = files !== null && (lastFiles === null || JSON.stringify(lastFiles.files) !== files);
+  if (last && last.seen === input.seen && last.priceCents === price && last.currency === currency && !filesChanged) return;
   await query(
-    `INSERT INTO venue_listing_readings (id, product_id, provider, listing_id, seen, price_cents, currency)
-     VALUES (?,?,?,?,?,?,?)`,
-    [nanoid(), input.productId, p, input.listingId, input.seen ? 1 : 0, price, currency]);
+    `INSERT INTO venue_listing_readings (id, product_id, provider, listing_id, seen, price_cents, currency, files_json)
+     VALUES (?,?,?,?,?,?,?,?)`,
+    [nanoid(), input.productId, p, input.listingId, input.seen ? 1 : 0, price, currency, files]);
+}
+
+/** The files as last READ on a listing, whichever pass read them; null when they never were. */
+export async function filesAsShown(productId: string, provider: string, listingId: string): Promise<{ files: ListingFile[]; observedAt: string } | null> {
+  const r = (await query(
+    `SELECT files_json, observed_at FROM venue_listing_readings
+      WHERE product_id = ? AND provider = ? AND listing_id = ? AND files_json IS NOT NULL
+      ORDER BY datetime(observed_at) DESC, rowid DESC LIMIT 1`,
+    [productId, provider.toLowerCase(), listingId])).rows[0] as Record<string, unknown> | undefined;
+  return r ? { files: JSON.parse(String(r.files_json)) as ListingFile[], observedAt: String(r.observed_at) } : null;
+}
+
+/**
+ * THE FILE FOUNDRY BUILT FOR THIS TEST, as its own deliverable says:
+ * `File: NAME (N bytes, …)`. That line is written by the institution when the
+ * deliverable is recorded, never by a model or a buyer. Null when it says none.
+ */
+export async function sealedFileOf(experimentId: string): Promise<{ filename: string; bytes: number } | null> {
+  const { materialOf } = await import('./hand.js');
+  const d = await materialOf(experimentId, 'deliverable');
+  const m = d ? /File: (\S+) \((\d+) bytes/.exec(d.body) : null;
+  return m ? { filename: m[1], bytes: Number(m[2]) } : null;
 }
 
 /** What the venue last showed for a listing, or null when it has never been read. */
 export async function listingAsShown(productId: string, provider: string, listingId: string): Promise<ListingAsShown | null> {
   const r = (await query(
-    `SELECT seen, price_cents, currency, observed_at FROM venue_listing_readings
+    `SELECT seen, price_cents, currency, files_json, observed_at FROM venue_listing_readings
       WHERE product_id = ? AND provider = ? AND listing_id = ?
       ORDER BY datetime(observed_at) DESC, rowid DESC LIMIT 1`,
     [productId, provider.toLowerCase(), listingId])).rows[0] as Record<string, unknown> | undefined;
   return r ? { seen: Number(r.seen) === 1, priceCents: r.price_cents == null ? null : Number(r.price_cents),
-    currency: r.currency == null ? null : String(r.currency), observedAt: String(r.observed_at) } : null;
+    currency: r.currency == null ? null : String(r.currency),
+    files: r.files_json == null ? null : JSON.parse(String(r.files_json)) as ListingFile[],
+    observedAt: String(r.observed_at) } : null;
 }
 

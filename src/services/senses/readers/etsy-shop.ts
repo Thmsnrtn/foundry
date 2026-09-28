@@ -120,6 +120,12 @@ export interface ShopReading {
   /** Whether every listing Etsy said it had was fetched: the only read from which "not listed" may be concluded. */
   listingsComplete: boolean;
   /**
+   * The files on THIS test's listing, name and size, as Etsy holds them. Null
+   * when they were not read — no listing to read them for, or Etsy refused —
+   * which is never the same as an empty list.
+   */
+  listingFiles: Array<{ filename: string; sizeBytes: number | null }> | null;
+  /**
    * WHETHER SILENCE MEANS ANYTHING. False when the read was truncated or
    * anything was discarded: a path that cannot tell it was partial must never
    * let an empty list become an affirmative "nobody bought".
@@ -302,6 +308,21 @@ export async function readTheShop(input: {
       url: typeof l.url === 'string' ? l.url : null,
     }));
 
+    // THE FILE A BUYER WOULD DOWNLOAD, for this test's listing only. One more
+    // request, at read scope. A refusal here leaves the rest of the read
+    // standing and says "not read" rather than "no file".
+    let listingFiles: Array<{ filename: string; sizeBytes: number | null }> | null = null;
+    if (input.onlyListingId && listings.some((l) => l.listingId === input.onlyListingId)) {
+      try {
+        const body = await get(
+          `${API}/shops/${encodeURIComponent(shopId)}/listings/${encodeURIComponent(input.onlyListingId)}/files`, token, apiKey);
+        listingFiles = list(body).map((f) => ({
+          filename: typeof f.filename === 'string' ? f.filename : '',
+          sizeBytes: Number.isInteger(Number(f.size_bytes)) ? Number(f.size_bytes) : null,
+        }));
+      } catch { listingFiles = null; }
+    }
+
     // PAID RECEIPTS ONLY, AND ASKED FOR AS SUCH.
     //
     // A receipt exists before the money does on Etsy's deferred methods, and
@@ -444,6 +465,7 @@ export async function readTheShop(input: {
       listings, orders,
       saidListings: rawListings.said, saidOrders: rawOrders.said, discarded,
       listingsComplete: rawListings.said <= listings.length,
+      listingFiles,
       // COMPLETE MEANS ALL THREE: nothing left unfetched on either endpoint,
       // and nothing fetched that this reader could not read. A discard is a
       // receipt that exists and was not understood, which is exactly the
@@ -621,7 +643,8 @@ export async function bringTheVenueUpToDate(input: {
     if (shown || reading.listingsComplete) {
       const { noteListingAsShown } = await import('../../venture/findability.js');
       await noteListingAsShown({ productId, provider: 'etsy', listingId,
-        seen: shown !== undefined, priceCents: shown?.priceCents ?? null, currency: shown?.currency ?? null });
+        seen: shown !== undefined, priceCents: shown?.priceCents ?? null, currency: shown?.currency ?? null,
+        files: shown ? reading.listingFiles : null });
     }
   }
 

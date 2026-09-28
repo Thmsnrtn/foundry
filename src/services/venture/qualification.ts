@@ -108,6 +108,7 @@ export interface Qualification {
 
 const met = (name: string, because: string): QualificationCondition => ({ name, verdict: 'met', because });
 const NAME_SEALED_OFFER = 'the listing Etsy shows is the offer that was sealed';
+const NAME_BUILT_FILE = 'the file on the listing is the one Foundry built';
 
 /**
  * WHAT THIS EXPERIMENT OWES BEFORE IT TOUCHES ANYBODY, and which of those it
@@ -403,6 +404,24 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
               ? `listing ${listingId} is not among ${venue}'s active listings for the shop (read ${on}) — it may have expired, sold out or been deactivated; relist it, or the test measures nothing`
               : `${venue} shows listing ${listingId} at ${shown.priceCents === null ? 'no readable price' : dollars(shown.priceCents, shown.currency)}, but the test was sealed at ${dollars(sealed.amountCents, sealed.currency.toLowerCase())} (read ${on}) — change the listing back, or the test measures a different offer` });
       }
+
+      // AND THE FILE A BUYER WOULD DOWNLOAD IS THE ONE FOUNDRY BUILT. Said
+      // only once the files have been read and the built file is known. The
+      // venue gives name and size, never a hash: size is what is compared.
+      const { filesAsShown, sealedFileOf } = await import('./findability.js');
+      const [held, built] = [await filesAsShown(productId, plan!.listing!.venue, listingId), await sealedFileOf(experimentId)];
+      if (held && built) {
+        const bytes = (n: number) => `${n.toLocaleString('en-US')} bytes`;
+        const right = held.files.find((f) => f.sizeBytes === built.bytes);
+        const on = held.observedAt.slice(0, 10);
+        conditions.push(right
+          ? met(NAME_BUILT_FILE, `${venue} holds ${right.filename} (${bytes(built.bytes)}) on listing ${listingId}, the size of the file Foundry built (read ${on})`)
+          : { name: NAME_BUILT_FILE, verdict: 'waits_for_you',
+            because: held.files.length === 0
+              ? `no file is attached to listing ${listingId} (read ${on}) — a buyer would pay and get nothing; upload ${built.filename}`
+              : `${venue} holds ${held.files.map((f) => `${f.filename || 'an unnamed file'} (${f.sizeBytes === null ? 'size not given' : bytes(f.sizeBytes)})`).join(', ')} on listing ${listingId}, `
+                + `but the file Foundry built is ${built.filename} (${bytes(built.bytes)}) (read ${on}) — replace it, or buyers get a different file` });
+      }
     }
 
     // WHAT THE EXPERIMENT INTENDS TO LEARN, AND WHETHER IT COULD. The owner:
@@ -556,7 +575,7 @@ function stateFrom(conditions: QualificationCondition[], e: Record<string, unkno
   if (e.ran_at != null) return 'operating';
   if (blocked.length === 0) return 'ready_within_charter';
 
-  const account = conditions.find((c) => c.verdict === 'waits_for_you' && /can be operated|listing is live|can find the shop|is the offer that was sealed/.test(c.name));
+  const account = conditions.find((c) => c.verdict === 'waits_for_you' && /can be operated|listing is live|can find the shop|is the offer that was sealed|is the one Foundry built/.test(c.name));
   if (account) return 'needs_external_account';
   if (has('unproven')) return 'testing_capability';
   if (has('waits_for_you')) return 'needs_owner_authorisation';

@@ -4601,7 +4601,8 @@ CREATE TABLE venue_listing_readings (
   seen         INTEGER NOT NULL CHECK (seen IN (0, 1)),
   price_cents  INTEGER CHECK (price_cents IS NULL OR price_cents >= 0),
   currency     TEXT CHECK (currency IS NULL OR currency = lower(currency)),
-  observed_at  TEXT NOT NULL DEFAULT (datetime('now')),
+  observed_at  TEXT NOT NULL DEFAULT (datetime('now')), files_json TEXT
+  CHECK (files_json IS NULL OR json_valid(files_json)),
   CHECK (seen = 1 OR (price_cents IS NULL AND currency IS NULL))
 );
 CREATE TABLE venue_orders_after_settlement (

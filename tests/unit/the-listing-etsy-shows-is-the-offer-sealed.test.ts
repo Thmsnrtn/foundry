@@ -27,6 +27,8 @@ import { nanoid } from 'nanoid';
 const LISTING = 9988776659;
 /** What Etsy shows: the listing at a price, absent, or a count that says more than it returned. */
 let shows: { priceCents: number } | 'absent' | 'truncated' = { priceCents: 1400 };
+/** The files Etsy holds on the listing; undefined answers 404 like an endpoint nobody asked of this double. */
+let files: Array<{ filename: string; size_bytes: number }> | 'refused' | undefined;
 vi.mock('../../src/services/outbound/ssrf.js', () => ({
   safeFetch: vi.fn(async (url: string) => {
     const path = url.replace('https://openapi.etsy.com/v3/application/', '').split('?')[0];
@@ -42,6 +44,10 @@ vi.mock('../../src/services/outbound/ssrf.js', () => ({
         : { count: listing ? 1 : 0, results: listing ? [listing] : [] },
       'shops/77770003/receipts': { count: 0, results: [] },
     };
+    if (path === `shops/77770003/listings/${String(LISTING)}/files`) {
+      if (files === 'refused') return { ok: false, status: 403, json: async () => ({}) };
+      if (files !== undefined) return { ok: true, status: 200, json: async () => ({ count: files.length, results: files }) };
+    }
     const body = bodies[path];
     if (body === undefined) return { ok: false, status: 404, json: async () => ({}) };
     return { ok: true, status: 200, json: async () => body };
@@ -149,6 +155,66 @@ describe('Etsy shows the sealed offer again', () => {
     await read();
     expect((await condition())!.verdict).toBe('met');
     expect((await log()).map((r) => Number(r.seen))).toEqual([1, 1, 0, 1]);
+  });
+});
+
+describe('the file a buyer would download', () => {
+  const FILE = 'the file on the listing is the one Foundry built';
+  const fileCondition = async () => (await qualificationOf(X)).conditions.find((c) => c.name === FILE);
+  const fileRows = async () => Number(((await query(
+    `SELECT COUNT(*) AS n FROM venue_listing_readings WHERE product_id = ? AND files_json IS NOT NULL`, [PRODUCT]))
+    .rows[0] as Record<string, unknown>).n);
+
+  it('claims nothing while the files have not been read', async () => {
+    expect(await fileCondition()).toBeUndefined();
+  });
+
+  it('is met when the listing carries the workbook Foundry built, by its size', async () => {
+    shows = { priceCents: 1400 };
+    files = [{ filename: 'bid-decision-workbook.xlsx', size_bytes: 48303 }];
+    await read();
+    const c = (await fileCondition())!;
+    expect(c.verdict).toBe('met');
+    expect(c.because).toMatch(/48,303 bytes/);
+  });
+
+  it('stops the test when no file is attached: a buyer would pay and get nothing', async () => {
+    files = [];
+    await read();
+    const c = (await fileCondition())!;
+    expect(c.verdict).toBe('waits_for_you');
+    expect(c.because).toMatch(/get nothing/);
+    expect((await qualificationOf(X)).state).toBe('needs_external_account');
+  });
+
+  it('stops the test on a different file, naming both sizes', async () => {
+    files = [{ filename: 'bid-workbook-old.xlsx', size_bytes: 41000 }];
+    await read();
+    const c = (await fileCondition())!;
+    expect(c.verdict).toBe('waits_for_you');
+    expect(c.because).toMatch(/41,000 bytes/);
+    expect(c.because).toMatch(/48,303 bytes/);
+  });
+
+  it('concludes nothing from a refused file read, and the price check still stands', async () => {
+    const before = await fileRows();
+    files = 'refused';
+    await read();
+    expect(await fileRows()).toBe(before);
+    expect((await fileCondition())!.because).toMatch(/41,000 bytes/);
+    expect((await condition())!.verdict).toBe('met');
+  });
+
+  it('keeps the file log change-only, and nothing rewrites it', async () => {
+    files = [{ filename: 'bid-workbook-old.xlsx', size_bytes: 41000 }];
+    const before = await fileRows();
+    await read();
+    expect(await fileRows()).toBe(before);
+    await expect(query(`UPDATE venue_listing_readings SET files_json = '[]' WHERE product_id = ?`, [PRODUCT]))
+      .rejects.toThrow(/read_is_read/);
+    files = [{ filename: 'bid-decision-workbook.xlsx', size_bytes: 48303 }];
+    await read();
+    expect((await fileCondition())!.verdict).toBe('met');
   });
 });
 

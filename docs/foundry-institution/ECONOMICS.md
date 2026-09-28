@@ -498,3 +498,7 @@ The rows from 21 September are reused where they apply:
 
 The Flippa row is not reused, because its page could not be located at a
 checkable address. Acquisition therefore stays unknown.
+
+| Source | Mechanism | Depends on | Grade | Applies now |
+|---|---|---|---|---|
+| Etsy, *Open API v3 specification* (3.0.0), etsy.com/openapi/generated/oas/3.0.0.json, read 2026-09-28 | What an app with read scope can see: `Shop.is_vacation` (boolean); `ShopListing.price` as Money, which for a listing with variations is "the minimum possible price"; listings default to `state=active`; `getAllListingFiles` returns each file's name and `size_bytes`, and no hash. | Etsy's current API; the scopes granted (`listings_r` covers the files). | A — the platform's own specification | Yes: the vacation flag, the price check and the file check are read against these fields. |

@@ -25,15 +25,16 @@ in the maturity map.
 | G6 | `npm run check` from about 22 minutes to 10.5 | `6a76b6e6` |
 | D1 | Each product type's sourced facts, its unknowns, and what can serve it | `582c0438` |
 | B2 | The listing Etsy shows is checked against the sealed offer's price, and against being listed at all | `4ca70f81` |
-| B2b | A window in which Etsy showed another price, or no listing, is not a verdict | this commit |
+| B2b | A window in which Etsy showed another price, or no listing, is not a verdict | `3f3991ea` |
+| B3 | The file on the listing is the one Foundry built, by size, as Etsy reports it | this commit |
 
 ## Next
 
-Next in order: B3 (the listing's file matches the version Foundry built, as
-far as the API shows it), B1 (one per-task qualification record, extending
+Next in order: B1 (one per-task qualification record, extending
 `qualification.ts`), then E1 (the deliberation against one strong model, on
 frozen cases). D2, which venues can sell which forms, waits on sources Foundry
-can actually read: Etsy refuses automated fetches.
+can actually read: Etsy refuses automated fetches of its help pages, though its
+published API specification can be read.
 
 ## A. Pay the proof debt already written down (code only)
 

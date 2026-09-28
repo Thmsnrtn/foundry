@@ -1714,3 +1714,48 @@ red first). **Proof debt:**
 - A price change during a running window is recorded but does not yet void
   the window's silence the way a hidden shop does. That is the next piece of
   this seam.
+
+### The file on the listing is the one Foundry built (28 September 2026)
+
+Roadmap B3. A download listing delivers whatever file the owner uploaded by
+hand. The wrong file, an older version, or none would mean a buyer pays and
+gets the wrong thing or nothing, and the test measures a different product.
+
+Each read of a test's listing now also asks Etsy for its files:
+`getAllListingFiles`, which is covered by the `listings_r` scope already
+granted. Name and size are kept in `venue_listing_readings.files_json`
+(migration 357) as part of the same change log:
+- a new row only when the files change;
+- nothing rewrites a row;
+- a refused or failed file read is "not read", and never the same as "no
+  file".
+
+The file Foundry built is taken from the experiment's own deliverable line,
+`File: NAME (N bytes, …)`, which only the institution writes.
+
+Readiness gains "the file on the listing is the one Foundry built", stated
+once the files have been read:
+- **met** when a file of the built size is attached;
+- **waits on the owner** when no file is attached ("a buyer would pay and get
+  nothing") or the file is a different size (naming both).
+
+**Checked against Etsy's own specification (28 September 2026).** Etsy's
+published OpenAPI 3.0.0 document was read directly. It confirms the fields
+three slices rely on:
+- `Shop.is_vacation` (A1);
+- `ShopListing.price` as Money (B2);
+- `getListingsByShop` defaulting to active listings (B2's "not among active
+  listings").
+
+This moves those from assumed to documented. They are still not observed on
+the real shop. One caveat it adds: for a listing with variations, `price` is
+the minimum, so a varied listing's price check compares against its cheapest
+option.
+
+**Maturity.** **`tested`** (`the-listing-etsy-shows-is-the-offer-sealed`, +6,
+red first). **Proof debt:**
+- The API gives no hash, so a file of the same size with different contents
+  passes.
+- A wrong file does not void a window's verdict. It is a care failure for a
+  buyer and a readiness failure, not a demand verdict.
+- Not observed on the real listing.
