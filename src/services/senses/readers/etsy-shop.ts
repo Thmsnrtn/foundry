@@ -176,6 +176,24 @@ function money(m: unknown): { minorUnits: number; currency: string } | null {
   return { minorUnits: amount, currency: v.currency_code.toLowerCase() };
 }
 
+/**
+ * ETSY SAID "NOT SO OFTEN" (roadmap B5). Carries how long it asked Foundry to
+ * wait: its own Retry-After in seconds or as a date, a minute when it gave
+ * none, and never more than a day, whatever it said.
+ */
+export class EtsyAskedToWait extends Error {
+  constructor(public readonly waitSeconds: number) { super('Etsy asked Foundry to wait'); this.name = 'EtsyAskedToWait'; }
+}
+
+function retryAfterSeconds(header: string | null | undefined): number {
+  const DAY = 86_400;
+  if (header == null || header.trim() === '') return 60;
+  const n = Number(header.trim());
+  const secs = Number.isFinite(n) ? n : (Date.parse(header) - Date.now()) / 1000;
+  if (!Number.isFinite(secs) || secs <= 0) return 60;
+  return Math.min(Math.ceil(secs), DAY);
+}
+
 async function get(url: string, accessToken: string, apiKey: string): Promise<Record<string, unknown>> {
   const res = await safeFetch(url, {
     headers: {
@@ -184,6 +202,10 @@ async function get(url: string, accessToken: string, apiKey: string): Promise<Re
     },
     signal: AbortSignal.timeout(15_000),
   });
+  if (res.status === 429) {
+    const headers = (res as { headers?: { get?: (h: string) => string | null } }).headers;
+    throw new EtsyAskedToWait(retryAfterSeconds(headers?.get?.('retry-after')));
+  }
   if (!res.ok) throw new Error(`Etsy answered ${String(res.status)}`);
   return await res.json() as Record<string, unknown>;
 }
@@ -608,10 +630,33 @@ export async function bringTheVenueUpToDate(input: {
   // the asset's record, the absence reading and settlement all went on as if
   // the shop had simply been quiet. It is written here, in the same words the
   // owner is shown, and answered as a refusal rather than rethrown.
+  // AND A VENUE THAT ASKED TO BE LEFT ALONE IS LEFT ALONE UNTIL IT SAID
+  // (roadmap B5). Nothing is written: the failed read that set the wait is
+  // still the last word, so readiness and settlement go on waiting.
+  const waiting = (await query(
+    `SELECT read_not_before FROM company_senses
+      WHERE product_id = ? AND provider = 'etsy' AND disconnected_at IS NULL
+        AND read_not_before IS NOT NULL AND datetime(read_not_before) > datetime('now') LIMIT 1`, [productId]))
+    .rows[0] as Record<string, unknown> | undefined;
+  if (waiting) {
+    return { read: false, because: `Etsy asked Foundry to wait until ${String(waiting.read_not_before).slice(0, 16)} UTC before `
+      + 'reading again, so it has not been read; nothing is concluded from its silence meanwhile' };
+  }
   let reading: Awaited<ReturnType<typeof readTheShop>>;
   try {
     reading = await readTheShop({ founderId: input.founderId, productId, onlyListingId: listingId });
   } catch (err) {
+    if (err instanceof EtsyAskedToWait) {
+      await query(
+        `UPDATE company_senses SET read_not_before = datetime('now', ?)
+          WHERE product_id = ? AND provider = 'etsy' AND disconnected_at IS NULL`,
+        [`+${String(err.waitSeconds)} seconds`, productId]);
+      const until = new Date(Date.now() + err.waitSeconds * 1000).toISOString().slice(0, 16).replace('T', ' ');
+      const because = `Etsy asked Foundry to wait until ${until} UTC before reading again (too many requests), `
+        + 'so it has not been read; nothing is concluded from its silence meanwhile';
+      await noteSenseObserved(productId, 'etsy', because);
+      return { read: false, because };
+    }
     const because = `Etsy could not be read: ${err instanceof Error ? err.message : String(err)}`;
     await noteSenseObserved(productId, 'etsy', because);
     return { read: false, because };
@@ -631,6 +676,8 @@ export async function bringTheVenueUpToDate(input: {
     return { read: false, because: reading.ownerWords };
   }
   await noteSenseObserved(productId, 'etsy');
+  await query(`UPDATE company_senses SET read_not_before = NULL
+    WHERE product_id = ? AND provider = 'etsy' AND read_not_before IS NOT NULL`, [productId]);
   // WHAT ETSY SAID ABOUT VACATION, KEPT AS ETSY'S. Only a change is a new row.
   if (reading.shop.onVacation !== null) {
     const { noteVenueVisibility } = await import('../../venture/findability.js');

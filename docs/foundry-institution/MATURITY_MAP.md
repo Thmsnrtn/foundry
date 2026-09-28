@@ -2054,3 +2054,30 @@ the listing answers are unchanged, held by their own tests).
 - A payment counted here is a real charge recorded by the webhook. A payout,
   and the bank, stay unread, as question 4 already says.
 
+### When Etsy asks Foundry to wait (28 September 2026)
+
+Roadmap B5. A 429 is Etsy saying "not so often". It was handled exactly like a
+broken connection ("Etsy could not be read: Etsy answered 429"), and every
+later pass asked again at once.
+
+- The reader raises a typed `EtsyAskedToWait` carrying Etsy's own
+  `Retry-After`, in seconds or as a date. It waits a minute when Etsy gives
+  none, and never more than a day, whatever it says.
+- The wait is kept (migration 361, `company_senses.read_not_before`). Until it
+  passes, no read is attempted and nothing is written.
+- The owner reads "Etsy asked Foundry to wait until HH:MM UTC before reading
+  again (too many requests), so it has not been read; nothing is concluded
+  from its silence meanwhile."
+- **The silence is still not evidence.** The read is still recorded as failed
+  (`last_error`), so readiness says "cannot be read" and settlement waits,
+  exactly as for any other failed read. That is deliberate: settlement's
+  refusal to conclude rests on that column.
+- A good read clears both the wait and the error.
+
+**Maturity.** **`tested`** (`etsy-asks-foundry-to-wait`, 4, red first).
+**Proof debt:**
+- Etsy's real rate-limit responses have not been seen. The header's name and
+  format are the HTTP standard's, not observed from Etsy.
+- Only the shop reader backs off. The identity probe and token refresh do not
+  share the wait.
+

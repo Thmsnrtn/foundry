@@ -936,7 +936,7 @@ CREATE TABLE company_senses (
   last_error        TEXT,
   disconnected_at   TEXT,
   disconnect_reason TEXT
-, provider_account_ref TEXT, provider_account_label TEXT, identity_verified_at TEXT, identity_confirmed_at TEXT, identity_confirmed_by TEXT, identity_disputed_at TEXT, identity_disputed_ref TEXT, identity_disputed_detail TEXT);
+, provider_account_ref TEXT, provider_account_label TEXT, identity_verified_at TEXT, identity_confirmed_at TEXT, identity_confirmed_by TEXT, identity_disputed_at TEXT, identity_disputed_ref TEXT, identity_disputed_detail TEXT, read_not_before TEXT);
 CREATE TABLE company_situations (
   id             TEXT PRIMARY KEY,
   product_id     TEXT NOT NULL REFERENCES products(id),
