@@ -7414,6 +7414,23 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
         ${answer('no', 'It’s hidden now', 'btn btn-secondary btn-sm')}
       </section>`;
 
+    // WHAT THE VENUE LAST SHOWED, once the shop is his: every listing test's
+    // venue checks, word for word as readiness says them, and when the
+    // permission to read ends.
+    const shownBy = one.accountConfirmed && !journey?.dispute
+      ? await (await import('../../services/venture/qualification.js')).whatTheVenueLastShowed(String(founder.id), one.provider)
+      : null;
+    const shownCard = shownBy && shownBy.listings.length > 0 ? html`
+      <section class="task" aria-labelledby="shown-h">
+        <h2 id="shown-h">What ${one.name} last showed</h2>
+        ${shownBy.listings.map((l) => html`
+        <p><strong>listing ${/\/listing\/(\d+)/.exec(l.listingRef)?.[1] ?? l.listingRef}</strong></p>
+        <dl class="facts">
+          ${l.checks.map((k) => html`<dt>${k.verdict === 'met' ? '✓' : '•'} ${k.name.charAt(0).toUpperCase() + k.name.slice(1)}</dt><dd>${k.because}</dd>`)}
+        </dl>`)}
+        <p class="hint">Permission to read: ${shownBy.permissionEnds ? `ends ${shownBy.permissionEnds}` : 'end date not recorded'}.</p>
+      </section>` : '';
+
     return c.html(page(one.name, html`
       <h1>${one.name}</h1>
       <p class="lede">${status}</p>
@@ -7444,6 +7461,7 @@ foundryShellRoutes.get('/foundry/controls/connectors/:provider',
 
       ${task}
       ${findCard}
+      ${shownCard}
 
       <div class="inspect">
         ${placement || journey ? html`

@@ -218,6 +218,38 @@ describe('the file a buyer would download', () => {
   });
 });
 
+describe('what Etsy last showed, in one place on the connection page', () => {
+  it('gathers each listing test\'s venue checks, as readiness words them, and when the permission ends', async () => {
+    const { whatTheVenueLastShowed } = await import('../../src/services/venture/qualification.js');
+    const shown = await whatTheVenueLastShowed(OWNER, 'etsy');
+    expect(shown.listings).toHaveLength(1);
+    const names = shown.listings[0].checks.map((c) => c.name);
+    expect(names).toContain(NAME);
+    expect(names).toContain('the file on the listing is the one Foundry built');
+    expect(names).toContain('what the venue reports can be read');
+    // Exactly what readiness says, not a second wording of it.
+    const q = (await qualificationOf(X)).conditions.find((c) => c.name === NAME)!;
+    expect(shown.listings[0].checks.find((c) => c.name === NAME)!.because).toBe(q.because);
+    expect(shown.permissionEnds).toBeNull();
+  });
+
+  it('is on the connection page once the shop is his', async () => {
+    await query(`UPDATE company_senses SET provider_account_ref = '77770003', identity_verified_at = datetime('now'),
+      identity_confirmed_at = datetime('now'), identity_confirmed_by = ? WHERE product_id = ?`, [`founder:${OWNER}`, PRODUCT]);
+    const { Hono } = await import('hono');
+    const { foundryShellRoutes } = await import('../../src/routes/dashboard/foundry-shell.js');
+    const app = new Hono();
+    app.use('*', async (c, next) => { c.set('founder' as never, { id: OWNER, email: 'ls@example.com' } as never); await next(); });
+    app.route('/', foundryShellRoutes);
+    const text = (await (await app.request('https://f.test/foundry/controls/connectors/etsy')).text())
+      .replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+    expect(text).toContain('What Etsy last showed');
+    expect(text).toMatch(new RegExp(`listing ${String(LISTING)}`));
+    expect(text).toMatch(/48,303 bytes/);
+    expect(text).toMatch(/Permission to read: end date not recorded/);
+  });
+});
+
 describe('a window in which Etsy showed another offer is not a verdict', () => {
   it('voids the silence of a window during which the listing was at another price', async () => {
     await new Promise((r) => setTimeout(r, 1100));

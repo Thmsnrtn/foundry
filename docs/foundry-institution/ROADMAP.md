@@ -29,15 +29,17 @@ in the maturity map.
 | B3 | The file on the listing is the one Foundry built, by size, as Etsy reports it | `4742ed7c` |
 | G3 | Every loop the Brief watches says when its work failed | `d7564ea5` |
 | B6 | An unread fee is unknown, never zero | found already done (P1-F, case 10) |
-| C6 | The refund-reserve question (PENDING 26) comes back at the tenth settled sale | this commit |
+| C6 | The refund-reserve question (PENDING 26) comes back at the tenth settled sale | `93fc7ff4` |
+| B1 | What Etsy last showed, for every listing test, in one place on the connection page | this commit |
+| A5 | Preview a Controls change before it binds | found largely done: authority and typed rules confirm; the charter page recomputes before signing |
 
 ## Next
 
-Next in order: B1 (one per-task qualification record, extending
-`qualification.ts`), then E1 (the deliberation against one strong model, on
-frozen cases). D2, which venues can sell which forms, waits on sources Foundry
-can actually read: Etsy refuses automated fetches of its help pages, though its
-published API specification can be read.
+Next in order: E1 (the deliberation against one strong model, on frozen
+cases) needs real model calls and is the owner's spend to authorise, so the
+code-only work next is E2 (a
+lesson's lifecycle: source, contrary evidence, expiry, the decisions that used
+it). D2 waits on sources Foundry can read.
 
 ## A. Pay the proof debt already written down (code only)
 

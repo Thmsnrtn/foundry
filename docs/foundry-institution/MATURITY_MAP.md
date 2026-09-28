@@ -1807,3 +1807,37 @@ reading, not a duty that is due.
 
 B6 (an unread fee is unknown, never zero) was found already done. The reader
 keeps `feeCents: null`, and no fee event is written for it (P1-F, case 10).
+
+### What Etsy last showed, in one place (28 September 2026)
+
+Roadmap B1. The venue checks built in the last three slices, and the ones
+before them, were each visible only on a test's own readiness list:
+- the shop can be found, by his word or Etsy's vacation flag;
+- Etsy can be read;
+- the listing is the sealed offer;
+- the file is the one built.
+
+The connection page, where he will be when he taps "Buyers can find it again",
+showed none of them.
+
+`whatTheVenueLastShowed(founder, provider)` gathers, for every listing test
+on the reader's own work list, the readiness conditions that are about the
+venue. It reports each one word for word as readiness says it, so the two
+pages cannot disagree. It also reports when the permission to read ends. The
+connection page shows these as "What Etsy last showed" once the shop is
+confirmed as his.
+
+**Maturity.** **`tested`** (`the-listing-etsy-shows-is-the-offer-sealed`, +2,
+red first). **Proof debt:** the panel is only as current as the last read.
+Each line carries the date its reading was taken. It refreshes on the hourly
+read, or at once when he taps "Buyers can find it again". There is no
+general read-now control.
+
+A5 (preview a Controls change before it binds) was found largely done:
+- a company's authority move and the typed "say it" route both preview and
+  confirm;
+- the charter page recomputes the ceiling ("Recalculate the ceiling") and
+  shows the full charter text before signing.
+
+What binds on one tap is renewing the charter as it stands, with no numbers
+changed.

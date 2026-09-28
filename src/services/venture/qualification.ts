@@ -657,3 +657,47 @@ export async function qualificationStandsInTheWay(input: {
     blocking: r.blocking,
   };
 }
+
+// ─── What the venue last showed, in one place ────────────────────────────────
+
+/** The conditions that are about the venue itself, as readiness words them. */
+const VENUE_FACING = new Set([
+  'buyers can find the shop', 'what the venue reports can be read', NAME_SEALED_OFFER, NAME_BUILT_FILE,
+]);
+
+export interface VenueShowed {
+  listings: Array<{ experimentId: string; listingRef: string; checks: QualificationCondition[] }>;
+  /** When the permission to read ends, `YYYY-MM-DD`, or null when no end is recorded. */
+  permissionEnds: string | null;
+}
+
+/**
+ * WHAT THE VENUE LAST SHOWED, FOR EVERY LISTING TEST OF HIS, IN ONE PLACE.
+ *
+ * Nothing here is a second reading: each check is the readiness condition
+ * itself, word for word, so the connection page and the test's own page can
+ * never disagree. The listings are the same work list the reader reads.
+ */
+export async function whatTheVenueLastShowed(founderId: string, provider: string): Promise<VenueShowed> {
+  const { listingExperimentsToRead, settledListingsStillLive } = await import('../senses/readers/etsy-shop.js');
+  const mine = [...await listingExperimentsToRead(), ...await settledListingsStillLive()]
+    .filter((r) => r.founderId === founderId);
+  const listings: VenueShowed['listings'] = [];
+  for (const r of mine) {
+    const x = (await query(
+      `SELECT exposure_ref FROM experiment_exposures WHERE experiment_id = ? AND lower(provider) = lower(?)
+        ORDER BY placed_at DESC, rowid DESC LIMIT 1`, [r.experimentId, provider])).rows[0] as Record<string, unknown> | undefined;
+    if (!x) continue;
+    const checks = (await qualificationOf(r.experimentId)).conditions.filter((c) => VENUE_FACING.has(c.name));
+    listings.push({ experimentId: r.experimentId, listingRef: String(x.exposure_ref), checks });
+  }
+  const ends = (await query(
+    `SELECT MIN(c.refresh_expires_at) AS ends FROM sense_credentials c
+       JOIN company_senses s ON s.id = c.company_sense_id
+       JOIN venture_experiments e ON e.founder_id = ?
+       JOIN experiment_exposures x ON x.experiment_id = e.id AND x.product_id = s.product_id
+      WHERE lower(s.provider) = lower(?) AND s.disconnected_at IS NULL AND c.revoked_at IS NULL`,
+    [founderId, provider])).rows[0] as Record<string, unknown> | undefined;
+  return { listings, permissionEnds: ends?.ends == null ? null : String(ends.ends).slice(0, 10) };
+}
+
