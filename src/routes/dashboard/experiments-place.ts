@@ -446,6 +446,8 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
   const listing = (await offerShapePlanOf(id))?.listing ?? null;
   const approve = listing && v.state === 'ready' ? await consequenceOfApproving(id) : null;
   const liveListing = listing && v.state === 'running' && v.offer.paymentLinkUrl ? v.offer.paymentLinkUrl : null;
+  const { minutesOn } = await import('../../services/venture/owner-minutes.js');
+  const mine = listing ? await minutesOn(id) : null;
   // WHAT THE OWNER READS FIRST: a state, four numbers, where it stops, what
   // happens next. Everything the decision rests on is one fold down, and every
   // form is where the act belongs. Nothing is hidden; it is ordered.
@@ -632,6 +634,19 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
         <label>Refunded on <input type="date" name="refunded_at" required /></label>
         <label>Amount, in cents <input type="number" name="amount_cents" min="1" step="1" required placeholder="1400" /></label>
         <button class="btn" type="submit">Record this refund</button></form>
+    </section>` : ''}
+
+    ${listing ? html`<section class="know" id="minutes"><h2>Your time on this</h2>
+      <p>${mine
+    ? `${String(mine.total)} minutes over ${String(mine.days)} ${mine.days === 1 ? 'day' : 'days'}, from ${mine.firstDay} to ${mine.lastDay}, as you entered them. A day without an entry is unknown, not zero.`
+    : 'You have not entered any time on this test. Nothing here counts it for you, and a day without an entry is unknown, not zero.'}</p>
+      ${mine ? html`<ul>${mine.entries.map((e) => html`<li>${e.onDay}: ${String(e.minutes)} min${e.what ? html` — ${e.what}` : ''}
+        <form method="POST" action="/foundry/experiments/${id}/minutes/${e.id}/withdraw" class="inline"><button class="btn quiet" type="submit">Withdraw</button></form></li>`)}</ul>` : ''}
+      <form method="POST" action="/foundry/experiments/${id}/minutes" class="stack">
+        <label>Day <input type="date" name="on_day" required max="${new Date().toISOString().slice(0, 10)}" /></label>
+        <label>Minutes <input type="number" name="minutes" min="1" max="1440" step="1" required inputmode="numeric" /></label>
+        <label>On what (optional) <input type="text" name="what" maxlength="500" placeholder="answered a buyer, replaced the file" /></label>
+        <button class="btn" type="submit">Record my time</button></form>
     </section>` : ''}
 
     ${listing ? '' : v.readiness.sending.status !== 'ready' && v.state !== 'declined' ? html`<section class="know" id="sending"><h2>Email sending</h2>
@@ -1039,6 +1054,31 @@ experimentRoutes.post('/foundry/experiments/:id/reading', requireInstitutionOwne
       sources: String(form.sources ?? ''), queries: String(form.queries ?? ''),
     } });
     return back(c, id, 'test', 'reading');
+  } catch (e) { return back(c, id, 'test', null, said(e)); }
+});
+
+// HIS OWN TIME ON THE TEST (roadmap D6). Entered by him, for a day already
+// lived; what he has not entered is unknown, never zero.
+experimentRoutes.post('/foundry/experiments/:id/minutes', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c); if (!founderId) return c.redirect('/onboarding');
+  const id = String(c.req.param('id'));
+  const form = await c.req.parseBody();
+  try {
+    const { recordOwnerMinutes } = await import('../../services/venture/owner-minutes.js');
+    const raw = String(form.minutes ?? '').trim();
+    await recordOwnerMinutes({ founderId, experimentId: id, onDay: String(form.on_day ?? ''),
+      minutes: raw === '' ? Number.NaN : Number(raw), what: String(form.what ?? '') });
+    return back(c, id, 'test', 'minutes');
+  } catch (e) { return back(c, id, 'test', null, said(e)); }
+});
+
+experimentRoutes.post('/foundry/experiments/:id/minutes/:entry/withdraw', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c); if (!founderId) return c.redirect('/onboarding');
+  const id = String(c.req.param('id'));
+  try {
+    const { withdrawOwnerMinutes } = await import('../../services/venture/owner-minutes.js');
+    await withdrawOwnerMinutes({ founderId, entryId: String(c.req.param('entry')) });
+    return back(c, id, 'test', 'minutes');
   } catch (e) { return back(c, id, 'test', null, said(e)); }
 });
 

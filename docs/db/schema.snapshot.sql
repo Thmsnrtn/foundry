@@ -2907,6 +2907,16 @@ CREATE TABLE owner_exclusions (
   lifted_by     TEXT,
   lifted_reason TEXT
 );
+CREATE TABLE owner_minutes (
+  id            TEXT PRIMARY KEY,
+  founder_id    TEXT NOT NULL REFERENCES founders(id),
+  experiment_id TEXT NOT NULL REFERENCES venture_experiments(id),
+  on_day        TEXT NOT NULL CHECK (on_day GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'),
+  minutes       INTEGER NOT NULL CHECK (typeof(minutes) = 'integer' AND minutes BETWEEN 1 AND 1440),
+  what          TEXT CHECK (what IS NULL OR length(what) <= 500),
+  entered_at    TEXT NOT NULL DEFAULT (datetime('now')),
+  withdrawn_at  TEXT
+);
 CREATE TABLE owner_objectives (
   id              TEXT PRIMARY KEY,
   product_id      TEXT NOT NULL REFERENCES products(id),
@@ -5464,6 +5474,7 @@ CREATE INDEX lessons_read_by_lesson ON lessons_read (lesson_experiment_id, read_
 CREATE INDEX owner_decision_reversals_subject
   ON owner_decision_reversals (subject_kind, subject_id);
 CREATE INDEX owner_exclusion_marks_value ON owner_exclusion_marks (kind, value);
+CREATE INDEX owner_minutes_by_test ON owner_minutes (experiment_id, on_day);
 CREATE INDEX venue_findability_by_shop ON venue_findability (product_id, provider, said_at);
 CREATE INDEX venue_listing_readings_by_listing ON venue_listing_readings (product_id, provider, listing_id, observed_at);
 CREATE INDEX venue_visibility_readings_by_shop ON venue_visibility_readings (product_id, provider, observed_at);
@@ -7974,6 +7985,21 @@ CREATE TRIGGER owner_exclusion_mark_immutable
 BEFORE UPDATE ON owner_exclusion_marks
 BEGIN
   SELECT RAISE(ABORT,'owner_exclusion_mark:immutable');
+END;
+CREATE TRIGGER owner_minutes_entered_is_entered
+BEFORE UPDATE ON owner_minutes
+WHEN NEW.id IS NOT OLD.id OR NEW.founder_id IS NOT OLD.founder_id OR NEW.experiment_id IS NOT OLD.experiment_id
+  OR NEW.on_day IS NOT OLD.on_day OR NEW.minutes IS NOT OLD.minutes OR NEW.what IS NOT OLD.what
+  OR NEW.entered_at IS NOT OLD.entered_at
+  OR OLD.withdrawn_at IS NOT NULL
+BEGIN
+  SELECT RAISE(ABORT, 'owner_minutes:entered_is_entered');
+END;
+CREATE TRIGGER owner_minutes_only_his_own_test
+BEFORE INSERT ON owner_minutes
+WHEN NEW.founder_id IS NOT (SELECT founder_id FROM venture_experiments WHERE id = NEW.experiment_id)
+BEGIN
+  SELECT RAISE(ABORT, 'owner_minutes:not_his_test');
 END;
 CREATE TRIGGER owner_objective_needs_words
 BEFORE INSERT ON owner_objectives

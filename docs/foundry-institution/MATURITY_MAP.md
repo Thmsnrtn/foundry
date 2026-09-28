@@ -1948,3 +1948,32 @@ exits 0, and a corrupt one exits 1 with "file is not a database".
 - It proves that a copy opens and holds the liabilities. A full recovery
   (stop the app, swap the file, start again) has never been rehearsed.
 
+### The owner's own minutes on a test (28 September 2026)
+
+Roadmap D6. Proof 3 asks what a findable listing cost the owner in his own
+time, and nothing recorded it. A listing test's page now has "Your time on
+this": he enters the minutes he spent on a day already lived, with an optional
+note on what they went on. The page gives the total and the number of days,
+and says that a day without an entry is unknown, not zero. Before anything is
+entered it says so, never "0 minutes".
+
+- Kept as entered (migration 360, `owner_minutes`). A mistaken entry is
+  withdrawn once, stops counting, and stays on record.
+- Only the person whose test it is can enter time on it. The service checks
+  this, and so does a table trigger, so no caller can write an entry for
+  somebody else's test.
+- Refused: a future day, a non-date, and minutes that are not a whole number
+  from 1 to 1440.
+- Nothing is inferred from activity. A page he opened is not a minute he
+  spent.
+- Erasure: FOUNDER_SCOPED, deleted with his account.
+
+**Maturity.** **`tested`** (`his-minutes-are-his-to-enter`, 7, red first).
+**Proof debt:**
+- Never used by the owner. Proof 3's figure is only as complete as his
+  entries, and the page says so.
+- Only on listing tests' pages. Time spent on the institution itself, outside
+  any test, has nowhere to go yet.
+- Proof 3's report does not read it yet, because that report does not exist
+  until there are 30 findable days.
+

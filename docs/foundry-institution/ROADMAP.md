@@ -35,7 +35,9 @@ in the maturity map.
 | E2 | A lesson knows which later designs read it | `3890328c` |
 | E2b | A design says when a lesson it read has since stopped standing | `317ec986` |
 | G4 | A past qualification is not inherited by another shop or a new grant | `5263ccb9` |
-| G5 | Each day's copy is restored and read the day it is made; the owner can rehearse any copy with one command | this commit |
+| G5 | Each day's copy is restored and read the day it is made; the owner can rehearse any copy with one command | `b4632b66` |
+| C3 | The owner enters Etsy's weekly views and visits | found already done: the "What the venue reports" form on a live listing test |
+| D6 | The owner's own minutes on a test, entered by him; a day without an entry is unknown, not zero | this commit |
 
 ## Next
 
