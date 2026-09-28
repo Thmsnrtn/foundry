@@ -1883,3 +1883,37 @@ was read as it then stood, and is not news to that design.
   was superseded.
 - The notice is on the design's own page, not the Brief. A changed lesson is
   something to read when he looks at that test, not a duty due today.
+
+### A past qualification is not inherited by another shop or a new grant (28 September 2026)
+
+Roadmap G4. Three things readiness rested on outlived the connection that
+produced them:
+
+- **His word that buyers can find the shop** was kept per company and venue.
+  An answer about ApexMicro would have counted for a different Etsy shop
+  connected later. Each answer now records the shop confirmed as his when he
+  gave it (migration 359, `venue_findability.account_ref`). `findabilityOf`
+  reads only answers about the shop connected now, so connecting another shop
+  asks again. Answers that named no shop, including every one given before
+  this change, still count as they did. A "hidden" answer still voids an
+  overlapping window whichever shop it named: it only ever refuses a
+  conclusion.
+- **What Etsy showed for the listing, and the files on it.** Readiness now
+  reads only readings taken since the current credential was granted
+  (`connectionSince`). Every grant, whether for another shop or for other
+  permissions, is a new credential. The first read after a grant is always
+  written, even when it sees exactly what the last connection saw.
+- **"What the venue reports can be read"** passed on any past reading. It now
+  also needs the connection to have been read since it was granted, and says
+  "connected again on DATE and has not been read through that connection yet"
+  until then.
+
+**Maturity.** **`tested`** (`a-hidden-shop-is-not-a-quiet-market` +1,
+`the-listing-etsy-shows-is-the-offer-sealed` +2, red first).
+**Proof debt:**
+- A token refresh is not a new grant and does not reset anything; only a new
+  authorisation does.
+- The vacation reading is not scoped. It only refuses, and the next read of
+  the new shop replaces it, but until then it names the old shop.
+- Never exercised against a real second shop.
+

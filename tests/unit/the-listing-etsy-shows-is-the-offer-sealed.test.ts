@@ -250,6 +250,51 @@ describe('what Etsy last showed, in one place on the connection page', () => {
   });
 });
 
+describe('a new grant does not inherit what an earlier one read', () => {
+  // Roadmap G4. Every grant — another shop, or other permissions on this one —
+  // is a new credential. Readiness rests only on what was read through the
+  // connection there is now; the first read after it is always written, even
+  // when it sees what the last connection saw.
+  const FILE = 'the file on the listing is the one Foundry built';
+  const READABLE = 'what the venue reports can be read';
+  const named = async (n: string) => (await qualificationOf(X)).conditions.find((c) => c.name === n);
+
+  it('stops resting on the old reads the moment the connection is granted again', async () => {
+    shows = { priceCents: 1400 };
+    files = [{ filename: 'bid-decision-workbook.xlsx', size_bytes: 48303 }];
+    await read();
+    expect((await named(NAME))!.verdict).toBe('met');
+    expect((await named(FILE))!.verdict).toBe('met');
+    expect((await named(READABLE))!.verdict).toBe('met');
+
+    // A second apart, so the new grant is unambiguously after the last read.
+    await new Promise((r) => setTimeout(r, 1100));
+    const sense = String(((await query(`SELECT company_sense_id AS s FROM sense_credentials WHERE product_id = ? AND revoked_at IS NULL`,
+      [PRODUCT])).rows[0] as Record<string, unknown>).s);
+    await query(`UPDATE sense_credentials SET revoked_at = datetime('now'), revoke_reason = 'granted again' WHERE product_id = ? AND revoked_at IS NULL`, [PRODUCT]);
+    await query(
+      `INSERT INTO sense_credentials (id, company_sense_id, product_id, provider, granted_scopes_json, secret_json, expires_at)
+       VALUES (?,?,?,'etsy',?,?,?)`,
+      [nanoid(), sense, PRODUCT, JSON.stringify(['shops_r', 'listings_r', 'transactions_r']),
+        encryptCredentialPayload(JSON.stringify({ access_token: 'tok2', shop_id: '77770003' })),
+        new Date(Date.now() + 3600_000).toISOString()]);
+
+    expect(await named(NAME)).toBeUndefined();
+    expect(await named(FILE)).toBeUndefined();
+    const r = (await named(READABLE))!;
+    expect(r.verdict).not.toBe('met');
+    expect(r.because).toMatch(/connected again .* has not been read through that connection yet/);
+    expect((await qualificationOf(X)).state).not.toBe('ready');
+  });
+
+  it('is met again once the new connection has read the same thing', async () => {
+    await read();
+    expect((await named(NAME))!.verdict).toBe('met');
+    expect((await named(FILE))!.verdict).toBe('met');
+    expect((await named(READABLE))!.verdict).toBe('met');
+  });
+});
+
 describe('a window in which Etsy showed another offer is not a verdict', () => {
   it('voids the silence of a window during which the listing was at another price', async () => {
     await new Promise((r) => setTimeout(r, 1100));

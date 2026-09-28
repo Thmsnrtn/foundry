@@ -213,3 +213,35 @@ describe('evidence: a silence while the shop was hidden is not a verdict', () =>
     expect(e.validity).toBe('valid');
   });
 });
+
+describe('what he said about one shop does not carry to another', () => {
+  // Roadmap G4: a past qualification is never inherited when the account
+  // changes. His word that buyers can find a shop is about THAT shop. If the
+  // connection is later made to a different shop, the word does not transfer.
+  it('asks again once the connection names a different shop', async () => {
+    const who = 'hs_switch';
+    await founder(who);
+    const t = await listingTest(who);
+    await query(`INSERT INTO company_senses (id, product_id, sense_key, provider, mode, disclosure, provider_account_ref, provider_account_label,
+        identity_verified_at, identity_confirmed_at, identity_confirmed_by)
+      VALUES ('hs_sw_cs',?,'revenue','etsy','real','read only','77770001','ShopOne',datetime('now'),datetime('now'),?)`, [t.product, `founder:${who}`]);
+    await sayWhetherFindable({ productId: t.product, provider: 'etsy', findable: true, saidBy: `founder:${who}` });
+    expect((await findabilityOf(t.product, 'etsy'))?.findable).toBe(true);
+    expect((await conditionOf(t.x))!.verdict).toBe('met');
+
+    // He connects a different shop.
+    await query(`UPDATE company_senses SET disconnected_at = datetime('now'), disconnect_reason = 'connected another shop' WHERE id = 'hs_sw_cs'`);
+    await query(`INSERT INTO company_senses (id, product_id, sense_key, provider, mode, disclosure, provider_account_ref, provider_account_label,
+        identity_verified_at, identity_confirmed_at, identity_confirmed_by)
+      VALUES ('hs_sw_cs2',?,'revenue','etsy','real','read only','88880002','ShopTwo',datetime('now'),datetime('now'),?)`, [t.product, `founder:${who}`]);
+    expect(await findabilityOf(t.product, 'etsy')).toBeNull();
+    const c = (await conditionOf(t.x))!;
+    expect(c.verdict).toBe('waits_for_you');
+    expect(c.because).toMatch(/you have not said/);
+
+    // And what he says now is about the shop now connected.
+    await sayWhetherFindable({ productId: t.product, provider: 'etsy', findable: true, saidBy: `founder:${who}` });
+    expect((await findabilityOf(t.product, 'etsy'))?.findable).toBe(true);
+  });
+});
+

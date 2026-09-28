@@ -33,7 +33,8 @@ in the maturity map.
 | B1 | What Etsy last showed, for every listing test, in one place on the connection page | `e00874f7` |
 | A5 | Preview a Controls change before it binds | found largely done: authority and typed rules confirm; the charter page recomputes before signing |
 | E2 | A lesson knows which later designs read it | `3890328c` |
-| E2b | A design says when a lesson it read has since stopped standing | this commit |
+| E2b | A design says when a lesson it read has since stopped standing | `317ec986` |
+| G4 | A past qualification is not inherited by another shop or a new grant | this commit |
 
 ## Next
 

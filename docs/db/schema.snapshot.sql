@@ -4600,7 +4600,7 @@ CREATE TABLE venue_findability (
   findable    INTEGER NOT NULL CHECK (findable IN (0, 1)),
   said_by     TEXT NOT NULL CHECK (said_by = 'founder:' || founder_id),
   said_at     TEXT NOT NULL DEFAULT (datetime('now'))
-);
+, account_ref TEXT);
 CREATE TABLE venue_listing_readings (
   id           TEXT PRIMARY KEY,
   product_id   TEXT NOT NULL REFERENCES products(id),

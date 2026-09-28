@@ -387,10 +387,18 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
     // by hand; a different price, or a listing gone from the shop, tests
     // something else or nothing. Said only once the venue has been read for it:
     // before that, "can be read" below is the condition that is open.
+    //
+    // A PAST READING IS NOT INHERITED BY A NEW CONNECTION (roadmap G4). Every
+    // grant — another shop, or other permissions on this one — is a new
+    // credential, and only what was read since it was obtained speaks for the
+    // connection there is now. Before its first read, "can be read" below is
+    // the condition that is open.
+    const since = productId
+      ? await (await import('./findability.js')).connectionSince(productId, plan!.listing!.venue) : null;
     const listingId = exposure ? /\/listing\/(\d+)/.exec(String(exposure.exposure_ref))?.[1] ?? null : null;
     if (listingId && productId) {
       const { listingAsShown } = await import('./findability.js');
-      const shown = await listingAsShown(productId, plan!.listing!.venue, listingId);
+      const shown = await listingAsShown(productId, plan!.listing!.venue, listingId, since);
       if (shown) {
         const sealed = plan!.price;
         const dollars = (c: number, cur: string | null) => `${cur && cur !== 'usd' ? `${cur.toUpperCase()} ` : '$'}${(c / 100).toFixed(2)}`;
@@ -409,7 +417,7 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
       // only once the files have been read and the built file is known. The
       // venue gives name and size, never a hash: size is what is compared.
       const { filesAsShown, sealedFileOf } = await import('./findability.js');
-      const [held, built] = [await filesAsShown(productId, plan!.listing!.venue, listingId), await sealedFileOf(experimentId)];
+      const [held, built] = [await filesAsShown(productId, plan!.listing!.venue, listingId, since), await sealedFileOf(experimentId)];
       if (held && built) {
         const bytes = (n: number) => `${n.toLocaleString('en-US')} bytes`;
         const right = held.files.find((f) => f.sizeBytes === built.bytes);
@@ -454,9 +462,13 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
     // refused for the product that held none. The screen said connected and
     // the reader said no account.
     const connectedEye = productId ? (await query(
-      `SELECT c.id, s.last_error, s.last_observed_at FROM sense_credentials c
+      `SELECT c.id, s.last_error, s.last_observed_at,
+              CASE WHEN s.last_observed_at IS NOT NULL AND datetime(s.last_observed_at) >= datetime(c.obtained_at)
+                   THEN 1 ELSE 0 END AS read_since_granted
+         FROM sense_credentials c
          JOIN company_senses s ON s.id = c.company_sense_id AND s.disconnected_at IS NULL
-        WHERE lower(c.provider) = lower(?) AND c.product_id = ? AND c.revoked_at IS NULL LIMIT 1`,
+        WHERE lower(c.provider) = lower(?) AND c.product_id = ? AND c.revoked_at IS NULL
+        ORDER BY datetime(c.obtained_at) DESC LIMIT 1`,
       [plan!.listing!.venue, productId])).rows[0] as Record<string, unknown> | undefined : undefined;
     // What the venue tells this institution through the connection, as opposed
     // to what the owner typed off a statistics page.
@@ -483,7 +495,9 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
       ? { name: 'what the venue reports can be read', verdict: 'unproven',
         because: `the last read of ${venue} failed on ${String(connectedEye!.last_observed_at ?? '').slice(0, 10)} `
           + `(${String(connectedEye!.last_error)}), so a silence there means nothing until it reads again` }
-      : connectedEye && readCount > 0
+      // AND PAST READINGS DO NOT SPEAK FOR A NEW GRANT (roadmap G4): another
+      // shop, or other permissions, is not readable until it has been read.
+      : connectedEye && readCount > 0 && Number(connectedEye.read_since_granted) === 1
         ? met('what the venue reports can be read',
           `${String(readCount)} readings taken from ${venue} itself — ${theLimit}`)
         : {
@@ -491,7 +505,10 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
           verdict: connectedEye ? 'unproven'
             : eye && String(eye.maturity) !== 'declared' ? 'unproven' : 'waits_for_you',
           because: connectedEye
-            ? `${venue} is connected and has not been read yet — ${theLimit}`
+            ? readCount > 0
+              ? `${venue} was connected again on ${String(since ?? '').slice(0, 10)} and has not been read through that connection yet — `
+                + `what earlier connections read does not speak for it — ${theLimit}`
+              : `${venue} is connected and has not been read yet — ${theLimit}`
             : typedCount > 0
               ? `${String(typedCount)} readings, each entered by you — nothing here reads ${venue} on its own yet`
               : `nothing here reads ${venue} on its own, so an absence of sales would not be evidence of no sales`,

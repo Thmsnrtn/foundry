@@ -63,11 +63,28 @@ export async function sayWhetherFindable(input: {
     return { refused: 'only the owner of this company can say whether buyers can find its shop' };
   }
   const id = nanoid();
+  const provider = input.provider.toLowerCase();
   await query(
-    `INSERT INTO venue_findability (id, founder_id, product_id, provider, findable, said_by)
-     VALUES (?,?,?,?,?,?)`,
-    [id, founderId, input.productId, input.provider.toLowerCase(), input.findable ? 1 : 0, input.saidBy]);
+    `INSERT INTO venue_findability (id, founder_id, product_id, provider, findable, said_by, account_ref)
+     VALUES (?,?,?,?,?,?,?)`,
+    [id, founderId, input.productId, provider, input.findable ? 1 : 0, input.saidBy,
+      await confirmedAccountOf(input.productId, provider)]);
   return { id };
+}
+
+/**
+ * THE VENUE ACCOUNT CONFIRMED AS HIS FOR THIS COMPANY NOW, or null. Only a
+ * connection he confirmed and has not disputed names a shop: a connection that
+ * merely reached an account has not said the account is his.
+ */
+async function confirmedAccountOf(productId: string, provider: string): Promise<string | null> {
+  const r = (await query(
+    `SELECT provider_account_ref FROM company_senses
+      WHERE product_id = ? AND provider = ? AND disconnected_at IS NULL
+        AND identity_confirmed_at IS NOT NULL AND identity_disputed_at IS NULL
+        AND provider_account_ref IS NOT NULL
+      ORDER BY rowid DESC LIMIT 1`, [productId, provider])).rows[0] as Record<string, unknown> | undefined;
+  return r ? String(r.provider_account_ref) : null;
 }
 
 export interface VenueVisibility {
@@ -99,14 +116,23 @@ export async function venueSaysOnVacation(productId: string, provider: string): 
   return r ? { onVacation: Number(r.on_vacation) === 1, observedAt: String(r.observed_at) } : null;
 }
 
-/** What he said most recently, or null when he has never been asked. */
+/**
+ * What he said most recently ABOUT THE SHOP CONNECTED NOW, or null when he has
+ * not been asked about it. A statement about another shop is not his word
+ * about this one (roadmap G4): connecting a different account asks again.
+ * Statements that named no shop — said before any was confirmed, or before
+ * migration 359 — still count, as they always did.
+ */
 export async function findabilityOf(productId: string, provider: string): Promise<Findability | null> {
+  const p = provider.toLowerCase();
+  const account = await confirmedAccountOf(productId, p);
   const r = (await query(
     `SELECT f.findable, f.said_at, f.said_by, 'founder:' || p.owner_id AS the_owner
        FROM venue_findability f JOIN products p ON p.id = f.product_id
       WHERE f.product_id = ? AND f.provider = ?
+        AND (f.account_ref IS NULL OR f.account_ref = ?)
       ORDER BY datetime(f.said_at) DESC, f.rowid DESC LIMIT 1`,
-    [productId, provider.toLowerCase()])).rows[0] as Record<string, unknown> | undefined;
+    [productId, p, account])).rows[0] as Record<string, unknown> | undefined;
   return r ? { findable: Number(r.findable) === 1, saidAt: String(r.said_at),
     byTheOwner: String(r.said_by) === String(r.the_owner) } : null;
 }
@@ -120,6 +146,10 @@ export async function findabilityOf(productId: string, provider: string): Promis
  * absence of record is not a record of failure, the same rule the instrument
  * applies to a day nobody watched — which is why readiness asks before a test
  * starts rather than this guessing after it ends.
+ *
+ * Every statement counts here, whichever shop it named: a "hidden" only ever
+ * refuses a conclusion, and refusing one wrongly costs a verdict, never a
+ * false one. Only readiness (`findabilityOf`) is scoped to the shop.
  *
  * Returns the sentence to give him, or null.
  */
@@ -240,8 +270,12 @@ export async function noteListingAsShown(input: {
   const price = input.seen ? input.priceCents : null;
   const currency = input.seen && input.currency ? input.currency.toLowerCase() : null;
   const files = input.seen && input.files ? JSON.stringify(input.files) : null;
-  const last = await listingAsShown(input.productId, p, input.listingId);
-  const lastFiles = await filesAsShown(input.productId, p, input.listingId);
+  // Compared with what was read through the connection there is now, so the
+  // first read after a new grant is always written: readiness counts only
+  // readings made since the grant (`connectionSince`).
+  const since = await connectionSince(input.productId, p);
+  const last = await listingAsShown(input.productId, p, input.listingId, since);
+  const lastFiles = await filesAsShown(input.productId, p, input.listingId, since);
   const filesChanged = files !== null && (lastFiles === null || JSON.stringify(lastFiles.files) !== files);
   if (last && last.seen === input.seen && last.priceCents === price && last.currency === currency && !filesChanged) return;
   await query(
@@ -250,13 +284,29 @@ export async function noteListingAsShown(input: {
     [nanoid(), input.productId, p, input.listingId, input.seen ? 1 : 0, price, currency, files]);
 }
 
+/**
+ * WHEN THE CONNECTION THERE IS NOW WAS GRANTED, or null when there is none.
+ * Every grant — another shop, or other permissions — is a new credential, so a
+ * reading made before this moment was made through a connection since replaced.
+ */
+export async function connectionSince(productId: string, provider: string): Promise<string | null> {
+  const r = (await query(
+    `SELECT c.obtained_at FROM sense_credentials c
+       JOIN company_senses s ON s.id = c.company_sense_id AND s.disconnected_at IS NULL
+      WHERE lower(c.provider) = lower(?) AND c.product_id = ? AND c.revoked_at IS NULL
+      ORDER BY datetime(c.obtained_at) DESC LIMIT 1`, [provider, productId])).rows[0] as Record<string, unknown> | undefined;
+  return r ? String(r.obtained_at) : null;
+}
+
 /** The files as last READ on a listing, whichever pass read them; null when they never were. */
-export async function filesAsShown(productId: string, provider: string, listingId: string): Promise<{ files: ListingFile[]; observedAt: string } | null> {
+export async function filesAsShown(productId: string, provider: string, listingId: string,
+  since: string | null = null): Promise<{ files: ListingFile[]; observedAt: string } | null> {
   const r = (await query(
     `SELECT files_json, observed_at FROM venue_listing_readings
       WHERE product_id = ? AND provider = ? AND listing_id = ? AND files_json IS NOT NULL
+        AND (? IS NULL OR datetime(observed_at) >= datetime(?))
       ORDER BY datetime(observed_at) DESC, rowid DESC LIMIT 1`,
-    [productId, provider.toLowerCase(), listingId])).rows[0] as Record<string, unknown> | undefined;
+    [productId, provider.toLowerCase(), listingId, since, since])).rows[0] as Record<string, unknown> | undefined;
   return r ? { files: JSON.parse(String(r.files_json)) as ListingFile[], observedAt: String(r.observed_at) } : null;
 }
 
@@ -272,13 +322,20 @@ export async function sealedFileOf(experimentId: string): Promise<{ filename: st
   return m ? { filename: m[1], bytes: Number(m[2]) } : null;
 }
 
-/** What the venue last showed for a listing, or null when it has never been read. */
-export async function listingAsShown(productId: string, provider: string, listingId: string): Promise<ListingAsShown | null> {
+/**
+ * What the venue last showed for a listing, or null when it has never been
+ * read. `since` narrows it to readings taken on or after that moment — the
+ * connection there is now — so readiness never rests on a read made through a
+ * connection that has since been replaced.
+ */
+export async function listingAsShown(productId: string, provider: string, listingId: string,
+  since: string | null = null): Promise<ListingAsShown | null> {
   const r = (await query(
     `SELECT seen, price_cents, currency, files_json, observed_at FROM venue_listing_readings
       WHERE product_id = ? AND provider = ? AND listing_id = ?
+        AND (? IS NULL OR datetime(observed_at) >= datetime(?))
       ORDER BY datetime(observed_at) DESC, rowid DESC LIMIT 1`,
-    [productId, provider.toLowerCase(), listingId])).rows[0] as Record<string, unknown> | undefined;
+    [productId, provider.toLowerCase(), listingId, since, since])).rows[0] as Record<string, unknown> | undefined;
   return r ? { seen: Number(r.seen) === 1, priceCents: r.price_cents == null ? null : Number(r.price_cents),
     currency: r.currency == null ? null : String(r.currency),
     files: r.files_json == null ? null : JSON.parse(String(r.files_json)) as ListingFile[],
