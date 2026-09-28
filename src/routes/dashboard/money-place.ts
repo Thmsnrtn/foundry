@@ -197,14 +197,14 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
       <header><h2>${mark('cash')}Movement <span class="dim">30 days</span></h2></header>
       ${spark.svg ? html`<div class="chart">${raw(spark.svg)}</div>` : ''}
       <p class="figures"><span class="up">+${dollars(inCents)} in</span><span class="down">−${dollars(outCents)} out</span>
-        ${recent.length === 0 ? html`<span class="quiet">nothing has moved yet; the first row will be written by Stripe, not by me</span>`
+        ${recent.length === 0 ? html`<span class="quiet">nothing has moved yet; the first row will be written from the provider's own record, not by me</span>`
     : spark.svg ? '' : html`<span class="quiet">${String(byDay.size)} ${byDay.size === 1 ? 'day' : 'days'} with movement — not yet a trend</span>`}</p>
     </section>
 
     <section class="panel ledger-panel" aria-label="The ledger">
       <header><h2>${mark('changed')}Economic events</h2><span class="dim">${ledger.length ? `${String(ledger.length)} newest, in the order the world put them` : ''}</span></header>
       ${ledger.length === 0
-        ? html`<p class="quiet">Nothing yet. The first row will be written by Stripe, not by me.</p>`
+        ? html`<p class="quiet">Nothing yet. The first row will be written from the provider's own record, not by me.</p>`
         : html`<ul class="ledger">${ledger.map((e) => html`<li class="${e.direction}">
             ${mark(KIND_MARK(e))}
             <span class="what">${e.whatItIs}${e.quality === 'estimated' ? html` <span class="pill warn">estimated</span>` : ''}</span>

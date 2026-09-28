@@ -156,7 +156,13 @@ const A_THING_THAT_EARNS =
 const EARNS = new RegExp(
   `${A_THING_THAT_EARNS.source}|\\b(api|calculator|generator|utility|plugin|extension`
   + '|add-?on|monitoring|alerting|marketplace|licensing|dataset|data product|directory'
-  + '|acquisition|idea|income|revenue|earning|earn money|passive)');
+  + '|acquisition|idea|income|revenue|earning|earn money|passive)'
+  // WHAT PEOPLE WOULD PAY FOR, IN PLAIN WORDS (found walking J1 on a phone,
+  // roadmap A8): "look for small digital tools that contractors would pay for
+  // once" was "I did not follow that". Bounded: "tools" only when something
+  // follows that makes them a kind of thing ("the tools page" is a page).
+  + '|\\bdigital (?:tools?|products?|downloads?|goods|files?)\\b|\\btools? (?:that|for|which)\\b'
+  + '|\\btemplates?\\b|\\bprintables?\\b|\\bworkbooks?\\b|\\bwould (?:pay|buy)\\b|\\bpay for\\b|\\bthat sells?\\b');
 
 /**
  * ASKS TO LOOK. The phrase list, and the plainest form of all: a sentence that

@@ -42,7 +42,8 @@ in the maturity map.
 | A6 + A7 | An outreach asset answers "what has it been shown to do" and "what if it is interrupted" | `7c00cf25` |
 | B5 | When Etsy rate-limits a read, Foundry waits as long as Etsy asked and concludes nothing meanwhile | `dd1c9111` |
 | F4 (+ F1 preparation) | Ask answers all five comprehension questions, from the money page's own readers | `73fe05d6` |
-| D4 | Each sale names who took its fee (Etsy, not "Stripe"), and the margin says what it leaves out | this commit |
+| D4 | Each sale names who took its fee (Etsy, not "Stripe"), and the margin says what it leaves out | `789cab7b` |
+| A8 | J1 and J3 walked on a 390px phone: 4 taps / 4 screens and 5 taps / 5 screens, no overflow — and the walk found a direction the door did not hear | this commit |
 | E3 | "No sales" split into its causes | found already done where observable: a hidden shop, an unreadable venue, and a listing inactive or at another price each void a silent window (B2b). A missing file does not stop a sale, so it is a readiness and care failure, not a cause of silence (B3). A broken checkout is not observable to a read-only app. |
 
 ## Next

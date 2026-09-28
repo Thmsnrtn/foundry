@@ -69,6 +69,10 @@ describe('the five questions, typed as he would type them', () => {
   it('reads "How much can you spend?" as what Foundry may spend, not a company\'s numbers', async () => {
     expect(await asked('How much can you spend?')).toMatch(/charter|may spend|may think/i);
   });
+
+  it('never sends an Etsy refund to Stripe', async () => {
+    expect(await asked('What may Foundry spend?')).toMatch(/sale made on Etsy is refunded on Etsy, by you/);
+  });
 });
 
 describe('Ask and the money page say the same thing', () => {

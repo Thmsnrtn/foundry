@@ -2146,3 +2146,38 @@ The same held figure appeared in Ask's bank answer.
 - No hourly value is put on his time, deliberately. That would be a number
   nobody has given.
 
+### J1 and J3, walked on a phone and counted (28 September 2026)
+
+Roadmap A8. J1 (start an investigation, and find it later) and J3 (stop a
+search, and still find the record) had only been proved through HTTP
+requests: the rows, not the walk. `scripts/measure-journeys.mts` drives the
+real pages in Chromium at 390 × 844, taps only what is visible, counts taps
+and screens, and fails on horizontal overflow. It is not part of `npm run
+check`, because it needs the browser binary.
+
+| Journey | Taps | Screens | Path |
+|---|---|---|---|
+| J1 | 4: open Ask, tap the box, Ask, confirm | 4 | Home → Ask → Home (looking) → Home shows "What I am looking for" |
+| J3 | 5: open Ask, tap the box, Ask, confirm, then More → Activity | 5 | Home → Ask → Home (stopped) → Home → Activity shows "Stopped looking" |
+
+**What the walk found.** The first direction typed, "Look for small digital
+tools that contractors would pay for once", was answered **"I did not follow
+that"**. The reader of directions needs a word for something that earns, and
+"tools", "templates" and "would pay for" were not among them. Those words are
+now included, with bounds: "tools" counts only when followed by "that", "for"
+or "which", so "the tools page" stays a page. A test holds four natural
+directions that must be heard, and four look-alikes ("Find the invoice I
+sent", "Explore the inbox", "Find the tools page") that must not.
+
+**And two sentences that assumed Stripe**, found by the audit that followed D4.
+Ask said a refund "waits for you to issue it in Stripe" whatever the channel;
+it now adds that a sale made on Etsy is refunded on Etsy, by the owner. The
+empty ledger said "the first row will be written by Stripe"; it now says "from
+the provider's own record".
+
+**Maturity.** J1 and J3 **`measured`** on a simulated 390px phone.
+Recognition **`tested`** (`an-entrepreneurial-mandate` +2, red first).
+**Proof debt:**
+- A simulated phone, not his. F1's test on his own device is still his to do.
+- Typing is not counted as taps. On a real keyboard it is most of the effort.
+

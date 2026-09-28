@@ -88,6 +88,28 @@ describe('hearing the mandate', () => {
     expect(readVentureSentence('Stop looking').kind).toBe('stop_mandate');
   });
 
+  // FOUND BY WALKING IT ON A PHONE (roadmap A8, 28 September 2026): the
+  // direction below, typed into Ask at 390px, was answered "I did not follow
+  // that", because "tools", "templates" and "would pay for" named nothing the
+  // reader knew as something that earns.
+  it('hears a direction that names what people would pay for, in plain words', () => {
+    for (const said of [
+      'Look for small digital tools that contractors would pay for once',
+      'Find templates tradespeople would buy',
+      'Explore digital products for small landlords',
+      'Look into printables that sell to teachers',
+    ]) expect(readVentureSentence(said).kind, said).toBe('mandate');
+  });
+
+  it('does not hear a request to find a thing as a search for income', () => {
+    for (const said of [
+      'Find the invoice I sent last week',
+      'Look for the file you made',
+      'Explore the inbox',
+      'Find the tools page',
+    ]) expect(readVentureSentence(said).kind, said).not.toBe('mandate');
+  });
+
   it('refuses to guess at a sentence it does not recognise', () => {
     expect(readVentureSentence('do something clever about ventures').kind)
       .toBe('not_venture');

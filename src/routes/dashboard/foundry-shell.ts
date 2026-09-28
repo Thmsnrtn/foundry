@@ -2803,8 +2803,8 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
     ? 'No test has been approved yet, so no test has spent anything.'
     : `${count(Number(tests.approved), 'test')} approved at ${dollars(Number(tests.approved_cents))} in all; ${count(Number(written.n), 'message')} sent to people under those tests; ${Number(tests.running) === 0 ? 'none running now, and an allowance ends with its test, so nothing is set aside now' : `${count(Number(tests.running), 'test')} running now`}.`}</p>
       <p>${process.env.FOUNDRY_ENABLE_MONEY_TOOLS === 'true'
-    ? 'Money tools are on: a refund a test\u2019s approved act covers is issued by me through Stripe.'
-    : 'Money tools are off in this deployment: I may not move money, so a refund a test\u2019s approved act covers waits for you to issue it in Stripe.'}</p>
+    ? 'Money tools are on: a refund a test\u2019s approved act covers is issued by me through Stripe. A sale made on Etsy is refunded on Etsy, by you; I have no way to move Etsy\u2019s money.'
+    : 'Money tools are off in this deployment: I may not move money, so a refund a test\u2019s approved act covers waits for you to issue it in Stripe, and a sale made on Etsy is refunded on Etsy, by you.'}</p>
       ${s.permissions.length === 0
     ? html`<p>On my own code I may change nothing.</p>`
     : html`<p>On my own code I may change ${s.permissions[0].path
@@ -3339,7 +3339,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
         <a class="more-link" href="/foundry/money">Economics ${mark('arrow')}</a></header>
       ${spark.svg ? html`<div class="chart">${raw(spark.svg)}</div>` : ''}
       <p class="figures"><span class="up">+${money(inCents)} in</span><span class="down">−${money(outCents)} out</span>
-        ${recent.length === 0 ? html`<span class="quiet">nothing has moved yet; the first row is written by Stripe, not by me</span>`
+        ${recent.length === 0 ? html`<span class="quiet">nothing has moved yet; the first row is written from the provider's own record, not by me</span>`
     : spark.svg ? '' : html`<span class="quiet">${String(byDay.size)} ${byDay.size === 1 ? 'day' : 'days'} with movement — not yet a trend</span>`}</p>
     </section>`;
   const { whatHappened } = await import('../../services/founder/activity.js');
