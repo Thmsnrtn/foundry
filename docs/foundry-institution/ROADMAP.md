@@ -37,7 +37,8 @@ in the maturity map.
 | G4 | A past qualification is not inherited by another shop or a new grant | `5263ccb9` |
 | G5 | Each day's copy is restored and read the day it is made; the owner can rehearse any copy with one command | `b4632b66` |
 | C3 | The owner enters Etsy's weekly views and visits | found already done: the "What the venue reports" form on a live listing test |
-| D6 | The owner's own minutes on a test, entered by him; a day without an entry is unknown, not zero | this commit |
+| D6 | The owner's own minutes on a test, entered by him; a day without an entry is unknown, not zero | `2cf4483c` |
+| A9 | The prompt shield measured on 24 prose attacks: 1 caught before, 14 after, every miss named | this commit |
 
 ## Next
 

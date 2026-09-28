@@ -37,6 +37,35 @@ const INJECTION_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
   // Common jailbreak preambles
   { pattern: /\bDAN\s+(?:mode|prompt)\b/gi, reason: 'dan-mode' },
   { pattern: /developer\s+mode\s+(?:enabled|on|activated)/gi, reason: 'dev-mode' },
+  // ── Prose shapes (roadmap A9) ──────────────────────────────────────────
+  // Added after measuring the shield against instructions written as plain
+  // prose (`tests/fixtures/prompt-shield-corpus.ts`): the patterns above caught
+  // 1 of 24. A FALSE POSITIVE IS NOT FREE HERE — `legal-pass` and
+  // `interpretation` decline to read a record that triggers, so an honest
+  // sentence flagged is evidence silently unread. So a first, broader set was
+  // measured against honest sentences written afterwards, flagged 9 of 15, and
+  // every shape that flagged one was dropped or narrowed on a stated
+  // principle. What remains missed is named in
+  // `the-shield-is-measured-not-assumed`.
+  //
+  // Setting aside THE READER'S instructions: addressed with "your", which an
+  // honest sentence about a document's instructions does not use.
+  { pattern: /(?:ignore|disregard|forget|override|set\s+aside|pay\s+no\s+attention\s+to)\s+(?:all\s+(?:of\s+)?)?your\s+(?:earlier\s+|previous\s+|prior\s+|original\s+|existing\s+)?(?:instructions?|guidance|guidelines|rules|directives?|prompts?|system\s+prompt)\b/gi, reason: 'set-aside-your-instructions' },
+  { pattern: /(?:ignore|disregard)\s+everything\s+(?:before|above|prior)/gi, reason: 'ignore-everything' },
+  { pattern: /forget\s+what\s+you\s+(?:were|have\s+been)\s+told/gi, reason: 'forget-told' },
+  { pattern: /instructions?\s+you\s+(?:were|have\s+been)\s+given\b/gi, reason: 'given-instructions' },
+  { pattern: /#{2,}\s*(?:instruction|system|prompt)s?\b/gi, reason: 'instruction-heading' },
+  // Speaking to the model that reads the text: "AI" only when followed by a
+  // word that makes it a reader, so "AI enthusiasts" is not one.
+  { pattern: /\b(?:note\s+to|attention|if\s+you\s+are)\s+(?:an?\s+|any\s+|the\s+)?(?:AI\s+(?:model|system|assistant|agent|reading)|language\s+model|LLM|chatbot)\b/gi, reason: 'address-to-model' },
+  { pattern: /you\s+are\s+(?:now\s+)?an?\s+(?:unrestricted|unfiltered|jailbroken)/gi, reason: 'role-takeover-unrestricted' },
+  // A role label opening a line, in capitals, as a transcript would carry it.
+  { pattern: /(?:^|\n)\s*(?:SYSTEM|ASSISTANT|DEVELOPER)\s*:/g, reason: 'role-label' },
+  { pattern: /<\s*\/?\s*(?:evidence|context|document|assistant|user)\s*>/gi, reason: 'boundary-tag' },
+  // Claiming the owner's or the builders' authority FOR THE READER.
+  { pattern: /\b(?:owner|administrator|admin|developers?|operator)\s+(?:has|have)\s+(?:authori[sz]ed|approved|instructed|permitted)\s+you\b/gi, reason: 'claimed-authority' },
+  { pattern: /you\s+(?:no\s+longer|do\s+not|don'?t)\s+need\s+(?:the\s+)?owner'?s?\s+(?:approval|permission|consent)/gi, reason: 'waived-approval' },
+  { pattern: /do\s+not\s+(?:mention|tell|show|reveal)\s+this\s+(?:sentence|message|instruction|line|note)\b/gi, reason: 'conceal-attempt' },
   // Foundry-specific lures (anything trying to talk to our agents)
   { pattern: /\b(?:atlas|compass|prism|beacon|scribe|forge|harbor|sentinel|ledger|shield|oracle|crucible)\s*[:,]?\s+(?:please|now|immediately)/gi, reason: 'agent-direct-address' },
 ];

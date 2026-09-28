@@ -1977,3 +1977,50 @@ entered it says so, never "0 minutes".
 - Proof 3's report does not read it yet, because that report does not exist
   until there are 30 findable days.
 
+### The prompt shield, measured (28 September 2026)
+
+Roadmap A9. `prompt-shield.ts` removes instruction-shaped text from what
+Foundry reads before a model sees it. It was a list of known shapes, never
+counted against the way instructions actually arrive: as plain prose inside a
+scraped page, a review or a buyer's email.
+
+**Measured.** A corpus of 24 prose attacks and 20 honest sentences from the
+same world (`tests/fixtures/prompt-shield-corpus.ts`), written before any
+pattern changed:
+
+- **Before:** 1 of 24 attacks caught; 1 of 20 honest sentences flagged.
+- **A broad first repair:** 21 of 24 caught. But on 15 honest sentences
+  written afterwards it flagged 9. A false positive is not free here:
+  `legal-pass` and `interpretation` do not read a record that triggers, so a
+  flagged honest sentence is evidence silently unread.
+- **After pruning:** every shape that flagged an honest sentence was dropped,
+  or narrowed on a stated principle (for example, "your instructions" rather
+  than "the instructions"). The result is **14 of 24 caught** and 0 of those
+  15 flagged.
+- **Real prose:** 0 of 6,476 paragraphs from 365 package READMEs, text nobody
+  wrote against the shield. The original shapes also flagged 0.
+- **Aimed collisions:** 15 honest sentences written knowing the shapes, one
+  aimed at each. 13 were flagged. This shows every shape *can* collide; it
+  does not say how often.
+
+`the-shield-is-measured-not-assumed` asserts this record. Each attack is caught
+or a named known miss with its reason, and each honest sentence passes or is a
+named false positive. A change that moves any sample fails until the record is
+updated.
+
+**The ten misses are left on purpose.** Each is either something no pattern
+can catch (spaced-out letters, a payment request) or something whose only
+catching shape flagged honest text. None matters on its own: no text Foundry
+reads can grant authority, spend, publish or move money. Those are gated on
+the owner's own acts. The shield only makes an attempt visible.
+
+**Maturity.** **`tested`** (75 cases; red without the change).
+**Proof debt:**
+- No natural corpus from this domain: no real buyer mail, no contractor
+  forums. The README prose is real, but technical.
+- The pre-existing "from now on, you will…" shape still flags an honest
+  sentence about invoices. It was left as it was and is recorded.
+- A regular expression cannot tell an instruction from a description of one.
+  The durable defence is the data-block framing (`sanitize.ts`) and the gates,
+  not this list.
+
