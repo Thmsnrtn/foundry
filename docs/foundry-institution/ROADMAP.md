@@ -34,7 +34,8 @@ in the maturity map.
 | A5 | Preview a Controls change before it binds | found largely done: authority and typed rules confirm; the charter page recomputes before signing |
 | E2 | A lesson knows which later designs read it | `3890328c` |
 | E2b | A design says when a lesson it read has since stopped standing | `317ec986` |
-| G4 | A past qualification is not inherited by another shop or a new grant | this commit |
+| G4 | A past qualification is not inherited by another shop or a new grant | `5263ccb9` |
+| G5 | Each day's copy is restored and read the day it is made; the owner can rehearse any copy with one command | this commit |
 
 ## Next
 

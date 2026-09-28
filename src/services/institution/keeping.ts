@@ -368,3 +368,71 @@ export async function howFarBackCopiesReach(now = new Date()): Promise<number | 
   if (oldest === undefined) return null;
   return Math.floor((now.getTime() - Date.parse(`${oldest}T00:00:00Z`)) / 86_400_000);
 }
+
+// =============================================================================
+// A REHEARSAL: PUT A COPY BACK WHERE NOTHING DEPENDS ON IT, AND READ IT.
+//
+// Roadmap G5. `restoreTheInstitution` existed and nothing called it, so a
+// restore was proven only on the day a test ran it against a test database.
+// The daily job now rehearses the copy it has just written, and the owner can
+// rehearse any copy with `node dist/cli/index.js rehearse-restore [copy]`. Both put
+// the copy beside the backups under a name the thinning never matches, read
+// it, and remove it — whatever happened.
+// =============================================================================
+
+export interface Rehearsal {
+  copy: string;
+  opened: boolean;
+  /** Why it did not open, when it did not. */
+  because: string | null;
+  bytes: number;
+  tables: number;
+  founders: number;
+  liabilities: Recovered[];
+}
+
+/** Restore `copy` (by default the newest kept) to a scratch file, read it, and remove the scratch. */
+export async function rehearseRestore(copy?: string): Promise<Rehearsal | { skipped: string }> {
+  const file = databaseFile();
+  if (file === null) return { skipped: 'the database is not a file here, so there is no copy to rehearse' };
+  const kept = join(dirname(file), 'backups');
+  let chosen = copy;
+  if (chosen === undefined) {
+    const newest = (await whatIsKept())[0];
+    if (!newest) return { skipped: 'no copy has been kept yet' };
+    chosen = join(kept, newest.name);
+  }
+  const scratch = join(kept, '.rehearsal.db');
+  try {
+    await mkdir(kept, { recursive: true });
+    const r = await restoreTheInstitution(chosen, scratch);
+    return { copy: chosen, opened: true, because: null, ...r };
+  } catch (err) {
+    return { copy: chosen, opened: false, because: err instanceof Error ? err.message : String(err),
+      bytes: 0, tables: 0, founders: 0, liabilities: [] };
+  } finally {
+    for (const f of [scratch, `${scratch}-wal`, `${scratch}-shm`, `${scratch}-journal`]) await rm(f, { force: true });
+  }
+}
+
+/**
+ * WHAT A REHEARSAL SAYS, AND WHETHER IT PASSED. It fails when the copy did not
+ * open, holds nobody, or could not answer one of the recovery questions. A
+ * difference from the live database is reported and is not a failure: anything
+ * written since the copy was taken is one.
+ */
+export function sayRehearsal(r: Rehearsal): { ok: boolean; lines: string[] } {
+  const name = basename(r.copy);
+  if (!r.opened) return { ok: false, lines: [`${name} did not open: ${r.because ?? 'no reason given'}`] };
+  const lines = [`${name} opened: ${String(r.bytes)} bytes, ${String(r.tables)} tables, ${String(r.founders)} `
+    + `${r.founders === 1 ? 'person' : 'people'}`];
+  const unreadable = r.liabilities.filter((l) => l.inTheCopy === null);
+  if (r.founders === 0) lines.push('it holds nobody, so it is not a copy of this institution');
+  for (const l of unreadable) lines.push(`it could not answer: ${l.what} (${l.because ?? 'no reason given'})`);
+  for (const l of r.liabilities) {
+    if (l.inTheCopy === null) continue;
+    lines.push(l.same ? `${l.what}: ${String(l.live)}, the same as now`
+      : `${l.what}: ${String(l.inTheCopy)} in the copy, ${String(l.live)} now`);
+  }
+  return { ok: r.founders > 0 && unreadable.length === 0, lines };
+}

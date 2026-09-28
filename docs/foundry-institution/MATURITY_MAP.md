@@ -1917,3 +1917,34 @@ produced them:
   the new shop replaces it, but until then it names the old shop.
 - Never exercised against a real second shop.
 
+### Each day's copy is restored the day it is made (28 September 2026)
+
+Roadmap G5. The daily copy (`copyTheInstitution`) and a verifying restore
+(`restoreTheInstitution`) already existed, but nothing called the restore. So
+"backups are real; restore is unproven" stayed true every day.
+
+- **Daily.** `keep_a_copy_of_everything` now restores the copy it has just
+  written, beside the backups and never over the live database, and reads it.
+  The job fails, so job health and the Brief name it, when the copy does not
+  open, holds nobody, or cannot answer one of the recovery questions (what
+  buyers are owed, money taken and returned, what may be spent, live assets,
+  who must never be written to…). A difference from the live database is
+  logged, not failed: anything written since the copy was taken is one.
+- **By hand.** `node dist/cli/index.js rehearse-restore [copy]`, run inside
+  `fly ssh console`, does the same for the newest copy or one he names. It
+  prints what came back beside what is true now, and exits 1 when the copy
+  would not serve a recovery. It is his to run; I do not read production.
+- Nothing is left behind: the scratch restore is removed whatever happened.
+
+**Maturity.** **`tested`** (`a-copy-is-restored-the-day-it-is-made`, 6, red
+first), and the CLI was run end to end against a file database: a good copy
+exits 0, and a corrupt one exits 1 with "file is not a database".
+**Proof debt:**
+- Never run on production. The first nightly run after this deploy is the
+  first evidence there.
+- Every copy is still on the same volume as the database. The volume's own
+  snapshots (five days) are the only defence against losing the volume, and
+  this cannot read them.
+- It proves that a copy opens and holds the liabilities. A full recovery
+  (stop the app, swap the file, start again) has never been rehearsed.
+

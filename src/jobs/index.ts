@@ -3404,6 +3404,16 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
         `keep_a_copy_of_everything: wrote ${kept.wrote} (${String(kept.bytes)} bytes); `
         + `${String(kept.kept)} copies kept, ${String(kept.removed)} aged out`,
         { jobName: 'keep_a_copy_of_everything' });
+      // AND IT IS PUT BACK THE SAME DAY (roadmap G5): a copy nobody has
+      // restored is a belief. A copy that would not serve a recovery fails the
+      // job, so job health and the Brief say so.
+      const { rehearseRestore, sayRehearsal } = await import('../services/institution/keeping.js');
+      const rehearsed = await rehearseRestore(kept.wrote);
+      if ('skipped' in rehearsed) throw new Error(`keep_a_copy_of_everything: could not rehearse — ${rehearsed.skipped}`);
+      const said = sayRehearsal(rehearsed);
+      if (!said.ok) throw new Error(`keep_a_copy_of_everything: today's copy would not serve a recovery — ${said.lines.join('; ')}`);
+      logger.info(`keep_a_copy_of_everything: restored and read — ${said.lines.join('; ')}`,
+        { jobName: 'keep_a_copy_of_everything' });
     },
     schedule: '15 4 * * *',
     description:

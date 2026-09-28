@@ -981,4 +981,20 @@ program.command('workshop:replay-post <founderIdOrEmail>').description('Read the
 program.command('workshop:gate <experimentId>').description('The publication gate for one experiment, as outbound would see it')
   .action(async (experimentId: string) => { const { publicationGate } = await import('../services/public-workshop/publication.js'); out(await publicationGate(experimentId)); });
 
+// ─── Rehearse a restore (roadmap G5) ─────────────────────────────────────────
+// Run where the database lives (for Fly, inside `fly ssh console`):
+//   node dist/cli/index.js rehearse-restore [copy]
+// Restores the newest kept copy, or the one named, beside the backups and
+// never over the live database; says what came back beside what is true now;
+// removes what it restored; exits 1 when the copy would not serve a recovery.
+program.command('rehearse-restore [copy]').description('Restore a kept copy somewhere harmless, read it, and say whether it would serve a recovery')
+  .action(async (copy?: string) => {
+    const { rehearseRestore, sayRehearsal } = await import('../services/institution/keeping.js');
+    const r = await rehearseRestore(copy);
+    if ('skipped' in r) { process.stdout.write(`${r.skipped}\n`); process.exitCode = 1; return; }
+    const said = sayRehearsal(r);
+    process.stdout.write(`${said.lines.join('\n')}\n${said.ok ? 'This copy would serve a recovery.' : 'This copy would NOT serve a recovery.'}\n`);
+    process.exitCode = said.ok ? 0 : 1;
+  });
+
 program.parse();
