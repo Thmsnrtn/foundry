@@ -997,4 +997,22 @@ program.command('rehearse-restore [copy]').description('Restore a kept copy some
     process.exitCode = said.ok ? 0 : 1;
   });
 
+// ─── The job review file under decision (handoff A5) ─────────────────────────
+//   node dist/cli/index.js job-review [dir]
+// Builds the A03 job review from its invented example and writes it, with a
+// manifest carrying its version and SHA-256, to river/proof-3-candidates/a03/
+// or the directory named. The same inputs give the same bytes, so the digest
+// binds the file the owner is asked to try (PENDING 27). It lists nothing.
+program.command('job-review [dir]').description('Write the job review file under decision, with its digest')
+  .action(async (dir?: string) => {
+    const { writeFileSync } = await import('node:fs');
+    const { buildJobReview, EXAMPLE_JOB, jobReviewManifest } = await import('../services/venture/products/recipes/job-review.js');
+    const built = buildJobReview(EXAMPLE_JOB);
+    if ('refused' in built) { process.stdout.write(`${built.refused}\n`); process.exitCode = 1; return; }
+    const to = dir ?? 'river/proof-3-candidates/a03';
+    writeFileSync(`${to}/${built.file}`, built.bytes);
+    writeFileSync(`${to}/MANIFEST.md`, jobReviewManifest(built));
+    process.stdout.write(`${built.file} ${built.sha256}\n`);
+  });
+
 program.parse();

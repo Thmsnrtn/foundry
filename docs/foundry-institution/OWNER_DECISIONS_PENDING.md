@@ -1707,3 +1707,44 @@ reserve stays all of it until you decide.
 owed, shortening the window, or applying any change to sales already made. A
 lower reserve changes what the owner may take, never what a customer may ask
 for.
+
+## PENDING 27 — The next product after the Bid Decision Workbook: A03, a rival, none, or wait: **OWNER** (2026-09-28)
+
+**Raised 28 September 2026,** from the digital-product handoff of that date.
+Nothing has been listed, uploaded, priced or granted by raising it.
+
+**On the numbering.** This record's numbers collide: §14, §15 and §25 name
+different decisions from PENDING 14, 15 and 25, and the header above counts an
+older state. 27 is the first number that neither series has used. Reconciling
+the whole file is roadmap item H1, and it waits on statuses that exist only in
+production data.
+
+**What is ready for him.** A completed prototype of the leading candidate, the
+A03 job review (estimate versus actual for one finished job):
+`river/proof-3-candidates/a03/job-review-v0.1.0.xlsx`, SHA-256 `a645092c95ef5309c6f2b107d37ed2e4a6ad1519e9fd378bf1b61e9396915f09`.
+Every result cell was checked against figures worked by hand, and recalculated
+by LibreOffice. Excel and Google Sheets have not been checked. The rivals, a
+draft listing written only from what was checked, and the support envelope are
+in `river/proof-3-candidates/DOSSIER.md`.
+
+**What he is asked to do before deciding.** Put two or three of his own
+finished jobs into the file, without help. Note the minutes each took, anything
+he could not fill in, anything wrong or unclear, and whether it would change
+his next quote.
+
+**The four answers, and what each sets in motion.**
+
+1. **A03.** A test is designed for it through the ordinary forge, inside a
+   charter he signs, not sharing Experiment 002's first findable month. Excel
+   and Google Sheets are checked first, and the listing names only what was.
+2. **A rival** (A05, a revised B01, improving A01, or licensing). The dossier's
+   fields are filled for it first. No rival has a prototype today.
+3. **None.** Recorded as a decision, not as inaction. The prototype stays in
+   the river as evidence of what was tried.
+4. **Wait for Experiment 002.** The recommendation, if his own jobs do not
+   make the answer obvious: the first findable month names the binding
+   constraint, and a second workbook cannot fix a distribution problem.
+
+**What the evidence supports.** Only that the file does its arithmetic
+correctly. Whether anybody would pay for it, or can supply its inputs, is
+unknown. The handoff's own rule applies: build none is a valid outcome.

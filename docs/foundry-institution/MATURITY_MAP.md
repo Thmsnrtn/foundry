@@ -2264,3 +2264,117 @@ no personal brand, because the repository is public. It records why no second
 product should be built before the first buyer relationship has run end to
 end.
 
+
+### One file recipe, checked by hand and by a real spreadsheet (handoff A5)
+
+The handoff says the owner should decide on the next product only after
+seeing a completed file. So the leading candidate was built, as a prototype
+for that decision: the A03 job review, estimate against actual for one
+finished job (`products/recipes/job-review.ts`). It is written by a
+dependency-free XLSX writer (`recipes/xlsx.ts`) that stores its parts with
+fixed timestamps, so the same inputs always give the same bytes and the digest
+binds the file. The recipe's rules:
+- A blank cell is "unknown", never zero.
+- At zero revenue, the margin says "undefined".
+- A loss stays visible.
+- Approved changes are judged apart from the quote.
+- Other currencies and units, negative amounts and absurd amounts are refused
+  before a file is built.
+- Formulas are locked, and only the yellow input cells are open.
+
+**The oracle is not the generator.** Nine cases were worked on paper, with
+the working written beside each figure (`tests/fixtures/job-review-by-hand.ts`):
+- normal;
+- a loss;
+- an approved change;
+- missing hours;
+- a supplier credit;
+- zero revenue;
+- rounding (12.5 × $47.33 is $591.63);
+- a blank credit;
+- the shipped example.
+
+The test unzips each built file and executes the formulas **as written in it**
+with an evaluator of its own, which rounds at 15 significant digits as a
+spreadsheet does. The builder does not compute these answers. Two deliberate
+formula mutations were caught:
+- dropping the supplier credit;
+- breaking the zero-revenue guard.
+
+**LibreOffice agrees.** LibreOffice Calc 24.2 was installed in this container
+for the purpose. It opened each case, calculated it from nothing (the files
+carry no cached values), and all 85 compared cells agreed with the hand
+figures (`river/proof-3-candidates/a03/RECALCULATED.md`, from
+`scripts/recalculate-job-review.mts`). The number formats held too ($9,985.00,
+28.9%). The first attempt failed because Calc was not installed, not because
+of the file. That is recorded so nobody takes it as a finding about the file.
+
+**Maturity.** **`tested`**, plus one independent engine observed: 16 tests in
+`the-job-review-file-is-checked-by-hand`, red first (the module did not
+exist). `template_file` stays `canMake: false`, and its reason now names what
+is missing: a buyer who used it, and the spreadsheets buyers use.
+**Proof debt:**
+- Excel, Numbers and Google Sheets are unchecked.
+- So is whether sheet protection and the "0 or more" validation behave in
+  them.
+- So is opening on a phone.
+- The buyer-use test has not been run: whether a small shop has actual hours
+  on paper at all.
+- The recalculation script is not part of `npm run check`, because the image
+  has no LibreOffice. It records what it saw when it is run.
+
+### The owner's one decision, made reviewable (handoff A6)
+
+The dossier now carries the decision packet:
+- the file and its SHA-256;
+- what he is asked to do first: two or three of his own finished jobs,
+  without help, with minutes and difficulties noted;
+- a draft listing written only from what was checked. It names LibreOffice
+  and not Excel, and carries the browser-download line;
+- the support envelope: messages at his stated frequency, a correction as a
+  new version traced to buyers of the old one, and refunds through Etsy by
+  him;
+- the rivals as they stand.
+
+It is recorded as **PENDING 27** in `OWNER_DECISIONS_PENDING.md`. The number
+is the first that neither of the record's colliding series has used, and the
+collision is named beside it. Nothing was listed, uploaded, priced or granted.
+**Maturity:** documentation. **Proof debt:** the decision itself.
+
+### How far the world has answered, on every test (handoff A7)
+
+RIVER.md keeps commercial evidence (CE0–CE6) apart from implementation proof
+(E0–E6). Until now the commercial ladder was graded by hand in this file.
+`commercialMaturityOf` reads it from rows that already exist:
+- **CE1**: a real, direct, supporting observation behind the test's claim.
+- **CE2**: somebody the provider could not match to the owner began to pay,
+  asked to hear more, or paid.
+- **CE3**: a payment still paid, with no refund and no open dispute.
+- **CE4**: that payment delivered. For a venue, the reader says the venue made
+  the file available and that the download itself is not observed.
+
+It stops at CE4. Repeat and sustained contribution are judgements no row
+makes, and the sentence says so. The owner's own purchase, sandbox and
+reference rows, a refund and an open dispute never raise a rung. A dispute the
+seller won restores it. One sentence appears on each test's page and at the
+end of the operating contract's first answer, in the same words.
+
+**Maturity.** **`tested`**: `how-far-the-world-has-answered` (11), red first; the eleventh was added after a self-review found the CE4 sentence could describe the owner's own earlier delivery, and went red before the fix.
+The 15 files that render the test page or the contract still pass.
+**Commercial maturity of Experiment 002, as the reader would state it:** CE1,
+if its seeded direct observations are real rows in production. That was not
+read from production here.
+**Proof debt:** no real row has yet exercised CE2 or above.
+
+### The strategy, written as doctrine (`STRATEGY.md`)
+
+The owner asked for a 50–100 item roadmap for Foundry's concepts. The handoff
+then asked that it not become a product backlog. `STRATEGY.md` holds both:
+- the 88 items first drafted, sharpened by the handoff (the four ledgers, the
+  demand-reading table, concentration at four levels, acquisition-source
+  labels, six mechanisms and the originality ladder, the weekly five sets, and
+  a charter per product);
+- eight items from the handoff itself (S89–S96).
+
+Each item has a tag and a falsifier. Nothing in it is built because it is
+listed. **Maturity:** doctrine, with no code maturity.

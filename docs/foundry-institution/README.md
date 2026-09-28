@@ -45,6 +45,8 @@ a concept → code index. Read the rest when the work touches it.
 | [`OWNER_DECISIONS_PENDING.md`](OWNER_DECISIONS_PENDING.md) | Genuinely unresolved owner and external dependencies. |
 | [`MATURITY_MAP.md`](MATURITY_MAP.md) | Per owner journey and loop transition: does it work, can he use it, does it earn — with evidence. |
 | [`CONSEQUENTIAL_EFFECTS.json`](CONSEQUENTIAL_EFFECTS.json) | The governed-effect inventory. |
+| [`ROADMAP.md`](ROADMAP.md) | The execution list: what is done, with its commit, and who must act next. |
+| [`STRATEGY.md`](STRATEGY.md) | The level above the roadmap: what Foundry should become, and what would show it wrong. Doctrine, not a product backlog. |
 
 ## History and lineage
 

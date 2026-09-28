@@ -39,7 +39,10 @@ export interface KindFacts {
 export const KINDS: KindFacts[] = [
   { kind: 'data_brief', whatItIs: 'a dated shortlist of public items for one question, each citing its source, delivered by email after payment', canMake: true, needs: null },
   { kind: 'static_tool', whatItIs: 'a single page that computes something for the reader', canMake: false, needs: 'a tool page recipe with a readback, and an exchange for a free thing with a downstream role' },
-  { kind: 'template_file', whatItIs: 'a spreadsheet or document file the buyer fills in', canMake: false, needs: 'a file generator whose formulas are checked mechanically' },
+  { kind: 'template_file', whatItIs: 'a spreadsheet or document file the buyer fills in', canMake: false,
+    // ONE RECIPE EXISTS — the job review (recipes/job-review.ts), checked by hand and by
+    // LibreOffice — as a prototype for the owner's decision, not a kind Foundry may make.
+    needs: 'a buyer who used the one recipe that exists (the job review) on real jobs, and a check in the spreadsheets buyers use' },
   { kind: 'directory', whatItIs: 'a page of listed items, refreshed on a cycle', canMake: false, needs: 'a page recipe and a steward that refreshes it' },
   { kind: 'monitoring_alert', whatItIs: 'a message when a watched source changes', canMake: false, needs: 'subscribers gathered by the Workshop and a watched source' },
 ];

@@ -63,9 +63,13 @@ businesses. Its method is carried into `STRATEGY.md` and
 | A8 | J1 and J3 walked on a 390px phone: 4 taps / 4 screens and 5 taps / 5 screens, no overflow — and the walk found a direction the door did not hear | `51d643e2` |
 | Handoff A0 | `OBJECTIVE.md` said the $29 brief was "sold"; the ledger says 0 payments. Corrected with a dated amendment; this file's reading order stated | `9110a79d` |
 | Handoff A1 | Who checks Etsy's buyer messages, and how often: said by the owner, read by the absence test, the asset's record and the connection page | `9110a79d` |
-| Handoff A2 | The buyer can get the file: the owner's acts carry the browser-download answer (Etsy's app cannot download), with its source and date | this commit |
-| Handoff A3 | Each venue order keeps which file its listing held when it sold; "not known" when no reading came before the sale | this commit |
-| Handoff A4 | A decision dossier for the next product (A03, A05, B01, improving A01, licensing, hold, none), in `river/proof-3-candidates/` | this commit |
+| Handoff A2 | The buyer can get the file: the owner's acts carry the browser-download answer (Etsy's app cannot download), with its source and date | `d1992eeb` |
+| Handoff A3 | Each venue order keeps which file its listing held when it sold; "not known" when no reading came before the sale | `d1992eeb` |
+| Handoff A4 | A decision dossier for the next product (A03, A05, B01, improving A01, licensing, hold, none), in `river/proof-3-candidates/` | `d1992eeb` |
+| Handoff A5 | One file recipe, the A03 job review, as a prototype for the owner's decision: a dependency-free deterministic XLSX writer, nine cases worked by hand and executed from the file's own formulas, recalculated by LibreOffice (85 cells agree). Not listed; `template_file` stays unmakeable | this commit |
+| Handoff A6 | The decision made reviewable: the file and its digest, a draft listing written only from what was checked, the support envelope, the rivals. PENDING 27 (the first number neither series uses) | this commit |
+| Handoff A7 | Commercial evidence CE0–CE4 read from rows on each test's page and in the operating contract's first answer; never raised by the owner's own purchase, a refund or an open dispute; CE5–CE6 never claimed | this commit |
+| Strategy | `STRATEGY.md`: 96 items of doctrine (the 88 first drafted, sharpened by the handoff, and eight from it), not a product backlog | this commit |
 | E3 | "No sales" split into its causes | found already done where observable: a hidden shop, an unreadable venue, and a listing inactive or at another price each void a silent window (B2b). A missing file does not stop a sale, so it is a readiness and care failure, not a cause of silence (B3). A broken checkout is not observable to a read-only app. |
 
 ## Next

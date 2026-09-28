@@ -53,6 +53,9 @@ dossier prepares a decision rather than a build.
 | Rights | An original workbook; no third-party content. |
 | Test window | To be set by the owner after Experiment 002 settles. Never overlapping its audience. |
 | Oracle | Hand-worked fixtures: normal, loss, change-approved, missing hours, supplier credit, zero revenue, unit mismatch (refused), rounding. The generator is never its own oracle. |
+| **Prototype** | `a03/job-review-v0.1.0.xlsx`, digest in `a03/MANIFEST.md`. Built by `products/recipes/job-review.ts`, not listed, and `template_file` stays unmakeable. |
+| **Checked** | Every result cell in nine hand-worked cases (`tests/fixtures/job-review-by-hand.ts`), executed from the formulas as written in the file by an evaluator in the test, never by the generator. The same nine cases were recalculated by LibreOffice 24.2 on 28 September: 85 cells, all agree (`a03/RECALCULATED.md`). Two deliberate formula mutations were caught. The same inputs give the same bytes. |
+| **Not checked (proof debt)** | Excel, Numbers and Google Sheets; whether sheet protection and the "0 or more" validation behave in them; opening on a phone; and whether anybody can supply the inputs, which is the question the buyer-use test asks. |
 | Buyer-use test | The owner reconstructs 2–3 of his own completed jobs without coaching; if possible, a second shop does one. Time, errors, and whether a different decision followed are recorded. |
 | Distribution | Etsy search is assumed, not shown. It shares Experiment 002's venue and audience, which is a concentration. |
 | Direct costs | Etsy fees as recorded for Experiment 002; production time is Foundry's recipe plus the owner's review minutes. |
@@ -114,11 +117,66 @@ constraint:
 
 ## The decision to be put to the owner
 
-Once the A03 prototype file exists and he has tried it on his own past jobs:
-**A03, B01, none, or wait for Experiment 002.** He sees:
-- the file and its digest;
-- what it did on his jobs;
-- a precise draft listing (promise, non-promise, the browser-download line, and
-  only what was checked);
-- the support envelope;
-- the rivals.
+It is recorded as PENDING 27 in `docs/foundry-institution/OWNER_DECISIONS_PENDING.md`:
+**A03, a rival, none, or wait for Experiment 002.** Nothing is listed, uploaded
+or granted by preparing it.
+
+### What he is asked to do first
+
+Open `a03/job-review-v0.1.0.xlsx`, overwrite the invented example with two or
+three of his own finished jobs, and note for each:
+- the minutes it took;
+- anything he could not fill in, and why;
+- anything the file said that was wrong or unclear;
+- whether it changed what he would quote next time.
+
+If none of his jobs has actual hours on paper, that is the answer to the
+assumption above, and A03 stops there.
+
+### The draft listing, if he chooses A03
+
+Written only from what was checked. It is a draft: Foundry publishes nothing.
+
+> **Job review: estimate versus actual (spreadsheet)**
+>
+> After a job is finished, enter what you quoted, any approved changes, and what
+> the materials, hours, subcontractors and other costs really were. The sheet
+> shows the contribution you planned and the one you got, where the job moved
+> line by line, and the price that would have kept your planned contribution on
+> these costs.
+>
+> Blank cells stay "unknown" instead of counting as zero. At zero revenue the
+> margin says "undefined". Formulas are locked; only the yellow cells take input.
+>
+> What it is not: bookkeeping, tax advice, a market price, or a prediction of
+> your next job.
+>
+> Works in: LibreOffice Calc (checked). *[Excel and Google Sheets are named here
+> only after they are checked.]*
+>
+> Digital download. On a phone, download from a browser: Etsy's app cannot
+> download digital purchases (You → Purchases → Download Files on etsy.com).
+
+The price is not proposed here. He sets it; Experiment 002's result will be the
+only price evidence Foundry has.
+
+### The support envelope
+
+- **Questions**: answered in Etsy messages at the frequency he has stated on the
+  connection page (A1). If he has stated none, absence is not covered, and the
+  absence test says so.
+- **A wrong result**: a corrected file gets a new version number. Buyers of the
+  old version are found from their order records (A3) and sent the correction.
+  No file is ever replaced silently.
+- **Refunds**: through Etsy, by him, as for Experiment 002.
+- **What it will not do**: custom formulas, other currencies or units, or
+  bookkeeping help.
+
+### The rivals, as they stand today
+
+- **A05**: no prototype, no oracle. It needs a supplier-quote corpus Foundry
+  does not have.
+- **B01 revised**: needs physical verification that no file recipe can supply.
+- **Improve A01**: waits on Experiment 002's first findable month.
+- **Licensing**: no partner is on record.
+- **Hold the money** or **build none**: valid. They cost nothing but time.

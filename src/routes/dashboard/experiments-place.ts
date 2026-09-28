@@ -448,6 +448,10 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
   const liveListing = listing && v.state === 'running' && v.offer.paymentLinkUrl ? v.offer.paymentLinkUrl : null;
   const { minutesOn } = await import('../../services/venture/owner-minutes.js');
   const mine = listing ? await minutesOn(id) : null;
+  // HOW FAR THE WORLD HAS ANSWERED (CE0–CE6, RIVER.md): one line, read from
+  // rows, never higher than they support, beside what the machinery proves.
+  const { commercialMaturityOf, commercialMaturitySentence } = await import('../../services/venture/commercial-maturity.js');
+  const commercial = commercialMaturitySentence(await commercialMaturityOf(id));
   // WHAT THE OWNER READS FIRST: a state, four numbers, where it stops, what
   // happens next. Everything the decision rests on is one fold down, and every
   // form is where the act belongs. Nothing is hidden; it is ordered.
@@ -512,6 +516,7 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
         <p>So it also does not establish ${v.instrumentDoubts.map((d) => d.doesNotEstablish).join(' ')}</p>
       </div>` : ''}
     </section>` : ''}
+    <p class="quiet" id="commercial">${commercial}</p>
     ${launch ? html`<section class="launch" id="authorise">
       <p class="act">First real market test</p>
       ${renderDecision({

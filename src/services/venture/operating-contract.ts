@@ -22,6 +22,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
+import { commercialMaturityOf, commercialMaturitySentence } from './commercial-maturity.js';
 
 export const QUESTIONS = [
   'Who is the customer, and what was promised?',
@@ -102,9 +103,11 @@ export async function operatingContractOf(productId: string, founderId: string):
   // file may do what the venue's defaults allow; nothing here narrows or
   // widens that, and inventing terms on the page would be a promise.
   const rights = 'No terms of use or licence for the buyer are recorded, so what a buyer may do with it is whatever the venue\'s own terms allow';
+  // How far the world has answered, from rows only (CE0–CE6, RIVER.md).
+  const commercial = experimentId ? ` ${commercialMaturitySentence(await commercialMaturityOf(experimentId))}` : '';
   say(0, deliverable
-    ? `${buyers}. What is sold is "${deliverable.title}", fixed by its digest ${deliverable.digest}. ${rights}.`
-    : `${buyers}. No deliverable is recorded for it, so what a buyer would receive is not on record. ${rights}.`,
+    ? `${buyers}. What is sold is "${deliverable.title}", fixed by its digest ${deliverable.digest}. ${rights}.${commercial}`
+    : `${buyers}. No deliverable is recorded for it, so what a buyer would receive is not on record. ${rights}.${commercial}`,
   deliverable ? 'partly' : 'unknown');
 
   // ─── 2. Where a buyer can meet it ─────────────────────────────────────────
