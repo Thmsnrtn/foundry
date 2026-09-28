@@ -442,14 +442,28 @@ export async function distributableSurplus(founderId: string): Promise<Surplus> 
     ? 'No allowance is standing, so nothing is already authorised to be spent.'
     : 'Allowances the owner has left standing, which the institution may spend without asking.');
 
+  // THE QUESTION COMES BACK WHEN THERE IS SOMETHING TO MEASURE (PENDING 26):
+  // hold all of it "until there is something to measure, and revisit it at the
+  // first ten settled sales". Counted from the same fulfilment rows the
+  // exposure is: a settled sale is one delivered or refunded.
+  const settled = (await query(
+    `SELECT COUNT(*) AS sales, COALESCE(SUM(CASE WHEN status = 'refunded' THEN 1 ELSE 0 END), 0) AS refunded
+       FROM experiment_fulfilments WHERE founder_id = ? AND status IN ('delivered','refunded')`, [founderId]))
+    .rows[0] as Record<string, unknown>;
+  const sales = Number(settled.sales);
+  const revisit = sales >= 10
+    ? ` Ten sales have settled (${String(sales)} now), and ${String(Number(settled.refunded))} of ${String(sales)} `
+      + `${Number(settled.refunded) === 1 ? 'was' : 'were'} refunded: this is when you said to revisit how much `
+      + 'of the promise to hold in cash. Nothing changes until you do, and the choice is yours to decide.'
+    : '';
   const refundReserve: Figure = exposure.cents === null ? exposure : {
     cents: exposure.cents,
     quality: exposure.quality,
-    because: exposure.cents === 0
+    because: (exposure.cents === 0
       ? 'Nothing has been delivered, so nothing is being held back against a refund.'
       : 'All of what could be asked back is being held back. That is a policy choice and not '
         + 'arithmetic: holding less would leave more of this yours to take and would not change '
-        + 'the promise, which is a refund with no form and no time limit.',
+        + 'the promise, which is a refund with no form and no time limit.') + revisit,
   };
 
   const parts = [held, obligations, exposure, tax, operatingReserve, authorisedCapital];

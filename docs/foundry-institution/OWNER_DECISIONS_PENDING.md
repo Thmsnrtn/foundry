@@ -1698,6 +1698,11 @@ settled sales — not because full backing is optimal, but because choosing
 anything else now would be choosing a number out of the air and calling it
 prudence.
 
+**The revisit is wired (28 September 2026).** Once ten sales have settled,
+the reserve's own sentence on the money page says so, with how many were
+refunded, and that the choice is yours. It changes nothing by itself: the
+reserve stays all of it until you decide.
+
 **What is NOT being asked.** Nothing here proposes narrowing what a buyer is
 owed, shortening the window, or applying any change to sales already made. A
 lower reserve changes what the owner may take, never what a customer may ask

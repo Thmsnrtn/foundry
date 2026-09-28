@@ -1787,3 +1787,23 @@ first: four of the five failure cases resolved as healthy. **Proof debt:** a
 source that is down for one claim now marks the whole evidence loop failing
 for that pass. That is honest, but it may be noisy. The Brief names a loop only
 after consecutive failures, which is the existing damping.
+
+### The reserve question comes back at the tenth settled sale (28 September 2026)
+
+Roadmap C6. PENDING 26 recommended holding all of the refund promise in cash
+"until there is something to measure", and revisiting it at the first ten
+settled sales. Nothing brought it back.
+
+The reserve's own sentence (`distributableSurplus().refundReserve.because`)
+now adds, once ten sales have settled, how many there are, how many were
+refunded, and that the choice is his. A settled sale is a fulfilment delivered
+or refunded, the same rows the exposure counts. The reserve stays all of it,
+and the buyer's promise is not touched.
+
+**Maturity.** **`tested`** (`the-reserve-question-returns-at-ten-sales`, 2, red
+first). **Proof debt:** the sentence appears where the reserve is shown, the
+money page. It is not a Brief item, because at ten sales it is a question worth
+reading, not a duty that is due.
+
+B6 (an unread fee is unknown, never zero) was found already done. The reader
+keeps `feeCents: null`, and no fee event is written for it (P1-F, case 10).
