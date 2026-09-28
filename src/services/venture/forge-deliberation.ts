@@ -76,7 +76,8 @@ export interface TheRecord {
   /** The retrievals the evidence came from: the words the eyes were asked with, and what came back. A brief can be built only from these. */
   retrievals: Array<{ sourceType: string; terms: string; source: string; returned: number; relevant: number; at: string }>;
   unknowns: Array<{ question: string; blocking: boolean; cheapestTest: string | null; asks: 'demand' | 'distribution' | 'conversion' | 'fulfilment' }>;
-  lessons: Array<{ whatWeDid: string; verdict: string | null; couldNotEstablish: string | null }>;
+  /** Each with the test it came from, so a design can record which lessons it read. */
+  lessons: Array<{ experimentId: string; whatWeDid: string; verdict: string | null; couldNotEstablish: string | null }>;
   /** WHAT IS ALREADY KNOWN ABOUT THIS CANDIDATE, with its scope: the settled tests on it, and whether the proposed act repeats one. */
   precedent: { stands: 'clear' | 'asked_before' | 'narrowed'; because: string; settled: string[] };
   legal: { sentence: string; inTheWay: string[] };
@@ -138,7 +139,8 @@ export async function theRecordOf(experimentId: string): Promise<TheRecord | nul
       WHERE opportunity_id = ? AND answered_at IS NULL AND kind = 'question' ORDER BY blocking DESC, rowid`, [opportunityId]))
     .map((r) => ({ question: String(r.question), blocking: Number(r.blocking) === 1, cheapestTest: r.cheapest_test == null ? null : String(r.cheapest_test), asks: fourQuestionsOf(String(r.question)) }));
   const { lessonsFor } = await import('./forge.js');
-  const lessons = (await lessonsFor(founderId)).map((l) => ({ whatWeDid: l.whatWeDid, verdict: l.verdict, couldNotEstablish: l.couldNotEstablish }));
+  const lessons = (await lessonsFor(founderId)).filter((l) => l.experimentId !== String(e.id))
+    .map((l) => ({ experimentId: l.experimentId, whatWeDid: l.whatWeDid, verdict: l.verdict, couldNotEstablish: l.couldNotEstablish }));
   const { precedentOfExperiment } = await import('./precedent.js');
   const p = await precedentOfExperiment(experimentId);
   const precedent = { stands: p?.stands ?? 'clear' as const, because: p?.because ?? 'no test on this candidate has settled',
@@ -499,6 +501,13 @@ export async function deliberate(experimentId: string): Promise<Deliberation> {
     recommendationBecause: c.recommendationBecause, designedBy: FORGE,
     interpretations: c.interpretations, alternatives: c.alternatives, costs: c.costs, stopConditions: c.stopConditions,
   });
+  // WHICH LESSONS THIS DESIGN HAD IN FRONT OF IT, kept so a lesson can say what
+  // it went on to influence.
+  for (const l of record.lessons) {
+    await query(
+      `INSERT OR IGNORE INTO lessons_read (design_experiment_id, lesson_experiment_id, founder_id) VALUES (?,?,?)`,
+      [experimentId, l.experimentId, record.founderId]);
+  }
   let design = (await designOf(experimentId))!;
 
   // THE ATTACKER, GIVEN ONLY THE DRAFT AND THE RECORD.

@@ -30,8 +30,9 @@ in the maturity map.
 | G3 | Every loop the Brief watches says when its work failed | `d7564ea5` |
 | B6 | An unread fee is unknown, never zero | found already done (P1-F, case 10) |
 | C6 | The refund-reserve question (PENDING 26) comes back at the tenth settled sale | `93fc7ff4` |
-| B1 | What Etsy last showed, for every listing test, in one place on the connection page | this commit |
+| B1 | What Etsy last showed, for every listing test, in one place on the connection page | `e00874f7` |
 | A5 | Preview a Controls change before it binds | found largely done: authority and typed rules confirm; the charter page recomputes before signing |
+| E2 | A lesson knows which later designs read it | this commit |
 
 ## Next
 

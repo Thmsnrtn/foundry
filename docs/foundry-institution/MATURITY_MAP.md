@@ -1841,3 +1841,28 @@ A5 (preview a Controls change before it binds) was found largely done:
 
 What binds on one tap is renewing the charter as it stands, with no numbers
 changed.
+
+### A lesson knows which later designs read it (28 September 2026)
+
+Roadmap E2, integrated plan §7: "A lesson keeps its source, context, contrary
+evidence, expiry or invalidator, and past decisions that used it." Lessons
+already carried their source (the settled test) and their invalidator (that
+test's own outcome: invalid, superseded or retired). What nothing kept was
+the other direction: which later designs had the lesson in front of them. A
+lesson that turned out wrong could not say what it had already influenced.
+
+The deliberation record's lessons now carry the test each came from. When a
+design is composed, one row per lesson it carried is written to `lessons_read`
+(migration 358). A design never reads itself, and nothing rewrites a row. A
+test's page gains "Read by N later designs", with each design linked, and
+reads: "If this test's outcome changes, these are what it already
+influenced."
+
+**Maturity.** **`tested`** (`a-lesson-knows-who-read-it`, 3, red first).
+**Proof debt:**
+- A lesson has no expiry. None has been asked for, and no evidence says how
+  long a lesson stays true.
+- "Read" means it was in the record, not that the design relied on it. The
+  design's own words are where reliance shows.
+- Nothing yet alerts the later designs when an earlier lesson is invalidated.
+  The link now exists for that to be built on.

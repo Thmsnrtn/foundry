@@ -2321,6 +2321,14 @@ CREATE TABLE legal_surfaces (
   retired_at         TEXT
 , standing TEXT NOT NULL DEFAULT 'recognised'
   CHECK (standing IN ('recognised','unresolved_internally')), grounds TEXT, recognised_by TEXT);
+CREATE TABLE lessons_read (
+  design_experiment_id TEXT NOT NULL REFERENCES venture_experiments(id),
+  lesson_experiment_id TEXT NOT NULL REFERENCES venture_experiments(id),
+  founder_id           TEXT NOT NULL REFERENCES founders(id),
+  read_at              TEXT NOT NULL DEFAULT (datetime('now')),
+  PRIMARY KEY (design_experiment_id, lesson_experiment_id),
+  CHECK (design_experiment_id <> lesson_experiment_id)
+);
 CREATE TABLE lifecycle_conditions (
   product_id TEXT NOT NULL REFERENCES products(id),
   prompt TEXT NOT NULL,
@@ -5452,6 +5460,7 @@ CREATE INDEX idx_workspace_events_ws ON workspace_events(workspace_id, at);
 CREATE UNIQUE INDEX idx_workspace_grant_live
   ON workspace_grants(workspace_id, capability_key) WHERE revoked_at IS NULL;
 CREATE INDEX idx_workspaces_live ON workspaces(founder_id) WHERE destroyed_at IS NULL;
+CREATE INDEX lessons_read_by_lesson ON lessons_read (lesson_experiment_id, read_at);
 CREATE INDEX owner_decision_reversals_subject
   ON owner_decision_reversals (subject_kind, subject_id);
 CREATE INDEX owner_exclusion_marks_value ON owner_exclusion_marks (kind, value);
@@ -7601,6 +7610,9 @@ BEGIN
        OR NEW.founder_id IS NOT OLD.founder_id
        OR NEW.evidence_mode IS NOT OLD.evidence_mode;
 END;
+CREATE TRIGGER lessons_read_is_as_read
+BEFORE UPDATE ON lessons_read
+BEGIN SELECT RAISE(ABORT, 'lessons_read:read_is_read'); END;
 CREATE TRIGGER market_claim_guard
 BEFORE INSERT ON market_claims
 BEGIN

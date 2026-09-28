@@ -406,6 +406,10 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
   const { genomeOf, likeness, DIMENSIONS } = await import('../../services/venture/genome.js');
   const genome = await genomeOf(id);
   const alike = genome === null ? null : await likeness(founderId, genome);
+  // WHICH LATER DESIGNS READ THIS TEST'S LESSON, so a lesson that turns out
+  // wrong can say what it already influenced.
+  const { readByLaterDesigns } = await import('../../services/venture/forge.js');
+  const readers = await readByLaterDesigns(id);
   const step = (s: ExperimentView['steps'][number]) => html`<li class="${s.status}">
     <p><strong>${s.status === 'done' ? '✓ ' : s.status === 'todo' ? '○ ' : '· '}${s.label}</strong>${s.status === 'todo' && s.key === 'recipients' ? html` — <a href="${s.href}">open</a>` : ''}</p>
     <p class="quiet">${s.detail}</p></li>`;
@@ -737,6 +741,10 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
     : html`<p class="quiet">Nothing yet.</p>`)}
 
     ${fold('details', 'Details', '', html`<dl class="facts">${v.details.map(([k, val]) => html`<dt>${k}</dt><dd>${val}</dd>`)}</dl>`)}
+
+    ${readers.length === 0 ? '' : fold('read-by', `Read by ${String(readers.length)} later ${readers.length === 1 ? 'design' : 'designs'}`, '', html`
+      <p class="quiet">Each of these was designed with this test's lesson in front of it. If this test's outcome changes, these are what it already influenced.</p>
+      <ul>${readers.map((r) => html`<li><a href="/foundry/experiments/${r.experimentId}">${r.whatWeDo}</a> <span class="dim">${r.readAt.slice(0, 10)}</span></li>`)}</ul>`)}
 
     ${genome === null ? '' : fold('kind', 'What kind of test this is', '', html`
       <dl class="facts">${DIMENSIONS.map((d) => html`<dt>${d.replace(/_/g, ' ')}</dt>

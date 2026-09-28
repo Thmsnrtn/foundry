@@ -927,6 +927,10 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
     reason: 'what each discipline saw in one person\'s candidate test, before the design was composed',
     onAccountErasure: { op: 'delete' },
   },
+  lessons_read: {
+    reason: 'which of one person\'s settled tests each of their later designs read; the tests were theirs and go with them',
+    onAccountErasure: { op: 'delete' },
+  },
   probe_attacks: {
     reason: 'what the adversary argued against one person\'s draft design, and whether it was accepted',
     onAccountErasure: { op: 'delete' },

@@ -166,6 +166,16 @@ export async function lessonsFor(founderId: string): Promise<Lesson[]> {
   });
 }
 
+/** WHICH LATER DESIGNS HAD THIS TEST'S LESSON IN FRONT OF THEM, oldest first. */
+export async function readByLaterDesigns(lessonExperimentId: string): Promise<Array<{ experimentId: string; whatWeDo: string; readAt: string }>> {
+  const r = await query(
+    `SELECT r.design_experiment_id, r.read_at, e.what_we_do FROM lessons_read r
+       JOIN venture_experiments e ON e.id = r.design_experiment_id
+      WHERE r.lesson_experiment_id = ? ORDER BY datetime(r.read_at), r.rowid`, [lessonExperimentId]);
+  return (r.rows as unknown as Array<Record<string, unknown>>).map((x) => ({
+    experimentId: String(x.design_experiment_id), whatWeDo: String(x.what_we_do), readAt: String(x.read_at) }));
+}
+
 function sentenceFor(open: OpenQuestion[], lessons: Lesson[]): string {
   const untested = open.filter((q) => q.alreadyTesting === null);
   const blocking = untested.filter((q) => q.blocking);
