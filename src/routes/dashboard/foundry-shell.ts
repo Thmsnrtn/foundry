@@ -2846,7 +2846,7 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
     const surplus = await distributableSurplus(s.ownerId);
     return html`<div class="said">
       <p><strong>What has reached a bank: ${figureText(banked)}.</strong> ${banked.because}</p>
-      <p>In Stripe, ours: ${figureText(surplus.held)} &mdash; settled with the provider; not a bank balance.</p>
+      <p>Held by the providers, ours: ${figureText(surplus.held)} &mdash; settled with the provider; not a bank balance.</p>
       <p class="quiet">The same figures are on <a href="/foundry/money">Economics</a>.</p>
     </div>`;
   }

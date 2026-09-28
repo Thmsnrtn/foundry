@@ -2120,3 +2120,29 @@ classifier still pass).
 - A regular-expression classifier. Wording outside what has been tried may
   still land on "I don't know yet", which is at least honest.
 
+### Each sale names who took its fee, and what its margin leaves out (28 September 2026)
+
+Roadmap D4. The money page listed every sale as "Stripe took …", with the gross
+line "before Stripe took anything" and the tile "In Stripe, ours". All three
+were written when Stripe was the only way anything was paid. The first real
+venue is Etsy, so the first real sale would have shown Etsy's fee as Stripe's.
+The same held figure appeared in Ask's bank answer.
+
+- Each sale names its own provider, from the fulfilment's `provider`: "Etsy
+  took $1.58".
+- The gross line and the tile now say "the providers" ("Held by the providers,
+  ours"), on the money page and in Ask.
+- The per-sale margin (`unitContribution`) already showed an unread fee as
+  unknown, never zero. The page now also says what the margin does not
+  subtract: what it cost to be found beyond the provider's own fees, and the
+  owner's time. His time is "not entered" until he enters minutes on a test's
+  page (D6), then "N minutes entered", with no price put on it.
+
+**Maturity.** **`tested`** (`a-sale-names-who-took-the-fee`, 3, red first; the
+12 files that render the money page still pass).
+**Proof debt:**
+- Etsy's listing-renewal fee and Offsite Ads are not read per sale. They are
+  named as not counted, not estimated.
+- No hourly value is put on his time, deliberately. That would be a number
+  nobody has given.
+

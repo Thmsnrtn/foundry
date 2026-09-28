@@ -97,9 +97,26 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
   const cost = await runningCost(founderId);
 
   const sales = await query(
-    `SELECT id, amount_cents, currency, status, created_at
+    `SELECT id, amount_cents, currency, status, created_at, provider
        FROM experiment_fulfilments WHERE founder_id = ? ORDER BY created_at DESC LIMIT 25`,
     [founderId]);
+  // WHO TOOK THE FEE, BY NAME (roadmap D4). Every sale read "Stripe took",
+  // written when Stripe was the only way anything was paid; an Etsy sale's
+  // fee is Etsy's.
+  const providerName = (p: unknown): string => {
+    const k = String(p ?? '').toLowerCase();
+    return k === 'etsy' ? 'Etsy' : k === 'stripe' ? 'Stripe' : k ? k.charAt(0).toUpperCase() + k.slice(1) : 'The provider';
+  };
+  // AND WHAT THE MARGIN LEAVES OUT, said rather than silently omitted: what it
+  // cost to be found beyond the provider's fees, and his own time, which he
+  // enters in minutes (D6) and which has no price here.
+  const minutes = Number(((await query(
+    `SELECT COALESCE(SUM(minutes), 0) AS n FROM owner_minutes WHERE founder_id = ? AND withdrawn_at IS NULL`, [founderId]))
+    .rows[0] as Record<string, unknown>).n ?? 0);
+  const notCounted = 'Not counted in what was left: what it cost to be found beyond the provider\'s own fees '
+    + '(advertising, listing renewals not on the receipt), and your own time'
+    + (minutes > 0 ? `: ${String(minutes)} minutes entered on your tests; no price is put on it here.`
+      : ', which is not entered — the minutes you spend on a test can be entered on its page; no price is put on it here.');
   const units = await Promise.all(sales.rows.map(async (r) => {
     const row = r as Record<string, unknown>;
     return { row, view: await unitContribution(founderId, String(row.id)) };
@@ -142,7 +159,7 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
     <p class="lede">${s.sentence}</p>
 
     <dl class="glance eco-glance" aria-label="The money, at a glance">
-      ${tile('cash', 'In Stripe, ours', s.held, 'settled with the provider; not a bank balance')}
+      ${tile('cash', 'Held by the providers, ours', s.held, 'settled with the provider; not a bank balance')}
       ${tile('reserve', 'Held for tax', s.taxReserve, s.taxReserve.policy ? 'from the assumption you recorded' : 'no assumption recorded yet')}
       ${tile('reserve', 'Kept to keep running', s.operatingReserve, 'the floor you set')}
       ${tile('warn', 'Could be asked back', s.refundExposure, 'refund exposure on delivered work')}
@@ -152,7 +169,7 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
     <div class="know">
       <h2>The subtraction</h2>
       <dl class="facts money">
-        ${line('In Stripe, ours', s.held)}
+        ${line('Held by the providers, ours', s.held)}
         ${line('Paid for, not delivered', s.obligations, true)}
         ${line('Could be asked back', s.refundExposure, true)}
         ${line('Held for tax', s.taxReserve, true)}
@@ -166,7 +183,7 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
       ${owedToBuyers.length ? html`<h2>Owed to buyers</h2>
       <ul class="owed-to-buyers">${owedToBuyers.map((o) => html`<li><a href="/foundry/experiments/${o.experimentId}">${o.sentence}</a>${o.asksHim ? html` <strong>${o.asksHim}</strong>` : ''}</li>`)}</ul>` : ''}
       ${reasons([
-    ['In Stripe, ours', s.held],
+    ['Held by the providers, ours', s.held],
     ['Paid for, not delivered', s.obligations],
     ['Could be asked back', s.refundExposure],
     ['Held for tax', s.taxReserve],
@@ -200,19 +217,20 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
     <div class="inspect">
     ${fold('cannot', 'What I cannot tell you', `reached a bank: ${figureText(banked)}`, html`
       <p><strong>What has reached a bank: ${fig(banked)}.</strong> ${banked.because}</p>
-      <p class="quiet">Gross charged, before Stripe took anything: ${figureText(gross)}. That number is
+      <p class="quiet">Gross charged, before the providers took anything: ${figureText(gross)}. That number is
         not yours and is only here so the subtraction above can be checked against it.</p>`)}
 
     ${fold('sales', 'Every sale, and what was left of it', units.length ? `${String(units.length)} ${units.length === 1 ? 'sale' : 'sales'}` : 'none yet', units.length === 0
         ? html`<p class="quiet">Nothing has been sold. When something is, each sale appears here with
-            what Stripe took out of it, so the margin is never guessed at from the price.</p>`
+            what the provider took out of it, so the margin is never guessed at from the price.</p>`
         : html`<ul class="sales">${units.map(({ row, view }) => html`<li>
             <b>${dollars(Number(row.amount_cents))}</b> ${String(row.status)}
-            · Stripe took ${fig(view.providerFee)}
+            · ${providerName(row.provider)} took ${fig(view.providerFee)}
             · left ${fig(view.contribution)}
             ${view.contribution.cents === null
               ? html`<p class="quiet">${view.contribution.because}</p>` : ''}
-          </li>`)}</ul>`)}
+          </li>`)}</ul>
+          <p class="quiet">${notCounted}</p>`)}
 
     ${fold('cost', 'What running this has cost', figureText(cost.total), html`
       <p><strong>${fig(cost.total)}</strong> ${cost.total.because}</p>

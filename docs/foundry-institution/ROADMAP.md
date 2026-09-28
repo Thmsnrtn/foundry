@@ -41,9 +41,21 @@ in the maturity map.
 | A9 | The prompt shield measured on 24 prose attacks: 1 caught before, 14 after, every miss named | `63e8f62c` |
 | A6 + A7 | An outreach asset answers "what has it been shown to do" and "what if it is interrupted" | `7c00cf25` |
 | B5 | When Etsy rate-limits a read, Foundry waits as long as Etsy asked and concludes nothing meanwhile | `dd1c9111` |
-| F4 (+ F1 preparation) | Ask answers all five comprehension questions, from the money page's own readers | this commit |
+| F4 (+ F1 preparation) | Ask answers all five comprehension questions, from the money page's own readers | `73fe05d6` |
+| D4 | Each sale names who took its fee (Etsy, not "Stripe"), and the margin says what it leaves out | this commit |
+| E3 | "No sales" split into its causes | found already done where observable: a hidden shop, an unreadable venue, and a listing inactive or at another price each void a silent window (B2b). A missing file does not stop a sale, so it is a readiness and care failure, not a cause of silence (B3). A broken checkout is not observable to a read-only app. |
 
 ## Next
+
+**H1 is blocked on the record, not on code (28 September 2026).** An in-app
+sheet of open decisions would have to read `OWNER_DECISIONS_PENDING.md`, and
+that record is not safe to render yet. Its header says "five pending" while
+the body holds many more. Its "§14 answered", "§15 RESOLVED" and "§25 RESOLVED"
+refer to different questions than the headings "PENDING 14", "PENDING 15" and
+"PENDING 25". And whether some items are settled, such as whether the charter
+(PENDING 17) was signed, lives in production data I do not read. The next step
+is to reconcile the record: one numbering, and a status line on every item,
+confirmed by the owner. Then the sheet can be built on it.
 
 Next in order: E1 (the deliberation against one strong model, on frozen
 cases) needs real model calls and is the owner's spend to authorise, so the
