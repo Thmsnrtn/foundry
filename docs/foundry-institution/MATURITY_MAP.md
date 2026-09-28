@@ -1759,3 +1759,31 @@ red first). **Proof debt:**
 - A wrong file does not void a window's verdict. It is a care failure for a
   buyer and a readiness failure, not a demand verdict.
 - Not observed on the real listing.
+
+### Every loop the Brief watches says when its work failed (28 September 2026)
+
+Roadmap G3. This extends Gate 1's case 8, where a job whose every settlement
+failed was recorded as a healthy pass, to all nine loops in
+`INSTITUTION_LOOPS`. Six already told the truth:
+- the forge and the sense check throw;
+- settlement and the hand throw after finishing the pass;
+- reconciliation and judgment record each company's failure.
+
+Three caught each subject's failure, logged it and returned normally, so the
+scheduler recorded success and the Brief called the day healthy:
+- `venture_discovery_tick`: a search that could not run;
+- `real_market_evidence_tick`: a claim that could not be looked at;
+- `public_workshop_tick`: a page that could not be republished, a reply-route
+  check that could not run, and, the one that matters most, opt-outs that
+  could not be kept. Those were a count in a log line. An opt-out is a promise
+  to stop writing to somebody.
+
+Each now finishes the pass for every other subject, then throws with what
+failed. `job_health` records it, and the Brief names the loop. A pass with
+nothing wrong still resolves.
+
+**Maturity.** **`tested`** (`every-watched-loop-says-when-it-failed`, 6). Red
+first: four of the five failure cases resolved as healthy. **Proof debt:** a
+source that is down for one claim now marks the whole evidence loop failing
+for that pass. That is honest, but it may be noisy. The Brief names a loop only
+after consecutive failures, which is the existing damping.

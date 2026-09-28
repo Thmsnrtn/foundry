@@ -3301,9 +3301,14 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       const { syncOptOutsFromStore } = await import('../services/public-workshop/suppression.js');
       const { workshopHealth, keepTheProgramCurrent } = await import('../services/public-workshop/infrastructure.js');
       const { publishSite } = await import('../services/public-workshop/publication.js');
+      // Every other Workshop is still kept; then the pass says what failed
+      // (case 8). A failed opt-out sync is named on its own: it is a promise
+      // to stop writing to somebody, not a housekeeping count.
+      const workshopFailed: string[] = [];
       for (const o of owners) {
         const founderId = String(o.founder_id);
         const opt = await syncOptOutsFromStore(founderId);
+        if (opt.failed.length > 0) workshopFailed.push(`${founderId}: ${String(opt.failed.length)} opt-out(s) could not be kept`);
         // THE WORLD SAYS WHAT THE RECORD SAYS. A page is rendered from rows,
         // and rows change — the Workshop's own statement did, by migration —
         // while the world kept serving the page as it was the day somebody
@@ -3343,11 +3348,13 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
             // A HELD PAGE IS SAID OUT LOUD. It is not a failure and not a
             // success, and leaving it out of the line meant the only trace of
             // the owner's word being applied was a page that stopped changing.
+            if (site.failed.length > 0) workshopFailed.push(`${founderId}: ${String(site.failed.length)} page(s) could not be republished`);
             if (site.published.length > 0 || site.failed.length > 0 || site.held.length > 0) {
               logger.info(`public_workshop_tick: ${founderId} republished ${site.published.join(', ') || 'nothing'}${site.failed.length ? `; failed ${site.failed.map((f) => `${f.path} (${f.reason})`).join(', ')}` : ''}${site.held.length ? `; held ${site.held.map((h) => `${h.path} (${h.reason})`).join(', ')}` : ''}`,
                 { jobName: 'public_workshop_tick' });
             }
           } catch (err) {
+            workshopFailed.push(`${founderId}: could not republish (${err instanceof Error ? err.message : String(err)})`);
             logger.warn(`public_workshop_tick: ${founderId} could not republish: ${err instanceof Error ? err.message : String(err)}`,
               { jobName: 'public_workshop_tick' });
           }
@@ -3368,6 +3375,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
               { jobName: 'public_workshop_tick' });
           }
         } catch (err) {
+          workshopFailed.push(`${founderId}: could not check the reply route (${err instanceof Error ? err.message : String(err)})`);
           logger.warn(`public_workshop_tick: ${founderId} could not check the reply route: ${err instanceof Error ? err.message : String(err)}`,
             { jobName: 'public_workshop_tick' });
         }
@@ -3375,6 +3383,9 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
         const health = await workshopHealth(founderId);
         logger.info(`public_workshop_tick: ${founderId} opt-outs +${opt.recorded}, answers +${opt.continuations}, swept ${opt.swept}; site ${health.site.status}, cloudflare ${health.cloudflare.status}, sending ${health.sending.status}, inbox ${health.replyInbox.status}`,
           { jobName: 'public_workshop_tick', failing: health.pagesFailing, optOutFailures: opt.failed });
+      }
+      if (workshopFailed.length > 0) {
+        throw new Error(`the Workshop could not be kept: ${workshopFailed.join('; ')}`);
       }
     },
     schedule: '40 * * * *',
@@ -3533,6 +3544,8 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
           WHERE closed_at IS NULL ORDER BY opened_at`, []);
       let sown = 0;
       let buried = 0;
+      // Every other search still runs; then the pass says it failed (case 8).
+      const discoveryFailed: string[] = [];
       let promotedCount = 0;
       let readCount = 0;
       let declined = 0;
@@ -3579,6 +3592,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
               { jobName: 'venture_discovery_tick' });
           }
         } catch (err) {
+          discoveryFailed.push(`${String(row.id)}: ${err instanceof Error ? err.message : String(err)}`);
           logger.error(
             `venture_discovery_tick failed for ${String(row.id)}: `
             + `${err instanceof Error ? err.message : String(err)}`,
@@ -3589,6 +3603,9 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
         `venture_discovery_tick: read=${String(readCount)}, declined=${String(declined)}, `
         + `sown=${String(sown)}, buried=${String(buried)}, promoted=${String(promotedCount)}`,
         { jobName: 'venture_discovery_tick' });
+      if (discoveryFailed.length > 0) {
+        throw new Error(`${String(discoveryFailed.length)} search(es) could not run: ${discoveryFailed.join('; ')}`);
+      }
     },
     schedule: '0 6 * * *',
     description:
@@ -3742,6 +3759,8 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
           WHERE c.evidence_mode = 'real' AND c.settled_as IS NULL
             AND NOT EXISTS (SELECT 1 FROM market_observations o WHERE o.claim_id = c.id)`, []);
       let looked = 0;
+      // Every other claim is still looked at; then the pass says it failed (case 8).
+      const evidenceFailed: string[] = [];
       for (const row of founders.rows as unknown as Array<Record<string, unknown>>) {
         const founderId = String(row.founder_id);
         const ways = await waysOfLooking(founderId, 'real');
@@ -3769,6 +3788,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
             });
             looked += 1;
           } catch (err) {
+            evidenceFailed.push(`${String(c.id)}: ${err instanceof Error ? err.message : String(err)}`);
             logger.error(
               `real_market_evidence_tick failed for claim ${String(c.id)}: `
               + `${err instanceof Error ? err.message : String(err)}`,
@@ -3778,6 +3798,9 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       }
       logger.info(`real_market_evidence_tick: claims looked at=${String(looked)}`,
         { jobName: 'real_market_evidence_tick' });
+      if (evidenceFailed.length > 0) {
+        throw new Error(`${String(evidenceFailed.length)} claim(s) could not be looked at: ${evidenceFailed.join('; ')}`);
+      }
     },
     schedule: '15 5 * * *',
     description:

@@ -26,7 +26,8 @@ in the maturity map.
 | D1 | Each product type's sourced facts, its unknowns, and what can serve it | `582c0438` |
 | B2 | The listing Etsy shows is checked against the sealed offer's price, and against being listed at all | `4ca70f81` |
 | B2b | A window in which Etsy showed another price, or no listing, is not a verdict | `3f3991ea` |
-| B3 | The file on the listing is the one Foundry built, by size, as Etsy reports it | this commit |
+| B3 | The file on the listing is the one Foundry built, by size, as Etsy reports it | `4742ed7c` |
+| G3 | Every loop the Brief watches says when its work failed | this commit |
 
 ## Next
 
