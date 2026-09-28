@@ -550,6 +550,16 @@ export async function recordVenueOrder(input: {
     'SELECT id FROM experiment_fulfilments WHERE payment_event_id = ?', [paid.id]))
     .rows[0] as Record<string, unknown> | undefined;
   const fulfilmentId = held ? String(held.id) : nanoid();
+  // WHICH FILE THIS BUYER RECEIVED (migration 363): what the listing held at the
+  // last reading at or before the payment, as the venue reported it. No reading
+  // before the sale is "not known", never the file that is there now.
+  const listingId = /\/listing\/(\d+)/.exec(x.exposureRef)?.[1] ?? null;
+  const heldThen = listingId && e.productId ? (await query(
+    `SELECT files_json, observed_at FROM venue_listing_readings
+      WHERE product_id = ? AND provider = ? AND listing_id = ? AND files_json IS NOT NULL
+        AND datetime(observed_at) <= datetime(?)
+      ORDER BY datetime(observed_at) DESC, rowid DESC LIMIT 1`,
+    [e.productId, plan.listing.venue, listingId, paidAt.toISOString()])).rows[0] as Record<string, unknown> | undefined : undefined;
   if (!held) {
   // ONE TRANSACTION, BECAUSE THE GAP BETWEEN TWO STATEMENTS WAS REACHABLE.
   //
@@ -565,9 +575,11 @@ export async function recordVenueOrder(input: {
   // is a reason to weaken it. What was missing was the transaction, so either
   // both land or neither does.
   await batch([
-      { sql: `INSERT INTO experiment_fulfilments (id, founder_id, experiment_id, exposure_id, payment_event_id, provider, payment_ref, amount_cents, currency, observed_how, after_settlement)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
-        args: [fulfilmentId, input.founderId, input.experimentId, x.id, paid.id, plan.listing.venue, ref, o.grossCents, currency, input.observedHow ?? 'owner_entered', afterSettlement ? 1 : 0] },
+      { sql: `INSERT INTO experiment_fulfilments (id, founder_id, experiment_id, exposure_id, payment_event_id, provider, payment_ref, amount_cents, currency, observed_how, after_settlement,
+                delivered_files_json, delivered_files_seen_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        args: [fulfilmentId, input.founderId, input.experimentId, x.id, paid.id, plan.listing.venue, ref, o.grossCents, currency, input.observedHow ?? 'owner_entered', afterSettlement ? 1 : 0,
+          heldThen ? String(heldThen.files_json) : null, heldThen ? String(heldThen.observed_at) : null] },
       { sql: `UPDATE experiment_fulfilments SET status = 'delivered', updated_at = datetime('now') WHERE id = ?`,
         args: [fulfilmentId] },
     ]);

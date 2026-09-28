@@ -1600,7 +1600,8 @@ CREATE TABLE experiment_fulfilments (
   refund_ref          TEXT,
   created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, disputed_at TEXT, dispute_outcome TEXT CHECK (dispute_outcome IN ('won','lost')), observed_how TEXT NOT NULL DEFAULT 'foundry_observed'
-  CHECK (observed_how IN ('foundry_observed','venue_reported','owner_entered','inferred')), after_settlement INTEGER NOT NULL DEFAULT 0 CHECK (after_settlement IN (0, 1)),
+  CHECK (observed_how IN ('foundry_observed','venue_reported','owner_entered','inferred')), after_settlement INTEGER NOT NULL DEFAULT 0 CHECK (after_settlement IN (0, 1)), delivered_files_json TEXT
+  CHECK (delivered_files_json IS NULL OR json_valid(delivered_files_json)), delivered_files_seen_at TEXT,
   UNIQUE(payment_event_id)
 );
 CREATE TABLE experiment_invalidity_kinds (

@@ -61,8 +61,11 @@ businesses. Its method is carried into `STRATEGY.md` and
 | F4 (+ F1 preparation) | Ask answers all five comprehension questions, from the money page's own readers | `73fe05d6` |
 | D4 | Each sale names who took its fee (Etsy, not "Stripe"), and the margin says what it leaves out | `789cab7b` |
 | A8 | J1 and J3 walked on a 390px phone: 4 taps / 4 screens and 5 taps / 5 screens, no overflow — and the walk found a direction the door did not hear | `51d643e2` |
-| Handoff A0 | `OBJECTIVE.md` said the $29 brief was "sold"; the ledger says 0 payments. Corrected with a dated amendment; this file's reading order stated | this commit |
-| Handoff A1 | Who checks Etsy's buyer messages, and how often: said by the owner, read by the absence test, the asset's record and the connection page | this commit |
+| Handoff A0 | `OBJECTIVE.md` said the $29 brief was "sold"; the ledger says 0 payments. Corrected with a dated amendment; this file's reading order stated | `9110a79d` |
+| Handoff A1 | Who checks Etsy's buyer messages, and how often: said by the owner, read by the absence test, the asset's record and the connection page | `9110a79d` |
+| Handoff A2 | The buyer can get the file: the owner's acts carry the browser-download answer (Etsy's app cannot download), with its source and date | this commit |
+| Handoff A3 | Each venue order keeps which file its listing held when it sold; "not known" when no reading came before the sale | this commit |
+| Handoff A4 | A decision dossier for the next product (A03, A05, B01, improving A01, licensing, hold, none), in `river/proof-3-candidates/` | this commit |
 | E3 | "No sales" split into its causes | found already done where observable: a hidden shop, an unreadable venue, and a listing inactive or at another price each void a silent window (B2b). A missing file does not stop a sale, so it is a readiness and care failure, not a cause of silence (B3). A broken checkout is not observable to a read-only app. |
 
 ## Next

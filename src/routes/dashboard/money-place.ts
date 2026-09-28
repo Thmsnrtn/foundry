@@ -97,7 +97,7 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
   const cost = await runningCost(founderId);
 
   const sales = await query(
-    `SELECT id, amount_cents, currency, status, created_at, provider
+    `SELECT id, amount_cents, currency, status, created_at, provider, delivered_files_json, delivered_files_seen_at
        FROM experiment_fulfilments WHERE founder_id = ? ORDER BY created_at DESC LIMIT 25`,
     [founderId]);
   // WHO TOOK THE FEE, BY NAME (roadmap D4). Every sale read "Stripe took",
@@ -110,6 +110,17 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
   // AND WHAT THE MARGIN LEAVES OUT, said rather than silently omitted: what it
   // cost to be found beyond the provider's fees, and his own time, which he
   // enters in minutes (D6) and which has no price here.
+  // WHICH FILE EACH VENUE BUYER RECEIVED (migration 363), or that it is not
+  // known. A Stripe sale's deliverable is the test's own material, sent by mail.
+  const deliveredLine = (row: Record<string, unknown>): string | null => {
+    if (String(row.provider ?? '').toLowerCase() === 'stripe') return null;
+    if (row.delivered_files_json == null) return 'which file this buyer received is not known';
+    const files = JSON.parse(String(row.delivered_files_json)) as Array<{ filename: string; sizeBytes: number | null }>;
+    const on = String(row.delivered_files_seen_at ?? '').slice(0, 10);
+    const who = providerName(row.provider);
+    return files.length === 0 ? `${who} held no file on the listing when this sold (read ${on})`
+      : `delivered ${files.map((f) => `${f.filename} (${f.sizeBytes === null ? 'size not given' : `${f.sizeBytes.toLocaleString('en-US')} bytes`}`).join(', ')}, as ${who} held it on ${on})`;
+  };
   const minutes = Number(((await query(
     `SELECT COALESCE(SUM(minutes), 0) AS n FROM owner_minutes WHERE founder_id = ? AND withdrawn_at IS NULL`, [founderId]))
     .rows[0] as Record<string, unknown>).n ?? 0);
@@ -226,6 +237,7 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
         : html`<ul class="sales">${units.map(({ row, view }) => html`<li>
             <b>${dollars(Number(row.amount_cents))}</b> ${String(row.status)}
             · ${providerName(row.provider)} took ${fig(view.providerFee)}
+            ${deliveredLine(row as Record<string, unknown>) ? html`<br /><small class="quiet">${deliveredLine(row as Record<string, unknown>)}</small>` : ''}
             · left ${fig(view.contribution)}
             ${view.contribution.cents === null
               ? html`<p class="quiet">${view.contribution.because}</p>` : ''}

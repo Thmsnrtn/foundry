@@ -2221,3 +2221,46 @@ no buyer has arrived.
 - Messages are one channel. A buyer who opens an Etsy case instead is covered
   only by the obligations reader, and only once an order exists.
 
+### The buyer can get the file, and each order keeps which file it was (handoff A2, A3)
+
+**A2.** The handoff cites Etsy's help: the Etsy app does not download digital
+purchases, so a buyer is sent to a browser or a computer. On an iPhone, "I
+can't find my file" is the most likely first help request this listing will
+get, and the owner's acts said nothing about it. They now carry the exact
+reply (etsy.com in a browser → You → Purchases → Download Files), its source,
+its date, and who read it: the handoff's research, since this environment
+cannot open Etsy's pages. It is for replies to buyers. The listing's own text
+stays as sealed, because changing it during the test would change what the
+test measures.
+
+**A3.** An order did not record which file its listing held when it sold, so
+a later change of file could not be traced to the buyers it affected. Each
+venue order now keeps the files from the last reading at or before its payment
+(migration 363, `delivered_files_json` and `delivered_files_seen_at` on
+`experiment_fulfilments`). It is written once, at intake. A replay never
+rebinds, and a later file change never rewrites an earlier buyer's record. With
+no reading before the sale, the page says "which file this buyer received is
+not known". The money page shows it under each venue sale.
+
+**Maturity.** **`tested`**: `the-buyer-can-get-the-file` (3) and
+`what-was-sold-is-what-was-delivered` (5), both red first. The 27 files that
+record orders or render the money page still pass.
+**Proof debt:**
+- Etsy's download help page has not been read from here, only through the
+  handoff.
+- The binding is by filename and size, as Etsy reports them. There is no hash,
+  so two different files of the same size would look the same.
+- Readings happen when the shop is read. A file changed and changed back
+  between two reads leaves no trace.
+
+### The next product is a decision, not a build (handoff A4)
+
+`river/proof-3-candidates/DOSSIER.md` compares A03 (a margin postmortem), A05
+(a supplier quote normaliser), B01 revised (a lumber-yard purchase planner),
+improving A01, a licensing path, holding the money, and building none. It
+uses the handoff's fields. Observed, inferred, assumed and unknown are kept in
+separate columns, and marketplace listings are graded as supply only. It names
+no personal brand, because the repository is public. It records why no second
+product should be built before the first buyer relationship has run end to
+end.
+

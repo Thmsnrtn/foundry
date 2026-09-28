@@ -99,6 +99,14 @@ Only what Thomas literally must do himself. Foundry cannot perform any of these;
 8. **Enter the venue's readings** on the experiment page at day 7, 14 and 30: impressions and position from Search Analytics, views, visits, favourites, orders, and the traffic-source split from Stats.
 9. **Enter each order** as it appears: Etsy order number, date, gross amount, fees from the Etsy Payments statement. Enter any refund or case.
 
+## Helping a buyer get the file
+
+Etsy's app cannot download digital purchases. A buyer on a phone who writes that they cannot find the file most likely bought it in the app. The answer to give them:
+
+> Open etsy.com in a browser (Safari or Chrome), sign in, go to You → Purchases, find the Bid Decision Workbook and tap Download Files. The Etsy app itself does not download files.
+
+Source: Etsy Help, "How to Download a Digital Item", as read by the owner's handoff research on 28 September 2026. This environment could not open Etsy's pages, so check it on screen once. Use it in replies to buyers, not the listing's own text during the test: changing the listing would change what the sealed test measures.
+
 ## At settlement
 
 10. Nothing. Foundry settles by the sealed rule when the window closes, and records what changes next.
