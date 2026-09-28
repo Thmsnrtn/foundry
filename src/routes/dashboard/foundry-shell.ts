@@ -2217,6 +2217,15 @@ export function matchQuestion(text: string): string {
   // money yet?" reached the permissions answer because the word "money" sits
   // in the rule for what Foundry is allowed to do. It is a question about the
   // world's rows, and it is answered from them.
+  // THE FIVE QUESTIONS THE OWNER'S COMPREHENSION TEST ASKS (roadmap F1).
+  // Three of them had no reading at all and were answered "I don't know yet".
+  // A bank is asked about before a payment: "has any money reached my bank?"
+  // is not "has anybody paid?".
+  if (/\bbank\b|\bbanked\b|\bdeposit(?:ed|s)?\b|\bpayouts?\b|paid out/.test(t)) return 'bank';
+  if (/\bowed\b|\bowe\b|\bowing\b|refunds? (?:due|asked|owed|outstanding)|who is waiting on/.test(t)) return 'owed';
+  if (/what (?:must|do|should|have) i (?:to )?do\b|what do i (?:need|have) to do|what(?:'s| is) (?:on me|mine to do|waiting on me)/.test(t)) return 'needs';
+  if (/what (?:is|are|'s) (?:foundry|you) (?:doing|up to|working on)|what(?:'s| is) foundry (?:doing|up to)/.test(t)) return 'working';
+  if (/how much (?:can|may|are) (?:you|foundry)|(?:can|may) (?:you|foundry) spend/.test(t)) return 'allowed';
   if (/making (?:any |me |us )?money|made (?:any )?money|(?:any(?:one|body)|someone|somebody) (?:paid|bought|buy|pay)|(?:anything|something) (?:sold|paid|earn|bought)|sold anything|earn(?:ing|ed) anything|money (?:yet|coming in|come in)|paid yet|bought anything|customers? yet|any (?:sales|revenue|income) yet|(?:is|has) (?:anything|any of it|it) (?:making|earning|selling)/.test(t)) {
     return 'paid';
   }
@@ -2811,6 +2820,37 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
     </div>`;
   }
 
+  // WHAT IS OWED, FROM THE READER THE MONEY PAGE LISTS IT FROM (roadmap F4):
+  // `obligationsFor`, in its own sentences, so the two cannot disagree.
+  if (key === 'owed') {
+    const { obligationsFor } = await import('../../services/venture/obligations.js');
+    const owed = await obligationsFor(s.ownerId);
+    const etsy = Number(((await query(
+      `SELECT COUNT(*) AS n FROM experiment_exposures x JOIN venture_experiments e ON e.id = x.experiment_id
+        WHERE e.founder_id = ? AND lower(x.provider) = 'etsy' AND x.withdrawn_at IS NULL`, [s.ownerId])).rows[0] as Record<string, unknown>).n ?? 0);
+    return html`<div class="said">
+      ${owed.length === 0
+    ? html`<p>Nothing is owed to a buyer on record.</p>`
+    : html`<p>${count(owed.length, 'thing')} owed to buyers:</p>
+      <ul>${owed.map((o) => html`<li><a href="/foundry/experiments/${o.experimentId}">${o.sentence}</a>${o.asksHim ? html` <strong>Yours: ${o.asksHim}</strong>` : ' Foundry carries it.'}</li>`)}</ul>`}
+      ${etsy > 0 ? html`<p>Etsy messages are not read here, so a buyer who asks there for help or a refund reaches you on Etsy, and I would not know.</p>` : ''}
+      <p class="quiet">The same list is on <a href="/foundry/money">Economics</a>, under Owed to buyers.</p>
+    </div>`;
+  }
+
+  // WHAT REACHED A BANK: NOT KNOWN, FOR THE MONEY PAGE'S OWN REASON, beside
+  // the figure the page puts next to it. A sale is not a deposit.
+  if (key === 'bank') {
+    const { moneyBanked, distributableSurplus, figureText } = await import('../../services/economy/projection.js');
+    const banked = await moneyBanked();
+    const surplus = await distributableSurplus(s.ownerId);
+    return html`<div class="said">
+      <p><strong>What has reached a bank: ${figureText(banked)}.</strong> ${banked.because}</p>
+      <p>In Stripe, ours: ${figureText(surplus.held)} &mdash; settled with the provider; not a bank balance.</p>
+      <p class="quiet">The same figures are on <a href="/foundry/money">Economics</a>.</p>
+    </div>`;
+  }
+
   if (key === 'today') {
     return html`<div class="said">
       <p>${s.routinesFailing.length > 0
@@ -2918,7 +2958,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
   // and a question about the whole institution is answered here regardless.
   const scoped = String(c.req.query('scope') ?? '').trim();
   if (typed && scoped.startsWith('company:')) {
-    const wide = ['portfolio', 'capital', 'venture', 'companies', 'away', 'back', 'today', 'turneddown'];
+    const wide = ['portfolio', 'capital', 'venture', 'companies', 'away', 'back', 'today', 'turneddown', 'owed', 'bank'];
     const namedInstead = await companyHeMeant(s.ownerId, typed);
     // Only whether it is his: the page this sends him to discloses reality
     // and standing itself, and refusing the redirect for an invented company or

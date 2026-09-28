@@ -2081,3 +2081,42 @@ later pass asked again at once.
 - Only the shop reader backs off. The identity probe and token refresh do not
   share the wait.
 
+### Ask answers the five questions, and agrees with the screens (28 September 2026)
+
+Roadmap F4, and preparation for F1. The comprehension test the owner is to
+take on his phone asks five questions. Typed into Ask on 28 September, before
+this change:
+
+| Question | Read as | Answer |
+|---|---|---|
+| What is owed? | nothing | "I don't know yet" |
+| What reached the bank? | nothing | "I don't know yet" |
+| What may Foundry spend? | what is allowed | correct |
+| What is Foundry doing? | how a company is doing | the wrong question |
+| What must I do? | nothing | "I don't know yet" |
+| How much can you spend? | a company's metrics | the wrong question |
+
+Now:
+
+- **"What is owed?"** is answered from `obligationsFor`, the reader behind the
+  money page's "Owed to buyers", in the same sentences. It adds the Etsy
+  caveat (messages there are not read here) when an Etsy listing is live.
+- **"What reached the bank?"** is answered from `moneyBanked`: not known, for
+  the page's own reason. The held figure sits beside it with the page's label,
+  "In Stripe, ours … not a bank balance". A sale is not a deposit.
+- **"What must I do?"** goes to the existing "what you need to do" answer.
+  **"What is Foundry doing?"** goes to "what I am working on". **"How much
+  can you spend?"** goes to the charter answer.
+
+`ask-answers-the-five-questions` fails if Ask and the money page disagree:
+every obligation sentence and the bank reason must appear in both, as must
+the held figure. It reads only Ask's answer block, because the first screen
+carries every figure anyway.
+
+**Maturity.** **`tested`** (12, red first; the 28 files that touch Ask's
+classifier still pass).
+**Proof debt:**
+- F1 itself, the owner taking the test on his phone, is still his to do.
+- A regular-expression classifier. Wording outside what has been tried may
+  still land on "I don't know yet", which is at least honest.
+

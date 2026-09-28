@@ -40,7 +40,8 @@ in the maturity map.
 | D6 | The owner's own minutes on a test, entered by him; a day without an entry is unknown, not zero | `2cf4483c` |
 | A9 | The prompt shield measured on 24 prose attacks: 1 caught before, 14 after, every miss named | `63e8f62c` |
 | A6 + A7 | An outreach asset answers "what has it been shown to do" and "what if it is interrupted" | `7c00cf25` |
-| B5 | When Etsy rate-limits a read, Foundry waits as long as Etsy asked and concludes nothing meanwhile | this commit |
+| B5 | When Etsy rate-limits a read, Foundry waits as long as Etsy asked and concludes nothing meanwhile | `dd1c9111` |
+| F4 (+ F1 preparation) | Ask answers all five comprehension questions, from the money page's own readers | this commit |
 
 ## Next
 
