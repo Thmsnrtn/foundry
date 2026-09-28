@@ -408,8 +408,10 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
   const alike = genome === null ? null : await likeness(founderId, genome);
   // WHICH LATER DESIGNS READ THIS TEST'S LESSON, so a lesson that turns out
   // wrong can say what it already influenced.
-  const { readByLaterDesigns } = await import('../../services/venture/forge.js');
+  const { readByLaterDesigns, lessonsThatChanged } = await import('../../services/venture/forge.js');
   const readers = await readByLaterDesigns(id);
+  // AND THE OTHER DIRECTION: lessons this design read that have since stopped standing.
+  const changedLessons = await lessonsThatChanged(id);
   const step = (s: ExperimentView['steps'][number]) => html`<li class="${s.status}">
     <p><strong>${s.status === 'done' ? '✓ ' : s.status === 'todo' ? '○ ' : '· '}${s.label}</strong>${s.status === 'todo' && s.key === 'recipients' ? html` — <a href="${s.href}">open</a>` : ''}</p>
     <p class="quiet">${s.detail}</p></li>`;
@@ -741,6 +743,12 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
     : html`<p class="quiet">Nothing yet.</p>`)}
 
     ${fold('details', 'Details', '', html`<dl class="facts">${v.details.map(([k, val]) => html`<dt>${k}</dt><dd>${val}</dd>`)}</dl>`)}
+
+    ${changedLessons.length === 0 ? '' : html`<div class="state flash" role="status">
+      <strong>This design read a lesson that has since changed.</strong>
+      <ul>${changedLessons.map((l) => html`<li><a href="/foundry/experiments/${l.experimentId}">${l.whatWeDid}</a>: ${l.what}.</li>`)}</ul>
+      <p class="quiet">It was designed with that lesson standing. Whether that matters here is yours to judge; nothing has been changed.</p>
+    </div>`}
 
     ${readers.length === 0 ? '' : fold('read-by', `Read by ${String(readers.length)} later ${readers.length === 1 ? 'design' : 'designs'}`, '', html`
       <p class="quiet">Each of these was designed with this test's lesson in front of it. If this test's outcome changes, these are what it already influenced.</p>

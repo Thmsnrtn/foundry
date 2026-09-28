@@ -1866,3 +1866,20 @@ influenced."
   design's own words are where reliance shows.
 - Nothing yet alerts the later designs when an earlier lesson is invalidated.
   The link now exists for that to be built on.
+
+### A design says when a lesson it read has since stopped standing (28 September 2026)
+
+This closes the proof debt E2 left. `lessonsThatChanged(design)` returns the
+lessons a design read whose test was invalidated or retired after the design
+read it, or has been superseded. The design's page then opens with "This
+design read a lesson that has since changed", naming each lesson and what
+happened to it. It adds: "Whether that matters here is yours to judge;
+nothing has been changed." A lesson that changed before the design read it
+was read as it then stood, and is not news to that design.
+
+**Maturity.** **`tested`** (`a-lesson-knows-who-read-it`, +2, red first).
+**Proof debt:**
+- Supersession carries no date, so a superseded lesson is flagged whenever it
+  was superseded.
+- The notice is on the design's own page, not the Brief. A changed lesson is
+  something to read when he looks at that test, not a duty due today.

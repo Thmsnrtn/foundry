@@ -176,6 +176,30 @@ export async function readByLaterDesigns(lessonExperimentId: string): Promise<Ar
     experimentId: String(x.design_experiment_id), whatWeDo: String(x.what_we_do), readAt: String(x.read_at) }));
 }
 
+/**
+ * THE LESSONS A DESIGN READ THAT HAVE SINCE STOPPED STANDING: their test
+ * invalidated, superseded or retired AFTER the design read them. A lesson
+ * that changed before the design read it was read as it then stood, and is not
+ * news to that design.
+ */
+export async function lessonsThatChanged(designExperimentId: string): Promise<Array<{ experimentId: string; whatWeDid: string; what: string }>> {
+  const r = await query(
+    `SELECT e.id, e.what_we_do, e.validity, e.invalid_because, e.invalidated_at, e.superseded_by, e.retired_at, e.retired_because, r.read_at
+       FROM lessons_read r JOIN venture_experiments e ON e.id = r.lesson_experiment_id
+      WHERE r.design_experiment_id = ?
+        AND ((e.validity = 'invalid' AND datetime(e.invalidated_at) > datetime(r.read_at))
+          OR (e.retired_at IS NOT NULL AND datetime(e.retired_at) > datetime(r.read_at))
+          OR e.superseded_by IS NOT NULL)
+      ORDER BY datetime(r.read_at), r.rowid`, [designExperimentId]);
+  return (r.rows as unknown as Array<Record<string, unknown>>).map((x) => ({
+    experimentId: String(x.id), whatWeDid: String(x.what_we_do),
+    what: x.validity === 'invalid'
+      ? `found invalid on ${String(x.invalidated_at).slice(0, 10)}${x.invalid_because == null ? '' : ` (${String(x.invalid_because).replace(/_/g, ' ')})`}`
+      : x.superseded_by != null ? 'superseded by a later test'
+        : `retired on ${String(x.retired_at).slice(0, 10)}${x.retired_because == null ? '' : ` (${String(x.retired_because)})`}`,
+  }));
+}
+
 function sentenceFor(open: OpenQuestion[], lessons: Lesson[]): string {
   const untested = open.filter((q) => q.alreadyTesting === null);
   const blocking = untested.filter((q) => q.blocking);

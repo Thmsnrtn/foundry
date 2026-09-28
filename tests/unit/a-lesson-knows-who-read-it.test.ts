@@ -120,3 +120,34 @@ describe('a design records the lessons in front of it', () => {
     expect(text).toMatch(/offer one at a fixed price/);
   });
 });
+
+describe('when a lesson turns out not to hold, the designs that read it say so', () => {
+  const page = async (id: string) => {
+    const { Hono } = await import('hono');
+    const { experimentRoutes } = await import('../../src/routes/dashboard/experiments-place.js');
+    const app = new Hono();
+    app.use('*', async (c, next) => { c.set('founder' as never, { id: OWNER, email: 'lr@example.com' } as never); c.set('csrfToken' as never, 't' as never); await next(); });
+    app.route('/', experimentRoutes);
+    return (await (await app.request(`https://f.test/foundry/experiments/${id}`)).text()).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ');
+  };
+
+  it('says nothing while the lesson stands', async () => {
+    const { lessonsThatChanged } = await import('../../src/services/venture/forge.js');
+    expect(await lessonsThatChanged(NEW)).toEqual([]);
+    expect(await page(NEW)).not.toMatch(/has since/);
+  });
+
+  it('names the lesson, and what happened to it, once its test is invalidated', async () => {
+    await new Promise((r) => setTimeout(r, 1100));
+    await query(`UPDATE venture_experiments SET validity = 'invalid', invalid_because = 'instrumentation_defect',
+      invalidated_by = 'the record', invalidated_at = datetime('now') WHERE id = ?`, [LESSON]);
+    const { lessonsThatChanged } = await import('../../src/services/venture/forge.js');
+    const changed = await lessonsThatChanged(NEW);
+    expect(changed.map((c) => c.experimentId)).toEqual([LESSON]);
+    expect(changed[0].what).toMatch(/invalid/);
+    const text = await page(NEW);
+    expect(text).toMatch(/This design read a lesson that has since changed/);
+    expect(text).toMatch(/offer the brief to ten contractors by email/);
+  });
+});
+

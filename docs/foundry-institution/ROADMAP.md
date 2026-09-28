@@ -32,7 +32,8 @@ in the maturity map.
 | C6 | The refund-reserve question (PENDING 26) comes back at the tenth settled sale | `93fc7ff4` |
 | B1 | What Etsy last showed, for every listing test, in one place on the connection page | `e00874f7` |
 | A5 | Preview a Controls change before it binds | found largely done: authority and typed rules confirm; the charter page recomputes before signing |
-| E2 | A lesson knows which later designs read it | this commit |
+| E2 | A lesson knows which later designs read it | `3890328c` |
+| E2b | A design says when a lesson it read has since stopped standing | this commit |
 
 ## Next
 
