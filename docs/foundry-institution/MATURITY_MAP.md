@@ -2024,3 +2024,33 @@ the owner's own acts. The shield only makes an attempt visible.
   The durable defence is the data-block framing (`sanitize.ts`) and the gates,
   not this list.
 
+### An outreach asset answers the seven questions too (28 September 2026)
+
+Roadmap A6 and A7. The seven answers (`operating-contract.ts`) were written for
+a listing on a venue. For an asset that writes to people and takes payment by
+link, two of them said nothing true:
+
+- **"What has the account been shown to do?"** answered "not assessed here".
+  It now says three things, each from the reader that decides it: whether
+  sending is set up, and whether the provider has accepted mail from it
+  (`sendingReadiness`); whether payment has come through, a link is recorded,
+  or no way to pay exists; and, when the last pass was not clean, what it was
+  attempting and why it stopped (`runStateOf`). It is `known` only when
+  sending has been accepted, payment has come through, and the last pass was
+  clean.
+- **"What if it is interrupted?"** answered "not assessed here yet". It now
+  says what Foundry does for the asset (write approved offers, deliver what
+  was bought, issue a refund it owes) and how each act is recovered: a failed
+  offer is kept and goes out once, so nobody is written to twice; a failed
+  delivery means a refund is owed; a refused refund stays owed and is issued
+  once. It then says what is waiting now. It is `partly`, and says why: those
+  rules were shown in the laboratory's month of a portfolio (simulation 10,
+  days 2–6), not yet on a real interruption.
+
+**Maturity.** **`tested`** (`an-outreach-asset-answers-too`, 2, red first;
+the listing answers are unchanged, held by their own tests).
+**Proof debt:**
+- No real interruption has happened to an outreach asset.
+- A payment counted here is a real charge recorded by the webhook. A payout,
+  and the bank, stay unread, as question 4 already says.
+

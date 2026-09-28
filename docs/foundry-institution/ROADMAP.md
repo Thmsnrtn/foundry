@@ -38,7 +38,8 @@ in the maturity map.
 | G5 | Each day's copy is restored and read the day it is made; the owner can rehearse any copy with one command | `b4632b66` |
 | C3 | The owner enters Etsy's weekly views and visits | found already done: the "What the venue reports" form on a live listing test |
 | D6 | The owner's own minutes on a test, entered by him; a day without an entry is unknown, not zero | `2cf4483c` |
-| A9 | The prompt shield measured on 24 prose attacks: 1 caught before, 14 after, every miss named | this commit |
+| A9 | The prompt shield measured on 24 prose attacks: 1 caught before, 14 after, every miss named | `63e8f62c` |
+| A6 + A7 | An outreach asset answers "what has it been shown to do" and "what if it is interrupted" | this commit |
 
 ## Next
 

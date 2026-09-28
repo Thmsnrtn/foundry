@@ -142,7 +142,28 @@ export async function operatingContractOf(productId: string, founderId: string):
         : `No ${venueName} account is connected for it, so nothing has been shown to work there — it has not been read at all. Connected, it could only read. ${limits}`,
     blind ? 'partly' : venueRead ? 'known' : connected ? 'partly' : 'unknown');
   } else {
-    say(2, 'Not assessed here for this kind of asset yet; its readiness on the test\'s page says what it depends on.', 'unknown');
+    // AN ASSET THAT WRITES TO PEOPLE AND TAKES PAYMENT BY LINK (roadmap A6):
+    // what its sending, its payment and its last pass have shown, each from
+    // the reader that decides it.
+    const { sendingReadiness } = await import('./hand.js');
+    const { runStateOf } = await import('./run-state.js');
+    const sending = await sendingReadiness(founderId);
+    const sendingShown = sending.status === 'ready' && /accepted mail from it before/.test(sending.detail);
+    const paidThrough = experimentId ? Number(((await query(
+      `SELECT COUNT(*) AS n FROM economic_events e JOIN experiment_fulfilments f ON f.id = e.fulfilment_id
+        WHERE f.experiment_id = ? AND e.kind = 'charge' AND e.evidence_mode = 'real'`, [experimentId])).rows[0] as Row).n ?? 0) : 0;
+    const offer = experimentId ? await materialOf(experimentId, 'offer') : null;
+    const payment = paidThrough > 0
+      ? `Payment has come through for it ${plural(paidThrough, 'time')}.`
+      : offer?.paymentLinkUrl
+        ? 'A payment link is recorded for it, and nothing has been paid through it yet.'
+        : 'No way to pay is recorded for it, and nothing has been paid.';
+    const run = experimentId ? await runStateOf(experimentId) : null;
+    const last = run && run.state !== 'success' && run.state !== 'noop_expected'
+      ? ` The last pass on it (${run.checkedAt.slice(0, 10)}) was ${run.state}: ${run.attempting}${run.because ? ` — ${run.because}` : ''}.`
+      : '';
+    say(2, `${sending.detail} ${payment}${last}`,
+      sendingShown && paidThrough > 0 && !last ? 'known' : sending.status === 'ready' ? 'partly' : 'unknown');
   }
 
   // ─── 4. Money, in the words its evidence supports ─────────────────────────
@@ -214,10 +235,31 @@ export async function operatingContractOf(productId: string, founderId: string):
   const q = experimentId && qualificationOf ? await qualificationOf(experimentId) : null;
   const standing = `${plural(boundaries, 'standing boundary', 'standing boundaries')} in your words`
     + (q ? `; ${q.blocking.length ? `not ready: ${q.blocking.join(', ')}` : 'everything it needs is in place'}` : '');
-  say(5, listing
-    ? `${standing}. Foundry holds read access only, so it cannot change anything at ${venueName} and nothing it does there needs recovering; every change there is yours, by hand.`
-    : `${standing}. What happens to an interrupted act for this asset is not assessed here yet.`,
-  listing ? 'known' : 'partly');
+  if (listing) {
+    say(5, `${standing}. Foundry holds read access only, so it cannot change anything at ${venueName} and nothing it does there needs recovering; every change there is yours, by hand.`, 'known');
+  } else {
+    // WHAT FOUNDRY DOES FOR IT, AND HOW EACH IS RECOVERED (roadmap A7). The
+    // rules are the hand's; that they hold across an outage was shown in the
+    // laboratory's month of a portfolio (days 2 to 6), and never yet on a real
+    // interruption — so this is `partly`, and says where it was shown.
+    const waiting = experimentId ? (await query(
+      `SELECT
+         (SELECT COUNT(*) FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'offer' AND status = 'failed') AS offers,
+         (SELECT COUNT(*) FROM experiment_fulfilments WHERE experiment_id = ? AND status = 'failed') AS deliveries`,
+      [experimentId, experimentId])).rows[0] as Row : null;
+    const offers = Number(waiting?.offers ?? 0);
+    const deliveries = Number(waiting?.deliveries ?? 0);
+    const now = [
+      offers ? `${plural(offers, 'offer')} failed and ${offers === 1 ? 'is' : 'are'} waiting to go again` : '',
+      deliveries ? `${plural(deliveries, 'delivery', 'deliveries')} failed, so a refund is owed for ${deliveries === 1 ? 'it' : 'each'}` : '',
+    ].filter(Boolean);
+    say(5, `${standing}. Foundry writes the offers you approved, delivers what was bought, and issues a refund it owes. `
+      + 'If one is interrupted: an offer that fails is kept as failed and goes out once when the mail provider answers again, so nobody is written to twice; '
+      + 'a delivery that fails means a refund is owed; a refund the payment provider refuses stays owed and is issued once. '
+      + 'That was shown in the laboratory, across an outage of each, and not yet on a real one. '
+      + (now.length ? `Now: ${now.join('; ')}.` : 'Nothing is waiting to be recovered now.'),
+    'partly');
+  }
 
   // ─── 7. His, and Foundry's ────────────────────────────────────────────────
   const his = [
