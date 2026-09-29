@@ -180,7 +180,6 @@ export async function companyMayIncurCost(productId: string): Promise<string | n
     const res = await query(
       `SELECT COALESCE(status,'active') AS s,
               COALESCE(scp_status,'active') AS scp,
-              entitlement_paused_at AS billing_paused,
               erasure_scheduled_at AS erasing,
               reality,
               standing,
@@ -237,7 +236,6 @@ export async function companyMayIncurCost(productId: string): Promise<string | n
     if (Number(row.operating) === 1) return null;
     if (String(row.s) !== 'active') return `archived (${String(row.s)})`;
     if (row.erasing != null) return 'scheduled for deletion';
-    if (row.billing_paused != null) return 'unentitled';
     return String(row.scp);
   } catch (err) {
     // A ceiling that fails open on a DB error is the existing posture in this

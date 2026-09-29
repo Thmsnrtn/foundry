@@ -1478,14 +1478,12 @@ letterRoutes.get('/letter', async (c) => {
     ${stopped ? html`
     <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid var(--alert);">
       <div style="font-size:0.7rem;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:var(--alert);margin-bottom:0.4rem;">I have stopped</div>
-      <div style="font-size:0.95rem;color:var(--text-primary);">${stopped.axis === 'entitlement'
-    ? html`I am not doing anything for ${ctx.productName} at the moment — the subscription is not active.`
-    : stopped.axis === 'paused'
+      <div style="font-size:0.95rem;color:var(--text-primary);">${stopped.axis === 'paused'
       ? html`I am not doing anything for ${ctx.productName} at the moment — you paused it.`
       : html`I am not doing anything for ${ctx.productName} at the moment — its record is archived.`}</div>
       <div style="font-size:0.8rem;color:var(--text-muted);margin-top:0.3rem;">Nothing is lost. Everything below is what I know; I am simply not acting on it.</div>
       ${stopped.axis === 'archived' ? '' : html`
-      <a href="/settings" class="btn btn-primary" style="margin-top:0.6rem;font-size:0.82rem;display:inline-block;">${stopped.axis === 'entitlement' ? 'Fix the subscription' : 'Start me again'}</a>`}
+      <a href="/settings" class="btn btn-primary" style="margin-top:0.6rem;font-size:0.82rem;display:inline-block;">Start me again</a>`}
     </div>` : ''}
     ${deletion ? html`
     <div class="card" style="padding:1.25rem;margin-bottom:1rem;border:1px solid var(--bad);">

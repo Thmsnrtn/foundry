@@ -42,7 +42,7 @@ import { operatingProduct, query } from '../../db/client.js';
  */
 export type ChangeVerdict =
   | { allowed: true }
-  | { allowed: false; reason: string; axis: 'archived' | 'entitlement' | 'paused' | 'erasure' };
+  | { allowed: false; reason: string; axis: 'archived' | 'paused' | 'erasure' };
 
 export async function companyMayBeChanged(productId: string): Promise<ChangeVerdict> {
   // `operating_ignoring_erasure` is the same predicate without the third axis.
@@ -52,11 +52,9 @@ export async function companyMayBeChanged(productId: string): Promise<ChangeVerd
   const res = await query(
     `SELECT CASE WHEN ${operatingProduct()} THEN 1 ELSE 0 END AS operating,
             COALESCE(status,'active') AS status,
-            entitlement_paused_at,
             erasure_scheduled_at,
             CASE WHEN status = 'active'
                    AND COALESCE(scp_status,'active') NOT IN ('paused','archived')
-                   AND entitlement_paused_at IS NULL
                  THEN 1 ELSE 0 END AS operating_ignoring_erasure
        FROM products WHERE id = ?`, [productId]);
   const row = res.rows[0] as Record<string, unknown> | undefined;
@@ -101,9 +99,7 @@ export async function companyMayBeChanged(productId: string): Promise<ChangeVerd
   }
   return String(row.status) !== 'active'
     ? { allowed: false, axis: 'archived', reason: 'this company has been archived' }
-    : row.entitlement_paused_at != null
-      ? { allowed: false, axis: 'entitlement', reason: "this company's subscription is not active" }
-      : { allowed: false, axis: 'paused', reason: 'this company is paused' };
+    : { allowed: false, axis: 'paused', reason: 'this company is paused' };
 }
 
 /**

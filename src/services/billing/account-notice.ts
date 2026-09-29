@@ -28,13 +28,7 @@ import { invoke, registerToolHandler, type GatewayRequest } from '../outbound/ga
 import { sendEmailHandler } from '../integration/resend.js';
 import { log } from '../../lib/logger.js';
 
-export type NoticeKind =
-  | 'read_only_started'
-  | 'trial_ending'
-  | 'trial_ended'
-  | 'subscription_cancelled'
-  | 'payment_failed'
-  | 'institution_stopped';
+export type NoticeKind = 'institution_stopped';
 
 export interface AccountNotice {
   kind: NoticeKind;
@@ -56,41 +50,11 @@ const APP_URL = (): string => process.env.APP_URL ?? 'https://foundry.so';
 /** Subject and body per kind. Server-owned: the caller names a kind, and this
  * decides what Foundry says. */
 function render(notice: AccountNotice): { subject: string; html: string } {
-  const billing = `${APP_URL()}/settings/billing`;
-  const when = formatDate(notice.effectiveAt);
   const shell = (body: string): string =>
     `<div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;line-height:1.6;">${body}
      <p style="color:#6b7280;font-size:13px;margin-top:28px;">You are receiving this because it concerns your Foundry account.</p></div>`;
 
   switch (notice.kind) {
-    case 'trial_ending':
-      return {
-        subject: `Your Foundry trial ends ${when ?? 'soon'}`,
-        html: shell(`<p>Your trial for <strong>${escapeHtml(notice.companyName)}</strong> ends ${when ?? 'shortly'}.</p>
-          <p>Subscribe to keep Foundry operating your company. Your data and history stay yours either way.</p>
-          <p><a href="${billing}">Choose a plan →</a></p>`),
-      };
-    case 'trial_ended':
-      return {
-        subject: 'Your Foundry trial has ended',
-        html: shell(`<p>The trial for <strong>${escapeHtml(notice.companyName)}</strong> has ended, so Foundry has stopped acting on your behalf — no agent runs, no outbound email, no spend.</p>
-          <p>Everything you have built is still here and still readable. Subscribing picks up exactly where you left off.</p>
-          <p><a href="${billing}">Subscribe →</a></p>`),
-      };
-    case 'subscription_cancelled':
-      return {
-        subject: 'Your Foundry subscription is cancelled',
-        html: shell(`<p>Your subscription is cancelled. <strong>${escapeHtml(notice.companyName)}</strong> keeps running until ${when ?? 'the end of the period you have paid for'} — you are not losing time you have already paid for.</p>
-          <p>After that, the account becomes read-only: your data and history stay readable, and Foundry stops acting.</p>
-          <p><a href="${billing}">Reactivate →</a></p>`),
-      };
-    case 'payment_failed':
-      return {
-        subject: 'Foundry could not take your payment',
-        html: shell(`<p>The last payment for <strong>${escapeHtml(notice.companyName)}</strong> did not go through. We will retry it automatically.</p>
-          <p>Nothing changes while we retry. Updating your card now avoids any interruption.</p>
-          <p><a href="${billing}">Update payment method →</a></p>`),
-      };
     case 'institution_stopped':
       // THE ONE THING THE OWNER SHOULD HEAR WITHOUT OPENING THE APP: that the
       // institution's scheduled work has stopped completing. One message per
@@ -102,13 +66,6 @@ function render(notice: AccountNotice): { subject: string; html: string } {
           <p>What it tells you may be out of date until it recovers. Nothing is lost, and nothing needs you unless Home says so.</p>
           <p>I will not write again about this stoppage. If it stops again after recovering, I will.</p>
           <p><a href="${APP_URL()}/foundry">See where it stands →</a></p>`),
-      };
-    case 'read_only_started':
-      return {
-        subject: `${escapeHtml(notice.companyName)} is now read-only`,
-        html: shell(`<p><strong>${escapeHtml(notice.companyName)}</strong> is now read-only. Foundry has stopped running agents, sending email, and spending on your behalf.</p>
-          <p>This happens when there is no active plan and no live trial. Nothing has been deleted and no permission you gave has been withdrawn — subscribing lifts it immediately.</p>
-          <p><a href="${billing}">Subscribe →</a></p>`),
       };
   }
 }
@@ -157,6 +114,13 @@ async function ownerEmail(productId: string): Promise<string | null> {
  * a convenience — the test file states this set exactly, and an addition has to
  * change that line too.
  *
+ * FIVE OF THE SIX ARE GONE (Private S7b1, 29 September 2026). Trial ending,
+ * trial ended, subscription cancelled, payment failed and read-only started
+ * were all about a customer's subscription to Foundry, and nobody has one: it
+ * is the owner's alone. Their senders were deleted, so the kinds went too —
+ * which narrows the one capability that survives a pause to the one message
+ * the owner asked for.
+ *
  * `institution_stopped` was added 20 September 2026 as the sixth, and it is
  * the same class as `read_only_started`: the state of the institution itself,
  * as it concerns the owner. It is sent by a routine that reads `job_health`,
@@ -166,10 +130,7 @@ async function ownerEmail(productId: string): Promise<string | null> {
  * work has stopped, without opening the application and without a
  * notification system.
  */
-export const NOTICE_KINDS: readonly NoticeKind[] = [
-  'read_only_started', 'trial_ending', 'trial_ended',
-  'subscription_cancelled', 'payment_failed', 'institution_stopped',
-] as const;
+export const NOTICE_KINDS: readonly NoticeKind[] = ['institution_stopped'] as const;
 
 const KINDS = new Set<NoticeKind>(NOTICE_KINDS);
 
@@ -221,15 +182,6 @@ export async function sendAccountNotice(input: {
     });
   }
   return result.ok;
-}
-
-function formatDate(iso: string | null | undefined): string | null {
-  if (!iso) return null;
-  const t = Date.parse(iso);
-  if (!Number.isFinite(t)) return null;
-  return new Date(t).toLocaleDateString('en-GB', {
-    day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC',
-  });
 }
 
 function escapeHtml(value: string): string {

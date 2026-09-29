@@ -390,21 +390,6 @@ describe('a configured sender does not authorise the send', () => {
     }
   });
 
-  it('is still refused when the subscription has lapsed', async () => {
-    await connect();
-    const fetchSpy = vi.fn(async () => new Response(JSON.stringify({ id: 'm' }), { status: 200 }));
-    vi.stubGlobal('fetch', fetchSpy);
-    await query(`UPDATE products SET entitlement_paused_at=datetime('now') WHERE id=?`, [P]);
-    try {
-      const { invoke } = await import('../../src/services/outbound/gateway.js');
-      const result = await invoke(invoked(CUSTOMER) as never);
-      expect(result.ok).toBe(false);
-      expect(fetchSpy).not.toHaveBeenCalled();
-    } finally {
-      await query(`UPDATE products SET entitlement_paused_at=NULL WHERE id=?`, [P]);
-    }
-  });
-
   it('goes out when the company may act AND has a sender', async () => {
     // Both are required, and neither substitutes for the other.
     await connect();

@@ -64,7 +64,7 @@ export async function checkKillSwitch(
     experimentAct?: ExperimentAct | null },
 ): Promise<KillSwitchResult> {
   const productResult = await query(
-    `SELECT status, scp_status, entitlement_paused_at, erasure_scheduled_at, disabled_tools,
+    `SELECT status, scp_status, erasure_scheduled_at, disabled_tools,
             reality, standing
        FROM products WHERE id = ?`,
     [productId]
@@ -148,8 +148,9 @@ export async function checkKillSwitch(
   // would silence accounts nobody made a decision about.
   // TWO PAUSE REASONS, ONE ANSWER TO "MAY WE ACT", DIFFERENT ANSWERS TO "MAY WE
   // WRITE TO THE ACCOUNT". `scp_status` is the founder's or an operator's
-  // decision to stop the company; `entitlement_paused_at` is the billing
-  // sweep's. Both stop the institution acting. Neither stops account mail,
+  // decision to stop the company. (`entitlement_paused_at`, the billing sweep's
+  // axis, is no longer read: the sweep was deleted in Private S7b1.) It stops
+  // the institution acting. Neither stops account mail,
   // because account mail is about the pause — and a founder who paused their
   // own company still needs to hear that their card was declined.
   //
@@ -162,11 +163,9 @@ export async function checkKillSwitch(
   // between telling a founder their card was declined, which they need, and
   // continuing to reach their customers on behalf of a company being deleted.
   const scpStatus = String(productRow.scp_status ?? '');
-  const entitlementPaused = productRow.entitlement_paused_at != null;
   const erasureScheduled = productRow.erasure_scheduled_at != null;
   const pausedReason = NOT_ACTING.has(scpStatus) ? scpStatus
-    : erasureScheduled ? 'scheduled for deletion'
-    : entitlementPaused ? 'unentitled' : null;
+    : erasureScheduled ? 'scheduled for deletion' : null;
   if (pausedReason) {
     const exempt = capability?.deliverableWhilePaused === true
       && pausedReason !== 'archived' && pausedReason !== 'scheduled for deletion';

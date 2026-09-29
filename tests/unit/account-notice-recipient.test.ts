@@ -48,7 +48,7 @@ describe('an account notice goes to the account owner', () => {
     const ok = await sendAccountNotice({
       productId: 'an_p',
       to: 'attacker@example.com',
-      notice: { kind: 'trial_ended', companyName: 'Notice Co' },
+      notice: { kind: 'institution_stopped', companyName: 'Notice Co' },
     });
     expect(ok).toBe(true);
     expect(sent.length).toBe(1);
@@ -64,7 +64,7 @@ describe('an account notice goes to the account owner', () => {
        VALUES ('an_p2','Orphan','an_f2','active','paused')`);
     const ok = await sendAccountNotice({
       productId: 'an_p2', to: 'someone@example.com',
-      notice: { kind: 'trial_ended', companyName: 'Orphan' },
+      notice: { kind: 'institution_stopped', companyName: 'Orphan' },
     });
     expect(ok, 'no owner means no notice, not a notice to whoever asked').toBe(false);
     expect(sent.length).toBe(1);

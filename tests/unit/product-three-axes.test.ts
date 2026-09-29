@@ -100,22 +100,25 @@ describe('each axis stops the institution acting on its own', () => {
     expect(await operating()).toBe(false);
   });
 
-  it('a billing pause stops it', async () => {
-    await query("UPDATE products SET entitlement_paused_at = datetime('now') WHERE id = ?", [P]);
-    expect(await operating()).toBe(false);
-  });
-
   it('and neither removes the record from administration', async () => {
     await query(
-      `UPDATE products SET scp_status='paused', entitlement_paused_at=datetime('now')
-        WHERE id = ?`, [P]);
+      `UPDATE products SET scp_status='paused' WHERE id = ?`, [P]);
     expect(await recordLives(),
       'a paused company still has an owner, data, and an account to administer')
       .toBe(true);
   });
 
-  it('the background work list honours both', async () => {
-    await query("UPDATE products SET entitlement_paused_at = datetime('now') WHERE id = ?", [P]);
+  it('a value left in the retired billing column stops nothing', async () => {
+    // The billing sweep, its only writer, was deleted in Private S7b1
+    // (29 September 2026). The column stays, and nothing reads it: a stale
+    // value must not silently stop the owner's company.
+    await query("UPDATE products SET scp_status='active', entitlement_paused_at = datetime('now') WHERE id = ?", [P]);
+    expect(await operating()).toBe(true);
+    await query('UPDATE products SET entitlement_paused_at = NULL WHERE id = ?', [P]);
+  });
+
+  it('the background work list honours the pause', async () => {
+    await query("UPDATE products SET scp_status = 'paused' WHERE id = ?", [P]);
     const ids = (await getAllActiveProducts()).rows.map((r) => (r as Record<string, string>).id);
     expect(ids).not.toContain(P);
   });

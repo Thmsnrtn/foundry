@@ -61,8 +61,9 @@ export interface ProductRow {
   /** OPERATING axis: may the institution carry work for this company now.
    * Written by the founder pausing, or by an operator. */
   scp_status: string | null;
-  /** COMMERCIAL axis: set by the billing sweep when the account is unpaid, and
-   * by nothing else. Null means entitled. */
+  /** RETIRED COMMERCIAL axis. Its only writer, the billing sweep, was deleted
+   * in Private S7b1 (29 September 2026), and nothing reads it now. The column
+   * stays because dropping a column on `products` is a table rebuild. */
   entitlement_paused_at: string | null;
   sector_profile: string | null;
   growth_stage: string | null;

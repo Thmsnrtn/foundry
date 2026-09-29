@@ -63,17 +63,6 @@ describe('the letter says when Foundry has stopped', () => {
     expect(await page()).not.toContain('I have stopped');
   });
 
-  it('names a lapsed subscription, and offers the way back', async () => {
-    await query("UPDATE products SET entitlement_paused_at=datetime('now') WHERE id=?", [P]);
-    const html = await page();
-    expect(html).toContain('I have stopped');
-    expect(html, 'the reason must be the one that is true')
-      .toContain('the subscription is not active');
-    expect(html).toContain('Fix the subscription');
-    // And it must not read as data loss, which is what a founder fears here.
-    expect(html).toContain('Nothing is lost');
-  });
-
   it('distinguishes a pause the founder chose from a payment that failed', async () => {
     await query("UPDATE products SET scp_status='paused' WHERE id=?", [P]);
     const html = await page();
@@ -86,7 +75,7 @@ describe('the letter says when Foundry has stopped', () => {
     // The first-run welcome is checked before most institutional state and
     // would otherwise replace the notice with "there's no data yet — that's
     // expected on day one", for a company that has been running for months.
-    await query("UPDATE products SET entitlement_paused_at=datetime('now') WHERE id=?", [P]);
+    await query("UPDATE products SET scp_status='paused' WHERE id=?", [P]);
     const html = await page();
     expect(html).toContain('I have stopped');
     expect(html).not.toContain("there's no data yet");

@@ -221,29 +221,6 @@ describe('the authority read follows the canonical predicate', () => {
       `UPDATE products SET scp_status='active', entitlement_paused_at=NULL WHERE id=?`, [P]);
   });
 
-  it('refuses when the billing axis is paused, which is where cancellation writes now', async () => {
-    await query(
-      "UPDATE products SET entitlement_paused_at=datetime('now') WHERE id=?", [P]);
-    const before = dispatched;
-    const action = await plan('bca_effect_entitlement');
-    expect(await executeAssistedSupportEmail(action))
-      .toEqual({ dispatched: false, certainty: 'not_attempted' });
-    expect(dispatched).toBe(before);
-
-    // WHICH refusal, not just that one happened. The outbound gateway would
-    // also refuse this send, so "nothing was dispatched" is true either way —
-    // a mutation restoring the old scp_status-only predicate passed an earlier
-    // version of this case for exactly that reason.
-    //
-    // The row says which: an authority refusal returns before the plan is
-    // claimed, leaving it 'approved'; a gateway refusal happens after the
-    // claim and marks it 'failed'.
-    const row = (await query('SELECT status FROM outbound_actions WHERE id=?', [action]))
-      .rows[0] as Record<string, string>;
-    expect(row.status, 'the authority read must refuse this, not the gateway')
-      .toBe('approved');
-  });
-
   it('refuses when the founder pauses on the operating axis', async () => {
     await query("UPDATE products SET scp_status='paused' WHERE id=?", [P]);
     const action = await plan('bca_effect_operating');

@@ -454,16 +454,20 @@ export async function getAllActiveProducts(): Promise<ResultSet> {
 /**
  * MAY THE INSTITUTION ACT FOR THIS PRODUCT NOW?
  *
- * The canonical predicate. Three independent facts have to be true, and each is
- * owned by a different writer — which is the whole reason they are three fields
- * and not one:
+ * The canonical predicate. Independent facts have to be true, and each is
+ * owned by a different writer — which is the whole reason they are separate
+ * fields and not one:
  *
  *   status = 'active'          LIFECYCLE. The record exists. Written by
  *                              onboarding and by erasure.
  *   scp_status not paused      OPERATING PERMISSION. Written by the founder
  *                              pausing their own company, or by an operator.
- *   entitlement_paused_at NULL COMMERCIAL ENTITLEMENT. Written by the billing
- *                              sweep, and by nobody else.
+ *   (entitlement_paused_at     COMMERCIAL ENTITLEMENT — no longer read. Its
+ *                              only writer, the billing sweep, was deleted in
+ *                              Private S7b1 (29 September 2026): nobody pays
+ *                              for access to the owner's own institution, and
+ *                              on this deployment the sweep had long cleared
+ *                              any pause every hour. The column stays, empty.)
  *
  * They used to share two fields between them, so a billing sweep could resume a
  * company its founder had deliberately paused, and pausing a company removed it
@@ -495,7 +499,6 @@ export function operatingProduct(alias = ''): string {
     // words why he is calling it real.
     + ` AND ${p}standing = 'earned'`
     + ` AND COALESCE(${p}scp_status,'active') NOT IN ('paused','archived')`
-    + ` AND ${p}entitlement_paused_at IS NULL`
     // THE THIRD PAUSE AXIS. A company with a deletion scheduled is on its way
     // out, and for the thirty days of the grace window Foundry used to keep
     // running its agents, mailing its customers and spending its AI budget on

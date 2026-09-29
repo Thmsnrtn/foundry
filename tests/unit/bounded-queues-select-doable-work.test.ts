@@ -35,7 +35,6 @@ const LIVE = 'bq_live';
 /** A company Foundry cannot spend for, one per axis that stops it. */
 const STOPPED: Array<{ id: string; set: string }> = [
   { id: 'bq_paused', set: "scp_status = 'paused'" },
-  { id: 'bq_unpaid', set: "entitlement_paused_at = datetime('now')" },
   { id: 'bq_erasing', set: "erasure_scheduled_at = datetime('now')" },
   { id: 'bq_archived', set: "status = 'archived'" },
 ];

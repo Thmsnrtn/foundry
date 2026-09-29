@@ -72,33 +72,6 @@ describe('a company Foundry is operating', () => {
   });
 });
 
-describe('a company whose subscription has lapsed', () => {
-  beforeEach(async () => {
-    await query(`UPDATE products SET entitlement_paused_at=datetime('now') WHERE id=?`, [P]);
-  });
-
-  it('may still read its own data', async () => {
-    // Refusing reads would turn a billing lapse into a data lockout, which is
-    // not what read-only means and not what was asked for.
-    const res = await api().request('/thing');
-    expect(res.status).toBe(200);
-  });
-
-  it('may not write', async () => {
-    for (const method of ['POST', 'PUT', 'DELETE']) {
-      const res = await api().request('/thing', { method });
-      expect(res.status, `${method} changes the company`).toBe(403);
-      expect((await res.json() as Record<string, unknown>).error).toBe('read_only');
-    }
-  });
-
-  it('is told which of the three reasons it is', async () => {
-    const body = await (await api().request('/thing', { method: 'POST' })).json() as
-      Record<string, string>;
-    expect(body.message).toMatch(/subscription/);
-  });
-});
-
 describe('a company the founder paused', () => {
   beforeEach(async () => {
     await query(`UPDATE products SET scp_status='paused' WHERE id=?`, [P]);
@@ -210,14 +183,7 @@ describe('the MCP transport asks per tool, not per method', () => {
     if (!paused.allowed) expect(paused.reason).toMatch(/paused/);
 
     await query(
-      `UPDATE products SET scp_status='active', entitlement_paused_at=datetime('now')
-        WHERE id=?`, [P]);
-    const lapsed = await companyMayBeChanged(P);
-    expect(lapsed.allowed).toBe(false);
-    if (!lapsed.allowed) expect(lapsed.reason).toMatch(/subscription/);
-
-    await query(
-      `UPDATE products SET entitlement_paused_at=NULL, status='archived' WHERE id=?`, [P]);
+      `UPDATE products SET scp_status='active', status='archived' WHERE id=?`, [P]);
     const gone = await companyMayBeChanged(P);
     expect(gone.allowed).toBe(false);
     if (!gone.allowed) expect(gone.reason).toMatch(/archived/);

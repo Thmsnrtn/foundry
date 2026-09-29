@@ -44,10 +44,9 @@ async function currentAuthority(actionId:string):Promise<Record<string,unknown>|
       --
       -- THE CANONICAL PREDICATE, not a hand-copied piece of it. This tested
       -- scp_status alone, and that was right until migration 145 gave
-      -- commercial entitlement its own field: a cancelled subscription now
-      -- writes entitlement_paused_at and leaves scp_status alone, so this
-      -- predicate stopped seeing the exact case it was written for. A copied
-      -- fragment of a rule drifts the moment the rule grows another axis.
+      -- commercial entitlement its own field, which this predicate then could
+      -- not see. A copied fragment of a rule drifts the moment the rule grows
+      -- another axis. (That field is no longer read: Private S7b1.)
       --
       -- operatingProduct() answers "may the institution act for this company
       -- now" across all three axes, and is the same predicate the gateway, the

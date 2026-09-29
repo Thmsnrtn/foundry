@@ -102,18 +102,6 @@ describe('an approved action still asks whether the company may act', () => {
     expect(String(row.error_message)).toMatch(/refused before dispatch/);
   });
 
-  it('refuses when the subscription has lapsed', async () => {
-    // The owner's decision, in the words it was given: an unpaid account is
-    // read-only. No spend, no outward effects.
-    const { approveAndExecute } = await import('../../src/services/scp/actions/executor.js');
-    const id = await execution();
-    await query(
-      `UPDATE products SET entitlement_paused_at=datetime('now') WHERE id=?`, [P]);
-
-    expect((await approveAndExecute(id, principalRef('founder', F), { ownerId: F })).success).toBe(false);
-    expect(slackSpy).not.toHaveBeenCalled();
-  });
-
   it('refuses when the company has been erased', async () => {
     const { approveAndExecute } = await import('../../src/services/scp/actions/executor.js');
     const id = await execution();

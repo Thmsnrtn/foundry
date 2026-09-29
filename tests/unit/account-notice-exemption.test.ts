@@ -63,7 +63,7 @@ function stubNoticeTool(): ReturnType<typeof vi.fn> {
 function noticeReq(overrides: Record<string, unknown> = {}) {
   return {
     productId, tool: 'send_account_notice', action: 'account notice',
-    params: { to: ['f@example.com'], notice: { kind: 'read_only_started', companyName: 'Paused Co' } },
+    params: { to: ['f@example.com'], notice: { kind: 'institution_stopped', companyName: 'Paused Co' } },
     dedupKey: `n-${nanoid()}`, customerExternalId: 'f@example.com',
     ...overrides,
   } as Parameters<typeof invoke>[0];
@@ -126,7 +126,7 @@ describe('the exemption cannot be claimed by a caller', () => {
       productId, tool: 'send_email', action: 'definitely a notice',
       params: {
         to: ['f@example.com'], subject: 'hi',
-        deliverableWhilePaused: true, notice: { kind: 'read_only_started' },
+        deliverableWhilePaused: true, notice: { kind: 'institution_stopped' },
       },
       dedupKey: `d-${nanoid()}`, customerExternalId: 'f@example.com',
     } as Parameters<typeof invoke>[0]);
@@ -183,9 +183,13 @@ describe('naming the exempt tool does not buy arbitrary content', () => {
   it('escapes the one caller-supplied string that reaches the body', async () => {
     const src = readFileSync(
       resolve(__dirname, '../../src/services/billing/account-notice.ts'), 'utf8');
-    const interpolations = src.match(/\$\{notice\.companyName\}/g) ?? [];
-    expect(interpolations, 'company name must go through escapeHtml').toEqual([]);
-    expect(src).toMatch(/escapeHtml\(notice\.companyName\)/);
+    // Since Private S7b1 the one kind left carries a server-composed sentence,
+    // `detail`, and no company name in its body; it is escaped all the same.
+    for (const field of ['companyName', 'detail']) {
+      expect(src.match(new RegExp(`\\$\\{notice\\.${field}`, 'g')) ?? [],
+        `${field} must go through escapeHtml`).toEqual([]);
+    }
+    expect(src).toMatch(/escapeHtml\(notice\.detail/);
   });
 });
 
@@ -195,24 +199,19 @@ describe('naming the exempt tool does not buy arbitrary content', () => {
 // =============================================================================
 
 describe('the exemption is account administration and nothing else', () => {
-  it('sends only the six account-administration kinds', async () => {
+  it('sends only the one account-administration kind left', async () => {
     const { NOTICE_KINDS } = await import('../../src/services/billing/account-notice.js');
     // Stated as an exact set on purpose. Adding a kind is then a deliberate
     // edit to this line, where the boundary is written down, rather than a
     // quiet widening of the one capability that survives a pause.
     //
-    // `institution_stopped` is the deliberate sixth (20 September 2026): the
-    // state of the institution itself, sent once per stoppage by a routine
-    // that reads job_health — the same class as read_only_started, and the
-    // one thing the owner asked to hear without opening the application.
-    expect([...NOTICE_KINDS].sort()).toEqual([
-      'institution_stopped',
-      'payment_failed',
-      'read_only_started',
-      'subscription_cancelled',
-      'trial_ended',
-      'trial_ending',
-    ]);
+    // There were six. Five were about a customer's subscription to Foundry —
+    // trial ending and ended, cancelled, payment failed, read-only — and went
+    // with the billing that sent them (Private S7b1, 29 September 2026).
+    // `institution_stopped` stays: the state of the institution itself, sent
+    // once per stoppage by a routine that reads job_health, and the one thing
+    // the owner asked to hear without opening the application.
+    expect([...NOTICE_KINDS]).toEqual(['institution_stopped']);
   });
 
   it('refuses marketing, support and operations kinds', async () => {
@@ -235,7 +234,7 @@ describe('the exemption is account administration and nothing else', () => {
     await query(`DELETE FROM founders WHERE id = ?`, [founderId]).catch(() => undefined);
     const r = await invoke({
       productId: orphan, tool: 'send_account_notice', action: 'notice',
-      params: { notice: { kind: 'trial_ended', companyName: 'X' } },
+      params: { notice: { kind: 'institution_stopped', companyName: 'X' } },
       dedupKey: `n-${nanoid()}`, customerExternalId: 'x@example.com',
     } as Parameters<typeof invoke>[0]);
     expect(r.ok).toBe(false);

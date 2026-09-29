@@ -104,16 +104,6 @@ describe('a pause reaches work that was already queued', () => {
     expect(String((await statusOf(id)).error_message)).toMatch(/refused before dispatch/);
   });
 
-  it('refuses one planned before the subscription lapsed', async () => {
-    const { approveAndExecute } = await import('../../src/services/scp/actions/executor.js');
-    const id = await queueWhileOperating();
-    await query(
-      `UPDATE products SET entitlement_paused_at=datetime('now') WHERE id=?`, [P]);
-
-    expect((await approveAndExecute(id, principalRef('founder', F), { scopeProductId: P })).success).toBe(false);
-    expect(slackSpy).not.toHaveBeenCalled();
-  });
-
   it('refuses one planned before the company was erased', async () => {
     const { approveAndExecute } = await import('../../src/services/scp/actions/executor.js');
     const id = await queueWhileOperating();

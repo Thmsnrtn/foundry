@@ -241,16 +241,16 @@ describe('a company on its way out stops acting', () => {
   });
 
   it('still refuses writes when something ELSE is also wrong', async () => {
-    // A company that is also unpaid answers on the entitlement axis, not the
-    // erasure one — the axes stay distinguishable when they overlap.
+    // A company that is also paused answers on the pause axis, not the
+    // erasure one — the axes stay distinguishable when they overlap. (This
+    // used an unpaid company until the billing axis was deleted, Private S7b1.)
     const { companyMayBeChanged } = await import('../../src/api/middleware/entitlement.js');
     await scheduleDataDeletion(P, 30, OWNER);
-    await query(
-      `UPDATE products SET entitlement_paused_at = datetime('now') WHERE id = ?`, [P]);
+    await query(`UPDATE products SET scp_status = 'paused' WHERE id = ?`, [P]);
     const verdict = await companyMayBeChanged(P);
     expect(verdict.allowed).toBe(false);
-    expect(verdict.allowed === false && verdict.axis).toBe('entitlement');
-    await query(`UPDATE products SET entitlement_paused_at = NULL WHERE id = ?`, [P]);
+    expect(verdict.allowed === false && verdict.axis).toBe('paused');
+    await query(`UPDATE products SET scp_status = 'active' WHERE id = ?`, [P]);
   });
 
   it('leaves a door open when an account erasure half-fails', async () => {
