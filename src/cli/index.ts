@@ -987,9 +987,25 @@ program.command('workshop:gate <experimentId>').description('The publication gat
 // Restores the newest kept copy, or the one named, beside the backups and
 // never over the live database; says what came back beside what is true now;
 // removes what it restored; exits 1 when the copy would not serve a recovery.
+//   node dist/cli/index.js rehearse-restore --from-away [key]
+// Fetches the newest sealed copy from off the machine (or the one named), opens
+// its seal with BACKUP_ENCRYPTION_KEY, and rehearses THAT — the proof that the
+// copy away would serve a recovery if this machine and its volume were gone.
 program.command('rehearse-restore [copy]').description('Restore a kept copy somewhere harmless, read it, and say whether it would serve a recovery')
-  .action(async (copy?: string) => {
+  .option('--from-away', 'fetch the copy from off the machine first (newest, or the key named)')
+  .action(async (copy: string | undefined, opts: { fromAway?: boolean }) => {
     const { rehearseRestore, sayRehearsal } = await import('../services/institution/keeping.js');
+    if (opts.fromAway) {
+      const { listCopiesAway, fetchCopyBack } = await import('../services/institution/sending-away.js');
+      const { tmpdir } = await import('node:os');
+      const { join } = await import('node:path');
+      const key = copy ?? (await listCopiesAway())[0];
+      if (!key) { process.stdout.write('no copy has been sent away yet\n'); process.exitCode = 1; return; }
+      const local = join(tmpdir(), key.replace(/\.sealed$/, ''));
+      const bytes = await fetchCopyBack(key, local);
+      process.stdout.write(`fetched ${key} from off the machine and opened its seal (${String(bytes)} bytes)\n`);
+      copy = local;
+    }
     const r = await rehearseRestore(copy);
     if ('skipped' in r) { process.stdout.write(`${r.skipped}\n`); process.exitCode = 1; return; }
     const said = sayRehearsal(r);

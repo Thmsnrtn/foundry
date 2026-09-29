@@ -3414,11 +3414,20 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
       if (!said.ok) throw new Error(`keep_a_copy_of_everything: today's copy would not serve a recovery — ${said.lines.join('; ')}`);
       logger.info(`keep_a_copy_of_everything: restored and read — ${said.lines.join('; ')}`,
         { jobName: 'keep_a_copy_of_everything' });
+      // AND THEN IT LEAVES THE MACHINE (Private S4): only a copy that has just
+      // been shown to serve a recovery is sealed and sent away. Not configured
+      // is said and is not a failure; a configured send that fails fails the job.
+      const { sendTheCopyAway } = await import('../services/institution/sending-away.js');
+      const away = await sendTheCopyAway(kept.wrote);
+      logger.info('notConfigured' in away
+        ? `keep_a_copy_of_everything: the copy stays on this machine — ${away.notConfigured}`
+        : `keep_a_copy_of_everything: sealed and sent away as ${away.sent.key} (${String(away.sent.bytes)} bytes)`,
+      { jobName: 'keep_a_copy_of_everything' });
     },
     schedule: '15 4 * * *',
     description:
-      'Take a consistent copy of the whole database, so the institution survives a bad '
-      + 'migration, a corruption or a mistaken delete (daily)',
+      'Take a consistent copy of the whole database, rehearse restoring it, and send the '
+      + 'sealed copy off the machine when storage is configured (daily)',
   },
   sense_check_tick: {
     fn: async () => {

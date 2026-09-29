@@ -51,6 +51,10 @@ const classifications = new Map(Object.entries({
   // dispatch, which is what governed means.
   'src/lib/webhooks.ts|dynamic_webhook_post': ['governed', 'customer webhook fan-out — kill-switch checked before dispatch, per-delivery receipt after'],
   'src/routes/dashboard/onboarding.ts|external_post': ['control_path', 'GitHub OAuth credential exchange'],
+  // The institution's own continuity: one sealed copy a day, to the owner's own
+  // bucket, only after that copy's restore rehearsal passed, and only when the
+  // owner has set the storage secrets (Private S4, 29 September 2026).
+  'src/services/institution/sending-away.ts|external_post': ['control_path', 'the daily sealed copy of the database, sent to the owner\'s own bucket off the machine'],
   'src/services/distribution/outbound-webhooks.ts|dynamic_webhook_post': ['governed', 'post_webhook capability handler'],
   // NOT AN EFFECT THIS PROCESS CAN HAVE. It is the SOURCE TEXT of the program
   // that runs at Cloudflare's edge, held as a string so that what is deployed

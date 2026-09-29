@@ -1,0 +1,67 @@
+# =============================================================================
+# THE WITNESS — Foundry read from outside its own machine.
+#
+# Everything that could tell the owner Foundry had stopped ran inside the
+# process that had stopped: the pulse email, the SLO check, the Brief. A dead
+# or wedged machine was noticed only when the owner happened to look (executive
+# review of 29 September 2026, O-2). This runs on GitHub's schedule, not Fly's,
+# reads the public health reading, and FAILS on a hard fault — and a failed
+# scheduled run is emailed by GitHub to the account that last edited this
+# schedule. A stalled loop is a warning here, not a failure: it is on Home, and
+# an email every fifteen minutes about it would teach the owner to ignore this.
+#
+# Needs no secret and reads nothing private: /internal/health is public by
+# design and reports shapes and ages, never values.
+# Note: GitHub pauses schedules in a repository with no activity for 60 days.
+# =============================================================================
+name: witness
+
+on:
+  schedule:
+    - cron: '7,22,37,52 * * * *'
+  workflow_dispatch:
+    inputs:
+      rehearse_failure:
+        description: 'Fail on purpose, to prove the failure email reaches the owner'
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  witness:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: A rehearsed failure, when asked for
+        if: ${{ inputs.rehearse_failure == true }}
+        run: |
+          echo "::error::This is a rehearsal: the witness failed on purpose. If this reached you by email, the real one will too."
+          exit 1
+      - name: Read Foundry's health from outside Fly
+        env:
+          HEALTH_URL: https://foundry-intel.fly.dev/internal/health
+        run: |
+          set -u
+          out=$(curl -sS -m 25 --retry 2 --retry-delay 10 -w '\n%{http_code}' "$HEALTH_URL") || {
+            echo "::error::Foundry did not answer at all"; exit 1; }
+          code=$(printf '%s\n' "$out" | tail -n 1)
+          body=$(printf '%s\n' "$out" | sed '$d')
+          printf '%s' "$body" | CODE="$code" python3 -c '
+          import json, os, sys
+          code = os.environ["CODE"]
+          if code != "200":
+              print(f"::error::health answered HTTP {code}"); sys.exit(1)
+          d = json.load(sys.stdin)
+          checks = d.get("checks", {})
+          hard = [k for k in ("database", "schema", "scheduler", "copies") if checks.get(k) == "error"]
+          soft = [k for k, v in checks.items() if v == "error" and k not in hard]
+          print(f"commit {str(d.get(\"commit\"))[:8]}, status {d.get(\"status\")}, copies {d.get(\"copies\")}")
+          for k in soft:
+              print(f"::warning::{k} is reporting a problem (see Home); not an outage")
+          for line in (d.get("loops") or {}).get("stopped", []):
+              print(f"::warning::{line}")
+          if hard:
+              print("::error::hard fault: " + ", ".join(hard)); sys.exit(1)
+          '

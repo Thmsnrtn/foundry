@@ -1886,3 +1886,34 @@ orders stays outside Foundry until the execution boundary in
 **What would decide it:** your word, and allowing that one change in this environment's
 permissions. Polymarket stays public market data only here. Whether and how an account
 there should ever be read is a separate question, not asked here.
+
+## PENDING 30 — Give the daily copy somewhere to go off the machine: **OWNER ACTION** (2026-09-29)
+
+**Why.** Every copy of the database lives on the same Fly volume as the
+database. Losing the volume or the machine loses all of them. Since Private S4,
+Foundry seals each day's copy, once it has passed its restore rehearsal, and
+sends it to Cloudflare R2 (you already use Cloudflare for the Workshop). Until
+the storage exists it says "not configured", and nothing else changes.
+
+**Your steps, about fifteen minutes. The values never go into chat:**
+1. In the Cloudflare dashboard, open **R2** and create a bucket, for example
+   `foundry-copies`. Add a **lifecycle rule**: delete objects after 30 days.
+2. In R2, go to **Manage API tokens** and create a token with **Object Read &
+   Write**, scoped to **that bucket only**. Note the Access Key ID and the
+   Secret Access Key.
+3. Make a backup key: 64 hex characters, for example from `openssl rand -hex 32`.
+   **Keep a copy of it somewhere that is not the Fly machine**, such as your
+   password manager. Without it, the copies away cannot be opened.
+4. Set them as Fly secrets, from your own terminal:
+   `fly secrets set -a foundry-intel R2_ACCOUNT_ID=... R2_BUCKET=foundry-copies R2_ACCESS_KEY_ID=... R2_SECRET_ACCESS_KEY=... BACKUP_ENCRYPTION_KEY=...`
+   The account id is the 32-character id on the R2 overview page.
+
+**How you will know it worked.** The next morning `/internal/health` shows
+`copies.awayConfigured: true` and a recent `away` time. Running
+`node dist/cli/index.js rehearse-restore --from-away` on the machine fetches the
+copy, opens its seal, and says whether it would serve a recovery.
+
+**Also, once:** in GitHub, open Actions, then **witness**, then **Run
+workflow**, with "rehearse failure" ticked. If a failure email reaches you, the
+real one will too. If none arrives, edit `.github/workflows/witness.yml` once in
+the GitHub web editor; GitHub emails the last person to edit a schedule.

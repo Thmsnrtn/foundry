@@ -88,7 +88,28 @@ healthRoutes.get('/internal/health', async (c) => {
   } catch {
     checks.loops = 'error';
   }
-  const degradedLoops = checks.loops === 'error';
+  // THE COPY, READ FROM OUT HERE (Private S4). The daily copy and its restore
+  // rehearsal were watched by nothing a probe could see. Reported as ages and
+  // a word, never a path or a key: how old the newest copy on this machine is,
+  // how old the newest one sent away is, and whether sending away is set up.
+  // Only a database on a volume has copies to report; anything else says so.
+  let copies: { local: string | null; away: string | null; awayConfigured: boolean } | 'not_a_file_database' = 'not_a_file_database';
+  const onVolume = (process.env.TURSO_DATABASE_URL ?? '').startsWith('file:') && !(process.env.TURSO_DATABASE_URL ?? '').includes(':memory:');
+  if (onVolume) {
+    try {
+      const { whatIsKept } = await import('../../services/institution/keeping.js');
+      const { awayConfig, lastSentAway } = await import('../../services/institution/sending-away.js');
+      const newest = (await whatIsKept())[0];
+      const away = await lastSentAway();
+      const configured = !('notConfigured' in awayConfig());
+      copies = { local: newest?.at ?? null, away: away?.sentAt ?? null, awayConfigured: configured };
+      const within = (at: string | null): boolean => at !== null && Date.now() - Date.parse(at.includes('T') ? at : `${at.replace(' ', 'T')}Z`) < 26 * 3_600_000;
+      checks.copies = within(copies.local) && (!configured || within(copies.away)) ? 'ok' : 'error';
+    } catch {
+      checks.copies = 'error';
+    }
+  }
+  const degradedLoops = checks.loops === 'error' || checks.copies === 'error';
 
   // WHICH MIGRATIONS THIS DATABASE ACTUALLY HAS.
   //
@@ -169,6 +190,7 @@ healthRoutes.get('/internal/health', async (c) => {
       commit: process.env.FOUNDRY_COMMIT ?? 'unknown',
       checks,
       loops,
+      copies,
       storage,
       schema,
     },

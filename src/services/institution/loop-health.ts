@@ -83,6 +83,14 @@ export const INSTITUTION_LOOPS: Record<string, { label: string; staleAfterHours:
     label: 'keeping the public pages current',
     staleAfterHours: 6, economic: true,
   },
+  // THE COPY IS NOT ECONOMIC WORK, AND IT IS THE ONE LOOP WHOSE SILENCE COSTS
+  // EVERYTHING. It was watched by nothing: a failed or skipped copy never
+  // reached the health reading (found 29 September 2026). Daily at 04:15, so
+  // twenty-six hours is a missed day.
+  keep_a_copy_of_everything: {
+    label: 'copying everything, rehearsing the restore, and sending the copy away',
+    staleAfterHours: 26, economic: false,
+  },
 };
 
 /** The loops that are the institution's economic work, named. */

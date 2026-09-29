@@ -1140,6 +1140,12 @@ CREATE TABLE conversation_threads (
   archived BOOLEAN DEFAULT FALSE,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE copies_sent_away (
+  away_key TEXT PRIMARY KEY CHECK (away_key GLOB 'foundry-[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].db.gz.sealed'),
+  bytes    INTEGER NOT NULL CHECK (bytes > 0),
+  sha256   TEXT NOT NULL CHECK (length(sha256) = 64),
+  sent_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 CREATE TABLE cost_events (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,

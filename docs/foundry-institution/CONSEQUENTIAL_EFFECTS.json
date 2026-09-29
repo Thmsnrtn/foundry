@@ -72,6 +72,13 @@
       "capability": "post_webhook capability handler"
     },
     {
+      "file": "src/services/institution/sending-away.ts",
+      "line": 154,
+      "detector": "external_post",
+      "status": "control_path",
+      "capability": "the daily sealed copy of the database, sent to the owner's own bucket off the machine"
+    },
+    {
       "file": "src/services/integration/cloudflare-gateway.ts",
       "line": 272,
       "detector": "templated_post",
