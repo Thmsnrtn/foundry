@@ -43,6 +43,16 @@ healthRoutes.get('/internal/health', async (c) => {
   // Clerk configured
   checks.clerk_configured = process.env.CLERK_SECRET_KEY ? 'ok' : 'error';
 
+  // WHICH CLERK INSTANCE SIGNS THE OWNER IN (PENDING 24, Private S8). A
+  // development instance can be reset, which would lock the owner out; keys
+  // from two different instances cannot sign anyone in. Read from the key
+  // prefixes — never a value — and reported rather than failed, because the
+  // switch is the owner's to make and until then this is the truth, not a
+  // fault.
+  const { clerkInstanceOf } = await import('../../lib/clerk-instance.js');
+  const clerkInstance = clerkInstanceOf();
+  if (clerkInstance === 'mismatched') checks.clerk_configured = 'error';
+
   // WHETHER THE APPLICATION KEY IS SET — never its value. Stored credentials
   // are encrypted under it, and contributor hashes refuse to run without it.
   // Reported, not yet fatal: a boot that exits on a single machine is an
@@ -191,6 +201,7 @@ healthRoutes.get('/internal/health', async (c) => {
       checks,
       loops,
       copies,
+      clerkInstance,
       storage,
       schema,
     },

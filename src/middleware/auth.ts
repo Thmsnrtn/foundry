@@ -7,7 +7,7 @@ import { mayBeAdmitted } from '../lib/instance-posture.js';
 import { createMiddleware } from 'hono/factory';
 import { Clerk as ClerkBackend, verifyToken, type VerifyTokenOptions } from '@clerk/backend';
 import { getFounderByClerkId, query } from '../db/client.js';
-import { nanoid } from 'nanoid';
+import { bindOwnerIdentity } from '../services/founder/owner-identity.js';
 import type { Founder, FounderPreferences } from '../types/index.js';
 import type { FounderRow } from '../types/database.js';
 import { logger } from '../services/logger.js';
@@ -174,16 +174,16 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
         }
 
         const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || null;
-        const founderId = nanoid();
 
-        // One owner: no referral attribution and no welcome sequence
-        // (Private S7, 29 September 2026). Those were for strangers signing up.
-        await query(
-          `INSERT INTO founders (id, clerk_user_id, email, name)
-           VALUES (?, ?, ?, ?)
-           ON CONFLICT (clerk_user_id) DO NOTHING`,
-          [founderId, clerkUserId, email, name]
-        );
+        // FOUND, REBOUND OR CREATED — ONE RULE FOR BOTH DOORS (Private S8).
+        // A new Clerk instance gives the owner a new id; their existing row is
+        // rebound to it rather than a second one attempted, which the unique
+        // email refused and which locked them out. The rule asks the admission
+        // question itself and records every rebind.
+        const bound = await bindOwnerIdentity({ clerkUserId, verifiedPrimaryEmail: email, name });
+        if (bound.action === 'rebound') {
+          logger.warn('Owner rebound to a new Clerk identity', { founderId: bound.founderId });
+        }
 
         result = await getFounderByClerkId(clerkUserId);
 

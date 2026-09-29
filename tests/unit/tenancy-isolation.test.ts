@@ -448,7 +448,11 @@ describe('Auth middleware founder scoping', () => {
   });
 
   it('auto-provisioned founders use INSERT with ON CONFLICT (no duplicate creation)', () => {
-    expect(authSource).toMatch(/ON CONFLICT.*DO NOTHING/i);
+    // The insert moved into the one rule both founder-creating doors share
+    // (Private S8): the middleware calls it and inserts nothing itself.
+    expect(authSource).toMatch(/bindOwnerIdentity\(/);
+    const rule = readFileSync(resolve(__dirname, '../../src/services/founder/owner-identity.ts'), 'utf8');
+    expect(rule).toMatch(/ON CONFLICT.*DO NOTHING/i);
   });
 
   it('last_seen_at update scopes by founder ID', () => {

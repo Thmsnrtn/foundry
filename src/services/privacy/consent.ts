@@ -824,6 +824,7 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
   // His, and nobody else's; erased with him.
   capital_research_theses: { reason: 'a research question the owner began', onAccountErasure: { op: 'delete' } },
   foundry_cost_lines: { reason: 'a monthly bill the owner stated, with where the number came from', onAccountErasure: { op: 'delete' } },
+  owner_identity_rebinds: { reason: 'when their own sign-in moved to a new identity, and between which two', onAccountErasure: { op: 'delete' } },
   capital_forecasts: { reason: 'forecasts sealed under the owner\'s research question', onAccountErasure: { op: 'delete' } },
   capital_paper_fills: { reason: 'simulated fills under the owner\'s research question', onAccountErasure: { op: 'delete' } },
   capital_evaluations: { reason: 'evaluations of the owner\'s research question', onAccountErasure: { op: 'delete' } },

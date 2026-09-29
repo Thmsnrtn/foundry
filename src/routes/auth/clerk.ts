@@ -5,7 +5,7 @@
 import { Hono } from 'hono';
 import { OWNER_STYLESHEET } from '../../lib/owner-stylesheet.js';
 import { query } from '../../db/client.js';
-import { nanoid } from 'nanoid';
+import { bindOwnerIdentity } from '../../services/founder/owner-identity.js';
 import { verifiedPrimaryEmail } from '../../middleware/auth.js';
 import { CLEAR_KEPT_SESSION } from '../../middleware/session-lapse.js';
 import { log } from '../../lib/logger.js';
@@ -248,20 +248,16 @@ authRoutes.post('/auth/webhook', async (c) => {
       return c.json({ received: true, provisioned: false });
     }
 
-    // Check if founder already exists
-    const existing = await query('SELECT id FROM founders WHERE clerk_user_id = ?', [userId]);
-    if (existing.rows.length === 0) {
-      const founderId = nanoid();
-      // No Stripe customer: nobody buys access to their own institution.
-      const stripeCustomerId = null;
-
-
-      await query(
-        `INSERT INTO founders (id, clerk_user_id, email, name, stripe_customer_id)
-         VALUES (?, ?, ?, ?, ?)`,
-        [founderId, userId, email, name, stripeCustomerId]
-      );
-
+    // FOUND, REBOUND OR CREATED — the same rule the session path uses
+    // (Private S8). On a new Clerk instance the owner arrives with a new id; a
+    // plain insert collided with their existing row's unique email, so their
+    // institution stays theirs by rebinding that row instead.
+    const bound = await bindOwnerIdentity({ clerkUserId: userId, verifiedPrimaryEmail: email, name });
+    if (bound.action === 'rebound') {
+      log.warn('clerk.owner_rebound_to_new_identity', { userId });
+    }
+    if (bound.action === 'created') {
+      const founderId = bound.founderId;
       // Activation funnel: signup (Phase 5.2).
       void (async () => {
         try {
@@ -269,7 +265,6 @@ authRoutes.post('/auth/webhook', async (c) => {
           await recordFunnelStep('signup', { founderId });
         } catch { /* non-fatal */ }
       })();
-
     }
   }
 

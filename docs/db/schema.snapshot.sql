@@ -2978,6 +2978,13 @@ CREATE TABLE owner_exclusions (
   lifted_by     TEXT,
   lifted_reason TEXT
 );
+CREATE TABLE owner_identity_rebinds (
+  id                 TEXT PRIMARY KEY,
+  founder_id         TEXT NOT NULL REFERENCES founders(id),
+  from_clerk_user_id TEXT NOT NULL,
+  to_clerk_user_id   TEXT NOT NULL,
+  rebound_at         TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE owner_minutes (
   id            TEXT PRIMARY KEY,
   founder_id    TEXT NOT NULL REFERENCES founders(id),
@@ -5344,6 +5351,8 @@ CREATE INDEX idx_owner_allowances_live
   ON owner_allowances(product_id) WHERE withdrawn_at IS NULL;
 CREATE INDEX idx_owner_boundaries_live
   ON owner_boundaries(subject, product_id) WHERE lifted_at IS NULL;
+CREATE INDEX idx_owner_identity_rebinds_founder
+  ON owner_identity_rebinds(founder_id, rebound_at);
 CREATE UNIQUE INDEX idx_owner_objective_one_live
   ON owner_objectives(product_id) WHERE retired_at IS NULL;
 CREATE INDEX idx_owner_preferences_live
@@ -8129,6 +8138,11 @@ CREATE TRIGGER owner_exclusion_mark_immutable
 BEFORE UPDATE ON owner_exclusion_marks
 BEGIN
   SELECT RAISE(ABORT,'owner_exclusion_mark:immutable');
+END;
+CREATE TRIGGER owner_identity_rebind_is_kept_as_it_was
+BEFORE UPDATE ON owner_identity_rebinds
+BEGIN
+  SELECT RAISE(ABORT, 'owner_identity_rebind: kept as it was');
 END;
 CREATE TRIGGER owner_minutes_entered_is_entered
 BEFORE UPDATE ON owner_minutes

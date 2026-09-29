@@ -5,6 +5,7 @@
 
 import { createMiddleware } from 'hono/factory';
 import { OWNER_SURFACE_SCRIPT_HASH, isOwnerSurface } from '../lib/owner-surface-script.js';
+import { clerkFrontendHost } from '../lib/clerk-instance.js';
 
 /** The provider consent screens Connect redirects to. Held to the adapters by a test. */
 const CONSENT_SCREENS = ['https://www.etsy.com', 'https://connect.stripe.com'] as const;
@@ -66,15 +67,22 @@ export const securityHeaders = createMiddleware(async (c, next) => {
   // inline handlers. It loads nothing from a CDN, so no CDN is allowed to run
   // code on it.
   const strict = isOwnerSurface(new URL(c.req.url).pathname);
+  // A PRODUCTION CLERK INSTANCE LOADS FROM THE OWNER'S OWN DOMAIN
+  // (`clerk.<domain>`), not from `*.clerk.accounts.dev`, so the sign-in pages
+  // would have been blocked the day the owner switched (Private S8). The host
+  // is read from the publishable key and admitted only if it is a bare
+  // hostname. The owner's surface loads no Clerk at all and is unchanged.
+  const liveHost = clerkFrontendHost(process.env.CLERK_PUBLISHABLE_KEY);
+  const clerkOrigins = `https://*.clerk.accounts.dev${liveHost ? ` https://${liveHost}` : ''}`;
   c.header('Content-Security-Policy', [
     "default-src 'self'",
     strict
       ? `script-src 'self' ${OWNER_SURFACE_SCRIPT_HASH}`
-      : "script-src 'self' 'unsafe-inline' https://*.clerk.accounts.dev https://cdn.jsdelivr.net https://unpkg.com",
+      : `script-src 'self' 'unsafe-inline' ${clerkOrigins} https://cdn.jsdelivr.net https://unpkg.com`,
     "style-src 'self' 'unsafe-inline'",
     "img-src 'self' data: https:",
-    "connect-src 'self' https://*.clerk.accounts.dev https://api.clerk.com",
-    strict ? "frame-src 'none'" : 'frame-src https://*.clerk.accounts.dev',
+    `connect-src 'self' ${clerkOrigins} https://api.clerk.com`,
+    strict ? "frame-src 'none'" : `frame-src ${clerkOrigins}`,
     "font-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",

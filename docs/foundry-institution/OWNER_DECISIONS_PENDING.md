@@ -1205,12 +1205,39 @@ running unattended with obligations on it and nobody able to open the door.
 **Why this is yours and not mine.** Provisioning a production Clerk instance
 means an account action on a third-party service, a new secret key in Fly's
 secrets, and a domain configuration. Each of those is an external dependency,
-and none is something I may do on my own authority. The code change on this
-side is nil: the keys are read from the environment already.
+and none is something I may do on my own authority.
 
-**What I would do if you asked.** Nothing until you have created the production
-instance and set `CLERK_SECRET_KEY` and `CLERK_PUBLISHABLE_KEY` in Fly. After
-that it is a deploy and a read-back.
+**Correction (29 September 2026, Private S8).** This entry used to say "the
+code change on this side is nil". That was wrong, and it mattered: a new
+instance gives you a new Clerk user id, sign-in looks you up by that id, and
+your email is unique — so your first production sign-in would have been refused
+and sent back to sign in, locking you out of your own institution by the act of
+making sign-in durable. Private S8 fixed it before the switch: your existing
+founder row is rebound to the new id, only for a verified primary email that is
+`FOUNDRY_OWNER_EMAIL`, and each rebind is recorded and shown under **Settings →
+Your sign-in**. Health now reports `clerkInstance` (development, production, or
+mismatched), and the sign-in pages allow the production instance's own host,
+read from the publishable key.
+
+**The switch, in order — every step yours:**
+1. In the Clerk dashboard, create a **production** instance for this application.
+2. Choose a domain you own for it (Clerk's production instance cannot use
+   `fly.dev`). A private subdomain is enough. Decide whether to put it under the
+   public Apex Micro name; it will appear in the sign-in address.
+3. Add the DNS records Clerk lists for that domain, and wait for Clerk to show
+   them verified.
+4. Point the app at the domain: `fly certs add <your domain> -a foundry-intel`,
+   then add the DNS record `fly certs show` asks for.
+5. Set the Fly secrets together, so the two keys never disagree:
+   `CLERK_SECRET_KEY` (`sk_live_…`), `CLERK_PUBLISHABLE_KEY` (`pk_live_…`) and
+   `APP_URL` (`https://<your domain>`). Keep `FOUNDRY_OWNER_EMAIL` as it is.
+6. Update the Clerk webhook endpoint to the new domain and set the new
+   `CLERK_WEBHOOK_SECRET` it gives you.
+7. Sign in once. **Settings → Your sign-in** should show one move, and
+   `/internal/health` should say `"clerkInstance": "production"`.
+
+If step 7 shows anything else, sign in with the old keys restored and tell me;
+nothing about your companies changes in any of these steps.
 
 ---
 

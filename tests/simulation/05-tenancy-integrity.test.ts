@@ -281,7 +281,10 @@ describe('Cross-company data contract enforcement', () => {
   });
 
   it('auth middleware auto-provisions founders with ON CONFLICT DO NOTHING', () => {
-    expect(authMiddlewareSource).toMatch(/ON CONFLICT.*DO NOTHING/i);
+    // Through the one rule both founder-creating doors share (Private S8).
+    expect(authMiddlewareSource).toMatch(/bindOwnerIdentity\(/);
+    expect(readFileSync(resolve(SRC, 'services/founder/owner-identity.ts'), 'utf-8'))
+      .toMatch(/ON CONFLICT.*DO NOTHING/i);
   });
 
   it('products table has owner_id foreign key to founders', () => {

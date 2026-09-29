@@ -117,6 +117,12 @@ settingsRoutes.get('/settings', async (c) => {
     '../../services/api/api-key-issuance.js');
   const apiKeys = productId ? await getApiKeys(productId) : [];
 
+  // Where the owner's sign-in has moved (Private S8). Empty until the switch to
+  // a production Clerk instance, and then one line saying when and between
+  // which identities — never a surprise found only in a table.
+  const { signInMoves } = await import('../../services/founder/owner-identity.js');
+  const moves = await signInMoves(founder.id as string);
+
   // Success banner for settings actions
   const successParam = c.req.query('success');
   const successMessages: Record<string, string> = {
@@ -528,6 +534,14 @@ settingsRoutes.get('/settings', async (c) => {
       </details>
     </div>` : ''}
 
+    <div class="card" id="sign-in">
+      <h3>Your sign-in</h3>
+      ${moves.length === 0
+        ? html`<p class="quiet">It has not moved. You sign in with the identity this institution was set up with.</p>`
+        : html`<p class="quiet">Your sign-in moved to a new identity, and your institution came with it:</p>
+      <ul>${moves.map((m) => html`<li>${m.at.slice(0, 16).replace('T', ' ')} — from ${m.from} to ${m.to}</li>`)}</ul>
+      <p class="quiet">If you did not switch your sign-in provider at that time, tell me.</p>`}
+    </div>
     ${/* WHAT USED TO BE HERE, AND WHERE IT LIVES NOW. Two sections were never
          settings — a sending identity is a company's permission to write to
          its customers, and an application key is half of a connection — and

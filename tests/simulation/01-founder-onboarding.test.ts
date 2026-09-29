@@ -47,11 +47,14 @@ describe('Signup flow (Clerk webhook → founder record)', () => {
   });
 
   it('creates a founder record with INSERT INTO founders', () => {
-    // After user.created check, there should be an INSERT INTO founders
+    // After the user.created check the webhook calls the one rule both
+    // founder-creating doors share (Private S8), and that rule does the insert.
     const userCreatedBlock = authRouteSource.slice(
       authRouteSource.indexOf("payload.type === 'user.created'")
     );
-    expect(userCreatedBlock).toMatch(/INSERT INTO founders/i);
+    expect(userCreatedBlock).toMatch(/bindOwnerIdentity\(/);
+    expect(readFileSync(resolve(SRC, 'services/founder/owner-identity.ts'), 'utf-8'))
+      .toMatch(/INSERT INTO founders/i);
   });
 
   it('extracts the VERIFIED PRIMARY email from the Clerk payload', () => {
