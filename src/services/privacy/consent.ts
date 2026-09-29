@@ -828,6 +828,7 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
   // forecasts, the fills that never happened, and what the evidence said.
   // His, and nobody else's; erased with him.
   capital_research_theses: { reason: 'a research question the owner began', onAccountErasure: { op: 'delete' } },
+  foundry_cost_lines: { reason: 'a monthly bill the owner stated, with where the number came from', onAccountErasure: { op: 'delete' } },
   capital_forecasts: { reason: 'forecasts sealed under the owner\'s research question', onAccountErasure: { op: 'delete' } },
   capital_paper_fills: { reason: 'simulated fills under the owner\'s research question', onAccountErasure: { op: 'delete' } },
   capital_evaluations: { reason: 'evaluations of the owner\'s research question', onAccountErasure: { op: 'delete' } },

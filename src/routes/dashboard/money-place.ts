@@ -37,8 +37,8 @@ import {
   type CapitalResearchReading, type CrossVenueReading, type LastWindow,
 } from '../../services/capital/research.js';
 import {
-  distributableSurplus, dollars, figureText, grossCharged, ledgerEntries, moneyBanked,
-  runningCost, unitContribution, type Figure,
+  COST_PROVIDERS, carryingCost, distributableSurplus, dollars, figureText, grossCharged, isCostProvider, ledgerEntries,
+  moneyBanked, runningCost, stateCostLine, unitContribution, type Figure,
 } from '../../services/economy/projection.js';
 
 export const moneyRoutes = new Hono();
@@ -102,6 +102,7 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
 
   const ledger = await ledgerEntries(founderId, 30);
   const cost = await runningCost(founderId);
+  const carry = await carryingCost(founderId);
 
   const sales = await query(
     `SELECT id, amount_cents, currency, status, created_at, provider, delivered_files_json, delivered_files_seen_at
@@ -144,7 +145,8 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
     ? html`<p class="noticed" role="alert"><strong>That did not go through.</strong> ${error}</p>`
     : done === 'tax' ? html`<p class="noticed">Recorded. It is still an estimate, and it still says so.</p>`
       : done === 'floor' ? html`<p class="noticed">Recorded. That much is kept back before anything is called yours.</p>`
-        : done === 'moved' ? html`<p class="noticed">Recorded. That is measured now, because you saw it happen.</p>` : '';
+        : done === 'moved' ? html`<p class="noticed">Recorded. That is measured now, because you saw it happen.</p>`
+          : done === 'carry' ? html`<p class="noticed">Recorded. The newest figure for that bill is the one read; the old one is kept.</p>` : '';
 
   // THE FIGURES FIRST, AS INSTRUMENTS. Five tiles read from the same
   // subtraction the page has always shown — what is held, what is reserved
@@ -262,6 +264,26 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
           · ${l.at}
         </li>`)}</ul>`}`)}
 
+    ${fold('carry', 'What Foundry costs to carry each month', carry.notKnown.length ? `at least ${figureText(carry.total)}` : figureText(carry.total), html`
+      <p><strong>${carry.notKnown.length ? 'At least ' : ''}${fig(carry.total)}</strong> a month. ${carry.total.because}.</p>
+      <ul class="sales">${carry.lines.map((l) => html`<li>
+          <b>${l.cents === null ? 'not known' : dollars(l.cents)}</b> ${l.what}
+          · ${l.kind === 'measured' ? 'measured' : l.kind === 'stated' ? 'yours' : 'not stated'} · ${l.because}
+        </li>`)}</ul>
+      <p class="quiet">Your own time is not priced here: ${carry.ownerMinutes30d === null
+    ? 'no minutes were entered in the last 30 days.' : `${String(carry.ownerMinutes30d)} minutes entered in the last 30 days.`}</p>
+      <form class="inline" method="POST" action="/foundry/money/costs">
+        <label class="sr" for="carryprovider">Which bill</label>
+        <select id="carryprovider" name="provider">
+          ${Object.entries(COST_PROVIDERS).map(([k, v]) => html`<option value="${k}">${v}</option>`)}
+        </select>
+        <label class="sr" for="carryamount">A month, in dollars (blank if you do not know yet)</label>
+        <input id="carryamount" name="amount" type="text" inputmode="decimal" placeholder="a month, e.g. 5.70" />
+        <label class="sr" for="carrysource">Where this comes from</label>
+        <input id="carrysource" name="source" type="text" placeholder="Where this number comes from, e.g. the Fly invoice" />
+        <button class="btn" type="submit">Record it</button>
+      </form>`)}
+
     <p class="quiet" id="trading-research">Trading research is a simulation and is never counted here:
       <a href="/foundry/money/research">what it has found</a>.</p>
 
@@ -348,6 +370,21 @@ moneyRoutes.post('/foundry/money/tax', requireInstitutionOwner(), async (c: any)
     setBy: 'owner',
   });
   return back(c, 'tax');
+});
+
+moneyRoutes.post('/foundry/money/costs', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return back(c, '', 'No owner on this request.');
+  const form = await c.req.parseBody();
+  const provider = String(form.provider ?? '');
+  const raw = String(form.amount ?? '').trim();
+  const amount = raw === '' ? null : cents(raw);
+  const source = String(form.source ?? '').trim();
+  if (!isCostProvider(provider)) return back(c, '', 'That is not one of the bills this reading knows.');
+  if (raw !== '' && amount === null) return back(c, '', 'That amount is not a number of dollars.');
+  if (!source) return back(c, '', 'Say where the number comes from, or nobody can check it.');
+  await stateCostLine(founderId, provider, amount, source);
+  return back(c, 'carry');
 });
 
 moneyRoutes.post('/foundry/money/floor', requireInstitutionOwner(), async (c: any) => {

@@ -1917,3 +1917,8 @@ copy, opens its seal, and says whether it would serve a recovery.
 workflow**, with "rehearse failure" ticked. If a failure email reaches you, the
 real one will too. If none arrives, edit `.github/workflows/witness.yml` once in
 the GitHub web editor; GitHub emails the last person to edit a schedule.
+
+**One more thing the witness needs.** GitHub runs scheduled workflows only from
+the repository's **default branch** (`master`). The witness lives on the working
+branch until that branch reaches `master`, and until then it does not run on
+its own. Merging the branch, or copying that one file to `master`, starts it.

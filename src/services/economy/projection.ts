@@ -655,3 +655,113 @@ export async function runningCost(founderId: string): Promise<RunningCost> {
     }),
   };
 }
+
+
+// ─── What Foundry costs to carry (Private S5) ────────────────────────────────
+
+/** The bills the owner states, because Foundry cannot read them. */
+export const COST_PROVIDERS = {
+  fly: 'Fly (the machine and its volume)',
+  cloudflare: 'Cloudflare (the Workshop, mail, and the copy away)',
+  domains: 'Domains',
+  clerk: 'Clerk (signing in)',
+  etsy: 'Etsy (shop and listing fees beyond each sale)',
+  github: 'GitHub',
+  other: 'Anything else',
+} as const;
+export type CostProvider = keyof typeof COST_PROVIDERS;
+export const isCostProvider = (v: unknown): v is CostProvider => typeof v === 'string' && v in COST_PROVIDERS;
+
+export interface CarryingLine {
+  what: string;
+  /** A month's cents, or null when not known. Never zero by default. */
+  cents: number | null;
+  /** measured: read from Foundry's own records. stated: the owner's word, with its source. */
+  kind: 'measured' | 'stated' | 'not_stated';
+  because: string;
+}
+
+export interface CarryingCost {
+  lines: CarryingLine[];
+  /** The sum of what is known; a lower bound whenever a line is not. */
+  total: Figure;
+  notKnown: string[];
+  ownerMinutes30d: number | null;
+}
+
+/**
+ * WHAT FOUNDRY COSTS TO CARRY, A MONTH AT A TIME.
+ *
+ * The denominator of everything: the hold rule compares what an asset earns
+ * with what it costs to keep, and nothing said what keeping Foundry costs.
+ * Measured lines come from Foundry's own records over the last thirty days;
+ * the rest are the owner's word with its source, and a line nobody has stated
+ * is shown as not stated — the total then says "at least", because a sum that
+ * treats an unknown bill as free is the specific lie this refuses to tell.
+ */
+export async function carryingCost(founderId: string): Promise<CarryingCost> {
+  const lines: CarryingLine[] = [];
+  // Read through the spend ledger, where the erasure promise about that table is kept.
+  const { settledByModel } = await import('../ai/spend-ledger.js');
+  const models = (await settledByModel(30)).reduce((a, m) => a + m.cents, 0);
+  lines.push({ what: 'Thinking (models), last 30 days', cents: Math.round(models), kind: 'measured',
+    because: 'settled model calls, from the spend ledger' });
+  // STANDING DOES NOT APPLY, as in runningCost: money spent on an experimental
+  // asset is money spent, and scoping to earned companies would hide most of
+  // what carrying Foundry costs.
+  const tools = Number(((await query(
+    `SELECT COALESCE(SUM(s.amount_cents), 0) AS c FROM asset_money_spent s JOIN products p ON p.id = s.product_id
+      WHERE p.owner_id = ? AND ${realCompany('p')} AND s.source = 'settled' AND s.recorded_at >= datetime('now', '-30 days')`, [founderId]))
+    .rows[0] as Record<string, unknown>).c ?? 0);
+  lines.push({ what: 'Tools Foundry paid for, last 30 days', cents: Math.round(tools), kind: 'measured',
+    because: 'settled spend with the provider\'s receipt' });
+  const stated = (await query(
+    `SELECT provider, monthly_cents, source, said_at FROM foundry_cost_lines f
+      WHERE founder_id = ? AND NOT EXISTS (
+        SELECT 1 FROM foundry_cost_lines g WHERE g.founder_id = f.founder_id AND g.provider = f.provider
+           AND (g.said_at > f.said_at OR (g.said_at = f.said_at AND g.rowid > f.rowid)))`, [founderId])).rows as Array<Record<string, unknown>>;
+  const byProvider = new Map(stated.map((r) => [String(r.provider), r]));
+  const notKnown: string[] = [];
+  for (const [key, label] of Object.entries(COST_PROVIDERS)) {
+    const r = byProvider.get(key);
+    if (!r) {
+      if (key === 'other' || key === 'github') continue; // said only when there is something to say
+      notKnown.push(label);
+      lines.push({ what: label, cents: null, kind: 'not_stated', because: 'not stated yet' });
+      continue;
+    }
+    const cents = r.monthly_cents == null ? null : Number(r.monthly_cents);
+    if (cents === null) notKnown.push(label);
+    lines.push({ what: label, cents, kind: 'stated',
+      because: `${cents === null ? 'you said it is not known yet' : 'your figure'}: ${String(r.source)} (${String(r.said_at).slice(0, 10)})` });
+  }
+  const known = lines.reduce((a, l) => a + (l.cents ?? 0), 0);
+  const minutesRow = (await query(
+    `SELECT COUNT(*) AS n, COALESCE(SUM(minutes), 0) AS m FROM owner_minutes
+      WHERE founder_id = ? AND withdrawn_at IS NULL AND entered_at >= datetime('now', '-30 days')`, [founderId]))
+    .rows[0] as Record<string, unknown>;
+  return {
+    lines,
+    notKnown,
+    ownerMinutes30d: Number(minutesRow.n ?? 0) === 0 ? null : Number(minutesRow.m ?? 0),
+    total: notKnown.length === 0
+      ? { cents: known, quality: stated.length ? 'estimated' : 'measured',
+        because: stated.length ? 'measured spend plus the bills you stated' : 'measured spend only' }
+      : { cents: known, quality: 'estimated',
+        because: `at least this: ${String(notKnown.length)} ${notKnown.length === 1 ? 'bill is' : 'bills are'} not known (${notKnown.join('; ')})` },
+  };
+}
+
+/** The owner states one month's bill for one provider, with where the number came from. */
+export async function stateCostLine(founderId: string, provider: CostProvider, monthlyCents: number | null, source: string): Promise<void> {
+  const words = source.trim().slice(0, 300);
+  if (!words) throw new Error('a cost line says where the number came from');
+  if (!isCostProvider(provider)) throw new Error('not a provider this reading knows');
+  if (monthlyCents !== null && (!Number.isInteger(monthlyCents) || monthlyCents < 0 || monthlyCents > 10_000_000)) {
+    throw new Error('not a monthly amount this reading accepts');
+  }
+  const { nanoid } = await import('nanoid');
+  await query(
+    `INSERT INTO foundry_cost_lines (id, founder_id, provider, monthly_cents, source, said_by) VALUES (?,?,?,?,?,?)`,
+    [nanoid(), founderId, provider, monthlyCents, words, `founder:${founderId}`]);
+}

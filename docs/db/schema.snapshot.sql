@@ -2089,6 +2089,16 @@ CREATE TABLE founding_story_artifacts (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   published BOOLEAN DEFAULT FALSE
 );
+CREATE TABLE foundry_cost_lines (
+  id            TEXT PRIMARY KEY,
+  founder_id    TEXT NOT NULL REFERENCES founders(id),
+  provider      TEXT NOT NULL CHECK (provider IN ('fly','cloudflare','domains','clerk','etsy','github','other')),
+  monthly_cents INTEGER CHECK (monthly_cents IS NULL OR (monthly_cents >= 0 AND monthly_cents <= 10000000)),
+  source        TEXT NOT NULL CHECK (length(trim(source)) > 0),
+  said_by       TEXT NOT NULL,
+  said_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK (said_by = 'founder:' || founder_id)
+);
 CREATE TABLE freeze_periods (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -5289,6 +5299,7 @@ CREATE UNIQUE INDEX idx_founder_evidence_request_identity
 CREATE INDEX idx_founder_state_product ON founder_state_assessments(product_id, assessed_at DESC);
 CREATE INDEX idx_founders_paid_through ON founders(paid_through);
 CREATE INDEX idx_founders_tier ON founders(tier);
+CREATE INDEX idx_foundry_cost_lines_newest ON foundry_cost_lines(founder_id, provider, said_at);
 CREATE INDEX idx_freeze_periods_product_active
   ON freeze_periods(product_id, ended_at);
 CREATE INDEX idx_freeze_periods_started
@@ -7446,6 +7457,8 @@ BEGIN
     OR json_extract(NEW.payload_json,'$.grant') IS NOT NULL
     OR json_extract(NEW.payload_json,'$.state') IS NOT NULL;
 END;
+CREATE TRIGGER foundry_cost_lines_said_is_said BEFORE UPDATE ON foundry_cost_lines
+BEGIN SELECT RAISE(ABORT,'foundry_cost_lines:said_is_said'); END;
 CREATE TRIGGER governed_effect_kinds_immutable_delete
 BEFORE DELETE ON governed_effect_kinds
 BEGIN
