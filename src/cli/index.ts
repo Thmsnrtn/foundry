@@ -1015,16 +1015,14 @@ program.command('job-review [dir]').description('Write the job review file under
     process.stdout.write(`${built.file} ${built.sha256}\n`);
   });
 
-// ─── Capital research, by hand (migration 364) ───────────────────────────────
+// ─── Capital research, by hand (migrations 364–365) ───────────────────────────────
 //   node dist/cli/index.js capital-observe     one pass: snapshot, forecasts, results
 //   node dist/cli/index.js capital-evaluate    score every observing question now
 // Both read public market data only. Neither can place an order.
 program.command('capital-observe').description('Run one capital-research observation pass now (read-only)')
   .action(async () => {
-    const { observeOnce } = await import('../services/capital/research.js');
-    const r = await observeOnce();
-    process.stdout.write(`${r.observed ?? 'nothing observed'}: ${r.because}; ${String(r.forecasts)} forecasts, `
-      + `${String(r.simulatedFills)} simulated fills, ${String(r.resolved)} official results imported\n`);
+    const { observeOnce, describeRun } = await import('../services/capital/research.js');
+    process.stdout.write(`${describeRun(await observeOnce())}\n`);
   });
 program.command('capital-evaluate').description('Evaluate every observing capital-research question now')
   .action(async () => {

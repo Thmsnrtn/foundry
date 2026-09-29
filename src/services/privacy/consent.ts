@@ -1284,6 +1284,7 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   // its contract rules, its books at a moment, its official results — and a
   // public spot price. Nobody's data, and no person is named in any of it.
   capital_contract_rules: 'an exchange\'s published contract rules, as read',
+  capital_venues: 'the trading venues research may read, and what each is; the institution\'s vocabulary, naming nobody',
   capital_market_snapshots: 'an exchange\'s public book at one moment, and a public spot price kept as a proxy',
   capital_resolutions: 'an exchange\'s official, public result for one market',
   // THE INSTRUMENT'S OWN VOCABULARIES. Constitutional tables, written once by

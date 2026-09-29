@@ -726,9 +726,9 @@ CREATE TABLE capability_providers (
   sort_order     INTEGER NOT NULL DEFAULT 0
 , supplies_source_type TEXT
   REFERENCES market_source_types(source_type));
-CREATE TABLE capital_contract_rules (
-  id                TEXT PRIMARY KEY,              -- sha256 of the fields below, as read
-  venue             TEXT NOT NULL CHECK (venue = 'kalshi'),
+CREATE TABLE "capital_contract_rules" (
+  id                TEXT PRIMARY KEY,
+  venue             TEXT NOT NULL REFERENCES capital_venues(venue),
   series_ticker     TEXT NOT NULL,
   settlement_source TEXT NOT NULL,
   settlement_note   TEXT,
@@ -736,10 +736,10 @@ CREATE TABLE capital_contract_rules (
   fee_multiplier    REAL,
   first_seen_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE TABLE capital_evaluations (
+CREATE TABLE "capital_evaluations" (
   id             TEXT PRIMARY KEY,
   founder_id     TEXT NOT NULL REFERENCES founders(id),
-  thesis_id      TEXT NOT NULL REFERENCES capital_research_theses(id),
+  thesis_id      TEXT NOT NULL REFERENCES "capital_research_theses"(id),
   computed_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   resolved_count INTEGER NOT NULL CHECK (resolved_count >= 0),
   verdict        TEXT NOT NULL CHECK (verdict IN
@@ -747,49 +747,43 @@ CREATE TABLE capital_evaluations (
   result_json    TEXT NOT NULL CHECK (json_valid(result_json)),
   result_digest  TEXT NOT NULL
 );
-CREATE TABLE capital_forecasts (
+CREATE TABLE "capital_forecasts" (
   id            TEXT PRIMARY KEY,
   founder_id    TEXT NOT NULL REFERENCES founders(id),
-  thesis_id     TEXT NOT NULL REFERENCES capital_research_theses(id),
-  snapshot_id   TEXT NOT NULL REFERENCES capital_market_snapshots(id),
+  thesis_id     TEXT NOT NULL REFERENCES "capital_research_theses"(id),
+  snapshot_id   TEXT NOT NULL REFERENCES "capital_market_snapshots"(id),
   market_ticker TEXT NOT NULL,
   model         TEXT NOT NULL CHECK (model IN ('market_implied_v1','proxy_drift_v1')),
-  -- P(YES). NULL only when the model could not form one, and then it skips.
   p_yes         REAL CHECK (p_yes IS NULL OR (p_yes >= 0 AND p_yes <= 1)),
   decision      TEXT NOT NULL CHECK (decision IN ('yes','no','skip')),
   reason        TEXT NOT NULL,
   recorded_at   TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CHECK (decision = 'skip' OR p_yes IS NOT NULL)
 );
-CREATE TABLE capital_market_snapshots (
+CREATE TABLE "capital_market_snapshots" (
   id                   TEXT PRIMARY KEY,
-  venue                TEXT NOT NULL CHECK (venue = 'kalshi'),
+  venue                TEXT NOT NULL REFERENCES capital_venues(venue),
   series_ticker        TEXT NOT NULL,
   market_ticker        TEXT NOT NULL,
-  rule_id              TEXT NOT NULL REFERENCES capital_contract_rules(id),
+  rule_id              TEXT NOT NULL REFERENCES "capital_contract_rules"(id),
   open_time            TEXT NOT NULL,
   close_time           TEXT NOT NULL,
-  -- The official reference level: for these contracts, the previous window's
-  -- settlement average. NULL while the venue shows it as not yet known.
   floor_strike         REAL,
   rules_primary_digest TEXT NOT NULL,
   received_at          TEXT NOT NULL,
-  -- Best prices, in dollars. The venue publishes bids only; a YES ask is one
-  -- dollar less the best NO bid, and is derived here, never invented.
   best_yes_bid         REAL CHECK (best_yes_bid IS NULL OR (best_yes_bid >= 0 AND best_yes_bid <= 1)),
   best_yes_ask         REAL CHECK (best_yes_ask IS NULL OR (best_yes_ask >= 0 AND best_yes_ask <= 1)),
   yes_book_json        TEXT NOT NULL CHECK (json_valid(yes_book_json)),
   no_book_json         TEXT NOT NULL CHECK (json_valid(no_book_json)),
-  -- A PROXY, NEVER THE SETTLEMENT SOURCE. NULL when it could not be read.
   proxy_price          REAL,
   proxy_source         TEXT,
   proxy_observed_at    TEXT,
   proxy_sigma_1m       REAL
 );
-CREATE TABLE capital_paper_fills (
+CREATE TABLE "capital_paper_fills" (
   id                  TEXT PRIMARY KEY,
   founder_id          TEXT NOT NULL REFERENCES founders(id),
-  forecast_id         TEXT NOT NULL UNIQUE REFERENCES capital_forecasts(id),
+  forecast_id         TEXT NOT NULL UNIQUE REFERENCES "capital_forecasts"(id),
   side                TEXT NOT NULL CHECK (side IN ('yes','no')),
   contracts_requested INTEGER NOT NULL CHECK (contracts_requested > 0),
   contracts_filled    INTEGER NOT NULL CHECK (contracts_filled >= 0 AND contracts_filled <= contracts_requested),
@@ -799,10 +793,10 @@ CREATE TABLE capital_paper_fills (
   provenance          TEXT NOT NULL DEFAULT 'simulated' CHECK (provenance = 'simulated'),
   created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-CREATE TABLE capital_research_theses (
+CREATE TABLE "capital_research_theses" (
   id              TEXT PRIMARY KEY,
   founder_id      TEXT NOT NULL REFERENCES founders(id),
-  venue           TEXT NOT NULL CHECK (venue = 'kalshi'),
+  venue           TEXT NOT NULL REFERENCES capital_venues(venue),
   series_ticker   TEXT NOT NULL,
   hypothesis      TEXT NOT NULL,
   falsifier       TEXT NOT NULL,
@@ -814,9 +808,9 @@ CREATE TABLE capital_research_theses (
   stopped_because TEXT,
   CHECK (begun_by = 'founder:' || founder_id)
 );
-CREATE TABLE capital_resolutions (
+CREATE TABLE "capital_resolutions" (
   market_ticker        TEXT PRIMARY KEY,
-  venue                TEXT NOT NULL CHECK (venue = 'kalshi'),
+  venue                TEXT NOT NULL REFERENCES capital_venues(venue),
   result               TEXT NOT NULL CHECK (result IN ('yes','no')),
   expiration_value     REAL,
   floor_strike         REAL,
@@ -824,6 +818,13 @@ CREATE TABLE capital_resolutions (
   rules_primary        TEXT NOT NULL,
   rules_primary_digest TEXT NOT NULL,
   fetched_at           TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE capital_venues (
+  venue        TEXT PRIMARY KEY,
+  name         TEXT NOT NULL,
+  -- What the venue is, in the owner's terms, and what it is not.
+  what_it_is   TEXT NOT NULL,
+  sort_rank    INTEGER NOT NULL
 );
 CREATE TABLE causal_chains (
   id TEXT PRIMARY KEY,
@@ -5153,9 +5154,9 @@ CREATE INDEX idx_capital_evaluations_thesis ON capital_evaluations(thesis_id, co
 CREATE UNIQUE INDEX idx_capital_one_forecast_per_model
   ON capital_forecasts(thesis_id, model, market_ticker);
 CREATE UNIQUE INDEX idx_capital_one_open_thesis
-  ON capital_research_theses(founder_id, series_ticker) WHERE status = 'observing';
+  ON capital_research_theses(founder_id, venue, series_ticker) WHERE status = 'observing';
 CREATE INDEX idx_capital_snapshot_close ON capital_market_snapshots(close_time);
-CREATE UNIQUE INDEX idx_capital_snapshot_moment ON capital_market_snapshots(market_ticker, received_at);
+CREATE UNIQUE INDEX idx_capital_snapshot_moment ON capital_market_snapshots(venue, market_ticker, received_at);
 CREATE INDEX idx_causal_chains ON causal_chains(product_id);
 CREATE INDEX idx_cf_profiles_product ON cofounder_profiles(product_id);
 CREATE INDEX idx_chat_messages_session ON chat_messages(session_id, created_at);
@@ -5974,6 +5975,10 @@ BEGIN
   SELECT RAISE(ABORT,'capital_forecasts:thesis_is_not_observing')
    WHERE NOT EXISTS (SELECT 1 FROM capital_research_theses t
                       WHERE t.id = NEW.thesis_id AND t.founder_id = NEW.founder_id AND t.status = 'observing');
+  -- A forecast about one venue's market is made under that venue's question.
+  SELECT RAISE(ABORT,'capital_forecasts:another_venue')
+   WHERE NOT EXISTS (SELECT 1 FROM capital_research_theses t JOIN capital_market_snapshots s ON s.id = NEW.snapshot_id
+                      WHERE t.id = NEW.thesis_id AND t.venue = s.venue);
 END;
 CREATE TRIGGER capital_forecasts_sealed BEFORE UPDATE ON capital_forecasts
 BEGIN SELECT RAISE(ABORT,'capital_forecasts:sealed'); END;
@@ -5995,6 +6000,10 @@ BEGIN
   SELECT RAISE(ABORT,'capital_research_theses:a_stop_says_when_and_why')
    WHERE NEW.status = 'stopped' AND (NEW.stopped_at IS NULL OR NEW.stopped_because IS NULL);
 END;
+CREATE TRIGGER capital_venues_constitutional_delete BEFORE DELETE ON capital_venues
+BEGIN SELECT RAISE(ABORT,'capital_venues:constitutional'); END;
+CREATE TRIGGER capital_venues_constitutional_update BEFORE UPDATE ON capital_venues
+BEGIN SELECT RAISE(ABORT,'capital_venues:constitutional'); END;
 CREATE TRIGGER cfp_amounts_are_not_negative_ins
 BEFORE INSERT ON company_financial_position
 WHEN NEW.cash_on_hand_cents < 0 OR NEW.monthly_burn_cents < 0

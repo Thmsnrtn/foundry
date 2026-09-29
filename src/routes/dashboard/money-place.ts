@@ -31,9 +31,10 @@ import { query } from '../../db/client.js';
 import { record, setPolicy } from '../../services/economy/ledger.js';
 import { EVALUATION_RULE, type Evaluation } from '../../services/capital/evaluation.js';
 import { DECISION_RULE } from '../../services/capital/models.js';
-import { FEE_VERSION } from '../../services/capital/fees.js';
+import { FEE_VERSION, POLYMARKET_FEE_VERSION } from '../../services/capital/fees.js';
 import {
-  CapitalRefused, beginObserving, capitalResearchReading, stopObserving, type LastWindow,
+  CapitalRefused, beginObserving, capitalResearchReading, crossVenueReading, isVenue, researchVenues, stopObserving,
+  type CapitalResearchReading, type CrossVenueReading, type LastWindow,
 } from '../../services/capital/research.js';
 import {
   distributableSurplus, dollars, figureText, grossCharged, ledgerEntries, moneyBanked,
@@ -406,8 +407,8 @@ moneyRoutes.post('/foundry/money/moved', requireInstitutionOwner(), async (c: an
 });
 
 // =============================================================================
-// TRADING RESEARCH, as the owner reads it (/foundry/money/research; migration
-// 364). A reading under Economics, not a new door, and deliberately not a
+// TRADING RESEARCH, as the owner reads it (/foundry/money/research; migrations
+// 364–365). One section per venue, and one reading of the venues side by side. A reading under Economics, not a new door, and deliberately not a
 // trading dashboard: no ticker tape, no P&L in green, nothing that rewards
 // activity. It says what question is being asked, what the evidence says so
 // far, what the research cannot see, and that no order is possible. A
@@ -433,9 +434,9 @@ const VERDICT_WORDS: Record<string, string> = {
   survived_holdout_owner_review: 'Survived the test — yours to review, not to trade',
 };
 
-function verdictPanel(e: { computedAt: string; verdict: string; digest: string; resolvedCount: number; result: Evaluation }): H {
+function verdictPanel(venue: string, e: { computedAt: string; verdict: string; digest: string; resolvedCount: number; result: Evaluation }): H {
   const r = e.result;
-  return html`<section class="know" id="verdict">
+  return html`<section class="know" id="verdict-${venue}">
     <h2>What the evidence says</h2>
     <p><strong>${VERDICT_WORDS[e.verdict] ?? e.verdict}.</strong> ${r.sentence}</p>
     <dl class="facts">
@@ -456,15 +457,15 @@ function verdictPanel(e: { computedAt: string; verdict: string; digest: string; 
 
 const MODEL_WORDS: Record<string, string> = { market_implied_v1: 'The market\'s own price', proxy_drift_v1: 'The proxy model' };
 
-function lastWindowPanel(w: LastWindow): H {
+function lastWindowPanel(venue: string, w: LastWindow): H {
   const p = (x: number | null): string => (x === null ? 'not known' : x.toFixed(4));
-  return html`<section class="know" id="last-window">
+  return html`<section class="know" id="last-window-${venue}">
     <h2>The last window</h2>
     <p class="quiet">${w.marketTicker}, read ${researchDay(w.receivedAt)}, closing ${researchDay(w.closeTime)}.</p>
     <dl class="facts">
-      <div><dt>Reference level</dt><dd>${w.floorStrike === null ? 'not yet published' : `$${w.floorStrike.toFixed(2)}`}</dd></div>
+      <div><dt>Reference level</dt><dd>${w.floorStrike === null ? (venue === 'polymarket' ? 'not published by this venue' : 'not yet published') : `$${w.floorStrike.toFixed(2)}`}</dd></div>
       <div><dt>YES bid / ask</dt><dd>${p(w.yesBid)} / ${p(w.yesAsk)}</dd></div>
-      <div><dt>Proxy (not the settlement source)</dt><dd>${w.proxy ? `$${w.proxy.price.toFixed(2)} from ${w.proxy.source} at ${researchDay(w.proxy.observedAt)}${w.proxy.sigma1m === null ? '' : `; one-minute volatility ${(w.proxy.sigma1m * 100).toFixed(3)}%`}` : 'could not be read'}</dd></div>
+      <div><dt>Proxy (not the settlement source)</dt><dd>${w.proxy ? `$${w.proxy.price.toFixed(2)} from ${w.proxy.source} at ${researchDay(w.proxy.observedAt)}${w.proxy.sigma1m === null ? '' : `; one-minute volatility ${(w.proxy.sigma1m * 100).toFixed(3)}%`}` : venue === 'polymarket' ? 'not read: there is no reference level to measure it against' : 'could not be read'}</dd></div>
       ${w.forecasts.map((f) => html`<div><dt>${MODEL_WORDS[f.model] ?? f.model}</dt><dd>P(YES) ${p(f.pYes)} — ${f.decision === 'skip' ? 'no trade' : `simulated ${f.decision.toUpperCase()}`}: ${f.reason}</dd></div>`)}
       ${w.fill ? html`<div><dt>Simulated fill — not a trade</dt><dd>${String(w.fill.filled)} of ${String(w.fill.requested)} ${w.fill.side.toUpperCase()} for ${usd(w.fill.cost)},
         fee ${w.fill.fee === null ? 'not known' : usd(w.fill.fee)} (${w.fill.feeVersion})</dd></div>` : ''}
@@ -472,55 +473,99 @@ function lastWindowPanel(w: LastWindow): H {
   </section>`;
 }
 
-moneyRoutes.get('/foundry/money/research', async (c: any) => {
-  const founderId = await founderOf(c);
-  if (!founderId) return c.redirect('/onboarding');
-  const done = String(c.req.query('done') ?? ''); const error = String(c.req.query('error') ?? '');
-  const r = await capitalResearchReading(founderId);
-  const observing = r.thesis?.status === 'observing';
+const percent = (a: number, b: number): string => (b === 0 ? 'none yet' : `${String(a)} of ${String(b)}`);
 
-  const body = html`
-    ${done ? html`<p class="noticed" role="status">${done === 'begun' ? 'Observing. The first forecast is sealed at the next window.' : 'Stopped. What was recorded stays.'}</p>` : ''}
-    ${error ? html`<p class="noticed" role="alert">${error}</p>` : ''}
-    <section class="know" id="what">
-      <h2>${observing ? 'Observing Kalshi\'s 15-minute Bitcoin contracts' : r.thesis ? 'Stopped' : 'Not observing anything'}</h2>
-      <p>No order is possible. Foundry holds no exchange credential, and nothing in it can place, change or cancel one.
-        This reads public prices, seals a forecast before each window closes, and scores it against the exchange's official result.
-        Nothing here is income, and none of it is counted in Economics.</p>
+function crossVenuePanel(x: CrossVenueReading): H {
+  const c = (v: number): string => `${(v * 100).toFixed(1)}¢`;
+  return html`<section class="know" id="across-venues">
+    <h2>The same window, on both venues</h2>
+    <p>Kalshi and Polymarket each ask whether Bitcoin ends a fifteen-minute window up, closing at the same instant, but settle on different sources:
+      CF Benchmarks' index against the previous window's average, and Chainlink's average against the window's opening price.
+      Where both were observed, this compares them. It is research about two prices, never an instruction.</p>
+    ${x.windows === 0 ? html`<p class="quiet">No window has been observed on both yet. Observe both venues and this fills in, one window every fifteen minutes.</p>`
+    : html`<dl class="facts">
+      <div><dt>Windows seen on both</dt><dd>${String(x.windows)}, ${String(x.sameMoment)} read within a minute of each other</dd></div>
+      <div><dt>How far apart the prices were</dt><dd>${x.priceGap ? `${c(x.priceGap.mean)} on average, ${c(x.priceGap.max)} at most, over ${String(x.priceGap.pairs)} windows` : 'not known: a book was empty'}</dd></div>
+      <div><dt>Did the official results agree</dt><dd>${x.results.both === 0 ? 'no window has both results yet' : `${percent(x.results.agreed, x.results.both)} windows`}</dd></div>
+      <div><dt>Each venue's price against its own result (Brier, lower is better)</dt><dd>${x.brier ? `Kalshi ${x.brier.kalshi.toFixed(4)} · Polymarket ${x.brier.polymarket.toFixed(4)} over ${String(x.brier.pairs)} windows` : 'not known yet'}</dd></div>
+      <div><dt>Both sides for under a dollar, after both fees — simulated, never money</dt><dd>${String(x.pairsUnderADollar.count)} windows at the displayed top of book;
+        ${x.pairsUnderADollar.resolved === 0 ? 'none resolved yet' : `of ${String(x.pairsUnderADollar.resolved)} resolved, ${usd(x.pairsUnderADollar.simulatedNet)} per contract in all, with ${String(x.pairsUnderADollar.bothLegsLost)} where the results disagreed and both sides lost`}</dd></div>
+    </dl>`}
+  </section>`;
+}
+
+const HEADINGS: Record<string, string> = { kalshi: 'Kalshi\'s 15-minute Bitcoin contracts', polymarket: 'Polymarket\'s 15-minute Bitcoin Up or Down markets' };
+
+function venueSection(v: { venue: string; name: string; whatItIs: string }, r: CapitalResearchReading): H {
+  const observing = r.thesis?.status === 'observing';
+  const what = HEADINGS[v.venue] ?? v.name;
+  return html`<section class="know" id="venue-${v.venue}">
+      <h2>${observing ? `Observing ${what}` : r.thesis ? `${v.name}: stopped` : `${v.name}: not observing`}</h2>
+      <p class="quiet">${v.name}: ${v.whatItIs}.</p>
       ${r.thesis ? html`<dl class="facts">
         <div><dt>The question</dt><dd>${r.thesis.hypothesis}</dd></div>
         <div><dt>What would prove it wrong</dt><dd>${r.thesis.falsifier}</dd></div>
         <div><dt>The alternative</dt><dd>${r.thesis.alternativeUse}</dd></div>
         <div><dt>${observing ? 'Since' : 'Ran'}</dt><dd>${r.thesis.begunByOwner ? 'Begun by you, ' : ''}${researchDay(r.thesis.begunAt)}${r.thesis.stoppedAt ? ` to ${researchDay(r.thesis.stoppedAt)} — ${r.thesis.stoppedBecause ?? ''}` : ''}</dd></div>
-      </dl>` : ''}
-    </section>
-
-    ${r.evaluation ? verdictPanel(r.evaluation) : r.thesis ? html`<section class="know" id="verdict"><h2>What the evidence says</h2>
-      <p>Nothing yet: the first evaluation is read each morning once results exist.</p></section>` : ''}
-
-    ${r.thesis ? html`<section class="know" id="seen">
-      <h2>What it has seen</h2>
-      <p>${String(r.counts.snapshots)} windows observed, ${String(r.counts.resolved)} with the official result, ${String(r.counts.forecasts)} forecasts sealed,
+        <div><dt>What it has seen</dt><dd>${String(r.counts.snapshots)} windows observed, ${String(r.counts.resolved)} with the official result, ${String(r.counts.forecasts)} forecasts sealed,
         ${String(r.counts.simulatedFills)} simulated fills${r.counts.proxyMissing ? `, ${String(r.counts.proxyMissing)} windows where the proxy could not be read` : ''}.
-        ${r.lastSnapshotAt ? `Last observed ${researchDay(r.lastSnapshotAt)}.` : ''}</p>
-    </section>` : ''}
-
-    ${r.lastWindow ? lastWindowPanel(r.lastWindow) : ''}
-
-    <section class="know" id="rule">
-      <h2>What decides these contracts</h2>
-      ${r.rules ? html`<p>Settled on <strong>${r.rules.settlementSource}</strong>, as the exchange states it${r.rules.settlementNote ? html`: ${r.rules.settlementNote.replace(/\*\*/g, '')}` : '.'}</p>
-        <p class="quiet">Fee rule as published: ${r.rules.feeType ?? 'not stated'}${r.rules.feeMultiplier === null ? '' : `, multiplier ${String(r.rules.feeMultiplier)}`}; first read ${researchDay(r.rules.firstSeenAt)}.</p>`
+        ${r.lastSnapshotAt ? `Last observed ${researchDay(r.lastSnapshotAt)}.` : ''}</dd></div>
+      </dl>` : ''}
+      ${r.noProxyModel && r.thesis ? html`<p class="quiet">The proxy model does not run here: ${r.noProxyModel}. The market's own price is still sealed each window.</p>` : ''}
+      <h3>What decides these contracts</h3>
+      ${r.rules ? html`<p>Settled on <strong>${r.rules.settlementSource}</strong>, as the venue states it${r.rules.settlementNote ? html`: ${r.rules.settlementNote.replace(/\*\*/g, '')}` : '.'}</p>
+        <p class="quiet">Fee rule as published: ${r.rules.feeType ?? 'not stated'}${r.rules.feeMultiplier === null ? '' : `, ${v.venue === 'polymarket' ? 'rate' : 'multiplier'} ${String(r.rules.feeMultiplier)}`}; first read ${researchDay(r.rules.firstSeenAt)}.</p>`
     : html`<p class="quiet">Not read yet.</p>`}
-      ${r.latestRule ? html`<p class="quiet">The latest rule, in the exchange's words: ${r.latestRule}</p>` : ''}
+      ${r.latestRule ? html`<p class="quiet">The latest rule, in the venue's words: ${r.latestRule}</p>` : ''}
+      ${observing ? html`<form class="inline" method="POST" action="/foundry/money/research/stop">
+          <input type="hidden" name="venue" value="${v.venue}" />
+          <label class="sr" for="because-${v.venue}">Why stop</label>
+          <input id="because-${v.venue}" name="because" type="text" placeholder="Why stop, in your words" />
+          <button class="btn" type="submit">Stop observing ${v.name}</button>
+        </form>`
+    : html`<form class="inline" method="POST" action="/foundry/money/research/begin">
+          <input type="hidden" name="venue" value="${v.venue}" />
+          <button class="btn" type="submit">${r.thesis ? `Begin a new observation on ${v.name}` : `Begin observing ${v.name}`}</button>
+        </form>
+        <p class="quiet">Costs nothing and risks nothing: public data only, a few reads every five minutes.</p>`}
     </section>
+    ${r.evaluation ? verdictPanel(v.venue, r.evaluation) : r.thesis ? html`<section class="know" id="verdict-${v.venue}"><h2>What the evidence says</h2>
+      <p>Nothing yet: the first evaluation is read each morning once results exist.</p></section>` : ''}
+    ${r.lastWindow ? lastWindowPanel(v.venue, r.lastWindow) : ''}`;
+}
+
+moneyRoutes.get('/foundry/money/research', async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return c.redirect('/onboarding');
+  const done = String(c.req.query('done') ?? ''); const error = String(c.req.query('error') ?? '');
+  const venues = await researchVenues();
+  const readings = await Promise.all(venues.map((v) => capitalResearchReading(founderId, v.venue)));
+  const anyObserving = readings.some((r) => r.thesis?.status === 'observing');
+  const across = await crossVenueReading();
+
+  const body = html`
+    ${done ? html`<p class="noticed" role="status">${done === 'begun' ? 'Observing. The first forecast is sealed at the next window.' : 'Stopped. What was recorded stays.'}</p>` : ''}
+    ${error ? html`<p class="noticed" role="alert">${error}</p>` : ''}
+    <section class="know" id="what">
+      <h2>${anyObserving ? `Observing ${String(readings.filter((r) => r.thesis?.status === 'observing').length)} of ${String(venues.length)} venues` : 'Not observing anything'}</h2>
+      <p>No order is possible. Foundry holds no exchange credential, and nothing in it can place, change or cancel one on any venue.
+        This reads public prices, seals a forecast before each window closes, and scores it against each venue's official result.
+        Nothing here is income, and none of it is counted in Economics.</p>
+    </section>
+
+    ${crossVenuePanel(across)}
+
+    ${venues.map((v, i) => venueSection(v, readings[i]))}
 
     <section class="know" id="blind">
       <h2>What this cannot see</h2>
       <ul class="plain">
-        <li>The settlement index itself. It is licensed data; the model uses a public spot price as a proxy, and the gap between them is unknown.</li>
+        <li>The settlement index itself. Kalshi's is licensed data; the model uses a public spot price as a proxy, and the gap between them is unknown.
+          Polymarket does not publish the price its window is measured from, so no model is measured there at all.</li>
         <li>Whether a real order would fill. A simulated fill takes the displayed book at one instant, with no queue and no delay; one cent worse is shown beside it.</li>
-        <li>The fee schedule as published. The formula (${FEE_VERSION}) is the handoff's reading; Kalshi's page refused this environment.</li>
+        <li>The fee schedules as published. Kalshi's formula (${FEE_VERSION}) is the handoff's reading; Kalshi's page refused this environment.
+          Polymarket's (${POLYMARKET_FEE_VERSION}) is read from each market and its documentation.</li>
+        <li>Whether you may trade on a venue at all where you live. Polymarket may restrict some countries; reading its public prices needs no permission, trading would.</li>
         <li>Anything before ${String(EVALUATION_RULE.minResolvedMarkets)} results. Until then it says nothing, and it never says "trade".</li>
       </ul>
     </section>
@@ -531,19 +576,6 @@ moneyRoutes.get('/foundry/money/research', async (c: any) => {
         Neither showed an edge. The old paper results were wrong by construction: a comparison that could never say "up",
         a sizer that bet 30% at any forecast, a probability curve off by up to 3.7 points, and order paths that recorded fills that never happened.
         Nothing from either runs here; what was sound was rebuilt and tested.</p>
-    </section>
-
-    <section class="know" id="yours">
-      <h2>Yours</h2>
-      ${observing ? html`<form class="inline" method="POST" action="/foundry/money/research/stop">
-          <label class="sr" for="because">Why stop</label>
-          <input id="because" name="because" type="text" placeholder="Why stop, in your words" />
-          <button class="btn" type="submit">Stop observing</button>
-        </form>`
-    : html`<form class="inline" method="POST" action="/foundry/money/research/begin">
-          <button class="btn" type="submit">${r.thesis ? 'Begin a new observation' : 'Begin observing'}</button>
-        </form>
-        <p class="quiet">Costs nothing and risks nothing: public data only, about one read a minute.</p>`}
     </section>`;
   return c.html(page('Trading research', body, 'money', researchFrame));
 });
@@ -551,7 +583,9 @@ moneyRoutes.get('/foundry/money/research', async (c: any) => {
 moneyRoutes.post('/foundry/money/research/begin', requireInstitutionOwner(), async (c: any) => {
   const founderId = await founderOf(c);
   if (!founderId) return researchBack(c, '', 'No owner on this request.');
-  try { await beginObserving(founderId); } catch (err) {
+  const venue = String((await c.req.parseBody()).venue ?? '');
+  if (!isVenue(venue)) return researchBack(c, '', 'Not a venue research reads.');
+  try { await beginObserving(founderId, venue); } catch (err) {
     if (err instanceof CapitalRefused) return researchBack(c, '', err.message);
     throw err;
   }
@@ -562,8 +596,10 @@ moneyRoutes.post('/foundry/money/research/stop', requireInstitutionOwner(), asyn
   const founderId = await founderOf(c);
   if (!founderId) return researchBack(c, '', 'No owner on this request.');
   const form = await c.req.parseBody();
+  const venue = String(form.venue ?? '');
+  if (!isVenue(venue)) return researchBack(c, '', 'Not a venue research reads.');
   try {
-    if (!(await stopObserving(founderId, String(form.because ?? '')))) return researchBack(c, '', 'Nothing was being observed.');
+    if (!(await stopObserving(founderId, String(form.because ?? ''), venue))) return researchBack(c, '', 'Nothing was being observed.');
   } catch (err) {
     if (err instanceof CapitalRefused) return researchBack(c, '', 'Say why, so the record can be read later.');
     throw err;

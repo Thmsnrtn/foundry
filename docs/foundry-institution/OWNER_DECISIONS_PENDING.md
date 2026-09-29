@@ -1826,3 +1826,42 @@ dissolving the old repos", and asked Foundry to take care of the Fly app if it h
 4. On GitHub, archive `kalshi-genius` and `Apex-Micro` (Settings, then Archive).
 5. Later, if the old database is not worth reading, `fly apps destroy kalshi-genius` and
    `fly apps destroy apex-trading` remove the volume and the stored secrets for good.
+
+## PENDING 29 — Reading your own Kalshi account ("recycle that Kalshi API into Foundry"): **OWNER** (2026-09-29)
+
+**Asked 29 September 2026:** "Recycle that Kalshi api into foundry please."
+
+**What Foundry can do with it, and what it will not.** A Kalshi key that can read the
+account answers the question PENDING 28 left open: did either old bot ever trade real
+money? It would do that from the account's own balance, positions, fills, settlements,
+deposits and withdrawals. It would also let the research compare its simulated fills
+with fills that really happened. It would **not** give Foundry a way to trade. Placing
+orders stays outside Foundry until the execution boundary in
+`capital/CAPITAL_RESEARCH.md` exists and you grant it in writing.
+
+**Not built, and why.**
+- Storing an exchange credential inside Foundry is a new kind of authority. This
+  session's safety review stopped the change that would have stored it, and it is
+  yours to allow, not Foundry's.
+- The old key has been exposed on a public, unauthenticated dashboard's host, so it
+  should not be reused anyway. PENDING 28 asks you to revoke it.
+
+**The recommended path, if you want it:**
+1. Revoke the old key (PENDING 28, act 1).
+2. Create a new key at kalshi.com with **read scope only**: no `write`, no
+   `write::trade`, no `write::transfer`.
+3. Foundry checks that scope when the key is connected, from Kalshi's own
+   `GET /api_keys`, and refuses the key if it carries any write scope. A write-capable
+   key is refused even if you meant it; your word is not the check.
+4. Foundry stores the key encrypted, as it stores the Etsy grant, and signs only `GET`s
+   to `/portfolio/balance`, `/portfolio/positions`, `/portfolio/fills`,
+   `/portfolio/settlements`, the deposit and withdrawal records, and their historical
+   forms.
+5. One reading on `/foundry/money/research`, headed "Your Kalshi account, as Kalshi
+   records it", answers whether the old bots traded, what they cost, and what was
+   settled. It is kept apart from Economics until you say how to account for it.
+   Deposits are capital flows, not income.
+
+**What would decide it:** your word, and allowing that one change in this environment's
+permissions. Polymarket stays public market data only here. Whether and how an account
+there should ever be read is a separate question, not asked here.

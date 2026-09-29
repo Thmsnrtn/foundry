@@ -51,3 +51,53 @@ export function takerFeeForLevels(rule: SeriesFeeRule, levels: Array<{ price: nu
   }
   return Math.round(total * 100) / 100;
 }
+
+// ─── Polymarket ──────────────────────────────────────────────────────────────
+//
+// Polymarket publishes its fee inside each market (`feeType: crypto_fees_v2`,
+// `feeSchedule: { exponent 1, rate 0.07, takerOnly true }`, read 29 September
+// 2026), and its documentation (docs.polymarket.com/trading/fees, read the
+// same day) states a taker pays
+//
+//     shares × rate × P × (1 − P),  rounded to 5 decimals, at least 0.00001 USDC
+//
+// and a maker nothing. The rate is taken from the market, never assumed; any
+// other schedule shape is unknown here and gives NULL. Rounding is upward at
+// the fifth decimal, per level, so the simulation never charges itself less
+// than the venue would.
+
+export const POLYMARKET_FEE_VERSION = 'polymarket_crypto_fees_v2_taker@docs_read_2026_09_29';
+
+const ceilTo5 = (x: number): number => Math.ceil(Math.round(x * 1e9) / 1e4) / 1e5;
+
+export function polymarketTakerFee(rule: SeriesFeeRule, shares: number, price: number): number | null {
+  if (rule.feeType !== 'crypto_fees_v2' || rule.feeMultiplier === null || !(rule.feeMultiplier >= 0 && rule.feeMultiplier < 1)) return null;
+  if (!Number.isInteger(shares) || shares < 0 || !(price > 0 && price < 1)) return null;
+  if (shares === 0) return 0;
+  const fee = ceilTo5(shares * rule.feeMultiplier * price * (1 - price));
+  return fee > 0 && fee < 0.00001 ? 0.00001 : fee;
+}
+
+/** The fee rule of each venue research reads, by name and version. */
+export interface VenueFees {
+  version: string;
+  perContract: (rule: SeriesFeeRule, price: number) => number | null;
+  forLevels: (rule: SeriesFeeRule, levels: Array<{ price: number; size: number }>) => number | null;
+}
+
+export const VENUE_FEES: Record<'kalshi' | 'polymarket', VenueFees> = {
+  kalshi: { version: FEE_VERSION, perContract: (r, p) => takerFee(r, 1, p), forLevels: takerFeeForLevels },
+  polymarket: {
+    version: POLYMARKET_FEE_VERSION,
+    perContract: (r, p) => polymarketTakerFee(r, 1, p),
+    forLevels: (r, levels) => {
+      let total = 0;
+      for (const l of levels) {
+        const f = polymarketTakerFee(r, l.size, l.price);
+        if (f === null) return null;
+        total += f;
+      }
+      return Math.round(total * 1e5) / 1e5;
+    },
+  },
+};

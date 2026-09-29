@@ -39,7 +39,9 @@ describe('in the source', () => {
     for (const [file, text] of source) {
       const c = code(text);
       for (const banned of [/\/portfolio/i, /KALSHI-ACCESS/i, /private[_-]?key/i, /createSign|\.sign\(/, /method:\s*['"](POST|PUT|PATCH|DELETE)/i,
-        /placeOrder|place_order|create_order|\/orders\b/i, /process\.env\.[A-Z_]*(KEY|SECRET|TOKEN)/]) {
+        /placeOrder|place_order|create_order|\/orders\b/i, /process\.env\.[A-Z_]*(KEY|SECRET|TOKEN)/,
+        // Polymarket: its order and trade paths, its L1/L2 auth headers, API-key derivation and wallet signing.
+        /\/order\b|\/trades\b|\/auth\//i, /POLY_(API_KEY|ADDRESS|SIGNATURE|PASSPHRASE|TIMESTAMP|NONCE)/i, /signTypedData|ethers|viem|wallet/i]) {
         expect(banned.test(c), `${file} matches ${String(banned)}`).toBe(false);
       }
     }
@@ -62,6 +64,16 @@ describe('at the network boundary', () => {
       'https://demo-api.kalshi.co/trade-api/v2/markets',
       'http://api.elections.kalshi.com/trade-api/v2/markets',
       'https://api.exchange.coinbase.com/orders',
+      'https://clob.polymarket.com/order',
+      'https://clob.polymarket.com/orders',
+      'https://clob.polymarket.com/data/orders',
+      'https://clob.polymarket.com/trades',
+      'https://clob.polymarket.com/auth/api-key',
+      'https://clob.polymarket.com/auth/derive-api-key',
+      'https://clob.polymarket.com/events',
+      'https://gamma-api.polymarket.com/book',
+      'https://data-api.polymarket.com/positions',
+      'http://clob.polymarket.com/book',
     ]) {
       expect(() => assertReadable(url), url).toThrow(MarketDataRefused);
     }
@@ -85,9 +97,10 @@ describe('in the constitution', () => {
     const caps = (await query(
       `SELECT c.capability_key, c.rung, a.needs_credential, a.basis FROM capabilities c
          LEFT JOIN capability_access a ON a.capability_key = c.capability_key
-        WHERE c.capability_key IN (SELECT capability_key FROM capability_providers WHERE provider IN ('kalshi','coinbase'))`)).rows;
+        WHERE c.capability_key IN (SELECT capability_key FROM capability_providers WHERE provider IN ('kalshi','coinbase','polymarket'))`)).rows;
     expect(caps).toEqual([{ capability_key: 'read_public_event_markets', rung: 'observe', needs_credential: 0, basis: 'public_observation' }]);
-    const tools = (await query(`SELECT tool FROM capability_providers WHERE provider IN ('kalshi','coinbase')`)).rows;
+    const tools = (await query(`SELECT tool FROM capability_providers WHERE provider IN ('kalshi','coinbase','polymarket')`)).rows;
+    expect(tools).toHaveLength(3);
     expect(tools.every((t) => (t as Record<string, unknown>).tool === null)).toBe(true);
     // Whole words of the key: `screen_trademark` is about names, not markets.
     const keys = (await query(`SELECT capability_key FROM capabilities`)).rows.map((r) => String((r as Record<string, unknown>).capability_key));
@@ -98,7 +111,7 @@ describe('in the constitution', () => {
     const tables = (await query(`SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'capital_%' ORDER BY name`)).rows
       .map((r) => String((r as Record<string, unknown>).name));
     expect(tables).toEqual(['capital_contract_rules', 'capital_evaluations', 'capital_forecasts', 'capital_market_snapshots',
-      'capital_paper_fills', 'capital_research_theses', 'capital_resolutions']);
+      'capital_paper_fills', 'capital_research_theses', 'capital_resolutions', 'capital_venues']);
     for (const t of tables) {
       const cols = (await query(`SELECT name FROM pragma_table_info(?)`, [t])).rows.map((r) => String((r as Record<string, unknown>).name));
       for (const c of cols) expect(/order|balance|credential|api_key|mandate|account/i.test(c), `${t}.${c}`).toBe(false);

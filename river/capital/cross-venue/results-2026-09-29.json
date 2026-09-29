@@ -1,0 +1,770 @@
+[
+ {
+  "start": 1790647200,
+  "kalshi_ticker": "KXBTC15M-26SEP282215-15",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83035.85,
+  "kalshi_exp": "83016.08"
+ },
+ {
+  "start": 1790646300,
+  "kalshi_ticker": "KXBTC15M-26SEP282200-00",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 82913.76,
+  "kalshi_exp": "83035.85"
+ },
+ {
+  "start": 1790645400,
+  "kalshi_ticker": "KXBTC15M-26SEP282145-45",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 82812.75,
+  "kalshi_exp": "82913.76"
+ },
+ {
+  "start": 1790644500,
+  "kalshi_ticker": "KXBTC15M-26SEP282130-30",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 82991.63,
+  "kalshi_exp": "82812.75"
+ },
+ {
+  "start": 1790643600,
+  "kalshi_ticker": "KXBTC15M-26SEP282115-15",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83182.19,
+  "kalshi_exp": "82991.63"
+ },
+ {
+  "start": 1790642700,
+  "kalshi_ticker": "KXBTC15M-26SEP282100-00",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83495.28,
+  "kalshi_exp": "83182.19"
+ },
+ {
+  "start": 1790641800,
+  "kalshi_ticker": "KXBTC15M-26SEP282045-45",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83504.45,
+  "kalshi_exp": "83495.28"
+ },
+ {
+  "start": 1790640900,
+  "kalshi_ticker": "KXBTC15M-26SEP282030-30",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83495.58,
+  "kalshi_exp": "83504.45"
+ },
+ {
+  "start": 1790640000,
+  "kalshi_ticker": "KXBTC15M-26SEP282015-15",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83484.34,
+  "kalshi_exp": "83495.58"
+ },
+ {
+  "start": 1790639100,
+  "kalshi_ticker": "KXBTC15M-26SEP282000-00",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83559.3,
+  "kalshi_exp": "83484.34"
+ },
+ {
+  "start": 1790638200,
+  "kalshi_ticker": "KXBTC15M-26SEP281945-45",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83546.39,
+  "kalshi_exp": "83559.30"
+ },
+ {
+  "start": 1790637300,
+  "kalshi_ticker": "KXBTC15M-26SEP281930-30",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83414.36,
+  "kalshi_exp": "83546.39"
+ },
+ {
+  "start": 1790636400,
+  "kalshi_ticker": "KXBTC15M-26SEP281915-15",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83503.58,
+  "kalshi_exp": "83414.36"
+ },
+ {
+  "start": 1790635500,
+  "kalshi_ticker": "KXBTC15M-26SEP281900-00",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83444.8,
+  "kalshi_exp": "83503.58"
+ },
+ {
+  "start": 1790634600,
+  "kalshi_ticker": "KXBTC15M-26SEP281845-45",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83198.55,
+  "kalshi_exp": "83444.80"
+ },
+ {
+  "start": 1790633700,
+  "kalshi_ticker": "KXBTC15M-26SEP281830-30",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83173.05,
+  "kalshi_exp": "83198.55"
+ },
+ {
+  "start": 1790632800,
+  "kalshi_ticker": "KXBTC15M-26SEP281815-15",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83189.31,
+  "kalshi_exp": "83173.05"
+ },
+ {
+  "start": 1790631900,
+  "kalshi_ticker": "KXBTC15M-26SEP281800-00",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83381.03,
+  "kalshi_exp": "83189.31"
+ },
+ {
+  "start": 1790631000,
+  "kalshi_ticker": "KXBTC15M-26SEP281745-45",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83415.87,
+  "kalshi_exp": "83381.03"
+ },
+ {
+  "start": 1790630100,
+  "kalshi_ticker": "KXBTC15M-26SEP281730-30",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83542.23,
+  "kalshi_exp": "83415.87"
+ },
+ {
+  "start": 1790629200,
+  "kalshi_ticker": "KXBTC15M-26SEP281715-15",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83503.87,
+  "kalshi_exp": "83542.23"
+ },
+ {
+  "start": 1790628300,
+  "kalshi_ticker": "KXBTC15M-26SEP281700-00",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83459.79,
+  "kalshi_exp": "83503.87"
+ },
+ {
+  "start": 1790627400,
+  "kalshi_ticker": "KXBTC15M-26SEP281645-45",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83500.84,
+  "kalshi_exp": "83459.79"
+ },
+ {
+  "start": 1790626500,
+  "kalshi_ticker": "KXBTC15M-26SEP281630-30",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83539.92,
+  "kalshi_exp": "83500.84"
+ },
+ {
+  "start": 1790625600,
+  "kalshi_ticker": "KXBTC15M-26SEP281615-15",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83377.12,
+  "kalshi_exp": "83539.92"
+ },
+ {
+  "start": 1790624700,
+  "kalshi_ticker": "KXBTC15M-26SEP281600-00",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83274.99,
+  "kalshi_exp": "83377.12"
+ },
+ {
+  "start": 1790623800,
+  "kalshi_ticker": "KXBTC15M-26SEP281545-45",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83619.94,
+  "kalshi_exp": "83274.99"
+ },
+ {
+  "start": 1790622900,
+  "kalshi_ticker": "KXBTC15M-26SEP281530-30",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83703.59,
+  "kalshi_exp": "83619.94"
+ },
+ {
+  "start": 1790622000,
+  "kalshi_ticker": "KXBTC15M-26SEP281515-15",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 84022.16,
+  "kalshi_exp": "83703.59"
+ },
+ {
+  "start": 1790621100,
+  "kalshi_ticker": "KXBTC15M-26SEP281500-00",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83836,
+  "kalshi_exp": "84022.16"
+ },
+ {
+  "start": 1790620200,
+  "kalshi_ticker": "KXBTC15M-26SEP281445-45",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83920.15,
+  "kalshi_exp": "83836.00"
+ },
+ {
+  "start": 1790619300,
+  "kalshi_ticker": "KXBTC15M-26SEP281430-30",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83945.17,
+  "kalshi_exp": "83920.15"
+ },
+ {
+  "start": 1790618400,
+  "kalshi_ticker": "KXBTC15M-26SEP281415-15",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83860.19,
+  "kalshi_exp": "83945.17"
+ },
+ {
+  "start": 1790617500,
+  "kalshi_ticker": "KXBTC15M-26SEP281400-00",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83981.71,
+  "kalshi_exp": "83860.19"
+ },
+ {
+  "start": 1790616600,
+  "kalshi_ticker": "KXBTC15M-26SEP281345-45",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83890.52,
+  "kalshi_exp": "83981.71"
+ },
+ {
+  "start": 1790615700,
+  "kalshi_ticker": "KXBTC15M-26SEP281330-30",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 84162.53,
+  "kalshi_exp": "83890.52"
+ },
+ {
+  "start": 1790614800,
+  "kalshi_ticker": "KXBTC15M-26SEP281315-15",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83682.46,
+  "kalshi_exp": "84162.53"
+ },
+ {
+  "start": 1790613900,
+  "kalshi_ticker": "KXBTC15M-26SEP281300-00",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83710.86,
+  "kalshi_exp": "83682.46"
+ },
+ {
+  "start": 1790613000,
+  "kalshi_ticker": "KXBTC15M-26SEP281245-45",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 84035.19,
+  "kalshi_exp": "83710.86"
+ },
+ {
+  "start": 1790612100,
+  "kalshi_ticker": "KXBTC15M-26SEP281230-30",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83386.48,
+  "kalshi_exp": "84035.19"
+ },
+ {
+  "start": 1790611200,
+  "kalshi_ticker": "KXBTC15M-26SEP281215-15",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83366.8,
+  "kalshi_exp": "83386.48"
+ },
+ {
+  "start": 1790610300,
+  "kalshi_ticker": "KXBTC15M-26SEP281200-00",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83174.2,
+  "kalshi_exp": "83366.80"
+ },
+ {
+  "start": 1790609400,
+  "kalshi_ticker": "KXBTC15M-26SEP281145-45",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83072.33,
+  "kalshi_exp": "83174.20"
+ },
+ {
+  "start": 1790608500,
+  "kalshi_ticker": "KXBTC15M-26SEP281130-30",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 82960.58,
+  "kalshi_exp": "83072.33"
+ },
+ {
+  "start": 1790607600,
+  "kalshi_ticker": "KXBTC15M-26SEP281115-15",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 82953.65,
+  "kalshi_exp": "82960.58"
+ },
+ {
+  "start": 1790606700,
+  "kalshi_ticker": "KXBTC15M-26SEP281100-00",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 82892.45,
+  "kalshi_exp": "82953.65"
+ },
+ {
+  "start": 1790605800,
+  "kalshi_ticker": "KXBTC15M-26SEP281045-45",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83179.22,
+  "kalshi_exp": "82892.45"
+ },
+ {
+  "start": 1790604900,
+  "kalshi_ticker": "KXBTC15M-26SEP281030-30",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83398.37,
+  "kalshi_exp": "83179.22"
+ },
+ {
+  "start": 1790604000,
+  "kalshi_ticker": "KXBTC15M-26SEP281015-15",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83635.43,
+  "kalshi_exp": "83398.37"
+ },
+ {
+  "start": 1790603100,
+  "kalshi_ticker": "KXBTC15M-26SEP281000-00",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83711.14,
+  "kalshi_exp": "83635.43"
+ },
+ {
+  "start": 1790602200,
+  "kalshi_ticker": "KXBTC15M-26SEP280945-45",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83528.72,
+  "kalshi_exp": "83711.14"
+ },
+ {
+  "start": 1790601300,
+  "kalshi_ticker": "KXBTC15M-26SEP280930-30",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83383.49,
+  "kalshi_exp": "83528.72"
+ },
+ {
+  "start": 1790600400,
+  "kalshi_ticker": "KXBTC15M-26SEP280915-15",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83547.31,
+  "kalshi_exp": "83383.49"
+ },
+ {
+  "start": 1790599500,
+  "kalshi_ticker": "KXBTC15M-26SEP280900-00",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83290.13,
+  "kalshi_exp": "83547.31"
+ },
+ {
+  "start": 1790598600,
+  "kalshi_ticker": "KXBTC15M-26SEP280845-45",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83355.1,
+  "kalshi_exp": "83290.13"
+ },
+ {
+  "start": 1790597700,
+  "kalshi_ticker": "KXBTC15M-26SEP280830-30",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83327.46,
+  "kalshi_exp": "83355.10"
+ },
+ {
+  "start": 1790596800,
+  "kalshi_ticker": "KXBTC15M-26SEP280815-15",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83058.66,
+  "kalshi_exp": "83327.46"
+ },
+ {
+  "start": 1790595900,
+  "kalshi_ticker": "KXBTC15M-26SEP280800-00",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83051.43,
+  "kalshi_exp": "83058.66"
+ },
+ {
+  "start": 1790595000,
+  "kalshi_ticker": "KXBTC15M-26SEP280745-45",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 82989.69,
+  "kalshi_exp": "83051.43"
+ },
+ {
+  "start": 1790594100,
+  "kalshi_ticker": "KXBTC15M-26SEP280730-30",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 82956.62,
+  "kalshi_exp": "82989.69"
+ },
+ {
+  "start": 1790593200,
+  "kalshi_ticker": "KXBTC15M-26SEP280715-15",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 82924.72,
+  "kalshi_exp": "82956.62"
+ },
+ {
+  "start": 1790592300,
+  "kalshi_ticker": "KXBTC15M-26SEP280700-00",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 82909.09,
+  "kalshi_exp": "82924.72"
+ },
+ {
+  "start": 1790591400,
+  "kalshi_ticker": "KXBTC15M-26SEP280645-45",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 82772.22,
+  "kalshi_exp": "82909.09"
+ },
+ {
+  "start": 1790590500,
+  "kalshi_ticker": "KXBTC15M-26SEP280630-30",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 82682.18,
+  "kalshi_exp": "82772.22"
+ },
+ {
+  "start": 1790589600,
+  "kalshi_ticker": "KXBTC15M-26SEP280615-15",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 82615.99,
+  "kalshi_exp": "82682.18"
+ },
+ {
+  "start": 1790588700,
+  "kalshi_ticker": "KXBTC15M-26SEP280600-00",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 82602.13,
+  "kalshi_exp": "82615.99"
+ },
+ {
+  "start": 1790587800,
+  "kalshi_ticker": "KXBTC15M-26SEP280545-45",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 82769.93,
+  "kalshi_exp": "82602.13"
+ },
+ {
+  "start": 1790586900,
+  "kalshi_ticker": "KXBTC15M-26SEP280530-30",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 82826.8,
+  "kalshi_exp": "82769.93"
+ },
+ {
+  "start": 1790586000,
+  "kalshi_ticker": "KXBTC15M-26SEP280515-15",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 82926.45,
+  "kalshi_exp": "82826.80"
+ },
+ {
+  "start": 1790585100,
+  "kalshi_ticker": "KXBTC15M-26SEP280500-00",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 82861.02,
+  "kalshi_exp": "82926.45"
+ },
+ {
+  "start": 1790584200,
+  "kalshi_ticker": "KXBTC15M-26SEP280445-45",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 82795.57,
+  "kalshi_exp": "82861.02"
+ },
+ {
+  "start": 1790583300,
+  "kalshi_ticker": "KXBTC15M-26SEP280430-30",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 82977.62,
+  "kalshi_exp": "82795.57"
+ },
+ {
+  "start": 1790582400,
+  "kalshi_ticker": "KXBTC15M-26SEP280415-15",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 82951.18,
+  "kalshi_exp": "82977.62"
+ },
+ {
+  "start": 1790581500,
+  "kalshi_ticker": "KXBTC15M-26SEP280400-00",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 82894.82,
+  "kalshi_exp": "82951.18"
+ },
+ {
+  "start": 1790580600,
+  "kalshi_ticker": "KXBTC15M-26SEP280345-45",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 82925.22,
+  "kalshi_exp": "82894.82"
+ },
+ {
+  "start": 1790579700,
+  "kalshi_ticker": "KXBTC15M-26SEP280330-30",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83049.77,
+  "kalshi_exp": "82925.22"
+ },
+ {
+  "start": 1790578800,
+  "kalshi_ticker": "KXBTC15M-26SEP280315-15",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83131.72,
+  "kalshi_exp": "83049.77"
+ },
+ {
+  "start": 1790577900,
+  "kalshi_ticker": "KXBTC15M-26SEP280300-00",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83181.66,
+  "kalshi_exp": "83131.72"
+ },
+ {
+  "start": 1790577000,
+  "kalshi_ticker": "KXBTC15M-26SEP280245-45",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83046.46,
+  "kalshi_exp": "83181.66"
+ },
+ {
+  "start": 1790576100,
+  "kalshi_ticker": "KXBTC15M-26SEP280230-30",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83239.25,
+  "kalshi_exp": "83046.46"
+ },
+ {
+  "start": 1790575200,
+  "kalshi_ticker": "KXBTC15M-26SEP280215-15",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83163.59,
+  "kalshi_exp": "83239.25"
+ },
+ {
+  "start": 1790574300,
+  "kalshi_ticker": "KXBTC15M-26SEP280200-00",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83099.01,
+  "kalshi_exp": "83163.59"
+ },
+ {
+  "start": 1790573400,
+  "kalshi_ticker": "KXBTC15M-26SEP280145-45",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83071.6,
+  "kalshi_exp": "83099.01"
+ },
+ {
+  "start": 1790572500,
+  "kalshi_ticker": "KXBTC15M-26SEP280130-30",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83282.51,
+  "kalshi_exp": "83071.60"
+ },
+ {
+  "start": 1790571600,
+  "kalshi_ticker": "KXBTC15M-26SEP280115-15",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83484.63,
+  "kalshi_exp": "83282.51"
+ },
+ {
+  "start": 1790570700,
+  "kalshi_ticker": "KXBTC15M-26SEP280100-00",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83481.1,
+  "kalshi_exp": "83484.63"
+ },
+ {
+  "start": 1790569800,
+  "kalshi_ticker": "KXBTC15M-26SEP280045-45",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83469.47,
+  "kalshi_exp": "83481.10"
+ },
+ {
+  "start": 1790568900,
+  "kalshi_ticker": "KXBTC15M-26SEP280030-30",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83410.26,
+  "kalshi_exp": "83469.47"
+ },
+ {
+  "start": 1790568000,
+  "kalshi_ticker": "KXBTC15M-26SEP280015-15",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83323.89,
+  "kalshi_exp": "83410.26"
+ },
+ {
+  "start": 1790567100,
+  "kalshi_ticker": "KXBTC15M-26SEP280000-00",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83457.59,
+  "kalshi_exp": "83323.89"
+ },
+ {
+  "start": 1790566200,
+  "kalshi_ticker": "KXBTC15M-26SEP272345-45",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83317.98,
+  "kalshi_exp": "83457.59"
+ },
+ {
+  "start": 1790565300,
+  "kalshi_ticker": "KXBTC15M-26SEP272330-30",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83429.03,
+  "kalshi_exp": "83317.98"
+ },
+ {
+  "start": 1790564400,
+  "kalshi_ticker": "KXBTC15M-26SEP272315-15",
+  "polymarket": "yes",
+  "kalshi": "yes",
+  "kalshi_floor": 83394.03,
+  "kalshi_exp": "83429.03"
+ },
+ {
+  "start": 1790563500,
+  "kalshi_ticker": "KXBTC15M-26SEP272300-00",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83494.5,
+  "kalshi_exp": "83394.03"
+ },
+ {
+  "start": 1790562600,
+  "kalshi_ticker": "KXBTC15M-26SEP272245-45",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83652.19,
+  "kalshi_exp": "83494.50"
+ },
+ {
+  "start": 1790561700,
+  "kalshi_ticker": "KXBTC15M-26SEP272230-30",
+  "polymarket": "no",
+  "kalshi": "no",
+  "kalshi_floor": 83732.16,
+  "kalshi_exp": "83652.19"
+ }
+]

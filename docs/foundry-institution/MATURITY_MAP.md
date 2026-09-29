@@ -2449,3 +2449,44 @@ The owner asked for his two earlier trading projects to become one of Foundry's 
   unknown.
 - Whether the old `kalshi-genius` Fly app is running is unknown here, and it is urgent
   (PENDING 28).
+  *(Answered 29 September: it had one machine, which a GET started LIVE; it was destroyed. See C6.)*
+
+### Trading research across venues (capital C7)
+
+The owner asked for Foundry to "work across all trading platforms simultaneously".
+
+**What is true now (migration 365, `src/services/capital/`).**
+- Venues are a vocabulary (`capital_venues`: Kalshi, Polymarket), and each is one reader
+  in `VENUE_READERS`. Everything after the read is shared code: the sealed forecasts,
+  simulated fills, official results and evaluation.
+- The rebuild of the seven tables was proved on a populated 364 database. Every row
+  survived, `foreign_key_check` is clean, and sealed stays sealed.
+- Polymarket is read from its public event list and book only. Its order, trade, auth
+  and data-API paths are refused before the network and banned from the source.
+- Its fee is the venue's own, at the rate each market states.
+- Up is YES only when the outcomes are exactly `["Up","Down"]`.
+- A result counts only when the oracle has resolved it, at exactly 1 and 0.
+- No reference level is invented, so the proxy model says why it does not run there.
+- One run observes every venue with a question open. A venue that asks to wait
+  concludes nothing, and the others carry on.
+- A forecast cannot be filed under another venue's question.
+- The page has a section per venue and one reading of both side by side.
+
+**Maturity: `tested`, plus two real-world observations.**
+- Tests: `one-question-many-venues` (15). The existing capital suites were updated:
+  62 tests in all.
+- **Real world, 96 windows, 28–29 September.** The two venues' official results agreed
+  96 times out of 96 (`river/capital/cross-venue/`). They are one exposure, not two.
+- **Real world, 29 September 02:51 UTC, throwaway database.** Both venues were
+  observed in one pass on the window closing at 03:00Z. The prices were 1¢ apart
+  (0.535 against 0.525). The Kalshi model skipped at a net edge of +0.1¢. The
+  Polymarket model did not run, and recorded why.
+- **Commercial maturity: CE0.**
+
+**Proof debt:**
+- The cross-venue reading has one live window, and no resolved pair in production.
+- Polymarket's fee rounding direction is inferred ("rounded to 5 decimals"); the code
+  rounds up, which never undercharges the simulation.
+- Polymarket's reference level is unobservable here.
+- Whether the owner may trade on Polymarket is not established.
+- The owner has not begun either question in production.

@@ -17,7 +17,7 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import {
   CapitalRefused, activeMarket, beginObserving, capitalResearchReading, evaluateThesis, importResolutions,
-  observeOnce, stopObserving,
+  observeOnce, stopObserving, type ObservationPass,
 } from '../../src/services/capital/research.js';
 import { evaluate, evaluationDigest, EVALUATION_RULE, type ResolvedForecast } from '../../src/services/capital/evaluation.js';
 import { MarketAskedToWait, type Fetcher, parseMarket } from '../../src/services/capital/public-markets.js';
@@ -58,6 +58,14 @@ const fetcherFor = (w: World): Fetcher => async (url, init) => {
   return new Response('unexpected', { status: 500 });
 };
 
+/** One run, and the Kalshi venue's part of it. */
+const kalshiPass = async (f: Fetcher): Promise<ObservationPass> => {
+  const run = await observeOnce({ fetcher: f });
+  const p = run.passes.find((x) => x.venue === 'kalshi');
+  if (!p) throw new Error(`no Kalshi pass: ${run.because}`);
+  return p;
+};
+
 beforeAll(async () => {
   await runMigrations();
   for (const id of [OWNER, OTHER]) {
@@ -83,7 +91,7 @@ describe('one pass of observation', () => {
 
   it('archives the rule, snapshots the open window, and seals both forecasts before it closes', async () => {
     w.markets = [liveMarket(TICKER, -5 * 60_000, 10 * 60_000), liveMarket('KXBTC15M-TEST-NEXT', 10 * 60_000, 25 * 60_000)];
-    const r = await observeOnce({ fetcher: fetcherFor(w) });
+    const r = await kalshiPass(fetcherFor(w));
     expect(r.observed).toBe(TICKER);
     expect(r.forecasts).toBe(2);
     const rule = (await query(`SELECT settlement_source, fee_type FROM capital_contract_rules`)).rows[0] as Record<string, unknown>;
@@ -99,7 +107,7 @@ describe('one pass of observation', () => {
   });
 
   it('never forecasts the same window twice', async () => {
-    const r = await observeOnce({ fetcher: fetcherFor(w) });
+    const r = await kalshiPass(fetcherFor(w));
     expect(r.forecasts).toBe(0);
     expect(Number(((await query(`SELECT COUNT(*) AS n FROM capital_forecasts`)).rows[0] as Record<string, unknown>).n)).toBe(2);
   });
@@ -144,13 +152,17 @@ describe('one pass of observation', () => {
 
   it('when the venue asks Foundry to wait, it writes nothing and concludes nothing', async () => {
     const before = Number(((await query(`SELECT COUNT(*) AS n FROM capital_market_snapshots`)).rows[0] as Record<string, unknown>).n);
-    await expect(observeOnce({ fetcher: fetcherFor({ ...w, wait: true, calls: [] }) })).rejects.toThrow(MarketAskedToWait);
+    // The pass says so, in its own words, and the run carries on for any other venue.
+    const r = await kalshiPass(fetcherFor({ ...w, wait: true, calls: [] }));
+    expect(r.observed).toBeNull();
+    expect(r.because).toMatch(/asked to wait 30s; nothing concluded/);
+    expect(new MarketAskedToWait(30).waitSeconds).toBe(30);
     expect(Number(((await query(`SELECT COUNT(*) AS n FROM capital_market_snapshots`)).rows[0] as Record<string, unknown>).n)).toBe(before);
   });
 
   it('a proxy that cannot be read makes the model skip, with its reason, and the baseline still stands', async () => {
     const w2: World = { markets: [liveMarket('KXBTC15M-TEST-C', -5 * 60_000, 10 * 60_000)], settled: {}, historical: {}, proxyDown: true, calls: [] };
-    const r = await observeOnce({ fetcher: fetcherFor(w2) });
+    const r = await kalshiPass(fetcherFor(w2));
     expect(r.forecasts).toBe(2);
     const f = (await query(`SELECT model, p_yes, decision, reason FROM capital_forecasts WHERE market_ticker = 'KXBTC15M-TEST-C' ORDER BY model`)).rows as Array<Record<string, unknown>>;
     expect(f[0]).toMatchObject({ model: 'market_implied_v1', p_yes: 0.515 });
@@ -160,14 +172,14 @@ describe('one pass of observation', () => {
 
   it('too near the close, it does not forecast at all', async () => {
     const w3: World = { markets: [liveMarket('KXBTC15M-TEST-D', -13 * 60_000, 2 * 60_000)], settled: {}, historical: {}, calls: [] };
-    const r = await observeOnce({ fetcher: fetcherFor(w3) });
+    const r = await kalshiPass(fetcherFor(w3));
     expect(r.observed).toBeNull();
     expect(r.because).toMatch(/fewer than 3/);
   });
 
   it('forecasts every window at the same point: not before the book has formed', async () => {
     const w5: World = { markets: [liveMarket('KXBTC15M-TEST-EARLY', -60_000, 14 * 60_000)], settled: {}, historical: {}, calls: [] };
-    const r = await observeOnce({ fetcher: fetcherFor(w5) });
+    const r = await kalshiPass(fetcherFor(w5));
     expect(r.observed).toBeNull();
     expect(r.because).toMatch(/fewer than 4/);
   });

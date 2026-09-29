@@ -48,18 +48,21 @@ describe('the reading', () => {
     const stranger = as('someone@example.com');
     const { moneyRoutes } = await import('../../src/routes/dashboard/money-place.js');
     stranger.route('/', moneyRoutes);
-    expect((await post(stranger, '/foundry/money/research/begin')).status).toBe(403);
+    expect((await post(stranger, '/foundry/money/research/begin', { venue: 'kalshi' })).status).toBe(403);
   });
 
   it('the owner begins it, and the page shows the question and how it would be proved wrong', async () => {
-    const r = await post(app, '/foundry/money/research/begin');
+    expect((await post(app, '/foundry/money/research/begin', { venue: 'nyse' })).headers.get('location')).toMatch(/error=Not%20a%20venue/);
+    expect((await post(app, '/foundry/money/research/begin')).headers.get('location')).toMatch(/error=Not%20a%20venue/);
+    const r = await post(app, '/foundry/money/research/begin', { venue: 'kalshi' });
     expect(r.status).toBe(302);
     expect(r.headers.get('location')).toBe('/foundry/money/research?done=begun');
     const t = await text(app, '/foundry/money/research?done=begun');
     expect(t).toMatch(/Observing Kalshi's 15-minute Bitcoin contracts/);
     expect(t).toMatch(/What would prove it wrong/);
-    expect(t).toMatch(/Stop observing/);
-    expect((await post(app, '/foundry/money/research/begin')).headers.get('location')).toMatch(/error=.*already/);
+    expect(t).toMatch(/Stop observing Kalshi/);
+    expect(t).toMatch(/Begin observing Polymarket/);
+    expect((await post(app, '/foundry/money/research/begin', { venue: 'kalshi' })).headers.get('location')).toMatch(/error=.*already/);
   });
 
   it('shows the evidence\'s verdict in words, with the simulation called a simulation', async () => {
@@ -89,11 +92,12 @@ describe('the reading', () => {
   });
 
   it('a stop needs a reason, and then it stops', async () => {
-    expect((await post(app, '/foundry/money/research/stop', { because: '' })).headers.get('location')).toMatch(/error=/);
-    expect((await post(app, '/foundry/money/research/stop', { because: 'the products come first' })).headers.get('location'))
+    expect((await post(app, '/foundry/money/research/stop', { venue: 'kalshi', because: '' })).headers.get('location')).toMatch(/error=/);
+    expect((await post(app, '/foundry/money/research/stop', { venue: 'polymarket', because: 'x' })).headers.get('location')).toMatch(/Nothing%20was%20being%20observed/);
+    expect((await post(app, '/foundry/money/research/stop', { venue: 'kalshi', because: 'the products come first' })).headers.get('location'))
       .toBe('/foundry/money/research?done=stopped');
     const t = await text(app, '/foundry/money/research');
-    expect(t).toMatch(/Stopped/);
+    expect(t).toMatch(/Kalshi: stopped/);
     expect(t).toMatch(/the products come first/);
   });
 

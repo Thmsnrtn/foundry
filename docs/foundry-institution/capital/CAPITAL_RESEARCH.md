@@ -7,7 +7,9 @@ is `LEGACY_TRADING_AUDIT.md`.*
 
 ## What it is
 
-**A research laboratory for one question about one market, with no way to trade.**
+**A research laboratory for one question, asked of each venue at once, with no way to trade.**
+Kalshi and Polymarket today (migration 365); another venue is one reader and one row
+in `capital_venues`, never a rebuild.
 
 Each pass reads the rules of Kalshi's 15-minute Bitcoin contracts, its book and a public
 spot price. Before each window closes, it seals two forecasts:
@@ -23,6 +25,54 @@ Foundry's scope and stays there." Trading **research** is now inside, at the run
 `observe`, because the owner asked. Trading **execution** stays outside until the gates
 below are met and he grants it in writing. The Constitution's refusal to allocate
 capital stands: Foundry reports, and he decides.
+
+## Many venues (29 September 2026, migration 365)
+
+The owner asked for the research to "work across all trading platforms simultaneously
+Kalshi, polymarket, etc". What that means here:
+
+| | Kalshi | Polymarket |
+|---|---|---|
+| The market | `KXBTC15M`, one per 15-minute window | `btc-updown-15m-{start}`, one per 15-minute window, closing at the same instants |
+| Settles on | CF Benchmarks BRTI 60-second average, against the previous window's average (published as the reference level) | Chainlink BTC/USD TWAP, against "the price at the beginning" of the window (**not published**) |
+| Read from | `api.elections.kalshi.com` series, markets, book, historical | `gamma-api.polymarket.com/events?slug=`, `clob.polymarket.com/book` |
+| Book | bids only; asks derived | Up token's bids and asks; an Up ask at a is stored as a Down bid at 1 − a, so one book shape serves both |
+| Result | the market record's `result` | only when `closed` and `umaResolutionStatus = resolved`, with prices exactly 1 and 0 |
+| Taker fee | `ceil¢(0.07 × m × C × P(1−P))`, the handoff's reading (`kalshi_quadratic_taker_2026_07_07@handoff_reading`) | `C × rate × P(1−P)`, rate read from each market's `feeSchedule`, rounded up at 5 decimals (`polymarket_crypto_fees_v2_taker@docs_read_2026_09_29`) |
+| Proxy model | runs, on the official reference level | **does not run**: there is no published reference level, and estimating one is the legacy bot's defect 6. It says so in its forecast's reason |
+| Permission | a CFTC-regulated US exchange | may restrict some countries; reading public data needs no permission, trading would |
+
+Each venue is one question the owner begins or stops. A forecast about one venue's
+market cannot be filed under another venue's question (trigger `another_venue`). One
+venue asking Foundry to wait does not blind the other. The proxy spot price is read
+once per run and shared.
+
+**The two venues side by side.** Where both were observed for the same window, the page
+reads:
+- how far apart their prices were at the same pass;
+- whether their official results agreed;
+- each venue's price scored against its own result;
+- how often buying YES on one venue and NO on the other cost less than a dollar after
+  both fees, at the displayed top of book, and what that would have paid given the
+  real results. A disagreement between the results is where such a pair loses both
+  legs, and it is counted.
+
+It is a simulation of one contract, and never an instruction.
+
+**What was found before it was built (29 September, ~02:35 UTC).** Over the 96
+fifteen-minute windows from 28 September 02:15 to 29 September 02:15 UTC, the two
+venues' official results **agreed 96 times out of 96**
+(`river/capital/cross-venue/`). Two different sources, two different reference rules,
+one answer: for this question they are one exposure, not two. Holding the same side on
+both is not diversification. A price gap between them is the interesting thing, and
+one day in one regime says nothing about how often the results part.
+
+**The first live reading (29 September 02:51 UTC, throwaway database).** The window
+closing at 03:00Z was observed on both venues in the same pass:
+- Kalshi: YES 0.53/0.54, reference level 82,975.22. The model gave P(YES) 0.5089 and
+  skipped, with a best net edge of 0.1¢.
+- Polymarket: YES 0.52/0.53. The model did not run, with its reason recorded.
+- The prices were 1¢ apart.
 
 ## Four records, never one
 
@@ -90,6 +140,11 @@ review of the evidence, and nothing more.
   `quadratic` with multiplier 1.
 - **Regimes.** 200 markets is about two days, one regime. A result that survives is
   still one sample.
+- **Polymarket's reference level.** Chainlink's window-opening price is not published by
+  the venue, so no model is measured against it there, and the cross-venue reading
+  compares prices and results only.
+- **Whether the owner may trade on Polymarket at all.** Not established. Reading is
+  public; trading is a separate question of permission, and it is his.
 
 ## Before any order could exist (the execution boundary, not built)
 
