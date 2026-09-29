@@ -108,12 +108,14 @@ async function postWebhookHandler(req: GatewayRequest): Promise<{ status: number
   // did not, and the only reason that was not exploitable is that nothing can
   // currently register a target: `addWebhookConfig` has no caller. One wiring
   // away is not a safety property.
-  const { assertUrlSafe } = await import('../outbound/ssrf.js');
+  const { assertUrlSafe, safeFetch, readTextCapped } = await import('../outbound/ssrf.js');
   await assertUrlSafe(config.url);
 
+  // safeFetch screens every redirect hop again; a raw fetch followed them
+  // unscreened (found 29 September 2026).
   const response = await withRetry(
     () =>
-      fetch(config.url, {
+      safeFetch(config.url, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -127,7 +129,7 @@ async function postWebhookHandler(req: GatewayRequest): Promise<{ status: number
   );
 
   if (!response.ok) {
-    const text = await response.text().catch(() => '');
+    const { text } = await readTextCapped(response, 10_000).catch(() => ({ text: '' }));
     throw new Error(`webhook ${config.target} ${response.status}: ${text.slice(0, 200)}`);
   }
 

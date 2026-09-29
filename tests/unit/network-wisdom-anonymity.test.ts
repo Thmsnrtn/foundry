@@ -278,3 +278,20 @@ describe('an old claim is not a current one', () => {
       'a row existing is not a claim being current').toHaveLength(0);
   });
 });
+
+describe('a contributor is never hashed with a public key', () => {
+  it('refuses without the application key, rather than falling back to a literal in the source', async () => {
+    const { contributorHash } = await import('../../src/services/wisdom/network.js');
+    const saved = process.env.ENCRYPTION_KEY;
+    try {
+      delete process.env.ENCRYPTION_KEY;
+      expect(() => contributorHash('p1')).toThrow(/ENCRYPTION_KEY/);
+      process.env.ENCRYPTION_KEY = 'a'.repeat(64);
+      const a = contributorHash('p1');
+      process.env.ENCRYPTION_KEY = 'b'.repeat(64);
+      expect(contributorHash('p1')).not.toBe(a);
+    } finally {
+      if (saved === undefined) delete process.env.ENCRYPTION_KEY; else process.env.ENCRYPTION_KEY = saved;
+    }
+  });
+});

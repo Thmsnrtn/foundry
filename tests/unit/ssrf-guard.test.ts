@@ -31,6 +31,43 @@ describe('assertUrlSafe blocks the dangerous surface', () => {
     }
   });
 
+  it('refuses the ranges a hand-written list forgets, however the address is spelled', async () => {
+    // FOUND BY THE EXECUTIVE REVIEW OF 29 SEPTEMBER 2026. The URL parser writes
+    // `[::ffff:169.254.169.254]` as `[::ffff:a9fe:a9fe]`, and the guard then
+    // tested `a9fe:a9fe` as if it were dotted IPv4 — so the metadata endpoint,
+    // spelled as a mapped IPv6 literal, passed. Every spelling of an embedded
+    // IPv4 address is now unpacked and screened as the IPv4 address it is.
+    for (const u of [
+      'https://[::ffff:169.254.169.254]/',     // v4-mapped, parser-normalised to hex
+      'https://[::ffff:127.0.0.1]/',
+      'https://[0:0:0:0:0:ffff:a00:5]/',       // v4-mapped, spelled out: 10.0.0.5
+      'https://[::127.0.0.1]/',                // v4-compatible (deprecated, still routable on some stacks)
+      'https://[64:ff9b::a9fe:a9fe]/',         // NAT64 of the metadata address
+      'https://[64:ff9b:1::1]/',               // NAT64 local-use
+      'https://[2002:a9fe:a9fe::1]/',          // 6to4 wrapping 169.254.169.254
+      'https://[fec0::1]/',                    // site-local
+      'https://[ff02::1]/',                    // multicast
+      'https://[2001:db8::1]/',                // documentation
+      'https://198.18.0.1/', 'https://198.19.255.254/',  // benchmarking 198.18/15
+      'https://224.0.0.1/', 'https://239.255.255.250/',  // multicast
+      'https://240.0.0.1/', 'https://255.255.255.255/',  // reserved and broadcast
+      'https://192.0.0.8/', 'https://192.0.2.1/', 'https://198.51.100.7/', 'https://203.0.113.9/',
+      'https://2852039166/',                   // 169.254.169.254 as one decimal number
+      'https://0xa9.0xfe.0xa9.0xfe/',          // and in hex
+    ]) {
+      await expect(assertUrlSafe(u), u).rejects.toBeInstanceOf(SSRFBlockedError);
+    }
+    // A resolver may answer in any spelling too.
+    for (const address of ['::ffff:169.254.169.254', '::ffff:a9fe:a9fe', '64:ff9b::a00:1', '198.18.3.4', '::ffff:0:a00:1']) {
+      await expect(assertUrlSafe('https://totally-legitimate.example/', { resolver: async () => [{ address }] }), address)
+        .rejects.toBeInstanceOf(SSRFBlockedError);
+    }
+    // Public addresses in the same families still pass, or the test proves nothing.
+    for (const u of ['https://198.20.0.1/', 'https://223.255.255.1/', 'https://[2606:4700:4700::1111]/', 'https://[::ffff:1.1.1.1]/']) {
+      await expect(assertUrlSafe(u), u).resolves.toBeInstanceOf(URL);
+    }
+  });
+
   it('refuses non-http(s) schemes and http to non-loopback', async () => {
     await expect(assertUrlSafe('file:///etc/passwd')).rejects.toBeInstanceOf(SSRFBlockedError);
     await expect(assertUrlSafe('gopher://x/')).rejects.toBeInstanceOf(SSRFBlockedError);

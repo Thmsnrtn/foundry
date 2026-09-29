@@ -12,14 +12,14 @@ const files = globSync('src/**/*.ts', { cwd: root, absolute: true }).sort();
 const strip = (s) => stripComments(s, { lineComments: false })
   .split('\n').map((l) => l.replace(/^(\s*)\/\/.*$/, '$1')).join('\n');
 const rules = [
-  { id: 'external_post', re: /fetch\(\s*(['"`])https:\/\/(?!api\.openrouter\.ai)([^'"`]+)\1\s*,\s*\{[\s\S]{0,500}?method:\s*['"](POST|PUT|PATCH|DELETE)['"]/g },
+  { id: 'external_post', re: /(?:\bfetch|\bsafeFetch)\(\s*(['"`])https:\/\/(?!api\.openrouter\.ai)([^'"`]+)\1\s*,\s*\{[\s\S]{0,500}?method:\s*['"](POST|PUT|PATCH|DELETE)['"]/g },
   // A URL assembled from a template was invisible to the detector above, which
   // requires the host to appear inside the quotes. `fetch(`${baseUrl}/audio/
   // transcriptions`, {method:'POST'})` is exactly as consequential as a literal
   // one — it was the codebase's only unreserved paid provider call, and the
   // inventory reported zero direct effects while it existed.
-  { id: 'templated_post', re: /fetch\(\s*`\$\{[^`]*`\s*,\s*\{[\s\S]{0,500}?method:\s*['"](POST|PUT|PATCH|DELETE)['"]/g },
-  { id: 'dynamic_webhook_post', re: /fetch\(\s*(url|payload\.webhook_url|config\.url|webhook\.url)\s*,\s*\{[\s\S]{0,300}?method:\s*['"]POST['"]/g },
+  { id: 'templated_post', re: /(?:\bfetch|\bsafeFetch)\(\s*`\$\{[^`]*`\s*,\s*\{[\s\S]{0,500}?method:\s*['"](POST|PUT|PATCH|DELETE)['"]/g },
+  { id: 'dynamic_webhook_post', re: /(?:\bfetch|\bsafeFetch)\(\s*(url|payload\.webhook_url|config\.url|webhook\.url|server\.url)\s*,\s*\{[\s\S]{0,300}?method:\s*['"]POST['"]/g },
   { id: 'stripe_sdk_mutation', re: /stripe\.(customers\.create|subscriptions\.(?:create|update|cancel)|checkout\.sessions\.create|billingPortal\.sessions\.create|oauth\.token)\s*\(/g },
   { id: 'resend_sdk_send', re: /resend\.emails\.send\s*\(/g },
   // RUNNING A PROGRAM ON THE HOST IS AN EFFECT CLASS OF ITS OWN, and until a
@@ -38,7 +38,7 @@ const rules = [
   // no literal and no template appears anywhere in the file. Detected on its
   // own rather than waved through, because a worker source that called
   // somewhere it should not would look exactly the same to every other rule.
-  { id: 'env_bound_post', re: /fetch\(\s*env\.[A-Z_]+\s*,\s*\{[\s\S]{0,500}?method:\s*['"](POST|PUT|PATCH|DELETE)['"]/g },
+  { id: 'env_bound_post', re: /(?:\bfetch|\bsafeFetch)\(\s*env\.[A-Z_]+\s*,\s*\{[\s\S]{0,500}?method:\s*['"](POST|PUT|PATCH|DELETE)['"]/g },
   { id: 'process_spawn', re: /from\s+['"]node:child_process['"]|require\(\s*['"]child_process['"]/g },
 ];
 
@@ -294,12 +294,14 @@ if (process.argv.includes('--write')) {
     const rel = relative(root, file);
     const covered = new Set();
     for (const { re } of rules) for (const m of src.matchAll(new RegExp(re.source, re.flags))) covered.add(m.index);
-    for (const m of src.matchAll(/fetch\(/g)) {
+    // `safeFetch` is a fetch too: it is how every founder-supplied URL leaves,
+    // and a narrower pattern made those calls invisible here (29 September 2026).
+    for (const m of src.matchAll(/(?:\bfetch|\bsafeFetch)\(/g)) {
       const tail = src.slice(m.index, m.index + 2000);
       if (!/method:\s*['"](POST|PUT|PATCH|DELETE)['"]/.test(tail)) continue;
       if (covered.has(m.index)) continue;
       // A relative path is this application talking to itself.
-      if (/^fetch\(\s*['"`]\//.test(tail)) continue;
+      if (/^(?:fetch|safeFetch)\(\s*['"`]\//.test(tail)) continue;
       uncovered.push(`${rel}:${src.slice(0, m.index).split('\n').length}  ${tail.slice(0, 80).replace(/\s+/g, ' ')}`);
     }
   }

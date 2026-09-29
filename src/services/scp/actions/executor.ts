@@ -633,9 +633,12 @@ async function executeWebhook(payload: ActionPayload): Promise<ExecutionResult> 
   }
 
   // SSRF guard: a standing order must not be usable to reach cloud metadata
-  // or internal services (adapted from AcreOS's validateUrl).
+  // or internal services (adapted from AcreOS's validateUrl). Screened here
+  // first so a refused URL is honestly `not_attempted`; then sent through
+  // `safeFetch`, which screens every redirect hop again. The raw `fetch` that
+  // was here followed redirects unscreened (found 29 September 2026).
+  const { assertUrlSafe, safeFetch, readTextCapped } = await import('../../outbound/ssrf.js');
   try {
-    const { assertUrlSafe } = await import('../../outbound/ssrf.js');
     await assertUrlSafe(payload.webhook_url);
   } catch (err) {
     return {
@@ -646,14 +649,14 @@ async function executeWebhook(payload: ActionPayload): Promise<ExecutionResult> 
   }
 
   try {
-    const resp = await fetch(payload.webhook_url, {
+    const resp = await safeFetch(payload.webhook_url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload.webhook_payload ?? {}),
       signal: AbortSignal.timeout(15000),
     });
 
-    const responseText = await resp.text();
+    const { text: responseText } = await readTextCapped(resp);
     let responseBody: unknown;
     try { responseBody = JSON.parse(responseText); } catch { responseBody = responseText; }
 

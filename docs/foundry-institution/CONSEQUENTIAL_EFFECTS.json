@@ -3,7 +3,7 @@
   "findings": [
     {
       "file": "src/lib/webhooks.ts",
-      "line": 135,
+      "line": 137,
       "detector": "dynamic_webhook_post",
       "status": "governed",
       "capability": "customer webhook fan-out — kill-switch checked before dispatch, per-delivery receipt after"
@@ -66,7 +66,7 @@
     },
     {
       "file": "src/services/distribution/outbound-webhooks.ts",
-      "line": 116,
+      "line": 118,
       "detector": "dynamic_webhook_post",
       "status": "governed",
       "capability": "post_webhook capability handler"
@@ -184,6 +184,13 @@
       "capability": "GraphQL queries: in-progress, completed and velocity issue counts"
     },
     {
+      "file": "src/services/integration/mcp-client.ts",
+      "line": 130,
+      "detector": "dynamic_webhook_post",
+      "status": "governed",
+      "capability": "MCP capability handler"
+    },
+    {
       "file": "src/services/integration/resend.ts",
       "line": 396,
       "detector": "external_post",
@@ -248,7 +255,7 @@
     },
     {
       "file": "src/services/scp/actions/executor.ts",
-      "line": 649,
+      "line": 652,
       "detector": "dynamic_webhook_post",
       "status": "governed",
       "capability": "approved custom webhook — kill-switch checked before dispatch, SSRF guard and durable receipt"

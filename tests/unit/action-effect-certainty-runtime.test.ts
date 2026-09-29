@@ -5,7 +5,12 @@ import { runMigrations } from '../../src/db/migrate.js';
 
 const { integration, urlGuard } = vi.hoisted(() => ({ integration: vi.fn(), urlGuard: vi.fn() }));
 vi.mock('../../src/services/integration/fabric.js', () => ({ getIntegration: integration }));
-vi.mock('../../src/services/outbound/ssrf.js', () => ({ assertUrlSafe: urlGuard }));
+// The URL check is stubbed; the transport is the real safeFetch (every redirect
+// hop re-screened) and the real capped reader, over the stubbed global fetch.
+vi.mock('../../src/services/outbound/ssrf.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../src/services/outbound/ssrf.js')>()),
+  assertUrlSafe: urlGuard,
+}));
 
 import { approveAndExecute, createExecution, type ActionPayload } from '../../src/services/scp/actions/executor.js';
 
@@ -95,6 +100,30 @@ describe('approved action runtime effect certainty', () => {
     expect(row.effect_certainty).toBe('ambiguous');
     expect(row.reconcile_after).toBeTruthy();
     expect(fetchMock).toHaveBeenCalledOnce();
+  });
+});
+
+describe('a webhook is not followed where it points', () => {
+  // FOUND BY THE EXECUTIVE REVIEW OF 29 SEPTEMBER 2026. The URL was screened,
+  // then handed to a raw fetch that followed redirects: a public host could
+  // answer 302 to the cloud metadata address and the POST went there.
+  it('refuses a redirect to the metadata address, and says the first hop may have landed', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(null, { status: 307, headers: { location: 'https://169.254.169.254/latest/meta-data/' } }));
+    const { row } = await run(webhookPayload);
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toBe('https://hooks.example.test/x');
+    expect((fetchMock.mock.calls[0] as [string, RequestInit])[1].redirect).toBe('manual');
+    // The first host received the POST before redirecting, so the effect is honestly unknown.
+    expect(row.effect_certainty).toBe('ambiguous');
+  });
+
+  it('reads no more than a megabyte of whatever the far end sends back', async () => {
+    const huge = 'x'.repeat(1_500_000);
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(huge, { status: 200 }));
+    const { result } = await run(webhookPayload);
+    expect(result.effect_certainty).toBe('provider_acknowledged');
+    expect(String(result.integration_response).length).toBe(1_000_000);
   });
 });
 

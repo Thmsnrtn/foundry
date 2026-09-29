@@ -9,7 +9,9 @@ describe('approved action effect certainty', () => {
     const start = source.indexOf('async function executeWebhook');
     const body = source.slice(start);
     expect(body.indexOf('assertUrlSafe')).toBeGreaterThan(0);
-    expect(body.indexOf('assertUrlSafe')).toBeLessThan(body.indexOf('await fetch'));
+    expect(body.indexOf('assertUrlSafe')).toBeLessThan(body.indexOf('await safeFetch'));
+    // The transport screens every redirect hop; a raw fetch would follow them unscreened.
+    expect(body.slice(0, body.indexOf('\n}\n'))).not.toMatch(/await fetch\(/);
     expect(body).toContain("effect_certainty: 'not_attempted'");
   });
 

@@ -31,33 +31,108 @@ const BLOCKED_EXACT = new Set([
   '100.100.100.200',   // Alibaba Cloud metadata
 ]);
 
-const PRIVATE_V4 = [
-  /^127\./,            // loopback
-  /^10\./,             // RFC 1918
-  /^169\.254\./,       // link-local (incl. metadata)
-  /^192\.168\./,       // RFC 1918
-  /^0\./,              // "this" network
+// Screened by NUMERIC RANGE, not by the spelling of the address. A pattern
+// list over strings missed `::ffff:a9fe:a9fe` — the URL parser's own spelling
+// of `::ffff:169.254.169.254` — so the metadata endpoint, written as a mapped
+// IPv6 literal, passed (found 29 September 2026). Every address is parsed to
+// numbers first; every IPv6 form that embeds an IPv4 address is unpacked and
+// screened as that IPv4 address.
+
+/** IPv4 ranges that are never a public webhook: [network, prefix length]. */
+const PRIVATE_V4_CIDRS: Array<[string, number]> = [
+  ['0.0.0.0', 8],        // "this" network
+  ['10.0.0.0', 8],       // RFC 1918
+  ['100.64.0.0', 10],    // carrier-grade NAT / Tailscale
+  ['127.0.0.0', 8],      // loopback
+  ['169.254.0.0', 16],   // link-local, including cloud metadata
+  ['172.16.0.0', 12],    // RFC 1918
+  ['192.0.0.0', 24],     // IETF protocol assignments
+  ['192.0.2.0', 24],     // documentation
+  ['192.168.0.0', 16],   // RFC 1918
+  ['198.18.0.0', 15],    // benchmarking
+  ['198.51.100.0', 24],  // documentation
+  ['203.0.113.0', 24],   // documentation
+  ['224.0.0.0', 4],      // multicast
+  ['240.0.0.0', 4],      // reserved, including broadcast
 ];
+
+function v4ToInt(ip: string): number | null {
+  const parts = ip.split('.');
+  if (parts.length !== 4) return null;
+  let n = 0;
+  for (const p of parts) {
+    if (!/^\d{1,3}$/.test(p) || Number(p) > 255) return null;
+    n = n * 256 + Number(p);
+  }
+  return n;
+}
+
+const V4_RANGES = PRIVATE_V4_CIDRS.map(([net4, len]) => {
+  const base = v4ToInt(net4)!;
+  const size = 2 ** (32 - len);
+  return [base, base + size - 1] as const;
+});
 
 function isPrivateV4(ip: string): boolean {
   if (BLOCKED_EXACT.has(ip)) return true;
-  if (PRIVATE_V4.some((re) => re.test(ip))) return true;
-  // 172.16.0.0/12
-  const m = /^172\.(\d+)\./.exec(ip);
-  if (m) { const o = Number(m[1]); if (o >= 16 && o <= 31) return true; }
-  // 100.64.0.0/10 (carrier-grade NAT / Tailscale)
-  const c = /^100\.(\d+)\./.exec(ip);
-  if (c) { const o = Number(c[1]); if (o >= 64 && o <= 127) return true; }
-  return false;
+  const n = v4ToInt(ip);
+  if (n === null) return true; // not a dotted IPv4 address: unsafe, never guessed
+  return V4_RANGES.some(([lo, hi]) => n >= lo && n <= hi);
 }
+
+/** The eight 16-bit groups of an IPv6 address, or null if it is not one. */
+function v6Groups(ip: string): number[] | null {
+  let s = ip.toLowerCase().replace(/%.*$/, ''); // drop a zone id
+  // A trailing dotted IPv4 part becomes two groups.
+  const dotted = /^(.*:)(\d{1,3}(?:\.\d{1,3}){3})$/.exec(s);
+  if (dotted) {
+    const n = v4ToInt(dotted[2]);
+    if (n === null) return null;
+    s = `${dotted[1]}${(n >>> 16).toString(16)}:${(n & 0xffff).toString(16)}`;
+  }
+  const halves = s.split('::');
+  if (halves.length > 2) return null;
+  const read = (part: string): number[] | null => {
+    if (part === '') return [];
+    const out: number[] = [];
+    for (const g of part.split(':')) {
+      if (!/^[0-9a-f]{1,4}$/.test(g)) return null;
+      out.push(parseInt(g, 16));
+    }
+    return out;
+  };
+  const head = read(halves[0]); const tail = halves.length === 2 ? read(halves[1]) : [];
+  if (!head || !tail) return null;
+  if (halves.length === 1) return head.length === 8 ? head : null;
+  const fill = 8 - head.length - tail.length;
+  if (fill < 1) return null;
+  return [...head, ...Array(fill).fill(0), ...tail];
+}
+
+const v4Of = (hi: number, lo: number): string => [hi >> 8, hi & 0xff, lo >> 8, lo & 0xff].join('.');
 
 function isPrivateV6(ip: string): boolean {
   const l = ip.toLowerCase();
   if (BLOCKED_EXACT.has(l)) return true;
-  if (l === '::1' || l === '::') return true;
-  if (l.startsWith('fc') || l.startsWith('fd')) return true;                 // ULA fc00::/7
-  if (l.startsWith('fe8') || l.startsWith('fe9') || l.startsWith('fea') || l.startsWith('feb')) return true; // link-local
-  if (l.startsWith('::ffff:')) return isPrivateV4(l.slice('::ffff:'.length)); // v4-mapped
+  const g = v6Groups(l);
+  if (!g) return true; // unparseable: unsafe
+  const zeroTo = (k: number): boolean => g.slice(0, k).every((x) => x === 0);
+  if (zeroTo(8)) return true;                                   // ::
+  if (zeroTo(7) && g[7] === 1) return true;                     // ::1
+  if (zeroTo(5) && g[5] === 0xffff) return isPrivateV4(v4Of(g[6], g[7]));   // ::ffff:a.b.c.d (mapped)
+  if (zeroTo(4) && g[4] === 0xffff && g[5] === 0) return isPrivateV4(v4Of(g[6], g[7])); // ::ffff:0:a.b.c.d (translated)
+  if (zeroTo(6)) return isPrivateV4(v4Of(g[6], g[7]));         // ::a.b.c.d (compatible)
+  if (g[0] === 0x64 && g[1] === 0xff9b) {
+    // 64:ff9b::/96 translates an IPv4 address; anything else under 64:ff9b (the local-use /48) is refused.
+    return g.slice(2, 6).every((x) => x === 0) ? isPrivateV4(v4Of(g[6], g[7])) : true;
+  }
+  if (g[0] === 0x2002) return isPrivateV4(v4Of(g[1], g[2]));    // 6to4 wraps an IPv4 address
+  if (g[0] === 0x2001 && g[1] === 0) return true;               // Teredo hides its IPv4 address
+  if (g[0] === 0x2001 && g[1] === 0xdb8) return true;           // documentation
+  if ((g[0] & 0xfe00) === 0xfc00) return true;                  // unique local fc00::/7
+  if ((g[0] & 0xffc0) === 0xfe80) return true;                  // link-local fe80::/10
+  if ((g[0] & 0xffc0) === 0xfec0) return true;                  // site-local fec0::/10
+  if ((g[0] & 0xff00) === 0xff00) return true;                  // multicast ff00::/8
   return false;
 }
 
@@ -221,4 +296,26 @@ export async function safeFetch(
     }
   }
   throw new SSRFBlockedError(`too many redirects from ${url}`);
+}
+
+/**
+ * A response body read up to `maxBytes` and no further. The far end of a
+ * webhook is a server nobody at Foundry chose; it does not get to decide how
+ * much memory Foundry spends reading its answer.
+ */
+export async function readTextCapped(response: Response, maxBytes = 1_000_000): Promise<{ text: string; truncated: boolean }> {
+  if (!response.body) return { text: '', truncated: false };
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = []; let total = 0; let truncated = false;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (total + value.byteLength > maxBytes) {
+      chunks.push(value.subarray(0, maxBytes - total)); total = maxBytes; truncated = true;
+      await reader.cancel().catch(() => undefined);
+      break;
+    }
+    chunks.push(value); total += value.byteLength;
+  }
+  return { text: new TextDecoder().decode(Buffer.concat(chunks.map((c) => Buffer.from(c)))), truncated };
 }

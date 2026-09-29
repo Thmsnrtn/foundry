@@ -208,17 +208,12 @@ describe('posting to a URL somebody else chose', () => {
     // a 302 to a cloud metadata endpoint. `safeFetch` does both, and the ones
     // that can use it now do.
     //
-    // Two remain on the split form for real reasons rather than convenience,
-    // and each is recorded here so the exception has to be argued rather than
-    // inherited.
-    const SPLIT_FORM: Record<string, string> = {
-      'src/lib/webhooks.ts':
-        'records a per-attempt delivery receipt around the call and needs the raw response object',
-      'src/services/distribution/outbound-webhooks.ts':
-        'wraps the call in its own retry/timeout policy and crosses the outbound gateway',
-      'src/services/scp/actions/executor.ts':
-        'records an effect receipt with provider certainty around the call',
-    };
+    // Three senders stayed on the split form "for real reasons" until the
+    // executive review of 29 September 2026 found the reasons did not hold:
+    // each needed the raw response and a receipt around the call, and
+    // safeFetch returns the raw response. All three now use it, and no
+    // exception is recorded. A new one has to be argued here.
+    const SPLIT_FORM: Record<string, string> = {};
     for (const rel of dynamicUrlSenders()) {
       if (rel in FOUNDRY_CHOSEN || rel === 'src/services/outbound/ssrf.ts') continue;
       const source = executable(resolve(ROOT, rel));

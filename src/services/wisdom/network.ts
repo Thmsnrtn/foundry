@@ -94,7 +94,12 @@ export const INSIGHT_FRESHNESS_DAYS = 365;
  * product ids by guessing them.
  */
 export function contributorHash(productId: string): string {
-  const key = process.env.ENCRYPTION_KEY ?? 'foundry-dev-contributor-key';
+  // NO KEY, NO HASH. This fell back to a literal written in this public
+  // repository, so a table hashed under it could be walked back to product ids
+  // by anyone who read the source — the one thing the HMAC exists to prevent
+  // (found 29 September 2026). Without the secret it refuses, visibly.
+  const key = process.env.ENCRYPTION_KEY;
+  if (!key) throw new Error('contributorHash: ENCRYPTION_KEY is not set, and a contributor is never hashed with a public key');
   return createHmac('sha256', key).update(`decision_pattern:${productId}`).digest('hex').slice(0, 32);
 }
 

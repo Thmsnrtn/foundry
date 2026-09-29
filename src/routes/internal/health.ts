@@ -43,6 +43,13 @@ healthRoutes.get('/internal/health', async (c) => {
   // Clerk configured
   checks.clerk_configured = process.env.CLERK_SECRET_KEY ? 'ok' : 'error';
 
+  // WHETHER THE APPLICATION KEY IS SET — never its value. Stored credentials
+  // are encrypted under it, and contributor hashes refuse to run without it.
+  // Reported, not yet fatal: a boot that exits on a single machine is an
+  // outage, so this reading is how the key's presence in production is
+  // established before anything is made to depend on it.
+  checks.encryption_key = /^[0-9a-fA-F]{64}$/.test(process.env.ENCRYPTION_KEY ?? '') ? 'ok' : 'error';
+
   // WHETHER THE ROUTINES ARE ACTUALLY RUNNING.
   //
   // Ninety-six routines carry everything this institution does on its own, and

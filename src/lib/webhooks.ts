@@ -7,7 +7,7 @@ import { createHmac } from 'crypto';
 import { query } from '../db/client.js';
 import { nanoid } from 'nanoid';
 import { log } from './logger.js';
-import { assertUrlSafe } from '../services/outbound/ssrf.js';
+import { assertUrlSafe, safeFetch } from '../services/outbound/ssrf.js';
 import { decryptCredentialPayload, encrypt, isEncrypted } from '../services/encryption.js';
 
 /**
@@ -132,7 +132,9 @@ async function deliverWebhook(
   const signature = createHmac('sha256', plaintextSecret).update(body).digest('hex');
 
   try {
-    const response = await fetch(url, {
+    // Every redirect hop is screened again (safeFetch); a raw fetch followed
+    // them unscreened (found 29 September 2026).
+    const response = await safeFetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
