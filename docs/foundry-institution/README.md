@@ -1,8 +1,10 @@
 # Foundry Institution
 
-This directory is the durable governing context for Foundry's evolution from an
-agent-centric SaaS into an **Adaptive Company Institution**: a system capable of
-discovering, understanding, and progressively operating unfamiliar companies.
+This directory is the durable governing context for Foundry: the owner's
+**private** institution, used by him and nobody else (CONSTITUTION, amended 29
+September 2026), for discovering, understanding and progressively operating
+companies. It began as an agent-centric SaaS; that lineage is history, not
+direction.
 
 **It is also the bootstrap.** A fresh capable model should be able to
 reconstruct the product, its current verified reality, and the next frontier

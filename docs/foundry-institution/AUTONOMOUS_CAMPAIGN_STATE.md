@@ -79,7 +79,7 @@ edited; it is the campaign steward's to fix.
 
 Read `CONSTITUTION.md` § *The owner's priority function* before choosing a
 frontier. The short version, because this is the drift the correction names:
-**Commercial Foundry is dormant optionality, not the objective.** The product
+**Commercial Foundry is not the objective, and since 29 September 2026 not in the code either:** Foundry is the owner's private app, never used by anyone else (CONSTITUTION, amended). The product
 being built is the owner's private entrepreneurial institution — his venture
 studio, operating institution, portfolio intelligence and command layer.
 

@@ -406,9 +406,9 @@ app.route('/', privacySettings);
 // else. Deleted here on 2026-09-13; preserved in full on branch
 // `archive/commercial-foundry` at 9049f60e and in history.
 //
-// The services beneath them are shared and stay. Some are now reached only by
-// the tests that were written against those routes; separating those is its
-// own pass, and it is named in OWNER_OS_MIGRATION.md rather than started here.
+// The services beneath them are shared and stay. None is reached only by tests
+// any more (the reachability baseline has been empty since dc354030); the
+// multi-user services still run by scheduled jobs are deleted by Private S7.
 
 // ─── 404 Handler ─────────────────────────────────────────────────────────────
 

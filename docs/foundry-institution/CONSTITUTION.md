@@ -60,6 +60,33 @@ commercial tiers, marketing, procurement readiness, broad self-service, or
 hypothetical external customer needs — unless the shared institutional kernel or
 a real portfolio business genuinely requires the capability.
 
+> **Amended 29 September 2026: private, one owner, no one else.** The owner
+> said: "foundry is my own private app not ever to be used by anyone else at
+> the moment", and approved the plan that carries it out
+> (`EXECUTIVE_REVIEW.md`, "Private" slices S1–S8).
+>
+> - **The failure of the paragraph above.** "Dormant optionality" kept the
+>   machinery of a product for other people *switched on*. The posture
+>   defaulted to `commercial`, which admitted anyone Clerk vouched for. A second
+>   deploy config, `fly.toml`, would have pushed that open shape onto the owner's
+>   app with one command. A public sign-up page existed, and access-billing jobs
+>   ran on a schedule.
+> - **What replaces it.** Foundry admits its owner and nobody else, whatever the
+>   setting (S2, `ddbce4c3`). The access-billing, trial, team, cross-company
+>   benchmark, referral and public-API code is deleted (S7). It is kept
+>   recoverable at the git tag `archive/multi-user-2026-09-29` and on branch
+>   `archive/commercial-foundry`, not in the running code.
+> - **Adversarial reading.**
+>   - *Is optionality lost?* Only the code's presence is. Every line stays
+>     recoverable, and a Commercial Foundry was always to be a separate company
+>     with its own deployment (below), never this one grown by accident.
+>   - *Does anything the owner uses depend on it?* Stripe for his products'
+>     sales, refund links for his buyers, metric intake from his companies,
+>     Etsy, and scoping between his own companies all stay. The split is proven
+>     by tests before any deletion.
+> - **"At the moment"** is the owner's word, so this is reversible by him, and
+>   by nobody else.
+
 **Venture-studio capability is a central intended responsibility, not a
 footnote** — and not a licence to spray speculative abstractions into the
 repository. The work is to find the minimum institutional primitives that make
@@ -739,7 +766,7 @@ enforced by `scripts/check-layer-boundary.mjs`.
 | **substrate** | A database, a logger, a clock. Below everything; knows nothing about institutions, owners or customers. |
 | **kernel** | The **shared institutional kernel**: authority, responsibility, evidence, effects, senses, provenance, spend governance, and the machinery of understanding and operating a company. What a future Commercial Foundry would consume. |
 | **private** | The **Private Foundry product** — the experience built for this owner, for a deployment with one principal and no commercial relationship in it. Deliberately small. |
-| **commercial** | The surface a commercial Foundry would *start from*: access metering, tiers, trials, the marketing site, the older multi-tenant dashboard. **Preserved, not developed.** |
+| **commercial** | The surface a commercial Foundry would *start from*: access metering, tiers, trials, the older multi-tenant dashboard. **To be deleted (29 September 2026; S7), recoverable from the archive tag.** |
 | **composition** | What assembles a deployment out of the above. |
 
 **THE ONE RULE THAT CARRIES THE WEIGHT: nothing may depend on `private`.** It is
@@ -955,8 +982,10 @@ customer state or authority.
 `FOUNDRY_INSTANCE_POSTURE=private_owner`, read through
 `lib/instance-posture.ts`, is decided once at the deployment's edge. Ownership
 is never expressed as `if (email === owner)`: scattered bypasses are places a
-rule gets forgotten, and none of them says why. The default is `commercial`,
-the restrictive answer.
+rule gets forgotten, and none of them says why. The default is `private_owner`
+(amended 29 September 2026: it was `commercial`, which was not the restrictive
+answer — it admitted anyone Clerk vouched for). Admission is owner-only in every
+posture; `commercial` names only the access-billing machinery until it is deleted.
 
 **It removes exactly one thing: commercial metering of ACCESS.** Trials, plan
 prompts, upgrade gating and the entitlement sweep's pause do not apply to
@@ -994,7 +1023,7 @@ safeguards.
 - Commitments and responsibilities persist across sessions. Strategy remains falsifiable.
 - Founder attention is scarce. Human and physical work is first-class.
 - No business-specific kernel branches. AcreOS is a golden adoption benchmark, never a reason for `if AcreOS` kernel logic.
-- Foundry-the-SaaS must eventually operate through the same company semantics as external companies.
+- ~~Foundry-the-SaaS must eventually operate through the same company semantics as external companies.~~ *(Struck 29 September 2026: there is no Foundry-the-SaaS. Foundry still operates itself through the same company semantics as the owner's other companies.)*
 - Every cognition step pays rent. Complex executive deliberation survives only when it beats, or justifies itself against, simpler strong-model baselines.
 - Prefer dynamic executive functions over permanent named-agent theater where equivalent.
 - Quality and safety floors precede cost minimization; economic discipline applies to every tier.

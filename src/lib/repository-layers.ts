@@ -45,11 +45,10 @@ export type Layer =
    *  deployment with exactly one principal and no commercial relationship in
    *  it. Deliberately small, and deliberately depended upon by nothing. */
   | 'private'
-  /** The product surface a commercial Foundry would START FROM: access
-   *  metering, tiers, trials, the marketing site, and the older multi-tenant
-   *  dashboard. PRESERVED, NOT DEVELOPED. Dormant optionality, per the owner's
-   *  priority function — and if it ever earns existence it is originated as a
-   *  separate portfolio company, not grown here by accident. */
+  /** What remains of a product for other people: access metering, tiers,
+   *  trials. The owner said on 29 September 2026 that Foundry is his private
+   *  app, never used by anyone else; this layer is to be deleted (Private S7)
+   *  and is recoverable from the archive tag, not kept running here. */
   | 'commercial'
   /** The composition root: what assembles a deployment out of the above. It may
    *  reach anything, because choosing what a deployment contains is exactly its
@@ -186,7 +185,6 @@ export const LAYER_OF: Record<string, Layer> = {
   // `onboarding.ts` stays: it is commercial in character and still mounted,
   // because the private instance redirects to it on first run.
   'src/services/billing': 'commercial',
-  'src/routes/public/landing.ts': 'commercial',
   'src/routes/dashboard/onboarding.ts': 'commercial',
 
   // ── everything else is the shared institutional kernel ─────────────────
@@ -233,8 +231,8 @@ export const LAYER_IN_PLAIN_WORDS: Record<Layer, string> = {
     'your own experience of Foundry, and nothing else. Nothing depends on it, '
     + 'so changing it cannot change how the institution behaves for anyone.',
   commercial:
-    'the dormant remains of a product for other people. It is kept, not '
-    + 'developed, and nothing new is built on it.',
+    'the remains of a product for other people, which Foundry will never be. '
+    + 'It is being deleted, and nothing is built on it.',
   composition:
     'the wiring that assembles this deployment — which routes exist, which '
     + 'routines run.',

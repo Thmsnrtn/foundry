@@ -107,6 +107,9 @@ kinds be created at runtime, by a company, an integration, or a model.
 
 ## RESOLVED 5 — The public API: **MAKE IT LIVE**
 
+> **SUPERSEDED 29 September 2026.** Foundry is the owner's private app, never used by anyone else (CONSTITUTION, amended). There is no one for a public API to serve; `/api/v1` and its keys are deleted in S7, recoverable from the archive tag.
+
+
 `/api/v1` and the Fathom/Fireflies transcript webhooks were mounted,
 authenticated, and unreachable by anyone — nothing could issue a key, and the
 endpoint the dashboard advertised did not exist and could not have.
@@ -128,6 +131,9 @@ customer data and untrusted external content, and must be treated as both.
 ---
 
 ## RESOLVED 6 — An unpaid account is **READ-ONLY**
+
+> **SUPERSEDED 29 September 2026.** Foundry is the owner's private app, never used by anyone else (CONSTITUTION, amended). There are no accounts but the owner's, and he does not pay himself; the access-billing machinery is deleted in S7.
+
 
 A founder who never subscribed, or whose trial expired without converting, was
 indistinguishable from a paying customer to every capability gate: `scp_status`
@@ -165,6 +171,9 @@ list. Both axes are now read through one exported predicate,
 mechanism was already total.**
 
 ## RESOLVED 7 — Follow **ordinary SaaS convention** for access and communication
+
+> **SUPERSEDED 29 September 2026.** Foundry is the owner's private app, never used by anyone else (CONSTITUTION, amended). Foundry is not a SaaS. Its own communication is with its owner; his products' communication with their buyers is governed by each product's own rules.
+
 
 Asked whether a paused account should be reachable at all, the owner answered a
 larger question: *"People should be able to use their accounts until their
@@ -212,6 +221,9 @@ the channel rather than remove the surface.
 # NEWLY PENDING
 
 ## PENDING 9 — Retention periods for what survives an erasure: **COUNSEL**
+
+> **Narrowed 29 September 2026** (Foundry is private, one owner). The question narrows: no Foundry user will ever erase themselves. What remains is retention of **buyer** personal data in the owner's products (orders, messages, refunds).
+
 
 Foundry now states, for every table that survives a company's erasure, what is
 kept, on what basis, what may be done with it while it is kept, and when the
@@ -281,6 +293,9 @@ eye:
 ---
 
 ## PENDING 11 — Should the audit log be kept for 180 days or 365?
+
+> **Narrowed 29 September 2026** (Foundry is private, one owner). With one owner this is his preference, not a counsel question, unless the log names buyers; the interim 180 days stands until he says otherwise.
+
 
 Found while removing a duplication, not while asking about retention — which is
 why it is worth the owner's attention.
@@ -404,6 +419,9 @@ regression — the old answer was that it could see all of them.
 ---
 
 ## PENDING 13 — Cross-company benchmarks: is aggregation with k = 5 enough? **COUNSEL**
+
+> **Narrowed 29 September 2026** (Foundry is private, one owner). Moot once S7 deletes the cross-company benchmark pool: there are no other companies' data to aggregate.
+
 
 A company's metrics are pooled and returned to other companies as percentiles.
 Two present-tense engineering corrections were made this cycle and both hold:
@@ -592,6 +610,9 @@ stewardship.
 ---
 
 ## PENDING 15 — The AI sub-processor disclosure was wrong, and what replaces it is yours: **COUNSEL**
+
+> **Narrowed 29 September 2026** (Foundry is private, one owner). The Foundry-customer half (questions 3–4) is moot: there are no Foundry customers and the page that carried the statement is gone. Questions 1–2 remain only where the Apex Micro Workshop's buyers could read a statement about AI processing.
+
 
 **What was true.** The public privacy copy said "Foundry sends prompts to
 Anthropic (Claude) under the standard API terms, which contractually forbid

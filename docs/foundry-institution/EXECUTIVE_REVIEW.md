@@ -7,6 +7,21 @@ can possibly be, meticulously and exhaustively". This is that review. It is a pr
 it grants no authority, spends nothing, and builds nothing by itself. Each item says who
 decides it, what it costs, and what would prove it wrong.*
 
+> **Amended 29 September 2026, on approval.** The owner approved this review
+> with three amendments.
+> 1. **Foundry is his own private app**, never used by anyone else "at the
+>    moment".
+> 2. **Clerk stays.** Decision 2 means moving to a Clerk *production*
+>    instance, still Clerk.
+> 3. **The leftover multi-user code is locked first and then deleted**, with a
+>    git archive tag.
+>
+> The work is the "Private" slices S1–S8 in `ROADMAP.md`. One correction to
+> §3.7: exploration found no `src` module reachable only from tests. That
+> baseline has been empty since 13 September, so D-8's premise was stale. The
+> real leftovers are multi-user services still run by scheduled jobs, plus dead
+> exports inside live files. S7 targets exactly those.
+
 **How it was made.**
 - The evidence is the repository at `c5518c14` plus the multi-venue work of 29 September
   (capital C7). It covers every governing document in this directory, the code and its

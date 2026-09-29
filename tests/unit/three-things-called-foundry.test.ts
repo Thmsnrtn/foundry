@@ -63,7 +63,8 @@ describe('the classification', () => {
       expect(words).not.toMatch(/src\/|kernel'|\.ts/);
     }
     expect(LAYER_IN_PLAIN_WORDS.private).toContain('Nothing depends on it');
-    expect(LAYER_IN_PLAIN_WORDS.commercial).toContain('kept, not');
+    // Since 29 September 2026 the commercial layer is being deleted, not kept.
+    expect(LAYER_IN_PLAIN_WORDS.commercial).toContain('being deleted');
     expect(LAYER_IN_PLAIN_WORDS.kernel).toContain('any \nfuture Foundry'.replace('\n', ''));
   });
 
