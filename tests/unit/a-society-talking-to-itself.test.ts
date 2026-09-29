@@ -33,7 +33,10 @@ describe('the schedules are retired', () => {
   });
 
   it('retired twenty-seven of them, each with what it used to do', () => {
-    expect(Object.keys(RETIRED_LOOPS)).toHaveLength(27);
+    // Twenty-six remain listed: `scp_benchmark_refresh` was deleted outright in
+    // Private S7 (29 September 2026) with the benchmark pool it refreshed,
+    // because one owner has no peers to be benchmarked against.
+    expect(Object.keys(RETIRED_LOOPS)).toHaveLength(26);
     for (const [name, loop] of Object.entries(RETIRED_LOOPS)) {
       expect(name).toMatch(/^scp_/);
       expect(typeof loop.fn).toBe('function');

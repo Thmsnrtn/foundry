@@ -2534,3 +2534,22 @@ contradicted itself. This is what became of each.
 14. **AcreOS**: the Constitution's "likely first external company", while
     implementation is "owner deferred". Both are true: one is a priority, the
     other a schedule.
+
+### The multi-user machinery, first half removed (Private S7a, 29 September 2026)
+
+**Evidence maturity.** E3 for the removal: the gate chain proves that nothing
+reads, writes or reaches what was removed; the job registry pin moved 78 to 73
+with each reason written beside it; and migration 368's test proves one row kept
+for every row dropped, on a database that had rows. E1 for production: until the
+deploy reports this commit, production still runs the five jobs.
+
+**Proof debt.**
+- How many rows production held in the three retired tables is not known here.
+  Production data was not read from this session. The migration keeps them all
+  whatever the number, and `retired_rows` can be counted after the deploy.
+- The archive tag is not on GitHub (the proxy drops tag pushes). Until the owner
+  pushes it, commit `7d3129af` on this branch is the recoverable point.
+- `team_members`, `team_invitations`, `decision_votes`, `referral_links`,
+  `referral_conversions`, `network_contributions`, `network_benchmarks` and
+  `onboarding_tour` remain as tables, and billing, trials and `/api/v1` remain as
+  code. They are S7b.

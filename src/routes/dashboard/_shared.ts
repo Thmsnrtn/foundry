@@ -32,12 +32,11 @@ export interface LayoutOptions {
   sidebarRiskClass?: string | null;
   chamberMode?: boolean;
 }
-import type { RiskStateValue, NextAction, AppNotification, MilestoneEvent, OnboardingTour, NavBadges, Founder } from '../../types/index.js';
+import type { RiskStateValue, NextAction, AppNotification, MilestoneEvent, NavBadges, Founder } from '../../types/index.js';
 import { getProductDNA } from '../../services/wisdom/dna.js';
 import { getNextAction } from '../../services/ux/next-action.js';
 import { getUnreadNotifications, getUnreadCount } from '../../services/ux/notifications.js';
 import { getUnseenMilestones } from '../../services/ux/milestones.js';
-import { getTourState } from '../../services/ux/tour.js';
 import { getTrialStatus, type TrialStatus } from '../../services/billing/trial.js';
 import { getFluency, navExplain } from '../../services/ux/fluency.js';
 import { getCookie } from 'hono/cookie';
@@ -59,7 +58,6 @@ export interface UXContext {
   unreadNotifications: AppNotification[];
   unreadNotificationCount: number;
   unseenMilestones: MilestoneEvent[];
-  tourState: OnboardingTour | null;
   navBadges: NavBadges;
 }
 
@@ -135,7 +133,6 @@ export async function getLayoutContext(
     unreadNotifications: [],
     unreadNotificationCount: 0,
     unseenMilestones: [],
-    tourState: null,
     navBadges: { decisions_count: 0 },
   };
 
@@ -187,12 +184,12 @@ export async function getLayoutContext(
   const dnaCompletionPct = dna?.completion_pct ?? 0;
   const wisdomLayerActive = (ls?.wisdom_layer_active as number | null) === 1;
   // UX Intelligence Layer — parallel fetches
-  const [nextAction, unreadNotifs, unreadCount, unseenMilestones, tourState] = await Promise.all([
+  // No product tour: it was a new customer's onboarding, and Foundry has one owner (Private S7).
+  const [nextAction, unreadNotifs, unreadCount, unseenMilestones] = await Promise.all([
     getNextAction(founder, productId),
     getUnreadNotifications(founder.id),
     getUnreadCount(founder.id),
     getUnseenMilestones(founder.id, productId),
-    getTourState(founder.id),
   ]);
 
   // The one badge the sidebar draws. The other five were computed here, cached
@@ -206,7 +203,6 @@ export async function getLayoutContext(
     unreadNotifications: unreadNotifs,
     unreadNotificationCount: unreadCount,
     unseenMilestones,
-    tourState,
     navBadges,
   };
 

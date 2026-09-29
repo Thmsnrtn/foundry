@@ -7,7 +7,6 @@ import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 
 export type ConsentType =
-  | 'benchmark_contribution'
   | 'aggregate_insights'
   | 'product_improvement'
   | 'ai_training_opt_out'
@@ -42,7 +41,6 @@ export const RECORDED_PREFERENCE_ONLY: Partial<Record<ConsentType, string>> = {
 };
 
 export type ConsentSummary = {
-  benchmark_contribution: boolean;
   aggregate_insights: boolean;
   product_improvement: boolean;
   ai_training_opt_out: boolean;
@@ -119,7 +117,6 @@ export async function getConsentSummary(productId: string): Promise<ConsentSumma
   }
 
   return {
-    benchmark_contribution: map['benchmark_contribution'] ?? false,
     aggregate_insights: map['aggregate_insights'] ?? false,
     product_improvement: map['product_improvement'] ?? false,
     ai_training_opt_out: map['ai_training_opt_out'] ?? false,
@@ -143,7 +140,6 @@ export async function getOrInitConsents(productId: string): Promise<ConsentSumma
   if (result.rows.length === 0) {
     // GDPR: all defaults are opt-out (false)
     return {
-      benchmark_contribution: false,
       aggregate_insights: false,
       product_improvement: false,
       ai_training_opt_out: false,
@@ -159,7 +155,6 @@ export async function getOrInitConsents(productId: string): Promise<ConsentSumma
 
   // GDPR: default to false (opt-out) for any consent type not yet recorded
   return {
-    benchmark_contribution: map['benchmark_contribution'] ?? false,
     aggregate_insights: map['aggregate_insights'] ?? false,
     product_improvement: map['product_improvement'] ?? false,
     ai_training_opt_out: map['ai_training_opt_out'] ?? false,
@@ -1276,7 +1271,6 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   // refuses and should. Naming it here says that on purpose rather than relying
   // on the delete finding no rows.
   system_identities: 'names which product row is Foundry itself, not a customer\'s data',
-  benchmark_percentiles: 'percentiles over a cohort, naming no member',
   cohort_groups: 'the groups themselves, not who is in them',
   cross_product_insights: 'aggregate claims that name no contributor; the rows behind them are erased via decision_patterns',
   failure_patterns: 'a library of known failure shapes, written by the institution',

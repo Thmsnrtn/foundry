@@ -1,37 +1,21 @@
 // =============================================================================
-// FOUNDRY — Team / Co-Founder Mode: Member Management
-// Invite co-founders, manage roles, compute alignment scores.
+// FOUNDRY — who may act for a company
+// Ownership and member capability, read at every door that acts.
 // =============================================================================
 
 import { query } from '../../db/client.js';
-import { callSonnet, parseJSONResponse } from '../ai/client.js';
-import { computeSignal } from '../signal.js';
 import { nanoid } from 'nanoid';
-import type { TeamMember, TeamInvitation, AlignmentSnapshot } from '../../types/index.js';
+import type { TeamInvitation } from '../../types/index.js';
 
-// ─── Get Team ─────────────────────────────────────────────────────────────────
-
-export async function getTeamMembers(productId: string): Promise<TeamMember[]> {
-  const result = await query(
-    `SELECT tm.*, f.name as founder_name, f.email as founder_email
-     FROM team_members tm
-     JOIN founders f ON tm.founder_id = f.id
-     WHERE tm.product_id = ? AND tm.status = 'active'
-     ORDER BY tm.joined_at ASC`,
-    [productId],
-  );
-  return result.rows as unknown as TeamMember[];
-}
-
-export async function getPendingInvitations(productId: string): Promise<TeamInvitation[]> {
-  const result = await query(
-    `SELECT * FROM team_invitations
-     WHERE product_id = ? AND accepted_at IS NULL AND expires_at > CURRENT_TIMESTAMP
-     ORDER BY created_at DESC`,
-    [productId],
-  );
-  return result.rows as unknown as TeamInvitation[];
-}
+// VOTES AND THE ALIGNMENT SCORE ARE GONE (Private S7, 29 September 2026).
+// Foundry has one owner; nobody else votes, and a co-founder alignment score
+// over one person measures nothing.
+//
+// THE INVITE STAYS UNTIL ITS READERS GO. It is the only writer of
+// `team_members`, and seven live readers still take the union "owner OR
+// active member" — the gate on writerless tables refuses a reader with no
+// writer. Membership is removed in one change with every reader (Private S7b),
+// so no door is left asking a question whose answer can only be "no".
 
 // ─── Invite Co-Founder ────────────────────────────────────────────────────────
 
@@ -120,148 +104,6 @@ export async function acceptInvitation(token: string, founderId: string): Promis
   );
 
   return { product_id: inv.product_id, role: inv.role };
-}
-
-// ─── Decision Votes ───────────────────────────────────────────────────────────
-
-export async function submitDecisionVote(
-  decisionId: string,
-  productId: string,
-  founderId: string,
-  vote: 'approve' | 'reject' | 'abstain' | 'needs_more_info',
-  preferredOption?: string,
-  rationale?: string,
-  concerns?: string[],
-): Promise<void> {
-  await query(
-    `INSERT INTO decision_votes
-     (id, decision_id, product_id, founder_id, vote, preferred_option, rationale, concerns)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(decision_id, founder_id) DO UPDATE SET
-       vote = excluded.vote, preferred_option = excluded.preferred_option,
-       rationale = excluded.rationale, concerns = excluded.concerns,
-       voted_at = CURRENT_TIMESTAMP`,
-    [nanoid(), decisionId, productId, founderId, vote, preferredOption ?? null, rationale ?? null, JSON.stringify(concerns ?? [])],
-  );
-}
-
-export async function getDecisionVotes(decisionId: string): Promise<Array<{
-  founder_name: string;
-  vote: string;
-  preferred_option: string | null;
-  rationale: string | null;
-}>> {
-  const result = await query(
-    `SELECT f.name as founder_name, dv.vote, dv.preferred_option, dv.rationale
-     FROM decision_votes dv
-     JOIN founders f ON dv.founder_id = f.id
-     WHERE dv.decision_id = ?`,
-    [decisionId],
-  );
-  return result.rows as unknown as Array<{ founder_name: string; vote: string; preferred_option: string | null; rationale: string | null }>;
-}
-
-// ─── Alignment Score ──────────────────────────────────────────────────────────
-
-/**
- * Compute the co-founder alignment score for a product.
- * Measures: signal interpretation consensus, risk state agreement, priority consensus.
- * Called weekly when a product has 2+ active team members.
- */
-export async function computeAlignmentScore(productId: string): Promise<AlignmentSnapshot | null> {
-  const members = await getTeamMembers(productId);
-  if (members.length < 2) return null;
-
-  // Recent decision votes, FROM PRINCIPALS ENTITLED TO CAST THEM.
-  //
-  // `can_vote_decisions` existed and nothing read it, so an investor_observer
-  // could vote and their vote fed this score. Refusing new ones at the route
-  // stops the intake; it does not clean what the intake already accepted.
-  //
-  // The rows stay. What actually happened is evidence, and deleting it would
-  // be fabricating a history in which it did not. What changes is that the
-  // CURRENT canonical alignment is computed only from votes whose caster is
-  // entitled to vote today: the owner, and members whose membership carries
-  // the permission. A vote from somebody since removed, or since restricted,
-  // stops counting — which is the same rule read forwards.
-  const recentVotes = await query(
-    `SELECT dv.decision_id, dv.vote, dv.preferred_option, dv.founder_id
-       FROM decision_votes dv
-      WHERE dv.product_id = ? AND dv.voted_at > date('now', '-30 days')
-        AND (
-          EXISTS (SELECT 1 FROM products p
-                   WHERE p.id = dv.product_id AND p.owner_id = dv.founder_id)
-          OR EXISTS (SELECT 1 FROM team_members t
-                      WHERE t.product_id = dv.product_id
-                        AND t.founder_id = dv.founder_id
-                        AND t.status = 'active'
-                        AND t.can_vote_decisions = 1)
-        )`,
-    [productId],
-  );
-
-  const votes = recentVotes.rows as unknown as Array<{ decision_id: string; vote: string; preferred_option: string | null; founder_id: string }>;
-
-  // Group by decision
-  const votesByDecision = new Map<string, typeof votes>();
-  for (const v of votes) {
-    if (!votesByDecision.has(v.decision_id)) votesByDecision.set(v.decision_id, []);
-    votesByDecision.get(v.decision_id)!.push(v);
-  }
-
-  // Count decisions with consensus vs divergence
-  let consensusCount = 0;
-  let totalDecisions = 0;
-  const divergenceAreas: string[] = [];
-
-  for (const [decisionId, decVotes] of votesByDecision) {
-    if (decVotes.length < 2) continue;
-    totalDecisions++;
-
-    const allApprove = decVotes.every((v) => v.vote === 'approve');
-    const allReject = decVotes.every((v) => v.vote === 'reject');
-    const sameOption = decVotes.every((v) => v.preferred_option === decVotes[0].preferred_option);
-
-    if (allApprove || allReject || sameOption) {
-      consensusCount++;
-    } else {
-      // Get the decision title for the divergence report
-      const dResult = await query(`SELECT what FROM decisions WHERE id = ?`, [decisionId]);
-      if (dResult.rows.length > 0) {
-        divergenceAreas.push((dResult.rows[0] as Record<string, string>).what);
-      }
-    }
-  }
-
-  const priorityConsensus = totalDecisions > 0 ? consensusCount / totalDecisions > 0.7 : true;
-  const alignmentScore = totalDecisions > 0
-    ? Math.round(70 + (priorityConsensus ? 30 : 0) * (consensusCount / totalDecisions))
-    : 75; // default when no decisions voted on yet
-
-  const today = new Date().toISOString().slice(0, 10);
-  const id = nanoid();
-
-  await query(
-    `INSERT INTO alignment_snapshots
-     (id, product_id, snapshot_date, alignment_score, priority_consensus, divergence_areas)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(product_id, snapshot_date) DO UPDATE SET
-       alignment_score = excluded.alignment_score,
-       priority_consensus = excluded.priority_consensus,
-       divergence_areas = excluded.divergence_areas`,
-    [id, productId, today, alignmentScore, priorityConsensus ? 1 : 0, JSON.stringify(divergenceAreas)],
-  );
-
-  return {
-    id, product_id: productId, snapshot_date: today,
-    alignment_score: alignmentScore,
-    signal_consensus: null,
-    divergence_areas: divergenceAreas,
-    risk_state_consensus: null,
-    priority_consensus: priorityConsensus,
-    notes: null,
-    created_at: new Date().toISOString(),
-  };
 }
 
 /**

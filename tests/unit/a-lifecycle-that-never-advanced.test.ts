@@ -5,7 +5,6 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { evaluateConditions, PROMPT_ORDER, promptIndex } from '../../src/services/lifecycle/monitor.js';
-import { lifecycleBandForPrompt } from '../../src/services/benchmarking/pool.js';
 
 // =============================================================================
 // A LIFECYCLE THAT NEVER ADVANCED.
@@ -72,18 +71,6 @@ describe('a company whose conditions are met', () => {
       .rows[0] as unknown as Record<string, unknown>;
     expect(ls.current_prompt).toBe('prompt_4');
     expect(ls.prompt_4_status).toBe('in_progress');
-  });
-
-  it('is banded by where it actually is', async () => {
-    await query(
-      `INSERT INTO metric_snapshots (id, product_id, snapshot_date, signups_7d)
-       VALUES ('ms_1', ?, date('now','-3 days'), 60)`, [P]);
-    await evaluateConditions(P);
-    const ls = (await query('SELECT current_prompt FROM lifecycle_state WHERE product_id=?', [P]))
-      .rows[0] as unknown as Record<string, unknown>;
-    expect(lifecycleBandForPrompt(String(ls.current_prompt))).toBe('early');
-    // Every company used to band here, whatever it had done.
-    expect(lifecycleBandForPrompt('prompt_1')).toBe('pre_revenue');
   });
 
   it('records the advance where a founder can read it', async () => {

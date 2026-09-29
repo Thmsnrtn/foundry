@@ -1074,16 +1074,6 @@ export interface MilestoneEvent {
   created_at: string;
 }
 
-export interface OnboardingTour {
-  founder_id: string;
-  started_at: string;
-  current_step: number;
-  completed_steps: number[];
-  completed_at: string | null;
-  skipped_at: string | null;
-  product_id: string;
-}
-
 export interface AppNotification {
   id: string;
   founder_id: string;

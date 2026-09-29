@@ -55,7 +55,7 @@ beforeAll(async () => {
 
 /** The consent types the page offers and the route accepts. */
 const CONSENTS = [
-  'benchmark_contribution', 'aggregate_insights', 'product_improvement', 'ai_training_opt_out',
+  'aggregate_insights', 'product_improvement', 'ai_training_opt_out',
 ];
 
 describe('the owner can actually set a privacy preference', () => {

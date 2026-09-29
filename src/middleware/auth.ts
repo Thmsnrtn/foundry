@@ -176,54 +176,17 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
         const name = [user.firstName, user.lastName].filter(Boolean).join(' ') || null;
         const founderId = nanoid();
 
-        // Wave 3 — referral attribution. The __foundry_ref cookie was set
-        // when the visitor arrived via ?ref=<code>. Capture it on the
-        // founder row so the 'paid' conversion event later resolves
-        // without the cookie (Stripe webhook arrives without browser
-        // context).
-        const cookieHeader = c.req.header('cookie') ?? '';
-        const refMatch = cookieHeader.match(/(?:^|;\s*)__foundry_ref=([\w-]{4,32})/);
-        const referredByCode = refMatch ? refMatch[1] : null;
-
+        // One owner: no referral attribution and no welcome sequence
+        // (Private S7, 29 September 2026). Those were for strangers signing up.
         await query(
-          `INSERT INTO founders (id, clerk_user_id, email, name, referred_by_code)
-           VALUES (?, ?, ?, ?, ?)
+          `INSERT INTO founders (id, clerk_user_id, email, name)
+           VALUES (?, ?, ?, ?)
            ON CONFLICT (clerk_user_id) DO NOTHING`,
-          [founderId, clerkUserId, email, name, referredByCode]
+          [founderId, clerkUserId, email, name]
         );
-
-        // Fire signup conversion event when the row was created via this
-        // path (a no-op when the ON CONFLICT branch took the INSERT).
-        if (referredByCode) {
-          try {
-            const { recordReferralEvent } = await import(
-              '../services/distribution/referrals.js'
-            );
-            await recordReferralEvent(referredByCode, 'signup', {
-              invited_founder_id: founderId,
-            });
-          } catch { /* attribution failure is non-fatal */ }
-        }
 
         result = await getFounderByClerkId(clerkUserId);
 
-        // Welcome email on provisioning (idempotent via the gateway, so this
-        // never double-sends with the Clerk webhook path). Use the resolved
-        // row's real id for a stable dedup key. Fire-and-forget.
-        const provisioned = result.rows[0] as Record<string, unknown> | undefined;
-        if (provisioned?.id && provisioned?.email) {
-          void (async () => {
-            try {
-              const { sendFounderWelcome } = await import('../services/founder/welcome-sequence.js');
-              await sendFounderWelcome({
-                id: String(provisioned.id),
-                email: String(provisioned.email),
-                name: (provisioned.name as string | null) ?? null,
-                created_at: String(provisioned.created_at ?? new Date().toISOString()),
-              });
-            } catch { /* non-fatal; cron will retry */ }
-          })();
-        }
       } catch (e) {
         logger.error('Auto-provision founder failed', { error: String(e) });
       }

@@ -17,6 +17,10 @@
 // not a hypothetical. So there is one number, here, and the four call sites
 // import it.
 //
+// Two of those four are gone: `benchmarking/pool.ts` and
+// `network/benchmarks.ts` were deleted in Private S7 (29 September 2026),
+// because one owner has no peers. The floor still governs the two that remain.
+//
 // FIVE IS AN ENGINEERING ESTIMATE, NOT A LEGAL CONCLUSION. It is the smallest
 // count at which no single contributor dominates an aggregate. Whether it is
 // sufficient for the jurisdictions Foundry operates in is counsel debt —

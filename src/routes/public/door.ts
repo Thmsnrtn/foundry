@@ -39,9 +39,8 @@
 //     dashboard — consent, export, deletion — is a different thing and stays.
 //   • The `?ref=` referral capture that set a 30-day attribution cookie here.
 //     Referral links were a growth mechanic for a product with a signup funnel.
-//     `services/distribution/referrals.ts` survives — `middleware/auth.ts` and
-//     `billing/stripe.ts` still call it — but nothing captures a click any
-//     more, which is the honest state while there is nothing to refer anyone to.
+//     The referral service itself was deleted in Private S7 (29 September
+//     2026): one owner refers nobody.
 // =============================================================================
 
 import { Hono } from 'hono';

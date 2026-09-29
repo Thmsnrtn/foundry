@@ -9,7 +9,24 @@ import {
   FOUNDRY_IDENTITY_KEY, establishSystemIdentity, resolveFoundryProductId,
   resolveSystemIdentityProductId,
 } from '../../src/services/system-identity.js';
-import { sendFounderWelcome } from '../../src/services/founder/welcome-sequence.js';
+import { invoke } from '../../src/services/outbound/gateway.js';
+
+// A governed send scoped by Foundry's own identity. This was the founder
+// welcome email until Private S7 (29 September 2026) deleted it: one owner is
+// never welcomed. The shape is kept because the property is about identity,
+// not about the welcome — resolve the scope, decline when it is unknown, and
+// go out only through the gateway.
+async function sendAsFoundry(): Promise<{ ok: boolean; reason?: string }> {
+  const productId = await resolveFoundryProductId();
+  if (!productId) return { ok: false, reason: 'foundry_product_not_seeded' };
+  const r = await invoke({
+    productId, tool: 'send_email', action: 'identity probe → owner@foundry.example',
+    params: { to: ['owner@foundry.example'], subject: 'probe', html: '<p>probe</p>', from: 'Foundry <probe@foundry.example>' },
+    dedupKey: 'identity-probe', customerExternalId: 'owner@foundry.example',
+    surface: 'email_outbound', dataClass: 'customer',
+  });
+  return r.ok ? { ok: true } : { ok: false, reason: r.reason };
+}
 
 // =============================================================================
 // Canonical system identity (migration 123).
@@ -53,13 +70,10 @@ describe('canonical system identity', () => {
     expect(await resolveFoundryProductId()).toBeNull();
 
     // And the consequence of unknown is declining to act, not acting on a
-    // guess: the welcome send stops rather than borrowing the impostor's scope.
+    // guess: a send scoped by identity stops rather than borrowing the impostor's scope.
     const before = await countOf(
       "SELECT COUNT(*) n FROM audit_log WHERE product_id=? AND action_type='gateway:send_email'", [IMPOSTOR]);
-    const result = await sendFounderWelcome({
-      id: 'si_owner', email: 'owner@foundry.example', name: 'Owner',
-      created_at: new Date().toISOString(),
-    });
+    const result = await sendAsFoundry();
     expect(result).toMatchObject({ ok: false, reason: 'foundry_product_not_seeded' });
     expect(await countOf(
       "SELECT COUNT(*) n FROM audit_log WHERE product_id=? AND action_type='gateway:send_email'", [IMPOSTOR]))
@@ -152,10 +166,7 @@ describe('canonical system identity', () => {
     // The identity is an ordinary product id. It carries no cross-tenant read,
     // and nothing about it widens a scope: an effect scoped to the canonical
     // product touches only the canonical product.
-    await sendFounderWelcome({
-      id: 'si_owner', email: 'owner@foundry.example', name: 'Owner',
-      created_at: new Date().toISOString(),
-    });
+    await sendAsFoundry();
     expect(await countOf(
       "SELECT COUNT(*) n FROM audit_log WHERE product_id=? AND action_type='gateway:send_email'", [IMPOSTOR]))
       .toBe(0);
@@ -173,15 +184,6 @@ describe('canonical system identity', () => {
       "SELECT COUNT(*) n FROM audit_log WHERE product_id=? AND action_type='gateway:send_email'", [CANONICAL]))
       .toBeGreaterThan(0);
 
-    // The welcome path itself contains no direct send: it goes through invoke().
-    const src = readFileSync(
-      resolve(process.cwd(), 'src/services/founder/welcome-sequence.ts'), 'utf8');
-    expect(src).toMatch(/invoke\(\{/);
-    // No provider client, no direct HTTP: the only way out is the gateway.
-    // (`RESEND_FROM_ADDRESS` is a From header handed *to* the gateway, not a
-    // provider call, so the assertion is about imports and requests.)
-    expect(src).not.toMatch(/from '.*integration\/resend/);
-    expect(src).not.toMatch(/\bfetch\s*\(/);
   });
 
   it('is invisible to the institutional kernel', () => {

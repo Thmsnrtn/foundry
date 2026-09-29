@@ -165,15 +165,6 @@ describe('the quiet rungs leave a record', () => {
     const src = readFileSync('src/routes/dashboard/letter.ts', 'utf8');
     expect(src).toMatch(/Noticed, and not worth interrupting you for/);
   });
-
-  it('routes the peer-radar bell through the policy', () => {
-    const src = stripComments(readFileSync('src/jobs/index.ts', 'utf8'), { lineComments: true });
-    const radar = src.slice(src.indexOf('network_radar starting'));
-    const body = radar.slice(0, radar.indexOf('network_radar complete'));
-    expect(body, 'the Letter carries this fact, so quieting it is safe')
-      .toMatch(/deliver\(p\.owner_id, p\.id/);
-    expect(body).not.toMatch(/createNotification\(/);
-  });
 });
 
 describe('the in-app bypass, pinned so it can only shrink', () => {

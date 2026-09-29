@@ -18,7 +18,6 @@ src/services/distribution/briefing-share.ts 1
 src/services/fleet/insights.ts 1
 src/services/founder/intelligence.ts 1
 src/services/founder/selected-company.ts 1
-src/services/founder/welcome-sequence.ts 1
 src/services/institution/ecosystem-principal.ts 1
 src/services/institution/keeping.ts 1
 src/services/intelligence/benchmarks.ts 1

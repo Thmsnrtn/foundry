@@ -129,10 +129,10 @@ describe('every surface that shows a Signal', () => {
   }
 
   // A consumer that neither reads `hasData` nor uses the helpers is presenting
-  // a default as a measurement. `team/members.ts` imports `computeSignal` and
-  // never calls it for a score, so it carries its reason here rather than a
-  // silent pass.
-  const NO_SCORE_SHOWN = new Set(['src/services/team/members.ts']);
+  // a default as a measurement. `team/members.ts` used to import
+  // `computeSignal` without calling it and was exempted by name; the import
+  // went with the alignment score in Private S7, so nothing is exempt now.
+  const NO_SCORE_SHOWN = new Set<string>();
 
   it('reads hasData or says why it does not', () => {
     const offenders = consumers().filter((f) => {
@@ -149,11 +149,12 @@ describe('every surface that shows a Signal', () => {
     // above. It was five until `conversation/context.ts` was deleted as
     // production-dead, then four until `GET /share/:token` went — the investor
     // read-only view, whose token nothing can mint now that the control that
-    // generated it is deleted. The three left are `jobs/index.ts`,
-    // `services/team/members.ts` and `services/voice/briefing.ts`, each
-    // asserted by name below or exempted by name above.
+    // generated it is deleted, then three until the alignment score left
+    // `services/team/members.ts` (Private S7). The two left are
+    // `jobs/index.ts` and `services/voice/briefing.ts`, each asserted by name
+    // below.
     expect(consumers().length, 'if this moves, a new surface appeared')
-      .toBeGreaterThanOrEqual(3);
+      .toBeGreaterThanOrEqual(2);
   });
 
   it('does not let a bare score reach the voice', () => {

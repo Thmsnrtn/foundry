@@ -144,7 +144,13 @@ describe('the table is gone', () => {
       // And `capital_research_observe` — the owner's trading research, which
       // reads one public market every five minutes and scores itself once a
       // day, and can place no order — makes seventy-eight (29 September 2026).
-      .toBe(78);
+      // AND FOUR CAME OFF the same day, on the owner's word that Foundry is
+      // theirs alone (Private S7): the welcome emails, the founding-cohort slot
+      // enforcement, the co-founder alignment score and the cross-company
+      // network contribution. Each served only somebody who is not the owner.
+      // And the peer radar, which compared a company with its peers: one owner
+      // has none. Seventy-three.
+      .toBe(73);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

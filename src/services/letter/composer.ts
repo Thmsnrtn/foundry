@@ -4,13 +4,13 @@
 // The Overnight Operator's one daily artifact: "what I handled, the one thing
 // that needs you, what I learned, how trust moved." Composed DETERMINISTICALLY
 // from the ledgers — no model call, so it is free, instant, and cannot
-// hallucinate (Honesty Law). The Letter is where the radar (B4) and the trust
-// ledger (B6) speak. The measure of success is what the founder can safely
+// hallucinate (Honesty Law). The Letter is where the trust ledger (B6) speaks;
+// the peer radar (B4) spoke here too until Private S7 deleted it, because one
+// owner has no peers. The measure of success is what the founder can safely
 // ignore, not what they engage with.
 // =============================================================================
 
 import { query } from '../../db/client.js';
-import { scanForWarnings } from '../network/radar.js';
 import { getTrustLedger } from '../trust/ledger.js';
 import { getDissentRecord } from '../redteam/council.js';
 import { getExpiredBeliefs, getMemoryDigest } from '../memory/kernel.js';
@@ -49,7 +49,7 @@ const ASK_WORDS: Record<string, string> = {
 };
 
 export async function composeLetter(productId: string, f: Fluency = 'balanced'): Promise<Letter> {
-  const [executions, gate0, pending, expired, digest, radar, ledger, dissent, quieted,
+  const [executions, gate0, pending, expired, digest, ledger, dissent, quieted,
     executedDrafts] = await Promise.all([
     query(
       `SELECT action_type, integration FROM action_executions
@@ -80,7 +80,6 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
     ),
     getExpiredBeliefs(productId),
     getMemoryDigest(productId),
-    scanForWarnings(productId),
     getTrustLedger(productId),
     getDissentRecord(productId),
     // What the interruption policy quieted to this rung in the last day. Same
@@ -219,7 +218,6 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
         ? `Something you believed — "${e.premise.premise}" — is no longer true: ${e.premise.evidence ?? 'your own numbers now contradict it'}`
         : `A belief expired: "${e.premise.premise}" — ${e.premise.evidence ?? 'contradicted by telemetry'}`,
     ),
-    ...radar.map((w) => w.message),
   ];
   if (digest.holding > 0) {
     learned.push(digest.holding === 1

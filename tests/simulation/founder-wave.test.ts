@@ -21,7 +21,7 @@
 //   • the Forker — forks reality; scenarios land; fork is idempotent
 //   • the Thin founder — Ghost + radar both ABSTAIN (honesty holds under load)
 //   • the Overloaded founder — a 2am decision spree → pulse notices, kindly
-//   • the Radar-warned founder — churn in the peer danger tail → tap + Letter
+//   • the unranked founder — no peers to be ranked against (the radar is gone)
 //   • the Trusted founder — 9/10 positive outcomes → graduation proposal
 //   • the Quiet founder — a letter that says "nothing needs you"
 //   • the Adversary — tries to run the loop against a victim's tenant → refused
@@ -245,7 +245,7 @@ describe('the Forker — reality forked, idempotently', () => {
 });
 
 describe('the Thin founder — honesty under thin data', () => {
-  it('Ghost abstains and the radar stays silent rather than fabricate', async () => {
+  it('Ghost abstains rather than fabricate', async () => {
     const f = await founderWith('Thin', { snapshots: [5000, 5200] });
     actAs(f);
     const d = await decision(f.pid, 'Big bet on outbound');
@@ -254,9 +254,6 @@ describe('the Thin founder — honesty under thin data', () => {
       .toMatch(/^Abstained/);
     const rows = await query('SELECT COUNT(*) AS n FROM scenario_models WHERE decision_id = ?', [d]);
     expect(Number((rows.rows[0] as Record<string, unknown>).n)).toBe(0); // abstained
-
-    const { scanForWarnings } = await import('../../src/services/network/radar.js');
-    expect(await scanForWarnings(f.pid)).toEqual([]); // no peer cell → silence
   });
 });
 
@@ -283,9 +280,12 @@ describe('the Overloaded founder — the pulse notices', () => {
   });
 });
 
-describe('the Radar-warned founder — the network sees it first', () => {
-  it('churn in the peer danger tail lands in The Letter with evidence', async () => {
-    const f = await founderWith('Warned', { stage: 'prompt_4' });
+describe('the unranked founder — one owner has no peers', () => {
+  it('a stale peer cell never reaches The Letter', async () => {
+    // The peer radar was deleted in Private S7 (29 September 2026). A leftover
+    // benchmark row that would once have put this company in the danger tail
+    // must now say nothing at all: there is nobody to be compared with.
+    const f = await founderWith('Unranked', { stage: 'prompt_4' });
     await query(
       `INSERT INTO metric_snapshots (id, product_id, snapshot_date, churn_rate, mrr_cents)
        VALUES (?, ?, '2026-06-01', 0.12, 900000)`, [`wf_warn_${f.pid}`, f.pid]);
@@ -296,8 +296,8 @@ describe('the Radar-warned founder — the network sees it first', () => {
     const letter = await hit('GET', '/letter');
     expect(letter.status).toBe(200);
     const text = await letter.text();
-    expect(text).toContain('11 peers');
-    expect(text).toContain('4%');
+    expect(text).not.toContain('11 peers');
+    expect(text).not.toMatch(/danger tail|peer median/);
   });
 });
 

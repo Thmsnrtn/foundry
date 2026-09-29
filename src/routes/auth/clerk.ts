@@ -255,28 +255,12 @@ authRoutes.post('/auth/webhook', async (c) => {
       // No Stripe customer: nobody buys access to their own institution.
       const stripeCustomerId = null;
 
-      // Determine cohort
-      const now = new Date();
-      const weekStart = new Date(now);
-      weekStart.setDate(now.getDate() - now.getDay());
-      const cohortPeriod = weekStart.toISOString().split('T')[0];
 
       await query(
         `INSERT INTO founders (id, clerk_user_id, email, name, stripe_customer_id)
          VALUES (?, ?, ?, ?, ?)`,
         [founderId, userId, email, name, stripeCustomerId]
       );
-
-      // Welcome email on provisioning (idempotent via the gateway; the
-      // welcome_sequence_tick cron is the retry safety net). Fire-and-forget.
-      if (email) {
-        void (async () => {
-          try {
-            const { sendFounderWelcome } = await import('../../services/founder/welcome-sequence.js');
-            await sendFounderWelcome({ id: founderId, email, name, created_at: new Date().toISOString() });
-          } catch { /* non-fatal; cron will retry */ }
-        })();
-      }
 
       // Activation funnel: signup (Phase 5.2).
       void (async () => {
@@ -286,19 +270,6 @@ authRoutes.post('/auth/webhook', async (c) => {
         } catch { /* non-fatal */ }
       })();
 
-      // Create or update cohort (for Foundry's own tracking). Scoped by
-      // canonical system identity (migration 123) so signup cohorts can never
-      // be written into a customer product that happens to be named "Foundry".
-      const { resolveFoundryProductId } = await import('../../services/system-identity.js');
-      const fpId = await resolveFoundryProductId();
-      if (fpId) {
-        await query(
-          `INSERT INTO cohorts (id, product_id, acquisition_period, acquisition_channel, founder_count)
-           VALUES (?, ?, ?, 'organic', 1)
-           ON CONFLICT (product_id, acquisition_period, acquisition_channel) DO UPDATE SET founder_count = founder_count + 1`,
-          [nanoid(), fpId, cohortPeriod]
-        );
-      }
     }
   }
 

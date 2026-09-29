@@ -14,7 +14,6 @@ import { getLatestCohortSummary, getHistoricalAverage } from '../services/intell
 import { generateRecoveryProtocol } from '../services/intelligence/recovery.js';
 import { generateDigest } from '../services/digest/generator.js';
 import { sendDigestEmail } from '../services/digest/delivery.js';
-import { enforceActivationWindow } from '../services/billing/cohort.js';
 import { generatePatternFromOutcome } from '../services/decisions/patterns.js';
 import { synthesizeJudgmentPatterns } from '../services/wisdom/patterns.js';
 import { getProductDNA } from '../services/wisdom/dna.js';
@@ -258,13 +257,6 @@ export async function sloCheck(): Promise<void> {
 //
 // WHAT THE ABSENCE OF A ROW NOW MEANS: this company reported nothing that day.
 // That is a fact worth being able to state, and a row of zeros cannot state it.
-
-// ─── 7. Slot Enforcement — Daily 9:00 UTC ────────────────────────────────────
-export async function slotEnforcement(): Promise<void> {
-  logger.info('slot_enforcement starting', { jobName: 'slot_enforcement' });
-  await enforceActivationWindow();
-  logger.info('slot_enforcement complete', { jobName: 'slot_enforcement' });
-}
 
 // ─── 8. Cold Start Check — Daily ──────────────────────────────────────────────
 export async function coldStartCheck(): Promise<void> {
@@ -1008,44 +1000,6 @@ export async function morningBriefings(): Promise<void> {
   logger.info('morning_briefings complete', { jobName: 'morning_briefings' });
 }
 
-// ─── New Job: Alignment Scores ────────────────────────────────────────────────
-
-export async function alignmentScores(): Promise<void> {
-  logger.info('alignment_scores starting', { jobName: 'alignment_scores' });
-  const products = await getAllActiveProducts();
-  const { computeAlignmentScore } = await import('../services/team/members.js');
-
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      await computeAlignmentScore(p.id);
-    } catch (err) {
-      logger.error(`alignment_scores error for ${p.id}:`, { jobName: 'alignment_scores', error: String(err) });
-    }
-  }
-  logger.info('alignment_scores complete', { jobName: 'alignment_scores' });
-}
-
-// ─── New Job: Network Contribution ────────────────────────────────────────────
-
-export async function networkContribution(): Promise<void> {
-  logger.info('network_contribution starting', { jobName: 'network_contribution' });
-  const products = await getAllActiveProducts();
-  const { contributeToNetwork } = await import('../services/network/benchmarks.js');
-
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      const lsResult = await query('SELECT current_prompt FROM lifecycle_state WHERE product_id = ?', [p.id]);
-      const lifecycleStage = (lsResult.rows[0] as Record<string, string> | undefined)?.current_prompt ?? 'prompt_1';
-      await contributeToNetwork(p.id, p.market_category ?? null, lifecycleStage);
-    } catch (err) {
-      logger.error(`network_contribution error for ${p.id}:`, { jobName: 'network_contribution', error: String(err) });
-    }
-  }
-  logger.info('network_contribution complete', { jobName: 'network_contribution' });
-}
-
 // ─── New Job: Prediction Accuracy ─────────────────────────────────────────────
 
 export async function predictionAccuracyJob(): Promise<void> {
@@ -1462,47 +1416,6 @@ async function scpExtendedIntegrationsSync(): Promise<void> {
     + `${products.rows.length} products, ${failed} provider sync(s) failed`;
   if (failed > 0) logger.error(line, { jobName: 'scp_extended_integrations_sync' });
   else logger.info(line, { jobName: 'scp_extended_integrations_sync' });
-}
-
-// ─── SCP v4: Benchmark Refresh — Sunday 3:00 UTC ────────────────────────────
-
-async function scpBenchmarkRefresh(): Promise<void> {
-  logger.info('scp_benchmark_refresh starting', { jobName: 'scp_benchmark_refresh' });
-  try {
-    const { refreshPercentiles, submitBenchmark } = await import('../services/benchmarking/pool.js');
-    const { query: dbQuery } = await import('../db/client.js');
-
-    // Submit this cycle's metrics as benchmark contributions
-    const products = await dbQuery(
-      `SELECT ms.*, ls.current_prompt, p.market_category
-       FROM metric_snapshots ms
-       JOIN products p ON ms.product_id = p.id
-       JOIN lifecycle_state ls ON ms.product_id = ls.product_id
-       WHERE ms.snapshot_date = date('now', '-1 day')
-         AND ${operatingProduct('p')}
-       LIMIT 200`
-    );
-
-    // The band vocabulary lives with the pool that is keyed on it, so the
-    // reader in `network/cohort-patterns.ts` cannot invent a second spelling.
-    const { lifecycleBandForPrompt } = await import('../services/benchmarking/pool.js');
-
-    for (const row of products.rows) {
-      const r = row as Record<string, unknown>;
-      const stage = lifecycleBandForPrompt(r.current_prompt as string | null);
-      const contributions = [];
-      if (r.churn_rate != null) contributions.push({ metric_name: 'churn_rate', value: Number(r.churn_rate), company_stage: stage, industry: 'saas' });
-      if (r.activation_rate != null) contributions.push({ metric_name: 'activation_rate', value: Number(r.activation_rate), company_stage: stage, industry: 'saas' });
-      if (contributions.length > 0) {
-        await submitBenchmark(r.product_id as string, contributions).catch(() => {});
-      }
-    }
-
-    await refreshPercentiles();
-    logger.info(`scp_benchmark_refresh: Refreshed percentiles for ${products.rows.length} contributions`, { jobName: 'scp_benchmark_refresh' });
-  } catch (err) {
-    logger.error('scp_benchmark_refresh: Error:', { jobName: 'scp_benchmark_refresh', error: String(err) });
-  }
 }
 
 // ─── SCP v4: Decision Retrospectives — Monday 9:00 UTC ───────────────────────
@@ -2295,42 +2208,6 @@ export async function founderPulseCheck(): Promise<void> {
   logger.info('founder_pulse_check complete', { jobName: 'founder_pulse_check' });
 }
 
-// ─── Network radar (Ascent B4 / Compounding Law) ──────────────────────────────
-// Peer early-warning: one notification when a vital sits in the danger tail of
-// the product's peer cell. The Letter carries the detail; this is just the tap
-// on the shoulder. Abstains on thin cells (radar's own rule).
-export async function networkRadarCheck(): Promise<void> {
-  logger.info('network_radar starting', { jobName: 'network_radar' });
-  const products = await getAllActiveProducts();
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      const { scanForWarnings } = await import('../services/network/radar.js');
-      const warnings = await scanForWarnings(p.id);
-      if (warnings.length > 0) {
-        // THROUGH THE INTERRUPTION POLICY, because the Letter carries this fact
-        // itself — `letter/composer.ts` calls `scanForWarnings` too. That is the
-        // condition which makes quieting safe: a founder whose ceiling is
-        // `letter` loses the bell and still reads the warning, which is exactly
-        // what they asked for. The bell used to ignore their ceiling entirely.
-        const { deliver } = await import('../services/ux/interruption.js');
-        await deliver(p.owner_id, p.id, {
-          // A peer signal in the danger tail is worth reading, not worth a
-          // phone buzzing: the Letter is where it belongs and where it already
-          // is.
-          importance: 'attention',
-          title: `Peer radar: ${warnings.length} vital${warnings.length > 1 ? 's' : ''} in the danger tail`,
-          body: warnings[0].message + (warnings.length > 1 ? ` (+${warnings.length - 1} more in The Letter)` : ''),
-          actionUrl: '/letter', actionLabel: 'Read The Letter',
-        }, await founderPrefs(p.owner_id) as never);
-      }
-    } catch (err) {
-      logger.error(`network_radar error for ${p.id}`, { jobName: 'network_radar', error: String(err) });
-    }
-  }
-  logger.info('network_radar complete', { jobName: 'network_radar' });
-}
-
 // ─── Autopilot tick (Ascent B6 realized / Trust Law) ──────────────────────────
 // Learn (bank real outcomes into the ladder) then act (resolve eligible gate-≤1
 // decisions in founder-granted categories). Every act is notified with its 24h
@@ -2579,7 +2456,6 @@ export const RETIRED_LOOPS: Record<string, { fn: () => Promise<void>; was: strin
   scp_failure_pattern_scan: { fn: scpFailurePatternScan, was: 'Scan all products for failure pattern matches (daily 9:00 UTC)' },
   scp_prompt_evolution: { fn: scpPromptEvolution, was: 'Generate prompt mutation suggestions for underperforming agents (Sunday 4:00 UTC)' },
   scp_playbook_eval: { fn: scpExecutionPlaybookEval, was: 'Evaluate execution playbook conditions for all active products (hourly)' },
-  scp_benchmark_refresh: { fn: scpBenchmarkRefresh, was: 'Refresh anonymous benchmark percentiles (Sunday 3:00 UTC)' },
   scp_decision_retrospectives: { fn: scpDecisionRetrospectives, was: 'Notify founders of decisions due for 90-day retrospective (Monday)' },
   scp_signal_events: { fn: scpSignalEvents, was: 'Process pending signal events and dispatch to target agents (hourly)' },
   scp_founder_state: { fn: scpFounderStateAssessment, was: 'Detect behavioral signals and assess founder state (daily 7:00 UTC)' },
@@ -2590,7 +2466,6 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   memory_premise_check: { fn: memoryPremiseCheck,   schedule: '0 7 * * *',       description: 'Re-check decision premises against live telemetry; flag expired beliefs (daily)' },
   red_team_sweep:       { fn: redTeamSweep,         schedule: '30 */2 * * *',    description: 'Adversarial pre-mortem for uncontested gate-3+ pending decisions (every 2h)' },
   founder_pulse_check:  { fn: founderPulseCheck,    schedule: '0 9 * * 5',       description: 'Founder strain check — kind, numbers-shown, only when overloaded (Friday 9:00 UTC)' },
-  network_radar:        { fn: networkRadarCheck,    schedule: '15 7 * * *',      description: 'Peer early-warning radar — warns when a vital sits in the danger tail of ≥5 peers (daily)' },
   autopilot_tick:       { fn: autopilotTick,        schedule: '45 */4 * * *',    description: 'Second Self: bank real outcomes into the trust ladder, then act on eligible gate-≤1 decisions in founder-granted categories (every 4h)' },
   customer_success_sweep: { fn: customerSuccessSweep, schedule: '15 8 * * *',    description: 'Customer Success department: one check-in per at-risk customer, drafted from real account state; trust-ladder governed, envelope-bounded (daily)' },
   marketing_sweep:      { fn: marketingSweep,       schedule: '0 9 * * 1',       description: 'Marketing department: one campaign proposal per cycle, carried by a graced signups_7d premise that falsifies honestly (Monday)' },
@@ -2603,7 +2478,6 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   weekly_synthesis:     { fn: weeklySynthesis,      schedule: '0 6 * * 5',       description: 'Weekly intelligence synthesis (Friday)' },
   digest_generate:      { fn: digestGenerate,       schedule: '0 7 * * 1',       description: 'Generate and send weekly digests (Monday)' },
   slo_check:            { fn: sloCheck,             schedule: '15 * * * *',      description: 'Check SLOs (AI spend vs cap) and alert operator on breach (hourly)' },
-  slot_enforcement:     { fn: slotEnforcement,      schedule: '0 9 * * *',       description: 'Enforce founding cohort activation window' },
   cold_start_check:     { fn: coldStartCheck,       schedule: '0 5 * * *',       description: 'Check cold start exit conditions' },
   scenario_accuracy:    { fn: scenarioAccuracy,     schedule: '0 8 * * 5',       description: 'Evaluate scenario prediction accuracy (Friday)' },
   yellow_pulse:         { fn: yellowPulse,          schedule: '0 7 * * 4',       description: 'Thursday pulse digest for Yellow products' },
@@ -2622,8 +2496,6 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   weekly_plan_generate:   { fn: weeklyPlanGenerate,    schedule: '0 8 * * 1',   description: 'Generate Weekly Operating Plan for each product (Monday 8:00 UTC)' },
   integration_sync:       { fn: integrationSync,       schedule: '0 */1 * * *', description: 'Sync all active external integrations (every hour)' },
   morning_briefings:      { fn: morningBriefings,      schedule: '30 6 * * *',  description: 'Pre-generate morning voice briefings (daily 6:30 UTC)' },
-  alignment_scores:       { fn: alignmentScores,       schedule: '0 8 * * 1',   description: 'Compute co-founder alignment scores (Monday)' },
-  network_contribution:   { fn: networkContribution,   schedule: '0 3 * * 0',   description: 'Contribute anonymized metrics to Intelligence Network (Sunday)' },
   prediction_accuracy:    { fn: predictionAccuracyJob, schedule: '0 11 * * *',  description: 'Compute prediction accuracy for recent decision outcomes (daily)' },
   // ─── SCP Jobs ─────────────────────────────────────────────────────────────
   // SCP v3: New capability layer jobs
@@ -4241,24 +4113,6 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
     },
     schedule: '25 * * * *', // Hourly
     description: 'Pause acting for products whose owner has no paid tier and no live trial; resume when they do',
-  },
-  // Wave 2 / Council 16: Foundry's own customer onboarding sequence
-  welcome_sequence_tick: {
-    fn: async () => {
-      const { runWelcomeSequenceTick } = await import(
-        '../services/founder/welcome-sequence.js'
-      );
-      const counts = await runWelcomeSequenceTick();
-      const total = counts.day_0 + counts.day_3 + counts.day_7;
-      if (total > 0) {
-        logger.info(
-          `welcome_sequence_tick sent: day_0=${counts.day_0} day_3=${counts.day_3} day_7=${counts.day_7}`,
-          { jobName: 'welcome_sequence_tick' }
-        );
-      }
-    },
-    schedule: '0 */6 * * *', // Every 6 hours; gateway idempotency dedups duplicate sends
-    description: "Send Foundry's own day-0 / day-3 / day-7 founder onboarding emails",
   },
   // CAPITAL RESEARCH (migrations 364–365; CAPITAL_RESEARCH.md): read each
   // venue's public market, seal two forecasts before the window closes, and import the

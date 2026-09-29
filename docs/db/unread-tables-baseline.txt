@@ -1,3 +1,2 @@
-alignment_snapshots
 founder_behavioral_signals
 geopolitical_signals

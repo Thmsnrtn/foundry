@@ -181,18 +181,6 @@ privacySettings.get('/privacy', async (c) => {
 
   const consentItems: Array<{ name: ConsentType; label: string; description: string; learnMore: string; }> = [
     {
-      name: 'benchmark_contribution',
-      label: 'Contribute to Benchmarking',
-      // THIS PROMISED SOMETHING THE CODE DID NOT DO, twice over. It said
-      // "anonymized" and "stripped of all identifying information", while the
-      // pool stored each contribution against the company id — and it said
-      // "share", while the contribution happened whether or not this toggle was
-      // ever ticked. Both are fixed; the wording now describes the second
-      // version rather than the first.
-      description: 'Contribute your activation and churn rates to the Foundry benchmarking pool, and get percentile comparisons back. Off unless you turn it on.',
-      learnMore: 'Contributions are stored against your company so you can erase them — they are not anonymous at rest, and saying otherwise would be untrue. What leaves the pool is only an aggregate, and only once at least five different companies are in the same segment. Below that, nothing is published.',
-    },
-    {
       // TWO CLAIMS WERE UNTRUE AND ONE CONTROL DID NOTHING. Nothing read this
       // toggle: contribution to the wisdom network was consented separately
       // while RECEIVING was governed by nothing, so a company that left this
@@ -503,7 +491,6 @@ privacySettings.post('/privacy/consent',
   const granted = body[consentType ?? ''] === '1';
 
   const validTypes: ConsentType[] = [
-    'benchmark_contribution',
     'aggregate_insights',
     'product_improvement',
     'ai_training_opt_out',

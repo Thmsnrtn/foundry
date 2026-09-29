@@ -1,7 +1,8 @@
 // =============================================================================
-// Tests: Ascent Phase 5 — Network radar (B4), Trust ledger (B6), The Letter (B7)
-// All three against the real migrated schema; all three honor their abstention
-// rules (thin peer cells, thin trust samples, quiet days).
+// Tests: Ascent Phase 5 — Trust ledger (B6), The Letter (B7)
+// Both against the real migrated schema; both honor their abstention rules
+// (thin trust samples, quiet days). The network radar (B4) and its cases were
+// deleted in Private S7: one owner has no peer cell.
 // =============================================================================
 
 process.env.TURSO_DATABASE_URL = 'file::memory:';
@@ -11,7 +12,6 @@ process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
 import { describe, it, expect, beforeAll } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { scanForWarnings } from '../../src/services/network/radar.js';
 import { getTrustLedger, TRUST_MIN_SAMPLE } from '../../src/services/trust/ledger.js';
 import { composeLetter } from '../../src/services/letter/composer.js';
 
@@ -21,30 +21,10 @@ const id = (): string => `p5_${++seq}`;
 beforeAll(async () => {
   await runMigrations();
   await query('PRAGMA foreign_keys=OFF', []);
-  for (const p of ['p_radar', 'p_thincell', 'p_trust', 'p_quiet']) {
+  for (const p of ['p_trust', 'p_quiet']) {
     await query(`INSERT INTO products (id, name, owner_id) VALUES ('${p}','Co','o1')`, []);
     await query(`INSERT INTO lifecycle_state (product_id, current_prompt) VALUES ('${p}','prompt_2')`, []);
   }
-  // Radar: product churns at 9% (mrr $1k → bracket 0-5k); peers median 4%.
-  await query(
-    `INSERT INTO metric_snapshots (id, product_id, snapshot_date, churn_rate, mrr_cents)
-     VALUES ('p5_snap1', 'p_radar', '2026-03-01', 0.09, 100000)`, [],
-  );
-  await query(
-    `INSERT INTO network_benchmarks (id, metric, market_category, lifecycle_stage, mrr_bracket, p25, p50, p75, sample_count)
-     VALUES ('nb_p5', 'churn_rate', 'all', 'prompt_2', '0-5k', 0.02, 0.04, 0.06, 9)`, [],
-  );
-  // Thin cell: its own stage (prompt_3) so it can't match p_radar's cell;
-  // terrible NPS but only 3 peers → must abstain.
-  await query("UPDATE lifecycle_state SET current_prompt = 'prompt_3' WHERE product_id = 'p_thincell'", []);
-  await query(
-    `INSERT INTO metric_snapshots (id, product_id, snapshot_date, nps_score, mrr_cents)
-     VALUES ('p5_snap2', 'p_thincell', '2026-03-01', 5, 100000)`, [],
-  );
-  await query(
-    `INSERT INTO network_benchmarks (id, metric, market_category, lifecycle_stage, mrr_bracket, p25, p50, p75, sample_count)
-     VALUES ('nb_thin', 'nps_score', 'all', 'prompt_3', '0-5k', 20, 40, 60, 3)`, [],
-  );
   // Trust: 9 approved marketing decisions with positive outcomes, 1 negative;
   // plus a thin category (3 decisions).
   for (let i = 0; i < 10; i++) {
@@ -76,19 +56,6 @@ beforeAll(async () => {
     `INSERT INTO decisions (id, product_id, category, gate, what, why_now, status)
      VALUES ('p5_pending', 'p_trust', 'strategic', 3, 'Enter enterprise', 'Pull from pipeline', 'pending')`, [],
   );
-});
-
-describe('Network radar (B4)', () => {
-  it('warns when a vital is in the danger tail of a thick peer cell, with evidence', async () => {
-    const w = await scanForWarnings('p_radar');
-    expect(w.length).toBe(1);
-    expect(w[0].metric).toBe('churn_rate');
-    expect(w[0].message).toContain('9 peers');
-    expect(w[0].message).toContain('4%'); // peer median shown, humanized
-  });
-  it('abstains on thin cells (<5 peers)', async () => {
-    expect(await scanForWarnings('p_thincell')).toEqual([]);
-  });
 });
 
 describe('Trust ledger (B6)', () => {

@@ -4,7 +4,6 @@ process.env.ENCRYPTION_KEY = '0'.repeat(64);
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { lifecycleBandForPrompt, benchmarkSegment } from '../../src/services/benchmarking/pool.js';
 import { __loadProductStateForTest as loadProductState } from '../../src/services/network/failure-library.js';
 
 // =============================================================================
@@ -12,11 +11,10 @@ import { __loadProductStateForTest as loadProductState } from '../../src/service
 //
 // THE COHORT HALF OF THIS IS GONE WITH ITS SUBJECT. `network/cohort-patterns.ts`
 // was deleted as production-dead, so the two describes that held
-// `getCohortBenchmarks` to the published percentiles were removed with it. What
-// survives is the SEGMENT KEY it was looking up under — `benchmarking/pool.ts`
-// still writes and reads that vocabulary — and the runway, which lives in
-// `network/failure-library.ts`. The original account is kept because the key is
-// the thing still being asserted:
+// `getCohortBenchmarks` to the published percentiles were removed with it. The
+// segment key went with `benchmarking/pool.ts` in Private S7 (29 September
+// 2026): one owner has no cohort. What survives is the runway, which lives in
+// `network/failure-library.ts`. The original account is kept as history:
 //
 // `getCohortBenchmarks` looked up published percentiles with a lifecycle key of
 // 'prompt_1'..'prompt_4', derived from the company's FUNDING stage. The only
@@ -51,20 +49,8 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  await query('DELETE FROM benchmark_percentiles');
   await query('DELETE FROM metric_snapshots');
   await query('DELETE FROM company_financial_position');
-});
-
-describe('the segment key', () => {
-  it('is the one the pool is written with', async () => {
-    expect(lifecycleBandForPrompt('prompt_6')).toBe('growth');
-    expect(lifecycleBandForPrompt('prompt_1')).toBe('pre_revenue');
-    // Not 'prompt_N': that vocabulary belongs to the lifecycle, not the pool.
-    const segment = await benchmarkSegment(P);
-    expect(segment.lifecycleState).toBe('growth');
-    expect(segment.companyCategory).toBe('b2b_saas');
-  });
 });
 
 describe('runway', () => {

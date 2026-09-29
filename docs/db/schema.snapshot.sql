@@ -361,19 +361,6 @@ CREATE TABLE ai_spend_reservations (
 , purpose_kind TEXT
   CHECK (purpose_kind IS NULL OR purpose_kind IN (
     'observation','candidate','experiment','unknown','undertaking','responsibility','workspace','mandate')), purpose_id TEXT, work TEXT);
-CREATE TABLE alignment_snapshots (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  snapshot_date TEXT NOT NULL,        -- YYYY-MM-DD
-  alignment_score INTEGER NOT NULL,   -- 0-100
-  signal_consensus BOOLEAN,           -- do all founders agree on Signal interpretation?
-  divergence_areas TEXT,              -- JSON: string[] of areas where views differ
-  risk_state_consensus BOOLEAN,
-  priority_consensus BOOLEAN,
-  notes TEXT,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(product_id, snapshot_date)
-);
 CREATE TABLE api_keys (
   id TEXT PRIMARY KEY,
   founder_id TEXT NOT NULL REFERENCES founders(id),
@@ -478,39 +465,6 @@ CREATE TABLE autopilot_policies (
   last_demotion_reason  TEXT,
   updated_at            DATETIME DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(product_id, category)
-);
-CREATE TABLE benchmark_contributions (
-  id                  TEXT PRIMARY KEY,
-  product_id          TEXT NOT NULL,        -- kept private, never joined publicly
-  lifecycle_state     TEXT NOT NULL,
-  company_category    TEXT NOT NULL CHECK (company_category IN (
-                        'b2b_saas','b2c_saas','marketplace','developer_tools','fintech','other'
-                      )),
-  team_size_bucket    TEXT NOT NULL CHECK (team_size_bucket IN ('1','2-5','6-15','16-50','50+')),
-  mrr_bucket          TEXT NOT NULL CHECK (mrr_bucket IN ('0-1k','1k-10k','10k-50k','50k-200k','200k+')),
-
-  -- Core growth and retention metrics (nullable — contribute what you have)
-  activation_rate     REAL,
-  day_30_retention    REAL,
-  churn_rate          REAL,
-  nps_score           REAL,
-  cac_usd             REAL,
-  ltv_usd             REAL,
-  ai_cost_pct_of_mrr  REAL,
-
-  contributed_at      TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE TABLE benchmark_percentiles (
-  id               TEXT PRIMARY KEY,
-  lifecycle_state  TEXT NOT NULL,
-  company_category TEXT NOT NULL,
-  metric_name      TEXT NOT NULL,   -- e.g. 'activation_rate', 'churn_rate', 'nps_score'
-  p25              REAL,
-  p50              REAL,
-  p75              REAL,
-  p90              REAL,
-  sample_count     INTEGER NOT NULL,
-  computed_at      TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE briefing_decision_links (
   id TEXT PRIMARY KEY,
@@ -4008,6 +3962,13 @@ CREATE TABLE responsibility_transitions (
   actor_ref TEXT NOT NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE retired_rows (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  table_name  TEXT NOT NULL,
+  product_id  TEXT,
+  row_json    TEXT NOT NULL,
+  retired_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE retrieval_items (
   id            TEXT PRIMARY KEY,
   retrieval_id  TEXT NOT NULL REFERENCES market_retrievals(id),
@@ -5109,7 +5070,6 @@ CREATE INDEX idx_ai_spend_purpose ON ai_spend_reservations(purpose_kind, purpose
 CREATE INDEX idx_ai_spend_reservations_open
   ON ai_spend_reservations(status, expires_at);
 CREATE INDEX idx_ai_spend_work ON ai_spend_reservations(date, work);
-CREATE INDEX idx_alignment_product ON alignment_snapshots(product_id, snapshot_date DESC);
 CREATE INDEX idx_api_keys_founder ON api_keys(founder_id);
 CREATE INDEX idx_api_keys_hash ON api_keys(key_hash);
 CREATE INDEX idx_asset_money_spent_product ON asset_money_spent(product_id, recorded_at);
@@ -5141,12 +5101,6 @@ CREATE INDEX idx_bdl_unmatched
   ON briefing_decision_links(founder_id, decision_acted_at)
   WHERE decision_acted_at IS NULL;
 CREATE INDEX idx_behavioral_signals_product ON founder_behavioral_signals(product_id, detected_at DESC);
-CREATE INDEX idx_benchmark_contrib_segment
-  ON benchmark_contributions(lifecycle_state, company_category, contributed_at);
-CREATE INDEX idx_benchmark_percentiles_segment
-  ON benchmark_percentiles(lifecycle_state, company_category, metric_name);
-CREATE UNIQUE INDEX idx_benchmark_percentiles_unique
-  ON benchmark_percentiles(lifecycle_state, company_category, metric_name, computed_at);
 CREATE UNIQUE INDEX idx_benchmarks_metric_cohort ON intelligence_benchmarks(metric_name, cohort);
 CREATE INDEX idx_briefing_share_code ON briefing_shares(share_code);
 CREATE INDEX idx_briefing_share_founder
@@ -5503,6 +5457,8 @@ CREATE INDEX idx_responsibility_signals
   ON responsibility_signals(founder_id, responsibility, noted_at);
 CREATE INDEX idx_responsibility_transitions
   ON responsibility_transitions(responsibility_id, created_at);
+CREATE INDEX idx_retired_rows_product ON retired_rows(product_id);
+CREATE INDEX idx_retired_rows_table ON retired_rows(table_name);
 CREATE INDEX idx_retrieval_items_of ON retrieval_items(retrieval_id);
 CREATE INDEX idx_revenue_attributions_product ON revenue_attributions(product_id, agent_name, period_start DESC);
 CREATE INDEX idx_rule_triggers_cooldown ON lifecycle_rule_triggers(rule_id, customer_id, triggered_at DESC);
@@ -9764,6 +9720,11 @@ BEGIN
   SELECT RAISE(ABORT, 'responsibility_transition:outcome_required') WHERE NEW.to_state IN ('mature','exception_owned') AND NEW.outcome_ref IS NULL;
   SELECT RAISE(ABORT, 'responsibility_transition:authority_not_applicable') WHERE NEW.to_state IN ('unknown','visible','understood','shadowing') AND NEW.authority_ref IS NOT NULL;
   SELECT RAISE(ABORT, 'responsibility_transition:outcome_not_applicable') WHERE NEW.to_state NOT IN ('mature','exception_owned') AND NEW.outcome_ref IS NOT NULL;
+END;
+CREATE TRIGGER retired_rows_are_kept_as_they_were
+BEFORE UPDATE ON retired_rows
+BEGIN
+  SELECT RAISE(ABORT, 'retired_rows are kept as they were');
 END;
 CREATE TRIGGER retrieval_item_guard
 BEFORE INSERT ON retrieval_items

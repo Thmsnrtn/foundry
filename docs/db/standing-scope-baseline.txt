@@ -17,7 +17,6 @@ src/services/founder/health.ts 2
 src/services/founder/intelligence.ts 1
 src/services/founder/portfolio.ts 1
 src/services/founder/selected-company.ts 1
-src/services/founder/welcome-sequence.ts 1
 src/services/founder/what-changed.ts 1
 src/services/institution/absence-test.ts 5
 src/services/institution/acting.ts 3

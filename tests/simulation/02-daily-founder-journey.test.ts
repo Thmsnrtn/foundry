@@ -109,8 +109,4 @@ describe('Shared layout context loads UX intelligence', () => {
   it('layout context loads unseen milestones', () => {
     expect(sharedSource).toMatch(/getUnseenMilestones/);
   });
-
-  it('layout context loads tour state', () => {
-    expect(sharedSource).toMatch(/getTourState/);
-  });
 });

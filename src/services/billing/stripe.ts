@@ -301,30 +301,6 @@ async function processWebhookEvent(event: Stripe.Event): Promise<void> {
           } catch { /* non-fatal */ }
         })();
 
-        // Wave 3 — referral attribution. On subscription.created (only),
-        // fire the 'paid' conversion event for whoever invited this
-        // founder. Idempotent dedup is in the referrals service, but as
-        // an extra guard we only fire on 'created'.
-        if (event.type === 'customer.subscription.created') {
-          try {
-            const founderRow = await query(
-              'SELECT id, referred_by_code FROM founders WHERE stripe_customer_id = ?',
-              [sub.customer]
-            );
-            const f = founderRow.rows[0] as Record<string, string | null> | undefined;
-            if (f?.referred_by_code) {
-              const { recordReferralEvent } = await import(
-                '../distribution/referrals.js'
-              );
-              await recordReferralEvent(f.referred_by_code, 'paid', {
-                invited_founder_id: f.id ?? undefined,
-                metadata: { tier, subscription_id: sub.id },
-              });
-            }
-          } catch {
-            /* attribution failure must not break the webhook handler */
-          }
-        }
       } else {
         console.warn(`[STRIPE WEBHOOK] Unrecognised price ID: ${priceId} (customer: ${sub.customer}). Check STRIPE_*_PRICE_ID env vars.`);
       }
