@@ -23,48 +23,6 @@
       "capability": "the central AI client — atomic reservation before dispatch, settlement or release after"
     },
     {
-      "file": "src/services/billing/stripe.ts",
-      "line": 46,
-      "detector": "stripe_sdk_mutation",
-      "status": "control_path",
-      "capability": "Foundry SaaS billing credential owner"
-    },
-    {
-      "file": "src/services/billing/stripe.ts",
-      "line": 61,
-      "detector": "stripe_sdk_mutation",
-      "status": "control_path",
-      "capability": "Foundry SaaS billing credential owner"
-    },
-    {
-      "file": "src/services/billing/stripe.ts",
-      "line": 84,
-      "detector": "stripe_sdk_mutation",
-      "status": "control_path",
-      "capability": "Foundry SaaS billing credential owner"
-    },
-    {
-      "file": "src/services/billing/stripe.ts",
-      "line": 106,
-      "detector": "stripe_sdk_mutation",
-      "status": "control_path",
-      "capability": "Foundry SaaS billing credential owner"
-    },
-    {
-      "file": "src/services/billing/stripe.ts",
-      "line": 116,
-      "detector": "stripe_sdk_mutation",
-      "status": "control_path",
-      "capability": "Foundry SaaS billing credential owner"
-    },
-    {
-      "file": "src/services/billing/stripe.ts",
-      "line": 135,
-      "detector": "stripe_sdk_mutation",
-      "status": "control_path",
-      "capability": "Foundry SaaS billing credential owner"
-    },
-    {
       "file": "src/services/distribution/outbound-webhooks.ts",
       "line": 118,
       "detector": "dynamic_webhook_post",

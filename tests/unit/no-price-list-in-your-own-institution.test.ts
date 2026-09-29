@@ -28,8 +28,10 @@ import { query } from '../../src/db/client.js';
 // benchmarks — were dropped in migrations 309 and 311. A checkout preserved
 // for a product whose schema is gone is not a preserved capability.
 //
-// `services/billing/stripe.ts` STAYS and is live: it is how an Apex Micro
-// buyer pays and how they are refunded. What went is the SUBSCRIPTION surface —
+// The Stripe door a buyer's money comes through STAYS and is live — since
+// Private S7b1 it is `services/venture/stripe-webhook.ts`, and the file that
+// held the subscription machinery beside it is deleted. What went is the
+// SUBSCRIPTION surface —
 // `POST /checkout`, `GET /checkout`, `/settings/manage-subscription`, the
 // three price buttons and the tier vocabulary that described them.
 //
@@ -89,7 +91,7 @@ describe('the owner is not sold access to what he owns', () => {
     // The billing a real buyer touches: still here. Apex Micro charges a card
     // for a piece of work and refunds it on request, and that is a different
     // thing from a monthly plan.
-    const stripe = here('services/billing/stripe.ts');
-    expect(stripe).toMatch(/refund/i);
+    expect(here('services/venture/stripe-webhook.ts')).toMatch(/intakeStripeSettlement/);
+    expect(here('services/venture/settlement-intake.ts')).toMatch(/refund/i);
   });
 });

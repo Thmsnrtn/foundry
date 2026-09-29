@@ -185,21 +185,16 @@ describe('the in-app bypass, pinned so it can only shrink', () => {
     return out.sort();
   }
 
-  // ONE FILE REMAINS, AND IT IS RIGHT THAT IT DOES.
-  //
-  // `billing/stripe.ts` tells a founder their card failed and their service is
-  // about to lapse. `max_channel` is an ATTENTION preference — how loudly
-  // Foundry may interrupt about the work — and the owner's §14 decision draws
-  // the line this sits on: necessary service, billing, security and
-  // configuration state stays ungated and disclosed; optional product
-  // telemetry and celebration honour the preference. These notices are also
-  // founder-scoped and carry no product id, which a company-scoped policy
-  // cannot anchor.
+  // NONE REMAIN. The last was `billing/stripe.ts`, which told a founder their
+  // card had failed and their service was about to lapse — necessary service
+  // state, ungated under the owner's §14 decision. Nobody buys access to the
+  // owner's own institution, so that file was deleted in Private S7b1
+  // (29 September 2026), and with it the one exception.
   //
   // Anything ADDED to this list is a claim that some other message outranks a
   // founder's stated wishes. The test exists to make somebody write that claim
   // down.
-  const KNOWN_BYPASSES = ['src/services/billing/stripe.ts'];
+  const KNOWN_BYPASSES: string[] = [];
 
   it('has not grown', () => {
     expect(notificationCallers()).toEqual(KNOWN_BYPASSES);
@@ -217,13 +212,6 @@ describe('the in-app bypass, pinned so it can only shrink', () => {
     expect(src, 'the most optional thing Foundry ever says')
       .toMatch(/deliver\(founderId, productId/);
     expect(src).not.toMatch(/createNotification\(/);
-  });
-
-  it('says why billing is not subject to an attention preference', () => {
-    const src = readFileSync('src/services/billing/stripe.ts', 'utf8');
-    expect(src).toMatch(/NOT THROUGH THE INTERRUPTION POLICY, AND DELIBERATELY/);
-    expect(src, 'grounded in the owner decision, not in convenience')
-      .toMatch(/§14 decision/);
   });
 
   it('converted the premise bell, whose fact the Letter really does carry', () => {

@@ -70,7 +70,7 @@ import { healthRoutes } from './routes/internal/health.js';
 import { ecosystemRoutes } from './routes/internal/ecosystem.js';
 
 // Stripe webhook (raw body needed)
-import { handleWebhook } from './services/billing/stripe.js';
+import { handleWebhook } from './services/venture/stripe-webhook.js';
 
 // Scheduled jobs
 import { JOB_REGISTRY } from './jobs/index.js';

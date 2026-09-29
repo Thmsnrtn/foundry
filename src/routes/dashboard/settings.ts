@@ -8,7 +8,6 @@ import { html } from 'hono/html';
 import { getCookie } from 'hono/cookie';
 import type { AuthEnv } from '../../middleware/auth.js';
 import { query } from '../../db/client.js';
-import { createBillingPortalSession, createCheckoutSession } from '../../services/billing/stripe.js';
 import { mark, page } from '../../views/owner/shell.js';
 import type { Where } from '../../views/owner/shell.js';
 

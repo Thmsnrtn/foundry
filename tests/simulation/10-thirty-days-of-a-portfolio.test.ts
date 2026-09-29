@@ -131,7 +131,7 @@ describe('day 5 — a buyer pays, the delivery bounces, and the payment provider
     await recordMaterial({ founderId: OWNER, experimentId: X, kind: 'deliverable', title: current.title, body: current.body, pulledAt: new Date(), by: 'the owner' });
     state.buyers.set('pi_p_1', buyer);
     state.deliveryState.set(`next:${buyer}`, 'bounced');
-    const { handleWebhook } = await import('../../src/services/billing/stripe.js');
+    const { handleWebhook } = await import('../../src/services/venture/stripe-webhook.js');
     const [p, s] = signedEvent('payment_intent.succeeded', { id: 'pi_p_1', object: 'payment_intent', amount_received: 2900, currency: 'usd', receipt_email: buyer, latest_charge: 'ch_p_1', metadata: { app: 'foundry', experiment_id: X, primitive: 'sale' } });
     await handleWebhook(p, s);
     expect((await one('SELECT status FROM experiment_fulfilments WHERE experiment_id = ? AND payment_ref = ?', [X, 'pi_p_1'])).status).toBe('owed');
@@ -165,7 +165,7 @@ describe('day 5 — a buyer pays, the delivery bounces, and the payment provider
     expect(state.refunds[0]!.idempotency).toBe(`experiment:${X}:refund:pi_p_1`);
     await morning();
     expect(state.refunds).toHaveLength(1);
-    const { handleWebhook } = await import('../../src/services/billing/stripe.js');
+    const { handleWebhook } = await import('../../src/services/venture/stripe-webhook.js');
     const [p, s] = signedEvent('charge.refunded', { id: 'ch_p_1', object: 'charge', payment_intent: 'pi_p_1', currency: 'usd', amount_refunded: 2900, receipt_email: buyer, metadata: { app: 'foundry', experiment_id: X }, refunds: { data: [{ id: 're_p_1', amount: 2900 }] } });
     await handleWebhook(p, s);
     expect((await money()).refundedCents).toBe(2900);

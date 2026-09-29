@@ -31,7 +31,7 @@ import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import '../../src/services/integration/resend.js';
 import '../../src/services/integration/stripe-gateway.js';
-import { handleWebhook } from '../../src/services/billing/stripe.js';
+import { handleWebhook } from '../../src/services/venture/stripe-webhook.js';
 import { providerStubs, seedHandMadeLink } from '../helpers/provider-stubs.js';
 import { PROOF1_EDITION_PULLED_AT, PROOF1_PLAN, PROOF1_TITLE, seedProof1 } from '../../src/services/venture/proof-1.js';
 import { BRIEF_MD, OUTREACH_TEMPLATE_MD } from '../../src/services/venture/proof-1-content.js';

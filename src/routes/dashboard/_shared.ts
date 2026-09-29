@@ -3,7 +3,6 @@
 // Common data loader for layout context across all dashboard routes.
 // =============================================================================
 
-import { isPrivateOwnerInstance } from '../../lib/instance-posture.js';
 import { query, getProductsByOwner,
   getVisibleProducts, getLifecycleState } from '../../db/client.js';
 /**
@@ -37,7 +36,6 @@ import { getProductDNA } from '../../services/wisdom/dna.js';
 import { getNextAction } from '../../services/ux/next-action.js';
 import { getUnreadNotifications, getUnreadCount } from '../../services/ux/notifications.js';
 import { getUnseenMilestones } from '../../services/ux/milestones.js';
-import { getTrialStatus, type TrialStatus } from '../../services/billing/trial.js';
 import { getFluency, navExplain } from '../../services/ux/fluency.js';
 import { getCookie } from 'hono/cookie';
 import type { Context } from 'hono';
@@ -73,10 +71,6 @@ export interface LayoutContext extends Required<Pick<LayoutOptions, 'title' | 'f
   allProducts: Array<{ id: string; name: string }>;
   /** UX intelligence layer context */
   ux: UXContext;
-  /** Trial state for the header badge / expiry banner (Phase 1.3). */
-  trialStatus: TrialStatus;
-  /** True when the founder has never started a trial or paid. */
-  showStartTrial: boolean;
   /** Fluency Law: the page explainer strip ('' at technical or unmapped pages). */
   navExplainer: string;
 }
@@ -85,29 +79,6 @@ export interface LayoutContext extends Required<Pick<LayoutOptions, 'title' | 'f
  * Fetch common layout data for a dashboard page.
  * Returns founder name, primary product info, and risk state.
  */
-
-/**
- * WHAT THE OWNER OF THE INSTITUTION IS TOLD ABOUT TRIALS: NOTHING.
- *
- * `trialStatus` and `showStartTrial` drive the banner above every page — "Start
- * your 14-day free trial to keep your AI agents running. Choose a plan →". In a
- * commercial deployment that is honest. In a private owner institution it is an
- * invitation to buy access to something the reader already owns, and it is the
- * loudest element on the first screen a founder sees.
- *
- * Suppressed at the source rather than hidden in the template: a template that
- * merely stops rendering a countdown leaves the countdown running underneath,
- * and something else will eventually read it.
- */
-function accessTrial(founder: { trial_ends_at?: string | null; tier?: string | null }): {
-  trialStatus: TrialStatus; showStartTrial: boolean;
-} {
-  if (isPrivateOwnerInstance()) {
-    return { trialStatus: { state: 'none', daysRemaining: 0, onTrial: false }, showStartTrial: false };
-  }
-  const trialStatus = getTrialStatus(founder.trial_ends_at, founder.tier);
-  return { trialStatus, showStartTrial: !founder.tier && trialStatus.state === 'none' };
-}
 
 export async function getLayoutContext(
   founder: Founder,
@@ -156,7 +127,6 @@ export async function getLayoutContext(
       wisdomLayerActive: false,
       allProducts: [],
       ux: emptyUx,
-      ...accessTrial(founder),
       navExplainer: navExplain(activeNav, getFluency(founder)),
     };
   }
@@ -222,7 +192,6 @@ export async function getLayoutContext(
     wisdomLayerActive,
     allProducts,
     ux,
-    ...accessTrial(founder),
     navExplainer: navExplain(activeNav, getFluency(founder)),
   };
 }

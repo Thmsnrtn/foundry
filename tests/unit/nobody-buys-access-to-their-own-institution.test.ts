@@ -4,7 +4,8 @@ process.env.ENCRYPTION_KEY = '0'.repeat(64);
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { sweepEntitlements, entitledToAct } from '../../src/services/billing/entitlement.js';
+import { existsSync } from 'node:fs';
+import { JOB_REGISTRY } from '../../src/jobs/index.js';
 import { getInstancePosture, isPrivateOwnerInstance } from '../../src/lib/instance-posture.js';
 
 // =============================================================================
@@ -23,6 +24,13 @@ import { getInstancePosture, isPrivateOwnerInstance } from '../../src/lib/instan
 // whether ACCESS to Foundry is metered. Stripe, subscriptions, prices, MRR and
 // failed-payment handling stay, because a private institution still operates
 // businesses that bill their own customers.
+//
+// THE SWEEP IS GONE (Private S7b1, 29 September 2026). On this deployment it
+// had already been answering "entitled" for every company and clearing any old
+// pause every hour; with nobody left to bill, the rule, its job and the
+// subscription machinery behind it were deleted. What is held now is that
+// nothing meters access at all, and that an unpaid owner's company is not
+// paused by anything.
 // =============================================================================
 
 const OWNER = 'f_priv', P = 'p_priv';
@@ -49,32 +57,19 @@ const pausedAt = async (): Promise<unknown> =>
     .rows[0] as Record<string, unknown>).p;
 
 describe('a private owner institution does not meter access to itself', () => {
-  it('commercial posture pauses an unentitled company — the rule still works', async () => {
-    process.env.FOUNDRY_INSTANCE_POSTURE = 'commercial';
-    const r = await sweepEntitlements();
-    expect(r.paused, 'the commercial rule must be intact for real customers').toContain(P);
-    expect(await pausedAt()).not.toBeNull();
+  it('has no entitlement rule, no trial and no sweep left to ask', () => {
+    for (const f of ['src/services/billing/entitlement.ts', 'src/services/billing/trial.ts',
+      'src/services/billing/stripe.ts']) {
+      expect(existsSync(f), f).toBe(false);
+    }
+    expect(Object.keys(JOB_REGISTRY)).not.toContain('entitlement_sweep');
   });
 
-  it('private posture never pauses the owner for not paying himself', async () => {
-    process.env.FOUNDRY_INSTANCE_POSTURE = 'private_owner';
-    const r = await sweepEntitlements();
-    expect(r.paused).not.toContain(P);
-    expect(await pausedAt(),
-      'a paused company is invisible to operatingProduct(), so the institution '
-      + 'would stop observing its own company').toBeNull();
-  });
-
-  it('private posture resumes a company a previous sweep paused', async () => {
-    process.env.FOUNDRY_INSTANCE_POSTURE = 'commercial';
-    await sweepEntitlements();
-    expect(await pausedAt()).not.toBeNull();
-
-    process.env.FOUNDRY_INSTANCE_POSTURE = 'private_owner';
-    const r = await sweepEntitlements();
-    expect(r.resumed, 'the pause was the wrong answer to a question with no subject')
-      .toContain(P);
-    expect(await pausedAt()).toBeNull();
+  it('leaves an unpaid owner company unpaused, in either posture', async () => {
+    for (const posture of ['private_owner', 'commercial']) {
+      process.env.FOUNDRY_INSTANCE_POSTURE = posture;
+      expect(await pausedAt(), posture).toBeNull();
+    }
   });
 });
 
@@ -89,13 +84,5 @@ describe('the posture is a deployment fact with a safe default', () => {
       expect(isPrivateOwnerInstance({ FOUNDRY_INSTANCE_POSTURE: v }), v).toBe(true);
     }
     expect(isPrivateOwnerInstance({ FOUNDRY_INSTANCE_POSTURE: 'COMMERCIAL' })).toBe(false);
-  });
-
-  it('leaves the commercial entitlement rule itself untouched', () => {
-    // Posture decides whether the question is asked, never what the answer is.
-    // A commercial deployment must still be able to tell a paying customer from
-    // a lapsed one.
-    expect(entitledToAct({ tier: 'solo', trialEndsAt: null, paidThrough: null })).toBe(true);
-    expect(entitledToAct({ tier: null, trialEndsAt: null, paidThrough: null })).toBe(false);
   });
 });

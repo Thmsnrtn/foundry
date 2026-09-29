@@ -50,7 +50,6 @@ describe('the classification', () => {
     expect(layerOf('src/services/founder/what-situation.ts')).toBe('kernel');
     expect(layerOf('src/services/founder/situation-chain.ts')).toBe('kernel');
     expect(layerOf('src/services/institution/responsibility.ts')).toBe('kernel');
-    expect(layerOf('src/services/billing/trial.ts')).toBe('commercial');
     expect(layerOf('src/db/client.ts')).toBe('substrate');
   });
 

@@ -101,7 +101,7 @@ describe('what it says about an environment', () => {
   it('names the consequence of each absence, not just the absence', () => {
     const verdict = inspectEnvironment(full);
     const stripe = verdict.degradedMissing.find((d) => d.name === 'STRIPE_SECRET_KEY');
-    expect(stripe?.consequence).toMatch(/billing/i);
+    expect(stripe?.consequence, 'the key now serves the experiments, not a subscription').toMatch(/experiment/i);
     for (const d of verdict.degradedMissing) expect(d.consequence.length).toBeGreaterThan(10);
   });
 

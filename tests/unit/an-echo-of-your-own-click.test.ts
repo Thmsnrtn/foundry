@@ -52,14 +52,11 @@ describe('nothing reaches a founder around the interruption policy', () => {
     // be written at all. A caller reaching past `deliver` has chosen the bell
     // for the founder rather than letting the founder's settings choose.
     //
-    // Billing is the one standing exception and says why in place: a founder
-    // whose card is failing must be told their service is about to lapse
-    // whatever they set about notification volume, and that notice is
-    // founder-scoped rather than company-scoped. It is listed here so it stays
-    // a decision somebody made, rather than the first of many.
+    // Billing was the one standing exception — a failing card is told whatever
+    // the founder set about volume — until Private S7b1 deleted Foundry's own
+    // billing (29 September 2026). The ladder is the only caller left.
     const ALLOWED = [
       'src/services/ux/interruption.ts',   // the ladder itself
-      'src/services/billing/stripe.ts',    // service-lapse notices, reasoned in place
     ];
 
     const callers = FILES

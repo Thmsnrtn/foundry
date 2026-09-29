@@ -4069,19 +4069,6 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
     schedule: '10 * * * *', // Hourly
     description: 'Turn independently reported effect outcomes into resolved outcome status; reconciles only effects that already have an observation',
   },
-  // Entitlement to ACT, swept into line with billing (owner decision).
-  //
-  // Cancelling a subscription already stopped Foundry acting. A founder who
-  // never subscribed, or whose trial expired without converting, looked exactly
-  // like a paying customer to every capability gate — so the agents kept
-  // running and the AI spend kept accruing on an account that would never pay.
-  //
-  // This writes the SAME `scp_status='paused'` that `customer.subscription
-  // .deleted` writes, so every check that already honours a cancellation
-  // honours a lapsed trial too, rather than adding a second thing to keep in
-  // agreement. It resumes as well as pauses: one-way enforcement leaves a
-  // founder who subscribes after a lapse stuck read-only until somebody
-  // notices, which is a worse product than not enforcing at all.
   // Shared rate-limit counters accumulate one row per (key, window). Nothing
   // else deletes them.
   rate_limit_counter_sweep: {
@@ -4095,24 +4082,6 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
     },
     schedule: '40 * * * *', // Hourly
     description: 'Delete rate-limit counters for windows that have closed',
-  },
-  entitlement_sweep: {
-    fn: async () => {
-      const { sweepEntitlements, sendTrialEndingNotices } = await import(
-        '../services/billing/entitlement.js');
-      // Warn BEFORE pausing, in that order and in the same tick: a founder
-      // whose trial ends within the hour should get the warning rather than
-      // only the obituary.
-      const warned = await sendTrialEndingNotices();
-      const { paused, resumed } = await sweepEntitlements();
-      if (paused.length || resumed.length || warned.length) {
-        logger.info(
-          `entitlement_sweep: paused=${paused.length} resumed=${resumed.length} warned=${warned.length}`,
-          { jobName: 'entitlement_sweep' });
-      }
-    },
-    schedule: '25 * * * *', // Hourly
-    description: 'Pause acting for products whose owner has no paid tier and no live trial; resume when they do',
   },
   // CAPITAL RESEARCH (migrations 364–365; CAPITAL_RESEARCH.md): read each
   // venue's public market, seal two forecasts before the window closes, and import the

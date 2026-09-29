@@ -350,9 +350,9 @@ program
 // (the investor layer, playbooks, cohorts, team mode, benchmarks — their tables
 // went in migrations 309 and 311) or belongs to him already.
 //
-// `services/billing/entitlement.ts` is the live mechanism and is a different
-// thing: it decides whether a COMMERCIAL instance has lapsed into read-only,
-// which is a question about payment, not about plan.
+// `services/billing/entitlement.ts` decided whether a commercial instance had
+// lapsed into read-only; it was deleted in Private S7b1 (29 September 2026),
+// because nobody pays for access to the owner's own institution.
 
 program
   .command('ux:notifications <founderId>')

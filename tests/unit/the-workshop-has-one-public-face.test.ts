@@ -33,7 +33,7 @@ import { query } from '../../src/db/client.js';
 import '../../src/services/integration/resend.js';
 import '../../src/services/integration/stripe-gateway.js';
 import '../../src/services/integration/cloudflare-gateway.js';
-import { handleWebhook } from '../../src/services/billing/stripe.js';
+import { handleWebhook } from '../../src/services/venture/stripe-webhook.js';
 import { providerStubs } from '../helpers/provider-stubs.js';
 import { outreachOnly } from '../helpers/world.js';
 import { PROOF1_PUBLIC, PROOF1_SLUG, PROOF1_TITLE, findProof1, reframeProof1UnderTheWorkshop, seedProof1 } from '../../src/services/venture/proof-1.js';

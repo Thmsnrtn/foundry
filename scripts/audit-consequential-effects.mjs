@@ -122,7 +122,6 @@ const classifications = new Map(Object.entries({
   // passes the same check before dispatch — which is what `governed` means.
   'src/services/scp/actions/executor.ts|external_post': ['governed', 'approved Linear action — kill-switch checked before dispatch, durable receipt after'],
   'src/services/scp/actions/executor.ts|dynamic_webhook_post': ['governed', 'approved custom webhook — kill-switch checked before dispatch, SSRF guard and durable receipt'],
-  'src/services/billing/stripe.ts|stripe_sdk_mutation': ['control_path', 'Foundry SaaS billing credential owner'],
   'src/services/integrations/stripe-sync.ts|stripe_sdk_mutation': ['control_path', 'Stripe OAuth credential exchange'],
   // THE SENSE'S OWN CREDENTIAL, and nothing else. Three calls: exchanging a
   // code the OWNER just authorised, deauthorising when he disconnects, and

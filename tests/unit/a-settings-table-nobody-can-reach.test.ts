@@ -150,7 +150,10 @@ describe('the table is gone', () => {
       // network contribution. Each served only somebody who is not the owner.
       // And the peer radar, which compared a company with its peers: one owner
       // has none. Seventy-three.
-      .toBe(73);
+      // And the entitlement sweep, which asked whether a customer had paid for
+      // access: nobody pays for access to the owner's own institution
+      // (Private S7b1). Seventy-two.
+      .toBe(72);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

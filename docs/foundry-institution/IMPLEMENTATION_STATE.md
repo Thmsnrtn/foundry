@@ -23,7 +23,7 @@ manifest — is `history/IMPLEMENTATION_SLICES.md`. What to do next is
 | Highest migration number | 368 |
 | Migration numbers used more than once (historical, ratcheted) | 31 |
 | Tables in the schema snapshot | 340 |
-| Scheduled jobs | 73: 3 every few minutes, 9 hourly, 7 every few hours, 33 daily, 21 weekly |
+| Scheduled jobs | 72: 3 every few minutes, 8 hourly, 7 every few hours, 33 daily, 21 weekly |
 | Scripts `npm run check` runs | 43 |
 <!-- facts:end -->
 
