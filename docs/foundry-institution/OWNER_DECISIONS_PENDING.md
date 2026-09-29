@@ -12,37 +12,25 @@ around each item.
 
 ---
 
-# THIRTEEN ANSWERED, FIVE PENDING
+<!-- status:begin — generated from the headings below by node scripts/check-record-matches-code.mjs --write -->
+# 15 WAITING ON THE OWNER, 3 WITH COUNSEL, 3 DECIDED IN PLACE
 
-The owner answered the first eight queued decisions; those are recorded below as
-settled, with the record of what was asked and why in git history. **§10 and §14 are now answered and implemented** — see RESOLVED 9 and RESOLVED
-10 below. Four items remain pending — §§9, 11, 12 and 13 — and none blocks the
-campaign.
+- **Waiting on the owner:** PENDING 11, 12, 14, 16, 17, 18, 19, 20, 21, 24, 25, 26, 27, 29, 30.
+- **Waiting on counsel:** PENDING 9, 13, 15 (interim positions in force; see below).
+- **Decided, and kept where they were asked:** PENDING 22, 23, 28.
+- **Answered and recorded as RESOLVED:** 15.
+<!-- status:end -->
 
-Three need counsel rather than the owner alone (§9 retention periods, §11 the
-audit-log window, §13 the benchmark aggregation threshold). §12 is an owner
-instruction that is partly an operational act only the owner can perform.
+The header above is generated from this file's own headings, and a gate
+(`check-record-matches-code.mjs`) fails when it disagrees with them or when a
+number is used twice. It replaced a hand-kept header that said "thirteen
+answered, five pending" over some twenty open items (29 September 2026). The
+three sections once labelled §15, §22 and §25 RESOLVED collided with PENDING
+15, 22 and 25, so they are now RESOLVED 12, 13 and 14, and the unnumbered
+RESOLVED about `apexmicro.ai/foundry` is RESOLVED 15.
 
-**The owner's interim positions on the three counsel questions are recorded at
-the end of this file and are in force now.**
-
-§14 is a product and legal position rather than an engineering mechanism, which
-is why it is here rather than decided in git history.
-
-**PENDING 22 was answered on 2026-09-21** and is recorded as RESOLVED at the end
-of this file, with the authorisation quoted. **Two more were added the same day**
-(PENDING 23, the repository's visibility; PENDING 24, the development-instance
-Clerk key running in production). Both came
-out of verifying an independent review's claims against the live deployment
-rather than accepting them, and both are external or account decisions rather
-than engineering ones. Neither blocked anything.
-
-**PENDING 23 was decided on 2026-09-24**: public, for a term he set in words,
-with the Etsy keystring left as it is. It is recorded in place rather than moved
-to the resolved section, because what it exposes and the one thing I told him
-imprecisely both belong next to the decision they informed. **PENDING 24 remains
-open** and still blocks nothing, though a development Clerk instance that Clerk
-does not guarantee the durability of is a thing the institution depends on.
+**The owner's interim positions on the counsel questions are recorded further
+down and are in force now.**
 
 **Counsel debt is a kind of proof debt** (`PROOF_PROGRAM.md`): a conclusion
 software cannot responsibly draw. Each item below states the question, what
@@ -292,7 +280,7 @@ eye:
 
 ---
 
-## PENDING 11 — Should the audit log be kept for 180 days or 365?
+## PENDING 11 — Should the audit log be kept for 180 days or 365? **OWNER** (a preference now, not a counsel question)
 
 > **Narrowed 29 September 2026** (Foundry is private, one owner). With one owner this is his preference, not a counsel question, unless the log names buyers; the interim 180 days stands until he says otherwise.
 
@@ -753,7 +741,7 @@ Nothing here reaches a provider — that stays point 1, and stays yours.
 
 ---
 
-## §15 RESOLVED — The Workshop is live at apexmicro.ai (2026-09-09)
+## RESOLVED 12 — The Workshop is live at apexmicro.ai (2026-09-09; labelled §15 until 29 September 2026)
 
 The third token (`hidden-wave-924d`), confirmed and then widened to Edit at the
 zone level, did the work. **Pressing Confirm was the missing step all along.**
@@ -1068,7 +1056,7 @@ Nothing here changes until you say. The reply path itself is fixable from
 of it, so a second run would know what its instrument was doing.
 
 
-## PENDING 22 — Whether the public record of a settled test carries its limit: **OWNER** (2026-09-21)
+## PENDING 22 — Whether the public record of a settled test carries its limit: **DECIDED 2026-09-21** (RESOLVED 13)
 
 An adversarial review of the observation-integrity work found one surface the
 correction does not reach, and it is the one strangers read.
@@ -1226,7 +1214,7 @@ that it is a deploy and a read-back.
 
 ---
 
-## RESOLVED — `apexmicro.ai/foundry` returns 404, and that is correct (2026-09-21)
+## RESOLVED 15 — `apexmicro.ai/foundry` returns 404, and that is correct (2026-09-21)
 
 Recorded because an independent review reported it as a defect, and it is worth
 having the answer written down rather than re-derived by the next reviewer.
@@ -1244,7 +1232,7 @@ until Clerk has signed you in. Nothing to fix.
 
 ---
 
-## §22 RESOLVED — A narrow, dated public clarification, and what it does not authorise (2026-09-21)
+## RESOLVED 13 — A narrow, dated public clarification, and what it does not authorise (2026-09-21; labelled §22 until 29 September 2026)
 
 Recorded here because an adversarial review found the one record that was
 missing: the repository contained the mechanism, the wording and the proofs, and
@@ -1295,7 +1283,7 @@ allows, with new words and a new date together, and which no rule here prevents.
 
 ---
 
-## §25 RESOLVED — Apex Micro is the portfolio home, not the storefront (2026-09-21)
+## RESOLVED 14 — Apex Micro is the portfolio home, not the storefront (2026-09-21; labelled §25 until 29 September 2026)
 
 The owner clarified the relationship between the three layers, and two of the
 consequences were his to decide rather than mine to infer. Both were asked and
@@ -1676,7 +1664,7 @@ the same hand in the same hour.
 
 ---
 
-## PENDING 26 — How much of a refund promise to hold in cash
+## PENDING 26 — How much of a refund promise to hold in cash **OWNER**
 
 **Raised 23 September 2026,** by an independent review's finding and confirmed
 against the code. Nothing has been changed by raising it, and nothing will be

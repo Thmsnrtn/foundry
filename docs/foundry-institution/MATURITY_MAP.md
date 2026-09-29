@@ -846,7 +846,9 @@ absence reading's evidence names the order and the fix — runs in
 `the-venue-is-read-not-typed.test.ts` against the file's existing Etsy double,
 proved red against the prior code before the repair. No shop is connected in
 production; whether Etsy's real receipts arrive in a shape this reader has not
-seen remains unverified until PENDING 25 closes.
+seen remains unverified until PENDING 25 closes. *(Superseded 22–25 September:
+the owner registered the app and connected the shop at read scope; see "Proof 1,
+continued" below. Real receipts are still unseen, because no order has arrived.)*
 
 ### A minute of reading is not a sign-out; the connection page is the task (25 September 2026)
 
@@ -2490,3 +2492,45 @@ The owner asked for Foundry to "work across all trading platforms simultaneously
 - Polymarket's reference level is unobservable here.
 - Whether the owner may trade on Polymarket is not established.
 - The owner has not begun either question in production.
+
+### The record, reconciled (Private S6, 29 September 2026)
+
+The executive review's business digest listed fourteen places where the record
+contradicted itself. This is what became of each.
+
+**Settled from the evidence:**
+1. **The decisions file's header and numbering.** It is generated and gated now,
+   and renumbered as described in ROADMAP Private S6.
+2. **Experiment 002: CE0 or CE1?** Both lines are true about different things.
+   CE0 is what has been observed: no buyer. CE1 is what the reader would compute
+   *if* its seeded direct observations exist in production, which was never read
+   from production. **The recorded level is CE0** until production is read.
+3. **Etsy connected or not.** It is connected at read scope: PENDING 25 steps
+   1–2, 22–25 September. The earlier "no shop is connected" line carries a dated
+   correction.
+4. **IMPLEMENTATION_STATE's "Verified now".** Its counts are generated and gated.
+5. **ROADMAP "Next" named finished work.** It is rewritten.
+6. **"PENDING 22 open" in ROADMAP H1.** It was answered on 21 September
+   (RESOLVED 13, formerly §22).
+7. **The live-frontier file stopped on 25 September.** The work since then is
+   recorded in ROADMAP's Done table (Capital C0–C7, Review R1, Private S1–S6),
+   which is the authoritative list.
+8. **The vacation flag against Developer Mode.** Both statements are true. Foundry
+   reads Etsy's `is_vacation` (A1). Developer Mode is not known to be reported to
+   an app, so whether the shop is hidden still rests on the owner's word.
+
+**Waiting on the owner, because only the owner can settle them:**
+9. Whether the $14 listing was ever published, and on what date. No dated record
+   of publication was found.
+10. When the Etsy shop becomes findable again (ROADMAP B11).
+11. Whether the charter (PENDING 17) is signed. That is in production data.
+
+**Left as they are, with the reason:**
+12. **Workshop page counts** (9, 14 or 15, by date). Each was true when written,
+    and the site's own inventory is the current answer.
+13. **Reply-path dates** (routed on 9–10 September; unrouted during Experiment
+    001's window of 12–19 September). Both are recorded with their evidence in
+    PENDING 21, and that ruling is the owner's.
+14. **AcreOS**: the Constitution's "likely first external company", while
+    implementation is "owner deferred". Both are true: one is a priority, the
+    other a schedule.

@@ -80,26 +80,23 @@ businesses. Its method is carried into `STRATEGY.md` and
 | Private S2 | The door is locked for everyone but the owner. The setting now defaults to private: before, it defaulted to commercial, which admitted anyone Clerk vouched for, and only `fly.private.toml` set it otherwise. Admission is owner-only whatever the setting, so no configuration can open it. The auth middleware asks this on every session, whichever way the account was created. The public sign-up page is deleted, and the Clerk `user.created` webhook no longer creates a Stripe customer. `fly.toml` is deleted: same app name, no setting, one bare `fly deploy` away from pushing the open version live. The README now deploys only through `deploy-private.yml`. Ten tests had silently relied on the open default. Each now states its assumption, or asserts the new behaviour. `ENCRYPTION_KEY` is now required at boot, but only because production reported `encryption_key: ok` on `842cc167` first | `ddbce4c3` |
 | Private S3 | The doctrine now says "private, one owner". It is a dated Constitution amendment in the owner's words, meeting the amendment discipline: owner review, the stated failure, an adversarial reading, the evidence. The posture paragraph's "the default is `commercial`, the restrictive answer" is corrected. The layer table's commercial row is marked for deletion, and the "Foundry-the-SaaS" law is struck. RESOLVED 5, 6 and 7 (public API, read-only accounts, SaaS convention) are superseded. PENDING 9, 11, 13 and 15 are narrowed to the owner's buyers, or moot. ROADMAP G1's "delete nothing" is superseded. The executive review carries the approval and its correction to D-8 | `f7163abd` |
 | Private S4 | Continuity. (1) **The copy leaves the machine.** Each daily copy that passes its restore rehearsal is sealed with AES-256-GCM under its own `BACKUP_ENCRYPTION_KEY` and sent to Cloudflare R2. The request signing is written here, with no new dependency, and checked against AWS's published example. Every request goes through `safeFetch`. The upload is inert, saying "not configured", until the owner sets five secrets (PENDING 30). `rehearse-restore --from-away` fetches the newest copy from the bucket's own listing, checks its seal, and rehearses it. (2) **Health sees the copy.** It reports the ages of the newest local copy and the newest copy away, and goes `degraded` when either is over 26 hours old. The copy job is in the loop list: a failed or skipped copy used to reach nothing. (3) **A witness outside Fly.** `.github/workflows/witness.yml` reads health every 15 minutes and fails on hard faults only: no answer, non-200, database, schema, scheduler or copies. GitHub emails a failed run. A manual rehearsed failure proves the email arrives. (4) Not done, deliberately: job failures do *not* gain their message. Migration 172 keeps messages out of the health table because a message can carry a buyer's address or a secret fragment. That rule is sound, so the message stays in the log | `71d316c5` |
-| Private S5 | What Foundry costs to carry, a month at a time (F-1). Model spend comes from the spend ledger and tool spend from settled receipts, both measured over the last 30 days. The bills Foundry cannot read (Fly, Cloudflare, domains, Clerk, Etsy) are the owner's word, one line per provider with its source (migration 367, append-only: a new statement is a new row, the newest is read). An unstated bill, or one stated as "not known yet", is shown as not known, never as zero, and the total then says "at least". Economics shows the lines, which are measured and which are his, his minutes over the same 30 days (unpriced), and one form to state a bill | this commit |
+| Private S5 | What Foundry costs to carry, a month at a time (F-1). Model spend comes from the spend ledger and tool spend from settled receipts, both measured over the last 30 days. The bills Foundry cannot read (Fly, Cloudflare, domains, Clerk, Etsy) are the owner's word, one line per provider with its source (migration 367, append-only: a new statement is a new row, the newest is read). An unstated bill, or one stated as "not known yet", is shown as not known, never as zero, and the total then says "at least". Economics shows the lines, which are measured and which are his, his minutes over the same 30 days (unpriced), and one form to state a bill | `c371091f` |
+| Private S6 | The record is checked against the code. `check-record-matches-code.mjs` generates the counts in IMPLEMENTATION_STATE (migrations, highest number, duplicates, tables, the 78 scheduled jobs by cadence, the scripts the check runs) and the decisions file's status header from its own headings. It fails when either disagrees, when a PENDING or RESOLVED number is used twice, when a "§n" label collides, or when an open item carries no status; it has planted-defect tests. The decisions file is renumbered: §15, §22 and §25 RESOLVED became RESOLVED 12–14, the unnumbered one became 15, and PENDING 11, 22 and 26 got their statuses. Contradictions reconciled where the evidence settles them; the rest are marked as waiting on the owner (MATURITY_MAP, *The record, reconciled*) | this commit |
 | E3 | "No sales" split into its causes | found already done where observable: a hidden shop, an unreadable venue, and a listing inactive or at another price each void a silent window (B2b). A missing file does not stop a sale, so it is a readiness and care failure, not a cause of silence (B3). A broken checkout is not observable to a read-only app. |
 
 ## Next
 
-**H1 is blocked on the record, not on code (28 September 2026).** An in-app
-sheet of open decisions would have to read `OWNER_DECISIONS_PENDING.md`, and
-that record is not safe to render yet. Its header says "five pending" while
-the body holds many more. Its "§14 answered", "§15 RESOLVED" and "§25 RESOLVED"
-refer to different questions than the headings "PENDING 14", "PENDING 15" and
-"PENDING 25". And whether some items are settled, such as whether the charter
-(PENDING 17) was signed, lives in production data I do not read. The next step
-is to reconcile the record: one numbering, and a status line on every item,
-confirmed by the owner. Then the sheet can be built on it.
+**The record H1 was blocked on is reconciled (Private S6, 29 September 2026).**
+The decisions file now has one numbering and a status on every open item, both
+held by a gate, so an in-app sheet of open decisions can be built on it. Whether
+the charter (PENDING 17) was signed still lives in production data and is read
+there, not from this file.
 
-Next in order: E1 (the deliberation against one strong model, on frozen
-cases) needs real model calls and is the owner's spend to authorise, so the
-code-only work next is E2 (a
-lesson's lifecycle: source, contrary evidence, expiry, the decisions that used
-it). D2 waits on sources Foundry can read.
+**Next, in order:** the remaining "Private" slices — S7 (delete the multi-user
+machinery, after an archive tag) and S8 (the Clerk production instance, code
+side; the switch itself is the owner's). E1 (the deliberation against one strong
+model, on frozen cases) needs real model calls and is the owner's spend to
+authorise. D2 waits on sources Foundry can read.
 
 ## A. Pay the proof debt already written down (code only)
 

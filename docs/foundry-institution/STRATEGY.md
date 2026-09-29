@@ -43,7 +43,7 @@ Each item is tagged:
 3. **[think] The smallest ownable asset in each form.** For a download, a tool and a data brief: the least `v` worth holding once `a` is known.
 4. **[think] What Foundry refuses to be.** Not an agency, not a content farm, not a SaaS builder. Each refusal names the mechanism that would drift it there: search-page spam, or a service burden that grows with volume.
 5. **[think] Success at 1, 5 and 25 assets.** Attention binds at 1, correlation at 5, overhead and legal surface at 25. Write the first binding constraint at each scale.
-6. **[owner] "Operate and allocate", or "originate".** OBJECTIVE §8 leans to operating. Make it a dated choice with a review trigger, not a drift.
+6. **[owner] "Operate and allocate", or "originate".** OBJECTIVE §9 (formerly the second §8) leans to operating. Make it a dated choice with a review trigger, not a drift.
 
 ## B. Economics and capital allocation
 

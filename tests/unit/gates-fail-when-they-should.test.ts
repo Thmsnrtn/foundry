@@ -285,6 +285,32 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.code, r.output).toBe(0);
   });
 
+  it('check-record-matches-code fails when the generated facts go stale', () => {
+    // A migration nobody regenerated the record for: the count in
+    // IMPLEMENTATION_STATE is now a claim about a repository that has moved on.
+    expect(run('check-record-matches-code.mjs').code).toBe(0);
+    plant('src/db/migrations/997_gate_fixture_record.sql', '-- a migration the record has not heard of\n');
+    const r = run('check-record-matches-code.mjs');
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('facts disagree with the repository');
+  });
+
+  it('check-record-matches-code fails when the decisions file breaks its own numbering', () => {
+    const file = 'docs/foundry-institution/_gate_fixture_decisions.md';
+    plant(file, [
+      '<!-- status:begin -->', '<!-- status:end -->',
+      j('## PEN', 'DING 1 — a question: **OWNER**'),
+      j('## PEN', 'DING 1 — the same number again: **OWNER**'),
+      j('## §', '2 RESOLVED — a label that collides'),
+      j('## PEN', 'DING 3 — a question with no status'),
+    ].join('\n'));
+    const r = run('check-record-matches-code.mjs', ['--decisions', resolve(ROOT, file)]);
+    expect(r.code, r.output).toBe(1);
+    expect(r.output).toContain('PENDING 1 is used twice');
+    expect(r.output).toContain('collides with the numbering');
+    expect(r.output).toContain('PENDING 3 carries no status');
+  });
+
   it('check-unread-tables fails on a table something writes and nothing reads', () => {
     // THIS FIXTURE USED TO BORROW A REAL TABLE, and the borrowed table went
     // away. `sector_remediation_templates` qualified — in the schema, reached

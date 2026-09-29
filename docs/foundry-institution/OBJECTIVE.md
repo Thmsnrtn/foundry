@@ -333,7 +333,7 @@ that a real provider really billed for it, that a real workspace really came
 back or really went away. Only a real external substrate answers that, and
 maturity advances only for exactly what was proven.
 
-## 8. Operating and allocating, not producing (2026-09-23)
+## 9. Operating and allocating, not producing (2026-09-23; numbered 8 until 29 September 2026, beside another 8)
 
 An independent review put a sentence to this institution that it had not quite
 said to itself: **the mature form of Foundry selects, operates, improves,
