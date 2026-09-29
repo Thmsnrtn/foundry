@@ -45,11 +45,11 @@ export type Layer =
    *  deployment with exactly one principal and no commercial relationship in
    *  it. Deliberately small, and deliberately depended upon by nothing. */
   | 'private'
-  /** What remains of a product for other people: access metering, tiers,
-   *  trials. The owner said on 29 September 2026 that Foundry is his private
-   *  app, never used by anyone else; this layer is to be deleted (Private S7)
-   *  and is recoverable from the archive tag, not kept running here. */
-  | 'commercial'
+  /* THERE WAS A FIFTH LAYER, 'commercial': access metering, tiers, trials — a
+   * product for other people. The owner said on 29 September 2026 that Foundry
+   * is theirs alone. Its billing was deleted and its last two files turned out
+   * to be the owner's own (Private S7b), so the layer classified nothing and
+   * was removed. It is recoverable from commit 7d3129af. */
   /** The composition root: what assembles a deployment out of the above. It may
    *  reach anything, because choosing what a deployment contains is exactly its
    *  job; nothing may reach back into it. */
@@ -65,8 +65,7 @@ export const MAY_IMPORT: Record<Layer, Layer[]> = {
   substrate: ['substrate'],
   kernel: ['substrate', 'kernel'],
   private: ['substrate', 'kernel', 'private'],
-  commercial: ['substrate', 'kernel', 'commercial'],
-  composition: ['substrate', 'kernel', 'private', 'commercial', 'composition'],
+  composition: ['substrate', 'kernel', 'private', 'composition'],
 };
 
 /**
@@ -167,25 +166,15 @@ export const LAYER_OF: Record<string, Layer> = {
   // commercial Foundry would not inherit it; it would build its own.
   'src/routes/dashboard/letter.ts': 'private',
 
-  // ── dormant commercial ─────────────────────────────────────────────────
+  // ── the owner's own, moved out of "dormant commercial" (Private S7b) ─────
   //
-  // Access metering and the older multi-tenant surface. Preserved because a
-  // private institution operates businesses that bill their own customers, and
-  // one of those may one day be a commercial Foundry — but not developed, and
-  // nothing new may be built on it.
-  //
-  // THE COMMERCIAL ROUTES ARE NO LONGER HERE BECAUSE THEY ARE NO LONGER
-  // ANYWHERE. Eight of these entries named dashboard pages — agents, beta,
-  // cohorts, koldly, investors, board-packet, journey, plan — that were
-  // deleted with the other sixty-four on 13 September 2026 and live on branch
-  // `archive/commercial-foundry`. A map that classifies files which do not
-  // exist is describing a repository that is not this one. What remains under
-  // this heading is billing and the public landing page, which are still here.
-  //
-  // `onboarding.ts` stays: it is commercial in character and still mounted,
-  // because the private instance redirects to it on first run.
-  'src/services/billing': 'commercial',
-  'src/routes/dashboard/onboarding.ts': 'commercial',
+  // `onboarding.ts` is the owner's first-run door: `/onboarding/establish`,
+  // behind `requireInstitutionOwner`. `services/billing` holds only
+  // `account-notice.ts` now, which is the institution telling its owner that
+  // its scheduled work has stopped — a kernel concern, so it needs no entry and
+  // falls under `src/services`. Both were filed as commercial when there was a
+  // commercial layer; neither is, and nothing else was left in it.
+  'src/routes/dashboard/onboarding.ts': 'private',
 
   // ── everything else is the shared institutional kernel ─────────────────
   'src/routes': 'kernel',
@@ -230,9 +219,6 @@ export const LAYER_IN_PLAIN_WORDS: Record<Layer, string> = {
   private:
     'your own experience of Foundry, and nothing else. Nothing depends on it, '
     + 'so changing it cannot change how the institution behaves for anyone.',
-  commercial:
-    'the remains of a product for other people, which Foundry will never be. '
-    + 'It is being deleted, and nothing is built on it.',
   composition:
     'the wiring that assembles this deployment — which routes exist, which '
     + 'routines run.',

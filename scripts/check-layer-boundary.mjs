@@ -52,7 +52,9 @@ for (const [, layer, allowed] of
   MAY_IMPORT.set(layer, [...allowed.matchAll(/'([a-z]+)'/g)].map((m) => m[1]));
 }
 
-if (LAYER_OF.size < 5 || MAY_IMPORT.size < 5) {
+// Four layers since the commercial one was removed (Private S7b, 29 September
+// 2026); fewer than that means the tables were not read, not that they shrank.
+if (LAYER_OF.size < 5 || MAY_IMPORT.size < 4) {
   console.error(`✗ could not read the layer tables from ${MODULE}. `
     + `They are the single definition; if their shape changed, this gate must be `
     + `taught the new shape rather than left reading half of it.`);

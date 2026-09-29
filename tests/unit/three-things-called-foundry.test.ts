@@ -30,19 +30,20 @@ describe('the classification', () => {
     }
   });
 
-  it('keeps the shared institution free of the commercial surface', () => {
-    // A kernel that imports billing is a kernel that assumes there is something
-    // to sell — the assumption `instance-posture` exists to undo at runtime.
-    expect(MAY_IMPORT.kernel).not.toContain('commercial');
-    expect(MAY_IMPORT.private).not.toContain('commercial');
+  it('has no commercial surface left to keep the institution free of', () => {
+    // A kernel that imported billing assumed there was something to sell. The
+    // commercial layer was removed in Private S7b (29 September 2026): its
+    // billing was deleted and its last two files were the owner's own.
+    expect(Object.keys(MAY_IMPORT)).not.toContain('commercial');
+    expect(Object.keys(MAY_IMPORT).sort()).toEqual(['composition', 'kernel', 'private', 'substrate']);
   });
 
   it('classifies by longest prefix, so one file can differ from its folder', () => {
     // How `foundry-shell.ts` is the private product while the pages beside it
-    // in the same folder are not — `onboarding.ts` is commercial in character
-    // and sits in that same directory.
+    // in the same folder are not — `onboarding.ts`, the owner's first-run door,
+    // is private too and sits in that same directory.
     expect(layerOf('src/routes/dashboard/foundry-shell.ts')).toBe('private');
-    expect(layerOf('src/routes/dashboard/onboarding.ts')).toBe('commercial');
+    expect(layerOf('src/routes/dashboard/onboarding.ts')).toBe('private');
     // SURFACES, NOT CAPABILITIES. Diagnosing a company's situation is something
     // any Foundry would want; only the shell that renders it is this owner's.
     // The gate taught this by refusing a kernel service that needed the
@@ -62,8 +63,6 @@ describe('the classification', () => {
       expect(words).not.toMatch(/src\/|kernel'|\.ts/);
     }
     expect(LAYER_IN_PLAIN_WORDS.private).toContain('Nothing depends on it');
-    // Since 29 September 2026 the commercial layer is being deleted, not kept.
-    expect(LAYER_IN_PLAIN_WORDS.commercial).toContain('being deleted');
     expect(LAYER_IN_PLAIN_WORDS.kernel).toContain('any \nfuture Foundry'.replace('\n', ''));
   });
 
@@ -73,7 +72,9 @@ describe('the classification', () => {
     // the tangle this exists to prevent.
     const priv = Object.entries(LAYER_OF).filter(([, l]) => l === 'private');
     expect(priv.length).toBeGreaterThan(0);
-    expect(priv.length).toBeLessThan(12);
+    // Twelve since `onboarding.ts`, the owner's first-run door, moved in from
+    // the removed commercial layer (Private S7b, 29 September 2026).
+    expect(priv.length).toBeLessThan(13);
     // Every one of them is a surface the owner opens, not a capability.
     for (const [path] of priv) expect(path).toContain('routes/');
   });
