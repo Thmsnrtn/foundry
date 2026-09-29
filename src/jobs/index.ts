@@ -4251,4 +4251,31 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
     schedule: '0 */6 * * *', // Every 6 hours; gateway idempotency dedups duplicate sends
     description: "Send Foundry's own day-0 / day-3 / day-7 founder onboarding emails",
   },
+  // CAPITAL RESEARCH (migration 364; CAPITAL_RESEARCH.md): read one venue's
+  // public market, seal two forecasts before the window closes, and import the
+  // official result. It reads; it cannot order. When the venue asks to wait,
+  // the pass says so and concludes nothing.
+  capital_research_observe: {
+    fn: async () => {
+      const { observeOnce, evaluateDue } = await import('../services/capital/research.js');
+      const { MarketAskedToWait } = await import('../services/capital/public-markets.js');
+      try {
+        const r = await observeOnce();
+        logger.info(`capital_research_observe: ${r.observed ?? 'nothing observed'} — ${r.because}; `
+          + `${String(r.forecasts)} forecasts, ${String(r.simulatedFills)} simulated fills, ${String(r.resolved)} results imported`,
+        { jobName: 'capital_research_observe' });
+        // Once a day per question, the evidence is scored and kept with its digest.
+        const evaluated = await evaluateDue();
+        if (evaluated) logger.info(`capital_research_observe: evaluated ${String(evaluated)} question(s)`, { jobName: 'capital_research_observe' });
+      } catch (err) {
+        if (err instanceof MarketAskedToWait) {
+          logger.info(`capital_research_observe: ${err.message}; nothing concluded`, { jobName: 'capital_research_observe' });
+          return;
+        }
+        throw err;
+      }
+    },
+    schedule: '*/5 * * * *',
+    description: 'Capital research: snapshot the open 15-minute window, seal the forecasts, import official results, and score each question once a day (read-only; no order is possible)',
+  },
 };

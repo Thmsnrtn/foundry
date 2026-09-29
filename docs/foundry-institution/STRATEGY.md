@@ -15,7 +15,7 @@ are questions to settle in writing, or events only the world can supply.
 **Where it sits.** `ROADMAP.md` is the execution list. This file sits one
 level above it. It asks what Foundry should *become*, which ideas are still
 unexamined, and what would show each one right or wrong. Items are numbered
-S1–S96, and the numbers are stable so later work can cite them ("S38").
+S1–S100, and the numbers are stable so later work can cite them ("S38").
 
 **Rules every item obeys.**
 - Nothing here authorises spending, publishing, messaging, contacting buyers,
@@ -213,6 +213,13 @@ Each item is tagged:
 
     Each rung is earned by evidence, never by a confidence score.
 96. **[think] The binding constraint, asked after each result.** Is it no qualified arrival, an unconvincing offer, an unhelpful product, or incomplete stewardship? The next engineering unit answers that constraint before the product count grows. *Asked in `river/proof-3-candidates/DOSSIER.md`, "What would change this".*
+
+## P. Capital research (added 29 September 2026)
+
+97. **[world] Does anything forecast a 15-minute contract better than its own price?** The research loop runs when the owner begins it. Falsifier: 200 resolved markets with the model's Brier difference not below zero at 95%.
+98. **[think] Research is not income, and a simulation is not a sale.** Capital research never reaches Economics, MRR or the product pipeline. A trading **product** (a journal, an audit kit, a fee explainer) is an ordinary venture with buyers, independent of any edge.
+99. **[think] Authority for money is per venue, per account, per sum, per date.** Nothing in the research can widen into an order. The execution boundary in `capital/CAPITAL_RESEARCH.md` is a design to review, not a plan.
+100. **[think] A legacy system is evidence, not a starting point.** Both old bots reported results that their own arithmetic made up. What came into Foundry was rebuilt and tested against the venue's real responses; nothing was imported as code.
 
 ---
 

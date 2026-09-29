@@ -1015,4 +1015,27 @@ program.command('job-review [dir]').description('Write the job review file under
     process.stdout.write(`${built.file} ${built.sha256}\n`);
   });
 
+// ─── Capital research, by hand (migration 364) ───────────────────────────────
+//   node dist/cli/index.js capital-observe     one pass: snapshot, forecasts, results
+//   node dist/cli/index.js capital-evaluate    score every observing question now
+// Both read public market data only. Neither can place an order.
+program.command('capital-observe').description('Run one capital-research observation pass now (read-only)')
+  .action(async () => {
+    const { observeOnce } = await import('../services/capital/research.js');
+    const r = await observeOnce();
+    process.stdout.write(`${r.observed ?? 'nothing observed'}: ${r.because}; ${String(r.forecasts)} forecasts, `
+      + `${String(r.simulatedFills)} simulated fills, ${String(r.resolved)} official results imported\n`);
+  });
+program.command('capital-evaluate').description('Evaluate every observing capital-research question now')
+  .action(async () => {
+    const { query } = await import('../db/client.js');
+    const { evaluateThesis } = await import('../services/capital/research.js');
+    const ids = (await query(`SELECT id FROM capital_research_theses WHERE status = 'observing'`)).rows.map((r) => String((r as Record<string, unknown>).id));
+    for (const id of ids) {
+      const e = await evaluateThesis(id);
+      process.stdout.write(`${id}: ${e.verdict} — ${e.sentence}\n`);
+    }
+    if (ids.length === 0) process.stdout.write('nobody is observing\n');
+  });
+
 program.parse();

@@ -161,6 +161,10 @@ describe('posting to a URL somebody else chose', () => {
       // founder gave it, and guarded it. It was reachable from no entry point
       // and has been deleted; a sender that does not exist is not one this
       // list may name.
+      // CAPITAL RESEARCH'S ONE DOOR (migration 364). Two compiled-in public
+      // hosts and an allowlist of GET paths, checked before the network; it
+      // goes through safeFetch anyway, like every other public read.
+      'src/services/capital/public-markets.ts',
       'src/services/distribution/outbound-webhooks.ts',
       'src/services/integration/mcp-client.ts',
       'src/services/integration/posthog.ts',

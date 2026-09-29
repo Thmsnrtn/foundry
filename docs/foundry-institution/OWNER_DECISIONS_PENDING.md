@@ -1748,3 +1748,43 @@ his next quote.
 **What the evidence supports.** Only that the file does its arithmetic
 correctly. Whether anybody would pay for it, or can supply its inputs, is
 unknown. The handoff's own rule applies: build none is a valid outcome.
+
+## PENDING 28 — The two old trading bots, and trading research: **OWNER** (2026-09-29)
+
+**Raised 29 September 2026,** from the audit of kalshi-genius and the legacy Apex Micro
+trading platform (`capital/LEGACY_TRADING_AUDIT.md`). Nothing outside Foundry was changed.
+
+**1. Urgent, and only you can check: is either old bot still running?**
+- `kalshi-genius` is configured for Fly with `KALSHI_ENV='production'`, a private key on
+  its volume, and machines that never auto-stop.
+- On master, its public dashboard has an **unauthenticated `POST /api/sell-position`**
+  that sells any position at 1¢. It also has an unauthenticated chat endpoint that
+  spends on the Anthropic API.
+- Run `fly status -a kalshi-genius`. If it is up, scale it to zero and revoke that
+  Kalshi API key.
+- The legacy Apex Micro repository deploys to Fly on every push to `main`, and its boot
+  loop still has a direct exchange path. Check its app too, and do not push to its
+  `main`.
+
+**2. The two draft PRs.**
+- They quarantine the paths they touch, and their focused tests pass here.
+- The kalshi-genius PR leaves the defects in place, but unreachable.
+- The Apex PR leaves the system loop and the autopilot's paper fallback reachable. Its
+  one new failing test (`test_orders_place`) asserts the old behaviour and should expect
+  503.
+- Recommendation: merge neither to a deploying branch. Archive both repositories as
+  evidence. Foundry now carries what was sound in them.
+
+**3. If either bot ever traded real money:** an export of that account's orders, fills,
+settlements and transfers is the only way to know what actually happened. Repository
+contents cannot answer it.
+
+**4. Trading research is off until you begin it.**
+- One button on `/foundry/money/research` begins it, and one stops it with your reason.
+- It reads public data only. It costs nothing, and no order is possible.
+- It concludes nothing before 200 resolved markets (about two days), and its best
+  possible verdict is "yours to review", never "trade".
+
+**What is not being asked.** No mandate, credential, account connection or spending is
+proposed. A real-money path would need a separate execution design reviewed against
+`capital/CAPITAL_RESEARCH.md`, and your written, venue-specific mandate.

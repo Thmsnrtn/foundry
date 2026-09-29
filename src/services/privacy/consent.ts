@@ -824,6 +824,13 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
     reason: 'claims about the world formed while searching for one person\'s business',
     onAccountErasure: { op: 'delete' },
   },
+  // CAPITAL RESEARCH (migration 364): the owner's question, his sealed
+  // forecasts, the fills that never happened, and what the evidence said.
+  // His, and nobody else's; erased with him.
+  capital_research_theses: { reason: 'a research question the owner began', onAccountErasure: { op: 'delete' } },
+  capital_forecasts: { reason: 'forecasts sealed under the owner\'s research question', onAccountErasure: { op: 'delete' } },
+  capital_paper_fills: { reason: 'simulated fills under the owner\'s research question', onAccountErasure: { op: 'delete' } },
+  capital_evaluations: { reason: 'evaluations of the owner\'s research question', onAccountErasure: { op: 'delete' } },
   market_observations: {
     reason: 'what was seen, where and when, in the course of one person\'s search',
     onAccountErasure: { op: 'delete' },
@@ -1273,6 +1280,12 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   cross_product_insights: 'aggregate claims that name no contributor; the rows behind them are erased via decision_patterns',
   failure_patterns: 'a library of known failure shapes, written by the institution',
   governed_effect_kinds: 'the effect vocabulary',
+  // PUBLIC MARKET DATA (migration 364): what an exchange published to anyone —
+  // its contract rules, its books at a moment, its official results — and a
+  // public spot price. Nobody's data, and no person is named in any of it.
+  capital_contract_rules: 'an exchange\'s published contract rules, as read',
+  capital_market_snapshots: 'an exchange\'s public book at one moment, and a public spot price kept as a proxy',
+  capital_resolutions: 'an exchange\'s official, public result for one market',
   // THE INSTRUMENT'S OWN VOCABULARIES. Constitutional tables, written once by
   // a migration and refused to every writer after it: the channels a public
   // path can be observed on, the kinds of path an experiment can depend on,

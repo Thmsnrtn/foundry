@@ -29,6 +29,12 @@ import type { Where } from './foundry-shell.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
 import { query } from '../../db/client.js';
 import { record, setPolicy } from '../../services/economy/ledger.js';
+import { EVALUATION_RULE, type Evaluation } from '../../services/capital/evaluation.js';
+import { DECISION_RULE } from '../../services/capital/models.js';
+import { FEE_VERSION } from '../../services/capital/fees.js';
+import {
+  CapitalRefused, beginObserving, capitalResearchReading, stopObserving, type LastWindow,
+} from '../../services/capital/research.js';
 import {
   distributableSurplus, dollars, figureText, grossCharged, ledgerEntries, moneyBanked,
   runningCost, unitContribution, type Figure,
@@ -255,6 +261,9 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
           · ${l.at}
         </li>`)}</ul>`}`)}
 
+    <p class="quiet" id="trading-research">Trading research is a simulation and is never counted here:
+      <a href="/foundry/money/research">what it has found</a>.</p>
+
     ${fold('set', 'What you can set', 'tax, the floor, money you moved', html`
       <h3>Tax</h3>
       <p class="quiet">An assumption of yours, applied to a measured basis, so money you may owe is
@@ -394,4 +403,170 @@ moneyRoutes.post('/foundry/money/moved', requireInstitutionOwner(), async (c: an
     because,
   });
   return back(c, 'moved');
+});
+
+// =============================================================================
+// TRADING RESEARCH, as the owner reads it (/foundry/money/research; migration
+// 364). A reading under Economics, not a new door, and deliberately not a
+// trading dashboard: no ticker tape, no P&L in green, nothing that rewards
+// activity. It says what question is being asked, what the evidence says so
+// far, what the research cannot see, and that no order is possible. A
+// simulated result is always called simulated, and none of it is counted in
+// the figures above.
+// =============================================================================
+const researchFrame: Where = {
+  eyebrow: 'Economics',
+  crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: '/foundry/money', label: 'Economics' },
+    { href: '/foundry/money/research', label: 'Trading research' }],
+  scope: { kind: 'foundry', id: null, name: 'Trading research' }, local: [], chips: [],
+};
+
+const researchBack = (c: any, ok: string, err?: string) =>
+  c.redirect(`/foundry/money/research?${err ? `error=${encodeURIComponent(err)}` : `done=${ok}`}`);
+const researchDay = (iso: string): string => iso.slice(0, 16).replace('T', ' ');
+const usd = (x: number): string => `${x < 0 ? '−' : ''}$${Math.abs(x).toFixed(2)}`;
+
+const VERDICT_WORDS: Record<string, string> = {
+  insufficient_evidence: 'Not enough yet',
+  market_is_better: 'The market is better — do not trade',
+  no_net_edge: 'No edge after costs — do not trade',
+  survived_holdout_owner_review: 'Survived the test — yours to review, not to trade',
+};
+
+function verdictPanel(e: { computedAt: string; verdict: string; digest: string; resolvedCount: number; result: Evaluation }): H {
+  const r = e.result;
+  return html`<section class="know" id="verdict">
+    <h2>What the evidence says</h2>
+    <p><strong>${VERDICT_WORDS[e.verdict] ?? e.verdict}.</strong> ${r.sentence}</p>
+    <dl class="facts">
+      <div><dt>Resolved markets</dt><dd>${String(e.resolvedCount)} of the ${String(EVALUATION_RULE.minResolvedMarkets)} fixed in advance</dd></div>
+      <div><dt>Forecast error (Brier, lower is better)</dt><dd>${r.brier.model === null ? 'not known' : `model ${r.brier.model.toFixed(4)}`}
+        · ${r.brier.market === null ? 'market not known' : `market ${r.brier.market.toFixed(4)}`}
+        ${r.brier.pairs > 1 && r.brier.diffLow !== null && r.brier.diffHigh !== null
+    ? ` · difference ${r.brier.pairedDiff!.toFixed(4)} (95%: ${r.brier.diffLow.toFixed(4)} to ${r.brier.diffHigh.toFixed(4)}) over ${String(r.brier.pairs)} markets` : ''}</dd></div>
+      <div><dt>Simulated result — never money</dt><dd>${String(r.simulated.trades)} simulated trades of ${String(DECISION_RULE.contracts)} contracts:
+        ${usd(r.simulated.netDollars)} at the displayed book, ${usd(r.simulated.netDollarsAdverse)} with one cent worse per contract;
+        worst fall ${usd(r.simulated.maxDrawdown)}${r.simulated.unfilled ? `; ${String(r.simulated.unfilled)} could not fill at all` : ''}</dd></div>
+      <div><dt>Left out, and why</dt><dd>${String(r.excluded.ruleChanged)} with a changed rule · ${String(r.excluded.noModelProbability)} with no model forecast ·
+        ${String(r.excluded.feeUnknown)} with an unknown fee · ${String(r.excluded.fillNotReproduced ?? 0)} whose fill did not reproduce from its book</dd></div>
+      <div><dt>Read</dt><dd>${researchDay(e.computedAt)} · digest ${e.digest.slice(0, 12)}</dd></div>
+    </dl>
+  </section>`;
+}
+
+const MODEL_WORDS: Record<string, string> = { market_implied_v1: 'The market\'s own price', proxy_drift_v1: 'The proxy model' };
+
+function lastWindowPanel(w: LastWindow): H {
+  const p = (x: number | null): string => (x === null ? 'not known' : x.toFixed(4));
+  return html`<section class="know" id="last-window">
+    <h2>The last window</h2>
+    <p class="quiet">${w.marketTicker}, read ${researchDay(w.receivedAt)}, closing ${researchDay(w.closeTime)}.</p>
+    <dl class="facts">
+      <div><dt>Reference level</dt><dd>${w.floorStrike === null ? 'not yet published' : `$${w.floorStrike.toFixed(2)}`}</dd></div>
+      <div><dt>YES bid / ask</dt><dd>${p(w.yesBid)} / ${p(w.yesAsk)}</dd></div>
+      <div><dt>Proxy (not the settlement source)</dt><dd>${w.proxy ? `$${w.proxy.price.toFixed(2)} from ${w.proxy.source} at ${researchDay(w.proxy.observedAt)}${w.proxy.sigma1m === null ? '' : `; one-minute volatility ${(w.proxy.sigma1m * 100).toFixed(3)}%`}` : 'could not be read'}</dd></div>
+      ${w.forecasts.map((f) => html`<div><dt>${MODEL_WORDS[f.model] ?? f.model}</dt><dd>P(YES) ${p(f.pYes)} — ${f.decision === 'skip' ? 'no trade' : `simulated ${f.decision.toUpperCase()}`}: ${f.reason}</dd></div>`)}
+      ${w.fill ? html`<div><dt>Simulated fill — not a trade</dt><dd>${String(w.fill.filled)} of ${String(w.fill.requested)} ${w.fill.side.toUpperCase()} for ${usd(w.fill.cost)},
+        fee ${w.fill.fee === null ? 'not known' : usd(w.fill.fee)} (${w.fill.feeVersion})</dd></div>` : ''}
+    </dl>
+  </section>`;
+}
+
+moneyRoutes.get('/foundry/money/research', async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return c.redirect('/onboarding');
+  const done = String(c.req.query('done') ?? ''); const error = String(c.req.query('error') ?? '');
+  const r = await capitalResearchReading(founderId);
+  const observing = r.thesis?.status === 'observing';
+
+  const body = html`
+    ${done ? html`<p class="noticed" role="status">${done === 'begun' ? 'Observing. The first forecast is sealed at the next window.' : 'Stopped. What was recorded stays.'}</p>` : ''}
+    ${error ? html`<p class="noticed" role="alert">${error}</p>` : ''}
+    <section class="know" id="what">
+      <h2>${observing ? 'Observing Kalshi\'s 15-minute Bitcoin contracts' : r.thesis ? 'Stopped' : 'Not observing anything'}</h2>
+      <p>No order is possible. Foundry holds no exchange credential, and nothing in it can place, change or cancel one.
+        This reads public prices, seals a forecast before each window closes, and scores it against the exchange's official result.
+        Nothing here is income, and none of it is counted in Economics.</p>
+      ${r.thesis ? html`<dl class="facts">
+        <div><dt>The question</dt><dd>${r.thesis.hypothesis}</dd></div>
+        <div><dt>What would prove it wrong</dt><dd>${r.thesis.falsifier}</dd></div>
+        <div><dt>The alternative</dt><dd>${r.thesis.alternativeUse}</dd></div>
+        <div><dt>${observing ? 'Since' : 'Ran'}</dt><dd>${r.thesis.begunByOwner ? 'Begun by you, ' : ''}${researchDay(r.thesis.begunAt)}${r.thesis.stoppedAt ? ` to ${researchDay(r.thesis.stoppedAt)} — ${r.thesis.stoppedBecause ?? ''}` : ''}</dd></div>
+      </dl>` : ''}
+    </section>
+
+    ${r.evaluation ? verdictPanel(r.evaluation) : r.thesis ? html`<section class="know" id="verdict"><h2>What the evidence says</h2>
+      <p>Nothing yet: the first evaluation is read each morning once results exist.</p></section>` : ''}
+
+    ${r.thesis ? html`<section class="know" id="seen">
+      <h2>What it has seen</h2>
+      <p>${String(r.counts.snapshots)} windows observed, ${String(r.counts.resolved)} with the official result, ${String(r.counts.forecasts)} forecasts sealed,
+        ${String(r.counts.simulatedFills)} simulated fills${r.counts.proxyMissing ? `, ${String(r.counts.proxyMissing)} windows where the proxy could not be read` : ''}.
+        ${r.lastSnapshotAt ? `Last observed ${researchDay(r.lastSnapshotAt)}.` : ''}</p>
+    </section>` : ''}
+
+    ${r.lastWindow ? lastWindowPanel(r.lastWindow) : ''}
+
+    <section class="know" id="rule">
+      <h2>What decides these contracts</h2>
+      ${r.rules ? html`<p>Settled on <strong>${r.rules.settlementSource}</strong>, as the exchange states it${r.rules.settlementNote ? html`: ${r.rules.settlementNote.replace(/\*\*/g, '')}` : '.'}</p>
+        <p class="quiet">Fee rule as published: ${r.rules.feeType ?? 'not stated'}${r.rules.feeMultiplier === null ? '' : `, multiplier ${String(r.rules.feeMultiplier)}`}; first read ${researchDay(r.rules.firstSeenAt)}.</p>`
+    : html`<p class="quiet">Not read yet.</p>`}
+      ${r.latestRule ? html`<p class="quiet">The latest rule, in the exchange's words: ${r.latestRule}</p>` : ''}
+    </section>
+
+    <section class="know" id="blind">
+      <h2>What this cannot see</h2>
+      <ul class="plain">
+        <li>The settlement index itself. It is licensed data; the model uses a public spot price as a proxy, and the gap between them is unknown.</li>
+        <li>Whether a real order would fill. A simulated fill takes the displayed book at one instant, with no queue and no delay; one cent worse is shown beside it.</li>
+        <li>The fee schedule as published. The formula (${FEE_VERSION}) is the handoff's reading; Kalshi's page refused this environment.</li>
+        <li>Anything before ${String(EVALUATION_RULE.minResolvedMarkets)} results. Until then it says nothing, and it never says "trade".</li>
+      </ul>
+    </section>
+
+    <section class="know" id="legacy">
+      <h2>The old trading code</h2>
+      <p>kalshi-genius and the old Apex Micro trading platform were read line by line (docs/foundry-institution/capital/LEGACY_TRADING_AUDIT.md).
+        Neither showed an edge. The old paper results were wrong by construction: a comparison that could never say "up",
+        a sizer that bet 30% at any forecast, a probability curve off by up to 3.7 points, and order paths that recorded fills that never happened.
+        Nothing from either runs here; what was sound was rebuilt and tested.</p>
+    </section>
+
+    <section class="know" id="yours">
+      <h2>Yours</h2>
+      ${observing ? html`<form class="inline" method="POST" action="/foundry/money/research/stop">
+          <label class="sr" for="because">Why stop</label>
+          <input id="because" name="because" type="text" placeholder="Why stop, in your words" />
+          <button class="btn" type="submit">Stop observing</button>
+        </form>`
+    : html`<form class="inline" method="POST" action="/foundry/money/research/begin">
+          <button class="btn" type="submit">${r.thesis ? 'Begin a new observation' : 'Begin observing'}</button>
+        </form>
+        <p class="quiet">Costs nothing and risks nothing: public data only, about one read a minute.</p>`}
+    </section>`;
+  return c.html(page('Trading research', body, 'money', researchFrame));
+});
+
+moneyRoutes.post('/foundry/money/research/begin', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return researchBack(c, '', 'No owner on this request.');
+  try { await beginObserving(founderId); } catch (err) {
+    if (err instanceof CapitalRefused) return researchBack(c, '', err.message);
+    throw err;
+  }
+  return researchBack(c, 'begun');
+});
+
+moneyRoutes.post('/foundry/money/research/stop', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return researchBack(c, '', 'No owner on this request.');
+  const form = await c.req.parseBody();
+  try {
+    if (!(await stopObserving(founderId, String(form.because ?? '')))) return researchBack(c, '', 'Nothing was being observed.');
+  } catch (err) {
+    if (err instanceof CapitalRefused) return researchBack(c, '', 'Say why, so the record can be read later.');
+    throw err;
+  }
+  return researchBack(c, 'stopped');
 });

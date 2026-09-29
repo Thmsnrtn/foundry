@@ -141,7 +141,10 @@ describe('the table is gone', () => {
       // And `institution_pulse_tick` — which reads whether the economic loop's
       // routines completed on their cadence and tells the owner once, by account
       // notice, when one has stopped — makes seventy-seven (20 September 2026).
-      .toBe(77);
+      // And `capital_research_observe` — the owner's trading research, which
+      // reads one public market every five minutes and scores itself once a
+      // day, and can place no order — makes seventy-eight (29 September 2026).
+      .toBe(78);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

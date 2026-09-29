@@ -2378,3 +2378,74 @@ then asked that it not become a product backlog. `STRATEGY.md` holds both:
 
 Each item has a tag and a falsifier. Nothing in it is built because it is
 listed. **Maturity:** doctrine, with no code maturity.
+
+### Trading research: one question, asked honestly, with no way to trade (capital C0–C5)
+
+The owner asked for his two earlier trading projects to become one of Foundry's tools.
+
+**C0: the legacy code as evidence (`capital/LEGACY_TRADING_AUDIT.md`).**
+- All ten handoff findings in kalshi-genius hold on master. Two are new:
+  - its normal CDF overstates probabilities by 2.8–3.7 points where it traded;
+  - its Binance feed returns HTTP 451 from here.
+- Two were reproduced against its own source, under Bun:
+  - the object comparison is false in both directions;
+  - its sizer bets $30 of $100 at p = 0.50, 0.53 and 0.70 alike.
+- In the legacy Apex Micro code, the reachable order doors were traced. The boot
+  loop's direct exchange path remains open, and the draft PR does not touch it.
+- Both draft PRs' tests were run:
+  - kalshi-genius: 4 of 4 pass;
+  - Apex focused: 8 of 8 pass;
+  - Apex full: 475/9/38 against main's 468/8/38, and the one new failure asserts the
+    old behaviour.
+
+**C1–C3: the loop (`src/services/capital/`, migration 364).**
+- The series rules are archived by digest, and the settlement source is read from the
+  venue: CF Benchmarks.
+- One point-in-time snapshot per window is taken four minutes in, with the book
+  parsed as the venue publishes it (bids only, asks derived).
+- A public spot price is kept and labelled a proxy.
+- Two forecasts are sealed before the window closes, by triggers that also refuse a
+  forecast once the answer is on record:
+  - the market's own price;
+  - a proxy-drift model on the official reference level.
+- A simulated fill is taken against the displayed book, whole contracts only, with the
+  venue's quadratic fee, only when the net edge clears 2¢. The schema admits no
+  provenance but `simulated`, and the evaluation excludes any fill that does not
+  reproduce from its stored book.
+- Official results are imported from the venue's own record, falling back to the
+  historical endpoint (verified: a July market is 404 live and 200 historical). One
+  missing market no longer blinds the others; a test caught that.
+- The evaluation compares the model and the market on paired Brier scores and shows the
+  simulated result with one adverse cent. The verdict ladder has no "trade" rung.
+- The capability is `observe`, bound to no tool and needing no credential. No table can
+  hold an order, an account or a mandate.
+
+**C4–C5.**
+- `/foundry/money/research` is one reading under Economics, adding no door and
+  counting nothing.
+- ECONOMICS.md was amended: research is inside the scope, execution stays outside.
+- PENDING 28 was raised.
+
+**Maturity: `tested`, and one real-world observation.**
+- Tests: `the-market-is-read-as-published` (15), `research-is-sealed-before-the-answer`
+  (20), `research-cannot-reach-an-order` (6), `the-owner-reads-trading-research` (7).
+  Three reintroduced legacy behaviours were caught: the old CDF, a NO bid read as a YES
+  ask, and a flat fee.
+- **Real world, 29 September 00:39 UTC, in a throwaway local database:**
+  - Window `KXBTC15M-26SEP282045-45`; reference level 83,504.45; YES 0.44/0.45.
+  - Proxy 83,492.54, σ₁ₘ 0.00038.
+  - The model said P(YES) 0.4332 against the market's 0.445, and skipped: its best net
+    edge after the fee was −1.3¢.
+  - Two official results were read correctly.
+- **Commercial maturity: CE0.** There is no edge, no trade, and no product.
+
+**Proof debt:**
+- The research has not run in production until the owner begins it.
+- The fee coefficient is not read from Kalshi's schedule (HTTP 429 here).
+- BRTI is unobservable, and the proxy's basis is uncorrected.
+- The simulated fills ignore queue, latency and impact.
+- 200 markets is one regime.
+- The owner's accounts were never read, so whether either old bot traded real money is
+  unknown.
+- Whether the old `kalshi-genius` Fly app is running is unknown here, and it is urgent
+  (PENDING 28).
