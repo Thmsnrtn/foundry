@@ -73,6 +73,9 @@ closing at 03:00Z was observed on both venues in the same pass:
   skipped, with a best net edge of 0.1¢.
 - Polymarket: YES 0.52/0.53. The model did not run, with its reason recorded.
 - The prices were 1¢ apart.
+- Kalshi settled the window **NO** at 03:00:06 (82,932.33 against 82,975.22), after both
+  markets had priced YES slightly above even: a single window proves nothing. Polymarket's oracle had not yet resolved it at
+  03:02, and the reader waited rather than concluding anything.
 
 ## Four records, never one
 
