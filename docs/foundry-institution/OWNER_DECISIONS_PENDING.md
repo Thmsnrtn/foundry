@@ -1749,7 +1749,7 @@ his next quote.
 correctly. Whether anybody would pay for it, or can supply its inputs, is
 unknown. The handoff's own rule applies: build none is a valid outcome.
 
-## PENDING 28 — The two old trading bots, and trading research: **OWNER** (2026-09-29)
+## PENDING 28 — The two old trading bots, and trading research: **DECIDED 2026-09-29, two acts left to the owner**
 
 **Raised 29 September 2026,** from the audit of kalshi-genius and the legacy Apex Micro
 trading platform (`capital/LEGACY_TRADING_AUDIT.md`). Nothing outside Foundry was changed.
@@ -1788,3 +1788,41 @@ contents cannot answer it.
 **What is not being asked.** No mandate, credential, account connection or spending is
 proposed. A real-money path would need a separate execution design reviewed against
 `capital/CAPITAL_RESEARCH.md`, and your written, venue-specific mandate.
+
+**Decided 29 September 2026.** The owner said: "make these decisions for me, as Foundry should be ingesting and
+dissolving the old repos", and asked Foundry to take care of the Fly app if it had access.
+
+**What was decided and done.**
+- **Both draft PRs were closed unmerged**, each with a comment saying why and where its sound parts now live
+  (kalshi-genius#1, Apex-Micro#1). Merging would have made neither safe: the Apex branch leaves the boot loop's
+  direct exchange path reachable, and its `main` deploys to Fly on every push.
+- **Both repositories are retired into Foundry.** What was sound is rebuilt and tested in `src/services/capital/`.
+  The evidence is kept in `capital/LEGACY_TRADING_AUDIT.md` and `river/capital/legacy-audit/`. Nothing from either
+  repository runs in Foundry, and nothing was pushed to either repository's default branch.
+
+**The Fly apps: stopped (29 September 2026, with a temporary org token the owner gave for this).**
+- `apex-trading` was already suspended with **no machines**. Nothing was running, and nothing was changed.
+- `kalshi-genius` was suspended with one stopped machine that auto-starts on any request. Its logs show it
+  **started at 02:03:58 UTC today in LIVE mode against the production Kalshi account** ("Cash: $1.69 |
+  Positions: $0.00").
+  - It crashed at once on "database or disk is full", and stopped at Fly's limit of 10 restarts, before placing
+    any order.
+  - The request that woke it was almost certainly Foundry's own read-only probe of its address during the audit.
+    A GET was enough to start a live bot, which is the exposure this record warned of.
+- Its `DRY_RUN` secret is set, and the bot reported LIVE. The value was not read.
+- **Its machine was destroyed (`fly scale count 0`)**, so no request can start it again. The app, its encrypted
+  3 GB volume `polybot_data` (the bot's own database, possibly the only record of what it traded) and its secrets
+  were kept. Nothing was deployed and nothing else was changed.
+- A route through the Apex repository's CI secret had been refused by the session's permission system before the
+  token arrived, and was not pursued.
+
+**Left to the owner, in this order.**
+1. **Revoke the Kalshi API key** the old bot used (kalshi.com, Account, then API keys). It is still stored as a Fly
+   secret on `kalshi-genius`, and was live this morning.
+2. **Revoke the temporary Fly org token** given in chat (`fly tokens list`, then `fly tokens revoke <id>`, or the
+   Fly dashboard). It is in the conversation history.
+3. Consider rotating the Anthropic API key stored on `kalshi-genius`: its dashboard's chat endpoint was
+   unauthenticated whenever the app ran.
+4. On GitHub, archive `kalshi-genius` and `Apex-Micro` (Settings, then Archive).
+5. Later, if the old database is not worth reading, `fly apps destroy kalshi-genius` and
+   `fly apps destroy apex-trading` remove the volume and the stored secrets for good.

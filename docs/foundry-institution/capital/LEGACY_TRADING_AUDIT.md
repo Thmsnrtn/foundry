@@ -105,8 +105,13 @@ part of any "edge" it saw may have been its own arithmetic.
 | The order-state vocabulary, for the day an execution design is reviewed (`CAPITAL_RESEARCH.md`) | The in-memory kill switch; demo fallbacks |
 | Walk-forward's in-sample/out-of-sample idea, as a chronological split fixed in advance with nothing tuned | The optimizer and its grid search |
 
-Nothing from either repository runs in Foundry, and neither repository was changed from
-here.
+Nothing from either repository runs in Foundry, and no code in either repository was changed from here.
+
+**Retired, 29 September 2026, at the owner's direction.** Both draft PRs were closed unmerged, with comments.
+Both repositories are to be archived. On Fly, `apex-trading` had no machines. `kalshi-genius` had
+one, which a single GET started in LIVE mode against the production account at 02:03 UTC. It crashed on a full
+disk before trading, and it was then destroyed with the owner's temporary token. Its volume and secrets were kept,
+and revoking the Kalshi key is the owner's act (PENDING 28).
 
 ## What is not known
 
