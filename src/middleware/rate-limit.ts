@@ -221,8 +221,8 @@ export const apiModelRateLimit = sharedRateLimit(60, 60 * 60 * 1000, (c) => {
 
 // ─── Shared counters, for the limits that guard money ────────────────────────
 //
-// Every limit above is a Map in ONE Node process, and fly.toml runs
-// `min_machines_running = 2` behind a load balancer. So each of those limits is
+// Every limit above is a Map in ONE Node process, and the retired commercial
+// fly.toml ran `min_machines_running = 2` behind a load balancer. So each of those limits is
 // really twice what its docstring says, and more if the web group is ever
 // scaled up. For flood control that is tolerable — blunting a burst twice as
 // generously still blunts it. For the limits that exist to stop a bill it is

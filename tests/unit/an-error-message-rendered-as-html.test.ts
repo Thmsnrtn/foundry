@@ -29,7 +29,8 @@ describe('the auth pages', () => {
   it('put the error text in as text', () => {
     const code = stripComments(SRC, { lineComments: true });
     const matches = code.match(/textContent = String\(e && e\.message \? e\.message : e\)/g) ?? [];
-    expect(matches, 'one per page: sign-up and sign-in').toHaveLength(2);
+    // One page: sign-in. There is no sign-up page (29 September 2026).
+    expect(matches, 'the sign-in page').toHaveLength(1);
   });
 
   it('still tell the person what to do', () => {

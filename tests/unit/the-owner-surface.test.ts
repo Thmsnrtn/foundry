@@ -396,8 +396,12 @@ describe('every way in leads to the owner surface', () => {
     const clerk = readFileSync(
       resolve(import.meta.dirname, '../../src/routes/auth/clerk.ts'), 'utf8');
     expect(clerk).not.toContain('"/dashboard"');
-    expect(clerk).toContain('forceRedirectUrl: "/foundry"');
-    expect(clerk).toContain('fallbackRedirectUrl: "/foundry"');
+    // The sign-in page sends him to /foundry unless he was on his way somewhere
+    // else inside it. (The sign-up page that carried the same redirect is gone:
+    // nobody else signs up.)
+    expect(clerk).toMatch(/: "\/foundry";/);
+    expect(clerk).toContain('forceRedirectUrl: target');
+    expect(clerk).toContain('fallbackRedirectUrl: target');
   });
 
   it('opens the installed app on the owner surface', async () => {

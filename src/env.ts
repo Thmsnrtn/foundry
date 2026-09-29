@@ -48,23 +48,24 @@ export const FATAL_ENV: EnvRequirement[] = [
     names: ['OPENROUTER_API_KEY', 'ANTHROPIC_API_KEY'],
     consequence: 'no AI gateway — Foundry is an AI product, so no key is no product',
   },
+  // FATAL SINCE 29 SEPTEMBER 2026, AND ONLY AFTER PRODUCTION SHOWED IT PRESENT.
+  // It was "degraded": stored credentials fell back to the Clerk secret, and
+  // contributor hashes fell back to a literal written in this repository. The
+  // literal is gone (contributorHash refuses without the key), the Etsy app
+  // credential cannot be encrypted without it, and /internal/health reported
+  // `encryption_key: ok` on commit 842cc167 before this line was written — a
+  // boot that exits on a single machine is an outage, so the presence was
+  // observed first, never assumed.
+  {
+    names: ['ENCRYPTION_KEY'],
+    consequence: 'stored credentials cannot be encrypted or read, and no contributor can be hashed',
+  },
 ];
 
 /** Absent, a named thing stops working and the rest of the app runs. */
 export const DEGRADED_ENV: EnvRequirement[] = [
   { names: ['TURSO_AUTH_TOKEN'], consequence: 'a remote Turso database cannot be reached' },
   { names: ['CLERK_WEBHOOK_SECRET'], consequence: 'the Clerk webhook endpoint is disabled' },
-  // NOT "cannot be encrypted at rest", which is what the inline list said and
-  // is not what the code does: `lib/crypto.ts` derives from ENCRYPTION_KEY or
-  // falls back to CLERK_SECRET_KEY, which is fatal-required — so the fallback
-  // is always available and always used when this is unset. The cost is real
-  // and it is a different one: one secret doing two jobs, and rotating the
-  // Clerk key silently re-keys every stored integration credential.
-  {
-    names: ['ENCRYPTION_KEY'],
-    consequence: 'integration credentials are encrypted with the Clerk secret instead, '
-      + 'so rotating that key makes every stored credential unreadable',
-  },
   { names: ['OLD_ENCRYPTION_KEY'], consequence: 'credentials written under a previous key cannot be read' },
   { names: ['STRIPE_SECRET_KEY'], consequence: 'billing and checkout are disabled' },
   { names: ['STRIPE_WEBHOOK_SECRET'], consequence: 'subscription and trial state will not update' },

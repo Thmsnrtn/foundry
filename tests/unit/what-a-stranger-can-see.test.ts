@@ -73,7 +73,6 @@ const PUBLIC = [
   '/internal/routes',
   '/auth/login',
   '/auth/logout',
-  '/auth/signup',
 ].sort();
 
 /** Reports whether the service is healthy, so an unhealthy 503 is its job. */

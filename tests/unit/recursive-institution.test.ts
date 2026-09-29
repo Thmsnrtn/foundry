@@ -1,4 +1,8 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
+// This file exercises the commercial access-billing and onboarding machinery,
+// which only runs on a deployment that says it is commercial. Private is the
+// default since 29 September 2026; that machinery is to be deleted (S7).
+process.env.FOUNDRY_INSTANCE_POSTURE = 'commercial';
 
 import { mkdirSync, mkdtempSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

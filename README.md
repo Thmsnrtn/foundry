@@ -134,7 +134,9 @@ register a real reporter at boot via `setReporter`).
 ## Deployment
 
 ```bash
-fly deploy                # Fly.io (see fly.toml)
+# Deploys only through .github/workflows/deploy-private.yml: a commit whose message
+# carries [deploy-private], pushed to a named branch, deploys fly.private.toml after
+# the full check. There is no fly.toml: a bare `fly deploy` has nothing to push.
 # Or:
 docker build -t foundry . && docker run -p 8080:8080 --env-file .env foundry
 ```

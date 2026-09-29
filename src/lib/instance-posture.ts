@@ -28,16 +28,22 @@
 // guard are untouched: broad owner authority is made safe by integrity, never
 // by removing it.
 //
-// The default is `commercial`, the restrictive answer. A deployment becomes
-// private by saying so.
+// THE DEFAULT IS PRIVATE (29 September 2026). The owner said Foundry is his own
+// private app, never to be used by anyone else. The default used to be
+// `commercial`, which on this codebase meant "admit anyone Clerk vouches for":
+// only `fly.private.toml` stood between a stranger and an account, and
+// `fly.toml` — same app name, no posture — was one `fly deploy` away. Private
+// is now the default, and admission is owner-only in EVERY posture:
+// `commercial` still names the access-billing machinery (until it is deleted),
+// but it no longer opens the door.
 // =============================================================================
 
 export type InstancePosture = 'private_owner' | 'commercial';
 
 export function getInstancePosture(env: NodeJS.ProcessEnv = process.env): InstancePosture {
-  return (env.FOUNDRY_INSTANCE_POSTURE ?? '').trim().toLowerCase() === 'private_owner'
-    ? 'private_owner'
-    : 'commercial';
+  return (env.FOUNDRY_INSTANCE_POSTURE ?? '').trim().toLowerCase() === 'commercial'
+    ? 'commercial'
+    : 'private_owner';
 }
 
 /**
@@ -78,12 +84,12 @@ export function getOwnerEmail(env: NodeJS.ProcessEnv = process.env): string {
 /**
  * May this verified address be admitted to this deployment at all?
  *
- * Commercial deployments admit anyone the identity provider vouches for — that
- * is what a commercial service is. A private institution admits its owner and
- * nobody else, and says so here rather than discovering it later in a spend
- * report.
+ * The owner and nobody else, whatever the posture. It used to admit anyone the
+ * identity provider vouched for unless the deployment declared itself private;
+ * Foundry has no other users and is not to have any (29 September 2026), so no
+ * setting can open it. An empty address is nobody.
  */
 export function mayBeAdmitted(email: string, env: NodeJS.ProcessEnv = process.env): boolean {
-  if (!isPrivateOwnerInstance(env)) return true;
-  return email.trim().toLowerCase() === getOwnerEmail(env);
+  const e = email.trim().toLowerCase();
+  return e !== '' && e === getOwnerEmail(env);
 }

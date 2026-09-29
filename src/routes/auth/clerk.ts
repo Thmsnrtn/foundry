@@ -10,67 +10,12 @@ import { verifiedPrimaryEmail } from '../../middleware/auth.js';
 import { CLEAR_KEPT_SESSION } from '../../middleware/session-lapse.js';
 import { log } from '../../lib/logger.js';
 import { mayBeAdmitted } from '../../lib/instance-posture.js';
-import { createCustomer } from '../../services/billing/stripe.js';
 
 export const authRoutes = new Hono();
 
-authRoutes.get('/auth/signup', (c) => {
-  const publishableKey = process.env.CLERK_PUBLISHABLE_KEY ?? '';
-  return c.html(`<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Sign Up — Foundry</title>
-  <link rel="stylesheet" href="${OWNER_STYLESHEET}" />
-  <style>
-    body { display: flex; justify-content: center; align-items: center; min-height: 100vh; background: var(--bg); margin: 0; }
-    .auth-container { text-align: center; }
-    .auth-container h1 { color: var(--ink); font-family: var(--serif); font-weight: 500; margin-bottom: 1.5rem; font-size: 1.5rem; }
-    .auth-container a { color: var(--ink-2); font-size: 0.87rem; }
-    #sign-up { min-height: 400px; }
-  </style>
-</head>
-<body>
-  <div class="auth-container">
-    <h1>Foundry</h1>
-    <div id="sign-up"></div>
-    <p style="margin-top:1rem;"><a href="/auth/login">Already have an account? Log in</a></p>
-  </div>
-  <script>
-    const pk = "${publishableKey}";
-    async function initClerk() {
-      const m = await import("https://cdn.jsdelivr.net/npm/@clerk/clerk-js@5/+esm");
-      const clerk = new m.Clerk(pk);
-      await clerk.load();
-      if (clerk.user) { window.location.href = "/foundry"; return; }
-      clerk.mountSignUp(document.getElementById("sign-up"), {
-        forceRedirectUrl: "/foundry",
-        fallbackRedirectUrl: "/foundry",
-      });
-    }
-    initClerk().catch(e => {
-      // THE ERROR TEXT IS BUILT AS NODES, NOT AS HTML. This concatenated
-      // the error message into innerHTML, and the error comes from a third-party
-      // module loaded over the network: any markup in it — from a crafted CDN
-      // response, a proxy error page, or a message that happens to contain
-      // angle brackets — was rendered as HTML on the sign-in page.
-      const box = document.getElementById("sign-up");
-      box.textContent = "";
-      const headline = document.createElement("p");
-      headline.style.color = "var(--bad)";
-      headline.textContent = "Failed to load authentication. Please refresh the page.";
-      const detail = document.createElement("p");
-      detail.style.color = "var(--ink-3)";
-      detail.style.fontSize = "0.8rem";
-      detail.textContent = String(e && e.message ? e.message : e);
-      box.appendChild(headline);
-      box.appendChild(detail);
-    });
-  </script>
-</body>
-</html>`);
-});
+// THERE IS NO SIGN-UP PAGE. Foundry is one owner's private app (29 September
+// 2026); an account for anyone else is not a thing it offers. The owner signs
+// in at /auth/login.
 
 authRoutes.get('/auth/login', (c) => {
   const publishableKey = process.env.CLERK_PUBLISHABLE_KEY ?? '';
@@ -93,7 +38,6 @@ authRoutes.get('/auth/login', (c) => {
   <div class="auth-container">
     <h1>Foundry</h1>
     <div id="sign-in"></div>
-    <p style="margin-top:1rem;"><a href="/auth/signup">Don't have an account? Sign up</a></p>
   </div>
   <script>
     const pk = "${publishableKey}";
@@ -308,7 +252,8 @@ authRoutes.post('/auth/webhook', async (c) => {
     const existing = await query('SELECT id FROM founders WHERE clerk_user_id = ?', [userId]);
     if (existing.rows.length === 0) {
       const founderId = nanoid();
-      const stripeCustomerId = await createCustomer(email, name).catch(() => null);
+      // No Stripe customer: nobody buys access to their own institution.
+      const stripeCustomerId = null;
 
       // Determine cohort
       const now = new Date();

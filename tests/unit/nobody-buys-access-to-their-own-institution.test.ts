@@ -79,16 +79,16 @@ describe('a private owner institution does not meter access to itself', () => {
 });
 
 describe('the posture is a deployment fact with a safe default', () => {
-  it('defaults to commercial when unset', () => {
-    expect(getInstancePosture({})).toBe('commercial');
-    expect(isPrivateOwnerInstance({})).toBe(false);
+  it('defaults to private when unset — the owner said nobody else uses it (29 September 2026)', () => {
+    expect(getInstancePosture({})).toBe('private_owner');
+    expect(isPrivateOwnerInstance({})).toBe(true);
   });
 
-  it('is not turned on by anything except the exact value', () => {
-    for (const v of ['', 'private', 'true', '1', 'owner', 'PRIVATE-OWNER']) {
-      expect(isPrivateOwnerInstance({ FOUNDRY_INSTANCE_POSTURE: v }), v).toBe(false);
+  it('becomes commercial only by saying exactly that, and nothing else turns private off', () => {
+    for (const v of ['', 'private', 'true', '1', 'owner', 'PRIVATE-OWNER', 'commercial-ish', 'public']) {
+      expect(isPrivateOwnerInstance({ FOUNDRY_INSTANCE_POSTURE: v }), v).toBe(true);
     }
-    expect(isPrivateOwnerInstance({ FOUNDRY_INSTANCE_POSTURE: 'PRIVATE_OWNER' })).toBe(true);
+    expect(isPrivateOwnerInstance({ FOUNDRY_INSTANCE_POSTURE: 'COMMERCIAL' })).toBe(false);
   });
 
   it('leaves the commercial entitlement rule itself untouched', () => {

@@ -49,8 +49,39 @@ describe('a private institution admits its owner and nobody else', () => {
     }
   });
 
-  it('does not restrict a commercial deployment, which exists to admit people', () => {
-    expect(mayBeAdmitted('anyone@example.com', COMMERCIAL)).toBe(true);
+  it('no setting opens the door: a commercial posture admits the owner and nobody else too', () => {
+    // It used to: `commercial` meant "admit anyone Clerk vouches for", and it
+    // was the DEFAULT. The owner said on 29 September 2026 that Foundry is his
+    // own private app, never to be used by anyone else.
+    expect(mayBeAdmitted('anyone@example.com', { ...COMMERCIAL, FOUNDRY_OWNER_EMAIL: 'owner@example.com' })).toBe(false);
+    expect(mayBeAdmitted('owner@example.com', { ...COMMERCIAL, FOUNDRY_OWNER_EMAIL: 'owner@example.com' })).toBe(true);
+  });
+
+  it('is private when nothing is said, and when something unrecognised is said', async () => {
+    const { getInstancePosture, isPrivateOwnerInstance } = await import('../../src/lib/instance-posture.js');
+    expect(getInstancePosture({})).toBe('private_owner');
+    expect(getInstancePosture({ FOUNDRY_INSTANCE_POSTURE: '' })).toBe('private_owner');
+    expect(getInstancePosture({ FOUNDRY_INSTANCE_POSTURE: 'Commercial ' })).toBe('commercial');
+    expect(getInstancePosture({ FOUNDRY_INSTANCE_POSTURE: 'public' })).toBe('private_owner');
+    expect(isPrivateOwnerInstance({})).toBe(true);
+    // And with nothing configured at all, a stranger is still a stranger.
+    expect(mayBeAdmitted('someone@example.com', {})).toBe(false);
+  });
+});
+
+describe('there is no way in for anyone else', () => {
+  it('has no sign-up page', async () => {
+    const { authRoutes } = await import('../../src/routes/auth/clerk.js');
+    expect((await authRoutes.request('/auth/signup')).status).toBe(404);
+    const login = await (await authRoutes.request('/auth/login')).text();
+    expect(login).not.toMatch(/sign up/i);
+  });
+
+  it('has no second deploy config that would push an open app', () => {
+    const root = resolve(import.meta.dirname, '../..');
+    expect(readdirSync(root)).not.toContain('fly.toml');
+    const priv = readFileSync(join(root, 'fly.private.toml'), 'utf8');
+    expect(priv).toMatch(/FOUNDRY_INSTANCE_POSTURE\s*=\s*"private_owner"/);
   });
 });
 

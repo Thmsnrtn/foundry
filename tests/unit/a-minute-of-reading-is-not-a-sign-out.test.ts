@@ -19,6 +19,8 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 process.env.CLERK_SECRET_KEY = 'sk_test_lapse';
+// The session is the owner's: only the owner is admitted (29 September 2026).
+process.env.FOUNDRY_OWNER_EMAIL = 'owner@example.com';
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 

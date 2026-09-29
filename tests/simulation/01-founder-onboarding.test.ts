@@ -68,8 +68,10 @@ describe('Signup flow (Clerk webhook → founder record)', () => {
     expect(authRouteSource).toContain('primary_email_address_id');
   });
 
-  it('creates Stripe customer during signup', () => {
-    expect(authRouteSource).toMatch(/createCustomer/);
+  it('creates no Stripe customer at sign-in: nobody buys access to their own institution', () => {
+    // It used to, for every new account. Foundry has one owner and no access
+    // billing (29 September 2026).
+    expect(authRouteSource).not.toMatch(/createCustomer/);
   });
 
   it('webhook verifies Svix signature to prevent spoofing', () => {

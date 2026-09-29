@@ -1,5 +1,8 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
+// The access-billing machinery is only asked on a commercial deployment, which
+// is no longer the default (29 September 2026); this file tests that machinery.
+process.env.FOUNDRY_INSTANCE_POSTURE = 'commercial';
 
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';

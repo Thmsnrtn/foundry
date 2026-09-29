@@ -1,5 +1,9 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
+// This file exercises the commercial access-billing and onboarding machinery,
+// which only runs on a deployment that says it is commercial. Private is the
+// default since 29 September 2026; that machinery is to be deleted (S7).
+process.env.FOUNDRY_INSTANCE_POSTURE = 'commercial';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';

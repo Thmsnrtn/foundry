@@ -85,7 +85,7 @@ describe('the list names variables the code actually reads', () => {
 
 describe('what it says about an environment', () => {
   const full: NodeJS.ProcessEnv = {
-    TURSO_DATABASE_URL: 'x', CLERK_SECRET_KEY: 'x', CLERK_PUBLISHABLE_KEY: 'x',
+    TURSO_DATABASE_URL: 'x', CLERK_SECRET_KEY: 'x', CLERK_PUBLISHABLE_KEY: 'x', ENCRYPTION_KEY: 'x',
     OPENROUTER_API_KEY: 'x',
   };
 
