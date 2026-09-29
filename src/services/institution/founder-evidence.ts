@@ -547,8 +547,9 @@ export async function getFounderUnderstandingView(input: {
   // VISIBILITY IS NOT CAPABILITY, AND THIS ASKED THE WRONG ONE.
   //
   // The Letter resolves which company you are looking at through
-  // `getVisibleProducts` — owner OR an accepted team member — so a co-founder
-  // reads it daily. This page asked `owner_id` alone, so every responsibility
+  // `getVisibleProducts` — owner OR an accepted team member, until Private S7b3
+  // made it the owner alone — so a co-founder read it daily. This page asked
+  // `owner_id` alone, so every responsibility
   // card offered them "What I understand about this" and answered 404: the
   // same answer Foundry gives for another company's responsibility. That is
   // the defect `getVisibleProducts` was created to fix, reintroduced one
@@ -557,10 +558,8 @@ export async function getFounderUnderstandingView(input: {
   // Correcting stays the owner's. The page says so rather than offering a form
   // that fails.
   const viewer = (await query(
-    `SELECT p.owner_id FROM products p WHERE p.id=? AND (p.owner_id=? OR EXISTS (
-       SELECT 1 FROM team_members t
-        WHERE t.product_id=p.id AND t.founder_id=? AND t.status='active'))`,
-    [input.productId, input.founderId, input.founderId],
+    `SELECT p.owner_id FROM products p WHERE p.id=? AND p.owner_id=?`,
+    [input.productId, input.founderId],
   )).rows[0] as Record<string, unknown> | undefined;
   if (!viewer) return null;
   const mayCorrect = String(viewer.owner_id) === input.founderId;

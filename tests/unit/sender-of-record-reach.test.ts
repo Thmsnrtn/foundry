@@ -93,8 +93,10 @@ describe('who counts as the founder', () => {
     expect(await isFounderMail(['owner@company.example'])).toBe(true);
   });
 
-  it('recognises an active team member', async () => {
-    expect(await isFounderMail(['colleague@company.example'])).toBe(true);
+  it('does not recognise a team member any more', async () => {
+    // ONE OWNER, NO MEMBERS (Private S7b3, 29 September 2026): a membership
+    // row, stale or planted, admits nobody. This case used to assert the opposite.
+    expect(await isFounderMail(['colleague@company.example'])).toBe(false);
   });
 
   it('does not recognise a customer', async () => {

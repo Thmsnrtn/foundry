@@ -172,15 +172,12 @@ export async function getProductsByOwner(founderId: string): Promise<ResultSet> 
 }
 
 /**
- * The companies a person may SEE: the ones they own, and the ones they have
- * been accepted into.
+ * The companies a person may SEE: the ones they own.
  *
- * THE DASHBOARD LISTED BY `owner_id` ALONE. A founder could invite a
- * co-founder, have the invitation accepted, and that person would open the
- * dashboard to nothing — no company, no pages, no way in. The invite flow
- * existed, the membership row existed, and no query joined them to anything
- * anybody could see. The team feature was a surface you could be let into and
- * then not arrive.
+ * Accepted team members were joined in here once, so an invited co-founder
+ * could open the dashboard to something. Foundry has one owner and no members
+ * (Private S7b3, 29 September 2026), so it is ownership again, and a stale
+ * membership row shows nobody anything.
  *
  * VISIBILITY IS NOT CAPABILITY. Seeing the company is where the question
  * starts; every consequential route still asks its own, and the owner-only
@@ -190,13 +187,8 @@ export async function getVisibleProducts(founderId: string): Promise<ResultSet> 
   return query(
     `SELECT p.* FROM products p
       WHERE p.owner_id = ? AND p.status != 'archived' AND ${realCompany('p')}
-      UNION
-     SELECT p.* FROM products p
-       JOIN team_members t ON t.product_id = p.id
-      WHERE t.founder_id = ? AND t.status = 'active' AND p.status != 'archived'
-        AND ${realCompany('p')}
      ORDER BY 1`,
-    [founderId, founderId]);
+    [founderId]);
 }
 
 /**

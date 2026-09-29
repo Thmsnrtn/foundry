@@ -116,6 +116,17 @@ beforeAll(async () => {
 // the guard rather than about where each handler happens to redirect.
 const REFUSED = 403;
 
+// ONE OWNER, NO MEMBERS (Private S7b3, 29 September 2026). The co-founder and
+// observer rows above are left in the table on purpose: a stale membership
+// must admit nobody. A non-owner no longer sees the company at all, so they
+// are stopped one step earlier than the capability guard — "no company
+// selected" (400) rather than "not permitted" (403). Either is a refusal
+// before the handler; what must never happen is the handler answering them.
+async function refusedBeforeTheHandler(res: Response): Promise<void> {
+  expect([400, REFUSED], 'a non-owner must be stopped before the handler').toContain(res.status);
+  expect(await res.text(), 'the handler must not have answered').not.toBe('Refused');
+}
+
 describe('granting authority asks who is granting it', () => {
   // THE DOOR THIS USED TO ASK ABOUT IS RETIRED, AND THE CATEGORY IS NOT.
   //
@@ -128,30 +139,28 @@ describe('granting authority asks who is granting it', () => {
   // responsibility and a grant to a connected provider, and both are asked
   // here.
   it('refuses an observer granting a standing permission on a responsibility', async () => {
-    const res = await post('/letter/responsibilities/nonexistent/permission/grant',
-      OBSERVER, { days: '7' });
-    expect(res.status).toBe(REFUSED);
-    // Stopped by the guard, before the handler ever looked at what was asked.
-    expect(await res.text()).toContain('Not permitted for your access to this company');
+    await refusedBeforeTheHandler(await post('/letter/responsibilities/nonexistent/permission/grant',
+      OBSERVER, { days: '7' }));
   });
 
   it('refuses an observer granting a connected provider something to do', async () => {
-    const res = await post('/connections/grant', OBSERVER,
-      { service: 'mailer', capability: 'send' });
-    expect(res.status).toBe(REFUSED);
+    await refusedBeforeTheHandler(await post('/connections/grant', OBSERVER,
+      { service: 'mailer', capability: 'send' }));
   });
 
-  it('admits the co-founder at both', async () => {
-    // Past the guard at each. What the handler then says about a
-    // responsibility that does not exist, or a provider that is not connected,
-    // is a different refusal and not what this test is about.
-    // The permission door refuses a responsibility that does not exist, and
-    // that refusal is also a 403 — so the BODY is what says which one answered.
-    // The guard's refusal names the access; the handler's does not.
+  it('refuses a co-founder row too: membership admits nobody now', async () => {
+    await refusedBeforeTheHandler(await post('/letter/responsibilities/nonexistent/permission/grant',
+      MANAGER, { days: '7' }));
+    await refusedBeforeTheHandler(await post('/connections/grant', MANAGER,
+      { service: 'mailer', capability: 'send' }));
+  });
+
+  it('admits the owner at both', async () => {
     const granted = await post('/letter/responsibilities/nonexistent/permission/grant',
-      MANAGER, { days: '7' });
+      OWNER, { days: '7' });
+    // Past the guard: the handler answers about a responsibility that does not exist.
     expect(await granted.text()).toBe('Refused');
-    expect((await post('/connections/grant', MANAGER,
+    expect((await post('/connections/grant', OWNER,
       { service: 'mailer', capability: 'send' })).status).not.toBe(REFUSED);
   });
 });
@@ -165,30 +174,25 @@ describe('dispatching an effect asks who is dispatching it', () => {
   const SEND = '/letter/replies/nonexistent/send';
 
   it('refuses an observer sending a letter reply', async () => {
-    const res = await post(SEND, OBSERVER);
-    expect(res.status).toBe(REFUSED);
-    expect(await res.text()).toContain('Not permitted for your access to this company');
+    await refusedBeforeTheHandler(await post(SEND, OBSERVER));
   });
 
-  it('admits a member who holds can_trigger_actions', async () => {
-    const res = await post(SEND, MANAGER);
-    // Past the guard. The handler then refuses an action that is not theirs,
-    // which is a different refusal and the one this test is not about.
-    expect(await res.text()).toBe('Refused');
+  it('refuses a member row that holds can_trigger_actions, and admits the owner', async () => {
+    await refusedBeforeTheHandler(await post(SEND, MANAGER));
+    // Past the guard; the handler then refuses an action that does not exist.
+    expect(await (await post(SEND, OWNER)).text()).toBe('Refused');
   });
 });
 
 describe('erasure is the exceptional boundary, not a capability', () => {
   it('refuses an observer', async () => {
-    const res = await post('/privacy/delete', OBSERVER);
-    expect(res.status).toBe(REFUSED);
+    await refusedBeforeTheHandler(await post('/privacy/delete', OBSERVER));
   });
 
   it('refuses even a co-founder who holds every capability', async () => {
     // can_manage_company is ordinary company work. Erasing the company is not
     // ordinary company work, and nothing grants it.
-    const res = await post('/privacy/delete', MANAGER);
-    expect(res.status).toBe(REFUSED);
+    await refusedBeforeTheHandler(await post('/privacy/delete', MANAGER));
   });
 
   it('admits the owner', async () => {
@@ -209,8 +213,8 @@ describe('the emergency stop stays reachable', () => {
     // Taking authority back is still authority management, and it answers to
     // the same permission as giving it. The panic switch above is the
     // universal brake, so nobody is left without a way to stop the machine.
-    const res = await post('/letter/responsibilities/nonexistent/permission/revoke', OBSERVER);
-    expect(res.status).toBe(REFUSED);
+    await refusedBeforeTheHandler(
+      await post('/letter/responsibilities/nonexistent/permission/revoke', OBSERVER));
   });
 });
 

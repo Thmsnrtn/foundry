@@ -95,21 +95,13 @@ describe('what Foundry believes, shown to the person who told it', () => {
       productId: P, responsibilityId: 'no_such_responsibility', founderId: F })).toBeNull();
   });
 
-  it('shows an accepted co-founder everything, and lets them correct nothing', async () => {
-    // VISIBILITY IS NOT CAPABILITY. The Letter resolves which company you are
-    // looking at through `getVisibleProducts` — owner OR accepted member — so a
-    // co-founder reads it daily. Asking `owner_id` here answered them 404 on
-    // every responsibility card: the same answer Foundry gives for another
-    // company. That is the defect `getVisibleProducts` exists to fix.
+  it('shows a co-founder row nothing, and still lets the owner correct', async () => {
+    // ONE OWNER, NO MEMBERS (Private S7b3, 29 September 2026): a membership
+    // row, stale or planted, admits nobody. This case used to assert the opposite.
     await query(`INSERT INTO team_members (id,product_id,founder_id,role,status)
       VALUES ('ftb_tm',?,?,'co_founder','active')`, [P, OTHER]);
-    const theirs = await getFounderUnderstandingView({
-      productId: P, responsibilityId: R, founderId: OTHER });
-    expect(theirs).toBeTruthy();
-    expect(theirs!.title).toBe('Answer support mail');
-    // Correcting what the company says it is belongs to whoever owns it, and
-    // migration 220 refuses it independently of this flag.
-    expect(theirs!.mayCorrect).toBe(false);
+    expect(await getFounderUnderstandingView({
+      productId: P, responsibilityId: R, founderId: OTHER })).toBeNull();
     expect((await getFounderUnderstandingView({
       productId: P, responsibilityId: R, founderId: F }))!.mayCorrect).toBe(true);
     await query("DELETE FROM team_members WHERE id='ftb_tm'");

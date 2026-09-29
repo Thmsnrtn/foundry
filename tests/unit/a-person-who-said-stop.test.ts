@@ -118,7 +118,9 @@ describe('recording the constraint', () => {
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body: new URLSearchParams({ email: PERSON, reason: 'they_asked' }).toString(),
     });
-    expect(posted.status).toBe(403);
+    // Since Private S7b3 a member row admits nobody, so the observer is
+    // stopped before the capability guard (400, no company) or at it (403).
+    expect([400, 403]).toContain(posted.status);
     expect(await getContactConstraints(P)).toEqual([]);
   });
 

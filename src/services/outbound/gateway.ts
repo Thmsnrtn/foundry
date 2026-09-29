@@ -404,8 +404,8 @@ export async function invoke(req: GatewayRequest): Promise<GatewayResult> {
   // The answer is NOT a field the caller sets. This file's rule is that a
   // caller cannot skip or downgrade a control by declaring a safer fact, and a
   // bigger allowance is a downgrade. So the gateway asks the database who this
-  // address belongs to: an operator of THIS product — its owner, or a team
-  // member — gets the operator ceiling, and everyone else gets the customer
+  // address belongs to: the operator of THIS product — its owner — gets the
+  // operator ceiling, and everyone else gets the customer
   // one. Nothing at any call site changed, and nothing at any call site can
   // change the answer.
   let heldBudgetKey: string | null = null;
@@ -541,7 +541,7 @@ async function refusePolicy(
 /**
  * Whether this address belongs to somebody who OPERATES this company.
  *
- * The owner of the product, or a team member of it. Asked of the database
+ * The owner of the product — there are no members since Private S7b3. Asked of the database
  * rather than of the caller, because the answer decides which ceiling applies
  * and this file does not let a caller choose its own ceiling.
  *
@@ -555,12 +555,8 @@ async function recipientIsOperator(productId: string, recipientKey: string): Pro
     `SELECT 1 AS present FROM products p
        JOIN founders f ON f.id = p.owner_id
       WHERE p.id = ? AND lower(f.email) = lower(?)
-      UNION ALL
-     SELECT 1 AS present FROM team_members tm
-       JOIN founders f2 ON f2.id = tm.founder_id
-      WHERE tm.product_id = ? AND lower(f2.email) = lower(?)
       LIMIT 1`,
-    [productId, recipientKey, productId, recipientKey],
+    [productId, recipientKey],
   );
   return result.rows.length > 0;
 }

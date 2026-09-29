@@ -67,7 +67,10 @@ describe('the check the route now performs', () => {
 });
 
 describe('why the id was never the secret', () => {
-  it('shows a team member an id that the ownership check refuses them', async () => {
+  it('no longer shows a team member an id the ownership check refuses them', async () => {
+    // ONE OWNER, NO MEMBERS (Private S7b3, 29 September 2026): a membership
+    // row, stale or planted, admits nobody. This case used to assert the opposite.
+
     await query(
       `INSERT INTO team_members (id, product_id, founder_id, role, status)
        VALUES (?, ?, ?, 'co_founder', 'active')`, [nanoid(), P, TEAMMATE]);
@@ -75,8 +78,9 @@ describe('why the id was never the secret', () => {
     const visible = await getVisibleProducts(TEAMMATE);
     const owned = await getProductByOwner(P, TEAMMATE);
 
-    // Both true at once, which is exactly the gap the missing guard opened.
-    expect((visible.rows as unknown as Array<{ id: string }>).map((r) => r.id)).toContain(P);
+    // The gap the missing guard opened was both of these at once; visibility
+    // is ownership now, so it cannot open.
+    expect((visible.rows as unknown as Array<{ id: string }>).map((r) => r.id)).not.toContain(P);
     expect(owned.rows.length).toBe(0);
   });
 });

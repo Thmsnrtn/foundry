@@ -61,9 +61,13 @@ beforeEach(async () => {
      VALUES ('mc_tm_ob', ?, ?, 'investor_observer', 'active', 1, 0, 0, 0, 0, 0)`, [P, OBSERVER]);
 });
 
+// ONE OWNER, NO MEMBERS (Private S7b3, 29 September 2026). The co-founder and
+// observer rows planted above stay planted on purpose: a membership row, even
+// one carrying every flag, now admits nobody. Where these cases used to prove
+// the flags were honoured, they now prove the flags confer nothing.
 describe('the flags are asked', () => {
-  it('lets a co-founder vote', async () => {
-    expect(await memberMay(P, COFOUNDER, 'can_vote_decisions')).toBe(true);
+  it('does not let a co-founder row vote', async () => {
+    expect(await memberMay(P, COFOUNDER, 'can_vote_decisions')).toBe(false);
   });
 
   it('does not let an observer vote', async () => {
@@ -71,11 +75,12 @@ describe('the flags are asked', () => {
       'the whole defect: an observer’s vote fed the alignment score').toBe(false);
   });
 
-  it('honours each flag independently', async () => {
-    expect(await memberMay(P, OBSERVER, 'can_trigger_actions')).toBe(false);
-    expect(await memberMay(P, COFOUNDER, 'can_trigger_actions')).toBe(true);
-    expect(await memberMay(P, OBSERVER, 'can_manage_company')).toBe(false);
-    expect(await memberMay(P, COFOUNDER, 'can_manage_company')).toBe(true);
+  it('grants nothing on any flag, whatever the row carries', async () => {
+    for (const cap of ['can_trigger_actions', 'can_manage_company', 'can_vote_decisions'] as const) {
+      expect(await memberMay(P, OBSERVER, cap), cap).toBe(false);
+      expect(await memberMay(P, COFOUNDER, cap), cap).toBe(false);
+      expect(await memberMay(P, OWNER, cap), cap).toBe(true);
+    }
   });
 
   it('always allows the owner, who has no membership row', async () => {
@@ -157,9 +162,9 @@ describe('the flags are asked', () => {
 
 describe('membership and permission stay different questions', () => {
   it('hasProductAccess still answers only whether they belong here', async () => {
-    // Deliberately unchanged. It is the right answer to a different question,
-    // and the defect was callers using it for this one.
-    expect(await hasProductAccess(P, OBSERVER)).toBe(true);
+    // Only the owner belongs here now.
+    expect(await hasProductAccess(P, OBSERVER)).toBe(false);
+    expect(await hasProductAccess(P, OWNER)).toBe(true);
     expect(await memberMay(P, OBSERVER, 'can_vote_decisions')).toBe(false);
   });
 
@@ -198,22 +203,15 @@ describe('membership and permission stay different questions', () => {
 // drops both dead tables.
 // =============================================================================
 
-describe('membership is the company authorization model', () => {
-  it('an accepted member can see the company', async () => {
+describe('ownership is the company authorization model', () => {
+  it('a co-founder row sees nothing', async () => {
     const { getVisibleProducts } = await import('../../src/db/client.js');
-    const seen = (await getVisibleProducts(COFOUNDER)).rows
-      .map((r) => (r as Record<string, unknown>).id);
-    expect(seen, 'the dashboard listed by owner_id, so an invited member saw nothing')
-      .toContain(P);
+    expect((await getVisibleProducts(COFOUNDER)).rows.length).toBe(0);
   });
 
-  it('an observer can see the company too — visibility is not capability', async () => {
+  it('an observer row sees nothing either', async () => {
     const { getVisibleProducts } = await import('../../src/db/client.js');
-    const seen = (await getVisibleProducts(OBSERVER)).rows
-      .map((r) => (r as Record<string, unknown>).id);
-    expect(seen).toContain(P);
-    expect(await memberMay(P, OBSERVER, 'can_vote_decisions'),
-      'seeing the company is where the question starts').toBe(false);
+    expect((await getVisibleProducts(OBSERVER)).rows.length).toBe(0);
   });
 
   it('the owner still sees their own company', async () => {
@@ -236,8 +234,8 @@ describe('membership is the company authorization model', () => {
     const { getVisibleProducts } = await import('../../src/db/client.js');
     const seen = (await getVisibleProducts(COFOUNDER)).rows
       .map((r) => (r as Record<string, unknown>).id);
-    expect(seen).toContain(P);
-    expect(seen, 'membership is of ONE company').not.toContain('mc_b');
+    expect(seen).not.toContain(P);
+    expect(seen).not.toContain('mc_b');
   });
 
   it('a removed member stops seeing it', async () => {
@@ -271,7 +269,7 @@ describe('ownership is not the top of the ladder', () => {
       `UPDATE team_members SET can_view_decisions=1, can_vote_decisions=1,
          can_view_financials=1, can_view_audit=1, can_trigger_actions=1,
          can_manage_company=1 WHERE founder_id = ?`, [COFOUNDER]);
-    expect(await memberMay(P, COFOUNDER, 'can_manage_company')).toBe(true);
+    expect(await memberMay(P, COFOUNDER, 'can_manage_company')).toBe(false);
     expect(await isCompanyOwner(P, COFOUNDER)).toBe(false);
   });
 });

@@ -270,12 +270,8 @@ async function recipientIsFounder(
   const known = await query(
     `SELECT lower(f.email) AS email
        FROM products p JOIN founders f ON f.id = p.owner_id
-      WHERE p.id = ?
-      UNION
-     SELECT lower(f.email) AS email
-       FROM team_members t JOIN founders f ON f.id = t.founder_id
-      WHERE t.product_id = ? AND t.status = 'active'`,
-    [productId, productId]);
+      WHERE p.id = ?`,
+    [productId]);
   const inbox = new Set(
     (known.rows as unknown as Array<Record<string, unknown>>).map((r) => String(r.email)));
   return recipients.every((r) => inbox.has(r));

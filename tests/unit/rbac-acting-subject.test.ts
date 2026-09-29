@@ -123,32 +123,24 @@ describe('and the check still refuses everyone it should', () => {
     expect(await res.json()).not.toMatchObject({ error: expect.stringContaining('owner') });
   });
 
-  it('refuses a member a capability their membership does not carry', async () => {
-    // There is one company authorization model now. `account_roles` held a
-    // second one that nothing ever wrote to, so the guards were reading an
-    // always-empty table; membership in `team_members` is what the invite flow
-    // writes and what these now ask.
+  // ONE OWNER, NO MEMBERS (Private S7b3, 29 September 2026). A membership row
+  // admits nobody: the member cannot see the company, so they are refused the
+  // way a stranger is — no company (400) — before any capability is asked. The
+  // row carries every flag here to make the point.
+  it('refuses a member row, whatever capability it carries', async () => {
     await query(
       `INSERT INTO team_members
          (id, product_id, founder_id, role, status, can_vote_decisions, can_manage_company)
-       VALUES ('rb_tm', ?, ?, 'co_founder', 'active', 1, 0)`, [PRODUCT, MEMBER]);
-    const res = await dashboardApp(MEMBER, requireCompanyCapability('can_manage_company'))
-      .request('/x', withCompany);
-    expect(res.status).toBe(403);
+       VALUES ('rb_tm', ?, ?, 'co_founder', 'active', 1, 1)`, [PRODUCT, MEMBER]);
+    for (const cap of ['can_manage_company', 'can_vote_decisions'] as const) {
+      const res = await dashboardApp(MEMBER, requireCompanyCapability(cap)).request('/x', withCompany);
+      expect([400, 403], cap).toContain(res.status);
+    }
   });
 
-  it('admits that member to a capability they do carry', async () => {
-    const res = await dashboardApp(MEMBER, requireCompanyCapability('can_vote_decisions'))
-      .request('/x', withCompany);
-    expect(res.status).toBe(200);
-  });
-
-  it('refuses a member at the ownership boundary, whatever they carry', async () => {
-    // Ownership is not the top of the ladder. Nothing grants it.
-    await query(
-      `UPDATE team_members SET can_manage_company = 1 WHERE id = 'rb_tm'`);
+  it('refuses a member row at the ownership boundary', async () => {
     const res = await dashboardApp(MEMBER, requireOwner()).request('/x', withCompany);
-    expect(res.status).toBe(403);
+    expect([400, 403]).toContain(res.status);
   });
 
   it('refuses an unauthenticated request', async () => {

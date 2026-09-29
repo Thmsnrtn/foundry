@@ -127,7 +127,10 @@ describe('mail to the founder of the company', () => {
     expect(refused.phase).toBe('budget');
   });
 
-  it('a team member counts as an operator too', async () => {
+  it('a team member row does not make somebody an operator', async () => {
+    // ONE OWNER, NO MEMBERS (Private S7b3, 29 September 2026): a membership
+    // row, stale or planted, admits nobody. This case used to assert the opposite.
+
     await query('INSERT INTO founders (id, clerk_user_id, email) VALUES (?,?,?)',
       ['f_team', 'c_team', 'teammate@example.com']);
     await query(
@@ -137,7 +140,7 @@ describe('mail to the founder of the company', () => {
     await send('teammate@example.com', 't1');
     const rows = await query(
       "SELECT cap FROM communication_budgets WHERE customer_external_id = 'operator:teammate@example.com'");
-    expect((rows.rows[0] as unknown as { cap: number }).cap).toBe(OPERATOR_WEEKLY_CAP);
+    expect(rows.rows, 'counted as a customer, never as an operator').toEqual([]);
   });
 });
 

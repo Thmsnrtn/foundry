@@ -103,19 +103,16 @@ describe('the MCP door asks the same question of the key issuer', () => {
     expect((await decisionRow(id)).status).toBe('pending');
   });
 
-  it('admits a key issued by someone who does, and names them', async () => {
-    // And the kind stays a kind beside the person: the shadow ledger reads
-    // `decided_by`, so the identity goes in its own column rather than into it.
+  it('refuses a key issued by a member who may vote, because nobody but the owner may', async () => {
+    // ONE OWNER, NO MEMBERS (Private S7b3, 29 September 2026): a membership
+    // row, stale or planted, admits nobody. This case used to assert the opposite.
     const id = await pendingDecision();
     const result = await executeLoopTool(
       'foundry_resolve_decision',
       { decision_id: id, chosen_option: 'Ship' },
       { productId: P, founderId: VOTER });
-    expect(result.content[0]?.text).not.toMatch(/^Error/);
-    const row = await decisionRow(id);
-    expect(row.status).toBe('approved');
-    expect(row.decided_by, 'the kind stays a kind').toBe('founder');
-    expect(row.decided_by_founder_id, 'and the person is on the record too').toBe(VOTER);
+    expect(result.content[0]?.text).toMatch(/^Error/);
+    expect((await decisionRow(id)).status).toBe('pending');
   });
 
   it('does not resolve a decision belonging to another company', async () => {
