@@ -2628,3 +2628,9 @@ form.limits{display:grid;gap:10px;margin:0 0 var(--s4);max-width:36rem}
 form.limits label{display:grid;gap:4px;font-size:.9rem;color:var(--ink-2)}
 form.limits input,form.limits select{font:inherit;font-size:max(16px,1rem);min-height:44px;padding:10px 12px;border:1px solid var(--line-2);border-radius:10px;background:var(--card);color:var(--ink)}
 form.limits .btn{justify-self:start}
+/* THE SIX ANSWERS: a short definition list, label above value on a phone. */
+dl.six{display:grid;grid-template-columns:minmax(0,1fr);gap:2px 12px;margin:8px 0 12px;font-size:.9rem}
+dl.six dt{color:var(--ink-3);font-size:.75rem;letter-spacing:.04em;text-transform:uppercase;margin-top:6px}
+dl.six dd{margin:0;color:var(--ink-2)}
+@media (min-width:900px){dl.six{grid-template-columns:minmax(0,11rem) minmax(0,1fr)}dl.six dt{margin-top:0}}
+form.later{display:inline-flex;margin:0 0 0 8px}

@@ -2642,6 +2642,13 @@ CREATE TABLE missions (
   supersedes  TEXT REFERENCES missions(id),
   opened_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE needs_you_snoozes (
+  id         TEXT PRIMARY KEY,
+  founder_id TEXT NOT NULL REFERENCES founders(id),
+  item_key   TEXT NOT NULL,
+  until      TEXT NOT NULL,
+  said_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE network_benchmarks (
   id               TEXT PRIMARY KEY,
   metric           TEXT NOT NULL,
@@ -5371,6 +5378,7 @@ CREATE INDEX idx_mission_events_key ON mission_events(founder_id, mission_key, a
 CREATE INDEX idx_mission_terms_key ON mission_terms(founder_id, mission_key, said_at);
 CREATE UNIQUE INDEX idx_mission_terms_one_live ON mission_terms(founder_id, mission_key) WHERE superseded_by IS NULL;
 CREATE INDEX idx_missions_founder ON missions(founder_id, opened_at);
+CREATE INDEX idx_needs_you_snoozes_founder ON needs_you_snoozes(founder_id, until);
 CREATE INDEX idx_network_contrib_cell
   ON network_contributions(metric, lifecycle_stage, mrr_bracket);
 CREATE INDEX idx_network_profiles_founder ON network_profiles(founder_id);
@@ -7941,6 +7949,11 @@ WHEN NEW.id IS NOT OLD.id OR NEW.founder_id IS NOT OLD.founder_id OR NEW.mission
   OR OLD.superseded_by IS NOT NULL
 BEGIN
   SELECT RAISE(ABORT, 'mission_terms: superseded, never edited');
+END;
+CREATE TRIGGER needs_you_snooze_is_kept
+BEFORE UPDATE ON needs_you_snoozes
+BEGIN
+  SELECT RAISE(ABORT, 'needs_you_snooze: kept as it was said');
 END;
 CREATE TRIGGER offer_shape_guard
 BEFORE INSERT ON offer_shapes

@@ -1176,6 +1176,8 @@ export type { Where, Place, DoorCounts } from '../../views/owner/shell.js';
 import type { Where } from '../../views/owner/shell.js';
 import { consequenceOfAct, effectInWords, labelFor } from '../../services/founder/what-it-would-do.js';
 import { ADDRESSES, ICONS, LABELS, READINGS, page, placeHead, frameFor, mark, ago, everywhereElse } from '../../views/owner/shell.js';
+import { notNow, sixAnswers } from '../../views/owner/components.js';
+import { answersFor } from '../../services/needs-you/queue.js';
 
 /**
  * FOUR WAYS IN, UNDER THE GREETING.
@@ -1493,13 +1495,16 @@ export function waitingList(queue: import('../../services/founder/attention.js')
       ${item.points && item.points.length > 1
     ? html`<ul class="blocking quiet">${item.points.map((b) => html`<li>${b}</li>`)}</ul>`
     : html`<p class="quiet">${item.detail}</p>`}
+      ${/* JUDGMENT FIRST: the six answers before the buttons (Mission Control). */ ''}
+      ${sixAnswers(answersFor(item))}
       ${item.open ? html`<div class="pair"><a class="btn yes" href="${item.open.href}">${item.open.label}</a></div>` : html`<div class="pair">
         <form method="POST" action="${item.yes.action}">${Object.entries(item.yes.fields ?? {}).map(([k, v]) => html`<input type="hidden" name="${k}" value="${v}" />`)}
           <button class="btn yes" type="submit">${item.yes.label}</button></form>
         <form method="POST" action="${item.no.action}">${Object.entries(item.no.fields ?? {}).map(([k, v]) => html`<input type="hidden" name="${k}" value="${v}" />`)}
           <button class="btn" type="submit">${item.no.label}</button></form>
       </div>`}
-      ${item.why ? html`<p class="row"><a class="why" href="${item.why}">Show your work</a></p>` : ''}
+      <p class="row">${item.why ? html`<a class="why" href="${item.why}">Why Foundry thinks this</a>` : ''}
+        ${item.kind !== 'obligation' && item.kind !== 'charter' ? notNow(`${item.kind}:${item.id}`) : ''}</p>
     </div>`)}
   </section>` : '';
 }

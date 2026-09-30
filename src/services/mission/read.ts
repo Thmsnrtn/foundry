@@ -78,6 +78,8 @@ export interface Mission {
     interruptAt: 'silent' | 'today' | 'needs_you' | 'urgent'; saidAt: string } | null;
   /** What was spent through it, in cents, where the rows can say; null where they cannot. */
   spentCents: number | null;
+  /** Which of his limits it has crossed, if any. Foundry brings it to him; it never acts on it. */
+  tripped: 'budget' | 'until' | null;
 }
 
 const CONCLUDED: ReadonlySet<MissionStatus> = new Set(['succeeded', 'stopped', 'failed', 'archived']);
@@ -123,7 +125,7 @@ export function missionOfExperiment(e: ExperimentView, mandateKey: string | null
               : 'Reading the world each day until it answers.',
     outcome: concluded ? outcomeSentence(e) : null,
     parent: mandateKey, href: `/foundry/experiments/${e.id}`,
-    openedAt: e.timeline[0]?.at ?? '', concluded, terms: null, spentCents: m.spentCents,
+    openedAt: e.timeline[0]?.at ?? '', concluded, terms: null, spentCents: m.spentCents, tripped: null,
   };
 }
 
@@ -160,7 +162,7 @@ export function missionOfUndertaking(u: Undertaking, latest: string | null): Mis
     next: closed ? null : (latest ?? 'Looking at what the company already shows.'),
     outcome: closed ? (u.closedBecause ?? null) : null,
     parent: null, href: `/foundry/companies/${u.productId}/work`,
-    openedAt: u.openedAt, concluded: closed, terms: null, spentCents: null,
+    openedAt: u.openedAt, concluded: closed, terms: null, spentCents: null, tripped: null,
   };
 }
 
@@ -203,7 +205,7 @@ export async function missionsOf(founderId: string, now: Date = new Date()): Pro
       limits: { budget: budget ? budget.statement : null, until: null, success: null, stop: avoid.length ? avoid.join('; ') : null },
       next: needs ? 'Waiting for your decision on a test.' : 'Looking for candidates, and designing a test for the strongest.',
       outcome: null, parent: null, href: '/foundry/searching', openedAt: mandate.openedAt, concluded: false,
-      terms: null, spentCents: null,
+      terms: null, spentCents: null, tripped: null,
     });
   }
   out.push(...tests);
@@ -231,7 +233,7 @@ export async function missionsOf(founderId: string, now: Date = new Date()): Pro
       next: observing ? 'Sealing a forecast before each window closes, and scoring it after.' : null,
       outcome: observing ? null : String(t.stopped_because ?? ''), parent: null,
       href: '/foundry/money/research', openedAt: String(t.begun_at), concluded: !observing,
-      terms: null, spentCents: 0,
+      terms: null, spentCents: 0, tripped: null,
     });
   }
 
@@ -272,7 +274,7 @@ export async function missionsOf(founderId: string, now: Date = new Date()): Pro
           : 'Waiting for you, or for an engine that can carry it.',
       outcome: concluded ? String(last?.said ?? '') : null,
       parent: r.supersedes ? `mission:${String(r.supersedes)}` : null, href: `/foundry/missions/${encodeURIComponent(key)}`,
-      openedAt: String(r.opened_at), concluded, terms: null, spentCents: null,
+      openedAt: String(r.opened_at), concluded, terms: null, spentCents: null, tripped: null,
     });
   }
 
@@ -302,6 +304,7 @@ export async function missionsOf(founderId: string, now: Date = new Date()): Pro
     const over = m.terms.budgetCents !== null && m.spentCents !== null && m.spentCents > m.terms.budgetCents;
     const late = m.terms.until !== null && m.terms.until < today;
     if (over || late) {
+      m.tripped = over ? 'budget' : 'until';
       m.status = 'needs_you'; m.statusWord = STATUS_WORDS.needs_you;
       m.statusDetail = over ? `It has spent ${dollars(m.spentCents!)}, past the ${dollars(m.terms.budgetCents!)} you set.`
         : `It is past the end date you set, ${m.terms.until!}.`;

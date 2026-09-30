@@ -67,5 +67,27 @@ export function sectionHead(title: string, aside: string | null = null): H {
   return html`<h2 class="section">${title}${aside ? html` <span class="dim">${aside}</span>` : ''}</h2>`;
 }
 
+/**
+ * THE SIX ANSWERS every judgment gives before it asks for a yes (Mission
+ * Control): what, why now, what yes does, the most it can cost, whether it
+ * can be undone, and what happens if he does nothing. The first is the title
+ * the card already carries, so five are drawn here.
+ */
+export function sixAnswers(a: { whyNow: string; ifYes: string; mostItCanCost: string; undo: string; ifNothing: string }): H {
+  return html`<dl class="six">
+    <dt>Why now</dt><dd>${a.whyNow}</dd>
+    <dt>If you say yes</dt><dd>${a.ifYes}</dd>
+    <dt>The most it can cost</dt><dd>${a.mostItCanCost}</dd>
+    <dt>Can it be undone</dt><dd>${a.undo}</dd>
+    <dt>If you do nothing</dt><dd>${a.ifNothing}</dd>
+  </dl>`;
+}
+
+/** "Not now": puts one item off until tomorrow, where the item allows it. */
+export function notNow(key: string): H {
+  return html`<form method="POST" action="/foundry/needs-you/later" class="inline later">
+    <input type="hidden" name="key" value="${key}" /><button class="btn btn-sm" type="submit">Not now</button></form>`;
+}
+
 /** Raw re-exported for the few callers that pass trusted SVG. */
 export { raw };

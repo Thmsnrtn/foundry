@@ -12,6 +12,7 @@
 // not already; the forms that bind him stay where they were.
 // =============================================================================
 import { Hono } from 'hono';
+import { notNow, sixAnswers } from '../../views/owner/components.js';
 import { guidanceInPlainWords } from '../../services/venture/mandate.js';
 import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
@@ -510,6 +511,21 @@ placeRoutes.get('/foundry/decisions', (c: any) => {
   const q = new URL(c.req.url).search;
   return c.redirect(`${ADDRESSES.decisions}${q}`, 308);
 });
+// "NOT NOW": put one item off until tomorrow, where the item allows it. The
+// queue decides what may wait; a key the owner did not see snoozes nothing.
+placeRoutes.post('/foundry/needs-you/later', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return c.redirect('/onboarding');
+  const form = await c.req.parseBody();
+  const { SnoozeRefused, snooze } = await import('../../services/needs-you/queue.js');
+  try {
+    await snooze(founderId, String(form.key ?? '').slice(0, 200));
+  } catch (err) {
+    if (!(err instanceof SnoozeRefused)) throw err;
+    return c.redirect(`${ADDRESSES.decisions}?error=${encodeURIComponent(err.message)}`);
+  }
+  return c.redirect(`${ADDRESSES.decisions}?done=later#later`);
+});
 placeRoutes.get('/foundry/needs-you', async (c: any) => {
   const founderId = await founderOf(c);
   if (!founderId) return c.redirect('/onboarding');
@@ -532,7 +548,13 @@ placeRoutes.get('/foundry/needs-you', async (c: any) => {
   // uses; a company-scoped view still lists that company's open items.
   const state = company ? null : await context(c);
   const attention = state ? whatNeedsHim(state) : null;
-  const queue = state ? await theRestOfTheQueue(founderId, attention) : [];
+  // ONE LIST (Mission Control): the queue, less what he said "not now" to,
+  // plus the two things it used to leave out — mail only he can answer and
+  // Missions whose limits he set were crossed.
+  const ny = company ? null : await (await import('../../services/needs-you/queue.js')).needsYou(founderId);
+  const later = new Set((ny?.later ?? []).map((l) => l.key));
+  const queue = state ? (await theRestOfTheQueue(founderId, attention)).filter((i) => !later.has(`${i.kind}:${i.id}`)) : [];
+  const beyond = (ny?.items ?? []).filter((i) => i.item === null);
   const extras = state ? await extrasFor(attention, founderId) : {};
   const openActs = company ? await rows(
     `SELECT a.id, a.summary, a.expires_at, p.id AS product_id, p.name FROM proposed_acts a
@@ -566,7 +588,7 @@ placeRoutes.get('/foundry/needs-you', async (c: any) => {
   // itself said once, not an extra item on top of it; every other kind of one
   // thing is a decision lifted out of the queue and counts beside what remains.
   const waiting = company ? openActs.length + openAdvice.length + openAsks.length
-    : attention?.kind === 'queued' ? queue.length : (attention === null ? 0 : 1) + queue.length;
+    : (attention?.kind === 'queued' ? queue.length : (attention === null ? 0 : 1) + queue.length) + beyond.length;
   const decidedAll = [
     ...decidedActs.map((a) => ({ at: String(a.revoked_at ?? a.decided_at), what: String(a.summary),
       how: a.revoked_at ? 'taken back' : `${String(a.decision)}${a.consumed_at ? ', done' : ''}`,
@@ -596,7 +618,11 @@ placeRoutes.get('/foundry/needs-you', async (c: any) => {
     /taken back/.test(how) ? { word: 'taken back', cls: 'back' }
       : /refus|reject|declin|buried|not /.test(how) ? { word: how, cls: 'refused' }
         : { word: how, cls: 'done' };
+  const doneNow = String(c.req.query('done') ?? '');
+  const errorNow = String(c.req.query('error') ?? '').slice(0, 200);
   const body = html`
+    ${errorNow ? html`<p class="noticed" role="alert"><strong>Not put off.</strong> ${errorNow}</p>`
+    : doneNow === 'later' ? html`<p class="noticed">Put off until tomorrow. It comes back on its own.</p>` : ''}
     ${company ? html`<p class="crumbline"><a href="/foundry/companies/${String(company.id)}">← ${String(company.name)}</a></p>` : ''}
     <h1>${company ? `What needs you about ${String(company.name)}` : LABELS.decisions}</h1>
     ${company && String(company.reality) === 'reference' ? html`<p class="quiet"><strong>${String(company.name)} does not exist.</strong> I made it up; nothing decided here is about a real company.</p>` : ''}
@@ -608,7 +634,17 @@ placeRoutes.get('/foundry/needs-you', async (c: any) => {
     ${state ? html`${standingPermission(state)}
       ${attention !== null ? html`<h2 class="rank" id="now"><i class="hot">1</i>Needs a decision now<span class="dim">most important first</span></h2>${theOneThing(attention, extras)}` : ''}
       ${queue.length ? html`<h2 class="rank"${attention === null ? raw(' id="now"') : ''}><i class="${attention === null ? 'hot' : 'warm'}">${attention === null ? '1' : '2'}</i>${attention === null ? 'Waiting on you' : 'Can wait'}<span class="dim">${attention === null ? 'in the order they arrived' : 'lower urgency'}</span></h2>` : ''}
-      ${waitingList(queue, attention !== null)}` : ''}
+      ${waitingList(queue, attention !== null)}
+      ${beyond.length ? html`<h2 class="rank"><i class="warm">${attention === null && queue.length === 0 ? '1' : '3'}</i>Also needs you<span class="dim">mail only you can answer, and limits you set</span></h2>
+        ${beyond.map((b) => html`<div class="noticed qitem">
+          <p class="quiet">${b.companyName}${b.level === 'urgent' ? html` · <span class="status hot">Urgent</span>` : ''}</p>
+          <p><strong>${b.summary}</strong></p>
+          ${sixAnswers(b.answers)}
+          <div class="pair"><a class="btn yes" href="${b.href}">Open it</a></div>
+          <p class="row">${b.snoozable ? notNow(b.key) : ''}</p></div>`)}` : ''}
+      ${ny && ny.later.length ? html`<details class="fold know" id="later"><summary><h3>Put off until later</h3><span class="gist">${String(ny.later.length)}</span></summary>
+        <ul>${ny.later.map((l) => html`<li><a href="${l.href}">${l.summary}</a> <span class="dim">until ${l.snoozedUntil!.slice(0, 16).replace('T', ' ')}</span></li>`)}</ul>
+        <p class="quiet">Each comes back on its own when its time is up.</p></details>` : ''}` : ''}
     ${company && waiting > 0 ? html`<div class="know"><h2>Waiting on you</h2>
       ${openActs.map((a) => html`<div class="noticed"><p><strong>${String(a.summary)}</strong></p>
         <p class="quiet">An act, for <a href="/foundry/companies/${String(a.product_id)}">${String(a.name)}</a>. Expires ${day(a.expires_at)}.</p>

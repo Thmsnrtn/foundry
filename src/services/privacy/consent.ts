@@ -829,6 +829,7 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
   missions: { reason: 'a goal the owner stated for Foundry to carry, in their words', onAccountErasure: { op: 'delete' } },
   mission_terms: { reason: 'the limits the owner put on a Mission', onAccountErasure: { op: 'delete' } },
   mission_events: { reason: 'what the owner did to a Mission: paused, stopped, set its limits', onAccountErasure: { op: 'delete' } },
+  needs_you_snoozes: { reason: 'when the owner put something that waited on them off until later', onAccountErasure: { op: 'delete' } },
   capital_forecasts: { reason: 'forecasts sealed under the owner\'s research question', onAccountErasure: { op: 'delete' } },
   capital_paper_fills: { reason: 'simulated fills under the owner\'s research question', onAccountErasure: { op: 'delete' } },
   capital_evaluations: { reason: 'evaluations of the owner\'s research question', onAccountErasure: { op: 'delete' } },

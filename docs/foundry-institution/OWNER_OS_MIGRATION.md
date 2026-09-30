@@ -3062,3 +3062,17 @@ Home's one thing, when a buyer is owed something Foundry cannot carry alone: the
   - the undertaking → Mission cutover (M11);
   - linking actions to a stated Mission (M10);
   - proposals for a Build's steps.
+
+### M7: Needs you answers before it asks (30 September 2026)
+
+- **One list, extended rather than duplicated.** `services/needs-you/queue.ts` reads `waitingOn` in its own consequence order. It adds the two things the queue left out:
+  - mail only the owner can answer (`needs_owner`);
+  - Missions whose limits the owner set were crossed (`Mission.tripped`).
+
+  The page count includes them.
+- **Five answers before the buttons.** Every item gives why now, what yes does, the most it can cost, whether it can be undone, and what happens if the owner does nothing. The sixth answer, "what", is the item's title. The answers are derived from each item's kind and the consequence already computed for it. The link to the reasoning reads "Why Foundry thinks this".
+- **"Not now"** is migration 372, `needs_you_snoozes`, kept and never edited. It puts an item off for up to 24 hours by default, capped at 72. It is refused for what a buyer is owed, for the charter's last days, and for any key the queue did not show. The item comes back on its own, and the snoozed items are listed under "Put off until later".
+- **Proof debt:**
+  - Needs You is not yet a badge on every page. Under the 30 September long-horizon directive it leaves the bar and becomes a global indicator.
+  - Snoozes are not yet wired into the interruption ladder.
+  - The "if ignored" answers are derived from the item's kind, not from each item's own default path.
