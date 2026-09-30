@@ -56,7 +56,11 @@ export async function briefFor(input: {
       + 'to need avoiding'
     : needs.slice(0, 4).map((n) => n.need).join('; ');
 
-  const heldTo = mandate.guidance
+  // What the brief was held to includes the owner's portfolio-wide "leave it
+  // alone" (mandate/narrowing.ts), so a brief read later says why SaaS was
+  // never looked for.
+  const { avoidsAsGuidance } = await import('../mandate/narrowing.js');
+  const heldTo = [...mandate.guidance, ...(await avoidsAsGuidance(input.founderId))]
     .filter((g) => g.kind === 'avoid' || g.kind === 'prefer')
     .map((g) => g.statement).join('; ') || null;
 

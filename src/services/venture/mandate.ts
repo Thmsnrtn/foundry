@@ -1120,7 +1120,11 @@ export async function candidatesFor(mandateId: string): Promise<PresentedCandida
   const founderId = String(mandate.founder_id);
   const world = String(mandate.evidence_mode) === 'reference' ? 'reference' : 'real';
   const open = await currentMandate(founderId);
-  const guidance = open?.guidance ?? [];
+  // AND WHAT HE WANTS ACROSS EVERYTHING. "No SaaS for now", said on Control
+  // or to the composer, turns a SaaS candidate away here exactly as the same
+  // words said to this search would. It can only turn candidates away.
+  const { avoidsAsGuidance } = await import('../mandate/narrowing.js');
+  const guidance = [...(open?.guidance ?? []), ...(await avoidsAsGuidance(founderId))];
   const { portfolioFitOf } = await import('../founder/resilience.js');
   const { standingOf, openUnknowns, howItWasResearched } = await import('./market-evidence.js');
   const { awaitingHim, whatStandsInTheWay, whereToLookNext } = await import('./validation.js');

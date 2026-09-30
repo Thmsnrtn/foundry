@@ -3118,3 +3118,15 @@ Home's one thing, when a buyer is owed something Foundry cannot carry alone: the
 
 **Evidence maturity.** E2. **Proof debt.** Nothing yet *acts* on the Mandate: the forge and discovery do not read `avoid`, and Conserve does not lower the thinking ceiling; both are V2b, and both may only narrow. Review dates are shown but not yet brought to Needs you.
 
+### Institution V2b: the Mandate narrows, and never widens (30 September 2026)
+
+**Requirement.** INSTITUTION_MODEL §3.2 ("steering may narrow what Foundry looks for… safe because it narrows"), §4.1 (authority intersects), §11 V2; scenarios 610 "No SaaS for now" and 611 "Spend less this month".
+
+**What changed.** One module, `services/mandate/narrowing.ts`, is the only path from the Mandate to anything that acts:
+- `avoidsAsGuidance` hands portfolio `avoid` statements to `candidatesFor` and `briefFor` in the shape they already read, with ids that name the Mandate row (so nothing that supersedes the search's own guidance can touch them). They can only add reasons to turn a candidate away.
+- `spendFactor` is 1, or 0.5 while a live "spend less" stands, clamped to at most 1. `thinkingCapFor` (what the model client's reservation guard is handed) takes `min(deployment cap, charter or pre-charter rate, floor(rate × factor))`; `thinkingToday` lists it as "You asked me to spend less", names it as the binding ceiling when it binds, and the absence reading says so.
+
+**Tests.** `a-mandate-narrows-and-never-widens`: the SaaS candidate is turned away with the reason and returns when the owner takes it back; the Mandate never lets through what the search turned away; the ceiling halves, is the binding one, and lapses with the month; for every statement the reader can make, the factor is ≤ 1 and the ceiling never exceeds that of an owner who said nothing. `the-mandate-is-what-the-owner-wants` now allows exactly one import of `mandate/narrowing` into the gates, in `spending.ts`, and never the table or its writer.
+
+**Evidence maturity.** E2. **Proof debt.** Conserve does not yet slow the scheduler or lower test carves (only thinking); "look harder at" and "favour" are shown but not yet weighted in the forge (V3, allocation).
+

@@ -19,6 +19,7 @@
 
 import { query } from '../../db/client.js';
 import { PRE_CHARTER_THINKING_CENTS, envelopeReading, liveCharter } from './charter.js';
+import { spendFactor } from '../mandate/narrowing.js';
 
 type Row = Record<string, unknown>;
 const one = async (sql: string, params: unknown[]): Promise<Row | undefined> => (await query(sql, params)).rows[0] as Row | undefined;
@@ -40,7 +41,7 @@ export interface Ceiling {
 export interface ThinkingToday {
   /** The ceiling that refuses the next call once reached. */
   bindingCents: number;
-  bindingIs: 'charter' | 'pre-charter' | 'founder-cap';
+  bindingIs: 'charter' | 'pre-charter' | 'founder-cap' | 'spend-less';
   spentTodayCents: number;
   remainingTodayCents: number;
   /** Every ceiling that stands, the binding one first. */
@@ -69,7 +70,12 @@ async function providerCaps(): Promise<{ product: number; founder: number; globa
 export async function thinkingCapFor(founderId: string, now = new Date()): Promise<number> {
   const caps = await providerCaps();
   const charter = await liveCharter(founderId, now);
-  return Math.min(caps.founder, charter ? charter.cognitionCentsPerDay : PRE_CHARTER_THINKING_CENTS);
+  const rate = charter ? charter.cognitionCentsPerDay : PRE_CHARTER_THINKING_CENTS;
+  // "SPEND LESS" LOWERS IT, AND NOTHING THE OWNER SAYS RAISES IT. The factor
+  // is at most 1 (mandate/narrowing.ts), so this is one more ceiling in the
+  // minimum, never a replacement for the others.
+  const { factor } = await spendFactor(founderId, now);
+  return Math.min(caps.founder, rate, Math.floor(rate * Math.min(1, factor)));
 }
 
 /** Thinking spent at one scope over the last `days` days, from the enforced ledger. */
@@ -86,8 +92,11 @@ export async function thinkingToday(founderId: string, now = new Date()): Promis
   const caps = await providerCaps();
   const charter = await liveCharter(founderId, now);
   const rate = charter ? charter.cognitionCentsPerDay : PRE_CHARTER_THINKING_CENTS;
-  const bindingCents = Math.min(caps.founder, rate);
-  const bindingIs: ThinkingToday['bindingIs'] = caps.founder < rate ? 'founder-cap' : charter ? 'charter' : 'pre-charter';
+  const less = await spendFactor(founderId, now);
+  const lessCents = less.factor < 1 ? Math.floor(rate * less.factor) : null;
+  const bindingCents = Math.min(caps.founder, rate, lessCents ?? rate);
+  const bindingIs: ThinkingToday['bindingIs'] = lessCents !== null && lessCents <= caps.founder ? 'spend-less'
+    : caps.founder < rate ? 'founder-cap' : charter ? 'charter' : 'pre-charter';
   const spentTodayCents = await thinkingSpent('founder', founderId, 1, now);
   const ceilings: Ceiling[] = [
     charter
@@ -98,10 +107,14 @@ export async function thinkingToday(founderId: string, now = new Date()): Promis
     { name: 'This deployment, for you (all of my thinking)', cents: caps.founder, source: 'AI_DAILY_COST_CEILING_FOUNDER_CENTS in the deployment', stops: 'call', per: 'a day' },
     { name: 'This deployment, any one company', cents: caps.product, source: 'AI_DAILY_COST_CEILING_CENTS in the deployment', stops: 'call', per: 'a day' },
     { name: 'This deployment, everything it runs (only you)', cents: caps.global, source: 'AI_DAILY_COST_CEILING_GLOBAL_CENTS in the deployment', stops: 'call', per: 'a day' },
+    ...(lessCents !== null ? [{ name: 'You asked me to spend less', cents: lessCents,
+      source: `“${less.said ?? ''}”, on Control${less.until ? `, until ${less.until}` : ''}`, stops: 'call' as const, per: 'a day' }] : []),
   ];
   // The binding one first; the rest in the order they would bite.
   ceilings.sort((a, b) => a.cents - b.cents);
-  const because = bindingIs === 'charter'
+  const because = bindingIs === 'spend-less'
+    ? `you asked me to spend less, so thinking stops at ${dollars(bindingCents)} a day, half of the ${charter ? 'charter’s' : 'pre-charter'} ${dollars(rate)}`
+    : bindingIs === 'charter'
     ? `the charter you signed allows ${dollars(rate)} a day of thinking, and the deployment allows at least that`
     : bindingIs === 'pre-charter'
       ? `no charter is signed, so thinking is bounded at ${dollars(PRE_CHARTER_THINKING_CENTS)} a day until you sign one`

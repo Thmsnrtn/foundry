@@ -371,7 +371,7 @@ async function bounded(founderId: string, days: number, now: Date): Promise<Prop
   const t = await thinkingToday(founderId, now);
   const founderCeilingCents = t.bindingCents;
   const thinkingWorstCase = founderCeilingCents * days;
-  evidence.push(`thinking: at most ${money(founderCeilingCents)} a day${t.bindingIs === 'charter' ? ' under the charter' : t.bindingIs === 'pre-charter' ? ' until a charter is signed' : ' by this deployment\u2019s own cap'}, `
+  evidence.push(`thinking: at most ${money(founderCeilingCents)} a day${t.bindingIs === 'charter' ? ' under the charter' : t.bindingIs === 'pre-charter' ? ' until a charter is signed' : t.bindingIs === 'spend-less' ? ' because you asked me to spend less' : ' by this deployment\u2019s own cap'}, `
     + `so ${money(thinkingWorstCase)} over ${String(days)} days if every day hit the ceiling`);
 
   // REAL COMPANIES ONLY, AND DELIBERATELY NOT EARNED ONES ONLY. A reference

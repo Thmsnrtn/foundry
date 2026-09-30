@@ -163,7 +163,13 @@ describe('what the Mandate cannot do', () => {
     const files = (p: string): string[] => statSync(p).isDirectory()
       ? readdirSync(p).flatMap((f) => files(join(p, f))) : p.endsWith('.ts') ? [p] : [];
     for (const f of gates.flatMap(files)) {
-      expect(readFileSync(f, 'utf8'), f).not.toMatch(/mandate_statements|services\/mandate\//);
+      const src = readFileSync(f, 'utf8');
+      expect(src, f).not.toMatch(/mandate_statements|mandate\/statements/);
+      // ONE NAMED EXCEPTION: the thinking ceiling may be LOWERED by "spend
+      // less", through the one module whose factor is proven never above 1
+      // (a-mandate-narrows-and-never-widens).
+      const reach = [...src.matchAll(/mandate\/([a-z-]+)\.js/g)].map((m) => m[1]);
+      expect(reach.every((r) => r === 'narrowing') && (reach.length === 0 || f.endsWith('institution/spending.ts')), f).toBe(true);
     }
   });
 
