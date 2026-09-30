@@ -51,6 +51,7 @@ a concept → code index. Read the rest when the work touches it.
 | [`ROADMAP.md`](ROADMAP.md) | The execution list: what is done, with its commit, and who must act next. |
 | [`capital/CAPITAL_RESEARCH.md`](capital/CAPITAL_RESEARCH.md) | Trading as research: four records, one mode (no orders), what would count as an edge, and the execution boundary that does not exist. |
 | [`capital/LEGACY_TRADING_AUDIT.md`](capital/LEGACY_TRADING_AUDIT.md) | The two earlier trading projects, audited and reproduced; what Foundry took and left. |
+| [`ROADMAP_2027.md`](ROADMAP_2027.md) | Between strategy and the execution list: five milestones from the first findable listing to a livelihood, thirteen lenses, event-gated horizons, the owner's rhythm, what it refuses and what would show it wrong. Every slice names its measure, the event that earned it, and when it is deleted. Grants nothing. |
 | [`STRATEGY.md`](STRATEGY.md) | The level above the roadmap: what Foundry should become, and what would show it wrong. Doctrine, not a product backlog. |
 | [`EXECUTIVE_REVIEW.md`](EXECUTIVE_REVIEW.md) | The owner-requested executive and developer review of 29 September 2026: the verdict, ten owner decisions, each seat's findings, an event-gated plan, a scorecard and a risk register. A proposal; it grants nothing. |
 

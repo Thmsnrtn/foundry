@@ -27,6 +27,8 @@ or an external observation. "Natural" is decided by a reviewer who was given
 the objective and not the path (`scripts/owner-review-harness.mts`, below).
 "Earned" needs an unmatched external counterparty to have done something.
 
+**From Roadmap 2027 on (30 September 2026),** each slice's row in `ROADMAP.md` also names the measure it moves (A: recurring owner-minutes down; C: calibration up; D: cost per decision down; B: a bound held), the external event that earned it, and the condition under which it is deleted. The ratio of tables and jobs added to those deleted is read from `IMPLEMENTATION_STATE.md`'s generated facts at each quarterly review. `the-record-names-the-measure` holds the rows to it.
+
 ## Owner journeys
 
 | # | The owner wants to… | T | P | E | Evidence |
