@@ -2680,3 +2680,6 @@ ul.stands span{font-size:.88rem;color:var(--ink-2)}
 @media (min-width:900px){ul.stands{grid-template-columns:repeat(2,minmax(0,1fr))}}
 .stands-panel{margin:0 0 var(--s4)}
 .stands-panel ul.stands{margin:0}
+/* WHILE THE OWNER IS AWAY: one short panel, first on Home, with the way back. */
+.panel.away{border:1px solid var(--accent);border-radius:var(--r);padding:12px 16px;margin:0 0 var(--s4);background:var(--accent-soft)}
+.panel.away p{margin:0 0 6px}

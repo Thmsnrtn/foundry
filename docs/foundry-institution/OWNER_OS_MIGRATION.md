@@ -3187,3 +3187,13 @@ Home's one thing, when a buyer is owed something Foundry cannot carry alone: the
 
 **Evidence maturity.** E2. **Proof debt.** Test carves already sealed are not unsealed by Stop (the charter's own stop covers new ones); a single "start again" is deliberately absent.
 
+### Institution V6b: a week away widens nothing (30 September 2026)
+
+**Requirement.** Scenario 609 ("the founder disappears for seven days"); INSTITUTION_MODEL §5.1 (a check-in style is not permission), §5.6 (inactivity must not block; silence is neither yes nor no).
+
+**What changed.** `readMandate` reads being away, for how long, being back, and three check-in styles as `involvement` statements (one live at a time); `durationOf` reads "for a week / N days / N weeks" and "until October 8" (lapsing the day after). Home opens with an away panel built from `canIDisappear` — the same reading the absence test page uses — with the owner's own "I'm back" (a withdrawal of the statement). Nothing that decides what Foundry may do reads `involvement`.
+
+**Tests.** `a-week-away-widens-nothing`: the readings and a refusal; steering, never authority, in the composer; the thinking ceiling, the routines' modes and allowances are identical before and after; a decision waiting before the owner left is still undecided; the panel says until when and that being away grants nothing; it lapses by itself and "I'm back" removes it.
+
+**Evidence maturity.** E2. **Proof debt.** A check-in style does not yet quieten notifications (the interruption ladder is not wired to it); the return surface on coming back.
+

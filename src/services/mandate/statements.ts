@@ -94,6 +94,15 @@ export function durationOf(said: string, now: Date): { rest: string; until: stri
   if (cut(/[,\s]*\b(?:for )?this month\b/i)) return { rest, until: iso(endOfMonth(now)), reviewAt: null };
   if (cut(/[,\s]*\b(?:for )?this week\b/i)) return { rest, until: iso(addDays(now, 7)), reviewAt: null };
   if (cut(/[,\s]*\b(?:for )?today\b/i)) return { rest, until: iso(addDays(now, 1)), reviewAt: null };
+  // "UNTIL OCTOBER 8": back on the day named, so it lapses the day after.
+  const dated = cut(/[,\s]*\buntil (january|february|march|april|may|june|july|august|september|october|november|december) (\d{1,2})(?:st|nd|rd|th)?\b/i);
+  if (dated) {
+    const m = MONTHS.indexOf(dated[1]!.toLowerCase());
+    const day = Number(dated[2]);
+    const thisYear = new Date(Date.UTC(now.getUTCFullYear(), m, day));
+    const when = thisYear.getTime() < now.getTime() - 86_400_000 ? new Date(Date.UTC(now.getUTCFullYear() + 1, m, day)) : thisYear;
+    return { rest, until: iso(addDays(when, 1)), reviewAt: null };
+  }
   const until = cut(/[,\s]*\buntil (\d{4}-\d{2}-\d{2}|january|february|march|april|may|june|july|august|september|october|november|december)\b/i);
   if (until) {
     const w = until[1]!.toLowerCase();
@@ -101,6 +110,14 @@ export function durationOf(said: string, now: Date): { rest: string; until: stri
     const m = MONTHS.indexOf(w);
     const year = now.getUTCFullYear() + (m <= now.getUTCMonth() ? 1 : 0);
     return { rest, until: iso(new Date(Date.UTC(year, m, 1))), reviewAt: null };
+  }
+  // "FOR A WEEK", "FOR TEN DAYS", "FOR TWO WEEKS": a length from today.
+  const WORD_N: Record<string, number> = { a: 1, one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, fourteen: 14 };
+  const span = cut(/[,\s]*\bfor (a|one|two|three|four|five|six|seven|eight|nine|ten|fourteen|\d{1,2}) (day|days|week|weeks)\b/i);
+  if (span) {
+    const n = WORD_N[span[1]!.toLowerCase()] ?? Number(span[1]);
+    const days = /week/i.test(span[2]!) ? n * 7 : n;
+    if (days >= 1 && days <= 90) return { rest, until: iso(addDays(now, days)), reviewAt: null };
   }
   if (cut(/[,\s]*\b(?:for now|for the moment|for a while|right now|at the moment|for the time being)\b/i)) {
     return { rest, until: null, reviewAt: iso(addDays(now, 30)) };
@@ -123,6 +140,29 @@ export function readMandate(raw: string, now: Date = new Date()): MandateReading
   const make = (dimension: MandateDimension, s: { subject: string; label: string }, value: Record<string, unknown>,
     understood: string, scope: MandateReading['scope'] = { kind: 'portfolio', ref: null }): MandateReading =>
     ({ dimension, subject: s.subject, label: s.label, value, scope, statement: said, until, reviewAt, understoodAs: understood + when(t) });
+
+  // HOW INVOLVED THE OWNER IS, AND WHETHER THEY ARE AWAY. A check-in style is
+  // not permission (INSTITUTION_MODEL §5.1): away, Foundry carries exactly
+  // what it already may, and everything else waits.
+  if (/^(?:i(?:'m| am| will be|'ll be)\s+)?(?:away|out|off|travelling|traveling|on holiday|on vacation|offline)$/i.test(rest)) {
+    const lasting = until ? t : { until: iso(addDays(now, 7)), reviewAt: null };
+    return { dimension: 'involvement', subject: 'away', label: 'away', value: { style: 'away' },
+      scope: { kind: 'portfolio', ref: null }, statement: said, ...lasting,
+      understoodAs: `you are away, so I carry only what I already may and everything else waits for you${when(lasting)}` };
+  }
+  // "I'M BACK": the away statement is replaced, not left to lapse.
+  if (/^(?:i(?:'m| am)\s+)?back(?: now)?$/i.test(rest)) {
+    return { dimension: 'involvement', subject: 'present', label: 'back', value: { style: 'present' },
+      scope: { kind: 'portfolio', ref: null }, statement: said, until: null, reviewAt: null,
+      understoodAs: 'you are back, and everything that waited for you is in Needs you' };
+  }
+  const style = /^(?:be\s+)?(?:(quiet ceo|quiet)|(hands[- ]on)|(check in occasionally|occasional(?:ly)?))(?: mode)?$/i.exec(rest);
+  if (style) {
+    const s = style[1] ? 'quiet' : style[2] ? 'hands_on' : 'occasional';
+    const words = { quiet: 'only what cannot wait', hands_on: 'more of what I am doing', occasional: 'a regular summary' }[s];
+    return make('involvement', { subject: s, label: s.replace('_', '-') }, { style: s },
+      `you want to hear ${words} (how you hear from me, never what I may do)`);
+  }
 
   // A TEMPORARY POSTURE: spend less. Until the month ends when said of the
   // month; otherwise brought back in thirty days.
@@ -177,7 +217,7 @@ export class MandateRefused extends Error {}
 
 const DIMENSION_WORDS: Record<MandateDimension, string> = {
   interest: 'Look harder at', avoid: 'Leave alone', optimize: 'Favour', experiment_style: 'Test style',
-  involvement: 'How involved you are', risk: 'Risk', allocation: 'Share of attention', posture: 'For now',
+  involvement: 'How you hear from me', risk: 'Risk', allocation: 'Share of attention', posture: 'For now',
 };
 
 /** Statements that answer the same question — a newer one replaces an older one. */
@@ -187,7 +227,8 @@ function sameQuestion(a: { dimension: string; subject: string; scope_kind: strin
   const family = (d: string): string => (d === 'interest' || d === 'avoid' ? 'lean' : d);
   if (family(a.dimension) !== family(b.dimension)) return false;
   // One posture per scope at a time; one lean, favour or risk per subject.
-  return a.dimension === 'posture' && b.dimension === 'posture' && b.scope.kind === 'portfolio' ? true : a.subject === b.subject;
+  return (a.dimension === 'posture' || a.dimension === 'involvement') && a.dimension === b.dimension && b.scope.kind === 'portfolio'
+    ? true : a.subject === b.subject;
 }
 
 const statementOf = (r: Row): MandateStatement => ({

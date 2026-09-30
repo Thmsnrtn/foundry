@@ -1191,6 +1191,27 @@ import { answersFor } from '../../services/needs-you/queue.js';
  * number the reading beside it shows.
  */
 /**
+ * WHILE THE OWNER IS AWAY (INSTITUTION_MODEL §5.1, §5.6; scenario 609). Said
+ * in the composer ("I'm away until October 8") or on Control, it is a check-in
+ * style and never permission: Foundry carries exactly what it already may, and
+ * everything else waits. Home says so first, with the same absence reading the
+ * absence test uses, and one tap to say the owner is back.
+ */
+async function awayPanel(ownerId: string): Promise<HtmlEscapedString | ''> {
+  const { mandateOf } = await import('../../services/mandate/statements.js');
+  const away = (await mandateOf(ownerId)).find((m) => m.dimension === 'involvement' && m.subject === 'away');
+  if (!away) return '';
+  const { canIDisappear } = await import('../../services/founder/a-week-away.js');
+  const view = await canIDisappear(ownerId);
+  return html`<section class="panel away" aria-label="You are away"><p><b>You are away${away.until ? html` until ${away.until}` : ''}.</b>
+    ${view.verdict} ${view.willWait.length ? `${String(view.willWait.length)} ${view.willWait.length === 1 ? 'thing waits' : 'things wait'} for you.` : ''}
+    Being away lets me do nothing I could not already do.</p>
+    <p><a href="/foundry/absence">What I carry, and what I do not</a></p>
+    <form method="POST" action="/foundry/mandate/${away.id}/withdraw" class="inline"><button class="btn btn-sm" type="submit">I'm back</button></form>
+  </section>` as HtmlEscapedString;
+}
+
+/**
  * WHERE EVERYTHING STANDS (INSTITUTION_MODEL §9, Home). The other doors in a
  * line each: what is owned and at what stage, what Foundry is looking for,
  * and what the owner has said they want — read
@@ -3467,6 +3488,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
          A contradiction between "nothing needs you" and "I have not been
          awake" belongs INSIDE the card making the claim, not above it. */ ''}
     ${attention === null ? '' : pulseLine}
+    ${key ? '' : await awayPanel(s.ownerId)}
     ${key ? '' : quickTiles(needsN)}
     ${portfolioState}
     ${/* THE ONE THING HE CAME FOR, BEFORE ANYTHING HE DID NOT.
