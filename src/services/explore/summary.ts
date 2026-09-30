@@ -42,7 +42,13 @@ export interface ExploreSummary {
   turnedDown: { n: number; parked: number; recent: Buried[] };
   /** The work in flight under Explore: the search, its tests, the research, and Missions the owner stated to explore. */
   work: Mission[];
-  trading: { observing: number; capitalAtRiskCents: 0 };
+  /**
+   * TRADING, IN ITS THREE WORLDS (608). Simulation: forecasts sealed before
+   * each window and scored after. Paper: fills simulated against the book,
+   * with no money. Live: does not exist — there is no order path — and is
+   * shown as absent rather than left out, so its absence is visible.
+   */
+  trading: { observing: number; capitalAtRiskCents: 0; forecasts: number; resolved: number; paperFills: number; verdict: string | null };
   /** Everything in flight, Explore's and the Portfolio's, for "All work". */
   allWork: number;
   /** What the owner's Mandate says about where to look: areas to look harder at, and areas paused. */
@@ -62,6 +68,18 @@ async function counted(sql: string, args: unknown[]): Promise<{ real: number; re
     else out.real += Number(r.n ?? 0);
   }
   return out;
+}
+
+/** The research's own counts, summed across venues, and the latest verdict it reached. */
+async function tradingCounts(founderId: string): Promise<{ forecasts: number; resolved: number; paperFills: number; verdict: string | null }> {
+  const { capitalResearchReading, researchVenues } = await import('../capital/research.js');
+  let forecasts = 0; let resolved = 0; let paperFills = 0; let verdict: string | null = null;
+  for (const v of await researchVenues()) {
+    const r = await capitalResearchReading(founderId, v.venue);
+    forecasts += r.counts.forecasts; resolved += r.counts.resolved; paperFills += r.counts.simulatedFills;
+    if (r.evaluation && !verdict) verdict = r.evaluation.verdict;
+  }
+  return { forecasts, resolved, paperFills, verdict };
 }
 
 /** What Explore shows, read once. Bounded: six queries and the Missions reader. */
@@ -128,7 +146,7 @@ export async function exploreSummary(founderId: string, now: Date = new Date()):
     ],
     turnedDown: { n: turned.real + turned.reference, parked: parked.real + parked.reference, recent: buried },
     work,
-    trading: { observing: missions.filter((m) => m.source === 'thesis' && !m.concluded).length, capitalAtRiskCents: 0 },
+    trading: { observing: missions.filter((m) => m.source === 'thesis' && !m.concluded).length, capitalAtRiskCents: 0, ...(await tradingCounts(founderId)) },
     allWork: live.length,
     mandate: {
       focus: wants.filter((w) => w.dimension === 'interest' && w.scope.kind === 'portfolio').map((w) => ({ label: w.label, lasting: lasting(w) })),

@@ -559,6 +559,8 @@ Each slice goes through a red test, `npm run check`, a `[deploy-private]` commit
 
 Old routes stay reachable until the surface that replaces them passes its tests. Removal follows shadow → compare → cutover → delete.
 
+**Status, 30 September 2026.** V1 through V7 have shipped (the commits are listed in OWNER_OS_MIGRATION.md, "The long-horizon slices, V1–V7"). What each left as proof debt is recorded with it; the "later" row above is unchanged.
+
 ---
 
 ## 12. Institutional invariants (tests)

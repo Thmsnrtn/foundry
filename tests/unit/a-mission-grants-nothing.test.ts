@@ -70,10 +70,10 @@ describe('stating a Mission', () => {
     expect(html).toContain('value="lots"');
   });
 
-  it('will not state a trading Mission as anything but a simulation', async () => {
+  it('will not state a trading Mission as anything but a simulation or paper', async () => {
     const real = await post('/foundry/missions', { goal: 'Trade the Fed decision with $100', mode: 'monitor', realm: 'real' });
     expect(real.status).toBe(422);
-    expect(await real.text()).toContain('Trading can only be a simulation here');
+    expect(await real.text()).toContain('Trading can only be a simulation or on paper here');
     const sim = await post('/foundry/missions', { goal: 'Trade the Fed decision with $100', mode: 'monitor', realm: 'simulation' });
     expect(sim.status).toBe(302);
     expect((await query(`SELECT COUNT(*) AS n FROM sqlite_master WHERE type='table' AND name LIKE '%order%' AND name NOT LIKE 'venue_orders%'`)).rows[0])

@@ -213,10 +213,12 @@ missionRoutes.post('/foundry/missions', requireInstitutionOwner(), async (c: any
   const kept = fields(form);
   const asked = String(form.asked ?? '').trim() || kept.goal!;
   // TRADING IS THE STRESS TEST. A Mission about trading can be stated only as
-  // a simulation: there is no order path, and a form field cannot make one.
+  // a simulation or on paper: there is no order path, and a form field cannot
+  // make one (the long-horizon directive's 608, "test strategies, paper only").
+  // LIVE does not exist to choose.
   const trades = /\b(trade|trading|bet|wager|kalshi|polymarket|order|position)\b/i.test(`${kept.goal ?? ''} ${asked}`);
   try {
-    if (trades && kept.realm !== 'simulation') throw new MissionRefused('Trading can only be a simulation here. Choose Simulation, and I will observe and score forecasts; nothing will be bought or sold.');
+    if (trades && kept.realm !== 'simulation' && kept.realm !== 'paper') throw new MissionRefused('Trading can only be a simulation or on paper here. Choose Simulation or Paper, and I will observe, forecast and score; nothing will be bought or sold.');
     const id = await openMission({
       founderId, productId: kept.productId || null, asked, goal: kept.goal ?? '',
       mode: (kept.mode ?? 'build') as MissionMode, realm: (kept.realm ?? 'real') as MissionRealm,

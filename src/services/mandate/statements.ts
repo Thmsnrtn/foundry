@@ -173,6 +173,14 @@ export function readMandate(raw: string, now: Date = new Date()): MandateReading
       understoodAs: `you want Foundry to spend less across everything${when(lasting)}` };
   }
 
+  // TESTING STRATEGIES ON PAPER (608): "Test trading strategies, paper only".
+  // The same statement as keeping the domain theoretical — it says what the
+  // owner wants tried, and that nothing real may be at stake.
+  if (/^(?:test|try|trial|run)\s+(?:trading(?:\s+strategies)?|strategies)[,\s]+(?:on\s+)?(?:paper|in simulation|simulated)(?:\s+only)?$/i.test(rest)) {
+    return make('posture', { subject: 'trading_theoretical', label: 'trading' }, { mode: 'theoretical' },
+      'you want trading strategies tried on paper and in simulation only, with nothing real at stake', { kind: 'domain', ref: 'trading' });
+  }
+
   // A DOMAIN KEPT THEORETICAL: "keep trading theoretical", "trading on paper only".
   const theory = /^(?:keep\s+)?(\w[\w ]{1,30}?)\s+(?:theoretical|on paper(?: only)?|paper only|simulated|simulation only|in simulation)$/i.exec(rest);
   if (theory) {

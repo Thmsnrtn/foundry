@@ -2685,3 +2685,5 @@ ul.stands span{font-size:.88rem;color:var(--ink-2)}
 .panel.away p{margin:0 0 6px}
 /* WHAT FOUNDRY MAY DO (INSTITUTION_MODEL §6.1): one row per area, beside the Mandate. */
 .card.may-do .status{margin-left:6px}
+/* TRADING, IN ITS THREE WORLDS: Live is shown absent, never left out. */
+ul.trading-worlds .status{margin-left:6px}

@@ -49,11 +49,16 @@ exploreRoutes.get('/foundry/explore', async (c: any) => {
       : emptyState('Nothing is being explored. Tell Foundry what to look for, in the box below.',
         'Find a low-maintenance digital product I could test this month for under $100.')}
 
-    ${sectionHead('Trading', 'simulation only')}
-    <p>${x.trading.observing
-      ? `${String(x.trading.observing)} research question${x.trading.observing === 1 ? '' : 's'} being watched.`
-      : 'No trading research is running.'}
-      No capital is at risk: there is no way for Foundry to place an order.${x.mandate.tradingTheoretical ? ' You asked for it to stay theoretical, and it does.' : ''} <a href="/foundry/money/research">The research</a></p>
+    ${sectionHead('Trading', 'no money at risk')}
+    <ul class="mandate-list trading-worlds" aria-label="Trading, in its three worlds">
+      <li><span class="mandate-what"><b>Simulation</b> <span class="status ${x.trading.observing ? 'go' : 'done'}">${x.trading.observing ? 'Running' : 'Not running'}</span></span>
+        <span class="mandate-when dim">${String(x.trading.forecasts)} forecast${x.trading.forecasts === 1 ? '' : 's'} sealed before the window closed, ${String(x.trading.resolved)} scored against what happened${x.trading.verdict ? `; so far: ${x.trading.verdict}` : ''}.</span></li>
+      <li><span class="mandate-what"><b>Paper</b> <span class="status done">${String(x.trading.paperFills)} simulated</span></span>
+        <span class="mandate-when dim">Trades filled against the real order book on paper. No money moves.</span></li>
+      <li><span class="mandate-what"><b>Live</b> <span class="status back">Does not exist</span></span>
+        <span class="mandate-when dim">There is no way for Foundry to place an order. No sentence, Mission or setting can create one.</span></li>
+    </ul>
+    <p class="quiet">No capital is at risk.${x.mandate.tradingTheoretical ? ' You asked for it to stay theoretical, and it does.' : ''} <a href="/foundry/money/research">The research</a></p>
 
     ${sectionHead('Turned down, and why', x.turnedDown.n || x.turnedDown.parked ? `${String(x.turnedDown.n)} for good · ${String(x.turnedDown.parked)} parked` : null)}
     ${x.turnedDown.recent.length ? html`<ul class="plain">${x.turnedDown.recent.map((b) => html`<li><b>${b.headline}</b>

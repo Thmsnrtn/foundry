@@ -3207,3 +3207,17 @@ Home's one thing, when a buyer is owed something Foundry cannot carry alone: the
 
 **Evidence maturity.** E2. **Proof debt.** Build and deploy areas; per-company rows on the company page; the policy preview before a change; the kill switch's other refusals (qualification, experiment acts) are described, not yet held to the door by this test.
 
+### Institution V7: trading is paper and simulation only (30 September 2026)
+
+**Requirement.** Scenario 608 ("test strategies, paper only"); INSTITUTION_MODEL §6.1 (financial assets: simulation only; LIVE does not exist), §12 (no live capital, ever, from any sentence, mode or term).
+
+**What changed.** `readMandate` hears "Test trading strategies, paper only" as the domain posture already used for "Keep trading theoretical". A trading Mission may be stated as a simulation or on paper (paper was refused before); a real one is refused with the reason. `exploreSummary.trading` carries the research's own counts across venues (forecasts sealed, resolved, simulated fills, the latest evaluation verdict), and Explore shows Simulation, Paper and Live — Live with "Does not exist" and the sentence that nothing can create an order path.
+
+**Tests.** `trading-is-paper-and-simulation-only`: the reading and its refusal of a real order; confirmed through the composer; paper and simulation Missions accepted, a real one refused; the three worlds with Live shown absent; no order table exists and the authority reading says trading does not exist. `a-mission-grants-nothing` updated for the paper realm.
+
+**Evidence maturity.** E2. **Proof debt.** Research metrics beyond counts and the verdict (calibration curves) remain on the research page.
+
+## The long-horizon slices, V1–V7: where they stand (30 September 2026)
+
+All seven slices in INSTITUTION_MODEL §11 have shipped, each through a red test, the full check, a `[deploy-private]` commit and a health read-back: V1a `d998a9cc`, V1b `165cd296`, V2a `96d096ea`, V2b `5af725c1`, V3a `2d10ff6d`, V3b `54beaece`, V4 `fe53f825`, V5 `0bc45e42`, V6a `3902e9d5`, V6b `ae6e6aa0`, V6c `02af60bd`, V7 (this commit). Each section above names its own proof debt; the largest that remain are: the owner has not used any of it on a phone; check-in styles do not yet quieten notifications; allocation bands do not yet steer the forge; Conserve lowers thinking only; the return surface and "handled for you" on Home; the policy preview before an authority change; model-proposed readings (deliberately not built).
+
