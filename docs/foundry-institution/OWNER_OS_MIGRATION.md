@@ -3155,3 +3155,13 @@ Home's one thing, when a buyer is owed something Foundry cannot carry alone: the
 
 **Evidence maturity.** E2. **Proof debt.** Allocation bands between areas are not yet steering the forge.
 
+### Institution V4: the Portfolio says where each stands (30 September 2026)
+
+**Requirement.** INSTITUTION_MODEL §5.9: an asset's human stage is derived, no new column; graduation keeps its lineage; the Portfolio groups Operating, Testing, Retired.
+
+**What changed.** `assetStage(status, standing, posture, lifecycle, paid)` is pure: archived or winding down → Retired; a test → Testing, or Proven once the world recorded a real payment against the test it came from; otherwise Harvesting, Growing (grow with an optimizing or scaling lifecycle) or Operating. `stagesOf` reads every real asset, retired ones included, with its lineage (`from_experiment_id`, the test's own words, `earned_at`). The Portfolio map puts the word on each card in place of the old "A test" pill, adds the lineage line, and folds Retired at the foot with `retired_because`. The idea stage lives in Explore: an idea is not an asset.
+
+**Tests.** `the-portfolio-says-where-each-stands`: the truth table; four assets made by the real lifecycle (`beginExperimentalAsset`, a payment, `earnAsset`, `retireExperimentalAsset`) plus a harvested company each read their word; lineage survives graduation; the invented company is absent; the page shows each word, the lineage and the retired fold with its reason.
+
+**Evidence maturity.** E2. **Proof debt.** Net this month and owner attention per card; the asset page's own header.
+

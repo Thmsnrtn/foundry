@@ -4097,6 +4097,16 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
   const shown = shownAll.filter((e) => !e.experimental);
   const tests = shownAll.filter((e) => e.experimental);
   const companies = everything.filter((e) => !e.experimental);
+  // WHERE EACH ONE STANDS, IN A WORD (INSTITUTION_MODEL §5.9): derived from
+  // its columns, with the test it came from. Retired assets were on no page
+  // at all; they are folded at the foot, history intact.
+  const { stagesOf } = await import('../../services/portfolio/stage.js');
+  const stageList = await stagesOf(String(founder.id));
+  const stageOf = new Map(stageList.map((st) => [st.productId, st]));
+  const retired = stageList.filter((st) => st.stage === 'retired');
+  const TONE: Record<string, string> = { testing: 'wait', proven: 'go', operating: 'done', growing: 'go', harvesting: 'done', retired: 'back' };
+  const stagePill = (id: string) => { const st = stageOf.get(id); return st ? html`<span class="status ${TONE[st.stage] ?? 'done'}">${st.stageWord}</span>` : ''; };
+  const lineageLine = (id: string) => { const l = stageOf.get(id)?.lineage; return l ? html`<p class="quiet">From the test “${l.test}”${l.earnedAt ? `, given its place on ${l.earnedAt}` : ''}.</p>` : ''; };
   const filter = (key: string, label: string, n: number) => html`<a href="/foundry/companies?show=${key}${
     find ? `&find=${encodeURIComponent(find)}` : ''}"${show === key ? raw(' class="on"') : ''}>${label}${n > 0 ? ` ${String(n)}` : ''}</a>`;
   const mapBlock = html`
@@ -4117,13 +4127,18 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
     ${shown.length ? html`<h2 class="section">What you own</h2>` : ''}
     ${[...shown, ...tests].map((e, i) => html`${i === shown.length && tests.length ? html`<h2 class="section">Tests, not companies</h2>` : ''}<a class="item" href="/foundry/companies/${e.id}"
         aria-label="${e.name}${e.reference ? ', a company I made up' : ''}">
-      <h3>${e.name}${e.reference ? html` <span class="pill">Invented</span>` : ''}${e.experimental ? html` <span class="pill">A test</span>` : ''}</h3>
+      <h3>${e.name}${e.reference ? html` <span class="pill">Invented</span>` : ''} ${stagePill(e.id)}</h3>
       <p>${e.headline}${e.days > 0 && e.situation !== 'steady' ? html` <span class="quiet">For ${String(e.days)} ${e.days === 1 ? 'day' : 'days'}.</span>` : ''}</p>
       <p class="where">${e.needsHim > 0 ? html`<span class="need">${String(e.needsHim)} ${e.needsHim === 1 ? 'thing needs' : 'things need'} you</span>` : ''}${
     e.form ? html`<span>${e.form}</span>` : ''}${e.watching ? html`<span>I look after it</span>` : ''}${
     e.testing ? html`<span>being tested</span>` : ''}${e.canSee === 0 ? html`<span>I can see nothing</span>` : html`<span>I can see ${String(e.canSee)} ${e.canSee === 1 ? 'thing' : 'things'}</span>`}${
     e.posture !== 'grow' ? html`<span>${POSTURE_IN_PLAIN_WORDS[e.posture as keyof typeof POSTURE_IN_PLAIN_WORDS] ?? e.posture}</span>` : ''}</p>
-    </a>`)}`;
+      ${lineageLine(e.id)}
+    </a>`)}
+    ${retired.length ? html`<details class="fold" id="retired"><summary><h2>Retired</h2><span class="gist">${String(retired.length)}, history kept</span></summary>
+      ${retired.map((st) => html`<a class="item" href="/foundry/companies/${st.productId}"><h3>${st.name} ${stagePill(st.productId)}</h3>
+        <p>${st.retiredBecause ?? st.because}</p>${lineageLine(st.productId)}</a>`)}
+    </details>` : ''}`;
   const frame: Where = {
     eyebrow: 'Portfolio',
     crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: '/foundry/companies', label: 'Portfolio' }],
