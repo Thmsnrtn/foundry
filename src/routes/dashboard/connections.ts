@@ -308,6 +308,9 @@ connectionRoutes.post('/connections/envelope',
   return c.redirect('/connections');
 });
 
+// NO CAPABILITY, ON PURPOSE: revoking a grant and disconnecting a tool server
+// only take a hand away. Neither can widen what Foundry may do, and a stop
+// that asks for more than a signed-in owner is a stop that can fail to happen.
 connectionRoutes.post('/connections/grants/:id/revoke', async (c) => {
   const founder = c.get('founder');
   const ctx = await getLayoutContext(founder, 'connections', 'Tool servers', undefined, c);

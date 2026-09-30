@@ -54,7 +54,12 @@ describe('the composite gate is composite', () => {
     };
     const reached = expand(pkg.scripts.check);
 
-    const unreached = scripts.filter((f) => !reached.includes(f));
+    // NEEDS THE NETWORK, SO CI ONLY. `npm run check` has to pass offline; a gate
+    // that asks the package registry cannot. CI runs it by name, and
+    // `every-gate-runs` holds it to that. Adding a name here is a decision.
+    const CI_ONLY_NETWORK = ['check-dependency-advisories.mjs'];
+    for (const f of CI_ONLY_NETWORK) expect(ci, `${f} is CI-only, so CI must run it`).toMatch(/npm run advisories:audit/);
+    const unreached = scripts.filter((f) => !reached.includes(f) && !CI_ONLY_NETWORK.includes(f));
     expect(unreached,
       `these gates exist and \`npm run check\` never runs them: ${unreached.join(', ')}`)
       .toEqual([]);

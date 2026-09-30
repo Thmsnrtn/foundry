@@ -50,7 +50,7 @@ import {
   type ConsentType,
 } from '../../services/privacy/consent.js';
 import { getProductsByOwner } from '../../db/client.js';
-import { requireCompanyCapability, requireOwner } from '../../middleware/rbac.js';
+import { requireCompanyCapability, requireInstitutionOwner, requireOwner } from '../../middleware/rbac.js';
 
 export const privacySettings = new Hono<AuthEnv>();
 
@@ -803,7 +803,8 @@ privacySettings.get('/settings/delete-all-products', async (c) => {
 
 // ─── POST /settings/delete-all-products — Execute fleet-wide deletion (F-063-A) ──
 
-privacySettings.post('/settings/delete-all-products', async (c) => {
+// THE OWNER OF THE INSTITUTION, AND NOBODY ELSE: this deletes every company.
+privacySettings.post('/settings/delete-all-products', requireInstitutionOwner(), async (c) => {
   const founder = c.get('founder');
   const products = await getProductsByOwner(founder.id);
 

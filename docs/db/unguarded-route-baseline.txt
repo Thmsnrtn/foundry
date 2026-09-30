@@ -1,17 +1,7 @@
 POST /autopilot/panic
 POST /connections/:name/disconnect
 POST /connections/grants/:id/revoke
-POST /letter/attention/:decisionId
 POST /letter/channels/:channelId/revoke
-POST /letter/evidence/:requestId/answer
-POST /letter/evidence/:requestId/defer
-POST /letter/judgments/:judgmentId/disposition
-POST /letter/responsibilities/:responsibilityId/disposition
-POST /letter/responsibility-candidates/:candidateId/promote
-POST /letter/responsibility-candidates/:candidateId/reconsider
-POST /letter/responsibility-candidates/:candidateId/reject
-POST /settings/delete-all-products
-POST /settings/fluency
 POST /settings/interruption-ceiling
 POST /share/refund/:fulfilmentId/:token
 POST /workshop/mail

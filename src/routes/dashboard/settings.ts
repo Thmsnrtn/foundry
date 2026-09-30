@@ -1083,7 +1083,7 @@ settingsRoutes.post('/settings/interruption-ceiling', async (c) => {
 });
 
 // ─── Fluency (one product, many voices) ───────────────────────────────────────
-settingsRoutes.post('/settings/fluency', async (c) => {
+settingsRoutes.post('/settings/fluency', requireInstitutionOwner(), async (c) => {
   const founder = c.get('founder');
   const body = await c.req.parseBody() as Record<string, string>;
   const { setFluency } = await import('../../services/ux/fluency.js');

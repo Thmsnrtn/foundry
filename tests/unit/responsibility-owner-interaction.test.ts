@@ -1,5 +1,7 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
+// Deciding a responsibility asks who you are (Roadmap 2027 R2).
+process.env.FOUNDRY_OWNER_EMAIL = 'owner@example.com';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
@@ -33,7 +35,8 @@ beforeAll(async () => {
   const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
   app = new Hono();
   app.use('*', async (c, next) => {
-    c.set('founder' as never, { id: c.req.header('x-founder') ?? 'owner' } as never);
+    const id = c.req.header('x-founder') ?? 'owner';
+    c.set('founder' as never, { id, email: `${id}@example.com` } as never);
     c.set('csrfToken' as never, 'test' as never);
     await next();
   });

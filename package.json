@@ -29,6 +29,7 @@
     "mcp:issues": "tsx src/mcp/cli.ts issues",
     "mcp:dna": "tsx src/mcp/cli.ts dna",
     "effects:audit": "node scripts/audit-consequential-effects.mjs",
+    "advisories:audit": "node scripts/check-dependency-advisories.mjs",
     "guards:nullsafe": "node scripts/check-guard-null-safety.mjs",
     "reality:scope": "node scripts/check-reality-scope.mjs && node scripts/check-standing-scope.mjs",
     "sim:crawl": "TURSO_DATABASE_URL=file::memory: tsx tests/simulation/crawl.ts"
@@ -55,7 +56,7 @@
     "vitest": "^1.0.0"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=22.0.0"
   },
   "main": "index.js",
   "keywords": [],

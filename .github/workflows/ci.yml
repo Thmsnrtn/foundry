@@ -26,7 +26,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       # `npm run check` is the composite gate: typecheck, ratchets, kernel
@@ -43,7 +43,9 @@ jobs:
       # green on twelve gates they never ran.
       - run: npm run check
       - run: npm run build
-      - run: npm audit --audit-level=high || true
+      # Every high or critical advisory is fixed or carries a written reason
+      # (Roadmap 2027 R2). This used to end in `|| true`.
+      - run: npm run advisories:audit
 
   column-drift:
     name: Schema column drift (INSERT + UPDATE-SET)
@@ -52,7 +54,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: sudo apt-get update && sudo apt-get install -y sqlite3
       - run: npm ci
@@ -71,7 +73,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       # Deterministic (LLM mocked). Fails the build the moment a prompt edit
@@ -86,7 +88,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
       - run: npm ci
       # Stress-tests the distributed job lock the web/worker split depends on:

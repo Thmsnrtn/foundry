@@ -7,7 +7,7 @@
 import { Hono } from 'hono';
 import { html, raw } from 'hono/html';
 import type { HtmlEscapedString } from 'hono/utils/html';
-import { requireOwner } from '../../middleware/rbac.js';
+import { requireInstitutionOwner, requireOwner } from '../../middleware/rbac.js';
 import { isPrivateOwnerInstance } from '../../lib/instance-posture.js';
 import { logger } from '../../services/logger.js';
 import type { AuthEnv } from '../../middleware/auth.js';
@@ -1664,7 +1664,7 @@ function backTo(value: unknown, productId?: string): string {
   return from === 'foundry' ? '/foundry' : '/letter';
 }
 
-letterRoutes.post('/letter/responsibility-candidates/:candidateId/promote',async(c)=>{
+letterRoutes.post('/letter/responsibility-candidates/:candidateId/promote', requireInstitutionOwner(), async (c) => {
   const founder=c.get('founder');
   const returnTo=(await c.req.parseBody()).return_to;
   // Product is resolved server-side from candidate + authenticated owner. No
@@ -1690,7 +1690,7 @@ letterRoutes.post('/letter/responsibility-candidates/:candidateId/promote',async
 // the candidate must belong to a product this authenticated founder owns, and
 // a candidate id for anyone else's company is refused with 403 without
 // revealing that it exists.
-letterRoutes.post('/letter/responsibility-candidates/:candidateId/reconsider',async(c)=>{
+letterRoutes.post('/letter/responsibility-candidates/:candidateId/reconsider', requireInstitutionOwner(), async (c) => {
   // REFUSAL WAS NEVER PERMANENT, and the product acted as though it were.
   // Migration 109 turns a `reconsidered` decision back into a pending candidate;
   // no surface ever offered it, so "No" read as final and was not. Saying no and
@@ -1710,7 +1710,7 @@ letterRoutes.post('/letter/responsibility-candidates/:candidateId/reconsider',as
   return c.redirect(`${back}?done=reopened`);
 });
 
-letterRoutes.post('/letter/responsibility-candidates/:candidateId/reject',async(c)=>{
+letterRoutes.post('/letter/responsibility-candidates/:candidateId/reject', requireInstitutionOwner(), async (c) => {
   const founder=c.get('founder');
   const returnTo=(await c.req.parseBody()).return_to;
   const { query }=await import('../../db/client.js');
@@ -1730,7 +1730,7 @@ letterRoutes.post('/letter/responsibility-candidates/:candidateId/reject',async(
 // The authenticated session is the authority source. Product and responsibility
 // fields locate the object only; the disposition trigger independently verifies
 // that the session founder owns that product and that the evidence is tenant-bound.
-letterRoutes.post('/letter/responsibilities/:responsibilityId/disposition', async (c) => {
+letterRoutes.post('/letter/responsibilities/:responsibilityId/disposition', requireInstitutionOwner(), async (c) => {
   const founder = c.get('founder');
   const body = await c.req.parseBody();
   const disposition = String(body.disposition ?? '');
@@ -1759,7 +1759,7 @@ letterRoutes.post('/letter/responsibilities/:responsibilityId/disposition', asyn
 // plus real ownership, and a chosen alternative is located by position in the
 // canonical judgment row rather than accepted as caller-supplied text. This
 // records direction only — it creates no consent, action, or authority.
-letterRoutes.post('/letter/judgments/:judgmentId/disposition', async (c) => {
+letterRoutes.post('/letter/judgments/:judgmentId/disposition', requireInstitutionOwner(), async (c) => {
   const founder = c.get('founder');
   const judgmentId = c.req.param('judgmentId');
   const body = await c.req.parseBody();
@@ -1812,7 +1812,7 @@ letterRoutes.post('/letter/judgments/:judgmentId/disposition', async (c) => {
 // changes nothing about the company — refusing an observer's "I read this"
 // would be over-guarding, and its company arrives in the body, where a guard
 // resolving the company from the path or the selection could not see it.
-letterRoutes.post('/letter/attention/:decisionId', async (c) => {
+letterRoutes.post('/letter/attention/:decisionId', requireInstitutionOwner(), async (c) => {
   const founder = c.get('founder');
   const decisionId = c.req.param('decisionId');
   let productId = '', reaction = '', next = '';
@@ -1975,7 +1975,7 @@ letterRoutes.post('/autopilot/panic', async (c) => {
 //
 // An answer is evidence. It creates no consent, no capability, and no maturity —
 // the database refuses a payload that even carries the shape of one.
-letterRoutes.post('/letter/evidence/:requestId/answer', async (c) => {
+letterRoutes.post('/letter/evidence/:requestId/answer', requireInstitutionOwner(), async (c) => {
   const founder = c.get('founder');
   const body = await c.req.parseBody();
   const statement = String(body.statement ?? '').trim();
@@ -2022,7 +2022,7 @@ letterRoutes.post('/letter/do-not-contact',
 
 // Setting a question aside leaves the fact unknown. Silence is never recorded as
 // a negative answer, and Foundry does not ask again.
-letterRoutes.post('/letter/evidence/:requestId/defer', async (c) => {
+letterRoutes.post('/letter/evidence/:requestId/defer', requireInstitutionOwner(), async (c) => {
   const founder = c.get('founder');
   const { deferFounderEvidenceRequest } = await import('../../services/institution/founder-evidence.js');
   const deferred = await deferFounderEvidenceRequest(c.req.param('requestId'), founder.id as string);

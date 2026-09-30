@@ -1,5 +1,7 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
+// Answering the institution's question asks who you are (Roadmap 2027 R2).
+process.env.FOUNDRY_OWNER_EMAIL = 'o@example.com';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';

@@ -315,11 +315,16 @@ describe('operator attention memory — explicit, admission-controlled, ranking-
     expect(page).not.toContain('Other tenant decision');
 
     const before = Number((await query("SELECT COUNT(*) c FROM operator_attention", [])).rows[0]!.c);
+    // Recording a reaction asks who you are (Roadmap 2027 R2): this founder is
+    // the owner for this request, and the operator above is not re-tested.
+    const owner = process.env.FOUNDRY_OWNER_EMAIL;
+    process.env.FOUNDRY_OWNER_EMAIL = founder.email;
     await app.request('/letter/attention/jl_d1', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ product_id: 'jl_p1', reaction: 'acted' }),
     });
+    if (owner === undefined) delete process.env.FOUNDRY_OWNER_EMAIL; else process.env.FOUNDRY_OWNER_EMAIL = owner;
     const after = Number((await query("SELECT COUNT(*) c FROM operator_attention", [])).rows[0]!.c);
     expect(after).toBe(before + 1);
   });

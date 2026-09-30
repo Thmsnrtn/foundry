@@ -1,4 +1,6 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
+// Deciding a judgment asks who you are (Roadmap 2027 R2): the owner is jd@example.com.
+process.env.FOUNDRY_OWNER_EMAIL = 'jd@example.com';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 import { Hono } from 'hono';
@@ -56,7 +58,8 @@ beforeAll(async () => {
   const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
   app = new Hono();
   app.use('*', async (c, next) => {
-    c.set('founder' as never, { id: c.req.header('x-founder') ?? 'jd_owner' } as never);
+    const id = c.req.header('x-founder') ?? 'jd_owner';
+    c.set('founder' as never, { id, email: id === 'jd_owner' ? 'jd@example.com' : 'other@example.com' } as never);
     c.set('csrfToken' as never, 'test' as never);
     await next();
   });
