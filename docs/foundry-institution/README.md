@@ -34,6 +34,7 @@ a concept → code index. Read the rest when the work touches it.
 | [`CONSTITUTION.md`](CONSTITUTION.md) | Non-negotiable, founder-governed law. |
 | [`ARCHITECTURE.md`](ARCHITECTURE.md) | Canonical institutional flow, boundaries, migration rules. |
 | [`EXPERIENCE.md`](EXPERIENCE.md) | Founder-facing information architecture and governance language. |
+| [`INSTITUTION_MODEL.md`](INSTITUTION_MODEL.md) | The institution beneath the interface: the human ontology, who owns each canonical fact, precedence and scope of direction, and the attention, evidence, autonomy, inactivity, memory, Mission, Portfolio and Explore contracts. |
 | [`ECONOMICS.md`](ECONOMICS.md) | Value, cognition routing, attention discipline. |
 | [`PROOF_PROGRAM.md`](PROOF_PROGRAM.md) | Evidence maturity, proof debt, slice discipline. |
 | [`RECONSTRUCTION_SOURCES.md`](RECONSTRUCTION_SOURCES.md) | Canonical source ownership and reconstruction boundaries. |

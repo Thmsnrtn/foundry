@@ -2,6 +2,23 @@
 
 ## Primary architecture
 
+*Amended again the same day, 30 September 2026, by the owner's long-horizon directive.* The doors become the four the directive expects to last for years:
+
+```text
+HOME | PORTFOLIO | EXPLORE | CONTROL      + Needs you · N on every page, the composer, Advanced
+```
+
+- **Home:** can I leave Foundry alone?
+- **Portfolio:** what do I own or operate, and how is it doing?
+- **Explore:** what is Foundry looking for, testing or trying to create?
+- **Control:** what does Foundry believe I want, and what may it do?
+- **Needs you:** a global indicator, not a door. It is always visible and opens the one list of judgments.
+- **Missions:** they stay, but as the work beneath Explore and Portfolio rather than as a door.
+
+The ontology, state ownership and contracts behind these words are in [`INSTITUTION_MODEL.md`](INSTITUTION_MODEL.md). The shell below, shipped earlier the same day, stands until slice V1 replaces it.
+
+### The shell shipped on 30 September (superseded by the above, pending V1)
+
 *Amended 30 September 2026, by the owner's Mission-Control directive.* The owner says what they want and sets the limits. Foundry does the work, shows its progress, and asks for judgment only when judgment is needed. The test for every surface is: **is this making the owner operate Foundry, or making Foundry operate for the owner?**
 
 ```text
