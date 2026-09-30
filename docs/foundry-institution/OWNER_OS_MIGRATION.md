@@ -3197,3 +3197,13 @@ Home's one thing, when a buyer is owed something Foundry cannot carry alone: the
 
 **Evidence maturity.** E2. **Proof debt.** A check-in style does not yet quieten notifications (the interruption ladder is not wired to it); the return surface on coming back.
 
+### Institution V6c: effective authority, explained and held to the doors (30 September 2026)
+
+**Requirement.** INSTITUTION_MODEL §6.1 (the effective-authority reader explains, the gates enforce, a test keeps them in agreement), §12 ("no external act without effective permission").
+
+**What changed.** `effectiveAuthority(founderId, { domain, productId? })` returns a verdict (allowed, within limits, asks you first, not allowed, does not exist), the limits that apply in the owner's words, how to change them, and the owner's own rule when a door refuses on one. Spending and contacting people read `owner_boundaries` with the query `boundaryStandingInTheWay` uses (same door, same scope, same order, `contact_people` for person-reaching acts) without calling it, because the door consumes a one-time approval when it passes. Trading is "does not exist" whatever is set. A company that is not the owner's is answered as unavailable. `authorityTable` renders on Control.
+
+**Tests.** `effective-authority-agrees-with-the-doors`: for spending and contacting people × no rule, never, ask-first × this company or everywhere, each set up afresh: the reader names a rule exactly when the door refuses, with the same words, and no approval is consumed; "contact anyone" does not refuse a non-person tool at the door; trading is absent and no order table exists; another owner's company is unavailable; the reader writes nothing and calls no door; Control shows the four areas.
+
+**Evidence maturity.** E2. **Proof debt.** Build and deploy areas; per-company rows on the company page; the policy preview before a change; the kill switch's other refusals (qualification, experiment acts) are described, not yet held to the door by this test.
+

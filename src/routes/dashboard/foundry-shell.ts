@@ -7811,6 +7811,19 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
   const appearanceNow = currentAppearance();
   const { mandateCard } = await import('./mandate-place.js');
   const mandateHtml = await mandateCard(s.ownerId, c.req.query() as Record<string, string | undefined>);
+  // WHAT FOUNDRY MAY DO, PER AREA (INSTITUTION_MODEL §6.1): one table read
+  // with the doors' own rows, explained; the doors still enforce.
+  const { authorityTable, DOMAIN_WORDS, VERDICT_WORDS } = await import('../../services/control/authority.js');
+  const mayDo = await authorityTable(s.ownerId);
+  const VERDICT_TONE: Record<string, string> = { allowed: 'go', within_limit: 'done', needs_approval: 'wait', prohibited: 'back', unavailable: 'back' };
+  const authorityHtml = html`<section class="card may-do" id="may-do" aria-labelledby="may-do-h">
+    <h2 id="may-do-h">What Foundry may do</h2>
+    <p class="quiet">Across everything you own. The doors that act enforce these; this page only explains them.</p>
+    <ul class="mandate-list">${mayDo.map((a) => html`<li>
+      <span class="mandate-what"><b>${DOMAIN_WORDS[a.domain]}</b> <span class="status ${VERDICT_TONE[a.verdict] ?? 'done'}">${VERDICT_WORDS[a.verdict]}</span></span>
+      <span class="mandate-when dim">${a.because.join(' ')}${a.resolveBy.length ? html` <span class="quiet">To change it: ${a.resolveBy.join(', or ').toLowerCase()}.</span>` : ''}</span>
+    </li>`)}</ul>
+  </section>`;
 
   // WHO SET THE LIMIT, NOT JUST WHAT IT IS.
   //
@@ -7907,6 +7920,7 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
     ${/* THE MANDATE FIRST (INSTITUTION_MODEL §9): what the owner wants, before what
          Foundry may do — steering above authority, and never mixed with it. */ ''}
     ${mandateHtml}
+    ${authorityHtml}
 
     ${/* THE POSTURE FIRST, THE DETAIL WHEN HE ASKS FOR IT.
          The owner: "concise operating overview first, fuller detail when I
