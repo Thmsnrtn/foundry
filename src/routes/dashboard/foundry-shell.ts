@@ -5226,7 +5226,43 @@ foundryShellRoutes.post('/foundry/ask', requireInstitutionOwner(), async (c: any
 
   const { whichDoor } = await import('../../services/institution/the-door.js');
   const { currentMandate } = await import('../../services/venture/mandate.js');
-  const door = whichDoor(said, { searching: await currentMandate(String(founder.id)) !== null });
+  const searching = await currentMandate(String(founder.id)) !== null;
+  const door = whichDoor(said, { searching });
+
+  // ONE PROPOSAL FOR EVERY SENTENCE (Mission Control, 30 September 2026).
+  // The door above still decides where a sentence goes; the compiler wraps
+  // its reading in one shape — what kind of thing it is, whether it steers or
+  // moves authority — and keeps what was shown. Two things it adds: a place
+  // or a company named alone is somewhere to go, and a sentence said on a
+  // company's page is about that company. The scope is his only if the
+  // company is: a posted scope naming anybody else's is ignored.
+  // IDENTITY, NOT TRUTH: every company of his, invented ones included, so a
+  // sentence said on an invented company's page stays about that page and a
+  // name typed alone can be walked to. Nothing read here reaches a figure, a
+  // track record or an act; the pages it leads to disclose reality themselves.
+  // Standing does not apply for the same reason: an experimental asset named
+  // alone is still a place he can go.
+  const scopeRaw = String(form.scope ?? '').trim();
+  const scopeId = /^company:[A-Za-z0-9_-]{1,64}$/.test(scopeRaw) ? scopeRaw.slice('company:'.length) : null;
+  const mineAll = (await query(
+    `SELECT p.id, p.name FROM products p
+      WHERE p.owner_id = ? AND p.status = 'active' AND p.deleted_at IS NULL`, [String(founder.id)]))
+    .rows as unknown as Array<Record<string, unknown>>;
+  const scoped = scopeId ? mineAll.find((p) => String(p.id) === scopeId) ?? null : null;
+  const { compileIntent } = await import('../../services/intent/compile.js');
+  const { recordShown } = await import('../../services/intent/record.js');
+  const { DOORS, EVERYWHERE_ELSE } = await import('../../views/owner/shell.js');
+  const proposal = compileIntent(said, {
+    searching,
+    scope: scoped ? { kind: 'company', id: String(scoped.id), name: String(scoped.name) } : { kind: 'none', id: null, name: null },
+    places: [...DOORS.map((d) => ({ label: LABELS[d], href: ADDRESSES[d] })), ...EVERYWHERE_ELSE.map((e) => ({ label: e.label, href: e.href }))],
+    companies: mineAll.map((p) => ({ id: String(p.id), name: String(p.name) })),
+  });
+  if (said) await recordShown(String(founder.id), proposal).catch(() => undefined);
+  if (proposal.kind === 'jump' && proposal.href) return c.redirect(proposal.href);
+  if (scoped && ['company', 'posture', 'undertaking'].includes(door.destination)) {
+    return c.redirect(`/foundry/companies/${String(scoped.id)}?q=${encodeURIComponent(said)}#answer`);
+  }
 
   // WHAT IT COULD PLACE, IT HANDS ON — by calling the handler that owns the
   // responsibility, rather than by redirecting the browser to it. A redirect
@@ -5392,6 +5428,7 @@ async function housekeepingConfirmation(founderId: string, door: import('../../s
       </div>
       <form method="POST" action="/foundry/inbox/clear-handled">
         <input type="hidden" name="because" value="you cleared what you had dealt with" />
+        <input type="hidden" name="said" value="${door.said}" />
         <button class="btn go" type="submit">Yes — put them away</button>
       </form>`}
     <a class="btn" href="/foundry/inbox">The Inbox</a> <a class="btn" href="/foundry">Back</a>`, 'foundry');
@@ -5504,6 +5541,7 @@ foundryShellRoutes.post('/foundry/adopt', requireInstitutionOwner(), async (c: a
   const said = String(form.said ?? '').trim().slice(0, 800);
   const name = String(form.name ?? '').trim().slice(0, 60);
   const understood = String(form.understood ?? '');
+  if (said) await (await import('../../services/intent/record.js')).recordConfirmed(String(founder.id), said).catch(() => undefined);
   const { readUndertaking, companyNamedIn, openUndertaking } = await import('../../services/institution/undertaking.js');
   const asked = readUndertaking(said);
   // The name must be in his words — the one I read, or a shorter piece of it.
@@ -5736,6 +5774,8 @@ foundryShellRoutes.post('/foundry/venture/confirm',
     const form = await c.req.parseBody();
     const said = String(form.said ?? '').trim().slice(0, 800);
     if (!said) return c.redirect('/foundry');
+    // HE SAID YES TO WHAT HE WAS SHOWN: the reading the composer kept is settled.
+    await (await import('../../services/intent/record.js')).recordConfirmed(String(founder.id), said).catch(() => undefined);
 
     const venture = await import('../../services/venture/mandate.js');
     // THE WHOLE PARAGRAPH, EVERY SENTENCE OF IT LANDING. "Make the river
@@ -6621,6 +6661,7 @@ foundryShellRoutes.post('/foundry/companies/:id/said/confirm',
     const form = await c.req.parseBody();
     const said = String(form.said ?? '').trim().slice(0, 300);
     if (!said) return c.redirect(`/foundry/companies/${productId}`);
+    await (await import('../../services/intent/record.js')).recordConfirmed(String(founder.id), said).catch(() => undefined);
 
     const intent = await import('../../services/institution/standing-intent.js');
     const proposal = intent.interpret(said);
@@ -8119,6 +8160,27 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
       </details>
     </section>
     </div>
+    ${await (async () => {
+      // HOW WELL I UNDERSTAND YOU, read from what the composer kept (migration
+      // 370): how many sentences, how many it placed, and — verbatim — the
+      // last ones it could not. A composer that misreads him quietly is worse
+      // than one that says so.
+      const { howWellIUnderstand } = await import('../../services/intent/record.js');
+      const u = await howWellIUnderstand(s.ownerId);
+      return html`<details class="fold know" id="understanding"><summary><h3>How well I understand you</h3><span class="gist">${
+  u.said === 0 ? 'Nothing said yet' : `${String(u.said - u.notUnderstood)} of ${String(u.said)} placed, last ${String(u.days)} days`}</span></summary>
+        ${u.said === 0 ? html`<p class="quiet">Nothing has been said to me in the last ${String(u.days)} days.</p>` : html`<dl class="facts">
+          <dt>Said to me</dt><dd>${String(u.said)}</dd>
+          <dt>Answered, or taken where you asked</dt><dd>${String(u.answered + u.went)}</dd>
+          <dt>Confirmed by you</dt><dd>${String(u.confirmed)}${u.typicalMinutesToConfirm !== null ? html` <span class="dim">· usually within ${String(Math.max(1, u.typicalMinutesToConfirm))} min</span>` : ''}</dd>
+          <dt>Shown and left alone</dt><dd>${String(u.leftAlone)}</dd>
+          <dt>I asked which you meant</dt><dd>${String(u.askedWhich)}</dd>
+          <dt>I could not place</dt><dd>${String(u.notUnderstood)}</dd>
+          <dt>Touched what I may do</dt><dd>${String(u.touchedAuthority)}</dd></dl>`}
+        ${u.missed.length ? html`<p class="quiet">The last things I could not place, in your words:</p>
+          <ul>${u.missed.map((m) => html`<li>&ldquo;${m.said}&rdquo; <span class="dim">${m.at.slice(0, 10)}</span></li>`)}</ul>` : ''}
+      </details>`;
+    })()}
     ${/* EVERYWHERE ELSE. On a phone there is no rail; the places that are not
          doors are listed here, once, from the same list the desk rail reads. */ ''}
     <h2 class="section elsewhere-head">Everywhere else</h2>

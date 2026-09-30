@@ -302,6 +302,8 @@ inboxRoutes.post('/foundry/inbox/clear-handled', requireInstitutionOwner(), asyn
   if (!founderId) return c.redirect('/onboarding');
   const form = await c.req.parseBody();
   const because = String(form.because ?? '').trim() || 'you cleared what you had dealt with';
+  const said = String(form.said ?? '').trim();
+  if (said) await (await import('../../services/intent/record.js')).recordConfirmed(founderId, said).catch(() => undefined);
   const mail = await import('../../services/public-workshop/mail.js');
   const handled = await mail.theThreads(founderId, 'handled');
   let n = 0;

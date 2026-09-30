@@ -2985,6 +2985,19 @@ CREATE TABLE owner_identity_rebinds (
   to_clerk_user_id   TEXT NOT NULL,
   rebound_at         TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE owner_intents (
+  id             TEXT PRIMARY KEY,
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  said           TEXT NOT NULL,
+  scope          TEXT NOT NULL DEFAULT 'none',
+  kind           TEXT NOT NULL CHECK (kind IN ('question','mission','steer','authority','housekeeping','jump','clarify','unplaceable')),
+  understood_as  TEXT NOT NULL,
+  touches_authority INTEGER NOT NULL DEFAULT 0 CHECK (touches_authority IN (0,1)),
+  reading_hash   TEXT NOT NULL,
+  shown_at       TEXT NOT NULL DEFAULT (datetime('now')),
+  outcome        TEXT CHECK (outcome IS NULL OR outcome IN ('confirmed','answered','went')),
+  outcome_at     TEXT
+);
 CREATE TABLE owner_minutes (
   id            TEXT PRIMARY KEY,
   founder_id    TEXT NOT NULL REFERENCES founders(id),
@@ -5353,6 +5366,7 @@ CREATE INDEX idx_owner_boundaries_live
   ON owner_boundaries(subject, product_id) WHERE lifted_at IS NULL;
 CREATE INDEX idx_owner_identity_rebinds_founder
   ON owner_identity_rebinds(founder_id, rebound_at);
+CREATE INDEX idx_owner_intents_founder ON owner_intents(founder_id, shown_at);
 CREATE UNIQUE INDEX idx_owner_objective_one_live
   ON owner_objectives(product_id) WHERE retired_at IS NULL;
 CREATE INDEX idx_owner_preferences_live
@@ -8143,6 +8157,15 @@ CREATE TRIGGER owner_identity_rebind_is_kept_as_it_was
 BEFORE UPDATE ON owner_identity_rebinds
 BEGIN
   SELECT RAISE(ABORT, 'owner_identity_rebind: kept as it was');
+END;
+CREATE TRIGGER owner_intent_reading_is_sealed
+BEFORE UPDATE ON owner_intents
+WHEN NEW.founder_id IS NOT OLD.founder_id OR NEW.said IS NOT OLD.said OR NEW.scope IS NOT OLD.scope
+  OR NEW.kind IS NOT OLD.kind OR NEW.understood_as IS NOT OLD.understood_as
+  OR NEW.touches_authority IS NOT OLD.touches_authority OR NEW.reading_hash IS NOT OLD.reading_hash
+  OR NEW.shown_at IS NOT OLD.shown_at OR OLD.outcome IS NOT NULL
+BEGIN
+  SELECT RAISE(ABORT, 'owner_intent: the reading is sealed and its outcome is written once');
 END;
 CREATE TRIGGER owner_minutes_entered_is_entered
 BEFORE UPDATE ON owner_minutes

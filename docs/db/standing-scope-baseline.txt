@@ -1,12 +1,11 @@
 src/cli/index.ts 1
 src/jobs/index.ts 4
 src/routes/auth/clerk.ts 1
-src/routes/dashboard/foundry-shell.ts 10
+src/routes/dashboard/foundry-shell.ts 11
 src/routes/dashboard/inbox-place.ts 2
 src/routes/dashboard/roadmap-place.ts 1
 src/routes/dashboard/settings.ts 1
 src/routes/ingest/index.ts 1
-src/services/billing/entitlement.ts 2
 src/services/economy/projection.ts 3
 src/services/founder/a-week-away.ts 1
 src/services/founder/activity.ts 9
@@ -35,7 +34,7 @@ src/services/reference/world.ts 1
 src/services/senses/credentials.ts 1
 src/services/senses/read.ts 1
 src/services/senses/readers/etsy-shop.ts 1
-src/services/team/members.ts 2
+src/services/team/members.ts 1
 src/services/venture/form-knowledge.ts 1
 src/services/venture/obligations.ts 1
 src/services/venture/proof-2.ts 1

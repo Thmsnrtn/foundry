@@ -400,7 +400,9 @@ ${/* ONE ENTRANCE. This was a GET to /foundry?q=, which reaches the question
   <div class="ask-in">
     <label for="said" class="sr">${askScope(where).placeholder}</label>
     <input id="said" name="said" type="text" enterkeyhint="send" autocorrect="on" maxlength="800"
-      autocapitalize="sentences" spellcheck="true" placeholder="${askScope(where).placeholder}" />
+      autocapitalize="sentences" spellcheck="true" placeholder="${askScope(where).placeholder}"
+      aria-keyshortcuts="Meta+K Control+K /" />
+    <kbd class="ask-key" aria-hidden="true">⌘K</kbd>
     <button type="submit">Send</button>
   </div>
 </form>

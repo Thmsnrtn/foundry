@@ -119,8 +119,16 @@ export const OWNER_SURFACE_SCRIPT =
   + `    if(!t||!t.hasAttribute||!t.hasAttribute('data-submits'))return;\n`
   + `    var f=t.closest('form');if(!f)return;`
   + `if(f.requestSubmit)f.requestSubmit();else f.submit();});\n`
-  + `  document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a.ask-fab,a[data-ask]');`
+  + `  document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a[data-ask]');`
   + `if(!a)return;setTimeout(function(){var f=document.querySelector('#ask-foundry input,#ask-foundry textarea');if(f)f.focus();},0);});\n`
+  // ⌘K, CTRL+K OR "/" PUTS THE CURSOR IN THE COMPOSER (Mission Control). The
+  // composer is also the palette: a place or a company named alone is
+  // somewhere to go (services/intent/compile.ts), so one box both jumps and
+  // instructs, and no second, script-built palette exists to diverge from it.
+  // "/" is ignored while typing anywhere, so it never steals a character.
+  + `  document.addEventListener('keydown',function(e){var k=e.key;var typing=e.target&&e.target.closest&&e.target.closest('input,textarea,select,[contenteditable]');\n`
+  + `    if(!(((e.metaKey||e.ctrlKey)&&(k==='k'||k==='K'))||(k==='/'&&!typing&&!e.metaKey&&!e.ctrlKey&&!e.altKey)))return;\n`
+  + `    var f=document.querySelector('#ask-foundry input[name=said]');if(!f)return;e.preventDefault();f.focus();if(f.select)f.select();});\n`
   + `  document.addEventListener('click',function(e){\n`
   + `    var t=e.target&&e.target.closest&&e.target.closest(`
   + `'[data-select],[data-copy],[data-open],[data-close]');if(!t)return;\n`
