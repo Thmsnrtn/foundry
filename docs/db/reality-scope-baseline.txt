@@ -6,6 +6,7 @@ src/routes/dashboard/missions-place.ts 1
 src/routes/dashboard/settings.ts 1
 src/routes/ingest/index.ts 1
 src/services/ai/calibration.ts 1
+src/services/control/stop.ts 1
 src/services/explore/summary.ts 1
 src/services/founder/intelligence.ts 1
 src/services/founder/selected-company.ts 1

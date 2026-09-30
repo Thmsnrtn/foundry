@@ -59,7 +59,7 @@ import { getLayoutContext } from './_shared.js';
 import { query } from '../../db/client.js';
 import { composeLetter } from '../../services/letter/composer.js';
 import {
-  getAllPolicies, setPolicy, panicStop, getShadowStats,
+  getAllPolicies, setPolicy, getShadowStats,
   MODE_LABELS, PROMOTION_THRESHOLD, type AutopilotMode,
 } from '../../services/autopilot/policy.js';
 import { getFluency, gateLabel, explain, adviceFooter } from '../../services/ux/fluency.js';
@@ -1924,12 +1924,21 @@ letterRoutes.post('/autopilot/development/revoke', requireOwner(), async (c) => 
   return c.redirect(`${backTo(body.return_to)}?done=withdrawn`);
 });
 
+// STOP EVERYTHING, MEANING EVERYTHING (Institution V6a). This stopped the
+// routines of whichever company the request resolved to, under a button that
+// said it halted everything. It now stops the whole estate
+// (services/control/stop.ts): every company's routines, new outgoing
+// activity, every running Mission the owner stated. It only ever lowers, so
+// it stays open to anyone the guard lets in, and it acts only on the signed-in
+// owner's own estate.
 letterRoutes.post('/autopilot/panic', async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'autopilot', 'Controls', undefined, c);
-  if (!ctx.productId) return c.redirect('/foundry');
-  await panicStop(ctx.productId, founder.id as string);
-  return c.redirect(`${backTo((await c.req.parseBody()).return_to)}?done=stopped`);
+  if (!founder?.id) return c.redirect('/foundry');
+  const { stopEverything } = await import('../../services/control/stop.js');
+  const stopped = await stopEverything(String(founder.id));
+  const back = backTo((await c.req.parseBody()).return_to);
+  const target = back === '/foundry' ? '/foundry/controls' : back;
+  return c.redirect(`${target}?done=stopped_all&companies=${String(stopped.companies)}&missions=${String(stopped.missionsPaused)}&outreach=${stopped.outreachPaused ? '1' : '0'}`);
 });
 
 // ─── Talk to the company (Trust Plane phase 3) ────────────────────────────────

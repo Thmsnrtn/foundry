@@ -7933,12 +7933,18 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
 
     ${stopped ? html`<p class="noticed">Stopped. I will not use it again. If you are
       paying for it, that has not stopped &mdash; end it in your account with them.</p>` : ''}
+    ${String(c.req.query('done') ?? '') === 'stopped_all' ? html`<p class="noticed" role="status">Everything is stopped:
+      the routines of ${String(Number(c.req.query('companies') ?? 0))} ${Number(c.req.query('companies') ?? 0) === 1 ? 'company' : 'companies'}${
+      c.req.query('outreach') === '1' ? ', anything new going out to people' : ''}${
+      Number(c.req.query('missions') ?? 0) > 0 ? `, and ${String(Number(c.req.query('missions')))} of your Missions` : ''}. Nothing was deleted.
+      Start things again one at a time, where each one lives: a company's routines on its page, sending on the
+      <a href="/foundry/public-workshop">Workshop</a>, a Mission on <a href="/foundry/missions">All work</a>.</p>` : ''}
 
     <section class="panel stop-all" aria-label="Stop everything">
       ${mark('stop')}
       <div><h2>Stop everything</h2>
-        <p class="quiet">Halts every routine, every permission and every outgoing action at once. Nothing is lost — I stop acting on it.</p></div>
-      <form method="POST" action="/autopilot/panic" data-confirm="Stop every routine, permission and outgoing action now?">
+        <p class="quiet">Stops the routines of every company you own, anything new going out to people, and every Mission you started. Nothing is deleted — I stop acting on it, and you start things again one at a time.</p></div>
+      <form method="POST" action="/autopilot/panic" data-confirm="Stop every company's routines, anything new going out, and your Missions, now?">
         <input type="hidden" name="return_to" value="foundry" />
         <button class="btn danger" type="submit">Stop everything</button>
       </form>

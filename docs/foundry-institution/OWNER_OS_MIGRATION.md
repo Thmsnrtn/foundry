@@ -3175,3 +3175,15 @@ Home's one thing, when a buyer is owed something Foundry cannot carry alone: the
 
 **Evidence maturity.** E2. **Proof debt.** The return surface after an absence, "handled for you", and pinned figures remain; the thirty-second test with the owner on a phone has not been run.
 
+### Institution V6a: Stop everything means everything (30 September 2026)
+
+**Requirement.** INSTITUTION_MODEL §11 V6 (estate-wide Stop); the directive: kill switches are not weakened, and a brake is never harder to reach than the accelerator.
+
+**Baseline defect.** `/autopilot/panic` resolved one company from the request and demoted its routines, under a card that said "Halts every routine, every permission and every outgoing action at once."
+
+**What changed.** `stopEverything(founderId)`: `panicStop` for every company the owner owns (consent revoked before demotion, counters kept); `pauseNewEconomicActivity` when a Workshop exists; `actOnMission(…, 'paused')` for every running stated Mission. Nothing is resumed, granted or widened; the service writes no row itself. The route redirects to Control with what was stopped, and Control names where each thing starts again (a company's page, the Workshop, All work). The card's words now match the act.
+
+**Tests.** `stop-everything-means-everything`: three companies' acting routines all go to watching while another owner's stay; the Workshop pause is set; the Mission is paused; the notice; the service contains no resume and no write of its own. `authority-door-coverage` (the brake stays reachable by an observer) and `autopilot` pass unchanged.
+
+**Evidence maturity.** E2. **Proof debt.** Test carves already sealed are not unsealed by Stop (the charter's own stop covers new ones); a single "start again" is deliberately absent.
+
