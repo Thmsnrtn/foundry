@@ -128,7 +128,7 @@ export async function whatHappened(
     [founderId, limit])) {
     const base = {
       kind: 'authority' as const, productId: str(r.product_id),
-      companyName: str(r.name), href: `/foundry/decisions`,
+      companyName: str(r.name), href: `/foundry/needs-you`,
     };
     if (r.decided_at != null) {
       out.push({

@@ -349,17 +349,17 @@ async function main(): Promise<void> {
     // search, what to test next, and whether he could leave — and every one of
     // them renders a list, a table, or a set of nested details, which is where
     // a phone layout actually breaks.
-    '/foundry/decisions', '/foundry/inbox', '/foundry/money', '/foundry/roadmap',
+    '/foundry/needs-you', '/foundry/inbox', '/foundry/money', '/foundry/roadmap',
     // The stream, and the stream filtered — the filter chips wrap, and a day
     // heading over rows with a coloured strip is a new shape on the phone.
     '/foundry/activity', '/foundry/activity?kind=authority',
     '/foundry/searching', '/foundry/experiments/next', '/foundry/absence',
     // THE CHARTER, unsigned and recalculated; HISTORY, whole and filtered; and
-    // the More sheet open, which is the only way the secondary places are
-    // reached on a phone.
+    // the four doors' own pages: Missions, and Control, whose "Everywhere
+    // else" grid is how the places that are not doors are reached on a phone.
     '/foundry/charter', '/foundry/charter?tests_dollars=250&probes=4&thinking_dollars=5&days=90&statement=x',
     '/foundry/experiments/history', '/foundry/experiments/history?state=retired',
-    '/foundry#more',
+    '/foundry/missions',
     // THE STUDIO AND THE WORKING INBOX. Explore is shelves of folds with a
     // second fold inside each card, which is the deepest nesting on the phone;
     // the inbox rows now carry buttons over a whole-row link, which is where a
@@ -479,8 +479,8 @@ async function main(): Promise<void> {
         // coverage and never a door, which is how nine doors at half a rem
         // with colliding labels shipped green. Every visible door in the bar:
         // does its label fit its own box, does it overlap its neighbour, is it
-        // big enough to press, and is exactly one lit. And the More sheet,
-        // when it is open: visible, with rows a thumb can hit.
+        // big enough to press, and is exactly one lit. And the "Everywhere
+        // else" grid on Control, when it is on the page: rows a thumb can hit.
         doors: (() => {
           // No named helper here: the script runner names function values on
           // the way in, and the page has no such helper to call.
@@ -491,9 +491,9 @@ async function main(): Promise<void> {
           }).sort((x, y) => x.left - y.left);
           const overlaps: string[] = [];
           for (let i = 1; i < all.length; i++) if (all[i - 1]!.right > all[i]!.left + 0.5) overlaps.push(`${all[i - 1]!.label}/${all[i]!.label}`);
-          const more = document.getElementById('more');
-          const sheet = more && more.getBoundingClientRect().height > 0 && getComputedStyle(more).display !== 'none'
-            ? { rows: [...more.querySelectorAll('a')].map((a) => ({ label: (a.textContent ?? '').trim(), h: a.getBoundingClientRect().height })) }
+          const grid = document.querySelector('nav.elsewhere');
+          const sheet = grid && grid.getBoundingClientRect().height > 0 && getComputedStyle(grid).display !== 'none'
+            ? { rows: [...grid.querySelectorAll('a')].map((a) => ({ label: (a.textContent ?? '').trim(), h: a.getBoundingClientRect().height })) }
             : null;
           return { n: all.length, clipped: all.filter((d) => d.clipped).map((d) => d.label), overlaps,
             small: all.filter((d) => d.w < 44 || d.h < 44).map((d) => d.label), lit: all.filter((d) => d.lit).length, sheet };
@@ -607,14 +607,14 @@ async function main(): Promise<void> {
         })(),
       }));
       const overflow = m.scrollWidth - m.innerWidth;
-      // The door rules hold on a phone: five under the thumb, none clipped,
+      // The door rules hold on a phone: four under the thumb, none clipped,
       // none overlapping, every one 44px, exactly one lit. The desk rail is a
-      // list and is not held to them. A page opened at #more must show the
-      // sheet, with every row a thumb's height.
-      const wantsSheet = path.endsWith('#more');
-      const doorFault = desktop ? '' : m.doors.n > 5 ? `${String(m.doors.n)} doors` : m.doors.clipped.length ? `clipped: ${m.doors.clipped.join(', ')}`
+      // list and is not held to them. Control must show "Everywhere else",
+      // with every row a thumb's height.
+      const wantsSheet = path === '/foundry/controls';
+      const doorFault = desktop ? '' : m.doors.n > 4 ? `${String(m.doors.n)} doors` : m.doors.clipped.length ? `clipped: ${m.doors.clipped.join(', ')}`
         : m.doors.overlaps.length ? `overlapping: ${m.doors.overlaps.join(', ')}` : m.doors.small.length ? `under 44px: ${m.doors.small.join(', ')}`
-          : m.doors.lit !== 1 ? `${String(m.doors.lit)} doors lit` : wantsSheet && !m.doors.sheet ? 'the More sheet did not open'
+          : m.doors.lit !== 1 ? `${String(m.doors.lit)} doors lit` : wantsSheet && !m.doors.sheet ? 'Everywhere else is not on Control'
             : wantsSheet && m.doors.sheet && m.doors.sheet.rows.some((r) => r.h < 44) ? `sheet rows under 44px: ${m.doors.sheet.rows.filter((r) => r.h < 44).map((r) => r.label).join(', ')}` : '';
       const verdict = status === 200 && overflow <= 0 && m.covered <= 0 && !doorFault ? 'ok'
         : status === 200 && overflow <= 0 && m.covered <= 0 ? 'DOORS'
@@ -676,12 +676,12 @@ async function main(): Promise<void> {
         // check; these are the pages a reader of the tranche would ask to see.
         for (const [p, name] of [
           ['/foundry/controls', 'controls'], ['/foundry/money', 'money'],
-          ['/foundry/roadmap', 'roadmap'], ['/foundry/decisions', 'decisions'],
+          ['/foundry/roadmap', 'roadmap'], ['/foundry/needs-you', 'decisions'],
           ['/foundry/experiments/next', 'forge'], ['/foundry/absence', 'absence'],
           ['/foundry/activity', 'activity'],
           [`/foundry/companies/${COMPANY}/understanding/${RESPONSIBILITY}`, 'understanding'],
           ['/foundry/charter', 'charter'], ['/foundry/experiments/history', 'experiments-history'],
-          ['/foundry#more', 'more'], ['/foundry/experiments', 'experiments'], ['/foundry/inbox', 'inbox'],
+          ['/foundry/missions', 'missions'], ['/foundry/experiments', 'experiments'], ['/foundry/inbox', 'inbox'],
           ['/foundry/companies', 'portfolio'],
           ['/foundry/experiments/explore', 'explore'], ['/foundry/inbox?show=needs', 'inbox-needs'],
         ] as Array<[string, string]>) {

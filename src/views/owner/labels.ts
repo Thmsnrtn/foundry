@@ -19,8 +19,12 @@ import type { Place } from './shell.js';
 
 /** The one name of each place, as the owner reads it. */
 export const LABELS: Record<Place, string> = {
-  foundry: 'Home',
-  decisions: 'Decisions',
+  // FOUR DOORS (Mission Control, 30 September 2026): Today, Missions, Needs
+  // you, Control. The keys are the places' old names so no screen changed its
+  // identity; only the words the owner reads did.
+  foundry: 'Today',
+  missions: 'Missions',
+  decisions: 'Needs you',
   companies: 'Portfolio',
   // SEARCHING, everywhere. "Discover" was a product word for a thing the owner
   // calls looking for something; the place is the same place whether or not a
@@ -30,14 +34,17 @@ export const LABELS: Record<Place, string> = {
   inbox: 'Inbox',
   activity: 'Activity',
   money: 'Economics',
-  controls: 'Controls',
+  controls: 'Control',
   advanced: 'Advanced',
 };
 
 /** The address each place answers at. */
 export const ADDRESSES: Record<Place, string> = {
   foundry: '/foundry',
-  decisions: '/foundry/decisions',
+  missions: '/foundry/missions',
+  // Decisions answered here until 30 September 2026; that address now
+  // redirects, permanently, to this one.
+  decisions: '/foundry/needs-you',
   companies: '/foundry/companies',
   discover: '/foundry/searching',
   experiments: '/foundry/experiments',

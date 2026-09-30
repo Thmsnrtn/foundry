@@ -216,14 +216,13 @@ describe('places he can walk to', () => {
   // thirty doors were bad because they exposed machinery — Ambient, Roster,
   // Multi-Modal — not because destinations are bad. Stripping to a chat box
   // left him with nowhere to do anything, and he said so.
-  it('offers three, named for his world rather than the institution', async () => {
+  it('offers four doors, named for his world rather than the institution', async () => {
     const body = await get('/foundry');
     expect(body).toContain('/foundry/companies');
     expect(body).toContain('/foundry/controls');
-    // The second place is the portfolio: what he owns, as a river rather than
-    // a list. The tab carries an icon, so the word follows the glyph.
-    expect(body).toContain('Portfolio</a>');
-    expect(body).toContain('Controls</a>');
+    // Mission Control (30 September 2026): Today, Missions, Needs you,
+    // Control. The tab carries an icon, so the word follows the glyph.
+    for (const word of ['Today', 'Missions', 'Needs you', 'Control']) expect(body).toContain(`${word}</a>`);
   });
 
   it('lists his companies and offers to add one', async () => {

@@ -141,7 +141,7 @@ describe('same product, different voice', () => {
     for (const doc of [plain, technical]) {
       expect(doc).toContain('Enter enterprise');           // the decision itself
       expect(doc).toContain('The one thing that needs you');
-      expect(doc).toContain('/decisions');                 // the same action
+      expect(doc).toContain('/foundry/needs-you');         // the same action
     }
     // Different voice:
     expect(plain).toContain('Big decision (gate 3)');

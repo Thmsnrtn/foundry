@@ -128,13 +128,13 @@ async function main(): Promise<void> {
     if (open.length !== 0) { j3.ok = false; j3.notes.push('the search is still open'); }
     // Still find the record: Activity, reached by tapping what is on screen.
     await page.goto(`${base}/foundry`); await screen(page, j3);
-    // Only what a thumb can see: on a phone Activity is in the More sheet,
-    // which opens from a link to it (`.sheet-more:target`) — a tap, no screen.
+    // Only what a thumb can see: on a phone Activity is listed under
+    // "Everywhere else" on Control, one of the four doors — one tap away.
     const visibleActivity = page.locator('a[href="/foundry/activity"]').filter({ visible: true });
     if (await visibleActivity.count() === 0) {
-      const more = page.locator('a[href$="#more"]').filter({ visible: true });
-      if (await more.count() === 0) { j3.ok = false; j3.notes.push('Activity is hidden and nothing on screen opens More'); throw new Error('no More'); }
-      await more.first().click(); j3.taps += 1;
+      const control = page.locator('nav.places a[href="/foundry/controls"]').filter({ visible: true });
+      if (await control.count() === 0) { j3.ok = false; j3.notes.push('Activity is hidden and the Control door is not on screen'); throw new Error('no Control'); }
+      await control.first().click(); j3.taps += 1;
     }
     await tap(page, j3, page.locator('a[href="/foundry/activity"]').filter({ visible: true }), 'Activity'); await screen(page, j3);
     const record = await page.locator('body').innerText();

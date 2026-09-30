@@ -16,13 +16,11 @@
 # listed because they do not carry text.
 #
 # count	file	property: value
-1	src/public/owner.css	background: #0b1713
 2	src/public/owner.css	background: rgba(0,0,0,.08)
 1	src/public/owner.css	background: rgba(0,0,0,.10)
 1	src/public/owner.css	background: rgba(0,0,0,.12)
 2	src/public/owner.css	background: rgba(0,0,0,.14)
 1	src/public/owner.css	background: rgba(0,0,0,.6)
-1	src/public/owner.css	background: rgba(102,229,180,.10)
 1	src/public/owner.css	background: rgba(111,78,25,.24)
 1	src/public/owner.css	background: rgba(119,42,37,.08)
 1	src/public/owner.css	background: rgba(119,42,37,.22)
@@ -36,8 +34,6 @@
 2	src/public/owner.css	background: rgba(255,255,255,.06)
 1	src/public/owner.css	background: rgba(26,112,82,.28)
 1	src/public/owner.css	background: rgba(7,16,13,.55)
-1	src/public/owner.css	background: rgba(7,16,13,.96)
-1	src/public/owner.css	background: rgba(7,16,13,.97)
 1	src/public/owner.css	background: rgba(9,20,16,.86)
 1	src/public/owner.css	border-color: rgba(102,229,180,.16)
 1	src/public/owner.css	border-color: rgba(102,229,180,.22)

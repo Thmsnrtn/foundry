@@ -1175,7 +1175,7 @@ export { ADDRESSES, LABELS, READINGS, page, placeHead, frameFor } from '../../vi
 export type { Where, Place, DoorCounts } from '../../views/owner/shell.js';
 import type { Where } from '../../views/owner/shell.js';
 import { consequenceOfAct, effectInWords, labelFor } from '../../services/founder/what-it-would-do.js';
-import { ADDRESSES, ICONS, LABELS, READINGS, page, placeHead, frameFor, mark, ago } from '../../views/owner/shell.js';
+import { ADDRESSES, ICONS, LABELS, READINGS, page, placeHead, frameFor, mark, ago, everywhereElse } from '../../views/owner/shell.js';
 
 /**
  * FOUR WAYS IN, UNDER THE GREETING.
@@ -1430,7 +1430,7 @@ const ROUTE_WORDS: Record<string, string> = {
 export function waitingList(queue: import('../../services/founder/attention.js').AttentionItem[], afterTheOneThing: boolean, dense = false): HtmlEscapedString | Promise<HtmlEscapedString> | '' {
   return queue.length ? html`<section class="know queue" id="waiting">
     ${dense ? html`<div class="ev-sec"><h2>${afterTheOneThing ? 'Also waiting on you' : 'Waiting on you'}</h2>
-      <a href="/foundry/decisions">All ${String(queue.length)} \u203a</a></div>`
+      <a href="/foundry/needs-you">All ${String(queue.length)} \u203a</a></div>`
     : html`<h2>${afterTheOneThing ? 'Also waiting on you' : 'Waiting on you'} <span class="pill">${String(queue.length)}</span></h2>`}
     ${/* ONE QUEUE, TWO DENSITIES, AND DELIBERATELY NOT TWO RENDERINGS.
          The header above this function says what happened the last time there
@@ -1589,7 +1589,7 @@ export function theOneThing(a: Attention, extras: OneThingExtras = {}): HtmlEsca
         'None of these is a single yes or no I can put in front of you — a test waiting to be listed, something the Workshop needs from you — so the list is their honest shape.',
       ],
       facts: [['Waiting', String(a.n)], ['If you do nothing', 'they keep waiting; none of them expires on its own']],
-      open: { label: 'See what is waiting', href: '/foundry/decisions' },
+      open: { label: 'See what is waiting', href: '/foundry/needs-you' },
       technical: `${String(a.n)} from attention.waitingOn`,
     });
   }
@@ -2861,7 +2861,7 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
         ${drifted.length === 0 ? 'All of them still match.'
     : `${count(drifted.length, 'thing')} went out of step.`}</p>` : ''}
       ${a === null ? html`<p>Nothing that needs you.</p>`
-    : a.kind === 'queued' ? html`<p>${count(a.n, 'thing')} waiting on you, on <a href="/foundry/decisions">Decisions</a>.</p>`
+    : a.kind === 'queued' ? html`<p>${count(a.n, 'thing')} waiting on you, on <a href="/foundry/needs-you">Needs you</a>.</p>`
       : html`<p>One thing needs you; it is on your first screen.</p>`}
     </div>`;
   }
@@ -2870,7 +2870,7 @@ async function answerTo(key: string, s: OwnerState, a: Attention,
     return a === null
       ? html`<div class="said"><p>Nothing. I will tell you the moment that changes.</p></div>`
       : a.kind === 'queued'
-        ? html`<div class="said"><p>${count(a.n, 'thing')} waiting on you, listed on <a href="/foundry/decisions">Decisions</a>.</p></div>`
+        ? html`<div class="said"><p>${count(a.n, 'thing')} waiting on you, listed on <a href="/foundry/needs-you">Needs you</a>.</p></div>`
         : html`<div class="said"><p>The one thing above.</p></div>`;
   }
 
@@ -3173,7 +3173,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
            hierarchy decision. The cells take the width a sentence needs and
            the row breaks to two. */ ''}
       <div class="ev-strip" aria-label="At a glance">
-        <a class="ev-cell" href="${attention === null ? '/foundry/decisions' : '#the-one-thing'}">
+        <a class="ev-cell" href="${attention === null ? '/foundry/needs-you' : '#the-one-thing'}">
           <span class="c"><span class="ev-ic" aria-hidden="true">${raw(ICONS.decisions)}</span>${READINGS.needsYou}</span>
           <span class="top">${needsN === 0 ? '' : html`<span class="dot watch"></span>`}
             <span class="n">${needsN === 0 ? 'None' : String(needsN)}</span></span>
@@ -3288,7 +3288,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
     scope: { kind: 'foundry', id: null, name: 'everything' },
     local: [
       { href: '/foundry/companies', label: 'Portfolio', count: s.watching.real + s.watching.invented, on: false },
-      { href: '/foundry/decisions', label: 'Decisions', count: Number(waiting[0]?.n ?? 0), on: false },
+      { href: '/foundry/needs-you', label: LABELS.decisions, count: Number(waiting[0]?.n ?? 0), on: false },
       { href: ADDRESSES.discover, label: LABELS.discover, count: null, on: false },
       { href: '/foundry/public-workshop', label: 'Workshop', count: null, on: false },
       { href: '/foundry/inbox', label: 'Inbox', count: mail.waiting || null, on: false },
@@ -4776,7 +4776,7 @@ foundryShellRoutes.get('/foundry/companies/:id', async (c: any) => {
     : d.outcome === 'refused' ? 'you said no, and nothing happened'
       : `you took the approval back${d.note ? ` — ${d.note}` : ''}, before I used it`
 } on ${d.at}.</li>`).join(''))}</ul>
-      <p class="quiet"><a href="/foundry/decisions?company=${view.id}">Every decision about it, with why I asked</a></p>
+      <p class="quiet"><a href="/foundry/needs-you?company=${view.id}">Every decision about it, with why I asked</a></p>
     </details>` : ''}
 
     ${view.lifted.length ? html`<details class="know fold"><summary><h3>What you lifted</h3><span class="gist">${count(view.lifted.length, 'boundary', 'boundaries')}</span></summary>
@@ -7752,8 +7752,8 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
       <p class="lines"><span class="state ${envelope ? 'watch' : 'quiet none'}">${envelope ? (envelope.charter.daysLeft <= 7 ? 'Expiring' : 'Active') : 'None'}</span> <span class="quiet">${envelope ? charterSentence(envelope) : 'every real test waits for you'}</span></p>
       <p class="row"><a class="btn btn-sm" href="/foundry/charter">The charter</a></p>`);
   const body = html`
-    <h1>Controls</h1>
-    <p class="lede">Authority, safety and boundaries. What I may do on my own, what stops me, and the lines you drew.</p>
+    <h1>${LABELS.controls}</h1>
+    <p class="lede">What Foundry may do on its own, what stops it, and the lines you drew.</p>
 
     ${/* THE POSTURE FIRST, THE DETAIL WHEN HE ASKS FOR IT.
          The owner: "concise operating overview first, fuller detail when I
@@ -8118,12 +8118,16 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
   x.marks.length === 1 ? 'mark' : 'marks'} on record` : ''}.</span></li>`)}</ul>`}
       </details>
     </section>
-    </div>`;
+    </div>
+    ${/* EVERYWHERE ELSE. On a phone there is no rail; the places that are not
+         doors are listed here, once, from the same list the desk rail reads. */ ''}
+    <h2 class="section elsewhere-head">Everywhere else</h2>
+    ${everywhereElse()}`;
 
   const controlsFrame: Where = {
-    eyebrow: 'Controls',
-    crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: '/foundry/controls', label: 'Controls' }],
+    eyebrow: LABELS.controls,
+    crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: ADDRESSES.controls, label: LABELS.controls }],
     scope: { kind: 'foundry', id: null, name: 'everything' }, local: [], chips: [],
   };
-  return c.html(page('Controls', body, 'controls', controlsFrame));
+  return c.html(page(LABELS.controls, body, 'controls', controlsFrame));
 });

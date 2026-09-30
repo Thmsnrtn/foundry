@@ -159,6 +159,10 @@ export const LAYER_OF: Record<string, Layer> = {
   // `institution/absence-test.ts` and `ai/cognition.ts` — and any Foundry
   // would want both; this page is the one his estate is asked through.
   'src/routes/dashboard/absence-place.ts': 'private',
+  // Missions (30 September 2026): the work Foundry carries, read as Missions.
+  // The reading is the kernel's — `services/mission/read.ts` derives each one
+  // from rows any Foundry would write; this page is how his estate shows it.
+  'src/routes/dashboard/missions-place.ts': 'private',
   // THE DOOR THE SHELL LIVES BEHIND, and therefore part of the same product.
   // The Attention Law forbids a new top-level mount, so the shell is mounted
   // inside the Letter — which makes `letter.ts` the composition root for the

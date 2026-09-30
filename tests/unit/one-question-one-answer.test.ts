@@ -120,7 +120,7 @@ describe('the one thing is chosen across all three canonical sources', () => {
     // THE QUEUE'S ADDRESS ON THE OWNER'S OWN SURFACE. `/decisions` was the
     // commercial dashboard's page and the private instance never mounts it, so
     // this test was pinning the primary "Decide" button to a 404.
-    expect(letter.needsYouHref).toBe('/foundry/decisions');
+    expect(letter.needsYouHref).toBe('/foundry/needs-you');
   });
 
   it('still speaks when the queue is empty but a responsibility needs them', async () => {

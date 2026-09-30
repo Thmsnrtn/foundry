@@ -2,9 +2,43 @@
 
 ## Primary architecture
 
+*Amended 30 September 2026, by the owner's Mission-Control directive.* The owner says what they want and sets the limits. Foundry does the work, shows its progress, and asks for judgment only when judgment is needed. The test for every surface is: **is this making the owner operate Foundry, or making Foundry operate for the owner?**
+
+```text
+TODAY | MISSIONS | NEEDS YOU | CONTROL        + the composer, on every page
+```
+
+- **TODAY:**
+  - what happened while the owner was away;
+  - the one thing that needs the owner;
+  - the Missions that are running, and what Foundry will do next;
+  - what changed.
+- **MISSIONS:** the work Foundry is carrying. Each Mission shows its goal, limits, status, next step, activity, outcome and lineage.
+- **NEEDS YOU:** the one queue of judgments. Every item answers six questions:
+  - what is being asked;
+  - why now;
+  - what happens on yes;
+  - the most it can cost;
+  - whether it can be undone;
+  - what happens if the owner does nothing.
+- **CONTROL:**
+  - how much Foundry may do on its own (Observe, Assist or Operate);
+  - what Foundry aims for (steering, which grants nothing);
+  - the rules Foundry follows;
+  - money and the charter;
+  - the global mode;
+  - Stop everything.
+- **The composer is not a place.** It is on every page. It compiles the owner's words into a proposal the owner sees before anything consequential changes: language expresses intent, and structured state governs the institution.
+
+**A Mission grants nothing.** Its budget and authority are ceilings *inside* what the charter, allowances, boundaries and consents already allow. It is a thread through rows that already exist, not a second record of them, and its status is derived, never stored. That is why it is not the kind of "new governance subsystem" EXECUTIVE_REVIEW C-1 refuses.
+
+The architecture this replaces, kept for the record:
+
 ```text
 TODAY | ASK | COMPANY | ACTIVITY | CONTROL
 ```
+
+ASK became the composer. COMPANY became a depth reached from Today, Missions and ⌘K. ACTIVITY became each Mission's activity, with the full stream kept under Advanced.
 
 - **TODAY:** what changed, what matters, and the smallest justified attention request.
 - **ASK:** natural-language inquiry and instruction grounded in company evidence.

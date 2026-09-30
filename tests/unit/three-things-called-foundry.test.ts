@@ -73,8 +73,10 @@ describe('the classification', () => {
     const priv = Object.entries(LAYER_OF).filter(([, l]) => l === 'private');
     expect(priv.length).toBeGreaterThan(0);
     // Twelve since `onboarding.ts`, the owner's first-run door, moved in from
-    // the removed commercial layer (Private S7b, 29 September 2026).
-    expect(priv.length).toBeLessThan(13);
+    // the removed commercial layer (Private S7b, 29 September 2026); thirteen
+    // since the Missions door (Mission Control, 30 September 2026), which is
+    // a page — the Missions themselves are read by the kernel.
+    expect(priv.length).toBeLessThan(14);
     // Every one of them is a surface the owner opens, not a capability.
     for (const [path] of priv) expect(path).toContain('routes/');
   });

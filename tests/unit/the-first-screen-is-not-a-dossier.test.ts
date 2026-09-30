@@ -62,7 +62,7 @@ function lines(html: string): number {
     // and say nothing about what this morning holds.
     .replace(/<nav class="quick"[\s\S]*?<\/nav>/g, '')
     // Nor the More sheet: the rest of the places, closed until the door is pressed.
-    .replace(/<section class="sheet-more"[\s\S]*?<\/section>/g, '')
+    .replace(/<nav class="elsewhere"[\s\S]*?<\/nav>/g, '')
     .replace(/<[^>]+>/g, '\n').split('\n').map((l) => l.trim()).filter(Boolean).length;
 }
 

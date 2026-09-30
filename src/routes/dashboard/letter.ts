@@ -1518,7 +1518,7 @@ letterRoutes.get('/letter', async (c) => {
                The owner's instance connects a provider under Controls and reads
                what is waiting under Decisions, so those are where these go. */ ''}
           <a href="/foundry/controls" class="btn btn-primary" style="font-size:0.85rem;align-self:flex-start;">Connect a provider → so Foundry can see your real numbers</a>
-          <a href="/foundry/decisions" class="btn btn-secondary" style="font-size:0.85rem;align-self:flex-start;">See what is waiting on you → and the belief behind each one</a>
+          <a href="/foundry/needs-you" class="btn btn-secondary" style="font-size:0.85rem;align-self:flex-start;">See what is waiting on you → and the belief behind each one</a>
         </div>
       </div>` : letter.quiet && !hasResponsibilitySummary && !hasDevelopmentActivity
       && !hasPendingCandidate && !hasRecordedPerson ? html`
@@ -1836,7 +1836,7 @@ letterRoutes.post('/letter/attention/:decisionId', async (c) => {
   // Accepting a URL here would make this an open redirect on an authenticated
   // POST, so the field names one of two destinations and nothing else.
   if (ct.includes('application/json')) return c.json({ ok: true });
-  return c.redirect(next === 'decisions' ? '/foundry/decisions' : '/letter');
+  return c.redirect(next === 'decisions' ? '/foundry/needs-you' : '/letter');
 });
 
 // ─── Controls (Ascent B6 / Trust Law) — the autopilot's cockpit ───────────────
@@ -2592,3 +2592,7 @@ letterRoutes.route('/', moneyRoutes);
 letterRoutes.route('/', roadmapRoutes);
 letterRoutes.route('/', absenceRoutes);
 letterRoutes.route('/', activityRoutes);
+// MISSIONS (30 September 2026): the work Foundry carries, read from the rows
+// it already is — a search, a test, work for a company, the research.
+const { missionRoutes } = await import('./missions-place.js');
+letterRoutes.route('/', missionRoutes);

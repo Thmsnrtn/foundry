@@ -271,7 +271,7 @@ placeRoutes.get('/foundry/companies/:id/work', async (c: any) => {
       ${lines(decided.map((d) => `${d.summary} — ${d.outcome === 'approved'
     ? (d.used ? 'approved, and done' : 'approved, not yet used') : d.outcome === 'refused' ? 'refused' : 'taken back'} on ${d.at}.`),
     'No act has been approved or refused here.')}
-      <p class="quiet"><a href="/foundry/decisions?company=${id}">Every decision, in one place</a></p>
+      <p class="quiet"><a href="/foundry/needs-you?company=${id}">Every decision, in one place</a></p>
     </div>`;
   return c.html(page(`${view.name} — Work`, body, 'companies', frame));
 });
@@ -502,8 +502,15 @@ placeRoutes.get('/foundry/why/:kind/:id', async (c: any) => {
   return c.html(page(why.title, body, why.object.kind === 'company' ? 'companies' : 'foundry', frame));
 });
 
-// ─── Decisions: everything that waits on him, and everything he decided ─────
-placeRoutes.get('/foundry/decisions', async (c: any) => {
+// ─── Needs you: everything that waits on him, and everything he decided ─────
+// This answered at /foundry/decisions until Mission Control (30 September
+// 2026). That address now redirects here, permanently, with its query, so a
+// bookmark or an old link in a letter still lands on the same list.
+placeRoutes.get('/foundry/decisions', (c: any) => {
+  const q = new URL(c.req.url).search;
+  return c.redirect(`${ADDRESSES.decisions}${q}`, 308);
+});
+placeRoutes.get('/foundry/needs-you', async (c: any) => {
   const founderId = await founderOf(c);
   if (!founderId) return c.redirect('/onboarding');
   const companyId = String(c.req.query('company') ?? '').trim() || null;
@@ -572,12 +579,12 @@ placeRoutes.get('/foundry/decisions', async (c: any) => {
       href: `/foundry/why/experiment/${String(e.id)}`, where: 'a test', whereHref: '/foundry/searching' })),
   ].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0)).slice(0, 60);
   const frame: Where = {
-    eyebrow: 'Decisions',
+    eyebrow: LABELS.decisions,
     crumbs: [{ href: '/foundry', label: 'Foundry' },
       ...(company ? [{ href: '/foundry/companies', label: 'Portfolio' }, { href: `/foundry/companies/${String(company.id)}`, label: String(company.name) }] : []),
-      { href: c.req.path, label: 'Decisions' }],
+      { href: c.req.path, label: LABELS.decisions }],
     scope: company ? { kind: 'company', id: String(company.id), name: String(company.name) } : { kind: 'decisions', id: null, name: 'your decisions' },
-    local: company ? [{ href: '/foundry/decisions', label: 'All companies', count: null, on: false }] : [],
+    local: company ? [{ href: ADDRESSES.decisions, label: 'All companies', count: null, on: false }] : [],
     chips: [],
   };
   // CONSEQUENCE FIRST, RANKED. The one thing that needs deciding now, then
@@ -591,7 +598,7 @@ placeRoutes.get('/foundry/decisions', async (c: any) => {
         : { word: how, cls: 'done' };
   const body = html`
     ${company ? html`<p class="crumbline"><a href="/foundry/companies/${String(company.id)}">← ${String(company.name)}</a></p>` : ''}
-    <h1>${company ? `Decisions about ${String(company.name)}` : 'Decisions'}</h1>
+    <h1>${company ? `What needs you about ${String(company.name)}` : LABELS.decisions}</h1>
     ${company && String(company.reality) === 'reference' ? html`<p class="quiet"><strong>${String(company.name)} does not exist.</strong> I made it up; nothing decided here is about a real company.</p>` : ''}
     <p class="lede">${waiting === 0 ? 'Nothing is waiting on you.' : `${count(waiting, 'thing')} ${waiting === 1 ? 'waits' : 'wait'} on you.`}
       Only what truly needs your judgment; everything you decide is kept here, with why I asked.</p>
@@ -621,7 +628,7 @@ placeRoutes.get('/foundry/decisions', async (c: any) => {
         <span class="how"><span class="pill ${decidedWord(d.how).cls}">${decidedWord(d.how).word}</span></span>
         <span class="where">${day(d.at)} · <a href="${d.whereHref}">${d.where}</a> · <a href="${d.href}">why I asked</a></span></li>`)}</ul>`
     : html`<p class="quiet">Nothing yet. When you approve, refuse, agree or bury something, it is kept here.</p>`}`;
-  return c.html(page('Decisions', body, company ? 'companies' : 'decisions', frame));
+  return c.html(page(LABELS.decisions, body, company ? 'companies' : 'decisions', frame));
 });
 
 // ─── Searching: the one search, its candidates, and what was buried ─────────

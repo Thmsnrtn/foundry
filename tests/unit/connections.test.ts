@@ -113,10 +113,10 @@ describe('the shell this page is now inside', () => {
     expect(page).toContain('/static/owner.css');
     expect(page).not.toContain('/static/styles.css');
 
-    // The door you are behind is lit, and only that one. Controls is a desk
-    // door; on a phone it sits behind More, which lights in its place.
-    expect(page).toMatch(/<a href="\/foundry\/controls" class="on desk"/);
-    expect(page).toMatch(/<a class="more-door on" href="#more"/);
+    // The door you are behind is lit, and only that one: Control, one of the
+    // four, the same on a phone and a desk (Mission Control, 30 September 2026).
+    expect(page).toMatch(/<a href="\/foundry\/controls" class="on" aria-current="page">/);
+    expect(page.match(/class="on" aria-current="page"/g)).toHaveLength(1);
     expect(page).not.toMatch(/<details/);
   });
 });

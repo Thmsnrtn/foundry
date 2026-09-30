@@ -63,11 +63,12 @@ async function onThePhone(path: string, scheme: 'light' | 'dark' = 'dark'): Prom
       const contrast = (Math.max(ink, ground) + 0.05) / (Math.min(ink, ground) + 0.05);
       return { text: document.body.innerText, firstScreen, overflowX: de.scrollWidth - de.clientWidth, width: de.clientWidth, contrast };
     });
-    // One tap on the Ask pill: the cursor should be in the box.
+    // One tap on the docked composer: the cursor should be in the box. It is
+    // on the page itself now (Mission Control), not behind an Ask button.
     let askFocused = false;
-    const pill = await page.$('a.ask-fab');
-    if (pill) {
-      await pill.tap();
+    const box = await page.$('#ask-foundry input[name="said"]');
+    if (box && await box.isVisible()) {
+      await box.tap();
       await page.waitForTimeout(200);
       askFocused = await page.evaluate(() => document.activeElement !== null && document.activeElement.closest('#ask-foundry') !== null);
     }
@@ -83,7 +84,7 @@ phones('the surfaces that changed, on a 390px phone', () => {
     expect(seen.overflowX).toBe(0);
     expect(seen.text).toContain('Last test');
     expect(seen.text).toContain('Surprised');
-    expect(seen.firstScreen).toMatch(/Ask/);
+    expect(seen.firstScreen).toMatch(/Ask|Send/); // the composer, docked on the first screen
     expect(seen.askFocused).toBe(true);
     expect(seen.contrast).toBeGreaterThanOrEqual(4.5);
   });
@@ -101,7 +102,7 @@ phones('the surfaces that changed, on a 390px phone', () => {
     expect(seen.overflowX).toBe(0);
     expect(seen.text).toContain('What happened and why');
     expect(seen.text).toContain('What that establishes');
-    expect(seen.firstScreen).toMatch(/Ask/);
+    expect(seen.firstScreen).toMatch(/Ask|Send/); // the composer, docked on the first screen
   });
 
   it('the Inbox\'s Handled view carries the clear control and fits', async () => {

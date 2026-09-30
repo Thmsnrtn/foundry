@@ -140,11 +140,17 @@ describe('a button cannot be wider than what contains it', () => {
     //   never the only place the fact is said: the row's own line underneath
     //   carries it in words, which is what makes shortening it safe.
     //
+    //   A MISSION'S STATUS IS ONE OR TWO WORDS IN A PILL. `.status` — "Running",
+    //   "Needs you" — heads a Mission card whose goal and next step wrap below
+    //   it in a row that itself wraps (`.mission-head` is flex-wrap), so the
+    //   pill never pushes past the card; and the card says the same fact in
+    //   its sentence underneath, so the pill is never the only place it is said.
+    //
     // Anything else added to this list needs one of those sentences.
     const named = [...phoneOnly(css()).matchAll(/(?:^|\n)([^\n{]*)\{[^}]*white-space:\s*nowrap/g)]
       .map((m) => m[1].trim())
       .filter((s) => !s.startsWith('@'));
     expect(named.sort()).toEqual(['.ev-sec a', '.ev-tag', '.filters a', '.local a',
-      '.mline dd', '.sr', 'nav.places a'].sort());
+      '.mline dd', '.sr', '.status', 'nav.places a'].sort());
   });
 });

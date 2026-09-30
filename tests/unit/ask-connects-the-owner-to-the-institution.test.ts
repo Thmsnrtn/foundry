@@ -76,7 +76,7 @@ describe('the box he used', () => {
     // read by tests and search engines as page text: one such comment carried
     // "I don't know yet" on every page after the sentence itself was gone.
     // Comments in the templates are TypeScript comments now, and stay so.
-    for (const path of ['/foundry', '/foundry/searching', '/foundry/experiments', '/foundry/money', '/foundry/inbox', '/foundry/activity', '/foundry/controls', '/foundry/absence', '/foundry/decisions', '/foundry/charter']) {
+    for (const path of ['/foundry', '/foundry/searching', '/foundry/experiments', '/foundry/money', '/foundry/inbox', '/foundry/activity', '/foundry/controls', '/foundry/absence', '/foundry/needs-you', '/foundry/charter']) {
       const t = await page(path);
       expect(t, path).not.toContain('<!' + '--'); // spelled apart, so the comment gate does not read it as one
       expect(t, path).not.toContain('$' + '{/*'); // spelled apart, so the comment gate does not read it as one

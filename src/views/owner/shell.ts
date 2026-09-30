@@ -8,12 +8,13 @@
 // the doors — and the stylesheet at /static/owner.css that every consumer
 // shares and a browser caches once.
 //
-// THE DOORS ARE THE CANONICAL SET, AND ONLY THE ONES THAT OPEN. A door onto a
-// page that does not exist yet is a dead end with a nice icon. On a phone five
-// doors sit under the thumb — Home, Portfolio, Experiments, Inbox, More — and
-// the More sheet holds the rest; on a desk the rail carries the whole set.
-// Nine tabs at 375px is forty pixels a tab, which is not a door, and it shipped
-// exactly that way once, with the labels colliding.
+// FOUR DOORS, AND A COMPOSER THAT IS NOT ONE (Mission Control, 30 September
+// 2026). Today, Missions, Needs you, Control — the same four on a phone and on
+// a desk. Every other place is a depth beneath one of them: it lights its
+// parent door, is listed under "Everywhere else" on Control and in the desk
+// rail, and is one search away in the palette. The composer sits on every page,
+// docked above the bar on a phone and at the top of the page on a desk; it
+// takes no door, because saying what you want is not a place you go.
 //
 // MONEY SHIPPED AND IS STILL NOT A DOOR. This note used to say Economics would
 // get one when its surface existed. The surface exists — /foundry/money, the
@@ -44,8 +45,25 @@ import { OWNER_SURFACE_SCRIPT } from '../../lib/owner-surface-script.js';
  * matches no key in the rail, so nothing lights, and the footer that points at
  * it is suppressed there rather than linking a page to itself.
  */
-export type Place = 'foundry' | 'decisions' | 'companies' | 'discover' | 'experiments' | 'inbox'
+export type Place = 'foundry' | 'missions' | 'decisions' | 'companies' | 'discover' | 'experiments' | 'inbox'
   | 'activity' | 'money' | 'controls' | 'advanced';
+
+/** The four doors, in their order. */
+export const DOORS: ReadonlyArray<Place> = ['foundry', 'missions', 'decisions', 'controls'];
+
+/**
+ * WHICH DOOR A DEPTH STANDS UNDER. A company is reached from Today; an
+ * experiment or the search is part of a Mission; mail that needs the owner is
+ * something that needs him; money and the charter are limits he sets. The
+ * Letter is beneath everything and lights nothing.
+ */
+export const DOOR_OF: Record<Place, Place | null> = {
+  foundry: 'foundry', companies: 'foundry', activity: 'foundry',
+  missions: 'missions', experiments: 'missions', discover: 'missions',
+  decisions: 'decisions', inbox: 'decisions',
+  controls: 'controls', money: 'controls',
+  advanced: null,
+};
 
 type H = HtmlEscapedString | Promise<HtmlEscapedString>;
 
@@ -129,11 +147,36 @@ function railExtra(where: Where | null): H {
       html`<a href="${l.href}"${l.on ? raw(' class="on"') : ''}>${l.label}${
         l.count !== null && l.count > 0 ? html` <span>${String(l.count)}</span>` : ''}</a>`)}</section>`
     : '';
-  return html`${object}<section class="more" aria-label="Also here">
-    <a href="/foundry/public-workshop">Workshop</a>
-    <a href="/foundry/roadmap">Roadmap</a>
-    <a href="/foundry/absence">Absence test</a>
+  const here = where && where.crumbs.length ? where.crumbs[where.crumbs.length - 1]!.href : '';
+  return html`${object}<section class="more" aria-label="Everywhere else">
+    ${EVERYWHERE_ELSE.map((e) => html`<a href="${e.href}"${e.href === here ? raw(' aria-current="page"') : ''}>${e.label}</a>`)}
   </section>`;
+}
+
+/**
+ * EVERYWHERE ELSE: every place that is not a door, once, in one order. The
+ * desk rail lists it under the doors; Control lists it on a phone; the palette
+ * searches it. None of these is a second copy of a place — each is a link to
+ * the one address that place answers at.
+ */
+export const EVERYWHERE_ELSE: ReadonlyArray<{ href: string; label: string; icon: string }> = [
+  { href: '/foundry/companies', label: 'Your companies', icon: '<svg viewBox="0 0 24 24"><path d="M3 17c3-4 6 0 9-3s6 1 9-3"/><path d="M3 12c3-4 6 0 9-3s6 1 9-3"/></svg>' },
+  { href: '/foundry/experiments', label: 'Experiments', icon: '<svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6L4 19h16l-6-10V3"/></svg>' },
+  { href: '/foundry/searching', label: 'Searching', icon: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4M11 8v6M8 11h6"/></svg>' },
+  { href: '/foundry/money', label: 'Economics', icon: '<svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"/><path d="M8 10h8M8 14h5"/></svg>' },
+  { href: '/foundry/charter', label: 'The charter', icon: '<svg viewBox="0 0 24 24"><path d="M6 3h9l4 4v14H6z"/><path d="M15 3v4h4M9 12h6M9 16h4"/></svg>' },
+  { href: '/foundry/activity', label: 'Activity', icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>' },
+  { href: '/foundry/inbox', label: 'Inbox', icon: '<svg viewBox="0 0 24 24"><path d="M3 12v6h18v-6"/><path d="M3 12l3-7h12l3 7"/><path d="M3 12h5l2 3h4l2-3h5"/></svg>' },
+  { href: '/foundry/public-workshop', label: 'Workshop', icon: '<svg viewBox="0 0 24 24"><path d="M3 11 21 3l-6 18-3-8z"/></svg>' },
+  { href: '/foundry/roadmap', label: 'Roadmap', icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>' },
+  { href: '/foundry/absence', label: 'Absence test', icon: '<svg viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>' },
+  { href: '/letter', label: 'Advanced', icon: '<svg viewBox="0 0 24 24"><path d="M4 7h16v11H4z"/><path d="M9 7V5h6v2M4 12h16"/></svg>' },
+];
+
+/** Everywhere else, as a grid of links: Control renders it for the phone, where the rail is not. */
+export function everywhereElse(): H {
+  return html`<nav class="elsewhere" aria-label="Everywhere else">${EVERYWHERE_ELSE.map((e) =>
+    html`<a href="${e.href}">${raw(e.icon)}<span>${e.label}</span></a>`)}</nav>`;
 }
 
 /**
@@ -175,18 +218,18 @@ function companyBar(where: Where | null): H | '' {
 /** What Ask will take as its subject, said where he types. */
 function askScope(where: Where | null): { placeholder: string; hidden: string; line: H | '' } {
   if (!where || where.scope.kind === 'foundry') {
-    return { placeholder: 'Ask Foundry anything…', hidden: '', line: '' };
+    return { placeholder: 'Tell Foundry what you want…', hidden: '', line: '' };
   }
   if (where.scope.kind === 'company' && where.scope.id) {
     return {
-      placeholder: `Ask about ${where.scope.name}…`,
+      placeholder: `Tell Foundry about ${where.scope.name}…`,
       hidden: `company:${where.scope.id}`,
-      line: html`<p class="askwhere">Asking about <b>${where.scope.name}</b> · <a href="/foundry">everything instead</a></p>`,
+      line: html`<p class="askwhere">About <b>${where.scope.name}</b> · <a href="/foundry">everything instead</a></p>`,
     };
   }
   return {
-    placeholder: `Ask about ${where.scope.name}…`, hidden: '',
-    line: html`<p class="askwhere">Asking about <b>${where.scope.name}</b> · <a href="/foundry">everything instead</a></p>`,
+    placeholder: `Tell Foundry about ${where.scope.name}…`, hidden: '',
+    line: html`<p class="askwhere">About <b>${where.scope.name}</b> · <a href="/foundry">everything instead</a></p>`,
   };
 }
 
@@ -290,61 +333,30 @@ export const ICONS = {
   activity: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>',
   money: '<svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"/><path d="M8 10h8M8 14h5"/></svg>',
   ask: '<svg viewBox="0 0 24 24"><path d="M5 5h14v11H9l-4 3z"/><path d="M9 9h6M9 12h4"/></svg>',
-  more: '<svg viewBox="0 0 24 24"><rect x="4" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="4" width="6.5" height="6.5" rx="1.6"/><rect x="4" y="13.5" width="6.5" height="6.5" rx="1.6"/><rect x="13.5" y="13.5" width="6.5" height="6.5" rx="1.6"/></svg>',
+  today: '<svg viewBox="0 0 24 24"><path d="M5 17a7 7 0 0 1 14 0"/><path d="M2 17h20M6 21h12M12 4v3M4.9 8.9l2.1 2.1M19.1 8.9 17 11"/></svg>',
+  missions: '<svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></svg>',
+  needs: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v5.5M12 16.5h.01"/></svg>',
 };
 
-/**
- * FIVE DOORS UNDER THE THUMB, AND EVERYTHING ELSE BEHIND ONE OF THEM.
- *
- * On a phone the bar carries Home, Portfolio, Experiments, Inbox and More; the
- * rest of the canonical set — Decisions, Discover, Activity, Economics,
- * Controls — keeps its door on the desk rail and is reached on a phone from
- * the More sheet, or from whatever makes it relevant. The More door lights when
- * the page underfoot is one of the places it holds. The Letter (`advanced`) is
- * a depth, not a place, and lights nothing.
- */
-const MORE_PLACES: ReadonlySet<Place> = new Set<Place>(['decisions', 'discover', 'activity', 'money', 'controls']);
-const MORE_SHEET: ReadonlyArray<{ href: string; label: string; key: Place | null; icon: string }> = [
-  { href: ADDRESSES.decisions, label: LABELS.decisions, key: 'decisions', icon: ICONS.decisions },
-  { href: '/foundry/charter', label: 'The charter', key: null, icon: MARK.charter },
-  { href: ADDRESSES.money, label: LABELS.money, key: 'money', icon: ICONS.money },
-  { href: ADDRESSES.activity, label: LABELS.activity, key: 'activity', icon: ICONS.activity },
-  { href: ADDRESSES.controls, label: LABELS.controls, key: 'controls', icon: ICONS.controls },
-  { href: ADDRESSES.discover, label: LABELS.discover, key: 'discover', icon: ICONS.discover },
-  { href: '/foundry/public-workshop', label: 'Workshop', key: null, icon: MARK.sent },
-  { href: '/foundry/roadmap', label: 'Roadmap', key: null, icon: MARK.changed },
-  { href: '/foundry/absence', label: 'Absence test', key: null, icon: MARK.watching },
-  { href: '/letter', label: 'Advanced', key: null, icon: MARK.box },
-];
+const DOOR_ICON: Record<string, string> = {
+  foundry: ICONS.today, missions: ICONS.missions, decisions: ICONS.needs, controls: ICONS.controls,
+};
 
-/** The sheet, with the page underfoot marked. An address the sheet holds wins over the place word, so the charter page marks The charter and not Controls. */
-function moreSheet(lit: Place, where: Where | null): H {
-  const here = where && where.crumbs.length ? where.crumbs[where.crumbs.length - 1]!.href : '';
-  const byAddress = MORE_SHEET.some((m) => m.href === here);
-  const current = (m: { href: string; key: Place | null }): boolean => byAddress ? m.href === here : m.key !== null && m.key === lit;
-  return html`<section class="sheet-more" id="more" aria-label="More places">
-  ${MORE_SHEET.map((m) => html`<a href="${m.href}"${current(m) ? raw(' aria-current="page"') : ''}>${raw(m.icon)}${m.label}</a>`)}
-  <a class="close" href="#_">Close</a>
-</section>`;
-}
-
-/** One door. `deskOnly` doors render only where the rail has room. */
-function door(href: string, key: Place, label: string, icon: string, active: Place, counts: DoorCounts, deskOnly = false): H {
+/** One door, lit when the page underfoot stands beneath it. */
+function door(key: Place, lit: Place | null, counts: DoorCounts): H {
   const n = counts[key] ?? 0;
-  return html`<a href="${href}" class="${[active === key ? 'on' : '', deskOnly ? 'desk' : ''].filter(Boolean).join(' ')}"${active === key ? raw(' aria-current="page"') : ''}>${raw(icon)}${label}${n > 0 ? html`<b>${String(n)}</b>` : ''}</a>`;
+  const on = lit === key;
+  return html`<a href="${ADDRESSES[key]}"${on ? raw(' class="on" aria-current="page"') : ''}>${raw(DOOR_ICON[key] ?? '')}${LABELS[key]}${n > 0 ? html`<b>${String(n)}</b>` : ''}</a>`;
 }
 
 export const page = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString>,
   active: Place = 'foundry', where: Where | null = null, counts: DoorCounts = {},
-) => page2(title, body, active, where, counts, where?.scope.kind === 'searching' ? 'discover' : active);
-
-const page2 = (title: string, body: HtmlEscapedString | Promise<HtmlEscapedString>,
-  active: Place, where: Where | null, counts: DoorCounts, lit: Place,
-) => shellFor(currentAppearance(), title, body, active, where, counts, lit);
+) => shellFor(currentAppearance(), title, body, active, where, counts,
+  DOOR_OF[where?.scope.kind === 'searching' ? 'discover' : active]);
 
 const shellFor = (theme: Appearance | null,
   title: string, body: HtmlEscapedString | Promise<HtmlEscapedString>,
-  active: Place, where: Where | null, counts: DoorCounts, lit: Place,
+  active: Place, where: Where | null, counts: DoorCounts, lit: Place | null,
 ) => html`<!DOCTYPE html>
 <html lang="en"${theme ? raw(` data-theme="${theme}"`) : ''}>
 <head>
@@ -371,7 +383,7 @@ ${theme
 </head>
 <body>
 <main class="wrap" data-place="${active}">
-<div class="brand"><span class="forge-mark" aria-hidden="true">${raw(SUNRISE)}</span><span class="brand-copy"><b>Foundry</b><small>Ideas to income. Privately.</small></span>${modeSwitch(theme)}<a class="ask-fab" href="#ask-foundry" aria-label="Ask Foundry">${raw(ICONS.ask)}Ask</a></div>
+<div class="brand"><span class="forge-mark" aria-hidden="true">${raw(SUNRISE)}</span><span class="brand-copy"><b>Foundry</b><small>Ideas to income. Privately.</small></span>${modeSwitch(theme)}</div>
 ${crumbsOf(where)}
 ${body}
 ${active === 'advanced' ? '' : html`<footer><a href="/letter">Advanced — inspect the system</a></footer>`}
@@ -389,7 +401,7 @@ ${/* ONE ENTRANCE. This was a GET to /foundry?q=, which reaches the question
     <label for="said" class="sr">${askScope(where).placeholder}</label>
     <input id="said" name="said" type="text" enterkeyhint="send" autocorrect="on" maxlength="800"
       autocapitalize="sentences" spellcheck="true" placeholder="${askScope(where).placeholder}" />
-    <button type="submit">Ask</button>
+    <button type="submit">Send</button>
   </div>
 </form>
 </main>
@@ -397,19 +409,9 @@ ${companyBar(where)}
 <nav class="places${where && where.scope.kind === 'company' && where.local.length ? ' behind' : ''}" aria-label="Places"><div>
   <header class="rail-brand"><span class="forge-mark" aria-hidden="true">${raw(SUNRISE)}</span><span><b>Foundry</b><small>Ideas to income. Privately.</small></span></header>
   ${modeSwitch(theme, 'rail-modes')}
-  ${door(ADDRESSES.foundry, 'foundry', LABELS.foundry, ICONS.home, lit, counts)}
-  ${door(ADDRESSES.decisions, 'decisions', LABELS.decisions, ICONS.decisions, lit, counts, true)}
-  ${door(ADDRESSES.companies, 'companies', LABELS.companies, ICONS.portfolio, lit, counts)}
-  ${door(ADDRESSES.discover, 'discover', LABELS.discover, ICONS.discover, lit, counts, true)}
-  ${door(ADDRESSES.experiments, 'experiments', LABELS.experiments, ICONS.experiments, lit, counts)}
-  ${door(ADDRESSES.inbox, 'inbox', LABELS.inbox, ICONS.inbox, lit, counts)}
-  ${door(ADDRESSES.activity, 'activity', LABELS.activity, ICONS.activity, lit, counts, true)}
-  ${door(ADDRESSES.money, 'money', LABELS.money, ICONS.money, lit, counts, true)}
-  ${door(ADDRESSES.controls, 'controls', LABELS.controls, ICONS.controls, lit, counts, true)}
-  <a class="more-door${MORE_PLACES.has(lit) ? ' on' : ''}" href="#more" aria-haspopup="true"${MORE_PLACES.has(lit) ? raw(' aria-current="page"') : ''}>${raw(ICONS.more)}More</a>
+  ${DOORS.map((d) => door(d, lit, counts))}
   ${railExtra(where)}
 </div></nav>
-${moreSheet(lit, where)}
 <script>${raw(OWNER_SURFACE_SCRIPT)}</script>
 </body>
 </html>`;

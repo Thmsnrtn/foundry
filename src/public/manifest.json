@@ -32,9 +32,9 @@
       "description": "The estate at a glance"
     },
     {
-      "name": "Decisions",
-      "url": "/foundry/decisions",
-      "description": "Open decision queue"
+      "name": "Needs you",
+      "url": "/foundry/needs-you",
+      "description": "What needs your judgment"
     }
   ]
 }

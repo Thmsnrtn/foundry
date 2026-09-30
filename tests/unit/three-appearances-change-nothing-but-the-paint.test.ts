@@ -240,7 +240,7 @@ describe('Home opens with four ways in, as the boards draw it', () => {
     const html = await render('/foundry', 'green');
     const nav = /<nav class="quick"[\s\S]*?<\/nav>/.exec(html)?.[0] ?? '';
     const hrefs = [...nav.matchAll(/href="([^"]+)"/g)].map((m) => m[1] ?? '');
-    expect(hrefs).toEqual(['#ask-foundry', '/foundry/decisions', expect.stringMatching(/^\/foundry\//),
+    expect(hrefs).toEqual(['#ask-foundry', '/foundry/needs-you', expect.stringMatching(/^\/foundry\//),
       '/foundry/controls/connectors']);
     for (const h of hrefs.slice(1)) {
       const res = await withAppearance('green', async () => app.request(h));

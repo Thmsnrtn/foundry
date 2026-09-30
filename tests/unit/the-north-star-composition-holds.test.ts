@@ -78,7 +78,7 @@ describe('Home is the Founder Cockpit', () => {
     const body = await read('/foundry');
     const head = body.slice(0, body.indexOf('class="cockpit"') + 1 || body.length);
     for (const [reading, where] of [
-      ['needs you', '/foundry/decisions'],
+      ['needs you', '/foundry/needs-you'],
       ['yours', '/foundry/money'],
       ['health', '/foundry/controls'],
       ['company', '/foundry/companies'],
@@ -125,18 +125,21 @@ describe('Home is the Founder Cockpit', () => {
     expect(body).not.toContain('id="the-one-thing"');
   });
 
-  it('keeps the places without a door reachable on a phone, through the More sheet', async () => {
-    const body = await read('/foundry');
-    const sheet = /<section class="sheet-more" id="more"[\s\S]*?<\/section>/.exec(body)?.[0] ?? '';
-    for (const href of ['/foundry/searching', '/foundry/public-workshop', '/foundry/roadmap', '/foundry/absence', '/foundry/charter', '/foundry/decisions', '/foundry/money', '/foundry/activity', '/foundry/controls', '/letter']) {
-      expect(sheet).toContain(`href="${href}"`);
+  it('keeps the places without a door reachable on a phone, from Control', async () => {
+    // THE MORE SHEET IS GONE (Mission Control, 30 September 2026). Every place
+    // that is not one of the four doors is listed once, on Control, from the
+    // same list the desk rail reads.
+    const body = await read('/foundry/controls');
+    const grid = /<nav class="elsewhere"[\s\S]*?<\/nav>/.exec(body)?.[0] ?? '';
+    for (const href of ['/foundry/searching', '/foundry/public-workshop', '/foundry/roadmap', '/foundry/absence', '/foundry/charter', '/foundry/money', '/foundry/activity', '/foundry/companies', '/letter']) {
+      expect(grid).toContain(`href="${href}"`);
     }
   });
 });
 
-describe('Decisions is ranked and counted', () => {
+describe('Needs you is ranked and counted', () => {
   it('counts what needs him and what was handled, and ranks the sections', async () => {
-    const body = await read('/foundry/decisions');
+    const body = await read('/foundry/needs-you');
     expect(body).toMatch(/Needs you <b>\d+<\/b>/);
     expect(body).toMatch(/Decided <b>\d+<\/b>/);
     expect(body).toContain('id="decided"');

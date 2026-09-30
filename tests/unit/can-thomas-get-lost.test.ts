@@ -55,7 +55,7 @@ function orient(html: string) {
   const local = [...(html.match(/<nav class="local[^"]*"[\s\S]*?<\/nav>/)?.[0] ?? '').matchAll(/<a href="([^"]+)"[^>]*>([^<]*)/g)]
     .map((m) => ({ href: m[1] ?? '', label: (m[2] ?? '').trim() }));
   const localOn = /<nav class="local[^"]*"[\s\S]*?<\/nav>/.exec(html)?.[0].match(/aria-current="page"[^>]*>([^<]*)/)?.[1]?.trim() ?? null;
-  const placeholder = /placeholder="(Ask[^"]*)"/.exec(html)?.[1] ?? null;
+  const placeholder = /placeholder="((?:Ask|Tell)[^"]*)"/.exec(html)?.[1] ?? null;
   const scope = /name="scope" value="([^"]+)"/.exec(html)?.[1] ?? null;
   const askwhere = /<p class="askwhere">([\s\S]*?)<\/p>/.exec(html)?.[1]?.replace(/<[^>]+>/g, '') ?? null;
   const why = [...html.matchAll(/href="(\/foundry\/why\/[^"]+)"/g)].map((m) => m[1] ?? '');
@@ -158,9 +158,9 @@ describe('deep-linked into a company page', () => {
     expect(o.localOn).toBe('Overview');
     expect(o.local.find((l) => l.label === 'Work')?.href).toBe(`/foundry/companies/${tidewater}/work`);
     // Ask is grounded here, and says so.
-    expect(o.placeholder).toBe('Ask about Tidewater…');
+    expect(o.placeholder).toBe('Tell Foundry about Tidewater…');
     expect(o.scope).toBe(`company:${tidewater}`);
-    expect(o.askwhere).toMatch(/Asking about Tidewater/);
+    expect(o.askwhere).toMatch(/About Tidewater/);
     expect(o.askwhere).toMatch(/everything instead/);
     // Why goes somewhere: the situation, the advice and the act each descend.
     expect(o.why).toContain(`/foundry/why/company/${tidewater}`);
@@ -228,13 +228,13 @@ describe('deep-linked into a decision', () => {
     expect(orient(html).scope).toBe(`company:${tidewater}`);
   });
 
-  it('Decisions is an address, reached from context, that carries what waits and what was decided', async () => {
-    const { status, html } = await get('/foundry/decisions');
+  it('Needs you is an address, reached from context, that carries what waits and what was decided', async () => {
+    const { status, html } = await get('/foundry/needs-you');
     expect(status).toBe(200);
     expect(html).toContain('wire the checkout');
     expect(html).toContain(`href="/foundry/companies/${tidewater}#decide"`);
-    const scoped = await get(`/foundry/decisions?company=${tidewater}`);
-    expect(scoped.html).toContain('Decisions about Tidewater');
+    const scoped = await get(`/foundry/needs-you?company=${tidewater}`);
+    expect(scoped.html).toContain('What needs you about Tidewater');
     expect(orient(scoped.html).crumbLinks).toContain(`/foundry/companies/${tidewater}`);
   });
 });
@@ -267,14 +267,14 @@ describe('the app resumed', () => {
     expect(status).toBe(200);
     const o = orient(html);
     expect(o.local.map((l) => l.label)).toEqual(
-      ['Portfolio', 'Decisions', 'Searching', 'Workshop', 'Inbox', 'Activity']);
-    expect(html).toMatch(new RegExp(`href="/foundry/decisions"[^>]*>Decisions <b>${String(waiting)}</b>`));
+      ['Portfolio', 'Needs you', 'Searching', 'Workshop', 'Inbox', 'Activity']);
+    expect(html).toMatch(new RegExp(`href="/foundry/needs-you"[^>]*>Needs you <b>${String(waiting)}</b>`));
     // AND ACTIVITY CARRIES NO NUMBER, which is this test's whole point said
     // about the one door most likely to grow one. How many things happened is
     // not a figure the owner should be taught to watch: a stream that reports
     // its own volume makes a busy fortnight look like a productive one.
     expect(html).toMatch(/href="\/foundry\/activity"[^>]*>Activity<\/a>/);
-    expect(o.placeholder).toBe('Ask Foundry anything…');
+    expect(o.placeholder).toBe('Tell Foundry what you want…');
     expect(o.scope).toBeNull();
     expect(o.crumbs).toBe('');
   });
@@ -346,7 +346,7 @@ describe('object to portfolio', () => {
     expect(o.h1).toBe('Portfolio');
     expect(o.local.map((l) => l.label)).toEqual(['Map', 'River']);
     expect(o.localOn).toBe('Map');
-    expect(o.placeholder).toBe('Ask about your portfolio…');
+    expect(o.placeholder).toBe('Tell Foundry about your portfolio…');
     expect(html).toContain('name="find"');
     expect(html).toContain(`href="/foundry/companies/${tidewater}"`);
     // Invented companies are told apart and kept in their own section, not counted as his.
@@ -377,8 +377,8 @@ describe('switching assets', () => {
     const { html } = await get(`/foundry/companies/${invented}`);
     const o = orient(html);
     expect(o.chips[0]).toBe('invented');
-    expect(o.placeholder).toMatch(/^Ask about .+…$/);
-    expect(o.placeholder).not.toBe('Ask about Tidewater…');
+    expect(o.placeholder).toMatch(/^Tell Foundry about .+…$/);
+    expect(o.placeholder).not.toBe('Tell Foundry about Tidewater…');
     expect(o.scope).toBe(`company:${invented}`);
   });
 });
@@ -394,8 +394,8 @@ describe('the object changes while he is looking at it', () => {
     expect(o.chips.some((ch) => /needs you/.test(ch))).toBe(false);
     expect(o.chips.some((ch) => /looking after 1 thing/.test(ch))).toBe(true);
     const home = (await get('/foundry')).html;
-    expect(home).not.toMatch(/Decisions <b>\d+<\/b>/);
-    const decisions = (await get('/foundry/decisions')).html;
+    expect(home).not.toMatch(/Needs you <b>\d+<\/b>/);
+    const decisions = (await get('/foundry/needs-you')).html;
     expect(decisions).toContain('wire the checkout');
     expect(decisions).toMatch(/approved/);
     const work = (await get(`/foundry/companies/${tidewater}/work`)).html;
@@ -421,7 +421,7 @@ describe('the work behind a claim', () => {
       `/foundry/companies/${tidewater}/customers`, `/foundry/companies/${asset}/experiments`,
       `/foundry/why/company/${tidewater}`, `/foundry/why/advice/${adviceId}`, `/foundry/why/proposal/${actId}`,
       `/foundry/why/candidate/${opportunityId}`, `/foundry/why/experiment/${experimentId}`,
-      '/foundry/decisions', `/foundry/decisions?company=${tidewater}`, '/foundry/searching',
+      '/foundry/needs-you', `/foundry/needs-you?company=${tidewater}`, '/foundry/searching',
       '/foundry/companies', '/foundry/companies?view=river'];
     const dead: string[] = [];
     for (const path of pages) {

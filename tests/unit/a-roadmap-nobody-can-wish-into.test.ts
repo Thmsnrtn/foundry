@@ -113,31 +113,20 @@ describe('it is one of the places, drawn by the one shell', () => {
     expect(body).toContain('Foundry</a><i>›</i>');
   });
 
-  it('is reachable from the rail, so it is not a page only a link knows about', () => {
-    const shell = readFileSync(resolve(ROOT, 'src/views/owner/shell.ts'), 'utf8');
-    expect(shell).toContain('href="/foundry/roadmap"');
+  it('is reachable from the rail, so it is not a page only a link knows about', async () => {
+    // Listed once under "Everywhere else", which the desk rail and Control both render.
+    const { EVERYWHERE_ELSE } = await import('../../src/views/owner/shell.js');
+    expect(EVERYWHERE_ELSE.map((e) => e.href)).toContain('/foundry/roadmap');
   });
 
   it('adds no door of its own', async () => {
-    // THE DOORS ARE THE V3 CANONICAL SET, AND THE ROADMAP IS NOT ONE OF THEM.
-    // The supplied handoff fixes the owner map at Home, Decisions, Portfolio,
-    // Discover, Experiments, Inbox, Activity, Economics, Controls and Ask; on
-    // a phone the hashed owner script narrows that by context rather than by
-    // position. The Roadmap stays in "Also here" beside the Workshop and the
-    // absence test: it is one tap from Home, not a place under the thumb.
-    // THE DOORS NAME A PLACE AND THE PLACE KNOWS ITS OWN ADDRESS. The rail
-    // used to carry nine typed strings; they live in `owner/labels.ts` now, so
-    // the rail and the More sheet cannot drift apart. The claim is unchanged:
-    // exactly these nine, in this order, and the Roadmap is not among them.
+    // THE DOORS ARE THE FOUR OF MISSION CONTROL (30 September 2026), AND THE
+    // ROADMAP IS NOT ONE OF THEM. It is a depth, listed under "Everywhere
+    // else": one tap from Control, not a place under the thumb.
     const { ADDRESSES } = await import('../../src/views/owner/labels.js');
-    const shell = readFileSync(resolve(ROOT, 'src/views/owner/shell.ts'), 'utf8');
-    const doors = [...shell.matchAll(/\$\{door\(ADDRESSES\.(\w+)/g)]
-      .map((m) => ADDRESSES[m[1] as keyof typeof ADDRESSES]);
-    expect(doors).toEqual([
-      '/foundry', '/foundry/decisions', '/foundry/companies', '/foundry/searching',
-      '/foundry/experiments', '/foundry/inbox', '/foundry/activity', '/foundry/money',
-      '/foundry/controls',
-    ]);
+    const { DOORS } = await import('../../src/views/owner/shell.js');
+    const doors = DOORS.map((d) => ADDRESSES[d]);
+    expect(doors).toEqual(['/foundry', '/foundry/missions', '/foundry/needs-you', '/foundry/controls']);
     expect(doors).not.toContain('/foundry/roadmap');
   });
 });

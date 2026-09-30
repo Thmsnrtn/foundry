@@ -2989,3 +2989,38 @@ refusing the same writes with the same words. One file: 7.8s to 4.3s.
 
 Home's one thing, when a buyer is owed something Foundry cannot carry alone: the sentence, the amount, the payment reference, since when, what only he can do (a refund with money tools off, a dispute only he can answer, a purchase reported after the acts lapsed) and what happens if he does nothing. Economics lists "Owed to buyers" under the subtraction; the test's page carries the same sentence; the queue carries it as "somebody owed something". Controls' Money card leads with today's binding ceiling and why, lists the others as also standing, and calls the monthly budget a note. The Ask answer to "what are you allowed to spend" says today's bound in the same words. The charter page says what also stands beside the charter's rate.
 
+
+## Mission Control: four doors, a composer, and the Mission (30 September 2026)
+
+**The owner's directive.** Foundry is to become a personal company OS. The owner says what they want and sets limits, Foundry does the work, and the owner is asked for judgment only when it is needed. It has four surfaces (TODAY, MISSIONS, NEEDS YOU, CONTROL) and a composer on every page. The test is: *is this making the owner operate Foundry, or making Foundry operate for the owner?*
+
+**What the re-audit of `34d412c7` found already built, under other names.**
+
+| Directive | Already in code | What was missing |
+|---|---|---|
+| Composer | `#ask-foundry` → `POST /foundry/ask` → `whichDoor`. It is deterministic, shows "You said… / What I will do", and the confirm step re-reads the sentence server-side | One shared shape for what it understood; honouring the page's scope; a record of what was shown and confirmed; it was hidden on a phone; no ⌘K |
+| Needs you | `waitingOn()` (`founder/attention.ts`), ranked by `whatNeedsHim` | One place for it: it was split over Home, Decisions and Inbox. Mail needing the owner was left out. It did not answer "why now / the most it can cost / if you do nothing" |
+| Mission | The search (`venture_mandates`), tests (`venture_experiments`), work for a company (`undertakings`), trading research (`capital_research_theses`) | A common parent. A budget and time limit on the Mission itself. Anything rolled up across the work |
+| Authority | `authority.ts` (watch / propose / carry), rungs, charter, allowances, boundaries, consents | Words the owner uses (Observe / Assist / Operate); a Stop for the whole estate; steering shown apart from authority |
+| Interruption | `ux/interruption.ts`: log < letter < notification < push | A link between those channels and what needs the owner |
+| Absence | `canIDisappear`, `whileYouWereAway`, `whatChangedSince` | A way to say "I'm away"; a return summary that appears unasked |
+
+**The ruling that keeps this inside the Constitution: a Mission grants nothing.** Its budget and authority are ceilings *inside* what the charter, allowances, boundaries and consents already allow. It is a thread through rows, and its status is derived, never stored. So it is not the "new governance subsystem" that EXECUTIVE_REVIEW C-1 refuses. EXPERIENCE.md's primary architecture is amended accordingly.
+
+**M2, landed in this commit.**
+- **The four doors.** Phone and desk show the same four: Today, Missions, Needs you, Control.
+  - The More sheet is gone. Every other place is a depth that lights the door it stands under (`DOOR_OF` in `views/owner/shell.ts`) and is listed once under "Everywhere else", on Control and in the desk rail.
+  - `/foundry/decisions` answers **308 → `/foundry/needs-you`**, keeping its query.
+  - **Control stays at `/foundry/controls`**, a deliberate deviation from the plan. Forty-odd addresses (connectors, the charter, appearance) live beneath it, and moving only the root would split one tree across two prefixes.
+- **The composer is docked above the bar on a phone**, instead of hidden behind an Ask button.
+- **Touch targets.** The appearance switch, `.seg` and the settings index now reach 44px.
+- **Missions.** `/foundry/missions` and `/foundry/missions/:key` read the existing work as Missions (`services/mission/read.ts`). It writes nothing; it stores no status; it has no POST route.
+- **Components.** `views/owner/components.ts` is the first shared set: status pill, Mission card, teaching empty state, facts, section head.
+
+**Evidence and proof debt.** The structure is proven by `four-doors-and-a-composer` and `missions-are-read-from-the-work` (E2). The phone geometry is proven again by the browser tests. Still owed:
+- owner-created Missions (a table, migration 370);
+- the intent compiler;
+- the six answers on Needs you;
+- modes, and the estate-wide Stop;
+- the Today composition;
+- the owner using it on a phone for a day.
