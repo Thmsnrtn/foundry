@@ -214,7 +214,7 @@ settingsRoutes.get('/settings', async (c) => {
         <li class="ev-item">
           <span class="mark" aria-hidden="true">${mark('changed')}</span>
           <span class="body"><span class="t">Pause</span>
-            <span class="s">Suspend all agent activity and data ingestion. Your data is
+            <span class="s">Stop all of Foundry's work on it and stop taking in data. Your data is
               preserved.</span></span>
           <form method="POST" action="/settings/toggle-product-status">
             <input type="hidden" name="product_id" value="${productId}" />
@@ -311,11 +311,11 @@ settingsRoutes.get('/settings', async (c) => {
       <div class="row" style="justify-content:space-between;flex-wrap:nowrap;gap:var(--s3);">
         <div>
           <div style="font-weight:500;">Weekend pace</div>
-          <div style="font-size:0.85rem;color:var(--ink-2);">This is a side project — run the agents weekly, not daily</div>
+          <div style="font-size:0.85rem;color:var(--ink-2);">This is a side project: Foundry works through it weekly, not daily</div>
         </div>
         <form method="POST" action="/settings/cadence-mode" style="display:flex;align-items:center;">
           <input type="hidden" name="mode" value="${weekendMode ? 'standard' : 'weekend'}" />
-          <label class="toggle" title="${weekendMode ? 'Back to the standard pace' : 'Slow every agent to weekly'}">
+          <label class="toggle" title="${weekendMode ? 'Back to the standard pace' : 'Slow Foundry to weekly'}">
             <input type="checkbox" ${weekendMode ? 'checked' : ''} data-submits />
             <span class="toggle-track"></span>
             <span class="toggle-thumb"></span>
@@ -339,7 +339,7 @@ settingsRoutes.get('/settings', async (c) => {
       <details class="fold"><summary><h3 id="metric-ingest">Metric Ingest</h3>
         <span class="gist">${ingestToken ? 'URL set' : 'None yet'}</span></summary>
       <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
-        A secret URL your tools can POST to — Stripe webhooks, Zapier, cron jobs, or your own pipeline.
+        A private address your tools can send numbers to: Stripe, Zapier, a scheduled job, or your own.
         Foundry maps the fields to your metrics and reads them on its next pass.
         No login required; the URL is the secret.
       </p>
@@ -385,7 +385,7 @@ settingsRoutes.get('/settings', async (c) => {
         </p>
       </details>
       <form method="POST" action="/settings/generate-ingest" style="display:inline;">
-        <button type="submit" class="btn btn-ghost btn-sm">Regenerate token</button>
+        <button type="submit" class="btn btn-ghost btn-sm">Make a new address</button>
       </form>
       ` : html`
       <form method="POST" action="/settings/generate-ingest">
@@ -478,7 +478,7 @@ settingsRoutes.get('/settings', async (c) => {
               <strong>${key.label}</strong>
               <code style="font-size:0.72rem;color:var(--text-dim);"> ${key.prefix}…</code>
               <div style="color:var(--text-dim);font-size:0.76rem;">
-                ${key.scopes.join(', ') || 'no scopes'}
+                ${key.scopes.join(', ') || 'may do nothing'}
                 ${key.expiresAt ? html` · expires ${key.expiresAt.slice(0, 10)}` : ''}
                 ${key.lastUsedAt ? html` · last used ${key.lastUsedAt.slice(0, 10)}` : html` · never used`}
               </div>
@@ -508,8 +508,8 @@ settingsRoutes.get('/settings', async (c) => {
         <span class="gist">${apiKeys.length === 0 ? 'None live yet'
     : `${String(apiKeys.length)} live`}</span></summary>
       <p style="font-size:0.87rem;color:var(--text-muted);margin-bottom:1rem;">
-        For programs that read and write your data directly — the REST API, the
-        MCP tools, and call-transcript webhooks. A key does exactly what you tick
+        For programs that read and write your data directly: the programming
+        interface, tool servers (MCP), and call-transcript feeds. A key does exactly what you tick
         and nothing else, and every key expires. It is shown once when you issue
         it, because only a hash of it is stored.
       </p>
@@ -529,7 +529,7 @@ settingsRoutes.get('/settings', async (c) => {
           <input type="number" name="days" min="1" max="365" value="90"
             style="width:5rem;font-size:0.82rem;" /> days
         </label>
-        <button type="submit" class="btn go btn-sm">Issue API key</button>
+        <button type="submit" class="btn go btn-sm">Issue the key</button>
       </form>
       </details>
     </div>` : ''}

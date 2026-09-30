@@ -60,7 +60,7 @@ const LABEL_STYLE = 'display:block;font-size:0.75rem;color:var(--text-muted);mar
 
 connectionRoutes.get('/connections', async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'connections', 'Connections', undefined, c);
+  const ctx = await getLayoutContext(founder, 'connections', 'Tool servers', undefined, c);
   if (!ctx.productId) return c.redirect('/foundry');
   const fluency = getFluency(founder);
 
@@ -110,7 +110,7 @@ connectionRoutes.get('/connections', async (c) => {
           <span style="font-size:0.75rem;color:var(--text-muted);margin-left:0.5rem;">${url}</span>
         </div>
         <form method="POST" action="/connections/${s.name}/disconnect"
-          data-confirm="Disconnect ${s.name}? Its grants stop working immediately.">
+          data-confirm="Disconnect ${s.name}? What you allowed it stops working immediately.">
           <button type="submit" class="btn btn-ghost" style="font-size:0.75rem;padding:0.25rem 0.6rem;">Disconnect</button>
         </form>
       </div>
@@ -174,14 +174,14 @@ connectionRoutes.get('/connections', async (c) => {
   });
 
   const content = html`
-    <h1 style="margin-bottom:0.25rem;">Connections</h1>
+    <h1 style="margin-bottom:0.25rem;">Tool servers</h1>
     <p style="color:var(--text-dim);font-size:0.85rem;margin-bottom:1.5rem;max-width:720px;">
-      ${explain('connections', fluency) || 'Connect any MCP server; issue tool-scoped, call-capped, expiring grants. Every call routes the gateway: idempotent, audited, kill-switchable. Reach is never license.'}
+      ${explain('connections', fluency) || 'Connect a tool server (MCP, the open standard for AI tools) and allow one tool at a time, with a limit on calls and an end date. Every use goes through the same checked, recorded path, and you can stop any of it at once. Being able to reach a tool is not permission to use it.'}
     </p>
 
     ${servers.rows.length === 0 ? html`
       <div class="card" style="padding:1.25rem;margin-bottom:1rem;color:var(--text-muted);font-size:0.88rem;">
-        Nothing connected yet. Add your first tool below — anything that speaks MCP works.
+        Nothing connected yet. Add your first tool below: any tool server that follows the open standard (MCP) works.
       </div>` : serverCards}
 
     <div class="card" style="padding:1.1rem 1.25rem;margin-bottom:1.5rem;">
@@ -196,7 +196,7 @@ connectionRoutes.get('/connections', async (c) => {
           <input type="url" name="url" placeholder="https://…" required style="${INPUT_STYLE}" />
         </div>
         <div style="flex:2;min-width:160px;">
-          <label style="${LABEL_STYLE}">Access token (optional)</label>
+          <label style="${LABEL_STYLE}">Password or key for it (optional)</label>
           <input type="password" name="token" placeholder="stored encrypted" style="${INPUT_STYLE}" />
         </div>
         <button type="submit" class="btn btn-primary" style="font-size:0.85rem;">Connect</button>
@@ -227,7 +227,7 @@ connectionRoutes.get('/connections', async (c) => {
 connectionRoutes.post('/connections/add',
   requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'connections', 'Connections', undefined, c);
+  const ctx = await getLayoutContext(founder, 'connections', 'Tool servers', undefined, c);
   if (!ctx.productId) return c.redirect('/foundry');
 
   const body = await c.req.parseBody();
@@ -264,7 +264,7 @@ connectionRoutes.post('/connections/add',
 connectionRoutes.post('/connections/grant',
   requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'connections', 'Connections', undefined, c);
+  const ctx = await getLayoutContext(founder, 'connections', 'Tool servers', undefined, c);
   if (!ctx.productId) return c.redirect('/foundry');
 
   const body = await c.req.parseBody();
@@ -292,7 +292,7 @@ connectionRoutes.post('/connections/grant',
 connectionRoutes.post('/connections/envelope',
   requireCompanyCapability('can_manage_company'), async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'connections', 'Connections', undefined, c);
+  const ctx = await getLayoutContext(founder, 'connections', 'Tool servers', undefined, c);
   if (!ctx.productId) return c.redirect('/foundry');
 
   const body = await c.req.parseBody();
@@ -310,7 +310,7 @@ connectionRoutes.post('/connections/envelope',
 
 connectionRoutes.post('/connections/grants/:id/revoke', async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'connections', 'Connections', undefined, c);
+  const ctx = await getLayoutContext(founder, 'connections', 'Tool servers', undefined, c);
   if (!ctx.productId) return c.redirect('/foundry');
   await revokeGrant(c.req.param('id'), ctx.productId);
   return c.redirect('/connections');
@@ -318,7 +318,7 @@ connectionRoutes.post('/connections/grants/:id/revoke', async (c) => {
 
 connectionRoutes.post('/connections/:name/disconnect', async (c) => {
   const founder = c.get('founder');
-  const ctx = await getLayoutContext(founder, 'connections', 'Connections', undefined, c);
+  const ctx = await getLayoutContext(founder, 'connections', 'Tool servers', undefined, c);
   if (!ctx.productId) return c.redirect('/foundry');
   await query(
     `UPDATE integrations SET status = 'revoked', updated_at = CURRENT_TIMESTAMP

@@ -3093,3 +3093,13 @@ Home's one thing, when a buyer is owed something Foundry cannot carry alone: the
 
 **Proof debt.** Funnel stages screened, promising and parked have no rows yet (V3). The phone Needs-you sheet is a link. Jargon on the four older pages is V1b.
 
+### Institution V1b: the older pages speak plainly (30 September 2026)
+
+**Requirement.** INSTITUTION_MODEL §8 and §11 V1: "jargon purged from `/settings`, `/privacy`, `/connections`, `/onboarding`"; the directive: no jargon, depth behind progressive disclosure.
+
+**What changed.** Words only; no route, form field, column or permission moved. `/connections` is titled "Tool servers" and explained in sentences (the fallback and the `balanced` explainer both). Your data's retention card, export buttons and deletion warning name working notes and downloads, not agent logs and JSON. Account's pace control, pause card, data address and API-key permission labels (`API_SCOPE_LABELS`) describe what the owner's key may do in plain words. Onboarding's promise keeps its meaning in plainer words, and the simulation that holds the page to that promise was moved with it.
+
+**Test.** `the-older-pages-speak-plainly` renders each page, strips markup, code samples and attributes, and refuses a list of machinery words (agents, scopes, principal, gateway, idempotent, kill-switch, grants, residency, REST API, webhooks, OAuth, tenant, "speaks MCP", "MCP server").
+
+**Evidence maturity.** E2. **Proof debt.** The technical fluency still shows technical labels by design; the fold that holds the API keys is still on Account rather than under Advanced.
+

@@ -55,16 +55,16 @@ const establishedFoundry = (companyName: string) => html`
       <div style="font-size:0.85rem;color:var(--text-muted);margin-top:0.5rem;line-height:1.6;">
         Establishing it records three true things and nothing more: that this company is
         Foundry, that you own it, and that Foundry may begin observing itself. It will know
-        very little else until you connect a sense.
+        very little else until you connect a source.
       </div>
       <form method="POST" action="/onboarding/establish" style="margin-top:1rem;">
         <button type="submit" class="btn btn-primary">Establish ${companyName}</button>
       </form>
       <div style="font-size:0.75rem;color:var(--text-dim);margin-top:0.85rem;line-height:1.55;">
-        No agents are started, nothing is audited and no model is called. Connecting the
+        Nothing starts working, nothing is checked and no AI is asked anything. Connecting the
         repository afterwards lets Foundry <em>observe</em> its own software — observing is
-        not permission to change anything, and changing requires a separate, expiring grant
-        you issue in Controls.
+        not permission to change anything, and changing needs a separate permission, with an end date,
+        that you give in Control.
       </div>
     </div>
   </section>`;

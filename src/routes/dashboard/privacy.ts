@@ -303,7 +303,7 @@ privacySettings.get('/privacy', async (c) => {
     <div class="card" style="padding:0;overflow:hidden;margin-bottom:1.5rem;">
       <div style="padding:1rem 1.25rem;border-bottom:1px solid var(--line);background:var(--card-2);">
         <div style="font-size:0.65rem;font-weight:700;letter-spacing:0.1em;text-transform:uppercase;color:var(--text-muted);margin-bottom:0.2rem;">Section 2</div>
-        <h2 style="margin:0;font-size:1rem;font-weight:700;">Data Residency</h2>
+        <h2 style="margin:0;font-size:1rem;font-weight:700;">How long your data is kept</h2>
         <p style="margin:0.25rem 0 0;font-size:0.8rem;color:var(--text-dim);">Choose where your data is stored and how long it is retained.</p>
       </div>
       <div style="padding:1.25rem;">
@@ -341,7 +341,7 @@ privacySettings.get('/privacy', async (c) => {
 
             <div>
               <label style="display:block;font-size:0.8rem;font-weight:600;color:var(--text-primary);margin-bottom:0.5rem;" for="delete_agent_logs_after_days">
-                Agent Log Retention
+                How long Foundry keeps its working notes
               </label>
               <select id="delete_agent_logs_after_days" name="delete_agent_logs_after_days" style="max-width:200px;">
                 ${''}${html([logRetentionSelect] as unknown as TemplateStringsArray)}
@@ -352,12 +352,12 @@ privacySettings.get('/privacy', async (c) => {
                    trail: two of its event types are the record that an erasure
                    happened, and whether that record may be shortened is a legal
                    question, not a dropdown. */ ''}
-              <p style="margin:0.35rem 0 0;font-size:0.75rem;color:var(--text-muted);">Agent-to-agent activity older than this is deleted, if that is sooner than Foundry's own schedule. The audit trail is kept separately — it is what answers &ldquo;why didn't you show me this?&rdquo; — and this setting does not shorten it. Current: ${logRetentionLabel(residency.delete_agent_logs_after_days)}</p>
+              <p style="margin:0.35rem 0 0;font-size:0.75rem;color:var(--text-muted);">Foundry's working notes to itself older than this are deleted, if that is sooner than Foundry's own schedule. The record of what Foundry did is kept separately — it is what answers &ldquo;why didn't you show me this?&rdquo; — and this setting does not shorten it. Current: ${logRetentionLabel(residency.delete_agent_logs_after_days)}</p>
             </div>
 
           </div>
           <div style="margin-top:1.25rem;">
-            <button type="submit" class="btn btn-primary">Save Residency Settings</button>
+            <button type="submit" class="btn btn-primary">Save</button>
           </div>
         </form>
       </div>
@@ -375,10 +375,10 @@ privacySettings.get('/privacy', async (c) => {
         <div style="display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
           <div style="flex:1;min-width:200px;">
             <div style="font-size:0.875rem;font-weight:600;color:var(--text-primary);margin-bottom:0.25rem;">Export Current Product</div>
-            <p style="margin:0;font-size:0.8rem;color:var(--text-dim);line-height:1.5;">Download a complete copy of your current product data — metrics, briefings, decisions, customers, and agent configuration.</p>
+            <p style="margin:0;font-size:0.8rem;color:var(--text-dim);line-height:1.5;">Download a complete copy of your current product data — metrics, briefings, decisions, customers, and how Foundry is set up for it.</p>
           </div>
           <div style="display:flex;gap:0.5rem;flex-shrink:0;flex-wrap:wrap;">
-            <a href="/privacy/export" class="btn btn-ghost" style="white-space:nowrap;" aria-label="Download current product data as JSON">JSON</a>
+            <a href="/privacy/export" class="btn btn-ghost" style="white-space:nowrap;" aria-label="Download current product data as a data file (JSON)">Download</a>
             <a href="/privacy/export?format=csv" class="btn btn-ghost" style="white-space:nowrap;" aria-label="Download current product data as CSV">CSV</a>
           </div>
         </div>
@@ -389,7 +389,7 @@ privacySettings.get('/privacy', async (c) => {
             <p style="margin:0;font-size:0.8rem;color:var(--text-dim);line-height:1.5;">Not a company &mdash; you. Your profile and preferences, how you like to be worked with, your devices and connections, your referrals, and your own activity inside companies you do not own. Credentials are shown as present, never as their value.</p>
           </div>
           <div style="display:flex;gap:0.5rem;flex-shrink:0;flex-wrap:wrap;">
-            <a href="/privacy/export-account" class="btn btn-ghost" style="white-space:nowrap;" aria-label="Download your own account data as JSON">JSON</a>
+            <a href="/privacy/export-account" class="btn btn-ghost" style="white-space:nowrap;" aria-label="Download your own account data as a data file (JSON)">Download</a>
             <a href="/privacy/export-account?format=csv" class="btn btn-ghost" style="white-space:nowrap;" aria-label="Download your own account data as CSV">CSV</a>
           </div>
         </div>
@@ -398,10 +398,10 @@ privacySettings.get('/privacy', async (c) => {
         <div style="border-top:1px solid var(--line);padding-top:1.25rem;display:flex;align-items:flex-start;gap:1rem;flex-wrap:wrap;">
           <div style="flex:1;min-width:200px;">
             <div style="font-size:0.875rem;font-weight:600;color:var(--accent);margin-bottom:0.25rem;">Export All Products (Fleet)</div>
-            <p style="margin:0;font-size:0.8rem;color:var(--text-dim);line-height:1.5;">Download data across all ${ctx.allProducts.length} products in a single file. Includes metrics, briefings, decisions, customers, and agent configuration for every product.</p>
+            <p style="margin:0;font-size:0.8rem;color:var(--text-dim);line-height:1.5;">Download data across all ${ctx.allProducts.length} products in a single file. Includes metrics, briefings, decisions, customers, and how Foundry is set up, for every product.</p>
           </div>
           <div style="display:flex;gap:0.5rem;flex-shrink:0;flex-wrap:wrap;">
-            <a href="/settings/export-all" class="btn btn-ghost" style="white-space:nowrap;" aria-label="Download all products data as JSON">JSON</a>
+            <a href="/settings/export-all" class="btn btn-ghost" style="white-space:nowrap;" aria-label="Download all products data as a data file (JSON)">Download</a>
             <a href="/settings/export-all?format=csv" class="btn btn-ghost" style="white-space:nowrap;" aria-label="Download all products data as CSV">CSV</a>
           </div>
         </div>
@@ -456,7 +456,7 @@ privacySettings.get('/privacy', async (c) => {
       <div style="background:var(--card);border:1px solid var(--bad);border-radius:12px;padding:2rem;">
         <h2 style="margin:0 0 0.75rem;color:var(--bad);font-size:1.1rem;">Delete all data for ${ctx.productName}?</h2>
         <p style="margin:0 0 1rem;font-size:0.875rem;color:var(--text-dim);line-height:1.55;">
-          This will permanently schedule deletion of all data for <strong>${ctx.productName}</strong> including metrics, briefings, decisions, and agent logs.
+          This will permanently schedule deletion of all data for <strong>${ctx.productName}</strong> including metrics, briefings, decisions, and Foundry's working notes.
           You have 30 days to stop it. After that it cannot be undone.
         </p>
         <p style="margin:0 0 1.5rem;font-size:0.8rem;color:var(--text-muted);">

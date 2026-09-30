@@ -46,13 +46,13 @@ export type ApiScope = typeof API_SCOPES[number];
  * assume. */
 export const API_SCOPE_LABELS: Record<ApiScope, { may: string; mayNot: string }> = {
   'agents:read': {
-    may: 'read agents, briefings, experiments, metrics and webhooks',
+    may: 'read what Foundry is set up to do, briefings, experiments, metrics and notification addresses',
     mayNot: 'change any of them',
   },
-  'agents:run': { may: 'run an agent on demand', mayNot: 'change its configuration' },
+  'agents:run': { may: 'ask Foundry to do one of its regular jobs now', mayNot: 'change how that job is set up' },
   'agents:write': {
-    may: 'create and delete webhooks, and use the MCP tools that record or resolve a decision',
-    mayNot: 'grant authority, or reach anything Foundry sends on your behalf',
+    may: 'add and remove notification addresses, and use the tools (MCP) that record or settle a decision',
+    mayNot: 'give Foundry any new permission, or reach anything Foundry sends on your behalf',
   },
   'customers:read': { may: 'read your customer records and their timelines', mayNot: 'change them' },
   'customers:manage': { may: 'create customers and update their health', mayNot: 'delete them' },

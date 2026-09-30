@@ -215,7 +215,7 @@ const EXPLAINERS: Record<string, { plain: string; balanced: string }> = {
   },
   connections: {
     plain: 'Plug in the tools you already use, and decide exactly what Foundry may do with each one — like "send up to 25 emails a month." It can never do more than you allowed, everything it does is written down here, and you can take any permission back instantly.',
-    balanced: 'Connect any MCP server; grants are tool-scoped, call-capped, expiring, revocable. Every call routes the gateway (idempotent, audited, kill-switchable).',
+    balanced: 'Connect a tool server (MCP, the open standard for AI tools) and allow one tool at a time, with a limit on calls and an end date. Every use goes through the same checked, recorded path, and you can stop any of it at once.',
   },
 };
 

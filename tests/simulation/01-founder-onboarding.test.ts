@@ -184,10 +184,11 @@ describe('SCP provisioning during onboarding', () => {
     // founder who had typed a name and a URL had nine agents running against
     // it. Establishment writes three true things and stops: this company is
     // Foundry, you own it, it may begin observing itself. The page says so in
-    // as many words — "No agents are started, nothing is audited and no model
-    // is called" — and a page that says that must be telling the truth.
+    // as many words — "Nothing starts working, nothing is checked and no AI is
+    // asked anything" (plain words since 30 September 2026) — and a page that
+    // says that must be telling the truth.
     expect(onboardingRouteSource).not.toMatch(/ensureProvisioned/);
-    expect(onboardingRouteSource).toMatch(/No agents are started, nothing is audited/);
+    expect(onboardingRouteSource).toMatch(/Nothing starts working, nothing is checked and no AI is asked anything/);
   });
 
   it('provisions one agent for every agent that exists, and no others', () => {
