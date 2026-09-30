@@ -5384,6 +5384,12 @@ function didNotFollow(door: import('../../services/institution/the-door.js').Doo
       ${door.needs} before I can act on it. Say it on that company's page and it will
       stick.</p>`
     : html`<p>I understood you were telling me something, but not what to do about it.</p>`}
+    ${/* A GOAL NO READER KNOWS IS STILL A GOAL. "Build a landing page for the
+         workbook" is nothing the door can place, and it is exactly what a
+         Mission is for: kept in his words, with limits he sets, each step
+         brought to him as a proposal. Offered, never assumed. */ ''}
+    ${door.said ? html`<p><a class="btn go" href="/foundry/missions/new?said=${encodeURIComponent(door.said)}">Make this a Mission</a>
+      <span class="quiet">A goal with limits you set. Starting one grants nothing.</span></p>` : ''}
     <div class="know">
       <h2>What I can act on</h2>
       <ul>

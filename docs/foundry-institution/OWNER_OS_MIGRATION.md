@@ -3042,3 +3042,23 @@ Home's one thing, when a buyer is owed something Foundry cannot carry alone: the
   - The confirm step still re-reads the sentence through each destination's own confirm handler, as it did before. It does not yet check the stored hash, so a changed reading between show and confirm is not yet detected by hash.
   - htmx is deferred to Needs you (M7), where resolving an item in place is the clearest gain.
   - A model-proposed reading is not built. The deterministic readers remain the authority.
+
+### M4–M6: the Mission, stated and limited (30 September 2026)
+
+- **Migration 371** adds three tables, each kept and never edited:
+  - `missions`: a goal the owner states that no engine carries yet, such as a Build or a portfolio goal. Its identity is sealed.
+  - `mission_terms`: the limits put on *any* Mission, whether stated or read from work. They are superseded, never edited, with one live row each.
+  - `mission_events`: what the owner did to a Mission. It is append-only.
+- **A Mission grants nothing, and a test proves it.** No gate that decides whether Foundry may act reads these rows. The gates checked are the outbound gateway, the model client, the charter, standing intent, spending, autopilot, authority and the hand. The write module touches only its own three tables.
+- **A limit is a tripwire.** Past the end date the owner set, or over the budget they set where the spend is known, the Mission becomes *Needs you*. The status says which limit was crossed and asks the owner to stop it or give it more room. Foundry does not act on the limit itself.
+- **Pages:**
+  - `/foundry/missions/new`: state a Mission. The composer offers "Make this a Mission" for any sentence it could not place.
+  - Each Mission's page has a limits form, and Pause, Resume, Mark done and Stop for a stated Mission.
+  - Work read from an engine is stopped by its own Stop, so there is one way to do each thing.
+  - A mistake answers 422 with the owner's values kept, never a redirect that loses them.
+- **Trading** can be stated only as a Simulation. No order table exists. This is the directive's stress test (scenario H).
+- **Build** is labelled honestly: "Foundry can propose, not build, yet."
+- **Proof debt:**
+  - the undertaking → Mission cutover (M11);
+  - linking actions to a stated Mission (M10);
+  - proposals for a Build's steps.

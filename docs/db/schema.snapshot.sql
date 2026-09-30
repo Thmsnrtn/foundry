@@ -2611,6 +2611,37 @@ CREATE TABLE milestone_events (
   seen_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE mission_events (
+  id           TEXT PRIMARY KEY,
+  founder_id   TEXT NOT NULL REFERENCES founders(id),
+  mission_key  TEXT NOT NULL,
+  kind         TEXT NOT NULL CHECK (kind IN ('confirmed','paused','resumed','amended','stopped','concluded','archived')),
+  said         TEXT NOT NULL,
+  at           TEXT NOT NULL DEFAULT (datetime('now'))
+);
+CREATE TABLE mission_terms (
+  id              TEXT PRIMARY KEY,
+  founder_id      TEXT NOT NULL REFERENCES founders(id),
+  mission_key     TEXT NOT NULL,
+  budget_cents    INTEGER CHECK (budget_cents IS NULL OR budget_cents >= 0),
+  until           TEXT,
+  success         TEXT,
+  stop_when       TEXT,
+  interrupt_at    TEXT NOT NULL DEFAULT 'needs_you' CHECK (interrupt_at IN ('silent','today','needs_you','urgent')),
+  said_at         TEXT NOT NULL DEFAULT (datetime('now')),
+  superseded_by   TEXT
+);
+CREATE TABLE missions (
+  id          TEXT PRIMARY KEY,
+  founder_id  TEXT NOT NULL REFERENCES founders(id),
+  product_id  TEXT REFERENCES products(id),
+  asked       TEXT NOT NULL,
+  goal        TEXT NOT NULL,
+  mode        TEXT NOT NULL CHECK (mode IN ('explore','validate','build','operate','optimize','monitor')),
+  realm       TEXT NOT NULL DEFAULT 'real' CHECK (realm IN ('real','paper','simulation')),
+  supersedes  TEXT REFERENCES missions(id),
+  opened_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
 CREATE TABLE network_benchmarks (
   id               TEXT PRIMARY KEY,
   metric           TEXT NOT NULL,
@@ -5336,6 +5367,10 @@ CREATE INDEX idx_metrics_product ON metric_snapshots(product_id);
 CREATE INDEX idx_metrics_product_date ON metric_snapshots(product_id, snapshot_date);
 CREATE INDEX idx_milestones_founder ON milestone_events(founder_id, seen_at);
 CREATE UNIQUE INDEX idx_milestones_unique ON milestone_events(founder_id, product_id, milestone_key);
+CREATE INDEX idx_mission_events_key ON mission_events(founder_id, mission_key, at);
+CREATE INDEX idx_mission_terms_key ON mission_terms(founder_id, mission_key, said_at);
+CREATE UNIQUE INDEX idx_mission_terms_one_live ON mission_terms(founder_id, mission_key) WHERE superseded_by IS NULL;
+CREATE INDEX idx_missions_founder ON missions(founder_id, opened_at);
 CREATE INDEX idx_network_contrib_cell
   ON network_contributions(metric, lifecycle_stage, mrr_bracket);
 CREATE INDEX idx_network_profiles_founder ON network_profiles(founder_id);
@@ -7887,6 +7922,25 @@ BEGIN
   SELECT RAISE(ABORT,'market_unknown:question_required') WHERE trim(NEW.question) = '';
   SELECT RAISE(ABORT,'market_unknown:cannot_arrive_answered')
     WHERE NEW.answered_at IS NOT NULL;
+END;
+CREATE TRIGGER mission_events_are_kept
+BEFORE UPDATE ON mission_events
+BEGIN
+  SELECT RAISE(ABORT, 'mission_events: what the owner did is kept as it was');
+END;
+CREATE TRIGGER mission_is_sealed
+BEFORE UPDATE ON missions
+BEGIN
+  SELECT RAISE(ABORT, 'mission: a stated Mission is kept as it was said; amend its terms instead');
+END;
+CREATE TRIGGER mission_terms_are_superseded_never_edited
+BEFORE UPDATE ON mission_terms
+WHEN NEW.id IS NOT OLD.id OR NEW.founder_id IS NOT OLD.founder_id OR NEW.mission_key IS NOT OLD.mission_key
+  OR NEW.budget_cents IS NOT OLD.budget_cents OR NEW.until IS NOT OLD.until OR NEW.success IS NOT OLD.success
+  OR NEW.stop_when IS NOT OLD.stop_when OR NEW.interrupt_at IS NOT OLD.interrupt_at OR NEW.said_at IS NOT OLD.said_at
+  OR OLD.superseded_by IS NOT NULL
+BEGIN
+  SELECT RAISE(ABORT, 'mission_terms: superseded, never edited');
 END;
 CREATE TRIGGER offer_shape_guard
 BEFORE INSERT ON offer_shapes

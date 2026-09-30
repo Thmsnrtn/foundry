@@ -47,7 +47,7 @@ export const MODE_WORDS: Record<MissionMode, string> = {
 export const REALM_WORDS: Record<MissionRealm, string> = { real: 'Real', paper: 'Paper', simulation: 'Simulation' };
 
 /** Where a Mission's facts live: the one row it is a thread through. */
-export type MissionSource = 'mandate' | 'experiment' | 'undertaking' | 'thesis';
+export type MissionSource = 'mission' | 'mandate' | 'experiment' | 'undertaking' | 'thesis';
 
 export interface Mission {
   /** `source:id` — stable, and names the row. */
@@ -73,6 +73,11 @@ export interface Mission {
   href: string;
   openedAt: string;
   concluded: boolean;
+  /** The limits HE put on it (migration 371), when he has; null means none of his own. */
+  terms: { budgetCents: number | null; until: string | null; success: string | null; stopWhen: string | null;
+    interruptAt: 'silent' | 'today' | 'needs_you' | 'urgent'; saidAt: string } | null;
+  /** What was spent through it, in cents, where the rows can say; null where they cannot. */
+  spentCents: number | null;
 }
 
 const CONCLUDED: ReadonlySet<MissionStatus> = new Set(['succeeded', 'stopped', 'failed', 'archived']);
@@ -118,7 +123,7 @@ export function missionOfExperiment(e: ExperimentView, mandateKey: string | null
               : 'Reading the world each day until it answers.',
     outcome: concluded ? outcomeSentence(e) : null,
     parent: mandateKey, href: `/foundry/experiments/${e.id}`,
-    openedAt: e.timeline[0]?.at ?? '', concluded,
+    openedAt: e.timeline[0]?.at ?? '', concluded, terms: null, spentCents: m.spentCents,
   };
 }
 
@@ -155,7 +160,7 @@ export function missionOfUndertaking(u: Undertaking, latest: string | null): Mis
     next: closed ? null : (latest ?? 'Looking at what the company already shows.'),
     outcome: closed ? (u.closedBecause ?? null) : null,
     parent: null, href: `/foundry/companies/${u.productId}/work`,
-    openedAt: u.openedAt, concluded: closed,
+    openedAt: u.openedAt, concluded: closed, terms: null, spentCents: null,
   };
 }
 
@@ -198,6 +203,7 @@ export async function missionsOf(founderId: string, now: Date = new Date()): Pro
       limits: { budget: budget ? budget.statement : null, until: null, success: null, stop: avoid.length ? avoid.join('; ') : null },
       next: needs ? 'Waiting for your decision on a test.' : 'Looking for candidates, and designing a test for the strongest.',
       outcome: null, parent: null, href: '/foundry/searching', openedAt: mandate.openedAt, concluded: false,
+      terms: null, spentCents: null,
     });
   }
   out.push(...tests);
@@ -225,7 +231,82 @@ export async function missionsOf(founderId: string, now: Date = new Date()): Pro
       next: observing ? 'Sealing a forecast before each window closes, and scoring it after.' : null,
       outcome: observing ? null : String(t.stopped_because ?? ''), parent: null,
       href: '/foundry/money/research', openedAt: String(t.begun_at), concluded: !observing,
+      terms: null, spentCents: 0,
     });
+  }
+
+  // MISSIONS HE STATED (migration 371): goals no engine carries yet. Their
+  // status is his acts, newest first; nothing Foundry does changes it.
+  const acts = new Map<string, Row[]>();
+  for (const e of await rows(
+    `SELECT mission_key, kind, said, at FROM mission_events WHERE founder_id = ? ORDER BY at DESC, rowid DESC`, [founderId])) {
+    const k = String(e.mission_key);
+    acts.set(k, [...(acts.get(k) ?? []), e]);
+  }
+  // The company is joined for its NAME only — the Mission's subject, which he
+  // chose. Reality and standing do not apply: naming a company acts on nothing,
+  // and an invented company's page discloses that it is invented.
+  for (const r of await rows(
+    `SELECT m.id, m.product_id, p.name AS company, m.asked, m.goal, m.mode, m.realm, m.supersedes, m.opened_at
+       FROM missions m LEFT JOIN products p ON p.id = m.product_id
+      WHERE m.founder_id = ? ORDER BY m.opened_at, m.rowid`, [founderId])) {
+    const key = `mission:${String(r.id)}`;
+    const last = (acts.get(key) ?? []).find((a) => String(a.kind) !== 'amended');
+    const lastKind = last ? String(last.kind) : null;
+    const status: MissionStatus = lastKind === null ? 'draft'
+      : lastKind === 'paused' ? 'paused' : lastKind === 'stopped' ? 'stopped'
+        : lastKind === 'concluded' ? 'succeeded' : lastKind === 'archived' ? 'archived'
+          : r.mode === 'build' ? 'waiting' : 'ready';
+    const concluded = isConcluded(status);
+    if (concluded && String(last?.at ?? '') < cutoff.slice(0, 19).replace('T', ' ')) continue;
+    out.push({
+      key, source: 'mission', goal: String(r.goal), mode: String(r.mode) as MissionMode,
+      realm: String(r.realm) as MissionRealm, status, statusWord: STATUS_WORDS[status],
+      statusDetail: status === 'paused' ? 'You paused it. Nothing is done for it until you resume it.'
+        : r.mode === 'build' && !concluded ? 'Foundry can propose, not build, yet: each step comes to you as a proposal.'
+          : concluded ? String(last?.said ?? '') : 'Stated by you; it waits for the first step.',
+      company: r.product_id ? { id: String(r.product_id), name: String(r.company ?? '') } : null,
+      limits: { budget: null, until: null, success: null, stop: null },
+      next: concluded || status === 'paused' ? null
+        : r.mode === 'build' ? 'Bringing you the first step as a proposal, for you to approve or refuse.'
+          : 'Waiting for you, or for an engine that can carry it.',
+      outcome: concluded ? String(last?.said ?? '') : null,
+      parent: r.supersedes ? `mission:${String(r.supersedes)}` : null, href: `/foundry/missions/${encodeURIComponent(key)}`,
+      openedAt: String(r.opened_at), concluded, terms: null, spentCents: null,
+    });
+  }
+
+  // HIS LIMITS, ON ANY MISSION, AND THE TRIPWIRES THEY SET. A limit he wrote
+  // replaces the one the work carries for display, and crossing it makes the
+  // Mission need him — Foundry watches the limit and says so; it does not act
+  // on it, because a Mission grants nothing and stops nothing by itself.
+  const liveTerms = new Map<string, Row>();
+  for (const t of await rows(
+    `SELECT mission_key, budget_cents, until, success, stop_when, interrupt_at, said_at
+       FROM mission_terms WHERE founder_id = ? AND superseded_by IS NULL`, [founderId])) liveTerms.set(String(t.mission_key), t);
+  const today = now.toISOString().slice(0, 10);
+  const dollars = (c: number): string => `$${(c / 100).toFixed(2)}`;
+  for (const m of out) {
+    const t = liveTerms.get(m.key);
+    if (!t) continue;
+    m.terms = {
+      budgetCents: t.budget_cents == null ? null : Number(t.budget_cents), until: t.until == null ? null : String(t.until),
+      success: t.success == null ? null : String(t.success), stopWhen: t.stop_when == null ? null : String(t.stop_when),
+      interruptAt: String(t.interrupt_at) as 'silent' | 'today' | 'needs_you' | 'urgent', saidAt: String(t.said_at),
+    };
+    if (m.terms.budgetCents !== null) m.limits.budget = `${dollars(m.terms.budgetCents)} (your limit)${m.spentCents !== null ? `; ${dollars(m.spentCents)} spent` : ''}`;
+    if (m.terms.until) m.limits.until = m.terms.until;
+    if (m.terms.success) m.limits.success = m.terms.success;
+    if (m.terms.stopWhen) m.limits.stop = m.terms.stopWhen;
+    if (m.concluded || m.status === 'paused') continue;
+    const over = m.terms.budgetCents !== null && m.spentCents !== null && m.spentCents > m.terms.budgetCents;
+    const late = m.terms.until !== null && m.terms.until < today;
+    if (over || late) {
+      m.status = 'needs_you'; m.statusWord = STATUS_WORDS.needs_you;
+      m.statusDetail = over ? `It has spent ${dollars(m.spentCents!)}, past the ${dollars(m.terms.budgetCents!)} you set.`
+        : `It is past the end date you set, ${m.terms.until!}.`;
+      m.next = 'Waiting for you: stop it, or give it more room.';
+    }
   }
 
   const rank: Record<MissionStatus, number> = {

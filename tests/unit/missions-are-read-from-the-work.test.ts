@@ -87,11 +87,11 @@ describe('the trading research', () => {
 });
 
 describe('what a Mission cannot do', () => {
-  it('reads only: the module writes no row', () => {
+  it('reads only: the reader writes no row, and every write on the page is the owner\'s own act', () => {
     const src = readFileSync('src/services/mission/read.ts', 'utf8');
     expect(src).not.toMatch(/\b(INSERT|UPDATE|DELETE|REPLACE)\b/);
     const route = readFileSync('src/routes/dashboard/missions-place.ts', 'utf8');
-    expect(route).not.toMatch(/\.post\(/);
+    for (const m of route.matchAll(/missionRoutes\.post\('([^']+)', ([a-zA-Z]+)\(/g)) expect(m[2], m[1]).toBe('requireInstitutionOwner');
   });
 
   it('never shows another owner\'s work, even by its key', async () => {

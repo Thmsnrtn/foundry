@@ -826,6 +826,9 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
   foundry_cost_lines: { reason: 'a monthly bill the owner stated, with where the number came from', onAccountErasure: { op: 'delete' } },
   owner_identity_rebinds: { reason: 'when their own sign-in moved to a new identity, and between which two', onAccountErasure: { op: 'delete' } },
   owner_intents: { reason: 'what the owner said to the composer, verbatim, and what Foundry understood it as', onAccountErasure: { op: 'delete' } },
+  missions: { reason: 'a goal the owner stated for Foundry to carry, in their words', onAccountErasure: { op: 'delete' } },
+  mission_terms: { reason: 'the limits the owner put on a Mission', onAccountErasure: { op: 'delete' } },
+  mission_events: { reason: 'what the owner did to a Mission: paused, stopped, set its limits', onAccountErasure: { op: 'delete' } },
   capital_forecasts: { reason: 'forecasts sealed under the owner\'s research question', onAccountErasure: { op: 'delete' } },
   capital_paper_fills: { reason: 'simulated fills under the owner\'s research question', onAccountErasure: { op: 'delete' } },
   capital_evaluations: { reason: 'evaluations of the owner\'s research question', onAccountErasure: { op: 'delete' } },
@@ -1867,6 +1870,10 @@ const PERSON_ACROSS_COMPANIES: Record<string, PersonInOthersCompany> = {
   undertakings: {
     op: 'delete', columns: ['founder_id'],
     reason: 'what that person asked of the institution about a company, in their words; their steps go with them',
+  },
+  missions: {
+    op: 'delete', columns: ['founder_id'],
+    reason: 'a goal that person stated for Foundry to carry, in their words, sometimes about a company',
   },
   business_outcome_events: {
     op: 'delete', columns: ['founder_id'],
