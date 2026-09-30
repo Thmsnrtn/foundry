@@ -128,12 +128,14 @@ describe('Home is the Founder Cockpit', () => {
   it('keeps the places without a door reachable on a phone, from Control', async () => {
     // THE MORE SHEET IS GONE (Mission Control, 30 September 2026). Every place
     // that is not one of the four doors is listed once, on Control, from the
-    // same list the desk rail reads.
+    // same list the desk rail reads — and Portfolio, a door since the
+    // long-horizon directive, is not listed as somewhere else.
     const body = await read('/foundry/controls');
     const grid = /<nav class="elsewhere"[\s\S]*?<\/nav>/.exec(body)?.[0] ?? '';
-    for (const href of ['/foundry/searching', '/foundry/public-workshop', '/foundry/roadmap', '/foundry/absence', '/foundry/charter', '/foundry/money', '/foundry/activity', '/foundry/companies', '/letter']) {
+    for (const href of ['/foundry/searching', '/foundry/public-workshop', '/foundry/roadmap', '/foundry/absence', '/foundry/charter', '/foundry/money', '/foundry/activity', '/foundry/needs-you', '/foundry/missions', '/letter']) {
       expect(grid).toContain(`href="${href}"`);
     }
+    expect(grid).not.toContain('href="/foundry/companies"');
   });
 });
 

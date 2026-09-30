@@ -67,7 +67,7 @@ const where = (v: ExperimentView | null, on: 'test' | 'recipients' | 'list' | 'd
     { href: `/foundry/experiments/${v.id}/decide`, label: 'Before you decide', count: null, on: on === 'decide' },
   ] : (on === 'list' || on === 'explore') ? [
     { href: '/foundry/experiments', label: 'Now', count: counts?.now || null, on: on === 'list' },
-    { href: '/foundry/experiments/explore', label: 'Explore', count: counts?.found || null, on: on === 'explore' },
+    { href: '/foundry/experiments/explore', label: 'Found', count: counts?.found || null, on: on === 'explore' },
   ] : [],
   chips: [],
 });

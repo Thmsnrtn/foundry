@@ -91,3 +91,13 @@ export function notNow(key: string): H {
 
 /** Raw re-exported for the few callers that pass trusted SVG. */
 export { raw };
+
+/**
+ * THE FUNNEL, AS COUNTS HE CAN TAP. One row per stage the records can prove,
+ * the number first, what the stage means under it. Reference material a
+ * rehearsal used is said apart and never added into the real count.
+ */
+export function funnel(stages: Array<{ label: string; n: number; reference: number; means: string; href: string }>): H {
+  return html`<ol class="funnel">${stages.map((s) => html`<li><a href="${s.href}"><b>${String(s.n)}</b><span>${s.label}</span>
+    <small>${s.means}${s.reference ? ` (${String(s.reference)} more from reference material, not the real market.)` : ''}</small></a></li>`)}</ol>`;
+}

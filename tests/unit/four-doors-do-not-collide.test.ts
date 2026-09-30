@@ -38,10 +38,17 @@ beforeAll(async () => {
   await runMigrations();
   await query('INSERT INTO founders (id,clerk_user_id,email,name) VALUES (?,?,?,?)', [OWNER, 'clerk_collide', 'owner@example.com', 'Owner']);
   await query(`INSERT INTO products (id,name,owner_id,status,scp_status) VALUES ('collide_p','Private Foundry',?,'active','active')`, [OWNER]);
+  // SOMETHING WAITS, so the header carries a number to measure, not an empty pill.
+  const { proposeAct, setBoundary } = await import('../../src/services/institution/standing-intent.js');
+  await setBoundary({ productId: 'collide_p', subject: 'set_prices', mode: 'ask_first', statement: 'Ask me before changing prices' });
+  await proposeAct({ productId: 'collide_p', subject: 'set_prices', actionType: null, params: { price: 49 },
+    summary: 'Raise the price to $49', why: 'Buyers asked', expectedEffect: 'More per sale', risk: 'Fewer sales',
+    consequence: 'low', proposedBy: 'institution:test' });
   const founder = (await query('SELECT * FROM founders WHERE id = ?', [OWNER])).rows[0] as Record<string, unknown>;
+  const { withViewer } = await import('../../src/views/owner/viewer.js');
   const app = new Hono();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  app.use('*', async (c: any, next) => { c.set('founder', founder); c.set('userId', OWNER); c.set('csrfToken', 't'); await next(); });
+  app.use('*', async (c: any, next) => { c.set('founder', founder); c.set('userId', OWNER); c.set('csrfToken', 't'); await withViewer(OWNER, next); });
   const { letterRoutes } = await import('../../src/routes/dashboard/letter.js');
   app.route('/', letterRoutes);
   const { staticAssetHandler } = await import('../../src/routes/public/static-assets.js');
@@ -55,7 +62,8 @@ afterAll(() => { if (stop) stop(); });
 
 interface Door { label: string; left: number; right: number; top: number; bottom: number; clipped: boolean; lit: boolean }
 interface Box { top: number; bottom: number; height: number }
-interface Seen { doors: Door[]; overflowX: number; composer: Box | null; bar: Box | null; elsewhere: Array<{ label: string; height: number }> }
+interface Seen { doors: Door[]; overflowX: number; composer: Box | null; bar: Box | null; elsewhere: Array<{ label: string; height: number }>;
+  needs: { top: number; bottom: number; left: number; right: number; text: string } | null; width: number }
 
 async function measure(width: number, scale: number, path: string): Promise<Seen> {
   const { chromium } = await import('playwright-core');
@@ -76,7 +84,10 @@ async function measure(width: number, scale: number, path: string): Promise<Seen
       const box = (e: Element | null) => { if (!e || !visible(e)) return null; const r = e.getBoundingClientRect(); return { top: r.top, bottom: r.bottom, height: r.height }; };
       const elsewhere = [...document.querySelectorAll('nav.elsewhere a')].filter(visible)
         .map((a) => ({ label: (a.textContent ?? '').trim(), height: a.getBoundingClientRect().height }));
-      return { doors, overflowX: de.scrollWidth - de.clientWidth,
+      const pill = [...document.querySelectorAll('a.needs')].find(visible) ?? null;
+      const pr = pill ? pill.getBoundingClientRect() : null;
+      return { doors, overflowX: de.scrollWidth - de.clientWidth, width: de.clientWidth,
+        needs: pill && pr ? { top: pr.top, bottom: pr.bottom, left: pr.left, right: pr.right, text: (pill.textContent ?? '').trim() } : null,
         composer: box(document.querySelector('#ask-foundry .ask-in')), bar: box(document.querySelector('nav.places:not(.company)')), elsewhere };
     });
   } finally { await browser.close(); }
@@ -84,13 +95,13 @@ async function measure(width: number, scale: number, path: string): Promise<Seen
 
 const phones = CHROMIUM ? describe : describe.skip;
 
-const DOORS = ['Today', 'Missions', 'Needs you', 'Control'];
+const DOORS = ['Home', 'Portfolio', 'Explore', 'Control'];
 
 phones('the bar, on the phone he actually holds', () => {
   for (const width of WIDTHS) {
     for (const scale of [1, 2]) {
       it(`at ${String(width)}px and ${String(scale * 100)}% text: four doors, none clipped, none overlapping, all thumb-sized, one lit`, async () => {
-        for (const [path, lit] of [['/foundry', 'Today'], ['/foundry/needs-you', 'Needs you'], ['/foundry/experiments', 'Missions']] as const) {
+        for (const [path, lit] of [['/foundry', 'Home'], ['/foundry/explore', 'Explore'], ['/foundry/experiments', 'Explore'], ['/foundry/money', 'Portfolio']] as const) {
           const seen = await measure(width, scale, path);
           expect(seen.overflowX, `${path} overflow`).toBe(0);
           expect(seen.doors.map((d) => d.label), path).toEqual(DOORS);
@@ -108,6 +119,13 @@ phones('the bar, on the phone he actually holds', () => {
           expect(seen.composer, `${path} composer`).not.toBeNull();
           expect(seen.composer!.height, `${path} composer height`).toBeGreaterThanOrEqual(44);
           expect(seen.composer!.bottom, `${path} composer sits above the bar`).toBeLessThanOrEqual(seen.bar!.top + 0.5);
+          // NEEDS YOU IS IN THE HEADER, not the bar: one pill, visible, a
+          // thumb tall, inside the screen, carrying its number.
+          expect(seen.needs, `${path} needs you`).not.toBeNull();
+          expect(seen.needs!.bottom - seen.needs!.top, `${path} needs you height`).toBeGreaterThanOrEqual(44);
+          expect(seen.needs!.right, `${path} needs you inside the screen`).toBeLessThanOrEqual(seen.width + 0.5);
+          expect(seen.needs!.bottom, `${path} needs you sits above the bar`).toBeLessThanOrEqual(seen.bar!.top);
+          expect(seen.needs!.text, `${path} needs you count`).toMatch(/1$/);
         }
       }, 120_000);
     }

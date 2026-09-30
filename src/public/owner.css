@@ -2634,3 +2634,29 @@ dl.six dt{color:var(--ink-3);font-size:.75rem;letter-spacing:.04em;text-transfor
 dl.six dd{margin:0;color:var(--ink-2)}
 @media (min-width:900px){dl.six{grid-template-columns:minmax(0,11rem) minmax(0,1fr)}dl.six dt{margin-top:0}}
 form.later{display:inline-flex;margin:0 0 0 8px}
+/* NEEDS YOU, A COUNT IN EVERY HEADER (INSTITUTION_MODEL §8). Not a door: a
+   pill beside the appearance switch on a phone, a row under the name on a
+   desk. Lit only when something waits; the number is always printed, so the
+   colour is never the only signal. */
+.brand{flex-wrap:wrap;row-gap:8px}
+.brand-tools{display:inline-flex;align-items:center;gap:8px;margin-left:auto}
+.brand-tools .modes{margin:0}
+a.needs{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 12px;border:1px solid var(--v3-line-strong);
+  border-radius:999px;background:var(--card);color:var(--ink-3);font-size:.8rem;font-weight:600;text-decoration:none;white-space:nowrap}
+a.needs svg{width:17px;height:17px;flex:0 0 auto;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+a.needs b{min-width:1.35rem;height:1.35rem;padding:0 .35rem;border-radius:999px;background:var(--alert);color:var(--bg);font-size:.72rem;display:inline-grid;place-items:center}
+a.needs.hot{color:var(--ink);border-color:var(--alert)}
+a.needs:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+@media (max-width:429px){.brand-copy>small{display:none}}
+@media (max-width:899px){a.needs span{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}}
+.rail-brand{flex-wrap:wrap}
+@media (min-width:900px){nav.places .rail-brand a.rail-needs{flex:1 0 100%;justify-content:flex-start;min-height:36px;margin-top:.6rem;border-radius:8px}}
+/* THE FUNNEL: one thumb-sized row per stage, the count first. */
+ol.funnel{list-style:none;display:grid;gap:8px;margin:0 0 var(--s4);padding:0}
+ol.funnel a{display:grid;grid-template-columns:3.2rem minmax(0,1fr);gap:0 10px;align-items:baseline;min-height:44px;padding:12px 14px;
+  border:1px solid var(--line);border-radius:var(--r);background:var(--card);color:inherit;text-decoration:none}
+ol.funnel a:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+ol.funnel b{grid-row:span 2;font:500 1.6rem/1 var(--serif);color:var(--ink)}
+ol.funnel span{font-weight:600;color:var(--ink)}
+ol.funnel small{color:var(--ink-3);font-size:.82rem}
+@media (min-width:900px){ol.funnel{grid-template-columns:repeat(4,minmax(0,1fr))}}

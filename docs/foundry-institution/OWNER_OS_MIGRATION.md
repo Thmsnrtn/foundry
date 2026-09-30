@@ -3076,3 +3076,20 @@ Home's one thing, when a buyer is owed something Foundry cannot carry alone: the
   - Needs You is not yet a badge on every page. Under the 30 September long-horizon directive it leaves the bar and becomes a global indicator.
   - Snoozes are not yet wired into the interruption ladder.
   - The "if ignored" answers are derived from the item's kind, not from each item's own default path.
+
+### Institution V1a: Home, Portfolio, Explore, Control, and a count on every page (30 September 2026)
+
+**Requirement.** The long-horizon directive's first phase, the human shell (INSTITUTION_MODEL §8, §11 V1): four doors that stay put for years, Needs you as a global indicator rather than a door, and Explore as a door bound to a read model.
+
+**What changed.**
+- `DOORS` is `foundry, companies, explore, controls` (Home, Portfolio, Explore, Control). `DOOR_OF` puts activity under Home; money and the inbox under Portfolio; the search, experiments and All work under Explore; the charter under Control. Needs you and the Letter light nothing.
+- **Needs you in every header.** `views/owner/viewer.ts` is a request-scoped store set where the session's owner row is loaded (`middleware/auth.ts`), beside the appearance store and for the same reason. The shell reads `needsYouCount` once per request; a read that fails, or a request with nobody in scope, shows the pill with no number, never a zero. On a phone it is an icon and a number beside the appearance switch; on a desk a row under the name in the rail.
+- **Explore** (`routes/dashboard/explore-place.ts`, kernel layer) binds to `exploreSummary`: four funnel stages counted from their rows (noticed = `opportunity_seeds`, looked at = `venture_opportunities`, tested = `venture_experiments`, became a company = `products.from_opportunity_id`), reference material said apart and never added in; the work in flight read by `missionsOf`; trading as simulation with no capital at risk; the graveyard with revisit conditions.
+- The Missions list keeps its address as "All work" under Explore; the experiments list's "Explore" tab is now "Found" so one word names one place.
+
+**Tests.** `explore-is-what-foundry-is-looking-at` (counts per stage, reference apart, another owner never counted, writes nothing, the page, the header count). `four-doors-and-a-composer` and the Chromium `four-doors-do-not-collide` (four doors at 375/390/430 and doubled text, the count pill a thumb tall and inside the screen) updated; five structural tests updated to the new doors.
+
+**Evidence maturity.** E2 (tested in process and in a real browser at phone widths); the owner has not yet used it on their phone.
+
+**Proof debt.** Funnel stages screened, promising and parked have no rows yet (V3). The phone Needs-you sheet is a link. Jargon on the four older pages is V1b.
+

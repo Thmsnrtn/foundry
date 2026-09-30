@@ -86,6 +86,7 @@ const NAMES: Record<string, string> = {
   '/foundry/companies': 'portfolio',
   '/foundry/companies/:id': 'company',
   '/foundry/experiments': 'experiments',
+  '/foundry/explore': 'explore',
   '/foundry/needs-you': 'decisions',
   '/foundry/inbox': 'inbox',
   '/foundry/money': 'money',

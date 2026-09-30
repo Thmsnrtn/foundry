@@ -220,9 +220,9 @@ describe('places he can walk to', () => {
     const body = await get('/foundry');
     expect(body).toContain('/foundry/companies');
     expect(body).toContain('/foundry/controls');
-    // Mission Control (30 September 2026): Today, Missions, Needs you,
-    // Control. The tab carries an icon, so the word follows the glyph.
-    for (const word of ['Today', 'Missions', 'Needs you', 'Control']) expect(body).toContain(`${word}</a>`);
+    // The long-horizon directive (30 September 2026): Home, Portfolio,
+    // Explore, Control. The tab carries an icon, so the word follows the glyph.
+    for (const word of ['Home', 'Portfolio', 'Explore', 'Control']) expect(body).toContain(`${word}</a>`);
   });
 
   it('lists his companies and offers to add one', async () => {

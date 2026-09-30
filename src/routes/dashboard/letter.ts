@@ -2596,3 +2596,7 @@ letterRoutes.route('/', activityRoutes);
 // it already is — a search, a test, work for a company, the research.
 const { missionRoutes } = await import('./missions-place.js');
 letterRoutes.route('/', missionRoutes);
+// EXPLORE (long-horizon directive, 30 September 2026): one of the four doors,
+// bound to one read model over the search, its tests and the research.
+const { exploreRoutes } = await import('./explore-place.js');
+letterRoutes.route('/', exploreRoutes);

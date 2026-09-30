@@ -264,7 +264,11 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     // us asserting a preference he never expressed.
     const { withAppearance, isAppearance } = await import('../views/owner/appearance.js');
     const chosen = (row as unknown as Record<string, unknown>).appearance;
-    return withAppearance(isAppearance(chosen) ? chosen : null, async () => next());
+    // And WHO the owner is, so every page's header can say what needs them
+    // (views/owner/viewer.ts). The id the session just proved; it decides
+    // which count is shown and nothing else.
+    const { withViewer } = await import('../views/owner/viewer.js');
+    return withAppearance(isAppearance(chosen) ? chosen : null, async () => withViewer(founder.id, async () => next()));
   } catch {
     if (isBrowserRequest(accept)) {
       return c.redirect('/auth/login');

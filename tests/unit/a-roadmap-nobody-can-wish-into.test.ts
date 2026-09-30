@@ -120,13 +120,13 @@ describe('it is one of the places, drawn by the one shell', () => {
   });
 
   it('adds no door of its own', async () => {
-    // THE DOORS ARE THE FOUR OF MISSION CONTROL (30 September 2026), AND THE
-    // ROADMAP IS NOT ONE OF THEM. It is a depth, listed under "Everywhere
+    // THE DOORS ARE HOME, PORTFOLIO, EXPLORE AND CONTROL (30 September 2026),
+    // AND THE ROADMAP IS NOT ONE OF THEM. It is a depth, listed under "Everywhere
     // else": one tap from Control, not a place under the thumb.
     const { ADDRESSES } = await import('../../src/views/owner/labels.js');
     const { DOORS } = await import('../../src/views/owner/shell.js');
     const doors = DOORS.map((d) => ADDRESSES[d]);
-    expect(doors).toEqual(['/foundry', '/foundry/missions', '/foundry/needs-you', '/foundry/controls']);
+    expect(doors).toEqual(['/foundry', '/foundry/companies', '/foundry/explore', '/foundry/controls']);
     expect(doors).not.toContain('/foundry/roadmap');
   });
 });

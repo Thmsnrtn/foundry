@@ -1,7 +1,8 @@
 // =============================================================================
 // FOUNDRY — Missions: the work Foundry is carrying, as the owner watches it.
 //
-// A door, not a dashboard. Each card is one Mission — a search, a test, work
+// "All work", under Explore (INSTITUTION_MODEL §8): every piece of work in
+// flight, in one list, a tap below the Explore door. Each card is one Mission — a search, a test, work
 // taken on for a company, a piece of research — read by `services/mission`
 // from the row it is. The page holds no state and no controls of its own: to
 // stop a test is still the test's own Stop, reached from the Mission, so there
@@ -31,7 +32,8 @@ async function founderOf(c: any): Promise<string | null> {
 
 const frame = (m: Mission | null): Where => ({
   eyebrow: LABELS.missions,
-  crumbs: [{ href: ADDRESSES.foundry, label: 'Foundry' }, { href: ADDRESSES.missions, label: LABELS.missions },
+  crumbs: [{ href: ADDRESSES.foundry, label: 'Foundry' }, { href: ADDRESSES.explore, label: LABELS.explore },
+    { href: ADDRESSES.missions, label: LABELS.missions },
     ...(m ? [{ href: `/foundry/missions/${encodeURIComponent(m.key)}`, label: m.statusWord }] : [])],
   scope: { kind: 'foundry', id: null, name: LABELS.missions },
   local: [], chips: [],

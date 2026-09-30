@@ -19,11 +19,13 @@ import type { Place } from './shell.js';
 
 /** The one name of each place, as the owner reads it. */
 export const LABELS: Record<Place, string> = {
-  // FOUR DOORS (Mission Control, 30 September 2026): Today, Missions, Needs
-  // you, Control. The keys are the places' old names so no screen changed its
-  // identity; only the words the owner reads did.
-  foundry: 'Today',
-  missions: 'Missions',
+  // FOUR DOORS (long-horizon directive, 30 September 2026): Home, Portfolio,
+  // Explore, Control. The keys are the places' old names so no screen changed
+  // its identity; only the words the owner reads did. Needs you is a count in
+  // every header, and the Missions list is "All work", under Explore.
+  foundry: 'Home',
+  explore: 'Explore',
+  missions: 'All work',
   decisions: 'Needs you',
   companies: 'Portfolio',
   // SEARCHING, everywhere. "Discover" was a product word for a thing the owner
@@ -41,6 +43,7 @@ export const LABELS: Record<Place, string> = {
 /** The address each place answers at. */
 export const ADDRESSES: Record<Place, string> = {
   foundry: '/foundry',
+  explore: '/foundry/explore',
   missions: '/foundry/missions',
   // Decisions answered here until 30 September 2026; that address now
   // redirects, permanently, to this one.

@@ -146,11 +146,19 @@ describe('a button cannot be wider than what contains it', () => {
     //   pill never pushes past the card; and the card says the same fact in
     //   its sentence underneath, so the pill is never the only place it is said.
     //
+    //   NEEDS YOU IS A COUNT IN THE HEADER. `a.needs` is an icon, a number
+    //   and, on a desk, two words; on a phone the words are hidden and the
+    //   pill is the icon and the number, sitting in `.brand-tools` inside a
+    //   header that wraps (`.brand` is flex-wrap), so the pill drops to its
+    //   own line rather than pushing past the screen. Its aria-label says the
+    //   same fact in a sentence. The browser test measures it at 375px and at
+    //   doubled text (four-doors-do-not-collide).
+    //
     // Anything else added to this list needs one of those sentences.
     const named = [...phoneOnly(css()).matchAll(/(?:^|\n)([^\n{]*)\{[^}]*white-space:\s*nowrap/g)]
       .map((m) => m[1].trim())
       .filter((s) => !s.startsWith('@'));
     expect(named.sort()).toEqual(['.ev-sec a', '.ev-tag', '.filters a', '.local a',
-      '.mline dd', '.sr', '.status', 'nav.places a'].sort());
+      '.mline dd', '.sr', '.status', 'a.needs', 'nav.places a'].sort());
   });
 });

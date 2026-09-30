@@ -86,6 +86,10 @@ beforeAll(async () => {
   app.route('/', foundryShellRoutes);
   app.route('/', placeRoutes);
   app.route('/', letterRoutes);
+  // Account and Your data are listed under "Everywhere else" on every page;
+  // production mounts them beside the Letter's router, and so does this.
+  app.route('/', (await import('../../src/routes/dashboard/settings.js')).settingsRoutes);
+  app.route('/', (await import('../../src/routes/dashboard/privacy.js')).privacySettings);
 
   // A real company he named, with numbers that fell, so it has a situation and
   // advice about it; a sense so it has customers; a responsibility so Foundry

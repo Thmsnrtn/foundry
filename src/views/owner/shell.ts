@@ -8,13 +8,16 @@
 // the doors — and the stylesheet at /static/owner.css that every consumer
 // shares and a browser caches once.
 //
-// FOUR DOORS, AND A COMPOSER THAT IS NOT ONE (Mission Control, 30 September
-// 2026). Today, Missions, Needs you, Control — the same four on a phone and on
-// a desk. Every other place is a depth beneath one of them: it lights its
-// parent door, is listed under "Everywhere else" on Control and in the desk
-// rail, and is one search away in the palette. The composer sits on every page,
-// docked above the bar on a phone and at the top of the page on a desk; it
-// takes no door, because saying what you want is not a place you go.
+// FOUR DOORS, A COUNT AND A COMPOSER (long-horizon directive, 30 September
+// 2026; INSTITUTION_MODEL §8). Home, Portfolio, Explore, Control — the same
+// four on a phone and on a desk, meant to stay put for years. Every other
+// place is a depth beneath one of them: it lights its parent door and is
+// listed under "Everywhere else" on Control and in the desk rail. Needs you is
+// not a place the owner goes but a count every page carries in its header. The
+// composer sits on every page, docked above the bar on a phone and at the top
+// of the page on a desk; it takes no door, because saying what you want is
+// not a place you go. (The morning's Today / Missions / Needs you / Control
+// bar, 46d2417c, was the step before this one.)
 //
 // MONEY SHIPPED AND IS STILL NOT A DOOR. This note used to say Economics would
 // get one when its surface existed. The surface exists — /foundry/money, the
@@ -34,6 +37,7 @@ import { OWNER_STYLESHEET } from '../../lib/owner-stylesheet.js';
 import type { HtmlEscapedString } from 'hono/utils/html';
 import type { CompanyPlace, DimensionKey } from '../../services/founder/place.js';
 import { OWNER_SURFACE_SCRIPT } from '../../lib/owner-surface-script.js';
+import { needsYouNow } from './viewer.js';
 
 /** Which door is lit. `foundry` is Home; `companies` is Portfolio. */
 /**
@@ -45,24 +49,25 @@ import { OWNER_SURFACE_SCRIPT } from '../../lib/owner-surface-script.js';
  * matches no key in the rail, so nothing lights, and the footer that points at
  * it is suppressed there rather than linking a page to itself.
  */
-export type Place = 'foundry' | 'missions' | 'decisions' | 'companies' | 'discover' | 'experiments' | 'inbox'
+export type Place = 'foundry' | 'explore' | 'missions' | 'decisions' | 'companies' | 'discover' | 'experiments' | 'inbox'
   | 'activity' | 'money' | 'controls' | 'advanced';
 
 /** The four doors, in their order. */
-export const DOORS: ReadonlyArray<Place> = ['foundry', 'missions', 'decisions', 'controls'];
+export const DOORS: ReadonlyArray<Place> = ['foundry', 'companies', 'explore', 'controls'];
 
 /**
- * WHICH DOOR A DEPTH STANDS UNDER. A company is reached from Today; an
- * experiment or the search is part of a Mission; mail that needs the owner is
- * something that needs him; money and the charter are limits he sets. The
- * Letter is beneath everything and lights nothing.
+ * WHICH DOOR A DEPTH STANDS UNDER. What happened since the owner last looked
+ * is Home's; what they own and what it earns — its money, its mail — is the
+ * Portfolio's; the search, each test and all the work in flight are
+ * Explore's; the charter and the limits are Control's. Needs you is a count,
+ * not a door, and the Letter is beneath everything: neither lights anything.
  */
 export const DOOR_OF: Record<Place, Place | null> = {
-  foundry: 'foundry', companies: 'foundry', activity: 'foundry',
-  missions: 'missions', experiments: 'missions', discover: 'missions',
-  decisions: 'decisions', inbox: 'decisions',
-  controls: 'controls', money: 'controls',
-  advanced: null,
+  foundry: 'foundry', activity: 'foundry',
+  companies: 'companies', money: 'companies', inbox: 'companies',
+  explore: 'explore', missions: 'explore', experiments: 'explore', discover: 'explore',
+  controls: 'controls',
+  decisions: null, advanced: null,
 };
 
 type H = HtmlEscapedString | Promise<HtmlEscapedString>;
@@ -160,7 +165,8 @@ function railExtra(where: Where | null): H {
  * the one address that place answers at.
  */
 export const EVERYWHERE_ELSE: ReadonlyArray<{ href: string; label: string; icon: string }> = [
-  { href: '/foundry/companies', label: 'Your companies', icon: '<svg viewBox="0 0 24 24"><path d="M3 17c3-4 6 0 9-3s6 1 9-3"/><path d="M3 12c3-4 6 0 9-3s6 1 9-3"/></svg>' },
+  { href: '/foundry/needs-you', label: 'Needs you', icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v5.5M12 16.5h.01"/></svg>' },
+  { href: '/foundry/missions', label: 'All work', icon: '<svg viewBox="0 0 24 24"><path d="M5 21V4"/><path d="M5 4h11l-2 4 2 4H5"/></svg>' },
   { href: '/foundry/experiments', label: 'Experiments', icon: '<svg viewBox="0 0 24 24"><path d="M9 3h6M10 3v6L4 19h16l-6-10V3"/></svg>' },
   { href: '/foundry/searching', label: 'Searching', icon: '<svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4M11 8v6M8 11h6"/></svg>' },
   { href: '/foundry/money', label: 'Economics', icon: '<svg viewBox="0 0 24 24"><rect x="4" y="6" width="16" height="12" rx="2"/><path d="M8 10h8M8 14h5"/></svg>' },
@@ -170,6 +176,8 @@ export const EVERYWHERE_ELSE: ReadonlyArray<{ href: string; label: string; icon:
   { href: '/foundry/public-workshop', label: 'Workshop', icon: '<svg viewBox="0 0 24 24"><path d="M3 11 21 3l-6 18-3-8z"/></svg>' },
   { href: '/foundry/roadmap', label: 'Roadmap', icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 7v5l3 2"/></svg>' },
   { href: '/foundry/absence', label: 'Absence test', icon: '<svg viewBox="0 0 24 24"><path d="M2 12s4-7 10-7 10 7 10 7-4 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>' },
+  { href: '/settings', label: 'Account', icon: '<svg viewBox="0 0 24 24"><circle cx="12" cy="8" r="3.5"/><path d="M5 20c0-3.5 3-6 7-6s7 2.5 7 6"/></svg>' },
+  { href: '/privacy', label: 'Your data', icon: '<svg viewBox="0 0 24 24"><path d="M12 3 5 6v5c0 4.5 3 8 7 10 4-2 7-5.5 7-10V6z"/></svg>' },
   { href: '/letter', label: 'Advanced', icon: '<svg viewBox="0 0 24 24"><path d="M4 7h16v11H4z"/><path d="M9 7V5h6v2M4 12h16"/></svg>' },
 ];
 
@@ -339,8 +347,21 @@ export const ICONS = {
 };
 
 const DOOR_ICON: Record<string, string> = {
-  foundry: ICONS.today, missions: ICONS.missions, decisions: ICONS.needs, controls: ICONS.controls,
+  foundry: ICONS.home, companies: ICONS.portfolio, explore: ICONS.discover, controls: ICONS.controls,
 };
+
+/**
+ * NEEDS YOU, IN THE HEADER OF EVERY PAGE. A count, not a door: the owner
+ * learns whether anything waits on them wherever they are, and one tap opens
+ * the list.
+ * No count when nobody is in scope or the queue could not be read — never a
+ * zero that was not counted.
+ */
+async function needsIndicator(extra = ''): Promise<HtmlEscapedString> {
+  const n = await needsYouNow();
+  const cls = `needs${n ? ' hot' : ''}${extra ? ` ${extra}` : ''}`;
+  return html`<a class="${cls}" href="${ADDRESSES.decisions}"${n === null ? '' : raw(` aria-label="${n === 0 ? 'Nothing needs you' : `${String(n)} ${n === 1 ? 'thing needs' : 'things need'} you`}"`)}>${raw(ICONS.needs)}<span>${LABELS.decisions}</span>${n ? html`<b>${String(n)}</b>` : ''}</a>` as HtmlEscapedString;
+}
 
 /** One door, lit when the page underfoot stands beneath it. */
 function door(key: Place, lit: Place | null, counts: DoorCounts): H {
@@ -383,7 +404,7 @@ ${theme
 </head>
 <body>
 <main class="wrap" data-place="${active}">
-<div class="brand"><span class="forge-mark" aria-hidden="true">${raw(SUNRISE)}</span><span class="brand-copy"><b>Foundry</b><small>Ideas to income. Privately.</small></span>${modeSwitch(theme)}</div>
+<div class="brand"><span class="forge-mark" aria-hidden="true">${raw(SUNRISE)}</span><span class="brand-copy"><b>Foundry</b><small>Ideas to income. Privately.</small></span><span class="brand-tools">${needsIndicator()}${modeSwitch(theme)}</span></div>
 ${crumbsOf(where)}
 ${body}
 ${active === 'advanced' ? '' : html`<footer><a href="/letter">Advanced — inspect the system</a></footer>`}
@@ -409,7 +430,7 @@ ${/* ONE ENTRANCE. This was a GET to /foundry?q=, which reaches the question
 </main>
 ${companyBar(where)}
 <nav class="places${where && where.scope.kind === 'company' && where.local.length ? ' behind' : ''}" aria-label="Places"><div>
-  <header class="rail-brand"><span class="forge-mark" aria-hidden="true">${raw(SUNRISE)}</span><span><b>Foundry</b><small>Ideas to income. Privately.</small></span></header>
+  <header class="rail-brand"><span class="forge-mark" aria-hidden="true">${raw(SUNRISE)}</span><span><b>Foundry</b><small>Ideas to income. Privately.</small></span>${needsIndicator('rail-needs')}</header>
   ${modeSwitch(theme, 'rail-modes')}
   ${DOORS.map((d) => door(d, lit, counts))}
   ${railExtra(where)}

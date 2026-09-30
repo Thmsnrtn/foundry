@@ -355,11 +355,12 @@ async function main(): Promise<void> {
     '/foundry/activity', '/foundry/activity?kind=authority',
     '/foundry/searching', '/foundry/experiments/next', '/foundry/absence',
     // THE CHARTER, unsigned and recalculated; HISTORY, whole and filtered; and
-    // the four doors' own pages: Missions, and Control, whose "Everywhere
-    // else" grid is how the places that are not doors are reached on a phone.
+    // the doors' own pages: Explore and All work beneath it, and Control, whose
+    // "Everywhere else" grid is how the places that are not doors are reached
+    // on a phone.
     '/foundry/charter', '/foundry/charter?tests_dollars=250&probes=4&thinking_dollars=5&days=90&statement=x',
     '/foundry/experiments/history', '/foundry/experiments/history?state=retired',
-    '/foundry/missions',
+    '/foundry/explore', '/foundry/missions',
     // THE STUDIO AND THE WORKING INBOX. Explore is shelves of folds with a
     // second fold inside each card, which is the deepest nesting on the phone;
     // the inbox rows now carry buttons over a whole-row link, which is where a
@@ -681,7 +682,7 @@ async function main(): Promise<void> {
           ['/foundry/activity', 'activity'],
           [`/foundry/companies/${COMPANY}/understanding/${RESPONSIBILITY}`, 'understanding'],
           ['/foundry/charter', 'charter'], ['/foundry/experiments/history', 'experiments-history'],
-          ['/foundry/missions', 'missions'], ['/foundry/experiments', 'experiments'], ['/foundry/inbox', 'inbox'],
+          ['/foundry/missions', 'missions'], ['/foundry/explore', 'explore-door'], ['/foundry/experiments', 'experiments'], ['/foundry/inbox', 'inbox'],
           ['/foundry/companies', 'portfolio'],
           ['/foundry/experiments/explore', 'explore'], ['/foundry/inbox?show=needs', 'inbox-needs'],
         ] as Array<[string, string]>) {
