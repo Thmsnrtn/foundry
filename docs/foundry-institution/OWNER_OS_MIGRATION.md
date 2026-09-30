@@ -3130,3 +3130,18 @@ Home's one thing, when a buyer is owed something Foundry cannot carry alone: the
 
 **Evidence maturity.** E2. **Proof debt.** Conserve does not yet slow the scheduler or lower test carves (only thinking); "look harder at" and "favour" are shown but not yet weighted in the forge (V3, allocation).
 
+### Institution V3a: a digital product under a hundred dollars (30 September 2026)
+
+**Requirement.** INSTITUTION_MODEL §11 V3, the long-horizon directive's first vertical slice (607): "Find a low-maintenance digital product to test this month, ≤$100."
+
+**Baseline.** The sentence read as one clause — a search with no shape — and the three limits in it were lost: no form, no preference, no budget, no date.
+
+**What changed.**
+- `SHAPES` gains `digital_product` (last, so every more specific form still wins).
+- `readVentureParagraph` follows each clause that opens a search with `constraintsInside(clause)`: the low-maintenance preference the reader already knew (it was only heard when the clause was *not* a search) and an inline budget (`budgetInside`). Both are steering on the new search, absorbed by the existing absorber, and listed on the confirmation in the same plain words the search page uses.
+- `horizonOf` reads the date with the Mandate's own duration reader ("this month" means one date everywhere) and returns the last day given. After the search opens, the date and the amount become `mission_terms` on `mandate:<id>`: the search Mission shows them, and once the day has passed it needs the owner — a tripwire, never a permission.
+
+**Tests.** `a-digital-product-under-a-hundred-dollars`: the reading; the confirmation lists every limit and the due date before anything binds; after yes, the search, its guidance and its Mission terms each hold their part, and no outbound action or experiment exists; in time on the last day, brought back the day after. The fifteen existing reader and door test files pass unchanged.
+
+**Evidence maturity.** E2 (in-process). **Proof debt.** Whether the morning's discovery actually finds and tests a digital product inside $100 is the world's answer, not this commit's; the funnel's screened, promising and parked stages and allocations are still to build (V3b).
+

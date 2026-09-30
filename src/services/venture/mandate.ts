@@ -110,6 +110,10 @@ const SHAPES: Array<[string, string[]]> = [
   ['plugin', ['plugin', 'plug-in', 'extension', 'add-on', 'addon']],
   ['monitoring', ['monitoring', 'alerting', 'alerts', 'watch for changes', 'notify me when']],
   ['acquisition', ['acquisition', 'acquire something', 'buy a business', 'buy an existing']],
+  // A DIGITAL PRODUCT: the form the long-horizon directive's first slice names
+  // ("a low-maintenance digital product to test this month, ≤$100"). Last, so
+  // every more specific form above still wins.
+  ['digital_product', ['digital product', 'digital download', 'downloadable', 'printable', 'digital good']],
 ];
 
 /**
@@ -492,7 +496,49 @@ export function readVentureParagraph(raw: string): VentureReading[] {
     .map((piece) => piece.trim())
     .filter((piece) => piece.length > 0)
     .flatMap(intoClauses)
-    .map(readVentureSentence);
+    .flatMap((clause): VentureReading[] => {
+      const r = readVentureSentence(clause);
+      return r.kind === 'mandate' ? [r, ...constraintsInside(clause)] : [r];
+    });
+}
+
+/**
+ * WHAT A DIRECTION CARRIES INSIDE IT. "Find a low-maintenance digital product
+ * to test this month, ≤$100" is one clause: the search, and two limits the
+ * owner put on it in the same breath. Both were dropped — the clause read as a
+ * search and nothing else. Each is now its own steering reading, with the
+ * owner's words as its statement, so the confirmation lists it and the
+ * absorber holds the new search to it. (The time — "this month" — is the
+ * search's end date; `horizonOf` reads it.)
+ */
+export function constraintsInside(clause: string): GuidanceProposal[] {
+  const t = ` ${clause.toLowerCase().replace(/[’]/g, "'")} `;
+  const out: GuidanceProposal[] = [];
+  const easy = readConstraintInside(t, clause);
+  if (easy) out.push(easy);
+  const amount = budgetInside(clause);
+  if (amount !== null) out.push({ kind: 'guidance', statement: clause, guidance: 'budget', subject: amount, dimension: null });
+  return out;
+}
+
+/** "≤$100", "under $100", "for less than $100", "$100 or less", "a $100 budget": the amount, or null. */
+export function budgetInside(clause: string): string | null {
+  const m = /(?:≤|<=|\bunder|\bbelow|\bless than|\bat most|\bno more than|\bmax(?:imum)?(?: of)?|\bup to|\bwithin|\bbudget of)\s*\$\s?(\d+(?:\.\d{1,2})?)/i.exec(clause)
+    ?? /\$\s?(\d+(?:\.\d{1,2})?)\s*(?:or less|or under|max\b|budget\b|at most)/i.exec(clause);
+  return m ? m[1]! : null;
+}
+
+/**
+ * THE LAST DAY THE OWNER GAVE IT. "This month" → the month's last day; "this
+ * week" → six days on; "until November" → 31 October. Null when the words
+ * carry no time. Read by the one duration reader the Mandate uses (which says
+ * when a statement LAPSES), one day earlier, because a Mission's end date is
+ * the last day it runs and it is brought back the day after.
+ */
+export async function horizonOf(statement: string, now: Date = new Date()): Promise<string | null> {
+  const { durationOf } = await import('../mandate/statements.js');
+  const lapses = durationOf(statement, now).until;
+  return lapses ? new Date(Date.parse(`${lapses}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10) : null;
 }
 
 // ─── the mandate ─────────────────────────────────────────────────────────────

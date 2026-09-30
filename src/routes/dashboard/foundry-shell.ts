@@ -5156,6 +5156,20 @@ async function absorbAndAnswer(
   // it would not do.
   if (result.pointed) return c.redirect('/foundry?done=pointedsearch');
   if (hadMandate && !result.opened) return c.redirect('/foundry?done=alreadylooking');
+  // THE LIMITS THE OWNER PUT ON IT, ON THE SEARCH'S OWN MISSION. "To test this
+  // month, ≤$100": the date and the amount become the Mission's terms — a
+  // tripwire Foundry watches and brings back to the owner, never a permission. The
+  // budget is also steering on the search itself (absorbed above).
+  if (result.opened) {
+    const open = await venture.currentMandate(founderId);
+    const asked = readings.filter((r) => r.kind === 'mandate').map((r) => r.statement).join(' ');
+    const until = open ? await venture.horizonOf(asked) : null;
+    const budget = venture.budgetInside(asked);
+    if (open && (until || budget)) {
+      const { readTerms, setTerms } = await import('../../services/mission/write.js');
+      await setTerms(founderId, `mandate:${open.id}`, readTerms({ until: until ?? '', budget: budget ?? '' }));
+    }
+  }
   if (result.opened) return c.redirect(replaced ? '/foundry?done=replacedsearch' : '/foundry?done=looking');
   if (result.absorbed > 0) return c.redirect('/foundry?done=steeredsearch');
   return c.redirect('/foundry');
@@ -5748,6 +5762,16 @@ async function ventureConfirmation(c: any, founderId: string, said: string): Pro
         ${reading.shape ? `a ${reading.shape.replaceAll('_', '-')} business` : 'something that earns'}
         — not an instruction to build one. Your words become the search itself; every
         constraint in them is held against every candidate.</p>
+      ${await (async () => {
+        // WHAT THE OWNER PUT INSIDE IT, each on its own line: the limits the search
+        // will be held to and the date it is due back, before they say yes.
+        const inside = readings.filter((r): r is Extract<typeof r, { kind: 'guidance' }> => r.kind === 'guidance');
+        const due = await venture.horizonOf(readings.filter((r) => r.kind === 'mandate').map((r) => r.statement).join(' '));
+        return inside.length || due ? html`<ul class="plain" aria-label="What you put inside it">
+          ${inside.map((g) => html`<li>${guidanceInPlainWords(g.guidance, g.subject)}</li>`)}
+          ${due ? html`<li>I will bring it back to you by ${due}, found or not.</li>` : ''}
+        </ul>` : '';
+      })()}
       <ul>
         <li><strong>Every morning</strong> — I look through the eyes, sow what somebody
           actually wrote, bury what a capable source contradicts, and promote only what two
