@@ -93,6 +93,17 @@ describe('the page', () => {
     expect(html).toContain('No capital is at risk');
     expect(html).not.toContain('theirs');
   });
+
+  it('says what the Mandate paused and what it asked Foundry to look harder at', async () => {
+    const { readMandate, stateMandate } = await import('../../src/services/mandate/statements.js');
+    await stateMandate(OWNER, readMandate('No SaaS for now')!, 'direct');
+    await stateMandate(OWNER, readMandate('Focus on digital downloads')!, 'direct');
+    await stateMandate(OWNER, readMandate('Keep trading theoretical')!, 'direct');
+    const html = await (await app.request('/foundry/explore')).text();
+    expect(html).toMatch(/<b>SaaS:<\/b> paused by your Mandate/);
+    expect(html).toMatch(/<b>digital downloads:<\/b> looking harder, because you asked/);
+    expect(html).toContain('You asked for it to stay theoretical, and it does.');
+  });
 });
 
 describe('the count in every header', () => {

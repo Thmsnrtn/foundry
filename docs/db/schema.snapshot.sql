@@ -2475,6 +2475,23 @@ CREATE TABLE lifecycle_state (
   prompt_9_started_at DATETIME,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 , dna_completion_pct INTEGER DEFAULT 0, wisdom_layer_active BOOLEAN DEFAULT FALSE, pending_decisions_count INTEGER DEFAULT 0);
+CREATE TABLE mandate_statements (
+  id             TEXT PRIMARY KEY,
+  founder_id     TEXT NOT NULL REFERENCES founders(id),
+  dimension      TEXT NOT NULL CHECK (dimension IN
+                   ('interest','avoid','optimize','experiment_style','involvement','risk','allocation','posture')),
+  subject        TEXT NOT NULL CHECK (length(subject) BETWEEN 1 AND 60 AND subject = lower(subject)),
+  value_json     TEXT NOT NULL DEFAULT '{}',
+  scope_kind     TEXT NOT NULL DEFAULT 'portfolio' CHECK (scope_kind IN ('portfolio','domain','asset','mission')),
+  scope_ref      TEXT,
+  statement      TEXT NOT NULL CHECK (length(statement) BETWEEN 1 AND 800),
+  source         TEXT NOT NULL CHECK (source = 'direct' OR source LIKE 'intent:%' OR source LIKE 'undo:%'),
+  until          TEXT,
+  review_at      TEXT,
+  said_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  superseded_by  TEXT,
+  CHECK ((scope_kind = 'portfolio') = (scope_ref IS NULL))
+);
 CREATE TABLE market_claims (
   id             TEXT PRIMARY KEY,
   founder_id     TEXT NOT NULL REFERENCES founders(id),
@@ -5363,6 +5380,7 @@ CREATE INDEX idx_legal_surfaces_live
 CREATE INDEX idx_lifecycle_cond_product ON lifecycle_conditions(product_id);
 CREATE INDEX idx_lifecycle_risk ON lifecycle_state(risk_state);
 CREATE INDEX idx_lifecycle_rules_product ON lifecycle_rules(product_id, enabled);
+CREATE INDEX idx_mandate_statements_live ON mandate_statements(founder_id, superseded_by, said_at);
 CREATE INDEX idx_market_observations_claim ON market_observations(claim_id, bearing);
 CREATE INDEX idx_market_retrievals_founder
   ON market_retrievals(founder_id, retrieved_at DESC);
@@ -7834,6 +7852,16 @@ END;
 CREATE TRIGGER lessons_read_is_as_read
 BEFORE UPDATE ON lessons_read
 BEGIN SELECT RAISE(ABORT, 'lessons_read:read_is_read'); END;
+CREATE TRIGGER mandate_statements_are_superseded_never_edited
+BEFORE UPDATE ON mandate_statements
+WHEN NEW.id IS NOT OLD.id OR NEW.founder_id IS NOT OLD.founder_id OR NEW.dimension IS NOT OLD.dimension
+  OR NEW.subject IS NOT OLD.subject OR NEW.value_json IS NOT OLD.value_json OR NEW.scope_kind IS NOT OLD.scope_kind
+  OR NEW.scope_ref IS NOT OLD.scope_ref OR NEW.statement IS NOT OLD.statement OR NEW.source IS NOT OLD.source
+  OR NEW.until IS NOT OLD.until OR NEW.review_at IS NOT OLD.review_at OR NEW.said_at IS NOT OLD.said_at
+  OR OLD.superseded_by IS NOT NULL OR NEW.superseded_by IS NULL
+BEGIN
+  SELECT RAISE(ABORT, 'mandate_statements: superseded, never edited');
+END;
 CREATE TRIGGER market_claim_guard
 BEFORE INSERT ON market_claims
 BEGIN

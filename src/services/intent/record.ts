@@ -91,3 +91,11 @@ export async function howWellIUnderstand(founderId: string, days = 30): Promise<
     missed,
   };
 }
+
+/** The reading shown with this hash, most recent first — the Mandate's source when a sentence is confirmed. */
+export async function intentShown(founderId: string, hash: string): Promise<string | null> {
+  const r = (await query(
+    `SELECT id FROM owner_intents WHERE founder_id = ? AND reading_hash = ? ORDER BY shown_at DESC, rowid DESC LIMIT 1`,
+    [founderId, hash])).rows[0] as Record<string, unknown> | undefined;
+  return r ? String(r.id) : null;
+}

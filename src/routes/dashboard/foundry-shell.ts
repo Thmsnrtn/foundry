@@ -5265,6 +5265,12 @@ foundryShellRoutes.post('/foundry/ask', requireInstitutionOwner(), async (c: any
   });
   if (said) await recordShown(String(founder.id), proposal).catch(() => undefined);
   if (proposal.kind === 'jump' && proposal.href) return c.redirect(proposal.href);
+  // WHAT HE WANTS ACROSS EVERYTHING (the Mandate): shown with what it replaces
+  // and what it leaves alone, then one tap that re-reads it on the server.
+  if (proposal.destination === 'mandate' && proposal.mandate) {
+    const { mandateConfirmation } = await import('./mandate-place.js');
+    return c.html(await mandateConfirmation(String(founder.id), proposal));
+  }
   if (scoped && ['company', 'posture', 'undertaking'].includes(door.destination)) {
     return c.redirect(`/foundry/companies/${String(scoped.id)}?q=${encodeURIComponent(said)}#answer`);
   }
@@ -7713,6 +7719,8 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
   // painted the page from — never from a second copy that could disagree with
   // what his eyes are already telling him.
   const appearanceNow = currentAppearance();
+  const { mandateCard } = await import('./mandate-place.js');
+  const mandateHtml = await mandateCard(s.ownerId, c.req.query() as Record<string, string | undefined>);
 
   // WHO SET THE LIMIT, NOT JUST WHAT IT IS.
   //
@@ -7806,6 +7814,9 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
   const body = html`
     <h1>${LABELS.controls}</h1>
     <p class="lede">What Foundry may do on its own, what stops it, and the lines you drew.</p>
+    ${/* THE MANDATE FIRST (INSTITUTION_MODEL §9): what the owner wants, before what
+         Foundry may do — steering above authority, and never mixed with it. */ ''}
+    ${mandateHtml}
 
     ${/* THE POSTURE FIRST, THE DETAIL WHEN HE ASKS FOR IT.
          The owner: "concise operating overview first, fuller detail when I

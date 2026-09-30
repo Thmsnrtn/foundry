@@ -19,6 +19,7 @@
 import { query } from '../../db/client.js';
 import { currentMandate, graveyardFor, type Buried } from '../venture/mandate.js';
 import { missionsOf, type Mission } from '../mission/read.js';
+import { mandateOf } from '../mandate/statements.js';
 
 type Row = Record<string, unknown>;
 
@@ -42,6 +43,12 @@ export interface ExploreSummary {
   trading: { observing: number; capitalAtRiskCents: 0 };
   /** Everything in flight, Explore's and the Portfolio's, for "All work". */
   allWork: number;
+  /** What the owner's Mandate says about where to look: areas to look harder at, and areas paused. */
+  mandate: {
+    focus: Array<{ label: string; lasting: string }>;
+    paused: Array<{ label: string; lasting: string }>;
+    tradingTheoretical: boolean;
+  };
 }
 
 const EXPLORING = new Set(['explore', 'validate', 'monitor']);
@@ -57,7 +64,7 @@ async function counted(sql: string, args: unknown[]): Promise<{ real: number; re
 
 /** What Explore shows, read once. Bounded: six queries and the Missions reader. */
 export async function exploreSummary(founderId: string, now: Date = new Date()): Promise<ExploreSummary> {
-  const [mandate, noticed, lookedAt, tested, turned, buried, missions] = await Promise.all([
+  const [mandate, noticed, lookedAt, tested, turned, buried, missions, wants] = await Promise.all([
     currentMandate(founderId),
     counted(`SELECT evidence_mode AS mode, COUNT(*) AS n FROM opportunity_seeds WHERE founder_id = ? GROUP BY evidence_mode`, [founderId]),
     counted(`SELECT evidence_mode AS mode, COUNT(*) AS n FROM venture_opportunities WHERE founder_id = ? GROUP BY evidence_mode`, [founderId]),
@@ -68,7 +75,10 @@ export async function exploreSummary(founderId: string, now: Date = new Date()):
               WHERE founder_id = ? AND verdict = 'rejected' GROUP BY evidence_mode`, [founderId]),
     graveyardFor(founderId, 3),
     missionsOf(founderId, now),
+    mandateOf(founderId, now),
   ]);
+  const lasting = (w: { until: string | null; reviewAt: string | null }): string =>
+    w.until ? `until ${w.until}` : w.reviewAt ? `until you say otherwise; I will ask again ${w.reviewAt}` : 'until you change it';
   // WHAT BECAME A COMPANY: the lineage column a graduation writes. Reality and
   // standing are not filtered here on purpose — a company that is not real
   // still came from a real idea or it did not, and the evidence mode of the
@@ -102,5 +112,10 @@ export async function exploreSummary(founderId: string, now: Date = new Date()):
     work,
     trading: { observing: missions.filter((m) => m.source === 'thesis' && !m.concluded).length, capitalAtRiskCents: 0 },
     allWork: live.length,
+    mandate: {
+      focus: wants.filter((w) => w.dimension === 'interest' && w.scope.kind === 'portfolio').map((w) => ({ label: w.label, lasting: lasting(w) })),
+      paused: wants.filter((w) => w.dimension === 'avoid' && w.scope.kind === 'portfolio').map((w) => ({ label: w.label, lasting: lasting(w) })),
+      tradingTheoretical: wants.some((w) => w.dimension === 'posture' && w.scope.kind === 'domain' && w.scope.ref === 'trading'),
+    },
   };
 }

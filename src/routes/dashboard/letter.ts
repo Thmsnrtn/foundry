@@ -2600,3 +2600,7 @@ letterRoutes.route('/', missionRoutes);
 // bound to one read model over the search, its tests and the research.
 const { exploreRoutes } = await import('./explore-place.js');
 letterRoutes.route('/', exploreRoutes);
+// THE MANDATE (long-horizon directive, 30 September 2026): what the owner
+// wants, confirmed from a sentence or set from Control's own controls.
+const { mandateRoutes } = await import('./mandate-place.js');
+letterRoutes.route('/', mandateRoutes);

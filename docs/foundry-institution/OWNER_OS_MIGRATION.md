@@ -3103,3 +3103,18 @@ Home's one thing, when a buyer is owed something Foundry cannot carry alone: the
 
 **Evidence maturity.** E2. **Proof debt.** The technical fluency still shows technical labels by design; the fold that holds the API keys is still on Account rather than under Advanced.
 
+### Institution V2a: the Mandate, as statements (30 September 2026)
+
+**Requirement.** INSTITUTION_MODEL §3.2 (the one new canonical table), §4 (scope and durability), §7 (UpdateMandate, the state diff), §9 (Control opens with the Mandate); scenario 610, "No SaaS for now".
+
+**What changed.**
+- Migration 373 `mandate_statements` (dimension, subject, value, scope, statement, source, until, review_at; superseded never edited; a withdrawal points at 'withdrawn'). Erasure deletes by `founder_id`.
+- `readMandate` is a phrase table. It runs only on a sentence the door could not place, or one that would otherwise ask "which company?" when said about none, so every reader that binds authority runs first; and it refuses any sentence carrying an act or a rule (never, always, up to, contact, email, send, pay, a dollar figure…).
+- The composer's proposal carries the typed reading in its hash. `/foundry/mandate/confirm` recompiles and binds only on the same hash; a different hash re-shows the reading (409) and a sentence that is not a Mandate binds nothing. The statement's source is the `owner_intents` row that was shown.
+- Control's "What you want" card lists what is in force with how long it lasts, and takes each back; Add writes the same typed statement a sentence would; after any change the card shows before → after, computed from the two rows, with "What Foundry may do, spend or send: unchanged" and Undo (the newer is withdrawn and the older said again, as a new row marked `undo:`).
+- Explore lists what the Mandate paused and what it asked Foundry to look harder at.
+
+**Tests.** `the-mandate-is-what-the-owner-wants` (the reader's readings and refusals; steering never authority; same hash same day; the flow with a forged hash and a rule pushed at the door; supersede, trigger, Undo; a tap equals a sentence; take back; another owner's statement untouched; lapse by date; no gate reads the table; the service writes only its table). `explore-is-what-foundry-is-looking-at` extended.
+
+**Evidence maturity.** E2. **Proof debt.** Nothing yet *acts* on the Mandate: the forge and discovery do not read `avoid`, and Conserve does not lower the thinking ceiling; both are V2b, and both may only narrow. Review dates are shown but not yet brought to Needs you.
+

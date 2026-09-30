@@ -30,6 +30,7 @@
 import { createHash } from 'node:crypto';
 import { whichDoor, type Destination, type Doorway } from '../institution/the-door.js';
 import { interpret } from '../institution/standing-intent.js';
+import { readMandate, type MandateReading } from '../mandate/statements.js';
 
 export type IntentKind =
   | 'question' | 'mission' | 'steer' | 'authority' | 'housekeeping' | 'jump' | 'clarify' | 'unplaceable';
@@ -54,7 +55,9 @@ export interface IntentProposal {
   scope: Scope;
   kind: IntentKind;
   /** The door's own destination, kept so the dispatch is exactly what it was. */
-  destination: Destination | 'jump';
+  destination: Destination | 'jump' | 'mandate';
+  /** What the owner wants, typed, when the sentence was about the Mandate (INSTITUTION_MODEL §7, UpdateMandate). */
+  mandate: MandateReading | null;
   understoodAs: string;
   effects: IntentEffect[];
   /** Nothing binds without the owner seeing it: false only for questions and jumps. */
@@ -119,7 +122,7 @@ function effectsOf(door: Doorway): { kind: IntentKind; effects: IntentEffect[] }
 
 function hashOf(p: Omit<IntentProposal, 'hash'>): string {
   return createHash('sha256')
-    .update(JSON.stringify([p.said, p.scope.kind, p.scope.id, p.kind, p.destination, p.understoodAs, p.effects]))
+    .update(JSON.stringify([p.said, p.scope.kind, p.scope.id, p.kind, p.destination, p.understoodAs, p.effects, p.mandate]))
     .digest('hex').slice(0, 24);
 }
 
@@ -130,16 +133,32 @@ function hashOf(p: Omit<IntentProposal, 'hash'>): string {
  */
 export function compileIntent(raw: string, world: {
   searching: boolean; scope?: Scope; places?: Place[]; companies?: Array<{ id: string; name: string }>;
+  /** The day it is read on, for "for now" and "this month". Defaults to today. */
+  now?: Date;
 }): IntentProposal {
   const said = raw.trim().slice(0, 800);
   const scope: Scope = world.scope ?? { kind: 'none', id: null, name: null };
   const jump = jumpFor(said, world.places ?? [], world.companies ?? []);
   if (jump) {
     const base = { said, scope, kind: 'jump' as const, destination: 'jump' as const,
-      understoodAs: `you want to go to ${jump.label}`, effects: [], needsConfirm: false, href: jump.href, needs: null };
+      understoodAs: `you want to go to ${jump.label}`, effects: [], needsConfirm: false, href: jump.href, needs: null, mandate: null };
     return { ...base, hash: hashOf(base) };
   }
   const door = whichDoor(said, { searching: world.searching });
+  // WHAT THE OWNER WANTS, ACROSS EVERYTHING (the Mandate). Asked only of a
+  // sentence no other reader placed, or one that would otherwise ask "which
+  // company?" when it was said about none — "Spend less this month", "I
+  // prefer low-maintenance businesses". Every reader that binds authority ran
+  // first, and this one refuses anything that sounds like an act or a rule.
+  const unplaced = door.destination === 'unplaceable'
+    || (door.needs === 'which company you mean' && scope.kind !== 'company');
+  const wanted = unplaced ? readMandate(said, world.now ?? new Date()) : null;
+  if (wanted) {
+    const base = { said, scope, kind: 'steer' as const, destination: 'mandate' as const, understoodAs: wanted.understoodAs,
+      effects: [{ class: 'steer' as const, what: wanted.understoodAs, reversible: true }],
+      needsConfirm: true, href: null, needs: null, mandate: wanted };
+    return { ...base, hash: hashOf(base) };
+  }
   const { kind, effects } = effectsOf(door);
   // A SENTENCE SAID ON A COMPANY'S PAGE IS ABOUT THAT COMPANY. The door asks
   // "which company?" for steering, posture and work; the page already said.
@@ -148,7 +167,7 @@ export function compileIntent(raw: string, world: {
   const base = {
     said, scope, kind, destination: door.destination, understoodAs: door.understoodAs, effects,
     needsConfirm: kind !== 'question' && kind !== 'clarify' && kind !== 'unplaceable',
-    href: null, needs,
+    href: null, needs, mandate: null,
   };
   return { ...base, hash: hashOf(base) };
 }

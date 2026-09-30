@@ -2660,3 +2660,13 @@ ol.funnel b{grid-row:span 2;font:500 1.6rem/1 var(--serif);color:var(--ink)}
 ol.funnel span{font-weight:600;color:var(--ink)}
 ol.funnel small{color:var(--ink-3);font-size:.82rem}
 @media (min-width:900px){ol.funnel{grid-template-columns:repeat(4,minmax(0,1fr))}}
+/* THE MANDATE (INSTITUTION_MODEL §9): what the owner wants, first on
+   Control. One row per statement — what, how long, a way to take it back —
+   and the change just made, before → after, with what it left alone. */
+.mandate .diff{border:1px solid var(--accent);border-radius:var(--r);padding:10px 14px;margin:0 0 12px;background:var(--accent-soft)}
+.mandate .diff p{margin:0 0 6px}
+ul.mandate-list{list-style:none;margin:0 0 12px;padding:0;display:grid;gap:8px}
+ul.mandate-list li{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;align-items:center;padding:10px 0;border-top:1px solid var(--line)}
+.mandate-what{color:var(--ink)}
+.mandate-when{grid-column:1;font-size:.82rem}
+ul.mandate-list form{grid-column:2;grid-row:1 / span 2}

@@ -36,6 +36,10 @@ exploreRoutes.get('/foundry/explore', async (c: any) => {
       ${x.work.length ? ` ${String(x.work.length)} piece${x.work.length === 1 ? '' : 's'} of work in flight here.` : ''}</p>
     ${x.search && x.search.avoid.length
       ? html`<p class="quiet">Kept out of the search, because you said so: ${x.search.avoid.join('; ')}.</p>` : ''}
+    ${x.mandate.focus.length || x.mandate.paused.length ? html`<ul class="plain" aria-label="What your Mandate says about where to look">
+      ${x.mandate.focus.map((f) => html`<li><b>${f.label}:</b> looking harder, because you asked <span class="dim">(${f.lasting})</span></li>`)}
+      ${x.mandate.paused.map((f) => html`<li><b>${f.label}:</b> paused by your Mandate <span class="dim">(${f.lasting})</span></li>`)}
+    </ul><p class="quiet"><a href="/foundry/controls#mandate">Change what you want</a></p>` : ''}
 
     ${sectionHead('How far each idea got', 'all time')}
     ${funnel(x.stages)}
@@ -49,7 +53,7 @@ exploreRoutes.get('/foundry/explore', async (c: any) => {
     <p>${x.trading.observing
       ? `${String(x.trading.observing)} research question${x.trading.observing === 1 ? '' : 's'} being watched.`
       : 'No trading research is running.'}
-      No capital is at risk: there is no way for Foundry to place an order. <a href="/foundry/money/research">The research</a></p>
+      No capital is at risk: there is no way for Foundry to place an order.${x.mandate.tradingTheoretical ? ' You asked for it to stay theoretical, and it does.' : ''} <a href="/foundry/money/research">The research</a></p>
 
     ${sectionHead('Turned down, and why', x.turnedDown.n ? String(x.turnedDown.n) : null)}
     ${x.turnedDown.recent.length ? html`<ul class="plain">${x.turnedDown.recent.map((b) => html`<li><b>${b.headline}</b>
