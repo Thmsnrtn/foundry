@@ -1190,6 +1190,31 @@ import { answersFor } from '../../services/needs-you/queue.js';
  * add no capability and hide none, and the count on Decisions is the same
  * number the reading beside it shows.
  */
+/**
+ * WHERE EVERYTHING STANDS (INSTITUTION_MODEL §9, Home). The other doors in a
+ * line each: what is owned and at what stage, what Foundry is looking for,
+ * and what the owner has said they want — read
+ * from the same readers the doors bind to (services/home/summary.ts), so Home
+ * can never disagree with the page one tap away.
+ */
+async function whereEverythingStands(ownerId: string): Promise<HtmlEscapedString> {
+  const { homeSummary } = await import('../../services/home/summary.js');
+  const h = await homeSummary(ownerId);
+  const p = h.portfolio;
+  // An instrument, like Now/Next and the readings strip: state read from the
+  // doors' own readers, drawn as a panel. Needs you is not repeated here; the
+  // header and the tile above already carry that count.
+  return html`<section class="panel stands-panel" aria-label="Where everything stands"><ul class="stands">
+    <li><a href="${ADDRESSES.companies}"><b>${LABELS.companies}</b><span>${p.operating + p.testing === 0 ? 'Nothing yet.'
+      : `${String(p.operating)} in operation · ${String(p.testing)} being tested`}${p.retired ? ` · ${String(p.retired)} retired` : ''}</span></a></li>
+    <li><a href="${ADDRESSES.explore}"><b>${LABELS.explore}</b><span>${h.explore.lookingFor ? `Looking for: ${h.explore.lookingFor}` : 'Not looking for anything new.'}${
+      h.explore.inFlight ? ` · ${String(h.explore.inFlight)} in flight` : ''}${h.explore.paid ? ` · ${String(h.explore.paid)} where a buyer paid` : ''}</span></a></li>
+    <li><a href="/foundry/controls#mandate"><b>What you want</b><span>${h.mandate.statements === 0 ? 'Nothing said yet.'
+      : `${String(h.mandate.statements)} ${h.mandate.statements === 1 ? 'thing' : 'things'} you said`}${h.mandate.paused.length ? ` · paused: ${h.mandate.paused.join(', ')}` : ''}${
+      h.mandate.spendingLessUntil ? ` · spending less until ${h.mandate.spendingLessUntil}` : ''}</span></a></li>
+  </ul></section>` as HtmlEscapedString;
+}
+
 function quickTiles(needsN: number): ReturnType<typeof html> {
   const tile = (href: string, icon: string, label: string, badge = 0, ask = false) => html`
     <a class="qt" href="${href}"${ask ? raw(' data-ask') : ''}>
@@ -1198,7 +1223,7 @@ function quickTiles(needsN: number): ReturnType<typeof html> {
   return html`<nav class="quick" aria-label="Ways in">
     ${tile('#ask-foundry', ICONS.ask, 'Ask Foundry', 0, true)}
     ${tile(ADDRESSES.decisions, ICONS.decisions, LABELS.decisions, needsN)}
-    ${tile(ADDRESSES.discover, ICONS.discover, LABELS.discover)}
+    ${tile(ADDRESSES.explore, ICONS.discover, LABELS.explore)}
     ${tile('/foundry/controls/connectors', CONNECT_ICON, 'Connectors')}
   </nav>`;
 }
@@ -3462,6 +3487,10 @@ foundryShellRoutes.get('/foundry', async (c) => {
       ${activityPanel}
     </div>
     ${nowNext}
+    ${/* WHERE EVERYTHING STANDS comes after the one thing and Now/Next: on a
+         phone the decision must be on the first screen, and this row is the
+         glance that follows it. */ ''}
+    ${key ? '' : await whereEverythingStands(s.ownerId)}
     ${alsoWaiting}
     ${/* SAID ALONGSIDE, NOT INSTEAD OF. Demoting a stopped routine below a
           decision that needs him must not make it disappear: what he is being

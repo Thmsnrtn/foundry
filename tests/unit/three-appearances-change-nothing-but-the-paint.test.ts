@@ -70,6 +70,8 @@ beforeAll(async () => {
   app.route('/', foundryShellRoutes);
   const { placeRoutes } = await import('../../src/routes/dashboard/places.js');
   app.route('/', placeRoutes);
+  // Explore is a door and one of the ways in; production mounts it beside these.
+  app.route('/', (await import('../../src/routes/dashboard/explore-place.js')).exploreRoutes);
 });
 
 describe('the three are the three, everywhere', () => {

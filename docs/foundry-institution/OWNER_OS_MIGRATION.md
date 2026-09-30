@@ -3165,3 +3165,13 @@ Home's one thing, when a buyer is owed something Foundry cannot carry alone: the
 
 **Evidence maturity.** E2. **Proof debt.** Net this month and owner attention per card; the asset page's own header.
 
+### Institution V5: Home says where everything stands (30 September 2026)
+
+**Requirement.** INSTITUTION_MODEL §6 (HomeSummary) and §9 (Home): the thirty-second test — state, then where each part stands, before any case.
+
+**What changed.** `homeSummary` reads four readers in parallel and stores nothing: `stagesOf` (Operating, Testing, Retired), `exploreSummary` (what is looked for, in flight, where a buyer paid), `mandateOf` (statements, what is paused, spending less until), and `needsYou` (the count and one sentence). Home renders the first three as one instrument row after the one thing and Now/Next (on a phone the decision stays on the first screen) — a panel, like Now/Next, so the first-screen line budget treats it as state rather than prose — and does not repeat the Needs-you count the header and the tile already carry. The quick tile that led to Searching now leads to the Explore door.
+
+**Tests.** `home-says-where-everything-stands`: the reader equals each door's own reader; the sentence changes when something needs the owner; Home's row links to exactly Portfolio, Explore and the Mandate card; the Explore tile. The first-screen, north-star and stylesheet tests pass unchanged.
+
+**Evidence maturity.** E2. **Proof debt.** The return surface after an absence, "handled for you", and pinned figures remain; the thirty-second test with the owner on a phone has not been run.
+
