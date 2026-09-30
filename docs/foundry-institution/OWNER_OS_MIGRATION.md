@@ -3145,3 +3145,13 @@ Home's one thing, when a buyer is owed something Foundry cannot carry alone: the
 
 **Evidence maturity.** E2 (in-process). **Proof debt.** Whether the morning's discovery actually finds and tests a digital product inside $100 is the world's answer, not this commit's; the funnel's screened, promising and parked stages and allocations are still to build (V3b).
 
+### Institution V3b: the funnel, stage by stage, from rows (30 September 2026)
+
+**Requirement.** INSTITUTION_MODEL §5.10: observed → screened → investigated → tested → promising → graduated, with killed and parked alongside; every stage count derived from the rows.
+
+**What changed.** `exploreSummary` reads six stages and two side counts, each a COUNT over the row that is the fact: `opportunity_seeds` (noticed; screened when promoted or buried), `venture_opportunities` (looked at closely; turned down for good when rejected without `revisit_if`; parked when rejected with one), `venture_experiments` (tested), a `business_outcome_events` payment on one of the test's `experiment_exposures` (a real buyer paid), `products.from_opportunity_id` (became a company). Reference material is counted apart and never added in. "Promising" is deliberately "a real buyer paid": anything softer would be a number Foundry chose to believe.
+
+**Tests.** `explore-is-what-foundry-is-looking-at`: the stage order; a buried seed is screened; of two approved, exposed tests only the one with a recorded payment counts as paid; parked is not buried.
+
+**Evidence maturity.** E2. **Proof debt.** Allocation bands between areas are not yet steering the forge.
+

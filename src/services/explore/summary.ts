@@ -8,12 +8,13 @@
 // binds to, and stores nothing: every count is a COUNT over the row that is
 // the fact, and every piece of work is a Mission read by `mission/read.ts`.
 //
-// INITIAL, ON PURPOSE. The model's funnel has six stages; three of them
-// (screened, promising, parked) have no row that says so yet, and a count
-// with no row behind it would be a number Foundry made up. So this reads the
-// four stages the records can prove — noticed, looked at closely, tested,
-// became a company — and the one that matters as much, turned down and why.
-// The rest arrive with slice V3, when the rows exist.
+// ONLY STAGES A ROW CAN PROVE. Noticed (a seed), screened (a seed promoted or
+// buried), looked at closely (an opportunity), tested (an experiment), a real
+// buyer paid (a payment the world recorded against a test's exposure), became
+// a company (the lineage a graduation writes) — and, beside them, parked
+// (turned down with a condition for another look) and turned down for good.
+// "Promising" in the model is "a real buyer paid" here, because anything
+// softer would be a number Foundry chose to believe.
 // =============================================================================
 
 import { query } from '../../db/client.js';
@@ -24,7 +25,7 @@ import { mandateOf } from '../mandate/statements.js';
 type Row = Record<string, unknown>;
 
 export interface ExploreStage {
-  key: 'noticed' | 'looked_at' | 'tested' | 'became_company';
+  key: 'noticed' | 'screened' | 'looked_at' | 'tested' | 'paid' | 'became_company';
   label: string;
   /** Counted from the real market only. */
   n: number;
@@ -37,7 +38,8 @@ export interface ExploreStage {
 export interface ExploreSummary {
   search: { statement: string; since: string; avoid: string[]; href: string } | null;
   stages: ExploreStage[];
-  turnedDown: { n: number; recent: Buried[] };
+  /** Turned down for good, and parked: turned down with a condition under which it is worth another look. */
+  turnedDown: { n: number; parked: number; recent: Buried[] };
   /** The work in flight under Explore: the search, its tests, the research, and Missions the owner stated to explore. */
   work: Mission[];
   trading: { observing: number; capitalAtRiskCents: 0 };
@@ -64,15 +66,27 @@ async function counted(sql: string, args: unknown[]): Promise<{ real: number; re
 
 /** What Explore shows, read once. Bounded: six queries and the Missions reader. */
 export async function exploreSummary(founderId: string, now: Date = new Date()): Promise<ExploreSummary> {
-  const [mandate, noticed, lookedAt, tested, turned, buried, missions, wants] = await Promise.all([
+  const [mandate, noticed, screened, lookedAt, tested, paid, turned, parked, buried, missions, wants] = await Promise.all([
     currentMandate(founderId),
     counted(`SELECT evidence_mode AS mode, COUNT(*) AS n FROM opportunity_seeds WHERE founder_id = ? GROUP BY evidence_mode`, [founderId]),
+    // SCREENED: a seed something was decided about — promoted to a closer
+    // look, or buried with its reason.
+    counted(`SELECT evidence_mode AS mode, COUNT(*) AS n FROM opportunity_seeds
+              WHERE founder_id = ? AND (promoted_to IS NOT NULL OR buried_at IS NOT NULL) GROUP BY evidence_mode`, [founderId]),
     counted(`SELECT evidence_mode AS mode, COUNT(*) AS n FROM venture_opportunities WHERE founder_id = ? GROUP BY evidence_mode`, [founderId]),
     counted(`SELECT o.evidence_mode AS mode, COUNT(*) AS n FROM venture_experiments e
                JOIN venture_opportunities o ON o.id = e.opportunity_id
               WHERE e.founder_id = ? GROUP BY o.evidence_mode`, [founderId]),
+    // A REAL BUYER PAID: a test with at least one payment the world recorded
+    // against one of its exposures — the one stage a hope cannot reach.
+    counted(`SELECT e.evidence_mode AS mode, COUNT(DISTINCT e.id) AS n FROM venture_experiments e
+               JOIN experiment_exposures x ON x.experiment_id = e.id
+               JOIN business_outcome_events b ON b.exposure_id = x.id AND b.kind = 'payment'
+              WHERE e.founder_id = ? GROUP BY e.evidence_mode`, [founderId]),
     counted(`SELECT evidence_mode AS mode, COUNT(*) AS n FROM venture_opportunities
-              WHERE founder_id = ? AND verdict = 'rejected' GROUP BY evidence_mode`, [founderId]),
+              WHERE founder_id = ? AND verdict = 'rejected' AND revisit_if IS NULL GROUP BY evidence_mode`, [founderId]),
+    counted(`SELECT evidence_mode AS mode, COUNT(*) AS n FROM venture_opportunities
+              WHERE founder_id = ? AND verdict = 'rejected' AND revisit_if IS NOT NULL GROUP BY evidence_mode`, [founderId]),
     graveyardFor(founderId, 3),
     missionsOf(founderId, now),
     mandateOf(founderId, now),
@@ -101,14 +115,18 @@ export async function exploreSummary(founderId: string, now: Date = new Date()):
     stages: [
       { key: 'noticed', label: 'Noticed', n: noticed.real, reference: noticed.reference,
         means: 'Something in the world that might be worth looking into.', href: '/foundry/searching' },
+      { key: 'screened', label: 'Screened', n: screened.real, reference: screened.reference,
+        means: 'Kept for a closer look, or set aside with a reason.', href: '/foundry/searching' },
       { key: 'looked_at', label: 'Looked at closely', n: lookedAt.real, reference: lookedAt.reference,
         means: 'Who has the problem, why it might work, and what would kill it.', href: '/foundry/experiments/explore' },
       { key: 'tested', label: 'Tested', n: tested.real, reference: tested.reference,
         means: 'Put in front of the real world, inside limits you set.', href: '/foundry/experiments/history' },
+      { key: 'paid', label: 'A real buyer paid', n: paid.real, reference: paid.reference,
+        means: 'A test in which somebody actually paid. Nothing else counts here.', href: '/foundry/experiments/history' },
       { key: 'became_company', label: 'Became a company', n: became.real, reference: became.reference,
         means: 'Earned a place in your portfolio.', href: '/foundry/companies' },
     ],
-    turnedDown: { n: turned.real + turned.reference, recent: buried },
+    turnedDown: { n: turned.real + turned.reference, parked: parked.real + parked.reference, recent: buried },
     work,
     trading: { observing: missions.filter((m) => m.source === 'thesis' && !m.concluded).length, capitalAtRiskCents: 0 },
     allWork: live.length,

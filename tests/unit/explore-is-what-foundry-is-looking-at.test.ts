@@ -62,15 +62,37 @@ describe('the reading', () => {
   it('counts each stage from its own rows, keeps reference material apart, and counts only the owner\'s', async () => {
     const x = await exploreSummary(OWNER);
     const at = Object.fromEntries(x.stages.map((s) => [s.key, s]));
+    expect(x.stages.map((st) => st.key)).toEqual(['noticed', 'screened', 'looked_at', 'tested', 'paid', 'became_company']);
     expect(at.noticed).toMatchObject({ n: 2, reference: 1 });
+    expect(at.screened).toMatchObject({ n: 0 });
     expect(at.looked_at).toMatchObject({ n: 2, reference: 0 });
     expect(at.tested).toMatchObject({ n: 0 });
+    expect(at.paid).toMatchObject({ n: 0 });
     expect(at.became_company).toMatchObject({ n: 0 });
-    expect(x.turnedDown.n).toBe(1);
+    // Turned down with a condition for another look is parked, not buried.
+    expect(x.turnedDown).toMatchObject({ n: 0, parked: 1 });
     expect(x.turnedDown.recent[0]).toMatchObject({ headline: 'A pricing template for bakers', revisitIf: 'a marketplace opens' });
     expect(x.search).toMatchObject({ statement: mandate.statement, avoid: ['No SaaS'] });
     expect(x.work.map((w) => w.key)).toContain(`mandate:${mandate.id}`);
     expect(x.trading.capitalAtRiskCents).toBe(0);
+  });
+
+  it('counts a seed decided about as screened, and a test only as paid when the world recorded a payment', async () => {
+    await query(`UPDATE opportunity_seeds SET buried_at = datetime('now'), buried_because = 'a capable source said nobody pays' WHERE id = 'seed_s1'`);
+    await query(`INSERT INTO market_unknowns (id, founder_id, opportunity_id, question, blocking, cheapest_test)
+      VALUES ('unk_x2',?,'opp_x2','will anyone pay',1,'offer one')`, [OWNER]);
+    for (const e of ['exp_paid', 'exp_unpaid']) {
+      await query(`INSERT INTO venture_experiments (id, founder_id, opportunity_id, unknown_id, what_we_do, what_we_expect, would_disprove, cost_cents, evidence_mode)
+        VALUES (?,?,'opp_x2','unk_x2','sell a checklist','someone pays','nobody pays',0,'real')`, [e, OWNER]);
+      await query(`UPDATE venture_experiments SET decision='approved', decided_at=datetime('now'), decided_by='owner' WHERE id=?`, [e]);
+      await query(`INSERT INTO experiment_exposures (id, founder_id, experiment_id, provider, exposure_ref, evidence_mode, placed_by)
+        VALUES (?,?,?,'stripe',?,'real','test fixture')`, [`x_${e}`, OWNER, e, `plink_${e}`]);
+    }
+    // A refund or a click is not a payment; only the payment counts.
+    await query(`INSERT INTO business_outcome_events (id, founder_id, exposure_id, kind, amount_cents, observed_at, provider, provider_event_ref, evidence_mode)
+      VALUES ('boe_1',?,'x_exp_paid','payment',900,datetime('now'),'stripe','pi_1','real')`, [OWNER]);
+    const at = Object.fromEntries((await exploreSummary(OWNER)).stages.map((st) => [st.key, st.n]));
+    expect(at).toMatchObject({ screened: 1, tested: 2, paid: 1 });
   });
 
   it('writes nothing', async () => {

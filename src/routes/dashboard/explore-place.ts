@@ -55,7 +55,7 @@ exploreRoutes.get('/foundry/explore', async (c: any) => {
       : 'No trading research is running.'}
       No capital is at risk: there is no way for Foundry to place an order.${x.mandate.tradingTheoretical ? ' You asked for it to stay theoretical, and it does.' : ''} <a href="/foundry/money/research">The research</a></p>
 
-    ${sectionHead('Turned down, and why', x.turnedDown.n ? String(x.turnedDown.n) : null)}
+    ${sectionHead('Turned down, and why', x.turnedDown.n || x.turnedDown.parked ? `${String(x.turnedDown.n)} for good · ${String(x.turnedDown.parked)} parked` : null)}
     ${x.turnedDown.recent.length ? html`<ul class="plain">${x.turnedDown.recent.map((b) => html`<li><b>${b.headline}</b>
       <span class="dim">${b.when}${b.reference ? ' · reference material' : ''}</span><br />${b.why}${b.revisitIf ? html` <span class="quiet">Worth another look if ${b.revisitIf}.</span>` : ''}</li>`)}</ul>`
       : html`<p class="quiet">Nothing has been turned down yet.</p>`}
