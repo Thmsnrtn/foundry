@@ -153,7 +153,10 @@ describe('the table is gone', () => {
       // And the entitlement sweep, which asked whether a customer had paid for
       // access: nobody pays for access to the owner's own institution
       // (Private S7b1). Seventy-two.
-      .toBe(72);
+      // And the daily fleet-letter notification and the Monday digest (which
+      // needed a subscription tier nobody has) became one weekly email in five
+      // sets, sent only when the week changed (Roadmap 2027 R5). Seventy-one.
+      .toBe(71);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

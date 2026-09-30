@@ -162,46 +162,6 @@ export async function weeklySynthesis(): Promise<void> {
   logger.info('weekly_synthesis complete', { jobName: 'weekly_synthesis' });
 }
 
-// ─── 4. Digest Generate — Monday 7:00 AM per founder timezone ─────────────────
-export async function digestGenerate(): Promise<void> {
-  logger.info('digest_generate starting', { jobName: 'digest_generate' });
-  const founders = await query('SELECT * FROM founders WHERE tier IS NOT NULL', []);
-
-  for (const fRow of founders.rows) {
-    const f = fRow as Record<string, unknown>;
-    try {
-      // A TEMPLATE LITERAL, BECAUSE IT WAS NOT ONE. This was written in double
-      // quotes, so `${operatingProduct()}` reached SQLite as those literal
-      // characters and every run of this job threw `unrecognized token: "$"`
-      // before sending a single digest. Nothing caught it: the string scanners
-      // in `scripts/` read template literals, so a query hidden in quotes is
-      // invisible to all of them, and the failure is swallowed by the per-
-      // founder try/catch below as one more logged error.
-      // And `realCompany()`, which the original could not have had: a digest is
-      // the owner reading his own companies, and a company that does not exist
-      // has nothing to tell him.
-      const products = await query(
-        `SELECT id, name FROM products
-          WHERE owner_id = ? AND ${operatingProduct()} AND ${realCompany()}`, [f.id]);
-      for (const pRow of products.rows) {
-        const p = pRow as Record<string, string>;
-        const ls = await query('SELECT risk_state FROM lifecycle_state WHERE product_id = ?', [p.id]);
-        const riskState = ((ls.rows[0] as Record<string, string>)?.risk_state as RiskStateValue) ?? 'green';
-
-        let digestType: 'weekly' | 'yellow_pulse' | 'red_daily' = 'weekly';
-        if (riskState === 'red') digestType = 'red_daily';
-        else if (riskState === 'yellow' && new Date().getDay() === 4) digestType = 'yellow_pulse';
-
-        const digest = await generateDigest(p.id, riskState, digestType);
-        await sendDigestEmail(p.id, f.email as string, p.name, digest);
-      }
-    } catch (err) {
-      logger.error(`digest_generate error for founder ${f.id}:`, { jobName: 'digest_generate', error: String(err) });
-    }
-  }
-  logger.info('digest_generate complete', { jobName: 'digest_generate' });
-}
-
 // ─── 5. Behavioral Triggers — Every 6 hours ──────────────────────────────────
 // BEHAVIOURAL TRIGGERS IS RETIRED, AND THE RESPONSIBILITY WITH IT.
 //
@@ -2309,64 +2269,6 @@ export const outreachSweep = departmentSweepJob('outreach_sweep', async (id) => 
   return runOutreachSweep(id);
 });
 
-// ─── Fleet Letter (Jarvis slice 1) ──────────────────────────────────────────
-// One artifact per founder across their whole fleet: compose → independently
-// VERIFY → deliver through the interruption policy (quietest sufficient
-// channel; strain quiets non-critical noise; the founder's ceiling wins).
-export async function fleetLetterNotify(): Promise<void> {
-  logger.info('fleet_letter_notify starting', { jobName: 'fleet_letter_notify' });
-  const founders = await query(
-    `SELECT DISTINCT p.owner_id, f.preferences
-       FROM products p JOIN founders f ON f.id = p.owner_id
-      WHERE p.status != 'archived'`, [],
-  );
-  let delivered = 0;
-  for (const row of founders.rows as unknown as Array<Record<string, string>>) {
-    const founderId = row.owner_id;
-    try {
-      const { composeFleetLetter } = await import('../services/letter/fleet.js');
-      const { verifyFleetLetter } = await import('../services/letter/verifier.js');
-      const { deliver } = await import('../services/ux/interruption.js');
-
-      let prefs: Record<string, unknown> | null = null;
-      try { prefs = row.preferences ? JSON.parse(row.preferences) : null; } catch { /* unset */ }
-      const fluency = (prefs?.fluency as 'plain' | 'balanced' | 'technical') ?? 'balanced';
-
-      const { letter } = await verifyFleetLetter(await composeFleetLetter(founderId, fluency));
-      if (letter.quiet) continue; // silence is the success state (Attention Law)
-
-      const top = letter.needsYou[0];
-      const anchorProduct = top?.productId ?? letter.products[0]?.productId;
-      if (!anchorProduct) continue;
-
-      const result = await deliver(founderId, anchorProduct, {
-        // A responsibility has no gate, and a passed date the COMPANY gave is
-        // not "attention" — it is the one ask that is already late. Gate 3+
-        // decisions and overdue responsibilities are both action_needed; the
-        // rest is attention.
-        importance: top
-          ? ((top.kind === 'decision' ? top.gate >= 3
-            : top.kind === 'responsibility' ? top.because === 'overdue'
-              : top.evaluationState === 'contradicted')
-            ? 'action_needed' : 'attention')
-          : 'info',
-        title: top ? `Your letter: ${top.what} needs you` : 'Your letter is ready',
-        body: top
-          // `needsYou` is capped at MAX_NEEDS_YOU for the page, so this read
-          // `Top of 5` whatever the real number of asks was — a count of the
-          // cap, printed as a count of the fleet.
-          ? `Top of ${letter.needsYouTotal} across ${letter.products.length} companies: ${top.what} (${top.productName}).`
-          : `What ran across your ${letter.products.length} companies while you were away.`,
-        actionUrl: '/letter',
-        actionLabel: 'Read the letter',
-      }, prefs as never);
-      if (result.delivered) delivered++;
-    } catch (err) {
-      logger.error(`fleet_letter_notify error for ${founderId}`, { jobName: 'fleet_letter_notify', error: String(err) });
-    }
-  }
-  logger.info(`fleet_letter_notify complete — ${delivered} delivered`, { jobName: 'fleet_letter_notify' });
-}
 
 // ─── Action verification sweep (Jarvis axis 1 — verified action) ──────────────
 export async function actionVerifySweep(): Promise<void> {
@@ -2390,6 +2292,36 @@ const STOP = new Set(['that', 'this', 'with', 'from', 'would', 'will', 'have', '
 
 
 // =============================================================================
+// ─── The week, in five sets (Roadmap 2027 R5) ───────────────────────────────
+export async function theWeekTick(): Promise<void> {
+  const { worthSending, isoWeek } = await import('../services/week/sets.js');
+  const { sendAccountNotice } = await import('../services/billing/account-notice.js');
+  const { mandateOf } = await import('../services/mandate/statements.js');
+  // STANDING DOES NOT APPLY: this resolves the one product that IS the
+  // institution, by its system identity, to find whose account to write to.
+  const owners = (await query(
+    `SELECT p.id AS product_id, f.id AS founder_id, f.email
+       FROM system_identities s JOIN products p ON p.id = s.product_id
+       JOIN founders f ON f.id = p.owner_id
+      WHERE s.identity_key = 'foundry'`, [])).rows as unknown as Array<Record<string, unknown>>;
+  const now = new Date();
+  for (const o of owners) {
+    const founderId = String(o.founder_id);
+    // "QUIET CEO": only what cannot wait. The week can wait; it is on Money.
+    if ((await mandateOf(founderId, now)).some((m) => m.dimension === 'involvement' && m.subject === 'quiet')) {
+      logger.info('the_week: not sent, the owner asked for quiet', { jobName: 'the_week' });
+      continue;
+    }
+    const { send, week, why } = await worthSending(founderId, now);
+    if (!send) { logger.info(`the_week: not sent (${why})`, { jobName: 'the_week' }); continue; }
+    const sent = await sendAccountNotice({
+      productId: String(o.product_id), to: String(o.email),
+      notice: { kind: 'the_week', companyName: 'Foundry', effectiveAt: `${isoWeek(now)}:${week.fingerprint}` },
+    });
+    logger.info(`the_week: ${sent ? 'sent' : 'refused at the door'}`, { jobName: 'the_week' });
+  }
+}
+
 // THE SOCIETY IS NO LONGER ON A TIMER.
 //
 // WHAT THE EVIDENCE SAID. Twelve agents across three companies, provisioned on
@@ -2471,12 +2403,16 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   marketing_sweep:      { fn: marketingSweep,       schedule: '0 9 * * 1',       description: 'Marketing department: one campaign proposal per cycle, carried by a graced signups_7d premise that falsifies honestly (Monday)' },
   product_evolution_sweep: { fn: productEvolutionSweep, schedule: '30 9 * * 2',  description: 'Product Evolution department: one gate-3 hypothesis citing the thesis, auto-contested by the Red Team, carried by a graced metric premise (Tuesday)' },
   outreach_sweep:       { fn: outreachSweep,        schedule: '0 10 * * 3',      description: 'Outreach department (referral engine v1): asks champions for intros; suppression-listed, never auto-sends (Wednesday)' },
-  fleet_letter_notify:  { fn: fleetLetterNotify,    schedule: '30 7 * * *',      description: 'One verified letter per founder across their fleet; delivered via the interruption policy — quietest sufficient channel, strain-aware (daily)' },
+  // THE WEEK, IN FIVE SETS (Roadmap 2027 R5). Replaces the daily fleet letter
+  // notification and the Monday digest (which needed a subscription tier
+  // nobody has): one email a week to the owner, composed on the server from
+  // their own rows, sent only when the week differs from the last and is not
+  // empty, and not at all while the owner has asked for "quiet".
+  the_week:             { fn: theWeekTick,          schedule: '30 7 * * 1',      description: 'The week in five sets, emailed to the owner only when it changed (Monday)' },
   action_verify_sweep:  { fn: actionVerifySweep,    schedule: '20 */6 * * *',    description: 'Independent verification of act-tier executions against their pre-declared success criteria; failures log defects and demote the acting category (every 6h)' },
   lifecycle_check:      { fn: lifecycleCheck,      schedule: '0 6 * * *',       description: 'Evaluate lifecycle conditions for all products' },
   competitive_scan:     { fn: competitiveScan,     schedule: '0 6 * * 0',       description: 'Scan competitors for all products (Sunday)' },
   weekly_synthesis:     { fn: weeklySynthesis,      schedule: '0 6 * * 5',       description: 'Weekly intelligence synthesis (Friday)' },
-  digest_generate:      { fn: digestGenerate,       schedule: '0 7 * * 1',       description: 'Generate and send weekly digests (Monday)' },
   slo_check:            { fn: sloCheck,             schedule: '15 * * * *',      description: 'Check SLOs (AI spend vs cap) and alert operator on breach (hourly)' },
   cold_start_check:     { fn: coldStartCheck,       schedule: '0 5 * * *',       description: 'Check cold start exit conditions' },
   scenario_accuracy:    { fn: scenarioAccuracy,     schedule: '0 8 * * 5',       description: 'Evaluate scenario prediction accuracy (Friday)' },

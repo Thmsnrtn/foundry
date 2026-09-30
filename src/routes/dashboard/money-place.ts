@@ -100,6 +100,8 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
   const gross = await grossCharged(founderId);
   const banked = await moneyBanked();
 
+  const { theWeek } = await import('../../services/week/sets.js');
+  const week = await theWeek(founderId);
   const ledger = await ledgerEntries(founderId, 30);
   const cost = await runningCost(founderId);
   const carry = await carryingCost(founderId);
@@ -185,6 +187,19 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
       ${tile('warn', 'Could be asked back', s.refundExposure, 'refund exposure on delivered work')}
       ${tile('owner', 'Yours to take', s.figure, s.figure.cents !== null && s.figure.cents < 0 ? 'more is spoken for than is held' : 'after everything already spoken for', ' yours')}
     </dl>
+
+    <div class="know" id="the-week">
+      <h2>The week from ${week.since}</h2>
+      <p class="quiet">The five things the Monday email says, when the week brought something new.</p>
+      <dl class="facts">
+        <div class="mline"><dt>Earned and settled</dt><dd>${week.earned.length ? week.earned.join('; ') : 'Nobody paid, and nothing went back.'}</dd></div>
+        <div class="mline"><dt>Owed to buyers</dt><dd>${week.owed.length ? week.owed.join('; ') : 'Nothing is owed to anybody.'}</dd></div>
+        <div class="mline"><dt>Can buyers find it?</dt><dd>${week.visible.length ? week.visible.join('; ') : 'Nothing is listed anywhere yet.'}</dd></div>
+        <div class="mline"><dt>Stopped on purpose</dt><dd>${week.stopped.length ? week.stopped.join('; ') : 'Nothing is held back on your word.'}</dd></div>
+        <div class="mline"><dt>The one decision</dt><dd>${week.decision ?? 'Nothing is waiting for you.'}</dd></div>
+      </dl>
+      <p><a href="/foundry/experiments">Enter this week's views and visits</a></p>
+    </div>
 
     <div class="know">
       <h2>The subtraction</h2>

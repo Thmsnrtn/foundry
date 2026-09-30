@@ -68,6 +68,38 @@ export async function setMaxChannel(founderId: string, channel: Channel): Promis
   await query('UPDATE founders SET preferences = ? WHERE id = ?', [JSON.stringify(prefs), founderId]);
 }
 
+/**
+ * HOW THE OWNER SAID THEY WANT TO HEAR FROM FOUNDRY, AS A CEILING (Roadmap 2027
+ * R5; INSTITUTION_MODEL §5.1). "Quiet CEO", "check in occasionally" and "I'm
+ * away" each cap delivery at the letter: the fact is kept where the owner
+ * reads it, and nothing buzzes. "Hands-on" sets no ceiling. Read from the
+ * Mandate at the moment of delivery, never stored, so a style that lapses or
+ * is replaced stops applying by itself. A CRITICAL event is never capped by a
+ * style: being away is not permission to stay silent about a buyer owed money
+ * or a stopped institution.
+ *
+ * It only ever lowers. It cannot raise a channel above what the founder's own
+ * `max_channel` allows, because `decideChannel` takes the lower of the two.
+ */
+export async function styleCeiling(founderId: string, now: Date = new Date()): Promise<Channel | null> {
+  try {
+    const { mandateOf } = await import('../mandate/statements.js');
+    const style = (await mandateOf(founderId, now)).find((m) => m.dimension === 'involvement');
+    if (!style) return null;
+    return ['quiet', 'occasional', 'away'].includes(style.subject) ? 'letter' : null;
+  } catch { return null; }
+}
+
+/** The lower of the founder's own ceiling and the style's, for a non-critical event. */
+async function withStyle(founderId: string, importance: Importance, prefs?: FounderPreferences | null): Promise<FounderPreferences | null | undefined> {
+  if (importance === 'critical') return prefs;
+  const style = await styleCeiling(founderId);
+  if (!style) return prefs;
+  const own = prefs?.max_channel as Channel | undefined;
+  const lower = own && LADDER.includes(own) && LADDER.indexOf(own) < LADDER.indexOf(style) ? own : style;
+  return { ...(prefs ?? {}), max_channel: lower } as FounderPreferences;
+}
+
 export function decideChannel(
   importance: Importance,
   pulse: PulseSignal,
@@ -109,7 +141,7 @@ export async function mayPush(
 ): Promise<boolean> {
   const pulse = await getFounderPulse(productId).then((p) => p.signal)
     .catch(() => 'steady' as PulseSignal);
-  const decided = decideChannel(importance, pulse, prefs);
+  const decided = decideChannel(importance, pulse, await withStyle(founderId, importance, prefs));
   if (decided !== 'push') {
     log.info('interruption ceiling withheld a push', {
       founderId, productId, importance, pulse, decided,
@@ -142,7 +174,7 @@ export async function deliver(
   prefs?: FounderPreferences | null,
 ): Promise<DeliveryResult> {
   const pulse = await getFounderPulse(productId).then((p) => p.signal).catch(() => 'steady' as PulseSignal);
-  const channel = decideChannel(event.importance, pulse, prefs);
+  const channel = decideChannel(event.importance, pulse, await withStyle(founderId, event.importance, prefs));
 
   log.info('interruption policy decision', {
     founderId, importance: event.importance, pulse, channel, title: event.title,

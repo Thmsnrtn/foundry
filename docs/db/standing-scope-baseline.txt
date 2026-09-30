@@ -10,7 +10,7 @@ src/routes/ingest/index.ts 1
 src/services/control/stop.ts 1
 src/services/economy/projection.ts 3
 src/services/explore/summary.ts 1
-src/services/founder/a-week-away.ts 1
+src/services/founder/a-week-away.ts 2
 src/services/founder/activity.ts 9
 src/services/founder/attention.ts 3
 src/services/founder/autonomy-map.ts 1
@@ -42,3 +42,4 @@ src/services/team/members.ts 1
 src/services/venture/form-knowledge.ts 1
 src/services/venture/obligations.ts 1
 src/services/venture/proof-2.ts 1
+src/services/week/sets.ts 1

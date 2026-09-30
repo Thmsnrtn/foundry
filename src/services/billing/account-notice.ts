@@ -27,8 +27,9 @@ import { query } from '../../db/client.js';
 import { invoke, registerToolHandler, type GatewayRequest } from '../outbound/gateway.js';
 import { sendEmailHandler } from '../integration/resend.js';
 import { log } from '../../lib/logger.js';
+import type { TheWeek } from '../week/sets.js';
 
-export type NoticeKind = 'institution_stopped';
+export type NoticeKind = 'institution_stopped' | 'the_week';
 
 export interface AccountNotice {
   kind: NoticeKind;
@@ -49,7 +50,7 @@ const APP_URL = (): string => process.env.APP_URL ?? 'https://foundry.so';
 
 /** Subject and body per kind. Server-owned: the caller names a kind, and this
  * decides what Foundry says. */
-function render(notice: AccountNotice): { subject: string; html: string } {
+function render(notice: AccountNotice, week: TheWeek | null): { subject: string; html: string } {
   const shell = (body: string): string =>
     `<div style="font-family:system-ui,sans-serif;max-width:560px;margin:0 auto;line-height:1.6;">${body}
      <p style="color:#6b7280;font-size:13px;margin-top:28px;">You are receiving this because it concerns your Foundry account.</p></div>`;
@@ -67,6 +68,27 @@ function render(notice: AccountNotice): { subject: string; html: string } {
           <p>I will not write again about this stoppage. If it stops again after recovering, I will.</p>
           <p><a href="${APP_URL()}/foundry">See where it stands →</a></p>`),
       };
+    case 'the_week': {
+      // THE WEEK, IN FIVE SETS (Roadmap 2027 R5). Composed on the server from
+      // the owner's own rows at the moment of sending; the caller names the
+      // week and nothing else, so no caller can put a word in it.
+      const w = week!;
+      const set = (title: string, lines: string[], none: string): string =>
+        `<h3 style="font-size:15px;margin:20px 0 6px;">${title}</h3>`
+        + (lines.length ? `<ul style="margin:0;padding-left:18px;">${lines.map((l) => `<li>${escapeHtml(l)}</li>`).join('')}</ul>`
+          : `<p style="margin:0;color:#6b7280;">${none}</p>`);
+      return {
+        subject: `Foundry, the week from ${w.since}`,
+        html: shell(`<p>The week from ${escapeHtml(w.since)}, in five parts.</p>`
+          + set('Earned and settled', w.earned, 'Nobody paid, and nothing went back.')
+          + set('Owed to buyers', w.owed, 'Nothing is owed to anybody.')
+          + set('Can buyers find it?', w.visible, 'Nothing is listed anywhere yet.')
+          + set('Stopped on purpose', w.stopped, 'Nothing is held back on your word.')
+          + `<h3 style="font-size:15px;margin:20px 0 6px;">The one decision</h3><p style="margin:0;">${w.decision ? escapeHtml(w.decision) : 'Nothing is waiting for you.'}</p>`
+          + `<p style="margin-top:20px;"><a href="${APP_URL()}/foundry/money">The week on Money →</a> · <a href="${APP_URL()}/foundry/experiments">Enter this week's views and visits →</a></p>`
+          + '<p style="color:#6b7280;">I write only when the week changed. A week like the last one is not sent.</p>'),
+      };
+    }
   }
 }
 
@@ -90,8 +112,18 @@ async function accountNoticeHandler(req: GatewayRequest): Promise<unknown> {
   const owner = await ownerEmail(req.productId);
   if (!owner) throw new Error('account notice has no owner to reach');
 
-  const { subject, html } = render(notice);
+  const week = notice.kind === 'the_week' ? await weekOfTheOwner(req.productId) : null;
+  if (notice.kind === 'the_week' && !week) throw new Error('the week has no owner to read');
+  const { subject, html } = render(notice, week);
   return sendEmailHandler({ ...req, params: { to: [owner], subject, html } });
+}
+
+/** The week, read for the product's owner and nobody else. */
+async function weekOfTheOwner(productId: string): Promise<TheWeek | null> {
+  const r = (await query(`SELECT owner_id FROM products WHERE id = ?`, [productId])).rows[0] as Record<string, unknown> | undefined;
+  if (!r?.owner_id) return null;
+  const { theWeek } = await import('../week/sets.js');
+  return theWeek(String(r.owner_id));
 }
 
 /** The address on the account, from the database. */
@@ -130,7 +162,16 @@ async function ownerEmail(productId: string): Promise<string | null> {
  * work has stopped, without opening the application and without a
  * notification system.
  */
-export const NOTICE_KINDS: readonly NoticeKind[] = ['institution_stopped'] as const;
+//
+// `the_week` was added 30 September 2026 (Roadmap 2027 R5), and it is the same
+// class again: the institution's own state, told to its owner and nobody else.
+// Its body is read on the server from the owner's rows (`week/sets.ts`); the
+// caller supplies the week, never the words. It is keyed on the week and the
+// content, so it goes at most once a week and never twice with the same text.
+// It REPLACES two senders (the daily fleet letter notification and the Monday
+// digest, which needed a subscription tier nobody has), so the owner hears less
+// often, and about the five things that matter.
+export const NOTICE_KINDS: readonly NoticeKind[] = ['institution_stopped', 'the_week'] as const;
 
 const KINDS = new Set<NoticeKind>(NOTICE_KINDS);
 

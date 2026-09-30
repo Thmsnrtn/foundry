@@ -173,7 +173,10 @@ describe('naming the exempt tool does not buy arbitrary content', () => {
       resolve(__dirname, '../../src/services/billing/account-notice.ts'), 'utf8');
     // The handler must build subject/html from render(), never pass through
     // caller-supplied ones.
-    expect(src).toMatch(/const \{ subject, html \} = render\(notice\)/);
+    expect(src).toMatch(/const \{ subject, html \} = render\(notice, week\)/);
+    // The week (Roadmap 2027 R5) is read here, for the product's owner, from
+    // the database — never from the request.
+    expect(src).toMatch(/const week = notice\.kind === 'the_week' \? await weekOfTheOwner\(req\.productId\) : null;/);
     // The recipient is the account owner, resolved here — not `params.to`.
     expect(src).toMatch(/params: \{ to: \[owner\], subject, html \}/);
     expect(src, 'a pause-exempt capability must not take its recipient from the caller')
@@ -199,7 +202,7 @@ describe('naming the exempt tool does not buy arbitrary content', () => {
 // =============================================================================
 
 describe('the exemption is account administration and nothing else', () => {
-  it('sends only the one account-administration kind left', async () => {
+  it('sends only the two kinds that are the institution\'s own state, told to its owner', async () => {
     const { NOTICE_KINDS } = await import('../../src/services/billing/account-notice.js');
     // Stated as an exact set on purpose. Adding a kind is then a deliberate
     // edit to this line, where the boundary is written down, rather than a
@@ -211,7 +214,12 @@ describe('the exemption is account administration and nothing else', () => {
     // `institution_stopped` stays: the state of the institution itself, sent
     // once per stoppage by a routine that reads job_health, and the one thing
     // the owner asked to hear without opening the application.
-    expect([...NOTICE_KINDS]).toEqual(['institution_stopped']);
+    //
+    // `the_week` joined it on 30 September 2026 (Roadmap 2027 R5): the week in
+    // five sets, the same class — the institution's own state, to its owner
+    // alone, its words composed on the server from the owner's rows, at most
+    // once a week. It replaced two senders rather than adding a third.
+    expect([...NOTICE_KINDS]).toEqual(['institution_stopped', 'the_week']);
   });
 
   it('refuses marketing, support and operations kinds', async () => {

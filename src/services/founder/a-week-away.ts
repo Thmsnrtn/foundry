@@ -176,9 +176,13 @@ export async function whileYouWereAway(founderId: string, days = 7): Promise<Ret
   const since = `-${String(days)} days`;
   const companies = (await query(
     `SELECT p.id, p.name FROM products p
-      WHERE p.owner_id = ? AND p.status = 'active' AND p.standing = 'earned' AND p.deleted_at IS NULL
+      WHERE p.owner_id = ? AND p.status = 'active' AND p.deleted_at IS NULL
         AND ${realCompany('p')}`, [founderId]))
     .rows as unknown as Array<Record<string, unknown>>;
+  // STANDING DOES NOT APPLY (Roadmap 2027 R5): the return letter read only
+  // earned companies, so the one asset that exists — an experimental listing —
+  // was invisible to the owner coming back. What happened to it while they
+  // were away is exactly what they need; experimental assets are read too.
   const names = new Map(companies.map((c) => [String(c.id), String(c.name)]));
   const ids = [...names.keys()];
   const marks = ids.map(() => '?').join(',') || "''";
