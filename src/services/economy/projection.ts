@@ -765,3 +765,96 @@ export async function stateCostLine(founderId: string, provider: CostProvider, m
     `INSERT INTO foundry_cost_lines (id, founder_id, provider, monthly_cents, source, said_by) VALUES (?,?,?,?,?,?)`,
     [nanoid(), founderId, provider, monthlyCents, words, `founder:${founderId}`]);
 }
+
+// ─── What an hour is worth, and Foundry's own line (Roadmap 2027 R6) ─────────
+
+export interface HourValue { lowCents: number; highCents: number; source: string; saidAt: string }
+
+/** What the owner last said an hour of their own is worth, or null when they have not said. */
+export async function hourValueOf(founderId: string): Promise<HourValue | null> {
+  const r = (await query(
+    `SELECT low_cents_per_hour, high_cents_per_hour, source, said_at FROM owner_hour_values
+      WHERE founder_id = ? ORDER BY datetime(said_at) DESC, rowid DESC LIMIT 1`, [founderId])).rows[0] as Record<string, unknown> | undefined;
+  return r ? { lowCents: Number(r.low_cents_per_hour), highCents: Number(r.high_cents_per_hour),
+    source: String(r.source), saidAt: String(r.said_at) } : null;
+}
+
+/**
+ * THE OWNER STATES WHAT AN HOUR IS WORTH, as a range, with where it came from.
+ * STRATEGY S2 asks for λ to be derived from what the owner declines and
+ * delegates. With no asset yet there is no behaviour to derive it from, so it
+ * is asked once, as a range, and revised from behaviour when there is some.
+ */
+export async function stateHourValue(founderId: string, lowCents: number, highCents: number, source: string): Promise<void> {
+  const words = source.trim().slice(0, 300);
+  if (!words) throw new Error('an hour\'s worth says where the number came from');
+  for (const c of [lowCents, highCents]) {
+    if (!Number.isInteger(c) || c < 0 || c > 10_000_000) throw new Error('not an hourly amount this reading accepts');
+  }
+  if (lowCents > highCents) throw new Error('the low end of the range is above the high end');
+  const { nanoid } = await import('nanoid');
+  await query(
+    `INSERT INTO owner_hour_values (id, founder_id, low_cents_per_hour, high_cents_per_hour, source, said_by) VALUES (?,?,?,?,?,?)`,
+    [nanoid(), founderId, lowCents, highCents, words, `founder:${founderId}`]);
+}
+
+export interface FoundryLine {
+  /** What Foundry costs to carry a month, from `carryingCost`. */
+  carrying: Figure;
+  /** Every minute the owner entered in the last 30 days: tests, assets, Foundry. */
+  minutes30d: number | null;
+  /** Those minutes at the owner's stated worth, low and high; null when either is not known. */
+  attention: { lowCents: number; highCents: number } | null;
+  /** Charges and returned fees, less fees, unit costs, refunds and disputes, over 30 days. */
+  contribution30d: Figure;
+  sentence: string;
+  /**
+   * THE FROZEN BASELINE (ROADMAP D7): the simpler way to run the same thing.
+   * One listing on the venue and a spreadsheet costs only the venue's own fees,
+   * which are already inside the contribution above. Foundry is worth its line
+   * only when it earns or saves more than that line over the baseline.
+   */
+  baseline: string;
+}
+
+const IN_KINDS = ['charge', 'refund_fee_returned'];
+const OUT_KINDS = ['provider_fee', 'unit_cost', 'refund', 'dispute_withdrawal', 'dispute_fee'];
+
+/** FOUNDRY'S OWN MONTHLY LINE: what it costs, in money and in the owner's time, against what came in. */
+export async function foundryLine(founderId: string): Promise<FoundryLine> {
+  const carry = await carryingCost(founderId);
+  const minutesRow = (await query(
+    `SELECT COUNT(*) AS n, COALESCE(SUM(minutes), 0) AS m FROM owner_minutes
+      WHERE founder_id = ? AND withdrawn_at IS NULL AND on_day >= date('now', '-30 days')`, [founderId]))
+    .rows[0] as Record<string, unknown>;
+  const minutes30d = Number(minutesRow.n ?? 0) === 0 ? null : Number(minutesRow.m ?? 0);
+  const worth = await hourValueOf(founderId);
+  const attention = minutes30d !== null && worth
+    ? { lowCents: Math.round(minutes30d * worth.lowCents / 60), highCents: Math.round(minutes30d * worth.highCents / 60) }
+    : null;
+
+  const marks = (a: string[]): string => a.map(() => '?').join(',');
+  const sums = (await query(
+    `SELECT
+       COALESCE(SUM(CASE WHEN kind IN (${marks(IN_KINDS)}) THEN amount_cents ELSE 0 END), 0) AS in_c,
+       COALESCE(SUM(CASE WHEN kind IN (${marks(OUT_KINDS)}) THEN amount_cents ELSE 0 END), 0) AS out_c,
+       COUNT(*) AS n
+       FROM economic_events
+      WHERE founder_id = ? AND evidence_mode = 'real' AND datetime(occurred_at) >= datetime('now', '-30 days')`,
+    [...IN_KINDS, ...OUT_KINDS, founderId])).rows[0] as Record<string, unknown>;
+  const contribution30d: Figure = Number(sums.n ?? 0) === 0
+    ? { cents: 0, quality: 'measured', because: 'nothing was sold or returned in the last 30 days' }
+    : { cents: Number(sums.in_c ?? 0) - Number(sums.out_c ?? 0), quality: 'measured',
+      because: 'what buyers paid in the last 30 days, less what it cost to sell and what went back' };
+
+  const carryText = `${carry.notKnown.length ? 'at least ' : ''}${carry.total.cents === null ? 'an unknown amount' : dollars(carry.total.cents)}`;
+  const timeText = minutes30d === null ? 'your time, which is not entered'
+    : attention === null ? `${String(minutes30d)} minutes of your time, which has no worth stated yet`
+      : `${String(minutes30d)} minutes of your time, worth ${dollars(attention.lowCents)} to ${dollars(attention.highCents)}`;
+  const sentence = `In the last 30 days Foundry cost ${carryText} to carry and ${timeText}; `
+    + `what came in, after what it cost to sell, was ${dollars(contribution30d.cents ?? 0)}.`;
+  const baseline = 'The simpler way to run this is one listing and a spreadsheet: it costs only the venue\'s own fees, '
+    + 'which are already inside what came in. Foundry earns its line only when it brings in, or saves you, more than '
+    + `${carryText} a month${attention ? ` plus ${dollars(attention.lowCents)} to ${dollars(attention.highCents)} of your time` : ''}.`;
+  return { carrying: carry.total, minutes30d, attention, contribution30d, sentence, baseline };
+}

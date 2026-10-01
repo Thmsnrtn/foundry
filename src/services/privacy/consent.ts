@@ -823,6 +823,7 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
   // forecasts, the fills that never happened, and what the evidence said.
   // His, and nobody else's; erased with him.
   capital_research_theses: { reason: 'a research question the owner began', onAccountErasure: { op: 'delete' } },
+  owner_hour_values: { reason: 'what the owner said an hour of their own is worth, low and high, with where the number came from', onAccountErasure: { op: 'delete' } },
   foundry_cost_lines: { reason: 'a monthly bill the owner stated, with where the number came from', onAccountErasure: { op: 'delete' } },
   owner_identity_rebinds: { reason: 'when their own sign-in moved to a new identity, and between which two', onAccountErasure: { op: 'delete' } },
   owner_intents: { reason: 'what the owner said to the composer, verbatim, and what Foundry understood it as', onAccountErasure: { op: 'delete' } },
@@ -938,7 +939,7 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
     onAccountErasure: { op: 'delete' },
   },
   owner_minutes: {
-    reason: 'the minutes one person entered on their own tests; the time was theirs and goes with them',
+    reason: 'the minutes one person entered on their own tests, assets or on Foundry itself; the time was theirs and goes with them',
     onAccountErasure: { op: 'delete' },
   },
   lessons_read: {
@@ -1860,6 +1861,10 @@ const PERSON_ACROSS_COMPANIES: Record<string, PersonInOthersCompany> = {
   venue_findability: {
     op: 'delete', columns: ['founder_id'],
     reason: 'what that person said about whether buyers could find their shop; it was their word about their shop',
+  },
+  owner_minutes: {
+    op: 'delete', columns: ['founder_id'],
+    reason: 'the minutes that person entered on their own test, asset or on Foundry itself; the time was theirs and goes with them',
   },
   venue_care_checks: {
     op: 'delete', columns: ['founder_id'],

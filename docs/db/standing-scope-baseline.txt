@@ -4,6 +4,7 @@ src/routes/auth/clerk.ts 1
 src/routes/dashboard/foundry-shell.ts 11
 src/routes/dashboard/inbox-place.ts 2
 src/routes/dashboard/missions-place.ts 1
+src/routes/dashboard/money-place.ts 1
 src/routes/dashboard/roadmap-place.ts 1
 src/routes/dashboard/settings.ts 1
 src/routes/ingest/index.ts 1

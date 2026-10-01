@@ -83,3 +83,39 @@ export async function minutesOn(experimentId: string): Promise<MinutesOn | null>
     firstDay: entries[0].onDay, lastDay: entries[entries.length - 1].onDay, entries,
   };
 }
+
+/**
+ * MINUTES THAT ARE NOT A TEST'S (Roadmap 2027 R6). The hold rule needs `a`, the
+ * recurring minutes an asset asks of the owner, and the line for Foundry itself
+ * needs the minutes Foundry asks. So a minute can belong to an asset the owner
+ * owns, or to Foundry (no asset), never to both. The same rules as a test's
+ * minutes: entered by the owner, for a day already lived, kept as entered; the
+ * table refuses an asset that is not theirs (migration 374).
+ */
+export async function recordRecurringMinutes(input: {
+  founderId: string; productId: string | null; onDay: string; minutes: number; what: string | null;
+}): Promise<{ id: string }> {
+  if (input.productId !== null) {
+    const r = (await query('SELECT owner_id FROM products WHERE id = ? AND deleted_at IS NULL', [input.productId]))
+      .rows[0] as Record<string, unknown> | undefined;
+    if (!r || String(r.owner_id) !== input.founderId) {
+      throw new HandRefused('not_yours', 'only the owner of an asset can enter time on it');
+    }
+  }
+  const day = input.onDay.trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || Number.isNaN(Date.parse(`${day}T00:00:00Z`))) {
+    throw new HandRefused('bad_date', 'the day needs to be a date, as YYYY-MM-DD');
+  }
+  if (day > new Date().toISOString().slice(0, 10)) {
+    throw new HandRefused('future_day', 'time is entered for a day already lived, not one in the future');
+  }
+  if (!Number.isInteger(input.minutes) || input.minutes < 1 || input.minutes > 1440) {
+    throw new HandRefused('bad_minutes', 'minutes are a whole number from 1 to 1440, a day\'s worth');
+  }
+  const what = input.what?.trim() ? input.what.trim().slice(0, 500) : null;
+  const id = nanoid();
+  await query(
+    `INSERT INTO owner_minutes (id, founder_id, product_id, on_day, minutes, what) VALUES (?,?,?,?,?,?)`,
+    [id, input.founderId, input.productId, day, input.minutes, what]);
+  return { id };
+}

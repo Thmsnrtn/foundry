@@ -27,7 +27,7 @@ import { page } from './foundry-shell.js';
 import { ago, mark } from '../../views/owner/shell.js';
 import type { Where } from './foundry-shell.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
-import { query } from '../../db/client.js';
+import { query, realCompany } from '../../db/client.js';
 import { record, setPolicy } from '../../services/economy/ledger.js';
 import { EVALUATION_RULE, type Evaluation } from '../../services/capital/evaluation.js';
 import { DECISION_RULE } from '../../services/capital/models.js';
@@ -105,6 +105,14 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
   const ledger = await ledgerEntries(founderId, 30);
   const cost = await runningCost(founderId);
   const carry = await carryingCost(founderId);
+  const { foundryLine, hourValueOf } = await import('../../services/economy/projection.js');
+  const line30 = await foundryLine(founderId);
+  const worth = await hourValueOf(founderId);
+  // STANDING DOES NOT APPLY: the owner may enter time on any asset of theirs,
+  // experimental ones included; the only one that exists today is one.
+  const myAssets = (await query(
+    `SELECT id, name FROM products WHERE owner_id = ? AND deleted_at IS NULL AND ${realCompany()} ORDER BY name, rowid`, [founderId]))
+    .rows as unknown as Array<Record<string, unknown>>;
 
   const sales = await query(
     `SELECT id, amount_cents, currency, status, created_at, provider, delivered_files_json, delivered_files_seen_at
@@ -285,8 +293,31 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
           <b>${l.cents === null ? 'not known' : dollars(l.cents)}</b> ${l.what}
           · ${l.kind === 'measured' ? 'measured' : l.kind === 'stated' ? 'yours' : 'not stated'} · ${l.because}
         </li>`)}</ul>
-      <p class="quiet">Your own time is not priced here: ${carry.ownerMinutes30d === null
-    ? 'no minutes were entered in the last 30 days.' : `${String(carry.ownerMinutes30d)} minutes entered in the last 30 days.`}</p>
+      <p id="foundry-line"><strong>Foundry's own line.</strong> ${line30.sentence}</p>
+      <p class="quiet">${line30.baseline}</p>
+      <p class="quiet">${worth ? `You said an hour of yours is worth ${dollars(worth.lowCents)} to ${dollars(worth.highCents)} (${worth.source}, ${worth.saidAt.slice(0, 10)}).`
+    : 'You have not said what an hour of yours is worth, so your time is counted but not priced.'}</p>
+      <form class="inline" method="POST" action="/foundry/money/hour">
+        <label class="sr" for="hourlow">An hour of yours is worth at least, in dollars</label>
+        <input id="hourlow" name="low" type="text" inputmode="decimal" placeholder="an hour, at least, e.g. 40" />
+        <label class="sr" for="hourhigh">And at most, in dollars</label>
+        <input id="hourhigh" name="high" type="text" inputmode="decimal" placeholder="at most, e.g. 90" />
+        <label class="sr" for="hoursource">Where this comes from</label>
+        <input id="hoursource" name="source" type="text" placeholder="Why, e.g. what my other work pays" />
+        <button class="btn" type="submit">Say it</button>
+      </form>
+      <form class="inline" method="POST" action="/foundry/money/minutes">
+        <label class="sr" for="minon">What the time went on</label>
+        <select id="minon" name="on">
+          <option value="foundry">Foundry itself</option>
+          ${myAssets.map((a) => html`<option value="${String(a.id)}">${String(a.name)}</option>`)}
+        </select>
+        <label class="sr" for="minday">The day</label>
+        <input id="minday" name="day" type="date" />
+        <label class="sr" for="minutes">Minutes</label>
+        <input id="minutes" name="minutes" type="text" inputmode="numeric" placeholder="minutes, e.g. 20" />
+        <button class="btn" type="submit">Enter time</button>
+      </form>
       <form class="inline" method="POST" action="/foundry/money/costs">
         <label class="sr" for="carryprovider">Which bill</label>
         <select id="carryprovider" name="provider">
@@ -399,6 +430,37 @@ moneyRoutes.post('/foundry/money/costs', requireInstitutionOwner(), async (c: an
   if (raw !== '' && amount === null) return back(c, '', 'That amount is not a number of dollars.');
   if (!source) return back(c, '', 'Say where the number comes from, or nobody can check it.');
   await stateCostLine(founderId, provider, amount, source);
+  return back(c, 'carry');
+});
+
+moneyRoutes.post('/foundry/money/hour', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return back(c, '', 'No owner on this request.');
+  const form = await c.req.parseBody();
+  const low = cents(String(form.low ?? '').trim());
+  const high = cents(String(form.high ?? '').trim());
+  const source = String(form.source ?? '').trim();
+  if (low === null || high === null) return back(c, '', 'Both ends of the range need to be a number of dollars.');
+  if (low > high) return back(c, '', 'The low end is above the high end.');
+  if (!source) return back(c, '', 'Say where the number comes from, or nobody can check it.');
+  const { stateHourValue } = await import('../../services/economy/projection.js');
+  await stateHourValue(founderId, low, high, source);
+  return back(c, 'carry');
+});
+
+moneyRoutes.post('/foundry/money/minutes', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return back(c, '', 'No owner on this request.');
+  const form = await c.req.parseBody();
+  const on = String(form.on ?? 'foundry');
+  const minutes = Number(String(form.minutes ?? '').trim());
+  const day = String(form.day ?? '').trim() || new Date().toISOString().slice(0, 10);
+  const { recordRecurringMinutes } = await import('../../services/venture/owner-minutes.js');
+  try {
+    await recordRecurringMinutes({ founderId, productId: on === 'foundry' ? null : on, onDay: day, minutes, what: null });
+  } catch (err) {
+    return back(c, '', err instanceof Error ? err.message : 'That was not recorded.');
+  }
   return back(c, 'carry');
 });
 
