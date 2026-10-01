@@ -1,8 +1,8 @@
 {
   "name": "interruption-sites",
-  "description": "Attention Law, pointed at the surface the law is actually about. The route ratchet counts doors the founder CHOOSES to walk through; this counts the ones that walk through them. An 'action_needed' reaches the in-app bell, a 'critical' reaches the phone — those two rungs are the only ones that spend the founder's attention without being asked, and the north star is days they could safely not look. The count may only shrink: a new interruption is a claim that something is worth a person's day, and it should be argued for by lowering another. Demoting a site to 'attention' (a line in tomorrow's Letter) or 'info' (log only) lowers this baseline in the same commit. 5 to 4: customer_success_sweep's 'action_needed' was deleted in Roadmap 2027 R10.",
+  "description": "Attention Law, pointed at the surface the law is actually about. The route ratchet counts doors the founder CHOOSES to walk through; this counts the ones that walk through them. An 'action_needed' reaches the in-app bell, a 'critical' reaches the phone — those two rungs are the only ones that spend the founder's attention without being asked, and the north star is days they could safely not look. The count may only shrink: a new interruption is a claim that something is worth a person's day, and it should be argued for by lowering another. Demoting a site to 'attention' (a line in tomorrow's Letter) or 'info' (log only) lowers this baseline in the same commit. 5 to 4: customer_success_sweep's 'action_needed' was deleted in Roadmap 2027 R10. 4 to 3: signal_alert_check's 'action_needed' was deleted in Roadmap 2027 R11.",
   "pattern": "importance: '(?:action_needed|critical)'",
   "roots": ["src"],
-  "baseline": 4,
+  "baseline": 3,
   "direction": "down"
 }

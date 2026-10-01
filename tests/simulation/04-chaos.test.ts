@@ -14,7 +14,6 @@ let aiClientSource: string;
 let healthRouteSource: string;
 let resilienceSource: string;
 let onboardingSource: string;
-let voiceBriefingSource: string;
 let signalSource: string;
 
 beforeAll(() => {
@@ -22,7 +21,6 @@ beforeAll(() => {
   healthRouteSource = readFileSync(resolve(SRC, 'routes/internal/health.ts'), 'utf-8');
   resilienceSource = readFileSync(resolve(SRC, 'services/resilience.ts'), 'utf-8');
   onboardingSource = readFileSync(resolve(SRC, 'routes/dashboard/onboarding.ts'), 'utf-8');
-  voiceBriefingSource = readFileSync(resolve(SRC, 'services/voice/briefing.ts'), 'utf-8');
   signalSource = readFileSync(resolve(SRC, 'services/signal.ts'), 'utf-8');
 });
 
@@ -169,18 +167,5 @@ describe('SCP provisioning failure is non-fatal', () => {
 // 5. Voice Briefing Has AI Fallback
 // =============================================================================
 
-describe('Voice briefing degrades gracefully when AI fails', () => {
-
-  it('voice briefing has a fallback when AI call fails', () => {
-    expect(voiceBriefingSource).toMatch(/catch/);
-    expect(voiceBriefingSource).toMatch(/buildFallbackBriefing|fallback/i);
-  });
-
-  it('fallback briefing includes the Signal score', () => {
-    expect(voiceBriefingSource).toMatch(/score.*out of 100|signal.*score/i);
-  });
-
-  it('fallback briefing includes risk state context', () => {
-    expect(voiceBriefingSource).toMatch(/recovery mode|elevated monitoring|operations.*stable/i);
-  });
-});
+// `services/voice/briefing.ts` was deleted in Roadmap 2027 R11, with the
+// morning_briefings job that called it, so its three fallback cases went too.

@@ -42,7 +42,8 @@
  * Retiring a piece of work means deleting its entry here, and the compiler then
  * names every call site that still claims it. The agent society's three kinds,
  * and five whose only callers were its modules, left this way with the agents
- * (Roadmap 2027 R9).
+ * (Roadmap 2027 R9); six more whose only buyers were scheduled jobs nobody read
+ * left with those jobs (R11).
  */
 export const WORK_THE_MODEL_DOES = {
   // ── the institution reasoning about the world ────────────────────────────
@@ -57,9 +58,7 @@ export const WORK_THE_MODEL_DOES = {
 
   // ── what the owner opens ─────────────────────────────────────────────────
   'the daily insight': 'the one thing worth saying about a company today',
-  'the weekly plan': 'what the coming week should be spent on',
   'the morning briefing': 'the thirty-second read across everything at once',
-  'the spoken briefing': 'the same, said out loud, for a commute',
 
   // ── judging work already done ────────────────────────────────────────────
   'scoring an audit': 'grading how well something was carried out',
@@ -70,12 +69,8 @@ export const WORK_THE_MODEL_DOES = {
   // ── reading signals ──────────────────────────────────────────────────────
   'a signal': 'deciding what one event actually means',
   'competitive read': 'what a competitor did and whether it matters here',
-  'regulatory read': 'whether a rule change reaches this company',
-  'recovering a company': 'what to do when something has gone badly wrong',
   'a scenario': 'playing out what would happen if',
   'a simulation': 'running a company forward to see where it ends up',
-  'the graph': 'what the relationships between things imply',
-  'global intelligence': 'what is happening beyond this company that bears on it',
 
   // ── the institution's own voice ──────────────────────────────────────────
   'reading the post': 'deciding what a message sent to the Workshop is asking for',
@@ -106,21 +101,15 @@ export const WHAT_IT_COULD_CHANGE: Record<Work, string | null> = {
   'attacking a probe': 'whether a draft test is sealed as it is, reframed or killed',
   'shaping an offer': 'what a test sells and at what price',
   'the daily insight': 'what the owner looks at first today',
-  'the weekly plan': 'where the coming week goes',
   'the morning briefing': 'what the owner attends to this morning',
-  'the spoken briefing': 'what the owner attends to this morning, heard rather than read',
   'scoring an audit': 'whether a piece of work is accepted or redone',
   'planning a remedy': 'what is done about a finding',
   'red team': 'whether a plan is committed to as it is',
   'a decision': 'which way the owner chooses, knowing what each costs',
   'a signal': 'whether an event needs a response',
   'competitive read': 'whether a competitor\'s move changes what a company does',
-  'regulatory read': 'whether a company has to change for a rule',
-  'recovering a company': 'what is done first when something has gone badly wrong',
   'a scenario': 'which option is taken, given how each plays out',
   'a simulation': 'whether a plan is worth starting',
-  'the graph': 'which relationship is acted on',
-  'global intelligence': 'whether something outside the company changes what it does',
   'reading the post': 'how a message to the Workshop is answered, within the rules already set',
   'voice': 'how something already decided is worded',
   'wisdom': 'whether a lesson already learned changes the next design',

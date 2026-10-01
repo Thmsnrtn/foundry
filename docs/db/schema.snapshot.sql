@@ -620,17 +620,6 @@ CREATE TABLE capital_venues (
   what_it_is   TEXT NOT NULL,
   sort_rank    INTEGER NOT NULL
 );
-CREATE TABLE causal_chains (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  chain_description TEXT NOT NULL,
-  hops TEXT NOT NULL,
-  root_cause_entity_id TEXT,
-  effect_entity_id TEXT,
-  confidence REAL,
-  actionable_insight TEXT,
-  discovered_at TEXT DEFAULT (datetime('now'))
-, root_cause_label TEXT, effect_label TEXT);
 CREATE TABLE change_production_isolation (
   -- Checked rather than referenced: `workspace_substrates` is keyed on the
   -- substrate, so a foreign key to its isolation column is a mismatch. The
@@ -1033,16 +1022,6 @@ CREATE TABLE customers (
   metadata TEXT,
   created_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now'))
-);
-CREATE TABLE daily_insights (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  headline TEXT NOT NULL,    -- ≤120 chars: the one sentence founders wake up to
-  context TEXT NOT NULL,     -- 2–3 sentence elaboration
-  action TEXT,               -- optional: the one concrete thing to do today
-  insight_date TEXT NOT NULL, -- YYYY-MM-DD
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(product_id, insight_date)
 );
 CREATE TABLE data_classifications (
   id TEXT PRIMARY KEY,
@@ -1793,18 +1772,6 @@ CREATE TABLE funnel_events (
   created_at  TEXT NOT NULL,
   UNIQUE(founder_id, product_id, step)
 );
-CREATE TABLE geopolitical_signals (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  owner_id TEXT NOT NULL,
-  signal_type TEXT NOT NULL,
-  severity TEXT DEFAULT 'medium',
-  description TEXT NOT NULL,
-  affected_markets TEXT,
-  source TEXT,
-  detected_at TEXT DEFAULT (datetime('now')),
-  status TEXT DEFAULT 'active'
-);
 CREATE TABLE governed_effect_kinds (
   scope_key            TEXT PRIMARY KEY,
   action_type          TEXT NOT NULL,
@@ -1815,26 +1782,6 @@ CREATE TABLE governed_effect_kinds (
   consequence_boundary TEXT NOT NULL,
   -- What a founder is actually agreeing to when they grant this scope.
   description          TEXT NOT NULL
-);
-CREATE TABLE graph_entities (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  entity_type TEXT NOT NULL,
-  entity_id TEXT NOT NULL,
-  label TEXT NOT NULL,
-  properties TEXT,
-  created_at TEXT DEFAULT (datetime('now')),
-  UNIQUE(product_id, entity_type, entity_id)
-);
-CREATE TABLE graph_relationships (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  source_entity_id TEXT NOT NULL REFERENCES graph_entities(id),
-  target_entity_id TEXT NOT NULL REFERENCES graph_entities(id),
-  relationship_type TEXT NOT NULL,
-  weight REAL DEFAULT 1.0,
-  evidence TEXT,
-  created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE "hypotheses" (
   id TEXT PRIMARY KEY,
@@ -3445,31 +3392,6 @@ CREATE TABLE referral_links (
   signup_count INTEGER NOT NULL DEFAULT 0,
   paid_count INTEGER NOT NULL DEFAULT 0
 );
-CREATE TABLE regulatory_changes (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  owner_id TEXT NOT NULL,
-  change_type TEXT NOT NULL,
-  jurisdiction TEXT NOT NULL,
-  description TEXT NOT NULL,
-  impact_level TEXT DEFAULT 'medium',
-  effective_date TEXT,
-  source TEXT,
-  action_required TEXT,
-  status TEXT DEFAULT 'active',
-  detected_at TEXT DEFAULT (datetime('now'))
-);
-CREATE TABLE regulatory_profile (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  owner_id TEXT NOT NULL,
-  jurisdictions TEXT,
-  regulatory_classifications TEXT,
-  compliance_requirements TEXT,
-  compliance_debt_score REAL,
-  updated_at TEXT DEFAULT (datetime('now')),
-  UNIQUE(product_id)
-);
 CREATE TABLE rejection_streaks (
   id TEXT PRIMARY KEY,
   founder_id TEXT NOT NULL,
@@ -4395,16 +4317,6 @@ CREATE TABLE "webhooks" (
   product_id TEXT,
   created_by TEXT
 );
-CREATE TABLE weekly_plans (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  week_of TEXT NOT NULL,          -- ISO YYYY-Www (e.g. 2026-W10)
-  signal_at_generation INTEGER,  -- Signal score when plan was made
-  items_json TEXT NOT NULL,       -- JSON: [{id, text, category, impact, done}]
-  synthesis TEXT,                 -- 1-2 sentence framing paragraph
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(product_id, week_of)
-);
 CREATE TABLE workshop_continuations (
   id            TEXT PRIMARY KEY,
   founder_id    TEXT NOT NULL REFERENCES founders(id),
@@ -4660,7 +4572,6 @@ CREATE UNIQUE INDEX idx_capital_one_open_thesis
   ON capital_research_theses(founder_id, venue, series_ticker) WHERE status = 'observing';
 CREATE INDEX idx_capital_snapshot_close ON capital_market_snapshots(close_time);
 CREATE UNIQUE INDEX idx_capital_snapshot_moment ON capital_market_snapshots(venue, market_ticker, received_at);
-CREATE INDEX idx_causal_chains ON causal_chains(product_id);
 CREATE INDEX idx_cf_profiles_product ON cofounder_profiles(product_id);
 CREATE INDEX idx_chat_messages_session ON chat_messages(session_id, created_at);
 CREATE INDEX idx_chat_sessions_founder ON chat_sessions(founder_id);
@@ -4715,7 +4626,6 @@ CREATE INDEX idx_customer_intel_product ON customer_intelligence(product_id, sta
 CREATE INDEX idx_customers_churn ON customers(product_id, churn_risk DESC);
 CREATE INDEX idx_customers_health ON customers(product_id, health_score);
 CREATE INDEX idx_customers_product ON customers(product_id);
-CREATE INDEX idx_daily_insights ON daily_insights(product_id, insight_date DESC);
 CREATE UNIQUE INDEX idx_data_class_product_surface
   ON data_classifications(product_id, surface);
 CREATE INDEX idx_deal_rooms_product ON deal_rooms(product_id);
@@ -4781,12 +4691,6 @@ CREATE INDEX idx_founders_paid_through ON founders(paid_through);
 CREATE INDEX idx_founders_tier ON founders(tier);
 CREATE INDEX idx_foundry_cost_lines_newest ON foundry_cost_lines(founder_id, provider, said_at);
 CREATE INDEX idx_funnel_events_step ON funnel_events(step, created_at);
-CREATE INDEX idx_geo_signals_product ON geopolitical_signals(product_id);
-CREATE INDEX idx_geo_signals_status ON geopolitical_signals(status);
-CREATE INDEX idx_graph_entities ON graph_entities(product_id, entity_type);
-CREATE INDEX idx_graph_rels_product ON graph_relationships(product_id, relationship_type);
-CREATE INDEX idx_graph_rels_source ON graph_relationships(source_entity_id);
-CREATE INDEX idx_graph_rels_target ON graph_relationships(target_entity_id);
 CREATE INDEX idx_hypotheses_product ON hypotheses(product_id, status);
 CREATE INDEX idx_idem_expires ON idempotency_keys(expires_at);
 CREATE UNIQUE INDEX idx_idem_unique
@@ -4941,9 +4845,6 @@ CREATE INDEX idx_red_team_product ON red_team_reviews(product_id, created_at);
 CREATE INDEX idx_ref_conversion_link
   ON referral_conversions(referral_link_id, created_at DESC);
 CREATE INDEX idx_referral_code ON referral_links(code);
-CREATE INDEX idx_reg_changes_product ON regulatory_changes(product_id);
-CREATE INDEX idx_reg_changes_status ON regulatory_changes(status);
-CREATE INDEX idx_reg_profile_product ON regulatory_profile(product_id);
 CREATE UNIQUE INDEX idx_rejection_streak_unique
   ON rejection_streaks(founder_id, product_id, COALESCE(agent_name, '*'));
 CREATE INDEX idx_remediation_prs_audit ON remediation_prs(audit_score_id);
@@ -5051,7 +4952,6 @@ CREATE INDEX idx_voice_sessions_founder ON voice_sessions(founder_id);
 CREATE INDEX idx_voice_sessions_product ON voice_sessions(product_id, session_date DESC);
 CREATE INDEX idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id);
 CREATE INDEX idx_webhooks_founder ON webhooks(founder_id);
-CREATE INDEX idx_weekly_plans ON weekly_plans(product_id, week_of DESC);
 CREATE INDEX idx_workshop_continuations ON workshop_continuations(founder_id, email);
 CREATE INDEX idx_workshop_mail_handling ON workshop_mail(founder_id, handling);
 CREATE UNIQUE INDEX idx_workshop_mail_rfc ON workshop_mail(founder_id, rfc_message_id);

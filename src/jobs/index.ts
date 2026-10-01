@@ -4,14 +4,10 @@
 // =============================================================================
 
 import { logger } from '../services/logger.js';
-import { getAllActiveProducts, operatingProduct, realCompany, referenceCompany, query, getActiveStressors, getLatestMetrics, insertAuditLog, countGate0DecisionsWithOutcomes } from '../db/client.js';
+import { getAllActiveProducts, operatingProduct, referenceCompany, query, insertAuditLog, countGate0DecisionsWithOutcomes } from '../db/client.js';
 import { evaluateConditions } from '../services/lifecycle/monitor.js';
 import { runCompetitiveScan } from '../services/intelligence/competitive.js';
-import { identifyStressors, type StressorInputs } from '../services/intelligence/stressor.js';
-import { assessRiskState, transitionRiskState, getOldestPendingGate3Age } from '../services/intelligence/risk-state.js';
-import { getMRRDecomposition, computeHealthRatio } from '../services/intelligence/revenue.js';
-import { getLatestCohortSummary, getHistoricalAverage } from '../services/intelligence/cohort.js';
-import { generateRecoveryProtocol } from '../services/intelligence/recovery.js';
+import { getMRRDecomposition } from '../services/intelligence/revenue.js';
 import { generateDigest } from '../services/digest/generator.js';
 import { sendDigestEmail } from '../services/digest/delivery.js';
 import { generatePatternFromOutcome } from '../services/decisions/patterns.js';
@@ -19,13 +15,10 @@ import { synthesizeJudgmentPatterns } from '../services/wisdom/patterns.js';
 import { getProductDNA } from '../services/wisdom/dna.js';
 import { isPRMerged, isPROpen } from '../services/audit/github.js';
 import { triggerDimensionReAudit } from '../services/audit/remediation.js';
-import { callSonnet, parseJSONResponse } from '../services/ai/client.js';
 import { companySpend } from '../services/ai/what-it-is-for.js';;
 import { checkAndAwardMilestones } from '../services/ux/milestones.js';
 import { detectGrowthStage, updateGrowthStage } from '../services/lifecycle/stage-detection.js';
 import { refreshFounderHealthMetrics } from '../services/intelligence/founder-health.js';
-import { scanGeopoliticalRisks } from '../services/intelligence/global.js';
-import { scanRegulatoryChanges } from '../services/intelligence/regulatory.js';
 import { aggregateInsights } from '../services/wisdom/network.js';
 // `runAllDueSyncs` was imported here and never scheduled. It belongs to the
 // second integration subsystem — services/integrations/framework.ts — which
@@ -40,7 +33,6 @@ import { aggregateInsights } from '../services/wisdom/network.js';
 import { generatePredictions } from '../services/intelligence/predictive.js';
 import { generateDraftsForPendingDecisions } from '../services/decisions/actions.js';
 import { refreshAllCustomerHealth } from '../services/customers/intelligence.js';
-import { buildProductGraph, discoverCausalChains } from '../services/graph/engine.js';
 import { generatePortfolioSnapshot } from '../services/portfolio/manager.js';
 import { nanoid } from 'nanoid';
 import type { RiskStateValue, StressorSeverity, CompetitiveSignal, GrowthStage } from '../types/index.js';
@@ -77,89 +69,6 @@ export async function competitiveScan(): Promise<void> {
     }
   }
   logger.info('competitive_scan complete', { jobName: 'competitive_scan' });
-}
-
-// ─── 3. Weekly Synthesis — Friday 6:00 UTC ────────────────────────────────────
-export async function weeklySynthesis(): Promise<void> {
-  logger.info('weekly_synthesis starting', { jobName: 'weekly_synthesis' });
-  const products = await getAllActiveProducts();
-
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      const ls = await query('SELECT * FROM lifecycle_state WHERE product_id = ?', [p.id]);
-      const lsRow = ls.rows[0] as Record<string, unknown> | undefined;
-      if (!lsRow) continue;
-
-      const riskState = (lsRow.risk_state as RiskStateValue) ?? 'green';
-
-      // Gather inputs for stressor identification
-      const mrr = await getMRRDecomposition(p.id);
-      const latestMetrics = await getLatestMetrics(p.id);
-      const priorMetrics = await query(
-        'SELECT * FROM metric_snapshots WHERE product_id = ? ORDER BY snapshot_date DESC LIMIT 1 OFFSET 1', [p.id]);
-      const cohort = await getLatestCohortSummary(p.id);
-      const historicalAvg = await getHistoricalAverage(p.id);
-      const compSignals = await query(
-        `SELECT * FROM competitive_signals WHERE product_id = ? AND significance = 'high' AND detected_at > datetime('now', '-7 days')`, [p.id]);
-
-      // Get product growth stage and lifestyle mode
-      const growthStage = (p.growth_stage as GrowthStage) ?? 'growth';
-      const founderResult = await query('SELECT lifestyle_mode FROM founders WHERE id = ?', [p.owner_id]);
-      const isLifestyle = ((founderResult.rows[0] as Record<string, number> | undefined)?.lifestyle_mode ?? 0) === 1;
-
-      // Run stressor identification with stage and lifestyle awareness
-      const stressorInputs: StressorInputs = {
-        productId: p.id,
-        currentMetrics: latestMetrics.rows[0] as unknown as StressorInputs['currentMetrics'],
-        priorMetrics: priorMetrics.rows[0] as unknown as StressorInputs['priorMetrics'],
-        mrrDecomposition: mrr,
-        latestCohort: cohort,
-        historicalAvgRetention: historicalAvg ? { day_14: historicalAvg.day_14, day_30: historicalAvg.day_30 } : null,
-        highSignificanceSignals: compSignals.rows as unknown as CompetitiveSignal[],
-        riskState,
-        growthStage,
-        lifestyleMode: isLifestyle,
-      };
-      const stressorReport = await identifyStressors(stressorInputs);
-
-      // Assess risk state with stage awareness
-      const activeStressors = await getActiveStressors(p.id);
-      const stressorList = (activeStressors.rows as unknown as Array<Record<string, unknown>>).map((s) => ({
-        severity: s.severity as StressorSeverity, name: s.stressor_name as string,
-      }));
-      const pendingGate3Age = await getOldestPendingGate3Age(p.id);
-
-      const riskAssessment = assessRiskState({
-        productId: p.id,
-        activeStressors: stressorList,
-        mrrHealthRatio: mrr?.health_ratio ?? null,
-        pendingGate3AgeDays: pendingGate3Age,
-        currentState: riskState,
-        growthStage,
-      });
-
-      if (riskAssessment.transitionWarranted) {
-        await transitionRiskState(p.id, riskState, riskAssessment.recommendedState, riskAssessment.reason, riskAssessment.triggeringSignals);
-
-        // If transitioning to Red, generate recovery protocol
-        if (riskAssessment.recommendedState === 'red') {
-          await generateRecoveryProtocol({
-            productId: p.id, productName: p.name,
-            activeStress: stressorReport.stressors.map((s) => s.name).join(', '),
-            mrrTrajectory: JSON.stringify(mrr), cohortTrends: JSON.stringify(cohort),
-            competitiveSignals: JSON.stringify(compSignals.rows),
-            activeDecisions: '[]', stressorTrajectory: JSON.stringify(stressorReport.stressors),
-          });
-        }
-      }
-
-      logger.info(`weekly_synthesis: ${p.name} — risk ${riskState}→${riskAssessment.recommendedState}, ${stressorReport.stressors.length} stressors`, { jobName: 'weekly_synthesis' });
-    } catch (err) {
-      logger.error(`weekly_synthesis error for ${p.id}:`, { jobName: 'weekly_synthesis', error: String(err) });
-    }
-  }
-  logger.info('weekly_synthesis complete', { jobName: 'weekly_synthesis' });
 }
 
 // ─── 5. Behavioral Triggers — Every 6 hours ──────────────────────────────────
@@ -615,7 +524,6 @@ export async function navBadgeRefresh(): Promise<void> {
 
 // ─── 20. Signal Alert Check — Every 2 hours ───────────────────────────────────
 
-import { computeSignal } from '../services/signal.js';
 
 /** The founder's interruption ceiling, for a job that needs to route an event
  *  through `ux/interruption.ts`. Unset or unreadable preferences are no
@@ -628,82 +536,6 @@ async function founderPrefs(founderId: string): Promise<Record<string, unknown> 
   } catch {
     return null;
   }
-}
-
-export async function signalAlertCheck(): Promise<void> {
-  logger.info('signal_alert_check starting', { jobName: 'signal_alert_check' });
-  const products = await getAllActiveProducts();
-
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      // Get yesterday's snapshot for comparison
-      const prev = await query(
-        `SELECT score, tier FROM signal_history
-         WHERE product_id = ? AND snapshot_date < date('now')
-         ORDER BY snapshot_date DESC LIMIT 1`,
-        [p.id],
-      );
-      if (prev.rows.length === 0) continue;
-
-      const prevRow = prev.rows[0] as Record<string, unknown>;
-      const prevScore = prevRow.score as number;
-      const prevTier = prevRow.tier as string;
-
-      // Compute current Signal (also records today's snapshot)
-      const signal = await computeSignal(p.id);
-
-      // NO ALERT ABOUT A COMPANY NOTHING IS KNOWN ABOUT. `computeSignal`
-      // returns a default when there is no metric snapshot, and that default
-      // used to be written into `signal_history` like any other score — so the
-      // first day a company actually reported something, the real score landed
-      // against a default baseline and the founder was told their Signal had
-      // "dropped 30 points" from a number their company was never at.
-      //
-      // `signal.ts` no longer records the default, so any row read above is a
-      // real measurement; this guard covers the other end.
-      if (!signal.hasData) continue;
-
-      const drop = prevScore - signal.score;
-
-      // Alert conditions: significant drop OR tier degradation
-      const tierDowngrade =
-        (prevTier === 'high' && signal.tier !== 'high') ||
-        (prevTier === 'mid' && signal.tier === 'low');
-
-      if (drop >= 10 || tierDowngrade) {
-        // Avoid duplicate alerts: check if we've already notified today
-        const alreadyNotified = await query(
-          `SELECT id FROM notifications
-           WHERE product_id = ? AND type = 'signal_alert'
-             AND created_at >= datetime('now', 'start of day')`,
-          [p.id],
-        );
-        if (alreadyNotified.rows.length > 0) continue;
-
-        const title = tierDowngrade
-          ? `Signal dropped to ${signal.tier.toUpperCase()}`
-          : `Signal fell ${drop} points`;
-
-        const body = tierDowngrade
-          ? `${p.name} moved from ${prevTier} to ${signal.tier} tier (${prevScore} → ${signal.score}). Review stressors now.`
-          : `${p.name} Signal dropped from ${prevScore} to ${signal.score} in the last 24 hours.`;
-
-        // Through the policy. A Signal falling is worth acting on, and the
-        // ceiling now costs the founder nothing: migration 182 records the
-        // quieted event and the Letter reads it back.
-        const { deliver } = await import('../services/ux/interruption.js');
-        await deliver(p.owner_id, p.id, {
-          importance: 'action_needed',
-          title, body, actionUrl: '/foundry', actionLabel: 'View Signal',
-        }, await founderPrefs(p.owner_id) as never);
-        logger.info(`signal_alert_check: alert created for ${p.name} — drop ${drop}pts, tier: ${prevTier} → ${signal.tier}`, { jobName: 'signal_alert_check' });
-      }
-    } catch (err) {
-      logger.error(`signal_alert_check error for ${p.id}:`, { jobName: 'signal_alert_check', error: String(err) });
-    }
-  }
-  logger.info('signal_alert_check complete', { jobName: 'signal_alert_check' });
 }
 
 // ─── 21. Decision Follow-up — Daily 10:00 UTC ─────────────────────────────────
@@ -764,95 +596,6 @@ export async function decisionFollowUp(): Promise<void> {
 
 // ─── 22. Daily Insight Generate — Daily 7:30 UTC ──────────────────────────────
 
-import { getPreviousSignalScore } from '../services/signal.js';
-
-export async function dailyInsightGenerate(): Promise<void> {
-  logger.info('daily_insight_generate starting', { jobName: 'daily_insight_generate' });
-  const products = await getAllActiveProducts();
-
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      // Skip if today's insight already exists
-      const existing = await query(
-        `SELECT id FROM daily_insights WHERE product_id = ? AND insight_date = date('now')`,
-        [p.id],
-      );
-      if (existing.rows.length > 0) continue;
-
-      // Gather context
-      const [metrics, stressors, lifecycle, previousScore, pendingResult] = await Promise.all([
-        getLatestMetrics(p.id),
-        getActiveStressors(p.id),
-        query('SELECT current_prompt, risk_state FROM lifecycle_state WHERE product_id = ?', [p.id]),
-        getPreviousSignalScore(p.id),
-        query("SELECT COUNT(*) as c FROM decisions WHERE product_id = ? AND status = 'pending'", [p.id]),
-      ]);
-
-      const m = (metrics.rows[0] ?? {}) as Record<string, unknown>;
-      const ls = (lifecycle.rows[0] ?? {}) as Record<string, string>;
-      const stressorList = (stressors.rows as Array<Record<string, string>>)
-        .map((s) => `${s.title} (${s.severity})`).join('; ') || 'none';
-      const pendingCount = (pendingResult.rows[0] as Record<string, number>)?.c ?? 0;
-      const promptLabels: Record<string, string> = {
-        prompt_1: 'Ideation', prompt_2: 'Foundation', prompt_2_5: 'Transition',
-        prompt_3: 'Pre-launch', prompt_4: 'Launch', prompt_5: 'Early traction',
-        prompt_6: 'Growth', prompt_7: 'Scale', prompt_8: 'Maturity', prompt_9: 'Exit',
-      };
-      const stageLabel = promptLabels[ls.current_prompt ?? 'prompt_1'] ?? 'Unknown';
-      const mrrHealthStr = m.mrr_health_ratio != null
-        ? `MRR health ratio: ${(m.mrr_health_ratio as number).toFixed(2)}`
-        : 'MRR: insufficient data';
-
-      const prompt = `You are Foundry, an intelligence layer for early-stage founders.
-Generate today's "Daily One Thing" — the single most important insight for this business today.
-
-Product: ${p.name}
-Stage: ${stageLabel}
-Risk state: ${ls.risk_state ?? 'green'}
-Signal score: ${previousScore !== null ? `${previousScore} (yesterday's last reading)` : 'first day'}
-Active stressors: ${stressorList}
-Pending decisions: ${pendingCount}
-${mrrHealthStr}
-Activation rate: ${m.activation_rate != null ? ((m.activation_rate as number) * 100).toFixed(1) + '%' : 'unknown'}
-30-day retention: ${m.day_30_retention != null ? ((m.day_30_retention as number) * 100).toFixed(1) + '%' : 'unknown'}
-Churn rate: ${m.churn_rate != null ? ((m.churn_rate as number) * 100).toFixed(1) + '%' : 'unknown'}
-
-Return JSON only, no markdown:
-{
-  "headline": "One sentence, ≤120 chars, specific and concrete — the most important thing to know today",
-  "context": "2–3 sentences elaborating on why this matters and what's driving it",
-  "action": "The one concrete thing to do today, ≤80 chars, or null if none"
-}`;
-
-      // NOT THE FRONTIER MODEL, AND THE REASON IS WRITTEN IN
-      // `src/lib/frontier-warrant.ts`. The frontier is warranted when being
-      // wrong is expensive AND the occasion is rare. This is neither: the
-      // context above has already been gathered by the queries, the job asks
-      // for a hundred and twenty characters of it back, and it asks every day
-      // for every company. Four hundred tokens of compression at five times
-      // the price, three hundred and sixty-five times a year, was the whole
-      // of this institution's frontier spending — sixteen calls and thirty-one
-      // cents between 1 and 14 September 2026.
-      const raw = await callSonnet('You are Foundry, an intelligence layer for early-stage founders.', prompt, 400, companySpend(p.id, 'the daily insight'));
-      const insight = parseJSONResponse<{ headline: string; context: string; action: string | null }>(raw.content);
-
-      if (insight?.headline) {
-        const { nanoid: nid } = await import('nanoid');
-        await query(
-          `INSERT INTO daily_insights (id, product_id, headline, context, action, insight_date)
-           VALUES (?, ?, ?, ?, ?, date('now'))
-           ON CONFLICT(product_id, insight_date) DO NOTHING`,
-          [nid(), p.id, insight.headline, insight.context, insight.action ?? null],
-        );
-        logger.info(`daily_insight_generate: generated for ${p.name} — "${insight.headline}"`, { jobName: 'daily_insight_generate' });
-      }
-    } catch (err) {
-      logger.error(`daily_insight_generate error for ${p.id}:`, { jobName: 'daily_insight_generate', error: String(err) });
-    }
-  }
-  logger.info('daily_insight_generate complete', { jobName: 'daily_insight_generate' });
-}
 
 // ─── 23. Weekly Plan Generate — Monday 8:00 UTC ───────────────────────────────
 
@@ -865,74 +608,6 @@ function isoWeek(date: Date): string {
   return `${d.getUTCFullYear()}-W${String(weekNo).padStart(2, '0')}`;
 }
 
-export async function weeklyPlanGenerate(): Promise<void> {
-  logger.info('weekly_plan_generate starting', { jobName: 'weekly_plan_generate' });
-  const products = await getAllActiveProducts();
-  const week = isoWeek(new Date());
-
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      const existing = await query('SELECT id FROM weekly_plans WHERE product_id = ? AND week_of = ?', [p.id, week]);
-      if (existing.rows.length > 0) continue;
-
-      const [signal, stressors, metrics, lifecycle, pendingResult] = await Promise.all([
-        computeSignal(p.id),
-        getActiveStressors(p.id),
-        getLatestMetrics(p.id),
-        query('SELECT current_prompt, risk_state FROM lifecycle_state WHERE product_id = ?', [p.id]),
-        query("SELECT COUNT(*) as c FROM decisions WHERE product_id = ? AND status = 'pending'", [p.id]),
-      ]);
-
-      const ls = (lifecycle.rows[0] ?? {}) as Record<string, string>;
-      const m = (metrics.rows[0] ?? {}) as Record<string, unknown>;
-      const stressorList = (stressors.rows as Array<Record<string, string>>)
-        .map((s) => `${s.title} (${s.severity})`).slice(0, 5).join('; ') || 'none';
-      const pendingCount = (pendingResult.rows[0] as Record<string, number>)?.c ?? 0;
-
-      const prompt = `Product: ${p.name}
-Signal score: ${signal.score} (${signal.tier} tier), risk state: ${signal.riskState}
-Stage: ${ls.current_prompt ?? 'unknown'}, pending decisions: ${pendingCount}
-Active stressors: ${stressorList}
-Signal components — stressors: −${signal.components.stressorPenalty}, MRR: −${signal.components.mrrPenalty}, backlog: −${signal.components.backlogPenalty}, lifecycle: +${signal.components.lifecycleBonus}
-Activation: ${m.activation_rate != null ? ((m.activation_rate as number)*100).toFixed(1)+'%' : 'unknown'}
-Churn: ${m.churn_rate != null ? ((m.churn_rate as number)*100).toFixed(1)+'%' : 'unknown'}
-
-Generate exactly 3 prioritized weekly actions that would raise Signal the most. Be specific and concrete.
-
-Return JSON only:
-{
-  "synthesis": "1-2 sentence framing of this week's priority",
-  "items": [
-    { "id": "1", "text": "Specific action", "category": "signal|decision|relationship|product", "impact": "high|medium|low" }
-  ]
-}`;
-
-      // NOT THE FRONTIER MODEL, and its warrant admitted why: fifty-two
-      // occasions a year is not rare, and six hundred tokens of framing is not
-      // the frontier's best argument for itself. Demoted in the closeout
-      // rather than left as a standing question for the owner — which model
-      // answers a routine internal question is not his decision to make.
-      const raw = await callSonnet('You are Foundry. Generate a weekly operating plan for a founder.', prompt, 600, companySpend(p.id, 'the weekly plan'));
-      const plan = parseJSONResponse<{ synthesis: string; items: Array<{ id: string; text: string; category: string; impact: string }> }>(raw.content);
-
-      if (plan?.items) {
-        const items = plan.items.map((item) => ({ ...item, done: false }));
-        await query(
-          `INSERT INTO weekly_plans (id, product_id, week_of, signal_at_generation, items_json, synthesis)
-           VALUES (?, ?, ?, ?, ?, ?)
-           ON CONFLICT(product_id, week_of) DO NOTHING`,
-          [nanoid(), p.id, week, signal.score, JSON.stringify(items), plan.synthesis ?? null],
-        );
-        logger.info(`weekly_plan_generate: generated for ${p.name}`, { jobName: 'weekly_plan_generate' });
-      }
-    } catch (err) {
-      logger.error(`weekly_plan_generate error for ${p.id}:`, { jobName: 'weekly_plan_generate', error: String(err) });
-    }
-  }
-  logger.info('weekly_plan_generate complete', { jobName: 'weekly_plan_generate' });
-}
-
 // ─── New Job: Integration Sync ────────────────────────────────────────────────
 
 export async function integrationSync(): Promise<void> {
@@ -941,24 +616,6 @@ export async function integrationSync(): Promise<void> {
 }
 
 // ─── New Job: Morning Briefings ───────────────────────────────────────────────
-
-export async function morningBriefings(): Promise<void> {
-  logger.info('morning_briefings starting', { jobName: 'morning_briefings' });
-  const products = await getAllActiveProducts();
-
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      const founderResult = await query('SELECT name FROM founders WHERE id = ?', [p.owner_id]);
-      const founderName = (founderResult.rows[0] as Record<string, string> | undefined)?.name ?? null;
-      const { generateMorningBriefing } = await import('../services/voice/briefing.js');
-      await generateMorningBriefing(p.id, p.owner_id, founderName);
-    } catch (err) {
-      logger.error(`morning_briefings error for ${p.id}:`, { jobName: 'morning_briefings', error: String(err) });
-    }
-  }
-  logger.info('morning_briefings complete', { jobName: 'morning_briefings' });
-}
 
 // ─── New Job: Prediction Accuracy ─────────────────────────────────────────────
 
@@ -1187,24 +844,6 @@ export async function founderHealthRefresh(): Promise<void> {
   logger.info('founder_health_refresh complete', { jobName: 'founder_health_refresh' });
 }
 
-// ─── 22. Geopolitical Scan — Sunday 8:00 UTC ─────────────────────────────────
-export async function geopoliticalScan(): Promise<void> {
-  logger.info('geopolitical_scan starting', { jobName: 'geopolitical_scan' });
-  const products = await getAllActiveProducts();
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      const signals = await scanGeopoliticalRisks(p.id, p.owner_id);
-      if (signals.length > 0) {
-        logger.info(`geopolitical_scan: ${p.name} — ${signals.length} signals detected`, { jobName: 'geopolitical_scan' });
-      }
-    } catch (err) {
-      logger.error(`geopolitical_scan error for ${p.id}:`, { jobName: 'geopolitical_scan', error: String(err) });
-    }
-  }
-  logger.info('geopolitical_scan complete', { jobName: 'geopolitical_scan' });
-}
-
 // ─── 27. Customer Health Refresh — Daily 3:00 UTC ────────────────────────────
 export async function customerHealthRefresh(): Promise<void> {
   logger.info('customer_health_refresh starting', { jobName: 'customer_health_refresh' });
@@ -1219,26 +858,6 @@ export async function customerHealthRefresh(): Promise<void> {
     }
   }
   logger.info('customer_health_refresh complete', { jobName: 'customer_health_refresh' });
-}
-
-// ─── 28. Knowledge Graph Rebuild — Sunday 4:00 UTC ───────────────────────────
-export async function graphRebuild(): Promise<void> {
-  logger.info('graph_rebuild starting', { jobName: 'graph_rebuild' });
-  const products = await getAllActiveProducts();
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      const graph = await buildProductGraph(p.id);
-      logger.info(`graph_rebuild: ${p.name} — ${graph.entities} entities, ${graph.relationships} relationships`, { jobName: 'graph_rebuild' });
-      if (graph.entities > 5) {
-        const chains = await discoverCausalChains(p.id);
-        if (chains.length > 0) logger.info(`graph_rebuild: ${p.name} — ${chains.length} causal chains discovered`, { jobName: 'graph_rebuild' });
-      }
-    } catch (err) {
-      logger.error(`graph_rebuild error for ${p.id}:`, { jobName: 'graph_rebuild', error: String(err) });
-    }
-  }
-  logger.info('graph_rebuild complete', { jobName: 'graph_rebuild' });
 }
 
 // ─── 29. Portfolio Snapshots — Monday 6:00 UTC ───────────────────────────────
@@ -1290,24 +909,6 @@ export async function actionDraftGeneration(): Promise<void> {
     }
   }
   logger.info('action_draft_generation complete', { jobName: 'action_draft_generation' });
-}
-
-// ─── 23. Regulatory Scan — Sunday 9:00 UTC ───────────────────────────────────
-export async function regulatoryScan(): Promise<void> {
-  logger.info('regulatory_scan starting', { jobName: 'regulatory_scan' });
-  const products = await getAllActiveProducts();
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      const changes = await scanRegulatoryChanges(p.id, p.owner_id);
-      if (changes.length > 0) {
-        logger.info(`regulatory_scan: ${p.name} — ${changes.length} changes detected`, { jobName: 'regulatory_scan' });
-      }
-    } catch (err) {
-      logger.error(`regulatory_scan error for ${p.id}:`, { jobName: 'regulatory_scan', error: String(err) });
-    }
-  }
-  logger.info('regulatory_scan complete', { jobName: 'regulatory_scan' });
 }
 
 // ─── V3.1 Layer C: Idempotency Cleanup — Daily 4:00 UTC ──────────────────────
@@ -1620,6 +1221,16 @@ export const RETIRED_LOOPS: Readonly<Record<string, string>> = {
   product_evolution_sweep: 'Product Evolution department: one gate-3 hypothesis citing the thesis, contested by the red team (Tuesday)',
   outreach_sweep: 'Outreach department: asked champions for introductions, never auto-sending (Wednesday)',
   action_verify_sweep: 'Independent verification of acted executions against their declared success criteria (every 6h)',
+  // Eight jobs that bought thinking nothing read (R11). Six ran on the owner's
+  // pre-charter dollar a day, the same dollar the forge and discovery need.
+  daily_insight_generate: 'Generate Daily One Thing for each product (daily 7:30 UTC)',
+  weekly_plan_generate: 'Generate Weekly Operating Plan for each product (Monday 8:00 UTC)',
+  morning_briefings: 'Pre-generate morning voice briefings (daily 6:30 UTC)',
+  signal_alert_check: 'Check for significant Signal drops and tier changes (every 2h)',
+  geopolitical_scan: 'Scan geopolitical risks (Sunday)',
+  regulatory_scan: 'Scan regulatory changes (Sunday)',
+  graph_rebuild: 'Rebuild knowledge graph and discover causal chains (Sunday)',
+  weekly_synthesis: 'Weekly intelligence synthesis (Friday)',
   // Two weekly jobs that measured the society, deleted with it (R9): the
   // critique and evolution rates of agents that no longer exist, and outcome
   // trees whose only writer went in R4.
@@ -1640,7 +1251,6 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   the_week:             { fn: theWeekTick,          schedule: '30 7 * * 1',      description: 'The week in five sets, emailed to the owner only when it changed (Monday)' },
   lifecycle_check:      { fn: lifecycleCheck,      schedule: '0 6 * * *',       description: 'Evaluate lifecycle conditions for all products' },
   competitive_scan:     { fn: competitiveScan,     schedule: '0 6 * * 0',       description: 'Scan competitors for all products (Sunday)' },
-  weekly_synthesis:     { fn: weeklySynthesis,      schedule: '0 6 * * 5',       description: 'Weekly intelligence synthesis (Friday)' },
   slo_check:            { fn: sloCheck,             schedule: '15 * * * *',      description: 'Check SLOs (AI spend vs cap) and alert operator on breach (hourly)' },
   cold_start_check:     { fn: coldStartCheck,       schedule: '0 5 * * *',       description: 'Check cold start exit conditions' },
   scenario_accuracy:    { fn: scenarioAccuracy,     schedule: '0 8 * * 5',       description: 'Evaluate scenario prediction accuracy (Friday)' },
@@ -1654,12 +1264,8 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   remediation_outcome_check: { fn: remediationOutcomeCheck, schedule: '0 9 * * *', description: 'Check remediation PR outcomes (daily)' },
   milestone_check:      { fn: milestoneCheck,      schedule: '0 8 * * *',   description: 'Check and award milestones for all products (daily)' },
   nav_badge_refresh:    { fn: navBadgeRefresh,     schedule: '0 */6 * * *', description: 'Refresh cached nav badge counts (every 6h)' },
-  signal_alert_check:    { fn: signalAlertCheck,       schedule: '0 */2 * * *', description: 'Check for significant Signal drops and tier changes (every 2h)' },
   decision_follow_up:    { fn: decisionFollowUp,       schedule: '0 10 * * *',  description: 'Notify founders to log decision outcomes (daily 10:00 UTC)' },
-  daily_insight_generate: { fn: dailyInsightGenerate,  schedule: '30 7 * * *',  description: 'Generate Daily One Thing for each product (daily 7:30 UTC)' },
-  weekly_plan_generate:   { fn: weeklyPlanGenerate,    schedule: '0 8 * * 1',   description: 'Generate Weekly Operating Plan for each product (Monday 8:00 UTC)' },
   integration_sync:       { fn: integrationSync,       schedule: '0 */1 * * *', description: 'Sync all active external integrations (every hour)' },
-  morning_briefings:      { fn: morningBriefings,      schedule: '30 6 * * *',  description: 'Pre-generate morning voice briefings (daily 6:30 UTC)' },
   prediction_accuracy:    { fn: predictionAccuracyJob, schedule: '0 11 * * *',  description: 'Compute prediction accuracy for recent decision outcomes (daily)' },
   // ─── SCP Jobs ─────────────────────────────────────────────────────────────
   // SCP v3: New capability layer jobs
@@ -1668,12 +1274,9 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   // SCP v7: Event bus, ROI, founder intelligence, priority queue
   stage_detection:    { fn: stageDetection,    schedule: '30 5 * * *',  description: 'Auto-detect product growth stage (daily)' },
   founder_health_refresh: { fn: founderHealthRefresh, schedule: '30 6 * * *', description: 'Refresh founder health metrics (daily)' },
-  geopolitical_scan: { fn: geopoliticalScan, schedule: '0 8 * * 0', description: 'Scan geopolitical risks (Sunday)' },
-  regulatory_scan: { fn: regulatoryScan, schedule: '0 9 * * 0', description: 'Scan regulatory changes (Sunday)' },
   predictive_intelligence: { fn: predictiveIntelligence, schedule: '0 7 * * 3', description: 'Generate predictive insights (Wednesday)' },
   action_draft_generation: { fn: actionDraftGeneration, schedule: '30 7 * * *', description: 'Auto-generate action drafts for pending decisions (daily)' },
   customer_health_refresh: { fn: customerHealthRefresh, schedule: '0 3 * * *', description: 'Refresh all customer health scores (daily 3am)' },
-  graph_rebuild: { fn: graphRebuild, schedule: '0 4 * * 0', description: 'Rebuild knowledge graph and discover causal chains (Sunday)' },
   portfolio_snapshots: { fn: portfolioSnapshotJob, schedule: '0 6 * * 1', description: 'Generate portfolio snapshots (Monday)' },
   data_deletion_processor: {
     fn: async () => {

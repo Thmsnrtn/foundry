@@ -34,8 +34,9 @@ import { computeSignal, signalText, signalNumber } from '../../src/services/sign
 //     from a number their company was never at.
 //
 // Several of the offending surfaces were Commercial Foundry pages and are gone;
-// the ones named above are not, and the scan below is over whatever calls
-// `computeSignal` today rather than over a list written by hand.
+// the voice briefing and the drop alert were deleted in Roadmap 2027 R11, and
+// the scan below is over whatever calls `computeSignal` today rather than over
+// a list written by hand.
 //
 // The rule did not need to be discovered. It needed one way to obey it, which
 // is `signalText`/`signalNumber`, and a test that notices when a consumer does
@@ -150,11 +151,11 @@ describe('every surface that shows a Signal', () => {
     // production-dead, then four until `GET /share/:token` went — the investor
     // read-only view, whose token nothing can mint now that the control that
     // generated it is deleted, then three until the alignment score left
-    // `services/team/members.ts` (Private S7). The two left are
-    // `jobs/index.ts` and `services/voice/briefing.ts`, each asserted by name
-    // below.
+    // `services/team/members.ts` (Private S7), then two until the drop alert
+    // in `jobs/index.ts` and `services/voice/briefing.ts` were deleted.
+    // deleted in Roadmap 2027 R11
     expect(consumers().length, 'if this moves, a new surface appeared')
-      .toBeGreaterThanOrEqual(2);
+      .toBeGreaterThanOrEqual(0);
   });
 
   it('does not let a bare score reach the voice', () => {
@@ -169,10 +170,7 @@ describe('every surface that shows a Signal', () => {
     const share = stripComments(readFileSync('src/routes/share/index.ts', 'utf8'),
       { lineComments: true });
     expect(share).not.toMatch(/computeSignal/);
-
-    const voice = stripComments(readFileSync('src/services/voice/briefing.ts', 'utf8'),
-      { lineComments: true });
-    expect(voice).toMatch(/signalText\(signal\)/);
+    // The voice half went with `services/voice/briefing.ts` (Roadmap 2027 R11).
   });
 
   // The prompt case was `conversation/context.ts`, which passed
@@ -181,8 +179,7 @@ describe('every surface that shows a Signal', () => {
   // there is no prompt left carrying it — and `consumers()` above is what
   // catches the next one that appears.
 
-  it('does not alert on a drop from a number nobody measured', () => {
-    const src = stripComments(readFileSync('src/jobs/index.ts', 'utf8'), { lineComments: true });
-    expect(src).toMatch(/if \(!signal\.hasData\) continue;/);
-  });
+  // The drop alert (`signalAlertCheck` in `jobs/index.ts`) skipped a company
+  // without `hasData`; the job was retired in Roadmap 2027 R11, so the case
+  // that held it to that went with it.
 });

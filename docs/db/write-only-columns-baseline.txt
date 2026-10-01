@@ -5,8 +5,6 @@ ai_spend_reservations.global_cap_cents
 ai_spend_reservations.product_cap_cents
 ai_spend_reservations.reserved_cents
 autonomy_consents.from_mode
-causal_chains.effect_entity_id
-causal_chains.root_cause_entity_id
 communication_budgets.last_sent_at
 company_observation_channels.evidence_signal_id
 development_change_plans.disposition_evidence_json
@@ -45,6 +43,4 @@ strategic_decisions_log.expected_outcome
 strategic_decisions_log.key_assumptions_json
 strategic_decisions_log.made_by
 system_identities.established_reason
-weekly_plans.items_json
-weekly_plans.signal_at_generation
 workshop_correspondence_policy.changed_by

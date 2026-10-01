@@ -23,10 +23,11 @@ const { query } = await import('../../src/db/client.js');
 // from no entry point. The eight cases here that started conversations, and
 // that read back what the model was paid to extract from them, went with it.
 //
-// THE BRIEFING HALF IS STILL LIVE — `voice/briefing.ts` writes and reads
-// `voice_sessions` — so the separation itself still has to hold. That is what
-// is asserted below: the briefing's table does not carry the conversation's
-// columns, and does carry the two both features share.
+// THE BRIEFING HALF'S WRITER IS GONE TOO — `voice/briefing.ts` was deleted in
+// Roadmap 2027 R11 — but `voice_sessions` and the rows it already holds remain,
+// so the separation itself still has to hold. That is what is asserted below:
+// the briefing's table does not carry the conversation's columns, and does
+// carry the two both features share.
 // =============================================================================
 
 const P = 'p_voice';

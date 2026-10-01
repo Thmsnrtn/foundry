@@ -15,14 +15,12 @@ const ROOT = resolve(__dirname, '../..');
 
 let clientSource: string;
 let portfolioSource: string;
-let voiceBriefingSource: string;
 let schemaSource: string;
 let authMiddlewareSource: string;
 
 beforeAll(() => {
   clientSource = readFileSync(resolve(SRC, 'db/client.ts'), 'utf-8');
   portfolioSource = readFileSync(resolve(SRC, 'services/portfolio/manager.ts'), 'utf-8');
-  voiceBriefingSource = readFileSync(resolve(SRC, 'services/voice/briefing.ts'), 'utf-8');
   schemaSource = readFileSync(resolve(SRC, 'db/schema.sql'), 'utf-8');
   authMiddlewareSource = readFileSync(resolve(SRC, 'middleware/auth.ts'), 'utf-8');
 });
@@ -176,35 +174,15 @@ describe('Portfolio API has ownership checks', () => {
 // entry point and were deleted with the rest of the commercial estate.
 //
 // A tenancy assertion about a module that is gone is not a weaker guarantee —
-// it is no guarantee at all, wearing a filename. `voice/briefing.ts` is live
-// and its three scoping cases remain below; the surfaces that still touch
-// company data are checked in the describes that stay.
+// it is no guarantee at all, wearing a filename. `voice/briefing.ts` followed
+// in Roadmap 2027 R11, taking its three scoping cases with it; the surfaces
+// that still touch company data are checked in the describes that stay.
 
 // =============================================================================
 // 4. Voice API Has Ownership Checks
 // =============================================================================
 
-describe('Voice API has ownership checks', () => {
-
-  it('generateMorningBriefing accepts productId and founderId', () => {
-    const fn = extractFunction(voiceBriefingSource, 'generateMorningBriefing');
-    expect(fn).toMatch(/productId:\s*string/);
-    expect(fn).toMatch(/founderId:\s*string/);
-  });
-
-  it('generateMorningBriefing queries voice_sessions by product_id', () => {
-    const fn = extractFunction(voiceBriefingSource, 'generateMorningBriefing');
-    const sql = extractSQL(fn);
-    expect(sql).toMatch(/WHERE.*product_id\s*=\s*\?/i);
-  });
-
-  it('processVoiceTranscript persists by session_id', () => {
-    const fn = extractFunction(voiceBriefingSource, 'processVoiceTranscript');
-    const sql = extractSQL(fn);
-    expect(sql).toMatch(/WHERE.*id\s*=\s*\?/i);
-  });
-
-});
+// Its three cases read `services/voice/briefing.ts`, deleted in Roadmap 2027 R11.
 
 // =============================================================================
 // 5. Decision Patterns Has No Product ID (Cross-Company by Design)

@@ -386,21 +386,6 @@ export async function getPreviousSignalScore(productId: string): Promise<number 
   return (result.rows[0] as Record<string, number>).score;
 }
 
-/**
- * Get today's daily insight for a product, if it exists.
- */
-export async function getDailyInsight(
-  productId: string,
-): Promise<{ headline: string; context: string; action: string | null } | null> {
-  const result = await query(
-    `SELECT headline, context, action FROM daily_insights
-     WHERE product_id = ? AND insight_date = date('now')`,
-    [productId],
-  );
-  if (result.rows.length === 0) return null;
-  return result.rows[0] as unknown as { headline: string; context: string; action: string | null };
-}
-
 // ─── Invalidate Cache ─────────────────────────────────────────────────────────
 
 /**

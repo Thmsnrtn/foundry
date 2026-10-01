@@ -59,7 +59,8 @@ describe('every table holding a company is erased or explains itself', () => {
   it('erases far more than the thirteen tables it used to', async () => {
     const erased = await tablesToErase();
     // 34 erased tables were dropped by migration 375 in Roadmap 2027 R9.
-    expect(erased.length).toBeGreaterThan(116);
+    // 8 erased tables were dropped by migration 376; deleted in Roadmap 2027 R11.
+    expect(erased.length).toBeGreaterThan(108);
   });
 
   it('names the tables a founder would notice most', async () => {
@@ -212,8 +213,9 @@ describe('an export that exports', () => {
     const all = await tablesWithProductId();
     const unaccounted = all.filter((t) => !(t in EXCLUDED_FROM_EXPORT_REASONS));
     // 34 exported tables were dropped by migration 375 in Roadmap 2027 R9.
+    // 8 exported tables were dropped by migration 376; deleted in Roadmap 2027 R11.
     expect(unaccounted.length, 'the export is derived from the schema')
-      .toBeGreaterThan(116);
+      .toBeGreaterThan(108);
     for (const reason of Object.values(EXCLUDED_FROM_EXPORT_REASONS)) {
       expect(reason.length).toBeGreaterThan(20);
     }

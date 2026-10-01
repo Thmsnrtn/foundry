@@ -46,8 +46,9 @@ describe('a retired loop is refused by name', () => {
     // The twenty-six society loops (scp_benchmark_refresh went earlier, in
     // Private S7), the two weekly jobs that measured the society (R9), and
     // R10's five: the four department sweeps and action_verify_sweep, deleted
-    // in Roadmap 2027 R10 with the last legacy executor.
-    expect(Object.keys(RETIRED_LOOPS)).toHaveLength(33);
+    // in Roadmap 2027 R10 with the last legacy executor, and R11's eight: the
+    // jobs whose model output nothing read, deleted in Roadmap 2027 R11.
+    expect(Object.keys(RETIRED_LOOPS)).toHaveLength(41);
     for (const [name, was] of Object.entries(RETIRED_LOOPS)) {
       expect(was.length, name).toBeGreaterThan(10);
     }

@@ -81,34 +81,11 @@ export const FRONTIER_WARRANTS: readonly FrontierWarrant[] = [
       + 'Rare: an audit is run deliberately, not on a schedule.',
   },
   {
-    file: 'src/services/intelligence/regulatory.ts',
-    sites: 1,
-    question: 'Which regulations genuinely apply to this company.',
-    warrant: 'Expensive to get wrong in both directions — a missed obligation and '
-      + 'an invented one are each costly, and the prompt exists to stop the '
-      + 'second. Rare: a sector classification changes when the sector does.',
-  },
-  {
-    file: 'src/services/intelligence/recovery.ts',
-    sites: 1,
-    question: 'What a company under real stress should do about it.',
-    warrant: 'Expensive to get wrong: it is asked only when something is already '
-      + 'going badly. Rare by construction: stress is not a schedule.',
-  },
-  {
     file: 'src/services/intelligence/scenario.ts',
     sites: 1,
     question: 'How a specific decision could play out.',
     warrant: 'Expensive to get wrong: it is attached to a decision someone is '
       + 'about to make. Rare: one decision, one occasion.',
-  },
-  {
-    file: 'src/services/graph/engine.ts',
-    sites: 1,
-    question: 'Find multi-hop causal chains across a company’s data.',
-    warrant: 'The one question here that is genuinely about reasoning rather than '
-      + 'writing: several hops, each of which must hold. Rebuilt on a schedule, '
-      + 'which is the weaker half, but over material that has actually changed.',
   },
   {
     file: 'src/services/wisdom/patterns.ts',

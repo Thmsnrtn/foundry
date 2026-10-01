@@ -2,8 +2,6 @@ process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { beforeAll, describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 
@@ -40,36 +38,6 @@ describe('the columns nothing could write', () => {
     expect(cols).not.toContain('exchange_rate');
   });
 
-  it('and no code still reads them', () => {
-    const hits: string[] = [];
-    for (const f of ['src/services/intelligence/global.ts']) {
-      const code = stripComments(readFileSync(f, 'utf8'), { lineComments: true });
-      if (/local_currency_mrr|exchange_rate/.test(code)) hits.push(f);
-    }
-    expect(hits).toEqual([]);
-  });
-});
-
-describe('the detector that could not detect', () => {
-  it('is gone from the intelligence service', async () => {
-    const global_ = stripComments(
-      readFileSync('src/services/intelligence/global.ts', 'utf8'), { lineComments: true });
-    expect(global_).not.toMatch(/detectCurrencyErosion/);
-    // And not merely unexported: the module offers no such function at all.
-    const mod = await import('../../src/services/intelligence/global.js') as Record<string, unknown>;
-    expect(Object.keys(mod)).not.toContain('detectCurrencyErosion');
-  });
-
-  it('and the account of why survives in the source', () => {
-    // The reason has to outlive the code, or the next reader rebuilds it.
-    const global_ = readFileSync('src/services/intelligence/global.ts', 'utf8');
-    expect(global_).toMatch(/NOTHING CAN FILL THE CURRENCY COLUMNS/);
-    expect(global_).toMatch(/SO THE FALLBACK WAS THE WHOLE INPUT/);
-    expect(global_).toMatch(/AND THE USD SERIES WAS THE WRONG QUANTITY/);
-  });
-
-  it('leaves the rest of the module intact', async () => {
-    const { scanGeopoliticalRisks } = await import('../../src/services/intelligence/global.js');
-    expect(typeof scanGeopoliticalRisks).toBe('function');
-  });
+  // The one module that read them, `intelligence/global.ts`, was deleted in
+  // Roadmap 2027 R11, and the detector's cases went with it.
 });

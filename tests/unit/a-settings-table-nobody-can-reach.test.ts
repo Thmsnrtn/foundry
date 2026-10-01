@@ -160,7 +160,9 @@ describe('the table is gone', () => {
       // Roadmap 2027 R9 with what they measured. Sixty-nine.
       // And the four department sweeps and action_verify_sweep came off:
       // deleted in Roadmap 2027 R10 with the last legacy executor. Sixty-four.
-      .toBe(64);
+      // And eight jobs whose model output nothing read came off: deleted in
+      // Roadmap 2027 R11. Fifty-six.
+      .toBe(56);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

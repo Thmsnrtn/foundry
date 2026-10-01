@@ -104,19 +104,12 @@ describe('the warrants are arguments rather than adjectives', () => {
   });
 });
 
-describe('the daily compression that started this', () => {
-  it('no longer reaches the frontier', () => {
-    // A hundred and twenty characters of already-gathered context, asked for
-    // every company every day. It was the whole of this institution's frontier
-    // spending: sixteen calls and thirty-one cents in the fortnight to 14
-    // September 2026.
-    const jobs = readFileSync(join(ROOT, 'src/jobs/index.ts'), 'utf8');
-    const insight = jobs.slice(jobs.indexOf('export async function dailyInsightGenerate'),
-      jobs.indexOf('export async function weeklyPlanGenerate'));
-    expect(insight).toContain('callSonnet(');
-    expect(insight).not.toMatch(/(?<![A-Za-z0-9_.])callOpus\s*\(/);
-  });
-});
+// THE DAILY COMPRESSION THAT STARTED THIS — `dailyInsightGenerate`, a hundred
+// and twenty characters of already-gathered context asked for every company
+// every day, once the whole of this institution's frontier spending — was
+// retired with its job in Roadmap 2027 R11, so the slice that held it to the
+// operational model went with it. That `src/jobs/index.ts` reaches the frontier
+// nowhere is still asserted above.
 
 describe('the gate itself', () => {
   it('passes on the repository as it stands', () => {
