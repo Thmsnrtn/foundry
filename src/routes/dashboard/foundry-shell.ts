@@ -7812,6 +7812,21 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
   const appearanceNow = currentAppearance();
   const { mandateCard } = await import('./mandate-place.js');
   const mandateHtml = await mandateCard(s.ownerId, c.req.query() as Record<string, string | undefined>);
+  // YOUR DECISIONS (Roadmap 2027 R1): the owner's fortnight, each act read from
+  // the state it changes, and "cannot see" where Foundry cannot see it.
+  const { yourDecisions } = await import('../../services/control/decisions.js');
+  const decisions = await yourDecisions(s.ownerId);
+  const DECISION_TONE: Record<string, string> = { done: 'go', open: 'wait', cannot_see: 'done' };
+  const DECISION_WORD: Record<string, string> = { done: 'Done', open: 'Open', cannot_see: 'Yours to confirm' };
+  const openN = decisions.filter((d) => d.state === 'open').length;
+  const decisionsHtml = html`<section class="card your-decisions" id="your-decisions" aria-labelledby="your-decisions-h">
+    <h2 id="your-decisions-h">Your decisions</h2>
+    <p class="quiet">${openN === 0 ? 'Everything Foundry can see is done.' : `${String(openN)} still open. Each is read from what it changes, not ticked.`}</p>
+    <ul class="mandate-list">${decisions.map((d) => html`<li>
+      <span class="mandate-what"><b>${d.act}</b> <span class="status ${DECISION_TONE[d.state] ?? 'done'}">${DECISION_WORD[d.state] ?? ''}</span></span>
+      <span class="mandate-when dim">${d.seen}. <span class="quiet">Unblocks ${d.unblocks}.</span></span>
+    </li>`)}</ul>
+  </section>`;
   // WHAT FOUNDRY MAY DO, PER AREA (INSTITUTION_MODEL §6.1): one table read
   // with the doors' own rows, explained; the doors still enforce.
   const { authorityTable, DOMAIN_WORDS, VERDICT_WORDS } = await import('../../services/control/authority.js');
@@ -7920,6 +7935,7 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
     <p class="lede">What Foundry may do on its own, what stops it, and the lines you drew.</p>
     ${/* THE MANDATE FIRST (INSTITUTION_MODEL §9): what the owner wants, before what
          Foundry may do — steering above authority, and never mixed with it. */ ''}
+    ${decisionsHtml}
     ${mandateHtml}
     ${authorityHtml}
 

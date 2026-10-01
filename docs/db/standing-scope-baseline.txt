@@ -8,6 +8,7 @@ src/routes/dashboard/money-place.ts 1
 src/routes/dashboard/roadmap-place.ts 1
 src/routes/dashboard/settings.ts 1
 src/routes/ingest/index.ts 1
+src/services/control/decisions.ts 1
 src/services/control/stop.ts 1
 src/services/economy/projection.ts 3
 src/services/explore/summary.ts 1

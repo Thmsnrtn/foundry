@@ -2683,6 +2683,8 @@ ul.stands span{font-size:.88rem;color:var(--ink-2)}
 /* WHILE THE OWNER IS AWAY: one short panel, first on Home, with the way back. */
 .panel.away{border:1px solid var(--accent);border-radius:var(--r);padding:12px 16px;margin:0 0 var(--s4);background:var(--accent-soft)}
 .panel.away p{margin:0 0 6px}
+/* YOUR DECISIONS (Roadmap 2027 R1): the owner's acts, each read from what it changes. */
+.card.your-decisions .status{margin-left:6px}
 /* WHAT FOUNDRY MAY DO (INSTITUTION_MODEL §6.1): one row per area, beside the Mandate. */
 .card.may-do .status{margin-left:6px}
 /* TRADING, IN ITS THREE WORLDS: Live is shown absent, never left out. */
