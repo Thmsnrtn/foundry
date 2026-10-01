@@ -6,7 +6,6 @@ import { join } from 'node:path';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { createPortfolio } from '../../src/services/portfolio/manager.js';
 import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 
 // =============================================================================
@@ -30,23 +29,10 @@ import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 beforeAll(async () => { await runMigrations(); });
 beforeEach(async () => { await query('DELETE FROM portfolios'); });
 
-describe('creating a portfolio', () => {
-  it('does not hand back a credential', async () => {
-    const created = await createPortfolio('Fund One', 'vc', 'gp@example.com');
-
-    expect(created.id).toBeTruthy();
-    expect(Object.keys(created)).toEqual(['id']);
-    expect((created as Record<string, unknown>).api_key).toBeUndefined();
-  });
-
-  it('stores no secret on the row', async () => {
-    const created = await createPortfolio('Fund Two', 'vc', 'gp@example.com');
-
-    const row = (await query('SELECT api_key FROM portfolios WHERE id = ?', [created.id]))
-      .rows[0] as unknown as { api_key: string | null };
-    expect(row.api_key).toBeNull();
-  });
-
+describe('the source', () => {
+  // The two checks on `createPortfolio`'s return value and row went with
+  // `portfolio/manager.ts`, deleted in Roadmap 2027 R12. Nothing creates a
+  // portfolio now; the source and the migrated rows are what is left to hold.
   it('mints nothing that looks like a key anywhere in the source', () => {
     // Comments stripped: the paragraphs above and in the migration explain the
     // prefix, and prose about a secret is not a secret.

@@ -12,7 +12,6 @@ import { JOB_REGISTRY, retiredLoopRefusal } from '../jobs/index.js';
 import { getProductDNA } from '../services/wisdom/dna.js';
 import { synthesizeJudgmentPatterns } from '../services/wisdom/patterns.js';
 import { getRemediationStats } from '../services/audit/remediation.js';
-import { remediationOutcomeCheck } from '../jobs/index.js';
 import { nanoid } from 'nanoid';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -277,15 +276,6 @@ program
         if (pr.github_pr_url) console.log(`      ${pr.github_pr_url}`);
       }
     }
-  });
-
-program
-  .command('remediation:check')
-  .description('Run remediation outcome check (check PR merge status)')
-  .action(async () => {
-    console.log('Running remediation outcome check...');
-    await remediationOutcomeCheck();
-    console.log('Outcome check complete.');
   });
 
 // ─── UX Intelligence Commands ────────────────────────────────────────────────

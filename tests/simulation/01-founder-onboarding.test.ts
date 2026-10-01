@@ -20,14 +20,12 @@ const SRC = resolve(__dirname, '../../src');
 
 let authRouteSource: string;
 let onboardingRouteSource: string;
-let lifecycleMonitorSource: string;
 let schemaSource: string;
 let clientSource: string;
 
 beforeAll(() => {
   authRouteSource = readFileSync(resolve(SRC, 'routes/auth/clerk.ts'), 'utf-8');
   onboardingRouteSource = readFileSync(resolve(SRC, 'routes/dashboard/onboarding.ts'), 'utf-8');
-  lifecycleMonitorSource = readFileSync(resolve(SRC, 'services/lifecycle/monitor.ts'), 'utf-8');
   schemaSource = readFileSync(resolve(SRC, 'db/schema.sql'), 'utf-8');
   clientSource = readFileSync(resolve(SRC, 'db/client.ts'), 'utf-8');
 });

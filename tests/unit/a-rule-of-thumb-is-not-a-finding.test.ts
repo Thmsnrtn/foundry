@@ -1,9 +1,7 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
-import { readFileSync } from 'node:fs';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 
@@ -42,11 +40,6 @@ describe('the table that would have held the measurements', () => {
     expect(rows.rows).toHaveLength(0);
   });
 
-  it('is named nowhere in the source', () => {
-    const src = stripComments(
-      readFileSync('src/services/intelligence/predictive.ts', 'utf8'), { lineComments: true });
-    expect(src).not.toContain('leading_indicators');
-    // And the header that claimed the capability no longer does.
-    expect(src).not.toMatch(/^\/\/ Leading indicators, pre-stressor detection/m);
-  });
+  // `intelligence/predictive.ts` was checked here for naming it; that module
+  // was deleted in Roadmap 2027 R12.
 });

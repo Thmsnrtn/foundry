@@ -157,7 +157,7 @@ describe('the level and the movement', () => {
 describe('no surface still shows the movement as MRR', () => {
   const SURFACES = [
     // `src/services/voice/briefing.ts` was deleted in Roadmap 2027 R11.
-    'src/services/digest/delivery.ts',
+    // `src/services/digest/delivery.ts` was deleted in Roadmap 2027 R12.
     'src/services/chat/coo.ts',
     // `src/services/conversation/context.ts` was the sixth surface. It was
     // deleted as production-dead, so there is no reader of it left to hold.
@@ -172,7 +172,8 @@ describe('no surface still shows the movement as MRR', () => {
   });
 
   it('and each says "not reported" rather than printing a zero', () => {
-    for (const f of ['src/services/digest/delivery.ts', 'src/mcp/server.ts']) {
+    // `src/services/digest/delivery.ts` was deleted in Roadmap 2027 R12.
+    for (const f of ['src/mcp/server.ts']) {
       expect(readFileSync(f, 'utf8'), `${f}`).toMatch(/[Nn]ot reported/);
     }
   });

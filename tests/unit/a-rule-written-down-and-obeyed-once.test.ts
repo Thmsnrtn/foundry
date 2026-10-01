@@ -153,9 +153,10 @@ describe('every surface that shows a Signal', () => {
     // generated it is deleted, then three until the alignment score left
     // `services/team/members.ts` (Private S7), then two until the drop alert
     // in `jobs/index.ts` and `services/voice/briefing.ts` were deleted.
-    // deleted in Roadmap 2027 R11
-    expect(consumers().length, 'if this moves, a new surface appeared')
-      .toBeGreaterThanOrEqual(0);
+    // Both went in Roadmap 2027 R11, so none is left. A new caller is a new
+    // surface showing a Signal and must arrive with the rule above, which is
+    // why this is an exact list and not a floor.
+    expect(consumers(), 'if this moves, a new surface appeared').toEqual([]);
   });
 
   it('does not let a bare score reach the voice', () => {

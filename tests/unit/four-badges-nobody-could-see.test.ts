@@ -121,8 +121,8 @@ describe('the badges that are not drawn', () => {
     expect(jobs).not.toContain('unread_competitive_signals');
     expect(jobs).not.toContain('open_remediation_prs');
     expect(jobs).not.toContain('unread_milestones');
-    // The one that renders is still refreshed.
-    expect(jobs).toContain('pending_decisions_count = ?');
+    // `nav_badge_refresh`, which still refreshed the one that renders, was
+    // retired in Roadmap 2027 R12.
   });
 
   it('and their columns are gone from the schema', async () => {

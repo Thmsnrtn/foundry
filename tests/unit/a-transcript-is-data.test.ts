@@ -1,9 +1,7 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { wrapDataBlock, dataBlockInstruction, sanitizeForPrompt } from '../../src/services/ai/sanitize.js';
 
 // =============================================================================
@@ -19,8 +17,8 @@ import { wrapDataBlock, dataBlockInstruction, sanitizeForPrompt } from '../../sr
 // ONE OF THE TWO BOUNDARIES IS GONE. `voice/processor.ts` was deleted as
 // production-dead, so the two cases that counted its three wrapped transcripts
 // and its three data-block instructions went with it: there is no prompt left
-// putting a transcript anywhere. The competitive scan is still here and still
-// held. The instrument itself — the block, the instruction, and the difference
+// putting a transcript anywhere. The competitive scan went the same way in
+// Roadmap 2027 R12. The instrument itself — the block, the instruction, and the difference
 // between wrapping and filtering — is what the rest of this file is about, and
 // it is what a new transcript boundary would have to reach for.
 //
@@ -84,13 +82,6 @@ describe('the instruction that makes the block mean something', () => {
   });
 });
 
-describe('the boundary the audit named that is still here', () => {
-  const read = (f: string) => stripComments(readFileSync(f, 'utf8'), { lineComments: true });
-
-  it('the competitive scan wraps the names somebody typed', () => {
-    const src = read('src/services/intelligence/competitive.ts');
-    expect(src).toContain("wrapDataBlock('competitors'");
-    expect(src).toContain("wrapDataBlock('product'");
-    expect(src).toContain('dataBlockInstruction');
-  });
-});
+// The competitive scan's wrapping was checked here. `intelligence/competitive.ts`
+// was deleted in Roadmap 2027 R12 with the scheduled scan that was its only
+// caller, so neither of the two boundaries the audit named is left.

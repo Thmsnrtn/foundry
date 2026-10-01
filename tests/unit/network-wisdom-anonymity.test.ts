@@ -166,13 +166,8 @@ describe('the number in the claim is the number that was measured', () => {
   });
 });
 
-describe('the write side still requires consent', () => {
-  it('has not been loosened by any of this', () => {
-    const source = readFileSync(
-      resolve(__dirname, '../../src/services/decisions/patterns.ts'), 'utf8');
-    expect(source).toMatch(/hasConsent\(input\.productId, 'cross_company_patterns'\)/);
-  });
-});
+// The write side's consent check lived in `decisions/patterns.ts`, which was
+// deleted in Roadmap 2027 R12 with the scheduled job that was its only caller.
 
 // =============================================================================
 // §9: a claim that crosses a tenant boundary carries its provenance.

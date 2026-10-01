@@ -162,7 +162,9 @@ describe('the table is gone', () => {
       // deleted in Roadmap 2027 R10 with the last legacy executor. Sixty-four.
       // And eight jobs whose model output nothing read came off: deleted in
       // Roadmap 2027 R11. Fifty-six.
-      .toBe(56);
+      // And twenty jobs that wrote what nothing read, or could never find work
+      // here, came off: deleted in Roadmap 2027 R12. Thirty-six.
+      .toBe(36);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

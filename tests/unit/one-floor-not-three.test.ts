@@ -55,7 +55,7 @@ describe('the floor is one rule', () => {
   it('is what every cross-company path uses, with no literal beside it', () => {
     const paths = [
       'src/services/wisdom/network.ts',
-      'src/services/decisions/patterns.ts',
+      // `src/services/decisions/patterns.ts` was deleted in Roadmap 2027 R12.
     ];
     for (const p of paths) {
       const src = stripComments(readFileSync(p, 'utf8'), { lineComments: true });

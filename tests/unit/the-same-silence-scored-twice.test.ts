@@ -86,8 +86,8 @@ describe('a founder nobody has observed', () => {
 
 describe('the substitutions are gone from the source', () => {
   it('no midpoint stands where a person was not observed', () => {
-    for (const f of ['src/services/intelligence/founder-health.ts',
-                     'src/services/intelligence/predictive.ts']) {
+    // `src/services/intelligence/predictive.ts` was deleted in Roadmap 2027 R12.
+    for (const f of ['src/services/intelligence/founder-health.ts']) {
       const code = stripComments(readFileSync(f, 'utf8'), { lineComments: true });
       expect(code, `${f} still substitutes 50 for an unrecorded motivation`)
         .not.toMatch(/motivation_score \?\? 50/);

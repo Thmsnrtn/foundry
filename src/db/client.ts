@@ -372,12 +372,6 @@ export async function getStoryArtifacts(productId: string): Promise<ResultSet> {
   );
 }
 
-/**
- * Get lifecycle conditions for a product.
- */
-export async function getLifecycleConditions(productId: string): Promise<ResultSet> {
-  return query('SELECT * FROM lifecycle_conditions WHERE product_id = ?', [productId]);
-}
 
 /**
  * Insert a new audit log entry. Used by every autonomous action and job.

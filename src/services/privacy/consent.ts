@@ -38,6 +38,11 @@ export const RECORDED_PREFERENCE_ONLY: Partial<Record<ConsentType, string>> = {
   // that if a training path is ever proposed it meets an existing answer.
   ai_training_opt_out:
     'no training path exists to gate; the row is the auditable preference itself',
+  // The one writer of cross-company patterns was retired with the job that ran
+  // it (Roadmap 2027 R12), so nothing produces them now and there is no path
+  // to gate. The owner's answer is kept so a future path meets it.
+  cross_company_patterns:
+    'nothing produces cross-company patterns since R12; the row is the auditable preference itself',
 };
 
 export type ConsentSummary = {
@@ -1364,12 +1369,10 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   sense_providers: 'which provider could supply which sense, and what the credential hands over; constitutional, naming no company',
   sense_provider_scopes: 'the exact minimum scopes each provider may be asked for, constitutional and the same for every owner; the credentials themselves are erased with their company',
   job_health: 'whether Foundry\'s own scheduled work is running; job names and error class names, no company in it',
-  intelligence_benchmarks: 'benchmarks over a cohort, naming no member',
   job_locks: 'scheduler leases',
   leading_indicators: 'indicator definitions per sector',
   network_benchmarks: 'benchmark aggregates, naming no contributor',
   portfolios: 'an investor organisation, not a founder\'s company',
-  portfolio_snapshots: 'that organisation\'s own aggregates',
   schema_migrations: 'which migrations have run',
   support_channel_feeds: 'the closed list of providers an adapter exists for',
   sector_scoring_overrides: 'scoring configuration per sector',

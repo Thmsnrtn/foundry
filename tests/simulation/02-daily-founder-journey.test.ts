@@ -92,21 +92,12 @@ describe('Settings page renders', () => {
 // 6. Layout Context (shared data loader)
 // =============================================================================
 
-describe('Shared layout context loads UX intelligence', () => {
+describe('Shared layout context', () => {
 
   it('getLayoutContext function is exported', () => {
     expect(sharedSource).toMatch(/export.*getLayoutContext/);
   });
 
-  it('layout context loads next action', () => {
-    expect(sharedSource).toMatch(/getNextAction/);
-  });
-
-  it('layout context loads unread notifications', () => {
-    expect(sharedSource).toMatch(/getUnreadNotifications|getUnreadCount/);
-  });
-
-  it('layout context loads unseen milestones', () => {
-    expect(sharedSource).toMatch(/getUnseenMilestones/);
-  });
+  // The layout context's `ux` half — next action, unread notifications and
+  // unseen milestones — was removed in Roadmap 2027 R12: no page read it.
 });

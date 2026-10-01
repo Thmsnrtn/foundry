@@ -17,7 +17,8 @@
 // was false for every company at once.
 //
 // This is the cheap local precondition that belongs BEFORE the paid call, not
-// after it. Same shape in `scenarioAccuracy`, fixed the same way.
+// after it. Same shape in `scenarioAccuracy`, fixed the same way (that job
+// was retired in Roadmap 2027 R12).
 // =============================================================================
 
 process.env.TURSO_DATABASE_URL = 'file::memory:';

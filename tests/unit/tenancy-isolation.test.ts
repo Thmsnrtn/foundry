@@ -181,10 +181,8 @@ describe('Database tenant isolation', () => {
   // after the commercial routes went, so the reader and the table were both
   // removed; there is no accessor to scope.
 
-  it('getLifecycleConditions scopes by product_id', () => {
-    const fn = extractFunction(clientSource, 'getLifecycleConditions');
-    expect(fn).toMatch(/WHERE.*product_id\s*=\s*\?/i);
-  });
+  // `getLifecycleConditions` was checked here too. Nothing called it, and it
+  // was deleted with `lifecycle_conditions` in Roadmap 2027 R12.
 
   // ── Insert Operations — Must Include product_id ─────────────────────────
 

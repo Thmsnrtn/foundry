@@ -79,10 +79,10 @@ describe('what the founder is promised', () => {
   });
 
   it('cannot grant the one consent the code enforces elsewhere, which is why that path is dead', async () => {
-    // `decisions/patterns.ts` gates the peer decision signal on
-    // `cross_company_patterns`. That type is in the TypeScript union and NOT in
-    // migration 041's CHECK, so it can never be recorded and `getPeerSignal`
-    // always returns null. Recorded as a fact rather than repaired: the careful
+    // `decisions/patterns.ts` (deleted in Roadmap 2027 R12) gated the peer
+    // decision signal on `cross_company_patterns`. That type is in the
+    // TypeScript union and NOT in migration 041's CHECK, so it can never be
+    // recorded and `getPeerSignal` always returned null. Recorded as a fact rather than repaired: the careful
     // path being unreachable is the reason its careless sibling matters.
     await company('bp_check');
     await expect(recordConsent('bp_check', 'f_bp_check', 'cross_company_patterns' as never, true))

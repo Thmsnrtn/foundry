@@ -60,7 +60,8 @@ describe('every table holding a company is erased or explains itself', () => {
     const erased = await tablesToErase();
     // 34 erased tables were dropped by migration 375 in Roadmap 2027 R9.
     // 8 erased tables were dropped by migration 376; deleted in Roadmap 2027 R11.
-    expect(erased.length).toBeGreaterThan(108);
+    // 3 erased tables were dropped by migration 377; deleted in Roadmap 2027 R12.
+    expect(erased.length).toBeGreaterThan(105);
   });
 
   it('names the tables a founder would notice most', async () => {
@@ -214,8 +215,9 @@ describe('an export that exports', () => {
     const unaccounted = all.filter((t) => !(t in EXCLUDED_FROM_EXPORT_REASONS));
     // 34 exported tables were dropped by migration 375 in Roadmap 2027 R9.
     // 8 exported tables were dropped by migration 376; deleted in Roadmap 2027 R11.
+    // 3 exported tables were dropped by migration 377; deleted in Roadmap 2027 R12.
     expect(unaccounted.length, 'the export is derived from the schema')
-      .toBeGreaterThan(108);
+      .toBeGreaterThan(105);
     for (const reason of Object.values(EXCLUDED_FROM_EXPORT_REASONS)) {
       expect(reason.length).toBeGreaterThan(20);
     }
@@ -366,9 +368,8 @@ describe('retained data stays restricted', () => {
     // empty directories, so naming it here makes this scan throw ENOENT on a
     // fresh clone rather than find nothing. The remaining five are the
     // cognition surfaces that still exist. `services/scp/agents` was deleted in
-    // Roadmap 2027 R9.
-    const cognition = ['services/wisdom', 'services/intelligence', 'services/chat',
-      'services/digest'];
+    // Roadmap 2027 R9. `services/digest` was deleted in Roadmap 2027 R12.
+    const cognition = ['services/wisdom', 'services/intelligence', 'services/chat'];
     const offenders: string[] = [];
     for (const dir of cognition) {
       for (const f of walk(r(__dirname, '../../src', dir))) {

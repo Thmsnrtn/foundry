@@ -1,26 +1,23 @@
 // =============================================================================
 // Simulation 05: Multi-Tenancy Integrity
 // Verifies every data access path enforces tenant isolation.
-// Static analysis of db/client.ts, portfolio, experiment, voice, and
+// Static analysis of db/client.ts, experiment, voice, and
 // decision_patterns — the cross-company data contract.
 // =============================================================================
 
 import { describe, it, expect, beforeAll } from 'vitest';
 import { existsSync, readFileSync } from 'fs';
 import { resolve } from 'path';
-import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 
 const SRC = resolve(__dirname, '../../src');
 const ROOT = resolve(__dirname, '../..');
 
 let clientSource: string;
-let portfolioSource: string;
 let schemaSource: string;
 let authMiddlewareSource: string;
 
 beforeAll(() => {
   clientSource = readFileSync(resolve(SRC, 'db/client.ts'), 'utf-8');
-  portfolioSource = readFileSync(resolve(SRC, 'services/portfolio/manager.ts'), 'utf-8');
   schemaSource = readFileSync(resolve(SRC, 'db/schema.sql'), 'utf-8');
   authMiddlewareSource = readFileSync(resolve(SRC, 'middleware/auth.ts'), 'utf-8');
 });
@@ -117,50 +114,10 @@ describe('All exported db/client.ts queries enforce tenant scoping', () => {
 // 2. Portfolio API Has Ownership Checks
 // =============================================================================
 
-describe('Portfolio API has ownership checks', () => {
-
-  it('getPortfolioOverview scopes by portfolio_id', () => {
-    const fn = extractFunction(portfolioSource, 'getPortfolioOverview');
-    const sql = extractSQL(fn);
-    expect(sql).toMatch(/WHERE.*portfolio_id\s*=\s*\?/i);
-  });
-
-  it('addToPortfolio requires both portfolioId and founderId', () => {
-    const fn = extractFunction(portfolioSource, 'addToPortfolio');
-    expect(fn).toMatch(/portfolioId:\s*string/);
-    expect(fn).toMatch(/founderId:\s*string/);
-  });
-
-  it('removeFromPortfolio scopes by portfolio_id AND product_id', () => {
-    const fn = extractFunction(portfolioSource, 'removeFromPortfolio');
-    const sql = extractSQL(fn);
-    expect(sql).toMatch(/portfolio_id\s*=\s*\?/);
-    expect(sql).toMatch(/product_id\s*=\s*\?/);
-  });
-
-  it('benchmarkProduct scopes by portfolio_id', () => {
-    const fn = extractFunction(portfolioSource, 'benchmarkProduct');
-    const sql = extractSQL(fn);
-    expect(sql).toMatch(/portfolio_id\s*=\s*\?/i);
-  });
-
-  it('mints no portfolio API key, because nothing accepts one', () => {
-    // These two tests used to pin `authenticatePortfolioKey` — which queried
-    // `api_key = ?` against a PLAINTEXT column — and the `pfk_` prefix format.
-    // RT02-10 asked for the key to be hashed. Reading it for that fix found
-    // that `authenticatePortfolioKey` HAD NO CALLER: the key was minted, stored
-    // in the clear, returned to the portfolio owner, and opened nothing. An API
-    // key handed to a customer says a door exists; there was no door. So the
-    // credential is gone rather than hashed, and migration 200 nulls the ones
-    // already written.
-    //
-    // Comments stripped: the paragraph above names both the function and the
-    // prefix, and a test that greps source must not read its own explanation.
-    const code = stripComments(portfolioSource, { lineComments: true });
-    expect(code).not.toMatch(/authenticatePortfolioKey/);
-    expect(code).not.toMatch(/pfk_/);
-  });
-});
+// `describe('Portfolio API has ownership checks')` stood here, reading
+// `services/portfolio/manager.ts`. That module was deleted in Roadmap 2027 R12
+// with the scheduled snapshot job that was its last caller; the check that no
+// portfolio key is minted anywhere lives on in a-key-that-opened-nothing.
 
 // =============================================================================
 // 3. Experiment API Has Ownership Checks

@@ -31,11 +31,8 @@ export interface LayoutOptions {
   sidebarRiskClass?: string | null;
   chamberMode?: boolean;
 }
-import type { RiskStateValue, NextAction, AppNotification, MilestoneEvent, NavBadges, Founder } from '../../types/index.js';
+import type { RiskStateValue, Founder } from '../../types/index.js';
 import { getProductDNA } from '../../services/wisdom/dna.js';
-import { getNextAction } from '../../services/ux/next-action.js';
-import { getUnreadNotifications, getUnreadCount } from '../../services/ux/notifications.js';
-import { getUnseenMilestones } from '../../services/ux/milestones.js';
 import { getFluency, navExplain } from '../../services/ux/fluency.js';
 import { getCookie } from 'hono/cookie';
 import type { Context } from 'hono';
@@ -51,14 +48,6 @@ import type { AuthEnv } from '../../middleware/auth.js';
  */
 export { selectedProductId } from '../../services/founder/selected-company.js';
 
-export interface UXContext {
-  nextAction: NextAction | null;
-  unreadNotifications: AppNotification[];
-  unreadNotificationCount: number;
-  unseenMilestones: MilestoneEvent[];
-  navBadges: NavBadges;
-}
-
 export interface LayoutContext extends Required<Pick<LayoutOptions, 'title' | 'founderName' | 'productName' | 'productId' | 'activeNav' | 'riskState' | 'riskReason'>> {
   founderId: string;
   founder: Founder;
@@ -69,8 +58,6 @@ export interface LayoutContext extends Required<Pick<LayoutOptions, 'title' | 'f
   csrfToken: string;
   /** All products owned by this founder, for the switcher */
   allProducts: Array<{ id: string; name: string }>;
-  /** UX intelligence layer context */
-  ux: UXContext;
   /** Fluency Law: the page explainer strip ('' at technical or unmapped pages). */
   navExplainer: string;
 }
@@ -99,14 +86,6 @@ export async function getLayoutContext(
     return { id: r.id as string, name: r.name as string };
   });
 
-  const emptyUx: UXContext = {
-    nextAction: null,
-    unreadNotifications: [],
-    unreadNotificationCount: 0,
-    unseenMilestones: [],
-    navBadges: { decisions_count: 0 },
-  };
-
   // Extract CSRF token from Hono context
   const csrfToken = honoCtx ? ((honoCtx as any).get?.('csrfToken') as string ?? '') : '';
 
@@ -126,7 +105,6 @@ export async function getLayoutContext(
       dnaCompletionPct: 0,
       wisdomLayerActive: false,
       allProducts: [],
-      ux: emptyUx,
       navExplainer: navExplain(activeNav, getFluency(founder)),
     };
   }
@@ -153,29 +131,6 @@ export async function getLayoutContext(
   const dna = await getProductDNA(productId);
   const dnaCompletionPct = dna?.completion_pct ?? 0;
   const wisdomLayerActive = (ls?.wisdom_layer_active as number | null) === 1;
-  // UX Intelligence Layer — parallel fetches
-  // No product tour: it was a new customer's onboarding, and Foundry has one owner (Private S7).
-  const [nextAction, unreadNotifs, unreadCount, unseenMilestones] = await Promise.all([
-    getNextAction(founder, productId),
-    getUnreadNotifications(founder.id),
-    getUnreadCount(founder.id),
-    getUnseenMilestones(founder.id, productId),
-  ]);
-
-  // The one badge the sidebar draws. The other five were computed here, cached
-  // in `lifecycle_state` by a job, and read into a struct the layout ignored.
-  const navBadges: NavBadges = {
-    decisions_count: (ls?.pending_decisions_count as number) ?? 0,
-  };
-
-  const ux: UXContext = {
-    nextAction,
-    unreadNotifications: unreadNotifs,
-    unreadNotificationCount: unreadCount,
-    unseenMilestones,
-    navBadges,
-  };
-
   return {
     title,
     founderName,
@@ -191,7 +146,6 @@ export async function getLayoutContext(
     dnaCompletionPct,
     wisdomLayerActive,
     allProducts,
-    ux,
     navExplainer: navExplain(activeNav, getFluency(founder)),
   };
 }

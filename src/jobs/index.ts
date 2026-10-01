@@ -4,22 +4,9 @@
 // =============================================================================
 
 import { logger } from '../services/logger.js';
-import { getAllActiveProducts, operatingProduct, referenceCompany, query, insertAuditLog, countGate0DecisionsWithOutcomes } from '../db/client.js';
-import { evaluateConditions } from '../services/lifecycle/monitor.js';
-import { runCompetitiveScan } from '../services/intelligence/competitive.js';
+import { getAllActiveProducts, operatingProduct, referenceCompany, query } from '../db/client.js';
 import { getMRRDecomposition } from '../services/intelligence/revenue.js';
-import { generateDigest } from '../services/digest/generator.js';
-import { sendDigestEmail } from '../services/digest/delivery.js';
-import { generatePatternFromOutcome } from '../services/decisions/patterns.js';
-import { synthesizeJudgmentPatterns } from '../services/wisdom/patterns.js';
-import { getProductDNA } from '../services/wisdom/dna.js';
-import { isPRMerged, isPROpen } from '../services/audit/github.js';
-import { triggerDimensionReAudit } from '../services/audit/remediation.js';
 import { companySpend } from '../services/ai/what-it-is-for.js';;
-import { checkAndAwardMilestones } from '../services/ux/milestones.js';
-import { detectGrowthStage, updateGrowthStage } from '../services/lifecycle/stage-detection.js';
-import { refreshFounderHealthMetrics } from '../services/intelligence/founder-health.js';
-import { aggregateInsights } from '../services/wisdom/network.js';
 // `runAllDueSyncs` was imported here and never scheduled. It belongs to the
 // second integration subsystem — services/integrations/framework.ts — which
 // writes `integrations.last_sync_at` / `last_sync_status` / `error_count` while
@@ -30,46 +17,9 @@ import { aggregateInsights } from '../services/wisdom/network.js';
 // scheduling a second hourly sync over the same rows would double every
 // provider call, and reconciling the two vocabularies is a real piece of work,
 // not an import statement. Recorded in the frontier.
-import { generatePredictions } from '../services/intelligence/predictive.js';
 import { generateDraftsForPendingDecisions } from '../services/decisions/actions.js';
 import { refreshAllCustomerHealth } from '../services/customers/intelligence.js';
-import { generatePortfolioSnapshot } from '../services/portfolio/manager.js';
-import { nanoid } from 'nanoid';
 import type { RiskStateValue, StressorSeverity, CompetitiveSignal, GrowthStage } from '../types/index.js';
-
-// ─── 1. Lifecycle Check — Daily 6:00 UTC ─────────────────────────────────────
-export async function lifecycleCheck(): Promise<void> {
-  logger.info('lifecycle_check starting', { jobName: 'lifecycle_check' });
-  const products = await getAllActiveProducts();
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      const activated = await evaluateConditions(p.id);
-      if (activated.length > 0) {
-        logger.info(`lifecycle_check: ${p.name} activated: ${activated.join(', ')}`, { jobName: 'lifecycle_check' });
-      }
-    } catch (err) {
-      logger.error(`lifecycle_check error for ${p.id}:`, { jobName: 'lifecycle_check', error: String(err) });
-    }
-  }
-  logger.info('lifecycle_check complete', { jobName: 'lifecycle_check' });
-}
-
-// ─── 2. Competitive Scan — Sunday 6:00 UTC ───────────────────────────────────
-export async function competitiveScan(): Promise<void> {
-  logger.info('competitive_scan starting', { jobName: 'competitive_scan' });
-  const products = await getAllActiveProducts();
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      const signals = await runCompetitiveScan(p.id);
-      logger.info(`competitive_scan: ${p.name} — ${signals.length} signals`, { jobName: 'competitive_scan' });
-    } catch (err) {
-      logger.error(`competitive_scan error for ${p.id}:`, { jobName: 'competitive_scan', error: String(err) });
-    }
-  }
-  logger.info('competitive_scan complete', { jobName: 'competitive_scan' });
-}
 
 // ─── 5. Behavioral Triggers — Every 6 hours ──────────────────────────────────
 // BEHAVIOURAL TRIGGERS IS RETIRED, AND THE RESPONSIBILITY WITH IT.
@@ -127,400 +77,6 @@ export async function sloCheck(): Promise<void> {
 // WHAT THE ABSENCE OF A ROW NOW MEANS: this company reported nothing that day.
 // That is a fact worth being able to state, and a row of zeros cannot state it.
 
-// ─── 8. Cold Start Check — Daily ──────────────────────────────────────────────
-export async function coldStartCheck(): Promise<void> {
-  logger.info('cold_start_check starting', { jobName: 'cold_start_check' });
-  const products = await getAllActiveProducts();
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    const count = await countGate0DecisionsWithOutcomes(p.id);
-    const ls = await query('SELECT * FROM lifecycle_state WHERE product_id = ?', [p.id]);
-    const lsRow = ls.rows[0] as Record<string, unknown> | undefined;
-    if (!lsRow) continue;
-
-    const createdAt = new Date(p.created_at);
-    const daysSinceCreation = Math.floor((Date.now() - createdAt.getTime()) / 86400000);
-
-    // Cold Start exits when: 25+ decisions with outcomes AND 30+ days elapsed
-    const coldStartActive = count < 25 || daysSinceCreation < 30;
-
-    if (!coldStartActive && lsRow.prompt_9_status === 'not_started') {
-      // Exit cold start — mark prompt 9 as started
-      await query(
-        `UPDATE lifecycle_state SET prompt_9_status = 'in_progress', prompt_9_started_at = ? WHERE product_id = ?`,
-        [new Date().toISOString(), p.id]);
-
-      await insertAuditLog({
-        id: nanoid(), product_id: p.id,
-        action_type: 'cold_start_exit', gate: 1,
-        trigger: 'cold_start_check',
-        reasoning: `Cold Start complete: ${count} decisions with outcomes, ${daysSinceCreation} days elapsed`,
-      });
-    }
-  }
-  logger.info('cold_start_check complete', { jobName: 'cold_start_check' });
-}
-
-// ─── 9. Scenario Accuracy — Weekly after synthesis ────────────────────────────
-export async function scenarioAccuracy(): Promise<void> {
-  logger.info('scenario_accuracy starting', { jobName: 'scenario_accuracy' });
-  // A PAID FRONTIER CALL THAT NOTHING READ, DUPLICATING A FREE DETERMINISTIC ONE.
-  //
-  // This asked Opus, once per decision and up to twenty per pass, to classify
-  // an outcome as positive/neutral/negative and score how close the base case
-  // had been. It then wrote that answer to `scenario_models.outcome_accuracy`
-  // — a column no SELECT in this repository reads. Every reader of
-  // `scenario_models` takes `id`, `option_label`, `base_case`, `best_case`,
-  // `stress_case`, and none of them takes the accuracy.
-  //
-  // Meanwhile the direction it was paying to infer is already a recorded fact:
-  // `decisions.outcome_valence`, which the prediction-accuracy job beside this
-  // one reads deterministically and writes to `prediction_accuracy`, a table
-  // that IS read. So the model was being asked for something the database
-  // already knew, and the answer was filed where nobody looks.
-  //
-  // Cognition pays rent or it goes. What this job is FOR — contributing the
-  // outcome to the cross-company pattern pool — is kept, computed from the
-  // valence the founder recorded. The scenario comparison it was scoring is
-  // not lost either: nothing consumed it, and if a consumer appears the
-  // deterministic comparison can be written then, without buying it.
-  const decisions = await query(
-    `SELECT d.id, d.product_id, d.category, d.chosen_option, d.outcome_valence
-     FROM decisions d
-     JOIN scenario_models sm ON d.id = sm.decision_id
-     JOIN products p ON p.id = d.product_id
-     WHERE d.outcome IS NOT NULL AND d.outcome_valence IS NOT NULL
-       AND ${operatingProduct('p')}
-     LIMIT 20`, []);
-
-  for (const row of decisions.rows) {
-    const d = row as Record<string, unknown>;
-    try {
-      const valence = Number(d.outcome_valence);
-      const outcomeDirection = valence === 1 ? 'positive' : valence === -1 ? 'negative' : 'neutral';
-
-      const ls = await query('SELECT * FROM lifecycle_state WHERE product_id = ?', [d.product_id]);
-      const lsRow = ls.rows[0] as Record<string, string> | undefined;
-
-      await generatePatternFromOutcome({
-        productId: d.product_id as string,
-        decisionType: d.category as string,
-        lifecycleStage: lsRow?.current_prompt ?? 'unknown',
-        riskState: (lsRow?.risk_state as RiskStateValue) ?? 'green',
-        metricsContext: {},
-        optionChosen: d.chosen_option as string,
-        outcomeDirection,
-        outcomeMagnitude: 'moderate',
-        outcomeTimeframeDays: 30,
-        marketCategory: null,
-        contributingFactors: null,
-        // NOT A SCORE ANY MORE, AND NOT A FABRICATED ONE. The accuracy figure
-        // came from the model call that has gone; inventing a number here
-        // would be worse than the call was. The pool records the outcome
-        // without a scenario-accuracy claim.
-        scenarioAccuracyScore: null,
-      });
-    } catch (err) {
-      logger.error(`scenario_accuracy error for decision ${d.id}:`, { jobName: 'scenario_accuracy', error: String(err) });
-    }
-  }
-  logger.info('scenario_accuracy complete', { jobName: 'scenario_accuracy' });
-}
-
-
-// ─── 10. Yellow Pulse — Thursday (for Yellow state products) ──────────────────
-export async function yellowPulse(): Promise<void> {
-  logger.info('yellow_pulse starting', { jobName: 'yellow_pulse' });
-  const products = await query(
-    `SELECT p.*, f.email FROM products p
-     JOIN founders f ON p.owner_id = f.id
-     JOIN lifecycle_state ls ON p.id = ls.product_id
-     WHERE ls.risk_state = 'yellow' AND ${operatingProduct('p')}`, []);
-
-  for (const row of products.rows) {
-    const p = row as Record<string, unknown>;
-    try {
-      const digest = await generateDigest(p.id as string, 'yellow', 'yellow_pulse');
-      await sendDigestEmail(p.id as string, p.email as string, p.name as string, digest);
-    } catch (err) {
-      logger.error(`yellow_pulse error for ${p.id}:`, { jobName: 'yellow_pulse', error: String(err) });
-    }
-  }
-  logger.info('yellow_pulse complete', { jobName: 'yellow_pulse' });
-}
-
-// ─── 11. Red Daily — Daily (for Red state products) ───────────────────────────
-export async function redDaily(): Promise<void> {
-  logger.info('red_daily starting', { jobName: 'red_daily' });
-  const products = await query(
-    `SELECT p.*, f.email FROM products p
-     JOIN founders f ON p.owner_id = f.id
-     JOIN lifecycle_state ls ON p.id = ls.product_id
-     WHERE ls.risk_state = 'red' AND ${operatingProduct('p')}`, []);
-
-  for (const row of products.rows) {
-    const p = row as Record<string, unknown>;
-    try {
-      const digest = await generateDigest(p.id as string, 'red', 'red_daily');
-      await sendDigestEmail(p.id as string, p.email as string, p.name as string, digest);
-    } catch (err) {
-      logger.error(`red_daily error for ${p.id}:`, { jobName: 'red_daily', error: String(err) });
-    }
-  }
-  logger.info('red_daily complete', { jobName: 'red_daily' });
-}
-
-// ─── 12. Stressor Cleanup — Daily ────────────────────────────────────────────
-export async function stressorCleanup(): Promise<void> {
-  logger.info('stressor_cleanup starting', { jobName: 'stressor_cleanup' });
-  // Auto-resolve stressors that have exceeded their timeframe
-  await query(
-    `UPDATE stressor_history SET status = 'escalated', resolution_notes = 'Auto-escalated: exceeded timeframe'
-     WHERE status = 'active' AND datetime(identified_at, '+' || timeframe_days || ' days') < datetime('now')`, []);
-  logger.info('stressor_cleanup complete', { jobName: 'stressor_cleanup' });
-}
-
-// ─── 13. Pattern Aggregation — Weekly ─────────────────────────────────────────
-export async function patternAggregation(): Promise<void> {
-  logger.info('pattern_aggregation starting', { jobName: 'pattern_aggregation' });
-  // Log pattern stats for monitoring
-  const total = await query('SELECT COUNT(*) as c FROM decision_patterns', []);
-  const withOutcomes = await query('SELECT COUNT(*) as c FROM decision_patterns WHERE outcome_direction IS NOT NULL', []);
-  logger.info(`pattern_aggregation: ${(total.rows[0] as Record<string, number>)?.c ?? 0} total, ${(withOutcomes.rows[0] as Record<string, number>)?.c ?? 0} with outcomes`, { jobName: 'pattern_aggregation' });
-
-  // Cross-product wisdom network aggregation
-  try {
-    const insightsGenerated = await aggregateInsights();
-    if (insightsGenerated > 0) {
-      logger.info(`pattern_aggregation: generated ${insightsGenerated} cross-product insights`, { jobName: 'pattern_aggregation' });
-    }
-  } catch (err) {
-    logger.error('JOB: pattern_aggregation: wisdom network aggregation failed:', { jobName: 'JOB', error: String(err) });
-  }
-  logger.info('pattern_aggregation complete', { jobName: 'pattern_aggregation' });
-}
-
-// ─── 14. Story Capture — Event-driven, but checked daily ─────────────────────
-export async function storyCapture(): Promise<void> {
-  logger.info('story_capture starting', { jobName: 'story_capture' });
-  const products = await getAllActiveProducts();
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    // Check for milestone events that should generate story artifacts
-    const recentTransitions = await query(
-      `SELECT * FROM audit_log WHERE product_id = ? AND action_type = 'risk_state_transition' AND created_at > datetime('now', '-1 day')`, [p.id]);
-
-    for (const t of recentTransitions.rows) {
-      const tr = t as Record<string, unknown>;
-      await query(
-        `INSERT INTO founding_story_artifacts (id, product_id, phase, artifact_type, title, content)
-         VALUES (?, ?, 'operational', 'risk_event', ?, ?)`,
-        [nanoid(), p.id, `Risk Transition: ${tr.reasoning}`, tr.reasoning as string]);
-    }
-  }
-  logger.info('story_capture complete', { jobName: 'story_capture' });
-}
-
-// ─── 15. Founder Pattern Synthesis — Sunday 7:00 UTC ──────────────────────────
-export async function founderPatternSynthesis(): Promise<void> {
-  logger.info('founder_pattern_synthesis starting', { jobName: 'founder_pattern_synthesis' });
-  const products = await getAllActiveProducts();
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      // Only synthesize for products with wisdom layer active
-      const ls = await query('SELECT wisdom_layer_active FROM lifecycle_state WHERE product_id = ?', [p.id]);
-      const lsRow = ls.rows[0] as Record<string, unknown> | undefined;
-      if (!lsRow || (lsRow.wisdom_layer_active as number) !== 1) continue;
-
-      // Check for 3+ resolved Gate 3 decisions with reasoning
-      const decisions = await query(
-        // `decisions.status` has never had a 'resolved' value — the
-        // vocabulary is pending / approved / rejected / executed / expired. So
-        // this count was always zero, `cnt < 3` always held, and
-        // founder-pattern synthesis has never run for anybody. A decision the
-        // founder settled is one they approved or rejected; both carry the
-        // reasoning this looks for.
-        `SELECT COUNT(*) as cnt FROM decisions
-          WHERE product_id = ? AND gate = 3
-            AND status IN ('approved','rejected','executed')
-            AND resolution_reasoning IS NOT NULL`,
-        [p.id]
-      );
-      const cnt = (decisions.rows[0] as Record<string, number>)?.cnt ?? 0;
-      if (cnt < 3) continue;
-
-      await synthesizeJudgmentPatterns(p.id, p.owner_id);
-      logger.info(`founder_pattern_synthesis: ${p.name} — patterns synthesized`, { jobName: 'founder_pattern_synthesis' });
-    } catch (err) {
-      logger.error(`founder_pattern_synthesis error for ${p.id}:`, { jobName: 'founder_pattern_synthesis', error: String(err) });
-    }
-  }
-  logger.info('founder_pattern_synthesis complete', { jobName: 'founder_pattern_synthesis' });
-}
-
-// ─── 16. DNA Completion Nudge — Wednesday 8:00 UTC ────────────────────────────
-export async function dnaCompletionNudge(): Promise<void> {
-  logger.info('dna_completion_nudge starting', { jobName: 'dna_completion_nudge' });
-  const products = await query(
-    `SELECT p.id, p.name, p.owner_id, p.created_at, f.email
-     FROM products p
-     JOIN founders f ON p.owner_id = f.id
-     JOIN lifecycle_state ls ON p.id = ls.product_id
-     WHERE ${operatingProduct('p')}
-       AND (ls.dna_completion_pct IS NULL OR ls.dna_completion_pct < 60)
-       AND p.created_at < datetime('now', '-14 days')`, []
-  );
-
-  for (const row of products.rows) {
-    const p = row as Record<string, unknown>;
-    try {
-      // Max 1 nudge per week: check audit_log
-      const recent = await query(
-        `SELECT id FROM audit_log WHERE product_id = ? AND action_type = 'dna_completion_nudge' AND created_at > datetime('now', '-7 days')`,
-        [p.id]
-      );
-      if (recent.rows.length > 0) continue;
-
-      const dna = await getProductDNA(p.id as string);
-      const completionPct = dna?.completion_pct ?? 0;
-
-      await sendDigestEmail(
-        p.id as string,
-        p.email as string,
-        p.name as string,
-        {
-          subject: `Your Product DNA is ${completionPct}% complete — reach 60% to unlock Wisdom`,
-          html: `<p>Complete your Product DNA to activate Foundry's Wisdom Layer. At 60%, audit scoring uses your specific ICP and positioning instead of generic best practices.</p><p><a href="${process.env.APP_URL}/products/${p.id}/dna">Edit Product DNA →</a></p>`,
-        } as any
-      );
-
-      await query(
-        `INSERT INTO audit_log (id, product_id, action_type, gate, trigger, reasoning, created_at) VALUES (?, ?, 'dna_completion_nudge', 0, 'job', ?, ?)`,
-        [nanoid(), p.id, JSON.stringify({ completion_pct: completionPct }), new Date().toISOString()]
-      );
-      logger.info(`dna_completion_nudge: nudged ${p.name} (${completionPct}%)`, { jobName: 'dna_completion_nudge' });
-    } catch (err) {
-      logger.error(`dna_completion_nudge error for ${p.id}:`, { jobName: 'dna_completion_nudge', error: String(err) });
-    }
-  }
-  logger.info('dna_completion_nudge complete', { jobName: 'dna_completion_nudge' });
-}
-
-// ─── 17. Remediation Outcome Check — Daily 9:00 UTC ───────────────────────────
-export async function remediationOutcomeCheck(): Promise<void> {
-  logger.info('remediation_outcome_check starting', { jobName: 'remediation_outcome_check' });
-  const openPRs = await query(
-    `SELECT rp.*, p.github_repo_owner, p.github_repo_name, p.github_access_token
-     FROM remediation_prs rp
-     JOIN products p ON rp.product_id = p.id
-     WHERE rp.status = 'pr_open'`, []
-  );
-
-  for (const row of openPRs.rows) {
-    const pr = row as Record<string, unknown>;
-    try {
-      const owner = pr.github_repo_owner as string;
-      const repo = pr.github_repo_name as string;
-      const token = pr.github_access_token as string;
-      const prNumber = pr.github_pr_number as number;
-
-      if (!owner || !repo || !token || !prNumber) continue;
-
-      // Check if merged
-      const merged = await isPRMerged(owner, repo, prNumber, token);
-      if (merged) {
-        await query(
-          `UPDATE remediation_prs SET status = 'merged', resolved_at = ? WHERE id = ?`,
-          [new Date().toISOString(), pr.id]
-        );
-        // Trigger dimension re-audit
-        await triggerDimensionReAudit(
-          pr.product_id as string,
-          pr.audit_score_id as string,
-          pr.blocking_issue_dimension as string,
-          pr.id as string
-        );
-        logger.info(`remediation_outcome_check: PR #${prNumber} merged, re-audit triggered`, { jobName: 'remediation_outcome_check' });
-        continue;
-      }
-
-      // Check if closed (rejected)
-      const open = await isPROpen(owner, repo, prNumber, token);
-      if (!open) {
-        await query(
-          `UPDATE remediation_prs SET status = 'rejected', resolved_at = ?, rejection_reason = 'PR closed without merge' WHERE id = ?`,
-          [new Date().toISOString(), pr.id]
-        );
-        logger.info(`remediation_outcome_check: PR #${prNumber} rejected`, { jobName: 'remediation_outcome_check' });
-        continue;
-      }
-
-      // Check for stale (14+ days open)
-      const createdAt = new Date(pr.created_at as string);
-      const daysSinceCreation = Math.floor((Date.now() - createdAt.getTime()) / 86400000);
-      if (daysSinceCreation >= 14) {
-        await query(
-          `INSERT INTO audit_log (id, product_id, action_type, gate, trigger, reasoning, created_at) VALUES (?, ?, 'remediation_pr_stale', 0, 'job', ?, ?)`,
-          [nanoid(), pr.product_id, JSON.stringify({ pr_id: pr.id, pr_number: prNumber, days_open: daysSinceCreation }), new Date().toISOString()]
-        );
-      }
-    } catch (err) {
-      logger.error(`remediation_outcome_check error for PR ${pr.id}:`, { jobName: 'remediation_outcome_check', error: String(err) });
-    }
-  }
-  logger.info('remediation_outcome_check complete', { jobName: 'remediation_outcome_check' });
-}
-
-// ─── 18. Milestone Check — Daily 8:00 UTC ─────────────────────────────────────
-export async function milestoneCheck(): Promise<void> {
-  logger.info('milestone_check starting', { jobName: 'milestone_check' });
-  const products = await getAllActiveProducts();
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      const awarded = await checkAndAwardMilestones(p.id, p.owner_id);
-      if (awarded.length > 0) {
-        logger.info(`milestone_check: ${p.name} — ${awarded.length} new milestones`, { jobName: 'milestone_check' });
-      }
-    } catch (err) {
-      logger.error(`milestone_check error for ${p.id}:`, { jobName: 'milestone_check', error: String(err) });
-    }
-  }
-  logger.info('milestone_check complete', { jobName: 'milestone_check' });
-}
-
-// ─── 19. Nav Badge Refresh — Every 6 hours ────────────────────────────────────
-export async function navBadgeRefresh(): Promise<void> {
-  logger.info('nav_badge_refresh starting', { jobName: 'nav_badge_refresh' });
-  const products = await getAllActiveProducts();
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      // FOUR OF THESE SIX COUNTS FED A BADGE THAT DOES NOT EXIST. The sidebar
-      // draws one badge — the count beside "Decide" — and has since the nav was
-      // cut to five doors. An audit's age, unacknowledged competitive signals,
-      // unseen milestones and open remediation PRs were swept for every product
-      // every six hours, written into `lifecycle_state`, read back on every
-      // dashboard page load, and handed to a layout that ignored them. Their
-      // columns are dropped in migration 211.
-      //
-      // `dna_completion_pct` stays: `wisdom/dna.ts` reads it, and writes it
-      // itself on every DNA update — this job was a second writer of the same
-      // number, so it is no longer one.
-      const pendingDecisions = await query("SELECT COUNT(*) as c FROM decisions WHERE product_id = ? AND status = 'pending'", [p.id]);
-      const pendingCount = (pendingDecisions.rows[0] as Record<string, number>)?.c ?? 0;
-
-      await query(
-        'UPDATE lifecycle_state SET pending_decisions_count = ? WHERE product_id = ?',
-        [pendingCount, p.id],
-      );
-    } catch (err) {
-      logger.error(`nav_badge_refresh error for ${p.id}:`, { jobName: 'nav_badge_refresh', error: String(err) });
-    }
-  }
-  logger.info('nav_badge_refresh complete', { jobName: 'nav_badge_refresh' });
-}
 
 // ─── 20. Signal Alert Check — Every 2 hours ───────────────────────────────────
 
@@ -618,45 +174,6 @@ export async function integrationSync(): Promise<void> {
 // ─── New Job: Morning Briefings ───────────────────────────────────────────────
 
 // ─── New Job: Prediction Accuracy ─────────────────────────────────────────────
-
-export async function predictionAccuracyJob(): Promise<void> {
-  logger.info('prediction_accuracy starting', { jobName: 'prediction_accuracy' });
-  // Find decisions with outcomes recorded in the last 7 days that haven't been scored
-  const decisions = await query(
-    `SELECT d.id, d.product_id, d.chosen_option, d.outcome, d.outcome_valence
-     FROM decisions d
-     WHERE d.outcome IS NOT NULL AND d.outcome_valence IS NOT NULL
-       AND d.decided_at > date('now', '-90 days')
-       AND NOT EXISTS (
-         SELECT 1 FROM prediction_accuracy pa WHERE pa.decision_id = d.id
-       )
-     ORDER BY d.decided_at ASC
-     LIMIT 50`,
-    [],
-  );
-
-  const { recordPredictionAccuracy } = await import('../services/temporal/prediction-accuracy.js');
-
-  for (const row of decisions.rows) {
-    const d = row as Record<string, unknown>;
-    const direction = d.outcome_valence === 1 ? 'positive' : d.outcome_valence === -1 ? 'negative' : 'neutral';
-    try {
-      await recordPredictionAccuracy(
-        d.product_id as string,
-        d.id as string,
-        direction as 'positive' | 'neutral' | 'negative',
-        null,
-        null,
-        // Already selected above, and previously discarded one call short of
-        // the scorer that needed it to grade the right forecast.
-        d.chosen_option == null ? null : String(d.chosen_option),
-      );
-    } catch (err) {
-      logger.error(`prediction_accuracy error for decision ${d.id}:`, { jobName: 'prediction_accuracy', error: String(err) });
-    }
-  }
-  logger.info(`prediction_accuracy: scored ${decisions.rows.length} decisions`, { jobName: 'prediction_accuracy' });
-}
 
 // ─── SCP Jobs ─────────────────────────────────────────────────────────────────
 
@@ -809,41 +326,6 @@ export function reportRun(jobName: string, sentence: string, failed: number): vo
 
 // ─── SCP v7: Priority Queue Rebuild — Every 30 minutes ───────────────────────
 
-// ─── 20. Growth Stage Detection — Daily 5:30 UTC ─────────────────────────────
-export async function stageDetection(): Promise<void> {
-  logger.info('stage_detection starting', { jobName: 'stage_detection' });
-  const products = await getAllActiveProducts();
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      const detected = await detectGrowthStage(p.id);
-      const current = p.growth_stage ?? 'pre_launch';
-      if (detected !== current) {
-        await updateGrowthStage(p.id, detected);
-        logger.info(`stage_detection: ${p.name} ${current} → ${detected}`, { jobName: 'stage_detection' });
-      }
-    } catch (err) {
-      logger.error(`stage_detection error for ${p.id}:`, { jobName: 'stage_detection', error: String(err) });
-    }
-  }
-  logger.info('stage_detection complete', { jobName: 'stage_detection' });
-}
-
-// ─── 21. Founder Health Refresh — Daily 6:30 UTC ─────────────────────────────
-export async function founderHealthRefresh(): Promise<void> {
-  logger.info('founder_health_refresh starting', { jobName: 'founder_health_refresh' });
-  const founders = await query('SELECT id FROM founders WHERE tier IS NOT NULL', []);
-  for (const row of founders.rows) {
-    const f = row as Record<string, string>;
-    try {
-      await refreshFounderHealthMetrics(f.id);
-    } catch (err) {
-      logger.error(`founder_health_refresh error for ${f.id}:`, { jobName: 'founder_health_refresh', error: String(err) });
-    }
-  }
-  logger.info('founder_health_refresh complete', { jobName: 'founder_health_refresh' });
-}
-
 // ─── 27. Customer Health Refresh — Daily 3:00 UTC ────────────────────────────
 export async function customerHealthRefresh(): Promise<void> {
   logger.info('customer_health_refresh starting', { jobName: 'customer_health_refresh' });
@@ -858,39 +340,6 @@ export async function customerHealthRefresh(): Promise<void> {
     }
   }
   logger.info('customer_health_refresh complete', { jobName: 'customer_health_refresh' });
-}
-
-// ─── 29. Portfolio Snapshots — Monday 6:00 UTC ───────────────────────────────
-export async function portfolioSnapshotJob(): Promise<void> {
-  logger.info('portfolio_snapshots starting', { jobName: 'portfolio_snapshots' });
-  const portfolios = await query('SELECT id, name FROM portfolios', []);
-  for (const row of portfolios.rows as unknown as Array<Record<string, string>>) {
-    try {
-      await generatePortfolioSnapshot(row.id);
-      logger.info(`portfolio_snapshots: ${row.name} snapshot generated`, { jobName: 'portfolio_snapshots' });
-    } catch (err) {
-      logger.error(`portfolio_snapshots error for ${row.id}:`, { jobName: 'portfolio_snapshots', error: String(err) });
-    }
-  }
-  logger.info('portfolio_snapshots complete', { jobName: 'portfolio_snapshots' });
-}
-
-// ─── 25. Predictive Intelligence — Wednesday 7:00 UTC ────────────────────────
-export async function predictiveIntelligence(): Promise<void> {
-  logger.info('predictive_intelligence starting', { jobName: 'predictive_intelligence' });
-  const products = await getAllActiveProducts();
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      const predictions = await generatePredictions(p.id, p.owner_id);
-      if (predictions.length > 0) {
-        logger.info(`predictive_intelligence: ${p.name} — ${predictions.length} predictions`, { jobName: 'predictive_intelligence' });
-      }
-    } catch (err) {
-      logger.error(`predictive_intelligence error for ${p.id}:`, { jobName: 'predictive_intelligence', error: String(err) });
-    }
-  }
-  logger.info('predictive_intelligence complete', { jobName: 'predictive_intelligence' });
 }
 
 // ─── 26. Action Draft Generation — Daily 7:30 UTC ───────────────────────────
@@ -1030,38 +479,6 @@ export async function redTeamSweep(): Promise<void> {
     }
   }
   logger.info(`red_team_sweep complete — ${reviewed} pre-mortems`, { jobName: 'red_team_sweep' });
-}
-
-// ─── Founder pulse (Ascent B5 / Human Law) ────────────────────────────────────
-// Weekly check on the human running the company. Notifies ONLY on 'overloaded'
-// (two independent strain factors) — a kind observation with the numbers shown,
-// never a diagnosis, and deliberately sent Friday morning, not at night.
-export async function founderPulseCheck(): Promise<void> {
-  logger.info('founder_pulse_check starting', { jobName: 'founder_pulse_check' });
-  const products = await getAllActiveProducts();
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      const { getFounderPulse } = await import('../services/wellbeing/pulse.js');
-      const pulse = await getFounderPulse(p.id);
-      if (pulse.signal === 'overloaded') {
-        // Through the policy. A note about the founder's own strain is the
-        // last thing that should arrive as an interruption — and the policy
-        // already quiets non-critical events for an overloaded founder, which
-        // is exactly who this is about.
-        const { deliver } = await import('../services/ux/interruption.js');
-        await deliver(p.owner_id, p.id, {
-          importance: 'info',
-          title: 'A note about your week',
-          body: pulse.message,
-          actionUrl: '/foundry', actionLabel: 'See the week',
-        }, await founderPrefs(p.owner_id) as never);
-      }
-    } catch (err) {
-      logger.error(`founder_pulse_check error for ${p.id}`, { jobName: 'founder_pulse_check', error: String(err) });
-    }
-  }
-  logger.info('founder_pulse_check complete', { jobName: 'founder_pulse_check' });
 }
 
 // ─── Autopilot tick (Ascent B6 realized / Trust Law) ──────────────────────────
@@ -1231,6 +648,28 @@ export const RETIRED_LOOPS: Readonly<Record<string, string>> = {
   regulatory_scan: 'Scan regulatory changes (Sunday)',
   graph_rebuild: 'Rebuild knowledge graph and discover causal chains (Sunday)',
   weekly_synthesis: 'Weekly intelligence synthesis (Friday)',
+  // Twenty jobs whose output nothing read, or which could never find work here
+  // (R12). One, the DNA nudge, threw a TypeError every week and swallowed it.
+  founder_pulse_check: 'Founder strain check — kind, numbers-shown, only when overloaded (Friday 9:00 UTC)',
+  lifecycle_check: 'Evaluate lifecycle conditions for all products',
+  stressor_cleanup: 'Auto-escalate expired stressors',
+  story_capture: 'Capture milestone events as story artifacts',
+  dna_completion_nudge: 'Nudge founders with incomplete DNA (Wednesday)',
+  milestone_check: 'Check and award milestones for all products (daily)',
+  nav_badge_refresh: 'Refresh cached nav badge counts (every 6h)',
+  prediction_accuracy: 'Compute prediction accuracy for recent decision outcomes (daily)',
+  stage_detection: 'Auto-detect product growth stage (daily)',
+  predictive_intelligence: 'Generate predictive insights (Wednesday)',
+  cold_start_check: 'Check cold start exit conditions',
+  scenario_accuracy: 'Evaluate scenario prediction accuracy (Friday)',
+  founder_health_refresh: 'Refresh founder health metrics (daily)',
+  portfolio_snapshots: 'Generate portfolio snapshots (Monday)',
+  remediation_outcome_check: 'Check remediation PR outcomes (daily)',
+  competitive_scan: 'Scan competitors for all products (Sunday)',
+  yellow_pulse: 'Thursday pulse digest for Yellow products',
+  red_daily: 'Daily briefing for Red products',
+  pattern_aggregation: 'Aggregate decision pattern stats (Sunday)',
+  founder_pattern_synthesis: 'Synthesize founder judgment patterns (Sunday)',
   // Two weekly jobs that measured the society, deleted with it (R9): the
   // critique and evolution rates of agents that no longer exist, and outcome
   // trees whose only writer went in R4.
@@ -1241,7 +680,6 @@ export const RETIRED_LOOPS: Readonly<Record<string, string>> = {
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
   memory_premise_check: { fn: memoryPremiseCheck,   schedule: '0 7 * * *',       description: 'Re-check decision premises against live telemetry; flag expired beliefs (daily)' },
   red_team_sweep:       { fn: redTeamSweep,         schedule: '30 */2 * * *',    description: 'Adversarial pre-mortem for uncontested gate-3+ pending decisions (every 2h)' },
-  founder_pulse_check:  { fn: founderPulseCheck,    schedule: '0 9 * * 5',       description: 'Founder strain check — kind, numbers-shown, only when overloaded (Friday 9:00 UTC)' },
   autopilot_tick:       { fn: autopilotTick,        schedule: '45 */4 * * *',    description: 'Second Self: bank real outcomes into the trust ladder, then act on eligible gate-≤1 decisions in founder-granted categories (every 4h)' },
   // THE WEEK, IN FIVE SETS (Roadmap 2027 R5). Replaces the daily fleet letter
   // notification and the Monday digest (which needed a subscription tier
@@ -1249,35 +687,16 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   // their own rows, sent only when the week differs from the last and is not
   // empty, and not at all while the owner has asked for "quiet".
   the_week:             { fn: theWeekTick,          schedule: '30 7 * * 1',      description: 'The week in five sets, emailed to the owner only when it changed (Monday)' },
-  lifecycle_check:      { fn: lifecycleCheck,      schedule: '0 6 * * *',       description: 'Evaluate lifecycle conditions for all products' },
-  competitive_scan:     { fn: competitiveScan,     schedule: '0 6 * * 0',       description: 'Scan competitors for all products (Sunday)' },
   slo_check:            { fn: sloCheck,             schedule: '15 * * * *',      description: 'Check SLOs (AI spend vs cap) and alert operator on breach (hourly)' },
-  cold_start_check:     { fn: coldStartCheck,       schedule: '0 5 * * *',       description: 'Check cold start exit conditions' },
-  scenario_accuracy:    { fn: scenarioAccuracy,     schedule: '0 8 * * 5',       description: 'Evaluate scenario prediction accuracy (Friday)' },
-  yellow_pulse:         { fn: yellowPulse,          schedule: '0 7 * * 4',       description: 'Thursday pulse digest for Yellow products' },
-  red_daily:            { fn: redDaily,             schedule: '0 7 * * *',       description: 'Daily briefing for Red products' },
-  stressor_cleanup:     { fn: stressorCleanup,      schedule: '0 4 * * *',       description: 'Auto-escalate expired stressors' },
-  pattern_aggregation:  { fn: patternAggregation,   schedule: '0 9 * * 0',       description: 'Aggregate decision pattern stats (Sunday)' },
-  story_capture:        { fn: storyCapture,         schedule: '0 23 * * *',      description: 'Capture milestone events as story artifacts' },
-  founder_pattern_synthesis: { fn: founderPatternSynthesis, schedule: '0 7 * * 0', description: 'Synthesize founder judgment patterns (Sunday)' },
-  dna_completion_nudge: { fn: dnaCompletionNudge,    schedule: '0 8 * * 3',      description: 'Nudge founders with incomplete DNA (Wednesday)' },
-  remediation_outcome_check: { fn: remediationOutcomeCheck, schedule: '0 9 * * *', description: 'Check remediation PR outcomes (daily)' },
-  milestone_check:      { fn: milestoneCheck,      schedule: '0 8 * * *',   description: 'Check and award milestones for all products (daily)' },
-  nav_badge_refresh:    { fn: navBadgeRefresh,     schedule: '0 */6 * * *', description: 'Refresh cached nav badge counts (every 6h)' },
   decision_follow_up:    { fn: decisionFollowUp,       schedule: '0 10 * * *',  description: 'Notify founders to log decision outcomes (daily 10:00 UTC)' },
   integration_sync:       { fn: integrationSync,       schedule: '0 */1 * * *', description: 'Sync all active external integrations (every hour)' },
-  prediction_accuracy:    { fn: predictionAccuracyJob, schedule: '0 11 * * *',  description: 'Compute prediction accuracy for recent decision outcomes (daily)' },
   // ─── SCP Jobs ─────────────────────────────────────────────────────────────
   // SCP v3: New capability layer jobs
   scp_expire_overdue_decisions: { fn: scpExpireOverdueDecisions, schedule: '5 0 * * *', description: 'Mark pending decisions past their deadline as expired (daily)' },
   scp_webhook_delivery_cleanup: { fn: scpWebhookDeliveryCleanup, schedule: '0 4 * * 0', description: 'Clean up old webhook delivery records (Sunday 4:00 UTC)' },
   // SCP v7: Event bus, ROI, founder intelligence, priority queue
-  stage_detection:    { fn: stageDetection,    schedule: '30 5 * * *',  description: 'Auto-detect product growth stage (daily)' },
-  founder_health_refresh: { fn: founderHealthRefresh, schedule: '30 6 * * *', description: 'Refresh founder health metrics (daily)' },
-  predictive_intelligence: { fn: predictiveIntelligence, schedule: '0 7 * * 3', description: 'Generate predictive insights (Wednesday)' },
   action_draft_generation: { fn: actionDraftGeneration, schedule: '30 7 * * *', description: 'Auto-generate action drafts for pending decisions (daily)' },
   customer_health_refresh: { fn: customerHealthRefresh, schedule: '0 3 * * *', description: 'Refresh all customer health scores (daily 3am)' },
-  portfolio_snapshots: { fn: portfolioSnapshotJob, schedule: '0 6 * * 1', description: 'Generate portfolio snapshots (Monday)' },
   data_deletion_processor: {
     fn: async () => {
       const { processScheduledDeletions } = await import('../services/privacy/consent.js');

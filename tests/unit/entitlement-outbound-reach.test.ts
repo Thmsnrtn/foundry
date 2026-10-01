@@ -119,9 +119,9 @@ describe('the entitlement pause reaches the outbound gateway', () => {
 });
 
 // The outbound gateway stops the EFFECT. It does not stop the WORK that
-// produced it — and the work is where the money goes. `redDaily` generates an
-// Opus narrative and then sends it; blocking only the send means Foundry pays
-// for a briefing nobody receives. Thirty-four background jobs choose their work
+// produced it — and the work is where the money goes. `redDaily` (retired in
+// Roadmap 2027 R12) generated an Opus narrative and then sent it; blocking
+// only the send meant Foundry paid for a briefing nobody received. Thirty-four background jobs choose their work
 // through one helper, and that helper filtered on the archive axis too.
 describe('the pause reaches the work, not only the send', () => {
   it('drops a paused company from the background work list', async () => {

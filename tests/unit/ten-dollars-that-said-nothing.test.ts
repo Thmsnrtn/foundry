@@ -52,7 +52,7 @@ async function settled(work: string | null, cents: number): Promise<void> {
 
 describe('the subject says what the money was for', () => {
   it('carries the work on a company call and on an institutional one', () => {
-    expect(subjectWork(companySpend(P, 'the daily insight'))).toBe('the daily insight');
+    expect(subjectWork(companySpend(P, 'the morning briefing'))).toBe('the morning briefing');
     expect(subjectWork(institutionSpend(
       'the owner has no company for this yet, and it is still worth reading',
       'reading an observation'))).toBe('reading an observation');
@@ -101,10 +101,10 @@ describe('the ledger can be grouped by what the institution was doing', () => {
   it('adds up the calls and the money for each kind of work', async () => {
     await settled('red team', 3);
     await settled('red team', 5);
-    await settled('the daily insight', 2);
+    await settled('the morning briefing', 2);
     const rows = await settledByWork(30);
     expect(rows.find((r) => r.work === 'red team')).toEqual({ work: 'red team', calls: 2, cents: 8 });
-    expect(rows.find((r) => r.work === 'the daily insight')?.calls).toBe(1);
+    expect(rows.find((r) => r.work === 'the morning briefing')?.calls).toBe(1);
   });
 
   it('reports what predates the column as unattributed, never as nothing', async () => {

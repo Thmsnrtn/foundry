@@ -237,7 +237,8 @@ describe('the in-app bypass, pinned so it can only shrink', () => {
     // One (scp_decision_retrospectives) was deleted in Roadmap 2027 R4.
     // One (customer_success_sweep) was deleted in Roadmap 2027 R10.
     // One (signal_alert_check) was deleted in Roadmap 2027 R11.
+    // One (founder_pulse_check) was deleted in Roadmap 2027 R12.
     expect((src.match(/await deliver\(/g) ?? []).length,
-      'eight bells, all through the policy').toBeGreaterThanOrEqual(4);
+      'eight bells, all through the policy').toBe(3);
   });
 });

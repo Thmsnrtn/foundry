@@ -2024,16 +2024,6 @@ CREATE TABLE lessons_read (
   PRIMARY KEY (design_experiment_id, lesson_experiment_id),
   CHECK (design_experiment_id <> lesson_experiment_id)
 );
-CREATE TABLE lifecycle_conditions (
-  product_id TEXT NOT NULL REFERENCES products(id),
-  prompt TEXT NOT NULL,
-  condition_name TEXT NOT NULL,
-  condition_met BOOLEAN DEFAULT FALSE,
-  current_value TEXT,
-  threshold_value TEXT,
-  last_checked DATETIME,
-  PRIMARY KEY (product_id, prompt, condition_name)
-);
 CREATE TABLE lifecycle_rules (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -2749,22 +2739,6 @@ CREATE TABLE portfolio_memberships (
   added_at TEXT DEFAULT (datetime('now')),
   UNIQUE(portfolio_id, product_id)
 );
-CREATE TABLE portfolio_snapshots (
-  id TEXT PRIMARY KEY,
-  portfolio_id TEXT NOT NULL,
-  snapshot_date TEXT NOT NULL,
-  total_companies INTEGER,
-  avg_mrr REAL,
-  median_mrr REAL,
-  companies_green INTEGER,
-  companies_yellow INTEGER,
-  companies_red INTEGER,
-  avg_growth_rate REAL,
-  total_portfolio_mrr REAL,
-  highlights TEXT,
-  concerns TEXT,
-  created_at TEXT DEFAULT (datetime('now'))
-);
 CREATE TABLE portfolios (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -2785,28 +2759,6 @@ CREATE TABLE posture_changes (
   said        TEXT NOT NULL,
   changed_by  TEXT NOT NULL,
   changed_at  TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE TABLE prediction_accuracy (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  scenario_model_id TEXT REFERENCES scenario_models(id),
-  decision_id TEXT NOT NULL REFERENCES decisions(id),
-  option_chosen TEXT NOT NULL,
-  -- Predicted outcomes (from scenario model)
-  predicted_mrr_delta_pct REAL,
-  predicted_outcome_direction TEXT,
-  predicted_timeframe_days INTEGER,
-  -- Actual outcomes (filled in after outcome_measured_at)
-  actual_mrr_delta_pct REAL,
-  actual_outcome_direction TEXT,
-  actual_timeframe_days INTEGER,
-  -- Accuracy scoring
-  direction_correct BOOLEAN,           -- did we predict the direction right?
-  magnitude_accuracy REAL,             -- 0.0-1.0
-  timeframe_accuracy REAL,             -- 0.0-1.0
-  composite_accuracy REAL,             -- weighted aggregate
-  measured_at DATETIME,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE prediction_kinds (
   kind            TEXT PRIMARY KEY,
@@ -2833,23 +2785,6 @@ CREATE TABLE prediction_resolutions (
   -- without a join into four different tables.
   predicted_at   TEXT NOT NULL,
   resolved_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE TABLE predictions (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  owner_id TEXT NOT NULL,
-  prediction_type TEXT NOT NULL,
-  description TEXT NOT NULL,
-  probability REAL NOT NULL,
-  time_horizon_days INTEGER NOT NULL,
-  evidence TEXT NOT NULL,
-  recommended_action TEXT,
-  pattern_sources TEXT,
-  status TEXT DEFAULT 'active',
-  outcome TEXT,
-  outcome_recorded_at TEXT,
-  accuracy_score REAL,
-  created_at TEXT DEFAULT (datetime('now'))
 );
 CREATE TABLE privacy_consents (
   id TEXT PRIMARY KEY,
@@ -4725,7 +4660,6 @@ CREATE UNIQUE INDEX idx_legal_surface_one_live
   ON legal_surfaces(subject_kind, subject_id, class) WHERE retired_at IS NULL;
 CREATE INDEX idx_legal_surfaces_live
   ON legal_surfaces(founder_id, class) WHERE retired_at IS NULL;
-CREATE INDEX idx_lifecycle_cond_product ON lifecycle_conditions(product_id);
 CREATE INDEX idx_lifecycle_risk ON lifecycle_state(risk_state);
 CREATE INDEX idx_lifecycle_rules_product ON lifecycle_rules(product_id, enabled);
 CREATE INDEX idx_mandate_statements_live ON mandate_statements(founder_id, superseded_by, said_at);
@@ -4787,16 +4721,12 @@ CREATE UNIQUE INDEX idx_portfolio_exposure_one_live
 CREATE INDEX idx_portfolio_exposures_live
   ON portfolio_exposures(founder_id, dimension) WHERE retired_at IS NULL;
 CREATE INDEX idx_portfolio_members ON portfolio_memberships(portfolio_id, status);
-CREATE INDEX idx_portfolio_snapshots ON portfolio_snapshots(portfolio_id, snapshot_date);
 CREATE INDEX idx_portfolios_api ON portfolios(api_key);
 CREATE INDEX idx_posture_changes_product ON posture_changes(product_id, changed_at);
-CREATE INDEX idx_prediction_accuracy_product ON prediction_accuracy(product_id, measured_at DESC);
 CREATE INDEX idx_prediction_resolutions_founder
   ON prediction_resolutions(founder_id, kind, resolved_at);
 CREATE UNIQUE INDEX idx_prediction_resolved_once
   ON prediction_resolutions(kind, prediction_id);
-CREATE INDEX idx_predictions_product ON predictions(product_id, status);
-CREATE INDEX idx_predictions_type ON predictions(prediction_type);
 CREATE INDEX idx_premises_decision ON decision_premises(decision_id);
 CREATE INDEX idx_premises_product_status ON decision_premises(product_id, status);
 CREATE INDEX idx_probe_attacks_experiment ON probe_attacks(experiment_id, recorded_at);

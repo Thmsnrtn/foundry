@@ -14,6 +14,10 @@
 //
 // USE DETERMINISTIC SYSTEMS WHEN THE TRUTH IS DETERMINISTIC. Cognition pays
 // rent or it goes.
+//
+// Roadmap 2027 R12 retired `scenarioAccuracy` itself, with the
+// prediction-accuracy job and its table, so the checks on the job's body went
+// with it. The premise — the column it wrote is read by nothing — still holds.
 // =============================================================================
 
 import { describe, expect, it } from 'vitest';
@@ -28,33 +32,6 @@ function sourceFiles(dir = 'src', out: string[] = []): string[] {
   }
   return out;
 }
-
-const jobs = readFileSync('src/jobs/index.ts', 'utf8');
-const scenarioJob = jobs.slice(
-  jobs.indexOf('export async function scenarioAccuracy'),
-  jobs.indexOf("logger.info('scenario_accuracy complete'"));
-
-describe('the scenario accuracy pass buys nothing', () => {
-  it('makes no model call', () => {
-    expect(scenarioJob, 'a paid call in a job whose output nothing reads')
-      .not.toMatch(/call(Opus|Sonnet|Haiku|Claude)\s*\(/);
-  });
-
-  it('reads the direction the founder already recorded', () => {
-    expect(scenarioJob).toContain('outcome_valence');
-  });
-
-  it('does not invent a score to replace the one it stopped buying', () => {
-    // Fabricating an accuracy figure to fill the same field would be worse
-    // than the model call was: the call at least looked at something.
-    expect(scenarioJob).toContain('scenarioAccuracyScore: null');
-  });
-
-  it('still contributes the outcome to the cross-company pool', () => {
-    // What the job is FOR. Deleting the paid call must not delete the purpose.
-    expect(scenarioJob).toContain('generatePatternFromOutcome');
-  });
-});
 
 describe('the column it wrote to is genuinely unread', () => {
   it('has no reader anywhere in the source', () => {

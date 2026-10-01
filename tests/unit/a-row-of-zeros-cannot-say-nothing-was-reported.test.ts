@@ -43,7 +43,9 @@ describe('the daily placeholder', () => {
   it('leaves the registry otherwise intact', () => {
     // A registry that lost more than it should is a different defect.
     expect(Object.keys(JOB_REGISTRY).length).toBeGreaterThan(30);
-    expect(JOB_REGISTRY.lifecycle_check).toBeTruthy();
+    // `lifecycle_check` stood here until Roadmap 2027 R12 retired it; a job the
+    // registry still runs takes its place as the witness.
+    expect(JOB_REGISTRY.integration_sync).toBeTruthy();
   });
 });
 
