@@ -5,7 +5,8 @@
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join } from 'path';
 import { execSync } from 'child_process';
-const DB = '/tmp/_sqlcol.db'; execSync(`rm -f ${DB}`);
+import { scratchDb } from './lib/scratch-db.mjs';
+const DB = scratchDb('sqlcol'); execSync(`rm -f ${DB}`);
 for (const f of readdirSync('src/db/migrations').filter(f=>f.endsWith('.sql')).sort())
   try { execSync(`sqlite3 ${DB} < src/db/migrations/${f} 2>/dev/null`); } catch {}
 const tbls = execSync(`sqlite3 ${DB} "SELECT name FROM sqlite_master WHERE type='table'"`).toString().trim().split('\n');

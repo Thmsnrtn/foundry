@@ -48,9 +48,10 @@ import { execSync } from 'child_process';
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative, resolve } from 'path';
 import { stripComments } from './lib/strip-comments.mjs';
+import { scratchDb } from './lib/scratch-db.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
-const DB = '/tmp/_checkvocab.db';
+const DB = scratchDb('checkvocab');
 
 execSync(`rm -f ${DB}`);
 for (const f of readdirSync(join(ROOT, 'src/db/migrations')).filter((f) => f.endsWith('.sql')).sort()) {

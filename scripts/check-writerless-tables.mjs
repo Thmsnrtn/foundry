@@ -39,9 +39,10 @@ import { execSync } from 'child_process';
 import { readdirSync, readFileSync, statSync } from 'fs';
 import { join, relative, resolve } from 'path';
 import { stripComments } from './lib/strip-comments.mjs';
+import { scratchDb } from './lib/scratch-db.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
-const DB = '/tmp/_writerless.db';
+const DB = scratchDb('writerless');
 const MIGRATIONS = join(ROOT, 'src/db/migrations');
 
 execSync(`rm -f ${DB}`);

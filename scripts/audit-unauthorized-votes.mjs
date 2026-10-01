@@ -28,12 +28,13 @@
 import { execSync } from 'child_process';
 import { readdirSync } from 'fs';
 import { join, resolve } from 'path';
+import { scratchDb } from './lib/scratch-db.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
 let db = process.argv[2];
 
 if (!db) {
-  db = '/tmp/_votes_audit.db';
+  db = scratchDb('votes_audit');
   execSync(`rm -f ${db}`);
   for (const f of readdirSync(join(ROOT, 'src/db/migrations')).filter((f) => f.endsWith('.sql')).sort()) {
     try { execSync(`sqlite3 ${db} < ${join(ROOT, 'src/db/migrations', f)} 2>/dev/null`); } catch { /* partial */ }

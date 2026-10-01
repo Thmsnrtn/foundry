@@ -111,6 +111,25 @@ jobs:
           test -f docs/db/schema.snapshot.sql || { echo "schema snapshot missing"; exit 1; }
           grep -q 'docs/db' Dockerfile || { echo "Dockerfile does not copy docs/db"; exit 1; }
 
+      # WHAT TO PUT BACK IF THIS RELEASE DOES NOT PROVE ITSELF (Roadmap 2027 R3).
+      # Read before deploying: the image production runs now. Non-fatal by
+      # design — a deploy must never fail because the safety net could not be
+      # read — and the step says so when it cannot read it, so a failed deploy
+      # that does not roll back is never a surprise.
+      - name: Remember the release that is running now
+        run: |
+          prev=$(flyctl image show --app foundry-intel --json 2>/dev/null \
+            | jq -r 'if type=="array" then .[0] else . end
+                     | if .Reference then .Reference
+                       elif .Repository and .Tag then ((.Registry // "registry.fly.io") + "/" + .Repository + ":" + .Tag)
+                       else empty end' 2>/dev/null || true)
+          case "$prev" in
+            registry.fly.io/*) echo "PREV_IMAGE=$prev" >> "$GITHUB_ENV"; echo "running now: $prev" ;;
+            *) echo "could not read the running image; if this release fails it will NOT roll back by itself" ;;
+          esac
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
       - name: Deploy
         run: |
           flyctl deploy \
@@ -192,3 +211,23 @@ jobs:
             echo "GONE a screen posts to a route this release does not have"; fail=1
           fi
           exit $fail
+
+      # A RELEASE THAT NEVER REPORTS ITS OWN COMMIT, OR THAT IS MISSING A ROUTE
+      # THE OWNER'S SCREENS POST TO, IS TAKEN DOWN AND THE LAST ONE PUT BACK.
+      # It restores the CODE, not the schema: a migration the failed release
+      # applied stays applied, which is safe only because migrations here are
+      # additive — a destructive migration must ship with its own way back.
+      # The run still ends red: a rollback is a recovery, not a success.
+      - name: Roll back to the release that was running
+        if: failure() && env.PREV_IMAGE != ''
+        run: |
+          echo "this release did not prove itself; putting back $PREV_IMAGE"
+          flyctl deploy \
+            --config fly.private.toml \
+            --app foundry-intel \
+            --image "$PREV_IMAGE" \
+            --ha=false \
+            --now
+          echo "rolled back to $PREV_IMAGE"; exit 1
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

@@ -30,9 +30,10 @@
 import { execSync } from 'child_process';
 import { readdirSync } from 'fs';
 import { join, resolve } from 'path';
+import { scratchDb } from './lib/scratch-db.mjs';
 
 const ROOT = resolve(import.meta.dirname, '..');
-const DB = '/tmp/_applied.db';
+const DB = scratchDb('applied');
 const MIGRATIONS = join(ROOT, 'src/db/migrations');
 
 execSync(`rm -f ${DB}`);

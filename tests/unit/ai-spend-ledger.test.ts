@@ -1,14 +1,21 @@
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { readFileSync } from 'fs';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { readFileSync, rmSync } from 'fs';
 import { resolve } from 'path';
-import { executeRaw, query } from '../../src/db/client.js';
+import { closeDb, executeRaw, query } from '../../src/db/client.js';
 import { runMigrations } from '../../src/db/migrate.js';
 import { splitSqlStatements } from '../../src/db/migrate.js';
 import { finishReservation, reserveSpend, SpendCeilingError } from '../../src/services/ai/spend-ledger.js';
 
 // Interactive libSQL transactions use distinct connections; a named file is
 // required because `file::memory:` is private to each connection.
-process.env.TURSO_DATABASE_URL = `file:/tmp/foundry-ai-spend-${process.pid}-${Date.now()}.db`;
+const DB_FILE = `/tmp/foundry-ai-spend-${process.pid}-${Date.now()}.db`;
+process.env.TURSO_DATABASE_URL = `file:${DB_FILE}`;
+
+// Each run left its 6 MB file behind: 191 of them, 1.1 GB, by 1 October 2026.
+afterAll(async () => {
+  await closeDb();
+  for (const f of [DB_FILE, `${DB_FILE}-wal`, `${DB_FILE}-shm`, `${DB_FILE}-journal`]) rmSync(f, { force: true });
+});
 
 const caps = { global: 10, product: 10, founder: 10 };
 const input = (overrides: Record<string, unknown> = {}) => ({
