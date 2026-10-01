@@ -27,6 +27,11 @@ import { query } from '../../src/db/client.js';
 // message NOT being sent, and the honest way to hold that is to show the call
 // goes through the door and that the door would refuse it — not to assert on a
 // stub that never gets reached.
+//
+// The executor and `integration/slack.ts` (the `post_slack` handler and the
+// briefing formatter) were deleted in Roadmap 2027 R10, so the blocks that read
+// their source went with them. What remains is the binding and the boundary,
+// which still exist and still have to say what they say.
 // =============================================================================
 
 beforeAll(async () => { await runMigrations(); });
@@ -51,50 +56,6 @@ describe('the tool is bound to a capability, because an unbound tool is refused'
     const intent = readFileSync('src/services/institution/standing-intent.ts', 'utf8');
     expect(intent).toContain("'post_slack'");
     expect(intent).toContain('REACHES_A_PERSON');
-  });
-});
-
-describe('the executor no longer reaches the sender directly', () => {
-  const executor = readFileSync('src/services/scp/actions/executor.ts', 'utf8');
-  const slack = executor.slice(executor.indexOf('async function executeSlack'));
-  const body = slack.slice(0, slack.indexOf('\n}\n'));
-
-  it('goes through invoke, with the tool named', () => {
-    expect(body).toContain('invoke({');
-    expect(body).toContain("tool: 'post_slack'");
-  });
-
-  it('does not call the bare sender any more', () => {
-    expect(body).not.toContain('sendSlackNotification(');
-  });
-
-  it('carries a dedup key, so a retried execution cannot post twice', () => {
-    expect(body).toContain('dedupKey');
-    expect(body).toContain('action_execution:');
-  });
-
-  it('keeps the one distinction that matters when a send is interrupted', () => {
-    // 'execution' is the only phase where something may have reached the
-    // outside world. Everything else is definitively nothing sent, and
-    // booking a reconciliation for it would invent doubt.
-    expect(body).toContain("res.phase === 'execution'");
-    expect(body).toContain("'ambiguous'");
-    expect(body).toContain("'not_attempted'");
-  });
-});
-
-describe('the handler is registered, and says what it did not do', () => {
-  const src = readFileSync('src/services/integration/slack.ts', 'utf8');
-
-  it('registers post_slack with a policy that requires a dedup key', () => {
-    expect(src).toContain("registerToolHandler('post_slack'");
-    expect(src).toContain('requireDedupKey: true');
-  });
-
-  it('raises a definitive refusal as notAttempted, so the door releases its holds', () => {
-    expect(src).toContain('notAttempted');
-    // Only the genuinely uncertain case is left uncertain.
-    expect(src).toContain("receipt.certainty !== 'ambiguous'");
   });
 });
 
@@ -126,41 +87,10 @@ describe('the ungoverned browser is gone', () => {
 // code and gets the same reading.
 
 describe('the second door: the daily briefing', () => {
-  const slack = readFileSync('src/services/integration/slack.ts', 'utf8');
-
-  it('leaves no function here that both builds a briefing and sends it', () => {
-    // `sendAgentBriefing` formatted and then called the transport, so the
-    // hourly scheduler reached real people in a real workspace with a
-    // kill-switch check and nothing else: no rung, no budget, no dedup key, no
-    // audit row. Splitting them is what makes the caller unable to send.
-    // The name survives in the header, which explains what was wrong with it;
-    // what must be gone is the function.
-    expect(slack).not.toMatch(/export async function sendAgentBriefing/);
-    expect(slack).toContain('export function briefingMessage');
-  });
-
   it('is no longer claimed as governed-by-its-callers anywhere', () => {
     const audit = readFileSync('scripts/audit-consequential-effects.mjs', 'utf8');
     // "The callers check" is a claim about other files, and it is the claim
     // that hid this. The map that carried it is empty.
     expect(audit).toContain('const GUARD_IN_CALLERS = {}');
-  });
-});
-
-describe('a message that may have arrived is not reported as never sent', () => {
-  const slack = readFileSync('src/services/integration/slack.ts', 'utf8');
-
-  it('treats a 5xx as ambiguous rather than as a rejection', () => {
-    // `!resp.ok` covered every non-2xx and returned `provider_rejected`, which
-    // the door reads as `notAttempted` and the executor writes as
-    // `not_attempted` with `reconcile_after = null` — so nothing ever checked.
-    // A 500 or a 502 is the classic post-processing failure: accepted, posted,
-    // response lost.
-    expect(slack).toContain('resp.status >= 500');
-    expect(slack).toContain("certainty: 'ambiguous'");
-  });
-
-  it('keeps a 4xx definitive, because saying "it might have gone" is its own lie', () => {
-    expect(slack).toContain("if (!resp.ok) return { certainty: 'provider_rejected'");
   });
 });

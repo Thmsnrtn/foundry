@@ -82,6 +82,7 @@ export async function planAssistedSupportEmail(input:{productId:string;responsib
 export async function executeAssistedSupportEmail(actionId:string, lifecycle:{afterClaim?:()=>Promise<void>}={}):Promise<{dispatched:boolean;certainty:string}> {
   const row=await currentAuthority(actionId);
   if (!row) return {dispatched:false,certainty:'not_attempted'};
+  // `approved_by` is provenance for a person reading the row; no code reads it.
   const claim=await query("UPDATE outbound_actions SET status='executing',approved_by='institution:assisting',approved_at=datetime('now') WHERE id=? AND status='approved'",[actionId]);
   if ((claim.rowsAffected??0)===0) {
     const replay=await query('SELECT effect_certainty FROM outbound_actions WHERE id=?',[actionId]);
@@ -222,7 +223,7 @@ export async function reconcileAssistedSupportEmail(productId:string,actionId:st
 
   // WHY A VERIFIED FAILURE DOES NOT REVOKE THE GRANT.
   //
-  // `action-verifier.ts` states a rule plainly — an autopilot-approved
+  // `action-verifier.ts` (retired in Roadmap 2027 R10) stated a rule plainly — an autopilot-approved
   // execution that fails its own criteria demotes the acting category one rung
   // — and applies it only when `approved_by` starts with `autopilot:`. The
   // institution's assisted path sets `institution:assisting`, so it looks at

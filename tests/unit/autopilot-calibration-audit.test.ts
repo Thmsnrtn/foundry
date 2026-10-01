@@ -1,7 +1,9 @@
 // =============================================================================
 // Tests: Calibration scoring + Self-audit (AcreOS ports, 2026-07-14)
-// Calibration gates promotion on truthfulness-of-confidence (do the acts pass,
-// do the beliefs hold?), independent of agreement. Self-audit catches the
+// Calibration gates promotion on truthfulness-of-confidence (do the beliefs
+// hold?), independent of agreement. Verified acts were a second source until the
+// legacy executor and its verifier were deleted in Roadmap 2027 R10, so these
+// cases now seed premises only. Self-audit catches the
 // system drifting toward over-deference — the meta-check on founder-minutes.
 // =============================================================================
 
@@ -22,15 +24,6 @@ beforeAll(async () => {
   await query("INSERT INTO products (id, name, owner_id, status) VALUES ('ca_p','CalCo','ca_f','active')", []);
 });
 
-async function seedAction(category: string, verify: 'passed' | 'failed') {
-  const id = nanoid();
-  await query(
-    `INSERT INTO action_executions (id, product_id, action_type, integration, payload_json, status, approved_by, verify_status)
-     VALUES (?, 'ca_p', 'send_email', 'resend', '{}', 'completed', ?, ?)`,
-    [id, `autopilot:${category}`, verify],
-  );
-}
-
 async function seedPremise(category: string, status: 'holding' | 'falsified') {
   const did = nanoid();
   await query(
@@ -48,28 +41,28 @@ describe('calibration = truthfulness of confidence', () => {
   // Use real decisions.category values (CHECK-constrained); the autopilot
   // category name (in approved_by / autopilot_policies) is free-form and
   // matches by convention.
-  it('a category whose acts pass and beliefs hold is well-calibrated', async () => {
-    for (let i = 0; i < 3; i++) await seedAction('marketing', 'passed');
-    await seedPremise('marketing', 'holding');
+  it('a category whose beliefs hold is well-calibrated', async () => {
+    for (let i = 0; i < 4; i++) await seedPremise('marketing', 'holding');
     const c = await getCategoryCalibration('ca_p', 'marketing');
-    expect(c.actionsPassed).toBe(3);
+    expect(c.premisesHeld).toBe(4);
+    expect(c.premisesFalsified).toBe(0);
     expect(c.score).toBe(1);
     expect(c.verdict).toBe('well_calibrated');
     expect(await calibrationHold('ca_p', 'marketing')).toBe(false);
   });
 
-  it('a category whose acts fail is overconfident and HELD from promotion', async () => {
-    for (let i = 0; i < 3; i++) await seedAction('product', 'failed');
-    await seedPremise('product', 'falsified');
+  it('a category whose beliefs are falsified is overconfident and HELD from promotion', async () => {
+    for (let i = 0; i < 4; i++) await seedPremise('product', 'falsified');
     await seedPremise('product', 'holding');
     const c = await getCategoryCalibration('ca_p', 'product');
+    expect(c.premisesFalsified).toBe(4);
     expect(c.score).toBeLessThan(0.6); // 1 good of 5
     expect(c.verdict).toBe('overconfident');
     expect(await calibrationHold('ca_p', 'product')).toBe(true);
   });
 
   it('thin evidence abstains — no false verdict, no hold', async () => {
-    await seedAction('urgent', 'passed');
+    await seedPremise('urgent', 'holding');
     const c = await getCategoryCalibration('ca_p', 'urgent');
     expect(c.verdict).toBe('thin');
     expect(c.score).toBeNull();

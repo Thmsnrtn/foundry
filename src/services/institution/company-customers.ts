@@ -378,7 +378,8 @@ export async function getChampions(
 /**
  * This customer's health now, from whichever store holds them.
  *
- * WHY THIS EXISTS RATHER THAN A SECOND QUERY. `action-verifier.ts` checks
+ * WHY THIS EXISTS RATHER THAN A SECOND QUERY. `action-verifier.ts` (retired in
+ * Roadmap 2027 R10, with the departments) checked
  * `customer_health_not_worse` with `SELECT health_score FROM customers WHERE
  * id = ?`. The moment the department could act on a customer from the reported
  * store, that lookup would find no row and the criterion would abstain — a

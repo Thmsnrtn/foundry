@@ -662,12 +662,14 @@ deleted; thirty-six tables nothing could touch afterwards are copied into
 (`what-was-retired-is-refused-not-absent`). The code before the deletion is
 commit 1864d6dc.
 
-**What the decision did not reach.** `scp/actions/executor.ts` stays: it is not
-an agent's, it is the execute path of the three department sweeps (customer
-success, outreach, product evolution), and the Letter, autopilot calibration
-and the action verifier read its `action_executions` receipts. Moving those
-callers onto the gateway is a shadow → compare → cutover migration of its own,
-recorded as proof debt in ROADMAP 2027 R9, not done here.
+**And the rest of it, 1 October 2026 (Roadmap 2027 R10).** The first release
+kept `scp/actions/executor.ts` for the four department sweeps that used it.
+Read closely, none of them could find work here: they swept earned products
+only, needed SaaS customers or champions there are none of, ran at `shadow`,
+and had their acting branch capped at `suggest`. So the sweeps, the executor,
+its verifier and the Slack sender only it loaded are deleted too. The decision
+now reaches all the way: everything that reaches the world goes through the
+gateway (`there-is-one-door-to-the-world`).
 
 The record below is as it stood when the question was asked.
 

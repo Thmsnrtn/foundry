@@ -391,20 +391,8 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('_gate_fixture_window');
   });
 
-  it('check-autonomous-approval fails on an approval that asks nothing', () => {
-    plant('src/services/_gate_fixture_e.ts',
-      'import { approveAndExecute } from "../scp/actions/executor.js";\n'
-      + 'export const go = (id: string) => approveAndExecute(id, "whoever");\n');
-    expect(run('check-autonomous-approval.mjs').code).toBe(1);
-  });
-
-  it('check-autonomous-approval fails on an execution status advanced outside the executor', () => {
-    plant('src/services/_gate_fixture_f.ts',
-      'import { query } from "../db/client.js";\n'
-      + j('export const q = () => query(`UPDATE ', 'action_executions SET ',
-        "status='approved' WHERE id=?`, []);\n"));
-    expect(run('check-autonomous-approval.mjs').code).toBe(1);
-  });
+  // The two check-autonomous-approval cases went with the gate and the executor
+  // it guarded, deleted in Roadmap 2027 R10.
 
   it('check-route-guards fails on a new mutating route that asks no capability', () => {
     // The gate that was reading one line of each handler. A route planted in a
@@ -616,9 +604,11 @@ describe('every gate refuses the defect it exists for', () => {
   });
 
   it('check-kernel-boundary fails when the kernel imports a pack', () => {
+    // The pack module named here was `scp/actions/executor.ts` until it was
+    // deleted in Roadmap 2027 R10; `scp/types.ts` is a pack module that exists.
     plant('src/services/memory/_gate_fixture_i.ts',
-      "import type { ActionType } from '../scp/actions/executor.js';\n"
-      + 'export type Y = ActionType;\n');
+      "import type { SCPStatus } from '../scp/types.js';\n"
+      + 'export type Y = SCPStatus;\n');
     expect(run('check-kernel-boundary.mjs').code).toBe(1);
   });
 
@@ -1401,7 +1391,8 @@ describe('and passes on a clean tree', () => {
     // one that never does.
     for (const script of [
       'check-sql-columns.mjs', 'check-select-columns.mjs', 'check-insert-columns.mjs',
-      'check-check-vocabularies.mjs', 'check-autonomous-approval.mjs',
+      // check-autonomous-approval.mjs was here; deleted in Roadmap 2027 R10.
+      'check-check-vocabularies.mjs',
       'check-route-guards.mjs', 'check-kernel-boundary.mjs',
       'check-test-schema-fabrication.mjs', 'audit-consequential-effects.mjs',
       'check-writerless-tables.mjs', 'check-notnull-inserts.mjs',

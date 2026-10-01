@@ -1,9 +1,7 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
-import { readFileSync } from 'node:fs';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { invoke, registerToolHandler, clearToolHandlers } from '../../src/services/outbound/gateway.js';
@@ -212,12 +210,4 @@ describe('a send that did not happen', () => {
   });
 });
 
-describe('the department sweeps', () => {
-  it('look at the budget without spending it', () => {
-    for (const f of ['src/services/departments/success.ts', 'src/services/departments/outreach.ts']) {
-      const src = stripComments(readFileSync(f, 'utf8'), { lineComments: true });
-      expect(src, `${f} must not take a hold for work it may not send`).not.toContain('checkAndIncrement');
-      expect(src).toContain('remainingFor');
-    }
-  });
-});
+// 'the department sweeps' read success.ts and outreach.ts; both deleted in Roadmap 2027 R10.

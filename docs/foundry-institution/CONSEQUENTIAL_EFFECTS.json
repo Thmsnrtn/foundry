@@ -150,31 +150,24 @@
     },
     {
       "file": "src/services/integration/resend.ts",
-      "line": 392,
+      "line": 397,
       "detector": "external_post",
       "status": "governed",
       "capability": "send_email capability handler"
     },
     {
       "file": "src/services/integration/resend.ts",
-      "line": 415,
+      "line": 420,
       "detector": "external_post",
       "status": "governed",
       "capability": "send_email capability handler"
     },
     {
       "file": "src/services/integration/resend.ts",
-      "line": 501,
+      "line": 506,
       "detector": "external_post",
       "status": "governed",
       "capability": "send_email capability handler"
-    },
-    {
-      "file": "src/services/integration/slack.ts",
-      "line": 133,
-      "detector": "external_post",
-      "status": "governed",
-      "capability": "post_slack capability handler. This line claimed \"every caller kill-switch checked before dispatch\" while the action executor called the sender directly, past the door — the one outbound-mutating integration that did. It is registered on the gateway now and bound to post_to_channel at rung public, so the claim and the code agree"
     },
     {
       "file": "src/services/integration/stripe-gateway.ts",
@@ -192,7 +185,7 @@
     },
     {
       "file": "src/services/integrations/linear.ts",
-      "line": 129,
+      "line": 128,
       "detector": "external_post",
       "status": "read_only",
       "capability": "GraphQL query: completed issues for ship-cadence metrics"
@@ -203,20 +196,6 @@
       "detector": "env_bound_post",
       "status": "read_only",
       "capability": "edge mail program source — hands a copy to Foundry's own intake; deployed through the door, executed only by Cloudflare"
-    },
-    {
-      "file": "src/services/scp/actions/executor.ts",
-      "line": 577,
-      "detector": "external_post",
-      "status": "governed",
-      "capability": "approved Linear action — kill-switch checked before dispatch, durable receipt after"
-    },
-    {
-      "file": "src/services/scp/actions/executor.ts",
-      "line": 652,
-      "detector": "dynamic_webhook_post",
-      "status": "governed",
-      "capability": "approved custom webhook — kill-switch checked before dispatch, SSRF guard and durable receipt"
     },
     {
       "file": "src/services/senses/providers/stripe.ts",

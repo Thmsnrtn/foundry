@@ -27,6 +27,7 @@ institutional_judgment_evaluations.economic_result_json
 institutional_judgment_evaluations.learned_claim_id
 operator_attention.item_kind
 operator_attention.item_ref
+outbound_actions.approved_by
 outbound_actions.learned_claim_id
 portfolios.organization_type
 posture_changes.changed_by

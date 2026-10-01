@@ -61,24 +61,6 @@ export async function getOperatorSystemLines(): Promise<string[]> {
     lines.push(`The letter verifier dropped ${verifierDrops} unverifiable line(s) in the last 24h — composition and ledger disagreed somewhere. The audit log has each reason.`);
   }
 
-  // Failed act-tier verifications — autonomy that didn't deliver.
-  const actionFails = await safeCount(
-    `SELECT COUNT(*) c FROM action_executions
-      WHERE verify_status = 'failed' AND verified_at >= datetime('now', '-1 day')`,
-  );
-  if (actionFails != null && actionFails > 0) {
-    lines.push(`${actionFails} autonomous action(s) failed their pre-declared success criteria in the last 24h — the acting categories were demoted automatically.`);
-  }
-
-  // Failed executions generally (integration rot shows up here first).
-  const execFails = await safeCount(
-    `SELECT COUNT(*) c FROM action_executions
-      WHERE status = 'failed' AND executed_at >= datetime('now', '-1 day')`,
-  );
-  if (execFails != null && execFails > 0) {
-    lines.push(`${execFails} execution(s) failed outright in the last 24h — usually a disconnected integration or an expired grant.`);
-  }
-
   // Self-audit: is the autopilot drifting toward over-deference? (Prime
   // Objective is minimum founder-minutes — this is the meta-check on it.)
   try {

@@ -110,16 +110,12 @@ describe('the sources', () => {
   });
 });
 
-describe('the other page the same scan found', () => {
-  it('the verifier takes the executions whose window elapsed first', async () => {
-    const { readFileSync } = await import('node:fs');
-    const { stripComments } = await import('../../scripts/lib/strip-comments.mjs');
-    const src = stripComments(
-      readFileSync('src/services/outbound/action-verifier.ts', 'utf8'), { lineComments: true });
-    expect(src).toMatch(/verify_after <= datetime\('now'\)\s*\n\s*ORDER BY verify_after ASC/);
-  });
-
-  // The second was `network/matchmaking.ts`, whose shortlist was ordered by the
-  // part of the score SQL could compute. That module was deleted as
-  // production-dead, so there is no shortlist left to order.
-});
+// THE OTHER PAGE THE SAME SCAN FOUND.
+//
+// The first was `outbound/action-verifier.ts`, which took the executions whose
+// window elapsed first. The verifier was deleted in Roadmap 2027 R10 with the
+// legacy executor it checked, so there is no page left to order.
+//
+// The second was `network/matchmaking.ts`, whose shortlist was ordered by the
+// part of the score SQL could compute. That module was deleted as
+// production-dead, so there is no shortlist left to order.

@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
@@ -17,11 +17,12 @@ import { describe, expect, it } from 'vitest';
 // classification, no budget, no idempotency key, and no receipt. And it had no
 // callers at all.
 //
-// The live path for creating a Linear issue is the approved action in
-// `services/scp/actions/executor.ts`, which carries a durable receipt. So this
+// The live path for creating a Linear issue was then the approved action in
+// `services/scp/actions/executor.ts`, which carried a durable receipt. So this
 // was a duplicate writer with weaker governance — deleted rather than
 // classified, and the audit ratcheted so the next untraced effect cannot sit
-// for a year the way this one did.
+// for a year the way this one did. That executor was itself deleted in Roadmap
+// 2027 R10, so Foundry now has no Linear writer at all.
 // =============================================================================
 
 const ROOT = resolve(__dirname, '../..');
@@ -52,14 +53,30 @@ describe('the Linear integration', () => {
     }
   });
 
-  it('keeps exactly one writer for the effect that does exist', () => {
-    // Creating a Linear issue is a real capability and it is not being removed
-    // — only the second, weaker copy of it. The governed one carries a receipt.
-    const executor = executable('src/services/scp/actions/executor.ts');
-    expect(executor, 'the approved-action path is the one that may write')
-      .toContain('issueCreate');
-    expect(executor, 'and it must record what the provider said')
-      .toMatch(/effect_certainty/);
+  it('has no writer anywhere in src, now that the governed one is gone too', () => {
+    // FLIPPED IN ROADMAP 2027 R10. This asserted that the approved-action path
+    // in `services/scp/actions/executor.ts` was the one writer and carried
+    // `issueCreate`. The owner retired that executor (PENDING 16), so creating
+    // a Linear issue is no longer a capability Foundry has: no file in `src/`
+    // may write to a Linear workspace, and the one module that talks to the
+    // API is the read-only one above.
+    const offenders: string[] = [];
+    const walk = (dir: string): void => {
+      for (const entry of readdirSync(resolve(ROOT, dir), { withFileTypes: true })) {
+        const rel = `${dir}/${entry.name}`;
+        if (entry.isDirectory()) { walk(rel); continue; }
+        if (!rel.endsWith('.ts')) continue;
+        const source = executable(rel);
+        for (const write of ['issueCreate', 'issueUpdate', 'issueDelete', 'commentCreate']) {
+          if (source.includes(write)) offenders.push(`${rel}: ${write}`);
+        }
+        if (source.includes('api.linear.app') && !LINEAR_MODULES.includes(rel)) {
+          offenders.push(`${rel}: reaches api.linear.app outside the read-only module`);
+        }
+      }
+    };
+    walk('src');
+    expect(offenders, 'nothing in src may write to a Linear workspace').toEqual([]);
   });
 
   it('is classified as read-only in the effects inventory, not as governed', () => {

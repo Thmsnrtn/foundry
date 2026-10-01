@@ -4,9 +4,10 @@
 // The go-live caveat that was never closed: "does the real generated output
 // read like a sharp operator, or like generic MBA advice?" This seeds a
 // realistic founder + 90 days of history and prints EVERY deterministic
-// founder-facing artifact — the Letter, the fleet Letter, the department
-// drafts, the decision framing, the calibration display — so a human can read
-// what Foundry actually says. No model calls; no live keys; no deploy needed.
+// founder-facing artifact — the Letter, the fleet Letter, the decision framing,
+// the calibration display — so a human can read what Foundry actually says. No
+// model calls; no live keys; no deploy needed. (The four department drafts were
+// deleted in Roadmap 2027 R10 with the departments that wrote them.)
 //
 // Run: npm run sim:golden
 // =============================================================================
@@ -49,7 +50,7 @@ async function seed() {
     [new Date(today.getTime() - 2 * 86_400_000).toISOString(),
      new Date(today.getTime() - 24 * 86_400_000).toISOString()]);
 
-  // Product DNA so marketing/product drafts have something real to cite.
+  // Product DNA, as a real company would have it.
   await query(`INSERT INTO product_dna (id, product_id, icp_description, icp_pain, positioning_statement, primary_objection, what_we_are_not, growth_hypothesis, sections_completed, completion_pct)
     VALUES ('g_dna','g_p','ops leads at 20-100 person B2B SaaS','drowning in manual reporting across disconnected tools','the reporting layer that assembles itself','we already have a BI tool','not another dashboard you have to configure','warm intros convert 4x cold', '[]', 60)`, []);
 
@@ -70,11 +71,6 @@ async function seed() {
 async function main() {
   await seed();
   const { composeLetter } = await import('../../src/services/letter/composer.js');
-  const { draftCheckIn } = await import('../../src/services/departments/success.js');
-  const { draftContentBrief } = await import('../../src/services/departments/marketing.js');
-  const { deriveHypothesis } = await import('../../src/services/departments/product.js');
-  const { draftReferralAsk } = await import('../../src/services/departments/outreach.js');
-  const { getProductDNA } = await import('../../src/services/wisdom/dna.js');
   const { adviceFooter } = await import('../../src/services/ux/fluency.js');
 
   rule('THE LETTER (plain fluency) — what Maya reads over coffee');
@@ -84,26 +80,6 @@ async function main() {
   block(`What I learned:\n${letter.learned.map((l) => '   • ' + l).join('\n') || '   (quiet)'}`);
   block(`How trust moved:\n${letter.trust.map((l) => '   • ' + l).join('\n') || '   (quiet)'}`);
   block(`   — ${adviceFooter('plain')}`);
-
-  rule('CUSTOMER SUCCESS — the check-in it would send to an at-risk account');
-  const dan = (await query("SELECT * FROM customers WHERE id='g_c2'", [])).rows[0] as Record<string, unknown>;
-  const checkIn = draftCheckIn(dan, 'Northwind');
-  block(`Subject: ${checkIn.subject}\n\n${checkIn.body}`);
-
-  rule('OUTREACH — the referral ask it would send to a champion');
-  const priya = (await query("SELECT * FROM customers WHERE id='g_c1'", [])).rows[0] as Record<string, unknown>;
-  const ref = draftReferralAsk(priya, 'Northwind');
-  block(`Subject: ${ref.subject}\n\n${ref.body}`);
-
-  rule('MARKETING — the content brief it would propose (grounded in real DNA)');
-  const dna = await getProductDNA('g_p');
-  const brief = draftContentBrief(dna as never);
-  block(`${brief.title} (grounded: ${brief.grounded})\n\n${brief.brief}`);
-
-  rule('PRODUCT — the hypothesis it would put in front of the founder');
-  const snap = (await query("SELECT * FROM metric_snapshots WHERE product_id='g_p' ORDER BY snapshot_date DESC LIMIT 1", [])).rows[0] as Record<string, unknown>;
-  const hyp = deriveHypothesis(snap);
-  block(hyp ? `${hyp.what}\n   Why now: ${hyp.whyNow}\n   The bet on record: ${hyp.premise}` : '(no metric over a line)');
 
   rule('THE EXPIRED BELIEF — the memory kernel catching a decision going stale');
   const { getExpiredBeliefs } = await import('../../src/services/memory/kernel.js');

@@ -11,11 +11,10 @@
 // consequential-effects audit had flagged it for years as `unresolved`,
 // meaning nobody had yet traced whether it read or wrote.
 //
-// Tracing it settled two things: it wrote, and it had no callers. The live path
-// for creating a Linear issue is the approved action in
-// `services/scp/actions/executor.ts`, which carries a durable receipt. So this
-// was a second, ungoverned writer for an effect that already had a governed
-// one — deleted rather than classified.
+// Tracing it settled two things: it wrote, and it had no callers, so it was
+// deleted rather than classified. The other writer, an approved action in the
+// legacy executor, went with that executor (Roadmap 2027 R10). Foundry writes
+// to Linear nowhere now.
 // =============================================================================
 
 import { query } from '../../db/client.js';

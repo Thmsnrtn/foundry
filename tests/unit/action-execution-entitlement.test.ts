@@ -1,75 +1,29 @@
 // =============================================================================
 // Tests: the second outward door was not checking the rule the first one was
 //
-// Foundry has two paths that produce outward effects:
+// Foundry had two paths that produced outward effects:
 //
 //   outbound_actions   → services/outbound/gateway.ts → checkKillSwitch → send
 //   action_executions  → services/scp/actions/executor.ts → send
 //
-// The second posts to Slack, files Linear tickets and calls customer webhooks,
-// and it reached none of the checks the first one does. `checkKillSwitch` had
-// exactly one caller in the entire system: the gateway.
-//
-// So an approval on this path dispatched an outward effect for a company whose
-// subscription had lapsed, whose founder had paused it, or whose data had just
-// been erased and whose product row was archived. The owner's decision is
-// explicit — an unpaid account is read-only, no spend and no outward effects —
-// and it was being enforced at one of the two doors.
-//
-// This is the same shape as the pause-axis findings, one level up: not a guard
-// bound to the wrong subject, but a second subject nobody bound a guard to.
+// The second reached none of the checks the first one does, so an approval on
+// it could dispatch an outward effect for a company whose subscription had
+// lapsed, whose founder had paused it, or whose data had been erased. That was
+// closed, and then the second door itself was deleted in Roadmap 2027 R10
+// (PENDING 16, "Retire them") — so the cases that drove `approveAndExecute`
+// went with it. What remains below is the same question asked of the outward
+// paths that still exist.
 // =============================================================================
 
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-// `approved_by` takes a principal reference — a kind AND an id. These
-// fixtures passed the bare word 'founder', which is a role label with nobody
-// behind it: the same shape as the literal 'ceo' this field used to hold.
-import { principalRef } from '../../src/services/outbound/acting-principal.js';
-import { nanoid } from 'nanoid';
-
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 
 const F = 'ae_f';
 const P = 'ae_p';
-
-// THE DOUBLE STANDS IN FOR THE WHOLE INTEGRATION, REGISTRATION INCLUDED.
-//
-// This file's own header says the finding: `action_executions` reached none of
-// the checks `outbound_actions` does, because `checkKillSwitch` had exactly one
-// caller. That is now closed — the Slack path goes through `invoke` like the
-// email path beside it — which means importing the integration is what puts the
-// handler on the gateway's registry. A mock that returned only the sender left
-// the door answering `no_handler`, so the double registers too, exactly as the
-// module it replaces does.
-// It is one shared double now, because three suites were carrying their own
-// copy of it and a copy that drifts is a suite standing in for the gate it
-// claims to prove. See `tests/helpers/slack-door.ts`.
-vi.mock('../../src/services/integration/slack.js', async () => {
-  const { slackModuleDouble } = await import('../helpers/slack-door.js');
-  return slackModuleDouble();
-});
-const { sendSlackNotification: slackSpy } = await import('../../src/services/integration/slack.js') as
-  { sendSlackNotification: ReturnType<typeof vi.fn> };
-
-async function execution(): Promise<string> {
-  const id = nanoid();
-  await query(
-    `INSERT INTO action_executions
-       (id, product_id, action_type, integration, payload_json, status)
-     VALUES (?, ?, 'post_slack', 'slack', ?, 'pending')`,
-    [id, P, JSON.stringify({ action_type: 'post_slack', text: 'hello', channel: '#general' })]);
-  return id;
-}
-
-async function statusOf(id: string): Promise<Record<string, unknown>> {
-  return (await query(
-    'SELECT status, error_message FROM action_executions WHERE id = ?', [id]))
-    .rows[0] as Record<string, unknown>;
-}
 
 beforeAll(async () => {
   await runMigrations();
@@ -81,64 +35,9 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  slackSpy.mockClear();
   await query(
     `UPDATE products SET status='active', scp_status='active', entitlement_paused_at=NULL WHERE id=?`,
     [P]);
-});
-
-describe('an approved action still asks whether the company may act', () => {
-  it('refuses when the founder has paused the company', async () => {
-    const { approveAndExecute } = await import('../../src/services/scp/actions/executor.js');
-    const id = await execution();
-    await query(`UPDATE products SET scp_status='paused' WHERE id=?`, [P]);
-
-    const result = await approveAndExecute(id, principalRef('founder', F), { ownerId: F });
-    expect(result.success).toBe(false);
-    expect(slackSpy, 'nothing may leave the building').not.toHaveBeenCalled();
-
-    const row = await statusOf(id);
-    expect(row.status).toBe('cancelled');
-    expect(String(row.error_message)).toMatch(/refused before dispatch/);
-  });
-
-  it('refuses when the company has been erased', async () => {
-    const { approveAndExecute } = await import('../../src/services/scp/actions/executor.js');
-    const id = await execution();
-    await query(
-      `UPDATE products SET status='archived', scp_status='archived' WHERE id=?`, [P]);
-
-    expect((await approveAndExecute(id, principalRef('founder', F), { ownerId: F })).success).toBe(false);
-    expect(slackSpy).not.toHaveBeenCalled();
-  });
-
-  it('carries out the action for a company that is operating', async () => {
-    // A guard that refuses the legitimate case is not extra secure. It is
-    // broken, and this half of the test is the half that says so.
-    const { approveAndExecute } = await import('../../src/services/scp/actions/executor.js');
-    const id = await execution();
-
-    const result = await approveAndExecute(id, principalRef('founder', F), { ownerId: F });
-    expect(result.success, 'an operating company may still act').toBe(true);
-    expect(slackSpy).toHaveBeenCalledTimes(1);
-    expect((await statusOf(id)).status).toBe('completed');
-  });
-
-  it('leaves a refused execution able to run later', async () => {
-    // Refusing must not consume the approval: when the subscription resumes,
-    // the founder should not have to recreate the action... but nor should a
-    // cancelled one silently re-fire. Cancelled is the honest terminal state,
-    // and the test says which one this is rather than leaving it to be found.
-    const { approveAndExecute } = await import('../../src/services/scp/actions/executor.js');
-    const id = await execution();
-    await query(`UPDATE products SET scp_status='paused' WHERE id=?`, [P]);
-    await approveAndExecute(id, principalRef('founder', F), { ownerId: F });
-
-    await query(`UPDATE products SET scp_status='active' WHERE id=?`, [P]);
-    const second = await approveAndExecute(id, principalRef('founder', F), { ownerId: F });
-    expect(second.success, 'a cancelled execution is finished, not queued').toBe(false);
-    expect(slackSpy).not.toHaveBeenCalled();
-  });
 });
 
 // =============================================================================

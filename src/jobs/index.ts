@@ -1496,87 +1496,6 @@ export async function autopilotTick(): Promise<void> {
   logger.info('autopilot_tick complete', { jobName: 'autopilot_tick' });
 }
 
-// ─── Customer Success sweep (Hands Law layer 3 — the first department) ─────────
-// One save per at-risk customer, drafted from their real account state.
-// Trust-ladder governed: shadow records, suggest queues for approval, act sends.
-export async function customerSuccessSweep(): Promise<void> {
-  logger.info('customer_success_sweep starting', { jobName: 'customer_success_sweep' });
-  const products = await getAllActiveProducts();
-  let proposed = 0, sent = 0;
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      const { runSuccessSweep } = await import('../services/departments/success.js');
-      const res = await runSuccessSweep(p.id);
-      proposed += res.proposed;
-      sent += res.sent;
-      if (res.proposed > 0) {
-        const { deliver } = await import('../services/ux/interruption.js');
-        // Drafts sit in the queue until approved; nothing reaches a customer
-        // while the founder is not looking. Action needed, not urgent.
-        await deliver(p.owner_id, p.id, {
-          importance: 'action_needed',
-          title: 'Check-in drafts waiting for your approval',
-          body: `${res.proposed} at-risk customer(s) have a check-in drafted from their real account state. Approve or discard in the action queue.`,
-          actionUrl: '/agents/actions', actionLabel: 'Review drafts',
-        }, await founderPrefs(p.owner_id) as never);
-      }
-    } catch (err) {
-      logger.error(`customer_success_sweep error for ${p.id}`, { jobName: 'customer_success_sweep', error: String(err) });
-    }
-  }
-  logger.info(`customer_success_sweep complete — ${proposed} proposed, ${sent} sent`, { jobName: 'customer_success_sweep' });
-}
-
-// ─── Marketing / Product Evolution / Outreach sweeps (Hands Law departments) ───
-// Same shape as customer_success_sweep: per-product, trust-ladder governed,
-// envelope-bounded, errors isolated per product.
-function departmentSweepJob(
-  jobName: string,
-  run: (productId: string) => Promise<{ proposed: number }>,
-): () => Promise<void> {
-  return async () => {
-    logger.info(`${jobName} starting`, { jobName });
-    const products = await getAllActiveProducts();
-    let proposed = 0;
-    for (const row of products.rows) {
-      const p = row as Record<string, string>;
-      try {
-        proposed += (await run(p.id)).proposed;
-      } catch (err) {
-        logger.error(`${jobName} error for ${p.id}`, { jobName, error: String(err) });
-      }
-    }
-    logger.info(`${jobName} complete — ${proposed} proposed`, { jobName });
-  };
-}
-
-export const marketingSweep = departmentSweepJob('marketing_sweep', async (id) => {
-  const { runMarketingSweep } = await import('../services/departments/marketing.js');
-  return runMarketingSweep(id);
-});
-export const productEvolutionSweep = departmentSweepJob('product_evolution_sweep', async (id) => {
-  const { runProductSweep } = await import('../services/departments/product.js');
-  return runProductSweep(id);
-});
-export const outreachSweep = departmentSweepJob('outreach_sweep', async (id) => {
-  const { runOutreachSweep } = await import('../services/departments/outreach.js');
-  return runOutreachSweep(id);
-});
-
-
-// ─── Action verification sweep (Jarvis axis 1 — verified action) ──────────────
-export async function actionVerifySweep(): Promise<void> {
-  logger.info('action_verify_sweep starting', { jobName: 'action_verify_sweep' });
-  try {
-    const { verifyDueActions } = await import('../services/outbound/action-verifier.js');
-    const res = await verifyDueActions();
-    logger.info(`action_verify_sweep complete — ${res.checked} checked, ${res.passed} passed, ${res.failed} failed`, { jobName: 'action_verify_sweep' });
-  } catch (err) {
-    logger.error('action_verify_sweep error', { jobName: 'action_verify_sweep', error: String(err) });
-  }
-}
-
 // ─── Job Registry ─────────────────────────────────────────────────────────────
 
 /** Words that make a claim a sentence rather than a search. */
@@ -1692,6 +1611,15 @@ export const RETIRED_LOOPS: Readonly<Record<string, string>> = {
   scp_signal_events: 'Process pending signal events and dispatch to target agents (hourly)',
   scp_founder_state: 'Detect behavioral signals and assess founder state (daily 7:00 UTC)',
   scp_priority_rebuild: 'Rebuild priority action queue for One Thing banner (every 30 min)',
+  // The four department sweeps and the verifier of what they did, deleted with
+  // the last legacy executor they fed (R10). None could find work here: earned
+  // products only, no SaaS customers, every policy at shadow, acting capped at
+  // suggest.
+  customer_success_sweep: 'Customer Success department: one check-in per at-risk customer, drafted from real account state (daily 8:15 UTC)',
+  marketing_sweep: 'Marketing department: one campaign proposal per cycle, carried by a signups_7d premise (Monday)',
+  product_evolution_sweep: 'Product Evolution department: one gate-3 hypothesis citing the thesis, contested by the red team (Tuesday)',
+  outreach_sweep: 'Outreach department: asked champions for introductions, never auto-sending (Wednesday)',
+  action_verify_sweep: 'Independent verification of acted executions against their declared success criteria (every 6h)',
   // Two weekly jobs that measured the society, deleted with it (R9): the
   // critique and evolution rates of agents that no longer exist, and outcome
   // trees whose only writer went in R4.
@@ -1704,17 +1632,12 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   red_team_sweep:       { fn: redTeamSweep,         schedule: '30 */2 * * *',    description: 'Adversarial pre-mortem for uncontested gate-3+ pending decisions (every 2h)' },
   founder_pulse_check:  { fn: founderPulseCheck,    schedule: '0 9 * * 5',       description: 'Founder strain check — kind, numbers-shown, only when overloaded (Friday 9:00 UTC)' },
   autopilot_tick:       { fn: autopilotTick,        schedule: '45 */4 * * *',    description: 'Second Self: bank real outcomes into the trust ladder, then act on eligible gate-≤1 decisions in founder-granted categories (every 4h)' },
-  customer_success_sweep: { fn: customerSuccessSweep, schedule: '15 8 * * *',    description: 'Customer Success department: one check-in per at-risk customer, drafted from real account state; trust-ladder governed, envelope-bounded (daily)' },
-  marketing_sweep:      { fn: marketingSweep,       schedule: '0 9 * * 1',       description: 'Marketing department: one campaign proposal per cycle, carried by a graced signups_7d premise that falsifies honestly (Monday)' },
-  product_evolution_sweep: { fn: productEvolutionSweep, schedule: '30 9 * * 2',  description: 'Product Evolution department: one gate-3 hypothesis citing the thesis, auto-contested by the Red Team, carried by a graced metric premise (Tuesday)' },
-  outreach_sweep:       { fn: outreachSweep,        schedule: '0 10 * * 3',      description: 'Outreach department (referral engine v1): asks champions for intros; suppression-listed, never auto-sends (Wednesday)' },
   // THE WEEK, IN FIVE SETS (Roadmap 2027 R5). Replaces the daily fleet letter
   // notification and the Monday digest (which needed a subscription tier
   // nobody has): one email a week to the owner, composed on the server from
   // their own rows, sent only when the week differs from the last and is not
   // empty, and not at all while the owner has asked for "quiet".
   the_week:             { fn: theWeekTick,          schedule: '30 7 * * 1',      description: 'The week in five sets, emailed to the owner only when it changed (Monday)' },
-  action_verify_sweep:  { fn: actionVerifySweep,    schedule: '20 */6 * * *',    description: 'Independent verification of act-tier executions against their pre-declared success criteria; failures log defects and demote the acting category (every 6h)' },
   lifecycle_check:      { fn: lifecycleCheck,      schedule: '0 6 * * *',       description: 'Evaluate lifecycle conditions for all products' },
   competitive_scan:     { fn: competitiveScan,     schedule: '0 6 * * 0',       description: 'Scan competitors for all products (Sunday)' },
   weekly_synthesis:     { fn: weeklySynthesis,      schedule: '0 6 * * 5',       description: 'Weekly intelligence synthesis (Friday)' },

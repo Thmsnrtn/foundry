@@ -49,14 +49,8 @@ const ASK_WORDS: Record<string, string> = {
 };
 
 export async function composeLetter(productId: string, f: Fluency = 'balanced'): Promise<Letter> {
-  const [executions, gate0, pending, expired, digest, ledger, dissent, quieted,
+  const [gate0, pending, expired, digest, ledger, dissent, quieted,
     executedDrafts] = await Promise.all([
-    query(
-      `SELECT action_type, integration FROM action_executions
-       WHERE product_id = ? AND status = 'completed'
-         AND datetime(executed_at) >= datetime('now', '-1 day') LIMIT 10`,
-      [productId],
-    ),
     query(
       // 'system_gate_0' used to be in this list. Migration 001's comment on
       // the column named it as a vocabulary value — "founder, system_gate_0,
@@ -110,11 +104,6 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
   ]);
 
   const handled: string[] = [
-    ...(executions.rows as unknown as Array<Record<string, string>>).map(
-      (e) => f === 'plain'
-        ? `Ran ${e.action_type} for you through ${e.integration}`
-        : `Executed ${e.action_type} via ${e.integration}`,
-    ),
     ...(gate0.rows as unknown as Array<Record<string, string>>).map(
       (d) => d.decided_by === 'second_self'
         ? (f === 'plain'
@@ -230,28 +219,6 @@ export async function composeLetter(productId: string, f: Fluency = 'balanced'):
     trust.push(f === 'plain'
       ? `The devil's advocate's record: ${dissent.vindicated} warnings proved right, ${dissent.overruled_held} overruled and held, ${dissent.pending} still open.`
       : `Red Team record: ${dissent.vindicated} vindicated, ${dissent.overruled_held} overruled-and-held, ${dissent.pending} pending.`);
-  }
-
-  // Hands Law: a watching department's shadow work is the founder's cue to
-  // promote it — surfaced here, never as a new dashboard (Attention Law).
-  const DEPT_NAMES: Record<string, string> = {
-    'dept:customer_success': 'customer success',
-    'dept:marketing': 'marketing',
-    'dept:product_evolution': 'product',
-    'dept:outreach': 'outreach',
-  };
-  const shadowWork = await query(
-    `SELECT action_type, COUNT(*) as n FROM audit_log
-     WHERE product_id = ? AND action_type LIKE 'dept:%' AND outcome = 'shadow'
-       AND created_at >= datetime('now', '-1 day')
-     GROUP BY action_type LIMIT 4`,
-    [productId],
-  );
-  for (const row of shadowWork.rows as unknown as Array<Record<string, unknown>>) {
-    const dept = DEPT_NAMES[String(row.action_type)] ?? String(row.action_type).replace('dept:', '');
-    trust.push(f === 'plain'
-      ? `Your ${dept} department is still just watching — it saw ${row.n} thing(s) it would have acted on. Let it suggest drafts in Controls when you're ready.`
-      : `${dept}: ${row.n} shadowed action(s) in 24h — promotable in Controls.`);
   }
 
   // What Foundry noticed and deliberately did not interrupt for. Rendered as

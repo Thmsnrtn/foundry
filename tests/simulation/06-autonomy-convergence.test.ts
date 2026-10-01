@@ -41,12 +41,24 @@ async function resolvedDecision(productId: string, category: string, valence: 'p
   return id;
 }
 
-/** Simulate a verified/failed autonomous action in a category (for calibration). */
-async function verifiedAction(productId: string, category: string, verify: 'passed' | 'failed') {
+/**
+ * Simulate a belief a category's decision rested on, resolved either way (for
+ * calibration). This seeded verified autonomous actions until the legacy
+ * executor and its verifier were deleted in Roadmap 2027 R10; calibration now
+ * reads premises only, so the same verdicts are reached through them.
+ */
+async function resolvedPremise(productId: string, category: string, status: 'holding' | 'falsified') {
+  const did = nanoid();
+  // Pending, so the outcome loop does not count it as a resolved decision: it
+  // carries the belief and nothing else.
   await query(
-    `INSERT INTO action_executions (id, product_id, action_type, integration, payload_json, status, approved_by, verify_status)
-     VALUES (?, ?, 'send_email', 'resend', '{}', 'completed', ?, ?)`,
-    [nanoid(), productId, `autopilot:${category}`, verify],
+    `INSERT INTO decisions (id, product_id, category, gate, what, why_now, status)
+     VALUES (?, ?, ?, 2, 'sim', 'sim', 'pending')`, [did, productId, category],
+  );
+  await query(
+    `INSERT INTO decision_premises (id, product_id, decision_id, decision_source, premise, premise_type, status, origin)
+     VALUES (?, ?, ?, 'decision', 'p', 'metric', ?, 'founder')`,
+    [nanoid(), productId, did, status],
   );
 }
 
@@ -59,12 +71,13 @@ beforeAll(async () => {
 describe('the autopilot converges to the right behavior over time', () => {
   // Auto-promotion via processOutcomeFeedback is keyed to DECISION categories
   // (urgent/strategic/product/marketing/informational). Department names
-  // (customer_success/outreach) earn trust via their verified-action record +
-  // an explicit founder grant — a separate, deliberately slower path.
+  // (customer_success/outreach) earned trust via their verified-action record +
+  // an explicit founder grant; the departments and the verifier were deleted
+  // in Roadmap 2027 R10, so only the explicit grant and the cap remain.
   it('a category that consistently succeeds EARNS promotion (shadow → suggest)', async () => {
     await setPolicy('cv_p', 'marketing', 'shadow', 'sim');
-    // Well-calibrated: its acts pass, its decisions land positive.
-    for (let i = 0; i < 5; i++) await verifiedAction('cv_p', 'marketing', 'passed');
+    // Well-calibrated: its beliefs hold, its decisions land positive.
+    for (let i = 0; i < 5; i++) await resolvedPremise('cv_p', 'marketing', 'holding');
     for (let i = 0; i < PROMOTION_THRESHOLD; i++) {
       await resolvedDecision('cv_p', 'marketing', 'positive', 'founder');
     }
@@ -78,8 +91,8 @@ describe('the autopilot converges to the right behavior over time', () => {
 
   it('an OVERCONFIDENT category is held at shadow despite a clean agreement record', async () => {
     await setPolicy('cv_p', 'strategic', 'shadow', 'sim');
-    // Agreement looks great (positive outcomes) — but its ACTS fail verification.
-    for (let i = 0; i < 6; i++) await verifiedAction('cv_p', 'strategic', 'failed');
+    // Agreement looks great (positive outcomes) — but its BELIEFS were falsified.
+    for (let i = 0; i < 6; i++) await resolvedPremise('cv_p', 'strategic', 'falsified');
     for (let i = 0; i < PROMOTION_THRESHOLD + 2; i++) {
       await resolvedDecision('cv_p', 'strategic', 'positive', 'founder');
     }
@@ -107,9 +120,11 @@ describe('the autopilot converges to the right behavior over time', () => {
   });
 
   it('the platform cap holds regardless of an earned trust history', async () => {
-    // outreach caps at suggest; even a flawless record cannot reach act.
+    // outreach caps at suggest; even a flawless record cannot reach act. (The
+    // record was five verified actions, which nothing can produce since Roadmap
+    // 2027 R10; `outreach` is not a decision category, so it has no premises
+    // to stand in. The cap is what is asserted, and it never read the record.)
     await setPolicy('cv_p', 'outreach', 'suggest', 'sim');
-    for (let i = 0; i < 5; i++) await verifiedAction('cv_p', 'outreach', 'passed');
     const { getEffectiveMode } = await import('../../src/services/autopilot/policy.js');
     // Even if the founder tries to grant act:
     await setPolicy('cv_p', 'outreach', 'act', 'sim');

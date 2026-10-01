@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 //
 //   src/lib/webhooks.ts                       assertUrlSafe at call time
 //   src/services/scp/actions/executor.ts      assertUrlSafe at call time
+//                                             (deleted in Roadmap 2027 R10)
 //   src/services/distribution/outbound-webhooks.ts   nothing
 //
 // The third was not exploitable, and only by accident: nothing can currently
@@ -170,7 +171,7 @@ describe('posting to a URL somebody else chose', () => {
       // `src/services/integration/posthog.ts` was here; deleted in Roadmap 2027 R4.
       'src/services/integrations/posthog.ts',
       'src/services/outbound/ssrf.ts',
-      'src/services/scp/actions/executor.ts',
+      // `src/services/scp/actions/executor.ts` was here; deleted in Roadmap 2027 R10.
       // THE MARKETPLACE SENSE, WHICH COULD HAVE CLAIMED THE EXEMPTION ABOVE
       // AND DELIBERATELY DOES NOT. Its three hosts are compiled in and the
       // only value reaching a path is a shop id Etsy itself returned,

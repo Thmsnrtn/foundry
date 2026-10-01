@@ -1,15 +1,16 @@
 // =============================================================================
 // Tests: Connections (Hands Law / Constitution Law 10)
 // The founder shapes the system's hands: connect any MCP server, grant scoped
-// abilities, watch the audit trail, revoke instantly. Reach is never license —
-// proven end-to-end through the standing-order (mcp_tool) action path.
+// abilities, watch the audit trail, revoke instantly. Reach is never license.
+// The standing-order (mcp_tool) action path that proved it end-to-end was the
+// legacy executor, deleted in Roadmap 2027 R10; the no-grant refusal is held
+// at `callMcpTool` in `mcp-client-gateway.test.ts`.
 // =============================================================================
 
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { principalRef } from '../../src/services/outbound/acting-principal.js';
 import { Hono } from 'hono';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
@@ -121,18 +122,7 @@ describe('the shell this page is now inside', () => {
   });
 });
 
-describe('the hands obey the law end-to-end (standing-order mcp_tool action)', () => {
-  it('no grant → the action fails with the reason, and nothing leaves the building', async () => {
-    const { createExecution, approveAndExecute } = await import('../../src/services/scp/actions/executor.js');
-    const execId = await createExecution('cx_p', null, {
-      action_type: 'mcp_tool', integration: 'my-crm',
-      server_name: 'my-crm', tool: 'send_email', tool_args: { to: 'x@y.z' },
-    });
-    const result = await approveAndExecute(execId, principalRef('founder', 'cx_f'));
-    expect(result.success).toBe(false);
-    expect(result.error).toContain('no live grant'); // revoked above — Hands Law holds
-  });
-
+describe('the hands obey the law', () => {
   it('a disconnected server refuses calls even with a live grant', async () => {
     const { issueGrant, callMcpTool } = await import('../../src/services/integration/mcp-client.js');
     await issueGrant({ productId: 'cx_p', serverName: 'my-crm', toolPattern: '*', createdBy: 'cx_f' });

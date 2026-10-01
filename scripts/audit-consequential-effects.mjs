@@ -87,7 +87,6 @@ const classifications = new Map(Object.entries({
   // `sendSlackNotification` now has exactly one caller, the handler registered
   // on the gateway in the same file, and the briefing path formats through
   // `briefingMessage` and crosses the door like everything else.
-  'src/services/integration/slack.ts|external_post': ['governed', 'post_slack capability handler. This line claimed "every caller kill-switch checked before dispatch" while the action executor called the sender directly, past the door — the one outbound-mutating integration that did. It is registered on the gateway now and bound to post_to_channel at rung public, so the claim and the code agree'],
   // Traced, not assumed. Both files POST to a GraphQL endpoint, which is what
   // the detector sees; every remaining operation is a QUERY. `read_only` is a
   // real classification and deliberately not `governed` — a read does not need
@@ -119,8 +118,6 @@ const classifications = new Map(Object.entries({
   // caller in the system, the outbound gateway, so this second outward door
   // dispatched for companies that were paused, unentitled or erased. It now
   // passes the same check before dispatch — which is what `governed` means.
-  'src/services/scp/actions/executor.ts|external_post': ['governed', 'approved Linear action — kill-switch checked before dispatch, durable receipt after'],
-  'src/services/scp/actions/executor.ts|dynamic_webhook_post': ['governed', 'approved custom webhook — kill-switch checked before dispatch, SSRF guard and durable receipt'],
   'src/services/integrations/stripe-sync.ts|stripe_sdk_mutation': ['control_path', 'Stripe OAuth credential exchange'],
   // THE SENSE'S OWN CREDENTIAL, and nothing else. Three calls: exchanging a
   // code the OWNER just authorised, deauthorising when he disconnects, and

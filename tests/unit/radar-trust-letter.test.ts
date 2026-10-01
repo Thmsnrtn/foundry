@@ -47,11 +47,9 @@ beforeAll(async () => {
       [id()],
     );
   }
-  // Letter fodder for p_trust: an executed action + one pending gate-3 decision.
-  await query(
-    `INSERT INTO action_executions (id, product_id, action_type, integration, status, executed_at)
-     VALUES ('p5_ae1', 'p_trust', 'send_email', 'resend', 'completed', datetime('now','-2 hours'))`, [],
-  );
+  // Letter fodder for p_trust: one pending gate-3 decision. (An executed
+  // `action_executions` row was seeded here too; the Letter stopped reading that
+  // ledger when the legacy executor was deleted in Roadmap 2027 R10.)
   await query(
     `INSERT INTO decisions (id, product_id, category, gate, what, why_now, status)
      VALUES ('p5_pending', 'p_trust', 'strategic', 3, 'Enter enterprise', 'Pull from pipeline', 'pending')`, [],
@@ -80,7 +78,6 @@ describe('The Letter (B7)', () => {
   it('composes handled / needs-you / trust from the ledgers, deterministically', async () => {
     const letter = await composeLetter('p_trust');
     expect(letter.quiet).toBe(false);
-    expect(letter.handled.some((h) => h.includes('send_email'))).toBe(true);
     expect(letter.needsYou).toContain('Gate-3');
     expect(letter.needsYou).toContain('Enter enterprise');
     expect(letter.trust.some((t) => t.includes('marketing'))).toBe(true);

@@ -2,14 +2,15 @@
 // FOUNDRY — Calibration scoring (ported from AcreOS confidenceObservations.ts)
 //
 // The trust ladder measures AGREEMENT (did the founder do what the autopilot
-// would have?). Calibration measures TRUTHFULNESS OF CONFIDENCE: when the
-// autopilot acted, did it actually work? A category that acts and its acts
-// pass verification is well-calibrated; one whose acts fail is overconfident
-// and should not be trusted with more autonomy, whatever its agreement rate.
+// would have?). Calibration measures TRUTHFULNESS OF CONFIDENCE: did the
+// beliefs a category's decisions rested on hold up? A category whose premises
+// are falsified is overconfident and should not be trusted with more autonomy,
+// whatever its agreement rate.
 //
-// Sources, both fresh ledger reads:
-//   - action_executions.verify_status (the action verifier — passed/failed)
-//   - decision_premises (beliefs that held vs falsified)
+// Source, a fresh ledger read: decision_premises (beliefs that held vs
+// falsified). Verified actions were a second source until the legacy executor
+// and its verifier were retired (Roadmap 2027 R10); nothing could act through
+// them here, so that half only ever read zero.
 // Deterministic. Feeds Controls + the operator letter. A category below the
 // floor is a promotion HOLD, mirroring the existing quality hold.
 // =============================================================================
@@ -20,8 +21,6 @@ export type CalibrationVerdict = 'well_calibrated' | 'overconfident' | 'thin';
 
 export interface CategoryCalibration {
   category: string;
-  actionsPassed: number;
-  actionsFailed: number;
   premisesHeld: number;
   premisesFalsified: number;
   /** 0..1 across both signals; null when too thin to judge. */
@@ -33,19 +32,6 @@ const MIN_SAMPLE = 4;
 export const CALIBRATION_FLOOR = 0.6;
 
 export async function getCategoryCalibration(productId: string, category: string): Promise<CategoryCalibration> {
-  // Verified actions attributed to this category's autopilot.
-  const actions = (await query(
-    `SELECT verify_status, COUNT(*) as n FROM action_executions
-      WHERE product_id = ? AND approved_by = ? AND verify_status IN ('passed','failed')
-      GROUP BY verify_status`,
-    [productId, `autopilot:${category}`],
-  )).rows as unknown as Array<Record<string, unknown>>;
-  let actionsPassed = 0, actionsFailed = 0;
-  for (const r of actions) {
-    if (r.verify_status === 'passed') actionsPassed = Number(r.n);
-    if (r.verify_status === 'failed') actionsFailed = Number(r.n);
-  }
-
   // Premises recorded for this category's decisions, resolved either way.
   const premises = (await query(
     `SELECT dp.status, COUNT(*) as n FROM decision_premises dp
@@ -60,15 +46,15 @@ export async function getCategoryCalibration(productId: string, category: string
     if (r.status === 'falsified') premisesFalsified = Number(r.n);
   }
 
-  const good = actionsPassed + premisesHeld;
-  const bad = actionsFailed + premisesFalsified;
+  const good = premisesHeld;
+  const bad = premisesFalsified;
   const total = good + bad;
   if (total < MIN_SAMPLE) {
-    return { category, actionsPassed, actionsFailed, premisesHeld, premisesFalsified, score: null, verdict: 'thin' };
+    return { category, premisesHeld, premisesFalsified, score: null, verdict: 'thin' };
   }
   const score = good / total;
   return {
-    category, actionsPassed, actionsFailed, premisesHeld, premisesFalsified, score,
+    category, premisesHeld, premisesFalsified, score,
     verdict: score >= CALIBRATION_FLOOR ? 'well_calibrated' : 'overconfident',
   };
 }

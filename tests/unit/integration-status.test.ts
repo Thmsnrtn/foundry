@@ -17,15 +17,13 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
-const ACTIVE = 'active';
-
 const base = resolve(__dirname, '../../src');
 const read = (rel: string) => readFileSync(resolve(base, rel), 'utf-8');
 
 // posthog, sentry, linear, intercom and github adapters were deleted in Roadmap 2027 R4.
-const SYNC_ADAPTERS = [
-  'services/integration/slack.ts',
-];
+// `services/integration/slack.ts`, the last one, was deleted in Roadmap 2027 R10,
+// so the list and the block that walked it went with it; `isResendConnected`
+// below is the remaining guard on the value.
 
 let fabricSrc: string;
 let resendSrc: string;
@@ -42,18 +40,6 @@ describe('Integration status consistency', () => {
     // 'connected' fails the schema CHECK constraint — must never be written.
     expect(fabricSrc).not.toMatch(/status\s*=\s*'connected'/);
     expect(fabricSrc).not.toMatch(/VALUES\s*\([^)]*'connected'/s);
-  });
-
-  it('every sync adapter guards on the same value the connect paths write', () => {
-    for (const rel of SYNC_ADAPTERS) {
-      const src = read(rel);
-      expect(src, `${rel} should compare status to '${ACTIVE}'`).toMatch(
-        new RegExp(`status\\s*[!=]==\\s*'${ACTIVE}'`),
-      );
-      expect(src, `${rel} must not guard on schema-invalid 'connected'`).not.toMatch(
-        /status\s*[!=]==\s*'connected'/,
-      );
-    }
   });
 
   it("isResendConnected checks the canonical 'active' status", () => {

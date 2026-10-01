@@ -122,6 +122,11 @@ export async function executeEmailSend(
   // ever offered and nobody was asked, because the code says this class of
   // action does not need asking. That is a standing authority, not silence
   // after a notice, and the two are different facts about who is responsible.
+  //
+  // PROVENANCE, NOT INPUT: `approved_by` is recorded for a person reading the
+  // row later; no code consumes it (write-only-columns baseline). A namesake
+  // read in the legacy executor hid that until the executor was retired
+  // (Roadmap 2027 R10).
   await query(
     `UPDATE outbound_actions SET status = 'executing',
             approved_by = COALESCE(approved_by, ?),

@@ -80,27 +80,9 @@ describe('every capability is consumed by something that runs', () => {
 // inside it, is kept above: the capability scan now walks every entry point,
 // so the next router to claim a capability has to actually consult it.
 
-describe('approving an outward effect asks who may', () => {
-  // THE PAGE THAT ASKED IS GONE. `routes/dashboard/agents-actions.ts` carried
-  // the approve and cancel doors and was deleted on 13 September 2026 with the
-  // rest of Commercial Foundry, so the half of this that read its source went
-  // with it. What it was really protecting is underneath and still here: the
-  // executor must scope an approved action to the company that authorised it,
-  // not to whoever owns the company.
-  it('scopes the execution to the company that was authorized, not to ownership', () => {
-    // The ownership scope was the only thing keeping a non-owner out, which
-    // made approving an outward effect owner-only by accident rather than by
-    // decision.
-    const executor = readFileSync(
-      resolve(__dirname, '../../src/services/scp/actions/executor.ts'), 'utf8')
-      .replace(/\/\*[\s\S]*?\*\//g, ' ')
-      .split('\n').map((l) => l.replace(/^\s*\/\/.*$/, '')).join('\n');
-    expect(executor).toMatch(/scopeProductId/);
-    expect(executor,
-      'scoping approval on owner_id makes the capability column unreachable')
-      .not.toMatch(/action_executions[\s\S]{0,200}owner_id/);
-  });
-});
+// 'approving an outward effect asks who may' read the legacy action executor
+// for its company scope. The executor was deleted in Roadmap 2027 R10, and
+// with it the last approval of an `action_executions` row.
 
 describe('ownership stays separate from capability', () => {
   const settings = readFileSync(join(ROUTES, 'dashboard/settings.ts'), 'utf8');

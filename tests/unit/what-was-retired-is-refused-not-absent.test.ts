@@ -44,8 +44,10 @@ const DROPPED = [
 describe('a retired loop is refused by name', () => {
   it('lists every loop that was retired, each with what it did', () => {
     // The twenty-six society loops (scp_benchmark_refresh went earlier, in
-    // Private S7) and the two weekly jobs that measured the society (R9).
-    expect(Object.keys(RETIRED_LOOPS)).toHaveLength(28);
+    // Private S7), the two weekly jobs that measured the society (R9), and
+    // R10's five: the four department sweeps and action_verify_sweep, deleted
+    // in Roadmap 2027 R10 with the last legacy executor.
+    expect(Object.keys(RETIRED_LOOPS)).toHaveLength(33);
     for (const [name, was] of Object.entries(RETIRED_LOOPS)) {
       expect(was.length, name).toBeGreaterThan(10);
     }
@@ -84,12 +86,12 @@ describe('the code is gone', () => {
     for (const gone of [
       'src/services/scp/events/dispatcher.ts', 'src/services/scp/provisioner.ts', 'src/services/scp/scheduler.ts',
       'src/services/outbound/executor.ts', 'src/api/v1/agents.ts', 'src/api/v1/briefings.ts',
-      'src/services/financial/economics.ts',
+      'src/services/financial/economics.ts', 'src/services/scp/actions/executor.ts',
     ]) expect(existsSync(join(ROOT, gone)), gone).toBe(false);
-    // What is left of the old SCP tree is not the society: the department
-    // sweeps' execute path, the runway forecast, and shared types.
+    // What is left of the old SCP tree is not the society: the runway forecast
+    // and shared types. The department sweeps' execute path went in R10.
     const left = readdirSync(join(ROOT, 'src/services/scp'), { recursive: true }).map(String).filter((f) => f.endsWith('.ts')).sort();
-    expect(left).toEqual(['actions/executor.ts', 'forecasting/runway.ts', 'types.ts']);
+    expect(left).toEqual(['forecasting/runway.ts', 'types.ts']);
   });
 
   it('starts nothing for the society at boot, and serves nothing of it on the API', () => {

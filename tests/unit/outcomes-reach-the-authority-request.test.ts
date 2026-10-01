@@ -161,11 +161,11 @@ describe('and the founder is shown it while deciding', () => {
 
 describe('a verified failure does not revoke what the owner granted', () => {
   it('leaves the grant standing, and records the failure instead', async () => {
-    // TRIED THE OTHER WAY AND IT WAS WRONG. `action-verifier.ts` demotes an
-    // autopilot category when an autopilot-approved action fails its criteria,
-    // and applies that only to `approved_by` starting `autopilot:` — so the
-    // institution's own assisting path appears to escape a cost the autopilot
-    // pays, and revoking its responsibility-bound grant looks like the
+    // TRIED THE OTHER WAY AND IT WAS WRONG. `action-verifier.ts` (deleted in
+    // Roadmap 2027 R10) demoted an autopilot category when an autopilot-approved
+    // action failed its criteria, and applied that only to `approved_by`
+    // starting `autopilot:` — so the institution's own assisting path appeared
+    // to escape a cost the autopilot paid, and revoking its responsibility-bound grant looks like the
     // symmetric fix.
     //
     // It is not. Reducing what Foundry may do is always permitted, but a grant

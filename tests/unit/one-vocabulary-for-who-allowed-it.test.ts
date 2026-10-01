@@ -1,15 +1,12 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import {
   AUTO_PRINCIPAL, describePrincipal, isPrincipalRef, parsePrincipal, principalRef,
 } from '../../src/services/outbound/acting-principal.js';
-import { createExecution, approveAndExecute } from '../../src/services/scp/actions/executor.js';
-import { registerToolHandler } from '../../src/services/outbound/gateway.js';
-import { SEND_EMAIL_POLICY } from '../../src/services/integration/resend.js';
 
 // =============================================================================
 // `approved_by` IS WHAT MAKES AN AUTHORISATION ATTRIBUTABLE, AND IT HELD FOUR
@@ -41,11 +38,6 @@ beforeAll(async () => {
   await runMigrations();
   await query(`INSERT INTO founders (id,clerk_user_id,email,tier) VALUES (?,'ovp_c','o@example.com','growth')`, [OWNER]);
   await query(`INSERT INTO products (id,name,owner_id,status) VALUES (?,'Vocab Co',?,'active')`, [P, OWNER]);
-});
-
-beforeEach(async () => {
-  await query('DELETE FROM idempotency_keys');
-  registerToolHandler('send_email', async () => ({ message_id: 'm1' }), SEND_EMAIL_POLICY);
 });
 
 describe('a principal reference', () => {
@@ -101,32 +93,8 @@ describe('the sentence a founder reads', () => {
   });
 });
 
-describe('the approval doors', () => {
-  const execute = async (approver: string) => {
-    const execId = await createExecution(P, null, {
-      action_type: 'send_email', integration: 'resend',
-      to_email: 'reader@example.com', subject: 's', body: 'b',
-    });
-    const result = await approveAndExecute(execId, approver);
-    const row = (await query(
-      'SELECT status, approved_by FROM action_executions WHERE id = ?', [execId],
-    )).rows[0] as Record<string, unknown>;
-    return { result, row };
-  };
-
-  it('refuse a bare founder id — which is what the dashboard used to send', async () => {
-    const { result, row } = await execute(OWNER);
-    expect(result.success).toBe(false);
-    expect(String(result.error)).toContain('not a principal reference');
-    expect(row.status, 'nothing was approved').toBe('pending');
-    expect(row.approved_by).toBeFalsy();
-  });
-
-  it('accept the same person named properly', async () => {
-    const { result, row } = await execute(principalRef('founder', OWNER));
-    expect(result.success).toBe(true);
-    expect(row.approved_by).toBe(`founder:${OWNER}`);
-  });
-
-  // 'the other ledger' was `outbound/executor.ts`, deleted in Roadmap 2027 R9.
-});
+// 'the approval doors' asserted that `approveAndExecute` refused a bare founder
+// id and accepted a principal reference. That door was the legacy action
+// executor, deleted in Roadmap 2027 R10; the refusal of a bare id is held above
+// by `parsePrincipal`.
+// 'the other ledger' was `outbound/executor.ts`, deleted in Roadmap 2027 R9.

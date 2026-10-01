@@ -11,9 +11,7 @@ import {
   AT_RISK_CHURN_RISK, AT_RISK_HEALTH_SCORE, customerStoreSplit, getCustomerHealth,
   getCompanyCustomers, getCustomersAtRisk,
 } from '../../src/services/institution/company-customers.js';
-import { draftCheckIn, runSuccessSweep, CATEGORY } from '../../src/services/departments/success.js';
 import { getChampions, CHAMPION_MIN_HEALTH, getCustomerRevenue } from '../../src/services/institution/company-customers.js';
-import { setPolicy } from '../../src/services/autopilot/policy.js';
 
 // =============================================================================
 // REALITY ARRIVED IN THE TABLE NOBODY READ.
@@ -90,28 +88,9 @@ describe('a customer reported through the documented API', () => {
     expect(atRisk[0].churnRisk).toBeCloseTo(0.8);
   });
 
-  it('reaches the department that acts on customers', async () => {
-    // THE DEFECT, END TO END. Before this, the sweep saw nothing for a company
-    // whose customers all arrived the documented way.
-    await reported('r1', 'ada@buyer.example', 15, new Date(Date.now() - 20 * 86_400_000).toISOString());
-    await setPolicy(P, CATEGORY, 'shadow', OWNER);
-
-    const res = await runSuccessSweep(P);
-    expect(res.atRisk, 'the company is not empty to the department').toBe(1);
-    expect(res.shadowed).toBe(1);
-  });
-
-  it('is personalised, rather than losing the sentence to a column name', async () => {
-    // `draftCheckIn` read `last_active_at` — the LEGACY column name. A reported
-    // customer produced the generic sentence because the property was simply
-    // absent, which is how a store migration goes quiet instead of failing.
-    const days20 = new Date(Date.now() - 20 * 86_400_000).toISOString();
-    expect(draftCheckIn({ name: 'Ada', lastActiveAt: days20 }, 'Northwind').body)
-      .toMatch(/It's been about \d+ days/);
-    // The legacy spelling still works, for fixtures that predate the accessor.
-    expect(draftCheckIn({ name: 'Ada', last_active_at: days20 }, 'Northwind').body)
-      .toMatch(/It's been about \d+ days/);
-  });
+  // 'reaches the department that acts on customers' and 'is personalised'
+  // drove the customer success sweep and its `draftCheckIn`, both deleted in
+  // Roadmap 2027 R10.
 });
 
 describe('the two stores, while both exist', () => {
@@ -190,25 +169,8 @@ describe('verifying what happened to a customer afterwards', () => {
       'and never another company\'s customer').toBeNull();
   });
 
-  it('is what the verifier asks, so a reported customer is not a vacuous pass', async () => {
-    // The criterion returns null (abstain) when health cannot be established.
-    // Before the accessor, a reported customer ALWAYS produced that — the
-    // outcome loop stopped silently for exactly the customers the department
-    // had just gained.
-    const { verifyDueActions } = await import('../../src/services/outbound/action-verifier.js');
-    await reported('r1', 'ada@buyer.example', 10);   // fell from a baseline of 80
-    await query(
-      `INSERT INTO action_executions (id, product_id, action_type, integration, payload_json, status, verify_criteria, verify_status, verify_after)
-       VALUES ('cip_exec', ?, 'send_email', 'resend', '{}', 'completed', ?, 'pending', datetime('now','-1 hour'))`,
-      [P, JSON.stringify([{ kind: 'customer_health_not_worse', customer_id: 'r1', baseline_health: 80 }])]);
-
-    await verifyDueActions();
-    const row = (await query(
-      'SELECT verify_status FROM action_executions WHERE id = ?', ['cip_exec'],
-    )).rows[0] as Record<string, unknown>;
-    expect(row.verify_status, 'health fell far below the baseline and the check saw it')
-      .toBe('failed');
-  });
+  // 'is what the verifier asks' drove `verifyDueActions`; the verifier was
+  // deleted in Roadmap 2027 R10.
 });
 
 describe('the other department that acts on customers', () => {
@@ -248,9 +210,10 @@ describe('a department asks the institution, not a table', () => {
     return statSync(p).isDirectory() ? files(p) : p.endsWith('.ts') ? [p] : [];
   });
 
-  it('names no customer table under departments/ or institution/', () => {
+  // `src/services/departments` was scanned here too; deleted in Roadmap 2027 R10.
+  it('names no customer table under institution/', () => {
     const offenders: string[] = [];
-    for (const file of [...files('src/services/departments'), ...files('src/services/institution')]) {
+    for (const file of files('src/services/institution')) {
       if (file.endsWith('company-customers.ts')) continue;   // the accessor itself
       // Comments describe the defect and name both tables on purpose.
       const src = stripComments(readFileSync(file, 'utf8'), { lineComments: true });

@@ -21,6 +21,14 @@ beforeAll(async () => {
   await query('PRAGMA foreign_keys=OFF', []);
   await query("INSERT INTO founders (id, clerk_user_id, email) VALUES ('pw_f','clk_pw','pw@t.co')", []);
   await query("INSERT INTO products (id, name, owner_id, status) VALUES ('pw_p','WrapCo','pw_f','active')", []);
+  // A customer with an email on file, so primitive 4's "no PII in operator
+  // lines" has something real it could leak. (It was seeded by primitive 3,
+  // deleted in Roadmap 2027 R10.)
+  await query(
+    `INSERT INTO customers (id, product_id, owner_id, name, email, churn_risk, health_score, last_active_at)
+     VALUES ('pw_c1','pw_p','pw_f','Risk','risk@cust.co',0.9,0.3,?)`,
+    [new Date(Date.now() - 20 * 86_400_000).toISOString()],
+  );
 });
 
 describe('primitive 1 — autonomy is a lattice: min(setting, platform cap)', () => {
@@ -77,54 +85,10 @@ describe('primitive 2 — the consent ledger (the founder shield)', () => {
   });
 });
 
-describe('primitive 3 — no autonomous act without live consent (+ attribution)', () => {
-  beforeAll(async () => {
-    await query(
-      `INSERT INTO customers (id, product_id, owner_id, name, email, churn_risk, health_score, last_active_at)
-       VALUES ('pw_c1','pw_p','pw_f','Risk','risk@cust.co',0.9,0.3,?)`,
-      [new Date(Date.now() - 20 * 86_400_000).toISOString()],
-    );
-  });
-
-  it("act WITHOUT recorded consent downgrades to a proposal — belt beyond the policy row", async () => {
-    // Force the policy row to 'act' directly, bypassing setPolicy's consent record.
-    await query("UPDATE autopilot_policies SET mode='act' WHERE product_id='pw_p' AND category='customer_success'", []);
-    await query("UPDATE autonomy_consents SET revoked_at=CURRENT_TIMESTAMP WHERE product_id='pw_p' AND capability='customer_success'", []);
-    expect(await hasActConsent('pw_p', 'customer_success')).toBe(false);
-
-    const { runSuccessSweep } = await import('../../src/services/departments/success.js');
-    const res = await runSuccessSweep('pw_p');
-    expect(res.sent).toBe(0);          // did NOT act
-    expect(res.proposed).toBe(1);      // downgraded to a proposal
-  });
-
-  it('live consent is still not enough, because the ceiling is above it', async () => {
-    // THIS USED TO ASSERT THAT IT SENT, and it was the last line of defence in
-    // the wrong order: consent was the only thing between a model's churn score
-    // and a named customer's inbox, because the platform had no ceiling for
-    // this capability at all. The lattice is min(setting, CAP, consent), and a
-    // founder's live consent cannot climb above the cap.
-    //
-    // What the attribution trail contains WHEN it is reachable is asserted in
-    // `attribution-under-a-lifted-ceiling.test.ts`, which is explicit about
-    // hypothesising a ceiling this one pins to 'suggest'.
-    await query("DELETE FROM action_executions WHERE product_id='pw_p'", []); // clear dedup
-    // Realistic transition INTO act from below records fresh consent.
-    await setPolicy('pw_p', 'customer_success', 'suggest', 'pw_f');
-    await setPolicy('pw_p', 'customer_success', 'act', 'pw_f');
-    expect(await hasActConsent('pw_p', 'customer_success')).toBe(true);
-
-    const { runSuccessSweep } = await import('../../src/services/departments/success.js');
-    const res = await runSuccessSweep('pw_p');
-    expect(res.sent, 'consent does not lift a platform ceiling').toBe(0);
-    expect(res.proposed).toBe(1);
-
-    const attribution = await query(
-      "SELECT reasoning FROM audit_log WHERE action_type='attribution:customer_success'", [],
-    );
-    expect(attribution.rows.length, 'nothing acted, so nothing is attributed').toBe(0);
-  });
-});
+// 'primitive 3 — no autonomous act without live consent (+ attribution)' drove
+// the customer success sweep, the only caller that consulted consent before an
+// act. That department was deleted in Roadmap 2027 R10; the consent ledger
+// itself is held by primitive 2 above.
 
 describe('primitive 4 — the operator brain sees aggregates only (Level-1/2 boundary)', () => {
   it('operator system lines never carry a customer PII value', async () => {
