@@ -234,6 +234,9 @@ export async function reviewRecipient(input: {
   founderId: string; experimentId: string; recipientId: string; decision: 'approved' | 'struck'; reason?: string; email?: string;
 }): Promise<void> {
   const email = input.email?.trim().toLowerCase();
+  // PROVENANCE, NOT INPUT: `reviewed_by` is recorded for a person reading the
+  // row later (a trigger checks it is the owner; that validates, it does not
+  // consume). No code reads it, deliberately (write-only-columns baseline).
   const r = await query(
     `UPDATE experiment_recipients
         SET review_status = ?, review_reason = ?, reviewed_by = ?, reviewed_at = datetime('now'),

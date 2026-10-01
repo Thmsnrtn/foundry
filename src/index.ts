@@ -599,23 +599,6 @@ function startProcess(): void {
   processStarted = true;
   runMigrations()
     .then(async () => {
-      // Provision SCP instances for any existing products that don't have one yet
-      try {
-        const { ensureProvisioned } = await import('./services/scp/provisioner.js');
-        const { getAllActiveProducts } = await import('./db/client.js');
-        const products = await getAllActiveProducts();
-        for (const row of products.rows) {
-          const p = row as Record<string, string>;
-          await ensureProvisioned(p.id, p.owner_id).catch((err) => {
-            logger.warn(`SCP provision skipped for ${p.id}`, { productId: p.id, error: String(err) });
-          });
-        }
-        logger.info(`SCP: provisioned for ${products.rows.length} product(s)`);
-      } catch (err) {
-        // Non-fatal: SCP provisioning failure should not block server startup
-        logger.warn('SCP provisioning error (non-fatal)', { error: String(err) });
-      }
-
       // Phase 3.1: only the worker (or an all-in-one) process runs the scheduler.
       // The 'web' process group serves HTTP without the 73 in-process crons.
       const role = getProcessRole();

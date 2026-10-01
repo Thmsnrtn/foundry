@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { executeRaw, query } from '../db/client.js';
-import { JOB_REGISTRY } from '../jobs/index.js';
+import { JOB_REGISTRY, retiredLoopRefusal } from '../jobs/index.js';
 import { getProductDNA } from '../services/wisdom/dna.js';
 import { synthesizeJudgmentPatterns } from '../services/wisdom/patterns.js';
 import { getRemediationStats } from '../services/audit/remediation.js';
@@ -90,10 +90,12 @@ program
   .command('job:run <name>')
   .description('Run a specific scheduled job')
   .action(async (name: string) => {
-    const job = JOB_REGISTRY[name];
+    // A retired name is refused with what it was, never reported as unknown.
+    const retired = retiredLoopRefusal(name);
+    const job = retired ? undefined : JOB_REGISTRY[name];
     if (!job) {
-      console.error(`Unknown job: ${name}`);
-      console.log('Available jobs:', Object.keys(JOB_REGISTRY).join(', '));
+      console.error(retired ?? `Unknown job: ${name}`);
+      if (!retired) console.log('Available jobs:', Object.keys(JOB_REGISTRY).join(', '));
       process.exit(1);
     }
     console.log(`Running job: ${name} — ${job.description}`);
@@ -733,9 +735,7 @@ program
     // 6. V3.1 migration coherence — verify the most recent migrations' tables exist.
     const v31Tables = [
       'north_stars',
-      'outcome_trees',
       'freeze_periods',
-      'team_health_metrics',
       'product_voice_fingerprints',
       'taste_journals',
       'idempotency_keys',

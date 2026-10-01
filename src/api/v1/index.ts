@@ -6,10 +6,8 @@ import { Hono } from 'hono';
 import { apiKeyAuth } from '../middleware/auth.js';
 import { requireOperatingForWrites } from '../middleware/entitlement.js';
 import { apiKeyRateLimit, apiModelRateLimit } from '../../middleware/rate-limit.js';
-import { agentsApi } from './agents.js';
 import { customersApi } from './customers.js';
 import { experimentsApi } from './experiments.js';
-import { briefingsApi } from './briefings.js';
 import { metricsApi } from './metrics.js';
 import { webhooksApi } from './webhooks.js';
 import { mcpApi } from './mcp.js';
@@ -41,10 +39,8 @@ apiV1.use('*', apiKeyRateLimit);
 apiV1.use('*', requireOperatingForWrites);
 
 // Mount sub-routers
-apiV1.route('/agents', agentsApi);
 apiV1.route('/customers', customersApi);
 apiV1.route('/experiments', experimentsApi);
-apiV1.route('/briefings', briefingsApi);
 apiV1.route('/metrics', metricsApi);
 apiV1.route('/webhooks', webhooksApi);
 // The MCP transport reaches tools that call a model, so it carries a tighter

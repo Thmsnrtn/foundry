@@ -103,27 +103,5 @@ describe('the integrations table', () => {
   });
 });
 
-describe('an outbound action’s approval', () => {
-  it('is stamped in one format whether it was approved or rejected', async () => {
-    const { approveAction, rejectAction } =
-      await import('../../src/services/outbound/executor.js');
-
-    for (const [id, kind] of [['oa_1', 'approve'], ['oa_2', 'reject']] as const) {
-      await query(
-        `INSERT INTO outbound_actions
-           (id, product_id, agent_name, integration_name, action_type, parameters_json,
-            preview_text, rationale, status, authority_level)
-         VALUES (?, ?, 'ledger', 'resend', 'send_email', '{}', 'a preview', 'a reason', 'pending_approval', 2)`, [id, P]);
-      if (kind === 'approve') await approveAction(id, 'founder:f_clock').catch(() => {});
-      else await rejectAction(id, 'founder:f_clock', 'not now').catch(() => {});
-    }
-
-    const rows = (await query(
-      'SELECT id, approved_at FROM outbound_actions WHERE approved_at IS NOT NULL ORDER BY id',
-    )).rows as unknown as Array<Record<string, unknown>>;
-    expect(rows.length).toBeGreaterThan(0);
-    for (const r of rows) {
-      expect(String(r.approved_at), `${r.id} carries the wrong clock`).toMatch(SQL_TIME);
-    }
-  });
-});
+// The outbound-action approval case went with `outbound/executor.ts`, deleted in
+// Roadmap 2027 R9.

@@ -128,9 +128,5 @@ describe('the approval doors', () => {
     expect(row.approved_by).toBe(`founder:${OWNER}`);
   });
 
-  it('refuse on the other ledger too', async () => {
-    const { approveAction, rejectAction } = await import('../../src/services/outbound/executor.js');
-    await expect(approveAction('ovp_missing', 'ceo')).rejects.toThrow(/principal reference/);
-    await expect(rejectAction('ovp_missing', OWNER)).rejects.toThrow(/principal reference/);
-  });
+  // 'the other ledger' was `outbound/executor.ts`, deleted in Roadmap 2027 R9.
 });

@@ -156,7 +156,9 @@ describe('the table is gone', () => {
       // And the daily fleet-letter notification and the Monday digest (which
       // needed a subscription tier nobody has) became one weekly email in five
       // sets, sent only when the week changed (Roadmap 2027 R5). Seventy-one.
-      .toBe(71);
+      // And team_health_aggregate and outcome_tree_health came off: deleted in
+      // Roadmap 2027 R9 with what they measured. Sixty-nine.
+      .toBe(69);
   });
 
   it('is off the write-only baseline rather than merely unreferenced', () => {

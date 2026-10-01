@@ -51,7 +51,6 @@ beforeAll(async () => {
 });
 
 beforeEach(async () => {
-  await query('DELETE FROM integration_sync_log WHERE product_id = ?', [P]);
   await query('DELETE FROM integrations WHERE product_id = ?', [P]);
   delivered.length = 0;
 });
@@ -102,14 +101,8 @@ describe('a connection Foundry calls, not one it pulls from', () => {
     expect(after.last_error).toBeNull();
   });
 
-  it('records no failed sync attempt against itself', async () => {
-    await outboundConnection('my-mcp-server');
-
-    await syncProductIntegrations(P);
-
-    const rows = await query('SELECT COUNT(*) AS n FROM integration_sync_log WHERE product_id = ?', [P]);
-    expect((rows.rows[0] as unknown as { n: number }).n).toBe(0);
-  });
+  // 'records no failed sync attempt against itself' read `integration_sync_log`,
+  // which the sync stopped writing and migration 375 dropped (Roadmap 2027 R9).
 
   it('never reaches the founder as an integration Foundry gave up on', async () => {
     const id = await outboundConnection('my-mcp-server');

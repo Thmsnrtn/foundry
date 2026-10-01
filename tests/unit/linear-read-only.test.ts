@@ -26,9 +26,9 @@ import { describe, expect, it } from 'vitest';
 
 const ROOT = resolve(__dirname, '../..');
 
+// `src/services/integration/linear.ts` was the second; deleted in Roadmap 2027 R4.
 const LINEAR_MODULES = [
   'src/services/integrations/linear.ts',
-  'src/services/integration/linear.ts',
 ];
 
 /** Comments stripped, and only where they open a line — a naive block-comment

@@ -3,7 +3,7 @@ process.env.TURSO_DATABASE_URL = 'file::memory:';
 import { beforeAll, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { logCost } from '../../src/services/financial/economics.js';
+import { nanoid } from 'nanoid';
 
 // =============================================================================
 // Cost attaches to institutional truth, and attribution is evidence.
@@ -22,6 +22,23 @@ import { logCost } from '../../src/services/financial/economics.js';
 // refuse to let the attribution be rewritten. Those are the rules that make a
 // cost row evidence rather than an editable opinion.
 // =============================================================================
+
+// `financial/economics.ts`, whose `logCost` wrote this row, was deleted in
+// Roadmap 2027 R9. The `cost_events` triggers it relied on are still in the
+// schema, so the row is written here in exactly the shape logCost wrote it.
+async function logCost(params: {
+  productId: string; agentName?: string; costType: string; amountUsd: number;
+  details?: Record<string, unknown>; sessionId?: string;
+  responsibilityId?: string; capability?: string;
+}): Promise<void> {
+  await query(
+    `INSERT INTO cost_events (id, product_id, agent_name, cost_type, amount_usd, details_json, session_id,
+       responsibility_id, capability)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [nanoid(), params.productId, params.agentName ?? null, params.costType, params.amountUsd,
+     params.details ? JSON.stringify(params.details) : null, params.sessionId ?? null,
+     params.responsibilityId ?? null, params.capability ?? null]);
+}
 
 const P = 'ie_prod';
 const OTHER = 'ie_other';

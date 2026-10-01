@@ -104,21 +104,6 @@ CREATE TABLE action_templates (
   is_active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
-CREATE TABLE agent_accuracy_scores (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  agent_name TEXT NOT NULL,
-  prediction_type TEXT NOT NULL,
-  period_start TEXT NOT NULL, -- ISO date, start of 30-day window
-  total_predictions INTEGER NOT NULL DEFAULT 0,
-  measured_predictions INTEGER NOT NULL DEFAULT 0,
-  correct_predictions INTEGER NOT NULL DEFAULT 0,
-  accuracy_rate REAL, -- correct / measured
-  avg_confidence REAL, -- average stated confidence
-  calibration_score REAL, -- how well confidence matches accuracy (Brier score style)
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE(product_id, agent_name, prediction_type, period_start)
-);
 CREATE TABLE agent_audit_log (
   id            TEXT PRIMARY KEY,
   product_id    TEXT NOT NULL,
@@ -133,79 +118,6 @@ CREATE TABLE agent_audit_log (
   metadata_json TEXT NOT NULL DEFAULT '{}',  -- arbitrary structured context
   ip_address    TEXT,            -- set when actor_type = 'founder' or 'api'
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE TABLE agent_config_history (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  agent_name TEXT NOT NULL,
-  config_type TEXT NOT NULL,
-  version INTEGER NOT NULL,
-  content TEXT NOT NULL,
-  changed_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  changed_by TEXT DEFAULT 'evolution_engine',
-  rationale TEXT,
-  session_id TEXT,
-  gate_scores TEXT  -- JSON: {constitution, regression, size, drift, safety}
-);
-CREATE TABLE agent_configs (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  agent_name TEXT NOT NULL,
-  config_type TEXT NOT NULL CHECK(config_type IN (
-    'persona', 'domain_knowledge', 'task_patterns',
-    'tool_preferences', 'error_recovery', 'shared_knowledge'
-  )),
-  content TEXT NOT NULL DEFAULT '',
-  version INTEGER NOT NULL DEFAULT 1,
-  parent_version INTEGER,
-  line_count INTEGER DEFAULT 0,
-  word_count INTEGER DEFAULT 0,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_by TEXT DEFAULT 'system',
-  UNIQUE(product_id, agent_name, config_type)
-);
-CREATE TABLE agent_cost_log (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  agent_name TEXT NOT NULL,
-  session_id TEXT REFERENCES agent_sessions(id),
-  tokens_input INTEGER DEFAULT 0,
-  tokens_output INTEGER DEFAULT 0,
-  cost_usd REAL DEFAULT 0.0,
-  attributed_revenue_usd REAL DEFAULT 0.0, -- Revenue traced to this agent's action
-  action_type TEXT,                    -- What kind of action generated this cost
-  logged_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-CREATE TABLE agent_evolution_versions (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  agent_name TEXT NOT NULL,
-  version INTEGER NOT NULL,
-  change_type TEXT NOT NULL CHECK(change_type IN (
-    'golden_lesson', 'constraint_added', 'authority_change',
-    'prompt_refinement', 'founder_correction', 'initial_provision'
-  )),
-  change_description TEXT NOT NULL,    -- Human-readable summary
-  trigger_session_id TEXT REFERENCES agent_sessions(id),
-  previous_config TEXT,                -- JSON: snapshot of config before change
-  new_config TEXT NOT NULL,            -- JSON: snapshot of config after change
-  validation_score REAL,               -- 0-1: validation judge score
-  validation_notes TEXT,               -- Why the change was accepted/rejected
-  promoted_at DATETIME,                -- NULL = pending, non-NULL = live
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(product_id, agent_name, version)
-);
-CREATE TABLE agent_initiative_queue (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  agent_name TEXT NOT NULL,
-  initiative_type TEXT NOT NULL,  -- 'proactive_check', 'message_response', 'event_reaction'
-  description TEXT NOT NULL,
-  context TEXT DEFAULT '{}',
-  priority INTEGER DEFAULT 5,    -- 1=critical, 10=low
-  status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'running', 'completed', 'failed', 'skipped')),
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  processed_at DATETIME
 );
 CREATE TABLE agent_instances (
   id TEXT PRIMARY KEY,
@@ -250,78 +162,6 @@ CREATE TABLE agent_messages (
   read_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 , parent_message_id TEXT REFERENCES agent_messages(id));
-CREATE TABLE agent_predictions (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  agent_name TEXT NOT NULL,
-  session_id TEXT NOT NULL,
-  prediction_type TEXT NOT NULL,
-  -- Types: 'churn_risk' | 'expansion_opportunity' | 'metric_target' | 'experiment_outcome' | 'risk_escalation'
-  prediction_text TEXT NOT NULL, -- human-readable: "Customer Acme Corp will churn within 30 days"
-  predicted_value REAL, -- numeric prediction if applicable (e.g. probability 0.0-1.0)
-  confidence REAL NOT NULL, -- 0.0-1.0, agent's stated confidence
-  measure_by_date TEXT NOT NULL, -- when to check the outcome (ISO date)
-  outcome_criteria TEXT NOT NULL, -- what to check: "customer_id=X AND stage='churned'"
-  -- Outcome fields (populated when measured)
-  outcome TEXT CHECK (outcome IN ('correct','incorrect','partial','unmeasurable')),
-  outcome_measured_at TEXT,
-  outcome_notes TEXT,
-  accuracy_score REAL, -- 0.0-1.0: correct=1.0, partial=0.5, incorrect=0.0
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE TABLE agent_remediations (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  agent_name TEXT NOT NULL,
-  session_id TEXT,
-  remediation_type TEXT NOT NULL,
-  title TEXT NOT NULL,
-  description TEXT NOT NULL,
-  severity TEXT NOT NULL DEFAULT 'medium',
-  status TEXT NOT NULL DEFAULT 'open',
-  estimated_effort TEXT,
-  affected_area TEXT,
-  suggested_fix TEXT,
-  github_issue_url TEXT,
-  resolved_at TEXT,
-  dismissed_reason TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE TABLE agent_scratchpad (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  scratchpad_date TEXT NOT NULL DEFAULT (date('now')),
-  -- Each agent writes its key finding as it completes (JSON object, agent_name -> finding)
-  findings_json TEXT NOT NULL DEFAULT '{}',
-  -- Cross-agent synthesis notes
-  consensus_points_json TEXT NOT NULL DEFAULT '[]',  -- things multiple agents agree on
-  conflict_points_json TEXT NOT NULL DEFAULT '[]',   -- things agents disagree on
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
-CREATE TABLE agent_sessions (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  agent_name TEXT NOT NULL,
-  agent_version INTEGER NOT NULL,
-  status TEXT NOT NULL DEFAULT 'running' CHECK(status IN ('running', 'completed', 'failed', 'skipped')),
-  -- Structured output
-  observations TEXT,                -- JSON: string[]
-  actions_taken TEXT,               -- JSON: AgentAction[]
-  pending_decisions TEXT,           -- JSON: AgentDecision[]
-  -- For CEO briefing assembly
-  briefing_contribution TEXT,       -- 2-3 sentences for CEO briefing
-  briefing_priority TEXT DEFAULT 'normal' CHECK(briefing_priority IN ('high', 'normal', 'low')),
-  -- Evolution signals
-  evolution_candidates TEXT,        -- JSON: EvolutionCandidate[]
-  -- Cost tracking
-  tokens_used INTEGER DEFAULT 0,
-  cost_usd REAL DEFAULT 0.0,
-  -- Status
-  error_message TEXT,
-  started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  completed_at DATETIME
-);
 CREATE TABLE ai_daily_spend (
   scope       TEXT NOT NULL,
   scope_id    TEXT NOT NULL,
@@ -1021,23 +861,6 @@ CREATE TABLE competitive_signals (
   reviewed BOOLEAN DEFAULT FALSE,
   linked_stressor_id TEXT REFERENCES stressor_history(id)
 );
-CREATE TABLE competitor_profiles (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  name TEXT NOT NULL,
-  url TEXT,
-  known_features TEXT DEFAULT '[]',      -- JSON: string[]
-  pricing_summary TEXT,
-  estimated_traffic TEXT,
-  top_keywords TEXT DEFAULT '[]',        -- JSON: string[]
-  our_advantages TEXT DEFAULT '[]',      -- JSON: string[]
-  their_advantages TEXT DEFAULT '[]',    -- JSON: string[]
-  threat_level TEXT DEFAULT 'low' CHECK(threat_level IN ('low','medium','high')),
-  recommended_response TEXT,
-  last_scanned_at DATETIME,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(product_id, name)
-);
 CREATE TABLE competitors (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL REFERENCES products(id),
@@ -1254,33 +1077,6 @@ CREATE TABLE "deal_rooms" (
   view_count INTEGER DEFAULT 0,
   last_viewed_at DATETIME,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
-CREATE TABLE debate_sessions (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  briefing_date TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'pending', -- pending | running | complete
-  positions_json TEXT, -- JSON array of agent positions collected
-  conflicts_json TEXT, -- JSON array of identified conflicts
-  synthesis_json TEXT, -- final synthesized output
-  confidence_weights_json TEXT, -- JSON obj: agentName -> weighted_score
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  completed_at TEXT
-);
-CREATE TABLE decision_outcomes (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  agent_name TEXT NOT NULL,
-  session_id TEXT,
-  decision_title TEXT NOT NULL,
-  decision_description TEXT,
-  outcome TEXT NOT NULL CHECK(outcome IN ('approved', 'denied')),
-  outcome_result TEXT CHECK(outcome_result IN ('positive', 'negative', 'neutral', 'pending')),
-  founder_rationale TEXT,
-  impact_usd REAL,
-  context_json TEXT,       -- JSON: the full AgentDecision object
-  resolved_at TEXT NOT NULL DEFAULT (datetime('now')),
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE decision_patterns (
   id TEXT PRIMARY KEY,
@@ -1579,39 +1375,6 @@ CREATE TABLE epistemic_stances (
   not_the_same_as TEXT NOT NULL,
   sort_order   INTEGER NOT NULL
 );
-CREATE TABLE evolved_prompts (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  agent_name TEXT NOT NULL,
-  prompt_version INTEGER NOT NULL DEFAULT 1,
-  mutation_type TEXT NOT NULL, -- 'emphasis_shift' | 'context_addition' | 'framing_change'
-  base_prompt_hash TEXT NOT NULL, -- hash of the original system prompt
-  delta_instructions TEXT NOT NULL, -- additional instructions to append to base prompt
-  reasoning TEXT NOT NULL, -- why this mutation was made
-  predictions_before INTEGER NOT NULL DEFAULT 0,
-  accuracy_before REAL,
-  predictions_after INTEGER NOT NULL DEFAULT 0,
-  accuracy_after REAL,
-  is_active INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  activated_at TEXT
-);
-CREATE TABLE execution_playbooks (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  name TEXT NOT NULL,
-  description TEXT,
-  trigger_type TEXT NOT NULL, -- 'metric_threshold' | 'agent_signal' | 'schedule' | 'manual'
-  trigger_config_json TEXT NOT NULL, -- JSON: conditions to evaluate
-  action_type TEXT NOT NULL, -- 'post_slack' | 'create_ticket' | 'send_email' | 'custom_webhook'
-  action_config_json TEXT NOT NULL, -- JSON: action payload template
-  auto_execute INTEGER NOT NULL DEFAULT 0, -- 0=require approval, 1=auto-execute
-  execution_budget_weekly INTEGER, -- max executions per week (null = unlimited)
-  is_active INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  last_evaluated_at TEXT,
-  last_triggered_at TEXT
-);
 CREATE TABLE execution_queue (
   id TEXT PRIMARY KEY,
   job_type TEXT NOT NULL,
@@ -1847,18 +1610,6 @@ CREATE TABLE failure_log (
   linked_stressor_id TEXT REFERENCES stressor_history(id),
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-CREATE TABLE failure_patterns (
-  id TEXT PRIMARY KEY,
-  pattern_name TEXT NOT NULL,
-  description TEXT NOT NULL,
-  category TEXT NOT NULL, -- 'churn_spike' | 'runway_crisis' | 'growth_stall' | 'team_fracture' | 'product_drift'
-  warning_signals_json TEXT NOT NULL, -- JSON array of early warning signals
-  typical_lead_time_days INTEGER, -- how many days before failure these signals appear
-  mitigation_actions_json TEXT NOT NULL, -- JSON array of what worked
-  match_criteria_json TEXT NOT NULL, -- JSON: how to check if a company matches this pattern
-  severity TEXT NOT NULL DEFAULT 'medium', -- 'low' | 'medium' | 'high' | 'critical'
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
 CREATE TABLE forecast_checkpoints (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL,
@@ -1899,15 +1650,6 @@ CREATE TABLE founder_ai_profile (
   calibrated_at TEXT DEFAULT (datetime('now')),
   updated_at TEXT DEFAULT (datetime('now')),
   UNIQUE(founder_id)
-);
-CREATE TABLE founder_behavioral_signals (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  signal_type TEXT NOT NULL,  -- 'approval_without_reading' | 'rapid_override_sequence' | 'late_night_activity' | 'override_without_reason' | 'unusual_velocity' | 'contradiction' | 'extended_inactivity'
-  signal_description TEXT NOT NULL,
-  severity TEXT NOT NULL DEFAULT 'low', -- 'low' | 'medium' | 'high'
-  detected_at TEXT NOT NULL DEFAULT (datetime('now')),
-  context_json TEXT  -- what triggered the detection
 );
 CREATE TABLE founder_evidence_requests (
   id                TEXT PRIMARY KEY,
@@ -1978,16 +1720,6 @@ CREATE TABLE founder_judgment_patterns (
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
-CREATE TABLE founder_state_assessments (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  assessed_at TEXT NOT NULL DEFAULT (datetime('now')),
-  state TEXT NOT NULL,  -- 'optimal' | 'watchful' | 'stressed' | 'degraded'
-  confidence REAL NOT NULL DEFAULT 0.5,
-  contributing_signals_json TEXT NOT NULL,  -- JSON array of signal descriptions
-  recommendation TEXT,  -- what to do about it
-  recommended_deferral_hours INTEGER  -- if degraded, how long to wait before major decisions
-);
 CREATE TABLE founder_voice (
   founder_id TEXT PRIMARY KEY REFERENCES founders(id),
   -- Communication style
@@ -2053,17 +1785,6 @@ CREATE TABLE foundry_cost_lines (
   said_at       TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CHECK (said_by = 'founder:' || founder_id)
 );
-CREATE TABLE freeze_periods (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  scope TEXT NOT NULL DEFAULT 'architecture_class',
-  reason TEXT NOT NULL,
-  started_at TEXT NOT NULL DEFAULT (datetime('now')),
-  expected_end_at TEXT,                       -- e.g. started_at + 90 days
-  ended_at TEXT,                              -- NULL = currently active
-  ended_by TEXT,                              -- 'founder' | 'expired' | 'override'
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
 CREATE TABLE funnel_events (
   id          TEXT PRIMARY KEY,
   founder_id  TEXT NOT NULL,
@@ -2083,28 +1804,6 @@ CREATE TABLE geopolitical_signals (
   source TEXT,
   detected_at TEXT DEFAULT (datetime('now')),
   status TEXT DEFAULT 'active'
-);
-CREATE TABLE golden_suite (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  agent_name TEXT NOT NULL,
-  lesson_type TEXT NOT NULL CHECK(lesson_type IN (
-    'correction',        -- Founder changed what the agent proposed
-    'validation',        -- Founder confirmed the agent was right
-    'behavioral',        -- Observed pattern about how to behave
-    'domain'             -- Domain knowledge specific to this company
-  )),
-  input_context TEXT NOT NULL,         -- What situation prompted this lesson
-  expected_behavior TEXT NOT NULL,     -- What the agent should do in this situation
-  lesson TEXT NOT NULL,                -- Synthesized lesson (injected into prompts)
-  source TEXT NOT NULL CHECK(source IN (
-    'founder_correction', 'self_observation', 'evolution_synthesis'
-  )),
-  confidence REAL DEFAULT 1.0,
-  times_reinforced INTEGER DEFAULT 1,
-  active INTEGER DEFAULT 1,            -- BOOLEAN: FALSE = retired lesson
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE governed_effect_kinds (
   scope_key            TEXT PRIMARY KEY,
@@ -2279,17 +1978,6 @@ CREATE TABLE integration_secret_quarantine (
   rotated_at     TEXT,
   UNIQUE(integration_id, secret_key)
 );
-CREATE TABLE integration_sync_log (
-  id TEXT PRIMARY KEY,
-  integration_id TEXT NOT NULL REFERENCES integrations(id) ON DELETE CASCADE,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  started_at DATETIME NOT NULL,
-  completed_at DATETIME,
-  status TEXT CHECK(status IN ('running', 'success', 'partial', 'failed')),
-  records_processed INTEGER DEFAULT 0,
-  metrics_updated TEXT,  -- JSON: array of column names updated in metric_snapshots
-  error_message TEXT
-, provider TEXT, sync_type TEXT, errors TEXT, duration_ms INTEGER);
 CREATE TABLE "integrations" (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL,
@@ -2317,17 +2005,6 @@ CREATE TABLE "integrations" (
   error_count_trailing_7d INTEGER DEFAULT 0,
   cost_trailing_30d_usd REAL DEFAULT 0.0
 , direction TEXT);
-CREATE TABLE intelligence_benchmarks (
-  id TEXT PRIMARY KEY,
-  metric_name TEXT NOT NULL,   -- e.g., 'health_score', 'approval_rate', 'evolution_cycles_per_month'
-  cohort TEXT NOT NULL DEFAULT 'all',  -- 'all', 'early_stage', 'growth', 'scale'
-  p25 REAL,
-  p50 REAL,
-  p75 REAL,
-  p90 REAL,
-  cohort_size INTEGER NOT NULL DEFAULT 0,
-  computed_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
 CREATE TABLE internal_counterparties (
   id             TEXT PRIMARY KEY,
   founder_id     TEXT NOT NULL REFERENCES founders(id),
@@ -2409,15 +2086,6 @@ CREATE TABLE lifecycle_conditions (
   threshold_value TEXT,
   last_checked DATETIME,
   PRIMARY KEY (product_id, prompt, condition_name)
-);
-CREATE TABLE lifecycle_rule_triggers (
-  id TEXT PRIMARY KEY,
-  rule_id TEXT NOT NULL REFERENCES lifecycle_rules(id),
-  product_id TEXT NOT NULL,
-  customer_id TEXT NOT NULL,
-  triggered_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  outcome TEXT,                         -- 'success', 'failure', 'pending'
-  outbound_action_id TEXT
 );
 CREATE TABLE lifecycle_rules (
   id TEXT PRIMARY KEY,
@@ -2922,37 +2590,6 @@ CREATE TABLE outbound_actions (
   expires_at DATETIME,        -- Actions become stale after this
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 , responsibility_id TEXT REFERENCES institutional_responsibilities(id), authority_consent_id TEXT REFERENCES autonomy_consents(id), authority_scope TEXT, effect_id TEXT, effect_certainty TEXT, provider_receipt_json TEXT, reconcile_after TEXT, outcome_status TEXT, outcome_evidence_ref TEXT, learned_claim_id TEXT REFERENCES reconstruction_claims(id), inbound_message_id TEXT REFERENCES inbound_customer_messages(id), reply_proposal_id TEXT REFERENCES signal_events(id), experiment_id TEXT REFERENCES venture_experiments(id), experiment_act TEXT CHECK (experiment_act IS NULL OR experiment_act IN ('offer','delivery')), recipient_id TEXT REFERENCES experiment_recipients(id), fulfilment_id TEXT REFERENCES experiment_fulfilments(id), proposed_act_id TEXT REFERENCES proposed_acts(id));
-CREATE TABLE outbound_rate_limits (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  agent_name TEXT NOT NULL,
-  integration_name TEXT NOT NULL,
-  action_type TEXT NOT NULL,
-  max_per_hour INTEGER DEFAULT 10,
-  max_per_day INTEGER DEFAULT 50,
-  current_hour_count INTEGER DEFAULT 0,
-  current_day_count INTEGER DEFAULT 0,
-  hour_reset_at DATETIME,
-  day_reset_at DATETIME,
-  UNIQUE(product_id, agent_name, integration_name, action_type)
-);
-CREATE TABLE outcome_trees (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  parent_branch_id TEXT,                     -- NULL = root branch; else self-references id
-  label TEXT NOT NULL,                       -- e.g. "Acquisition: 200 trial signups/mo"
-  metric_key TEXT,                           -- joins with metric_snapshots when present
-  current_value REAL,
-  target_value REAL,
-  unit TEXT,                                 -- 'count' | 'usd' | 'pct' | 'days' | other
-  kill_criterion TEXT NOT NULL,              -- Sage: required, NOT NULL.
-  status TEXT NOT NULL DEFAULT 'active',     -- 'active' | 'killed' | 'achieved' | 'superseded'
-  killed_at TEXT,
-  killed_reason TEXT,
-  achieved_at TEXT,
-  generated_at TEXT NOT NULL DEFAULT (datetime('now')),
-  weekly_refresh_run_id TEXT                 -- correlates branches generated in same weekly refresh
-);
 CREATE TABLE outreach_suppressions (
   id          TEXT PRIMARY KEY,
   product_id  TEXT NOT NULL,
@@ -3097,41 +2734,6 @@ CREATE TABLE owner_visits (
   looked_at  TEXT NOT NULL,
   -- The point "what changed" is measured from. Never ahead of looked_at.
   since      TEXT NOT NULL
-);
-CREATE TABLE pattern_matches (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  failure_pattern_id TEXT NOT NULL REFERENCES failure_patterns(id),
-  match_score REAL NOT NULL, -- 0-1 how closely the company matches the pattern
-  matched_signals_json TEXT NOT NULL,
-  first_detected_at TEXT NOT NULL DEFAULT (datetime('now')),
-  last_checked_at TEXT NOT NULL DEFAULT (datetime('now')),
-  resolved_at TEXT, -- null if still active
-  outcome TEXT -- 'avoided' | 'occurred' | 'monitoring'
-);
-CREATE TABLE phase_beta_proposals (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  source_type TEXT NOT NULL,                  -- 'decision' | 'evolution' | 'cron_addition' | 'integration' | 'agent_provision'
-  source_id TEXT,                             -- decision id, evolution version id, etc.
-  proposed_change TEXT NOT NULL,              -- human-readable description
-  proposed_by TEXT NOT NULL,                  -- agent name or 'founder' or 'system'
-  rationale TEXT,
-  blocked_at TEXT NOT NULL DEFAULT (datetime('now')),
-  blocked_during_freeze_id TEXT REFERENCES freeze_periods(id),
-  status TEXT NOT NULL DEFAULT 'queued',      -- 'queued' | 'approved' | 'rejected' | 'force_applied' | 'superseded'
-  reviewed_at TEXT,
-  reviewed_by TEXT,
-  review_notes TEXT
-);
-CREATE TABLE playbook_trigger_log (
-  id TEXT PRIMARY KEY,
-  playbook_id TEXT NOT NULL REFERENCES execution_playbooks(id),
-  product_id TEXT NOT NULL,
-  evaluation_result TEXT NOT NULL, -- 'triggered' | 'skipped' | 'budget_exceeded'
-  condition_snapshot_json TEXT, -- what the condition values were at evaluation time
-  action_execution_id TEXT, -- FK to action_executions if one was created
-  triggered_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE portfolio_envelope_carves (
   id             TEXT PRIMARY KEY,
@@ -3301,24 +2903,6 @@ CREATE TABLE predictions (
   outcome_recorded_at TEXT,
   accuracy_score REAL,
   created_at TEXT DEFAULT (datetime('now'))
-);
-CREATE TABLE priority_actions (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  title TEXT NOT NULL,              -- the one sentence action
-  description TEXT,                 -- 2-3 sentence context
-  urgency_score REAL NOT NULL,      -- 0-10 (higher = more urgent)
-  impact_score REAL NOT NULL,       -- 0-10 (higher = more impactful)
-  priority_score REAL NOT NULL,     -- urgency * impact
-  source TEXT NOT NULL,             -- 'harbor' | 'forge' | 'ledger' | etc | 'execution_playbook' | 'failure_pattern'
-  source_id TEXT,                   -- ID of the underlying record
-  action_type TEXT NOT NULL,        -- 'outreach' | 'decision' | 'review' | 'execute' | 'defer'
-  action_url TEXT,                  -- deep link to the relevant page
-  deadline_hours INTEGER,           -- how many hours until this becomes more urgent
-  is_active INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  dismissed_at TEXT,
-  completed_at TEXT
 );
 CREATE TABLE privacy_consents (
   id TEXT PRIMARY KEY,
@@ -4072,21 +3656,6 @@ CREATE TABLE retrieval_items (
   -- The words it shares with the search, which is what decided relevance.
   shared_terms  TEXT
 );
-CREATE TABLE revenue_attributions (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  attribution_type TEXT NOT NULL CHECK(attribution_type IN (
-    'direct','experiment','contribution','protective'
-  )),
-  agent_name TEXT NOT NULL,
-  amount_usd REAL NOT NULL,
-  confidence REAL NOT NULL,
-  description TEXT NOT NULL,
-  evidence_json TEXT,                    -- {action_id, customer_id, conversion_event}
-  period_start DATETIME NOT NULL,
-  period_end DATETIME NOT NULL,
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-);
 CREATE TABLE runway_models (
   id TEXT PRIMARY KEY,
   founder_id TEXT NOT NULL,
@@ -4129,38 +3698,6 @@ CREATE TABLE schema_migrations (
   name TEXT NOT NULL,
   applied_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   checksum TEXT
-);
-CREATE TABLE scp_briefings (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  briefing_date TEXT NOT NULL,         -- YYYY-MM-DD
-  signal_score INTEGER,
-  risk_state TEXT,
-  health_score INTEGER,
-  headline TEXT,                       -- One-line summary of the day
-  full_briefing TEXT NOT NULL,         -- Complete briefing markdown
-  agent_contributions TEXT,            -- JSON: {agent_name: {contribution, priority}}
-  pending_decisions TEXT,              -- JSON: AgentDecision[]
-  overnight_actions TEXT,              -- JSON: AgentAction[] (already executed)
-  experiments_running TEXT,            -- JSON: Experiment[]
-  financial_summary TEXT,              -- JSON: {mrr, ai_cost_30d, roi}
-  lifecycle_state TEXT,
-  tokens_used INTEGER DEFAULT 0,
-  cost_usd REAL DEFAULT 0.0,
-  generated_by TEXT DEFAULT 'system',  -- 'system' or 'manual'
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(product_id, briefing_date)
-);
-CREATE TABLE scp_constitutions (
-  id TEXT PRIMARY KEY,
-  product_id TEXT UNIQUE NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  version INTEGER NOT NULL DEFAULT 1,
-  core_values TEXT,                    -- JSON: string[]
-  operating_principles TEXT,           -- JSON: string[]
-  authority_framework TEXT,            -- JSON: {agent_name: authority_level}
-  evolution_policy TEXT,               -- JSON: evolution configuration
-  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE TABLE search_briefs (
   id             TEXT PRIMARY KEY,
@@ -4414,23 +3951,6 @@ CREATE TABLE strategic_decisions_log (
   made_at                 TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at              TEXT NOT NULL DEFAULT (datetime('now'))
 , alternatives_considered_json TEXT, key_assumptions_json TEXT, responsibility_refs_json TEXT, evidence_refs_json TEXT, constraints_json TEXT, uncertainties_json TEXT, consequences_json TEXT, reversible INTEGER, expected_economic_effect_json TEXT, authority_required_json TEXT, conflict_identity TEXT);
-CREATE TABLE strategic_syntheses (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  generated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  period_start DATETIME NOT NULL,
-  period_end DATETIME NOT NULL,
-  market_position TEXT,                  -- Oracle + Beacon analysis
-  customer_intelligence TEXT,            -- Harbor + Forge analysis
-  product_direction TEXT,                -- Compass analysis
-  risks TEXT,                            -- Sentinel + Shield analysis
-  top_opportunities TEXT NOT NULL,       -- JSON: [{opportunity, agent, impact, priority}]
-  recommended_priorities TEXT NOT NULL,  -- JSON: [{priority, description, owners, expected_impact}]
-  ceo_decision_needed TEXT,              -- What requires CEO input
-  full_synthesis TEXT NOT NULL,          -- Complete synthesis markdown
-  tokens_used INTEGER DEFAULT 0,
-  cost_usd REAL DEFAULT 0.0
-);
 CREATE TABLE stressor_history (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL REFERENCES products(id),
@@ -4530,32 +4050,6 @@ CREATE TABLE system_identities (
   product_id         TEXT NOT NULL UNIQUE REFERENCES products(id),
   established_reason TEXT NOT NULL,
   established_at     TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-CREATE TABLE team_health_metrics (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
-  week_starting TEXT NOT NULL,                  -- 'YYYY-MM-DD' Monday
-  -- ─── Critique discipline ──────────────────────────────────────────────────
-  critique_pass_rate_pct REAL,                  -- 0-100
-  total_critiques INTEGER NOT NULL DEFAULT 0,
-  critiques_resulting_in_change INTEGER NOT NULL DEFAULT 0,
-  -- ─── Founder override rate ───────────────────────────────────────────────
-  override_rate_pct REAL,                       -- 0-100
-  total_decisions_resolved INTEGER NOT NULL DEFAULT 0,
-  decisions_overridden INTEGER NOT NULL DEFAULT 0,
-  -- ─── Recursive critique yield (Ambros Round 5) ────────────────────────────
-  -- The signal that says "stop iterating" when yield drops below threshold.
-  evolutions_promoted_count INTEGER NOT NULL DEFAULT 0,
-  recursive_yield_score REAL,                   -- 0-1
-  -- ─── Decision velocity ────────────────────────────────────────────────────
-  decisions_queued INTEGER NOT NULL DEFAULT 0,
-  decisions_resolved INTEGER NOT NULL DEFAULT 0,
-  median_time_to_action_hours REAL,
-  -- ─── Action accuracy ──────────────────────────────────────────────────────
-  action_accuracy_pct REAL,                     -- 0-100 from agent_predictions
-  -- ─── Meta ─────────────────────────────────────────────────────────────────
-  computed_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE(product_id, week_starting)
 );
 CREATE TABLE team_invitations (
   id TEXT PRIMARY KEY,
@@ -4901,25 +4395,6 @@ CREATE TABLE "webhooks" (
   product_id TEXT,
   created_by TEXT
 );
-CREATE TABLE "weekly_compressed_briefs" (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  week_of TEXT NOT NULL,
-
-  -- Nullable: null means nothing has scored this company, which is different
-  -- from a low score and must not be rendered as one.
-  health_score INTEGER,
-  health_trend TEXT NOT NULL CHECK (health_trend IN ('improving','stable','declining')),
-  one_sentence_status TEXT NOT NULL,
-  top_3_this_week TEXT NOT NULL DEFAULT '[]',
-  metrics_delta_json TEXT NOT NULL DEFAULT '{}',
-  agent_consensus TEXT,
-  one_decision_to_make TEXT,
-  estimated_read_minutes REAL NOT NULL DEFAULT 3.0,
-
-  generated_at TEXT NOT NULL DEFAULT (datetime('now')),
-  UNIQUE(product_id, week_of)
-);
 CREATE TABLE weekly_plans (
   id TEXT PRIMARY KEY,
   product_id TEXT NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -4929,20 +4404,6 @@ CREATE TABLE weekly_plans (
   synthesis TEXT,                 -- 1-2 sentence framing paragraph
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   UNIQUE(product_id, week_of)
-);
-CREATE TABLE wisdom_patterns (
-  id TEXT PRIMARY KEY,
-  product_id TEXT NOT NULL,
-  pattern_type TEXT NOT NULL,  -- 'what_works', 'what_fails', 'agent_tendency', 'approval_signal'
-  agent_name TEXT,             -- NULL means cross-agent pattern
-  pattern TEXT NOT NULL,       -- The synthesized wisdom statement
-  evidence_count INTEGER NOT NULL DEFAULT 1,
-  confidence REAL NOT NULL DEFAULT 0.5,
-  supporting_decision_ids TEXT,  -- JSON array of decision_outcome IDs
-  active INTEGER NOT NULL DEFAULT 1,
-  last_reinforced_at TEXT NOT NULL DEFAULT (datetime('now')),
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 CREATE TABLE workshop_continuations (
   id            TEXT PRIMARY KEY,
@@ -5124,31 +4585,18 @@ CREATE TABLE workspaces (
   -- What was kept when it went: the evidence, the artefacts, the outcome.
   preserved      TEXT
 );
-CREATE INDEX idx_accuracy_scores_product ON agent_accuracy_scores(product_id, agent_name);
 CREATE INDEX idx_act_classifications ON act_classifications(founder_id, classified_at);
 CREATE INDEX idx_action_drafts_decision ON action_drafts(decision_id);
 CREATE INDEX idx_action_drafts_product ON action_drafts(product_id, status);
 CREATE INDEX idx_action_executions_action ON action_executions(outbound_action_id);
 CREATE INDEX idx_action_executions_product ON action_executions(product_id, status, created_at);
 CREATE INDEX idx_action_templates_product ON action_templates(product_id, action_type);
-CREATE INDEX idx_agent_config_history_agent ON agent_config_history(product_id, agent_name, changed_at DESC);
-CREATE INDEX idx_agent_configs_product ON agent_configs(product_id, agent_name);
-CREATE INDEX idx_agent_cost_agent ON agent_cost_log(product_id, agent_name);
-CREATE INDEX idx_agent_cost_product ON agent_cost_log(product_id, logged_at DESC);
-CREATE INDEX idx_agent_evo_product ON agent_evolution_versions(product_id, agent_name);
-CREATE INDEX idx_agent_evo_promoted ON agent_evolution_versions(promoted_at);
 CREATE INDEX idx_agent_instances_next_run ON agent_instances(next_run_at, status);
 CREATE INDEX idx_agent_instances_product ON agent_instances(product_id);
 CREATE INDEX idx_agent_instances_status ON agent_instances(product_id, status);
 CREATE INDEX idx_agent_messages_from ON agent_messages(product_id, from_agent, created_at DESC);
 CREATE INDEX idx_agent_messages_to ON agent_messages(product_id, to_agent, read_at);
 CREATE INDEX idx_agent_messages_unread ON agent_messages(product_id, to_agent) WHERE read_at IS NULL;
-CREATE INDEX idx_agent_remediations_agent ON agent_remediations(product_id, agent_name);
-CREATE INDEX idx_agent_remediations_product ON agent_remediations(product_id, status);
-CREATE INDEX idx_agent_remediations_severity ON agent_remediations(product_id, severity, status);
-CREATE INDEX idx_agent_sessions_agent ON agent_sessions(product_id, agent_name, started_at DESC);
-CREATE INDEX idx_agent_sessions_product ON agent_sessions(product_id, started_at DESC);
-CREATE INDEX idx_agent_sessions_status ON agent_sessions(status, started_at);
 CREATE INDEX idx_ai_daily_spend_date ON ai_daily_spend(date);
 CREATE INDEX idx_ai_feedback_founder ON ai_output_feedback(founder_id);
 CREATE INDEX idx_ai_profile_founder ON founder_ai_profile(founder_id);
@@ -5187,8 +4635,6 @@ CREATE INDEX idx_bdl_product_created
 CREATE INDEX idx_bdl_unmatched
   ON briefing_decision_links(founder_id, decision_acted_at)
   WHERE decision_acted_at IS NULL;
-CREATE INDEX idx_behavioral_signals_product ON founder_behavioral_signals(product_id, detected_at DESC);
-CREATE UNIQUE INDEX idx_benchmarks_metric_cohort ON intelligence_benchmarks(metric_name, cohort);
 CREATE INDEX idx_briefing_share_code ON briefing_shares(share_code);
 CREATE INDEX idx_briefing_share_founder
   ON briefing_shares(founder_id, created_at DESC);
@@ -5245,7 +4691,6 @@ CREATE UNIQUE INDEX idx_company_situation_open
 CREATE INDEX idx_company_situations_history
   ON company_situations(product_id, began_at);
 CREATE INDEX idx_competitive_signals_created ON competitive_signals(detected_at);
-CREATE INDEX idx_competitor_profiles_product ON competitor_profiles(product_id);
 CREATE INDEX idx_competitors_active ON competitors(product_id, monitoring_active);
 CREATE INDEX idx_competitors_product ON competitors(product_id);
 CREATE INDEX idx_consents_product ON privacy_consents(product_id);
@@ -5275,9 +4720,6 @@ CREATE UNIQUE INDEX idx_data_class_product_surface
   ON data_classifications(product_id, surface);
 CREATE INDEX idx_deal_rooms_product ON deal_rooms(product_id);
 CREATE INDEX idx_deal_rooms_token ON deal_rooms(access_token);
-CREATE INDEX idx_debate_sessions_product ON debate_sessions(product_id, briefing_date);
-CREATE INDEX idx_decision_outcomes_agent ON decision_outcomes(product_id, agent_name);
-CREATE INDEX idx_decision_outcomes_product ON decision_outcomes(product_id);
 CREATE INDEX idx_decision_patterns_contributor
   ON decision_patterns(market_category, product_lifecycle_stage, contributor_hash);
 CREATE INDEX idx_decision_votes_decision ON decision_votes(decision_id);
@@ -5306,8 +4748,6 @@ CREATE INDEX idx_envelope_usage_lookup
   ON envelope_usage(product_id, scope, week_starting);
 CREATE INDEX idx_evidence_policy_live
   ON delegation_evidence_policy(founder_id, ceiling, superseded_at);
-CREATE UNIQUE INDEX idx_evolved_prompts_active ON evolved_prompts(product_id, agent_name) WHERE is_active = 1;
-CREATE INDEX idx_exec_playbooks_product ON execution_playbooks(product_id, is_active);
 CREATE INDEX idx_exec_queue_job ON execution_queue(job_type, status);
 CREATE INDEX idx_exec_queue_product ON execution_queue(product_id);
 CREATE INDEX idx_exec_queue_status ON execution_queue(status, created_at);
@@ -5337,19 +4777,12 @@ CREATE UNIQUE INDEX idx_founder_company_fact
   ON founder_evidence_requests(product_id,predicate) WHERE scope='company';
 CREATE UNIQUE INDEX idx_founder_evidence_request_identity
   ON founder_evidence_requests(product_id,responsibility_id,predicate);
-CREATE INDEX idx_founder_state_product ON founder_state_assessments(product_id, assessed_at DESC);
 CREATE INDEX idx_founders_paid_through ON founders(paid_through);
 CREATE INDEX idx_founders_tier ON founders(tier);
 CREATE INDEX idx_foundry_cost_lines_newest ON foundry_cost_lines(founder_id, provider, said_at);
-CREATE INDEX idx_freeze_periods_product_active
-  ON freeze_periods(product_id, ended_at);
-CREATE INDEX idx_freeze_periods_started
-  ON freeze_periods(product_id, started_at DESC);
 CREATE INDEX idx_funnel_events_step ON funnel_events(step, created_at);
 CREATE INDEX idx_geo_signals_product ON geopolitical_signals(product_id);
 CREATE INDEX idx_geo_signals_status ON geopolitical_signals(status);
-CREATE INDEX idx_golden_suite_agent ON golden_suite(product_id, agent_name, active);
-CREATE INDEX idx_golden_suite_type ON golden_suite(product_id, lesson_type);
 CREATE INDEX idx_graph_entities ON graph_entities(product_id, entity_type);
 CREATE INDEX idx_graph_rels_product ON graph_relationships(product_id, relationship_type);
 CREATE INDEX idx_graph_rels_source ON graph_relationships(source_entity_id);
@@ -5361,7 +4794,6 @@ CREATE UNIQUE INDEX idx_idem_unique
 CREATE UNIQUE INDEX idx_inbound_message_identity
   ON inbound_customer_messages(product_id,channel_id,external_message_id);
 CREATE INDEX idx_ingest_credentials_product ON ingest_credentials(product_id, revoked_at);
-CREATE INDEX idx_initiative_queue_pending ON agent_initiative_queue(product_id, agent_name, status, priority);
 CREATE INDEX idx_integration_events_product ON integration_events(product_id, event_type, created_at DESC);
 CREATE INDEX idx_integration_events_unprocessed ON integration_events(product_id, created_at DESC);
 CREATE INDEX idx_integration_secret_quarantine_product
@@ -5424,13 +4856,6 @@ CREATE INDEX idx_origination_policy_live
   ON origination_policy(founder_id, requirement, superseded_at);
 CREATE INDEX idx_outbound_actions_pending ON outbound_actions(product_id, status) WHERE status = 'pending_approval';
 CREATE INDEX idx_outbound_actions_product ON outbound_actions(product_id, status, created_at DESC);
-CREATE INDEX idx_outbound_rate_limits ON outbound_rate_limits(product_id, agent_name);
-CREATE INDEX idx_outcome_trees_parent
-  ON outcome_trees(parent_branch_id);
-CREATE INDEX idx_outcome_trees_product
-  ON outcome_trees(product_id, status);
-CREATE INDEX idx_outcome_trees_run
-  ON outcome_trees(product_id, weekly_refresh_run_id);
 CREATE INDEX idx_outreach_suppressions
   ON outreach_suppressions(product_id, email);
 CREATE INDEX idx_owner_allowances_live
@@ -5444,15 +4869,10 @@ CREATE UNIQUE INDEX idx_owner_objective_one_live
   ON owner_objectives(product_id) WHERE retired_at IS NULL;
 CREATE INDEX idx_owner_preferences_live
   ON owner_preferences(product_id) WHERE dropped_at IS NULL;
-CREATE INDEX idx_pattern_matches_product ON pattern_matches(product_id, first_detected_at DESC);
 CREATE INDEX idx_patterns_market ON decision_patterns(market_category);
 CREATE INDEX idx_patterns_risk ON decision_patterns(risk_state_at_decision);
 CREATE INDEX idx_patterns_stage ON decision_patterns(product_lifecycle_stage);
 CREATE INDEX idx_patterns_type ON decision_patterns(decision_type);
-CREATE INDEX idx_phase_beta_freeze
-  ON phase_beta_proposals(blocked_during_freeze_id);
-CREATE INDEX idx_phase_beta_product_status
-  ON phase_beta_proposals(product_id, status);
 CREATE INDEX idx_portfolio_envelope_carves_envelope
   ON portfolio_envelope_carves(envelope_id, carved_at);
 CREATE INDEX idx_portfolio_envelopes_live
@@ -5471,12 +4891,10 @@ CREATE INDEX idx_prediction_resolutions_founder
   ON prediction_resolutions(founder_id, kind, resolved_at);
 CREATE UNIQUE INDEX idx_prediction_resolved_once
   ON prediction_resolutions(kind, prediction_id);
-CREATE INDEX idx_predictions_pending ON agent_predictions(measure_by_date, outcome) WHERE outcome IS NULL;
 CREATE INDEX idx_predictions_product ON predictions(product_id, status);
 CREATE INDEX idx_predictions_type ON predictions(prediction_type);
 CREATE INDEX idx_premises_decision ON decision_premises(decision_id);
 CREATE INDEX idx_premises_product_status ON decision_premises(product_id, status);
-CREATE INDEX idx_priority_actions_product ON priority_actions(product_id, priority_score DESC) WHERE is_active = 1;
 CREATE INDEX idx_probe_attacks_experiment ON probe_attacks(experiment_id, recorded_at);
 CREATE INDEX idx_probe_design_amendments ON probe_design_amendments(experiment_id, amended_at);
 CREATE INDEX idx_probe_interpretations ON probe_interpretations(experiment_id);
@@ -5556,15 +4974,11 @@ CREATE INDEX idx_responsibility_transitions
 CREATE INDEX idx_retired_rows_product ON retired_rows(product_id);
 CREATE INDEX idx_retired_rows_table ON retired_rows(table_name);
 CREATE INDEX idx_retrieval_items_of ON retrieval_items(retrieval_id);
-CREATE INDEX idx_revenue_attributions_product ON revenue_attributions(product_id, agent_name, period_start DESC);
-CREATE INDEX idx_rule_triggers_cooldown ON lifecycle_rule_triggers(rule_id, customer_id, triggered_at DESC);
 CREATE INDEX idx_runway_founder ON runway_models(founder_id);
 CREATE INDEX idx_saved_insights_product ON saved_insights(product_id, created_at DESC);
 CREATE INDEX idx_scenario_decision ON scenario_models(decision_id);
 CREATE INDEX idx_scenario_product ON scenario_models(product_id);
 CREATE INDEX idx_scenarios_product ON forecast_scenarios(product_id, scenario_type, created_at);
-CREATE INDEX idx_scp_briefings_product ON scp_briefings(product_id, briefing_date DESC);
-CREATE UNIQUE INDEX idx_scratchpad_product_date ON agent_scratchpad(product_id, scratchpad_date);
 CREATE INDEX idx_search_briefs_of ON search_briefs(mandate_id, made_at);
 CREATE INDEX idx_search_emphasis_dimension ON search_emphasis(dimension, guidance_kind);
 CREATE INDEX idx_seed_questionings_seed ON seed_questionings(seed_id, asked_at DESC);
@@ -5581,7 +4995,6 @@ CREATE INDEX idx_story_published ON founding_story_artifacts(published);
 CREATE INDEX idx_strategic_decisions_made_at    ON strategic_decisions_log(made_at);
 CREATE INDEX idx_strategic_decisions_product    ON strategic_decisions_log(product_id);
 CREATE INDEX idx_strategic_decisions_status     ON strategic_decisions_log(status);
-CREATE INDEX idx_strategic_syntheses_product ON strategic_syntheses(product_id, generated_at DESC);
 CREATE INDEX idx_stressor_history_created ON stressor_history(identified_at);
 CREATE INDEX idx_stressor_product ON stressor_history(product_id);
 CREATE INDEX idx_stressor_product_active ON stressor_history(product_id, status);
@@ -5594,17 +5007,12 @@ CREATE UNIQUE INDEX idx_support_channels_one_feed_per_provider
   ON support_channels(product_id, fed_by)
   WHERE fed_by IS NOT NULL AND revoked_at IS NULL;
 CREATE INDEX idx_support_channels_product ON support_channels(product_id,responsibility_id);
-CREATE INDEX idx_sync_log_integration ON integration_sync_log(integration_id, started_at DESC);
-CREATE INDEX idx_sync_log_product ON integration_sync_log(product_id, started_at DESC);
-CREATE INDEX idx_team_health_product_week
-  ON team_health_metrics(product_id, week_starting DESC);
 CREATE INDEX idx_team_invitations_product ON team_invitations(product_id);
 CREATE INDEX idx_team_invitations_token ON team_invitations(token);
 CREATE INDEX idx_team_members_founder ON team_members(founder_id);
 CREATE INDEX idx_team_members_product ON team_members(product_id, status);
 CREATE INDEX idx_transcripts_product ON call_transcripts(product_id, call_date DESC);
 CREATE INDEX idx_transcripts_type ON call_transcripts(product_id, call_type);
-CREATE INDEX idx_trigger_log_playbook ON playbook_trigger_log(playbook_id, triggered_at DESC);
 CREATE INDEX idx_undertaking_steps_by_ref ON undertaking_steps(ref_kind, ref_id)
   WHERE ref_id IS NOT NULL;
 CREATE UNIQUE INDEX idx_undertaking_steps_one_per_ref
@@ -5644,8 +5052,6 @@ CREATE INDEX idx_voice_sessions_product ON voice_sessions(product_id, session_da
 CREATE INDEX idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id);
 CREATE INDEX idx_webhooks_founder ON webhooks(founder_id);
 CREATE INDEX idx_weekly_plans ON weekly_plans(product_id, week_of DESC);
-CREATE INDEX idx_wisdom_patterns_agent ON wisdom_patterns(product_id, agent_name);
-CREATE INDEX idx_wisdom_patterns_product ON wisdom_patterns(product_id, active);
 CREATE INDEX idx_workshop_continuations ON workshop_continuations(founder_id, email);
 CREATE INDEX idx_workshop_mail_handling ON workshop_mail(founder_id, handling);
 CREATE UNIQUE INDEX idx_workshop_mail_rfc ON workshop_mail(founder_id, rfc_message_id);

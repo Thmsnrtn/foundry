@@ -350,10 +350,12 @@ describe('every gate refuses the defect it exists for', () => {
     // defects this gate was built from. That table was dropped with the push
     // notifier, and the gate reads its vocabularies from the LIVE schema — so a
     // fixture naming a table that no longer exists would have proved nothing
-    // and passed. `integration_sync_log` is a live table with a closed status.
+    // and passed. `integration_sync_log` was the next one, until migration 375
+    // dropped it in Roadmap 2027 R9; `action_executions` is a live table with a
+    // closed status.
     plant('src/services/_gate_fixture_d.ts',
       'import { query } from "../db/client.js";\n'
-      + j('export const q = () => query(`UPDATE ', 'integration_sync_log SET status',
+      + j('export const q = () => query(`UPDATE ', 'action_executions SET status',
         " = 'zz_not", "_a_status' WHERE id = ?`, []);\n"));
     const r = run('check-check-vocabularies.mjs');
     expect(r.code, r.output).toBe(1);
@@ -381,8 +383,8 @@ describe('every gate refuses the defect it exists for', () => {
     const padding = Array.from({ length: Math.ceil(window / line(0).length) + 50 }, (_, i) => line(i)).join('\n');
     plant('src/services/_gate_fixture_window.ts',
       'import { query } from "../db/client.js";\n'
-      + j('export const q = () => query(`UPDATE ', 'integration_sync_log SET status',
-        " = 'success'\n", padding, '\n      WHERE id = ?`, []);\n'));
+      + j('export const q = () => query(`UPDATE ', 'action_executions SET status',
+        " = 'completed'\n", padding, '\n      WHERE id = ?`, []);\n'));
     const r = run('check-check-vocabularies.mjs');
     expect(r.code, r.output).toBe(1);
     expect(r.output).toContain('scan window');
@@ -483,16 +485,9 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('_gate_fixture_orphan');
   });
 
-  it('check-reachability does not call a dynamically-loaded module dead', () => {
-    // The false positive that matters. A previous run of this class named
-    // ~160KB of live, dynamically-loaded agents as unreachable — the walker
-    // follows literal specifiers and the dispatcher builds its one by name.
-    // Planting a file INSIDE that declared directory must not be reported.
-    plant('src/services/scp/agents/_gate_fixture_agent.ts',
-      "export const run = () => 'loaded by computed name';\n");
-    const r = run('check-reachability.mjs');
-    expect(r.code, r.output).toBe(0);
-  });
+  // 'check-reachability does not call a dynamically-loaded module dead' planted
+  // into `src/services/scp/agents/`, whose REACHED_BY entry went with the agents
+  // and the dispatcher in Roadmap 2027 R9: nothing is loaded by computed name now.
 
   it('check-reachability fails when the Stripe gateway loses its only importer', () => {
     // THE REAL DEFECT, PLANTED. integration/stripe-gateway.ts registers four

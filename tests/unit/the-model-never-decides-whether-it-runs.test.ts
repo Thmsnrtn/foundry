@@ -34,9 +34,12 @@ describe('every kind of work names its decision', () => {
     expect(Object.keys(WHAT_IT_COULD_CHANGE).sort()).toEqual(Object.keys(WORK_THE_MODEL_DOES).sort());
   });
 
-  it('names a decision in words for all live work, and none only for the retired agent society', () => {
-    const none = Object.entries(WHAT_IT_COULD_CHANGE).filter(([, d]) => d === null).map(([w]) => w).sort();
-    expect(none).toEqual(['agent coordination', 'agent evolution', 'an agent session']);
+  it('names a decision in words for every kind of work', () => {
+    // The only kinds that served none were the agent society's, and they left
+    // with the agents (Roadmap 2027 R9). Work that serves none can still be
+    // declared, and is refused below; none is declared now.
+    const none = Object.entries(WHAT_IT_COULD_CHANGE).filter(([, d]) => d === null).map(([w]) => w);
+    expect(none).toEqual([]);
     for (const [work, decision] of Object.entries(WHAT_IT_COULD_CHANGE)) {
       if (decision !== null) expect(decision.length, work).toBeGreaterThan(10);
     }
@@ -46,10 +49,18 @@ describe('every kind of work names its decision', () => {
 
 describe('a call that could change nothing', () => {
   it('is refused before anything is reserved, and counted', () => {
-    const before = callsRefusedForChangingNothing();
-    expect(() => refuseIfItChangesNothing('an agent session')).toThrow(/could change no decision/);
-    expect(callsRefusedForChangingNothing()).toBe(before + 1);
-    expect(() => refuseIfItChangesNothing('composing a probe' as Work)).not.toThrow();
+    // Declared here for the test alone and removed after: a kind of work that
+    // could change nothing, as the retired agents' work was.
+    const map = WHAT_IT_COULD_CHANGE as Record<string, string | null>;
+    map['work that changes nothing'] = null;
+    try {
+      const before = callsRefusedForChangingNothing();
+      expect(() => refuseIfItChangesNothing('work that changes nothing' as Work)).toThrow(/could change no decision/);
+      expect(callsRefusedForChangingNothing()).toBe(before + 1);
+      expect(() => refuseIfItChangesNothing('composing a probe' as Work)).not.toThrow();
+    } finally {
+      delete map['work that changes nothing'];
+    }
   });
 
   it('is refused in the client before the spend is authorised', () => {

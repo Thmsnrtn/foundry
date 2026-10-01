@@ -182,14 +182,14 @@ describe('the pause reaches model spend', () => {
     await query(`UPDATE products SET scp_status='paused' WHERE id=?`, [productId]);
     const { callSonnet, NotEntitledError } = await import('../../src/services/ai/client.js');
     const { companySpend } = await import('../../src/services/ai/what-it-is-for.js');
-    await expect(callSonnet('sys', 'user', 16, companySpend(productId, 'a gate'))).rejects.toThrow(NotEntitledError);
+    await expect(callSonnet('sys', 'user', 16, companySpend(productId, 'red team'))).rejects.toThrow(NotEntitledError);
   });
 
   it('refuses for an archived record too', async () => {
     await query(`UPDATE products SET status='archived' WHERE id=?`, [productId]);
     const { callSonnet } = await import('../../src/services/ai/client.js');
     const { companySpend } = await import('../../src/services/ai/what-it-is-for.js');
-    await expect(callSonnet('sys', 'user', 16, companySpend(productId, 'a gate'))).rejects.toThrow(/refused/i);
+    await expect(callSonnet('sys', 'user', 16, companySpend(productId, 'red team'))).rejects.toThrow(/refused/i);
   });
 
   it('does not refuse an id that names no company', async () => {

@@ -102,6 +102,12 @@ export async function createDeterministicCapacityJudgment(productId:string,respo
   const economicEffect=economics.length===1&&['known','inferred'].includes(economics[0].status)
     ?{status:economics[0].status==='known'?'observed':'inferred_estimate',value:economics[0].value}
     :{status:economics.length===0?'unknown':economicStatuses.size>1||economicStatuses.has('conflicting')?'conflicting':'unknown',value:null};
+  // `decision_rationale`, `expected_outcome`, `decision_category`, `made_by`,
+  // `agent_context_json` and `key_assumptions_json` are required by the table and
+  // recorded for a person reading the judgment. Their readers were the retired
+  // agents (Roadmap 2027 R9); no code consumes them now, deliberately
+  // (write-only-columns baseline). `made_by` says 'agent_recommendation' because
+  // the table's CHECK allows nothing closer; the judgment is deterministic code.
   await query(`INSERT INTO strategic_decisions_log
     (id,product_id,decision_title,decision_description,decision_rationale,expected_outcome,decision_category,made_by,status,
      agent_context_json,alternatives_considered_json,key_assumptions_json,responsibility_refs_json,evidence_refs_json,

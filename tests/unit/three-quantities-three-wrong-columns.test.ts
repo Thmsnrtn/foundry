@@ -49,7 +49,6 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await query('DELETE FROM metric_snapshots');
-  await query('DELETE FROM integration_sync_log');
   await query('DELETE FROM integrations');
   await query(
     `INSERT INTO integrations (id, product_id, provider, direction, status, credentials, error_count)

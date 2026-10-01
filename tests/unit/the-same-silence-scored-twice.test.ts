@@ -94,12 +94,5 @@ describe('the substitutions are gone from the source', () => {
     }
   });
 
-  it('the ledger no longer invents a company budget', () => {
-    const code = stripComments(
-      readFileSync('src/services/scp/agents/ledger.ts', 'utf8'), { lineComments: true });
-    expect(code, 'a company that set no budget was given one of $50/month')
-      .not.toMatch(/operating_budget_monthly_usd\) \|\| 50/);
-    expect(code, 'and null MRR movement was reported to the financial agent as zero')
-      .not.toMatch(/Number\(row\.churned_mrr_cents\) \|\| 0/);
-  });
+  // The ledger case went with `scp/agents/ledger.ts` in Roadmap 2027 R9.
 });

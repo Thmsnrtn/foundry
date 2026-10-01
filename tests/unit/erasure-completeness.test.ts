@@ -58,7 +58,8 @@ describe('every table holding a company is erased or explains itself', () => {
 
   it('erases far more than the thirteen tables it used to', async () => {
     const erased = await tablesToErase();
-    expect(erased.length).toBeGreaterThan(150);
+    // 34 erased tables were dropped by migration 375 in Roadmap 2027 R9.
+    expect(erased.length).toBeGreaterThan(116);
   });
 
   it('names the tables a founder would notice most', async () => {
@@ -210,8 +211,9 @@ describe('an export that exports', () => {
   it('covers every table holding the company, minus recorded exclusions', async () => {
     const all = await tablesWithProductId();
     const unaccounted = all.filter((t) => !(t in EXCLUDED_FROM_EXPORT_REASONS));
+    // 34 exported tables were dropped by migration 375 in Roadmap 2027 R9.
     expect(unaccounted.length, 'the export is derived from the schema')
-      .toBeGreaterThan(150);
+      .toBeGreaterThan(116);
     for (const reason of Object.values(EXCLUDED_FROM_EXPORT_REASONS)) {
       expect(reason.length).toBeGreaterThan(20);
     }
@@ -361,9 +363,10 @@ describe('retained data stays restricted', () => {
     // `intent.ts` — were production-dead and deleted, and git does not track
     // empty directories, so naming it here makes this scan throw ENOENT on a
     // fresh clone rather than find nothing. The remaining five are the
-    // cognition surfaces that still exist.
+    // cognition surfaces that still exist. `services/scp/agents` was deleted in
+    // Roadmap 2027 R9.
     const cognition = ['services/wisdom', 'services/intelligence', 'services/chat',
-      'services/scp/agents', 'services/digest'];
+      'services/digest'];
     const offenders: string[] = [];
     for (const dir of cognition) {
       for (const f of walk(r(__dirname, '../../src', dir))) {

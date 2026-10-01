@@ -40,59 +40,9 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
-import { beforeAll, describe, expect, it } from 'vitest';
-import { nanoid } from 'nanoid';
-
-import { runMigrations } from '../../src/db/migrate.js';
-import { query } from '../../src/db/client.js';
-import { scheduleNextRun } from '../../src/services/scp/scheduler.js';
-
-const OWNER = 'rw_owner';
-const P = 'rw_product';
-
-beforeAll(async () => {
-  await runMigrations();
-  await query(`INSERT INTO founders (id, clerk_user_id, email) VALUES (?,?,?)`,
-    [OWNER, 'clerk_rw', 'rw@test.local']);
-  await query(
-    `INSERT INTO products (id, name, owner_id, status) VALUES (?, 'Read Co', ?, 'active')`,
-    [P, OWNER]);
-  await query(
-    `INSERT INTO agent_instances (id, product_id, agent_name, display_name, version)
-     VALUES (?, ?, 'atlas', 'Atlas', 1)`, [nanoid(), P]);
-});
+import { describe, expect, it } from 'vitest';
 
 describe('weekend mode can be reached', () => {
-  async function nextRunGapHours(): Promise<number> {
-    const row = (await query(
-      `SELECT next_run_at FROM agent_instances WHERE product_id = ? AND agent_name = 'atlas'`,
-      [P])).rows[0] as Record<string, unknown>;
-    return (new Date(String(row.next_run_at)).getTime() - Date.now()) / 3_600_000;
-  }
-
-  it('runs at the requested cadence by default', async () => {
-    await query(`UPDATE products SET cadence_mode = NULL WHERE id = ?`, [P]);
-    await scheduleNextRun(P, 'atlas', 24);
-    const gap = await nextRunGapHours();
-    expect(gap).toBeGreaterThan(23);
-    expect(gap).toBeLessThan(25);
-  });
-
-  it('clamps every cadence to weekly once weekend mode is set', async () => {
-    // The enforcement was always here. What was missing was any way to turn it
-    // on, which is the half that decides whether a founder ever sees it.
-    await query(`UPDATE products SET cadence_mode = 'weekend' WHERE id = ?`, [P]);
-    await scheduleNextRun(P, 'atlas', 24);
-    const gap = await nextRunGapHours();
-    expect(gap).toBeGreaterThan(167);
-  });
-
-  it('goes back to the standard pace when it is turned off', async () => {
-    await query(`UPDATE products SET cadence_mode = 'standard' WHERE id = ?`, [P]);
-    await scheduleNextRun(P, 'atlas', 24);
-    expect(await nextRunGapHours()).toBeLessThan(25);
-  });
-
   it('has a route that writes it', async () => {
     // The point of the batch: an enforcement with no door is unreachable. This
     // asserts the door exists and is the one the settings page posts to.

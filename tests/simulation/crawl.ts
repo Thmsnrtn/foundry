@@ -181,11 +181,8 @@ async function seed(): Promise<void> {
     seeded.customerId ??= cid;
   }
 
-  // Briefings + agents.
-  await query(
-    `INSERT INTO scp_briefings (id, product_id, briefing_date, headline, briefing_text) VALUES (?, ?, ?, ?, ?)`,
-    [id('b'), p1, day(0), 'Churn risk concentrated in one account', 'Lee Park is 70% churn risk; act this week.'],
-  ).catch(() => {});
+  // Agents. (`scp_briefings` was seeded here until migration 375 dropped it in
+  // Roadmap 2027 R9.)
   seeded.date = day(0);
   for (const [nm, st, h] of [['atlas', 'active', 82], ['forge', 'active', 61], ['harbor', 'paused', 40]] as const) {
     const aid = id('ai');

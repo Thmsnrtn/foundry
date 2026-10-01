@@ -1024,16 +1024,12 @@ export async function getAICostData(): Promise<AICostData> {
       WHERE scope = 'global' AND date >= date('now', '-1 day')`, []);
   const totalCost = Number((spend.rows[0] as Record<string, unknown>)?.total ?? 0);
 
-  // Tokens from the two paths that record them, which do not overlap: agent
-  // sessions log to `agent_cost_log`, founder chat to `chat_messages`.
-  const agentTokens = await safeQuery(
-    `SELECT COALESCE(SUM(tokens_input + tokens_output), 0) AS total FROM agent_cost_log
-      WHERE logged_at > datetime('now', '-1 day')`, []);
+  // Tokens from founder chat, the one path that records them. Agent sessions
+  // also logged theirs until the agents were retired (Roadmap 2027 R9).
   const chatTokens = await safeQuery(
     `SELECT COALESCE(SUM(tokens_in + tokens_out), 0) AS total FROM chat_messages
       WHERE created_at > datetime('now', '-1 day')`, []);
-  const totalTokens = Number((agentTokens.rows[0] as Record<string, unknown>)?.total ?? 0)
-    + Number((chatTokens.rows[0] as Record<string, unknown>)?.total ?? 0);
+  const totalTokens = Number((chatTokens.rows[0] as Record<string, unknown>)?.total ?? 0);
 
   const founders = await safeQuery("SELECT COUNT(*) as c FROM founders WHERE tier IS NOT NULL", []);
   const founderCount = Math.max(1, (founders.rows[0] as Record<string, number>)?.c ?? 1);

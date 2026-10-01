@@ -70,7 +70,6 @@ const NOT_EXECUTABLE = ['src/types/', 'src/db/migrations/'];
  * lying in the reassuring direction.
  */
 const REACHED_BY = {
-  'src/services/scp/agents/': 'computed dynamic import — scp/events/dispatcher.ts and scp/instance.ts build the specifier from a name narrowed to a closed vocabulary by isLoadableAgentName',
   'src/test/setup.ts': 'loaded by the test runner, not by the application',
   // AN ENTRY POINT IS NOT ALWAYS AN HTTP ROUTE.
   //

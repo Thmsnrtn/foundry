@@ -2,7 +2,7 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { nanoid } from 'nanoid';
 import { query } from '../../src/db/client.js';
 import { runMigrations } from '../../src/db/migrate.js';
-import { emitSignalEvent } from '../../src/services/scp/events/dispatcher.js';
+import { emitSignalEvent } from '../../src/services/institution/signals.js';
 import { discoverResponsibilityFromSignal } from '../../src/services/institution/discovery.js';
 
 beforeAll(async () => {

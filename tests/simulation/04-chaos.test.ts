@@ -13,8 +13,6 @@ const SRC = resolve(__dirname, '../../src');
 let aiClientSource: string;
 let healthRouteSource: string;
 let resilienceSource: string;
-let provisionerSource: string;
-let schedulerSource: string;
 let onboardingSource: string;
 let voiceBriefingSource: string;
 let signalSource: string;
@@ -23,8 +21,6 @@ beforeAll(() => {
   aiClientSource = readFileSync(resolve(SRC, 'services/ai/client.ts'), 'utf-8');
   healthRouteSource = readFileSync(resolve(SRC, 'routes/internal/health.ts'), 'utf-8');
   resilienceSource = readFileSync(resolve(SRC, 'services/resilience.ts'), 'utf-8');
-  provisionerSource = readFileSync(resolve(SRC, 'services/scp/provisioner.ts'), 'utf-8');
-  schedulerSource = readFileSync(resolve(SRC, 'services/scp/scheduler.ts'), 'utf-8');
   onboardingSource = readFileSync(resolve(SRC, 'routes/dashboard/onboarding.ts'), 'utf-8');
   voiceBriefingSource = readFileSync(resolve(SRC, 'services/voice/briefing.ts'), 'utf-8');
   signalSource = readFileSync(resolve(SRC, 'services/signal.ts'), 'utf-8');
@@ -166,26 +162,7 @@ describe('SCP provisioning failure is non-fatal', () => {
     expect(onboardingSource).toMatch(/INSERT INTO products/);
   });
 
-  it('provisionSCP returns a result object instead of throwing', () => {
-    // provisionSCP catches errors internally and returns ProvisionResult
-    expect(provisionerSource).toMatch(/catch\s*\(err\)/);
-    expect(provisionerSource).toMatch(/success:\s*false/);
-    expect(provisionerSource).toMatch(/error/);
-  });
-
-  it('scheduler continues to next product if one fails', () => {
-    // The scheduler's runDueAgentsForAllProducts has a try/catch inside the for loop
-    // and a comment "Continue to next product" — verify the pattern
-    const fn = schedulerSource.match(
-      /export\s+async\s+function\s+runDueAgentsForAllProducts[\s\S]*?(?=export\s+async\s+function|$)/
-    );
-    expect(fn).toBeTruthy();
-    const body = fn![0];
-    expect(body).toMatch(/for\s*\(.*of\s+result\.rows\)/);
-    expect(body).toMatch(/try\s*\{/);
-    expect(body).toMatch(/catch\s*\(err\)/);
-    expect(body).toMatch(/Continue to next product/);
-  });
+  // The provisionSCP case went with `scp/provisioner.ts` in Roadmap 2027 R9.
 });
 
 // =============================================================================

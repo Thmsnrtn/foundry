@@ -13,11 +13,11 @@ around each item.
 ---
 
 <!-- status:begin — generated from the headings below by node scripts/check-record-matches-code.mjs --write -->
-# 15 WAITING ON THE OWNER, 3 WITH COUNSEL, 3 DECIDED IN PLACE
+# 14 WAITING ON THE OWNER, 3 WITH COUNSEL, 4 DECIDED IN PLACE
 
-- **Waiting on the owner:** PENDING 11, 12, 14, 16, 17, 18, 19, 20, 21, 24, 25, 26, 27, 29, 30.
+- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 20, 21, 24, 25, 26, 27, 29, 30.
 - **Waiting on counsel:** PENDING 9, 13, 15 (interim positions in force; see below).
-- **Decided, and kept where they were asked:** PENDING 22, 23, 28.
+- **Decided, and kept where they were asked:** PENDING 16, 22, 23, 28.
 - **Answered and recorded as RESOLVED:** 15.
 <!-- status:end -->
 
@@ -58,6 +58,10 @@ dimensions it exercises, and production recursion remains external proof debt
 until the owner's action lands.
 
 ## RESOLVED 3 — `challenger` and `synthesizer`: **THEY SHOULD BE LIVE**
+
+*Superseded 1 October 2026:* the debate orchestrator that called both was a
+retired loop, and both were deleted with the agents when the owner retired them
+(PENDING 16, Roadmap 2027 R9). What follows is the record as it was.
 
 The owner was right, and my classification was wrong. Both are already
 production-reachable and always were:
@@ -644,7 +648,29 @@ an institution's.
 
 ---
 
-## PENDING 16 — Twelve agents propose actions nothing can carry out: **OWNER**
+## PENDING 16 — Twelve agents propose actions nothing can carry out: **DECIDED 2026-09-30**
+
+**The owner decided it: "Retire them."** Asked on 30 September 2026 whether to
+retire the twelve agents and the legacy executors or keep them dormant, the
+owner chose retirement. Roadmap 2027 R4 and R9 (1 October 2026) carried it out:
+the agents, the twenty-six loops that ran them, every module only those loops
+reached, `outbound/executor.ts`, the public API's `/agents` and `/briefings`,
+the boot-time provisioner, and two weekly jobs that measured the society are
+deleted; thirty-six tables nothing could touch afterwards are copied into
+`retired_rows` and dropped (migration 375). A retired loop's name is refused by
+`job:run` with what it was, never reported as unknown
+(`what-was-retired-is-refused-not-absent`). The code before the deletion is
+commit 1864d6dc.
+
+**What the decision did not reach.** `scp/actions/executor.ts` stays: it is not
+an agent's, it is the execute path of the three department sweeps (customer
+success, outreach, product evolution), and the Letter, autopilot calibration
+and the action verifier read its `action_executions` receipts. Moving those
+callers onto the gateway is a shadow → compare → cutover migration of its own,
+recorded as proof debt in ROADMAP 2027 R9, not done here.
+
+The record below is as it stood when the question was asked.
+
 
 Each of the twelve agents can emit `outboundActions`, which become rows in
 `outbound_actions`. None of those rows has ever been executed by anything, and

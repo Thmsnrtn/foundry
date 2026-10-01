@@ -1003,412 +1003,29 @@ export async function predictionAccuracyJob(): Promise<void> {
 
 // ─── SCP Jobs ─────────────────────────────────────────────────────────────────
 
-/** Run all due agents for all active SCP companies — the core heartbeat. */
-export async function scpAgentRunner(): Promise<void> {
-  logger.info('scp_agent_runner starting', { jobName: 'scp_agent_runner' });
-  try {
-    const { runDueAgentsForAllProducts } = await import('../services/scp/scheduler.js');
-    await runDueAgentsForAllProducts();
-  } catch (err) {
-    logger.error('JOB: scp_agent_runner error:', { jobName: 'JOB', error: String(err) });
-  }
-  logger.info('scp_agent_runner complete', { jobName: 'scp_agent_runner' });
-}
-
-/** Generate CEO briefings for all active SCP companies. */
-export async function scpDailyBriefing(): Promise<void> {
-  logger.info('scp_daily_briefing starting', { jobName: 'scp_daily_briefing' });
-  try {
-    const { generateBriefingsForAllProducts } = await import('../services/scp/scheduler.js');
-    await generateBriefingsForAllProducts();
-  } catch (err) {
-    logger.error('JOB: scp_daily_briefing error:', { jobName: 'JOB', error: String(err) });
-  }
-  logger.info('scp_daily_briefing complete', { jobName: 'scp_daily_briefing' });
-}
-
-/** Run evolution synthesis for all active agents across all companies. */
-export async function scpEvolutionCycle(): Promise<void> {
-  logger.info('scp_evolution_cycle starting', { jobName: 'scp_evolution_cycle' });
-  try {
-    const { runEvolutionForAllProducts } = await import('../services/scp/scheduler.js');
-    await runEvolutionForAllProducts();
-  } catch (err) {
-    logger.error('JOB: scp_evolution_cycle error:', { jobName: 'JOB', error: String(err) });
-  }
-  logger.info('scp_evolution_cycle complete', { jobName: 'scp_evolution_cycle' });
-}
-
-/** Update company lifecycle states (setup → learning → operating → ...). */
-export async function scpLifecycleTransition(): Promise<void> {
-  logger.info('scp_lifecycle_transition starting', { jobName: 'scp_lifecycle_transition' });
-  try {
-    const { SCPInstance } = await import('../services/scp/instance.js');
-    const products = await getAllActiveProducts();
-    for (const row of products.rows) {
-      const p = row as Record<string, string>;
-      if (p.scp_status === 'active') {
-        try {
-          const instance = new SCPInstance(p.id);
-          await instance.updateLifecycleState();
-        } catch (err) {
-          logger.error(`scp_lifecycle_transition error for ${p.id}:`, { jobName: 'scp_lifecycle_transition', error: String(err) });
-        }
-      }
-    }
-  } catch (err) {
-    logger.error('JOB: scp_lifecycle_transition error:', { jobName: 'JOB', error: String(err) });
-  }
-  logger.info('scp_lifecycle_transition complete', { jobName: 'scp_lifecycle_transition' });
-}
-
 // ─── SCP Remediation Sync — Daily 8:00 UTC ───────────────────────────────────
-
-export async function scpRemediationSync(): Promise<void> {
-  logger.info('scp_remediation_sync starting', { jobName: 'scp_remediation_sync' });
-  try {
-    const { getRemediationSummary } = await import('../services/scp/remediation.js');
-    const products = await getAllActiveProducts();
-    for (const row of products.rows) {
-      const p = row as Record<string, string>;
-      try {
-        const summary = await getRemediationSummary(p.id);
-        if (summary.open > 0) {
-          logger.info(`scp_remediation_sync: ${p.name}: ${summary.open} open remediations (critical:${summary.critical}, high:${summary.high})`, { jobName: 'scp_remediation_sync' });
-        }
-      } catch {
-        // Non-fatal per product
-      }
-    }
-  } catch (err) {
-    logger.error('scp_remediation_sync: Remediation sync error:', { jobName: 'scp_remediation_sync', error: String(err) });
-  }
-  logger.info('scp_remediation_sync complete', { jobName: 'scp_remediation_sync' });
-}
 
 // ─── SCP Temporal Analysis — Monday 5:00 UTC ─────────────────────────────────
 
-async function scpTemporalAnalysis(): Promise<void> {
-  // Weekly: analyze temporal trends for all active SCP products
-  const { query } = await import('../db/client.js');
-  const { getSignalTimeline, analyzeTemporalTrends } = await import('../services/scp/temporal.js');
-  const products = await query(`SELECT id FROM products WHERE ${operatingProduct()}`);
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      const timeline = await getSignalTimeline(p.id, 90);
-      if (timeline.length >= 7) {
-        await analyzeTemporalTrends(p.id, timeline);
-        logger.info(`temporal: Analyzed ${p.id}: ${timeline.length} data points`, { jobName: 'temporal' });
-      }
-    } catch (err) {
-      logger.error(`temporal: Failed for ${p.id}:`, { jobName: 'temporal', error: String(err) });
-    }
-  }
-}
-
 // ─── SCP Cost Report — 1st of Month ──────────────────────────────────────────
-
-async function scpCostReport(): Promise<void> {
-  // Monthly: update 30d trailing AI cost on all active products
-  const { query } = await import('../db/client.js');
-  const costData = await query(
-    `SELECT product_id, SUM(cost_usd) as total_cost
-     FROM agent_cost_log
-     WHERE logged_at >= datetime('now', '-30 days')
-     GROUP BY product_id`
-  );
-  for (const row of costData.rows) {
-    const r = row as Record<string, unknown>;
-    await query(
-      `UPDATE products SET ai_cost_trailing_30d_usd = ? WHERE id = ?`,
-      [r.total_cost as number ?? 0, r.product_id as string]
-    );
-  }
-  logger.info(`cost_report: Updated 30d costs for ${costData.rows.length} products`, { jobName: 'cost_report' });
-}
 
 // ─── SCP Wisdom Synthesis — Sunday 3:00 UTC ───────────────────────────────────
 
-async function scpWisdomSynthesis(): Promise<void> {
-  // Weekly: synthesize wisdom patterns for all active SCP products
-  const { query } = await import('../db/client.js');
-  const { synthesizeWisdomPatterns } = await import('../services/scp/wisdom.js');
-  const products = await query(`SELECT id FROM products WHERE ${operatingProduct()}`);
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      await synthesizeWisdomPatterns(p.id);
-    } catch (err) {
-      logger.error(`wisdom: synthesis failed for ${p.id}:`, { jobName: 'wisdom', error: String(err) });
-    }
-  }
-}
-
 // ─── SCP Intelligence Benchmarks — Daily 2:00 UTC ────────────────────────────
-
-async function scpIntelligenceBenchmarks(): Promise<void> {
-  // Daily: recompute intelligence benchmarks across all products
-  const { computeAndStoreBenchmarks } = await import('../services/scp/network.js');
-  await computeAndStoreBenchmarks();
-}
 
 // ─── SCP DNA Nudge — Daily 10:00 UTC ─────────────────────────────────────────
 
-async function scpDNANudge(): Promise<void> {
-  // Daily: nudge founders whose DNA completion < 60% to fill in more context
-  // This gives agents better context for their analyses
-  logger.info('scp_dna_nudge starting', { jobName: 'scp_dna_nudge' });
-  const { query: dbQuery } = await import('../db/client.js');
-  const incompleteProducts = await dbQuery(
-    `SELECT p.id, p.name, f.email
-     FROM products p
-     JOIN founders f ON p.owner_id = f.id
-     WHERE ${operatingProduct('p')}
-       AND p.company_lifecycle_state IN ('setup', 'learning')
-     LIMIT 50`
-  );
-  logger.info(`dna_nudge: Found ${incompleteProducts.rows.length} products in early lifecycle`, { jobName: 'dna_nudge' });
-  // In production: send email nudge via notification service
-  logger.info('scp_dna_nudge complete', { jobName: 'scp_dna_nudge' });
-}
-
 // ─── SCP v3: Lifecycle Rules — Every 4h ──────────────────────────────────────
-
-async function scpLifecycleRules(): Promise<void> {
-  logger.info('scp_lifecycle_rules starting', { jobName: 'scp_lifecycle_rules' });
-  const { query: dbQuery } = await import('../db/client.js');
-  const products = await dbQuery(
-    `SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`
-  );
-  const { evaluateLifecycleRules } = await import('../services/customer/lifecycle.js');
-  let totalTriggered = 0;
-  for (const row of products.rows) {
-    const { rules_triggered } = await evaluateLifecycleRules((row as Record<string, unknown>).id as string);
-    totalTriggered += rules_triggered;
-  }
-  logger.info(`scp_lifecycle_rules: ${totalTriggered} rules triggered across ${products.rows.length} products`, { jobName: 'scp_lifecycle_rules' });
-}
 
 // ─── SCP v3: AI P&L Update — Daily 1:00 UTC ──────────────────────────────────
 
-async function scpPLUpdate(): Promise<void> {
-  logger.info('scp_pl_update starting', { jobName: 'scp_pl_update' });
-  const { query: dbQuery } = await import('../db/client.js');
-  const products = await dbQuery(
-    `SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`
-  );
-  const { getAICompanyPL } = await import('../services/financial/economics.js');
-  for (const row of products.rows) {
-    const productId = (row as Record<string, unknown>).id as string;
-    const pl = await getAICompanyPL(productId, 30);
-    // Update products table with latest AI cost trailing 30d
-    await dbQuery(
-      `UPDATE products SET ai_cost_trailing_30d_usd=?, attributed_revenue_trailing_30d_usd=?, updated_at=CURRENT_TIMESTAMP WHERE id=?`,
-      [pl.costs.total_usd, pl.attributed_revenue.total_usd, productId]
-    );
-  }
-  logger.info(`scp_pl_update: Updated P&L for ${products.rows.length} products`, { jobName: 'scp_pl_update' });
-}
-
 // ─── SCP v3: Monthly Strategy Synthesis — 1st of month ───────────────────────
-
-async function scpStrategySynthesis(): Promise<void> {
-  logger.info('scp_strategy_synthesis starting', { jobName: 'scp_strategy_synthesis' });
-  const { query: dbQuery } = await import('../db/client.js');
-  const products = await dbQuery(
-    `SELECT id FROM products WHERE ${operatingProduct()} AND company_lifecycle_state NOT IN ('setup') LIMIT 50`
-  );
-  const { generateStrategicSynthesis } = await import('../services/strategy/synthesis.js');
-  let generated = 0;
-  for (const row of products.rows) {
-    try {
-      await generateStrategicSynthesis((row as Record<string, unknown>).id as string);
-      generated++;
-    } catch (err) {
-      logger.error(`scp_strategy_synthesis: Failed for ${(row as Record<string, unknown>).id}`, { jobName: 'scp_strategy_synthesis', error: String(err) });
-    }
-  }
-  logger.info(`scp_strategy_synthesis: Generated ${generated} syntheses`, { jobName: 'scp_strategy_synthesis' });
-}
 
 // ─── SCP v3: Integration Fabric Sync — Every Hour ────────────────────────────
 
-async function scpIntegrationFabricSync(): Promise<void> {
-  logger.info('scp_integration_fabric_sync starting', { jobName: 'scp_integration_fabric_sync' });
-  const { query: dbQuery } = await import('../db/client.js');
-  const products = await dbQuery(
-    `SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`
-  );
-  const { syncPostHogEvents } = await import('../services/integration/posthog.js');
-  const { syncGitHubEvents } = await import('../services/integration/github.js');
-
-  // The same shape as the extended sync below: both of these return
-  // `{ synced, error? }`, the `error` was never read, a throw was swallowed per
-  // product, and neither wrote `integration_sync_log` — so the integrations
-  // page said no sync had been attempted while this ran hourly.
-  const { recordSyncAttempt } = await import('../services/integrations/health.js');
-  const providers: Array<{ name: string; run: (p: string) => Promise<{ synced: number; error?: string }> }> = [
-    { name: 'posthog', run: syncPostHogEvents },
-    { name: 'github', run: syncGitHubEvents },
-  ];
-
-  const recorded = new Map<string, number>(providers.map((p) => [p.name, 0]));
-  let failed = 0;
-
-  for (const row of products.rows) {
-    const productId = (row as Record<string, unknown>).id as string;
-    for (const { name, run } of providers) {
-      const startedAt = new Date().toISOString();
-      try {
-        const result = await run(productId);
-        await recordSyncAttempt({
-          productId, provider: name, startedAt,
-          recordsProcessed: result.synced ?? 0, error: result.error ?? null,
-        });
-        if (result.error) {
-          failed += 1;
-          logger.error(`scp_integration_fabric_sync: ${name} failed for ${productId}: ${result.error}`,
-            { jobName: 'scp_integration_fabric_sync' });
-        } else {
-          recorded.set(name, (recorded.get(name) ?? 0) + (result.synced ?? 0));
-        }
-      } catch (err) {
-        failed += 1;
-        const message = err instanceof Error ? err.message : String(err);
-        await recordSyncAttempt({
-          productId, provider: name, startedAt, recordsProcessed: 0, error: message,
-        }).catch(() => { /* the throw above is the finding */ });
-        logger.error(`scp_integration_fabric_sync: ${name} threw for ${productId}: ${message}`,
-          { jobName: 'scp_integration_fabric_sync' });
-      }
-    }
-  }
-
-  // Summaries stored, not raw provider events: each run writes a handful of
-  // trend rows.
-  const line = `scp_integration_fabric_sync: PostHog ${recorded.get('posthog') ?? 0} summaries, `
-    + `GitHub ${recorded.get('github') ?? 0} summaries, ${failed} provider sync(s) failed`;
-  if (failed > 0) logger.error(line, { jobName: 'scp_integration_fabric_sync' });
-  else logger.info(line, { jobName: 'scp_integration_fabric_sync' });
-}
-
 // ─── SCP v4: Extended Integrations Sync — Every 2h ───────────────────────────
 
-async function scpExtendedIntegrationsSync(): Promise<void> {
-  logger.info('scp_extended_integrations_sync starting', { jobName: 'scp_extended_integrations_sync' });
-  const { query: dbQuery } = await import('../db/client.js');
-  const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
-
-  // FIVE WAYS THIS LOST A FAILURE, and one number that could not tell "nothing
-  // to sync" from "everything broken".
-  //
-  //  1. Each import was wrapped in `.catch(() => ({ syncXEvents: async () =>
-  //     ({ synced: 0 }) }))`, so a module that could not be LOADED — a
-  //     deployment fault — became a function reporting a clean zero.
-  //  2. `allSettled` results were read as `r.status === 'fulfilled' ? synced :
-  //     0`, so a sync that THREW contributed zero and was never mentioned.
-  //  3. All six of these functions return `{ synced, error? }` and set
-  //     `integrations.last_error` themselves. The `error` field was never read.
-  //  4. A per-product `catch {}` swallowed whatever was left.
-  //  5. Nothing was written to `integration_sync_log`, so the integrations
-  //     page — which is careful and right — told the founder "No sync has been
-  //     attempted in the last 7 days" about integrations Foundry had been
-  //     syncing every two hours.
-  //
-  // The imports are hoisted out of the loop and no longer substituted: a module
-  // that will not load should fail this job once, loudly, rather than a hundred
-  // times silently. Each provider records its own attempt, so a failure reaches
-  // the founder's page rather than only this log line.
-  const [
-    { syncSentryEvents },
-    { syncLinearEvents },
-    { syncIntercomEvents },
-    { syncSlackEvents },
-  ] = await Promise.all([
-    import('../services/integration/sentry.js'),
-    import('../services/integration/linear.js'),
-    import('../services/integration/intercom.js'),
-    import('../services/integration/slack.js'),
-  ]);
-  const { recordSyncAttempt } = await import('../services/integrations/health.js');
-
-  const providers: Array<{ name: string; run: (p: string) => Promise<{ synced: number; error?: string }> }> = [
-    { name: 'sentry', run: syncSentryEvents },
-    { name: 'linear', run: syncLinearEvents },
-    { name: 'intercom', run: syncIntercomEvents },
-    { name: 'slack', run: syncSlackEvents },
-  ];
-
-  let recorded = 0;
-  let failed = 0;
-  for (const row of products.rows) {
-    const productId = (row as Record<string, unknown>).id as string;
-    await Promise.all(providers.map(async ({ name, run }) => {
-      const startedAt = new Date().toISOString();
-      try {
-        const result = await run(productId);
-        await recordSyncAttempt({
-          productId, provider: name, startedAt,
-          recordsProcessed: result.synced ?? 0, error: result.error ?? null,
-        });
-        if (result.error) {
-          failed += 1;
-          logger.error(`scp_extended_integrations_sync: ${name} failed for ${productId}: ${result.error}`,
-            { jobName: 'scp_extended_integrations_sync' });
-        } else {
-          recorded += result.synced ?? 0;
-        }
-      } catch (err) {
-        failed += 1;
-        const message = err instanceof Error ? err.message : String(err);
-        await recordSyncAttempt({
-          productId, provider: name, startedAt, recordsProcessed: 0, error: message,
-        }).catch(() => { /* the throw above is the finding; do not mask it with a second one */ });
-        logger.error(`scp_extended_integrations_sync: ${name} threw for ${productId}: ${message}`,
-          { jobName: 'scp_extended_integrations_sync' });
-      }
-    }));
-  }
-  // `recorded` counts summary rows the syncs wrote, not raw provider events —
-  // each of these functions stores a handful of trend summaries per run.
-  const line = `scp_extended_integrations_sync: recorded ${recorded} summaries across `
-    + `${products.rows.length} products, ${failed} provider sync(s) failed`;
-  if (failed > 0) logger.error(line, { jobName: 'scp_extended_integrations_sync' });
-  else logger.info(line, { jobName: 'scp_extended_integrations_sync' });
-}
-
 // ─── SCP v4: Decision Retrospectives — Monday 9:00 UTC ───────────────────────
-
-async function scpDecisionRetrospectives(): Promise<void> {
-  logger.info('scp_decision_retrospectives starting', { jobName: 'scp_decision_retrospectives' });
-  try {
-    const { getDecisionsDueForRetrospective } = await import('../services/scp/decision-log.js');
-    const { query: dbQuery } = await import('../db/client.js');
-
-    const products = await dbQuery(`SELECT id, owner_id, name FROM products WHERE ${operatingProduct()} LIMIT 100`);
-    let notified = 0;
-
-    for (const row of products.rows) {
-      const p = row as Record<string, unknown>;
-      const due = await getDecisionsDueForRetrospective(p.id as string);
-      if (due.length === 0) continue;
-
-      const { deliver } = await import('../services/ux/interruption.js');
-      await deliver(p.owner_id as string, p.id as string, {
-        // Rating past decisions improves future judgment; it is not urgent.
-        importance: 'attention',
-        title: `${due.length} decision${due.length > 1 ? 's' : ''} ready for retrospective`,
-        body: `Review outcomes for: ${due.slice(0, 2).map(d => `"${d.decision_title}"`).join(', ')}${due.length > 2 ? ` +${due.length - 2} more` : ''}. Rate how each decision played out to improve future judgment.`,
-        actionUrl: '/agents/decisions', actionLabel: 'Review decisions',
-      }, await founderPrefs(p.owner_id as string) as never);
-      notified++;
-    }
-    logger.info(`scp_decision_retrospectives: Notified ${notified} products`, { jobName: 'scp_decision_retrospectives' });
-  } catch (err) {
-    logger.error('scp_decision_retrospectives: Error:', { jobName: 'scp_decision_retrospectives', error: String(err) });
-  }
-}
 
 // ─── Decision expiry — with the retrospective sweep ─────────────────────────
 //
@@ -1505,228 +1122,13 @@ export function reportRun(jobName: string, sentence: string, failed: number): vo
 
 // ─── SCP v5: Prediction Accuracy Check — Daily 6:00 UTC ──────────────────────
 
-async function scpPredictionAccuracyCheck(): Promise<void> {
-  logger.info('scp_prediction_accuracy starting', { jobName: 'scp_prediction_accuracy' });
-  try {
-    const { measurePendingPredictions } = await import('../services/scp/accuracy/tracker.js');
-    const { query: dbQuery } = await import('../db/client.js');
-    const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
-    let totalMeasured = 0;
-    let failed = 0;
-    for (const row of products.rows) {
-      const productId = (row as Record<string, unknown>).id as string;
-      try {
-        const result = await measurePendingPredictions(productId);
-        totalMeasured += result.measured;
-      } catch (err) {
-        failed += 1;
-        logSubjectFailure('scp_prediction_accuracy', productId, err);
-      }
-    }
-    reportRun('scp_prediction_accuracy', `Measured ${totalMeasured} predictions`, failed);
-  } catch (err) {
-    logger.error('scp_prediction_accuracy: Error:', { jobName: 'scp_prediction_accuracy', error: String(err) });
-  }
-}
-
 // ─── SCP v5: Compressed Brief — Monday 7:00 UTC ───────────────────────────────
-
-async function scpCompressedBrief(): Promise<void> {
-  logger.info('scp_compressed_brief starting', { jobName: 'scp_compressed_brief' });
-  try {
-    const { generateCompressedWeeklyBrief } = await import('../services/scp/briefing/compressed.js');
-    const { query: dbQuery } = await import('../db/client.js');
-    const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
-    let generated = 0;
-    let failed = 0;
-    for (const row of products.rows) {
-      const productId = (row as Record<string, unknown>).id as string;
-      try {
-        await generateCompressedWeeklyBrief(productId);
-        generated++;
-      } catch (err) {
-        failed += 1;
-        logSubjectFailure('scp_compressed_brief', productId, err);
-      }
-    }
-    reportRun('scp_compressed_brief', `Generated ${generated} compressed briefs`, failed);
-  } catch (err) {
-    logger.error('scp_compressed_brief: Error:', { jobName: 'scp_compressed_brief', error: String(err) });
-  }
-}
 
 // ─── SCP v5: Scenario Refresh — Monday 5:00 UTC ───────────────────────────────
 
-async function scpScenarioRefresh(): Promise<void> {
-  logger.info('scp_scenario_refresh starting', { jobName: 'scp_scenario_refresh' });
-  try {
-    const { generateScenariosForProduct } = await import('../services/scp/forecasting/runway.js');
-    const { query: dbQuery } = await import('../db/client.js');
-    const products = await dbQuery(
-      `SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`
-    );
-    let generated = 0;
-    let awaitingPosition = 0;
-    let failed = 0;
-    for (const row of products.rows) {
-      const productId = (row as Record<string, unknown>).id as string;
-      try {
-        // Null means the company has not stated its cash position, which is a
-        // normal state and not a failure — counted apart so the log does not
-        // read as though every company were being modelled.
-        if (await generateScenariosForProduct(productId) === null) awaitingPosition++;
-        else generated++;
-      } catch (err) {
-        failed += 1;
-        logSubjectFailure('scp_scenario_refresh', productId, err);
-      }
-    }
-    reportRun('scp_scenario_refresh',
-      `Generated scenarios for ${generated} products, `
-      + `${awaitingPosition} awaiting a stated cash position`, failed);
-  } catch (err) {
-    logger.error('scp_scenario_refresh: Error:', { jobName: 'scp_scenario_refresh', error: String(err) });
-  }
-}
-
 // ─── SCP v6: Debate, Failure Pattern Scan, Prompt Evolution ──────────────────
 
-async function scpDebateRun(): Promise<void> {
-  logger.info('scp_debate_run starting', { jobName: 'scp_debate_run' });
-  try {
-    const { query } = await import('../db/client.js');
-    const rows = await query(
-      `SELECT DISTINCT ai.product_id FROM agent_instances ai
-         JOIN products p ON p.id = ai.product_id
-        WHERE ai.status = 'active' AND ${operatingProduct('p')}`, []);
-    const today = new Date().toISOString().slice(0, 10);
-    let ran = 0;
-    let failed = 0;
-    for (const row of rows.rows) {
-      const productId = String((row as Record<string, unknown>)['product_id']);
-      try {
-        const { runDebateForProduct } = await import('../services/scp/debate/orchestrator.js');
-        await runDebateForProduct(productId, today);
-        ran++;
-      } catch (err) {
-        failed += 1;
-        logSubjectFailure('scp_debate_run', productId, err);
-      }
-    }
-    reportRun('scp_debate_run', `Ran debate for ${ran} products`, failed);
-  } catch (err) {
-    logger.error('scp_debate_run: Error:', { jobName: 'scp_debate_run', error: String(err) });
-  }
-}
-
-async function scpFailurePatternScan(): Promise<void> {
-  logger.info('scp_failure_pattern_scan starting', { jobName: 'scp_failure_pattern_scan' });
-  try {
-    const { query } = await import('../db/client.js');
-    const rows = await query(
-      `SELECT DISTINCT ai.product_id FROM agent_instances ai
-         JOIN products p ON p.id = ai.product_id
-        WHERE ai.status = 'active' AND ${operatingProduct('p')}`, []);
-    let scanned = 0;
-    let failed = 0;
-    for (const row of rows.rows) {
-      const productId = String((row as Record<string, unknown>)['product_id']);
-      try {
-        const { seedDefaultPatterns, scanForFailurePatterns } = await import('../services/network/failure-library.js');
-        await seedDefaultPatterns();
-        await scanForFailurePatterns(productId);
-        scanned++;
-      } catch (err) {
-        failed += 1;
-        logSubjectFailure('scp_failure_pattern_scan', productId, err);
-      }
-    }
-    reportRun('scp_failure_pattern_scan', `Scanned ${scanned} products`, failed);
-  } catch (err) {
-    logger.error('scp_failure_pattern_scan: Error:', { jobName: 'scp_failure_pattern_scan', error: String(err) });
-  }
-}
-
-async function scpPromptEvolution(): Promise<void> {
-  logger.info('scp_prompt_evolution starting', { jobName: 'scp_prompt_evolution' });
-  try {
-    const { query } = await import('../db/client.js');
-    const rows = await query(
-      `SELECT DISTINCT ai.product_id FROM agent_instances ai
-         JOIN products p ON p.id = ai.product_id
-        WHERE ai.status = 'active' AND ${operatingProduct('p')}`, []);
-    let evolved = 0;
-    let failed = 0;
-    for (const row of rows.rows) {
-      const productId = String((row as Record<string, unknown>)['product_id']);
-      try {
-        const { generatePromptMutations, recordMutationOutcome } = await import('../services/scp/accuracy/prompt-evolver.js');
-        await recordMutationOutcome(productId, '');  // update outcome stats for active mutations
-        await generatePromptMutations(productId);
-        evolved++;
-      } catch (err) {
-        failed += 1;
-        logSubjectFailure('scp_prompt_evolution', productId, err);
-      }
-    }
-    reportRun('scp_prompt_evolution', `Processed ${evolved} products`, failed);
-  } catch (err) {
-    logger.error('scp_prompt_evolution: Error:', { jobName: 'scp_prompt_evolution', error: String(err) });
-  }
-}
-
-async function scpExecutionPlaybookEval(): Promise<void> {
-  logger.info('scp_playbook_eval starting', { jobName: 'scp_playbook_eval' });
-  try {
-    const { query } = await import('../db/client.js');
-    const rows = await query(
-      `SELECT DISTINCT ai.product_id FROM agent_instances ai
-         JOIN products p ON p.id = ai.product_id
-        WHERE ai.status = 'active' AND ${operatingProduct('p')}`, []);
-    let triggered = 0;
-    let failed = 0;
-    for (const row of rows.rows) {
-      const productId = String((row as Record<string, unknown>)['product_id']);
-      try {
-        const { evaluatePlaybooksForProduct } = await import('../services/scp/playbooks/execution-engine.js');
-        const result = await evaluatePlaybooksForProduct(productId);
-        triggered += result.triggered;
-      } catch (err) {
-        failed += 1;
-        logSubjectFailure('scp_playbook_eval', productId, err);
-      }
-    }
-    reportRun('scp_playbook_eval', `Triggered ${triggered} playbook actions`, failed);
-  } catch (err) {
-    logger.error('scp_playbook_eval: Error:', { jobName: 'scp_playbook_eval', error: String(err) });
-  }
-}
-
 // ─── SCP v7: Signal Event Processing — Hourly ────────────────────────────────
-
-async function scpSignalEvents(): Promise<void> {
-  logger.info('scp_signal_events starting', { jobName: 'scp_signal_events' });
-  try {
-    const { query: dbQuery } = await import('../db/client.js');
-    const { processPendingSignalEvents } = await import('../services/scp/events/dispatcher.js');
-    const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
-    let total = 0;
-    let failed = 0;
-    for (const row of products.rows) {
-      const productId = (row as Record<string, unknown>).id as string;
-      try {
-        const processed = await processPendingSignalEvents(productId);
-        total += processed;
-      } catch (err) {
-        failed += 1;
-        logSubjectFailure('scp_signal_events', productId, err);
-      }
-    }
-    reportRun('scp_signal_events', `Processed ${total} signal events`, failed);
-  } catch (err) {
-    logger.error('scp_signal_events: Error:', { jobName: 'scp_signal_events', error: String(err) });
-  }
-}
 
 // ─── SCP v7: Monthly ROI Computation — REMOVED ───────────────────────────────
 //
@@ -1748,61 +1150,7 @@ async function scpSignalEvents(): Promise<void> {
 //
 // ─── SCP v7: Founder State Assessment — Daily 7:00 UTC ───────────────────────
 
-async function scpFounderStateAssessment(): Promise<void> {
-  logger.info('scp_founder_state starting', { jobName: 'scp_founder_state' });
-  try {
-    const { query: dbQuery } = await import('../db/client.js');
-    const { detectBehavioralSignals, assessFounderState } = await import('../services/scp/founder/decision-quality.js');
-    const founders = await dbQuery(
-      `SELECT DISTINCT f.id FROM founders f
-       JOIN products p ON p.owner_id = f.id
-       WHERE ${operatingProduct('p')}
-       LIMIT 100`
-    );
-    let assessed = 0;
-    let failed = 0;
-    for (const row of founders.rows) {
-      const founderId = (row as Record<string, unknown>).id as string;
-      try {
-        await detectBehavioralSignals(founderId);
-        await assessFounderState(founderId);
-        assessed++;
-      } catch (err) {
-        failed += 1;
-        logSubjectFailure('scp_founder_state', founderId, err);
-      }
-    }
-    reportRun('scp_founder_state', `Assessed ${assessed} founders`, failed);
-  } catch (err) {
-    logger.error('scp_founder_state: Error:', { jobName: 'scp_founder_state', error: String(err) });
-  }
-}
-
 // ─── SCP v7: Priority Queue Rebuild — Every 30 minutes ───────────────────────
-
-async function scpPriorityRebuild(): Promise<void> {
-  logger.info('scp_priority_rebuild starting', { jobName: 'scp_priority_rebuild' });
-  try {
-    const { query: dbQuery } = await import('../db/client.js');
-    const { rebuildPriorityQueue } = await import('../services/scp/priority/ranker.js');
-    const products = await dbQuery(`SELECT id FROM products WHERE ${operatingProduct()} LIMIT 100`);
-    let total = 0;
-    let failed = 0;
-    for (const row of products.rows) {
-      const productId = (row as Record<string, unknown>).id as string;
-      try {
-        const inserted = await rebuildPriorityQueue(productId);
-        total += inserted;
-      } catch (err) {
-        failed += 1;
-        logSubjectFailure('scp_priority_rebuild', productId, err);
-      }
-    }
-    reportRun('scp_priority_rebuild', `Rebuilt ${total} priority actions`, failed);
-  } catch (err) {
-    logger.error('scp_priority_rebuild: Error:', { jobName: 'scp_priority_rebuild', error: String(err) });
-  }
-}
 
 // ─── 20. Growth Stage Detection — Daily 5:30 UTC ─────────────────────────────
 export async function stageDetection(): Promise<void> {
@@ -1960,59 +1308,6 @@ export async function regulatoryScan(): Promise<void> {
     }
   }
   logger.info('regulatory_scan complete', { jobName: 'regulatory_scan' });
-}
-
-// ─── V3.1 Layer A: Team Health Aggregate — Monday 5:30 UTC ───────────────────
-// Computes Ambros's six metrics weekly per product. Reads from existing
-// tables (decisions, agent_messages, agent_evolution_versions,
-// agent_predictions); writes to team_health_metrics.
-
-export async function teamHealthAggregate(): Promise<void> {
-  const { computeAndStoreHealth } = await import('../services/discipline/team-health.js');
-  const products = await getAllActiveProducts();
-  const weekStart = mondayOfWeek(new Date());
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      await computeAndStoreHealth({ product_id: p.id, week_starting: weekStart });
-    } catch (err) {
-      logger.error(`team_health_aggregate error for ${p.id}:`, {
-        jobName: 'team_health_aggregate',
-        error: String(err),
-      });
-    }
-  }
-  logger.info('team_health_aggregate complete', { jobName: 'team_health_aggregate' });
-}
-
-// ─── V3.1 Layer A revisit: Outcome Tree Health — Monday 6:00 UTC ─────────────
-// Pull latest metric_snapshots into branches' current_value where metric_key
-// matches. Mark stale (>90d, no current_value) branches as superseded.
-// LLM-driven tree generation is deferred.
-
-export async function outcomeTreeHealth(): Promise<void> {
-  const { refreshOutcomeTreeHealth } = await import(
-    '../services/destination/outcome-tree-refresh.js'
-  );
-  const products = await getAllActiveProducts();
-  for (const row of products.rows) {
-    const p = row as Record<string, string>;
-    try {
-      const r = await refreshOutcomeTreeHealth(p.id);
-      if (r.refreshed > 0 || r.superseded > 0) {
-        logger.info(
-          `outcome_tree_health ${p.id}: refreshed=${r.refreshed} superseded=${r.superseded} active=${r.total_active}`,
-          { jobName: 'outcome_tree_health' }
-        );
-      }
-    } catch (err) {
-      logger.error(`outcome_tree_health error for ${p.id}:`, {
-        jobName: 'outcome_tree_health',
-        error: String(err),
-      });
-    }
-  }
-  logger.info('outcome_tree_health complete', { jobName: 'outcome_tree_health' });
 }
 
 // ─── V3.1 Layer C: Idempotency Cleanup — Daily 4:00 UTC ──────────────────────
@@ -2348,13 +1643,18 @@ export async function theWeekTick(): Promise<void> {
 // absence of a business that does not exist here. Private Foundry has one owner
 // and no funnel; the shape they were built for is Commercial Foundry's.
 //
-// WHAT IS RETIRED AND WHAT IS NOT. The SCHEDULES are retired: nothing here runs
-// on a timer any more. The CODE is preserved, exactly as the commercial surface
-// is preserved — it is reached at boot by the provisioner and by two live
-// routes, and deleting thirty-nine modules to stop a cron would be a much
-// larger change than the noise it removes. Listing them here rather than
-// deleting the entries keeps each function referenced, keeps the reason beside
-// the name, and makes a silent reinstatement impossible to do by accident.
+// WHAT IS RETIRED, AND THEN DELETED. The schedules stopped first, with the code
+// kept while the owner decided. The owner decided on 30 September 2026
+// (PENDING 16, "Retire them"), and Roadmap 2027 R4 and R9 deleted the code:
+// the twelve agents, these loops, every module only they reached, the public
+// API that served their briefings, and the tables nothing could touch after
+// (migration 375, every row kept in `retired_rows`). The code before the
+// deletion is commit 1864d6dc.
+//
+// WHY THE NAMES STAY. A retired name is REFUSED, not absent: `job:run` answers
+// a name below with what it was and why it went, rather than "Unknown job", so
+// nobody re-creates one believing it never existed. A name here may never also
+// be in `JOB_REGISTRY`.
 //
 // TWO LOOPS STAY IN THE REGISTRY, and they are not cognition:
 //   `scp_expire_overdue_decisions`  expires overdue rows in `decisions`, which
@@ -2362,36 +1662,41 @@ export async function theWeekTick(): Promise<void> {
 //   `scp_webhook_delivery_cleanup`  deletes delivery records over thirty days
 //                                   old. Retention hygiene, no model, no cost.
 //
-// ANYTHING HERE MAY COME BACK — by being put in `JOB_REGISTRY` deliberately,
-// with a reason, by somebody who has read what a fortnight of it produced.
+// ANYTHING HERE MAY COME BACK — rebuilt, deliberately, with a reason, by
+// somebody who has read what a fortnight of it produced.
 // =============================================================================
-export const RETIRED_LOOPS: Record<string, { fn: () => Promise<void>; was: string }> = {
-  scp_agent_runner: { fn: scpAgentRunner, was: 'Run due agents for all active SCP companies (every hour)' },
-  scp_daily_briefing: { fn: scpDailyBriefing, was: 'Generate CEO briefings for all SCP companies (daily 5:30 UTC)' },
-  scp_evolution_cycle: { fn: scpEvolutionCycle, was: 'Run evolution synthesis for all SCP agents (daily 4:00 UTC)' },
-  scp_lifecycle_transition: { fn: scpLifecycleTransition, was: 'Evaluate company lifecycle state transitions (daily 6:00 UTC)' },
-  scp_wisdom_synthesis: { fn: scpWisdomSynthesis, was: 'Synthesize wisdom patterns for all active SCP products (Sunday 3:00 UTC)' },
-  scp_intelligence_benchmarks: { fn: scpIntelligenceBenchmarks, was: 'Recompute intelligence benchmarks across all products (daily 2:00 UTC)' },
-  scp_remediation_sync: { fn: scpRemediationSync, was: 'Daily agent remediation sync and health logging (daily 8:00 UTC)' },
-  scp_temporal_analysis: { fn: scpTemporalAnalysis, was: 'Weekly temporal trend analysis for all SCP companies (Monday 5:00 UTC)' },
-  scp_dna_nudge: { fn: scpDNANudge, was: 'Nudge early-lifecycle SCP founders to complete DNA context (daily 10:00 UTC)' },
-  scp_cost_report: { fn: scpCostReport, was: 'Monthly 30d AI cost rollup for all products (1st of month)' },
-  scp_lifecycle_rules: { fn: scpLifecycleRules, was: 'Evaluate customer lifecycle rules for all SCP products (every 4h)' },
-  scp_pl_update: { fn: scpPLUpdate, was: 'Update AI Company P&L attribution for all products (daily 1:00 UTC)' },
-  scp_strategy_synthesis: { fn: scpStrategySynthesis, was: 'Generate monthly strategic synthesis for all products (1st of month)' },
-  scp_integration_fabric_sync: { fn: scpIntegrationFabricSync, was: 'Sync PostHog and GitHub into integration fabric (every hour)' },
-  scp_extended_integrations_sync: { fn: scpExtendedIntegrationsSync, was: 'Sync Sentry, Linear, Intercom, Slack integrations (every 2h)' },
-  scp_prediction_accuracy: { fn: scpPredictionAccuracyCheck, was: 'Measure pending agent predictions against actual outcomes (daily 6:00 UTC)' },
-  scp_compressed_brief: { fn: scpCompressedBrief, was: 'Generate compressed weekly brief for all SCP products (Monday 7:00 UTC)' },
-  scp_scenario_refresh: { fn: scpScenarioRefresh, was: 'Refresh Monte Carlo runway scenarios for all SCP products (Monday 5:00 UTC)' },
-  scp_debate_run: { fn: scpDebateRun, was: 'Run challenger/synthesizer debate pass after daily agent runs (daily 8:00 UTC)' },
-  scp_failure_pattern_scan: { fn: scpFailurePatternScan, was: 'Scan all products for failure pattern matches (daily 9:00 UTC)' },
-  scp_prompt_evolution: { fn: scpPromptEvolution, was: 'Generate prompt mutation suggestions for underperforming agents (Sunday 4:00 UTC)' },
-  scp_playbook_eval: { fn: scpExecutionPlaybookEval, was: 'Evaluate execution playbook conditions for all active products (hourly)' },
-  scp_decision_retrospectives: { fn: scpDecisionRetrospectives, was: 'Notify founders of decisions due for 90-day retrospective (Monday)' },
-  scp_signal_events: { fn: scpSignalEvents, was: 'Process pending signal events and dispatch to target agents (hourly)' },
-  scp_founder_state: { fn: scpFounderStateAssessment, was: 'Detect behavioral signals and assess founder state (daily 7:00 UTC)' },
-  scp_priority_rebuild: { fn: scpPriorityRebuild, was: 'Rebuild priority action queue for One Thing banner (every 30 min)' },
+export const RETIRED_LOOPS: Readonly<Record<string, string>> = {
+  scp_agent_runner: 'Run due agents for all active SCP companies (every hour)',
+  scp_daily_briefing: 'Generate CEO briefings for all SCP companies (daily 5:30 UTC)',
+  scp_evolution_cycle: 'Run evolution synthesis for all SCP agents (daily 4:00 UTC)',
+  scp_lifecycle_transition: 'Evaluate company lifecycle state transitions (daily 6:00 UTC)',
+  scp_wisdom_synthesis: 'Synthesize wisdom patterns for all active SCP products (Sunday 3:00 UTC)',
+  scp_intelligence_benchmarks: 'Recompute intelligence benchmarks across all products (daily 2:00 UTC)',
+  scp_remediation_sync: 'Daily agent remediation sync and health logging (daily 8:00 UTC)',
+  scp_temporal_analysis: 'Weekly temporal trend analysis for all SCP companies (Monday 5:00 UTC)',
+  scp_dna_nudge: 'Nudge early-lifecycle SCP founders to complete DNA context (daily 10:00 UTC)',
+  scp_cost_report: 'Monthly 30d AI cost rollup for all products (1st of month)',
+  scp_lifecycle_rules: 'Evaluate customer lifecycle rules for all SCP products (every 4h)',
+  scp_pl_update: 'Update AI Company P&L attribution for all products (daily 1:00 UTC)',
+  scp_strategy_synthesis: 'Generate monthly strategic synthesis for all products (1st of month)',
+  scp_integration_fabric_sync: 'Sync PostHog and GitHub into integration fabric (every hour)',
+  scp_extended_integrations_sync: 'Sync Sentry, Linear, Intercom, Slack integrations (every 2h)',
+  scp_prediction_accuracy: 'Measure pending agent predictions against actual outcomes (daily 6:00 UTC)',
+  scp_compressed_brief: 'Generate compressed weekly brief for all SCP products (Monday 7:00 UTC)',
+  scp_scenario_refresh: 'Refresh Monte Carlo runway scenarios for all SCP products (Monday 5:00 UTC)',
+  scp_debate_run: 'Run challenger/synthesizer debate pass after daily agent runs (daily 8:00 UTC)',
+  scp_failure_pattern_scan: 'Scan all products for failure pattern matches (daily 9:00 UTC)',
+  scp_prompt_evolution: 'Generate prompt mutation suggestions for underperforming agents (Sunday 4:00 UTC)',
+  scp_playbook_eval: 'Evaluate execution playbook conditions for all active products (hourly)',
+  scp_decision_retrospectives: 'Notify founders of decisions due for 90-day retrospective (Monday)',
+  scp_signal_events: 'Process pending signal events and dispatch to target agents (hourly)',
+  scp_founder_state: 'Detect behavioral signals and assess founder state (daily 7:00 UTC)',
+  scp_priority_rebuild: 'Rebuild priority action queue for One Thing banner (every 30 min)',
+  // Two weekly jobs that measured the society, deleted with it (R9): the
+  // critique and evolution rates of agents that no longer exist, and outcome
+  // trees whose only writer went in R4.
+  team_health_aggregate: 'Aggregate Ambros six metrics weekly per product (Monday 5:30 UTC)',
+  outcome_tree_health: 'Refresh outcome tree current_value from metrics; supersede stale branches (Monday 6:00 UTC)',
 };
 
 export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: string; description: string }> = {
@@ -2468,23 +1773,11 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
     schedule: '0 3 * * *', // Daily at 3:00 UTC
     description: 'Process scheduled data deletions (30-day delay)',
   },
-  // V3.1 Layer A
-  team_health_aggregate: {
-    fn: teamHealthAggregate,
-    schedule: '30 5 * * 1', // Monday 5:30 UTC
-    description: 'Aggregate Ambros six metrics weekly per product',
-  },
   // V3.1 Layer C
   idempotency_cleanup: {
     fn: idempotencyCleanup,
     schedule: '0 4 * * *', // Daily 4:00 UTC
     description: 'Delete expired outbound idempotency keys',
-  },
-  // V3.1 Layer A revisit
-  outcome_tree_health: {
-    fn: outcomeTreeHealth,
-    schedule: '0 6 * * 1', // Monday 6:00 UTC
-    description: 'Refresh outcome tree current_value from metrics; supersede stale branches',
   },
   // Wave 4 / Council 8: data retention policy — archive/delete old rows
   // from agent_messages, audit_log, briefing_decision_links,
@@ -4037,3 +3330,10 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
     description: 'Capital research: on each venue being observed, snapshot the open 15-minute window, seal the forecasts, import official results, and score each question once a day (read-only; no order is possible)',
   },
 };
+
+/** What `job:run` says for a retired name: refused with its reason, never "unknown". */
+export function retiredLoopRefusal(name: string): string | null {
+  const was = RETIRED_LOOPS[name];
+  return was === undefined ? null
+    : `${name} was retired by the owner's decision of 30 September 2026 and deleted (Roadmap 2027 R4/R9). It was: ${was}.`;
+}

@@ -171,18 +171,8 @@ describe('invoke: kill-switch', () => {
     if (!r.ok) expect(r.phase).toBe('kill_switch');
   });
 
-  it('refuses when agent is paused', async () => {
-    await query(
-      `INSERT INTO agent_instances (id, product_id, agent_name, display_name, status)
-       VALUES (?, ?, ?, 'Test Gateway', ?)`,
-      [nanoid(), productId, 'atlas', 'paused']
-    );
-    registerToolHandler('send_email', vi.fn(), TEST_POLICY);
-
-    const r = await invoke(baseReq());
-    expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.phase).toBe('kill_switch');
-  });
+  // 'refuses when agent is paused' was removed in Roadmap 2027 R9: nothing can
+  // set an agent to paused any more, so the kill-switch no longer has that branch.
 });
 
 // ─── Classification refusal ───────────────────────────────────────────────────

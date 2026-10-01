@@ -145,7 +145,8 @@ describe('institutional reachability', () => {
     // directly. If the last caller is ever removed, the ladder loses its
     // supply, and that must fail here rather than in silence.
     const callers = tsFiles(resolve(ROOT, 'src'))
-      .filter((f) => !f.endsWith('services/scp/events/dispatcher.ts'))
+      // The definition moved from `scp/events/dispatcher.ts` in Roadmap 2027 R9.
+      .filter((f) => !f.endsWith('services/institution/signals.ts'))
       .filter((f) => /\bemitSignalEvent\b/.test(readFileSync(f, 'utf8')));
     expect(callers,
       'Nothing produces company evidence. The institution cannot recognise a ' +
@@ -162,7 +163,7 @@ describe('institutional reachability', () => {
     // finding. Each entry names the module that DEFINES the symbol, so a module
     // referring to itself never counts as its own caller.
     const CHAIN: Array<[string, string, string]> = [
-      ['company evidence intake', 'emitSignalEvent', 'services/scp/events/dispatcher.ts'],
+      ['company evidence intake', 'emitSignalEvent', 'services/institution/signals.ts'],
       ['responsibility discovery', 'discoverResponsibilityFromSignal', 'services/institution/discovery.ts'],
       ['founder evidence', 'recordFounderEvidenceAnswer', 'services/institution/founder-evidence.ts'],
       // Without a production caller for the declaration, a company could never

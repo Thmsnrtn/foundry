@@ -95,7 +95,8 @@ describe('the warrants are arguments rather than adjectives', () => {
 
   it('demoted both cadence-driven sites rather than asking the owner', () => {
     // Which model answers a routine internal question is a routing decision.
-    for (const f of ['src/services/scp/agents/oracle.ts', 'src/jobs/index.ts']) {
+    // `scp/agents/oracle.ts` was the other site; deleted in Roadmap 2027 R9.
+    for (const f of ['src/jobs/index.ts']) {
       expect(FRONTIER_WARRANTS.map((w) => w.file)).not.toContain(f);
       expect(readFileSync(join(ROOT, f), 'utf8'))
         .not.toMatch(/(?<![A-Za-z0-9_.])callOpus\s*\(/);

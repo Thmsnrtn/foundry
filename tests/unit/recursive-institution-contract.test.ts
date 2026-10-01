@@ -200,7 +200,6 @@ describe('recursive-institution-v1 contract', () => {
       '../../src/services/institution/development-authority.js');
     const { planDevelopmentChange, executeDevelopmentChange } = await import(
       '../../src/services/institution/development-assisting.js');
-    const { logCost } = await import('../../src/services/financial/economics.js');
 
     const SNAP = 'docs/db/schema.snapshot.sql';
     const CONTENT = '-- generated\nCREATE TABLE x (id TEXT);\n';
@@ -305,11 +304,13 @@ describe('recursive-institution-v1 contract', () => {
     // because no model was used, duration is genuinely measured, and the cost
     // is attributable to the responsibility rather than assumed free. What this
     // does not establish is whether carrying it was worth anything.
-    await logCost({
-      productId: P_FOUNDRY, costType: 'compute', amountUsd: 0,
-      responsibilityId: 'ric_resp', capability: 'development',
-      details: { duration_ms: durationMs, model_invocations: 0 },
-    });
+    // `logCost` went with `financial/economics.ts` in Roadmap 2027 R9; this is
+    // the row it wrote.
+    await query(
+      `INSERT INTO cost_events (id, product_id, agent_name, cost_type, amount_usd, details_json, session_id,
+         responsibility_id, capability)
+       VALUES (?, ?, NULL, 'compute', 0, ?, NULL, 'ric_resp', 'development')`,
+      [`ric_cost_${Date.now()}`, P_FOUNDRY, JSON.stringify({ duration_ms: durationMs, model_invocations: 0 })]);
     // Read from the ledger itself. `financial/institutional-economics.ts` was
     // the reader that answered this — measured spend per responsibility, and the
     // components nobody measures named rather than folded into the sum — and it

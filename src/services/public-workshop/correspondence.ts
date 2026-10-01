@@ -365,6 +365,8 @@ export async function correspondenceMode(founderId: string): Promise<Mode> {
 
 export async function setCorrespondenceMode(input: { founderId: string; mode: Mode; because: string }): Promise<void> {
   const by = `founder:${input.founderId}`;
+// PROVENANCE, NOT INPUT: `changed_by` is recorded for a person reading the row later;
+// no code consumes it, and that is deliberate (write-only-columns baseline).
   const existing = await one('SELECT founder_id FROM workshop_correspondence_policy WHERE founder_id = ?', [input.founderId]);
   if (existing) {
     await query(`UPDATE workshop_correspondence_policy SET mode = ?, because = ?, changed_by = ?, changed_at = datetime('now') WHERE founder_id = ?`,

@@ -234,7 +234,8 @@ describe('the in-app bypass, pinned so it can only shrink', () => {
     // has come due is neither. Migration 182 removed that constraint.
     const src = stripComments(readFileSync('src/jobs/index.ts', 'utf8'), { lineComments: true });
     expect(src).toMatch(/decision_follow_up/);
+    // One (scp_decision_retrospectives) was deleted in Roadmap 2027 R4.
     expect((src.match(/await deliver\(/g) ?? []).length,
-      'eight bells, all through the policy').toBeGreaterThanOrEqual(7);
+      'eight bells, all through the policy').toBeGreaterThanOrEqual(6);
   });
 });

@@ -26,7 +26,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
-import { emitSignalEvent } from '../scp/events/dispatcher.js';
+import { emitSignalEvent } from '../institution/signals.js';
 import { type Responsibility } from '../institution/responsibility.js';
 import { discoverResponsibilityFromSignal } from '../institution/discovery.js';
 

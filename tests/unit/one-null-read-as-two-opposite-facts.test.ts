@@ -22,7 +22,6 @@ vi.mock('../../src/services/ai/client.js', async (importOriginal) => ({
 const { runMigrations } = await import('../../src/db/migrate.js');
 const { query } = await import('../../src/db/client.js');
 const { generateDigest } = await import('../../src/services/digest/generator.js');
-const { getLatestCompressedBrief } = await import('../../src/services/scp/briefing/compressed.js');
 
 // =============================================================================
 // ONE NULL, READ AS TWO OPPOSITE FACTS.
@@ -77,7 +76,6 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await query('DELETE FROM metric_snapshots WHERE product_id = ?', [P]);
-  await query('DELETE FROM weekly_compressed_briefs WHERE product_id = ?', [P]);
   lastPrompt = '';
 });
 
@@ -135,31 +133,5 @@ describe('a week nobody measured', () => {
     // measurement — which is the phrase computeHealthRatio was fixed under.
     expect(digest.mrr_health.indicator).toBe('unknown');
     expect(digest.mrr_health.value).toBeNull();
-  });
-});
-
-describe('a company no agent has scored', () => {
-  it('reports no health score rather than the invented middle of the scale', async () => {
-    await query(
-      `INSERT INTO weekly_compressed_briefs
-         (id, product_id, week_of, health_score, health_trend, one_sentence_status)
-       VALUES (?, ?, date('now'), NULL, 'stable', 'Quiet week.')`, [nanoid(), P]);
-
-    const brief = await getLatestCompressedBrief(P);
-
-    // 50 is the middle of every bar the product draws, and it renders amber.
-    expect(brief?.health_score).toBeNull();
-  });
-
-  it('still reports a score that was actually computed', async () => {
-    await query(
-      `INSERT INTO weekly_compressed_briefs
-         (id, product_id, week_of, health_score, health_trend, one_sentence_status)
-       VALUES (?, ?, date('now'), 50, 'stable', 'Quiet week.')`, [nanoid(), P]);
-
-    const brief = await getLatestCompressedBrief(P);
-
-    // A measured 50 is a real finding and must survive the fix untouched.
-    expect(brief?.health_score).toBe(50);
   });
 });

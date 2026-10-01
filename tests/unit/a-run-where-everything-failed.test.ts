@@ -118,8 +118,9 @@ describe('no scheduled job still swallows a per-subject failure', () => {
     // count follows the registry rather than leading it.
     const reportRunCalls = (src.match(/reportRun\('/g) ?? []).length;
     const failureLogs = (src.match(/logSubjectFailure\('/g) ?? []).length;
-    expect(reportRunCalls).toBe(10);
-    expect(failureLogs).toBe(10);
+    // All ten looping jobs were retired wrappers, deleted in Roadmap 2027 R4.
+    expect(reportRunCalls).toBe(0);
+    expect(failureLogs).toBe(0);
   });
 });
 
@@ -144,7 +145,6 @@ describe('a write that was allowed to fail, but not to be silent', () => {
   //
   // Neither fix changes the flow. Both stop the silence.
   const signalSrc = readFileSync('src/services/signal.ts', 'utf8');
-  const rankerSrc = readFileSync('src/services/scp/priority/ranker.ts', 'utf8');
 
   it('records why signal history was not written', () => {
     expect(signalSrc).not.toContain("} catch {\n    // Non-critical");
@@ -154,11 +154,5 @@ describe('a write that was allowed to fail, but not to be silent', () => {
   it('keeps letting the Signal read succeed anyway', () => {
     // The catch is still a catch: the read must not break because history did.
     expect(signalSrc).toMatch(/catch \(err\) \{[\s\S]*?logger\.error/);
-  });
-
-  it('says how many priority actions were skipped', () => {
-    expect(rankerSrc).toContain('let skipped = 0;');
-    expect(rankerSrc).toContain('priority action skipped for');
-    expect(rankerSrc).toContain('and ${skipped} skipped');
   });
 });

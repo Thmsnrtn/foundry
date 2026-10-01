@@ -3,10 +3,8 @@ process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { readFileSync } from 'node:fs';
-import { nanoid } from 'nanoid';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { getSyncHealth } from '../../src/services/integrations/health.js';
 
 // =============================================================================
 // AN INTEGRATION THAT STOPPED, AND NOBODY SAID SO.
@@ -52,31 +50,8 @@ beforeAll(async () => {
   await query("INSERT INTO products (id, name, owner_id, status) VALUES ('p_sync','Acme','f_sync','active')");
 });
 beforeEach(async () => {
-  await query('DELETE FROM integration_sync_log');
   await query('DELETE FROM integrations');
 });
-
-async function integration(status: string, errorCount: number): Promise<string> {
-  const id = `int_${nanoid(6)}`;
-  await query(
-    `INSERT INTO integrations (id, product_id, provider, direction, status, error_count)
-     VALUES (?, 'p_sync', 'stripe', 'inbound', ?, ?)`, [id, status, errorCount]);
-  return id;
-}
-
-async function attempt(
-  integrationId: string,
-  o: { status?: string | null; error_message?: string | null; errors?: string | null;
-       finished?: boolean; ago?: string },
-) {
-  await query(
-    `INSERT INTO integration_sync_log
-       (id, integration_id, product_id, started_at, completed_at, status, error_message, errors)
-     VALUES (?, ?, 'p_sync', datetime('now', ?), ?, ?, ?, ?)`,
-    [nanoid(), integrationId, o.ago ?? '-1 hours',
-      o.finished === false ? null : new Date().toISOString(),
-      o.status ?? null, o.error_message ?? null, o.errors ?? null]);
-}
 
 describe('an errored integration is tried again', () => {
   it('the sync query no longer excludes it', () => {
@@ -135,53 +110,6 @@ describe('giving up is announced', () => {
     const block = SYNC.slice(SYNC.indexOf("importance: 'action_needed'"),
                              SYNC.indexOf('actionUrl:'));
     expect(block).not.toMatch(/errorMessage/);
-  });
-});
-
-describe('the trailing week of attempts is readable', () => {
-  it('counts successes and failures written by sync.ts', async () => {
-    const id = await integration('active', 0);
-    await attempt(id, { status: 'success' });
-    await attempt(id, { status: 'failed', error_message: 'HTTP 500' });
-    await attempt(id, { status: 'success' });
-
-    const h = (await getSyncHealth('p_sync')).get(id)!;
-    expect(h.attempts).toBe(3);
-    expect(h.succeeded).toBe(2);
-    expect(h.failed).toBe(1);
-  });
-
-  it('counts failures written by framework.ts, which never sets status', async () => {
-    const id = await integration('active', 0);
-    await attempt(id, { status: null, errors: JSON.stringify(['token expired']) });
-    await attempt(id, { status: null, errors: null });
-
-    const h = (await getSyncHealth('p_sync')).get(id)!;
-    expect(h.failed, 'a NULL status is not a success').toBe(1);
-    expect(h.succeeded).toBe(1);
-  });
-
-  it('does not call a sync that never finished a success', async () => {
-    const id = await integration('active', 0);
-    await attempt(id, { status: 'running', finished: false });
-
-    const h = (await getSyncHealth('p_sync')).get(id)!;
-    expect(h.unfinished).toBe(1);
-    expect(h.succeeded).toBe(0);
-    expect(h.failed).toBe(0);
-  });
-
-  it('stops at the window', async () => {
-    const id = await integration('active', 0);
-    await attempt(id, { status: 'failed', error_message: 'x', ago: '-30 days' });
-    expect((await getSyncHealth('p_sync')).get(id)).toBeUndefined();
-  });
-
-  it('returns no entry rather than a clean bill of health', async () => {
-    // Absent, not zeroed: a reader has to be able to tell "nothing has been
-    // tried" from "everything succeeded", and a row of zeroes cannot.
-    const id = await integration('active', 0);
-    expect((await getSyncHealth('p_sync')).get(id)).toBeUndefined();
   });
 });
 

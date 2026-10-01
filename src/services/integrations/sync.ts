@@ -110,14 +110,9 @@ export async function syncAllIntegrations(): Promise<void> {
 // ─── Single Integration Sync ─────────────────────────────────────────────────
 
 async function runIntegrationSync(integration: IntegrationRow): Promise<void> {
-  const logId = nanoid();
-
-  // Start log entry
-  await query(
-    `INSERT INTO integration_sync_log (id, integration_id, product_id, started_at, status)
-     VALUES (?, ?, ?, CURRENT_TIMESTAMP, 'running')`,
-    [logId, integration.id, integration.product_id],
-  );
+  // The run is recorded on the `integrations` row itself (last sync, status,
+  // error count). A separate per-run log was kept too; its only reader was
+  // retired with the agents (Roadmap 2027 R4), so it was a write nobody read.
 
   let credentials: Record<string, string> = {};
   let config: Record<string, unknown> = {};
@@ -136,7 +131,7 @@ async function runIntegrationSync(integration: IntegrationRow): Promise<void> {
       config = JSON.parse(integration.config_json) as Record<string, unknown>;
     }
   } catch {
-    await markSyncFailed(logId, integration, 'Failed to parse credentials or config');
+    await markSyncFailed(integration, 'Failed to parse credentials or config');
     return;
   }
 
@@ -236,19 +231,13 @@ async function runIntegrationSync(integration: IntegrationRow): Promise<void> {
       }
 
       default:
-        await markSyncFailed(logId, integration,
+        await markSyncFailed(integration,
           `No sync adapter for provider '${integration.provider ?? 'unknown'}'`);
         return;
     }
 
-    // Mark sync successful
-    await query(
-      `UPDATE integration_sync_log
-       SET completed_at = CURRENT_TIMESTAMP, status = 'success',
-           records_processed = ?, metrics_updated = ?
-       WHERE id = ?`,
-      [recordsProcessed, JSON.stringify(metricsUpdated), logId],
-    );
+    logger.info(`[integrations] ${integration.provider ?? 'unknown'} synced: ${recordsProcessed} records`,
+      { productId: integration.product_id });
 
     // And return the integration to health. The per-provider modules each clear
     // `last_error` on success, but none of them restored `status` — so an
@@ -298,7 +287,7 @@ async function runIntegrationSync(integration: IntegrationRow): Promise<void> {
 
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);
-    await markSyncFailed(logId, integration, errorMessage);
+    await markSyncFailed(integration, errorMessage);
   }
 }
 
@@ -315,16 +304,9 @@ async function noteSenseFailed(
 }
 
 async function markSyncFailed(
-  logId: string,
   integration: Pick<IntegrationRow, 'id' | 'product_id' | 'provider'>,
   errorMessage: string,
 ): Promise<void> {
-  await query(
-    `UPDATE integration_sync_log
-     SET completed_at = CURRENT_TIMESTAMP, status = 'failed', error_message = ?
-     WHERE id = ?`,
-    [errorMessage, logId],
-  );
   await query(
     `UPDATE integrations
         SET last_error = ?, status = 'error',

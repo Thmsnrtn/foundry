@@ -10,11 +10,9 @@ import { resolve } from 'path';
 
 const SRC = resolve(__dirname, '../../src');
 
-let schedulerSource: string;
 let clientSource: string;
 let aiClientSource: string;
 let spendLedgerSource: string;
-let provisonerSource: string;
 // THE DEPLOYMENT'S THREE CAPS MOVED OUT OF THE CLIENT. They bound this
 // deployment rather than belonging to the thing that spends, and the
 // institutional kernel (which may not import a model client) has to read them
@@ -22,68 +20,10 @@ let provisonerSource: string;
 let ceilingsSource: string;
 
 beforeAll(() => {
-  schedulerSource = readFileSync(resolve(SRC, 'services/scp/scheduler.ts'), 'utf-8');
   clientSource = readFileSync(resolve(SRC, 'db/client.ts'), 'utf-8');
   aiClientSource = readFileSync(resolve(SRC, 'services/ai/client.ts'), 'utf-8');
   spendLedgerSource = readFileSync(resolve(SRC, 'services/ai/spend-ledger.ts'), 'utf-8');
-  provisonerSource = readFileSync(resolve(SRC, 'services/scp/provisioner.ts'), 'utf-8');
   ceilingsSource = readFileSync(resolve(SRC, 'services/deployment/ai-ceilings.ts'), 'utf-8');
-});
-
-// =============================================================================
-// 1. Scheduler — No Hardcoded Product Limits
-// =============================================================================
-
-describe('Scheduler has no hardcoded product limits', () => {
-
-  it('runDueAgentsForAllProducts iterates all products from DB query', () => {
-    // Should query products table without LIMIT or hardcoded count
-    const fn = schedulerSource.match(
-      /export\s+async\s+function\s+runDueAgentsForAllProducts[\s\S]*?(?=export\s+async\s+function|$)/
-    );
-    expect(fn).toBeTruthy();
-    const fnBody = fn![0];
-
-    // Verify it queries products from the DB
-    expect(fnBody).toMatch(/SELECT.*FROM products/i);
-
-    // Should NOT have a hardcoded LIMIT on the product query
-    const productQuery = fnBody.match(/SELECT.*FROM products[^;]*/i);
-    expect(productQuery).toBeTruthy();
-    expect(productQuery![0]).not.toMatch(/LIMIT\s+\d+/i);
-  });
-
-  it('scheduler loops with for...of (handles any count dynamically)', () => {
-    expect(schedulerSource).toMatch(/for\s*\(.*of\s+result\.rows\)/);
-  });
-
-  it('scheduler continues to next product on failure (no cascading abort)', () => {
-    // The loop should have try/catch that continues on error
-    const loopBlock = schedulerSource.match(
-      /for\s*\(.*of\s+result\.rows\)[\s\S]*?catch[\s\S]*?continue|\/\/ Continue/i
-    );
-    expect(loopBlock).toBeTruthy();
-  });
-
-  it('generateBriefingsForAllProducts has no product count limit', () => {
-    const fn = schedulerSource.match(
-      /export\s+async\s+function\s+generateBriefingsForAllProducts[\s\S]*?(?=export\s+async\s+function|$)/
-    );
-    expect(fn).toBeTruthy();
-    const productQuery = fn![0].match(/SELECT.*FROM products[^;]*/i);
-    expect(productQuery).toBeTruthy();
-    expect(productQuery![0]).not.toMatch(/LIMIT\s+\d+/i);
-  });
-
-  it('runEvolutionForAllProducts has no product count limit', () => {
-    const fn = schedulerSource.match(
-      /export\s+async\s+function\s+runEvolutionForAllProducts[\s\S]*?(?=export\s+async\s+function|$)/
-    );
-    expect(fn).toBeTruthy();
-    const productQuery = fn![0].match(/SELECT.*FROM products[^;]*/i);
-    expect(productQuery).toBeTruthy();
-    expect(productQuery![0]).not.toMatch(/LIMIT\s+\d+/i);
-  });
 });
 
 // =============================================================================
@@ -108,15 +48,7 @@ describe('Query functions accept any product count', () => {
     expect(fn![0]).not.toMatch(/LIMIT\s+\d+/i);
   });
 
-  it('provisionSCP accepts any productId (no hardcoded product cap)', () => {
-    const fn = provisonerSource.match(
-      /export\s+async\s+function\s+provisionSCP[\s\S]*?(?=export\s+async\s+function|$)/
-    );
-    expect(fn).toBeTruthy();
-    // Should not check a global product count limit
-    expect(fn![0]).not.toMatch(/products\.length\s*>=?\s*\d+/);
-    expect(fn![0]).not.toMatch(/MAX_PRODUCTS/);
-  });
+  // The provisionSCP case went with `scp/provisioner.ts` in Roadmap 2027 R9.
 });
 
 // =============================================================================

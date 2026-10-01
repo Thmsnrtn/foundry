@@ -97,7 +97,6 @@ const classifications = new Map(Object.entries({
   // customer's workspace, outside the gateway and with no callers — was
   // deleted. See the header of services/integrations/linear.ts.
   'src/services/integrations/linear.ts|external_post': ['read_only', 'GraphQL query: completed issues for ship-cadence metrics'],
-  'src/services/integration/linear.ts|external_post': ['read_only', 'GraphQL queries: in-progress, completed and velocity issue counts'],
   'src/services/scp/briefing/voice-reply.ts|templated_post': ['control_path', 'Whisper transcription — reserves against the AI ceilings before dispatch, settles at a conservative bound, releases only on a definitive refusal'],
   // Surfaced the moment the detector learned to read templated URLs. Six were
   // already-known handlers reached by a URL it could not see; the seventh had

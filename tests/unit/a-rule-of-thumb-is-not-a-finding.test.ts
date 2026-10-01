@@ -6,7 +6,6 @@ import { beforeAll, describe, expect, it } from 'vitest';
 import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { seedDefaultPatterns } from '../../src/services/network/failure-library.js';
 
 // =============================================================================
 // A RULE OF THUMB IS NOT A FINDING.
@@ -34,36 +33,7 @@ import { seedDefaultPatterns } from '../../src/services/network/failure-library.
 // Migration 205 removed it.
 // =============================================================================
 
-const LIB = stripComments(
-  readFileSync('src/services/network/failure-library.ts', 'utf8'), { lineComments: true });
-
 beforeAll(async () => { await runMigrations(); });
-
-describe('the shipped pattern library', () => {
-  it('states no frequency it has not counted', () => {
-    // Comments stripped: the paragraph above the seeds quotes all four.
-    for (const claim of [
-      'typically see churn double within 60 days',
-      'most companies in this pattern see negative MRR growth within 8 weeks',
-      'the most common failure mode for B2B SaaS',
-      'captures the deterioration 60-90 days before it hits revenue',
-    ]) {
-      expect(LIB, `a counted-sounding claim nothing counted: ${claim}`).not.toContain(claim);
-    }
-  });
-
-  it('still says what each shape is and what to do about it', async () => {
-    await seedDefaultPatterns();
-    const rows = await query(
-      "SELECT pattern_name, description, mitigation_actions_json FROM failure_patterns WHERE id = 'fp_churn_precursor'");
-    const row = rows.rows[0] as unknown as
-      { pattern_name: string; description: string; mitigation_actions_json: string };
-
-    expect(row.pattern_name).toBe('Churn Precursor');
-    expect(row.description).toContain('accelerating revenue loss');
-    expect(JSON.parse(row.mitigation_actions_json)).toHaveLength(4);
-  });
-});
 
 describe('the table that would have held the measurements', () => {
   it('is gone rather than empty', async () => {

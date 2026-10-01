@@ -22,13 +22,9 @@ const ACTIVE = 'active';
 const base = resolve(__dirname, '../../src');
 const read = (rel: string) => readFileSync(resolve(base, rel), 'utf-8');
 
+// posthog, sentry, linear, intercom and github adapters were deleted in Roadmap 2027 R4.
 const SYNC_ADAPTERS = [
-  'services/integration/posthog.ts',
-  'services/integration/sentry.ts',
-  'services/integration/linear.ts',
   'services/integration/slack.ts',
-  'services/integration/intercom.ts',
-  'services/integration/github.ts',
 ];
 
 let fabricSrc: string;

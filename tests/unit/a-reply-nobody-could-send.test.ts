@@ -2,11 +2,9 @@ process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { readFileSync } from 'node:fs';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { stripComments } from '../../scripts/lib/strip-comments.mjs';
+import { beforeAll, describe, expect, it } from 'vitest';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { sendMessage, markAsRead, getMessageInbox } from '../../src/services/scp/messages.js';
 
 // =============================================================================
 // A REPLY NOBODY COULD SEND.
@@ -28,17 +26,10 @@ import { sendMessage, markAsRead, getMessageInbox } from '../../src/services/scp
 // messages were marked was decided by whoever assembled the list.
 // =============================================================================
 
-const A = 'p_msg_a';
-const B = 'p_msg_b';
+// `scp/messages.ts` was deleted in Roadmap 2027 R9 with the agents; the schema
+// half of this file is what is left to hold.
 
-beforeAll(async () => {
-  await runMigrations();
-  await query("INSERT INTO founders (id, clerk_user_id, email) VALUES ('f_msg','c_msg','msg@example.com')");
-  await query("INSERT INTO products (id, name, owner_id, status) VALUES (?,'Alpha','f_msg','active')", [A]);
-  await query("INSERT INTO products (id, name, owner_id, status) VALUES (?,'Beta','f_msg','active')", [B]);
-});
-
-beforeEach(async () => { await query('DELETE FROM agent_messages'); });
+beforeAll(async () => { await runMigrations(); });
 
 describe('the response protocol', () => {
   it('is gone from the schema', async () => {
@@ -60,43 +51,5 @@ describe('the response protocol', () => {
     const m213 = readFileSync('src/db/migrations/213_a_reply_nobody_could_send.sql', 'utf8');
     expect(m213.match(/ALTER TABLE agent_messages DROP COLUMN/g)).toHaveLength(4);
     expect(m213).not.toContain('thread_id;');
-  });
-
-  it('is gone from the code, including the reply nothing called', async () => {
-    const src = stripComments(readFileSync('src/services/scp/messages.ts', 'utf8'));
-    expect(src).not.toContain('replyToMessage');
-    expect(src).not.toContain('requiresResponse');
-    expect(src).not.toContain('responded_at');
-  });
-
-  it('and a message still sends and arrives', async () => {
-    const id = await sendMessage({
-      productId: A, fromAgent: 'compass', toAgent: 'harbor',
-      type: 'insight', priority: 'high', subject: 'Churn is up', body: 'In the SMB cohort.',
-    });
-    const inbox = await getMessageInbox(A, 'harbor');
-    expect(inbox.map((m) => m.id)).toEqual([id]);
-    expect(inbox[0].subject).toBe('Churn is up');
-  });
-});
-
-describe('marking messages read', () => {
-  it('cannot reach another company’s messages', async () => {
-    const mine = await sendMessage({
-      productId: A, fromAgent: 'compass', toAgent: 'harbor',
-      type: 'insight', subject: 'Mine', body: 'x',
-    });
-    const theirs = await sendMessage({
-      productId: B, fromAgent: 'compass', toAgent: 'harbor',
-      type: 'insight', subject: 'Theirs', body: 'x',
-    });
-
-    await markAsRead(A, [mine, theirs]);
-
-    const rows = (await query('SELECT id, read_at FROM agent_messages ORDER BY id'))
-      .rows as unknown as Array<Record<string, unknown>>;
-    const byId = Object.fromEntries(rows.map((r) => [r.id, r.read_at]));
-    expect(byId[mine]).not.toBeNull();
-    expect(byId[theirs], 'another company’s message was marked read').toBeNull();
   });
 });

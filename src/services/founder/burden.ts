@@ -353,6 +353,8 @@ export async function setPosture(input: {
   const from = String(row.posture) as Posture;
   if (from === input.to) return { from, to: input.to };
   const { nanoid } = await import('nanoid');
+// PROVENANCE, NOT INPUT: `changed_by` is recorded for a person reading the row later;
+// no code consumes it, and that is deliberate (write-only-columns baseline).
   await query(
     `INSERT INTO posture_changes (id, product_id, founder_id, from_posture, to_posture, said, changed_by)
      VALUES (?,?,?,?,?,?,?)`,

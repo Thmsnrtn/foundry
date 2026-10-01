@@ -7,8 +7,6 @@ import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
-import { proposeAction } from '../../src/services/outbound/executor.js';
-import { detectBehavioralSignals } from '../../src/services/scp/founder/decision-quality.js';
 
 // =============================================================================
 // AN APPROVAL NOBODY GAVE.
@@ -40,65 +38,25 @@ beforeAll(async () => {
   await runMigrations();
   await query("INSERT INTO founders (id, clerk_user_id, email) VALUES ('f_ap','c_ap','ap@example.com')");
   await query("INSERT INTO products (id, name, owner_id, status) VALUES (?,'Acme','f_ap','active')", [P]);
-  // Harbor has to actually HOLD level 1 for a level-1 proposal to stay one.
-  // `proposeAction` binds a proposed level to the founder-set level on
-  // `agent_instances` and takes the stricter, because the level in a proposal
-  // came from a language model and the one here came from the founder. With no
-  // row at all there is no grant to bind to, and an ungranted proposal is
-  // raised to 2 — so without this the two actions below would both be level 2
-  // and the distinction under test would vanish for the wrong reason. 1 is
-  // harbor's own default in DEFAULT_AUTHORITY_LEVELS.
-  await query(
-    `INSERT INTO agent_instances (id, product_id, agent_name, display_name, status, authority_level)
-     VALUES ('ai_ap_harbor', ?, 'harbor', 'Harbor', 'active', 1)`, [P]);
 });
 beforeEach(async () => {
   await query('DELETE FROM outbound_actions');
-  await query('DELETE FROM outbound_rate_limits');
   await query('DELETE FROM action_executions');
 });
 
+// `proposeAction` wrote these rows until `outbound/executor.ts` was deleted in
+// Roadmap 2027 R9. The database guards below are what remain, so the row is
+// written here in the shape it wrote: level 1, waiting for a person.
+let seq = 0;
 async function proposeLevelOne(): Promise<string> {
-  const { action_id } = await proposeAction({
-    productId: P,
-    agentName: 'harbor',
-    integrationName: 'harbor',
-    actionType: 'send_note',
-    authorityLevel: 1,
-    parameters: { note: 'hello' },
-    rationale: 'because',
-    previewText: 'a note',
-  });
-  return action_id;
+  const id = `oa_ap_${++seq}`;
+  await query(
+    `INSERT INTO outbound_actions (id, product_id, agent_name, integration_name, action_type,
+       authority_level, status, parameters_json, rationale, preview_text)
+     VALUES (?, ?, 'harbor', 'harbor', 'send_note', 1, 'pending_approval', '{"note":"hello"}', 'because', 'a note')`,
+    [id, P]);
+  return id;
 }
-
-describe('an action that is waiting for a person', () => {
-  it('records no approver', async () => {
-    const id = await proposeLevelOne();
-    const row = (await query('SELECT status, approved_by, approved_at FROM outbound_actions WHERE id = ?', [id]))
-      .rows[0] as unknown as { status: string; approved_by: string | null; approved_at: string | null };
-
-    expect(row.status).toBe('pending_approval');
-    expect(row.approved_by).toBeNull();
-    expect(row.approved_at).toBeNull();
-  });
-
-  it('is not distinguishable from a level-2 action by anything but its level', async () => {
-    const one = await proposeLevelOne();
-    const { action_id: two } = await proposeAction({
-      productId: P, agentName: 'harbor', integrationName: 'harbor', actionType: 'send_note2',
-      authorityLevel: 2, parameters: {}, rationale: 'because', previewText: 'a note',
-    });
-
-    const rows = await query(
-      'SELECT authority_level, status, approved_by FROM outbound_actions WHERE id IN (?, ?) ORDER BY authority_level',
-      [one, two]);
-    const [a, b] = rows.rows as unknown as Array<{ authority_level: number; status: string; approved_by: string | null }>;
-    expect(a.status).toBe(b.status);
-    expect(a.approved_by).toBe(b.approved_by);
-    expect(a.authority_level).not.toBe(b.authority_level);
-  });
-});
 
 describe('the database', () => {
   it('refuses an approval dated in the future', async () => {
@@ -151,34 +109,5 @@ describe('the word `auto`', () => {
       return /approved_by\s*=\s*'auto'|approved_by,\s*'auto'|COALESCE\(approved_by,\s*'auto'\)/.test(src);
     });
     expect(writers).toEqual([]);
-  });
-});
-
-describe('what a machine approved', () => {
-  it('is not counted as the founder approving without reading', async () => {
-    // An autopilot sweep approves within milliseconds of proposing, by
-    // construction. Before this, switching autopilot on produced evidence that
-    // the founder was rubber-stamping decisions they had never seen.
-    for (const n of [1, 2, 3, 4]) {
-      await query(
-        `INSERT INTO action_executions (id, product_id, integration, action_type, status, approved_by, created_at, approved_at)
-         VALUES (?, ?, 'resend', 'send_email', 'approved', 'autopilot:growth', datetime('now'), datetime('now'))`,
-        [`ae_auto_${n}`, P]);
-    }
-
-    const signals = await detectBehavioralSignals(P);
-    expect(signals.find((s) => s.signal_type === 'approval_without_reading')).toBeUndefined();
-  });
-
-  it('while a person doing it in three seconds still is', async () => {
-    for (const n of [1, 2, 3]) {
-      await query(
-        `INSERT INTO action_executions (id, product_id, integration, action_type, status, approved_by, created_at, approved_at)
-         VALUES (?, ?, 'resend', 'send_email', 'approved', 'founder:f_ap', datetime('now','-3 seconds'), datetime('now'))`,
-        [`ae_person_${n}`, P]);
-    }
-
-    const signals = await detectBehavioralSignals(P);
-    expect(signals.find((s) => s.signal_type === 'approval_without_reading')).toBeDefined();
   });
 });

@@ -104,6 +104,10 @@ experimentsApi.post('/', requireScope('experiments:write'), async (c) => {
       `INSERT INTO hypotheses (id, product_id, proposed_by, statement) VALUES (?, ?, 'api', ?)`,
       [hypothesisId, productId, hypothesis]
     );
+    // PROVENANCE, NOT INPUT: `hypothesis_id`, `control_description` and
+    // `treatment_description` record the design for a person reading it later.
+    // Their one reader was the retired agent society (Roadmap 2027 R9); no code
+    // consumes them now, and that is deliberate (write-only-columns baseline).
     await query(
       `INSERT INTO experiments
          (id, product_id, hypothesis_id, name, hypothesis, type, control_description,

@@ -1,7 +1,6 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
-import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import {
   dataBlockInstruction, sanitizeForPrompt, wrapDataBlock,
@@ -29,34 +28,8 @@ import {
 // listed — which is every denylist's failure mode.
 // =============================================================================
 
-const BASE = readFileSync('src/services/scp/agents/base.ts', 'utf8');
-
-describe('the two blocks of third-party text are fenced', () => {
-  it('both are wrapped, and neither is interpolated bare', () => {
-    expect(BASE).toContain('wrapDataBlock(INTEGRATION_SIGNALS_TAG');
-    expect(BASE).toContain('wrapDataBlock(AGENT_MESSAGES_TAG');
-    // The bare forms these replaced. If either comes back, the fence is gone.
-    expect(BASE).not.toContain('since last run):\\n${eventLines}');
-    expect(BASE).not.toContain('AGENT NETWORK:\\n${msgLines}');
-  });
-
-  it('the sentence explaining the fence is in the stable half, before the breakpoint', () => {
-    const breakpoint = BASE.indexOf('CACHE_BREAKPOINT + volatile');
-    const instruction = BASE.indexOf('dataBlockInstruction(INTEGRATION_SIGNALS_TAG)');
-    expect(instruction, 'the instruction must exist').toBeGreaterThan(-1);
-    const stablePush = BASE.indexOf('stable.push(`${dataBlockInstruction');
-    expect(stablePush, 'it belongs in the system half, not beside the data')
-      .toBeGreaterThan(-1);
-    expect(stablePush).toBeLessThan(breakpoint);
-  });
-
-  it('the denylist is still applied — the fence did not replace it', () => {
-    // Both, not either: `sanitizeForPrompt` is what redacts PII out of these
-    // summaries before they reach a provider.
-    expect(BASE).toContain('sanitizeForPrompt(e.summary)');
-    expect(BASE).toContain('sanitizeForPrompt(m.body.slice(0, 300))');
-  });
-});
+// The describe that read `scp/agents/base.ts` went with the agents in Roadmap
+// 2027 R9; the sanitizer itself is still live and held below.
 
 describe('what each half of the defence actually does', () => {
   it('the fence survives text that closes its own tag', () => {

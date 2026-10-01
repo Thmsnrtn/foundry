@@ -127,7 +127,6 @@ describe('the ungoverned browser is gone', () => {
 
 describe('the second door: the daily briefing', () => {
   const slack = readFileSync('src/services/integration/slack.ts', 'utf8');
-  const sched = readFileSync('src/services/scp/scheduler.ts', 'utf8');
 
   it('leaves no function here that both builds a briefing and sends it', () => {
     // `sendAgentBriefing` formatted and then called the transport, so the
@@ -138,20 +137,6 @@ describe('the second door: the daily briefing', () => {
     // what must be gone is the function.
     expect(slack).not.toMatch(/export async function sendAgentBriefing/);
     expect(slack).toContain('export function briefingMessage');
-  });
-
-  it('sends the briefing through invoke, not through the transport', () => {
-    expect(sched).toContain('briefingMessage');
-    expect(sched).toContain("tool: 'post_slack'");
-    // And the private kill-switch check it used to stand on is gone, because
-    // the door runs it — a second copy is how the two drift apart.
-    expect(sched).not.toContain("checkKillSwitch(productId, 'post_slack')");
-  });
-
-  it('carries a dedup key, so a retried tick cannot post the briefing twice', () => {
-    // There was no dedup key at all on this path. An hourly tick that retried
-    // after a lost response posted the same briefing into the room again.
-    expect(sched).toContain('dedupKey: `slack_briefing:');
   });
 
   it('is no longer claimed as governed-by-its-callers anywhere', () => {

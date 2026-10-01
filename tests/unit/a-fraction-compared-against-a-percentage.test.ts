@@ -2,9 +2,7 @@ process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { ratePoints } from '../../src/services/ai/measured.js';
@@ -99,36 +97,4 @@ describe('the columns that were never there', () => {
   // `assessFundraisingReadiness` — went with it. The schema check above is what
   // is left, and it is the half that survives any consumer: the ghost columns
   // must stay absent so the next reader cannot read them.
-});
-
-describe('what a person is shown', () => {
-  it('renders a fraction as the percentage it is', () => {
-    // `scp/briefing/email-digest.ts` was the second renderer held to this and
-    // was deleted as production-dead, so the compressed briefing is the one
-    // live renderer left carrying the rule.
-    for (const f of ['src/services/scp/briefing/compressed.ts']) {
-      const src = stripComments(readFileSync(f, 'utf8'), { lineComments: true });
-      expect(src, `${f}: 2% churn was reaching a founder as "0.0%"`)
-        .toMatch(/churn_rate as number\) \* 100/);
-      expect(src).toMatch(/activation_rate as number\) \* 100/);
-    }
-  });
-
-  // THE INVESTOR UPDATE THAT SAID 0.0% CHURN IS GONE, NOT FIXED TWICE.
-  // `scp/investor/investor-update.ts` read the same two fractions and printed
-  // them unscaled, and it was checked here beside the briefings. Its only
-  // callers were Commercial Foundry routes; when they went it had none, so the
-  // module and `investor_updates` were removed. The rule it was held to is the
-  // one above, and the one live renderer left still carries it.
-});
-
-describe('a failure pattern keyed on churn can fire', () => {
-  it('compares points against points', () => {
-    const src = stripComments(
-      readFileSync('src/services/network/failure-library.ts', 'utf8'), { lineComments: true });
-    expect(src, 'churn_rate_gt: 8 means eight per cent').toMatch(/ratePoints\(latest\?\.churn_rate\)/);
-    expect(src).toMatch(/ratePoints\(latest\?\.activation_rate\)/);
-    expect(src, 'nps runs -100..100 already and must not be scaled')
-      .toMatch(/nps_score: \(latest\?\.nps_score as number \| null\) \?\? null/);
-  });
 });

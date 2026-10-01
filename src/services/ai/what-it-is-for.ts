@@ -40,8 +40,9 @@
  * Every kind of work that may reach a model, and what it is in plain words.
  *
  * Retiring a piece of work means deleting its entry here, and the compiler then
- * names every call site that still claims it — which is how the agent society's
- * entries will leave when their modules do.
+ * names every call site that still claims it. The agent society's three kinds,
+ * and five whose only callers were its modules, left this way with the agents
+ * (Roadmap 2027 R9).
  */
 export const WORK_THE_MODEL_DOES = {
   // ── the institution reasoning about the world ────────────────────────────
@@ -59,12 +60,10 @@ export const WORK_THE_MODEL_DOES = {
   'the weekly plan': 'what the coming week should be spent on',
   'the morning briefing': 'the thirty-second read across everything at once',
   'the spoken briefing': 'the same, said out loud, for a commute',
-  'the compressed brief': 'the long form squeezed into what fits on a phone',
 
   // ── judging work already done ────────────────────────────────────────────
   'scoring an audit': 'grading how well something was carried out',
   'planning a remedy': 'working out what to do about a finding',
-  'a gate': 'deciding whether a piece of work is good enough to go on',
   'red team': 'arguing against a plan before it is committed to',
   'a decision': 'framing a choice, and what each way would cost',
 
@@ -81,19 +80,7 @@ export const WORK_THE_MODEL_DOES = {
   // ── the institution's own voice ──────────────────────────────────────────
   'reading the post': 'deciding what a message sent to the Workshop is asking for',
   'voice': 'matching how this owner writes, so nothing goes out sounding like a machine',
-  'synthesis': 'putting many small findings into one account',
   'wisdom': 'what has been learned that should not have to be learned again',
-  'strategy': 'what this company is actually trying to do',
-  'temporal': 'what has changed over time rather than what is true now',
-
-  // ── the agent society, which is no longer on a timer ─────────────────────
-  //
-  // Kept because the modules are kept: they are reached at boot and by two live
-  // routes, and nothing schedules them. A call here would be somebody running
-  // one deliberately. When those modules go, so do these.
-  'an agent session': 'one of the retired agents doing its assessment',
-  'agent coordination': 'the retired agents leaving each other notes',
-  'agent evolution': 'a retired agent proposing a change to its own instructions',
 } as const;
 
 export type Work = keyof typeof WORK_THE_MODEL_DOES;
@@ -122,10 +109,8 @@ export const WHAT_IT_COULD_CHANGE: Record<Work, string | null> = {
   'the weekly plan': 'where the coming week goes',
   'the morning briefing': 'what the owner attends to this morning',
   'the spoken briefing': 'what the owner attends to this morning, heard rather than read',
-  'the compressed brief': 'what the owner attends to this week, on a phone',
   'scoring an audit': 'whether a piece of work is accepted or redone',
   'planning a remedy': 'what is done about a finding',
-  'a gate': 'whether a piece of work goes on',
   'red team': 'whether a plan is committed to as it is',
   'a decision': 'which way the owner chooses, knowing what each costs',
   'a signal': 'whether an event needs a response',
@@ -138,17 +123,7 @@ export const WHAT_IT_COULD_CHANGE: Record<Work, string | null> = {
   'global intelligence': 'whether something outside the company changes what it does',
   'reading the post': 'how a message to the Workshop is answered, within the rules already set',
   'voice': 'how something already decided is worded',
-  'synthesis': 'which finding is acted on',
   'wisdom': 'whether a lesson already learned changes the next design',
-  'strategy': 'what a company is trying to do next',
-  'temporal': 'whether a trend changes a decision about a company',
-  // THE RETIRED AGENT SOCIETY. Ninety sessions and eleven proposals, none ever
-  // approved; nothing the owner can open reads what they produce. A call for
-  // this work could change no decision, so it is refused and counted until the
-  // modules are deleted (Roadmap 2027 R4/R9).
-  'an agent session': null,
-  'agent coordination': null,
-  'agent evolution': null,
 };
 
 /** The decision a kind of work could change, or null when it could change none. */

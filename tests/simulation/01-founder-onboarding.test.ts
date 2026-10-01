@@ -13,15 +13,13 @@
 // =============================================================================
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { readFileSync, readdirSync } from 'fs';
+import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
 const SRC = resolve(__dirname, '../../src');
 
 let authRouteSource: string;
 let onboardingRouteSource: string;
-let provisionerSource: string;
-let typesSource: string;
 let lifecycleMonitorSource: string;
 let schemaSource: string;
 let clientSource: string;
@@ -29,8 +27,6 @@ let clientSource: string;
 beforeAll(() => {
   authRouteSource = readFileSync(resolve(SRC, 'routes/auth/clerk.ts'), 'utf-8');
   onboardingRouteSource = readFileSync(resolve(SRC, 'routes/dashboard/onboarding.ts'), 'utf-8');
-  provisionerSource = readFileSync(resolve(SRC, 'services/scp/provisioner.ts'), 'utf-8');
-  typesSource = readFileSync(resolve(SRC, 'services/scp/types.ts'), 'utf-8');
   lifecycleMonitorSource = readFileSync(resolve(SRC, 'services/lifecycle/monitor.ts'), 'utf-8');
   schemaSource = readFileSync(resolve(SRC, 'db/schema.sql'), 'utf-8');
   clientSource = readFileSync(resolve(SRC, 'db/client.ts'), 'utf-8');
@@ -191,63 +187,8 @@ describe('SCP provisioning during onboarding', () => {
     expect(onboardingRouteSource).toMatch(/Nothing starts working, nothing is checked and no AI is asked anything/);
   });
 
-  it('provisions one agent for every agent that exists, and no others', () => {
-    // THIS USED TO ASSERT THE NUMBER 24 — twelve agents times two quote
-    // characters each — and it broke the day the roster became nine.
-    //
-    // A hardcoded count is not the invariant. `ALL_AGENTS` is the closed
-    // vocabulary three dynamic `import()` loaders narrow through, and one of
-    // those names arrives from an `agent_instances` ROW, so the thing that
-    // actually matters is that every name the provisioner writes has a MODULE
-    // ON DISK to load. A name without a file is a row that resolves to a
-    // missing module at runtime, in production; a file without a name is an
-    // agent nobody is ever given.
-    //
-    // So the two sets are compared directly. The count follows from them and
-    // never needs editing again.
-    expect(provisionerSource).toMatch(/ALL_AGENTS/);
-
-    const agentList = typesSource.match(
-      /ALL_AGENTS:\s*AgentName\[\]\s*=\s*\[([\s\S]*?)\]/
-    );
-    expect(agentList, 'ALL_AGENTS is no longer an array literal').toBeTruthy();
-    const provisioned = [...agentList![1].matchAll(/'([a-z_]+)'/g)].map((m) => m[1]).sort();
-
-    // `base`, `challenger` and `synthesizer` are scaffolding, not agents: they
-    // are never provisioned and never loaded by name.
-    const SCAFFOLDING = new Set(['base.ts', 'challenger.ts', 'synthesizer.ts']);
-    const onDisk = readdirSync(resolve(SRC, 'services/scp/agents'))
-      .filter((f) => f.endsWith('.ts') && !SCAFFOLDING.has(f))
-      .map((f) => f.replace(/\.ts$/, '')).sort();
-
-    expect(provisioned,
-      'every provisioned agent must have a module, and every module an agent')
-      .toEqual(onDisk);
-    expect(provisioned.length).toBeGreaterThan(0);
-  });
-
-  it('provisioner creates SCP constitution', () => {
-    expect(provisionerSource).toMatch(/INSERT INTO scp_constitutions/i);
-  });
-
-  it('provisioner uses ON CONFLICT to prevent duplicate agents', () => {
-    expect(provisionerSource).toMatch(
-      /ON CONFLICT\(product_id,\s*agent_name\)\s*DO NOTHING/i
-    );
-  });
-
-  it('provisioning failure is non-fatal where provisioning happens', () => {
-    // This read the onboarding route, where `ensureProvisioned` was wrapped in
-    // a try/catch so a failed agent roster did not cost a founder the company
-    // they had just created. Onboarding no longer provisions; the guarantee
-    // belongs to the provisioner, which swallows a per-agent failure rather
-    // than abandoning the roster half-written.
-    expect(provisionerSource).toMatch(/catch/);
-  });
-
-  it('provisioner sets SCP status to active on success', () => {
-    expect(provisionerSource).toMatch(/scp_status='active'/);
-  });
+  // The provisioner checks went with `scp/provisioner.ts` and the agents in
+  // Roadmap 2027 R9: nothing provisions agents any more.
 });
 
 // =============================================================================

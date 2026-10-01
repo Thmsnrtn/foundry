@@ -35,14 +35,10 @@ beforeAll(async () => {
     [OWNER, 'c_hook', 'hook@example.com']);
   await query('INSERT INTO products (id,name,owner_id,status) VALUES (?,?,?,?)',
     [P, 'Acme', OWNER, 'active']);
-  await query(
-    `INSERT INTO agent_instances (id, product_id, agent_name, display_name, version,
-       authority_level, activation_cadence_hours, status)
-     VALUES ('ai_h', ?, 'compass', 'Compass', 1, 1, 24, 'active')`, [P]);
 
   key = (await issueApiKey({
     productId: P, founderId: OWNER, label: 'k',
-    scopes: ['agents:read', 'agents:write', 'agents:run'],
+    scopes: ['agents:read', 'agents:write'],
   }) as { key: string }).key;
 
   const { apiV1 } = await import('../../src/api/v1/index.js');
@@ -52,7 +48,6 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await query('DELETE FROM webhooks');
-  await query('DELETE FROM agent_initiative_queue');
 });
 
 const post = (path: string, body: unknown) =>
@@ -106,24 +101,5 @@ describe('the event vocabulary', () => {
   });
 });
 
-describe('queuing an agent run', () => {
-  it('queues for an agent this product has', async () => {
-    const res = await post('/agents/compass/run', {});
-    expect(res.status, await res.text()).toBe(201);
-    const rows = (await query('SELECT agent_name FROM agent_initiative_queue')).rows as unknown as Array<Record<string, unknown>>;
-    expect(rows.map((r) => r.agent_name)).toEqual(['compass']);
-  });
-
-  it('says what queuing means rather than claiming a run started', async () => {
-    const res = await post('/agents/compass/run', {});
-    const body = await res.json() as { message: string };
-    expect(body.message).toContain('next scheduled run');
-  });
-
-  it('refuses a name this product has no agent for', async () => {
-    const res = await post('/agents/nobody/run', {});
-    expect(res.status).toBe(404);
-    const rows = (await query('SELECT COUNT(*) AS c FROM agent_initiative_queue')).rows[0] as unknown as Record<string, unknown>;
-    expect(Number(rows.c), 'a row nothing will ever read was still written').toBe(0);
-  });
-});
+// The 'queuing an agent run' cases went with `api/v1/agents.ts` and
+// `agent_initiative_queue` in Roadmap 2027 R9.

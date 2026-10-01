@@ -33,9 +33,11 @@ import { query } from '../../db/client.js';
  * route honouring it, and a route cannot demand one a founder cannot grant.
  *
  * Writes are deliberately separated from reads. Three write routes used to sit
- * behind `agents:read`, and the MCP transport had no check at all. */
+ * behind `agents:read`, and the MCP transport had no check at all. `agents:run`
+ * went with the only route that honoured it, when the agents were retired
+ * (Roadmap 2027 R9). */
 export const API_SCOPES = [
-  'agents:read', 'agents:run', 'agents:write',
+  'agents:read', 'agents:write',
   'customers:read', 'customers:manage',
   'experiments:write', 'metrics:write',
 ] as const;
@@ -49,7 +51,6 @@ export const API_SCOPE_LABELS: Record<ApiScope, { may: string; mayNot: string }>
     may: 'read what Foundry is set up to do, briefings, experiments, metrics and notification addresses',
     mayNot: 'change any of them',
   },
-  'agents:run': { may: 'ask Foundry to do one of its regular jobs now', mayNot: 'change how that job is set up' },
   'agents:write': {
     may: 'add and remove notification addresses, and use the tools (MCP) that record or settle a decision',
     mayNot: 'give Foundry any new permission, or reach anything Foundry sends on your behalf',

@@ -47,9 +47,10 @@ const NOT_ACTING = new Set(['paused', 'archived']);
  *   - product status != 'active' (the record is archived or deleted)
  *   - product scp_status in ('paused','archived') (the company is not acting)
  *   - tool listed in products.disabled_tools (per-tool kill)
- *   - agent_instances row for (product, agent) with status='paused'
  *
- * Agent check is skipped when agentName is omitted or 'system'.
+ * A fourth check, a paused named agent, went with the agents themselves
+ * (Roadmap 2027 R9): nothing could set an agent to paused once they were
+ * retired, so the check could only ever answer "not paused".
  */
 export async function checkKillSwitch(
   productId: string,
@@ -181,17 +182,6 @@ export async function checkKillSwitch(
       blocked: true,
       reason: `tool '${tool}' is disabled for this product`,
     };
-  }
-
-  if (agentName && agentName !== 'system') {
-    const agentResult = await query(
-      `SELECT status FROM agent_instances WHERE product_id = ? AND agent_name = ?`,
-      [productId, agentName]
-    );
-    const agentRow = agentResult.rows[0] as Record<string, unknown> | undefined;
-    if (agentRow && agentRow.status === 'paused') {
-      return { blocked: true, reason: `agent '${agentName}' is paused` };
-    }
   }
 
   return { blocked: false, reason: 'ok' };

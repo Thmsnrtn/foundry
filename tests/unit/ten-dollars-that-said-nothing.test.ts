@@ -64,7 +64,7 @@ describe('the subject says what the money was for', () => {
     // about can sit beside what it cost to test. Most calls point at no such
     // row, and inventing one would add nothing over `product_id`, which is
     // already recorded, while looking like it had answered something.
-    expect(companySpend(P, 'a gate').purpose).toBeUndefined();
+    expect(companySpend(P, 'red team').purpose).toBeUndefined();
     expect(companySpend(P, 'reading an observation', { kind: 'observation', id: 'o1' }).purpose)
       .toEqual({ kind: 'observation', id: 'o1' });
   });
@@ -99,11 +99,11 @@ describe('the subject says what the money was for', () => {
 
 describe('the ledger can be grouped by what the institution was doing', () => {
   it('adds up the calls and the money for each kind of work', async () => {
-    await settled('a gate', 3);
-    await settled('a gate', 5);
+    await settled('red team', 3);
+    await settled('red team', 5);
     await settled('the daily insight', 2);
     const rows = await settledByWork(30);
-    expect(rows.find((r) => r.work === 'a gate')).toEqual({ work: 'a gate', calls: 2, cents: 8 });
+    expect(rows.find((r) => r.work === 'red team')).toEqual({ work: 'red team', calls: 2, cents: 8 });
     expect(rows.find((r) => r.work === 'the daily insight')?.calls).toBe(1);
   });
 
@@ -114,20 +114,20 @@ describe('the ledger can be grouped by what the institution was doing', () => {
     // page disagree with the total in the table — which is the specific way a
     // summary stops being worth reading.
     await settled(null, 7);
-    await settled('a gate', 3);
+    await settled('red team', 3);
     const rows = await settledByWork(30);
     expect(rows.find((r) => r.work === null)).toEqual({ work: null, calls: 1, cents: 7 });
     expect(rows.reduce((a, r) => a + r.cents, 0)).toBe(10);
   });
 
   it('orders by what cost the most, because that is the question', async () => {
-    await settled('a gate', 1);
+    await settled('red team', 1);
     await settled('red team', 9);
     expect((await settledByWork(30))[0].work).toBe('red team');
   });
 
   it('does not reach back further than it was asked', async () => {
-    await settled('a gate', 4);
+    await settled('red team', 4);
     await query("UPDATE ai_spend_reservations SET date = date('now', '-40 day')");
     expect(await settledByWork(30)).toEqual([]);
   });
@@ -150,7 +150,7 @@ describe('the ledger can be grouped by what the institution was doing', () => {
   });
 
   it('counts a row written at the far edge of the window, and not the one beyond it', async () => {
-    await settled('a gate', 1);
+    await settled('red team', 1);
     await query("UPDATE ai_spend_reservations SET date = date('now', '-30 day')");
     expect((await settledByWork(30))[0]?.cents).toBe(1);
     await query("UPDATE ai_spend_reservations SET date = date('now', '-31 day')");
@@ -168,7 +168,9 @@ describe('the vocabulary stays something a person can read', () => {
   });
 
   it('answers what a name in the ledger means, and says so when it does not know', () => {
-    expect(whatThatWorkIs('a gate')).toContain('good enough');
+    // 'a gate' was the example here until it left the vocabulary with the
+    // agents in Roadmap 2027 R9.
+    expect(whatThatWorkIs('red team')).toContain('arguing against a plan');
     // A name from before the vocabulary, or one somebody wrote by hand into the
     // database. The reading shows the name and no explanation rather than
     // inventing one.

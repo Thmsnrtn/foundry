@@ -6,7 +6,6 @@ import { nanoid } from 'nanoid';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { computeCustomerHealth, upsertCustomer } from '../../src/services/customers/intelligence.js';
-import { addAgentNote } from '../../src/services/customer/intelligence.js';
 
 // =============================================================================
 // A CUSTOMER SCORED ON NOTHING, AND AN UPSERT THAT NEVER UPSERTED.
@@ -165,26 +164,6 @@ describe('a company that has wired customer events', () => {
     // 10, so the one Foundry knew nothing about looked healthier.
     expect(stale.components.engagement).toBe(10);
     expect(unknown.components.engagement).toBeNull();
-  });
-});
-
-describe('an internal note', () => {
-  it('does not record that the customer was contacted', async () => {
-    const id = nanoid();
-    await query(
-      `INSERT INTO customer_intelligence (id, product_id, external_customer_id, account_name)
-       VALUES (?, ?, 'cus_note', 'Acme Co')`, [id, P]);
-
-    await addAgentNote(id, 'harbor', 'Looks shaky on usage.');
-
-    const row = (await query(
-      'SELECT agent_notes, last_contacted_at, last_contacted_by FROM customer_intelligence WHERE id = ?',
-      [id])).rows[0] as unknown as {
-        agent_notes: string; last_contacted_at: string | null; last_contacted_by: string | null };
-
-    expect(JSON.parse(row.agent_notes)[0].note).toBe('Looks shaky on usage.');
-    expect(row.last_contacted_at).toBeNull();
-    expect(row.last_contacted_by).toBeNull();
   });
 });
 

@@ -143,15 +143,7 @@ describe('who this changes things for', () => {
       .toEqual([]);
   });
 
-  it('reaches Harbor’s prompt', () => {
-    // The founder-facing page that listed the fallers was a Commercial Foundry
-    // route and is gone; the agent that is supposed to watch them is not, and
-    // it is the one that claimed churn is telegraphed in advance.
-    const harbor = readFileSync('src/services/scp/agents/harbor.ts', 'utf8');
-    expect(harbor).toMatch(/getFallingCustomers/);
-    expect(harbor, 'and it is told nothing when there is nothing to tell')
-      .toMatch(/No customer's health has fallen meaningfully/);
-  });
+  // 'reaches Harbor’s prompt' went with `scp/agents/harbor.ts` in Roadmap 2027 R9.
 
   it('took the table off the unread list', () => {
     const baseline = readFileSync('docs/db/unread-tables-baseline.txt', 'utf8');

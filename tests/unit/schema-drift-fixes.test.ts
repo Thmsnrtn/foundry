@@ -62,16 +62,9 @@ describe('reconciled schema-drift SQL runs against real schema', () => {
   // migration 084 added. `scp/wiki.ts` was the table's only reader and writer,
   // and the only module that reached `wiki.ts` was the Scribe agent; both went,
   // and migration 309 dropped the table behind them.
-
-  it('agent_initiative_queue: v1 API enqueue (initiative_type/description/context, status pending)', async () => {
-    await db.execute({
-      sql: `INSERT INTO agent_initiative_queue (id, product_id, agent_name, initiative_type, description, context, priority, status)
-            VALUES (?,?,?,'api_trigger',?,?,1,'pending')`,
-      args: ['i1', 'p1', 'atlas', 'API-triggered run for atlas', '{}'],
-    });
-    const r = await db.execute({ sql: "SELECT status FROM agent_initiative_queue WHERE id='i1'", args: [] });
-    expect((r.rows[0] as Record<string, unknown>).status).toBe('pending');
-  });
+  //
+  // The two `agent_initiative_queue` cases went with that table (migration 375,
+  // Roadmap 2027 R9).
 
   it('customer_intelligence: v1 upsert (account_name, no company/stage columns)', async () => {
     await db.execute({
@@ -206,17 +199,6 @@ describe('reconciled schema-drift SQL runs against real schema', () => {
       args: ['treatment won', 'var_1'],
     });
     const r = await db.execute({ sql: "SELECT status, outcome FROM experiments WHERE id='ex2'", args: [] });
-    expect((r.rows[0] as Record<string, unknown>).status).toBe('completed');
-  });
-
-  it('agent_initiative_queue: status transitions use CHECK-valid values + processed_at', async () => {
-    await db.execute({
-      sql: `INSERT INTO agent_initiative_queue (id, product_id, agent_name, initiative_type, description, status) VALUES ('i2','p1','atlas','proactive','d','pending')`,
-      args: [],
-    });
-    await db.execute({ sql: "UPDATE agent_initiative_queue SET status='running', processed_at=CURRENT_TIMESTAMP WHERE id='i2'", args: [] });
-    await db.execute({ sql: "UPDATE agent_initiative_queue SET status='completed', processed_at=CURRENT_TIMESTAMP WHERE id='i2'", args: [] });
-    const r = await db.execute({ sql: "SELECT status FROM agent_initiative_queue WHERE id='i2'", args: [] });
     expect((r.rows[0] as Record<string, unknown>).status).toBe('completed');
   });
 

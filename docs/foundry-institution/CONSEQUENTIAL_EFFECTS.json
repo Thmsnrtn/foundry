@@ -142,13 +142,6 @@
       "capability": "GitHub capability handlers"
     },
     {
-      "file": "src/services/integration/linear.ts",
-      "line": 181,
-      "detector": "external_post",
-      "status": "read_only",
-      "capability": "GraphQL queries: in-progress, completed and velocity issue counts"
-    },
-    {
       "file": "src/services/integration/mcp-client.ts",
       "line": 130,
       "detector": "dynamic_webhook_post",

@@ -20,5 +20,6 @@ export const RUNTIME_CREATED_TABLES: Record<string, string> = {
   // and `scp/briefing/voice-reply.ts`. All three modules were deleted as
   // production-dead, so no source names those tables any more and an exception
   // for them would be a permanent one for nothing.
-  daily_briefings: 'debate/orchestrator.ts: guarded synthesis-append against a table that was never built',
+  // `daily_briefings` was here for `debate/orchestrator.ts`, deleted in Roadmap
+  // 2027 R4; no source names the table any more.
 };

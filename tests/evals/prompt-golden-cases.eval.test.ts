@@ -26,54 +26,9 @@
 
 import { describe, expect, it } from 'vitest';
 import {
-  buildBriefingHeadlinePrompt,
-  GOLDEN_CASES as HEADLINE_CASES,
-} from '../../src/prompts/briefing-headline.js';
-import {
   buildVoiceJudgePrompt,
   GOLDEN_CASES as VOICE_CASES,
 } from '../../src/prompts/voice-judge.js';
-
-describe('briefing-headline golden cases run against the production builder', () => {
-  it('has cases', () => { expect(HEADLINE_CASES.length).toBeGreaterThan(0); });
-
-  for (const c of HEADLINE_CASES) {
-    describe(c.name, () => {
-      const built = buildBriefingHeadlinePrompt(c.input);
-
-      it('names the company the case says it should contain', () => {
-        expect(c.expected.contains_company).toBe(true);
-        expect(built.user).toContain(c.input.companyName);
-      });
-
-      it('states the character limit the case measures against', () => {
-        expect(built.user).toContain(`max ${c.expected.max_chars} characters`);
-      });
-
-      it('carries the destination block if and only if the case supplies one', () => {
-        expect(c.expected.mentions_destination_when_present)
-          .toBe(c.input.destinationBlock.length > 0);
-        // The FRAME, not the phrase: the prompt's closing sentence mentions
-        // North Star context unconditionally ("when North Star context is
-        // provided, prefer phrasings that reference progress toward it"), so
-        // matching the bare phrase would pass on every case and measure
-        // nothing. What the builder adds conditionally is the labelled block.
-        if (c.input.destinationBlock) {
-          expect(built.user).toContain(`North Star context:\n${c.input.destinationBlock}`);
-        } else {
-          expect(built.user).not.toContain('North Star context:');
-        }
-      });
-
-      it('carries every observation that has something to say, and no empty one', () => {
-        for (const o of c.input.observations) {
-          if (o.contribution) expect(built.user).toContain(o.contribution);
-          else expect(built.user).not.toContain(`${o.display_name}: `);
-        }
-      });
-    });
-  }
-});
 
 describe('voice-judge golden cases run against the production builder', () => {
   it('has cases', () => { expect(VOICE_CASES.length).toBeGreaterThan(0); });

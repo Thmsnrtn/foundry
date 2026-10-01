@@ -37,7 +37,6 @@ beforeEach(async () => {
   // run for it yet. This is the state the two adapters silently required.
   await query('DELETE FROM metric_snapshots');
   await query('DELETE FROM integrations');
-  await query('DELETE FROM integration_sync_log');
 });
 afterEach(() => { vi.unstubAllGlobals(); });
 

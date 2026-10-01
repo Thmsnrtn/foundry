@@ -1,10 +1,8 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 
-import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { describe, expect, it } from 'vitest';
-import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 
 // =============================================================================
 // A BENCHMARK OVER A CONSTANT.
@@ -30,53 +28,10 @@ import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 // =============================================================================
 
 const ROOT = resolve(__dirname, '../..');
-const read = (p: string): string => readFileSync(resolve(ROOT, p), 'utf8');
 
 describe('the counter nothing increments', () => {
-  it('is still only written by a function nothing calls', () => {
-    // The premise. If this ever stops being true, the removals below should be
-    // revisited rather than left — and this is what will say so.
-    const base = read('src/services/scp/agents/base.ts');
-    expect(base).toContain('golden_suite_size = golden_suite_size + 1');
-    // COMMENTS ARE NOT CALLS. Several files name this function while
-    // explaining that nothing calls it — including this one — so the mentions
-    // are stripped before counting, which is the house rule for any scan that
-    // reads source.
-    const mentions = ['src', 'tests', 'scripts'].flatMap((dir) => {
-      try {
-        return execFileSync('grep',
-          ['-rl', '--include=*.ts', '--include=*.mjs', 'addGoldenLesson', resolve(ROOT, dir)],
-          { encoding: 'utf8' }).trim().split('\n').filter(Boolean);
-      } catch { return []; }
-    });
-    // A NAME PASSED AS A STRING IS NOT A CALL. This file, the claim test and
-    // the claims gate all name the function as data while checking that nothing
-    // invokes it, so the subject is `addGoldenLesson(` — the definition and any
-    // real call — and everything else is a mention.
-    // Built from fragments so this file does not match its own needle — the
-    // same trick `gates-fail-when-they-should.test.ts` uses to keep a scanner
-    // from seeing a fixture as a real offender.
-    const CALL = ['addGolden', 'Lesson', '('].join('');
-    const callers = mentions
-      .filter((f) => stripComments(readFileSync(f, 'utf8')).includes(CALL))
-      .map((f) => f.replace(`${ROOT}/`, ''));
-    expect(callers).toEqual(['src/services/scp/agents/base.ts']);
-  });
-
-  it('is not benchmarked across companies, and neither is its twin', () => {
-    // TWO IDENTICAL CASES, AND THE FIRST FIX FOUND ONLY ONE.
-    // `total_evolution_cycles` is created DEFAULT 0 by migration 017 on both
-    // `products` and `agent_instances` and incremented by no TypeScript and no
-    // SQL anywhere — the same structural zero, benchmarked in the same set, in
-    // the same function. A metric removed from a set of four is a reason to
-    // check the other three.
-    const network = read('src/services/scp/network.ts');
-    expect(network).not.toContain("{ name: 'golden_suite_size'");
-    expect(network).not.toContain("{ name: 'total_evolution_cycles'");
-    // And the per-company reporter does not ask for a benchmark that is no
-    // longer written, which would have reported "no data" as the 50th percentile.
-    expect(network).not.toContain("positionFromBenchmark(goldSuiteSize");
-  });
+  // 'is still only written by a function nothing calls' went with
+  // `scp/agents/base.ts`, where `addGoldenLesson` lived, in Roadmap 2027 R9.
 
   it('has no writer for the evolution counter either', () => {
     // The premise for the second removal, asserted the same way as the first.

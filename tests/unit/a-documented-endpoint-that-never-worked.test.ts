@@ -140,38 +140,5 @@ describe('GET /v1/metrics/health', () => {
   });
 });
 
-describe('GET /v1/agents/:agentName/briefings', () => {
-  beforeEach(async () => {
-    await query('DELETE FROM scp_briefings');
-    await query('DELETE FROM agent_instances');
-    await query(
-      `INSERT INTO agent_instances (id, product_id, agent_name, display_name, status)
-       VALUES ('ai_1', ?, 'harbor', 'Harbor', 'active')`, [P]);
-    await query(
-      `INSERT INTO scp_briefings (id, product_id, briefing_date, headline, full_briefing, agent_contributions)
-       VALUES ('b_1', ?, '2026-08-01', 'day one', 'x', ?)`,
-      [P, JSON.stringify({ harbor: { contribution: 'two churn risks', priority: 'high' } })]);
-    await query(
-      `INSERT INTO scp_briefings (id, product_id, briefing_date, headline, full_briefing, agent_contributions)
-       VALUES ('b_2', ?, '2026-08-02', 'day two', 'x', ?)`,
-      [P, JSON.stringify({ atlas: { contribution: 'runway steady', priority: 'low' } })]);
-  });
-
-  it('returns only the briefings this agent contributed to', async () => {
-    const body = await (await get('/agents/harbor/briefings')).json() as
-      { data: Array<Record<string, unknown>> };
-    expect(body.data).toHaveLength(1);
-    expect(body.data[0].briefing_date).toBe('2026-08-01');
-  });
-
-  it('returns what the agent said, not the company-wide row', async () => {
-    const body = await (await get('/agents/harbor/briefings')).json() as
-      { data: Array<{ contribution: string }> };
-    expect(String(body.data[0].contribution)).toContain('two churn risks');
-  });
-
-  it('does not answer for a name that is not an agent', async () => {
-    const res = await get('/agents/nobody/briefings');
-    expect(res.status).toBe(404);
-  });
-});
+// The `GET /v1/agents/:agentName/briefings` cases went with `api/v1/agents.ts`
+// and `scp_briefings`, both removed in Roadmap 2027 R9.

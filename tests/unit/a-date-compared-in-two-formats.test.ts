@@ -3,7 +3,6 @@ process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
 import { readFileSync } from 'node:fs';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import { resolveDecision, recordOutcome } from '../../src/services/decisions/queue.js';
@@ -112,42 +111,5 @@ describe('the column that was written two ways', () => {
     expect(by.d_iso.decided_at).toBe('2026-03-04 10:11:12');
     expect(by.d_iso.outcome_measured_at).toBe('2026-03-05 01:02:03');
     expect(by.d_sql.decided_at).toBe('2026-03-04 10:11:12');
-  });
-});
-
-describe('the playbook weekly execution budget', () => {
-  it('counts a trigger recorded on the oldest day of its week', async () => {
-    // `execution_budget_weekly` is a control on how often Foundry may act on a
-    // company's behalf. The ISO bound made the window six days and a bit, so
-    // the budget systematically undercounted its own executions.
-    const src = stripComments(
-      readFileSync('src/services/scp/playbooks/execution-engine.ts', 'utf8'));
-    expect(src).toContain("triggered_at > datetime('now', '-7 days')");
-    expect(src).not.toMatch(/triggered_at > \?/);
-
-    await query(
-      `INSERT INTO execution_playbooks
-         (id, product_id, name, trigger_type, trigger_config_json, action_type, action_config_json)
-       VALUES ('pb_1', ?, 'a playbook', 'metric_threshold', '{}', 'email', '{}')`,
-      [P]);
-    await query(
-      `INSERT INTO playbook_trigger_log
-         (id, playbook_id, product_id, evaluation_result, condition_snapshot_json, triggered_at)
-       VALUES ('ptl_1', 'pb_1', ?, 'triggered', '{}', datetime('now', '-7 days', '+1 hour'))`,
-      [P]);
-    const { getWeeklyExecutionCounts } =
-      await import('../../src/services/scp/playbooks/execution-engine.js');
-    const counts = await getWeeklyExecutionCounts(P);
-    expect(counts.pb_1).toBe(1);
-  });
-});
-
-describe('the windows that were checked and cleared', () => {
-  it('bind date-only strings, which sort correctly against either format', () => {
-    const src = stripComments(
-      readFileSync('src/services/scp/accuracy/tracker.ts', 'utf8'));
-    // 'YYYY-MM-DD' is a prefix of both conventions, so it includes the whole
-    // boundary day either way. Recorded so the next reader does not re-derive it.
-    expect(src).toMatch(/toISOString\(\)\.slice\(0, 10\)/);
   });
 });

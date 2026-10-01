@@ -1,9 +1,7 @@
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
 
-import { readFileSync } from 'node:fs';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { stripComments } from '../../scripts/lib/strip-comments.mjs';
 import { runMigrations } from '../../src/db/migrate.js';
 import { query } from '../../src/db/client.js';
 import {
@@ -133,18 +131,7 @@ describe('the latest cohort summary', () => {
 });
 
 describe('what the agents are told', () => {
-  it('Harbor does not state an unreported figure as a percentage', () => {
-    const src = stripComments(readFileSync('src/services/scp/agents/harbor.ts', 'utf8'));
-    expect(src).not.toContain('Number(c.activated_count) || 0');
-    expect(src).not.toContain('Number(c.retained_day_30) || 0');
-    expect(src).toContain("return 'not reported'");
-  });
-
-  it('Beacon ranks the channels that have a rate ahead of those that do not', () => {
-    const src = stripComments(readFileSync('src/services/scp/agents/beacon.ts', 'utf8'));
-    expect(src).toContain('ORDER BY avg_activation IS NULL, avg_activation DESC');
-  });
-
+  // The Harbor and Beacon source checks went with the agents in Roadmap 2027 R9.
   it('and a channel with no retention figure says so rather than scoring 0', async () => {
     await cohort('c_1', '2026-01-01', { channel: 'paid' });
     const byChannel = await getCohortsByChannel(P);

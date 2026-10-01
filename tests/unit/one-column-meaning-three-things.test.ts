@@ -31,7 +31,6 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await query('DELETE FROM integrations');
-  await query('DELETE FROM integration_sync_log');
 });
 
 describe('the database', () => {
@@ -85,14 +84,18 @@ describe('the sync', () => {
               ('i_out', ?, 'weather', 'mcp', 'outbound', 'active'),
               ('i_unknown', ?, 'x', 'x', NULL, 'active')`, [P, P, P, P]);
 
+    // Every attempt ends by stamping its own `integrations` row, on success and
+    // on failure alike. (This read the per-run `integration_sync_log` until the
+    // sync stopped writing it and migration 375 dropped it, Roadmap 2027 R9.)
+    await query(`UPDATE integrations SET updated_at = '2000-01-01 00:00:00' WHERE product_id = ?`, [P]);
+
     const { syncProductIntegrations } = await import('../../src/services/integrations/sync.js');
     await syncProductIntegrations(P);
 
-    // Every attempt opens a row in the sync log, whatever it then does.
     const attempted = (await query(
-      'SELECT DISTINCT integration_id FROM integration_sync_log WHERE product_id = ? ORDER BY integration_id',
-      [P])).rows as unknown as Array<{ integration_id: string }>;
-    expect(attempted.map((r) => r.integration_id)).toEqual(['i_bi', 'i_in']);
+      `SELECT id FROM integrations WHERE product_id = ? AND updated_at != '2000-01-01 00:00:00' ORDER BY id`,
+      [P])).rows as unknown as Array<{ id: string }>;
+    expect(attempted.map((r) => r.id)).toEqual(['i_bi', 'i_in']);
   });
 });
 
@@ -111,14 +114,17 @@ describe('the dispatch', () => {
     await syncProductIntegrations(P);
 
     const row = (await query(
-      "SELECT status, error_message FROM integration_sync_log WHERE integration_id = 'i_fab'"))
-      .rows[0] as unknown as { status: string; error_message: string | null };
+      "SELECT status, last_error, error_count FROM integrations WHERE id = 'i_fab'"))
+      .rows[0] as unknown as { status: string; last_error: string | null; error_count: number | null };
     // Dispatching on `type` finds no adapter called 'inbound' and fails the
     // row — every cycle, for a provider that has one. The message it writes
     // names `provider ?? type`, so it reads "no adapter for provider 'stripe'":
     // an error that names the thing that would have worked. The status is what
-    // separates the two paths.
-    expect(row?.status, 'it looked for an adapter named after a direction').toBe('success');
+    // separates the two paths. (Read from the integrations row since the
+    // per-run log was dropped in Roadmap 2027 R9.)
+    expect(row?.status, 'it looked for an adapter named after a direction').toBe('active');
+    expect(row?.last_error).toBeNull();
+    expect(Number(row?.error_count ?? 0)).toBe(0);
   });
 });
 

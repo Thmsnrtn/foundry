@@ -41,7 +41,6 @@ beforeAll(async () => {
 });
 beforeEach(async () => {
   await query('DELETE FROM metric_snapshots');
-  await query('DELETE FROM integration_sync_log');
   await query('DELETE FROM integrations');
   await query(
     `INSERT INTO integrations (id, product_id, provider, direction, status, credentials, error_count)
@@ -82,8 +81,7 @@ describe('a sync named by a founder who does not own the integration', () => {
 
     const snaps = await query('SELECT COUNT(*) AS n FROM metric_snapshots WHERE product_id = ?', [THEIRS]);
     expect((snaps.rows[0] as unknown as { n: number }).n).toBe(0);
-    const logs = await query('SELECT COUNT(*) AS n FROM integration_sync_log WHERE product_id = ?', [THEIRS]);
-    expect((logs.rows[0] as unknown as { n: number }).n).toBe(0);
+    // The `integration_sync_log` half went with that table in Roadmap 2027 R9.
   });
 
   it('does not touch the other company sync status either', async () => {

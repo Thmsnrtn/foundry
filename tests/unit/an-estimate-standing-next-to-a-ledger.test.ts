@@ -45,7 +45,6 @@ beforeAll(async () => {
 beforeEach(async () => {
   await query('DELETE FROM ai_daily_spend');
   await query('DELETE FROM cost_events');
-  await query('DELETE FROM agent_cost_log');
   await query('DELETE FROM chat_messages');
 });
 
@@ -88,18 +87,16 @@ describe('what the operator is told about spend', () => {
     expect((await getAICostData()).total_cost_24h).toBe(0);
   });
 
-  it('adds the two token sources, which do not overlap', async () => {
-    // Agent sessions log to `agent_cost_log`; founder chat to `chat_messages`.
-    await query(
-      `INSERT INTO agent_cost_log (id, product_id, agent_name, tokens_input, tokens_output)
-       VALUES ('acl1', ?, 'harbor', 100, 50)`, [P]);
+  it('counts the founder chat tokens, the one token source left', async () => {
+    // Agent sessions logged to `agent_cost_log`, the second source; it was
+    // dropped with the agents in Roadmap 2027 R9 (migration 375).
     await query(
       `INSERT INTO chat_sessions (id, founder_id, product_id) VALUES ('cs1', ?, ?)`, [OWNER, P]);
     await query(
       `INSERT INTO chat_messages (id, session_id, role, content, tokens_in, tokens_out)
        VALUES ('cm1','cs1','founder','hi', 10, 5)`);
 
-    expect((await getAICostData()).total_tokens_24h).toBe(165);
+    expect((await getAICostData()).total_tokens_24h).toBe(15);
   });
 });
 

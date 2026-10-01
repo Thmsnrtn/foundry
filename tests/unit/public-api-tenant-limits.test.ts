@@ -56,7 +56,9 @@ beforeAll(async () => {
   app.route('/api/v1', apiV1 as unknown as Hono);
 });
 
-const call = (key: string, path = '/api/v1/agents') =>
+// `/api/v1/agents` was the probe until it was deleted in Roadmap 2027 R9;
+// `/api/v1/experiments` honours the same `agents:read` scope.
+const call = (key: string, path = '/api/v1/experiments') =>
   app.request(path, { headers: { Authorization: `Bearer ${key}` } });
 
 describe('the public API limits by credential, not by address', () => {

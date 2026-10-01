@@ -66,10 +66,11 @@ describe('a surface with no session', () => {
     // three were Commercial Foundry routers deleted on 13 September 2026. The
     // REST API is the one shadowed surface that is still here, so it carries
     // the behavioural half of this file on its own.
-    // The key is issued with `agents:read`, and `/api/v1/agents` is the route
-    // that honours it — a 401 here would mean the credential was refused
-    // before its own scope was ever consulted, which is exactly the failure.
-    const res = await app.request('/api/v1/agents', { headers: { Authorization: `Bearer ${key}` } });
+    // The key is issued with `agents:read`, and `/api/v1/experiments` is a route
+    // that honours it (`/api/v1/agents` was, until it was deleted in Roadmap
+    // 2027 R9) — a 401 here would mean the credential was refused before its
+    // own scope was ever consulted, which is exactly the failure.
+    const res = await app.request('/api/v1/experiments', { headers: { Authorization: `Bearer ${key}` } });
     expect(res.status, 'a valid key must not be answered 401').not.toBe(401);
   });
 });

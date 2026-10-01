@@ -16,7 +16,4 @@ describe('outbound webhook dispatch on founder-facing events', () => {
     expect(src).toMatch(/event_type:\s*'decision_needed'/);
   });
 
-  it('briefing generation still dispatches briefing_ready', () => {
-    expect(read('services/scp/briefing.ts')).toMatch(/event_type:\s*'briefing_ready'/);
-  });
 });

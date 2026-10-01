@@ -167,7 +167,7 @@ describe('posting to a URL somebody else chose', () => {
       'src/services/capital/public-markets.ts',
       'src/services/distribution/outbound-webhooks.ts',
       'src/services/integration/mcp-client.ts',
-      'src/services/integration/posthog.ts',
+      // `src/services/integration/posthog.ts` was here; deleted in Roadmap 2027 R4.
       'src/services/integrations/posthog.ts',
       'src/services/outbound/ssrf.ts',
       'src/services/scp/actions/executor.ts',
