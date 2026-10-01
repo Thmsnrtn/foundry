@@ -14,7 +14,7 @@ import {
 } from '../deployment/ai-ceilings.js';
 import { finishReservation, reserveSpend, type SpendReservation } from './spend-ledger.js';
 import {
-  subjectPurpose, subjectWork,
+  refuseIfItChangesNothing, subjectPurpose, subjectWork,
   type SpendPurpose, type SpendSubject, type Work,
 } from './what-it-is-for.js';
 
@@ -396,6 +396,7 @@ export async function callClaude(
   // then abandoned by a later throw sits as 'reserved' until it expires at the
   // full authorized amount.
   await refuseIfNotEntitled(productId);
+  refuseIfItChangesNothing(subjectWork(config.subject));
   const apiKey = getApiKey();
   const baseUrl = getBaseUrl();
   const reservation = await authorizeSpend(

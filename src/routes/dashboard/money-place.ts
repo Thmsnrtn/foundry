@@ -105,8 +105,9 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
   const ledger = await ledgerEntries(founderId, 30);
   const cost = await runningCost(founderId);
   const carry = await carryingCost(founderId);
-  const { foundryLine, hourValueOf } = await import('../../services/economy/projection.js');
+  const { costPerDecision, foundryLine, hourValueOf } = await import('../../services/economy/projection.js');
   const line30 = await foundryLine(founderId);
+  const perDecision = await costPerDecision(founderId);
   const worth = await hourValueOf(founderId);
   // STANDING DOES NOT APPLY: the owner may enter time on any asset of theirs,
   // experimental ones included; the only one that exists today is one.
@@ -295,6 +296,7 @@ moneyRoutes.get('/foundry/money', async (c: any) => {
         </li>`)}</ul>
       <p id="foundry-line"><strong>Foundry's own line.</strong> ${line30.sentence}</p>
       <p class="quiet">${line30.baseline}</p>
+      <p class="quiet" id="cost-per-decision">${perDecision.sentence}</p>
       <p class="quiet">${worth ? `You said an hour of yours is worth ${dollars(worth.lowCents)} to ${dollars(worth.highCents)} (${worth.source}, ${worth.saidAt.slice(0, 10)}).`
     : 'You have not said what an hour of yours is worth, so your time is counted but not priced.'}</p>
       <form class="inline" method="POST" action="/foundry/money/hour">

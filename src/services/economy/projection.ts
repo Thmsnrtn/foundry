@@ -858,3 +858,39 @@ export async function foundryLine(founderId: string): Promise<FoundryLine> {
     + `${carryText} a month${attention ? ` plus ${dollars(attention.lowCents)} to ${dollars(attention.highCents)} of your time` : ''}.`;
   return { carrying: carry.total, minutes30d, attention, contribution30d, sentence, baseline };
 }
+
+// ─── What a decision cost to think about (Roadmap 2027 R8) ───────────────────
+
+export interface CostPerDecision {
+  /** Settled model spend over 30 days, in cents. */
+  thinkingCents: number;
+  /** Decisions the owner recorded over the same 30 days. */
+  decisions: number;
+  /** Thinking per decision, or null with no decision to divide by. */
+  perDecisionCents: number | null;
+  sentence: string;
+}
+
+/**
+ * COST PER DECISION (OBJECTIVE §6: more nuanced = the same decision for less).
+ * Thinking is what the spend ledger settled; a decision is something the owner
+ * recorded: an act they decided, a test they decided on, a thing they told
+ * the Mandate. It is a ratio across the institution, not a price on any one
+ * decision, and it says so. With nothing decided it gives no number.
+ */
+export async function costPerDecision(founderId: string): Promise<CostPerDecision> {
+  const { settledByModel } = await import('../ai/spend-ledger.js');
+  const thinkingCents = Math.round((await settledByModel(30)).reduce((a, m) => a + m.cents, 0));
+  const by = `founder:${founderId}`;
+  const n = async (sql: string, args: unknown[]): Promise<number> =>
+    Number(((await query(sql, args)).rows[0] as Record<string, unknown>).n ?? 0);
+  const decisions =
+    await n(`SELECT COUNT(*) AS n FROM proposed_acts WHERE decided_by = ? AND datetime(decided_at) >= datetime('now', '-30 days')`, [by])
+    + await n(`SELECT COUNT(*) AS n FROM venture_experiments WHERE decided_by = ? AND datetime(decided_at) >= datetime('now', '-30 days')`, [by])
+    + await n(`SELECT COUNT(*) AS n FROM mandate_statements WHERE founder_id = ? AND datetime(said_at) >= datetime('now', '-30 days')`, [founderId]);
+  const perDecisionCents = decisions === 0 ? null : Math.round(thinkingCents / decisions);
+  const sentence = decisions === 0
+    ? `Thinking cost ${dollars(thinkingCents)} in the last 30 days, and you recorded no decision in that time, so there is no cost per decision to give.`
+    : `Thinking cost ${dollars(thinkingCents)} in the last 30 days, across ${String(decisions)} ${decisions === 1 ? 'decision' : 'decisions'} you recorded: about ${dollars(perDecisionCents!)} each, as a ratio, not a price on any one.`;
+  return { thinkingCents, decisions, perDecisionCents, sentence };
+}

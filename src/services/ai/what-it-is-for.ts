@@ -98,6 +98,80 @@ export const WORK_THE_MODEL_DOES = {
 
 export type Work = keyof typeof WORK_THE_MODEL_DOES;
 
+/**
+ * THE DECISION EACH KIND OF WORK COULD CHANGE (Roadmap 2027 R8; STRATEGY S35,
+ * "every model call names the decision it could change"; OBJECTIVE §6, more
+ * nuanced = the same decision for less).
+ *
+ * Declared here, in code, and never by a model: whether a call runs is not the
+ * model's to decide. `null` means the work could change no decision anybody
+ * makes, and such a call is refused before a cent is reserved, and counted.
+ * The type makes the map total, so new work does not compile until somebody
+ * says which decision it serves — or says, in this file, that it serves none.
+ */
+export const WHAT_IT_COULD_CHANGE: Record<Work, string | null> = {
+  'reading an observation': 'whether a public sentence becomes a candidate worth looking at',
+  'a second reading': 'the same, when the first reading was unusable',
+  'legal exposure': 'whether an idea is turned down for the rule it would break',
+  'cross-company patterns': 'which of the owner\'s companies needs attention first',
+  'a lens': 'what a candidate test is designed to decide',
+  'composing a probe': 'whether a test is sealed, and what it decides',
+  'attacking a probe': 'whether a draft test is sealed as it is, reframed or killed',
+  'shaping an offer': 'what a test sells and at what price',
+  'the daily insight': 'what the owner looks at first today',
+  'the weekly plan': 'where the coming week goes',
+  'the morning briefing': 'what the owner attends to this morning',
+  'the spoken briefing': 'what the owner attends to this morning, heard rather than read',
+  'the compressed brief': 'what the owner attends to this week, on a phone',
+  'scoring an audit': 'whether a piece of work is accepted or redone',
+  'planning a remedy': 'what is done about a finding',
+  'a gate': 'whether a piece of work goes on',
+  'red team': 'whether a plan is committed to as it is',
+  'a decision': 'which way the owner chooses, knowing what each costs',
+  'a signal': 'whether an event needs a response',
+  'competitive read': 'whether a competitor\'s move changes what a company does',
+  'regulatory read': 'whether a company has to change for a rule',
+  'recovering a company': 'what is done first when something has gone badly wrong',
+  'a scenario': 'which option is taken, given how each plays out',
+  'a simulation': 'whether a plan is worth starting',
+  'the graph': 'which relationship is acted on',
+  'global intelligence': 'whether something outside the company changes what it does',
+  'reading the post': 'how a message to the Workshop is answered, within the rules already set',
+  'voice': 'how something already decided is worded',
+  'synthesis': 'which finding is acted on',
+  'wisdom': 'whether a lesson already learned changes the next design',
+  'strategy': 'what a company is trying to do next',
+  'temporal': 'whether a trend changes a decision about a company',
+  // THE RETIRED AGENT SOCIETY. Ninety sessions and eleven proposals, none ever
+  // approved; nothing the owner can open reads what they produce. A call for
+  // this work could change no decision, so it is refused and counted until the
+  // modules are deleted (Roadmap 2027 R4/R9).
+  'an agent session': null,
+  'agent coordination': null,
+  'agent evolution': null,
+};
+
+/** The decision a kind of work could change, or null when it could change none. */
+export function couldChange(work: Work | null): string | null {
+  return work === null ? null : WHAT_IT_COULD_CHANGE[work];
+}
+
+let refusedForChangingNothing = 0;
+/** How many calls were refused since boot because their work could change no decision. */
+export function callsRefusedForChangingNothing(): number { return refusedForChangingNothing; }
+
+/**
+ * REFUSE A CALL THAT COULD CHANGE NOTHING, before anything is reserved. The
+ * refusal is counted and named, so "thinking that bought nothing" is a number
+ * and not a suspicion.
+ */
+export function refuseIfItChangesNothing(work: Work | null): void {
+  if (work !== null && WHAT_IT_COULD_CHANGE[work] === null) {
+    refusedForChangingNothing += 1;
+    throw new Error(`ai_call_refused: "${work}" could change no decision anybody makes, so it was not paid for`);
+  }
+}
+
 /** What a name in the ledger means, for a reader who did not write the code. */
 export function whatThatWorkIs(work: string): string | null {
   return (WORK_THE_MODEL_DOES as Record<string, string>)[work] ?? null;
