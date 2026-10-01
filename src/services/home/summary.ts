@@ -14,20 +14,24 @@ import { stagesOf } from '../portfolio/stage.js';
 import { exploreSummary } from '../explore/summary.js';
 import { mandateOf } from '../mandate/statements.js';
 import { needsYou } from '../needs-you/queue.js';
+import { howOftenRight } from '../institution/calibration.js';
 
 export interface HomeSummary {
   needsYou: number;
   portfolio: { operating: number; testing: number; retired: number };
   explore: { lookingFor: string | null; inFlight: number; paid: number };
   mandate: { statements: number; spendingLessUntil: string | null; paused: string[] };
+  /** How often Foundry's sealed predictions came true, as a count from the first grade (S24). */
+  record: { graded: number; count: string | null };
   /** One sentence for the top of Home. Calm when all is calm. */
   sentence: string;
 }
 
 /** Everything Home needs to say where the four doors stand. Four readers, in parallel. */
 export async function homeSummary(founderId: string, now: Date = new Date()): Promise<HomeSummary> {
-  const [stages, explore, wants, queue] = await Promise.all([
+  const [stages, explore, wants, queue, right] = await Promise.all([
     stagesOf(founderId), exploreSummary(founderId, now), mandateOf(founderId, now), needsYou(founderId, now),
+    howOftenRight(founderId),
   ]);
   const count = (g: string): number => stages.filter((s) => s.group === g).length;
   const conserve = wants.find((w) => w.dimension === 'posture' && w.subject === 'conserve');
@@ -49,6 +53,7 @@ export async function homeSummary(founderId: string, now: Date = new Date()): Pr
       spendingLessUntil: conserve ? (conserve.until ?? conserve.reviewAt) : null,
       paused: wants.filter((w) => w.dimension === 'avoid' && w.scope.kind === 'portfolio').map((w) => w.label),
     },
+    record: { graded: right.graded, count: right.count },
     sentence,
   };
 }

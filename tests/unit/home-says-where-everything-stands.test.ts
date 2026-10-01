@@ -71,8 +71,10 @@ describe('Home', () => {
   it('shows one row per door, each a link to that door, and does not repeat the Needs-you count', async () => {
     const html = await (await app.request('/foundry')).text();
     const row = /<section class="panel stands-panel" aria-label="Where everything stands">[\s\S]*?<\/section>/.exec(html)?.[0] ?? '';
+    // A row per door, and then the record (Roadmap 2027 R7, STRATEGY S24): how
+    // often Foundry's sealed predictions came true, from the first grade.
     expect([...row.matchAll(/<a href="([^"]+)"/g)].map((m) => m[1])).toEqual(
-      ['/foundry/companies', '/foundry/explore', '/foundry/controls#mandate']);
+      ['/foundry/companies', '/foundry/explore', '/foundry/controls#mandate', '/foundry/experiments/history']);
     expect(row).toContain('1 in operation · 0 being tested');
     expect(row).toContain('Looking for: Find a low-maintenance digital product');
     expect(row).toContain('paused: SaaS');

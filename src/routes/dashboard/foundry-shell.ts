@@ -1233,6 +1233,7 @@ async function whereEverythingStands(ownerId: string): Promise<HtmlEscapedString
     <li><a href="/foundry/controls#mandate"><b>What you want</b><span>${h.mandate.statements === 0 ? 'Nothing said yet.'
       : `${String(h.mandate.statements)} ${h.mandate.statements === 1 ? 'thing' : 'things'} you said`}${h.mandate.paused.length ? ` · paused: ${h.mandate.paused.join(', ')}` : ''}${
       h.mandate.spendingLessUntil ? ` · spending less until ${h.mandate.spendingLessUntil}` : ''}</span></a></li>
+    <li><a href="/foundry/experiments/history"><b>My record</b><span>${h.record.count ?? 'Not graded on anything yet.'}</span></a></li>
   </ul></section>` as HtmlEscapedString;
 }
 

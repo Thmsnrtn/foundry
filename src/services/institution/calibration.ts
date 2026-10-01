@@ -93,6 +93,13 @@ export interface HowOftenRight {
   daysToAnswer: number | null;
   /** One sentence, in his words, safe to put on a card. */
   sentence: string;
+  /**
+   * THE RECORD AS A COUNT, from the first grade (Roadmap 2027 R5's sibling R7;
+   * STRATEGY S24: calibration on Home even at n = 1). Below the floor a rate is
+   * a story, so this is never a percentage there: "1 of 1 as I said", the
+   * numbers and nothing that pretends to more. Null when nothing is graded.
+   */
+  count: string | null;
 }
 
 /**
@@ -139,8 +146,12 @@ export async function howOftenRight(
             + 'actually happened rather than by your opinion of it.'
             : `, ${String(row.by_world ?? 0)} of them settled by what actually `
               + 'happened rather than by your opinion of it.')
-        : `I have been graded ${String(graded)} ${graded === 1 ? 'time' : 'times'} so `
-          + 'far — not enough to tell you a rate that would mean anything.',
+        : `I have been graded ${String(graded)} ${graded === 1 ? 'time' : 'times'} so far: `
+          + `${String(asPredicted)} as I said, ${String(Number(row.partly ?? 0))} partly, `
+          + `${String(Number(row.wrong ?? 0))} not. That is not enough to tell you a rate that would mean anything.`,
+    count: graded === 0 ? null
+      : `${String(asPredicted)} of ${String(graded)} as I said${Number(row.partly ?? 0) ? `, ${String(Number(row.partly ?? 0))} partly` : ''}`
+        + `${Number(row.by_world ?? 0) < graded ? ` (${String(Number(row.by_world ?? 0))} settled by the world)` : ''}`,
   };
 }
 
