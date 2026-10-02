@@ -1947,6 +1947,17 @@ there should ever be read is a separate question, not asked here.
 
 ## PENDING 30 — Give the daily copy somewhere to go off the machine: **OWNER ACTION** (2026-09-29)
 
+**Progress, 2 October 2026.** R2 is enabled and the owner created the bucket
+`foundry` (eastern North America). At the owner's instruction, `R2_ACCOUNT_ID`
+and `R2_BUCKET=foundry` are **staged** on Fly: held, not yet on the machine,
+and applied by the next deploy. Three things remain, all the owner's, because
+each is either a credential or the only copy of a key: an R2 API token for
+that bucket only (`R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`), a backup key
+from `openssl rand -hex 32` kept in the owner's password manager first
+(`BACKUP_ENCRYPTION_KEY`), and a 30-day delete rule on the bucket (Foundry
+does not prune old copies itself). Until all five are present, health says
+`awayConfigured: false` and names what is missing.
+
 **Why.** Every copy of the database lives on the same Fly volume as the
 database. Losing the volume or the machine loses all of them. Since Private S4,
 Foundry seals each day's copy, once it has passed its restore rehearsal, and
