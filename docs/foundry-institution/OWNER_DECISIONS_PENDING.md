@@ -13,11 +13,11 @@ around each item.
 ---
 
 <!-- status:begin — generated from the headings below by node scripts/check-record-matches-code.mjs --write -->
-# 14 WAITING ON THE OWNER, 3 WITH COUNSEL, 4 DECIDED IN PLACE
+# 13 WAITING ON THE OWNER, 3 WITH COUNSEL, 5 DECIDED IN PLACE
 
-- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 20, 21, 24, 25, 26, 27, 29, 30.
+- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 20, 21, 25, 26, 27, 29, 30.
 - **Waiting on counsel:** PENDING 9, 13, 15 (interim positions in force; see below).
-- **Decided, and kept where they were asked:** PENDING 16, 22, 23, 28.
+- **Decided, and kept where they were asked:** PENDING 16, 22, 23, 24, 28.
 - **Answered and recorded as RESOLVED:** 15.
 <!-- status:end -->
 
@@ -1212,7 +1212,22 @@ what breaks (nothing — the deploy uses a token that works either way).
 
 ---
 
-## PENDING 24 — Production signs people in with a development-instance key: **OWNER** (2026-09-21)
+## PENDING 24 — Production signs people in with a development-instance key: **DECIDED 2026-10-01**
+
+**The owner decided it: stay on the development instance.** Foundry has one
+user and always will, so the production instance is insurance rather than a
+fix: rate limits and user caps are far above one person's use, and the door is
+the same either way (`/foundry` admits only `FOUNDRY_OWNER_EMAIL`). If the
+development instance were ever lost, recovery is a new instance and its two
+keys; Private S8 already rebinds the owner's row to a new Clerk id for the
+verified owner email, so the cost is minutes of lockout, not a stranded
+institution. **Revisit after the phone week** (development-mode sign-in can be
+fussier on a phone) **or at the first sale.** Control's decisions sheet shows
+development keys as this decision; mismatched or missing keys stay open. The
+switch, when it comes, is the seven steps below.
+
+The record below is as it stood when the question was asked.
+
 
 The live sign-in page at `foundry-intel.fly.dev` serves a Clerk **publishable**
 key beginning `pk_test_`. That is a development instance running in production.

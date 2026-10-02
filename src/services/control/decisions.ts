@@ -42,10 +42,14 @@ export async function yourDecisions(founderId: string, env: NodeJS.ProcessEnv = 
 
   const { clerkInstanceOf } = await import('../../lib/clerk-instance.js');
   const clerk = clerkInstanceOf(env);
-  out.push({ key: 'clerk', act: 'Switch sign-in to the production instance', unblocks: 'sign-in that is not on a development key',
-    state: clerk === 'production' ? 'done' : 'open',
+  // PENDING 24, decided by the owner on 1 October 2026: one owner, so the
+  // development instance stays until the phone week or the first sale gives a
+  // reason to move. Development keys are that decision, not an open act; keys
+  // from two instances, or none, are faults and stay open whatever was decided.
+  out.push({ key: 'clerk', act: 'Decide which sign-in instance Foundry uses', unblocks: 'sign-in you have chosen, not inherited',
+    state: clerk === 'production' || clerk === 'development' ? 'done' : 'open',
     seen: clerk === 'production' ? 'the sign-in keys are production keys'
-      : clerk === 'development' ? 'the sign-in keys are still development keys'
+      : clerk === 'development' ? 'development keys, by your decision of 1 October 2026; revisit after the phone week or the first sale'
         : clerk === 'mismatched' ? 'the two sign-in keys are from different instances' : 'sign-in is not configured' });
 
   const { awayConfig } = await import('../institution/sending-away.js');

@@ -53,8 +53,20 @@ describe('the eleven acts', () => {
 
 describe('each act is read from the state it changes', () => {
   it('reads the sign-in keys\' instance', async () => {
-    expect((await byKey(ENV({ CLERK_SECRET_KEY: 'sk_test_x', CLERK_PUBLISHABLE_KEY: 'pk_test_x' }))).clerk!.state).toBe('open');
     expect((await byKey(ENV({ CLERK_SECRET_KEY: 'sk_live_x', CLERK_PUBLISHABLE_KEY: 'pk_live_x' }))).clerk!.state).toBe('done');
+    // A fault is open whatever was decided: keys from two instances, or none.
+    expect((await byKey(ENV({ CLERK_SECRET_KEY: 'sk_live_x', CLERK_PUBLISHABLE_KEY: 'pk_test_x' }))).clerk!.state).toBe('open');
+    expect((await byKey(ENV({}))).clerk!.state).toBe('open');
+  });
+
+  it('counts development keys as the owner\'s decision, and says when to revisit it', async () => {
+    // PENDING 24, decided 1 October 2026: one owner, so the development
+    // instance stays until the phone week or the first sale gives a reason.
+    const clerk = (await byKey(ENV({ CLERK_SECRET_KEY: 'sk_test_x', CLERK_PUBLISHABLE_KEY: 'pk_test_x' }))).clerk!;
+    expect(clerk.state).toBe('done');
+    expect(clerk.act).toBe('Decide which sign-in instance Foundry uses');
+    expect(clerk.seen).toContain('development keys, by your decision of 1 October 2026');
+    expect(clerk.seen).toContain('after the phone week or the first sale');
   });
 
   it('reads whether error reports are configured', async () => {
