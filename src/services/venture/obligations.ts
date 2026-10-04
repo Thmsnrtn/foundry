@@ -34,6 +34,17 @@ export const OPEN_OBLIGATION = (f: string): string =>
     OR (${f}.refund_requested_at IS NOT NULL AND ${f}.refund_ref IS NULL AND ${f}.status <> 'refunded')
     OR (${f}.disputed_at IS NOT NULL AND ${f}.dispute_outcome IS NULL))`;
 
+/**
+ * A SUBSCRIPTION THIS PURCHASE BELONGS TO THAT HAS NOT BEEN STOPPED. Not an
+ * obligation to the buyer — a week paid is one, and is read above — but a
+ * charge that will come again, which nothing may leave behind: the asset does
+ * not retire under it and the hand's aftermath keeps carrying it until the
+ * provider has taken the stop (hand.ts stopWhatRecurs, migration 381).
+ */
+export const STILL_RECURS = (f: string): string =>
+  `(${f}.subscription_ref IS NOT NULL AND NOT EXISTS (SELECT 1 FROM subscription_cancellations sc
+      WHERE sc.experiment_id = ${f}.experiment_id AND sc.subscription_ref = ${f}.subscription_ref AND sc.cancelled_at IS NOT NULL))`;
+
 export type ObligationState =
   | 'owed'                    // paid; the goods have not gone out
   | 'sent_unconfirmed'        // sent; the provider has not said it arrived

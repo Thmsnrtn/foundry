@@ -655,7 +655,9 @@ export async function qualificationStandsInTheWay(input: {
   // else so that no later clause can reach it. A withdrawal is here too: taking
   // an exposure DOWN because a test is not ready is the refusal doing the
   // opposite of its job.
-  if (kind === 'delivery' || kind === 'refund' || kind === 'withdrawal') return null;
+  // A cancellation is the same kind of thing: stopping what a customer would
+  // otherwise go on being charged is never held back by a later refusal.
+  if (kind === 'delivery' || kind === 'refund' || kind === 'withdrawal' || kind === 'cancellation') return null;
   if (kind !== 'offer') {
     // No act named this crossing — it was matched by an owner-approved
     // parameter fingerprint. Fall back to the family, which is what governs

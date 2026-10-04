@@ -398,17 +398,22 @@ export function renderExperiment(f: PublicWorkshopFacts, x: PublicExperiment): s
   // PAY WHAT IT WAS WORTH says so in the same place a price would, and says
   // the part that matters most: paying nothing is a real choice.
   const chosen = x.price?.chosen ?? null;
+  // A WEEKLY OFFER SAYS SO IN THE SAME PLACE, with the two things a subscriber
+  // is owed before they pay: how to stop it, and that stopping it is final.
+  const weekly = x.price?.recurring ?? null;
   const priceLine = !x.price ? ''
+    : weekly ? `${amount(x.price)} a week until you cancel. Cancel any time from the link in every email; nothing is charged after you cancel, and it stops by itself when this test ends.`
     : chosen ? `Read it free below, then pay what it was worth to you, once — ${amount(x.price)} is a suggestion, and paying nothing is fine. No subscription, nothing renews.`
       : `${amount(x.price)}, once. No subscription, nothing renews.`;
   const refundLine = !x.price ? ''
+    : weekly ? `If a week's brief is no use to you, reply to that week's email or use the link in it and you get that week's ${amount(x.price)} back. No time limit, and you don't have to explain.`
     : chosen ? `If you pay and then wish you hadn't, reply to the email that comes with your copy or use the link in it and you get it all back. No time limit, and you don't have to explain.`
       : `If it's no use to you, reply to the delivery email or use the link in it and you get your ${amount(x.price)} back. No time limit, and you don't have to explain.`;
   // The same promise at two sizes, not twice at full length: five words where a
   // person is deciding, the whole sentence under the heading they would scroll
   // to if they wanted the terms. Saying it fully in both places is how a page
   // starts sounding like it is trying to convince itself.
-  const shortRefund = x.price ? `Refundable in full, no time limit.` : '';
+  const shortRefund = !x.price ? '' : weekly ? `Each week refundable in full; cancel any time.` : `Refundable in full, no time limit.`;
   // A MATERIAL TERM IS NOT A FEATURE OF ONE LIFECYCLE STATE.
   //
   // This branch used to replace the price line with "The offer is not open at
@@ -422,7 +427,7 @@ export function renderExperiment(f: PublicWorkshopFacts, x: PublicExperiment): s
     ? '<p class="quiet">The offer is not open at the moment.</p>' : '';
   const pay = x.payUrl && x.price ? `<div class="card">
   <p><strong>${esc(priceLine)}</strong></p>
-  <p><a class="btn" href="${esc(x.payUrl)}" rel="nofollow">${chosen ? 'Pay what it was worth' : `Buy for ${esc(amount(x.price))}`}</a></p>
+  <p><a class="btn" href="${esc(x.payUrl)}" rel="nofollow">${chosen ? 'Pay what it was worth' : weekly ? `Subscribe for ${esc(amount(x.price))} a week` : `Buy for ${esc(amount(x.price))}`}</a></p>
   <p class="quiet">${esc(shortRefund)}</p>
 </div>` : priceLine ? `<p><strong>${esc(priceLine)}</strong></p>${closed}` : closed;
   // A SPECIMEN BEATS A DESCRIPTION. Three paragraphs about the shape of the
@@ -490,7 +495,8 @@ ${refundLine ? `<p>${esc(refundLine)}</p>` : ''}
   // actually offered: a closed page describes a product no one can buy, and
   // saying otherwise in machine words would be the one lie on the page.
   // Not for a chosen amount: a machine-read price would be a price, and this has none.
-  const product = asking && x.price && !chosen ? `<script type="application/ld+json">${jsonLd({
+  // Nor for a weekly one: a machine-read price without its period reads as a one-time price.
+  const product = asking && x.price && !chosen && !weekly ? `<script type="application/ld+json">${jsonLd({
     '@context': 'https://schema.org', '@type': 'Product', name: x.title, description: x.summary,
     brand: { '@type': 'Organization', name: f.name },
     offers: { '@type': 'Offer', price: (x.price.amountCents / 100).toFixed(2), priceCurrency: x.price.currency.toUpperCase(), availability: 'https://schema.org/InStock', url: `${f.origin}${x.path}` },
@@ -594,7 +600,7 @@ export function renderTerms(f: PublicWorkshopFacts): string {
 <p class="lede">Short, because the work is.</p>
 <p><strong>Who you're dealing with.</strong> ${esc(f.name)} is a small digital workshop run by ${esc(f.legalOperator)} in ${esc(f.region)}. It isn't a company and doesn't claim to be one.</p>
 <p><strong>What you're buying.</strong> Exactly what the page describes, with the limits it states — or, where the entry points at a marketplace, what that listing describes. These are small, early things: made carefully and described honestly, and claiming nothing beyond what their page says.</p>
-<p><strong>Price and renewal.</strong> The price on the page, or on the listing the entry points at, once. Nothing renews unless a page says so, and none does.</p>
+<p><strong>Price and renewal.</strong> The price on the page, or on the listing the entry points at, once. Nothing renews unless its page says so in its price, and a page that does says how to cancel: from the link in every email, with nothing charged after you cancel.</p>
 <p><strong>Refunds.</strong> In full, on request, as described on the <a href="/refunds">refunds page</a>.</p>
 <p><strong>Your information.</strong> As described on the <a href="/privacy">privacy page</a>.</p>
 <p><strong>Changes.</strong> Every page says when it was last updated. Closing something stops new sales and leaves what was already promised in force.</p>`;

@@ -194,11 +194,13 @@ export async function retireExperimentalAsset(input: {
   // under the asset; archiving it with an obligation open would leave the
   // obligation with nothing to carry it. The hand retires a stopped test's
   // asset itself once the last buyer is square (hand.ts carryWhatIsOwed).
-  const { OPEN_OBLIGATION } = await import('./obligations.js');
+  // Nor while a subscription it started still charges: the stop goes through
+  // the asset's door, and an archived asset's door is shut.
+  const { OPEN_OBLIGATION, STILL_RECURS } = await import('./obligations.js');
   const r = await query(
     `UPDATE products SET status = 'archived', retired_because = ?, updated_at = datetime('now')
       WHERE id = ? AND standing = 'experimental' AND status = 'active'
-        AND NOT EXISTS (SELECT 1 FROM experiment_fulfilments f WHERE f.experiment_id = products.from_experiment_id AND ${OPEN_OBLIGATION('f')})`,
+        AND NOT EXISTS (SELECT 1 FROM experiment_fulfilments f WHERE f.experiment_id = products.from_experiment_id AND (${OPEN_OBLIGATION('f')} OR ${STILL_RECURS('f')}))`,
     [input.because.trim(), input.productId]);
   if ((r.rowsAffected ?? 0) > 0) {
     // A retired asset holds no budget. Its allowance ended with the test's

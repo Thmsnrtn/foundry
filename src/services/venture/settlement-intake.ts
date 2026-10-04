@@ -219,6 +219,11 @@ export async function intakeStripeSettlement(event: { id?: string; type: string;
         // The intent and its session are one payment; only one of them carries the charge.
         await query(`UPDATE experiment_fulfilments SET charge_ref = ?, updated_at = datetime('now') WHERE id = ?`, [fact.chargeRef, id]);
       }
+      // WHICH SUBSCRIPTION THIS WEEK BELONGS TO, kept on the week itself so a
+      // cancel link and a test that ends can stop exactly it (migration 381).
+      if (fact.subscriptionRef) {
+        await query(`UPDATE experiment_fulfilments SET subscription_ref = ? WHERE id = ? AND subscription_ref IS NULL`, [fact.subscriptionRef, id]);
+      }
       // A WEEK OF A SUBSCRIPTION whose invoice did not name its charge: read
       // it now, because a refund is made against a charge and the buyer may
       // ask for one this week.

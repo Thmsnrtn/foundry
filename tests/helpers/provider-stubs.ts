@@ -28,6 +28,15 @@ export interface ProviderState {
   payments: Array<{ id: string; created: number; amount: number; amount_received: number; currency: string; status: string; latest_charge: string | null; metadata: Record<string, string>; receipt_email: string | null }>;
   calls: string[];
   seq: number;
+  /**
+   * SUBSCRIPTIONS THE PROVIDER HOLDS, by id, and every update asked of one with
+   * its idempotency key (R19). A scenario puts one here when a week is paid; an
+   * update to a cancelled one is refused, as the provider refuses it.
+   */
+  subscriptions: Map<string, { status: string; cancel_at_period_end: boolean; metadata: Record<string, string> }>;
+  subscriptionUpdates: Array<{ id: string; body: string; idempotency: string }>;
+  /** invoice id → what the provider reports of it: the buyer's address and the charge. */
+  invoices: Map<string, { customer_email: string | null; charge: string | null }>;
   /** Cloudflare, shape-faithful: the zone, its records, the store, the program, the hostnames, mail routing. */
   cf: CloudflareState;
 }
@@ -75,7 +84,7 @@ function nested(params: Record<string, string>, prefix: string): Record<string, 
 }
 
 export function providerStubs(): { state: ProviderState; fetch: (url: string | URL, init?: RequestInit) => Promise<Response> } {
-  const state: ProviderState = { sends: [], deliveryState: new Map(), refunds: [], domains: [], nextDomainStatus: 'pending', stripeDown: false, resendDown: false, products: [], prices: [], paymentLinks: [], buyers: new Map(), payments: [], calls: [], seq: 0, cf: freshCloudflare() };
+  const state: ProviderState = { sends: [], deliveryState: new Map(), refunds: [], domains: [], nextDomainStatus: 'pending', stripeDown: false, resendDown: false, products: [], prices: [], paymentLinks: [], buyers: new Map(), payments: [], calls: [], seq: 0, subscriptions: new Map(), subscriptionUpdates: [], invoices: new Map(), cf: freshCloudflare() };
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   const cfOk = (result: unknown, status = 200) => json({ success: true, result, errors: [] }, status);
   const cfErr = (code: number, message: string, status = 400) => json({ success: false, result: null, errors: [{ code, message }] }, status);
@@ -278,8 +287,25 @@ export function providerStubs(): { state: ProviderState; fetch: (url: string | U
     if (u.startsWith('https://api.stripe.com/v1/invoices?') && method === 'GET') {
       return json({ data: [], has_more: false });
     }
-    if (/^https:\/\/api\.stripe\.com\/v1\/subscriptions\/[^/?]+/.test(u) && method === 'GET') {
-      return json({ error: { message: 'no such subscription' } }, 404);
+    const sub = /^https:\/\/api\.stripe\.com\/v1\/subscriptions\/([^/?]+)/.exec(u);
+    if (sub && method === 'GET') {
+      const known = state.subscriptions.get(decodeURIComponent(sub[1]));
+      return known ? json({ id: decodeURIComponent(sub[1]), ...known }) : json({ error: { message: 'no such subscription' } }, 404);
+    }
+    if (sub && method === 'POST') {
+      const id = decodeURIComponent(sub[1]);
+      const known = state.subscriptions.get(id);
+      if (!known) return json({ error: { message: 'no such subscription' } }, 404);
+      if (known.status === 'canceled') return json({ error: { message: 'A canceled subscription can only update its cancellation_details and metadata.' } }, 400);
+      const body = String(init?.body ?? '');
+      state.subscriptionUpdates.push({ id, body, idempotency: String(headers['Idempotency-Key'] ?? '') });
+      if (new URLSearchParams(body).get('cancel_at_period_end') === 'true') known.cancel_at_period_end = true;
+      return json({ id, ...known });
+    }
+    const inv = /^https:\/\/api\.stripe\.com\/v1\/invoices\/([^/?]+)/.exec(u);
+    if (inv && method === 'GET') {
+      const known = state.invoices.get(decodeURIComponent(inv[1]));
+      return known ? json({ id: decodeURIComponent(inv[1]), ...known }) : json({ error: { message: 'no such invoice' } }, 404);
     }
     const pi = /^https:\/\/api\.stripe\.com\/v1\/payment_intents\/([^/?]+)/.exec(u);
     if (pi && method === 'GET') {

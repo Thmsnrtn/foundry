@@ -19,11 +19,11 @@ import { query } from '../../src/db/client.js';
 // dispose of a judgment, answer the institution's question, promote a
 // responsibility, delete every company — and now ask the second question.
 //
-// Seven stay open, each for a reason written above it, and none of the seven
+// Eight stay open, each for a reason written above it, and none of the eight
 // can widen what Foundry may do: Stop, two revocations, a disconnect and a
-// quieter ceiling only take something away; a buyer's refund link and the
-// Workshop's mail intake are authenticated by their own token or secret, not
-// by a session. A stop that asks for more than a signed-in owner is a stop that
+// quieter ceiling only take something away; a buyer's refund link, a
+// subscriber's cancel link (R19) and the Workshop's mail intake are
+// authenticated by their own token or secret, not by a session. A stop that asks for more than a signed-in owner is a stop that
 // can fail to happen.
 // =============================================================================
 
@@ -86,14 +86,15 @@ describe('the ten routes that decide', () => {
   });
 });
 
-describe('the seven left open', () => {
+describe('the eight left open', () => {
   const REASONS: Record<string, [string, RegExp]> = {
     'POST /autopilot/panic': ['src/routes/dashboard/letter.ts', /only ever lowers/],
     'POST /connections/:name/disconnect': ['src/routes/dashboard/connections.ts', /only take a hand away/],
     'POST /connections/grants/:id/revoke': ['src/routes/dashboard/connections.ts', /only take a hand away/],
     'POST /letter/channels/:channelId/revoke': ['src/routes/dashboard/letter.ts', /Withdrawing a channel/],
     'POST /settings/interruption-ceiling': ['src/routes/dashboard/settings.ts', /NO COMPANY CAPABILITY/],
-    'POST /share/refund/:fulfilmentId/:token': ['src/routes/share/index.ts', /NO CAPABILITY IS ASKED HERE ON PURPOSE/],
+    'POST /share/cancel/:fulfilmentId/:token': ['src/routes/share/index.ts', /NO CAPABILITY IS ASKED HERE ON PURPOSE, for the refund's reason/],
+    'POST /share/refund/:fulfilmentId/:token': ['src/routes/share/index.ts', /NO CAPABILITY IS ASKED HERE ON PURPOSE\. The buyer/],
     'POST /workshop/mail': ['src/routes/workshop-mail.ts', /NO CAPABILITY GUARD, DELIBERATELY/],
   };
 

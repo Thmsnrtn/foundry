@@ -71,6 +71,10 @@ const NON_COOKIE_SURFACES: Record<string, { why: string; proof: RegExp }> = {
   // hold: it is a standing permission for a path, and the next thing to claim
   // that path would inherit it silently. The test below refuses to let one sit
   // here unclaimed, which is how these were found.
+  '/share/cancel/:fulfilmentId/:token': {
+    why: 'the subscriber has no session; the HMAC-signed token in the delivery link is the whole credential, verified before anything is read or stopped',
+    proof: /requestCancelByLink\(c\.req\.param\('fulfilmentId'\), c\.req\.param\('token'\)\)/,
+  },
   '/share/refund/:fulfilmentId/:token': {
     why: 'the buyer has no session; the HMAC-signed token in the delivery link is the whole credential, verified before anything is read or refunded',
     proof: /requestRefundByLink\(c\.req\.param\('fulfilmentId'\), c\.req\.param\('token'\)\)/,

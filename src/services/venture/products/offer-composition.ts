@@ -24,9 +24,28 @@ import { BANNED_CLAIMS } from '../hand.js';
 /**
  * THE EXCHANGES THE HANDS CAN CARRY, and what each makes. A fixed price sells
  * the brief. A free thing with a downstream role is a free calculator on the
- * same page as the brief it leads to (PENDING 20 and 31, migration 379).
+ * same page as the brief it leads to (PENDING 20 and 31, migration 379). A
+ * subscription sells a new edition of the brief every week, for as long as
+ * the buyer wants it and the test may deliver it (R19, migration 381).
  */
-export const EXCHANGES_THE_HANDS_CARRY = ['upfront_price', 'free_with_role', 'value_first'] as const;
+export const EXCHANGES_THE_HANDS_CARRY = ['upfront_price', 'free_with_role', 'value_first', 'subscription'] as const;
+
+/**
+ * A WEEK OF A BRIEF, bounded. Three dollars is the least a week is worth
+ * charging for once the provider's fee is taken; fifteen is the most a test
+ * asks a stranger to commit to every week before it has shown them one.
+ */
+export const WEEKLY_BAND = { lowDollars: 3, highDollars: 15 } as const;
+
+const SUBSCRIPTION_SYSTEM = [
+  '',
+  'THIS DESIGN CHARGES EVERY WEEK, and that replaces "Nothing recurs" and the one-time price above.',
+  'The buyer gets a new edition of the brief each week, made again from what the eyes retrieved that',
+  'week, until they cancel or the test ends. "price_dollars" is the WEEKLY price, a whole number from',
+  `${String(WEEKLY_BAND.lowDollars)} to ${String(WEEKLY_BAND.highDollars)}. "charges_how" says it is charged every week until`,
+  'cancelled, and that every email carries a link that cancels it with nothing charged after the week',
+  'paid for. "delivers_by" says a new edition arrives by email each week. Nothing else recurs.',
+].join('\n');
 
 /**
  * PAY WHAT IT WAS WORTH, bounded. A dollar is the floor because the provider
@@ -68,6 +87,29 @@ const TOOL_SYSTEM = [
  * step. Whatever reads this is reading the rule, not a copy of it.
  */
 export const OFFER_BAND = { lowDollars: 5, highDollars: 49, exchange: 'upfront_price', recurs: false } as const;
+
+/**
+ * WHAT A WEEKLY BRIEF IS, where it differs from one sold once. The recurring
+ * charge is present and enforced, which the first-proof rule refuses until
+ * the owner lifts it themselves (R17); every other fact is the brief's.
+ */
+export function subscriptionFacts(): OfferShapePlan['facts'] {
+  return {
+    ...briefFacts(),
+    recurring_billing: {
+      present: 1, basis: 'enforced',
+      enforcedBy: 'validateExperimentPaymentLink accepts only a weekly link at the stated price, every delivery carries a signed cancel link, and the hand stops every subscription before the test can no longer deliver (stopWhatRecurs)',
+      grounds: 'Charges: every week until the buyer cancels or the test ends; nothing is charged after the week paid for',
+    },
+    support_obligation: {
+      present: 0, basis: 'observed',
+      grounds: 'Delivers: a new edition each week paid for, and a refund of that week on request instead of ongoing help. '
+        + 'What is owed is bounded and real: each week\'s brief, a refund when a week\'s delivery fails or the buyer '
+        + 'asks, and a stop whenever the buyer asks or the test ends',
+    },
+    one_visit_delivery: { present: 0, basis: 'observed', grounds: 'Delivers by: a new edition by email each week the buyer pays for' },
+  };
+}
 
 /** The kinds of source a brief may be built from: what the eyes keep, item by item. */
 const BRIEF_SOURCES = ['job_posting', 'app_store', 'community', 'review', 'directory'] as const;
@@ -213,14 +255,21 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
   const design = await designOf(experimentId);
   if (!design) return { refused: 'no design' };
   const exchange = design.exchange.exchange;
-  if (!(EXCHANGES_THE_HANDS_CARRY as readonly string[]).includes(exchange)) return { refused: `the hands sell a brief at a fixed price, give a free tool beside one, or give it first for what it was worth; the design chose ${design.exchange.whatItIs}` };
+  if (!(EXCHANGES_THE_HANDS_CARRY as readonly string[]).includes(exchange)) return { refused: `the hands sell a brief at a fixed price or every week, give a free tool beside one, or give it first for what it was worth; the design chose ${design.exchange.whatItIs}` };
   if (!kindsFoundryCanMake().some((k) => k.kind === 'data_brief')) return { refused: 'the hands cannot make a brief' };
   const givesATool = exchange === 'free_with_role';
   const givesFirst = exchange === 'value_first';
+  const recurs = exchange === 'subscription';
   if (givesATool && !kindsFoundryCanMake().some((k) => k.kind === 'static_tool')) return { refused: 'the hands cannot make a free tool' };
   const record = await theRecordOf(experimentId);
   if (!record) return { refused: 'no record' };
-  const reply = await callSonnet(givesATool ? `${SYSTEM}\n${TOOL_SYSTEM}` : givesFirst ? `${SYSTEM}\n${VALUE_SYSTEM}` : SYSTEM,
+  // Refused before anything is thought or made: the allowance would refuse it.
+  if (recurs) {
+    const { subscriptionsRunnable } = await import('../hand.js');
+    const runnable = await subscriptionsRunnable(record.founderId);
+    if (!runnable.ok) return { refused: runnable.because };
+  }
+  const reply = await callSonnet(givesATool ? `${SYSTEM}\n${TOOL_SYSTEM}` : givesFirst ? `${SYSTEM}\n${VALUE_SYSTEM}` : recurs ? `${SYSTEM}\n${SUBSCRIPTION_SYSTEM}` : SYSTEM,
     `<record>${JSON.stringify({ candidate: record.candidate, test: record.experiment, evidence: record.evidence.slice(0, 20), retrievals: record.retrievals, charter: record.charter }, null, 1)}</record>\n<design>${JSON.stringify({
       decides: design.decides, canProve: design.canProve, cannotProve: design.cannotProve, distribution: design.distribution, ifItSucceeds: design.ifItSucceeds }, null, 1)}</design>`,
     givesATool ? 3200 : 1800, institutionSpend('shaping the offer of a designed test for the owner\'s portfolio search, which has no company to charge yet', 'shaping an offer', { kind: 'experiment', id: experimentId }));
@@ -235,7 +284,8 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
   const missing = need.filter((k) => str(raw, k) === null);
   if (missing.length) return { refused: `the offer left out ${missing.join(', ')}` };
   const price = Number(raw.price_dollars);
-  if (!Number.isInteger(price) || price < OFFER_BAND.lowDollars || price > OFFER_BAND.highDollars) return { refused: `the price is not a whole number of dollars between ${String(OFFER_BAND.lowDollars)} and ${String(OFFER_BAND.highDollars)}` };
+  const band = recurs ? WEEKLY_BAND : OFFER_BAND;
+  if (!Number.isInteger(price) || price < band.lowDollars || price > band.highDollars) return { refused: `the ${recurs ? 'weekly ' : ''}price is not a whole number of dollars between ${String(band.lowDollars)} and ${String(band.highDollars)}` };
   // THE FREE TOOL, read strictly and refused at its own gate: every worked
   // example reproduced by the arithmetic the page will run, every answer
   // finite across the ranges. A tool that fails is not published, and neither
@@ -262,8 +312,12 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
   const plan: OfferShapePlan = {
     shape: { sells: str(raw, 'sells')!, claimsMade: str(raw, 'claims_made')!, collects: str(raw, 'collects')!, deliversBy: str(raw, 'delivers_by')!, sellsTo: str(raw, 'sells_to')!, chargesHow: str(raw, 'charges_how')! },
     lighter: str(raw, 'lighter')!,
-    facts: briefFacts(),
-    price: givesFirst
+    facts: recurs ? subscriptionFacts() : briefFacts(),
+    price: recurs
+      ? { amountCents: price * 100, currency: 'USD', lookupKey: `foundry_brief_${experimentId}_weekly`, productName: str(raw, 'product_name')!,
+        productMetadata: { app_object: 'experiment_deliverable', plan_key: `brief_${experimentId}` }, confirmationMessage: 'Thank you. This week\'s brief is on its way by email, with a link to cancel in every one.',
+        recurring: { interval: 'week' } }
+      : givesFirst
       ? { amountCents: price * 100, currency: 'USD', lookupKey: `foundry_brief_${experimentId}_chosen`, productName: str(raw, 'product_name')!,
         productMetadata: { app_object: 'experiment_deliverable', plan_key: `brief_${experimentId}` }, confirmationMessage: 'Thank you. A copy of the brief is on its way by email.',
         chosen: { ...CHOSEN_BAND } }

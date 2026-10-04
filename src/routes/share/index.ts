@@ -1,5 +1,5 @@
 // =============================================================================
-// FOUNDRY — the one public, token-gated page: a buyer's refund
+// FOUNDRY — the public, token-gated pages: a buyer's refund, a subscriber's stop
 //
 // This was the Investor / Advisor share route, a read-only view of a company's
 // Signal score where the URL token was the secret. That page is deleted — see
@@ -54,6 +54,36 @@ shareRoutes.post('/share/refund/:fulfilmentId/:token', async (c) => {
   if (r.status === 'refunded') return c.html(refundPage('Refunded', `<h1>Refunded</h1><p>${amount} is on its way back to your card. Most banks show it within 5–10 days.</p>`));
   if (r.status === 'already_refunded') return c.html(refundPage('Refunded', `<h1>Already refunded</h1><p>The ${amount} has already been refunded.</p>`));
   return c.html(refundPage('Refund requested', `<h1>Got it</h1><p>Your refund of ${amount} couldn't go through automatically just now. It's been noted and someone will sort it out — you don't need to write again.</p>`));
+});
+
+// ─── A subscriber's stop, by the link in every week's delivery ───────────────
+//
+// The same shape as the refund: one signed link per week's delivery, a page
+// that says what stops and asks once, and a confirmation that records the ask
+// and stops the subscription at the end of the week already paid through the
+// governed door (services/venture/hand.ts cancelSubscription).
+shareRoutes.get('/share/cancel/:fulfilmentId/:token', async (c) => {
+  const { describeCancelLink } = await import('../../services/venture/hand.js');
+  const view = await describeCancelLink(c.req.param('fulfilmentId'), c.req.param('token'));
+  if (!view) return c.notFound();
+  const amount = `${view.currency === 'USD' ? '$' : ''}${(view.amountCents / 100).toFixed(2)}${view.currency === 'USD' ? '' : ` ${view.currency}`}`;
+  if (view.alreadyStopped) return c.html(refundPage('Cancelled', `<h1>Already cancelled</h1><p>Your subscription to ${esc(view.title)} is cancelled. Nothing more will be charged.</p>`));
+  return c.html(refundPage('Cancel', `<h1>Cancel your subscription?</h1>
+<p>You pay ${amount} a week for <strong>${esc(view.title)}</strong>. Confirm below and it stops at the end of the week you've already paid for: you still get that week, and nothing is charged after it.</p>
+<form method="POST"><button type="submit">Cancel my subscription</button></form>
+<p class="quiet">This link works for this subscription only.</p>`));
+});
+
+// NO CAPABILITY IS ASKED HERE ON PURPOSE, for the refund's reason: the signed
+// token is the whole credential, verified by `describeCancelLink`, and the only
+// thing this route can do is stop the buyer's own subscription through the
+// governed door. It lowers what Foundry will take.
+shareRoutes.post('/share/cancel/:fulfilmentId/:token', async (c) => {
+  const { requestCancelByLink } = await import('../../services/venture/hand.js');
+  const r = await requestCancelByLink(c.req.param('fulfilmentId'), c.req.param('token'));
+  if (r.status === 'not_found' || !r.view) return c.notFound();
+  if (r.status === 'stopped' || r.status === 'already_stopped') return c.html(refundPage('Cancelled', `<h1>Cancelled</h1><p>Your subscription to ${esc(r.view.title)} ends with the week you've paid for. Nothing more will be charged.</p>`));
+  return c.html(refundPage('Cancellation requested', `<h1>Got it</h1><p>Your cancellation couldn't go through automatically just now. It's recorded and is tried again every hour until it does — you don't need to write again.</p>`));
 });
 
 // ─── THE SHARE PAGE, DELETED — NOTHING COULD MINT ITS TOKEN ──────────────────

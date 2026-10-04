@@ -441,7 +441,10 @@ export async function publicationGate(experimentId: string, opts: { now?: Date; 
       const atProvider = x.price?.chosen ? (li?.custom ? li.custom.preset : null) : li?.unitAmount;
       if (!li || atProvider !== x.price?.amountCents || li.currency.toUpperCase() !== x.price.currency.toUpperCase()) failures.push(`the price on the page (${x.price?.label ?? 'none'}) is not the price at the provider (${atProvider ?? '?'} ${li?.currency ?? ''})`);
       if (li && x.price && !x.price.chosen && li.custom) failures.push('the page states a fixed price and the provider lets the buyer choose');
-      if (li?.recurring) failures.push('the page says one-time; the provider link recurs');
+      if (x.price?.recurring) {
+        if (!li?.recurring) failures.push('the page says weekly; the provider link charges once');
+        else if (li.interval !== 'week') failures.push(`the page says weekly; the provider link charges every ${li.interval ?? 'period it does not name'}`);
+      } else if (li?.recurring) failures.push('the page says one-time; the provider link recurs');
     }
   }
   // The sender is the Workshop, and its domain is authenticated at the provider.
@@ -475,7 +478,8 @@ export async function publicationGate(experimentId: string, opts: { now?: Date; 
   // the reader's behalf and then answers it reads as written by something that
   // is not a person. What a buyer is owed is a plain statement that there is no
   // subscription, wherever on the page it is made.
-  if (!entry && !/\bno subscription\b|\bnot a subscription\b/i.test(html())) failures.push('the page does not say plainly that there is no subscription');
+  const renewal = renewalPromiseMissing(html(), x.price?.recurring !== undefined);
+  if (!entry && renewal) failures.push(renewal);
   // A FREE TOOL IS THE ONE THING ON A PAGE THAT RUNS. The page must carry the
   // specification the projection checked, and call no script but the
   // Workshop's own; a page without a tool calls none at all.
@@ -491,3 +495,20 @@ export async function publicationGate(experimentId: string, opts: { now?: Date; 
 
 export { indexSlugs, cloudflareConfigured };
 export type { PublicWorkshop };
+
+/**
+ * WHAT A PAGE MUST SAY ABOUT RENEWAL, read the same way by the publication
+ * gate and the readiness check so the two cannot disagree. A one-time offer
+ * says plainly there is no subscription. A weekly one (R19) says it is weekly
+ * until cancelled, that cancelling is from the link in every email, and that
+ * nothing is charged after — because a subscription a buyer cannot see how to
+ * leave is the thing this institution must never sell.
+ */
+export function renewalPromiseMissing(html: string, weekly: boolean): string | null {
+  if (!weekly) return /\bno subscription\b|\bnot a subscription\b/i.test(html) ? null : 'the page does not say plainly that there is no subscription';
+  const missing: string[] = [];
+  if (!/\ba week until you cancel\b/i.test(html)) missing.push('that it is charged every week until cancelled');
+  if (!/\bcancel any time from the link in every email\b/i.test(html)) missing.push('how to cancel');
+  if (!/\bnothing is charged after you cancel\b/i.test(html)) missing.push('that nothing is charged after cancelling');
+  return missing.length ? `the page does not say ${missing.join(', or ')}` : null;
+}

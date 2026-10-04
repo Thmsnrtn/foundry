@@ -52,15 +52,16 @@ export interface PublicExperiment {
    * it. Null for every test that has none, which is all of them but one.
    */
   clarification: { on: string; text: string } | null;
-  /** `chosen` when the buyer picks the amount; `amountCents` is then the suggestion. */
-  price: { amountCents: number; currency: string; label: string; chosen?: { minimumCents: number; maximumCents: number } } | null;
+  /** `chosen` when the buyer picks the amount; `amountCents` is then the suggestion. `recurring` when it is charged every week. */
+  price: { amountCents: number; currency: string; label: string; chosen?: { minimumCents: number; maximumCents: number }; recurring?: { interval: 'week' } } | null;
   /**
    * THE THING ITSELF, given before anybody pays (`value_first`): the page
    * carries the deliverable whole, and paying is the reader's judgement of it.
    * Null for everything that is sold before it is given.
    */
   freeToRead: string | null;
-  recurring: false;
+  /** True only for a weekly offer, read from the sealed shape's own price (R19). */
+  recurring: boolean;
   payUrl: string | null;
   openedOn: string | null; closedOn: string | null; updatedOn: string;
   supersedes: { slug: string; title: string } | null;
@@ -200,11 +201,13 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
   let tool: ToolSpec | null = null;
   if (r.shape_json != null) {
     try {
-      const shape = JSON.parse(String(r.shape_json)) as { price?: { amountCents?: number; currency?: string; chosen?: { minimumCents?: number; maximumCents?: number } }; tool?: unknown };
+      const shape = JSON.parse(String(r.shape_json)) as { price?: { amountCents?: number; currency?: string; chosen?: { minimumCents?: number; maximumCents?: number }; recurring?: { interval?: string } }; tool?: unknown };
       const c = shape.price?.chosen;
       const chosen = c && Number.isInteger(c.minimumCents) && Number.isInteger(c.maximumCents) ? { minimumCents: c.minimumCents!, maximumCents: c.maximumCents! } : undefined;
       if (shape.price?.amountCents && shape.price.currency) {
-        price = chosen
+        price = shape.price.recurring?.interval === 'week' && !chosen
+          ? { amountCents: shape.price.amountCents, currency: shape.price.currency, recurring: { interval: 'week' }, label: `${money(shape.price.amountCents, shape.price.currency)} a week, until you cancel` }
+          : chosen
           ? { amountCents: shape.price.amountCents, currency: shape.price.currency, chosen, label: `pay what it was worth, ${money(shape.price.amountCents, shape.price.currency)} suggested` }
           : { amountCents: shape.price.amountCents, currency: shape.price.currency, label: `${money(shape.price.amountCents, shape.price.currency)}, one time` };
       }
@@ -228,7 +231,8 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
     whereToGetIt, shape,
     clarification: r.public_clarification == null || r.public_clarification_at == null ? null
       : { on: String(r.public_clarification_at), text: String(r.public_clarification) },
-    price: shape === 'portfolio_entry' || shape === 'identity_only' ? null : price, recurring: false,
+    price: shape === 'portfolio_entry' || shape === 'identity_only' ? null : price,
+    recurring: shape !== 'portfolio_entry' && shape !== 'identity_only' && price?.recurring !== undefined,
     // The way to pay is public only while the offer stands; a closed test's
     // link is down and the page says so rather than pointing at it.
     payUrl: shape === 'portfolio_entry' || shape === 'identity_only' ? null

@@ -83,10 +83,12 @@ describe('the vocabularies are the institution\'s, not a service\'s', () => {
     const x = await exchanges();
     expect(x.map((e) => e.exchange)).toEqual(['upfront_price', 'value_first', 'sample_then_paid', 'deposit_then_valuation',
       'subscription', 'usage', 'license', 'free_with_role']);
-    // Three are things the institution can actually run today, and it says so:
-    // a fixed price, pay what it was worth (migration 380), and a free tool
-    // beside a paid thing (migration 379).
-    expect(x.filter((e) => e.available).map((e) => e.exchange)).toEqual(['upfront_price', 'value_first', 'free_with_role']);
+    // Four are things the institution can actually run today, and it says so:
+    // a fixed price, pay what it was worth (migration 380), a subscription that
+    // can always be stopped (migration 381), and a free tool beside a paid
+    // thing (migration 379). A subscription is available to an owner only once
+    // they allow it and Foundry can cancel one (hand.ts subscriptionsRunnable).
+    expect(x.filter((e) => e.available).map((e) => e.exchange)).toEqual(['upfront_price', 'value_first', 'subscription', 'free_with_role']);
     for (const e of x) { expect(e.reveals.length).toBeGreaterThan(10); expect(e.confounds.length).toBeGreaterThan(10); }
     await expect(query(`DELETE FROM probe_exchanges WHERE exchange = 'usage'`)).rejects.toThrow();
     await expect(query(`INSERT INTO probe_exchanges (exchange, what_it_is, reveals, confounds, sort_order) VALUES ('barter','a','b','c',99)`)).rejects.toThrow();

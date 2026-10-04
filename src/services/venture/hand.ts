@@ -32,7 +32,7 @@ import { stateOfferShape, retireExperimentalAsset } from './asset.js';
 import { RECONCILE_DAYS } from './what-the-provider-knows.js';
 import { answerLighter } from './legal-surface.js';
 import { bindActToExperiment, exposureOf, placeExposure, recordBusinessOutcome, settleFromTheWorld, withdrawExposure } from './outcome.js';
-import { OPEN_OBLIGATION, UNCONFIRMED_IS_FAILED_AFTER_DAYS, obligationsOf, owesAnybody } from './obligations.js';
+import { OPEN_OBLIGATION, STILL_RECURS, UNCONFIRMED_IS_FAILED_AFTER_DAYS, obligationsOf, owesAnybody } from './obligations.js';
 import { decideExperiment } from './validation.js';
 import {
   buyerAddressFor, createExperimentPaymentLink, describePaymentLink, findExperimentPaymentLink, paymentCapabilityConfigured, paymentLinkParams,
@@ -511,6 +511,15 @@ export async function allowExperiment(input: {
   if (!ready.ok) throw new HandRefused('not_ready', ready.missing.join('; '));
   const plan = await offerShapePlanOf(input.experimentId);
   if (!plan) throw new HandRefused('no_offer_shape');
+  // NOTHING RECURS THAT FOUNDRY CANNOT STOP. A subscription is let in only
+  // when the owner has lifted the first-proof rule against it themselves, and
+  // only while Foundry's money switch is on — because that switch is what
+  // lets the hand cancel one, and a subscriber whom nobody but the owner can
+  // cancel is a promise on the page that the institution cannot keep.
+  if (plan.price.recurring) {
+    const runnable = await subscriptionsRunnable(input.founderId);
+    if (!runnable.ok) throw new HandRefused(runnable.code, runnable.because);
+  }
   const { publicWorkshopOf } = await import('../public-workshop/settings.js');
   const paused = (await publicWorkshopOf(input.founderId))?.economicPause;
   if (paused) throw new HandRefused('workshop_paused', paused.reason);
@@ -552,7 +561,9 @@ export async function allowExperiment(input: {
   await setBoundary({ productId: after.productId, subject: 'publish', mode: 'ask_first',
     statement: 'Ask me before placing an offer anywhere for this test' });
   await setBoundary({ productId: after.productId, subject: 'move_money', mode: 'ask_first',
-    statement: 'Ask me before moving money for this test; refunding a purchase that was not delivered or that the buyer returns is the one thing I allow' });
+    statement: plan.price.recurring
+      ? 'Ask me before moving money for this test; refunding a week that was not delivered or that the buyer returns, and stopping a subscription, are the things I allow'
+      : 'Ask me before moving money for this test; refunding a purchase that was not delivered or that the buyer returns is the one thing I allow' });
   // THE THREE ACTS ALLOWING IT IS. Each is exact: the campaign over the
   // businesses he reviewed and the offer as written; the payment link over its
   // precise parameters; the refund over purchases the provider reported at
@@ -584,6 +595,7 @@ export async function allowExperiment(input: {
   const refundable = await bindActToExperiment({ actId: refundId, experimentId: input.experimentId, measurementCritical: false });
   if ('refused' in refundable) throw new HandRefused('act_binding_refused', refundable.refused);
   await decideProposedAct({ id: refundId, decision: 'approved', decidedBy: by });
+  if (plan.price.recurring) await approveTheStop({ productId: after.productId, experimentId: input.experimentId, by, validForHours: hours });
   if (plan.venue === 'workshop') {
     // THE ONLY MESSAGE IS THE DELIVERY. One act covers writing to each buyer
     // the provider reports at this test's page, once, with what they paid
@@ -593,9 +605,11 @@ export async function allowExperiment(input: {
       productId: after.productId, subject: 'contact_people', actionType: 'send_email',
       params: { experiment_id: input.experimentId, delivers: 'the deliverable, once, to each buyer the provider reports at this test\'s exposure', one_message_each: true,
         stands_for: 'purchases reported while this act is valid; delivering one is never cut off by its expiry' },
-      summary: `Send ${plan.price.productName} once to each buyer the provider reports at this test's page, including a buyer who paid on the last day it stands; nobody else is written to`,
+      summary: plan.price.recurring
+        ? `Send each week's ${plan.price.productName} once to each subscriber the provider reports at this test's page, for every week they pay while this stands; nobody else is written to`
+        : `Send ${plan.price.productName} once to each buyer the provider reports at this test's page, including a buyer who paid on the last day it stands; nobody else is written to`,
       why: 'A buyer who paid is owed what they paid for, without waiting for you.',
-      expectedEffect: 'One email per settled payment, carrying the deliverable and a refund link.', risk: 'One message per buyer; a buyer who asks to hear nothing further is never written to again.',
+      expectedEffect: plan.price.recurring ? 'One email per paid week, carrying that week\'s edition, a refund link and a cancel link.' : 'One email per settled payment, carrying the deliverable and a refund link.', risk: 'One message per buyer; a buyer who asks to hear nothing further is never written to again.',
       consequence: 'low', rung: 'public', costCents: 0, proposedBy: HAND, validForHours: hours,
     });
     const boundDelivery = await bindActToExperiment({ actId: deliveryId, experimentId: input.experimentId, measurementCritical: true });
@@ -624,6 +638,49 @@ export async function allowExperiment(input: {
   // be edited afterwards would let every result be narrated as the expected one.
   await sealDesign(input.experimentId);
   return { productId: after.productId, actId };
+}
+
+/**
+ * CAN THIS OWNER'S FOUNDRY RUN A SUBSCRIPTION TODAY? Two facts, both read: the
+ * owner's own row lifting the first-proof rule against recurring billing
+ * (R17), and the money switch that lets the hand cancel one (R19). The forge
+ * reads it so it does not design what would be refused; the composition and
+ * the allowance refuse on it.
+ */
+export async function subscriptionsRunnable(founderId: string): Promise<{ ok: true } | { ok: false; code: 'subscriptions_not_allowed' | 'subscription_cannot_be_stopped'; because: string }> {
+  const { originationPolicyFor } = await import('./legal-surface.js');
+  const rule = (await originationPolicyFor(founderId)).find((p) => p.requirement === 'no_recurring_billing');
+  if (!rule || rule.treatment === 'refuse' || rule.treatment === 'require') {
+    return { ok: false, code: 'subscriptions_not_allowed', because: 'the first-proof rule refuses recurring billing until you allow subscriptions on Control' };
+  }
+  if (process.env.FOUNDRY_ENABLE_MONEY_TOOLS !== 'true') {
+    return { ok: false, code: 'subscription_cannot_be_stopped', because: 'Foundry\'s money switch is off, so it could not cancel a subscriber; a subscription is not offered until it can' };
+  }
+  return { ok: true };
+}
+
+/**
+ * THE STOP COMES WITH THE START. Approved with a subscription test, by whoever
+ * approved the test, in words that say it outlives the act's expiry and the
+ * test's end exactly as the refund does; the door finds it from a
+ * cancellation row and the exact stop, never from a caller (standing-intent.ts).
+ */
+export async function approveTheStop(input: { productId: string; experimentId: string; by: string; validForHours: number }): Promise<string> {
+  const cancelId = await proposeAct({
+    productId: input.productId, subject: 'move_money', actionType: 'stripe_update_subscription',
+    params: { experiment_id: input.experimentId, stops: 'a subscription a paid week of this test belongs to, at the end of the week already paid',
+      when: 'the buyer asks through the link in a delivery, or the test can no longer deliver the next week',
+      stands_for: 'subscriptions started while this act is valid; stopping one is never cut off by its expiry or by the test ending' },
+    summary: 'Stop, at the end of the week already paid, any subscription this test started: when the buyer asks through the link in their email, and for everyone once the test can no longer deliver another week. This stands after it expires and after the test ends',
+    why: 'Nobody should be charged for a week Foundry may not deliver, or after they asked to stop.',
+    expectedEffect: 'The subscription is set to end with its current week on your Stripe account; nothing is refunded and nothing more is charged.',
+    risk: 'A subscriber stops paying for weeks they might have wanted; never more than that.',
+    consequence: 'medium', rung: 'financial', costCents: 0, proposedBy: HAND, validForHours: input.validForHours,
+  });
+  const stoppable = await bindActToExperiment({ actId: cancelId, experimentId: input.experimentId, measurementCritical: false });
+  if ('refused' in stoppable) throw new HandRefused('act_binding_refused', stoppable.refused);
+  await decideProposedAct({ id: cancelId, decision: 'approved', decidedBy: input.by });
+  return cancelId;
 }
 
 /** The owner declines: the experiment is decided against and nothing is made. */
@@ -672,10 +729,13 @@ export async function stopExperiment(input: { founderId: string; experimentId: s
   // The acts that TAKE THINGS ON are revoked: the campaign and the placement.
   // The refund act is not, because a stop is not a decision to keep a buyer's
   // money: a purchase that slipped in before the link came down is returned
-  // under the act he already approved, and the door finds it there.
-  for (const a of await rows(`SELECT id FROM proposed_acts WHERE experiment_id = ? AND decision = 'approved' AND revoked_at IS NULL AND action_type IS NOT 'stripe_create_refund'`, [input.experimentId])) {
+  // under the act he already approved, and the door finds it there. Nor is
+  // the act that stops a subscription: a stop that left subscribers being
+  // charged would be the opposite of a stop.
+  for (const a of await rows(`SELECT id FROM proposed_acts WHERE experiment_id = ? AND decision = 'approved' AND revoked_at IS NULL AND action_type NOT IN ('stripe_create_refund', 'stripe_update_subscription')`, [input.experimentId])) {
     await revokeApproval(String(a.id), reason);
   }
+  await stopWhatRecurs(input.experimentId).catch(() => undefined);
   // The asset retires now if nobody is owed anything; otherwise the next pass
   // retires it once the last buyer has been refunded (carryWhatIsOwed).
   if (e.productId) await retireExperimentalAsset({ productId: e.productId, because: `you stopped it: ${reason}` });
@@ -1084,10 +1144,23 @@ export async function planDelivery(input: { experimentId: string; fulfilmentId: 
   if (!deliverable) throw new HandRefused('deliverable_missing');
   const quality = checkDeliverableQuality(deliverable, input.now ?? new Date());
   if (!quality.ok) throw new HandRefused('deliverable_quality', quality.failures.join('; '));
+  // A WEEK IS A NEW EDITION. A subscriber who paid for a second week and was
+  // sent the first week's brief again has paid twice for one thing; the week
+  // waits, owed, until an edition recorded after the last one went out.
+  const weekly = f.subscription_ref != null;
+  if (weekly && await one(
+    `SELECT 1 FROM outbound_actions o JOIN experiment_fulfilments g ON g.id = o.fulfilment_id
+      WHERE o.experiment_id = ? AND o.experiment_act = 'delivery' AND g.subscription_ref = ? AND g.id <> ?
+        AND datetime(o.created_at) >= datetime((SELECT recorded_at FROM experiment_materials WHERE id = ?))`,
+    [input.experimentId, String(f.subscription_ref), String(f.id), deliverable.id])) {
+    throw new HandRefused('same_edition', 'this week\'s brief has not been made again since last week\'s went out; the week is sent once a newer edition exists');
+  }
   const buyer = await buyerAddressFor(String(f.payment_ref));
   if (!buyer) throw new HandRefused('buyer_address_unknown', String(f.payment_ref));
   const replyTo = await replyAddressFor(e.productId, e.founderId);
-  const intro = `Thanks for buying the ${deliverable.title} — it's below. It's a shortlist with a link to each original notice, not a complete listing of the market. If it's no use to you, [ask for your money back here](${refundLinkFor(String(f.id))}) and it's refunded in full; replying to this message works just as well.\n\n---\n\n`;
+  const intro = weekly
+    ? `Thanks for subscribing — this week's ${deliverable.title} is below. It's a shortlist with a link to each original notice, not a complete listing of the market. If this week's is no use to you, [ask for this week's money back here](${refundLinkFor(String(f.id))}). To stop the subscription, [cancel it here](${cancelLinkFor(String(f.id))}): nothing is charged after the week you've paid for. Replying to this message works for either.\n\n---\n\n`
+    : `Thanks for buying the ${deliverable.title} — it's below. It's a shortlist with a link to each original notice, not a complete listing of the market. If it's no use to you, [ask for your money back here](${refundLinkFor(String(f.id))}) and it's refunded in full; replying to this message works just as well.\n\n---\n\n`;
   const body = intro + deliverable.body;
   const id = nanoid();
   await query(
@@ -1283,6 +1356,139 @@ export async function requestRefundByLink(fulfilmentId: string, token: string): 
   if (view.alreadyRefunded) return { status: 'already_refunded', view };
   const result = await refundFulfilment({ fulfilmentId, reason: 'buyer asked through the delivery link' });
   return { status: result.issued ? 'refunded' : 'could_not', view };
+}
+
+// ── A subscription can always be stopped ─────────────────────────────────────
+
+/**
+ * HOW LONG BEFORE THE ACT LAPSES A SUBSCRIPTION IS TOLD TO END. A week is the
+ * longest a paid period runs, and two days more covers a pass that did not
+ * run; a subscription told to end at its current week now cannot renew into a
+ * week nothing allows Foundry to deliver.
+ */
+export const STOP_AHEAD_DAYS = 9;
+
+export function cancelTokenFor(fulfilmentId: string): string {
+  return createHmac('sha256', refundKey()).update(`experiment_cancel:${fulfilmentId}`).digest('hex');
+}
+export function cancelLinkFor(fulfilmentId: string): string {
+  const base = (process.env.APP_URL ?? 'http://localhost:8080').replace(/\/$/, '');
+  return `${base}/share/cancel/${fulfilmentId}/${cancelTokenFor(fulfilmentId)}`;
+}
+export function verifyCancelToken(fulfilmentId: string, token: string): boolean {
+  const expected = Buffer.from(cancelTokenFor(fulfilmentId), 'utf8');
+  const given = Buffer.from(String(token), 'utf8');
+  return expected.length === given.length && timingSafeEqual(expected, given);
+}
+
+/**
+ * STOP ONE SUBSCRIPTION AT THE END OF ITS PAID WEEK. The ask is a row first —
+ * who asked and when — and only then the door, which finds the act the owner
+ * approved with the test from that row. Nothing is refunded here; a week
+ * already paid is delivered, and its own refund link stands. Idempotent: a
+ * second ask is the first one's row, and a stop the provider already took is
+ * reported as done.
+ */
+export async function cancelSubscription(input: { fulfilmentId: string; askedBy: 'buyer' | 'test_ended' }): Promise<{ stopped: boolean; refusedReason: string | null }> {
+  const f = await one(
+    `SELECT f.*, p.id AS product_id, e.founder_id FROM experiment_fulfilments f
+       JOIN venture_experiments e ON e.id = f.experiment_id
+       JOIN products p ON p.from_experiment_id = f.experiment_id AND p.deleted_at IS NULL
+      WHERE f.id = ?`, [input.fulfilmentId]);
+  if (!f) throw new HandRefused('fulfilment_not_found');
+  if (f.subscription_ref == null) return { stopped: false, refusedReason: 'not a subscription' };
+  const sub = String(f.subscription_ref);
+  const experimentId = String(f.experiment_id);
+  // Made under the subscription's FIRST week, which is the purchase the act
+  // covered when it began; a later week may have been reported after the act
+  // lapsed, and the stop must not depend on that.
+  const first = await one('SELECT id FROM experiment_fulfilments WHERE experiment_id = ? AND subscription_ref = ? ORDER BY created_at, rowid LIMIT 1', [experimentId, sub]);
+  await query(
+    `INSERT INTO subscription_cancellations (id, founder_id, experiment_id, fulfilment_id, subscription_ref, asked_by)
+     VALUES (?,?,?,?,?,?) ON CONFLICT (experiment_id, subscription_ref) DO NOTHING`,
+    [nanoid(), String(f.founder_id), experimentId, String(first?.id ?? f.id), sub, input.askedBy]);
+  const c = await one('SELECT id, cancelled_at FROM subscription_cancellations WHERE experiment_id = ? AND subscription_ref = ?', [experimentId, sub]);
+  if (c?.cancelled_at != null) return { stopped: true, refusedReason: null };
+  const refuse = async (why: string): Promise<{ stopped: false; refusedReason: string }> => {
+    await query('UPDATE subscription_cancellations SET refused_reason = ? WHERE id = ?', [why, String(c?.id)]);
+    return { stopped: false, refusedReason: why };
+  };
+  if (process.env.FOUNDRY_ENABLE_MONEY_TOOLS !== 'true') return refuse('policy: Foundry does not move money by default (FOUNDRY_ENABLE_MONEY_TOOLS is off), so only you can cancel this subscription on Stripe');
+  const result = await invoke({
+    productId: String(f.product_id), tool: 'stripe_update_subscription', action: `stop subscription ${sub} at the end of its paid week (${input.askedBy === 'buyer' ? 'the buyer asked' : 'the test can deliver no more weeks'})`,
+    params: { subscription_id: sub, body: { cancel_at_period_end: 'true' } },
+    dedupKey: `experiment:${experimentId}:cancel:${sub}`, customerExternalId: sub, surface: 'billing', dataClass: 'customer',
+  });
+  if (!result.ok) {
+    // ALREADY OVER IS STOPPED. A subscription the buyer ended at the provider,
+    // or that lapsed on a failed card, refuses an update; asking it what it
+    // is turns that refusal into the fact it reports.
+    const { subscriptionHasStopped } = await import('./payment-link.js');
+    if (!(await subscriptionHasStopped(sub).catch(() => false))) return refuse(`${result.phase}: ${result.reason}`);
+  }
+  await query(`UPDATE subscription_cancellations SET cancelled_at = datetime('now'), refused_reason = NULL WHERE id = ? AND cancelled_at IS NULL`, [String(c?.id)]);
+  return { stopped: true, refusedReason: null };
+}
+
+/**
+ * EVERY SUBSCRIPTION THAT MUST STOP, STOPPED. A buyer's ask that the door
+ * refused is asked again; and once the test can no longer deliver a week — the
+ * owner stopped it, it was retired, or the act allowing deliveries is within
+ * STOP_AHEAD_DAYS of lapsing — every subscription it started is told to end
+ * with the week already paid. A settled test is not by itself an end: its
+ * subscribers are still delivered to while the act stands.
+ */
+export async function stopWhatRecurs(experimentId: string, now: Date = new Date()): Promise<{ stopped: number; exceptions: string[] }> {
+  const out = { stopped: 0, exceptions: [] as string[] };
+  const running = await rows(
+    `SELECT f.subscription_ref AS sub, MIN(f.id) AS fulfilment_id,
+            (SELECT c.asked_by FROM subscription_cancellations c WHERE c.experiment_id = f.experiment_id AND c.subscription_ref = f.subscription_ref) AS asked_by
+       FROM experiment_fulfilments f
+      WHERE f.experiment_id = ? AND f.subscription_ref IS NOT NULL
+        AND NOT EXISTS (SELECT 1 FROM subscription_cancellations c WHERE c.experiment_id = f.experiment_id AND c.subscription_ref = f.subscription_ref AND c.cancelled_at IS NOT NULL)
+      GROUP BY f.subscription_ref`, [experimentId]);
+  if (running.length === 0) return out;
+  const e = await experimentRow(experimentId);
+  const act = await campaignActOf(experimentId);
+  const x = await exposureOf(experimentId);
+  // STOPPED is read as carryWhatIsOwed reads it: the act revoked, or the offer
+  // withdrawn before the world settled the test. An act already used once
+  // cannot be revoked (standing-intent.ts), so the withdrawn offer is the
+  // owner's stop as often as the revocation is.
+  const stopped = (!!act && act.revokedAt !== null) || (!!e && e.ranAt === null && (e.retiredAt !== null || (!!x && x.withdrawnAt !== null)));
+  const ending = !e || stopped || e.retiredAt !== null || !act || act.decision !== 'approved'
+    || new Date(act.expiresAt).getTime() - now.getTime() < STOP_AHEAD_DAYS * 86_400_000;
+  for (const r of running) {
+    if (!ending && r.asked_by == null) continue;
+    const done = await cancelSubscription({ fulfilmentId: String(r.fulfilment_id), askedBy: 'test_ended' })
+      .catch((err: unknown) => ({ stopped: false, refusedReason: err instanceof Error ? err.message : String(err) }));
+    if (done.stopped) out.stopped += 1;
+    // WHO ASKED is said, because a buyer who asked to stop and is still being
+    // charged is a buyer waiting on the owner, not a housekeeping line.
+    else out.exceptions.push(`subscription ${String(r.sub)} still charges every week${r.asked_by === 'buyer' ? ' although its buyer asked to cancel' : ''}: ${done.refusedReason}`);
+  }
+  return out;
+}
+
+export interface CancelView { fulfilmentId: string; title: string; amountCents: number; currency: string; alreadyStopped: boolean }
+
+/** What the cancel link shows: the subscription the signed link names, and whether it has already stopped. */
+export async function describeCancelLink(fulfilmentId: string, token: string): Promise<CancelView | null> {
+  if (!/^[A-Za-z0-9_-]{6,64}$/.test(fulfilmentId) || !verifyCancelToken(fulfilmentId, token)) return null;
+  const f = await one('SELECT * FROM experiment_fulfilments WHERE id = ? AND subscription_ref IS NOT NULL', [fulfilmentId]);
+  if (!f) return null;
+  const deliverable = await materialOf(String(f.experiment_id), 'deliverable');
+  const c = await one('SELECT cancelled_at FROM subscription_cancellations WHERE experiment_id = ? AND subscription_ref = ?', [String(f.experiment_id), String(f.subscription_ref)]);
+  return { fulfilmentId, title: deliverable?.title ?? 'your weekly brief', amountCents: Number(f.amount_cents), currency: String(f.currency).toUpperCase(), alreadyStopped: c?.cancelled_at != null };
+}
+
+/** The buyer confirmed. The ask is a fact; the stop is governed; a refusal is retried by every pass and is the owner's to see. */
+export async function requestCancelByLink(fulfilmentId: string, token: string): Promise<{ status: 'not_found' | 'stopped' | 'already_stopped' | 'asked'; view: CancelView | null }> {
+  const view = await describeCancelLink(fulfilmentId, token);
+  if (!view) return { status: 'not_found', view: null };
+  if (view.alreadyStopped) return { status: 'already_stopped', view };
+  const result = await cancelSubscription({ fulfilmentId, askedBy: 'buyer' });
+  return { status: result.stopped ? 'stopped' : 'asked', view };
 }
 
 // ── The cycle ────────────────────────────────────────────────────────────────
@@ -1577,6 +1783,7 @@ export async function runHand(input: { founderId?: string; now?: Date; offersPer
       WHERE e.decision = 'approved' AND e.evidence_mode = 'real' ${input.founderId ? 'AND e.founder_id = ?' : ''}
         AND e.id NOT IN (${live.map(() => '?').join(',') || "''"})
         AND (EXISTS (SELECT 1 FROM experiment_fulfilments f WHERE f.experiment_id = e.id AND ${OPEN_OBLIGATION('f')})
+          OR EXISTS (SELECT 1 FROM experiment_fulfilments f WHERE f.experiment_id = e.id AND ${STILL_RECURS('f')})
           OR EXISTS (SELECT 1 FROM experiment_exposures x WHERE x.experiment_id = e.id AND x.withdrawn_at IS NOT NULL AND datetime(x.withdrawn_at) > datetime('now', '-7 days')))
       ORDER BY e.decided_at, e.rowid`, [...(input.founderId ? [input.founderId] : []), ...live.map((r) => String(r.id))]);
   for (const row of aftermath) {
@@ -1622,6 +1829,10 @@ async function carryWhatIsOwed(experimentId: string, now: Date, report: HandRepo
   // after a settlement is still delivered); the older reading — withdrawn
   // before the world settled it — is kept for the same case reached by hand.
   const stopped = (!!act && act.revokedAt !== null) || (!!e && e.ranAt === null && (e.retiredAt !== null || (!!x && x.withdrawnAt !== null)));
+  // Before anything is delivered or refunded: nobody is charged for a week
+  // Foundry may not deliver (stopWhatRecurs).
+  const recurs = await stopWhatRecurs(experimentId, now);
+  report.exceptions.push(...recurs.exceptions);
   for (const f of await rows(`SELECT id, payment_ref, disputed_at, dispute_outcome, created_at FROM experiment_fulfilments WHERE experiment_id = ? AND status = 'owed' ORDER BY created_at, rowid`, [experimentId])) {
     // A CONTESTED PURCHASE IS NEITHER DELIVERED NOR REFUNDED until the bank
     // decides; the obligation stays visible as itself (obligations.ts).

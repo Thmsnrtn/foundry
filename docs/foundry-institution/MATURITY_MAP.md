@@ -2670,7 +2670,44 @@ pass unchanged.
   are read; the first real week is the proof.
 - The webhook endpoint must be subscribed to `invoice.paid`. Until it is, the
   provider poll (hourly, within 45 days) is what finds a paid week.
-- A refund the owner makes himself in Stripe on a subscription charge is
+- A refund the owner makes themselves in Stripe on a subscription charge is
   found only if the charge names its invoice (older shape); Foundry's own
   refunds update the row directly.
 
+
+### A subscription can always be stopped (Roadmap 2027 R19, 4 October 2026)
+
+**What changed.** `subscription` became available (migration 381) with its end
+built first. It is offered only when the owner's own row has lifted the rule
+against recurring billing and Foundry's money switch is on; the forge sees it
+as available only then, and the composition and the allowance refuse it
+otherwise. The stop is an act approved with the test (`stripe_update_subscription`,
+financial), found by the door only from a `subscription_cancellations` row and
+only for `cancel_at_period_end`. Each paid week records its subscription; each
+week's email carries a signed cancel link beside the refund link; the hand
+stops every subscription when the test is stopped or retired or its delivery
+act nears its end (`STOP_AHEAD_DAYS`, 9), retries a refused stop every pass,
+keeps the asset from retiring while one still charges, and records a
+subscription the provider already ended as stopped. A second week is sent only
+once a newer edition exists. The page, the gate and readiness read one
+renewal promise (`renewalPromiseMissing`).
+
+**Evidence maturity.** E1: law test `a-subscription-can-always-be-stopped`
+(15 cases, world harness, providers stubbed: the two refusals, the buyer's
+link and a forged one, the door refusing a price change and an unrecorded ask,
+the money switch off then on, a provider-ended subscription, the act nearing
+its end, the owner's stop, the page and the gate).
+
+**Proof debt.**
+- No subscription has existed at Stripe. `cancel_at_period_end` and the
+  ended-subscription read are tested against a stub.
+- In production the money switch is off, so the forge will not design a
+  subscription until the owner turns it on and allows subscriptions.
+- A subscription the buyer cancels in Stripe's own portal is read as stopped
+  only when Foundry next tries to stop it; nothing listens for
+  `customer.subscription.deleted`.
+- Subscribers of a test that settled are delivered to until nine days before
+  the delivery act lapses, then stopped; there is no path yet for a settled
+  subscription test to become a lasting product that keeps its subscribers.
+- A week that waits for a newer edition waits as an owed obligation; if the
+  brief cannot be re-pulled, the existing freshness rule makes it the owner's.

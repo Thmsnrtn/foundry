@@ -292,6 +292,17 @@ export async function subscriptionTag(subscriptionId: string): Promise<Record<st
   return sub.metadata ?? null;
 }
 
+/**
+ * WHETHER A SUBSCRIPTION WILL CHARGE AGAIN. Ended, or set to end with its
+ * current period, is stopped — however it got there: the buyer at the
+ * provider, a card that kept failing, or an earlier stop. A read, never an effect.
+ */
+export async function subscriptionHasStopped(subscriptionId: string): Promise<boolean> {
+  const sub = await stripeGet<{ status?: string | null; cancel_at_period_end?: boolean | null; canceled_at?: number | null }>(
+    `/subscriptions/${pathSegment(subscriptionId, 'subscription_id')}`);
+  return sub.status === 'canceled' || sub.status === 'incomplete_expired' || sub.cancel_at_period_end === true || sub.canceled_at != null;
+}
+
 /** The buyer's address for one payment, read from the provider at delivery time and never stored in a ledger. */
 export async function buyerAddressFor(paymentIntentId: string): Promise<string | null> {
   // A SUBSCRIPTION'S DELIVERY IS OWED PER INVOICE, and an invoice names its

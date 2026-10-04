@@ -1077,6 +1077,14 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
       + 'and naming no buyer; goes with the test',
     onAccountErasure: { op: 'delete' },
   },
+  // WHICH SUBSCRIPTION WAS ASKED TO STOP, by whom (the buyer or the test) and
+  // whether the provider took it (migration 381). A provider reference, never
+  // a person; it goes with the test.
+  subscription_cancellations: {
+    reason: 'which subscriptions one person\'s test was asked to stop, by the buyer or because the test ended, '
+      + 'keyed to the provider\'s reference and naming no buyer; goes with the test',
+    onAccountErasure: { op: 'delete' },
+  },
   internal_counterparties: {
     reason: 'keyed hashes of the identities he registered as his own or internal, so his '
       + 'own payments never count as the market; the identities themselves were never stored',

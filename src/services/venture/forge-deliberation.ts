@@ -150,6 +150,8 @@ export async function theRecordOf(experimentId: string): Promise<TheRecord | nul
   const { envelopeReading } = await import('../institution/charter.js');
   const envelope = await envelopeReading(founderId);
   const x = await exchanges();
+  const { subscriptionsRunnable } = await import('./hand.js');
+  const subscriptions = await subscriptionsRunnable(founderId);
   const costDimensions = (await rows('SELECT dimension, what_it_is FROM probe_cost_dimensions ORDER BY sort_order', []))
     .map((r) => ({ dimension: String(r.dimension), whatItIs: String(r.what_it_is) }));
   const stopKinds = (await rows('SELECT kind, what_it_is FROM probe_stop_kinds ORDER BY sort_order', []))
@@ -173,7 +175,10 @@ export async function theRecordOf(experimentId: string): Promise<TheRecord | nul
     charter: envelope ? { monthlyCents: envelope.charter.monthlyCents, remainingCents: envelope.remainingCents,
       probesInFlight: envelope.charter.probesInFlight, inFlight: envelope.inFlight,
       contactRules: envelope.charter.contactRules, publicVoice: envelope.charter.publicVoice } : null,
-    exchanges: x.map((f) => ({ exchange: f.exchange, whatItIs: f.whatItIs, reveals: f.reveals, confounds: f.confounds, available: f.available })),
+    // A SUBSCRIPTION IS AVAILABLE TO THIS OWNER, NOT TO THE INSTITUTION: only
+    // once they have allowed it and Foundry could cancel one (hand.ts).
+    exchanges: x.map((f) => ({ exchange: f.exchange, whatItIs: f.whatItIs, reveals: f.reveals, confounds: f.confounds,
+      available: f.available && (f.exchange !== 'subscription' || subscriptions.ok) })),
     costDimensions, stopKinds,
     form: { kind: takes.label, known: takes.known.map((k) => `${k.claim} (${k.source.title}, read ${k.read}, grade ${k.grade})`),
       notKnown: takes.unknown.map((a) => ASPECT_WORDS[a]), canServe: takes.canServe },

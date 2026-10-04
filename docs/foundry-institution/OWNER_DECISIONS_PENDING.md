@@ -2039,3 +2039,11 @@ authority would be Foundry declaring its own. Control → Your decisions now has
 "Allow subscriptions" (and "Refuse subscriptions again"). Until you tap it,
 nothing recurs, whatever else is built.
 
+**And one setting (4 October 2026, R19).** A subscription is offered only
+while Foundry can cancel one, which needs its money switch on
+(`FOUNDRY_ENABLE_MONEY_TOOLS=true` in the Fly secrets). The same switch lets it
+issue the refunds it already promises; it is off in production today, so
+refunds and cancellations wait for you in Stripe until it is set. The Stripe
+webhook endpoint should also be subscribed to `invoice.paid`; until it is, an
+hourly check of Stripe finds each paid week instead.
+

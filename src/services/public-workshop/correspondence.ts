@@ -305,10 +305,10 @@ export function decide(u: Understanding, ctx: Context): Plan {
       if (u.intent === 'asks_about_offer' || u.intent === 'asks_for_sample') bits.push(pub.what);
       if (u.intent === 'asks_about_coverage') bits.push(pub.what, pub.limits);
       if (u.intent === 'asks_about_sources') bits.push(pub.sources);
-      if (u.intent === 'asks_about_price') bits.push(pub.price ? `It is ${pub.price}, once.` : 'There is no price stated for this yet.');
+      if (u.intent === 'asks_about_price') bits.push(pub.price ? `It is ${pub.price}${pub.recurring ? '' : ', once'}.` : 'There is no price stated for this yet.');
       if (u.intent === 'asks_for_recurring') {
         bits.push(pub.recurring
-          ? 'It repeats.'
+          ? `It's weekly — ${pub.price ?? 'the price on the page'}. Every email has a link that cancels it, and nothing is charged after you cancel.`
           : `It's a one-off — it doesn't repeat and there's no subscription. If I ever offer a regular version you'd be shown it and would have to choose it.`);
       }
       const said = bits.filter(Boolean).join('\n\n');

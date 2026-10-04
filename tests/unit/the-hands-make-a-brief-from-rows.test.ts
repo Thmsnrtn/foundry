@@ -177,13 +177,28 @@ describe('the forge shapes the offer and the hands make the thing', () => {
       VALUES ('hands_x2',?,'hands_opp','hands_unk','give it first','they pay after','nobody pays',0,'real')`, [OWNER]);
     const { recordDesign } = await import('../../src/services/venture/probe-design.js');
     await recordDesign({
-      founderId: OWNER, experimentId: 'hands_x2', decides: 'd', decidesBecause: 'b', exchange: 'subscription', exchangeBecause: 'e', canProve: 'c', cannotProve: 'n',
+      founderId: OWNER, experimentId: 'hands_x2', decides: 'd', decidesBecause: 'b', exchange: 'usage', exchangeBecause: 'e', canProve: 'c', cannotProve: 'n',
       ratherThanWaiting: 'r', distribution: 'x', ifItSucceeds: 'i', recommendation: 'defer', recommendationBecause: 'w', designedBy: 'test',
     });
     const { shapeAndMake } = await import('../../src/services/venture/products/offer-composition.js');
     const made = await shapeAndMake('hands_x2');
-    expect('refused' in made && made.refused).toContain('the hands sell a brief at a fixed price, give a free tool beside one, or give it first for what it was worth');
+    expect('refused' in made && made.refused).toContain('the hands sell a brief at a fixed price or every week, give a free tool beside one, or give it first for what it was worth');
     const { materialOf } = await import('../../src/services/venture/hand.js');
     expect(await materialOf('hands_x2', 'deliverable')).toBeNull();
+  });
+
+  it('refuses a subscription before anything is thought or made, until the owner allows it and Foundry could cancel one', async () => {
+    await query(`INSERT INTO venture_experiments (id, founder_id, opportunity_id, unknown_id, what_we_do, what_we_expect, would_disprove, cost_cents, evidence_mode)
+      VALUES ('hands_x3',?,'hands_opp','hands_unk','charge weekly','they renew','nobody renews',0,'real')`, [OWNER]);
+    const { recordDesign } = await import('../../src/services/venture/probe-design.js');
+    await recordDesign({
+      founderId: OWNER, experimentId: 'hands_x3', decides: 'd', decidesBecause: 'b', exchange: 'subscription', exchangeBecause: 'e', canProve: 'c', cannotProve: 'n',
+      ratherThanWaiting: 'r', distribution: 'x', ifItSucceeds: 'i', recommendation: 'defer', recommendationBecause: 'w', designedBy: 'test',
+    });
+    const { shapeAndMake } = await import('../../src/services/venture/products/offer-composition.js');
+    const made = await shapeAndMake('hands_x3');
+    expect('refused' in made && made.refused).toContain('the first-proof rule refuses recurring billing until you allow subscriptions on Control');
+    const { materialOf } = await import('../../src/services/venture/hand.js');
+    expect(await materialOf('hands_x3', 'deliverable')).toBeNull();
   });
 });

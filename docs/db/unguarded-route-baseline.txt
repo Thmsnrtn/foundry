@@ -3,5 +3,6 @@ POST /connections/:name/disconnect
 POST /connections/grants/:id/revoke
 POST /letter/channels/:channelId/revoke
 POST /settings/interruption-ceiling
+POST /share/cancel/:fulfilmentId/:token
 POST /share/refund/:fulfilmentId/:token
 POST /workshop/mail

@@ -539,7 +539,7 @@ export async function boundaryStandingInTheWay(input: {
  * by a row that names an act — there is nothing to report, and the reader falls
  * back to the family.
  */
-export type ExperimentActKind = 'offer' | 'delivery' | 'refund' | 'withdrawal';
+export type ExperimentActKind = 'offer' | 'delivery' | 'refund' | 'withdrawal' | 'cancellation';
 
 export interface ExperimentAct { experimentId: string; actId: string; kind: ExperimentActKind | null }
 
@@ -595,6 +595,31 @@ export async function experimentActFor(input: { productId: string; tool: string;
         ORDER BY a.decided_at, a.rowid LIMIT 1`,
       [input.productId, input.effectId, input.productId, input.tool])).rows[0] as Record<string, unknown> | undefined;
     if (refund) return found(refund, 'refund');
+    // A SUBSCRIPTION STOPPED: asked for by the buyer's link or because the
+    // test can deliver no more weeks, recorded as a row before the door is
+    // asked, for a subscription a paid week of this experiment belongs to.
+    // Covered by the act approved with the test for as long as anything it
+    // started recurs — and ONLY for the stop itself. The tool can change what
+    // somebody is charged; this act allows exactly one change, ending at the
+    // paid week, so anything else under the same effect finds no act.
+    const cancellation = (await query(
+      `SELECT c.experiment_id, c.subscription_ref, a.id AS act_id
+         FROM subscription_cancellations c
+         JOIN experiment_fulfilments f ON f.id = c.fulfilment_id AND f.subscription_ref = c.subscription_ref
+         JOIN venture_experiments e ON e.id = c.experiment_id
+         JOIN products p ON p.from_experiment_id = e.id AND p.standing = 'experimental'
+         JOIN proposed_acts a ON a.experiment_id = e.id
+        WHERE p.id = ? AND 'experiment:' || c.experiment_id || ':cancel:' || c.subscription_ref = ?
+          AND c.cancelled_at IS NULL
+          AND e.decision = 'approved' AND a.product_id = ? AND a.action_type IS ?
+          AND a.decision = 'approved' AND a.revoked_at IS NULL
+          AND (datetime(a.expires_at) > datetime('now') OR datetime(f.created_at) <= datetime(a.expires_at))
+        ORDER BY a.decided_at, a.rowid LIMIT 1`,
+      [input.productId, input.effectId, input.productId, input.tool])).rows[0] as Record<string, unknown> | undefined;
+    if (cancellation && input.paramsFingerprint
+      && input.paramsFingerprint === fingerprint({ subscription_id: String(cancellation.subscription_ref), body: { cancel_at_period_end: 'true' } })) {
+      return found(cancellation, 'cancellation');
+    }
     // THE OFFER COMING DOWN: an exposure this experiment withdrew, taken down
     // by the same act that placed it. What was placed may be unplaced.
     const takedown = (await query(

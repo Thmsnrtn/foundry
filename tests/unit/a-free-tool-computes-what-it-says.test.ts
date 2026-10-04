@@ -53,7 +53,8 @@ describe('the owner\'s word, and no further', () => {
   it('makes a free thing with a role available, and leaves the exchanges nothing can run yet', async () => {
     const rows = (await query('SELECT exchange, available FROM probe_exchanges', [])).rows as unknown as Array<{ exchange: string; available: number }>;
     const on = rows.filter((r) => Number(r.available) === 1).map((r) => r.exchange).sort();
-    expect(on).toEqual(['free_with_role', 'upfront_price', 'value_first']);
+    // 'subscription' since R19 (migration 381), when a subscription can be stopped.
+    expect(on).toEqual(['free_with_role', 'subscription', 'upfront_price', 'value_first']);
     expect([...EXCHANGES_THE_HANDS_CARRY].sort()).toEqual(on);
     expect(KINDS.find((k) => k.kind === 'static_tool')!.canMake).toBe(true);
   });

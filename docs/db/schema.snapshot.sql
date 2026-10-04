@@ -1419,7 +1419,7 @@ CREATE TABLE experiment_fulfilments (
   created_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at          TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP, disputed_at TEXT, dispute_outcome TEXT CHECK (dispute_outcome IN ('won','lost')), observed_how TEXT NOT NULL DEFAULT 'foundry_observed'
   CHECK (observed_how IN ('foundry_observed','venue_reported','owner_entered','inferred')), after_settlement INTEGER NOT NULL DEFAULT 0 CHECK (after_settlement IN (0, 1)), delivered_files_json TEXT
-  CHECK (delivered_files_json IS NULL OR json_valid(delivered_files_json)), delivered_files_seen_at TEXT,
+  CHECK (delivered_files_json IS NULL OR json_valid(delivered_files_json)), delivered_files_seen_at TEXT, subscription_ref TEXT,
   UNIQUE(payment_event_id)
 );
 CREATE TABLE experiment_invalidity_kinds (
@@ -3886,6 +3886,19 @@ CREATE TABLE "structural_facts" (
   evidence_mode  TEXT NOT NULL CHECK (evidence_mode IN ('real','reference')),
   recorded_at    TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
   superseded_at  TEXT
+);
+CREATE TABLE subscription_cancellations (
+  id               TEXT PRIMARY KEY,
+  founder_id       TEXT NOT NULL REFERENCES founders(id),
+  experiment_id    TEXT NOT NULL REFERENCES venture_experiments(id),
+  fulfilment_id    TEXT NOT NULL REFERENCES experiment_fulfilments(id),
+  subscription_ref TEXT NOT NULL,
+  -- The buyer, by the link in a delivery; or the test, because it ended.
+  asked_by         TEXT NOT NULL CHECK (asked_by IN ('buyer', 'test_ended')),
+  asked_at         TEXT NOT NULL DEFAULT (datetime('now')),
+  cancelled_at     TEXT,
+  refused_reason   TEXT,
+  UNIQUE (experiment_id, subscription_ref)
 );
 CREATE TABLE substrate_evaluations (
   id             TEXT PRIMARY KEY,

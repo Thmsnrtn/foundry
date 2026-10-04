@@ -24,7 +24,7 @@
 
 import { query } from '../../db/client.js';
 import { publicWorkshopOf } from './settings.js';
-import { livePublications, pageUrlFor, publicationGate, verifyPublication, cloudflareConfigured } from './publication.js';
+import { livePublications, pageUrlFor, publicationGate, renewalPromiseMissing, verifyPublication, cloudflareConfigured } from './publication.js';
 import { projectExperiment, workshopFacts, leakIn, privateStringsOf } from './projection.js';
 
 export type LegStatus = 'verified' | 'ready' | 'waiting' | 'blocked';
@@ -102,10 +102,11 @@ export async function externalReadiness(
     if (!x.price) states.push('no price');
     // The commitment, not one sentence of it — the same reading the publication
     // gate uses, so the two cannot disagree about whether the page is honest.
-    if (!/\bno subscription\b|\bnot a subscription\b/i.test(html)) states.push('no plain statement that there is no subscription');
+    const renewal = renewalPromiseMissing(html, x.price?.recurring !== undefined);
+    if (renewal) states.push(renewal.replace(/^the page does not say/, 'no plain statement'));
     if (!x.limits) states.push('no stated limitations');
     say('sealed offer, price and limitations', states.length ? 'blocked' : 'ready',
-      states.length ? states.join('; ') : `${x.price?.label ?? '—'}, one-time, with stated coverage limits`);
+      states.length ? states.join('; ') : `${x.price?.label ?? '—'}${x.price?.recurring ? '' : ', one-time'}, with stated coverage limits`);
 
     // 6b ─ HOW OLD THE GOODS ARE, judged by the rule that will actually refuse.
     //
