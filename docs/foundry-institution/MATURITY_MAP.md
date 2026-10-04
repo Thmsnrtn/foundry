@@ -2730,6 +2730,17 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### In flight counts every charter (Roadmap 2027 R52, 4 October 2026)
+
+**What changed.** The envelope reading and the carve guard count the owner's
+unsettled tests under every charter, so a renewal never reopens places that
+running tests hold. Money is still per signature.
+
+**Evidence maturity.** E1: `in-flight-counts-every-test-whichever-charter-let-it-in`.
+
+**Proof debt.** Not yet read in production; re-signing with tests in flight is
+now safe once this is live.
+
 ### An act covers its window and ends with its charter (Roadmap 2027 R24, 4 October 2026)
 
 **What changed.** `windowAndValidity` sizes a test's window and its acts' life

@@ -7667,13 +7667,15 @@ BEGIN
        WHERE c.envelope_id = NEW.envelope_id
          AND strftime('%Y-%m', c.carved_at) = strftime('%Y-%m', 'now'))
       > (SELECT e.monthly_cents FROM portfolio_envelopes e WHERE e.id = NEW.envelope_id);
-  -- THE PLACES IN FLIGHT. A carved test counts until it has an answer, is
-  -- retired, invalidated or superseded.
+  -- THE PLACES IN FLIGHT, ACROSS EVERY CHARTER OF HIS (383). A carved test
+  -- counts until it has an answer, is retired, invalidated or superseded,
+  -- whichever of his charters let it in.
   SELECT RAISE(ABORT,'portfolio_envelope_carve:no_room_in_flight')
     WHERE (
       SELECT count(*) FROM portfolio_envelope_carves c
+        JOIN portfolio_envelopes ce ON ce.id = c.envelope_id
         JOIN venture_experiments x ON x.id = c.experiment_id
-       WHERE c.envelope_id = NEW.envelope_id
+       WHERE ce.founder_id = (SELECT e.founder_id FROM portfolio_envelopes e WHERE e.id = NEW.envelope_id)
          AND x.what_happened IS NULL AND x.retired_at IS NULL
          AND x.validity = 'valid' AND x.superseded_by IS NULL
          AND coalesce(x.decision, '') <> 'declined')

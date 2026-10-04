@@ -150,28 +150,40 @@ export interface EnvelopeReading {
   remainingCents: number;
   inFlight: number;
   roomForAnother: boolean;
-  carves: Array<{ experimentId: string; productId: string; cents: number; carvedAt: string; settled: boolean }>;
+  /**
+   * This charter's carves, and any test still in flight that an earlier
+   * charter let in (`underEarlierCharter`): those count against the places,
+   * never against this signature's money.
+   */
+  carves: Array<{ experimentId: string; productId: string; cents: number; carvedAt: string; settled: boolean; underEarlierCharter: boolean }>;
 }
 
 /** What the envelope holds and what has been taken from it, as arithmetic. */
 export async function envelopeReading(founderId: string, now: Date = new Date()): Promise<EnvelopeReading | null> {
   const charter = await liveCharter(founderId, now);
   if (!charter) return null;
+  // EVERY CARVE THIS OWNER HAS, under any charter (R52). A renewal withdraws
+  // the standing charter and writes a new one; counting only the live one's
+  // carves let "Renew as it stands" open every place again while the earlier
+  // tests were still running. Earlier charters' settled tests are history and
+  // are left out; their running ones stay, marked as theirs.
   const carves = (await rows(
-    `SELECT c.experiment_id, c.product_id, c.cents, c.carved_at,
+    `SELECT c.experiment_id, c.product_id, c.cents, c.carved_at, c.envelope_id,
             CASE WHEN x.what_happened IS NULL AND x.retired_at IS NULL AND x.validity = 'valid'
                       AND x.superseded_by IS NULL AND coalesce(x.decision,'') <> 'declined'
                  THEN 0 ELSE 1 END AS settled
        FROM portfolio_envelope_carves c
+       JOIN portfolio_envelopes e ON e.id = c.envelope_id
        JOIN venture_experiments x ON x.id = c.experiment_id
-      WHERE c.envelope_id = ? ORDER BY c.carved_at DESC`, [charter.id])).map((r) => ({
+      WHERE e.founder_id = ? ORDER BY c.carved_at DESC, c.rowid DESC`, [founderId])).map((r) => ({
     experimentId: String(r.experiment_id), productId: String(r.product_id), cents: Number(r.cents),
     carvedAt: String(r.carved_at), settled: Number(r.settled) === 1,
-  }));
-  // EVERY CARVE UNDER THIS CHARTER, not this month's. The reading and the row
-  // guard now hold the same arithmetic, so what the page says is left is what
-  // the database would actually still admit.
-  const carvedCents = carves.reduce((n, c) => n + c.cents, 0);
+    underEarlierCharter: String(r.envelope_id) !== charter.id,
+  })).filter((c) => !c.underEarlierCharter || !c.settled);
+  // THE MONEY IS THIS SIGNATURE'S. Every carve under this charter, not this
+  // month's, and none under an earlier one: each signature is its own total.
+  // The reading and the row guard hold the same arithmetic.
+  const carvedCents = carves.filter((c) => !c.underEarlierCharter).reduce((n, c) => n + c.cents, 0);
   // Thinking since he signed, at his scope. It is a separate ceiling, bounded
   // per day, and is not subtracted from the money for tests: netting it would
   // report a tests balance the rows do not enforce.

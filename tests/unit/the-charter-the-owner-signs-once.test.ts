@@ -280,7 +280,11 @@ describe('what he sees', () => {
     expect(home).toContain('href="/foundry/charter" aria-label="The charter"');
     const controls = await (await app.request('/foundry/controls')).text();
     expect(controls).toContain('Active</span>');
-    expect(controls).toContain('$100 of $100 left for tests · 0 of 3 in flight');
+    // The money is this signature's, whole; the places are not (R52): tests the
+    // earlier charters let in and that are still running hold their places.
+    const running = (await envelopeReading(OWNER))!.inFlight;
+    expect(running).toBeGreaterThan(0);
+    expect(controls).toContain(`$100 of $100 left for tests · ${String(running)} of 3 in flight`);
     const place = await (await app.request('/foundry/charter')).text();
     expect(place).toContain('The charter <span class="state watch">Active</span>');
     expect(place).toContain('Apex Micro, never you');
