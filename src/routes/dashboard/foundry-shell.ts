@@ -5114,6 +5114,32 @@ foundryShellRoutes.post('/foundry/controls/charter',
     return c.redirect(back === '/foundry' ? '/foundry' : '/foundry/charter?charter=signed');
   });
 
+/**
+ * SUBSCRIPTIONS ARE HIS TO ALLOW (PENDING 31). The first-proof policy refuses
+ * recurring billing; this supersedes it as HIS act, from his session, which is
+ * the only principal the policy table accepts. "Allow" makes it a weight
+ * against a design rather than a refusal; "refuse" restores the refusal. Both
+ * keep every earlier row, so what the institution started from stays on record.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/controls/subscriptions',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const body = await c.req.parseBody();
+    const allow = String(body.allow ?? '') === 'yes';
+    const { supersedeOriginationPolicy } = await import('../../services/venture/legal-surface.js');
+    const r = await supersedeOriginationPolicy({
+      founderId: String(founder.id), requirement: 'no_recurring_billing',
+      treatment: allow ? 'penalise' : 'refuse',
+      why: allow
+        ? 'The owner allowed subscriptions (PENDING 31, 4 October 2026). A recurring charge is an ongoing obligation, so it still counts against a design; it no longer refuses one.'
+        : 'The owner refused subscriptions again.',
+      by: `founder:${String(founder.id)}`,
+    });
+    return c.redirect(`/foundry/controls?subscriptions=${'refused' in r ? 'refused' : allow ? 'allowed' : 'refused_again'}#your-decisions`);
+  });
+
 foundryShellRoutes.post('/foundry/controls/charter/withdraw',
   requireInstitutionOwner(), async (c: any) => {
     const founder = c.get('founder') as { id?: string } | undefined;
@@ -7825,6 +7851,10 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
     <ul class="mandate-list">${decisions.map((d) => html`<li>
       <span class="mandate-what"><b>${d.act}</b> <span class="status ${DECISION_TONE[d.state] ?? 'done'}">${DECISION_WORD[d.state] ?? ''}</span></span>
       <span class="mandate-when dim">${d.seen}. <span class="quiet">Unblocks ${d.unblocks}.</span></span>
+      ${d.key === 'subscriptions' ? html`<form method="POST" action="/foundry/controls/subscriptions" class="inline">
+        <input type="hidden" name="allow" value="${d.state === 'done' ? 'no' : 'yes'}" />
+        <button class="btn${d.state === 'done' ? '' : ' go'}" type="submit">${d.state === 'done' ? 'Refuse subscriptions again' : 'Allow subscriptions'}</button>
+      </form>` : ''}
     </li>`)}</ul>
   </section>`;
   // WHAT FOUNDRY MAY DO, PER AREA (INSTITUTION_MODEL §6.1): one table read

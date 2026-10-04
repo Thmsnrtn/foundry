@@ -39,10 +39,10 @@ beforeAll(async () => {
 
 const byKey = async (env: NodeJS.ProcessEnv) => Object.fromEntries((await yourDecisions(OWNER, env)).map((d) => [d.key, d]));
 
-describe('the eleven acts', () => {
-  it('are all there, in the roadmap\'s order', async () => {
+describe('the acts', () => {
+  it('are all there, in the roadmap\'s order, with subscriptions (PENDING 31) before the charter', async () => {
     expect((await yourDecisions(OWNER, ENV())).map((d) => d.key)).toEqual(
-      ['credentials', 'clerk', 'copy_away', 'witness', 'money', 'sentry', 'phone', 'pending', 'refunds', 'charter', 'findable']);
+      ['credentials', 'clerk', 'copy_away', 'witness', 'money', 'sentry', 'phone', 'pending', 'refunds', 'subscriptions', 'charter', 'findable']);
   });
 
   it('say "cannot see" for what Foundry cannot see, never done', async () => {

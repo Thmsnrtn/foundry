@@ -84,6 +84,15 @@ export async function yourDecisions(founderId: string, env: NodeJS.ProcessEnv = 
   cannot('refunds', 'Say how a refund is given, and by whom', 'a refund promise you can keep',
     'Etsy refunds are made in Etsy by you; Foundry cannot see them.');
 
+  // SUBSCRIPTIONS (PENDING 31). The first-proof policy refuses recurring
+  // billing, and only the owner, signed in, may supersede it — the database
+  // refuses any other principal (migration 277). Read from his own row.
+  const recurring = await subscriptionsAllowed(founderId);
+  out.push({ key: 'subscriptions', act: 'Allow subscriptions, or keep refusing them', unblocks: 'tests that charge every week, with a cancel link in every email',
+    state: recurring.allowed ? 'done' : 'open',
+    seen: recurring.allowed ? `allowed by you on ${recurring.on ?? 'a recorded date'}; a recurring charge still counts against a design`
+      : recurring.on ? `refused again by you on ${recurring.on}` : 'the first-proof rule still refuses recurring billing' });
+
   const { liveCharter } = await import('../institution/charter.js');
   const charter = await liveCharter(founderId);
   out.push({ key: 'charter', act: 'Sign the charter, with the smallest envelope that lets a test seal', unblocks: 'tests that can seal, and thinking above $1 a day',
@@ -109,3 +118,19 @@ export async function yourDecisions(founderId: string, env: NodeJS.ProcessEnv = 
     state: findable ? 'done' : 'open', seen });
   return out;
 }
+
+/**
+ * WHETHER HE HAS ALLOWED SUBSCRIPTIONS: his own live row for
+ * `no_recurring_billing`, and only a non-binding treatment counts as allowed.
+ * No row of his means the institutional default, which refuses.
+ */
+export async function subscriptionsAllowed(founderId: string): Promise<{ allowed: boolean; on: string | null }> {
+  const row = (await query(
+    `SELECT treatment, set_at FROM origination_policy
+      WHERE founder_id = ? AND requirement = 'no_recurring_billing' AND superseded_at IS NULL
+      ORDER BY set_at DESC, rowid DESC LIMIT 1`, [founderId])).rows[0] as Row | undefined;
+  if (!row) return { allowed: false, on: null };
+  const binding = String(row.treatment) === 'refuse' || String(row.treatment) === 'require';
+  return { allowed: !binding, on: String(row.set_at).slice(0, 10) };
+}
+

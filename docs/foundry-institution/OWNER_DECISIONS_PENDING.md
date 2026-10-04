@@ -2032,3 +2032,10 @@ paid product on apexmicro.ai; pay what it was worth and subscriptions through
 Stripe; Etsy listings by Foundry; pay-per-use APIs; Gumroad or Lemon Squeezy,
 if their APIs permit creating products at all.
 
+**Subscriptions need one act of yours (4 October 2026).** The first-proof
+policy refuses recurring billing, and only you, signed in, may supersede it:
+the policy table refuses any other principal, and a migration writing your
+authority would be Foundry declaring its own. Control → Your decisions now has
+"Allow subscriptions" (and "Refuse subscriptions again"). Until you tap it,
+nothing recurs, whatever else is built.
+
