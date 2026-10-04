@@ -1354,6 +1354,22 @@ CREATE TABLE epistemic_stances (
   not_the_same_as TEXT NOT NULL,
   sort_order   INTEGER NOT NULL
 );
+CREATE TABLE etsy_mail_heard (
+  id              TEXT PRIMARY KEY,
+  founder_id      TEXT NOT NULL REFERENCES founders(id),
+  rfc_hash        TEXT NOT NULL,
+  -- A buyer, or something else Etsy sends (a sale notice, an account code),
+  -- which is recorded only so a redelivery is recognised and nothing is asked.
+  kind            TEXT NOT NULL CHECK (kind IN ('buyer_message', 'not_a_buyer')),
+  -- A key of SAVED_REPLIES (services/venture/etsy-messages.ts), or null when
+  -- no rule recognised the message — then the owner chooses, on Etsy.
+  suggested_reply TEXT,
+  because         TEXT NOT NULL,
+  heard_at        TEXT NOT NULL DEFAULT (datetime('now')),
+  -- Said by the owner. Foundry cannot see Etsy's side, so this is his word.
+  answered_at     TEXT,
+  UNIQUE (founder_id, rfc_hash)
+);
 CREATE TABLE execution_queue (
   id TEXT PRIMARY KEY,
   job_type TEXT NOT NULL,
@@ -5984,6 +6000,10 @@ BEGIN SELECT RAISE(ABORT,'epistemic_stance:constitutional'); END;
 CREATE TRIGGER epistemic_stances_constitutional_update
 BEFORE UPDATE ON epistemic_stances
 BEGIN SELECT RAISE(ABORT,'epistemic_stance:constitutional'); END;
+CREATE TRIGGER etsy_mail_heard_only_buyers_are_answered
+BEFORE UPDATE OF answered_at ON etsy_mail_heard
+WHEN NEW.answered_at IS NOT NULL AND NEW.kind <> 'buyer_message'
+BEGIN SELECT RAISE(ABORT, 'etsy_mail_heard:only_a_buyer_is_answered'); END;
 CREATE TRIGGER experiment_action_binding_immutable
 BEFORE UPDATE ON outbound_actions WHEN OLD.experiment_id IS NOT NULL
 BEGIN

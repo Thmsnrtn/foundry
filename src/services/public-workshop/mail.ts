@@ -590,6 +590,9 @@ export async function replayHeldMail(founderId: string, limit = 200): Promise<{
     if (rfc && await one('SELECT id FROM workshop_mail WHERE founder_id = ? AND rfc_message_id = ?', [founderId, rfc])) {
       alreadyHeard += 1; continue;
     }
+    if (rfc && await (await import('../venture/etsy-messages.js')).heardFromEtsyAlready(founderId, rfc)) {
+      alreadyHeard += 1; continue;
+    }
     let payload: Record<string, unknown>;
     try {
       const value = await readKvValue(w.mailKvNamespaceId, key);
@@ -612,5 +615,13 @@ export async function replayHeldMail(founderId: string, limit = 200): Promise<{
  */
 export async function ingestEdgeRecord(founderId: string, payload: Record<string, unknown>): Promise<Heard> {
   const { edgeRecordToMessage } = await import('./edge-record.js');
-  return hearMail({ founderId, ...edgeRecordToMessage(payload) });
+  const message = edgeRecordToMessage(payload);
+  // ETSY'S MAIL IS NOT THE WORKSHOP'S. The owner forwards Etsy's "a buyer
+  // wrote" emails here, and the Workshop's correspondence answers what it
+  // hears by email — to Etsy's notifier, or to the owner. So Etsy's mail is
+  // recognised first and kept apart, as that a buyer wrote and nothing they
+  // said (services/venture/etsy-messages.ts, migration 378).
+  const { isEtsyMail, hearEtsyMail } = await import('../venture/etsy-messages.js');
+  if (isEtsyMail(message.from, message.body)) return hearEtsyMail(founderId, message);
+  return hearMail({ founderId, ...message });
 }

@@ -1230,6 +1230,10 @@ needs no model.
   same way, which is safe but less informative.
 - Only Workshop mail is read. Etsy messages are not read at all (stated on
   every listing asset), so a buyer who writes on Etsy is his to see there.
+  *Narrowed 4 October 2026 (Roadmap 2027 R14):* Etsy's own "a buyer wrote"
+  email, once he forwards it to the Workshop's address, is heard as a buyer
+  waiting, with the saved reply that fits. The message itself is still read
+  and answered on Etsy, by him.
 - Not observed with a real buyer.
 
 ### A post is evidence, not an instruction (26 September 2026)
@@ -2555,3 +2559,34 @@ deploy reports this commit, production still runs the five jobs.
   `referral_conversions`, `network_contributions`, `network_benchmarks` and
   `onboarding_tour` remain as tables, and billing, trials and `/api/v1` remain as
   code. They are S7b.
+
+### A buyer on Etsy is heard, and answered by a person (Roadmap 2027 R14, 4 October 2026)
+
+**What changed.** Etsy's notification emails, forwarded by the owner to the
+Workshop's address, are recognised at the one mail door (`ingestEdgeRecord`)
+before the Workshop's correspondence can see them, and kept in
+`etsy_mail_heard` (migration 378) as that a buyer wrote, when, and which of
+seven saved replies the rules suggest. A buyer waiting is an urgent Needs-you
+item that cannot be snoozed; the owner marks it answered. The saved replies
+each quote the published passage they restate, and a test holds the quote to
+the listing, how-to or owner's acts. Nothing is sent by Foundry.
+
+**Evidence maturity.** E1: law test `a-buyer-on-etsy-is-heard-not-answered`
+over the real public route, with a stubbed Etsy email. No real Etsy
+notification has been seen by this environment.
+
+**Proof debt.**
+- Etsy's real template is unknown here. The footer filter and the rules were
+  written against an assumed shape; the first real notification is the proof,
+  and a wrong suggestion shows its grounds.
+- The forwarded email is still kept whole in the Workshop's mail store at
+  Cloudflare (the edge writes every message there before Foundry sees it).
+  Foundry's own record keeps no name or words; the store does. The page says
+  so and offers the owner a privacy-policy sentence; nothing deletes it yet.
+- Recognition is not authentication: anyone who knows the address could send
+  a look-alike. It costs the owner one look on Etsy, and grants nothing.
+- "Answered" is the owner's word. Foundry cannot see Etsy's side.
+- The parser change (a part ends at its own MIME boundary; `<address>` kept
+  as text) applies to all Workshop mail. Workshop tests pass; not yet seen on
+  real multi-part mail from a provider other than the stubs.
+

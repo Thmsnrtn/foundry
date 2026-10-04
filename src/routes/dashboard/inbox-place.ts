@@ -15,6 +15,7 @@ import { ago, mark } from '../../views/owner/shell.js';
 import type { Where } from './foundry-shell.js';
 import type { MailRecord, MailView } from '../../services/public-workshop/mail.js';
 import { requireInstitutionOwner } from '../../middleware/rbac.js';
+import type { SavedReply } from '../../services/venture/etsy-messages.js';
 
 export const inboxRoutes = new Hono();
 
@@ -26,7 +27,8 @@ async function founderOf(c: any): Promise<string | null> {
 const where = (on: 'inbox' | 'thread'): Where => ({
   crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: '/foundry/inbox', label: 'Inbox' }],
   scope: { kind: 'foundry', id: null, name: 'Inbox' },
-  local: [{ href: '/foundry/inbox', label: 'What people said', count: null, on: on === 'inbox' }],
+  local: [{ href: '/foundry/inbox', label: 'What people said', count: null, on: on === 'inbox' },
+    { href: '/foundry/etsy-messages', label: 'Etsy buyers', count: null, on: false }],
   chips: [],
 });
 
@@ -118,8 +120,13 @@ inboxRoutes.get('/foundry/inbox', async (c: any) => {
     ['draft', 'Draft', 'writes answers, sends none'],
     ['autonomous', 'Autonomous', 'answers ordinary messages itself'],
   ];
+  const { buyersWaiting } = await import('../../services/venture/etsy-messages.js');
+  const etsyWaiting = (await buyersWaiting(founderId)).length;
   const body = html`
     <h1>Inbox</h1>
+    <p class="${etsyWaiting > 0 ? 'noticed' : 'quiet'}"><a href="/foundry/etsy-messages">Etsy buyers</a>${etsyWaiting > 0
+    ? html` — <strong>${String(etsyWaiting)} ${etsyWaiting === 1 ? 'buyer is' : 'buyers are'} waiting</strong> for a reply on Etsy.`
+    : ' — who wrote on Etsy, and the saved replies.'}</p>
     ${done === 'cleared' ? html`<p class="noticed"><strong>Put away.</strong> ${String(c.req.query('n') ?? '0')} ${String(c.req.query('n') ?? '0') === '1' ? 'conversation' : 'conversations'} you had dealt with. Each keeps its record and can be put back from <a href="/foundry/inbox?show=archived">Put away</a>.</p>` : done ? html`<p class="noticed">Recorded.</p>` : ''}
     ${/* ONE SENTENCE, AND THE REASSURANCE IT CARRIES. This was four lines of
          prose above the first real thing on the page. What the owner needs on
@@ -370,4 +377,101 @@ inboxRoutes.post('/foundry/inbox/:id/settle', requireInstitutionOwner(), async (
   const { settleMail } = await import('../../services/public-workshop/mail.js');
   await settleMail({ founderId, id: String(c.req.param('id')), handling: 'resolved', because });
   return c.redirect('/foundry/inbox?done=settled');
+});
+
+// ─── A BUYER WROTE ON ETSY ───────────────────────────────────────────────────
+//
+// Three things on one page, in the order he needs them: who is waiting and the
+// reply that fits, ready to copy; every saved reply, to keep in Etsy once; and
+// how Etsy's emails reach Foundry at all. Nothing here sends: Etsy offers no
+// way to, and the listing promises a person answers. He reads the message on
+// Etsy, replies there, and says so here. It lives beside the Inbox because it
+// is the same question — who wrote, and is anybody waiting on me.
+const etsyWhere: Where = {
+  crumbs: [{ href: '/foundry', label: 'Foundry' }, { href: '/foundry/etsy-messages', label: 'Etsy buyers' }],
+  scope: { kind: 'foundry', id: null, name: 'Etsy buyers' },
+  local: [
+    { href: '/foundry/inbox', label: 'What people said', count: null, on: false },
+    { href: '/foundry/etsy-messages', label: 'Etsy buyers', count: null, on: true },
+  ],
+  chips: [],
+};
+
+/** A reply as something to copy, not to retype on a phone. */
+const copyable = (id: string, s: SavedReply) => html`<div class="copyrow">
+  <label for="${id}">${s.title}</label>
+  ${s.beforeSending ? html`<p class="noticed"><strong>Before you send it:</strong> ${s.beforeSending}</p>` : ''}
+  <div class="copyrow-field">
+    <textarea id="${id}" readonly rows="5" data-select>${s.text}</textarea>
+    <button type="button" class="btn btn-sm" data-copy="${id}">Copy</button>
+  </div>
+</div>`;
+
+inboxRoutes.get('/foundry/etsy-messages', async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return c.redirect('/onboarding');
+  const { buyersWaiting, SAVED_REPLIES } = await import('../../services/venture/etsy-messages.js');
+  const waiting = await buyersWaiting(founderId);
+  const { publicWorkshopOf } = await import('../../services/public-workshop/settings.js');
+  const address = (await publicWorkshopOf(founderId))?.contactEmail ?? null;
+  const done = String(c.req.query('done') ?? '');
+
+  const body = html`
+    ${done === 'answered' ? html`<p class="state ok" role="status">Marked answered.</p>` : ''}
+    <section class="know">
+      <h2>${waiting.length === 0 ? 'Nobody is waiting' : `${String(waiting.length)} ${waiting.length === 1 ? 'buyer is' : 'buyers are'} waiting`}</h2>
+      ${waiting.length === 0
+    ? html`<p class="quiet">When Etsy emails you that a buyer wrote, and that email is forwarded to
+        Foundry, the buyer appears here with the reply that fits.</p>`
+    : html`<p class="quiet">Read each message on Etsy, where it lives, and reply there. I keep only
+        that a buyer wrote and when, never their name or words.</p>
+      <p><a class="btn go" href="https://www.etsy.com/messages" rel="noopener">Open Etsy messages</a></p>
+      <ul class="sales">${waiting.map((b) => html`<li>
+        <b>A buyer wrote</b> <span class="quiet"><time>${ago(b.heardAt)}</time></span>
+        ${b.suggested
+    ? html`<p>This reply looks like it fits, because ${b.because}.</p>${copyable(`reply-${b.suggested.key}-${b.id}`, b.suggested)}`
+    : html`<p class="quiet">I could not tell which reply fits: ${b.because}. The saved replies are below.</p>`}
+        <form method="POST" action="/foundry/etsy-messages/${b.id}/answered">
+          <button class="btn" type="submit">I answered it on Etsy</button></form>
+      </li>`)}</ul>`}
+    </section>
+
+    <section class="know">
+      <h2>Saved replies</h2>
+      <p class="quiet">Each one says only what the listing or its how-to already promises, and is
+        signed by you. Keep them in Etsy's saved replies once, and answering a buyer is a tap; or
+        copy one from here.</p>
+      ${SAVED_REPLIES.map((s) => copyable(`saved-${s.key}`, s))}
+    </section>
+
+    <section class="know">
+      <h2>How Etsy's emails reach me</h2>
+      <p>Etsy emails you when a buyer writes. Forward that email to
+        ${address ? html`<b>${address}</b>` : html`the Workshop's address (set up the Workshop first)`}
+        and it appears here within a minute.</p>
+      <ul>
+        <li><b>By hand, from your phone:</b> open Etsy's email, tap Forward, and send it to that address.</li>
+        <li><b>Automatically, in Gmail:</b> in Safari, open gmail.com and switch to the desktop site.
+          Settings → See all settings → Forwarding and POP/IMAP → Add a forwarding address. Gmail sends
+          a confirmation code there; it shows in your Inbox here. Then open one of Etsy's message
+          emails, choose "Filter messages like these", and set it to forward.</li>
+      </ul>
+      <p class="quiet">Forward only Etsy's message emails, not everything from Etsy: sign-in codes
+        should never leave your mailbox. If one arrives anyway, I keep nothing of it.</p>
+      <p class="quiet">Your shop's privacy policy says your records hold the order number and amount,
+        never a buyer's name or email. Foundry keeps to that. The forwarded email itself is held in
+        the Workshop's mail store at Cloudflare, as every message to that address is, so add a
+        sentence to the policy before you forward automatically, for example: "When you message me
+        on Etsy, I forward Etsy's notification to my workshop's private mail so that I do not miss
+        you."</p>
+    </section>`;
+  return c.html(page('Etsy buyers', body, 'inbox', etsyWhere));
+});
+
+inboxRoutes.post('/foundry/etsy-messages/:id/answered', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c);
+  if (!founderId) return c.redirect('/onboarding');
+  const { markAnswered } = await import('../../services/venture/etsy-messages.js');
+  const marked = await markAnswered(founderId, String(c.req.param('id')));
+  return c.redirect(marked ? '/foundry/etsy-messages?done=answered' : '/foundry/etsy-messages');
 });

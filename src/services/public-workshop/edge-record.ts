@@ -94,12 +94,24 @@ export function decodeWords(subject: string): string {
 export function textOf(rawMime: string): string {
   if (!rawMime.trim()) return '(no readable body)';
   const body = rawMime.split(/\r?\n\r?\n/).slice(1).join('\n\n') || rawMime;
-  const plain = /content-type:\s*text\/plain[\s\S]*?\r?\n\r?\n([\s\S]*?)(?:\r?\n--|\r?\n\.\r?\n|$)/i.exec(rawMime);
+  // A PART ENDS AT ITS OWN BOUNDARY, NOT AT ANY LINE THAT STARTS "--". That
+  // rule cut a forwarded email at "---------- Forwarded message", which is
+  // where everything that says who it was from begins, and cut a signature at
+  // "-- ". The boundary is named in the message; without one there is one part.
+  const boundary = /boundary="?([^";\r\n]+)"?/i.exec(rawMime)?.[1];
+  const end = boundary ? `\\r?\\n--${boundary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}` : '\\r?\\n\\.\\r?\\n';
+  const plain = new RegExp(`content-type:\\s*text\\/plain[\\s\\S]*?\\r?\\n\\r?\\n([\\s\\S]*?)(?:${end}|$)`, 'i').exec(rawMime);
   const chosen = plain ? plain[1]! : body;
+  // AN ADDRESS IN ANGLE BRACKETS IS NOT A TAG. "From: Etsy <x@etsy.com>" in a
+  // forwarded email is who the email was from, and stripping it as markup left
+  // "From: Etsy" — a name, which says nothing. It is set aside before the tags
+  // go and put back as the plain text it is.
   const stripped = chosen
+    .replace(/<([^<>\s@"']+@[^<>\s"']+)>/g, '\u0001$1\u0002')
     .replace(/<script[\s\S]*?<\/script>/gi, ' ')
     .replace(/<style[\s\S]*?<\/style>/gi, ' ')
     .replace(/<[^>]+>/g, ' ')
+    .replace(/\u0001/g, '<').replace(/\u0002/g, '>')
     .replace(/&nbsp;/gi, ' ')
     .replace(/\r\n/g, '\n')
     .replace(/[ \t]+\n/g, '\n')

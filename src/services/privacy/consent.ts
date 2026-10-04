@@ -965,6 +965,13 @@ const FOUNDER_SCOPED: Record<string, { reason: string; onAccountErasure: Account
   // and what the institution made of it. It goes with the Workshop for the same
   // reason the suppression list does: the only thing that could ever act on it
   // is a workshop that is leaving with its owner.
+  // THAT A BUYER WROTE ON ETSY, and which saved reply fits. No name and no
+  // words were ever kept (migration 378); what remains is his queue, and it
+  // goes with him.
+  etsy_mail_heard: {
+    reason: 'that a buyer wrote on one person\'s Etsy shop, when, and which saved reply fits; never their name or words',
+    onAccountErasure: { op: 'delete' },
+  },
   workshop_mail: {
     reason: 'what people wrote to one person\'s workshop, and what it made of what they said',
     onAccountErasure: { op: 'delete' },

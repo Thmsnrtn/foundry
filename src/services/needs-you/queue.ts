@@ -135,6 +135,25 @@ export async function needsYou(founderId: string, now: Date = new Date()): Promi
     });
   }
 
+  // A BUYER WROTE ON ETSY. Heard from Etsy's own email, forwarded; read and
+  // answered on Etsy, by him. Like anything a buyer is owed, it cannot be put
+  // off (services/venture/etsy-messages.ts).
+  const { buyersWaiting } = await import('../venture/etsy-messages.js');
+  for (const b of await buyersWaiting(founderId)) {
+    all.push({
+      key: `etsy:${b.id}`, level: 'urgent', item: null,
+      summary: b.suggested ? `A buyer wrote on Etsy. The "${b.suggested.title}" reply looks like it fits.` : 'A buyer wrote on Etsy.',
+      companyName: 'Etsy shop', href: '/foundry/etsy-messages',
+      answers: {
+        what: 'A message from a buyer, on Etsy.', whyNow: `Etsy told you on ${b.heardAt.slice(0, 16).replace('T', ' ')} UTC, and they are waiting.`,
+        ifYes: 'You read it on Etsy, reply there, and tell me it is answered.',
+        mostItCanCost: 'Nothing by opening it. A refund is yours to give, in Etsy.',
+        undo: 'A reply sent on Etsy stays sent.', ifNothing: 'The buyer keeps waiting.',
+      },
+      snoozable: false, snoozedUntil: null,
+    });
+  }
+
   // MISSIONS WHOSE LIMITS HE SET WERE CROSSED. Foundry watches the limit and
   // says so here; it never acts on it (services/mission/read.ts).
   const { missionsOf } = await import('../mission/read.js');
