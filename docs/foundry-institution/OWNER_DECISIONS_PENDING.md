@@ -13,11 +13,11 @@ around each item.
 ---
 
 <!-- status:begin — generated from the headings below by node scripts/check-record-matches-code.mjs --write -->
-# 13 WAITING ON THE OWNER, 3 WITH COUNSEL, 5 DECIDED IN PLACE
+# 12 WAITING ON THE OWNER, 3 WITH COUNSEL, 7 DECIDED IN PLACE
 
-- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 20, 21, 25, 26, 27, 29, 30.
+- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 21, 25, 26, 27, 29, 30.
 - **Waiting on counsel:** PENDING 9, 13, 15 (interim positions in force; see below).
-- **Decided, and kept where they were asked:** PENDING 16, 22, 23, 24, 28.
+- **Decided, and kept where they were asked:** PENDING 16, 20, 22, 23, 24, 28, 31.
 - **Answered and recorded as RESOLVED:** 15.
 <!-- status:end -->
 
@@ -961,7 +961,16 @@ discloses that software does "the research and the day-to-day running" but
 not that its prose is written by software. Nothing here changes until you
 say.
 
-## PENDING 20 — Whether Foundry may test a free resource, or something licensed in: **OWNER** (2026-09-21)
+## PENDING 20 — Whether Foundry may test a free resource, or something licensed in: **DECIDED 2026-10-04 (free resource); licensing still open**
+
+**The owner decided the free resource: yes.** Asked on 4 October 2026 which
+new ways of getting paid Foundry may test, the owner chose all four offered:
+a free tool beside a paid product, subscriptions, pay-per-use, and pay what it
+was worth (PENDING 31). Licensing something in was not offered and stays open.
+Each exchange becomes available in the slice that builds the mechanism that
+runs it — never before, because an exchange marked available that nothing can
+run is a promise the code does not keep.
+
 
 The economic forms now include *a free resource that supports a paid
 product* and *something licensed in and resold* (`ECONOMICS.md` §
@@ -1991,3 +2000,35 @@ the GitHub web editor; GitHub emails the last person to edit a schedule.
 the repository's **default branch** (`master`). The witness lives on the working
 branch until that branch reaches `master`, and until then it does not run on
 its own. Merging the branch, or copying that one file to `master`, starts it.
+
+## PENDING 31 — How far Foundry may act on what it finds: **DECIDED 2026-10-04**
+
+**The owner decided it, on 4 October 2026, in four answers:**
+
+1. **Ways of getting paid:** a free tool beside a paid product, subscriptions,
+   pay-per-use (APIs), and pay what it was worth — in addition to the fixed
+   up-front price.
+2. **Where Foundry sells and delivers without the owner doing it by hand:**
+   apexmicro.ai with Stripe checkout; Etsy listings created by Foundry (needs
+   the owner to grant Etsy write permission); Gumroad or Lemon Squeezy.
+3. **Autonomy: "Launch on its own."** When research finds something promising
+   and it fits inside the charter's limits, Foundry builds, publishes and starts
+   selling, and tells the owner after. The charter's limits — money, contacts,
+   term — remain the bound, and the kill switch remains his.
+4. **Timing: "Build and launch now."** New tests may start alongside the Etsy
+   test. This overrides Roadmap 2027's gate that nothing new is added before
+   M1 (the first findable 30 days); the owner accepted that the Etsy result
+   becomes harder to read on its own.
+
+**What does not change.** Authority still comes from the charter and these
+answers, never from what Foundry is able to do. Nothing a buyer or stranger
+writes grants anything. Every outward effect still goes through the one
+gateway, with a receipt, and every new exchange or venue is refused until the
+slice that builds it is live and tested.
+
+**How it is carried out:** Roadmap 2027 tranche 3 (R15 onward), in order —
+the records; launching inside the charter; web tools and the free tool beside a
+paid product on apexmicro.ai; pay what it was worth and subscriptions through
+Stripe; Etsy listings by Foundry; pay-per-use APIs; Gumroad or Lemon Squeezy,
+if their APIs permit creating products at all.
+
