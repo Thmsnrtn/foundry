@@ -249,14 +249,17 @@ async function read(r: Row, now: Date, moneyToolsOn: boolean): Promise<Obligatio
  * and the difference is exactly what the owner needs to be told apart.
  */
 async function whyItCannotGoOut(experimentId: string, now: Date): Promise<string | null> {
-  const { materialOf, checkDeliverableQuality } = await import('./hand.js');
+  const { materialOf, deliverableGate } = await import('./hand.js');
   const deliverable = await materialOf(experimentId, 'deliverable');
   if (!deliverable) return 'there is nothing attached to deliver';
-  const quality = checkDeliverableQuality(deliverable, now);
+  const quality = await deliverableGate(experimentId, deliverable, now);
   if (quality.ok) return null;
   const shape = await materialOf(experimentId, 'offer_shape');
   const canRePull = (shape?.body ?? '').includes('"kind":"data_brief"');
-  return canRePull ? null : quality.failures.join('; ');
+  // Only staleness is a delay the steward clears; any other failure of the
+  // gate is a dead end, however the goods were made (R20).
+  const onlyStale = quality.failures.every((f) => /^pulled \d+ days ago|^no pull date/.test(f));
+  return canRePull && onlyStale ? null : quality.failures.join('; ');
 }
 
 // OWNER TRUTH: an obligation reaches Home, the queue and Economics as his, so

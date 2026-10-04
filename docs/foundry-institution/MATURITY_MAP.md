@@ -2711,3 +2711,21 @@ its end, the owner's stop, the page and the gate).
   subscription test to become a lasting product that keeps its subscribers.
 - A week that waits for a newer edition waits as an owed obligation; if the
   brief cannot be re-pulled, the existing freshness rule makes it the owner's.
+
+### What a buyer pays for can go out (Roadmap 2027 R20, 4 October 2026)
+
+**What changed.** A defect, found independently by three readers of the code
+in the toolbox review: the delivery gate counted only Experiment 001's
+COMMBUYS links, so every brief the hands made would have been refused at
+delivery after payment, silently. `deliverableGate` chooses the gate by what
+made the goods and is read at launch, delivery, page readiness, the experiment
+view and the obligation.
+
+**Evidence maturity.** E1: three law cases in `the-workshop-is-the-first-venue`
+(a hands-made brief passes and is planned for delivery to a paying buyer; a
+citation nobody retrieved is refused at launch and named to the owner).
+
+**Proof debt.**
+- No hands-made brief has been bought yet; the first sale is the proof.
+- A delivery refused for any reason still waits on the owner rather than being
+  refunded automatically; with the money switch off, a refund is theirs anyway.

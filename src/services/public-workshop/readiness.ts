@@ -195,11 +195,11 @@ export async function externalReadiness(
   }
 
   // 8 ─ Fulfilment readiness: something to deliver, good enough to send today.
-  const { materialOf, checkDeliverableQuality } = await import('../venture/hand.js');
+  const { materialOf, deliverableGate } = await import('../venture/hand.js');
   const deliverable = await materialOf(experimentId, 'deliverable');
   if (!deliverable) say('fulfilment readiness', 'blocked', 'nothing to deliver is attached');
   else {
-    const q = checkDeliverableQuality(deliverable, new Date());
+    const q = await deliverableGate(experimentId, deliverable, new Date());
     say('fulfilment readiness', q.ok ? 'ready' : 'blocked',
       q.ok ? `“${deliverable.title}”, ${deliverable.body.length} bytes, fresh enough to send` : q.failures.join('; '));
   }

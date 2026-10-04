@@ -15,6 +15,14 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 // deliverable sent by email under an act that covers exactly that. Nobody is
 // written to. Readiness wants the thing, its words, its page and a way to
 // send — never a list of people — and the charter lets the test in.
+//
+// AND WHAT A BUYER PAYS FOR CAN GO OUT (R20). The delivery gate was
+// Experiment 001's: it counted COMMBUYS bid links and refused every brief the
+// hands made from what the eyes read, so the first stranger to pay for a test
+// launched on its own would have been owed something no pass could send, and
+// told nothing. A brief the hands made now passes the hands' own gate — every
+// item cites a row this owner's eyes retrieved — at launch, at delivery, on
+// the page's readiness and in what the obligation says.
 // =============================================================================
 
 const reply = {
@@ -142,5 +150,57 @@ describe('the Workshop\'s page as the venue', () => {
     // No payment provider answers from here; the pass says so and sends nothing.
     expect(reports[0]!.exceptions.join(' | ')).toContain('offer not placed: Stripe');
     expect(reports[0]!.offersPlanned).toBe(0);
+  });
+});
+
+describe('what a buyer pays for can go out (R20)', () => {
+  it('the brief the hands made passes the gate delivery runs, and that gate is the hands\' own', async () => {
+    const { deliverableGate, materialOf } = await import('../../src/services/venture/hand.js');
+    const goods = (await materialOf(X, 'deliverable'))!;
+    expect(goods.body).toContain('https://remotive.com/remote-jobs/ops/bid-coordinator-9001');
+    expect(await deliverableGate(X, goods, new Date())).toEqual({ ok: true, failures: [] });
+    // A citation of something nobody retrieved is refused, so the gate is not a rubber stamp.
+    const forged = { ...goods, body: goods.body.replace('https://remotive.com/remote-jobs/ops/bid-coordinator-9001', 'https://example.com/made-up') };
+    expect((await deliverableGate(X, forged, new Date())).failures.join(' ')).toMatch(/not a row anything retrieved/);
+  });
+
+  it('a buyer who paid is planned a delivery, not refused at the gate', async () => {
+    const { campaignActOf, planDelivery } = await import('../../src/services/venture/hand.js');
+    // The offer as the hand would have placed it, and a buyer paying at it.
+    if (!(await query('SELECT id FROM experiment_exposures WHERE experiment_id = ?', [X])).rows[0]) {
+      const productId = String((await query('SELECT id FROM products WHERE from_experiment_id = ?', [X])).rows[0]!.id);
+      await query(`INSERT INTO experiment_exposures (id, founder_id, experiment_id, product_id, provider, exposure_ref, evidence_mode, placed_by)
+        VALUES ('venue_exposure',?,?,?,'stripe','plink_venue','real','test')`, [OWNER, X, productId]);
+    }
+    const { intakeStripeSettlement } = await import('../../src/services/venture/settlement-intake.js');
+    await intakeStripeSettlement({ id: 'evt_venue_buyer', type: 'payment_intent.succeeded', created: Math.floor(Date.now() / 1000),
+      data: { object: { id: 'pi_venue_buyer', object: 'payment_intent', amount_received: 1900, currency: 'usd', latest_charge: 'ch_venue_buyer',
+        metadata: { app: 'foundry', experiment_id: X, payment_link: 'plink_venue' } } } });
+    const fid = String((await query("SELECT id FROM experiment_fulfilments WHERE payment_ref = 'pi_venue_buyer'", [])).rows[0]!.id);
+    vi.stubGlobal('fetch', vi.fn(async (url: string) => String(url).includes('/payment_intents/pi_venue_buyer')
+      ? new Response(JSON.stringify({ id: 'pi_venue_buyer', receipt_email: 'buyer@trade.example' }), { status: 200 })
+      : new Response('{}', { status: 404 })));
+    process.env.STRIPE_SECRET_KEY ??= 'sk_test_venue';
+    try {
+      expect(await campaignActOf(X)).not.toBeNull();
+      const plan = await planDelivery({ experimentId: X, fulfilmentId: fid });
+      expect(plan.status).toBe('pending_approval');
+    } finally { vi.unstubAllGlobals(); }
+  });
+
+  it('goods that could not go out keep a test from launching, and an owed buyer is told the real reason', async () => {
+    const { deliverableGate, materialOf, recordMaterial } = await import('../../src/services/venture/hand.js');
+    const goods = (await materialOf(X, 'deliverable'))!;
+    await recordMaterial({ founderId: OWNER, experimentId: X, kind: 'deliverable', title: goods.title,
+      body: goods.body.replace('https://remotive.com/remote-jobs/ops/bid-coordinator-9001', 'https://example.com/made-up'), pulledAt: goods.pulledAt ? new Date(goods.pulledAt) : new Date(), by: 'test' });
+    const now = (await materialOf(X, 'deliverable'))!;
+    expect((await deliverableGate(X, now, new Date())).ok).toBe(false);
+    const { readiness } = await import('../../src/services/venture/hand.js');
+    expect((await readiness(X)).missing.join(' ')).toMatch(/what a buyer would be sent could not go out: .*not a row anything retrieved/);
+    const { obligationsOf } = await import('../../src/services/venture/obligations.js');
+    const owed = (await obligationsOf(X)).find((o) => o.paymentRef === 'pi_venue_buyer')!;
+    expect(owed.sentence).not.toMatch(/goes out on the next pass/);
+    expect(owed.sentence).toMatch(/the delivery is refused: .*not a row anything retrieved/);
+    expect(owed.asksHim).toMatch(/This one is yours/);
   });
 });

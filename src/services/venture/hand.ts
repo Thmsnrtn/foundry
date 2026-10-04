@@ -306,6 +306,29 @@ export function checkDeliverableQuality(m: Material, now: Date, maxAgeDays = DEL
   return { ok: failures.length === 0, failures };
 }
 
+/**
+ * THE GATE WHAT A BUYER PAID FOR MUST PASS TO GO OUT, chosen by what made it.
+ * A brief the hands made is held to the hands' own gate (every item cites a
+ * row this owner's eyes retrieved, fresh, coverage stated, nobody named); a
+ * deliverable written by hand keeps the gate it was written against
+ * (Experiment 001's bid links). One function so launch, delivery, the page's
+ * readiness and the obligation cannot disagree about whether it can go out —
+ * they did, and every brief the hands made would have been refused after a
+ * stranger paid for it (R20).
+ */
+export async function deliverableGate(experimentId: string, m: Material, now: Date): Promise<{ ok: boolean; failures: string[] }> {
+  const shape = await materialOf(experimentId, 'offer_shape');
+  let kind: unknown = null;
+  try { kind = shape ? (JSON.parse(shape.body) as { kind?: unknown }).kind : null; } catch { kind = null; }
+  if (kind === 'data_brief') {
+    const e = await experimentRow(experimentId);
+    if (!e) return { ok: false, failures: ['no such experiment'] };
+    const { checkBriefQuality } = await import('./products/registry.js');
+    return checkBriefQuality(e.founderId, m, now);
+  }
+  return checkDeliverableQuality(m, now);
+}
+
 export function checkOfferQuality(m: Material, pageUrl: string | null = null): { ok: boolean; failures: string[] } {
   const failures: string[] = [];
   const body = m.body;
@@ -821,7 +844,14 @@ export async function readiness(experimentId: string): Promise<Readiness> {
   const plan = await offerShapePlanOf(experimentId);
   if (plan?.venue === 'workshop') {
     const missing: string[] = [];
-    if (!(await materialOf(experimentId, 'deliverable'))) missing.push('nothing to deliver is attached');
+    const goods = await materialOf(experimentId, 'deliverable');
+    if (!goods) missing.push('nothing to deliver is attached');
+    else {
+      // NOTHING IS SOLD THAT COULD NOT GO OUT. Read by the gate delivery runs,
+      // so a test is not let in to take money for goods no pass could send.
+      const q = await deliverableGate(experimentId, goods, new Date());
+      if (!q.ok) missing.push(`what a buyer would be sent could not go out: ${q.failures.join('; ')}`);
+    }
     if (!(await materialOf(experimentId, 'offer_template'))) missing.push('the offer text is not written');
     const { designOf } = await import('./probe-design.js');
     if (!(await designOf(experimentId))) missing.push('the design has not been recorded');
@@ -1142,7 +1172,7 @@ export async function planDelivery(input: { experimentId: string; fulfilmentId: 
   if (existing) return existing;
   const deliverable = await materialOf(input.experimentId, 'deliverable');
   if (!deliverable) throw new HandRefused('deliverable_missing');
-  const quality = checkDeliverableQuality(deliverable, input.now ?? new Date());
+  const quality = await deliverableGate(input.experimentId, deliverable, input.now ?? new Date());
   if (!quality.ok) throw new HandRefused('deliverable_quality', quality.failures.join('; '));
   // A WEEK IS A NEW EDITION. A subscriber who paid for a second week and was
   // sent the first week's brief again has paid twice for one thing; the week

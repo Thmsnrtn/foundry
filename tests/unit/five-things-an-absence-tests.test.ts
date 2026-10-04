@@ -32,7 +32,10 @@ import {
 let OWNER = '';
 let COMPANY = '';
 
-const NOW = new Date('2026-09-14T12:00:00Z');
+// TODAY, AT NOON. A fixed date here was a time bomb: the database refuses a
+// proposal born already expired, so a fixture written as "twenty days from 14
+// September" began failing on 4 October with nothing in the code changed.
+const NOW = new Date(`${new Date().toISOString().slice(0, 10)}T12:00:00Z`);
 const day = (offset: number): string =>
   new Date(NOW.getTime() + offset * 86_400_000).toISOString();
 
@@ -363,8 +366,8 @@ describe('the reading as a whole', () => {
   it('answers all three horizons, in order, with the date he would come back', async () => {
     const all = await absenceHorizons(OWNER, NOW);
     expect(all.map((r) => r.days)).toEqual([7, 30, 90]);
-    expect(all[0].returnsOn).toBe('2026-09-21');
-    expect(all[2].returnsOn).toBe('2026-12-13');
+    expect(all[0].returnsOn).toBe(day(7).slice(0, 10));
+    expect(all[2].returnsOn).toBe(day(90).slice(0, 10));
   });
 
   it('leads the verdict with what fails, never with what works', async () => {

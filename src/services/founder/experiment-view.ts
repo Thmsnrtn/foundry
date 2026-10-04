@@ -18,7 +18,7 @@ export { outcomeOf, outcomeFromRow, outcomeSentence, type Outcome, type OutcomeW
 import { exposureOf, parseSettlementRule, whatTheWorldSaid } from '../venture/outcome.js';
 import {
   campaignActOf, experimentRow, handExceptions, materialOf, offerShapePlanOf, readiness, recipientsOf,
-  checkDeliverableQuality, checkOfferQuality, type ExperimentRow, type Readiness, type Recipient,
+  deliverableGate, checkOfferQuality, type ExperimentRow, type Readiness, type Recipient,
 } from '../venture/hand.js';
 
 type Row = Record<string, unknown>;
@@ -355,7 +355,7 @@ export async function getExperimentView(founderId: string, experimentId: string,
     killAt: rule?.atMost ?? null,
   };
   const moneyView: ExperimentMoney = { ...moneySoFar, currency: plan?.price.currency ?? 'USD' };
-  const dq = deliverable ? checkDeliverableQuality(deliverable, now) : null;
+  const dq = deliverable ? await deliverableGate(experimentId, deliverable, now) : null;
   const offerView = {
     price, oneTime: true, paymentLinkUrl: offer?.paymentLinkUrl ?? null, offerQuality: offer ? checkOfferQuality(offer) : null,
     deliverable: deliverable && dq ? { title: deliverable.title, pulledAt: deliverable.pulledAt ? deliverable.pulledAt.slice(0, 10) : null, items: (deliverable.body.match(/^### /gm) ?? []).length, quality: dq } : null,
