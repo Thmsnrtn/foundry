@@ -2730,6 +2730,27 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### The privacy page says what the pages do (Roadmap 2027 R22, 4 October 2026)
+
+**What changed.** `renderSite` renders `/privacy` after every other page and
+tells it whether any of them loads `/tool.js`. Where one does, the page says a
+calculator runs in the browser and the site's rules forbid it to send what is
+typed, and it no longer says "no scripts". Where none does, it says nothing
+about a calculator. "No cookies, no analytics, no tracking pixels" is unchanged,
+and "no analytics, by design" below stays true.
+
+**Evidence maturity.** E1: `the-privacy-page-says-what-the-pages-do` (every
+fixture site, with and without a tool; the Worker CSP has `default-src 'none'`
+and no `connect-src`; the runtime contains no fetch, beacon, socket, storage,
+cookie or message call).
+
+**Proof debt.**
+- No tool page has been published in production, so the new sentence has not
+  been read back over HTTPS. The first publication of one is the E3 read.
+- The sentence was written to the 90-day plan's proposal; the owner may reword
+  it (R22 owner act). R36's sentence about per-page daily counts is separate and
+  needs its own approval before it ships.
+
 ### The money door moves only Foundry's money (Roadmap 2027 R21, 4 October 2026)
 
 **What changed.** Before the money switch may be turned on, the refund and

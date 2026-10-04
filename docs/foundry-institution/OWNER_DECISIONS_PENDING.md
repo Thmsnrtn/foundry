@@ -599,6 +599,15 @@ questions block unrelated development."* Preserve the questions, implement the
 safest locally resolvable structural corrections, and resume autonomous
 stewardship.
 
+**4 October 2026 (Roadmap 2027 R22).** The public privacy page said "no
+scripts", which stopped being true when a free tool's page carried its
+calculator (`/tool.js`). It now says, only where such a page exists: "Some pages
+carry a calculator: it runs in your browser, and this site's own rules forbid it
+to send what you type anywhere." Everything else it promised stands, and nothing
+here counts visits. **Yours to reword** if you would put it differently; the
+sentence about counting page opens (R36) will be put to you separately before
+it ships.
+
 ---
 
 ## PENDING 15 — The AI sub-processor disclosure was wrong, and what replaces it is yours: **COUNSEL**
@@ -2043,7 +2052,9 @@ nothing recurs, whatever else is built.
 the code found that the refund door trusted its caller to name the right charge
 on a Stripe account that also holds your land sales. R21 makes the door read
 each charge from Stripe and refuse anything that is not a Foundry purchase's
-own. Turn the switch on only after R21 is live.
+own. Turn the switch on only after R21 is live. **R21 went live on 4 October
+2026 (`b0c1e0ba`, read back from production health), so the switch may now be
+set.**
 
 **And one setting (4 October 2026, R19).** A subscription is offered only
 while Foundry can cancel one, which needs its money switch on

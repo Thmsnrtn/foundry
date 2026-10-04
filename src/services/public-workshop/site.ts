@@ -4,8 +4,10 @@
 // Pure functions from public facts to HTML. Nothing here reads a row; what a
 // page can say is exactly what crossed the projection boundary. The voice is
 // the owner's: a person, plain, specific about what is and is not claimed.
-// One stylesheet, no scripts, no tracking of any kind, and every control large
-// enough for a thumb, because a recipient opens an experiment link on a phone.
+// One stylesheet. The only script is the free tools' calculator (/tool.js),
+// which the site's own security policy forbids to send anything. No tracking of
+// any kind, and every control large enough for a thumb, because a recipient
+// opens an experiment link on a phone.
 // =============================================================================
 import type { PublicExperiment, PublicWorkshopFacts } from './projection.js';
 import { postalLines } from './settings.js';
@@ -514,12 +516,22 @@ ${f.postalAddress ? `<p>Post: ${postalLines(f.postalAddress).map(esc).join('<br 
   return shell(f, 'Contact', '/contact', body, `How to reach ${f.name}.`, { path: '/contact' });
 }
 
-export function renderPrivacy(f: PublicWorkshopFacts): string {
+/**
+ * THE PRIVACY PAGE DESCRIBES THE PAGES BESIDE IT (R22). It used to say "no
+ * scripts", which stopped being true the day a free tool's page carried the
+ * calculator. So whether it mentions the calculator is decided from the pages
+ * actually rendered, never from a flag somebody remembers to set: renderSite
+ * passes `carriesCalculator` from what it built.
+ */
+export function renderPrivacy(f: PublicWorkshopFacts, carriesCalculator = false): string {
+  const calculator = carriesCalculator
+    ? ' Some pages carry a calculator: it runs in your browser, and this site\'s own rules forbid it to send what you type anywhere.'
+    : '';
   const body = `
 <h1>Privacy</h1>
 <p class="lede">This site doesn't collect anything about you. Anything I sell collects only what delivering it needs.</p>
 <h2>This site</h2>
-<p>No cookies, no analytics, no tracking pixels, no scripts. The pages come off a content network which, like any web server, sees requests as they arrive. Nothing about you is kept here.</p>
+<p>No cookies, no analytics, no tracking pixels.${calculator} The pages come off a content network which, like any web server, sees requests as they arrive. Nothing about you is kept here.</p>
 <h2>When you buy something here</h2>
 <p>Stripe handles the payment and passes me your email address so I can send you what you bought, and refund it if you ask. I don't keep a customer database of my own — your address lives in Stripe's records and in the delivery email.</p>
 <h2>When you buy something on a marketplace</h2>
@@ -646,7 +658,6 @@ export function renderSite(f: PublicWorkshopFacts, registry: PublicExperiment[])
   pages.set('/graduated', renderRegistry(f, registry, 'graduated'));
   pages.set('/closed', renderRegistry(f, registry, 'closed'));
   pages.set('/contact', renderContact(f));
-  pages.set('/privacy', renderPrivacy(f));
   pages.set('/email', renderEmail(f));
   pages.set('/email/done', renderEmailDone(f));
   pages.set('/thank-you', renderThankYou(f));
@@ -654,5 +665,6 @@ export function renderSite(f: PublicWorkshopFacts, registry: PublicExperiment[])
   pages.set('/terms', renderTerms(f));
   pages.set('/404', renderNotFound(f));
   for (const x of registry) pages.set(x.path, renderExperiment(f, x));
+  pages.set('/privacy', renderPrivacy(f, [...pages.values()].some((html) => html.includes('src="/tool.js"'))));
   return pages;
 }
