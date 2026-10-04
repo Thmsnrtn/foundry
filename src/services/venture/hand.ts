@@ -560,7 +560,9 @@ export async function allowExperiment(input: {
   const placementId = await proposeAct({
     productId: after.productId, subject: 'publish', actionType: 'stripe_create_payment_link',
     params: paymentLinkParams(input.experimentId, plan.price),
-    summary: plan.price.chosen
+    summary: plan.price.recurring
+      ? `Create the ${plan.price.currency.toUpperCase()} ${(plan.price.amountCents / 100).toFixed(2)}-a-${plan.price.recurring.interval} subscription link on your Stripe account, tagged for this test; every week paid is one brief owed`
+      : plan.price.chosen
       ? `Create the pay-what-it-was-worth payment link on your Stripe account, suggesting ${plan.price.currency.toUpperCase()} ${(plan.price.amountCents / 100).toFixed(2)} (between ${(plan.price.chosen.minimumCents / 100).toFixed(2)} and ${(plan.price.chosen.maximumCents / 100).toFixed(2)}), tagged for this test`
       : `Create the ${plan.price.currency.toUpperCase()} ${(plan.price.amountCents / 100).toFixed(2)} one-time payment link on your Stripe account, tagged for this test`,
     why: 'The offer needs one place a buyer can pay, and the tag is how a payment is known to belong to this test.',

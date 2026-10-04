@@ -37,6 +37,11 @@ export interface SettlementFact {
   providerRef: string; paymentRef: string; chargeRef: string | null; payerReference: string | null; paymentLinkId: string | null;
   /** The payment this event is about, when it reverses or contests one. */
   settlesRef: string | null;
+  /**
+   * THE SUBSCRIPTION A WEEKLY INVOICE BELONGS TO, when the invoice did not
+   * carry the subscription's tag itself; the intake asks the provider for it.
+   */
+  subscriptionRef?: string | null;
 }
 
 const isOurs = (m: Record<string, string> | null | undefined) => !!m && (m.app == null || m.app === 'foundry') && typeof m.experiment_id === 'string' && m.experiment_id.trim() !== '';
@@ -54,6 +59,24 @@ export function settlementFactsFromStripeEvent(event: { id?: string; type: strin
       observedAt: at, providerRef: String(o.id), paymentRef: String(o.id), chargeRef: refOf(o.latest_charge),
       payerReference: str(o.receipt_email), paymentLinkId: str(meta!.payment_link), settlesRef: null }];
   }
+  // A WEEK OF A SUBSCRIPTION, PAID. The invoice, not the intent, is the unit:
+  // one paid invoice is one delivery owed. Its tag is the subscription's,
+  // snapshotted on the invoice — under `parent.subscription_details` in the
+  // provider's current shape, at the top level in older ones — and when
+  // neither carries it the intake asks for the subscription by name. A
+  // subscription-mode checkout carries no intent and is skipped above it, so
+  // the first week is counted once, here.
+  if (event.type === 'invoice.paid' && o.object === 'invoice') {
+    const parent = (o.parent ?? null) as { subscription_details?: { subscription?: unknown; metadata?: Record<string, string> | null } | null } | null;
+    const details = parent?.subscription_details ?? (o.subscription_details as { metadata?: Record<string, string> | null } | null | undefined) ?? null;
+    const subMeta = details?.metadata ?? null;
+    const subscriptionRef = refOf(parent?.subscription_details?.subscription) ?? refOf(o.subscription);
+    const paid = Number(o.amount_paid ?? 0);
+    if (paid <= 0 || (!isOurs(subMeta) && !subscriptionRef)) return [];
+    return [{ experimentId: isOurs(subMeta) ? subMeta!.experiment_id : null, kind: 'payment', amountCents: paid, currency,
+      observedAt: at, providerRef: String(o.id), paymentRef: String(o.id), chargeRef: refOf(o.charge),
+      payerReference: str(o.customer_email), paymentLinkId: null, settlesRef: null, subscriptionRef }];
+  }
   if (event.type === 'checkout.session.completed' && o.object === 'checkout.session' && o.payment_status === 'paid' && isOurs(meta) && typeof o.payment_intent === 'string') {
     const details = o.customer_details as { email?: string | null } | null | undefined;
     return [{ experimentId: meta!.experiment_id, kind: 'payment', amountCents: Number(o.amount_total ?? 0), currency,
@@ -69,11 +92,14 @@ export function settlementFactsFromStripeEvent(event: { id?: string; type: strin
       observedAt: at, providerRef: `${String(o.id)}:declined`, paymentRef: String(o.id), chargeRef: str(err?.charge),
       payerReference: str(o.receipt_email), paymentLinkId: str(meta!.payment_link), settlesRef: null }];
   }
-  if (event.type === 'charge.refunded' && o.object === 'charge' && isOurs(meta)) {
+  if (event.type === 'charge.refunded' && o.object === 'charge' && (isOurs(meta) || typeof o.invoice === 'string')) {
     const refunds = (o.refunds as { data?: Array<{ id: string; amount: number }> } | undefined)?.data ?? [];
     const last = refunds[refunds.length - 1];
-    const paymentRef = String(o.payment_intent ?? '');
-    return [{ experimentId: meta!.experiment_id, kind: 'refund', amountCents: Number(last?.amount ?? o.amount_refunded ?? 0), currency,
+    // A SUBSCRIPTION'S CHARGE CARRIES NO TAG OF OURS; it names its invoice,
+    // which is the payment the delivery was owed against, and the intake
+    // finds the experiment by that reference or refuses it.
+    const paymentRef = typeof o.invoice === 'string' && !isOurs(meta) ? o.invoice : String(o.payment_intent ?? '');
+    return [{ experimentId: isOurs(meta) ? meta!.experiment_id : null, kind: 'refund', amountCents: Number(last?.amount ?? o.amount_refunded ?? 0), currency,
       observedAt: at, providerRef: last?.id ?? `${String(o.id)}:refund`, paymentRef, chargeRef: String(o.id),
       payerReference: str(o.receipt_email), paymentLinkId: null, settlesRef: paymentRef || String(o.id) }];
   }
@@ -103,6 +129,19 @@ export interface SettlementIntake {
   refused: Array<{ providerRef: string; reason: string }>;
 }
 
+/**
+ * THE EXPERIMENT A SUBSCRIPTION WAS STARTED FOR, read from the subscription's
+ * own tag at the provider. A read: it moves nothing. A subscription that is
+ * not ours, or that cannot be read, belongs to no experiment.
+ */
+export async function experimentOfSubscription(subscriptionId: string): Promise<string | null> {
+  try {
+    const { subscriptionTag } = await import('./payment-link.js');
+    const meta = await subscriptionTag(subscriptionId);
+    return isOurs(meta) ? meta!.experiment_id : null;
+  } catch { return null; }
+}
+
 /** The experiment a reference belongs to, from what is already owed. */
 async function experimentByReference(refs: Array<string | null>): Promise<string | null> {
   const known = refs.filter((r): r is string => !!r);
@@ -122,7 +161,8 @@ async function experimentByReference(refs: Array<string | null>): Promise<string
 export async function intakeStripeSettlement(event: { id?: string; type: string; created?: number; data?: { object?: unknown } }): Promise<SettlementIntake> {
   const result: SettlementIntake = { recorded: [], refused: [] };
   for (const fact of settlementFactsFromStripeEvent(event)) {
-    const experimentId = fact.experimentId ?? await experimentByReference([fact.paymentRef, fact.chargeRef]);
+    const experimentId = fact.experimentId ?? await experimentByReference([fact.paymentRef, fact.chargeRef])
+      ?? (fact.subscriptionRef ? await experimentOfSubscription(fact.subscriptionRef) : null);
     if (!experimentId) { result.refused.push({ providerRef: fact.providerRef, reason: 'no purchase of ours matches this reference' }); continue; }
     const x = await exposureOf(experimentId);
     if (!x) { result.refused.push({ providerRef: fact.providerRef, reason: 'the experiment has no exposure' }); continue; }
@@ -178,6 +218,19 @@ export async function intakeStripeSettlement(event: { id?: string; type: string;
       } else if (existing.charge_ref == null && fact.chargeRef) {
         // The intent and its session are one payment; only one of them carries the charge.
         await query(`UPDATE experiment_fulfilments SET charge_ref = ?, updated_at = datetime('now') WHERE id = ?`, [fact.chargeRef, id]);
+      }
+      // A WEEK OF A SUBSCRIPTION whose invoice did not name its charge: read
+      // it now, because a refund is made against a charge and the buyer may
+      // ask for one this week.
+      if (fact.paymentRef.startsWith('in_') && !fact.chargeRef) {
+        const has = (await query('SELECT charge_ref FROM experiment_fulfilments WHERE id = ?', [id])).rows[0] as Row | undefined;
+        if (has && has.charge_ref == null) {
+          try {
+            const { chargeOfInvoice } = await import('./payment-link.js');
+            const charge = await chargeOfInvoice(fact.paymentRef);
+            if (charge) await query(`UPDATE experiment_fulfilments SET charge_ref = ?, updated_at = datetime('now') WHERE id = ? AND charge_ref IS NULL`, [charge, id]);
+          } catch { /* the week is owed either way; the refund path says when the charge is unknown */ }
+        }
       }
       // Read back what the row guard made of it: a refund or dispute that
       // arrived first has already closed or marked the row.

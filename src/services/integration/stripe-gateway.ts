@@ -149,7 +149,10 @@ interface CreatePaymentLinkParams {
   price_lookup_key: string; unit_amount: number; currency: string; price_metadata: Record<string, string>;
   /** A price the buyer chooses: floor, ceiling and suggestion, in cents. `unit_amount` is then the suggestion. */
   custom_amount?: { minimum: number; maximum: number; preset: number };
-  link_metadata: Record<string, string>; payment_intent_metadata: Record<string, string>; confirmation_message?: string;
+  /** A price charged every interval until cancelled. Its tag rides on the subscription, not an intent. */
+  recurring?: { interval: 'week' };
+  subscription_metadata?: Record<string, string>;
+  link_metadata: Record<string, string>; payment_intent_metadata?: Record<string, string>; confirmation_message?: string;
 }
 
 /** A form POST to one Stripe collection, or to one object in it. Every
@@ -179,7 +182,13 @@ async function createPaymentLinkHandler(req: GatewayRequest): Promise<{ id: stri
   const apiKey = process.env.STRIPE_SECRET_KEY;
   if (!apiKey) throw new Error('STRIPE_SECRET_KEY is not configured');
   if (!Number.isInteger(params.unit_amount) || params.unit_amount <= 0) throw new Error('unit_amount must be a positive integer');
-  if (params.link_metadata?.app !== 'foundry' || params.payment_intent_metadata?.app !== 'foundry') throw new Error('payment links must be tagged app=foundry');
+  // THE TAG LIVES WHERE THE MONEY WILL: on the intent of a one-time payment,
+  // on the subscription of a recurring one. Exactly one of them, never both.
+  const tagged = params.recurring ? params.subscription_metadata : params.payment_intent_metadata;
+  if (params.link_metadata?.app !== 'foundry' || tagged?.app !== 'foundry') throw new Error('payment links must be tagged app=foundry');
+  if (params.recurring && (params.payment_intent_metadata || params.custom_amount || params.recurring.interval !== 'week')) {
+    throw new Error('a subscription is charged weekly at its stated price, and its tag rides on the subscription');
+  }
   const c = params.custom_amount;
   if (c && !(Number.isInteger(c.minimum) && Number.isInteger(c.maximum) && Number.isInteger(c.preset)
     && c.minimum >= 50 && c.minimum <= c.preset && c.preset <= c.maximum && c.preset === params.unit_amount)) {
@@ -201,14 +210,16 @@ async function createPaymentLinkHandler(req: GatewayRequest): Promise<{ id: stri
       ? new URLSearchParams({ product: String(created.id), currency: params.currency, lookup_key: params.price_lookup_key,
         'custom_unit_amount[enabled]': 'true', 'custom_unit_amount[minimum]': String(c.minimum),
         'custom_unit_amount[maximum]': String(c.maximum), 'custom_unit_amount[preset]': String(c.preset) })
-      : new URLSearchParams({ product: String(created.id), unit_amount: String(params.unit_amount), currency: params.currency, lookup_key: params.price_lookup_key });
+      : new URLSearchParams({ product: String(created.id), unit_amount: String(params.unit_amount), currency: params.currency, lookup_key: params.price_lookup_key,
+        ...(params.recurring ? { 'recurring[interval]': params.recurring.interval } : {}) });
     for (const [k, v] of Object.entries(params.price_metadata ?? {})) price.set(`metadata[${k}]`, v);
     priceId = String((await stripeForm(apiKey, 'prices', price, `${key}:price`)).id);
   }
 
   const link = new URLSearchParams({ 'line_items[0][price]': priceId, 'line_items[0][quantity]': '1' });
   for (const [k, v] of Object.entries(params.link_metadata)) link.set(`metadata[${k}]`, v);
-  for (const [k, v] of Object.entries(params.payment_intent_metadata)) link.set(`payment_intent_data[metadata][${k}]`, v);
+  if (params.recurring) for (const [k, v] of Object.entries(params.subscription_metadata ?? {})) link.set(`subscription_data[metadata][${k}]`, v);
+  else for (const [k, v] of Object.entries(params.payment_intent_metadata ?? {})) link.set(`payment_intent_data[metadata][${k}]`, v);
   if (params.confirmation_message) {
     link.set('after_completion[type]', 'hosted_confirmation');
     link.set('after_completion[hosted_confirmation][custom_message]', params.confirmation_message.slice(0, 500));

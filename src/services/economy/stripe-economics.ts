@@ -98,6 +98,22 @@ export function moneyFactsFromStripeEvent(
     }];
   }
 
+  // A WEEK OF A SUBSCRIPTION, PAID. The charge behind a subscription invoice
+  // carries no tag of ours, and its own event may arrive before the invoice's,
+  // when there is no sale yet to put it against. So the invoice states the
+  // charge: the amount it says was paid, against the sale its intake opened
+  // (payment_ref is the invoice). The fee is read from the charge below.
+  if (event.type === 'invoice.paid' && o.object === 'invoice' && Number(o.amount_paid ?? 0) > 0) {
+    // KEYED ON THE INVOICE, whatever shape it arrived in: the webhook and the
+    // provider poll may see the same week with and without its charge named,
+    // and one week must be one charge on the ledger.
+    return [{
+      kind: 'charge', amountCents: Number(o.amount_paid ?? 0), currency, occurredAt: at,
+      providerRef: `${String(o.id)}:charge`, chargeRef: btRef(o.charge), paymentRef: String(o.id),
+      balanceTransactionRef: null,
+    }];
+  }
+
   // A dispute IS expanded: `balance_transactions` arrives as objects, so the
   // withdrawal and the provider's handling charge are both stated outright.
   // A DISPUTE CARRIES NO METADATA OF OURS (a Dispute's metadata is its own,
@@ -170,6 +186,19 @@ export async function intakeStripeEconomics(
 
     // The fee is the one thing the event does not state. Read it once, here,
     // where the charge it belongs to is already in hand.
+    // AN INVOICE NAMES ITS CHARGE BUT NOT THE CHARGE'S BALANCE TRANSACTION, so
+    // that one read is made here, where the sale is already in hand.
+    if (f.kind === 'charge' && !f.chargeRef && f.paymentRef?.startsWith('in_')) {
+      const held = (await query('SELECT charge_ref FROM experiment_fulfilments WHERE id = ?', [link.fulfilmentId])).rows[0] as Record<string, unknown> | undefined;
+      if (held?.charge_ref != null) f.chargeRef = String(held.charge_ref);
+    }
+    if (f.kind === 'charge' && !f.balanceTransactionRef && f.chargeRef && f.paymentRef?.startsWith('in_')) {
+      try {
+        const { stripeClient } = await import('./provider-stripe.js');
+        const charge = await stripeClient().charges.retrieve(f.chargeRef);
+        f.balanceTransactionRef = btRef(charge.balance_transaction);
+      } catch { /* the charge is recorded; its fee is read on the next pass that names it */ }
+    }
     if (f.kind === 'charge' && f.balanceTransactionRef) {
       await recordProviderFee(f, link);
     }

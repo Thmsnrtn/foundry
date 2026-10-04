@@ -104,6 +104,32 @@ export async function reconcileWithTheProvider(
     if (taken.recorded.length > 0) weDidNot.push(intent.id);
   }
 
+  // AND THE WEEKS OF SUBSCRIPTIONS, which no intent of ours names. Each paid
+  // invoice is a delivery owed; one the provider knows and Foundry does not
+  // goes through the same door its webhook would have used.
+  let invoices: Array<Record<string, unknown>> = [];
+  try {
+    const { subscriptionInvoicesTheProviderKnowsOf } = await import('./payment-link.js');
+    invoices = await subscriptionInvoicesTheProviderKnowsOf(since);
+  } catch (err) {
+    log.warn('payments.reconcile.could_not_ask_invoices', { error: String(err) });
+  }
+  for (const inv of invoices) {
+    const id = String(inv.id);
+    const known = (await query(
+      `SELECT 1 AS n FROM experiment_fulfilments WHERE payment_ref = ?
+        UNION ALL SELECT 1 FROM business_outcome_events WHERE provider_event_ref = ?`, [id, id])).rows[0] as Row | undefined;
+    if (known) continue;
+    const event = { id: `reconciled_${id}`, type: 'invoice.paid', created: Number(inv.created ?? Math.floor(now.getTime() / 1000)), data: { object: inv } };
+    const { intakeStripeSettlement } = await import('./settlement-intake.js');
+    const taken = await intakeStripeSettlement(event);
+    try {
+      const { intakeStripeEconomics } = await import('../economy/stripe-economics.js');
+      await intakeStripeEconomics(event as never);
+    } catch { /* the week is recorded either way */ }
+    if (taken.recorded.length > 0) weDidNot.push(id);
+  }
+
   if (weDidNot.length > 0) {
     // THE PATH WAS NOT CARRYING WHAT IT IS FOR. Recorded on the day, through
     // the same writer the health pass uses, so the day record that a later
@@ -119,7 +145,7 @@ export async function reconcileWithTheProvider(
   }
 
   return {
-    asked: true, theyKnow: intents.length, weDidNot,
+    asked: true, theyKnow: intents.length + invoices.length, weDidNot,
     sentence: weDidNot.length === 0 ? null
       : `${String(weDidNot.length)} payment${weDidNot.length === 1 ? '' : 's'} the provider knew about had not reached Foundry. ${weDidNot.length === 1 ? 'It is' : 'They are'} recorded now, and what ${weDidNot.length === 1 ? 'it' : 'they'} bought is owed.`,
   };

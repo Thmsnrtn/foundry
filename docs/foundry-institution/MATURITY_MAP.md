@@ -2650,3 +2650,27 @@ the page's words).
 - The test settles on any payment; how much people chose is in the ledger but
   not yet summarised on the owner's page.
 
+### A week of a subscription is one delivery (Roadmap 2027 R18, 4 October 2026)
+
+**What changed.** The Stripe half of subscriptions, inert until the exchange
+is made available and the owner lifts the first-proof rule. Weekly links with
+the tag on the subscription; `invoice.paid` taken in as a payment in both of
+the provider's shapes, with a by-name lookup when the invoice carries no tag;
+untagged refunds found by their invoice; the ledger keyed per invoice with the
+fee read from the charge; the provider poll covering paid subscription
+invoices; the buyer's address and the charge read from the invoice.
+
+**Evidence maturity.** E1: `a-week-of-a-subscription-is-one-delivery`, with
+the provider stubbed in both shapes; the fifteen existing money-path suites
+pass unchanged.
+
+**Proof debt.**
+- Nothing here has met the real provider. Which shape the webhook delivers
+  depends on the endpoint's API version in the owner's Stripe account, so both
+  are read; the first real week is the proof.
+- The webhook endpoint must be subscribed to `invoice.paid`. Until it is, the
+  provider poll (hourly, within 45 days) is what finds a paid week.
+- A refund the owner makes himself in Stripe on a subscription charge is
+  found only if the charge names its invoice (older shape); Foundry's own
+  refunds update the row directly.
+

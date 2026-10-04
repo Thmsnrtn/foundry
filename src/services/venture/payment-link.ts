@@ -48,11 +48,19 @@ export interface OfferPrice {
    * floor is a dollar; paying nothing at all is not paying, and is allowed.
    */
   chosen?: { minimumCents: number; maximumCents: number };
+  /**
+   * A SUBSCRIPTION (`subscription`, PENDING 31, allowed by his own act on
+   * Control): charged every week until cancelled, each paid invoice one
+   * delivery. Absent for anything bought once. Never combined with `chosen`.
+   */
+  recurring?: { interval: 'week' };
 }
 
 export interface PaymentLinkFacts {
   id: string; url: string; active: boolean; metadata: Record<string, string>; paymentIntentMetadata: Record<string, string>;
-  lineItems: Array<{ unitAmount: number | null; currency: string; recurring: boolean; quantity: number;
+  /** What every subscription the link starts will carry; empty for a one-time link. */
+  subscriptionMetadata: Record<string, string>;
+  lineItems: Array<{ unitAmount: number | null; currency: string; recurring: boolean; interval: string | null; quantity: number;
     /** The bounds and suggestion of a price the buyer chooses, or null for a fixed one. */
     custom: { minimum: number | null; maximum: number | null; preset: number | null } | null }>;
 }
@@ -74,14 +82,17 @@ async function stripeGet<T>(path: string): Promise<T> {
   return (await response.json()) as T;
 }
 
-interface RawLink { id: string; url: string; active: boolean; metadata?: Record<string, string>; payment_intent_data?: { metadata?: Record<string, string> } | null }
+interface RawLink { id: string; url: string; active: boolean; metadata?: Record<string, string>; payment_intent_data?: { metadata?: Record<string, string> } | null;
+  subscription_data?: { metadata?: Record<string, string> } | null }
 
 async function linkFacts(link: RawLink): Promise<PaymentLinkFacts> {
-  const items = await stripeGet<{ data: Array<{ quantity: number; price: { unit_amount: number | null; currency: string; recurring: unknown | null;
+  const items = await stripeGet<{ data: Array<{ quantity: number; price: { unit_amount: number | null; currency: string; recurring: { interval?: string } | null;
     custom_unit_amount?: { minimum?: number | null; maximum?: number | null; preset?: number | null } | null } }> }>(`/payment_links/${pathSegment(link.id, 'payment_link_id')}/line_items?limit=10`);
   return {
     id: link.id, url: link.url, active: link.active, metadata: link.metadata ?? {}, paymentIntentMetadata: link.payment_intent_data?.metadata ?? {},
-    lineItems: items.data.map((i) => ({ unitAmount: i.price.unit_amount, currency: i.price.currency.toUpperCase(), recurring: i.price.recurring != null, quantity: i.quantity,
+    subscriptionMetadata: link.subscription_data?.metadata ?? {},
+    lineItems: items.data.map((i) => ({ unitAmount: i.price.unit_amount, currency: i.price.currency.toUpperCase(), recurring: i.price.recurring != null,
+      interval: i.price.recurring?.interval ?? null, quantity: i.quantity,
       custom: i.price.custom_unit_amount ? { minimum: i.price.custom_unit_amount.minimum ?? null, maximum: i.price.custom_unit_amount.maximum ?? null, preset: i.price.custom_unit_amount.preset ?? null } : null })),
   };
 }
@@ -140,17 +151,26 @@ export async function findExperimentPaymentLink(experimentId: string): Promise<P
 }
 
 /** The contract a link must meet before it may be offered to anyone. */
-export function validateExperimentPaymentLink(link: PaymentLinkFacts, experimentId: string, price: { amountCents: number; currency: string; chosen?: OfferPrice['chosen'] }): { ok: boolean; failures: string[] } {
+export function validateExperimentPaymentLink(link: PaymentLinkFacts, experimentId: string, price: { amountCents: number; currency: string; chosen?: OfferPrice['chosen']; recurring?: OfferPrice['recurring'] }): { ok: boolean; failures: string[] } {
   const failures: string[] = [];
   if (!link.active) failures.push('the link is not active');
   if (!/^https:\/\/buy\.stripe\.com\//.test(link.url)) failures.push('not a Stripe Payment Link URL');
   if ((link.metadata.app ?? '') !== 'foundry') failures.push('the link is not tagged app=foundry');
   if (link.metadata.experiment_id !== experimentId) failures.push(`the link is not tagged for this experiment (experiment_id=${link.metadata.experiment_id ?? 'missing'})`);
-  if (link.paymentIntentMetadata.experiment_id !== experimentId) failures.push('the payment itself is not tagged for this experiment (payment intent metadata)');
+  // A ONE-TIME PAYMENT carries the tag on its intent; a SUBSCRIPTION carries
+  // it on the subscription every invoice belongs to. Each is checked where it
+  // lives.
+  if (price.recurring) {
+    if (link.subscriptionMetadata.experiment_id !== experimentId) failures.push('the subscription is not tagged for this experiment (subscription metadata)');
+  } else if (link.paymentIntentMetadata.experiment_id !== experimentId) failures.push('the payment itself is not tagged for this experiment (payment intent metadata)');
   if (link.lineItems.length !== 1) failures.push(`expected one line item, found ${link.lineItems.length}`);
   const item = link.lineItems[0];
   if (item) {
-    if (item.recurring) failures.push('the price is recurring; the offer is one-time');
+    if (price.recurring) {
+      if (!item.recurring) failures.push('the price is one-time; the offer is a subscription');
+      else if (item.interval !== price.recurring.interval) failures.push(`the price recurs every ${item.interval ?? '?'}, not every ${price.recurring.interval}`);
+      if (item.custom) failures.push('a subscription is charged at its stated price; this one lets the buyer choose');
+    } else if (item.recurring) failures.push('the price is recurring; the offer is one-time');
     if (price.chosen) {
       // THE BUYER CHOOSES, AND THE LINK MUST SAY EXACTLY WHAT THE PAGE SAYS:
       // the suggestion, the floor and the ceiling, and no fixed amount at all.
@@ -183,10 +203,12 @@ export function paymentLinkParams(experimentId: string, p: OfferPrice): Record<s
   return {
     product_name: p.productName, product_metadata: { app: 'foundry', ...p.productMetadata },
     price_lookup_key: p.lookupKey, unit_amount: p.amountCents, currency: p.currency.toLowerCase(),
-    price_metadata: { app: 'foundry', plan_key: p.productMetadata.plan_key ?? p.lookupKey, billing_period: 'one_time', ...(p.chosen ? { pricing: 'chosen_by_buyer' } : {}) },
+    price_metadata: { app: 'foundry', plan_key: p.productMetadata.plan_key ?? p.lookupKey, billing_period: p.recurring ? p.recurring.interval : 'one_time', ...(p.chosen ? { pricing: 'chosen_by_buyer' } : {}) },
     ...(p.chosen ? { custom_amount: { minimum: p.chosen.minimumCents, maximum: p.chosen.maximumCents, preset: p.amountCents } } : {}),
-    link_metadata: { app: 'foundry', experiment_id: experimentId, primitive: 'sale' },
-    payment_intent_metadata: { app: 'foundry', experiment_id: experimentId, primitive: 'sale' },
+    link_metadata: { app: 'foundry', experiment_id: experimentId, primitive: p.recurring ? 'subscription' : 'sale' },
+    ...(p.recurring
+      ? { recurring: { interval: p.recurring.interval }, subscription_metadata: { app: 'foundry', experiment_id: experimentId, primitive: 'subscription' } }
+      : { payment_intent_metadata: { app: 'foundry', experiment_id: experimentId, primitive: 'sale' } }),
     confirmation_message: p.confirmationMessage,
   };
 }
@@ -195,7 +217,9 @@ export async function createExperimentPaymentLink(input: { productId: string; ex
   const p = input.price;
   const result = await invoke({
     productId: input.productId, tool: 'stripe_create_payment_link',
-    action: p.chosen
+    action: p.recurring
+      ? `create the ${p.currency.toUpperCase()} ${(p.amountCents / 100).toFixed(2)}-a-${p.recurring.interval} subscription link for experiment ${input.experimentId}`
+      : p.chosen
       ? `create the pay-what-it-was-worth payment link for experiment ${input.experimentId}, suggesting ${p.currency.toUpperCase()} ${(p.amountCents / 100).toFixed(2)}`
       : `create the ${p.currency.toUpperCase()} ${(p.amountCents / 100).toFixed(2)} one-time payment link for experiment ${input.experimentId}`,
     params: paymentLinkParams(input.experimentId, p),
@@ -209,8 +233,73 @@ export async function createExperimentPaymentLink(input: { productId: string; ex
   return { link: facts };
 }
 
+/**
+ * THE WEEKS OF SUBSCRIPTIONS THE PROVIDER KNOWS WERE PAID, since a moment, and
+ * that belong to a subscription of ours. Each invoice says whose it is through
+ * its subscription's tag; one that does not say is asked about by name. A
+ * read, like the intents above: the only way to find a week that was paid and
+ * never announced.
+ */
+export async function subscriptionInvoicesTheProviderKnowsOf(sinceUnix: number): Promise<Array<Record<string, unknown>>> {
+  const out: Array<Record<string, unknown>> = [];
+  const tags = new Map<string, Record<string, string> | null>();
+  let after: string | null = null;
+  for (let pageNo = 0; pageNo < 5; pageNo += 1) {
+    const res: { data: Array<Record<string, unknown>>; has_more: boolean } = await stripeGet<{ data: Array<Record<string, unknown>>; has_more: boolean }>(
+      `/invoices?status=paid&created[gte]=${String(sinceUnix)}&limit=100${after ? `&starting_after=${after}` : ''}`);
+    for (const inv of res.data) {
+      const parent = inv.parent as { subscription_details?: { subscription?: unknown; metadata?: Record<string, string> | null } | null } | null | undefined;
+      const sub = typeof parent?.subscription_details?.subscription === 'string' ? parent.subscription_details.subscription
+        : typeof inv.subscription === 'string' ? inv.subscription : null;
+      if (!sub) continue;
+      let meta = parent?.subscription_details?.metadata ?? (inv.subscription_details as { metadata?: Record<string, string> | null } | undefined)?.metadata ?? null;
+      if (!meta?.experiment_id) {
+        if (!tags.has(sub)) tags.set(sub, await subscriptionTag(sub).catch(() => null));
+        meta = tags.get(sub) ?? null;
+      }
+      if (!meta || typeof meta.experiment_id !== 'string' || meta.experiment_id.trim() === '') continue;
+      if (meta.app != null && meta.app !== 'foundry') continue;
+      out.push({ ...inv, object: 'invoice' });
+    }
+    if (!res.has_more || res.data.length === 0) break;
+    after = String(res.data[res.data.length - 1]!.id);
+  }
+  return out;
+}
+
+/**
+ * THE CHARGE BEHIND A PAID INVOICE: named on the invoice in older shapes,
+ * reached through its payment in newer ones. A refund moves money against a
+ * charge, never an invoice, so a week that is owed a refund needs this.
+ */
+export async function chargeOfInvoice(invoiceId: string): Promise<string | null> {
+  const inv = await stripeGet<{ charge?: string | { id?: string } | null; payment_intent?: string | null;
+    payments?: { data?: Array<{ payment?: { charge?: string | null; payment_intent?: string | null } }> } }>(
+    `/invoices/${pathSegment(invoiceId, 'invoice_id')}?expand[]=payments`);
+  if (typeof inv.charge === 'string') return inv.charge;
+  if (inv.charge && typeof inv.charge === 'object' && inv.charge.id) return inv.charge.id;
+  const paid = inv.payments?.data?.find((p) => p.payment?.charge || p.payment?.payment_intent)?.payment;
+  if (paid?.charge) return paid.charge;
+  const intent = paid?.payment_intent ?? inv.payment_intent ?? null;
+  if (!intent) return null;
+  const pi = await stripeGet<{ latest_charge?: string | null }>(`/payment_intents/${pathSegment(intent, 'payment_intent_id')}`);
+  return pi.latest_charge ?? null;
+}
+
+/** A subscription's own tag at the provider. A read, never an effect. */
+export async function subscriptionTag(subscriptionId: string): Promise<Record<string, string> | null> {
+  const sub = await stripeGet<{ metadata?: Record<string, string> | null }>(`/subscriptions/${pathSegment(subscriptionId, 'subscription_id')}`);
+  return sub.metadata ?? null;
+}
+
 /** The buyer's address for one payment, read from the provider at delivery time and never stored in a ledger. */
 export async function buyerAddressFor(paymentIntentId: string): Promise<string | null> {
+  // A SUBSCRIPTION'S DELIVERY IS OWED PER INVOICE, and an invoice names its
+  // customer's address itself; read at delivery like the intent's, never kept.
+  if (paymentIntentId.startsWith('in_')) {
+    const inv = await stripeGet<{ customer_email?: string | null }>(`/invoices/${pathSegment(paymentIntentId, 'invoice_id')}`);
+    return inv.customer_email ?? null;
+  }
   const pi = await stripeGet<{ receipt_email?: string | null; latest_charge?: string | { billing_details?: { email?: string | null } } | null }>(`/payment_intents/${pathSegment(paymentIntentId, 'payment_intent_id')}?expand[]=latest_charge`);
   if (pi.receipt_email) return pi.receipt_email;
   const charge = pi.latest_charge;

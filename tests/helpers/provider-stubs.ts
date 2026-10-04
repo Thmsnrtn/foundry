@@ -272,6 +272,15 @@ export function providerStubs(): { state: ProviderState; fetch: (url: string | U
       const since = Number(/created%5Bgte%5D=(\d+)|created\[gte\]=(\d+)/.exec(u)?.slice(1).find(Boolean) ?? 0);
       return json({ data: state.payments.filter((p) => p.created >= since), has_more: false });
     }
+    // SUBSCRIPTIONS: the provider's list of paid weekly invoices, which in a
+    // rehearsal holds none unless a scenario puts one there. Asked by the
+    // payment poll alongside the intents (Roadmap 2027 R18).
+    if (u.startsWith('https://api.stripe.com/v1/invoices?') && method === 'GET') {
+      return json({ data: [], has_more: false });
+    }
+    if (/^https:\/\/api\.stripe\.com\/v1\/subscriptions\/[^/?]+/.test(u) && method === 'GET') {
+      return json({ error: { message: 'no such subscription' } }, 404);
+    }
     const pi = /^https:\/\/api\.stripe\.com\/v1\/payment_intents\/([^/?]+)/.exec(u);
     if (pi && method === 'GET') {
       const id = decodeURIComponent(pi[1]);
