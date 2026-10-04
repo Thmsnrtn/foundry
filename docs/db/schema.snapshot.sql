@@ -8177,6 +8177,14 @@ FOR EACH ROW WHEN COALESCE(NEW.status, '') = 'paused'
 BEGIN
   SELECT RAISE(ABORT, 'product_axis:status is the lifecycle axis (active/archived); pause belongs on scp_status');
 END;
+CREATE TRIGGER proposed_act_charter_term_guard
+BEFORE UPDATE ON proposed_acts
+WHEN NEW.decision IS NOT NULL AND OLD.decision IS NULL AND NEW.decided_by LIKE 'charter:%'
+BEGIN
+  SELECT RAISE(ABORT,'proposed_act:outlives_its_charter')
+    WHERE datetime(NEW.expires_at) > (SELECT datetime(e.expires_at) FROM portfolio_envelopes e
+                                        WHERE 'charter:' || e.id = NEW.decided_by);
+END;
 CREATE TRIGGER proposed_act_cost_is_not_negative BEFORE INSERT ON proposed_acts
 WHEN NEW.cost_cents IS NOT NULL AND NEW.cost_cents < 0
 BEGIN SELECT RAISE(ABORT,'proposed_act:negative_cost'); END;

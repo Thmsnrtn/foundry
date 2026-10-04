@@ -818,11 +818,12 @@ describe('what a buyer is owed outlives order, expiry, settlement and a stop', (
     const buyer = 'lastday@buyer.example';
     await pay('pi_h_lastday', buyer, 'ch_h_lastday');
     const f = (await fulfilment('pi_h_lastday'))!;
-    // THE WORLD'S CLOCK, not an edited row: twenty-two days pass, so the acts
-    // minted for twenty-one have lapsed and the purchase above was reported
-    // while they stood. The brief is re-recorded fresh, as an edition would be.
+    // THE WORLD'S CLOCK, not an edited row: thirty-three days pass, so the acts
+    // minted for the thirty-day window and its two-day margin (R24) have lapsed
+    // and the purchase above was reported while they stood. The brief is
+    // re-recorded fresh, as an edition would be.
     const { advanceDays } = await import('../helpers/world.js');
-    const moved = await advanceDays(22);
+    const moved = await advanceDays(33);
     expect(moved.refused).toEqual([]);
     await recordMaterial({ founderId: OWNER, experimentId: X, kind: 'deliverable', title: PROOF1_TITLE, body: BRIEF_MD, pulledAt: PROOF1_EDITION_PULLED_AT, by: 'test' });
     const { campaignIsLive, campaignActCovers } = await import('../../src/services/venture/hand.js');

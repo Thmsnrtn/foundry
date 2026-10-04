@@ -21,6 +21,8 @@
 // Nothing here stores a buyer's identity in the outcome ledger.
 // =============================================================================
 
+import { STOP_AHEAD_DAYS, windowAndValidity, placementActCoversTheWindow } from './act-window.js';
+export { windowAndValidity, placementActCoversTheWindow } from './act-window.js';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
@@ -519,8 +521,9 @@ export async function allowExperiment(input: {
   // month, or that would be the fourth in flight, is not inside, and the row
   // guard on the carve refuses again below in case this reading is skipped.
   const { chartered, charterPrincipal, carve } = await import('../institution/charter.js');
+  const recurring = !!(await offerShapePlanOf(input.experimentId))?.price.recurring;
   const charter = input.under === 'the charter'
-    ? await chartered({ founderId: input.founderId, experimentId: input.experimentId, costCents: e.costCents, rungs: ['public', 'financial'] })
+    ? await chartered({ founderId: input.founderId, experimentId: input.experimentId, costCents: e.costCents, rungs: ['public', 'financial'], recurring })
     : null;
   if (charter && !charter.inside) throw new HandRefused('outside_the_charter', charter.because.join('; '));
   // THE THINKING COMES BEFORE THE DECISION — before the sending address, before
@@ -547,13 +550,19 @@ export async function allowExperiment(input: {
   const paused = (await publicWorkshopOf(input.founderId))?.economicPause;
   if (paused) throw new HandRefused('workshop_paused', paused.reason);
   const by = charter?.inside ? charterPrincipal(charter.charter.id) : `founder:${input.founderId}`;
+  // HOW LONG IT RUNS AND HOW LONG ITS ACTS LAST (R24), read before anything is
+  // decided: from the rule's kind and the charter row, never from a caller,
+  // whose \`within\` may only shorten the acts.
+  const window = windowAndValidity({ now: new Date(), recurring: !!plan.price.recurring,
+    charterExpiresAt: charter?.inside ? charter.charter.expiresAt : null, within: input.within });
+  if ('refused' in window) throw new HandRefused('window_too_short', window.refused);
   // A VENUE TEST IS SETTLED BY PAYMENT. The rule is sealed with the prediction
   // at approval; without one only the owner could settle it, and a studio
   // test must settle itself. Thirty days from placement, at least one payment.
   if (plan.venue === 'workshop' && e.settlesWhen === null) {
     const { settlementRuleJson } = await import('./outcome.js');
     await query('UPDATE venture_experiments SET settles_when = ? WHERE id = ? AND decision IS NULL AND settles_when IS NULL',
-      [settlementRuleJson({ event: 'payment', atLeast: 1, withinDays: 30 }), input.experimentId]);
+      [settlementRuleJson({ event: 'payment', atLeast: 1, withinDays: window.withinDays }), input.experimentId]);
   }
   await decideExperiment({ experimentId: input.experimentId, decision: 'approved', by, via: 'its own authorisation' });
   const after = await experimentRow(input.experimentId);
@@ -572,7 +581,7 @@ export async function allowExperiment(input: {
   const reachable = (await recipientsOf(input.experimentId)).filter((r) => r.reviewStatus === 'approved' && r.channel === 'email' && r.email);
   const approved = reachable.filter((r) => r.qualifiedAt);
   const template = await materialOf(input.experimentId, 'offer_template');
-  const hours = Math.max(24, Math.ceil(((input.within?.getTime() ?? Date.now() + 21 * 86_400_000) - Date.now()) / 3_600_000));
+  const hours = Math.max(24, Math.ceil((window.actsExpireAt.getTime() - Date.now()) / 3_600_000));
   // HIS STANDING WORD FOR THIS ASSET: nobody is written to from it without
   // asking him first. The one act he approves below is the answer, for exactly
   // the businesses he reviewed and the offer as written; a door that hears
@@ -730,7 +739,15 @@ export async function takeDownExposure(experimentId: string): Promise<{ done: bo
   const standing = await one(
     `SELECT id FROM proposed_acts WHERE experiment_id = ? AND action_type = 'stripe_create_payment_link' AND decision = 'approved' AND revoked_at IS NULL AND datetime(expires_at) > datetime('now')`,
     [experimentId]);
-  if (!standing) return { done: false, reason: 'nothing to take down' };
+  if (!standing) {
+    // THE ACT ENDED WITH THE LINK STILL UP (R24). Said, not swallowed: a link
+    // nobody may take down keeps taking money for a test that is over.
+    const stillUp = paymentCapabilityConfigured()
+      ? await findExperimentPaymentLink(experimentId).catch(() => null) : null;
+    return stillUp
+      ? { done: false, reason: 'the act that placed the link has ended and the link is still up; deactivate it in Stripe' }
+      : { done: false, reason: 'nothing to take down' };
+  }
   const result = await invoke({
     productId: e.productId, tool: 'stripe_deactivate_payment_link', action: `take down the payment link for experiment ${experimentId}`,
     params: { payment_link_id: x.exposureRef }, dedupKey: `experiment:${experimentId}:payment_link:withdraw:${x.exposureRef}`,
@@ -1009,6 +1026,18 @@ export async function ensureExposure(experimentId: string): Promise<{ exposureId
     const { paymentObservationPath } = await import('./the-instrument.js');
     const observation = await paymentObservationPath();
     if (observation.status === 'not_working') return { refused: `a way to pay is not placed while ${observation.detail}` };
+  }
+  // NO WINDOW OPENS THAT NO ACT COVERS (R24). A test let in with acts shorter
+  // than its window (every test before R24: twenty-one days against thirty)
+  // would take a payment near the end that nothing could deliver or refund.
+  if (!(existing && existing.withdrawnAt === null)) {
+    const act = await one(`SELECT expires_at FROM proposed_acts WHERE experiment_id = ? AND action_type = 'stripe_create_payment_link'
+        AND decision = 'approved' AND revoked_at IS NULL ORDER BY decided_at DESC, rowid DESC LIMIT 1`, [experimentId]);
+    const within = Number((await one(`SELECT json_extract(settles_when, '$.within_days') AS d FROM venture_experiments WHERE id = ?`, [experimentId]))?.d ?? 0);
+    if (act && within > 0) {
+      const short = placementActCoversTheWindow({ now: new Date(), actExpiresAt: String(act.expires_at), withinDays: within });
+      if (short) return { refused: short };
+    }
   }
   // NOTHING IS MINTED THAT PLACEMENT WOULD REFUSE (R23). placeExposure reads
   // the asset's legal picture and refuses; asked here first, the same picture
@@ -1489,7 +1518,7 @@ export async function requestRefundByLink(fulfilmentId: string, token: string): 
  * run; a subscription told to end at its current week now cannot renew into a
  * week nothing allows Foundry to deliver.
  */
-export const STOP_AHEAD_DAYS = 9;
+export { STOP_AHEAD_DAYS } from './act-window.js';
 
 export function cancelTokenFor(fulfilmentId: string): string {
   return createHmac('sha256', refundKey()).update(`experiment_cancel:${fulfilmentId}`).digest('hex');

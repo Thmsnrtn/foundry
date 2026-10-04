@@ -147,7 +147,8 @@ describe('the Workshop\'s page as the venue', () => {
     const e = (await query('SELECT decision, decided_by, settles_when FROM venture_experiments WHERE id = ?', [X])).rows[0]!;
     expect(e).toMatchObject({ decision: 'approved', decided_by: charterPrincipal(charter.id) });
     const { parseSettlementRule } = await import('../../src/services/venture/outcome.js');
-    expect(parseSettlementRule(e.settles_when)).toMatchObject({ event: 'payment', atLeast: 1, withinDays: 30 });
+    // A thirty-day charter leaves twenty-eight days to read it, so its acts end with the charter (R24).
+    expect(parseSettlementRule(e.settles_when)).toMatchObject({ event: 'payment', atLeast: 1, withinDays: 28 });
     expect((await query('SELECT sealed_at FROM probe_designs WHERE experiment_id = ?', [X])).rows[0]!.sealed_at).not.toBeNull();
     const carve = (await query('SELECT cents FROM portfolio_envelope_carves WHERE experiment_id = ?', [X])).rows[0]!;
     expect(Number(carve.cents)).toBe(1000);

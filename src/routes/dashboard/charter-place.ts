@@ -20,6 +20,7 @@ import {
   PRE_CHARTER_THINKING_CENTS, SEALED_CONTACT_RULES, charterExposure, charterStatus, envelopeReading, pastCharters,
 } from '../../services/institution/charter.js';
 import { publicWorkshopOf } from '../../services/public-workshop/settings.js';
+import { windowAndValidity } from '../../services/venture/act-window.js';
 
 export const charterRoutes = new Hono();
 
@@ -90,6 +91,7 @@ charterRoutes.get('/foundry/charter', async (c: any) => {
       <dt>Tests at once</dt><dd>${String(probes)}</dd>
       <dt>${envelope ? 'Expires' : 'Lasts'}</dt><dd>${envelope ? `${envelope.charter.expiresAt.slice(0, 10)} · ${count(envelope.charter.daysLeft, 'day')} left` : `${String(ex.days)} days from signing`}</dd>
       ${envelope ? html`<dt>Left for tests</dt><dd>${dollars(envelope.remainingCents)} of ${dollars(envelope.charter.testsTotalCents)}</dd>
+      <dt>A test let in today</dt><dd>${((w) => 'refused' in w ? 'none: ' + w.refused : `is read for ${count(w.withinDays, 'day')}`)(windowAndValidity({ now: new Date(), recurring: false, charterExpiresAt: envelope.charter.expiresAt }))}</dd>
       <dt>Thinking so far</dt><dd>${dollars(envelope.thinkingCents)} since you signed</dd>
       <dt>In flight</dt><dd>${String(envelope.inFlight)} of ${String(envelope.charter.probesInFlight)}${envelope.roomForAnother ? '' : ' — full until one settles'}</dd>` : ''}
     </dl></section>`;

@@ -218,8 +218,10 @@ describe('when the test can deliver no more weeks, every subscription stops', ()
   });
 
   it('as the act allowing deliveries nears its end, they are told to end with the week paid', async () => {
-    const { STOP_AHEAD_DAYS, stopWhatRecurs } = await import('../../src/services/venture/hand.js');
-    const soon = new Date(Date.now() + (21 * 86_400_000) - (STOP_AHEAD_DAYS - 1) * 86_400_000);
+    const { STOP_AHEAD_DAYS, stopWhatRecurs, campaignActOf } = await import('../../src/services/venture/hand.js');
+    // Read from the act itself, however long R24 sized it.
+    const ends = new Date(String((await campaignActOf(X))!.expiresAt).replace(' ', 'T') + 'Z').getTime();
+    const soon = new Date(ends - (STOP_AHEAD_DAYS - 1) * 86_400_000);
     const r = await stopWhatRecurs(X, soon);
     expect(r.stopped).toBe(1);
     expect(await stopOf('sub_live')).toMatchObject({ asked_by: 'test_ended' });

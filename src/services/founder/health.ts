@@ -93,7 +93,7 @@ async function whatTheDayRequired(founderId: string, now: Date): Promise<string[
         AND e.ran_at IS NULL AND e.retired_at IS NULL AND e.validity = 'valid'
         AND e.settles_when IS NOT NULL
         AND EXISTS (SELECT 1 FROM experiment_exposures x WHERE x.experiment_id = e.id
-                     AND datetime(x.placed_at, '+' || COALESCE(json_extract(e.settles_when, '$.withinDays'), 30) || ' days') < datetime(?))`,
+                     AND datetime(x.placed_at, '+' || COALESCE(json_extract(e.settles_when, '$.within_days'), json_extract(e.settles_when, '$.withinDays'), 30) || ' days') < datetime(?))`,
     [founderId, now.toISOString()])).rows as unknown as Array<Record<string, unknown>>;
   const waiting = overdue.filter((r) => r.blind != null);
   const n = overdue.length - waiting.length;

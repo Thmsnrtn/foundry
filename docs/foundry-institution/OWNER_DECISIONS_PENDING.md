@@ -2056,6 +2056,15 @@ own. Turn the switch on only after R21 is live. **R21 went live on 4 October
 2026 (`b0c1e0ba`, read back from production health), so the switch may now be
 set.**
 
+**How long a test runs under the charter (4 October 2026, R24).** A test is
+read for thirty days, and the acts that let Foundry place, deliver and refund it
+now last the whole window plus two days. Acts a charter decides end with that
+charter: late in a term a test gets a shorter window, and with fewer than about
+two weeks left none is let in (the charter page says how long a test let in
+today would run). Signing for 90 days avoids most of this. After a window
+closes, a refund the public page promises is yours until R53 lets you hand it
+to a standing act.
+
 **And one setting (4 October 2026, R19).** A subscription is offered only
 while Foundry can cancel one, which needs its money switch on
 (`FOUNDRY_ENABLE_MONEY_TOOLS=true` in the Fly secrets). The same switch lets it

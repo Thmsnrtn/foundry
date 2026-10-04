@@ -2730,6 +2730,27 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### An act covers its window and ends with its charter (Roadmap 2027 R24, 4 October 2026)
+
+**What changed.** `windowAndValidity` sizes a test's window and its acts' life
+from the rule's kind and the charter row: thirty days and acts to day 32 with
+no charter (to day 41 for a subscription, so its stop comes after the window);
+under a charter the window shrinks so acts end with the term, and under
+fourteen days nothing is let in. Migration 382 refuses a charter act that would
+outlive its charter. R19's "subscriptions stopped by about day 12" is closed
+for new tests.
+
+**Evidence maturity.** E1: `an-act-covers-the-window-it-was-approved-for`.
+
+**Proof debt.**
+- No real purchase after day 21 has happened yet.
+- Tests approved before R24 keep their 21-day acts; `ensureExposure` refuses to
+  open their windows, so any such test unplaced in production waits for the
+  owner (allow it again, or stop it). Whether any exist is unknown until the
+  Charter screenshot or R26.
+- Renewing a charter does not extend acts decided under the earlier one.
+- Refunds after the window are R53's standing act or the owner's.
+
 ### A forge-made offer is placed only on true facts and the owner's decision (Roadmap 2027 R23, 4 October 2026)
 
 **What changed.** Readiness dry-runs the first-proof policy on the facts an

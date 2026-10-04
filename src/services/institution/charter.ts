@@ -197,6 +197,8 @@ export async function chartered(input: {
   founderId: string; experimentId: string; costCents: number;
   /** The rungs the probe's acts stand on. `legal` and `destructive` are never inside. */
   rungs: string[];
+  /** A subscription keeps the stop's lead inside the term, so its window is shorter. */
+  recurring?: boolean;
 }): Promise<Chartered> {
   const reading = await envelopeReading(input.founderId);
   if (!reading) return { inside: false, because: ['no charter is standing; sign one on Controls, or allow this test yourself'], charter: null };
@@ -209,6 +211,10 @@ export async function chartered(input: {
   if (!reading.roomForAnother) {
     because.push(`${String(reading.inFlight)} of ${String(reading.charter.probesInFlight)} probes are already in flight`);
   }
+  // ENOUGH OF THE TERM LEFT TO READ IT (R24), by the one reading the hand uses.
+  const { windowAndValidity } = await import('../venture/act-window.js');
+  const window = windowAndValidity({ now: new Date(), recurring: !!input.recurring, charterExpiresAt: reading.charter.expiresAt });
+  if ('refused' in window) because.push(window.refused);
   const already = await rows('SELECT id FROM portfolio_envelope_carves WHERE experiment_id = ?', [input.experimentId]);
   if (already.length) because.push('this test was already let in once');
   return because.length ? { inside: false, because, charter: reading.charter } : { inside: true, charter: reading.charter };
