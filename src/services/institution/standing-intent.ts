@@ -541,6 +541,22 @@ export async function boundaryStandingInTheWay(input: {
  */
 export type ExperimentActKind = 'offer' | 'delivery' | 'refund' | 'withdrawal' | 'cancellation';
 
+/**
+ * THE ONLY REFUND A PURCHASE ALLOWS, built from its own row: the whole amount
+ * paid, against the charge the provider reported — or, for a checkout whose
+ * charge was never named, its intent; a week of a subscription also names its
+ * invoice, so the handler can prove the charge was that week's (R21). The hand
+ * asks with exactly this and the door expects exactly this; nothing a caller
+ * supplies can change which money moves or how much.
+ */
+export function refundParamsFor(f: { charge_ref?: unknown; payment_ref?: unknown; amount_cents?: unknown }): Record<string, unknown> | null {
+  const ref = String(f.payment_ref ?? '');
+  const base = { amount: Number(f.amount_cents), reason: 'requested_by_customer' };
+  if (f.charge_ref != null) return { charge_id: String(f.charge_ref), ...base, ...(ref.startsWith('in_') ? { invoice_id: ref } : {}) };
+  if (ref.startsWith('pi_')) return { payment_intent: ref, ...base };
+  return null;
+}
+
 export interface ExperimentAct { experimentId: string; actId: string; kind: ExperimentActKind | null }
 
 export async function experimentActFor(input: { productId: string; tool: string; effectId: string | null; paramsFingerprint?: string | null }): Promise<ExperimentAct | null> {
@@ -583,7 +599,7 @@ export async function experimentActFor(input: { productId: string; tool: string;
     // A REFUND: what is owed on a purchase the provider reported at this
     // experiment's exposure, asked for by the hand or by the buyer's link.
     const refund = (await query(
-      `SELECT f.experiment_id, a.id AS act_id
+      `SELECT f.experiment_id, a.id AS act_id, f.charge_ref, f.payment_ref, f.amount_cents
          FROM experiment_fulfilments f
          JOIN venture_experiments e ON e.id = f.experiment_id
          JOIN products p ON p.from_experiment_id = e.id AND p.standing = 'experimental'
@@ -594,7 +610,10 @@ export async function experimentActFor(input: { productId: string; tool: string;
           AND ${covering('f.created_at')}
         ORDER BY a.decided_at, a.rowid LIMIT 1`,
       [input.productId, input.effectId, input.productId, input.tool])).rows[0] as Record<string, unknown> | undefined;
-    if (refund) return found(refund, 'refund');
+    // AND ONLY FOR THE REFUND THAT PURCHASE ALLOWS: its own charge, its whole
+    // amount. A valid owed key carrying any other charge or amount finds no act.
+    const allowed = refund ? refundParamsFor(refund) : null;
+    if (refund && allowed && input.paramsFingerprint && input.paramsFingerprint === fingerprint(allowed)) return found(refund, 'refund');
     // A SUBSCRIPTION STOPPED: asked for by the buyer's link or because the
     // test can deliver no more weeks, recorded as a row before the door is
     // asked, for a subscription a paid week of this experiment belongs to.

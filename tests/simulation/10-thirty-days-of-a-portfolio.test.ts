@@ -130,6 +130,8 @@ describe('day 5 — a buyer pays, the delivery bounces, and the payment provider
     const current = (await materialOf(X, 'deliverable'))!;
     await recordMaterial({ founderId: OWNER, experimentId: X, kind: 'deliverable', title: current.title, body: current.body, pulledAt: new Date(), by: 'the owner' });
     state.buyers.set('pi_p_1', buyer);
+    // The provider holds the charge, tagged as Foundry's intent was (R21).
+    state.charges.set('ch_p_1', { amount: 2900, amount_refunded: 0, metadata: { app: 'foundry', experiment_id: X, primitive: 'sale' } });
     state.deliveryState.set(`next:${buyer}`, 'bounced');
     const { handleWebhook } = await import('../../src/services/venture/stripe-webhook.js');
     const [p, s] = signedEvent('payment_intent.succeeded', { id: 'pi_p_1', object: 'payment_intent', amount_received: 2900, currency: 'usd', receipt_email: buyer, latest_charge: 'ch_p_1', metadata: { app: 'foundry', experiment_id: X, primitive: 'sale' } });

@@ -61,6 +61,10 @@ const NOW = new Date('2026-09-08T00:00:00Z');
 const { state, fetch: fetchStub } = providerStubs();
 let seq = 500;
 function signedEvent(type: string, object: Record<string, unknown>): [string, string] {
+  // The provider holds the charge a succeeded intent made, tagged as the intent was (R21).
+  if (type === 'payment_intent.succeeded' && typeof object.latest_charge === 'string') {
+    state.charges.set(object.latest_charge, { amount: Number(object.amount_received ?? 0) || 2900, amount_refunded: 0, metadata: (object.metadata ?? {}) as Record<string, string> });
+  }
   const payload = JSON.stringify({ id: `evt_w_${++seq}`, object: 'event', type, created: Math.floor(Date.now() / 1000), data: { object } });
   return [payload, stripe.webhooks.generateTestHeaderString({ payload, secret: SECRET })];
 }

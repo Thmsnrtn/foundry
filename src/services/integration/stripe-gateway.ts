@@ -44,10 +44,52 @@ interface UpdateSubscriptionParams {
 }
 
 interface CreateRefundParams {
-  charge_id: string;
-  /** in cents; omit for full refund */
+  /** The charge to refund. Or, for a checkout whose charge was never named, the intent (pi_ only). */
+  charge_id?: string;
+  payment_intent?: string;
+  /** A week of a subscription: the invoice it was, whose subscription must be Foundry's and whose payment must be this charge. */
+  invoice_id?: string;
+  /** in cents */
   amount?: number;
   reason?: 'duplicate' | 'fraudulent' | 'requested_by_customer';
+}
+
+// ─── The money is Foundry's to return, or it is not touched ──────────────────
+//
+// THE ACCOUNT IS SHARED (docs/stripe-shared-account.md): the owner's land sales
+// and another app's subscriptions live beside Foundry's tests, and a restricted
+// key limits by resource, never by whose sale it was. So the handler reads the
+// money it is asked to move from the provider itself, and refuses unless it is
+// a sale Foundry tagged — a caller passing a charge id is not evidence that
+// the charge is Foundry's to refund (R21).
+async function stripeRead<T>(apiKey: string, path: string): Promise<T> {
+  // Every caller builds `path` from pathSegment-checked ids; it is joined here
+  // rather than interpolated so the URL check reads the callers, not this.
+  const response = await withRetry(() => fetch(STRIPE_API + path, { headers: { Authorization: `Bearer ${apiKey}` } }),
+    { timeoutMs: STRIPE_TIMEOUT_MS, maxRetries: 2 });
+  if (!response.ok) throw new Error(`Stripe ${path.split('?')[0]} ${response.status}: ${(await response.text().catch(() => '')).slice(0, 200)}`);
+  return (await response.json()) as T;
+}
+const isFoundrys = (meta: Record<string, string> | null | undefined): boolean => meta?.app === 'foundry' && typeof meta.experiment_id === 'string' && meta.experiment_id.trim() !== '';
+
+/** The subscription an invoice belongs to, and its tag, in either of the provider's shapes. */
+async function invoiceSubscriptionTag(apiKey: string, invoiceId: string): Promise<{ tag: Record<string, string> | null; chargeId: string | null }> {
+  const inv = await stripeRead<{ charge?: string | { id?: string } | null; payment_intent?: string | null; subscription?: string | null;
+    subscription_details?: { metadata?: Record<string, string> | null } | null;
+    parent?: { subscription_details?: { subscription?: string | null; metadata?: Record<string, string> | null } | null } | null;
+    payments?: { data?: Array<{ payment?: { charge?: string | null; payment_intent?: string | null } }> } }>(
+    apiKey, `/invoices/${pathSegment(invoiceId, 'invoice_id')}?expand[]=payments`);
+  let tag = inv.parent?.subscription_details?.metadata ?? inv.subscription_details?.metadata ?? null;
+  const sub = inv.parent?.subscription_details?.subscription ?? inv.subscription ?? null;
+  if (!isFoundrys(tag) && sub) tag = (await stripeRead<{ metadata?: Record<string, string> | null }>(apiKey, `/subscriptions/${pathSegment(sub, 'subscription_id')}`)).metadata ?? null;
+  let chargeId: string | null = typeof inv.charge === 'string' ? inv.charge : inv.charge && typeof inv.charge === 'object' ? inv.charge.id ?? null : null;
+  if (!chargeId) {
+    const paid = inv.payments?.data?.find((x) => x.payment?.charge || x.payment?.payment_intent)?.payment;
+    chargeId = paid?.charge ?? null;
+    const intent = chargeId ? null : paid?.payment_intent ?? inv.payment_intent ?? null;
+    if (intent) chargeId = (await stripeRead<{ latest_charge?: string | null }>(apiKey, `/payment_intents/${pathSegment(intent, 'payment_intent_id')}`)).latest_charge ?? null;
+  }
+  return { tag, chargeId };
 }
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────
@@ -62,6 +104,14 @@ async function updateSubscriptionHandler(
     log.warn('stripe.update_subscription.no_key', { productId: req.productId });
     return { id: params.subscription_id, status: 'logged_only' };
   }
+  // ONE CHANGE, ON FOUNDRY'S OWN SUBSCRIPTIONS ONLY. Ending at the paid period
+  // is the only edit Foundry makes to what anybody is charged; any other body,
+  // or a subscription another business on this account started, is refused
+  // here whatever approved it (R21).
+  const keys = Object.keys(params.body ?? {});
+  if (keys.length !== 1 || params.body.cancel_at_period_end !== 'true') throw new Error('subscription change refused: the only change Foundry makes is ending at the paid period');
+  const current = await stripeRead<{ metadata?: Record<string, string> | null }>(apiKey, `/subscriptions/${pathSegment(params.subscription_id, 'subscription_id')}`);
+  if (!isFoundrys(current.metadata)) throw new Error('subscription change refused: the subscription is not one Foundry started');
   const body = new URLSearchParams(params.body);
 
   const response = await withRetry(
@@ -104,9 +154,32 @@ async function createRefundHandler(
     return { id: 'log_only', status: 'logged', amount: params.amount ?? 0 };
   }
 
+  // WHICH MONEY, READ FROM THE PROVIDER. A charge named, or an intent's latest
+  // charge (pi_ only: an invoice is never refunded by its intent).
+  let chargeId = params.charge_id ?? null;
+  if (!chargeId && params.payment_intent) {
+    if (!/^pi_[A-Za-z0-9]+$/.test(params.payment_intent)) throw new Error('refund refused: only a payment intent (pi_) may stand for a charge');
+    chargeId = (await stripeRead<{ latest_charge?: string | null }>(apiKey, `/payment_intents/${pathSegment(params.payment_intent, 'payment_intent_id')}`)).latest_charge ?? null;
+  }
+  if (!chargeId) throw new Error('refund refused: no charge was named');
+  const charge = await stripeRead<{ id: string; amount: number; amount_refunded?: number; metadata?: Record<string, string> | null }>(
+    apiKey, `/charges/${pathSegment(chargeId, 'charge_id')}`);
+  if (params.invoice_id) {
+    // A WEEK OF A SUBSCRIPTION: the subscription must be Foundry's, and the
+    // invoice's payment must be exactly this charge.
+    const week = await invoiceSubscriptionTag(apiKey, params.invoice_id);
+    if (!isFoundrys(week.tag)) throw new Error('refund refused: the invoice belongs to a subscription Foundry did not start');
+    if (week.chargeId !== charge.id) throw new Error('refund refused: the charge is not the payment of that invoice');
+  } else if (!isFoundrys(charge.metadata)) {
+    throw new Error('refund refused: the charge is not a sale Foundry tagged; another business on this account owns it');
+  }
+  const left = charge.amount - (charge.amount_refunded ?? 0);
+  const amount = params.amount ?? left;
+  if (!Number.isInteger(amount) || amount <= 0 || amount > left) throw new Error(`refund refused: ${String(amount)} cents asked, ${String(left)} left to refund on that charge`);
+
   const body = new URLSearchParams();
-  body.set('charge', params.charge_id);
-  if (params.amount != null) body.set('amount', String(params.amount));
+  body.set('charge', charge.id);
+  body.set('amount', String(amount));
   if (params.reason) body.set('reason', params.reason);
 
   const response = await withRetry(
@@ -260,43 +333,7 @@ registerToolHandler('stripe_deactivate_payment_link', deactivatePaymentLinkHandl
 // ─── Exposed for tests + external re-registration ────────────────────────────
 export { updateSubscriptionHandler, createRefundHandler, createPaymentLinkHandler, deactivatePaymentLinkHandler };
 
-// ─── Convenience callers ──────────────────────────────────────────────────────
-
-export async function gatewayUpdateSubscription(opts: {
-  productId: string;
-  subscriptionId: string;
-  body: Record<string, string>;
-  dedupKey: string;          // required for refund/subscription paths
-  customerExternalId: string; // Stripe customer id; bounds budget
-}): Promise<ReturnType<typeof invoke>> {
-  return invoke({
-    productId: opts.productId,
-    tool: 'stripe_update_subscription',
-    action: `update Stripe subscription ${opts.subscriptionId}`,
-    params: { subscription_id: opts.subscriptionId, body: opts.body },
-    dedupKey: opts.dedupKey,
-    customerExternalId: opts.customerExternalId,
-    surface: 'billing',
-    dataClass: 'customer',
-  });
-}
-
-export async function gatewayCreateRefund(opts: {
-  productId: string;
-  chargeId: string;
-  amount?: number;
-  reason?: CreateRefundParams['reason'];
-  dedupKey: string;
-  customerExternalId: string;
-}): Promise<ReturnType<typeof invoke>> {
-  return invoke({
-    productId: opts.productId,
-    tool: 'stripe_create_refund',
-    action: `Stripe refund on charge ${opts.chargeId}`,
-    params: { charge_id: opts.chargeId, amount: opts.amount, reason: opts.reason },
-    dedupKey: opts.dedupKey,
-    customerExternalId: opts.customerExternalId,
-    surface: 'billing',
-    dataClass: 'customer',
-  });
-}
+// ─── No convenience callers ─────────────────────────────────────────────────
+// gatewayCreateRefund and gatewayUpdateSubscription took the money's identity
+// from their caller and had no caller in src. Deleted with R21: a refund or a
+// stop is asked for by the hand, from a fulfilment row, and nowhere else.

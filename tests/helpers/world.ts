@@ -94,6 +94,7 @@ export async function seedProductionShape(opts: WorldOptions = {}): Promise<{ ex
   // THE STUBS GO IN BEFORE ANY PROVIDER MODULE IS IMPORTED, and the env a
   // provider module reads at import is set here too, if it is not already.
   const providers = byTheWorld ? (opts.providers ?? providerStubs()) : null;
+  worldProviders = providers;
   if (providers) {
     globalThis.fetch = providers.fetch as typeof fetch;
     process.env.CLOUDFLARE_API_TOKEN ??= 'cfat_world';
@@ -520,6 +521,9 @@ async function theWorldCarriesTheReplyCheck(): Promise<void> {
  * Needs a world seeded `settledBy: 'the world'`: the purchase is reported at
  * that world's own exposure, through the door a provider's event uses.
  */
+/** The providers the last seeded world answers with, so a fixture can say what the provider holds. */
+let worldProviders: WorldOptions['providers'] | null = null;
+
 export async function aBuyerIsOwedARefund(founderId: string = OWNER): Promise<{ fulfilmentId: string; paymentRef: string }> {
   const { exposureOf, recordBusinessOutcome } = await import('../../src/services/venture/outcome.js');
   const { findProof1 } = await import('../../src/services/venture/proof-1.js');
@@ -537,6 +541,8 @@ export async function aBuyerIsOwedARefund(founderId: string = OWNER): Promise<{ 
     provider: 'stripe', providerRef: 'ch_harness_1', sourceEventId: ev.id, fulfilmentId: 'ful_harness_1',
     claimQuality: 'measured', evidenceMode: 'real', because: 'A buyer was charged this, and Stripe said so.' });
   await query(`UPDATE experiment_fulfilments SET status = 'failed', updated_at = datetime('now', '-2 days') WHERE id = 'ful_harness_1'`, []);
+  // The provider holds that charge, tagged as Foundry's intent was (R21).
+  worldProviders?.state.charges.set('ch_harness_1', { amount: 2900, amount_refunded: 0, metadata: { app: 'foundry', experiment_id: experimentId } });
   return { fulfilmentId: 'ful_harness_1', paymentRef: 'pi_harness_1' };
 }
 

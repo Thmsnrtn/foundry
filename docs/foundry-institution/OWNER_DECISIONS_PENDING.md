@@ -2039,6 +2039,12 @@ authority would be Foundry declaring its own. Control → Your decisions now has
 "Allow subscriptions" (and "Refuse subscriptions again"). Until you tap it,
 nothing recurs, whatever else is built.
 
+**Hold the money switch until R21 is live (4 October 2026).** A review of
+the code found that the refund door trusted its caller to name the right charge
+on a Stripe account that also holds your land sales. R21 makes the door read
+each charge from Stripe and refuse anything that is not a Foundry purchase's
+own. Turn the switch on only after R21 is live.
+
 **And one setting (4 October 2026, R19).** A subscription is offered only
 while Foundry can cancel one, which needs its money switch on
 (`FOUNDRY_ENABLE_MONEY_TOOLS=true` in the Fly secrets). The same switch lets it

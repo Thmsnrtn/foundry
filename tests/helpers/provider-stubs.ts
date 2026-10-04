@@ -35,6 +35,14 @@ export interface ProviderState {
    */
   subscriptions: Map<string, { status: string; cancel_at_period_end: boolean; metadata: Record<string, string> }>;
   subscriptionUpdates: Array<{ id: string; body: string; idempotency: string }>;
+  /**
+   * CHARGES THE PROVIDER HOLDS, by id (R21): the refund handler reads the charge
+   * before it moves money and refuses one Foundry did not tag. Stripe copies a
+   * payment intent's metadata onto its charge, so a scenario registers the
+   * charge with the intent's tag; an unregistered charge answers 404, as the
+   * provider does for a charge that is not on the account.
+   */
+  charges: Map<string, { amount: number; amount_refunded: number; metadata: Record<string, string> }>;
   /** invoice id → what the provider reports of it: the buyer's address and the charge. */
   invoices: Map<string, { customer_email: string | null; charge: string | null }>;
   /** Cloudflare, shape-faithful: the zone, its records, the store, the program, the hostnames, mail routing. */
@@ -84,7 +92,7 @@ function nested(params: Record<string, string>, prefix: string): Record<string, 
 }
 
 export function providerStubs(): { state: ProviderState; fetch: (url: string | URL, init?: RequestInit) => Promise<Response> } {
-  const state: ProviderState = { sends: [], deliveryState: new Map(), refunds: [], domains: [], nextDomainStatus: 'pending', stripeDown: false, resendDown: false, products: [], prices: [], paymentLinks: [], buyers: new Map(), payments: [], calls: [], seq: 0, subscriptions: new Map(), subscriptionUpdates: [], invoices: new Map(), cf: freshCloudflare() };
+  const state: ProviderState = { sends: [], deliveryState: new Map(), refunds: [], domains: [], nextDomainStatus: 'pending', stripeDown: false, resendDown: false, products: [], prices: [], paymentLinks: [], buyers: new Map(), payments: [], calls: [], seq: 0, subscriptions: new Map(), subscriptionUpdates: [], invoices: new Map(), charges: new Map(), cf: freshCloudflare() };
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   const cfOk = (result: unknown, status = 200) => json({ success: true, result, errors: [] }, status);
   const cfErr = (code: number, message: string, status = 400) => json({ success: false, result: null, errors: [{ code, message }] }, status);
@@ -237,6 +245,11 @@ export function providerStubs(): { state: ProviderState; fetch: (url: string | U
     // ── Stripe ──
     if (state.stripeDown && u.startsWith('https://api.stripe.com/')) {
       return json({ error: { message: 'the payment provider is unreachable' } }, 503);
+    }
+    const ch = /^https:\/\/api\.stripe\.com\/v1\/charges\/([^/?]+)/.exec(u);
+    if (ch && method === 'GET') {
+      const known = state.charges.get(decodeURIComponent(ch[1]));
+      return known ? json({ id: decodeURIComponent(ch[1]), object: 'charge', ...known }) : json({ error: { message: 'no such charge' } }, 404);
     }
     if (u === 'https://api.stripe.com/v1/refunds' && method === 'POST') {
       state.refunds.push({ body: String(init?.body), idempotency: headers['Idempotency-Key'] });

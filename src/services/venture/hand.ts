@@ -1330,18 +1330,32 @@ export async function refundFulfilment(input: { fulfilmentId: string; reason: st
   if (String(f.status) === 'refunded' || f.refund_ref != null) return { issued: true, refusedReason: null };
   // A CONTESTED CHARGE IS THE BANK'S UNTIL IT DECIDES. The provider refuses a
   // refund on a disputed charge; foreseeing that costs nothing and spends no
-  // unit at the door.
+  // unit at the door. (A buyer's own ask is recorded by requestRefundByLink
+  // before this, so it survives the dispute.)
   if (f.disputed_at != null && f.dispute_outcome == null) return { issued: false, refusedReason: 'disputed: the buyer is contesting the charge with their bank; nothing moves until it decides' };
-  const charge = f.charge_ref == null ? null : String(f.charge_ref);
-  if (!charge) return { issued: false, refusedReason: 'charge_unknown' };
+  // RECORDED BEFORE AN UNKNOWN CHARGE CAN REFUSE IT (R21): it used to return
+  // first, and the ask was lost.
   await query(`UPDATE experiment_fulfilments SET refund_requested_at = COALESCE(refund_requested_at, datetime('now')), updated_at = datetime('now') WHERE id = ?`, [input.fulfilmentId]);
+  // A WEEK WHOSE CHARGE WAS NEVER NAMED is read from its invoice now and kept
+  // on the row, because the door binds the refund to the row (refundParamsFor).
+  if (f.charge_ref == null && String(f.payment_ref).startsWith('in_')) {
+    const { chargeOfInvoice } = await import('./payment-link.js');
+    const found = await chargeOfInvoice(String(f.payment_ref)).catch(() => null);
+    if (found) {
+      await query(`UPDATE experiment_fulfilments SET charge_ref = ?, updated_at = datetime('now') WHERE id = ? AND charge_ref IS NULL`, [found, input.fulfilmentId]);
+      f.charge_ref = found;
+    }
+  }
+  const { refundParamsFor } = await import('../institution/standing-intent.js');
+  const params = refundParamsFor(f);
+  if (!params) return { issued: false, refusedReason: 'charge_unknown: the provider has not said which charge this was; refund it by hand in Stripe' };
   // The door charges the buyer's weekly communication budget before the
   // handler runs, and the clean-hands handler refuses without touching money;
   // a refusal Foundry can foresee must not spend the unit the refund needs.
   if (process.env.FOUNDRY_ENABLE_MONEY_TOOLS !== 'true') return { issued: false, refusedReason: 'policy: Foundry does not move money by default (FOUNDRY_ENABLE_MONEY_TOOLS is off)' };
   const result = await invoke({
     productId: String(f.product_id), tool: 'stripe_create_refund', action: `refund ${String(f.payment_ref)}: ${input.reason}`,
-    params: { charge_id: charge, amount: Number(f.amount_cents), reason: 'requested_by_customer' },
+    params,
     dedupKey: `experiment:${String(f.experiment_id)}:refund:${String(f.payment_ref)}`, customerExternalId: String(f.payment_ref),
     surface: 'billing', dataClass: 'customer',
   });
@@ -1384,6 +1398,9 @@ export async function requestRefundByLink(fulfilmentId: string, token: string): 
   const view = await describeRefundLink(fulfilmentId, token);
   if (!view) return { status: 'not_found', view: null };
   if (view.alreadyRefunded) return { status: 'already_refunded', view };
+  // THE BUYER'S ASK IS A FACT BEFORE ANYTHING CAN REFUSE IT (R21): the page
+  // tells them it was noted, so it is, whatever the refund then meets.
+  await query(`UPDATE experiment_fulfilments SET refund_requested_at = COALESCE(refund_requested_at, datetime('now')), updated_at = datetime('now') WHERE id = ?`, [fulfilmentId]);
   const result = await refundFulfilment({ fulfilmentId, reason: 'buyer asked through the delivery link' });
   return { status: result.issued ? 'refunded' : 'could_not', view };
 }

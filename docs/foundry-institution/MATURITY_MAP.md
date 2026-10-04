@@ -2729,3 +2729,21 @@ citation nobody retrieved is refused at launch and named to the owner).
 - No hands-made brief has been bought yet; the first sale is the proof.
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
+
+### The money door moves only Foundry's money (Roadmap 2027 R21, 4 October 2026)
+
+**What changed.** Before the money switch may be turned on, the refund and
+subscription handlers read the money they are asked to move from Stripe and
+refuse anything that is not a Foundry-tagged purchase's own (a land sale on the
+same account, an over-refund, another app's subscription, any edit but a stop),
+and the door binds the refund act to the exact refund its purchase allows.
+
+**Evidence maturity.** E1: `the-money-door-moves-only-foundrys-money` (handler
+refusals with a stubbed provider in both invoice shapes; the door refusing an
+owed key that carries the wrong charge or amount, through the world harness).
+
+**Proof debt.**
+- No refund has moved real money; the first one through the switch is the proof.
+- A sale made before tags were on the intent would be refused and becomes the
+  owner's; none is known to exist.
+- The money switch is still an environment secret, not an owner tap on Control.
