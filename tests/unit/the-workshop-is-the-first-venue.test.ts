@@ -26,15 +26,15 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 // =============================================================================
 
 const reply = {
-  title: 'Remote bid coordinator roles', terms: 'contractor bid tracker', source_types: ['job_posting'],
-  coverage: 'One public jobs board on the pull date, nothing else.', price_dollars: 19, price_because: 'a short read',
+  title: 'Remote bid coordinator roles', terms: 'contractor bid tracker', source_types: ['directory'],
+  coverage: 'One public repository directory on the pull date, nothing else.', price_dollars: 19, price_because: 'a short read',
   product_name: 'Bid Roles Brief', sells: 'a dated shortlist of public postings about tracking contractor bids, each with its source',
   claims_made: 'a shortlist of what one public board showed on the date; refund on request', collects: 'the buyer\'s email for one delivery',
   delivers_by: 'email, when the payment settles', sells_to: 'Small contractors and trade shops.', charges_how: 'one-time, $19, no subscription',
   lighter: 'a shortlist of public rows is the lightest thing that settles it', offer_subject: 'A short brief of bid-coordination postings',
   page: { summary: 'A dated shortlist of public postings about tracking contractor bids.', who: 'Small contractors who track bids by hand.',
     what: 'One brief by email, with a link to every posting.', limits: 'It is a shortlist of one board on one date, not a listing of the market.',
-    sources: 'A public remote-jobs board.', note: 'A small pilot from Apex Micro. If it is no use to you, you get your money back.' },
+    sources: 'A public repository directory.', note: 'A small pilot from Apex Micro. If it is no use to you, you get your money back.' },
 };
 vi.mock('../../src/services/ai/client.js', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
@@ -70,9 +70,9 @@ beforeAll(async () => {
      VALUES (?,?,'venue_opp','venue_unk','offer one at a fixed price on the Workshop page','one pays','nobody pays',1000,'real')`, [X, OWNER]);
   const { recordRetrieval } = await import('../../src/services/venture/sources/index.js');
   await recordRetrieval({
-    founderId: OWNER, sourceType: 'job_posting', source: 'https://remotive.com/api/remote-jobs?search=contractor+bid+tracker', terms: 'contractor bid tracker',
+    founderId: OWNER, sourceType: 'directory', source: 'https://api.github.com/search/repositories?q=contractor+bid+tracker', terms: 'contractor bid tracker',
     returnedCount: 1, canSee: 'jobs', cannotSee: 'the rest', wouldMostHelp: 'a wider board', notAlsoTried: null, evidenceMode: 'real',
-    items: [{ label: 'Northline Builders: Bid Coordinator', url: 'https://remotive.com/remote-jobs/ops/bid-coordinator-9001', datedAt: '2026-09-10T09:00:00', said: 'Track incoming bids.', relevant: true, sharedTerms: ['bid'] }],
+    items: [{ label: 'Northline Builders: Bid Coordinator', url: 'https://github.com/northline/bid-coordinator', datedAt: '2026-09-10T09:00:00', said: 'Track incoming bids.', relevant: true, sharedTerms: ['bid'] }],
   });
   const { recordDesign } = await import('../../src/services/venture/probe-design.js');
   await recordDesign({
@@ -112,6 +112,14 @@ describe('the Workshop\'s page as the venue', () => {
     expect(id.copy.note).not.toContain('Thomas Norton');
     const { offerShapePlanOf, readiness } = await import('../../src/services/venture/hand.js');
     expect((await offerShapePlanOf(X))!.venue).toBe('workshop');
+    // R23: BY DEFAULT IT CANNOT BE PLACED, and readiness says so before anything
+    // is decided, carved or minted. Only the owner's own row lets it through.
+    const refused = await readiness(X);
+    expect(refused.missing).toContain('email sending is not connected');
+    expect(refused.missing.some((m) => m.startsWith('placing it would be refused: the first-proof policy requires front loaded attention'))).toBe(true);
+    const { supersedeOriginationPolicy } = await import('../../src/services/venture/legal-surface.js');
+    await supersedeOriginationPolicy({ founderId: OWNER, requirement: 'front_loaded_attention', treatment: 'prefer',
+      why: 'The owner allowed offers that still take some of their minutes per sale (PENDING 32).', by: `founder:${OWNER}` });
     const before = await readiness(X);
     expect(before.ok).toBe(false);
     expect(before.missing).toEqual(['email sending is not connected']);
@@ -157,10 +165,10 @@ describe('what a buyer pays for can go out (R20)', () => {
   it('the brief the hands made passes the gate delivery runs, and that gate is the hands\' own', async () => {
     const { deliverableGate, materialOf } = await import('../../src/services/venture/hand.js');
     const goods = (await materialOf(X, 'deliverable'))!;
-    expect(goods.body).toContain('https://remotive.com/remote-jobs/ops/bid-coordinator-9001');
+    expect(goods.body).toContain('https://github.com/northline/bid-coordinator');
     expect(await deliverableGate(X, goods, new Date())).toEqual({ ok: true, failures: [] });
     // A citation of something nobody retrieved is refused, so the gate is not a rubber stamp.
-    const forged = { ...goods, body: goods.body.replace('https://remotive.com/remote-jobs/ops/bid-coordinator-9001', 'https://example.com/made-up') };
+    const forged = { ...goods, body: goods.body.replace('https://github.com/northline/bid-coordinator', 'https://example.com/made-up') };
     expect((await deliverableGate(X, forged, new Date())).failures.join(' ')).toMatch(/not a row anything retrieved/);
   });
 
@@ -192,7 +200,7 @@ describe('what a buyer pays for can go out (R20)', () => {
     const { deliverableGate, materialOf, recordMaterial } = await import('../../src/services/venture/hand.js');
     const goods = (await materialOf(X, 'deliverable'))!;
     await recordMaterial({ founderId: OWNER, experimentId: X, kind: 'deliverable', title: goods.title,
-      body: goods.body.replace('https://remotive.com/remote-jobs/ops/bid-coordinator-9001', 'https://example.com/made-up'), pulledAt: goods.pulledAt ? new Date(goods.pulledAt) : new Date(), by: 'test' });
+      body: goods.body.replace('https://github.com/northline/bid-coordinator', 'https://example.com/made-up'), pulledAt: goods.pulledAt ? new Date(goods.pulledAt) : new Date(), by: 'test' });
     const now = (await materialOf(X, 'deliverable'))!;
     expect((await deliverableGate(X, now, new Date())).ok).toBe(false);
     const { readiness } = await import('../../src/services/venture/hand.js');

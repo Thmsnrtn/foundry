@@ -33,7 +33,7 @@ vi.mock('../../src/services/ai/client.js', async (orig) => ({
   ...(await orig<Record<string, unknown>>()),
   callSonnet: vi.fn(async (system: string) => {
     if (system.startsWith('You shape the offer')) {
-      return say({ title: 'Bid roles brief', terms: 'contractor bid tracker', source_types: ['job_posting'], coverage: 'One board on the pull date.',
+      return say({ title: 'Bid roles brief', terms: 'contractor bid tracker', source_types: ['directory'], coverage: 'One directory on the pull date.',
         price_dollars: 19, price_because: 'a short read', product_name: 'Bid Roles Brief', sells: 'a dated shortlist', claims_made: 'a shortlist, not a listing',
         collects: 'an email for one delivery', delivers_by: 'email on payment', sells_to: 'Small contractors.', charges_how: 'one-time, $19', lighter: 'nothing lighter settles it', offer_subject: 'A short brief',
         page: { summary: 's', who: 'w', what: 'x', limits: 'l', sources: 'o', note: 'n' } });

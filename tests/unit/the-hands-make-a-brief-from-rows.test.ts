@@ -18,7 +18,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest';
 // =============================================================================
 
 const reply = {
-  title: 'Remote bid coordinator roles', terms: 'contractor bid tracker', source_types: ['job_posting', 'community'],
+  title: 'Remote bid coordinator roles', terms: 'contractor bid tracker', source_types: ['directory', 'community'],
   coverage: 'It covers what one public jobs board and one public forum showed on the pull date, and nothing else.',
   price_dollars: 19, price_because: 'a short read that saves an afternoon of searching', product_name: 'Bid Coordinator Roles Brief',
   sells: 'a dated shortlist of public postings and discussions about tracking contractor bids, each with its source',
@@ -67,12 +67,12 @@ beforeAll(async () => {
   // What the eyes kept: two retrievals for the same words, with items.
   const { recordRetrieval } = await import('../../src/services/venture/sources/index.js');
   await recordRetrieval({
-    founderId: OWNER, sourceType: 'job_posting', source: 'https://remotive.com/api/remote-jobs?search=contractor+bid+tracker', terms: 'contractor bid tracker',
+    founderId: OWNER, sourceType: 'directory', source: 'https://api.github.com/search/repositories?q=contractor+bid+tracker', terms: 'contractor bid tracker',
     returnedCount: 3, canSee: 'jobs', cannotSee: 'the rest', wouldMostHelp: 'a wider board', notAlsoTried: null, evidenceMode: 'real',
     items: [
-      { label: 'Northline Builders: Bid Coordinator', url: 'https://remotive.com/remote-jobs/ops/bid-coordinator-9001', datedAt: '2026-09-10T09:00:00', said: 'Track incoming bids and estimates, maintain the bid tracker.', relevant: true, sharedTerms: ['bid', 'tracker'] },
-      { label: 'Vectorish: ML Engineer', url: 'https://remotive.com/remote-jobs/dev/ml-9002', datedAt: '2026-09-11T09:00:00', said: 'Build models.', relevant: false, sharedTerms: [] },
-      { label: 'Harbor Homes: Estimator', url: 'https://remotive.com/remote-jobs/ops/estimator-9003', datedAt: '2026-09-12T09:00:00', said: 'Prepare bids and track their outcomes for a residential contractor.', relevant: true, sharedTerms: ['bids'] },
+      { label: 'Northline Builders: Bid Coordinator', url: 'https://github.com/northline/bid-coordinator', datedAt: '2026-09-10T09:00:00', said: 'Track incoming bids and estimates, maintain the bid tracker.', relevant: true, sharedTerms: ['bid', 'tracker'] },
+      { label: 'Vectorish: ML Engineer', url: 'https://github.com/vectorish/ml', datedAt: '2026-09-11T09:00:00', said: 'Build models.', relevant: false, sharedTerms: [] },
+      { label: 'Harbor Homes: Estimator', url: 'https://github.com/harbor-homes/estimator', datedAt: '2026-09-12T09:00:00', said: 'Prepare bids and track their outcomes for a residential contractor.', relevant: true, sharedTerms: ['bids'] },
     ],
   });
   await recordRetrieval({
@@ -85,16 +85,19 @@ beforeAll(async () => {
 describe('a brief made of rows', () => {
   it('cites a retrieval row for every item, counts what the eyes counted, and names nobody', async () => {
     const { rowsForBrief, renderBrief, checkBriefQuality } = await import('../../src/services/venture/products/registry.js');
-    const spec = { kind: 'data_brief' as const, title: 'Remote bid coordinator roles', terms: 'contractor bid tracker', sourceTypes: ['job_posting', 'community'], coverage: 'Two public sources on the pull date.', limit: 25 };
+    const spec = { kind: 'data_brief' as const, title: 'Remote bid coordinator roles', terms: 'contractor bid tracker', sourceTypes: ['directory', 'community'], coverage: 'Two public sources on the pull date.', limit: 25 };
     const made = await rowsForBrief(OWNER, spec);
     expect(made.items.map((i) => i.url)).toEqual([
-      'https://remotive.com/remote-jobs/ops/estimator-9003', 'https://remotive.com/remote-jobs/ops/bid-coordinator-9001', 'https://news.ycombinator.com/item?id=h1']);
+      'https://github.com/harbor-homes/estimator', 'https://github.com/northline/bid-coordinator', 'https://news.ycombinator.com/item?id=h1']);
     const body = renderBrief(spec, made, 'Apex Micro');
-    expect(body).toContain('job posting returned 3 result(s)');
+    expect(body).toContain('directory returned 3 result(s)');
     expect(body).toContain('of which 2 were about the subject');
     expect(body).toContain('### 1. Harbor Homes: Estimator');
-    expect(body).toContain('- **Source:** https://remotive.com/remote-jobs/ops/estimator-9003');
+    expect(body).toContain('- **Source:** https://github.com/harbor-homes/estimator');
     expect(body).not.toContain('Thomas Norton');
+    // NOBODY'S WORDS REPUBLISHED (R23): a discussion is named by where it is, never quoted.
+    expect(body).toContain('A public discussion on news.ycombinator.com');
+    expect(body).not.toContain('We track every contractor bid');
     const q = await checkBriefQuality(OWNER, { id: 'p', kind: 'deliverable', title: spec.title, body, pulledAt: made.pulledAt!.toISOString(), digest: '', paymentLinkUrl: null, recordedAt: '' });
     expect(q).toEqual({ ok: true, failures: [] });
   });
@@ -160,9 +163,9 @@ describe('the forge shapes the offer and the hands make the thing', () => {
     await new Promise((r) => setTimeout(r, 1100));
     const { recordRetrieval } = await import('../../src/services/venture/sources/index.js');
     await recordRetrieval({
-      founderId: OWNER, sourceType: 'job_posting', source: 'https://remotive.com/api/remote-jobs?search=contractor+bid+tracker', terms: 'contractor bid tracker',
+      founderId: OWNER, sourceType: 'directory', source: 'https://api.github.com/search/repositories?q=contractor+bid+tracker', terms: 'contractor bid tracker',
       returnedCount: 1, canSee: 'jobs', cannotSee: 'the rest', wouldMostHelp: 'a wider board', notAlsoTried: null, evidenceMode: 'real',
-      items: [{ label: 'Coastal Build: Bid Administrator', url: 'https://remotive.com/remote-jobs/ops/bid-admin-9004', datedAt: later.toISOString(), said: 'Keep the bid tracker current for a contractor.', relevant: true, sharedTerms: ['bid', 'tracker'] }],
+      items: [{ label: 'Coastal Build: Bid Administrator', url: 'https://github.com/coastal-build/bid-admin', datedAt: later.toISOString(), said: 'Keep the bid tracker current for a contractor.', relevant: true, sharedTerms: ['bid', 'tracker'] }],
     });
     const again = await refreshStaleBriefs(later);
     expect(again).toEqual([{ experimentId: X, refreshed: true, because: expect.stringContaining('re-pulled') }]);

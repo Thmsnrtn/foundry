@@ -816,6 +816,62 @@ export async function sendingReadiness(founderId: string): Promise<SendingReadin
   return { status: 'ready', fromLine, detail: `Ready. Messages go out as ${fromLine}${identity.lastAcceptedAt ? '; the provider has accepted mail from it before' : '; not yet used'}.`, identityProductId };
 }
 
+/**
+ * WHAT PLACING THIS OFFER WOULD BE REFUSED FOR, ASKED BEFORE ANYTHING IS DONE
+ * (Roadmap 2027 R23). `placeExposure` reads the first-proof policy against the
+ * asset's facts and refuses — but it ran after the test had been decided, a
+ * charter slot carved and a live payment link minted, so a refused offer still
+ * held a slot and left a link in Stripe. This is the same reading, through the
+ * same pure function, of the facts the offer WOULD state: the plan's own,
+ * except where the asset already carries a live fact, which statedShapeAndFacts
+ * would keep rather than overwrite. `placeExposure` stays the final gate.
+ *
+ * Only a real offer is read; a reference world's offer is never placed where a
+ * stranger could reach it, and placeExposure reads only the real one too.
+ */
+export async function placementWouldBeRefused(e: ExperimentRow, plan: OfferShapePlan): Promise<string[]> {
+  if (e.evidenceMode !== 'real') return [];
+  const { originationPolicyFor, policyVerdictsFor } = await import('./legal-surface.js');
+  const kinds = (await query('SELECT fact, answers_requirement, satisfied_when FROM structural_fact_kinds', []))
+    .rows as unknown as Array<{ fact: string; answers_requirement: string | null; satisfied_when: number | null }>;
+  const kindOf = new Map(kinds.map((k) => [String(k.fact), k]));
+  const stored = new Map<string, { present: number | null; basis: string; grounds: string | null }>();
+  if (e.productId) {
+    for (const r of (await query(`SELECT fact, present, basis, grounds FROM structural_facts
+        WHERE subject_kind = 'company' AND subject_id = ? AND superseded_at IS NULL`, [e.productId])).rows as unknown as Row[]) {
+      stored.set(String(r.fact), { present: r.present == null ? null : Number(r.present), basis: String(r.basis), grounds: r.grounds == null ? null : String(r.grounds) });
+    }
+  }
+  const facts = Object.entries(plan.facts).map(([fact, f]) => {
+    const k = kindOf.get(fact);
+    const live = stored.get(fact);
+    const present = live ? live.present : f.present;
+    return {
+      present: present == null ? null : Number(present) === 1,
+      basis: live ? live.basis : (f.basis ?? 'assumed'),
+      grounds: live ? live.grounds : f.grounds,
+      answersRequirement: k?.answers_requirement == null ? null : String(k.answers_requirement),
+      satisfiedWhen: k?.satisfied_when == null ? null : Number(k.satisfied_when),
+    };
+  });
+  const { inTheWay } = policyVerdictsFor({ policy: await originationPolicyFor(e.founderId), facts, shaped: true });
+  return inTheWay;
+}
+
+/**
+ * A WEEK AFTER THE FIRST HAS TO BE MAKEABLE BEFORE A WEEK IS SOLD. A weekly
+ * data brief is re-rendered from the rows it was made from; nothing pulls its
+ * query again, so week two would be week one with a new date. Refused here
+ * until the steward re-pulls a live brief's own sealed query (R28 deletes this).
+ */
+export async function recurringCannotBeMade(experimentId: string, plan: OfferShapePlan): Promise<string | null> {
+  if (!plan.price.recurring) return null;
+  const shape = await materialOf(experimentId, 'offer_shape');
+  let kind: unknown = null;
+  try { kind = shape ? (JSON.parse(shape.body) as { kind?: unknown }).kind : null; } catch { kind = null; }
+  return kind === 'data_brief' ? 'a week after the first cannot be made yet: nothing pulls a brief\'s sources again, so week two would repeat week one' : null;
+}
+
 export async function readiness(experimentId: string): Promise<Readiness> {
   const e = await experimentRow(experimentId);
   if (!e) throw new HandRefused('experiment_not_found');
@@ -865,6 +921,17 @@ export async function readiness(experimentId: string): Promise<Readiness> {
       if (!w.postalAddress) missing.push('the Workshop has no postal address for commercial mail');
       if (w.economicPause) missing.push('new economic activity is paused');
     }
+    // WHAT PLACING IT WOULD BE REFUSED FOR, before a decision, a carve or a
+    // link (R23). Said in the words placeExposure would use.
+    for (const why of await placementWouldBeRefused(e, plan)) missing.push(`placing it would be refused: ${why}`);
+    const weekTwo = await recurringCannotBeMade(experimentId, plan);
+    if (weekTwo) missing.push(weekTwo);
+    // A BRIEF MADE BEFORE R23 FROM A SOURCE THAT MAY NOT BE SOLD stays unsold.
+    const shapeBody = (await materialOf(experimentId, 'offer_shape'))?.body ?? '{}';
+    let named: string[] = [];
+    try { named = ((JSON.parse(shapeBody) as { spec?: { sourceTypes?: unknown } }).spec?.sourceTypes as string[] | undefined) ?? []; } catch { named = []; }
+    const { sourcesRefusedForSale } = await import('./products/registry.js');
+    for (const why of sourcesRefusedForSale(Array.isArray(named) ? named.map(String) : [])) missing.push(`it may not be sold: ${why}`);
     missing.push(...await instrumentMissing());
     return { ok: missing.length === 0, missing, reachable: 0, pending: 0, pendingWebForm: 0, struck: 0, sending };
   }
@@ -942,6 +1009,15 @@ export async function ensureExposure(experimentId: string): Promise<{ exposureId
     const { paymentObservationPath } = await import('./the-instrument.js');
     const observation = await paymentObservationPath();
     if (observation.status === 'not_working') return { refused: `a way to pay is not placed while ${observation.detail}` };
+  }
+  // NOTHING IS MINTED THAT PLACEMENT WOULD REFUSE (R23). placeExposure reads
+  // the asset's legal picture and refuses; asked here first, the same picture
+  // stops a live link being made on the owner's Stripe account for an offer
+  // that could never be placed. One reading, the one placeExposure takes.
+  if (e.evidenceMode === 'real' && !(existing && existing.withdrawnAt === null)) {
+    const { legalPictureOf } = await import('./legal-surface.js');
+    const picture = await legalPictureOf({ founderId: e.founderId, opportunityId: e.productId, world: 'real', subjectKind: 'company' });
+    if (picture.inTheWay.length > 0) return { refused: `the asset's legal picture stands in the way: ${picture.inTheWay.join('; ')}` };
   }
   let link: PaymentLinkFacts | null = await findExperimentPaymentLink(experimentId);
   if (link && !validateExperimentPaymentLink(link, experimentId, plan.price).ok) link = null;

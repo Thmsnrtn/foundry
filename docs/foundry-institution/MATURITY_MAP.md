@@ -2730,6 +2730,31 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### A forge-made offer is placed only on true facts and the owner's decision (Roadmap 2027 R23, 4 October 2026)
+
+**What changed.** Readiness dry-runs the first-proof policy on the facts an
+offer would state, through `policyVerdictsFor` (the same function the legal
+picture uses), so an offer placement would refuse is refused before it is
+decided, carved into the charter or given a payment link. `ensureExposure`
+reads the asset's legal picture before any link is found or made. The
+`front_loaded_attention` fact stays false and assumed; the owner alone may make
+the requirement a preference (PENDING 32), and Control re-shows the choice when
+its conditions change. Weekly briefs wait for R28. Paid briefs draw only on
+discussion and directory sources, and never quote a stranger.
+
+**Evidence maturity.** E1: `a-forge-offer-is-placed-only-on-true-facts`, plus
+the loop test now showing both sides (refused by default, let in after the
+owner allows it, with no carve before).
+
+**Proof debt.**
+- No forge offer has been placed in production; the first placement must be
+  read back over HTTPS.
+- Tests let in before R23 and stuck unplaced are refused at `ensureExposure`
+  but not retired; their charter slots stay carved until they settle or are
+  stopped. Whether any exist is unknown until the owner's Charter screenshot or
+  R26's facts block.
+- The paid-redistribution terms of HN search, GitHub and npm are unread.
+
 ### The privacy page says what the pages do (Roadmap 2027 R22, 4 October 2026)
 
 **What changed.** `renderSite` renders `/privacy` after every other page and

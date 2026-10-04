@@ -199,6 +199,80 @@ export async function structuralFactsOf(
   }));
 }
 
+/** One structural fact as the policy reads it. */
+export interface PolicyFact {
+  present: boolean | null; basis: string; grounds: string | null;
+  answersRequirement: string | null; satisfiedWhen: number | null;
+}
+
+/**
+ * WHAT THE FIRST-PROOF POLICY SAYS OF A SET OF FACTS, AND WHAT IT BLOCKS.
+ *
+ * Pure: the policy rows and the facts in, the verdicts and the sentences that
+ * stand in the way out. `legalPictureOf` reads it with the facts on record;
+ * readiness dry-runs it with the facts an offer WOULD state, before anything
+ * is decided, carved or minted (Roadmap 2027 R23). One function, so the dry
+ * run and the final gate in `placeExposure` cannot read the policy two ways.
+ */
+export function policyVerdictsFor(input: {
+  policy: Array<Pick<PolicyRow, 'requirement' | 'treatment' | 'why' | 'setBy'>>;
+  facts: PolicyFact[];
+  /** True once the offer has a shape: an unknown binding fact then blocks. */
+  shaped: boolean;
+}): { verdicts: LegalPicture['policy']; inTheWay: string[] } {
+  // THE POLICY, ROW BY ROW, FROM THE FACTS ON RECORD. An unknown fact is a
+  // real verdict: at candidate level it does not block, because the offer has
+  // no shape yet and guessing would be worse; once an offer shape exists the
+  // asset-level pass answers it, and a refused or required row that is still
+  // unknown then stands in the way.
+  const factByRequirement = new Map(input.facts.filter((f) => f.answersRequirement !== null)
+    .map((f) => [String(f.answersRequirement), f]));
+  const shaped = input.shaped;
+  const policyVerdicts: LegalPicture['policy'] = [];
+  const inTheWay: string[] = [];
+  for (const row of input.policy) {
+    if (row.treatment === 'policy' || row.requirement === 'block_on_unresolved_material_uncertainty') continue;
+    const fact = factByRequirement.get(row.requirement);
+    // AN ASSUMPTION IS NOT A FINDING, AND THIS TREATED IT AS ONE.
+    //
+    // A fact written because the recipe said so satisfied a binding
+    // requirement exactly as an observation would, and nothing looked at
+    // `basis` — which has been on the row the whole time. An intended US
+    // audience became "does not sell across a border"; a refund policy became
+    // "no support obligation". Deterministic enforcement cannot compensate for
+    // a false premise handed to it, so the premise now has to say what it is.
+    // ONLY WHAT SAYS IT IS AN ASSUMPTION. Rows written `offer_shape` predate
+    // the distinction and are left exactly as they were: re-judging them now
+    // would be the retroactive rewriting the migration refused to do, and
+    // would block an institution on no new evidence about it. New facts
+    // classify themselves, and the ones that matter have been restated.
+    const believedOnly = fact !== undefined && fact.basis === 'assumed';
+    const verdict: 'satisfied' | 'violated' | 'unknown' = fact === undefined || fact.present === null
+      ? 'unknown'
+      : (fact.present ? 1 : 0) === fact.satisfiedWhen ? 'satisfied' : 'violated';
+    policyVerdicts.push({ requirement: row.requirement, treatment: row.treatment, verdict,
+      why: row.why, setBy: row.setBy });
+    const binding = row.treatment === 'refuse' || row.treatment === 'require';
+    if (binding && verdict === 'violated') {
+      inTheWay.push(`the first-proof policy ${row.treatment === 'refuse' ? 'refuses' : 'requires'} `
+        + `${row.requirement.replace(/_/g, ' ')} (${row.why})`);
+    }
+    if (binding && verdict === 'unknown' && shaped) {
+      inTheWay.push(`whether ${row.requirement.replace(/_/g, ' ')} holds is still unknown, and `
+        + 'the offer has a shape now, so that is no longer a question for later');
+    }
+    // A REQUIREMENT MET ONLY BY AN ASSUMPTION IS NOT MET. Said in the words of
+    // what would settle it, because "assumed" alone tells him nothing about
+    // what to do next.
+    if (binding && verdict === 'satisfied' && believedOnly && shaped) {
+      inTheWay.push(`${row.requirement.replace(/_/g, ' ')} is assumed rather than checked`
+        + `${fact?.grounds ? ` (${fact.grounds})` : ''} — the offer has a shape now, so it needs `
+        + 'something that enforces it or somebody who has looked');
+    }
+  }
+  return { verdicts: policyVerdicts, inTheWay };
+}
+
 /**
  * THE LEGAL PICTURE OF A CANDIDATE, AS THE OWNER READS IT.
  *
@@ -265,55 +339,11 @@ export async function legalPictureOf(input: {
     if (s.stale) inTheWay.push(`what I know about ${s.whatItIs} is over six months old`);
   }
 
-  // THE POLICY, ROW BY ROW, FROM THE FACTS ON RECORD. An unknown fact is a
-  // real verdict: at candidate level it does not block, because the offer has
-  // no shape yet and guessing would be worse; once an offer shape exists the
-  // asset-level pass answers it, and a refused or required row that is still
-  // unknown then stands in the way.
-  const factByRequirement = new Map(facts.filter((f) => f.answersRequirement !== null)
-    .map((f) => [String(f.answersRequirement), f]));
-  const shaped = input.subjectKind === 'company';
-  const policyVerdicts: LegalPicture['policy'] = [];
-  for (const row of policy) {
-    if (row.treatment === 'policy' || row.requirement === 'block_on_unresolved_material_uncertainty') continue;
-    const fact = factByRequirement.get(row.requirement);
-    // AN ASSUMPTION IS NOT A FINDING, AND THIS TREATED IT AS ONE.
-    //
-    // A fact written because the recipe said so satisfied a binding
-    // requirement exactly as an observation would, and nothing looked at
-    // `basis` — which has been on the row the whole time. An intended US
-    // audience became "does not sell across a border"; a refund policy became
-    // "no support obligation". Deterministic enforcement cannot compensate for
-    // a false premise handed to it, so the premise now has to say what it is.
-    // ONLY WHAT SAYS IT IS AN ASSUMPTION. Rows written `offer_shape` predate
-    // the distinction and are left exactly as they were: re-judging them now
-    // would be the retroactive rewriting the migration refused to do, and
-    // would block an institution on no new evidence about it. New facts
-    // classify themselves, and the ones that matter have been restated.
-    const believedOnly = fact !== undefined && fact.basis === 'assumed';
-    const verdict: 'satisfied' | 'violated' | 'unknown' = fact === undefined || fact.present === null
-      ? 'unknown'
-      : (fact.present ? 1 : 0) === fact.satisfiedWhen ? 'satisfied' : 'violated';
-    policyVerdicts.push({ requirement: row.requirement, treatment: row.treatment, verdict,
-      why: row.why, setBy: row.setBy });
-    const binding = row.treatment === 'refuse' || row.treatment === 'require';
-    if (binding && verdict === 'violated') {
-      inTheWay.push(`the first-proof policy ${row.treatment === 'refuse' ? 'refuses' : 'requires'} `
-        + `${row.requirement.replace(/_/g, ' ')} (${row.why})`);
-    }
-    if (binding && verdict === 'unknown' && shaped) {
-      inTheWay.push(`whether ${row.requirement.replace(/_/g, ' ')} holds is still unknown, and `
-        + 'the offer has a shape now, so that is no longer a question for later');
-    }
-    // A REQUIREMENT MET ONLY BY AN ASSUMPTION IS NOT MET. Said in the words of
-    // what would settle it, because "assumed" alone tells him nothing about
-    // what to do next.
-    if (binding && verdict === 'satisfied' && believedOnly && shaped) {
-      inTheWay.push(`${row.requirement.replace(/_/g, ' ')} is assumed rather than checked`
-        + `${fact?.grounds ? ` (${fact.grounds})` : ''} — the offer has a shape now, so it needs `
-        + 'something that enforces it or somebody who has looked');
-    }
-  }
+  // THE POLICY, ROW BY ROW, FROM THE FACTS ON RECORD — read by the one pure
+  // function readiness also dry-runs, so the two cannot disagree (R23).
+  const { verdicts: policyVerdicts, inTheWay: policyInTheWay } = policyVerdictsFor({
+    policy, facts, shaped: input.subjectKind === 'company' });
+  inTheWay.push(...policyInTheWay);
 
   const worst = surfaces[0];
   const unresolved = surfaces.filter((s) => s.standing === 'unresolved_internally');

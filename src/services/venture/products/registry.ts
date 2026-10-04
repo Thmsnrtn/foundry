@@ -67,6 +67,37 @@ export interface BriefSpec {
   limit: number;
 }
 
+/**
+ * WHAT A PAID BRIEF MAY BE MADE FROM (Roadmap 2027 R23). The eyes read five
+ * kinds of source; reading is not reselling. Three of them are refused for
+ * sale, each for a reason the owner can check, and a brief is made only from
+ * the two that remain: public discussion (cited by link, never quoted) and
+ * public package and repository directories.
+ */
+export const REFUSED_FOR_SALE: Record<string, string> = {
+  job_posting: 'the jobs board\'s terms do not allow its listings to be resold',
+  app_store: 'Apple\'s terms do not allow its search results to be resold',
+  review: 'reviews are strangers\' own words, and Apple\'s terms do not allow them to be resold',
+};
+export const PAID_BRIEF_SOURCES = ['community', 'directory'] as const;
+
+/** Why each named source may not go into something sold, or nothing. */
+export function sourcesRefusedForSale(sourceTypes: readonly string[]): string[] {
+  return sourceTypes.filter((t) => t in REFUSED_FOR_SALE).map((t) => `${t.replace(/_/g, ' ')}: ${REFUSED_FOR_SALE[t]!}`);
+}
+
+/**
+ * NOBODY'S WORDS REPUBLISHED. A discussion's title or a review's text is what
+ * a stranger wrote; the brief names where it is and when, and links to it, and
+ * never carries the words themselves.
+ */
+export function neutralLabel(item: Pick<BriefItem, 'label' | 'url' | 'sourceType'>): string {
+  if (item.sourceType !== 'community' && item.sourceType !== 'review') return item.label;
+  let host = 'a public site';
+  try { host = new URL(item.url).hostname.replace(/^www\./, ''); } catch { /* keep the plain words */ }
+  return item.sourceType === 'review' ? `A review on ${host}` : `A public discussion on ${host}`;
+}
+
 export interface BriefItem { id: string; label: string; url: string; datedAt: string | null; said: string | null; sourceType: string; source: string }
 
 /** The rows a brief would be made of: relevant items from this founder's own retrievals, newest first, one per address. */
@@ -116,9 +147,10 @@ export function renderBrief(spec: BriefSpec, made: Awaited<ReturnType<typeof row
   lines.push('**Relevance is judged from the text the source showed.** Nothing beyond that text was opened, and an item can be about the subject and still be no use to you.', '');
   lines.push('Items are listed newest first.', '', '---', '');
   made.items.forEach((it, i) => {
-    lines.push(`### ${String(i + 1)}. ${it.label}`);
+    const quoted = it.sourceType !== 'community' && it.sourceType !== 'review';
+    lines.push(`### ${String(i + 1)}. ${neutralLabel(it)}`);
     if (it.datedAt) lines.push(`- **Dated:** ${it.datedAt.slice(0, 10)}`);
-    if (it.said) lines.push(`- **What the record says:** "${it.said.replace(/\s+/g, ' ').slice(0, 300)}"`);
+    if (it.said && quoted) lines.push(`- **What the record says:** "${it.said.replace(/\s+/g, ' ').slice(0, 300)}"`);
     lines.push(`- **Source:** ${it.url}`, '');
   });
   lines.push('---', '', `Compiled by ${workshop} from public sources. If it is no use to you, you can have your money back.`);
@@ -184,6 +216,9 @@ export interface Made { deliverableId: string; offerTemplateId: string; offerSha
  * deliverable a later hand could send.
  */
 export async function makeBrief(input: { founderId: string; experimentId: string; spec: BriefSpec; plan: OfferShapePlan; now?: Date }): Promise<Made | { refused: string }> {
+  // WHAT MAY BE SOLD IS ASKED FIRST (R23), before anything is looked up or made.
+  const refusedForSale = sourcesRefusedForSale(input.spec.sourceTypes);
+  if (refusedForSale.length > 0) return { refused: `a brief that is sold may not be made from ${refusedForSale.join('; ')}` };
   const { publicWorkshopOf } = await import('../../public-workshop/settings.js');
   const w = await publicWorkshopOf(input.founderId);
   if (!w) return { refused: 'there is no Workshop to speak as' };

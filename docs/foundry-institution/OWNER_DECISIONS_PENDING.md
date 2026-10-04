@@ -13,9 +13,9 @@ around each item.
 ---
 
 <!-- status:begin — generated from the headings below by node scripts/check-record-matches-code.mjs --write -->
-# 12 WAITING ON THE OWNER, 3 WITH COUNSEL, 7 DECIDED IN PLACE
+# 13 WAITING ON THE OWNER, 3 WITH COUNSEL, 7 DECIDED IN PLACE
 
-- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 21, 25, 26, 27, 29, 30.
+- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 21, 25, 26, 27, 29, 30, 32.
 - **Waiting on counsel:** PENDING 9, 13, 15 (interim positions in force; see below).
 - **Decided, and kept where they were asked:** PENDING 16, 20, 22, 23, 24, 28, 31.
 - **Answered and recorded as RESOLVED:** 15.
@@ -2063,4 +2063,46 @@ issue the refunds it already promises; it is off in production today, so
 refunds and cancellations wait for you in Stripe until it is set. The Stripe
 webhook endpoint should also be subscribed to `invoice.paid`; until it is, an
 hourly check of Stripe finds each paid week instead.
+
+---
+
+## PENDING 32 — Let offers that still take some of your minutes per sale be placed: **OWNER** (2026-10-04)
+
+**What Foundry found (Roadmap 2027 R23).** Every offer the forge makes says,
+truthfully, that it is not yet "attention spent once": while the money switch
+is off every refund and cancellation is yours in Stripe, and while
+correspondence is off every buyer's email is yours. The first-proof policy
+*requires* attention spent once, so placement refused every such offer. Worse,
+it refused only after the test had been decided, a charter slot carved and a
+live payment link made on your Stripe account, so "launch on its own" filled
+the charter and launched nothing.
+
+**What changed in the code.** Readiness now asks the same question first,
+through the one reading placement uses, and nothing is decided, carved or
+minted for an offer that could not be placed. The fact itself is never written
+true by code: no path writes it present, and the database refuses a policy row
+of yours set by any principal but you.
+
+**Your choice, on Control → Your decisions.**
+- **Keep requiring it** (the default): no forge-made offer reaches a page.
+- **Allow them**: the requirement becomes a preference. The fact still says
+  "not yet", and that still counts against a design; it no longer refuses one.
+  **It applies to every future offer of any kind**, with no end date.
+
+Control writes the conditions you decided under (the money switch, the
+correspondence mode) into your decision, and shows it to you again whenever
+either is different.
+
+**Recommendation.** Allow them, once the money switch is on (R21 is live, so
+it may be) and correspondence is at least "drafts", in the same sitting. Then
+the minutes a sale can still cost you are an email you approve, not a refund
+you make by hand.
+
+**Also in R23.** A paid brief is made only from public discussion (cited by
+link, never quoted) and public package and repository directories. The jobs
+board's and Apple's terms do not allow resale, and reviews are strangers' own
+words, so those sources are read as evidence and never sold. Proof debt: the
+paid-redistribution terms of Hacker News search, GitHub and npm have not been
+read; a brief from them is a list of links with dates, which is the least a
+list can be.
 

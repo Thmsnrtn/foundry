@@ -30,7 +30,7 @@ export interface YourDecision {
   seen: string;
 }
 
-/** THE ELEVEN ACTS, each read from the state it changes. */
+/** THE OWNER'S ACTS, each read from the state it changes. */
 export async function yourDecisions(founderId: string, env: NodeJS.ProcessEnv = process.env): Promise<YourDecision[]> {
   const out: YourDecision[] = [];
   const cannot = (key: string, act: string, unblocks: string, why: string): void => {
@@ -93,6 +93,20 @@ export async function yourDecisions(founderId: string, env: NodeJS.ProcessEnv = 
     seen: recurring.allowed ? `allowed by you on ${recurring.on ?? 'a recorded date'}; a recurring charge still counts against a design`
       : recurring.on ? `refused again by you on ${recurring.on}` : 'the first-proof rule still refuses recurring billing' });
 
+  // PLACING OFFERS THAT STILL COST HIM MINUTES PER SALE (PENDING 32, R23).
+  // Every forge-made offer honestly says it is not yet attention spent once:
+  // refunds are his while the money switch is off, buyer email is his while
+  // correspondence is off. Only he may let such an offer be placed, and his
+  // answer reaches every future offer of any kind, so it is shown again when
+  // either condition differs from the one he decided under.
+  const attention = await frontLoadedAttentionChoice(founderId, env);
+  out.push({ key: 'front_loaded_attention', act: 'Let Foundry place offers that still take some of your minutes per sale, or keep refusing them',
+    unblocks: 'any offer the forge makes reaching a page; it applies to every future offer of any kind',
+    state: attention.decided && !attention.conditionsChanged ? 'done' : 'open',
+    seen: `${attention.decided
+      ? `${attention.allowed ? 'allowed' : 'refused'} by you on ${attention.on ?? 'a recorded date'}${attention.conditionsChanged ? ', decided when ' + (attention.decidedUnder ?? 'conditions were different') + '; they differ now' : ''}`
+      : 'the first-proof rule still refuses them, so no forge-made offer can be placed'}. Per sale today: ${attention.now}` });
+
   const { liveCharter } = await import('../institution/charter.js');
   const charter = await liveCharter(founderId);
   out.push({ key: 'charter', act: 'Sign the charter, with the smallest envelope that lets a test seal', unblocks: 'tests that can seal, and thinking above $1 a day',
@@ -134,3 +148,43 @@ export async function subscriptionsAllowed(founderId: string): Promise<{ allowed
   return { allowed: !binding, on: String(row.set_at).slice(0, 10) };
 }
 
+
+/**
+ * THE CONDITIONS A PER-SALE MINUTE DEPENDS ON, AS ONE SENTENCE. Written into
+ * his decision's reason when he makes it, and compared with the same sentence
+ * now, so a choice made while refunds were his is shown again once they are
+ * not (and the other way round).
+ */
+export async function perSaleConditions(founderId: string, env: NodeJS.ProcessEnv = process.env): Promise<string> {
+  const { money, mode } = await perSaleReading(founderId, env);
+  return `the money switch was ${money ? 'on' : 'off'} and correspondence was ${mode}`;
+}
+
+async function perSaleReading(founderId: string, env: NodeJS.ProcessEnv): Promise<{ money: boolean; mode: string; said: string }> {
+  const { correspondenceMode } = await import('../public-workshop/correspondence.js');
+  const money = env.FOUNDRY_ENABLE_MONEY_TOOLS === 'true';
+  const mode = await correspondenceMode(founderId);
+  const said = `${money ? 'refunds and cancellations are Foundry\'s' : 'every refund and cancellation is yours, in Stripe'}; `
+    + `${mode === 'off' ? 'every buyer email is yours' : `buyer email is in ${mode} mode`}`;
+  return { money, mode, said };
+}
+
+/**
+ * HIS ANSWER ON `front_loaded_attention`: his own live row, never the
+ * institutional default. Allowed means a non-binding treatment.
+ */
+export async function frontLoadedAttentionChoice(founderId: string, env: NodeJS.ProcessEnv = process.env): Promise<{
+  decided: boolean; allowed: boolean; on: string | null; decidedUnder: string | null; conditionsChanged: boolean; now: string;
+}> {
+  const nowUnder = await perSaleConditions(founderId, env);
+  const now = (await perSaleReading(founderId, env)).said;
+  const row = (await query(
+    `SELECT treatment, why, set_at FROM origination_policy
+      WHERE founder_id = ? AND requirement = 'front_loaded_attention' AND superseded_at IS NULL
+      ORDER BY set_at DESC, rowid DESC LIMIT 1`, [founderId])).rows[0] as Row | undefined;
+  if (!row) return { decided: false, allowed: false, on: null, decidedUnder: null, conditionsChanged: false, now };
+  const binding = String(row.treatment) === 'refuse' || String(row.treatment) === 'require';
+  const under = /\[decided when (.+?)\]/.exec(String(row.why))?.[1] ?? null;
+  return { decided: true, allowed: !binding, on: String(row.set_at).slice(0, 10), decidedUnder: under,
+    conditionsChanged: under !== null && under !== nowUnder, now };
+}

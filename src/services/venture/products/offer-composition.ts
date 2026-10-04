@@ -16,7 +16,7 @@ import { institutionSpend } from '../../ai/what-it-is-for.js';
 import type { OfferShapePlan } from '../hand.js';
 import { designOf } from '../probe-design.js';
 import { theRecordOf } from '../forge-deliberation.js';
-import { kindsFoundryCanMake, makeBrief } from './registry.js';
+import { PAID_BRIEF_SOURCES, kindsFoundryCanMake, makeBrief, sourcesRefusedForSale } from './registry.js';
 import type { BriefSpec, Made } from './registry.js';
 import { checkToolQuality, toolFrom } from './tool.js';
 import { BANNED_CLAIMS } from '../hand.js';
@@ -112,7 +112,9 @@ export function subscriptionFacts(): OfferShapePlan['facts'] {
 }
 
 /** The kinds of source a brief may be built from: what the eyes keep, item by item. */
-const BRIEF_SOURCES = ['job_posting', 'app_store', 'community', 'review', 'directory'] as const;
+// ONLY WHAT MAY BE SOLD (R23). The eyes read more kinds than these; the
+// composer is offered the two whose terms allow a paid list of links.
+const BRIEF_SOURCES = PAID_BRIEF_SOURCES;
 
 const SYSTEM = [
   'You shape the offer for one small real test a studio has designed: what is sold, what it',
@@ -130,7 +132,7 @@ const SYSTEM = [
   '{',
   '  "title": <the brief\'s title, without a date>,',
   '  "terms": <the exact search words of one of the record\'s RETRIEVALS, copied verbatim; a brief is built only from rows the eyes kept>,',
-  '  "source_types": <an array from: "job_posting", "app_store", "community", "review", "directory">,',
+  '  "source_types": <an array from: "community", "directory"; other kinds the eyes read may not go into anything sold>,',
   '  "coverage": <one or two sentences on what the brief covers and does not>,',
   '  "price_dollars": <integer 5-49>, "price_because": <one sentence>,',
   '  "product_name": <a short product name>,',
@@ -202,9 +204,9 @@ export function briefFacts(): OfferShapePlan['facts'] {
     },
     cross_border_selling: {
       present: 0, basis: 'assumed',
-      grounds: 'Sells to: businesses in the United States, written to once each. That is who the '
-        + 'offer is written for and who is contacted; the public way to pay is not restricted by '
-        + 'country, so this is an intention rather than a boundary anything enforces',
+      grounds: 'Sells to: anyone who finds the page. Nobody is written to, and the way to pay is '
+        + 'not restricted by country, so where it sells is an intention rather than a boundary '
+        + 'anything enforces',
     },
     // NOT ONGOING HELP — and not nothing either. The fact asks whether a buyer
     // would reasonably expect continuing support; for one brief sold once with
@@ -232,10 +234,15 @@ export function briefFacts(): OfferShapePlan['facts'] {
     },
     two_sided_marketplace: { present: 0, basis: 'observed', grounds: 'Sells to: one audience, the buyer' },
     one_visit_delivery: { present: 1, basis: 'observed', grounds: 'Delivers by: a buyer pays and the brief arrives by email' },
+    // NOT YET, AND SAID PLAINLY. The brief is made from rows the eyes keep,
+    // but a sale can still cost the owner minutes: a refund is his while the
+    // money switch is off, and a buyer's email is his while correspondence is
+    // off. Nothing may write this fact true; only the owner may decide that an
+    // offer which is not yet attention-spent-once can be placed (PENDING 32).
     front_loaded_attention: {
       present: 0, basis: 'assumed',
-      grounds: 'The brief is made from rows the eyes keep; nobody\'s attention is spent per edition. '
-        + 'Assumed until an edition has actually been refreshed without him',
+      grounds: 'Attention is still spent per sale: while the money switch is off every refund is the '
+        + 'owner\'s, and while correspondence is off every buyer email is theirs. Nothing here is checked yet',
     },
   };
 }
@@ -296,8 +303,12 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
     const problems = checkToolQuality(tool, BANNED_CLAIMS);
     if (problems.length) return { refused: `the free tool did not pass its gate: ${problems.slice(0, 3).join('; ')}` };
   }
-  const sourceTypes = (Array.isArray(raw.source_types) ? raw.source_types.map(String) : []).filter((s): s is typeof BRIEF_SOURCES[number] => (BRIEF_SOURCES as readonly string[]).includes(s));
-  if (sourceTypes.length === 0) return { refused: 'no source the eyes keep was named' };
+  const named = Array.isArray(raw.source_types) ? raw.source_types.map(String) : [];
+  const sourceTypes = named.filter((s): s is typeof BRIEF_SOURCES[number] => (BRIEF_SOURCES as readonly string[]).includes(s));
+  if (sourceTypes.length === 0) {
+    const refused = sourcesRefusedForSale(named);
+    return { refused: refused.length > 0 ? `a brief that is sold may not be made from ${refused.join('; ')}` : 'no source the eyes keep was named' };
+  }
   // THE WORDS ARE THE EYES' WORDS. The composed terms are used when they name
   // a retrieval the record holds; otherwise the record's own retrievals are
   // tried in order of what they found, and a brief of nothing is refused.

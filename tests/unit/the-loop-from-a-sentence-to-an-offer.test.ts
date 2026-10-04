@@ -116,7 +116,9 @@ describe('the loop', () => {
     const unknowns = (await query('SELECT question, blocking, cheapest_test FROM market_unknowns WHERE opportunity_id = ? ORDER BY rowid', [candidate])).rows;
     expect(unknowns.some((u) => String(u.question).includes('would pay') && u.cheapest_test !== null)).toBe(true);
 
-    // The forge's daily pass: proposes, designs, seals, makes, lets in.
+    // The forge's daily pass: proposes, designs, seals, makes — and, until the
+    // owner has said an offer that still costs minutes per sale may be placed,
+    // lets nothing in (R23). Refused before a decision, a carve or a link.
     const { forgePass } = await import('../../src/services/venture/forge-deliberation.js');
     const pass = await forgePass(OWNER);
     expect(pass.skipped).toBeNull();
@@ -126,13 +128,29 @@ describe('the loop', () => {
     expect(d.outcome).toBe('designed');
     expect(d.design?.designedBy).toBe('forge');
     expect(d.sealed, d.unsealedBecause.join('; ')).toBe(true);
-    expect(pass.notAllowed).toEqual([]);
-    expect(pass.allowed).toEqual([d.experimentId]);
+    expect(pass.allowed).toEqual([]);
+    expect(JSON.stringify(pass.notAllowed)).toContain('placing it would be refused');
+    const held = (await query('SELECT decision FROM venture_experiments WHERE id = ?', [d.experimentId])).rows[0]!;
+    expect(held.decision).toBeNull();
+    expect((await query('SELECT COUNT(*) AS n FROM portfolio_envelope_carves WHERE experiment_id = ?', [d.experimentId])).rows[0]!.n).toBe(0);
+
+    // The owner allows it, as the owner; the fact itself still says what is true.
+    const { supersedeOriginationPolicy } = await import('../../src/services/venture/legal-surface.js');
+    await supersedeOriginationPolicy({ founderId: OWNER, requirement: 'front_loaded_attention', treatment: 'prefer',
+      why: 'The owner allowed offers that still take some of their minutes per sale (PENDING 32).', by: `founder:${OWNER}` });
+    const second = await forgePass(OWNER);
+    expect(second.notAllowed).toEqual([]);
+    expect(second.allowed).toEqual([d.experimentId]);
 
     // The brief is the eyes' own rows, every item citing its retrieval row.
     const { materialOf, offerShapePlanOf, readiness } = await import('../../src/services/venture/hand.js');
     const brief = (await materialOf(d.experimentId, 'deliverable'))!;
-    expect(brief.body).toContain('- **Source:** https://remotive.com/remote-jobs/ops/bid-coordinator-9001');
+    // ONLY WHAT MAY BE SOLD, AND NOBODY'S WORDS (R23): the composer named the jobs
+    // board too; it is read as evidence and never sold, and the discussion is
+    // cited by link, not quoted.
+    expect(brief.body).not.toContain('remotive.com');
+    expect(brief.body).toContain('A public discussion on news.ycombinator.com');
+    expect(brief.body).not.toContain('We track every contractor bid');
     expect(brief.body).toContain('- **Source:** https://news.ycombinator.com/item?id=h1');
     expect(brief.body).not.toContain('Thomas Norton');
     expect((await offerShapePlanOf(d.experimentId))!.venue).toBe('workshop');

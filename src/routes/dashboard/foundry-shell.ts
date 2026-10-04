@@ -5140,6 +5140,35 @@ foundryShellRoutes.post('/foundry/controls/subscriptions',
     return c.redirect(`/foundry/controls?subscriptions=${'refused' in r ? 'refused' : allow ? 'allowed' : 'refused_again'}#your-decisions`);
   });
 
+/**
+ * OFFERS THAT STILL COST HIM MINUTES PER SALE ARE HIS TO ALLOW (PENDING 32,
+ * Roadmap 2027 R23). The first-proof policy requires front-loaded attention,
+ * and every forge-made offer honestly says it is not that yet. "Allow" makes
+ * the requirement a preference; the fact itself is never touched, so the
+ * record still says what is true. The conditions he decided under are written
+ * into the reason, so Control can show the choice again when they change.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+foundryShellRoutes.post('/foundry/controls/front-loaded-attention',
+  requireInstitutionOwner(), async (c: any) => {
+    const founder = c.get('founder') as { id?: string } | undefined;
+    if (!founder?.id) return c.redirect('/onboarding');
+    const body = await c.req.parseBody();
+    const allow = String(body.allow ?? '') === 'yes';
+    const { perSaleConditions } = await import('../../services/control/decisions.js');
+    const under = await perSaleConditions(String(founder.id));
+    const { supersedeOriginationPolicy } = await import('../../services/venture/legal-surface.js');
+    const r = await supersedeOriginationPolicy({
+      founderId: String(founder.id), requirement: 'front_loaded_attention',
+      treatment: allow ? 'prefer' : 'require',
+      why: `${allow
+        ? 'The owner allowed offers that still take some of their minutes per sale to be placed (PENDING 32). Attention spent once stays the aim, and it counts for a design; it no longer refuses one. This applies to every future offer of any kind.'
+        : 'The owner required again that an offer take none of their minutes per sale before it is placed.'} [decided when ${under}]`,
+      by: `founder:${String(founder.id)}`,
+    });
+    return c.redirect(`/foundry/controls?attention=${'refused' in r ? 'refused' : allow ? 'allowed' : 'required_again'}#your-decisions`);
+  });
+
 foundryShellRoutes.post('/foundry/controls/charter/withdraw',
   requireInstitutionOwner(), async (c: any) => {
     const founder = c.get('founder') as { id?: string } | undefined;
@@ -7854,6 +7883,10 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
       ${d.key === 'subscriptions' ? html`<form method="POST" action="/foundry/controls/subscriptions" class="inline">
         <input type="hidden" name="allow" value="${d.state === 'done' ? 'no' : 'yes'}" />
         <button class="btn${d.state === 'done' ? '' : ' go'}" type="submit">${d.state === 'done' ? 'Refuse subscriptions again' : 'Allow subscriptions'}</button>
+      </form>` : ''}
+      ${d.key === 'front_loaded_attention' ? html`<form method="POST" action="/foundry/controls/front-loaded-attention" class="inline">
+        <input type="hidden" name="allow" value="${d.seen.startsWith('allowed') ? 'no' : 'yes'}" />
+        <button class="btn${d.seen.startsWith('allowed') ? '' : ' go'}" type="submit">${d.seen.startsWith('allowed') ? 'Refuse them again' : d.state === 'done' ? 'Allow them' : 'Allow them, for every future offer'}</button>
       </form>` : ''}
     </li>`)}</ul>
   </section>`;
