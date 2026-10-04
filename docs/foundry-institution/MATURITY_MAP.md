@@ -2590,3 +2590,38 @@ notification has been seen by this environment.
   as text) applies to all Workshop mail. Workshop tests pass; not yet seen on
   real multi-part mail from a provider other than the stubs.
 
+### A free tool beside a paid thing (Roadmap 2027 R15, 4 October 2026)
+
+**What changed.** The owner decided Foundry may act on what it finds (PENDING
+31). Launching inside the charter was already autonomous: the daily forge pass
+seals a design both sides recommend, inside the charter, and the hands allow it
+under the charter and carry it. What it could launch was one thing — a sourced
+brief at a fixed price. Now a design may give a free calculator away beside
+the brief (`free_with_role`, migration 379; `static_tool` makeable). The tool
+is a specification, not code: one reviewed program, carried in the Workshop
+worker's own text and served at /tool.js, computes it in the reader's browser;
+the site's policy admits same-origin script and still no connection. The gate
+runs the same arithmetic text in an isolated context against every worked
+example and across the input range. The page renders the tool above the paid
+offer; the projection re-checks it; the publication gate refuses any other
+script.
+
+**Evidence maturity.** E1: law test `a-free-tool-computes-what-it-says`
+(arithmetic shared word for word, precedence, refusals, no reach beyond its
+inputs, the worker serving its own program over a hostile store value, the CSP,
+escaping against a composition that tries to close the data block).
+
+**Proof debt.**
+- No free tool has yet been composed by the model, sealed, published or seen
+  in a real browser. The first one through the forge is the proof.
+- The gate proves a tool says what its examples say. Whether the formula is
+  the right one for the reader's world is argued only by the forge's adversary.
+- The tool's use is not measured (the site has no analytics, by design); the
+  test settles on payment for the brief beside it, so a tool that helps people
+  and sells nothing reads as failure.
+- The DOM half of /tool.js (reading the form, writing answers) is not exercised
+  by a test here; only its arithmetic is.
+- The worker is replaced by `keepTheProgramCurrent` through the door when its
+  digest changes; until that runs, a published tool page would show its worked
+  examples only (the old policy blocks the script).
+

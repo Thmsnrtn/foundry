@@ -325,6 +325,40 @@ order number — that’s what I can look you up by.`} A person reads it.</p>
   return shell(f, x.title, '/experiments', body, x.summary, { path: x.path });
 }
 
+/**
+ * A FREE TOOL, AS THE PAGE CARRIES IT. The form and its answers are plain
+ * markup; the specification rides along as data (`application/json`, which no
+ * browser runs); and the one script is the Workshop's own /tool.js. Without
+ * script the reader still gets the worked examples, which are the tool's own
+ * checked answers. Every `<` in the data is escaped, so nothing a composition
+ * wrote can close the block it sits in.
+ */
+export function renderTool(t: NonNullable<PublicExperiment['tool']>): string {
+  const unit = (u: string | null): string => (u ? ` <span class="quiet">${esc(u)}</span>` : '');
+  const data = JSON.stringify(t).replace(/</g, '\\u003c');
+  const head = (cells: string[]): string => `<tr>${cells.map((c) => `<th>${c}</th>`).join('')}</tr>`;
+  const examples = `<table>
+${head([...t.inputs.map((i) => esc(i.label)), ...t.outputs.map((o) => esc(o.label))])}
+${t.examples.map((e) => `<tr>${[...t.inputs.map((i) => String(e.inputs[i.id] ?? '')), ...t.outputs.map((o) => String(e.outputs[o.id] ?? ''))].map((v) => `<td>${esc(v)}</td>`).join('')}</tr>`).join('\n')}
+</table>`;
+  return `<div class="card tool">
+  <h2>${esc(t.title)} <span class="pill">Free</span></h2>
+  <p>${esc(t.explains)}</p>
+  <form id="tool" novalidate>
+${t.inputs.map((i) => `    <label for="tool-in-${i.id}">${esc(i.label)}${unit(i.unit)}</label>
+    <input id="tool-in-${i.id}" name="${i.id}" type="number" inputmode="decimal" min="${String(i.min)}" max="${String(i.max)}" step="${String(i.step)}" value="${String(i.value)}">`).join('\n')}
+    <p class="quiet" id="tool-error" role="status"></p>
+    <dl>
+${t.outputs.map((o) => `      <dt>${esc(o.label)}</dt><dd><output id="tool-out-${o.id}">—</output>${unit(o.unit)}</dd>`).join('\n')}
+    </dl>
+  </form>
+  <noscript><p class="quiet">This tool needs JavaScript to work out your numbers. Here are its worked examples:</p>${examples}</noscript>
+  <p class="quiet">It runs in your browser. Nothing you type is sent anywhere or kept.</p>
+  <script type="application/json" id="tool-spec">${data}</script>
+  <script src="/tool.js" defer></script>
+</div>`;
+}
+
 export function renderExperiment(f: PublicWorkshopFacts, x: PublicExperiment): string {
   // A PORTFOLIO ENTRY IS NOT A SHORTER PRODUCT PAGE. It is a different thing
   // with a different job: to let somebody who found the product somewhere else
@@ -400,6 +434,7 @@ ${paras(x.sample)}
 ${x.graduatedTo ? `<p>It now lives at <a href="${esc(x.graduatedTo)}">${esc(x.graduatedTo.replace(/^https?:\/\//, ''))}</a>.</p>` : ''}
 ${x.successor ? `<p>It was reframed as <a href="/experiments/${x.successor.slug}">${esc(x.successor.title)}</a>.</p>` : ''}
 ${x.supersedes ? `<p class="quiet">This continues an earlier design, <a href="/experiments/${x.supersedes.slug}">${esc(x.supersedes.title)}</a>.</p>` : ''}
+${x.tool ? renderTool(x.tool) : ''}
 ${pay}
 <h2>What you get</h2>
 ${paras(x.what)}

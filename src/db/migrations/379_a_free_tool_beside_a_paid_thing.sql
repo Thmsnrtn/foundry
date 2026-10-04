@@ -1,0 +1,18 @@
+-- =============================================================================
+-- A FREE TOOL BESIDE A PAID THING.
+--
+-- The owner decided it on 4 October 2026 (PENDING 20 and 31): Foundry may test
+-- "a free tool beside a paid product". Migration 286 kept `free_with_role`
+-- unavailable until the institution could genuinely run it, and said that
+-- availability changes only as that ability arrives. It arrives in the same
+-- change as this migration: a calculator recipe whose specification is data,
+-- one reviewed program served by the Workshop's own worker to compute it,
+-- a gate that reproduces every worked example with the same arithmetic the
+-- page runs, and a page that carries the free tool beside the paid brief.
+--
+-- What the downstream role is, concretely: the paid brief on the same page,
+-- bought through the same one-time payment link. The settlement rule is the
+-- Workshop's own — a payment within the window — so the free tool is judged by
+-- whether anybody who used it paid for the thing beside it.
+-- =============================================================================
+UPDATE probe_exchanges SET available = 1 WHERE exchange = 'free_with_role';

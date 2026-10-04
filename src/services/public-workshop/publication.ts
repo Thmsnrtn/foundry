@@ -472,6 +472,14 @@ export async function publicationGate(experimentId: string, opts: { now?: Date; 
   // is not a person. What a buyer is owed is a plain statement that there is no
   // subscription, wherever on the page it is made.
   if (!entry && !/\bno subscription\b|\bnot a subscription\b/i.test(html())) failures.push('the page does not say plainly that there is no subscription');
+  // A FREE TOOL IS THE ONE THING ON A PAGE THAT RUNS. The page must carry the
+  // specification the projection checked, and call no script but the
+  // Workshop's own; a page without a tool calls none at all.
+  const scripts = [...html().matchAll(/<script\b[^>]*\bsrc="([^"]*)"/gi)].map((m) => m[1]);
+  if (x.tool) {
+    if (!html().includes('id="tool-spec"') || !scripts.includes('/tool.js')) failures.push('the page gives a tool away and does not carry it');
+  }
+  if (scripts.some((src) => src !== '/tool.js') || (!x.tool && scripts.length > 0)) failures.push('the page calls a script that is not the Workshop\'s own tool');
   const leak = leakIn(html(), await privateStringsOf(experimentId));
   if (leak) failures.push('a private value would appear on the page');
   return { ok: failures.length === 0, failures, pageUrl, verifiedAt: pub?.verifiedAt ?? null, checkedAt: now.toISOString() };

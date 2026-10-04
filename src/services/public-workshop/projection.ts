@@ -13,6 +13,8 @@
 // rendered page against it. The projection and the check are two halves of
 // one boundary and live together on purpose.
 // =============================================================================
+import { checkToolQuality, toolFrom, type ToolSpec } from '../venture/products/tool.js';
+import { BANNED_CLAIMS } from '../venture/hand.js';
 import { query, realCompany } from '../../db/client.js';
 import { publicPostalLines, publicWorkshopOfExperiment } from './settings.js';
 import type { PublicWorkshop } from './settings.js';
@@ -25,6 +27,13 @@ export interface PublicExperiment {
   title: string; summary: string; who: string; what: string; limits: string; sources: string; selection: string; note: string;
   /** An excerpt of what a buyer actually receives, when the thing has one. */
   sample: string | null;
+  /**
+   * A FREE TOOL the page carries beside the paid thing, re-checked at its own
+   * gate here — the projection is the allowlist boundary, so a specification
+   * that no longer passes never reaches a renderer. Null for everything that
+   * gives nothing away.
+   */
+  tool: ToolSpec | null;
   status: PublicStatus; statusLabel: string; statusLine: string; outcome: string | null;
   /**
    * WHERE A CUSTOMER ACTUALLY GETS IT, when that is somewhere else.
@@ -54,7 +63,7 @@ export interface PublicExperiment {
 
 /** The fields the public shape carries, as a record the tests can read. */
 export const PUBLIC_EXPERIMENT_FIELDS = [
-  'number', 'slug', 'path', 'listed', 'title', 'summary', 'who', 'what', 'limits', 'sources', 'selection', 'note', 'sample',
+  'number', 'slug', 'path', 'listed', 'title', 'summary', 'who', 'what', 'limits', 'sources', 'selection', 'note', 'sample', 'tool',
   'status', 'statusLabel', 'statusLine', 'outcome', 'clarification', 'whereToGetIt', 'shape', 'price', 'recurring', 'payUrl', 'openedOn', 'closedOn', 'updatedOn', 'supersedes', 'successor', 'graduatedTo',
 ] as const;
 
@@ -180,11 +189,14 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
   // Enforced HERE rather than trusted to the renderer, because the projection
   // is the allowlist boundary: what a renderer is never handed, it cannot leak.
   let price: PublicExperiment['price'] = null;
+  let tool: ToolSpec | null = null;
   if (r.shape_json != null) {
     try {
-      const shape = JSON.parse(String(r.shape_json)) as { price?: { amountCents?: number; currency?: string } };
+      const shape = JSON.parse(String(r.shape_json)) as { price?: { amountCents?: number; currency?: string }; tool?: unknown };
       if (shape.price?.amountCents && shape.price.currency) price = { amountCents: shape.price.amountCents, currency: shape.price.currency, label: `${money(shape.price.amountCents, shape.price.currency)}, one time` };
-    } catch { price = null; }
+      const spec = toolFrom(shape.tool);
+      tool = spec && checkToolQuality(spec, BANNED_CLAIMS).length === 0 ? spec : null;
+    } catch { price = null; tool = null; }
   }
   const slug = String(r.slug);
   return {
@@ -192,6 +204,8 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
     title: String(r.public_title), summary: String(r.public_summary), who: String(r.public_who), what: String(r.public_what),
     limits: String(r.public_limits), sources: String(r.public_sources), selection: String(r.public_selection), note: String(r.public_note),
     sample: r.public_sample == null || String(r.public_sample).trim() === '' ? null : String(r.public_sample),
+    // A portfolio entry describes something sold elsewhere; it carries no tool.
+    tool: shape === 'portfolio_entry' || shape === 'identity_only' ? null : tool,
     status, statusLabel: STATUS_LABELS[status], statusLine, outcome,
     whereToGetIt, shape,
     clarification: r.public_clarification == null || r.public_clarification_at == null ? null

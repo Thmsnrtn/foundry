@@ -18,6 +18,31 @@ import { designOf } from '../probe-design.js';
 import { theRecordOf } from '../forge-deliberation.js';
 import { kindsFoundryCanMake, makeBrief } from './registry.js';
 import type { BriefSpec, Made } from './registry.js';
+import { checkToolQuality, toolFrom } from './tool.js';
+import { BANNED_CLAIMS } from '../hand.js';
+
+/**
+ * THE EXCHANGES THE HANDS CAN CARRY, and what each makes. A fixed price sells
+ * the brief. A free thing with a downstream role is a free calculator on the
+ * same page as the brief it leads to (PENDING 20 and 31, migration 379).
+ */
+export const EXCHANGES_THE_HANDS_CARRY = ['upfront_price', 'free_with_role'] as const;
+
+/** What the composition is asked for besides the brief, when the design gives something away. */
+const TOOL_SYSTEM = [
+  '',
+  'THIS DESIGN GIVES SOMETHING AWAY. Beside the paid brief, the page carries a free calculator for',
+  'the same people: a few numbers in, an answer out, which leads naturally to wanting the brief.',
+  'Add a "tool" key to the JSON:',
+  '"tool": { "title": <short>, "explains": <one sentence: what it works out>,',
+  '  "inputs": [ { "id": <lowercase_name>, "label": <words>, "unit": <short word or null>, "min": n, "max": n, "step": n, "value": n } ],',
+  '  "outputs": [ { "id": <lowercase_name>, "label": <words>, "unit": <short word or null>, "formula": <arithmetic>, "decimals": 0-4 } ],',
+  '  "examples": [ { "inputs": { <id>: n }, "outputs": { <id>: n } } ] }',
+  'Formulas use numbers, input names, earlier output names, + - * / ^, brackets, and min, max, abs,',
+  'floor, ceil, round(x, places), sqrt. 1-8 inputs, 1-6 outputs, 2-6 worked examples you have checked',
+  'by hand; the tool is refused if any example is wrong or any answer breaks inside the ranges.',
+  'It claims nothing it cannot compute, names nobody, and carries no address.',
+].join('\n');
 
 /**
  * THE ONLY SHAPE OF MONEY THE HANDS CAN CURRENTLY TAKE, named once so that
@@ -172,14 +197,17 @@ const str = (raw: Row, k: string): string | null => {
 export async function shapeAndMake(experimentId: string): Promise<Made | { refused: string }> {
   const design = await designOf(experimentId);
   if (!design) return { refused: 'no design' };
-  if (design.exchange.exchange !== 'upfront_price') return { refused: `a brief is sold at a fixed price; the design chose ${design.exchange.whatItIs}` };
+  const exchange = design.exchange.exchange;
+  if (!(EXCHANGES_THE_HANDS_CARRY as readonly string[]).includes(exchange)) return { refused: `the hands sell a brief at a fixed price, or give a free tool beside one; the design chose ${design.exchange.whatItIs}` };
   if (!kindsFoundryCanMake().some((k) => k.kind === 'data_brief')) return { refused: 'the hands cannot make a brief' };
+  const givesATool = exchange === 'free_with_role';
+  if (givesATool && !kindsFoundryCanMake().some((k) => k.kind === 'static_tool')) return { refused: 'the hands cannot make a free tool' };
   const record = await theRecordOf(experimentId);
   if (!record) return { refused: 'no record' };
-  const reply = await callSonnet(SYSTEM,
+  const reply = await callSonnet(givesATool ? `${SYSTEM}\n${TOOL_SYSTEM}` : SYSTEM,
     `<record>${JSON.stringify({ candidate: record.candidate, test: record.experiment, evidence: record.evidence.slice(0, 20), retrievals: record.retrievals, charter: record.charter }, null, 1)}</record>\n<design>${JSON.stringify({
       decides: design.decides, canProve: design.canProve, cannotProve: design.cannotProve, distribution: design.distribution, ifItSucceeds: design.ifItSucceeds }, null, 1)}</design>`,
-    1800, institutionSpend('shaping the offer of a designed test for the owner\'s portfolio search, which has no company to charge yet', 'shaping an offer', { kind: 'experiment', id: experimentId }));
+    givesATool ? 3200 : 1800, institutionSpend('shaping the offer of a designed test for the owner\'s portfolio search, which has no company to charge yet', 'shaping an offer', { kind: 'experiment', id: experimentId }));
   const from = reply.content.indexOf('{'); const to = reply.content.lastIndexOf('}');
   if (from < 0 || to <= from) return { refused: 'the composition was not an offer' };
   let raw: Row;
@@ -192,6 +220,16 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
   if (missing.length) return { refused: `the offer left out ${missing.join(', ')}` };
   const price = Number(raw.price_dollars);
   if (!Number.isInteger(price) || price < OFFER_BAND.lowDollars || price > OFFER_BAND.highDollars) return { refused: `the price is not a whole number of dollars between ${String(OFFER_BAND.lowDollars)} and ${String(OFFER_BAND.highDollars)}` };
+  // THE FREE TOOL, read strictly and refused at its own gate: every worked
+  // example reproduced by the arithmetic the page will run, every answer
+  // finite across the ranges. A tool that fails is not published, and neither
+  // is the offer it was meant to stand beside.
+  const tool = givesATool ? toolFrom(raw.tool) : null;
+  if (givesATool) {
+    if (!tool) return { refused: 'the design gives a tool away and the composition sent none' };
+    const problems = checkToolQuality(tool, BANNED_CLAIMS);
+    if (problems.length) return { refused: `the free tool did not pass its gate: ${problems.slice(0, 3).join('; ')}` };
+  }
   const sourceTypes = (Array.isArray(raw.source_types) ? raw.source_types.map(String) : []).filter((s): s is typeof BRIEF_SOURCES[number] => (BRIEF_SOURCES as readonly string[]).includes(s));
   if (sourceTypes.length === 0) return { refused: 'no source the eyes keep was named' };
   // THE WORDS ARE THE EYES' WORDS. The composed terms are used when they name
@@ -213,6 +251,7 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
       productMetadata: { app_object: 'experiment_deliverable', plan_key: `brief_${experimentId}` }, confirmationMessage: 'Thank you. The brief is on its way by email.' },
     offerSubject: str(raw, 'offer_subject')!,
     venue: 'workshop',
+    ...(tool ? { tool } : {}),
   };
   const made = await makeBrief({ founderId: record.founderId, experimentId, spec, plan });
   if ('refused' in made) return made;

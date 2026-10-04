@@ -380,6 +380,13 @@ export interface OfferShapePlan {
    * to send — never a list of people.
    */
   venue?: 'workshop';
+  /**
+   * A FREE TOOL BESIDE THE PAID THING, for a design whose exchange is
+   * `free_with_role`: a calculator specification (products/tool.ts) the page
+   * carries and the Workshop's one reviewed program computes. Absent for every
+   * offer that is only sold.
+   */
+  tool?: import('./products/tool.js').ToolSpec;
   /** structural_fact_kinds.fact → present, with grounds; written as the pass would, basis offer_shape. */
   /**
    * WHAT KIND OF CLAIM EACH ONE IS, not only what it claims. A recipe's

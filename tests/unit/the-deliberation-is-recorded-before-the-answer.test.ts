@@ -83,8 +83,9 @@ describe('the vocabularies are the institution\'s, not a service\'s', () => {
     const x = await exchanges();
     expect(x.map((e) => e.exchange)).toEqual(['upfront_price', 'value_first', 'sample_then_paid', 'deposit_then_valuation',
       'subscription', 'usage', 'license', 'free_with_role']);
-    // Exactly one is something the institution can actually run today, and it says so.
-    expect(x.filter((e) => e.available).map((e) => e.exchange)).toEqual(['upfront_price']);
+    // Exactly two are things the institution can actually run today, and it says
+    // so: a fixed price, and a free tool beside a paid thing (migration 379).
+    expect(x.filter((e) => e.available).map((e) => e.exchange)).toEqual(['upfront_price', 'free_with_role']);
     for (const e of x) { expect(e.reveals.length).toBeGreaterThan(10); expect(e.confounds.length).toBeGreaterThan(10); }
     await expect(query(`DELETE FROM probe_exchanges WHERE exchange = 'usage'`)).rejects.toThrow();
     await expect(query(`INSERT INTO probe_exchanges (exchange, what_it_is, reveals, confounds, sort_order) VALUES ('barter','a','b','c',99)`)).rejects.toThrow();

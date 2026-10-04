@@ -11,7 +11,16 @@
 //
 // Kept as a string so it is deployed exactly as reviewed here and the digest
 // of what is running can be compared with the digest of this text.
+//
+// ONE SCRIPT, AND IT IS THIS TEXT'S OWN. A free tool's page needs a program to
+// compute as the reader types. That program is carried inside the worker and
+// served at /tool.js from here — never from the store, which Foundry writes —
+// so the only script the site can run is one reviewed with this file. The
+// policy admits same-origin scripts; every page is served as HTML with
+// `nosniff`, so /tool.js is the only thing that can run, and `connect-src`
+// stays 'none', so it can compute and cannot send.
 // =============================================================================
+import { TOOL_RUNTIME_JS } from '../venture/products/tool.js';
 
 export const WORKER_SOURCE = `// Apex Micro public workshop. Serves finished pages from a store; nothing else.
 const HOSTS = new Set(['apexmicro.ai', 'www.apexmicro.ai']);
@@ -21,10 +30,12 @@ const HEADERS = {
   'x-content-type-options': 'nosniff',
   'x-frame-options': 'DENY',
   'referrer-policy': 'no-referrer',
-  'content-security-policy': "default-src 'none'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
+  'content-security-policy': "default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'",
   'strict-transport-security': 'max-age=31536000; includeSubDomains',
   'permissions-policy': 'camera=(), microphone=(), geolocation=()',
 };
+// The free tools' one program, as reviewed. Not read from the store.
+const TOOL_JS = ${JSON.stringify(TOOL_RUNTIME_JS)};
 // The two files that are not pages. Named one by one: no other dot passes.
 const FILES = { '/robots.txt': 'text/plain; charset=utf-8', '/sitemap.xml': 'application/xml; charset=utf-8' };
 function normalise(pathname) {
@@ -84,6 +95,7 @@ export default {
       return new Response(done || 'Thank you. That is recorded.', { status: 200, headers: { ...HEADERS, 'cache-control': 'no-store' } });
     }
     if (request.method !== 'GET' && request.method !== 'HEAD') return new Response('Method not allowed', { status: 405, headers: HEADERS });
+    if (url.pathname === '/tool.js') return new Response(TOOL_JS, { status: 200, headers: Object.assign({}, HEADERS, { 'content-type': 'text/javascript; charset=utf-8' }) });
     return pageOr404(env, path);
   },
 };

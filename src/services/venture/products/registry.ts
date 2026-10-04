@@ -38,7 +38,10 @@ export interface KindFacts {
 
 export const KINDS: KindFacts[] = [
   { kind: 'data_brief', whatItIs: 'a dated shortlist of public items for one question, each citing its source, delivered by email after payment', canMake: true, needs: null },
-  { kind: 'static_tool', whatItIs: 'a single page that computes something for the reader', canMake: false, needs: 'a tool page recipe with a readback, and an exchange for a free thing with a downstream role' },
+  // A FREE TOOL, beside the paid brief on the same page (products/tool.ts): its
+  // specification is data, one reviewed program computes it, and the gate
+  // reproduces every worked example with that program's own arithmetic.
+  { kind: 'static_tool', whatItIs: 'a free calculator on the test\'s own page, computing in the reader\'s browser, beside the paid brief it leads to', canMake: true, needs: null },
   { kind: 'template_file', whatItIs: 'a spreadsheet or document file the buyer fills in', canMake: false,
     // ONE RECIPE EXISTS — the job review (recipes/job-review.ts), checked by hand and by
     // LibreOffice — as a prototype for the owner's decision, not a kind Foundry may make.

@@ -182,7 +182,7 @@ describe('the forge shapes the offer and the hands make the thing', () => {
     });
     const { shapeAndMake } = await import('../../src/services/venture/products/offer-composition.js');
     const made = await shapeAndMake('hands_x2');
-    expect('refused' in made && made.refused).toContain('a brief is sold at a fixed price');
+    expect('refused' in made && made.refused).toContain('the hands sell a brief at a fixed price, or give a free tool beside one');
     const { materialOf } = await import('../../src/services/venture/hand.js');
     expect(await materialOf('hands_x2', 'deliverable')).toBeNull();
   });

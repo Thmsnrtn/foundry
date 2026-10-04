@@ -36,9 +36,10 @@ describe('the shape of the aperture, derived and not written down', () => {
 
   it('reads the makeable and unmakeable forms from the registry itself', () => {
     const a = theAperture();
-    expect(a.canMake.map((k) => k.kind)).toEqual(['data_brief']);
+    // A FREE TOOL BECAME MAKEABLE on 4 October 2026 (PENDING 31, migration 379).
+    expect(a.canMake.map((k) => k.kind)).toEqual(['data_brief', 'static_tool']);
     expect(a.cannotMake.map((k) => k.kind).sort())
-      .toEqual(['directory', 'monitoring_alert', 'static_tool', 'template_file']);
+      .toEqual(['directory', 'monitoring_alert', 'template_file']);
     // AND EACH ONE QUOTES THE REGISTRY'S OWN ACCOUNT OF WHAT IS MISSING,
     // written by whoever decided not to build it. The day somebody builds one,
     // this stops claiming it is missing, without anybody editing this file.
@@ -97,7 +98,7 @@ const FORMS: Array<{ form: string; wouldBe: string; reachable: boolean }> = [
 ];
 
 describe('the coverage exercise: economic rejection, or a production limit', () => {
-  it('finds that not one of seven forms was rejected on economic grounds', () => {
+  it('finds the calculator forms weighable on their merits, and the rest still blocked before anybody looked', () => {
     const a = theAperture();
     const makeable = new Set(a.canMake.map((k) => k.kind as string));
     const verdicts = FORMS.map((f) => ({
@@ -106,17 +107,19 @@ describe('the coverage exercise: economic rejection, or a production limit', () 
       needs: KINDS.find((k) => k.kind === f.wouldBe)?.needs ?? null,
     }));
 
-    // EVERY ONE. Whatever their merits, none of these was ever weighed.
-    expect(verdicts.every((v) => v.why === 'production limit')).toBe(true);
-    expect(verdicts.every((v) => v.needs !== null)).toBe(true);
+    // UNTIL 4 OCTOBER 2026 EVERY ONE WAS A PRODUCTION LIMIT. The free tool
+    // (PENDING 31) moved the two calculator-shaped forms to where they can be
+    // weighed — and only those two: nothing else was built, so nothing else
+    // may be counted as judged.
+    expect(verdicts.filter((v) => v.why === 'economic').map((v) => v.wouldBe)).toEqual(['static_tool', 'static_tool']);
+    const blocked = verdicts.filter((v) => v.why === 'production limit');
+    expect(blocked).toHaveLength(5);
+    expect(blocked.every((v) => v.needs !== null)).toBe(true);
 
-    // AND THE WEAK ONES ARE STILL PRODUCTION LIMITS, which is the point that
-    // makes this exercise worth running. It would be comfortable to conclude
-    // that the aperture happens to exclude only bad ideas. It excludes them
-    // the same way it excludes the good ones: before anybody looked.
-    const weak = verdicts.filter((v) => !v.reachable);
-    expect(weak).toHaveLength(3);
-    expect(weak.every((v) => v.why === 'production limit')).toBe(true);
+    // AND THE WEAK ONES THAT REMAIN BLOCKED ARE STILL PRODUCTION LIMITS: the
+    // aperture excludes them the same way it excludes the good ones.
+    const weak = blocked.filter((v) => !v.reachable);
+    expect(weak).toHaveLength(2);
   });
 
   it('does not let a blocked form be counted as a judged candidate', () => {
