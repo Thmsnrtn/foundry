@@ -31,6 +31,14 @@ const ACCEPTED = {
   // vite server.fs.deny bypass on Windows alternate paths. The dev server is
   // never run; vite is present only as vitest's transform. Closed with vitest 3+.
   'GHSA-fx2h-pf6j-xcff': 'vite dev server on Windows: never run; dev only',
+  // braces <=3.0.3, stack exhaustion on deeply nested patterns (published 3
+  // October 2026; no patched braces exists). Reached only through tsc-alias
+  // (a dev dependency) → chokidar and globby/micromatch, which run once at
+  // build time over this repository's own paths. The production image carries
+  // the files (its node_modules come from a full install) but the server never
+  // loads them, and no pattern from outside ever reaches them. Closed by a
+  // braces release above 3.0.3, or by dropping tsc-alias from the build.
+  'GHSA-vfj7-8cjw-p6xm': 'braces via tsc-alias: build-time only, over our own paths; no fix released',
 };
 
 let raw;

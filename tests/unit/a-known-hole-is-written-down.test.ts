@@ -19,7 +19,7 @@ const dir = mkdtempSync(join(tmpdir(), 'advisories-'));
 
 const advisory = (id: string, severity = 'high') => ({
   name: 'pkg', severity, title: 'planted', url: `https://github.com/advisories/${id}` });
-const ACCEPTED = ['GHSA-qjx8-664m-686j', 'GHSA-5xrq-8626-4rwp', 'GHSA-fx2h-pf6j-xcff'];
+const ACCEPTED = ['GHSA-qjx8-664m-686j', 'GHSA-5xrq-8626-4rwp', 'GHSA-fx2h-pf6j-xcff', 'GHSA-vfj7-8cjw-p6xm'];
 
 function run(vias: object[]): number {
   const file = join(dir, `${String(Math.random()).slice(2)}.json`);
