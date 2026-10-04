@@ -26,7 +26,22 @@ import { BANNED_CLAIMS } from '../hand.js';
  * the brief. A free thing with a downstream role is a free calculator on the
  * same page as the brief it leads to (PENDING 20 and 31, migration 379).
  */
-export const EXCHANGES_THE_HANDS_CARRY = ['upfront_price', 'free_with_role'] as const;
+export const EXCHANGES_THE_HANDS_CARRY = ['upfront_price', 'free_with_role', 'value_first'] as const;
+
+/**
+ * PAY WHAT IT WAS WORTH, bounded. A dollar is the floor because the provider
+ * takes nothing smaller; a hundred is the ceiling because a test of what a
+ * brief is worth to somebody is not a request for a donation.
+ */
+export const CHOSEN_BAND = { minimumCents: 100, maximumCents: 10_000 } as const;
+
+const VALUE_SYSTEM = [
+  '',
+  'THIS DESIGN GIVES FIRST. The whole brief is published free on the page; afterwards the reader may',
+  'pay what it was worth to them, including nothing. "price_dollars" is the amount SUGGESTED, not',
+  'charged; "charges_how" says plainly that paying is optional and the reader chooses the amount;',
+  '"delivers_by" says the brief is on the page and a copy is emailed to anyone who pays.',
+].join('\n');
 
 /** What the composition is asked for besides the brief, when the design gives something away. */
 const TOOL_SYSTEM = [
@@ -198,13 +213,14 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
   const design = await designOf(experimentId);
   if (!design) return { refused: 'no design' };
   const exchange = design.exchange.exchange;
-  if (!(EXCHANGES_THE_HANDS_CARRY as readonly string[]).includes(exchange)) return { refused: `the hands sell a brief at a fixed price, or give a free tool beside one; the design chose ${design.exchange.whatItIs}` };
+  if (!(EXCHANGES_THE_HANDS_CARRY as readonly string[]).includes(exchange)) return { refused: `the hands sell a brief at a fixed price, give a free tool beside one, or give it first for what it was worth; the design chose ${design.exchange.whatItIs}` };
   if (!kindsFoundryCanMake().some((k) => k.kind === 'data_brief')) return { refused: 'the hands cannot make a brief' };
   const givesATool = exchange === 'free_with_role';
+  const givesFirst = exchange === 'value_first';
   if (givesATool && !kindsFoundryCanMake().some((k) => k.kind === 'static_tool')) return { refused: 'the hands cannot make a free tool' };
   const record = await theRecordOf(experimentId);
   if (!record) return { refused: 'no record' };
-  const reply = await callSonnet(givesATool ? `${SYSTEM}\n${TOOL_SYSTEM}` : SYSTEM,
+  const reply = await callSonnet(givesATool ? `${SYSTEM}\n${TOOL_SYSTEM}` : givesFirst ? `${SYSTEM}\n${VALUE_SYSTEM}` : SYSTEM,
     `<record>${JSON.stringify({ candidate: record.candidate, test: record.experiment, evidence: record.evidence.slice(0, 20), retrievals: record.retrievals, charter: record.charter }, null, 1)}</record>\n<design>${JSON.stringify({
       decides: design.decides, canProve: design.canProve, cannotProve: design.cannotProve, distribution: design.distribution, ifItSucceeds: design.ifItSucceeds }, null, 1)}</design>`,
     givesATool ? 3200 : 1800, institutionSpend('shaping the offer of a designed test for the owner\'s portfolio search, which has no company to charge yet', 'shaping an offer', { kind: 'experiment', id: experimentId }));
@@ -247,8 +263,12 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
     shape: { sells: str(raw, 'sells')!, claimsMade: str(raw, 'claims_made')!, collects: str(raw, 'collects')!, deliversBy: str(raw, 'delivers_by')!, sellsTo: str(raw, 'sells_to')!, chargesHow: str(raw, 'charges_how')! },
     lighter: str(raw, 'lighter')!,
     facts: briefFacts(),
-    price: { amountCents: price * 100, currency: 'USD', lookupKey: `foundry_brief_${experimentId}_one_time`, productName: str(raw, 'product_name')!,
-      productMetadata: { app_object: 'experiment_deliverable', plan_key: `brief_${experimentId}` }, confirmationMessage: 'Thank you. The brief is on its way by email.' },
+    price: givesFirst
+      ? { amountCents: price * 100, currency: 'USD', lookupKey: `foundry_brief_${experimentId}_chosen`, productName: str(raw, 'product_name')!,
+        productMetadata: { app_object: 'experiment_deliverable', plan_key: `brief_${experimentId}` }, confirmationMessage: 'Thank you. A copy of the brief is on its way by email.',
+        chosen: { ...CHOSEN_BAND } }
+      : { amountCents: price * 100, currency: 'USD', lookupKey: `foundry_brief_${experimentId}_one_time`, productName: str(raw, 'product_name')!,
+        productMetadata: { app_object: 'experiment_deliverable', plan_key: `brief_${experimentId}` }, confirmationMessage: 'Thank you. The brief is on its way by email.' },
     offerSubject: str(raw, 'offer_subject')!,
     venue: 'workshop',
     ...(tool ? { tool } : {}),

@@ -147,6 +147,8 @@ async function createRefundHandler(
 interface CreatePaymentLinkParams {
   product_name: string; product_metadata: Record<string, string>;
   price_lookup_key: string; unit_amount: number; currency: string; price_metadata: Record<string, string>;
+  /** A price the buyer chooses: floor, ceiling and suggestion, in cents. `unit_amount` is then the suggestion. */
+  custom_amount?: { minimum: number; maximum: number; preset: number };
   link_metadata: Record<string, string>; payment_intent_metadata: Record<string, string>; confirmation_message?: string;
 }
 
@@ -178,6 +180,11 @@ async function createPaymentLinkHandler(req: GatewayRequest): Promise<{ id: stri
   if (!apiKey) throw new Error('STRIPE_SECRET_KEY is not configured');
   if (!Number.isInteger(params.unit_amount) || params.unit_amount <= 0) throw new Error('unit_amount must be a positive integer');
   if (params.link_metadata?.app !== 'foundry' || params.payment_intent_metadata?.app !== 'foundry') throw new Error('payment links must be tagged app=foundry');
+  const c = params.custom_amount;
+  if (c && !(Number.isInteger(c.minimum) && Number.isInteger(c.maximum) && Number.isInteger(c.preset)
+    && c.minimum >= 50 && c.minimum <= c.preset && c.preset <= c.maximum && c.preset === params.unit_amount)) {
+    throw new Error('a chosen amount needs a whole-cent floor of at least 50, a suggestion between floor and ceiling, and the suggestion as unit_amount');
+  }
   const key = req.dedupKey ?? `gw_plink_${Date.now()}`;
 
   const found = await withRetry(
@@ -190,7 +197,11 @@ async function createPaymentLinkHandler(req: GatewayRequest): Promise<{ id: stri
     const product = new URLSearchParams({ name: params.product_name });
     for (const [k, v] of Object.entries(params.product_metadata ?? {})) product.set(`metadata[${k}]`, v);
     const created = await stripeForm(apiKey, 'products', product, `${key}:product`);
-    const price = new URLSearchParams({ product: String(created.id), unit_amount: String(params.unit_amount), currency: params.currency, lookup_key: params.price_lookup_key });
+    const price = c
+      ? new URLSearchParams({ product: String(created.id), currency: params.currency, lookup_key: params.price_lookup_key,
+        'custom_unit_amount[enabled]': 'true', 'custom_unit_amount[minimum]': String(c.minimum),
+        'custom_unit_amount[maximum]': String(c.maximum), 'custom_unit_amount[preset]': String(c.preset) })
+      : new URLSearchParams({ product: String(created.id), unit_amount: String(params.unit_amount), currency: params.currency, lookup_key: params.price_lookup_key });
     for (const [k, v] of Object.entries(params.price_metadata ?? {})) price.set(`metadata[${k}]`, v);
     priceId = String((await stripeForm(apiKey, 'prices', price, `${key}:price`)).id);
   }

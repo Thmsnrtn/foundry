@@ -52,7 +52,14 @@ export interface PublicExperiment {
    * it. Null for every test that has none, which is all of them but one.
    */
   clarification: { on: string; text: string } | null;
-  price: { amountCents: number; currency: string; label: string } | null;
+  /** `chosen` when the buyer picks the amount; `amountCents` is then the suggestion. */
+  price: { amountCents: number; currency: string; label: string; chosen?: { minimumCents: number; maximumCents: number } } | null;
+  /**
+   * THE THING ITSELF, given before anybody pays (`value_first`): the page
+   * carries the deliverable whole, and paying is the reader's judgement of it.
+   * Null for everything that is sold before it is given.
+   */
+  freeToRead: string | null;
   recurring: false;
   payUrl: string | null;
   openedOn: string | null; closedOn: string | null; updatedOn: string;
@@ -63,7 +70,7 @@ export interface PublicExperiment {
 
 /** The fields the public shape carries, as a record the tests can read. */
 export const PUBLIC_EXPERIMENT_FIELDS = [
-  'number', 'slug', 'path', 'listed', 'title', 'summary', 'who', 'what', 'limits', 'sources', 'selection', 'note', 'sample', 'tool',
+  'number', 'slug', 'path', 'listed', 'title', 'summary', 'who', 'what', 'limits', 'sources', 'selection', 'note', 'sample', 'tool', 'freeToRead',
   'status', 'statusLabel', 'statusLine', 'outcome', 'clarification', 'whereToGetIt', 'shape', 'price', 'recurring', 'payUrl', 'openedOn', 'closedOn', 'updatedOn', 'supersedes', 'successor', 'graduatedTo',
 ] as const;
 
@@ -98,6 +105,7 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
             (SELECT p.standing FROM products p WHERE p.from_experiment_id = e.id AND p.deleted_at IS NULL AND p.status = 'active'
                AND ${realCompany('p')}) AS asset_standing,
             (SELECT m.payment_link_url FROM experiment_materials m WHERE m.experiment_id = e.id AND m.kind = 'offer' AND m.superseded_at IS NULL) AS pay_url,
+            (SELECT m.body FROM experiment_materials m WHERE m.experiment_id = e.id AND m.kind = 'deliverable' AND m.superseded_at IS NULL) AS deliverable_body,
             (SELECT m.body FROM experiment_materials m WHERE m.experiment_id = e.id AND m.kind = 'offer_shape' AND m.superseded_at IS NULL) AS shape_json,
             (SELECT s.slug FROM public_experiments s WHERE s.experiment_id = w.supersedes_experiment_id) AS supersedes_slug,
             (SELECT s.public_title FROM public_experiments s WHERE s.experiment_id = w.supersedes_experiment_id) AS supersedes_title,
@@ -192,8 +200,14 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
   let tool: ToolSpec | null = null;
   if (r.shape_json != null) {
     try {
-      const shape = JSON.parse(String(r.shape_json)) as { price?: { amountCents?: number; currency?: string }; tool?: unknown };
-      if (shape.price?.amountCents && shape.price.currency) price = { amountCents: shape.price.amountCents, currency: shape.price.currency, label: `${money(shape.price.amountCents, shape.price.currency)}, one time` };
+      const shape = JSON.parse(String(r.shape_json)) as { price?: { amountCents?: number; currency?: string; chosen?: { minimumCents?: number; maximumCents?: number } }; tool?: unknown };
+      const c = shape.price?.chosen;
+      const chosen = c && Number.isInteger(c.minimumCents) && Number.isInteger(c.maximumCents) ? { minimumCents: c.minimumCents!, maximumCents: c.maximumCents! } : undefined;
+      if (shape.price?.amountCents && shape.price.currency) {
+        price = chosen
+          ? { amountCents: shape.price.amountCents, currency: shape.price.currency, chosen, label: `pay what it was worth, ${money(shape.price.amountCents, shape.price.currency)} suggested` }
+          : { amountCents: shape.price.amountCents, currency: shape.price.currency, label: `${money(shape.price.amountCents, shape.price.currency)}, one time` };
+      }
       const spec = toolFrom(shape.tool);
       tool = spec && checkToolQuality(spec, BANNED_CLAIMS).length === 0 ? spec : null;
     } catch { price = null; tool = null; }
@@ -206,6 +220,10 @@ export async function projectExperiment(experimentId: string): Promise<PublicExp
     sample: r.public_sample == null || String(r.public_sample).trim() === '' ? null : String(r.public_sample),
     // A portfolio entry describes something sold elsewhere; it carries no tool.
     tool: shape === 'portfolio_entry' || shape === 'identity_only' ? null : tool,
+    // GIVEN FIRST only while the offer stands and only for an offer that is
+    // given first: a closed test does not keep handing out what it was testing.
+    freeToRead: shape === 'portfolio_entry' || shape === 'identity_only' || !price?.chosen || status !== 'testing'
+      || r.deliverable_body == null || String(r.deliverable_body).trim() === '' ? null : String(r.deliverable_body),
     status, statusLabel: STATUS_LABELS[status], statusLine, outcome,
     whereToGetIt, shape,
     clarification: r.public_clarification == null || r.public_clarification_at == null ? null

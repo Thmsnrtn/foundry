@@ -436,7 +436,11 @@ export async function publicationGate(experimentId: string, opts: { now?: Date; 
     if (!link) failures.push('the payment link on the page is not active at the provider');
     else {
       const li = link.lineItems[0];
-      if (!li || li.unitAmount !== x.price?.amountCents || li.currency.toUpperCase() !== x.price.currency.toUpperCase()) failures.push(`the price on the page (${x.price?.label ?? 'none'}) is not the price at the provider (${li?.unitAmount ?? '?'} ${li?.currency ?? ''})`);
+      // A CHOSEN AMOUNT IS CHECKED AS ONE: the suggestion on the page is the
+      // provider's suggestion, and the provider holds no fixed price at all.
+      const atProvider = x.price?.chosen ? (li?.custom ? li.custom.preset : null) : li?.unitAmount;
+      if (!li || atProvider !== x.price?.amountCents || li.currency.toUpperCase() !== x.price.currency.toUpperCase()) failures.push(`the price on the page (${x.price?.label ?? 'none'}) is not the price at the provider (${atProvider ?? '?'} ${li?.currency ?? ''})`);
+      if (li && x.price && !x.price.chosen && li.custom) failures.push('the page states a fixed price and the provider lets the buyer choose');
       if (li?.recurring) failures.push('the page says one-time; the provider link recurs');
     }
   }

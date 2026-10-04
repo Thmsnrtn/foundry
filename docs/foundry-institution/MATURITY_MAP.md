@@ -2625,3 +2625,28 @@ escaping against a composition that tries to close the data block).
   digest changes; until that runs, a published tool page would show its worked
   examples only (the old policy blocks the script).
 
+### Pay what it was worth (Roadmap 2027 R16, 4 October 2026)
+
+**What changed.** `value_first` became available (migration 380). A design that
+gives first publishes the whole brief on its page while the offer stands, and
+a Stripe price with `custom_unit_amount` lets the reader pay what it was worth
+between $1 and $100, a suggestion preset. The link validator, the act's
+parameters (what is approved is what is created), the gateway handler and the
+publication gate all treat a chosen amount as its own shape and refuse it in
+place of a fixed one, or the reverse. Payment, delivery of a copy by email,
+refunds and settlement run on the existing paths.
+
+**Evidence maturity.** E1: law test `pay-what-it-was-worth` (validation both
+ways, bounds, the request actually sent to the provider with a stubbed fetch,
+the page's words).
+
+**Proof debt.**
+- No chosen-amount link has been created at Stripe; the request shape is
+  tested against a stub, not the provider. The first live one is the proof,
+  and `validateExperimentPaymentLink` refuses it if Stripe returns anything
+  else.
+- The projection's `freeToRead` (given only while testing, only for a chosen
+  amount) is exercised through rendering, not through a database fixture.
+- The test settles on any payment; how much people chose is in the ledger but
+  not yet summarised on the owner's page.
+

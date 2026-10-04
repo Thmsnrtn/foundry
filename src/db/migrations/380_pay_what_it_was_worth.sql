@@ -1,0 +1,14 @@
+-- =============================================================================
+-- PAY WHAT IT WAS WORTH.
+--
+-- The owner decided it on 4 October 2026 (PENDING 31): Foundry may test "pay
+-- what it was worth — deliver first, the buyer pays what they judge fair,
+-- including nothing". Migration 286 named the exchange `value_first` and kept
+-- it unavailable until the institution could run it. It can now, in the same
+-- change as this migration: the whole brief is published on the test's page
+-- before anybody pays; a Stripe price lets the reader choose the amount
+-- between a dollar and a hundred, with a suggestion; the link is checked to be
+-- exactly that and nothing else; and whoever pays is emailed a copy, refunded
+-- on request, through the paths that already carry a fixed-price sale.
+-- =============================================================================
+UPDATE probe_exchanges SET available = 1 WHERE exchange = 'value_first';

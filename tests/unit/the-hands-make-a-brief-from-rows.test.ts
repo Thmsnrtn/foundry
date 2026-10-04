@@ -177,12 +177,12 @@ describe('the forge shapes the offer and the hands make the thing', () => {
       VALUES ('hands_x2',?,'hands_opp','hands_unk','give it first','they pay after','nobody pays',0,'real')`, [OWNER]);
     const { recordDesign } = await import('../../src/services/venture/probe-design.js');
     await recordDesign({
-      founderId: OWNER, experimentId: 'hands_x2', decides: 'd', decidesBecause: 'b', exchange: 'value_first', exchangeBecause: 'e', canProve: 'c', cannotProve: 'n',
+      founderId: OWNER, experimentId: 'hands_x2', decides: 'd', decidesBecause: 'b', exchange: 'subscription', exchangeBecause: 'e', canProve: 'c', cannotProve: 'n',
       ratherThanWaiting: 'r', distribution: 'x', ifItSucceeds: 'i', recommendation: 'defer', recommendationBecause: 'w', designedBy: 'test',
     });
     const { shapeAndMake } = await import('../../src/services/venture/products/offer-composition.js');
     const made = await shapeAndMake('hands_x2');
-    expect('refused' in made && made.refused).toContain('the hands sell a brief at a fixed price, or give a free tool beside one');
+    expect('refused' in made && made.refused).toContain('the hands sell a brief at a fixed price, give a free tool beside one, or give it first for what it was worth');
     const { materialOf } = await import('../../src/services/venture/hand.js');
     expect(await materialOf('hands_x2', 'deliverable')).toBeNull();
   });

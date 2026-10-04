@@ -38,11 +38,23 @@ import { pathSegment } from '../outbound/path-segment.js';
 const STRIPE_API = 'https://api.stripe.com/v1';
 const STRIPE_TIMEOUT_MS = 10_000;
 
-export interface OfferPrice { amountCents: number; currency: string; lookupKey: string; productName: string; productMetadata: Record<string, string>; confirmationMessage: string }
+export interface OfferPrice {
+  /** The price — or, when the buyer chooses, the amount suggested to them. */
+  amountCents: number; currency: string; lookupKey: string; productName: string; productMetadata: Record<string, string>; confirmationMessage: string;
+  /**
+   * PAY WHAT IT WAS WORTH (`value_first`, PENDING 31): the buyer chooses the
+   * amount, between these bounds, with `amountCents` suggested. Absent for a
+   * fixed price. Stripe takes nothing below its own minimum charge, so the
+   * floor is a dollar; paying nothing at all is not paying, and is allowed.
+   */
+  chosen?: { minimumCents: number; maximumCents: number };
+}
 
 export interface PaymentLinkFacts {
   id: string; url: string; active: boolean; metadata: Record<string, string>; paymentIntentMetadata: Record<string, string>;
-  lineItems: Array<{ unitAmount: number | null; currency: string; recurring: boolean; quantity: number }>;
+  lineItems: Array<{ unitAmount: number | null; currency: string; recurring: boolean; quantity: number;
+    /** The bounds and suggestion of a price the buyer chooses, or null for a fixed one. */
+    custom: { minimum: number | null; maximum: number | null; preset: number | null } | null }>;
 }
 
 function stripeKey(): string | null {
@@ -65,10 +77,12 @@ async function stripeGet<T>(path: string): Promise<T> {
 interface RawLink { id: string; url: string; active: boolean; metadata?: Record<string, string>; payment_intent_data?: { metadata?: Record<string, string> } | null }
 
 async function linkFacts(link: RawLink): Promise<PaymentLinkFacts> {
-  const items = await stripeGet<{ data: Array<{ quantity: number; price: { unit_amount: number | null; currency: string; recurring: unknown | null } }> }>(`/payment_links/${pathSegment(link.id, 'payment_link_id')}/line_items?limit=10`);
+  const items = await stripeGet<{ data: Array<{ quantity: number; price: { unit_amount: number | null; currency: string; recurring: unknown | null;
+    custom_unit_amount?: { minimum?: number | null; maximum?: number | null; preset?: number | null } | null } }> }>(`/payment_links/${pathSegment(link.id, 'payment_link_id')}/line_items?limit=10`);
   return {
     id: link.id, url: link.url, active: link.active, metadata: link.metadata ?? {}, paymentIntentMetadata: link.payment_intent_data?.metadata ?? {},
-    lineItems: items.data.map((i) => ({ unitAmount: i.price.unit_amount, currency: i.price.currency.toUpperCase(), recurring: i.price.recurring != null, quantity: i.quantity })),
+    lineItems: items.data.map((i) => ({ unitAmount: i.price.unit_amount, currency: i.price.currency.toUpperCase(), recurring: i.price.recurring != null, quantity: i.quantity,
+      custom: i.price.custom_unit_amount ? { minimum: i.price.custom_unit_amount.minimum ?? null, maximum: i.price.custom_unit_amount.maximum ?? null, preset: i.price.custom_unit_amount.preset ?? null } : null })),
   };
 }
 
@@ -126,7 +140,7 @@ export async function findExperimentPaymentLink(experimentId: string): Promise<P
 }
 
 /** The contract a link must meet before it may be offered to anyone. */
-export function validateExperimentPaymentLink(link: PaymentLinkFacts, experimentId: string, price: { amountCents: number; currency: string }): { ok: boolean; failures: string[] } {
+export function validateExperimentPaymentLink(link: PaymentLinkFacts, experimentId: string, price: { amountCents: number; currency: string; chosen?: OfferPrice['chosen'] }): { ok: boolean; failures: string[] } {
   const failures: string[] = [];
   if (!link.active) failures.push('the link is not active');
   if (!/^https:\/\/buy\.stripe\.com\//.test(link.url)) failures.push('not a Stripe Payment Link URL');
@@ -137,7 +151,20 @@ export function validateExperimentPaymentLink(link: PaymentLinkFacts, experiment
   const item = link.lineItems[0];
   if (item) {
     if (item.recurring) failures.push('the price is recurring; the offer is one-time');
-    if (item.unitAmount !== price.amountCents) failures.push(`the price is ${item.unitAmount == null ? 'unset' : (item.unitAmount / 100).toFixed(2)}, not ${(price.amountCents / 100).toFixed(2)}`);
+    if (price.chosen) {
+      // THE BUYER CHOOSES, AND THE LINK MUST SAY EXACTLY WHAT THE PAGE SAYS:
+      // the suggestion, the floor and the ceiling, and no fixed amount at all.
+      const c = item.custom;
+      if (!c) failures.push('the price is fixed; this offer lets the buyer choose');
+      else {
+        if (c.preset !== price.amountCents) failures.push(`the suggested amount is ${c.preset == null ? 'unset' : (c.preset / 100).toFixed(2)}, not ${(price.amountCents / 100).toFixed(2)}`);
+        if (c.minimum !== price.chosen.minimumCents) failures.push(`the floor is ${c.minimum == null ? 'unset' : (c.minimum / 100).toFixed(2)}, not ${(price.chosen.minimumCents / 100).toFixed(2)}`);
+        if (c.maximum !== price.chosen.maximumCents) failures.push(`the ceiling is ${c.maximum == null ? 'unset' : (c.maximum / 100).toFixed(2)}, not ${(price.chosen.maximumCents / 100).toFixed(2)}`);
+      }
+    } else {
+      if (item.custom) failures.push('the buyer may choose the amount; this offer has a fixed price');
+      if (item.unitAmount !== price.amountCents) failures.push(`the price is ${item.unitAmount == null ? 'unset' : (item.unitAmount / 100).toFixed(2)}, not ${(price.amountCents / 100).toFixed(2)}`);
+    }
     if (item.currency !== price.currency.toUpperCase()) failures.push(`the currency is ${item.currency}, not ${price.currency.toUpperCase()}`);
     if (item.quantity !== 1) failures.push('quantity is not fixed at 1');
   }
@@ -156,7 +183,8 @@ export function paymentLinkParams(experimentId: string, p: OfferPrice): Record<s
   return {
     product_name: p.productName, product_metadata: { app: 'foundry', ...p.productMetadata },
     price_lookup_key: p.lookupKey, unit_amount: p.amountCents, currency: p.currency.toLowerCase(),
-    price_metadata: { app: 'foundry', plan_key: p.productMetadata.plan_key ?? p.lookupKey, billing_period: 'one_time' },
+    price_metadata: { app: 'foundry', plan_key: p.productMetadata.plan_key ?? p.lookupKey, billing_period: 'one_time', ...(p.chosen ? { pricing: 'chosen_by_buyer' } : {}) },
+    ...(p.chosen ? { custom_amount: { minimum: p.chosen.minimumCents, maximum: p.chosen.maximumCents, preset: p.amountCents } } : {}),
     link_metadata: { app: 'foundry', experiment_id: experimentId, primitive: 'sale' },
     payment_intent_metadata: { app: 'foundry', experiment_id: experimentId, primitive: 'sale' },
     confirmation_message: p.confirmationMessage,
@@ -167,7 +195,9 @@ export async function createExperimentPaymentLink(input: { productId: string; ex
   const p = input.price;
   const result = await invoke({
     productId: input.productId, tool: 'stripe_create_payment_link',
-    action: `create the ${p.currency.toUpperCase()} ${(p.amountCents / 100).toFixed(2)} one-time payment link for experiment ${input.experimentId}`,
+    action: p.chosen
+      ? `create the pay-what-it-was-worth payment link for experiment ${input.experimentId}, suggesting ${p.currency.toUpperCase()} ${(p.amountCents / 100).toFixed(2)}`
+      : `create the ${p.currency.toUpperCase()} ${(p.amountCents / 100).toFixed(2)} one-time payment link for experiment ${input.experimentId}`,
     params: paymentLinkParams(input.experimentId, p),
     dedupKey: `experiment:${input.experimentId}:payment_link`, customerExternalId: `experiment:${input.experimentId}`,
     surface: 'billing', dataClass: 'customer',

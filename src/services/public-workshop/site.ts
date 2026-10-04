@@ -395,10 +395,15 @@ export function renderExperiment(f: PublicWorkshopFacts, x: PublicExperiment): s
   // sections down, which on a phone is two and a half screens below the fold —
   // and a price you have to hunt for reads as a price somebody hoped you would
   // not check. It is said once, plainly, where anyone can see it.
-  const priceLine = x.price ? `${amount(x.price)}, once. No subscription, nothing renews.` : '';
-  const refundLine = x.price
-    ? `If it's no use to you, reply to the delivery email or use the link in it and you get your ${amount(x.price)} back. No time limit, and you don't have to explain.`
-    : '';
+  // PAY WHAT IT WAS WORTH says so in the same place a price would, and says
+  // the part that matters most: paying nothing is a real choice.
+  const chosen = x.price?.chosen ?? null;
+  const priceLine = !x.price ? ''
+    : chosen ? `Read it free below, then pay what it was worth to you, once — ${amount(x.price)} is a suggestion, and paying nothing is fine. No subscription, nothing renews.`
+      : `${amount(x.price)}, once. No subscription, nothing renews.`;
+  const refundLine = !x.price ? ''
+    : chosen ? `If you pay and then wish you hadn't, reply to the email that comes with your copy or use the link in it and you get it all back. No time limit, and you don't have to explain.`
+      : `If it's no use to you, reply to the delivery email or use the link in it and you get your ${amount(x.price)} back. No time limit, and you don't have to explain.`;
   // The same promise at two sizes, not twice at full length: five words where a
   // person is deciding, the whole sentence under the heading they would scroll
   // to if they wanted the terms. Saying it fully in both places is how a page
@@ -417,7 +422,7 @@ export function renderExperiment(f: PublicWorkshopFacts, x: PublicExperiment): s
     ? '<p class="quiet">The offer is not open at the moment.</p>' : '';
   const pay = x.payUrl && x.price ? `<div class="card">
   <p><strong>${esc(priceLine)}</strong></p>
-  <p><a class="btn" href="${esc(x.payUrl)}" rel="nofollow">Buy for ${esc(amount(x.price))}</a></p>
+  <p><a class="btn" href="${esc(x.payUrl)}" rel="nofollow">${chosen ? 'Pay what it was worth' : `Buy for ${esc(amount(x.price))}`}</a></p>
   <p class="quiet">${esc(shortRefund)}</p>
 </div>` : priceLine ? `<p><strong>${esc(priceLine)}</strong></p>${closed}` : closed;
   // A SPECIMEN BEATS A DESCRIPTION. Three paragraphs about the shape of the
@@ -438,7 +443,10 @@ ${x.tool ? renderTool(x.tool) : ''}
 ${pay}
 <h2>What you get</h2>
 ${paras(x.what)}
-${sample}
+${x.freeToRead ? `<div class="card">
+  <p class="quiet">Here it is, whole. Nothing to pay before you read it.</p>
+${paras(x.freeToRead)}
+</div>` : sample}
 <h2>Why I wrote to you</h2>
 ${paras(x.selection)}
 <p>If you'd rather not hear from me again, <a href="/email">say so here</a> and you won't.</p>
@@ -481,7 +489,8 @@ ${refundLine ? `<p>${esc(refundLine)}</p>` : ''}
   // WHAT IS FOR SALE, SAID IN THE FORM AN INDEX READS. Only while the thing is
   // actually offered: a closed page describes a product no one can buy, and
   // saying otherwise in machine words would be the one lie on the page.
-  const product = asking && x.price ? `<script type="application/ld+json">${jsonLd({
+  // Not for a chosen amount: a machine-read price would be a price, and this has none.
+  const product = asking && x.price && !chosen ? `<script type="application/ld+json">${jsonLd({
     '@context': 'https://schema.org', '@type': 'Product', name: x.title, description: x.summary,
     brand: { '@type': 'Organization', name: f.name },
     offers: { '@type': 'Offer', price: (x.price.amountCents / 100).toFixed(2), priceCurrency: x.price.currency.toUpperCase(), availability: 'https://schema.org/InStock', url: `${f.origin}${x.path}` },
