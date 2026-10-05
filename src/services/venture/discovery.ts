@@ -306,6 +306,9 @@ export async function discover(input: {
   let looked = 0;
   let signals = 0;
   let read = 0;
+  // WHAT THIS PASS HAS ALREADY HANDLED (R39): one comment matching two of the
+  // brief's phrasings is one sentence, read once.
+  const handled = new Set<string>();
 
   for (const terms of brief.terms) {
     if (sown.length >= MOST_SEEDS_PER_PASS || read >= MOST_READINGS_PER_PASS) break;
@@ -365,6 +368,21 @@ export async function discover(input: {
       // paid to be reread.
       const buried = await alreadyBuried(input.founderId, said.text);
       if (buried) { passedOver.push(buried); continue; }
+
+      // A SENTENCE ALREADY READ IS NOT PAID FOR TWICE (R39). The archive returns
+      // largely the same top hits every day, and each one used to become a new
+      // observation and a new reading; only the readings that abstained were
+      // remembered. Any reading of the same address or the same words, in this
+      // pass or an earlier one, in the same world, is enough: what it said is
+      // already on the record and nothing in the sentence has changed.
+      const key = said.url || said.text;
+      if (handled.has(key)) continue;
+      handled.add(key);
+      const readOn = await alreadyRead(input.founderId, said.url, said.text.slice(0, 500), input.world === 'reference' ? 'reference' : 'real');
+      if (readOn !== null) {
+        passedOver.push({ what: signal.clause, because: `already read on ${readOn}; a sentence is not paid for twice` });
+        continue;
+      }
 
       // AND A SENTENCE ALREADY LOOKED AT AND FOUND EMPTY IS NOT PAID FOR TWICE.
       // The reason a reading was declined is worth keeping only if something
@@ -485,6 +503,17 @@ export async function discover(input: {
  * The graveyard is not dogma - a burial that named what would reopen it says so,
  * and the pass reports that rather than silently refusing forever.
  */
+/** When this sentence (by its address, or its exact words) was last read for this founder in this world, or null (R39). */
+async function alreadyRead(founderId: string, url: string | null, saw: string, world: 'real' | 'reference'): Promise<string | null> {
+  const r = (await query(
+    `SELECT MAX(i.interpreted_at) AS at FROM observation_interpretations i
+       JOIN market_observations o ON o.id = i.observation_id
+      WHERE i.founder_id = ? AND o.founder_id = ? AND o.evidence_mode = ?
+        AND ((? IS NOT NULL AND o.source = ?) OR o.saw = ?)`,
+    [founderId, founderId, world, url, url, saw])).rows[0] as Record<string, unknown> | undefined;
+  return r?.at == null ? null : String(r.at).slice(0, 10);
+}
+
 async function alreadyBuried(founderId: string, text: string): Promise<{
   what: string; because: string;
 } | null> {

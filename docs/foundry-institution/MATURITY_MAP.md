@@ -2730,6 +2730,16 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### Discovery never pays twice for one sentence (Roadmap 2027 R39, 5 October 2026)
+
+**What changed.** A sentence already read, by address or exact words, is passed
+over before an observation is minted or a model is paid. **Evidence
+maturity.** E1: `discovery-never-pays-twice-for-one-sentence`. **Proof debt.**
+The archive is still fetched daily for each phrasing (free, but repeated); a
+sentence whose reading call failed is not recorded and is tried again; a
+reading made under an earlier brief also suppresses one under a new brief, which
+is deliberate and may need the owner's view if the brief changes sharply.
+
 ### A refund outlives the asset (Roadmap 2027 R53, 5 October 2026)
 
 **What changed.** An archived experimental asset may still refund, under its
