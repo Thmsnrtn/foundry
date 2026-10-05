@@ -506,6 +506,36 @@ async function recordWhatIsScheduled(): Promise<void> {
       WHERE retired_at IS NOT NULL AND job_name IN (${marks})`, names);
 }
 
+/**
+ * ONE RUN OF A SCHEDULED JOB, under its lock, with its health recorded. The
+ * cron tick and the boot catch-up (R33a) both go through here, so a caught-up
+ * run is locked, recorded and failure-handled exactly as a scheduled one.
+ */
+async function runScheduledJob(name: string, fn: () => Promise<unknown>): Promise<void> {
+  // Acquire distributed lock to prevent double-execution during rolling deploys
+  if (!(await acquireJobLock(name))) {
+    logger.info(`Job ${name} skipped (locked by another instance)`, { jobName: name });
+    return;
+  }
+  logger.info(`Running: ${name}`, { jobName: name });
+  // A LOG IS NOT A RECORD. Every failure here was logged and forgotten,
+  // so a week in which the institution's loops threw on every run looked
+  // exactly like a calm week on the page the founder reads. The class
+  // name of the error is kept and never its message — see
+  // `loop-health.ts` for why.
+  const { recordJobFailure, recordJobSuccess } = await import(
+    './services/institution/loop-health.js');
+  try {
+    await fn();
+    await recordJobSuccess(name).catch(() => { /* health is a record, never a gate */ });
+  } catch (err) {
+    logger.error(`Error in ${name}`, { jobName: name, error: String(err) });
+    await recordJobFailure(name, err).catch(() => { /* as above */ });
+  } finally {
+    await releaseJobLock(name);
+  }
+}
+
 function startScheduler(): void {
   logger.info('Starting job scheduler...');
   void recordWhatIsScheduled().catch((err: unknown) => {
@@ -513,30 +543,7 @@ function startScheduler(): void {
   });
   for (const [name, job] of Object.entries(JOB_REGISTRY)) {
     try {
-      const handle = new CronJob(job.schedule, async () => {
-        // Acquire distributed lock to prevent double-execution during rolling deploys
-        if (!(await acquireJobLock(name))) {
-          logger.info(`Job ${name} skipped (locked by another instance)`, { jobName: name });
-          return;
-        }
-        logger.info(`Running: ${name}`, { jobName: name });
-        // A LOG IS NOT A RECORD. Every failure here was logged and forgotten,
-        // so a week in which the institution's loops threw on every run looked
-        // exactly like a calm week on the page the founder reads. The class
-        // name of the error is kept and never its message — see
-        // `loop-health.ts` for why.
-        const { recordJobFailure, recordJobSuccess } = await import(
-          './services/institution/loop-health.js');
-        try {
-          await job.fn();
-          await recordJobSuccess(name).catch(() => { /* health is a record, never a gate */ });
-        } catch (err) {
-          logger.error(`Error in ${name}`, { jobName: name, error: String(err) });
-          await recordJobFailure(name, err).catch(() => { /* as above */ });
-        } finally {
-          await releaseJobLock(name);
-        }
-      }, null, true, 'UTC');
+      const handle = new CronJob(job.schedule, async () => { await runScheduledJob(name, job.fn); }, null, true, 'UTC');
       // KEPT, SO IT CAN BE STOPPED. Nothing held these handles, so the drain
       // could not stop a routine even though it said it did.
       scheduledJobs.push(handle);
@@ -558,6 +565,20 @@ function startScheduler(): void {
         .catch(() => { /* health is a record, never a gate — as in the tick above */ });
     }
   }
+  // A DEPLOY DOES NOT COST A DAY (R33a). Once, after the job lock's life has
+  // passed, run each daily job whose last minute fell while this machine was
+  // down, through the same door a tick uses.
+  void import('./services/institution/catch-up.js').then(({ CATCH_UP_DELAY_SECONDS, jobsThatMissedTheirMinute }) => {
+    const timer = setTimeout(() => {
+      void jobsThatMissedTheirMinute(JOB_REGISTRY).then(async (missed) => {
+        for (const m of missed) {
+          logger.info(`Catching up ${m.name}, missed at ${m.missed.toISOString()}`, { jobName: m.name });
+          await runScheduledJob(m.name, JOB_REGISTRY[m.name]!.fn);
+        }
+      }).catch((err: unknown) => logger.warn('Could not catch up missed routines', { error: String(err) }));
+    }, CATCH_UP_DELAY_SECONDS * 1000);
+    timer.unref?.();
+  });
 }
 
 // ─── Server Start ────────────────────────────────────────────────────────────

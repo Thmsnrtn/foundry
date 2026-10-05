@@ -2730,6 +2730,15 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### A deploy does not cost a day (Roadmap 2027 R33a, 5 October 2026)
+
+**What changed.** On boot, after the job lock's life, daily jobs whose last
+minute passed unrun are run once through the same door as a tick.
+**Evidence maturity.** E1: `a-deploy-does-not-cost-a-day`. E2 when a
+production log shows "Catching up" after a deploy inside 04:00-07:30 UTC.
+**Proof debt.** The non-fatal volume snapshot before migrations (the other
+half of the R33a spec) is not built.
+
 ### The first sale lands as money (Roadmap 2027 R25, 5 October 2026)
 
 **What changed.** A tagged payment intent records its charge in the money
