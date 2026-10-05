@@ -1573,6 +1573,11 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
            JOIN founders f ON f.id = p.owner_id
           WHERE s.identity_key = 'foundry'`, []))
         .rows as unknown as Array<Record<string, unknown>>;
+      // THE MODEL'S CREDIT, READ ONCE A DAY (R33), from the hourly routine that
+      // is itself watched. A failed read is recorded as one, never as a balance.
+      const { readModelCreditsOnceADay } = await import('../services/ai/model-door.js');
+      const credits = await readModelCreditsOnceADay(fetch);
+      if (credits !== 'already_read_today') logger.info(`institution_pulse_tick: model credit ${credits}`, { jobName: 'institution_pulse_tick' });
       for (const o of owners) {
         const pulse = await howFoundryIsRunning(String(o.founder_id));
         logger.info(`institution_pulse_tick: ${pulse.state} — ${pulse.sentence}`, { jobName: 'institution_pulse_tick' });
@@ -1763,6 +1768,11 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
               { jobName: 'legal_surface_tick' });
           }
         } catch (err) {
+          // THE DOOR, NOT THE SUBJECT (R33): every later subject would fail the
+          // same way, so the pass stops and the routine records a failure the
+          // institution watches, instead of a run that read nothing.
+          const { ModelDoorError } = await import('../services/ai/client.js');
+          if (err instanceof ModelDoorError) throw err;
           logger.error(
             `legal_surface_tick failed for ${subject.subjectId}: `
             + `${err instanceof Error ? err.message : String(err)}`,

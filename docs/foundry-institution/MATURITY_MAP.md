@@ -2730,6 +2730,20 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### A failing model door is loud (Roadmap 2027 R33, 5 October 2026)
+
+**What changed.** Model-door failures are named and reach a routine's recorded
+failure instead of a "could not read it" refusal; the credit left is read once
+a day and Control shows answered/failed calls today and days of credit left.
+**Evidence maturity.** E1: `a-failing-model-door-is-loud`. E2 at the first
+production reading in `model_door_readings`. **Proof debt.** Which of the
+provider's two account endpoints this key may read is not yet known from
+production (the reader tries the account's credits, then the key's own limit;
+a key with no limit yields no balance). Spend-ceiling and entitlement refusals
+are still filed as refusals by discovery; they are the owner's own bounds and
+are shown on Control's spending reading, not here. Rehearsal B still mocks the
+client rather than the provider.
+
 ### A paid delivery never stalls silently (Roadmap 2027 R31, 5 October 2026)
 
 **What changed.** Stranded deliveries are retried (refused, unknown after its

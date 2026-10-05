@@ -26,7 +26,7 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
-import { callSonnet } from '../ai/client.js';
+import { callSonnet, ModelDoorError } from '../ai/client.js';
 import { institutionSpend } from '../ai/what-it-is-for.js';;
 import { shieldUntrustedContent } from '../ai/prompt-shield.js';
 import { dataBlockInstruction, wrapDataBlock } from '../ai/sanitize.js';
@@ -232,6 +232,7 @@ export async function interpret(input: {
       'reading one real market signal for the owner\'s own portfolio search; there is no company to charge because no venture exists yet',
       'reading an observation', { kind: 'observation', id: input.observationId }));
   } catch (err) {
+    if (err instanceof ModelDoorError) throw err;
     return { refused: `could not read it: ${err instanceof Error ? err.message : 'unknown'}` };
   }
 

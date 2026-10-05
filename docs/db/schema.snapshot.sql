@@ -2280,6 +2280,16 @@ CREATE TABLE missions (
   supersedes  TEXT REFERENCES missions(id),
   opened_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE model_door_readings (
+  id TEXT PRIMARY KEY,
+  read_on TEXT NOT NULL,
+  read_at TEXT NOT NULL DEFAULT (datetime('now')),
+  ok INTEGER NOT NULL CHECK (ok IN (0, 1)),
+  remaining_usd REAL,
+  source TEXT CHECK (source IS NULL OR source IN ('account', 'key')),
+  detail TEXT,
+  CHECK (ok = 1 OR remaining_usd IS NULL)
+);
 CREATE TABLE needs_you_snoozes (
   id         TEXT PRIMARY KEY,
   founder_id TEXT NOT NULL REFERENCES founders(id),
@@ -4707,6 +4717,7 @@ CREATE INDEX idx_mission_events_key ON mission_events(founder_id, mission_key, a
 CREATE INDEX idx_mission_terms_key ON mission_terms(founder_id, mission_key, said_at);
 CREATE UNIQUE INDEX idx_mission_terms_one_live ON mission_terms(founder_id, mission_key) WHERE superseded_by IS NULL;
 CREATE INDEX idx_missions_founder ON missions(founder_id, opened_at);
+CREATE UNIQUE INDEX idx_model_door_readings_day ON model_door_readings(read_on);
 CREATE INDEX idx_needs_you_snoozes_founder ON needs_you_snoozes(founder_id, until);
 CREATE INDEX idx_network_contrib_cell
   ON network_contributions(metric, lifecycle_stage, mrr_bracket);

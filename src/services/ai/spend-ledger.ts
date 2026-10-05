@@ -201,3 +201,24 @@ export async function finishReservation(
     [outcome.kind, outcome.kind === 'settled' ? outcome.actualCents : null,
       new Date().toISOString(), reservation.id]);
 }
+
+/**
+ * THE MODEL DOOR TODAY (R33): calls that ended without an answer (released,
+ * ambiguous or expired reservations; a ceiling or entitlement refusal never
+ * reserves, so it is not counted) beside calls that were answered and settled.
+ */
+export async function modelDoorToday(date: string = new Date().toISOString().slice(0, 10)): Promise<{ failed: number; settled: number }> {
+  const r = (await query(
+    `SELECT SUM(CASE WHEN status IN ('released','ambiguous','expired') THEN 1 ELSE 0 END) AS failed,
+            SUM(CASE WHEN status = 'settled' THEN 1 ELSE 0 END) AS settled
+       FROM ai_spend_reservations WHERE date = ?`, [date])).rows[0] as Record<string, unknown> | undefined;
+  return { failed: Number(r?.failed ?? 0), settled: Number(r?.settled ?? 0) };
+}
+
+/** Settled cents per day over the last `days` whole days before today (R33: how long the credit lasts). */
+export async function settledCentsPerDay(days: number): Promise<number> {
+  const r = (await query(
+    `SELECT COALESCE(SUM(actual_cents), 0) AS cents FROM ai_spend_reservations
+      WHERE status = 'settled' AND date >= date('now', ?) AND date < date('now')`, [within(days)])).rows[0] as Record<string, unknown> | undefined;
+  return Number(r?.cents ?? 0) / Math.max(1, Math.floor(days));
+}

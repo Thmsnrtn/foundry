@@ -7909,6 +7909,7 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
         <dt>Per-sale minutes (PENDING 32)</dt><dd>${facts.frontLoadedAttention ? `${facts.frontLoadedAttention.treatment}, set by ${facts.frontLoadedAttention.ownersOwn ? 'you' : 'the first-proof default'} on ${facts.frontLoadedAttention.setAt}` : 'no row'}</dd>
         <dt>Correspondence</dt><dd>${facts.correspondence}</dd>
         <dt>Subscriptions</dt><dd>${facts.subscriptionsAllowed ? 'allowed by you' : 'refused'}</dd>
+        <dt>Model door (R33)</dt><dd>${`${String(facts.modelDoor.answeredToday)} answered, ${String(facts.modelDoor.failedToday)} failed today`} · ${facts.modelDoor.remainingUsd === null ? (facts.modelDoor.lastReadFailed ? `credit unread: ${facts.modelDoor.lastReadFailed}` : 'credit not read yet, or the key has no limit') : `$${facts.modelDoor.remainingUsd.toFixed(2)} credit on ${String(facts.modelDoor.readOn)}${facts.modelDoor.daysLeft === null ? '' : `, about ${String(facts.modelDoor.daysLeft)} days`}`}</dd>
       </dl>
     </details>
   </section>`;

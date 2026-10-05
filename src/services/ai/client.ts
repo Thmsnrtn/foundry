@@ -169,6 +169,35 @@ export class NotEntitledError extends Error {
  * missing row into a silent outage, and `authorizeSpend` already fails on one
  * whose owner cannot be resolved.
  */
+/**
+ * THE MODEL DOOR FAILED (Roadmap 2027 R33): the provider refused (no credits,
+ * a revoked key), did not answer, or answered with no completion. Named so a
+ * caller can tell it from a refusal of its own and let it through, and so a
+ * routine's recorded failure says "ModelDoorError" rather than "Error".
+ */
+export class ModelDoorError extends Error {
+  readonly status: number | null;
+  constructor(message: string, status: number | null) {
+    super(message);
+    this.name = 'ModelDoorError';
+    this.status = status;
+  }
+}
+
+/** A 200 that carries an error, or no completion, is a failure and not an empty answer. */
+function noCompletion(data: OpenRouterResponse): ModelDoorError | null {
+  const e = (data as unknown as { error?: { message?: string; code?: number } }).error;
+  if (e || !Array.isArray(data.choices) || data.choices.length === 0) {
+    return new ModelDoorError(`OpenRouter answered with no completion${e?.message ? `: ${e.message}` : ''}`, typeof e?.code === 'number' && e.code >= 500 ? e.code : 502);
+  }
+  return null;
+}
+/** Whatever stopped the last attempt, named as the door's failure. */
+function asDoorError(err: Error | null, fallback: string): ModelDoorError {
+  if (err instanceof ModelDoorError) return err;
+  return new ModelDoorError(err?.message ?? fallback, null);
+}
+
 export async function companyMayIncurCost(productId: string): Promise<string | null> {
   try {
     // THE DECISION COMES FROM THE CANONICAL PREDICATE; the columns are read
@@ -435,12 +464,12 @@ export async function callClaude(
 
       if (!response.ok) {
         const body = await response.text().catch(() => '');
-        const err = new Error(`OpenRouter API error ${response.status}: ${body}`);
-        (err as unknown as Record<string, unknown>).status = response.status;
-        throw err;
+        throw new ModelDoorError(`OpenRouter API error ${response.status}: ${body}`, response.status);
       }
 
       const data = (await response.json()) as OpenRouterResponse;
+      const empty = noCompletion(data);
+      if (empty) throw empty;
       const textContent = data.choices?.[0]?.message?.content ?? '';
 
       await settleSpend(reservation, computeCostCents(
@@ -482,7 +511,7 @@ export async function callClaude(
           status,
         });
         reportError(lastError, { source: 'ai_client', productId, meta: { status } });
-        throw lastError;
+        throw asDoorError(lastError, 'the model door refused');
       }
 
       if (attempt < MAX_RETRIES) {
@@ -507,7 +536,7 @@ export async function callClaude(
   });
   await finishReservation(reservation, { kind: 'ambiguous' });
   reportError(lastError, { source: 'ai_client', productId: config.productId, meta: { attempts: MAX_RETRIES + 1 } });
-  throw lastError ?? new Error('AI call failed after retries');
+  throw asDoorError(lastError, 'AI call failed after retries');
 }
 
 /**
@@ -595,12 +624,12 @@ export async function callClaudeMultiTurn(
 
       if (!response.ok) {
         const body = await response.text().catch(() => '');
-        const err = new Error(`OpenRouter API error ${response.status}: ${body}`);
-        (err as unknown as Record<string, unknown>).status = response.status;
-        throw err;
+        throw new ModelDoorError(`OpenRouter API error ${response.status}: ${body}`, response.status);
       }
 
       const data = (await response.json()) as OpenRouterResponse;
+      const empty = noCompletion(data);
+      if (empty) throw empty;
       const textContent = data.choices?.[0]?.message?.content ?? '';
 
       await settleSpend(reservation, computeCostCents(
@@ -624,7 +653,7 @@ export async function callClaudeMultiTurn(
       const status = (err as unknown as Record<string, unknown>)?.status as number | undefined;
       if (status && status < 500 && status !== 429) {
         await finishReservation(reservation, { kind: 'released' });
-        throw lastError;
+        throw asDoorError(lastError, 'the model door refused');
       }
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_BASE_MS * Math.pow(2, attempt) * (0.5 + Math.random() * 0.5);
@@ -634,7 +663,7 @@ export async function callClaudeMultiTurn(
   }
 
   await finishReservation(reservation, { kind: 'ambiguous' });
-  throw lastError ?? new Error('AI multi-turn call failed after retries');
+  throw asDoorError(lastError, 'AI multi-turn call failed after retries');
 }
 
 /**

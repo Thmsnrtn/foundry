@@ -1385,6 +1385,7 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   sense_provider_scopes: 'the exact minimum scopes each provider may be asked for, constitutional and the same for every owner; the credentials themselves are erased with their company',
   job_health: 'whether Foundry\'s own scheduled work is running; job names and error class names, no company in it',
   job_locks: 'scheduler leases',
+  model_door_readings: 'the model account\'s remaining credit, read once a day; a balance and a date, no company or person in it (R33)',
   leading_indicators: 'indicator definitions per sector',
   network_benchmarks: 'benchmark aggregates, naming no contributor',
   portfolios: 'an investor organisation, not a founder\'s company',

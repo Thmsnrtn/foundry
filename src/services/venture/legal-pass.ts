@@ -32,7 +32,7 @@
 
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
-import { callSonnet } from '../ai/client.js';
+import { callSonnet, ModelDoorError } from '../ai/client.js';
 import { institutionSpend } from '../ai/what-it-is-for.js';;
 import { shieldUntrustedContent } from '../ai/prompt-shield.js';
 import { dataBlockInstruction, wrapDataBlock } from '../ai/sanitize.js';
@@ -270,6 +270,7 @@ export async function recogniseExposure(input: {
       'legal exposure',
       input.subjectKind === 'opportunity' ? { kind: 'candidate', id: input.subjectId } : undefined));
   } catch (err) {
+    if (err instanceof ModelDoorError) throw err;
     return { refused: `could not read it: ${err instanceof Error ? err.message : 'unknown'}` };
   }
   const parsed = parse(reply.content);
