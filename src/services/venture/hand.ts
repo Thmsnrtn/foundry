@@ -901,6 +901,31 @@ export async function feeFloorOf(plan: OfferShapePlan | null): Promise<string | 
   return why ? `the price is mostly fees: ${why}` : null;
 }
 
+/** A send whose pass died this long ago is treated as an unknown outcome. */
+export const EXECUTING_IS_CUT_OFF_AFTER_MINUTES = 60;
+
+/**
+ * WHETHER A DELIVERY THAT DID NOT GO OUT MAY BE TRIED AGAIN NOW, and if so put
+ * back to waiting (R31). Refused at the door before anything was sent: yes, on
+ * every pass, because the door reads its rules again and a buyer has paid. An
+ * unknown outcome: after its reconcile time, under the same idempotency key, so
+ * the provider cannot send it twice. A send claimed by a pass that died:
+ * treated as an unknown outcome once it is an hour old. Unlike an offer, a
+ * refusal by our own rules is retried: the buyer is owed it either way.
+ */
+async function rearmDelivery(actionId: string, now: Date): Promise<boolean> {
+  const r = await one('SELECT status, effect_certainty, reconcile_after, created_at FROM outbound_actions WHERE id = ?', [actionId]);
+  if (!r) return false;
+  const status = String(r.status);
+  const due = r.reconcile_after == null || new Date(String(r.reconcile_after)).getTime() <= now.getTime();
+  const created = new Date(String(r.created_at).includes('T') ? String(r.created_at) : `${String(r.created_at).replace(' ', 'T')}Z`).getTime();
+  const cutOff = status === 'executing' && now.getTime() - created >= EXECUTING_IS_CUT_OFF_AFTER_MINUTES * 60_000;
+  if (!(status === 'rejected' || (status === 'failed' && due) || cutOff)) return false;
+  const reset = await query(`UPDATE outbound_actions SET status = 'pending_approval', effect_certainty = 'not_attempted', result_json = NULL, reconcile_after = NULL
+    WHERE id = ? AND status = ?`, [actionId, status]);
+  return (reset.rowsAffected ?? 0) > 0;
+}
+
 export async function readiness(experimentId: string): Promise<Readiness> {
   const e = await experimentRow(experimentId);
   if (!e) throw new HandRefused('experiment_not_found');
@@ -2017,8 +2042,19 @@ async function carryWhatIsOwed(experimentId: string, now: Date, report: HandRepo
       continue;
     }
     try {
-      const plan = await planDelivery({ experimentId, fulfilmentId: String(f.id), now });
-      if (plan.status !== 'pending_approval') continue;
+      let plan = await planDelivery({ experimentId, fulfilmentId: String(f.id), now });
+      // A PAID DELIVERY NEVER STALLS SILENTLY (R31). The plan is keyed on the
+      // payment and returned whatever became of it, and this used to skip any
+      // plan not waiting to go: one refusal at the door, one unknown outcome,
+      // one pass that died mid-send, and the buyer waited for ever while every
+      // surface said it went out on the next pass.
+      if (plan.status === 'executed') {
+        // It went out, and the purchase was never marked: record it, never resend.
+        await query(`UPDATE experiment_fulfilments SET status = 'sent', updated_at = datetime('now') WHERE id = ? AND status = 'owed'`, [String(f.id)]);
+        continue;
+      }
+      if (await rearmDelivery(plan.id, now)) plan = { ...plan, status: 'pending_approval' };
+      if (plan.status !== 'pending_approval') { report.exceptions.push(`delivery ${String(f.payment_ref)}: waiting (${plan.status})`); continue; }
       const sent = await executeAction(plan.id);
       if (sent.dispatched) { report.deliveriesSent += 1; await query(`UPDATE experiment_fulfilments SET status = 'sent', updated_at = datetime('now') WHERE id = ? AND status = 'owed'`, [String(f.id)]); }
       else report.exceptions.push(`delivery ${String(f.payment_ref)}: ${sent.refusedReason}`);
@@ -2095,7 +2131,7 @@ export async function handExceptions(experimentId: string): Promise<string[]> {
   for (const o of await obligationsOf(experimentId)) {
     // Owed and not yet sent, or sent and awaiting the provider's word, is the
     // ordinary path and not an exception.
-    if (o.state === 'owed' || (o.state === 'sent_unconfirmed' && o.action === 'nothing')) continue;
+    if ((o.state === 'owed' || o.state === 'sent_unconfirmed') && o.action === 'nothing') continue;
     out.push(`${o.sentence} ${o.asksHim ?? ''}`.trim());
   }
   const failed = await rows(`SELECT COUNT(*) AS n, MIN(result_json) AS why FROM outbound_actions WHERE experiment_id = ? AND experiment_act = 'offer' AND status = 'failed'`, [experimentId]);

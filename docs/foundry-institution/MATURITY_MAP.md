@@ -2730,6 +2730,17 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### A paid delivery never stalls silently (Roadmap 2027 R31, 5 October 2026)
+
+**What changed.** Stranded deliveries are retried (refused, unknown after its
+reconcile time, cut off after an hour) or recorded (sent but unmarked), and a
+delivery not out a day after purchase is the owner's, with the last refusal
+named. **Evidence maturity.** E1: `a-paid-delivery-never-stalls-silently`.
+**Proof debt.** No real buyer has yet waited; the one-day bound is the pages'
+promise, not a measured delivery time. A buyer the owner serves by hand cannot
+be recorded as delivered for a Stripe sale (only a refund closes it), so the
+ask names refund or clearing the refusal, not a manual send.
+
 ### No price is mostly fees (Roadmap 2027 R29, 5 October 2026)
 
 **What changed.** Prices are refused where the published fee takes a fifth of

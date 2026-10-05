@@ -99,6 +99,11 @@ export const CHECK_DELIVERY_AFTER_HOURS = 72;
 export const UNCONFIRMED_IS_FAILED_AFTER_DAYS = 7;
 /** A refund refused for this long has had its retries; the owner is asked. */
 export const REFUND_IS_HIS_AFTER_HOURS = 24;
+/**
+ * Paid, and not gone out this long after the purchase, it is the owner's to
+ * know about (R31). A day: the pages promise a delivery within one.
+ */
+export const DELIVERY_IS_LATE_AFTER_HOURS = 24;
 
 /** What is his when a refund is owed and Foundry cannot issue it. The refund
  * act he approved still covers this purchase — its expiry bounds what may be
@@ -229,10 +234,33 @@ async function read(r: Row, now: Date, moneyToolsOn: boolean): Promise<Obligatio
       // experiment does not have, so promising one for a venue order is a
       // sentence that comes back every hour and never becomes true.
       action = venue ? 'deliver_or_refund_yourself' : 'nothing';
-      sentence = venue
-        ? `A buyer paid ${amount} for ${title} on ${venueName} (order ${ref}) on ${day(String(r.created_at))}, and my record does not show it handed over. ${venueName} delivers its own downloads; nothing here does.`
-        : `A buyer paid ${amount} for ${title} (payment ${ref}) on ${day(String(r.created_at))}; the delivery goes out on the next pass.`;
-      asksHim = venue ? `Check order ${ref} on ${venueName}. ${putItRight}` : null;
+      // WHAT BECAME OF THE LAST ATTEMPT, AND HOW LONG THE BUYER HAS WAITED
+      // (R31). "Goes out on the next pass" was said of a delivery the door had
+      // refused, and of one a day late, on every pass, for ever.
+      const attempt = venue ? null : (await rows(
+        `SELECT status, result_json FROM outbound_actions WHERE fulfilment_id = ? AND experiment_act = 'delivery' ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+        [String(r.id)]))[0];
+      let refused: string | null = null;
+      if (attempt && ['rejected', 'failed'].includes(String(attempt.status))) {
+        try {
+          const j = JSON.parse(String(attempt.result_json ?? '{}')) as { phase?: string; reason?: string; refused?: string };
+          refused = j.reason ? `${j.phase ? `${j.phase}: ` : ''}${j.reason}` : (j.refused ?? 'no reason was recorded');
+        } catch { refused = 'no reason was recorded'; }
+      }
+      const waited = Math.floor(hoursSince(String(r.created_at), now));
+      const lastAttempt = refused ? ` The last attempt was refused (${refused}).` : '';
+      if (!venue && waited >= DELIVERY_IS_LATE_AFTER_HOURS) {
+        action = 'deliver_or_refund_yourself';
+        sentence = `A buyer paid ${amount} for ${title} (payment ${ref}) on ${day(String(r.created_at))}, and it has not gone out in ${String(waited)} hours.${lastAttempt} I keep trying each pass, but I will not tell you it is coming.`;
+        asksHim = `Payment ${ref} is late: refund them in Stripe, which closes it, or clear what is refusing it${refused ? '' : ' (nothing was recorded; look at the hand\u2019s last pass)'} and I send it on the next pass.`;
+      } else {
+        sentence = venue
+          ? `A buyer paid ${amount} for ${title} on ${venueName} (order ${ref}) on ${day(String(r.created_at))}, and my record does not show it handed over. ${venueName} delivers its own downloads; nothing here does.`
+          : refused
+            ? `A buyer paid ${amount} for ${title} (payment ${ref}) on ${day(String(r.created_at))}; the last attempt was refused (${refused}). I try again on the next pass, and tell you if it is not out within a day.`
+            : `A buyer paid ${amount} for ${title} (payment ${ref}) on ${day(String(r.created_at))}; the delivery goes out on the next pass.`;
+        asksHim = venue ? `Check order ${ref} on ${venueName}. ${putItRight}` : null;
+      }
     }
   }
   return { id: String(r.id), experimentId: String(r.experiment_id), experimentTitle: title, productId: r.product_id == null ? null : String(r.product_id),
