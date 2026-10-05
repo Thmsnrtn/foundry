@@ -47,7 +47,7 @@
 //   strata, rollout and stop envelope are untouchable by anything here.
 // =============================================================================
 
-import { GRADE_SQL, outcomeFromRow, type Outcome, type OutcomeRow } from '../founder/what-happened.js';
+import { GRADE_SQL, PURCHASES_SQL, REACHED_SQL, UNREACHED_SQL, outcomeFromRow, type Outcome, type OutcomeRow } from '../founder/what-happened.js';
 import { query } from '../../db/client.js';
 
 export interface OpenQuestion {
@@ -145,7 +145,8 @@ export async function lessonsFor(founderId: string): Promise<Lesson[]> {
   const r = await query(
     `SELECT e.id, e.what_we_do, e.verdict, e.ran_at, d.cannot_prove, d.decides,
             e.decision, e.validity, e.what_happened, e.retired_at, e.retired_because, e.superseded_by,
-            e.invalidated_at, e.invalid_because, e.decided_at, ${GRADE_SQL} AS grade
+            e.invalidated_at, e.invalid_because, e.decided_at, ${GRADE_SQL} AS grade,
+            ${REACHED_SQL} AS reached, ${PURCHASES_SQL} AS purchases, ${UNREACHED_SQL} AS unreached
        FROM venture_experiments e
        LEFT JOIN probe_designs d ON d.experiment_id = e.id
       WHERE e.founder_id = ? AND e.evidence_mode = 'real'
@@ -161,7 +162,7 @@ export async function lessonsFor(founderId: string): Promise<Lesson[]> {
       couldNotEstablish: row.cannot_prove == null ? null : String(row.cannot_prove),
       decided: row.decides == null ? null : String(row.decides),
       settledAt: row.ran_at == null ? null : String(row.ran_at),
-      outcome: outcomeFromRow(row as OutcomeRow),
+      outcome: outcomeFromRow({ ...(row as OutcomeRow), reached: Number(row.reached), purchases: Number(row.purchases), unreached: Number(row.unreached) === 1 }),
     };
   });
 }

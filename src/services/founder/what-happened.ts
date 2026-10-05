@@ -66,6 +66,14 @@ export interface OutcomeRow {
   /** Whether an offer was ever placed. Unknown (undefined) where the rows are not to hand. */
   placed?: boolean;
   /**
+   * NO RECORD SHOWS ANYBODY REACHED IT (R40): placed, but not one delivery,
+   * arrival, view, checkout, payment or reply was recorded against it inside
+   * its window. Not "nobody saw it" — nothing here counts page opens yet — but
+   * nothing on record says anybody did. Undefined where the rows are not to
+   * hand, and for a listing, whose reach is the venue's to report.
+   */
+  unreached?: boolean;
+  /**
    * HOW MANY PURCHASES THE WORLD ACTUALLY REPORTED. Zero is what makes the
    * bound below applicable; anything else makes it arithmetic about an event
    * that happened.
@@ -210,6 +218,17 @@ export function outcomeFromRow(r: OutcomeRow): Outcome {
       : word === 'partly' ? 'Some of what was predicted happened, fewer than the rule asked for.'
         : 'The prediction did not hold.')
       + (r.placed === false ? ' Nothing was sent: no offer was ever placed, so nobody could buy.' : '');
+    // A NULL NOBODY REACHED (R40). The sealed rule counted what it said it
+    // would and its word stands; the result is not voided. What it may claim
+    // about the market is another matter: an offer no record shows anyone
+    // reaching was never put to anybody, so its silence is not an answer.
+    if (word === 'surprised' && r.unreached === true && r.placed !== false && (r.purchases ?? 0) === 0 && (r.reached ?? 0) === 0) {
+      const limit = str(r.cannot_prove) ? ` It could not establish: ${String(str(r.cannot_prove)).trim().replace(/\.+$/, '')}.` : '';
+      return { word, label: cap(word), meaning: `${meaning} Not reached: no record shows anyone opened or received it.`, reason: str(r.what_happened),
+        establishes: 'nothing about whether anybody wants it: no record shows the offer reached anyone, so the silence was never an answer.',
+        doesNotEstablish: `that it does not sell; it did not sell to anyone on record as having seen it, and nobody is.${limit}`,
+        when: str(r.ran_at), settled: true, concluded: true };
+    }
     const e = establishing(word, str(r.cannot_prove), r.reached, r.purchases);
     return { word, label: cap(word), meaning, reason: str(r.what_happened), establishes: e.establishes, doesNotEstablish: e.doesNotEstablish,
       when: str(r.ran_at), settled: true, concluded: true };
@@ -257,6 +276,17 @@ export const PURCHASES_SQL = `(SELECT COUNT(*) FROM business_outcome_events b
    JOIN experiment_exposures xe ON xe.id = b.exposure_id
   WHERE xe.experiment_id = e.id AND b.kind = 'payment' AND b.after_settlement = 0)`;
 
+/**
+ * WHETHER NO RECORD SHOWS ANYBODY REACHED IT (R40), 1 or 0: placed, not a
+ * listing (whose reach the venue reports), and nothing recorded against any of
+ * its exposures inside the window but Foundry's own handing-over of a file.
+ */
+export const UNREACHED_SQL = `(EXISTS (SELECT 1 FROM experiment_exposures xe WHERE xe.experiment_id = e.id)
+   AND NOT EXISTS (SELECT 1 FROM business_outcome_events b JOIN experiment_exposures xe ON xe.id = b.exposure_id
+        WHERE xe.experiment_id = e.id AND b.after_settlement = 0 AND b.kind <> 'made_available')
+   AND NOT EXISTS (SELECT 1 FROM experiment_materials m WHERE m.experiment_id = e.id AND m.kind = 'offer_shape'
+        AND m.superseded_at IS NULL AND m.body LIKE '%"listing":%'))`;
+
 /** The SQL that reads the grade the world wrote beside a test's verdict. */
 export const GRADE_SQL = `(SELECT g.verdict FROM prediction_resolutions g
    WHERE g.kind = 'venture_experiment' AND g.prediction_id = e.id
@@ -267,13 +297,13 @@ export async function outcomeOf(experimentId: string): Promise<Outcome | null> {
   const r = (await query(
     `SELECT e.decision, e.validity, e.verdict, e.what_happened, e.ran_at, e.retired_at, e.retired_because,
             e.superseded_by, e.invalidated_at, e.invalid_because, e.decided_at, d.cannot_prove,
-            ${GRADE_SQL} AS grade, ${REACHED_SQL} AS reached, ${PURCHASES_SQL} AS purchases,
+            ${GRADE_SQL} AS grade, ${REACHED_SQL} AS reached, ${PURCHASES_SQL} AS purchases, ${UNREACHED_SQL} AS unreached,
             EXISTS (SELECT 1 FROM experiment_exposures x WHERE x.experiment_id = e.id AND x.withdrawn_at IS NOT NULL) AS withdrawn,
             EXISTS (SELECT 1 FROM experiment_exposures x WHERE x.experiment_id = e.id) AS placed
        FROM venture_experiments e LEFT JOIN probe_designs d ON d.experiment_id = e.id
       WHERE e.id = ?`, [experimentId])).rows[0] as Record<string, unknown> | undefined;
   if (!r) return null;
-  const o = outcomeFromRow({ ...(r as OutcomeRow), stopped_by_owner: Number(r.withdrawn) === 1, placed: Number(r.placed) === 1, reached: Number(r.reached), purchases: Number(r.purchases) });
+  const o = outcomeFromRow({ ...(r as OutcomeRow), stopped_by_owner: Number(r.withdrawn) === 1, placed: Number(r.placed) === 1, reached: Number(r.reached), purchases: Number(r.purchases), unreached: Number(r.unreached) === 1 });
   // AND WHAT THE INSTRUMENT COSTS THE CLAIM, in the one vocabulary.
   //
   // The correction used to live on two surfaces, because two surfaces had been

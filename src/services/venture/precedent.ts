@@ -26,7 +26,7 @@
  * out in `because`, so the owner can disagree with the reading, not guess it.
  */
 import { query } from '../../db/client.js';
-import { GRADE_SQL, outcomeFromRow, type Outcome, type OutcomeRow } from '../founder/what-happened.js';
+import { GRADE_SQL, PURCHASES_SQL, REACHED_SQL, UNREACHED_SQL, outcomeFromRow, type Outcome, type OutcomeRow } from '../founder/what-happened.js';
 
 export interface PrecedentRef {
   experimentId: string;
@@ -91,7 +91,8 @@ const settledOn = async (founderId: string, opportunityId: string, except: strin
   const rows = (await query(
     `SELECT e.id, e.what_we_do, e.unknown_id, u.question, e.decision, e.validity, e.verdict, e.what_happened, e.ran_at,
             e.retired_at, e.retired_because, e.superseded_by, e.invalidated_at, e.invalid_because, e.decided_at,
-            d.decides, d.exchange, d.distribution, d.cannot_prove, ${GRADE_SQL} AS grade
+            d.decides, d.exchange, d.distribution, d.cannot_prove, ${GRADE_SQL} AS grade,
+            ${REACHED_SQL} AS reached, ${PURCHASES_SQL} AS purchases, ${UNREACHED_SQL} AS unreached
        FROM venture_experiments e
        JOIN market_unknowns u ON u.id = e.unknown_id
        LEFT JOIN probe_designs d ON d.experiment_id = e.id
@@ -100,7 +101,7 @@ const settledOn = async (founderId: string, opportunityId: string, except: strin
         AND (? IS NULL OR e.id <> ?)
       ORDER BY e.ran_at DESC`, [founderId, opportunityId, except, except])).rows as unknown as Array<Record<string, unknown>>;
   return rows.map((r) => {
-    const outcome = outcomeFromRow(r as OutcomeRow);
+    const outcome = outcomeFromRow({ ...(r as OutcomeRow), reached: Number(r.reached), purchases: Number(r.purchases), unreached: Number(r.unreached) === 1 });
     const when = outcome.when ? ` on ${outcome.when.slice(0, 10)}` : '';
     return {
       experimentId: String(r.id), unknownId: String(r.unknown_id), whatWeDid: String(r.what_we_do), question: String(r.question), outcome,

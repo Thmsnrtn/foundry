@@ -2730,6 +2730,16 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### A null nobody reached says so (Roadmap 2027 R40, 5 October 2026)
+
+**What changed.** A placed test that settles with nothing on record reaching
+anybody keeps its word and reads "not reached", establishing nothing about the
+market, on the outcome, precedent and the forge's lessons. **Evidence
+maturity.** E1: `a-null-nobody-reached-says-so`. **Proof debt.** "No record
+shows" is weaker than a count: page opens are not read until R36 and the
+owner's Cloudflare Analytics token; a listing is never called unreached; how
+an unreached null binds as precedent waits on decision (c).
+
 ### Discovery never pays twice for one sentence (Roadmap 2027 R39, 5 October 2026)
 
 **What changed.** A sentence already read, by address or exact words, is passed
