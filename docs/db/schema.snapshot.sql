@@ -1629,6 +1629,13 @@ CREATE TABLE forecast_scenarios (
   is_active INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
+CREATE TABLE forge_refusals (
+  id TEXT PRIMARY KEY,
+  experiment_id TEXT NOT NULL,
+  stage TEXT NOT NULL CHECK (stage IN ('deliberate', 'make')),
+  because TEXT NOT NULL,
+  refused_at TEXT NOT NULL
+);
 CREATE TABLE founder_ai_profile (
   id TEXT PRIMARY KEY,
   founder_id TEXT NOT NULL REFERENCES founders(id),
@@ -4657,6 +4664,7 @@ CREATE INDEX idx_feedback_product ON founder_feedback(product_id, created_at DES
 CREATE INDEX idx_feedback_type ON founder_feedback(feedback_type, created_at DESC);
 CREATE INDEX idx_fh_founder ON founder_health(founder_id);
 CREATE INDEX idx_fhs_founder_date ON founder_health_snapshots(founder_id, snapshot_date);
+CREATE INDEX idx_forge_refusals_experiment ON forge_refusals(experiment_id, stage, refused_at);
 CREATE UNIQUE INDEX idx_founder_company_fact
   ON founder_evidence_requests(product_id,predicate) WHERE scope='company';
 CREATE UNIQUE INDEX idx_founder_evidence_request_identity

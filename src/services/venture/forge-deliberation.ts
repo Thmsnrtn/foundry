@@ -38,7 +38,7 @@
 import { fourQuestionsOf } from './economic-forms.js';
 import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
-import { callOpus, callSonnet } from '../ai/client.js';
+import { callOpus, callSonnet, ModelDoorError } from '../ai/client.js';
 import { dataBlockInstruction } from '../ai/sanitize.js';
 import { shieldUntrustedContent } from '../ai/prompt-shield.js';
 import { institutionSpend } from '../ai/what-it-is-for.js';
@@ -577,14 +577,53 @@ export interface ForgePass {
   allowed: string[];
   notAllowed: Array<{ experimentId: string; because: string }>;
   skipped: string | null;
+  /** Tests whose attempt threw this pass, with why; the pass went on (R27). */
+  failed: Array<{ experimentId: string; because: string }>;
+  /** Tests left alone this pass because they were refused recently, and when they are tried again (R27). */
+  waiting: string[];
 }
+
+// ─── Backing off what keeps being refused (R27) ─────────────────────────────
+
+export type ForgeStage = 'deliberate' | 'make';
+/** Refused this many times at one stage, a test is retired with its reasons. */
+export const FORGE_GIVES_UP_AFTER = 4;
+const DAY_MS = 86_400_000;
+const STAGE_WORDS: Record<ForgeStage, string> = { deliberate: 'designing it', make: 'making what it sells' };
+const isoAt = (v: unknown): number => { const t = String(v); return new Date(t.includes('T') ? t : `${t.replace(' ', 'T')}Z`).getTime(); };
+
+/**
+ * WHETHER THIS STAGE OF THIS TEST MAY BE TRIED NOW, and if not, when. Refused
+ * n times, it waits 2^(n-1) days after the last refusal: a day, two, four.
+ */
+export async function forgeMayTry(experimentId: string, stage: ForgeStage, now: Date): Promise<{ may: boolean; refused: number; from: Date | null }> {
+  const r = (await query(`SELECT COUNT(*) AS n, MAX(refused_at) AS last FROM forge_refusals WHERE experiment_id = ? AND stage = ?`, [experimentId, stage])).rows[0] as Row | undefined;
+  const n = Number(r?.n ?? 0);
+  if (n === 0 || r?.last == null) return { may: true, refused: 0, from: null };
+  const from = new Date(isoAt(r.last) + 2 ** (n - 1) * DAY_MS);
+  return { may: n < FORGE_GIVES_UP_AFTER && now.getTime() >= from.getTime(), refused: n, from };
+}
+
+/** Record a refusal; at the last one, retire the undecided test with its reasons. */
+export async function recordForgeRefusal(experimentId: string, stage: ForgeStage, because: string, now: Date): Promise<void> {
+  await query(`INSERT INTO forge_refusals (id, experiment_id, stage, because, refused_at) VALUES (?,?,?,?,?)`,
+    [nanoid(), experimentId, stage, because, now.toISOString()]);
+  const r = (await query(`SELECT COUNT(*) AS n, MIN(refused_at) AS first FROM forge_refusals WHERE experiment_id = ? AND stage = ?`, [experimentId, stage])).rows[0] as Row;
+  const n = Number(r.n);
+  if (n < FORGE_GIVES_UP_AFTER) return;
+  const days = Math.round((now.getTime() - isoAt(r.first)) / DAY_MS);
+  await query(`UPDATE venture_experiments SET retired_at = datetime('now'), retired_because = ? WHERE id = ? AND retired_at IS NULL AND decision IS NULL`,
+    [`the forge was refused ${String(n)} times over ${String(days)} days ${STAGE_WORDS[stage]}; the last: ${because}`, experimentId]);
+}
+
+const timesWord = (n: number): string => (n === 1 ? 'once' : n === 2 ? 'twice' : `${String(n)} times`);
 
 /** THE MOST DESIGNS IN A DAY. Two compositions and two attacks on the frontier
  *  model is about a dollar; the charter's thinking is the hard stop beneath it. */
 export const MOST_DESIGNS_PER_PASS = 2;
 
-export async function forgePass(founderId: string): Promise<ForgePass> {
-  const out: ForgePass = { proposed: 0, deliberated: [], allowed: [], notAllowed: [], skipped: null };
+export async function forgePass(founderId: string, now: Date = new Date()): Promise<ForgePass> {
+  const out: ForgePass = { proposed: 0, deliberated: [], allowed: [], notAllowed: [], skipped: null, failed: [], waiting: [] };
   const { envelopeReading } = await import('../institution/charter.js');
   const envelope = await envelopeReading(founderId);
   // THE CHARTER'S THINKING FOR TODAY. Read from the same ledger the door writes,
@@ -618,8 +657,31 @@ export async function forgePass(founderId: string): Promise<ForgePass> {
     `SELECT e.id FROM venture_experiments e
       WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.decision IS NULL AND e.retired_at IS NULL
         AND NOT EXISTS (SELECT 1 FROM probe_designs d WHERE d.experiment_id = e.id)
-      ORDER BY e.proposed_at LIMIT ?`, [founderId, MOST_DESIGNS_PER_PASS]);
-  for (const e of undesigned) out.deliberated.push(await deliberate(String(e.id)));
+      ORDER BY e.proposed_at`, [founderId]);
+  let attempted = 0;
+  for (const e of undesigned) {
+    if (attempted >= MOST_DESIGNS_PER_PASS) break;
+    const id = String(e.id);
+    // REFUSED RECENTLY, IT WAITS (R27): the same question asked again the
+    // next morning costs another five readings and comes back the same.
+    const may = await forgeMayTry(id, 'deliberate', now);
+    if (!may.may) { out.waiting.push(`${id}: refused ${timesWord(may.refused)}; tried again from ${may.from!.toISOString().slice(0, 10)}`); continue; }
+    attempted += 1;
+    try {
+      const d = await deliberate(id);
+      out.deliberated.push(d);
+      if (d.outcome === 'refused') await recordForgeRefusal(id, 'deliberate', d.because ?? 'refused', now);
+    } catch (err) {
+      // THE DOOR, NOT THE TEST: every later test would fail the same way.
+      if (err instanceof ModelDoorError) throw err;
+      out.failed.push({ experimentId: id, because: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  // ONE TEST THAT THROWS DOES NOT STOP THE OTHERS; A PASS THAT COULD DO
+  // NOTHING AT ALL IS STILL A FAILED PASS, recorded as one and told to him.
+  if (out.failed.length > 0 && out.deliberated.length === 0) {
+    throw new Error(`the forge could not deliberate any test this pass: ${out.failed.map((f) => `${f.experimentId}: ${f.because}`).join('; ')}`);
+  }
 
   // SEALED INSIDE THE CHARTER AND READY: let in, as the charter's principal.
   const sealed = await rows(
@@ -634,8 +696,19 @@ export async function forgePass(founderId: string): Promise<ForgePass> {
       // THE HANDS MAKE THE THING FIRST, when nothing has been made: the offer
       // shape, the deliverable and the offer text, or the reason none could be.
       if (!(await materialOf(id, 'deliverable'))) {
-        const made = await shapeAndMake(id);
-        if ('refused' in made) { out.notAllowed.push({ experimentId: id, because: `the hands could not make it: ${made.refused}` }); continue; }
+        const may = await forgeMayTry(id, 'make', now);
+        if (!may.may) { out.waiting.push(`${id}: the hands were refused ${timesWord(may.refused)}; tried again from ${may.from!.toISOString().slice(0, 10)}`); continue; }
+        let made: Awaited<ReturnType<typeof shapeAndMake>>;
+        try { made = await shapeAndMake(id); } catch (err) {
+          if (err instanceof ModelDoorError) throw err;
+          out.failed.push({ experimentId: id, because: err instanceof Error ? err.message : String(err) });
+          continue;
+        }
+        if ('refused' in made) {
+          await recordForgeRefusal(id, 'make', made.refused, now);
+          out.notAllowed.push({ experimentId: id, because: `the hands could not make it: ${made.refused}` });
+          continue;
+        }
       }
       const ready = await readiness(id).catch(() => null);
       if (!ready?.ok) { out.notAllowed.push({ experimentId: id, because: ready ? ready.missing.join('; ') : 'readiness could not be read' }); continue; }

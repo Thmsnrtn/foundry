@@ -2730,6 +2730,16 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### The forge backs off what it cannot do (Roadmap 2027 R27, 5 October 2026)
+
+**What changed.** Refusals at designing and making are recorded and backed off
+(1, 2, 4 days), and a test is retired after the fourth; one test's failure no
+longer stops the pass. **Evidence maturity.** E1:
+`the-forge-backs-off-what-it-cannot-do`. **Proof debt.** The back-off schedule
+is a judgment, not measured against how often a second attempt succeeds; the
+forge's record of refusals is read by the pass and the retirement reason, not
+yet shown on Explore.
+
 ### A failing model door is loud (Roadmap 2027 R33, 5 October 2026)
 
 **What changed.** Model-door failures are named and reach a routine's recorded
