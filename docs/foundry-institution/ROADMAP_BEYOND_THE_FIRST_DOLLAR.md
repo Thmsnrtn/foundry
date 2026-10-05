@@ -92,7 +92,7 @@ files**.
 | Program-checked workbooks: the formula oracle in shadow, then cutover (R42–R43) | [code] | A, C | PENDING 34 = yes |
 | "Free tool, paid file" as one exchange the forge can design, with the tool's worked examples drawn from the file's own oracle | [code] | A | PENDING 36 |
 | Week two of a brief made by re-pulling its sealed query within each source's terms (R28) | [code] | A | none |
-| A fee floor: no price that is mostly fees; $3 chosen-price floor (R29) | [code] | B | none |
+| A fee floor: no price that is mostly fees; $3 chosen-price floor (R29) | [code] | B | **done, 5 Oct** |
 | A product only after its buyer evidence earns it (S30): the second file is chosen from the first file's buyers' questions | [world] | C | M1 |
 | Bundles, licensing and pay-per-use: only after a single file has sold twice | [owner] | none | M2 |
 
@@ -107,7 +107,7 @@ The binding constraint after placement. Ordered from cheapest to costliest.
 |---|---|---|---|
 | Restore the Etsy shop; Etsy's written answer on whether a seller app may list in a live shop | [owner] | none | now |
 | Search Console property and sitemap submitted once | [owner] | none | now |
-| IndexNow on every verified page change, and a dated sitemap (R38) | [code] | D | none |
+| IndexNow on every verified page change, and a dated sitemap (R38) | [code] | D | **done, 5 Oct** |
 | Free tools as the reason a page is found (front 1) | [code] | A | PENDING 36 |
 | Etsy findability seen by Foundry, calibrated while hidden (R34); view and favourite counts kept as numbers (R37) | [code] | C | none |
 | One paid reach lever for Experiment 002, chosen and paid by the owner, recorded with dates (R59) | [owner] | none | shop findable |
@@ -142,7 +142,7 @@ never by a model and never by confidence.
 | A standing refund-only act keeps "no time limit" after a window (R53) | [code] then [owner] tap | A | the money switch |
 | Correspondence drafts, then ordinary after one reviewed week | [owner] | A | now |
 | Tell the owner after each launch, as they chose (R30) | [code] | A | decision (d) |
-| A paid delivery never stalls silently (R31) | [code] | B | none |
+| A paid delivery never stalls silently (R31) | [code] | B | **done, 5 Oct** |
 | The autonomy ladder per task on Control, each rung earned by a held absence test | [code] | A | M3 |
 | 7-day, then 30-day, then 90-day absence with a live asset | [world] | A | M3 → M5 |
 
@@ -150,7 +150,7 @@ never by a model and never by confidence.
 
 | Next | Tag | Measure | Gate |
 |---|---|---|---|
-| The first Stripe sale lands as one charge row with its fee, however it arrives (R25) | [code] | B | none |
+| The first Stripe sale lands as one charge row with its fee, however it arrives (R25) | [code] | B | **done, 5 Oct** |
 | Buyers see Apex Micro on their statement: suffix now, separate account before subscriptions (R54) | [code] | B | PENDING 33 |
 | Tax: accept to N sales and record it, or Stripe Tax (R58) | [owner] then [code] | B | PENDING 35 |
 | Payout reconciliation: every Stripe and Etsy payout matched to ledger rows | [code] | B | M1 |
@@ -162,7 +162,7 @@ never by a model and never by confidence.
 
 | Next | Tag | Measure | Gate |
 |---|---|---|---|
-| "Can Foundry sell today?" first on Control (R26) | [code] | A | done in this commit |
+| "Can Foundry sell today?" first on Control (R26) | [code] | A | **done, 5 Oct** |
 | Push to the phone for the few things that need the owner, through the gateway (RESOLVED 8) | [code] | A | none |
 | One weekly email, sent only when the five sets changed; one sitting of 15 minutes or less | [code] | A | none |
 | A set point for recurring owner-minutes on Control, with the distance shown | [code] | A | M2 |
@@ -172,8 +172,8 @@ never by a model and never by confidence.
 
 | Next | Tag | Measure | Gate |
 |---|---|---|---|
-| A deploy does not cost a day: missed daily jobs re-run after a restart (R33a) | [code] | B | none |
-| A failing model door is loud; OpenRouter credits read daily (R33) | [code] | B | none |
+| A deploy does not cost a day: missed daily jobs re-run after a restart (R33a) | [code] | B | **done, 5 Oct** |
+| A failing model door is loud; OpenRouter credits read daily (R33) | [code] | B | **done, 5 Oct** |
 | Merge to `master` so the GitHub witness runs; push the archive tag | [owner] | B | an explicit "merge" |
 | Clerk production instance (PENDING 24) | [owner] | B | the owner's choice |
 | A monthly restore rehearsal from the off-machine copy, read back | [code] | B | none |
