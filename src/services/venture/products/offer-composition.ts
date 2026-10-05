@@ -20,6 +20,7 @@ import { PAID_BRIEF_SOURCES, kindsFoundryCanMake, makeBrief, sourcesRefusedForSa
 import type { BriefSpec, Made } from './registry.js';
 import { checkToolQuality, toolFrom } from './tool.js';
 import { BANNED_CLAIMS } from '../hand.js';
+import { priceIsMostlyFees } from '../fee-floor.js';
 
 /**
  * THE EXCHANGES THE HANDS CAN CARRY, and what each makes. A fixed price sells
@@ -48,11 +49,13 @@ const SUBSCRIPTION_SYSTEM = [
 ].join('\n');
 
 /**
- * PAY WHAT IT WAS WORTH, bounded. A dollar is the floor because the provider
- * takes nothing smaller; a hundred is the ceiling because a test of what a
- * brief is worth to somebody is not a request for a donation.
+ * PAY WHAT IT WAS WORTH, bounded. Three dollars is the floor (R29): at a
+ * dollar the card fee is a third of the money, and a payment that is mostly
+ * fee says nothing about what the brief was worth. Paying nothing at all is
+ * still allowed and is not a payment. A hundred is the ceiling because a test
+ * of what a brief is worth to somebody is not a request for a donation.
  */
-export const CHOSEN_BAND = { minimumCents: 100, maximumCents: 10_000 } as const;
+export const CHOSEN_BAND = { minimumCents: 300, maximumCents: 10_000 } as const;
 
 const VALUE_SYSTEM = [
   '',
@@ -293,6 +296,10 @@ export async function shapeAndMake(experimentId: string): Promise<Made | { refus
   const price = Number(raw.price_dollars);
   const band = recurs ? WEEKLY_BAND : OFFER_BAND;
   if (!Number.isInteger(price) || price < band.lowDollars || price > band.highDollars) return { refused: `the ${recurs ? 'weekly ' : ''}price is not a whole number of dollars between ${String(band.lowDollars)} and ${String(band.highDollars)}` };
+  // NO PRICE IS MOSTLY FEES (R29), read at the least a buyer could pay. The
+  // bands sit above the line today; this keeps a band change honest.
+  const mostlyFees = priceIsMostlyFees({ venue: 'stripe', amountCents: price * 100, chosen: givesFirst ? CHOSEN_BAND : null });
+  if (mostlyFees) return { refused: `the price is mostly fees: ${mostlyFees}` };
   // THE FREE TOOL, read strictly and refused at its own gate: every worked
   // example reproduced by the arithmetic the page will run, every answer
   // finite across the ranges. A tool that fails is not published, and neither

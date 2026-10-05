@@ -29,16 +29,16 @@ const link = (item: Partial<PaymentLinkFacts['lineItems'][number]>): PaymentLink
   metadata: { app: 'foundry', experiment_id: X }, paymentIntentMetadata: { app: 'foundry', experiment_id: X },
   lineItems: [{ unitAmount: null, currency: 'USD', recurring: false, quantity: 1, custom: null, ...item }],
 });
-const chosenLink = link({ custom: { minimum: 100, maximum: 10_000, preset: 1200 } });
+const chosenLink = link({ custom: { minimum: 300, maximum: 10_000, preset: 1200 } });
 const fixedLink = link({ unitAmount: 1200 });
 
 afterEach(() => { vi.unstubAllGlobals(); });
 
 describe('the owner\'s word', () => {
-  it('the hands carry it, between a dollar and a hundred', () => {
+  it('the hands carry it, between three dollars (R29: no price is mostly fees) and a hundred', () => {
     expect(EXCHANGES_THE_HANDS_CARRY).toContain('value_first');
     expect(CHOSEN_BAND.minimumCents).toBeGreaterThanOrEqual(50);
-    expect(CHOSEN_BAND.minimumCents).toBe(100);
+    expect(CHOSEN_BAND.minimumCents).toBe(300);
     expect(CHOSEN_BAND.maximumCents).toBe(10_000);
   });
 });
@@ -58,9 +58,9 @@ describe('a link is offered only if it is exactly what the page says', () => {
 
   it('refuses a different suggestion, floor or ceiling', () => {
     const off = (c: { minimum: number; maximum: number; preset: number }) => validateExperimentPaymentLink(link({ custom: c }), X, CHOSEN).failures.join(' ');
-    expect(off({ minimum: 100, maximum: 10_000, preset: 900 })).toMatch(/suggested amount is 9.00, not 12.00/);
-    expect(off({ minimum: 50, maximum: 10_000, preset: 1200 })).toMatch(/floor is 0.50, not 1.00/);
-    expect(off({ minimum: 100, maximum: 50_000, preset: 1200 })).toMatch(/ceiling is 500.00, not 100.00/);
+    expect(off({ minimum: 300, maximum: 10_000, preset: 900 })).toMatch(/suggested amount is 9.00, not 12.00/);
+    expect(off({ minimum: 50, maximum: 10_000, preset: 1200 })).toMatch(/floor is 0.50, not 3.00/);
+    expect(off({ minimum: 300, maximum: 50_000, preset: 1200 })).toMatch(/ceiling is 500.00, not 100.00/);
   });
 
   it('still refuses a recurring price, whatever the amount', () => {
@@ -71,7 +71,7 @@ describe('a link is offered only if it is exactly what the page says', () => {
 describe('what is asked of the provider', () => {
   it('the act names the bounds, so what is approved is what is created', () => {
     const p = paymentLinkParams(X, CHOSEN);
-    expect(p.custom_amount).toEqual({ minimum: 100, maximum: 10_000, preset: 1200 });
+    expect(p.custom_amount).toEqual({ minimum: 300, maximum: 10_000, preset: 1200 });
     expect(p.unit_amount).toBe(1200);
     expect((p.price_metadata as Record<string, string>).pricing).toBe('chosen_by_buyer');
     expect(paymentLinkParams(X, FIXED).custom_amount).toBeUndefined();
@@ -89,7 +89,7 @@ describe('what is asked of the provider', () => {
     await createPaymentLinkHandler({ productId: 'p', tool: 'stripe_create_payment_link', action: 'a', params: paymentLinkParams(X, CHOSEN), dedupKey: 'k' } as never);
     const price = new URLSearchParams(bodies.find((b) => b.url.endsWith('/prices'))!.body);
     expect(price.get('custom_unit_amount[enabled]')).toBe('true');
-    expect(price.get('custom_unit_amount[minimum]')).toBe('100');
+    expect(price.get('custom_unit_amount[minimum]')).toBe('300');
     expect(price.get('custom_unit_amount[maximum]')).toBe('10000');
     expect(price.get('custom_unit_amount[preset]')).toBe('1200');
     expect(price.get('unit_amount')).toBeNull();
@@ -116,7 +116,7 @@ describe('the page gives first and says so', () => {
     openedOn: '2026-10-04', closedOn: null, updatedOn: '2026-10-04', supersedes: null, successor: null, graduatedTo: null,
   };
   const given = { ...base, freeToRead: 'THE WHOLE BRIEF: item one, item two.',
-    price: { amountCents: 1200, currency: 'USD', label: 'pay what it was worth, $12 suggested', chosen: { minimumCents: 100, maximumCents: 10_000 } } } as unknown as PublicExperiment;
+    price: { amountCents: 1200, currency: 'USD', label: 'pay what it was worth, $12 suggested', chosen: { minimumCents: 300, maximumCents: 10_000 } } } as unknown as PublicExperiment;
   const sold = { ...base, freeToRead: null, price: { amountCents: 1200, currency: 'USD', label: '$12, one time' } } as unknown as PublicExperiment;
 
   it('carries the thing whole, before any payment', () => {

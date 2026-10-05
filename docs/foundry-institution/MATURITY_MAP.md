@@ -2730,6 +2730,17 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### No price is mostly fees (Roadmap 2027 R29, 5 October 2026)
+
+**What changed.** Prices are refused where the published fee takes a fifth of
+the least a buyer could pay, at composition, readiness and the Stripe door;
+the chosen-price floor is $3. **Evidence maturity.** E1:
+`no-price-is-mostly-fees`. **Proof debt.** The rate cards are read from
+published pages on 5 October 2026 and are not re-read automatically; a card
+change is caught only when a real fee (read after a sale) disagrees with the
+estimate, and nothing yet compares the two. The "stored offer text is true"
+half of the 90-day plan's R29 is open.
+
 ### A changed page is announced (Roadmap 2027 R38, 5 October 2026)
 
 **What changed.** Changed, verified, indexable pages are announced through

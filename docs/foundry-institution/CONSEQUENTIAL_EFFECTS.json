@@ -178,14 +178,14 @@
     },
     {
       "file": "src/services/integration/stripe-gateway.ts",
-      "line": 119,
+      "line": 120,
       "detector": "templated_post",
       "status": "governed",
       "capability": "Stripe capability handlers"
     },
     {
       "file": "src/services/integration/stripe-gateway.ts",
-      "line": 187,
+      "line": 188,
       "detector": "templated_post",
       "status": "governed",
       "capability": "Stripe capability handlers"

@@ -889,6 +889,18 @@ export async function recurringCannotBeMade(experimentId: string, plan: OfferSha
   return kind === 'data_brief' ? 'a week after the first cannot be made yet: nothing pulls a brief\'s sources again, so week two would repeat week one' : null;
 }
 
+/**
+ * NO PRICE IS MOSTLY FEES (R29): the price this plan would charge, read
+ * against its venue's published fee at the least a buyer could pay. A listing
+ * sells on its venue (Etsy); everything else is charged through Stripe.
+ */
+export async function feeFloorOf(plan: OfferShapePlan | null): Promise<string | null> {
+  if (!plan) return null;
+  const { priceIsMostlyFees } = await import('./fee-floor.js');
+  const why = priceIsMostlyFees({ venue: plan.listing ? 'etsy' : 'stripe', amountCents: plan.price.amountCents, chosen: plan.price.chosen ?? null });
+  return why ? `the price is mostly fees: ${why}` : null;
+}
+
 export async function readiness(experimentId: string): Promise<Readiness> {
   const e = await experimentRow(experimentId);
   if (!e) throw new HandRefused('experiment_not_found');
@@ -943,6 +955,8 @@ export async function readiness(experimentId: string): Promise<Readiness> {
     for (const why of await placementWouldBeRefused(e, plan)) missing.push(`placing it would be refused: ${why}`);
     const weekTwo = await recurringCannotBeMade(experimentId, plan);
     if (weekTwo) missing.push(weekTwo);
+    const fees = await feeFloorOf(plan);
+    if (fees) missing.push(fees);
     // A BRIEF MADE BEFORE R23 FROM A SOURCE THAT MAY NOT BE SOLD stays unsold.
     const shapeBody = (await materialOf(experimentId, 'offer_shape'))?.body ?? '{}';
     let named: string[] = [];
@@ -956,6 +970,8 @@ export async function readiness(experimentId: string): Promise<Readiness> {
     const missing: string[] = [];
     if (!(await materialOf(experimentId, 'deliverable'))) missing.push('nothing to deliver is attached');
     if (!(await materialOf(experimentId, 'offer_template'))) missing.push('the listing text is not written');
+    const fees = await feeFloorOf(plan);
+    if (fees) missing.push(fees);
     const { designOf } = await import('./probe-design.js');
     if (!(await designOf(experimentId))) missing.push('the design has not been recorded');
     return { ok: missing.length === 0, missing, reachable: 0, pending: 0, pendingWebForm: 0, struck: 0,
@@ -984,7 +1000,9 @@ export async function readiness(experimentId: string): Promise<Readiness> {
   if (sending.status !== 'ready') missing.push('email sending is not connected');
   if (!(await materialOf(experimentId, 'deliverable'))) missing.push('nothing to deliver is attached');
   if (!(await materialOf(experimentId, 'offer_template'))) missing.push('the offer text is not written');
-  if (!(await offerShapePlanOf(experimentId))) missing.push('the offer has no stated shape');
+  if (!plan) missing.push('the offer has no stated shape');
+  const fees = await feeFloorOf(plan);
+  if (fees) missing.push(fees);
   // WHAT THE WORKSHOP NEEDS before a stranger can be written to under its name.
   const { publicWorkshopOfExperiment } = await import('../public-workshop/settings.js');
   const w = await publicWorkshopOfExperiment(experimentId);

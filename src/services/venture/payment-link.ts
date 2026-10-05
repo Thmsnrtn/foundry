@@ -44,8 +44,9 @@ export interface OfferPrice {
   /**
    * PAY WHAT IT WAS WORTH (`value_first`, PENDING 31): the buyer chooses the
    * amount, between these bounds, with `amountCents` suggested. Absent for a
-   * fixed price. Stripe takes nothing below its own minimum charge, so the
-   * floor is a dollar; paying nothing at all is not paying, and is allowed.
+   * fixed price. The floor is three dollars (R29, CHOSEN_BAND): below it the
+   * card fee is a fifth or more of the money; paying nothing at all is not
+   * paying, and is allowed.
    */
   chosen?: { minimumCents: number; maximumCents: number };
   /**

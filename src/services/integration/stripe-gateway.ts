@@ -17,6 +17,7 @@ import { registerToolHandler, invoke, type GatewayRequest } from '../outbound/ga
 import { pathSegment } from '../outbound/path-segment.js';
 import { withRetry } from '../resilience.js';
 import { log } from '../../lib/logger.js';
+import { priceIsMostlyFees } from '../venture/fee-floor.js';
 
 const STRIPE_TIMEOUT_MS = 10_000;
 const STRIPE_API = 'https://api.stripe.com/v1';
@@ -267,6 +268,10 @@ async function createPaymentLinkHandler(req: GatewayRequest): Promise<{ id: stri
     && c.minimum >= 50 && c.minimum <= c.preset && c.preset <= c.maximum && c.preset === params.unit_amount)) {
     throw new Error('a chosen amount needs a whole-cent floor of at least 50, a suggestion between floor and ceiling, and the suggestion as unit_amount');
   }
+  // NO PRICE IS MOSTLY FEES (R29), refused at the door as well as before it:
+  // a link is never minted for an amount the card fee takes a fifth of.
+  const mostlyFees = priceIsMostlyFees({ venue: 'stripe', amountCents: params.unit_amount, chosen: c ? { minimumCents: c.minimum } : null });
+  if (mostlyFees) throw new Error(`refused: ${mostlyFees}`);
   const key = req.dedupKey ?? `gw_plink_${Date.now()}`;
 
   const found = await withRetry(
