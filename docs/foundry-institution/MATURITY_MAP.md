@@ -2730,6 +2730,18 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### The institution thinks inside the owner's bound (Roadmap 2027 R32, 5 October 2026)
+
+**What changed.** Institution model calls are charged to the institution's
+owner and refused at the owner's daily cap; the price table uses published
+rates. **Evidence maturity.** E1: `the-institution-thinks-inside-the-owners-bound`.
+E2 when production's founder-scope spend first shows the forge and discovery.
+**Proof debt.** A real consequence: with no live charter the forge, discovery
+and correspondence now share $1 a day and will be refused past it, as the
+owner was told they would be; cached prompt tokens are still priced at the
+full input rate (conservative); "cost per sealed test beside expected net"
+waits on a definition of expected net.
+
 ### A null nobody reached says so (Roadmap 2027 R40, 5 October 2026)
 
 **What changed.** A placed test that settles with nothing on record reaching

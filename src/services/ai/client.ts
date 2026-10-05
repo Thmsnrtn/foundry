@@ -72,6 +72,23 @@ function cacheKey(scope: Scope, scopeId: string, date: string): string {
   return `${scope}:${scopeId}:${date}`;
 }
 
+/**
+ * The owner of the product that IS the institution, or null where none is established (R32).
+ *
+ * REALITY AND STANDING DO NOT APPLY: an identity lookup of the one product that is
+ * Foundry, to find whose cap its thinking counts against; it reads no
+ * company's truth, and a narrower answer could only lift the bound.
+ */
+async function institutionOwner(): Promise<string | null> {
+  try {
+    const r = await query(`SELECT p.owner_id FROM system_identities s JOIN products p ON p.id = s.product_id WHERE s.identity_key = 'foundry'`, []);
+    return r.rows.length ? String((r.rows[0] as Record<string, unknown>).owner_id) : null;
+  } catch (err) {
+    log.warn('ai_spend.institution_owner_lookup_failed', { error: (err as Error).message });
+    return null;
+  }
+}
+
 async function resolveFounderId(productId: string): Promise<string | null> {
   const cached = productOwnerCache.get(productId);
   if (cached) return cached;
@@ -108,15 +125,18 @@ async function readScopeSpend(scope: Scope, scopeId: string): Promise<number> {
 }
 
 // ─── Model-Specific Pricing (per 1M tokens, in USD) ─────────────────────────
-// OpenRouter pricing. Configurable via environment variables.
+// The provider's published rates (Anthropic's first-party prices, which
+// OpenRouter passes through), read 2026-10-05 (R32). Opus was charged at three
+// times and Sonnet at one and a half times its rate, so every bound bought less
+// thinking than it said. Configurable via environment variables.
 const COST_PER_1M: Record<string, { input: number; output: number }> = {
   'anthropic/claude-opus-4-8': {
-    input: parseFloat(process.env.AI_COST_OPUS_INPUT_PER_1M ?? '15.00'),
-    output: parseFloat(process.env.AI_COST_OPUS_OUTPUT_PER_1M ?? '75.00'),
+    input: parseFloat(process.env.AI_COST_OPUS_INPUT_PER_1M ?? '5.00'),
+    output: parseFloat(process.env.AI_COST_OPUS_OUTPUT_PER_1M ?? '25.00'),
   },
   'anthropic/claude-sonnet-5': {
-    input: parseFloat(process.env.AI_COST_SONNET_INPUT_PER_1M ?? '3.00'),
-    output: parseFloat(process.env.AI_COST_SONNET_OUTPUT_PER_1M ?? '15.00'),
+    input: parseFloat(process.env.AI_COST_SONNET_INPUT_PER_1M ?? '2.00'),
+    output: parseFloat(process.env.AI_COST_SONNET_OUTPUT_PER_1M ?? '10.00'),
   },
   'anthropic/claude-haiku-4-5': {
     input: parseFloat(process.env.AI_COST_HAIKU_INPUT_PER_1M ?? '1.00'),
@@ -128,7 +148,7 @@ const COST_PER_1M: Record<string, { input: number; output: number }> = {
  * Compute cost in cents for a given model and token usage.
  */
 export function computeCostCents(model: AIModel | string, inputTokens: number, outputTokens: number): number {
-  const rates = COST_PER_1M[model] ?? { input: 3.0, output: 15.0 }; // Default to Sonnet rates
+  const rates = COST_PER_1M[model] ?? COST_PER_1M['anthropic/claude-sonnet-5']; // An unknown model is priced as Sonnet
   const inputCostCents = (inputTokens * rates.input) / 10_000;
   const outputCostCents = (outputTokens * rates.output) / 10_000;
   return inputCostCents + outputCostCents;
@@ -282,7 +302,12 @@ async function authorizeSpend(
   purpose: SpendPurpose | null = null,
   work: Work | null = null,
 ): Promise<SpendReservation> {
-  const founderId = productId ? await resolveFounderId(productId) : null;
+  // THE INSTITUTION'S THINKING IS ITS OWNER'S (R32). A call made for the
+  // owner's portfolio before any company exists names no product, and the cap
+  // was resolved only from a product: the forge, offer composition, discovery,
+  // the legal pass and correspondence ran to the deployment's global ceiling,
+  // and none of it reached the ledger the owner reads.
+  const founderId = productId ? await resolveFounderId(productId) : await institutionOwner();
   if (productId && !founderId) {
     throw new Error(`AI spend authorization failed: owner unavailable for product ${productId}`);
   }

@@ -81,7 +81,7 @@ describe('atomic AI spend reservations', () => {
     vi.stubGlobal('fetch', fetchSpy);
     vi.resetModules();
     const { callClaude, MODELS } = await import('../../src/services/ai/client.js');
-    const request = { model: MODELS.SONNET, maxTokens: 1, systemPrompt: 's'.repeat(1800), userPrompt: 'u', productId: 'p1' };
+    const request = { model: MODELS.SONNET, maxTokens: 1, systemPrompt: 's'.repeat(2700), userPrompt: 'u', productId: 'p1' };
     const results = await Promise.allSettled([callClaude(request), callClaude(request)]);
     expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
     expect(fetchSpy).toHaveBeenCalledOnce();

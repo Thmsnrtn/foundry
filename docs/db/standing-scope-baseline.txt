@@ -1,5 +1,5 @@
 src/cli/index.ts 1
-src/jobs/index.ts 4
+src/jobs/index.ts 3
 src/routes/auth/clerk.ts 1
 src/routes/dashboard/foundry-shell.ts 11
 src/routes/dashboard/inbox-place.ts 2
@@ -8,6 +8,7 @@ src/routes/dashboard/money-place.ts 1
 src/routes/dashboard/roadmap-place.ts 1
 src/routes/dashboard/settings.ts 1
 src/routes/ingest/index.ts 1
+src/services/ai/client.ts 1
 src/services/control/decisions.ts 1
 src/services/control/stop.ts 1
 src/services/economy/projection.ts 3
@@ -32,7 +33,6 @@ src/services/institution/winding-down.ts 1
 src/services/intelligence/founder-health.ts 3
 src/services/letter/verifier.ts 2
 src/services/mission/read.ts 1
-src/services/portfolio/manager.ts 1
 src/services/privacy/consent.ts 2
 src/services/public-workshop/how-it-should-show.ts 1
 src/services/public-workshop/projection.ts 1

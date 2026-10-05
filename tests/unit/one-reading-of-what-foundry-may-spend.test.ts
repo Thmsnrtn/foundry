@@ -59,7 +59,7 @@ describe('one reading of what Foundry may spend', () => {
     const { companySpend } = await import('../../src/services/ai/what-it-is-for.js');
     const company = String(((await query('SELECT id FROM products WHERE owner_id = ? AND reality = ? ORDER BY created_at LIMIT 1', [OWNER, 'real'])).rows[0] as Record<string, unknown>).id);
     const subject = companySpend(company, 'reading an observation');
-    const big = { model: MODELS.SONNET, maxTokens: 1, systemPrompt: 's'.repeat(400_000), userPrompt: 'u', subject };
+    const big = { model: MODELS.SONNET, maxTokens: 1, systemPrompt: 's'.repeat(600_000), userPrompt: 'u', subject };
     await expect(callClaude(big)).rejects.toThrow(/ceiling reached \(founder\)/);
     expect(fetchSpy).not.toHaveBeenCalled();
     const small = { model: MODELS.SONNET, maxTokens: 1, systemPrompt: 's'.repeat(2000), userPrompt: 'u', subject };
@@ -92,11 +92,11 @@ describe('one reading of what Foundry may spend', () => {
     const subject = companySpend(company, 'reading an observation');
     fetchSpy.mockClear();
     // ~$1.20 of input: over the pre-charter dollar, under the charter's three.
-    await callClaude({ model: MODELS.SONNET, maxTokens: 1, systemPrompt: 's'.repeat(400_000), userPrompt: 'u', subject });
+    await callClaude({ model: MODELS.SONNET, maxTokens: 1, systemPrompt: 's'.repeat(600_000), userPrompt: 'u', subject });
     expect(fetchSpy).toHaveBeenCalledOnce();
     const r = (await query('SELECT founder_cap_cents FROM ai_spend_reservations ORDER BY created_at DESC, rowid DESC LIMIT 1', [])).rows[0] as Record<string, unknown>;
     expect(Number(r.founder_cap_cents)).toBe(300);
     // And a call that would pass three dollars is refused, as the charter says.
-    await expect(callClaude({ model: MODELS.SONNET, maxTokens: 1, systemPrompt: 's'.repeat(1_200_000), userPrompt: 'u', subject })).rejects.toThrow(/ceiling reached \(founder\)/);
+    await expect(callClaude({ model: MODELS.SONNET, maxTokens: 1, systemPrompt: 's'.repeat(1_800_000), userPrompt: 'u', subject })).rejects.toThrow(/ceiling reached \(founder\)/);
   });
 });

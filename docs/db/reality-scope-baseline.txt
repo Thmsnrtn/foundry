@@ -1,11 +1,12 @@
 src/cli/index.ts 1
-src/jobs/index.ts 27
+src/jobs/index.ts 5
 src/routes/auth/clerk.ts 1
 src/routes/dashboard/foundry-shell.ts 3
 src/routes/dashboard/missions-place.ts 1
 src/routes/dashboard/settings.ts 1
 src/routes/ingest/index.ts 1
 src/services/ai/calibration.ts 1
+src/services/ai/client.ts 1
 src/services/control/stop.ts 1
 src/services/explore/summary.ts 1
 src/services/founder/intelligence.ts 1
@@ -16,7 +17,6 @@ src/services/intelligence/founder-health.ts 3
 src/services/letter/fleet.ts 1
 src/services/letter/verifier.ts 2
 src/services/mission/read.ts 1
-src/services/portfolio/manager.ts 1
 src/services/privacy/consent.ts 2
 src/services/public-workshop/how-it-should-show.ts 1
 src/services/public-workshop/projection.ts 1
