@@ -120,7 +120,11 @@ export async function publishPage(input: { founderId: string; path: string; html
   const result = await invoke({
     productId: w.productId, tool: 'cloudflare_kv_put', action: `publish ${input.path} (v${version})`,
     params: { namespace_id: w.kvNamespaceId, key: `page:${input.path}`, value: input.html, purpose: input.kind === 'experiment' ? `experiment page ${input.path}` : `workshop page ${input.path}` },
-    dedupKey: `public:${input.founderId}:${input.path}:${digest}`, surface: 'public_workshop', dataClass: 'general',
+    // KEYED ON THE VERSION AS WELL AS THE TEXT (R38): a page that returns to an
+    // earlier text is a new write; keyed on the text alone the store kept the
+    // newer bytes while the record said the earlier ones were live. A retry of
+    // this same write still finds the same version, so it still dedupes.
+    dedupKey: `public:${input.founderId}:${input.path}:v${String(version)}:${digest}`, surface: 'public_workshop', dataClass: 'general',
   });
   if (!result.ok) throw new WorkshopRefused('publication_refused', `${result.phase}: ${result.reason}`);
   if (current) await query(`UPDATE public_publications SET superseded_at = datetime('now') WHERE id = ?`, [current.id]);
@@ -131,7 +135,7 @@ export async function publishPage(input: { founderId: string; path: string; html
   return (await verifyPublication(input.founderId, input.path, input.fetchImpl))!;
 }
 
-export interface SiteReport { published: string[]; unchanged: string[]; failed: Array<{ path: string; reason: string }>; /** Rendered, and deliberately not put up: the owner's word, or his turn. */ held: Array<{ path: string; reason: string }>; /** Was live, and has been replaced with a notice because he said `never`. */ withdrawn: string[]; verified: number; unverified: string[] }
+export interface SiteReport { /** Pages announced to search engines this pass (R38), or null when none changed. */ announced?: { paths: string[]; accepted: boolean; detail: string | null } | null; published: string[]; unchanged: string[]; failed: Array<{ path: string; reason: string }>; /** Rendered, and deliberately not put up: the owner's word, or his turn. */ held: Array<{ path: string; reason: string }>; /** Was live, and has been replaced with a notice because he said `never`. */ withdrawn: string[]; verified: number; unverified: string[] }
 
 /**
  * WHY THIS ASSET'S PAGE IS NOT GOING UP, or null when nothing is holding it.
@@ -301,7 +305,32 @@ export async function publishSite(founderId: string, by: string, fetchImpl?: typ
       if (p.verifiedStatus === 'verified') report.verified += 1; else report.unverified.push(`${path}: ${p.verifiedDetail ?? p.verifiedStatus ?? 'unverified'}`);
     } catch (e) { report.failed.push({ path, reason: e instanceof Error ? e.message : String(e) }); }
   }
+  // TELL SEARCH ENGINES WHAT CHANGED (R38): only pages meant to be indexed,
+  // only versions this pass put up and read back, through the door that
+  // publishes them. Never a reason the publication failed.
+  report.announced = await announce(founderId, w, report, registry);
   return report;
+}
+
+async function announce(founderId: string, w: { productId: string; origin: string }, report: SiteReport, registry: PublicExperiment[]): Promise<SiteReport['announced']> {
+  const { indexedPaths } = await import('./site.js');
+  const { pathsToAnnounce, announcementFor, announcementKey } = await import('./indexnow.js');
+  const paths = pathsToAnnounce({ published: report.published, unverified: report.unverified, indexed: indexedPaths(registry) });
+  if (paths.length === 0 || !w.origin.startsWith('https://')) return null;
+  const body = announcementFor(w.origin, paths);
+  // The key names each page's live version, so the same pages changing again
+  // later are announced again, and a retry of this pass is not.
+  const versions = await Promise.all(paths.map(async (p) => `${w.origin}${p}@v${String((await livePublication(founderId, p))?.version ?? 0)}`));
+  try {
+    const r = await invoke({
+      productId: w.productId, tool: 'indexnow_submit', action: `tell search engines ${String(paths.length)} page${paths.length === 1 ? '' : 's'} changed`,
+      params: { paths, purpose: 'announce changed Workshop pages to search engines' },
+      dedupKey: announcementKey(founderId, versions), surface: 'public_workshop', dataClass: 'general',
+    });
+    return r.ok ? { paths, accepted: true, detail: null } : { paths, accepted: false, detail: `${r.phase}: ${r.reason}` };
+  } catch (e) {
+    return { paths, accepted: false, detail: e instanceof Error ? e.message : String(e) };
+  }
 }
 
 // The projection carries no experiment id on purpose; the publisher maps a

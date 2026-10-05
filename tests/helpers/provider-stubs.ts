@@ -47,6 +47,9 @@ export interface ProviderState {
   invoices: Map<string, { customer_email: string | null; charge: string | null }>;
   /** Cloudflare, shape-faithful: the zone, its records, the store, the program, the hostnames, mail routing. */
   cf: CloudflareState;
+  /** Every IndexNow announcement received (R38), and the status the endpoint answers with. */
+  indexNow: Array<{ host: string; key: string; keyLocation: string; urlList: string[] }>;
+  indexNowStatus: number;
 }
 
 export interface CloudflareState {
@@ -92,7 +95,7 @@ function nested(params: Record<string, string>, prefix: string): Record<string, 
 }
 
 export function providerStubs(): { state: ProviderState; fetch: (url: string | URL, init?: RequestInit) => Promise<Response> } {
-  const state: ProviderState = { sends: [], deliveryState: new Map(), refunds: [], domains: [], nextDomainStatus: 'pending', stripeDown: false, resendDown: false, products: [], prices: [], paymentLinks: [], buyers: new Map(), payments: [], calls: [], seq: 0, subscriptions: new Map(), subscriptionUpdates: [], invoices: new Map(), charges: new Map(), cf: freshCloudflare() };
+  const state: ProviderState = { sends: [], deliveryState: new Map(), refunds: [], domains: [], nextDomainStatus: 'pending', stripeDown: false, resendDown: false, products: [], prices: [], paymentLinks: [], buyers: new Map(), payments: [], calls: [], seq: 0, subscriptions: new Map(), subscriptionUpdates: [], invoices: new Map(), charges: new Map(), cf: freshCloudflare(), indexNow: [], indexNowStatus: 202 };
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   const cfOk = (result: unknown, status = 200) => json({ success: true, result, errors: [] }, status);
   const cfErr = (code: number, message: string, status = 400) => json({ success: false, result: null, errors: [{ code, message }] }, status);
@@ -123,6 +126,12 @@ export function providerStubs(): { state: ProviderState; fetch: (url: string | U
       const html = /[^a-z0-9/-]/.test(path) && !(path in files) ? undefined : store?.get(`page:${path}`);
       return html === undefined ? new Response(store?.get('page:/404') ?? 'Not found', { status: 404, headers: { 'content-type': 'text/html; charset=utf-8' } })
         : new Response(html, { status: 200, headers: { 'content-type': files[path] ?? 'text/html; charset=utf-8' } });
+    }
+
+    // ── IndexNow (R38): the shared endpoint records each announcement ──
+    if (u === 'https://api.indexnow.org/indexnow' && method === 'POST') {
+      if (state.indexNowStatus === 200 || state.indexNowStatus === 202) state.indexNow.push(JSON.parse(String(init?.body ?? '{}')));
+      return new Response(state.indexNowStatus === 202 || state.indexNowStatus === 200 ? '' : 'Forbidden', { status: state.indexNowStatus });
     }
 
     // ── Cloudflare API ──

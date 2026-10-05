@@ -174,9 +174,24 @@ describe('the Workshop stands up through the door, and the world is read back', 
     await expect(query(`DELETE FROM cloudflare_mutations WHERE rowid = 1`)).rejects.toThrow(/never_deleted/);
     // The google verification TXT was not touched: nothing unrelated is.
     expect(state.cf.dns.some((x) => x.type === 'TXT' && x.content.startsWith('google-site-verification'))).toBe(true);
+    // SEARCH ENGINES ARE TOLD WHAT CHANGED (R38): the pages a crawler is meant
+    // to keep, once, with the Workshop's own key file; never the opt-out form,
+    // the receipts, the not-found page or the two files.
+    expect(state.indexNow).toHaveLength(1);
+    const told = state.indexNow[0]!;
+    const { INDEXNOW_KEY, INDEXNOW_KEY_PATH } = await import('../../src/services/public-workshop/indexnow.js');
+    expect(told).toMatchObject({ host: 'apexmicro.ai', key: INDEXNOW_KEY, keyLocation: `https://apexmicro.ai${INDEXNOW_KEY_PATH}` });
+    expect(told.urlList).toContain('https://apexmicro.ai/');
+    expect(told.urlList).toContain('https://apexmicro.ai/privacy');
+    for (const never of ['/email', '/email/done', '/thank-you', '/404', '/robots.txt', '/sitemap.xml']) expect(told.urlList).not.toContain(`https://apexmicro.ai${never}`);
+    expect(r.site.announced).toMatchObject({ accepted: true });
+    expect(receipts.filter((x) => x.tool === 'indexnow_submit')).toHaveLength(1);
     const again = await standUpWorkshop(OWNER);
     expect(again).toMatchObject({ program: 'unchanged', retiredRecords: [] });
     expect(again.site.published).toEqual([]);
+    // Nothing changed, so nothing is announced again.
+    expect(again.site.announced ?? null).toBeNull();
+    expect(state.indexNow).toHaveLength(1);
     expect((await query(`SELECT COUNT(*) AS n FROM public_publications`)).rows[0]).toMatchObject({ n: 16 });
     const health = await workshopHealth(OWNER);
     expect(health.site).toMatchObject({ status: 'healthy' });

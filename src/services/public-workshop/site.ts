@@ -629,11 +629,20 @@ export function renderNotFound(f: PublicWorkshopFacts): string {
 
 /** Every page of the site at once, keyed by path. Experiment pages included. */
 /** What a crawler may keep: every indexable page and every listed experiment; the unlisted resolve but are not announced. */
+/** Every path a crawler is meant to keep: the indexed fixed pages and every listed experiment (R38). */
+export function indexedPaths(registry: PublicExperiment[]): Set<string> {
+  return new Set<string>([...INDEXED_PATHS, ...registry.filter((x) => x.listed).map((x) => x.path)]);
+}
+
 export function renderSitemap(f: PublicWorkshopFacts, registry: PublicExperiment[]): string {
-  const paths = [...INDEXED_PATHS, ...registry.filter((x) => x.listed).map((x) => x.path)];
+  // DATED WHERE A DATE IS KNOWN (R38): an experiment page says when it last
+  // changed, from the same record the page prints; the fixed pages carry none
+  // rather than a date that would be a guess.
+  const entries = [...INDEXED_PATHS.map((p) => ({ path: p as string, lastmod: null as string | null })),
+    ...registry.filter((x) => x.listed).map((x) => ({ path: x.path, lastmod: /^\d{4}-\d{2}-\d{2}/.test(x.updatedOn) ? x.updatedOn.slice(0, 10) : null }))];
   return `<?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
-${paths.map((p) => `  <url><loc>${esc(f.origin)}${esc(p)}</loc></url>`).join('\n')}
+${entries.map((e) => `  <url><loc>${esc(f.origin)}${esc(e.path)}</loc>${e.lastmod ? `<lastmod>${e.lastmod}</lastmod>` : ''}</url>`).join('\n')}
 </urlset>
 `;
 }

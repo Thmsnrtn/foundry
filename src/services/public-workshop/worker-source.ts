@@ -21,6 +21,7 @@
 // stays 'none', so it can compute and cannot send.
 // =============================================================================
 import { TOOL_RUNTIME_JS } from '../venture/products/tool.js';
+import { INDEXNOW_KEY, INDEXNOW_KEY_PATH } from './indexnow.js';
 
 export const WORKER_SOURCE = `// Apex Micro public workshop. Serves finished pages from a store; nothing else.
 const HOSTS = new Set(['apexmicro.ai', 'www.apexmicro.ai']);
@@ -36,8 +37,11 @@ const HEADERS = {
 };
 // The free tools' one program, as reviewed. Not read from the store.
 const TOOL_JS = ${JSON.stringify(TOOL_RUNTIME_JS)};
-// The two files that are not pages. Named one by one: no other dot passes.
-const FILES = { '/robots.txt': 'text/plain; charset=utf-8', '/sitemap.xml': 'application/xml; charset=utf-8' };
+// The files that are not pages. Named one by one: no other dot passes. The
+// IndexNow key is public by design and served from the program itself (R38).
+const FILES = { '/robots.txt': 'text/plain; charset=utf-8', '/sitemap.xml': 'application/xml; charset=utf-8', ${JSON.stringify(INDEXNOW_KEY_PATH)}: 'text/plain; charset=utf-8' };
+const INDEXNOW_KEY_PATH = ${JSON.stringify(INDEXNOW_KEY_PATH)};
+const INDEXNOW_KEY = ${JSON.stringify(INDEXNOW_KEY)};
 function normalise(pathname) {
   let p = pathname.replace(/\\/+$/, '') || '/';
   if (Object.prototype.hasOwnProperty.call(FILES, p)) return p;
@@ -59,6 +63,7 @@ export default {
     if (!HOSTS.has(url.hostname)) return new Response('Not found', { status: 404, headers: HEADERS });
     if (url.hostname === 'www.apexmicro.ai') return Response.redirect('https://apexmicro.ai' + url.pathname, 301);
     const path = normalise(url.pathname);
+    if (path === INDEXNOW_KEY_PATH) return new Response(INDEXNOW_KEY, { status: 200, headers: Object.assign({}, HEADERS, { 'content-type': FILES[INDEXNOW_KEY_PATH] }) });
     if (request.method === 'POST' && path === '/email/opt-out') {
       let email = '';
       try { const form = await request.formData(); email = String(form.get('email') || '').trim().toLowerCase(); } catch (e) { email = ''; }

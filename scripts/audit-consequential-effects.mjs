@@ -109,6 +109,9 @@ const classifications = new Map(Object.entries({
   // was there before, what was asked, what the provider said and what the
   // world then showed. There is no handler here for transferring the domain,
   // changing its nameservers, deleting a zone or touching another one.
+  // IndexNow (R38): the one announcement of changed Workshop pages, a gateway tool
+  // bound to the capability that publishes them, with a receipt.
+  'src/services/integration/cloudflare-gateway.ts|external_post': ['governed', 'indexnow_submit: announce changed Workshop pages to search engines, under publish_public_page, with a receipt'],
   'src/services/integration/cloudflare-gateway.ts|templated_post': ['governed', 'Cloudflare capability handlers for the public Workshop — kv, dns, worker, domain and mail routing, each with a receipt and a verification of the public result'],
   'src/services/notifications/push.ts|templated_post': ['governed', 'APNs/FCM device push, registered as the send_push gateway capability. It was classified unreachable — registration routes live, no sender anywhere — and the owner chose to wire it rather than remove the surface. Wiring it was the deliberate act this line asked for: it now inherits the kill-switch, the entitlement pause, dedup and audit from the same door as email, and the live caller is the risk-state transition'],
   'src/services/scp/briefing/email-digest.ts|external_post': ['direct', 'Resend/SendGrid weekly digest delivery'],

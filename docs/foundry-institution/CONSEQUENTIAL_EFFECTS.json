@@ -128,6 +128,13 @@
       "capability": "Cloudflare capability handlers for the public Workshop — kv, dns, worker, domain and mail routing, each with a receipt and a verification of the public result"
     },
     {
+      "file": "src/services/integration/cloudflare-gateway.ts",
+      "line": 602,
+      "detector": "external_post",
+      "status": "governed",
+      "capability": "indexnow_submit: announce changed Workshop pages to search engines, under publish_public_page, with a receipt"
+    },
+    {
       "file": "src/services/integration/github-gateway.ts",
       "line": 57,
       "detector": "templated_post",

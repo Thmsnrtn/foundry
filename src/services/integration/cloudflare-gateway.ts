@@ -575,6 +575,40 @@ async function emailDestinationDeleteHandler(req: GatewayRequest): Promise<{ ema
   });
 }
 
+/**
+ * indexnow_submit: TELL SEARCH ENGINES WHICH WORKSHOP PAGES CHANGED (R38).
+ * Bound to the capability that publishes a page, so it acts only where the
+ * page itself may. One POST to the protocol's shared endpoint; 200 and 202 are
+ * accepted, anything else is refused with what the endpoint said. Only the
+ * Workshop's own host and its own key file are ever sent.
+ */
+async function indexNowSubmitHandler(req: GatewayRequest): Promise<{ status: number; urls: number }> {
+  const p = req.params as { paths: string[]; purpose: string };
+  const paths = Array.isArray(p.paths) ? p.paths.map(String) : [];
+  return withReceipt(req, () => `indexnow:${req.productId}`, () => purposeOf(req.params), { paths }, async () => {
+    purposeOf(req.params);
+    // THE DESTINATION IS NEVER THE CALLER'S. The host is the Workshop's own,
+    // read from its row by the product the door was opened for; the request
+    // carries only paths on it.
+    const row = (await query('SELECT origin FROM public_workshop WHERE product_id = ?', [req.productId])).rows[0] as Record<string, unknown> | undefined;
+    if (!row) throw new CloudflareRefused('no_workshop');
+    const origin = String(row.origin);
+    if (!origin.startsWith('https://')) throw new CloudflareRefused('origin_not_https', origin);
+    const host = new URL(origin).hostname;
+    if (paths.length === 0 || paths.length > 1000) throw new CloudflareRefused('urls_invalid', String(paths.length));
+    if (paths.some((x) => !/^\/[a-z0-9/-]*$/.test(x))) throw new CloudflareRefused('path_invalid');
+    const { INDEXNOW_KEY, INDEXNOW_KEY_PATH } = await import('../public-workshop/indexnow.js');
+    const urlList = paths.map((x) => `${origin}${x}`);
+    const response = await withRetry(() => fetch('https://api.indexnow.org/indexnow', { method: 'POST', headers: { 'Content-Type': 'application/json; charset=utf-8' },
+      body: JSON.stringify({ host, key: INDEXNOW_KEY, keyLocation: `${origin}${INDEXNOW_KEY_PATH}`, urlList }) }), { timeoutMs: CF_TIMEOUT_MS, maxRetries: 1 });
+    if (response.status !== 200 && response.status !== 202) {
+      const said = await response.text().catch(() => '');
+      throw new CloudflareRefused('indexnow_refused', `HTTP ${String(response.status)}${said ? `: ${said.slice(0, 200)}` : ''}`);
+    }
+    return { previous: null, response: { status: response.status }, verification: { accepted: true }, rollback: null, result: { status: response.status, urls: urlList.length } };
+  });
+}
+
 registerToolHandler('cloudflare_kv_namespace_create', kvNamespaceCreateHandler, CLOUDFLARE_POLICY);
 registerToolHandler('cloudflare_kv_put', kvPutHandler, CLOUDFLARE_POLICY);
 registerToolHandler('cloudflare_kv_delete', kvDeleteHandler, CLOUDFLARE_POLICY);
@@ -584,5 +618,6 @@ registerToolHandler('cloudflare_worker_deploy', workerDeployHandler, CLOUDFLARE_
 registerToolHandler('cloudflare_domain_attach', domainAttachHandler, CLOUDFLARE_POLICY);
 registerToolHandler('cloudflare_email_route_upsert', emailRouteHandler, CLOUDFLARE_POLICY);
 registerToolHandler('cloudflare_email_destination_delete', emailDestinationDeleteHandler, CLOUDFLARE_POLICY);
+registerToolHandler('indexnow_submit', indexNowSubmitHandler, CLOUDFLARE_POLICY);
 
 export { kvNamespaceCreateHandler, kvPutHandler, kvDeleteHandler, dnsUpsertHandler, dnsDeleteHandler, workerDeployHandler, domainAttachHandler, emailRouteHandler, emailDestinationDeleteHandler };

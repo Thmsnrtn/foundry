@@ -2730,6 +2730,19 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### A changed page is announced (Roadmap 2027 R38, 5 October 2026)
+
+**What changed.** Changed, verified, indexable pages are announced through
+IndexNow on each pass; the sitemap is dated. A defect the dated sitemap
+exposed is closed with it: a page store write was deduplicated on the page's
+text alone, so a page returning to an earlier text was never written and the
+edge kept serving the newer bytes while the record said otherwise (the health
+check caught it as "1 of 17 pages not served as published"). Writes and
+announcements are now keyed on the version as well. **Evidence maturity.** E1. E2 at
+the first production receipt (HTTP 200 or 202) after the program redeploys with
+the key file. **Proof debt.** Bing-indexed paths at 7 and 14 days are not yet
+measured; Google still needs the owner's Search Console property.
+
 ### A deploy does not cost a day (Roadmap 2027 R33a, 5 October 2026)
 
 **What changed.** On boot, after the job lock's life, daily jobs whose last
