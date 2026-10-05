@@ -57,3 +57,13 @@ export function placementActCoversTheWindow(input: { now: Date; actExpiresAt: st
   return `the act that places it ends before the ${String(input.withinDays)}-day window it would open closes `
     + `(${new Date(ends).toISOString().slice(0, 10)}), so a buyer near the end would pay into a window nothing covers`;
 }
+
+/**
+ * THE HOURS AN ACT IS PROPOSED FOR, never past what was sized. Rounded down:
+ * rounding up put an act clamped to its charter's end a few seconds past it,
+ * and the row guard (migration 382) refused it, so a charter launch failed
+ * whenever the clock fell that way.
+ */
+export function actHoursUntil(actsExpireAt: Date, now: Date = new Date()): number {
+  return Math.max(1, Math.floor((actsExpireAt.getTime() - now.getTime()) / 3_600_000));
+}

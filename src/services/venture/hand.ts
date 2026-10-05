@@ -21,7 +21,7 @@
 // Nothing here stores a buyer's identity in the outcome ledger.
 // =============================================================================
 
-import { STOP_AHEAD_DAYS, windowAndValidity, placementActCoversTheWindow } from './act-window.js';
+import { STOP_AHEAD_DAYS, windowAndValidity, placementActCoversTheWindow, actHoursUntil } from './act-window.js';
 export { windowAndValidity, placementActCoversTheWindow } from './act-window.js';
 import { createHash, createHmac, timingSafeEqual } from 'node:crypto';
 import { nanoid } from 'nanoid';
@@ -581,7 +581,7 @@ export async function allowExperiment(input: {
   const reachable = (await recipientsOf(input.experimentId)).filter((r) => r.reviewStatus === 'approved' && r.channel === 'email' && r.email);
   const approved = reachable.filter((r) => r.qualifiedAt);
   const template = await materialOf(input.experimentId, 'offer_template');
-  const hours = Math.max(24, Math.ceil((window.actsExpireAt.getTime() - Date.now()) / 3_600_000));
+  const hours = actHoursUntil(window.actsExpireAt);
   // HIS STANDING WORD FOR THIS ASSET: nobody is written to from it without
   // asking him first. The one act he approves below is the answer, for exactly
   // the businesses he reviewed and the offer as written; a door that hears

@@ -2730,6 +2730,27 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### Foundry can say whether it can sell (Roadmap 2027 R26, 5 October 2026)
+
+**What changed.** Control opens with "Can Foundry sell on its own today?",
+computed from production rows, and the production facts beneath it (secrets by
+name, the payment route, places in flight, unplaced tests, the owner's
+per-sale-minutes row, correspondence). Read from Fly on 5 October 2026 before
+this shipped: `STRIPE_WEBHOOK_SECRET`, the money switch and
+`CLOUDFLARE_ANALYTICS_TOKEN` are not set; the off-machine copy's secrets are.
+
+**Evidence maturity.** E1: `foundry-can-say-whether-it-can-sell`. E2 once the
+owner reads the card in production.
+
+**Proof debt.** The money-switch refactor into one `moneyToolsOn()` from the
+R26 spec is not done; the direct reads stay.
+
+**A defect in R24, found by this commit's check and fixed here.** The hours an
+act is proposed for were rounded up, so an act clamped to its charter's end
+could end a few seconds after it, and migration 382 refused it: a charter
+launch failed whenever the clock fell that way (the loop test failed
+intermittently). `actHoursUntil` rounds down, and the R24 law test now pins it.
+
 ### In flight counts every charter (Roadmap 2027 R52, 4 October 2026)
 
 **What changed.** The envelope reading and the carve guard count the owner's

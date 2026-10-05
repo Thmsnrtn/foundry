@@ -42,7 +42,7 @@ const byKey = async (env: NodeJS.ProcessEnv) => Object.fromEntries((await yourDe
 describe('the acts', () => {
   it('are all there, in the roadmap\'s order, with subscriptions (PENDING 31) and placing offers that still cost minutes (PENDING 32) before the charter', async () => {
     expect((await yourDecisions(OWNER, ENV())).map((d) => d.key)).toEqual(
-      ['credentials', 'clerk', 'copy_away', 'witness', 'money', 'sentry', 'phone', 'pending', 'refunds', 'subscriptions', 'front_loaded_attention', 'charter', 'findable']);
+      ['credentials', 'clerk', 'copy_away', 'witness', 'money', 'sentry', 'phone', 'pending', 'refunds', 'stripe_events', 'money_switch', 'correspondence', 'subscriptions', 'front_loaded_attention', 'charter', 'findable']);
   });
 
   it('say "cannot see" for what Foundry cannot see, never done', async () => {

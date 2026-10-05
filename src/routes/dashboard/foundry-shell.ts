@@ -7890,6 +7890,28 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
       </form>` : ''}
     </li>`)}</ul>
   </section>`;
+  // CAN IT SELL ON ITS OWN TODAY, AND THE PRODUCTION FACTS (R26), read from
+  // this machine. Secrets by name only, never a value; the owner no longer
+  // has to screenshot what Foundry can see for itself.
+  const { productionFacts, canSellOnItsOwn } = await import('../../services/control/production-facts.js');
+  const facts = await productionFacts(s.ownerId);
+  const sell = canSellOnItsOwn(facts);
+  const factsHtml = html`<section class="card" id="production-facts" aria-labelledby="production-facts-h">
+    <h2 id="production-facts-h">Can Foundry sell on its own today? <span class="status ${sell.yes ? 'go' : 'wait'}">${sell.yes ? 'Yes' : 'Not yet'}</span></h2>
+    ${sell.blockers.length ? html`<p class="quiet">What stops it:</p><ul class="mandate-list">${sell.blockers.map((b) => html`<li><span class="mandate-when">${b}.</span></li>`)}</ul>` : ''}
+    ${sell.costs.length ? html`<p class="quiet">What it would still cost you per sale:</p><ul class="mandate-list">${sell.costs.map((b) => html`<li><span class="mandate-when dim">${b}.</span></li>`)}</ul>` : ''}
+    <details><summary>Production facts</summary>
+      <dl class="facts">
+        ${facts.secrets.map((x) => html`<dt>${x.name}</dt><dd>${x.present ? 'set' : 'not set'} <span class="quiet">· ${x.unblocks}</span></dd>`)}
+        <dt>Payment events</dt><dd>${facts.paymentEvents.detail}</dd>
+        <dt>Charter</dt><dd>${facts.charter ? `${String(facts.inFlight)} of ${String(facts.charter.probesInFlight)} in flight · ${String(facts.charter.daysLeft)} days left` : `none signed · ${String(facts.inFlight)} still running from earlier`}</dd>
+        <dt>Approved, never placed</dt><dd>${facts.unplaced.length ? facts.unplaced.map((u) => u.experimentId).join(', ') : 'none'}</dd>
+        <dt>Per-sale minutes (PENDING 32)</dt><dd>${facts.frontLoadedAttention ? `${facts.frontLoadedAttention.treatment}, set by ${facts.frontLoadedAttention.ownersOwn ? 'you' : 'the first-proof default'} on ${facts.frontLoadedAttention.setAt}` : 'no row'}</dd>
+        <dt>Correspondence</dt><dd>${facts.correspondence}</dd>
+        <dt>Subscriptions</dt><dd>${facts.subscriptionsAllowed ? 'allowed by you' : 'refused'}</dd>
+      </dl>
+    </details>
+  </section>`;
   // WHAT FOUNDRY MAY DO, PER AREA (INSTITUTION_MODEL §6.1): one table read
   // with the doors' own rows, explained; the doors still enforce.
   const { authorityTable, DOMAIN_WORDS, VERDICT_WORDS } = await import('../../services/control/authority.js');
@@ -7998,6 +8020,7 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
     <p class="lede">What Foundry may do on its own, what stops it, and the lines you drew.</p>
     ${/* THE MANDATE FIRST (INSTITUTION_MODEL §9): what the owner wants, before what
          Foundry may do — steering above authority, and never mixed with it. */ ''}
+    ${factsHtml}
     ${decisionsHtml}
     ${mandateHtml}
     ${authorityHtml}

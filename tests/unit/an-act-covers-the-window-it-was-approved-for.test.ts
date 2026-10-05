@@ -97,6 +97,18 @@ describe('one reading of how long a test runs and how long its acts last', () =>
   });
 });
 
+describe('an act clamped to its charter never ends after it', () => {
+  it('the hours an act is proposed for are rounded down, so now + hours never passes the charter\'s end', async () => {
+    const { actHoursUntil } = await import('../../src/services/venture/act-window.js');
+    for (const ms of [1, 999, 59_999, 3_599_999, 7 * DAY - 1]) {
+      const end = new Date(NOW.getTime() + 30 * DAY - ms);
+      const w = windowAndValidity({ now: NOW, recurring: false, charterExpiresAt: end.toISOString() });
+      if ('refused' in w) throw new Error(w.refused);
+      expect(NOW.getTime() + actHoursUntil(w.actsExpireAt, NOW) * 3_600_000).toBeLessThanOrEqual(end.getTime());
+    }
+  });
+});
+
 describe('the charter reads the same window', () => {
   it('a charter with ten days left is not inside, with the reason, and nothing is carved', async () => {
     const { signCharter, chartered } = await import('../../src/services/institution/charter.js');

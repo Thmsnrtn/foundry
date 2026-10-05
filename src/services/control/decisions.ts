@@ -84,6 +84,22 @@ export async function yourDecisions(founderId: string, env: NodeJS.ProcessEnv = 
   cannot('refunds', 'Say how a refund is given, and by whom', 'a refund promise you can keep',
     'Etsy refunds are made in Etsy by you; Foundry cannot see them.');
 
+  // WHAT SELLING DEPENDS ON (R26), each read from where it is true. The
+  // payment events are 'done' only when a live-mode event has actually
+  // arrived in the last 30 days: a configured secret alone proves nothing,
+  // and a test-mode event proves the machinery, not the live route.
+  const { paymentObservationPath } = await import('../venture/the-instrument.js');
+  const heard = await paymentObservationPath();
+  out.push({ key: 'stripe_events', act: 'Point one Stripe endpoint at Foundry and give it the signing secret', unblocks: 'hearing about a payment; without it every priced offer is refused',
+    state: heard.status === 'working' ? 'done' : 'open', seen: heard.detail });
+  const money = env.FOUNDRY_ENABLE_MONEY_TOOLS === 'true';
+  out.push({ key: 'money_switch', act: 'Turn on the money switch in the Fly secrets', unblocks: 'refunds and cancellations made by Foundry, only on its own tagged charges',
+    state: money ? 'done' : 'open', seen: money ? 'the money switch is on' : 'the money switch is off, so every refund and cancellation is yours in Stripe' });
+  const { correspondenceMode } = await import('../public-workshop/correspondence.js');
+  const mode = await correspondenceMode(founderId);
+  out.push({ key: 'correspondence', act: 'Set correspondence to "drafts" (Foundry drafts, you approve)', unblocks: 'buyer email off your hands',
+    state: mode === 'off' ? 'open' : 'done', seen: mode === 'off' ? 'correspondence is off, so every buyer email is yours' : `correspondence is in ${mode} mode` });
+
   // SUBSCRIPTIONS (PENDING 31). The first-proof policy refuses recurring
   // billing, and only the owner, signed in, may supersede it — the database
   // refuses any other principal (migration 277). Read from his own row.
