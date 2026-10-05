@@ -186,15 +186,25 @@ export async function checkBriefQuality(founderId: string, m: Material, now: Dat
 
 // ─── The offer, in the Workshop's voice ──────────────────────────────────────
 
-/** The message that carries a brief: a template and the plan's facts, no person named, one-time, opt-out plain. */
+/**
+ * The message that carries a brief: a template and the plan's facts, no person
+ * named, opt-out plain, and the terms as the plan has them (R29). It said
+ * "one-time, no subscription" whatever the plan was, so a weekly offer read as
+ * a single purchase and a pay-what-it-was-worth offer as a fixed price.
+ */
 export function renderOfferTemplate(plan: OfferShapePlan, workshop: string, region: string): string {
   const dollars = (plan.price.amountCents / 100).toFixed(plan.price.amountCents % 100 === 0 ? 0 : 2);
+  const terms = plan.price.recurring
+    ? `It's $${dollars} a week until you cancel. You can cancel any time from the link in every email, and nothing is charged after you cancel.`
+    : plan.price.chosen
+      ? `You pay what it was worth to you, $${dollars} suggested, or nothing. No subscription.`
+      : `It's $${dollars}, one-time. No subscription.`;
   return [
     'Hi,',
     '',
     `${workshop} is a small digital workshop in ${region}. It has put together ${plan.shape.sells}`,
     '',
-    `It's $${dollars}, one-time. No subscription. What's in it, and what it doesn't cover:`,
+    `${terms} What's in it, and what it doesn't cover:`,
     '',
     '[APEX MICRO EXPERIMENT PAGE]',
     '',

@@ -2730,6 +2730,15 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### The offer text says what the plan sells (Roadmap 2027 R29b, 5 October 2026)
+
+**What changed.** Offer text is written from the plan's terms and the gate
+checks it against the plan. **Evidence maturity.** E1:
+`the-offer-text-says-what-the-plan-sells`. **Proof debt.** Offers already
+stored keep their text until remade; the model-written page copy is not
+checked against the banned claims; the plan's free-text `charges_how` is not
+compared with its price.
+
 ### The institution thinks inside the owner's bound (Roadmap 2027 R32, 5 October 2026)
 
 **What changed.** Institution model calls are charged to the institution's

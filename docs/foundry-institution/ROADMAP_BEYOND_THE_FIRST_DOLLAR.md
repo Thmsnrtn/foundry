@@ -91,7 +91,7 @@ files**.
 | Sell the already-checked A03 job-review file as a digest-pinned attachment (R56) | [code] | A | PENDING 27 = A03, and the owner's self-test |
 | Program-checked workbooks: the formula oracle in shadow, then cutover (R42–R43) | [code] | A, C | PENDING 34 = yes |
 | "Free tool, paid file" as one exchange the forge can design, with the tool's worked examples drawn from the file's own oracle | [code] | A | PENDING 36 |
-| Week two of a brief made by re-pulling its sealed query within each source's terms (R28) | [code] | A | none |
+| Week two of a brief made by re-pulling its sealed query within each source's terms (R28) | [code] | A | **done, 5 Oct** |
 | A fee floor: no price that is mostly fees; $3 chosen-price floor (R29) | [code] | B | **done, 5 Oct** |
 | A product only after its buyer evidence earns it (S30): the second file is chosen from the first file's buyers' questions | [world] | C | M1 |
 | Bundles, licensing and pay-per-use: only after a single file has sold twice | [owner] | none | M2 |
@@ -193,7 +193,7 @@ never by a model and never by confidence.
 
 | Next | Tag | Measure | Gate |
 |---|---|---|---|
-| The charter's thinking rate binds every venture call, priced at real rates; cost per sealed test beside expected net (R32) | [code] | D | none |
+| The charter's thinking rate binds every venture call, priced at real rates; cost per sealed test beside expected net (R32) | [code] | D | **done, 5 Oct** |
 | Routing: the cheapest model that passes a frozen eval set does each job; the eval set is the gate | [code] | D | E1 (owner's spend) |
 | The forge stops re-deliberating what the precedent reader already refuses | [code] | D | none |
 | No forge cadence above one pass a day until the thinking bound is true | [code] | B | none |

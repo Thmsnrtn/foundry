@@ -331,7 +331,7 @@ export async function deliverableGate(experimentId: string, m: Material, now: Da
   return checkDeliverableQuality(m, now);
 }
 
-export function checkOfferQuality(m: Material, pageUrl: string | null = null): { ok: boolean; failures: string[] } {
+export function checkOfferQuality(m: Material, pageUrl: string | null = null, plan: OfferShapePlan | null = null): { ok: boolean; failures: string[] } {
   const failures: string[] = [];
   const body = m.body;
   if (!m.paymentLinkUrl || !/^https:\/\/buy\.stripe\.com\//.test(m.paymentLinkUrl)) failures.push('no Stripe payment link');
@@ -343,7 +343,26 @@ export function checkOfferQuality(m: Material, pageUrl: string | null = null): {
   else if (m.paymentLinkUrl && !body.includes(m.paymentLinkUrl)) failures.push('the payment link is not in the message');
   if (/\[[A-Z ]+\]|\{[a-zA-Z ]+\}/.test(body.replace('{Business name}', ''))) failures.push('placeholder text remains');
   if (!/no reply needed|reply .{0,20}(no|stop)|unsubscribe|won't hear from me again/i.test(body)) failures.push('no plain opt-out line');
-  if (!/one[- ]time/i.test(body) || !/no subscription/i.test(body)) failures.push('one-time and no-subscription are not both stated');
+  // THE TERMS AS THE PLAN HAS THEM (R29). Without a plan to read against, the
+  // old rule stands: a one-time price and no subscription, both said.
+  if (!plan) {
+    if (!/one[- ]time/i.test(body) || !/no subscription/i.test(body)) failures.push('one-time and no-subscription are not both stated');
+  } else {
+    const cents = plan.price.amountCents;
+    const dollars = `$${(cents / 100).toFixed(cents % 100 === 0 ? 0 : 2)}`;
+    if (!body.includes(dollars)) failures.push(`the text does not state the price the plan charges (${dollars})`);
+    if (plan.price.recurring) {
+      if (/one[- ]time|no subscription/i.test(body)) failures.push('the text calls a weekly charge one-time');
+      if (!/a week until you cancel/i.test(body)) failures.push('the text does not say it is charged every week until cancelled');
+      if (!/cancel any time from the link in every email/i.test(body)) failures.push('the text does not say how to cancel');
+      if (!/nothing is charged after you cancel/i.test(body)) failures.push('the text does not say nothing is charged after cancelling');
+    } else {
+      if (!/no subscription/i.test(body)) failures.push('the text does not say there is no subscription');
+      if (plan.price.chosen ? !/what it was worth/i.test(body) : !/one[- ]time/i.test(body)) {
+        failures.push(plan.price.chosen ? 'the text does not say the buyer chooses what to pay' : 'the text does not say the price is one-time');
+      }
+    }
+  }
   for (const phrase of BANNED_CLAIMS) if (body.toLowerCase().includes(phrase)) failures.push(`banned claim: "${phrase}"`);
   return { ok: failures.length === 0, failures };
 }
@@ -1291,7 +1310,7 @@ export async function planOffer(input: { experimentId: string; recipientId: stri
     const gate = await publicationGate(input.experimentId, { now: input.now });
     if (!gate.ok) throw new HandRefused('publication_gate', gate.failures.join('; '));
   }
-  const quality = checkOfferQuality(offer, w ? await pageUrlFor(input.experimentId) : null);
+  const quality = checkOfferQuality(offer, w ? await pageUrlFor(input.experimentId) : null, await offerShapePlanOf(input.experimentId));
   if (!quality.ok) throw new HandRefused('offer_quality', quality.failures.join('; '));
   const replyTo = await replyAddressFor(e.productId, e.founderId);
   // Every message carries who is writing, from where, and how to stop it.

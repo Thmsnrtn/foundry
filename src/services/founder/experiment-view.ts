@@ -357,7 +357,7 @@ export async function getExperimentView(founderId: string, experimentId: string,
   const moneyView: ExperimentMoney = { ...moneySoFar, currency: plan?.price.currency ?? 'USD' };
   const dq = deliverable ? await deliverableGate(experimentId, deliverable, now) : null;
   const offerView = {
-    price, oneTime: true, paymentLinkUrl: offer?.paymentLinkUrl ?? null, offerQuality: offer ? checkOfferQuality(offer) : null,
+    price, oneTime: !plan?.price.recurring, paymentLinkUrl: offer?.paymentLinkUrl ?? null, offerQuality: offer ? checkOfferQuality(offer, null, plan ?? null) : null,
     deliverable: deliverable && dq ? { title: deliverable.title, pulledAt: deliverable.pulledAt ? deliverable.pulledAt.slice(0, 10) : null, items: (deliverable.body.match(/^### /gm) ?? []).length, quality: dq } : null,
     limits: plan?.shape.claimsMade ?? '',
   };
