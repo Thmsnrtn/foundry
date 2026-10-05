@@ -13,9 +13,9 @@ around each item.
 ---
 
 <!-- status:begin — generated from the headings below by node scripts/check-record-matches-code.mjs --write -->
-# 13 WAITING ON THE OWNER, 3 WITH COUNSEL, 7 DECIDED IN PLACE
+# 17 WAITING ON THE OWNER, 3 WITH COUNSEL, 7 DECIDED IN PLACE
 
-- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 21, 25, 26, 27, 29, 30, 32.
+- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 21, 25, 26, 27, 29, 30, 32, 33, 34, 35, 36.
 - **Waiting on counsel:** PENDING 9, 13, 15 (interim positions in force; see below).
 - **Decided, and kept where they were asked:** PENDING 16, 20, 22, 23, 24, 28, 31.
 - **Answered and recorded as RESOLVED:** 15.
@@ -2114,4 +2114,75 @@ words, so those sources are read as evidence and never sold. Proof debt: the
 paid-redistribution terms of Hacker News search, GitHub and npm have not been
 read; a brief from them is a list of links with dates, which is the least a
 list can be.
+
+---
+
+## PENDING 33 — Whose name a buyer sees on their card statement: **OWNER** (2026-10-05)
+
+**What is true.** The Stripe account Foundry uses is shared with your land
+sales and another app, and Foundry's payment links set no statement descriptor
+suffix. A buyer on apexmicro.ai sees the account's default name, not Apex
+Micro. A charge a buyer does not recognise invites a dispute ($15 each), on the
+account that carries your land income.
+
+**Your choice.**
+- **(a)** Open a separate Apex Micro Stripe account (same login, "New
+  account"), with its own bank, name, descriptor, restricted key and webhook.
+- **(b)** Keep the shared account and add an `APEXMICRO` descriptor suffix to
+  one-time links. Subscription invoices would still show the account default.
+
+**Recommendation.** (b) now, then (a) before any subscription test runs. R54
+builds whichever you choose.
+
+---
+
+## PENDING 34 — May Foundry make workbooks itself, checked by a program: **OWNER** (2026-10-05)
+
+**What is true.** `template_file` (a spreadsheet the buyer fills in) is
+unmakeable by design (`registry.ts`) until you decide. One recipe exists, A03's
+job-review file, checked by hand and recalculated in LibreOffice. PENDING 27
+asks whether to sell that one file; this asks whether Foundry may make others,
+each proven by a program oracle (R42) before anything is sold (R43).
+
+**Your choice.** Yes (the oracle runs in shadow first, then cutover), or not
+yet.
+
+**Recommendation.** Yes, in shadow first. Workbooks are what buyers already buy
+on Etsy, and a program can prove one correct before it is sold. That is what
+PENDING 36's shift rests on.
+
+---
+
+## PENDING 35 — Sales tax and VAT on digital sales: **OWNER** (2026-10-05)
+
+**What is true.** Foundry's links collect no tax and are not restricted by
+country. A sale to the EU or the UK carries VAT on a digital good. Thresholds
+for small sellers have not been verified here.
+
+**Your choice.**
+- **(a)** Accept small exposure until N sales, and record that assumption.
+- **(b)** Turn on Stripe Tax for Foundry's links (+0.5% a sale; R58).
+
+**Recommendation.** (a) to 10 sales, recorded, then decide with real data.
+
+---
+
+## PENDING 36 — Lead with free tools beside checked files: **OWNER** (2026-10-05)
+
+**What is true.** The forge's default offer is a paid brief: a dated list of
+links. After R23, briefs may draw only on public discussion and directories,
+cited and never quoted, and week two of a weekly brief cannot be made yet.
+Nobody searches for a brief. A free calculator on its own page (R15) is what
+people search for and share; it needs no support and sends nothing. A checked
+file is what buyers already buy.
+
+**The proposal** (`ROADMAP_BEYOND_THE_FIRST_DOLLAR.md`):
+- The forge's default exchange becomes "free tool, paid file".
+- apexmicro.ai becomes the home of the tools, and Etsy the shelf for the files.
+- Briefs become the second exchange, used only where week two is real (R28).
+
+**Your choice.** Adopt it (it depends on PENDING 34 for files Foundry makes;
+until then, free tool beside a paid brief), or keep briefs as the default.
+
+**Recommendation.** Adopt it.
 
