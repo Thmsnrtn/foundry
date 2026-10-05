@@ -40,6 +40,8 @@ export async function recordRetrieval(input: {
   founderId: string; sourceType: string; source: string; terms: string;
   returnedCount: number; canSee: string; cannotSee: string; wouldMostHelp: string;
   notAlsoTried: string[] | null; evidenceMode: 'real' | 'sandbox' | 'reference';
+  /** When it was asked, if not this instant: the caller's clock (R28's steward runs on one). */
+  retrievedAt?: Date;
   items: Array<{
     label: string; url: string | null; datedAt: string | null; said: string | null;
     relevant: boolean; sharedTerms: string[];
@@ -49,15 +51,16 @@ export async function recordRetrieval(input: {
   await query(
     `INSERT INTO market_retrievals
        (id, founder_id, source_type, source, terms, returned_count, examined_count,
-        relevant_count, can_see, cannot_see, not_also_tried, would_most_help, evidence_mode)
-     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        relevant_count, can_see, cannot_see, not_also_tried, would_most_help, evidence_mode, retrieved_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,COALESCE(?, CURRENT_TIMESTAMP))`,
     [id, input.founderId, input.sourceType, input.source, input.terms,
       input.returnedCount, input.items.length,
       input.items.filter((i) => i.relevant).length,
       input.canSee, input.cannotSee,
       input.notAlsoTried === null || input.notAlsoTried.length === 0
         ? null : input.notAlsoTried.join(', '),
-      input.wouldMostHelp, input.evidenceMode]);
+      input.wouldMostHelp, input.evidenceMode,
+      input.retrievedAt ? input.retrievedAt.toISOString().replace('T', ' ').slice(0, 19) : null]);
   for (const item of input.items) {
     await query(
       `INSERT INTO retrieval_items

@@ -154,9 +154,14 @@ describe('the forge shapes the offer and the hands make the thing', () => {
     const { materialOf } = await import('../../src/services/venture/hand.js');
     const before = (await materialOf(X, 'deliverable'))!;
     expect(await refreshStaleBriefs()).toEqual([]);
-    // Six days on, the edition is about to fall foul of the freshness rule.
+    // Six days on, the edition is about to fall foul of the freshness rule, and
+    // the sealed words are asked again of the discussion archive (R28), which
+    // has nothing new; the jobs-board rows have no written terms and are not.
     const later = new Date(Date.now() + 6 * 86_400_000);
+    const quiet = vi.spyOn(globalThis, 'fetch').mockImplementation((async () => new Response(JSON.stringify({ nbHits: 0, hits: [] }), { status: 200 })) as never);
     const passes = await refreshStaleBriefs(later);
+    expect(quiet.mock.calls.map((c) => new URL(String(c[0])).host)).toEqual(['hn.algolia.com']);
+    quiet.mockRestore();
     expect(passes).toEqual([{ experimentId: X, refreshed: false, because: expect.stringMatching(/pulled 6 days ago|nothing fresh/) }]);
     // Fresh rows arrive (a second later, so the pull is provably newer); the
     // next pass re-pulls and the old edition is superseded.

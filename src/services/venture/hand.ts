@@ -877,16 +877,26 @@ export async function placementWouldBeRefused(e: ExperimentRow, plan: OfferShape
 
 /**
  * A WEEK AFTER THE FIRST HAS TO BE MAKEABLE BEFORE A WEEK IS SOLD. A weekly
- * data brief is re-rendered from the rows it was made from; nothing pulls its
- * query again, so week two would be week one with a new date. Refused here
- * until the steward re-pulls a live brief's own sealed query (R28 deletes this).
+ * data brief is re-made each week by asking its sealed words again of the
+ * sources they were first asked of (R28, sources/re-pull.ts). A brief none of
+ * whose sources can be asked again — never asked these words, or no terms of
+ * use written down for it — would send week one again as week two, so it is
+ * refused here.
  */
 export async function recurringCannotBeMade(experimentId: string, plan: OfferShapePlan): Promise<string | null> {
   if (!plan.price.recurring) return null;
   const shape = await materialOf(experimentId, 'offer_shape');
-  let kind: unknown = null;
-  try { kind = shape ? (JSON.parse(shape.body) as { kind?: unknown }).kind : null; } catch { kind = null; }
-  return kind === 'data_brief' ? 'a week after the first cannot be made yet: nothing pulls a brief\'s sources again, so week two would repeat week one' : null;
+  type Shape = { kind?: unknown; spec?: { terms?: unknown; sourceTypes?: unknown } };
+  let body: Shape | null = null;
+  try { body = shape ? (JSON.parse(shape.body) as Shape) : null; } catch { body = null; }
+  if (body?.kind !== 'data_brief') return null;
+  const terms = typeof body.spec?.terms === 'string' ? body.spec.terms : '';
+  const sourceTypes = Array.isArray(body.spec?.sourceTypes) ? body.spec.sourceTypes.map(String) : [];
+  const e = await experimentRow(experimentId);
+  if (!e || !terms) return 'a week after the first cannot be made yet: the brief has no sealed question to ask again';
+  const { whyItCannotBeAskedAgain } = await import('./sources/re-pull.js');
+  const why = await whyItCannotBeAskedAgain(e.founderId, terms, sourceTypes);
+  return why ? `a week after the first cannot be made yet: ${why}, so week two would repeat week one` : null;
 }
 
 /**

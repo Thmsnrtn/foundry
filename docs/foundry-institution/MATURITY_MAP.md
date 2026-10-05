@@ -2730,6 +2730,17 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### Week two of a brief is asked again (Roadmap 2027 R28, 5 October 2026)
+
+**What changed.** The steward re-asks a brief's sealed words of its own
+sources weekly, within written terms, and makes the next edition only from
+rows the last did not carry. **Evidence maturity.** E1:
+`week-two-of-a-brief-is-asked-again`. **Proof debt.** No weekly brief has been
+sold, so no real second edition exists; the written terms are this
+institution's reading of each source's public API terms, not a lawyer's; the
+jobs-board and GitHub-repository directory sources have no written terms and
+are never re-asked, so a brief made only from them still cannot recur.
+
 ### The forge backs off what it cannot do (Roadmap 2027 R27, 5 October 2026)
 
 **What changed.** Refusals at designing and making are recorded and backed off

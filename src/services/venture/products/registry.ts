@@ -235,9 +235,10 @@ export async function makeBrief(input: { founderId: string; experimentId: string
 }
 
 /**
- * THE STEWARD'S PASS OVER BRIEFS. A brief that is live, or about to be, and
- * older than the freshness rule allows is re-pulled from the rows the eyes
- * keep pulling, through the same gate. A refresh that fails its gate is
+ * THE STEWARD'S PASS OVER BRIEFS. A brief that is live, or about to be, or
+ * still owed or still subscribed to, and older than the freshness rule allows,
+ * has its sealed words asked again of its own sources (R28) and is re-made from
+ * what came back, through the same gate. A refresh that fails its gate is
  * said so and the old edition stands until the rule stops it being sent.
  */
 export async function refreshStaleBriefs(now: Date = new Date()): Promise<Array<{ experimentId: string; refreshed: boolean; because: string }>> {
@@ -252,14 +253,18 @@ export async function refreshStaleBriefs(now: Date = new Date()): Promise<Array<
   // promise-it-cannot-keep this institution refuses to make.
   //
   // So the steward follows the obligation, not the lifecycle.
-  const { OPEN_OBLIGATION } = await import('../obligations.js');
+  const { OPEN_OBLIGATION, STILL_RECURS } = await import('../obligations.js');
   const live = (await query(
     `SELECT e.id, e.founder_id FROM venture_experiments e
       WHERE e.evidence_mode = 'real'
         AND ( (e.retired_at IS NULL AND e.validity = 'valid'
                AND ((e.decision = 'approved' AND e.ran_at IS NULL) OR e.decision IS NULL))
            OR EXISTS (SELECT 1 FROM experiment_fulfilments f
-                       WHERE f.experiment_id = e.id AND ${OPEN_OBLIGATION('f')}) )
+                       WHERE f.experiment_id = e.id AND ${OPEN_OBLIGATION('f')})
+          -- A SUBSCRIPTION THAT WILL CHARGE AGAIN (R28): the next week's
+          -- edition is made before the week is paid for, not after.
+          OR EXISTS (SELECT 1 FROM experiment_fulfilments f
+                       WHERE f.experiment_id = e.id AND ${STILL_RECURS('f')}) )
         AND EXISTS (SELECT 1 FROM experiment_materials m WHERE m.experiment_id = e.id AND m.kind = 'offer_shape' AND m.superseded_at IS NULL AND m.body LIKE '%"kind":"data_brief"%')
       ORDER BY e.proposed_at`, [])).rows as unknown as Array<Record<string, unknown>>;
   const out: Array<{ experimentId: string; refreshed: boolean; because: string }> = [];
@@ -268,6 +273,17 @@ export async function refreshStaleBriefs(now: Date = new Date()): Promise<Array<
     if (r.because !== 'still fresh') out.push({ experimentId: String(e.id), ...r });
   }
   return out;
+}
+
+/** The relevant, linked rows of these words pulled after `since`: what a new edition may be made of. */
+async function newerItemUrls(founderId: string, spec: BriefSpec, since: Date): Promise<string[]> {
+  const ph = spec.sourceTypes.map(() => '?').join(',');
+  const at = since.toISOString().replace('T', ' ').slice(0, 19);
+  return ((await query(
+    `SELECT DISTINCT i.url FROM retrieval_items i JOIN market_retrievals r ON r.id = i.retrieval_id
+      WHERE r.founder_id = ? AND r.evidence_mode = 'real' AND r.source_type IN (${ph}) AND r.terms = ?
+        AND i.relevant = 1 AND i.url IS NOT NULL AND r.retrieved_at > ?`,
+    [founderId, ...spec.sourceTypes, spec.terms, at])).rows as unknown as Array<Record<string, unknown>>).map((r) => String(r.url));
 }
 
 /** REFRESH A BRIEF THAT IS GOING STALE, from the same rows the eyes keep pulling. */
@@ -284,11 +300,26 @@ export async function refreshBrief(input: { founderId: string; experimentId: str
   const { publicWorkshopOf } = await import('../../public-workshop/settings.js');
   const w = await publicWorkshopOf(input.founderId);
   if (!w) return { refreshed: false, because: 'no Workshop' };
+  // ASK THE SEALED WORDS AGAIN (R28), of the sources they were first asked of,
+  // at most once in six days and only where the source's terms are written
+  // down. Before this nothing pulled a brief's question twice, and week two
+  // was whatever something else had happened to retrieve.
+  const { rePullSealedQuery } = await import('../sources/re-pull.js');
+  const asked = await rePullSealedQuery({ founderId: input.founderId, terms: parsed.spec.terms, sourceTypes: parsed.spec.sourceTypes, now });
   const made = await rowsForBrief(input.founderId, parsed.spec);
   // A refresh needs newer rows. Re-rendering the same pull is not freshness,
   // and would put a new date on an old edition.
-  if (made.items.length === 0 || !made.pulledAt || (current?.pulledAt && made.pulledAt.getTime() <= new Date(current.pulledAt).getTime())) {
-    return { refreshed: false, because: 'nothing fresh was retrieved' };
+  // AN EMPTY ANSWER IS NOT A NEW EDITION (R28). Asking again and hearing
+  // nothing records that the question was asked; it does not make last week's
+  // rows this week's. A refresh needs a relevant row from a pull newer than the
+  // current edition, and a weekly brief needs one the last edition did not
+  // carry, or week two is week one with a new date.
+  const since = current?.pulledAt ? new Date(current.pulledAt) : null;
+  const newer = since === null ? made.items.map((i) => i.url) : await newerItemUrls(input.founderId, parsed.spec, since);
+  const recurs = Boolean((parsed as { price?: { recurring?: unknown } }).price?.recurring);
+  const unseen = recurs && current ? newer.filter((u) => !current.body.includes(u)) : newer;
+  if (made.items.length === 0 || !made.pulledAt || unseen.length === 0 || (current?.pulledAt && made.pulledAt.getTime() <= new Date(current.pulledAt).getTime())) {
+    return { refreshed: false, because: `nothing fresh was retrieved${asked.notAsked.length ? ` (${asked.notAsked.join('; ')})` : ''}` };
   }
   const body = renderBrief(parsed.spec, made, w.publicName);
   const probe: Material = { id: 'probe', kind: 'deliverable', title: parsed.spec.title, body, pulledAt: made.pulledAt?.toISOString() ?? null, digest: '', paymentLinkUrl: null, recordedAt: '' };
