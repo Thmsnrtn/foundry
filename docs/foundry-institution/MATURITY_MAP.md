@@ -2730,6 +2730,14 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### The first sale lands as money (Roadmap 2027 R25, 5 October 2026)
+
+**What changed.** A tagged payment intent records its charge in the money
+ledger, keyed on the charge, so the intent, the charge event and a poll replay
+are one charge row and one fee. **Evidence maturity.** E1:
+`the-first-sale-lands-as-money`. **Proof debt.** No real Stripe sale yet; the
+first one is the proof. The webhook secret is not set in production.
+
 ### Foundry can say whether it can sell (Roadmap 2027 R26, 5 October 2026)
 
 **What changed.** Control opens with "Can Foundry sell on its own today?",

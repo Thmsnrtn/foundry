@@ -86,6 +86,22 @@ export function moneyFactsFromStripeEvent(
     }];
   }
 
+  // A ONE-TIME SALE, HEARD AS ITS INTENT (R25). Stripe copies an intent's
+  // metadata onto its charge, so the intent names the same charge the
+  // `charge.succeeded` event does, and is keyed on that charge: whichever of
+  // the two arrives first records it, the other is a duplicate, and the sale
+  // is one charge row either way. An intent with no charge yet states
+  // nothing. Never derived from a checkout session, which can complete before
+  // any money has moved.
+  if (event.type === 'payment_intent.succeeded' && (o.object === 'payment_intent' || String(o.id ?? '').startsWith('pi_'))
+    && isOurs(meta) && typeof o.latest_charge === 'string' && o.latest_charge.startsWith('ch_')) {
+    return [{
+      kind: 'charge', amountCents: Number(o.amount_received ?? o.amount ?? 0), currency, occurredAt: at,
+      providerRef: o.latest_charge, chargeRef: o.latest_charge, paymentRef: String(o.id),
+      balanceTransactionRef: null,
+    }];
+  }
+
   if (event.type === 'charge.refunded' && o.object === 'charge' && isOurs(meta)) {
     const refunds = (o.refunds as { data?: Array<Record<string, unknown>> } | undefined)?.data ?? [];
     const last = refunds[refunds.length - 1];
@@ -192,7 +208,9 @@ export async function intakeStripeEconomics(
       const held = (await query('SELECT charge_ref FROM experiment_fulfilments WHERE id = ?', [link.fulfilmentId])).rows[0] as Record<string, unknown> | undefined;
       if (held?.charge_ref != null) f.chargeRef = String(held.charge_ref);
     }
-    if (f.kind === 'charge' && !f.balanceTransactionRef && f.chargeRef && f.paymentRef?.startsWith('in_')) {
+    // AN INTENT, LIKE AN INVOICE, names its charge but not the charge's balance
+    // transaction, so the same one read finds the fee (R25).
+    if (f.kind === 'charge' && !f.balanceTransactionRef && f.chargeRef && (f.paymentRef?.startsWith('in_') || f.paymentRef?.startsWith('pi_'))) {
       try {
         const { stripeClient } = await import('./provider-stripe.js');
         const charge = await stripeClient().charges.retrieve(f.chargeRef);
