@@ -139,7 +139,7 @@ never by a model and never by confidence.
 | Next | Tag | Measure | Gate |
 |---|---|---|---|
 | The money switch on, behind the bound door (R21 live) | [owner] | A | now |
-| A standing refund-only act keeps "no time limit" after a window (R53) | [code] then [owner] tap | A | the money switch |
+| "No time limit" refunds outlive the asset: an archived asset still refunds under its own refund act (R53; the expiry was already honoured, so no standing act or tap is needed) | [code] | A | **done, 5 Oct**; needs the money switch to run |
 | Correspondence drafts, then ordinary after one reviewed week | [owner] | A | now |
 | Tell the owner after each launch, as they chose (R30) | [code] | A | decision (d) |
 | A paid delivery never stalls silently (R31) | [code] | B | **done, 5 Oct** |

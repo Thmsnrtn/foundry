@@ -2062,8 +2062,11 @@ now last the whole window plus two days. Acts a charter decides end with that
 charter: late in a term a test gets a shorter window, and with fewer than about
 two weeks left none is let in (the charter page says how long a test let in
 today would run). Signing for 90 days avoids most of this. After a window
-closes, a refund the public page promises is yours until R53 lets you hand it
-to a standing act.
+closes, a refund of a purchase made while the window was open is still
+Foundry's to give, under the refund act you approved, even once the test's
+asset is archived (R53, 5 October 2026: a re-reading found the expiry already
+honoured, and archiving the one real time limit). A purchase reported after
+the acts lapsed is still yours, in Stripe.
 
 **And one setting (4 October 2026, R19).** A subscription is offered only
 while Foundry can cancel one, which needs its money switch on

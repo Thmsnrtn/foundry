@@ -137,7 +137,15 @@ export async function checkKillSwitch(
   if (said) {
     return { blocked: true, reason: `${said.refusal} — you said: "${said.statement}"` };
   }
-  if (productRow.status && productRow.status !== 'active') {
+  // A REFUND OUTLIVES THE ASSET (R53). An experimental asset is archived once
+  // nobody is owed anything, and the public promise is a refund with no time
+  // limit, which the owner's refund act repeats in the words he approved. So
+  // an archived experimental asset may still give money back, and only that:
+  // the refund tool, under an act the gateway resolved from the rows as this
+  // experiment's refund act. Nothing else passes an archived asset.
+  const refundUnderItsAct = productRow.status === 'archived' && productRow.standing === 'experimental'
+    && tool === 'stripe_create_refund' && capability?.experimentAct?.kind === 'refund';
+  if (productRow.status && productRow.status !== 'active' && !refundUnderItsAct) {
     return {
       blocked: true,
       reason: `product status is '${productRow.status}'`,

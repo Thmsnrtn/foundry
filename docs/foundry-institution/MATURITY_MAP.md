@@ -2730,6 +2730,15 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### A refund outlives the asset (Roadmap 2027 R53, 5 October 2026)
+
+**What changed.** An archived experimental asset may still refund, under its
+experiment's own refund act and nothing else. **Evidence maturity.** E1:
+`a-refund-outlives-the-asset`. **Proof debt.** Runs only with the money switch
+on (still off in production); an earned asset's refunds are not covered by an
+experiment act and still need an allowance or an exact approval; a purchase
+reported after its acts lapsed stays the owner's.
+
 ### Week two of a brief is asked again (Roadmap 2027 R28, 5 October 2026)
 
 **What changed.** The steward re-asks a brief's sealed words of its own
