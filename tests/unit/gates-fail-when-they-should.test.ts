@@ -26,7 +26,14 @@
 
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+
+// A MEASURED BUDGET FOR EVERY TEST HERE. Each test runs a gate script, which
+// migrates a scratch database; at the start of `npm run check`, beside two
+// other vitest processes, one took 14–31 s (measured 6 October 2026). Vitest 1
+// let a synchronous test finish however long it ran; vitest 4 fails it at its
+// timeout, so the file says what it may take. Twice the slowest measured.
+vi.setConfig({ testTimeout: 60_000 });
 import { execFileSync } from 'child_process';
 import {
   cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync,
@@ -177,7 +184,12 @@ beforeAll(() => {
   // and a 300MB copy would cost more than the serial execution this replaces.
   symlinkSync(resolve(REPO, 'node_modules'), resolve(sandbox, 'node_modules'));
   ROOT = sandbox;
-});
+  // A MEASURED BUDGET, NOT THE DEFAULT. The copy is about 130 MB (docs carry
+  // the captures) and takes half a second on a quiet machine; at the start of
+  // `npm run check`, with three vitest processes migrating databases at once,
+  // it measured over ten. Vitest 4 fails a synchronous hook that overruns its
+  // timeout where vitest 1 let it finish, so the hook says what it may take.
+}, 120_000);
 
 afterAll(() => {
   if (sandbox !== null) rmSync(sandbox, { recursive: true, force: true });
@@ -1402,5 +1414,6 @@ describe('and passes on a clean tree', () => {
       const r = run(script);
       expect(r.code, `${script}: ${r.output}`).toBe(0);
     }
-  });
+  // Every gate in turn, about thirty scripts: 144 s measured under load.
+  }, 300_000);
 });

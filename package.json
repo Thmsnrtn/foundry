@@ -1,7 +1,7 @@
 {
   "name": "foundry",
   "version": "0.1.0",
-  "description": "Adaptive company institution \u2014 discovers, understands and progressively operates unfamiliar companies",
+  "description": "Adaptive company institution — discovers, understands and progressively operates unfamiliar companies",
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
@@ -35,7 +35,7 @@
     "sim:crawl": "TURSO_DATABASE_URL=file::memory: tsx tests/simulation/crawl.ts"
   },
   "dependencies": {
-    "@clerk/clerk-sdk-node": "^4.13.0",
+    "@clerk/backend": "^3.23.0",
     "@hono/node-server": "^1.19.9",
     "@libsql/client": "^0.5.0",
     "@sentry/node": "^8.47.0",
@@ -53,7 +53,7 @@
     "tsc-alias": "^1.8.0",
     "tsx": "^4.7.0",
     "typescript": "^5.3.0",
-    "vitest": "^1.0.0"
+    "vitest": "^4.1.11"
   },
   "engines": {
     "node": ">=22.0.0"

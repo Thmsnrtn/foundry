@@ -5,7 +5,7 @@
 
 import { mayBeAdmitted } from '../lib/instance-posture.js';
 import { createMiddleware } from 'hono/factory';
-import { Clerk as ClerkBackend, verifyToken, type VerifyTokenOptions } from '@clerk/backend';
+import { createClerkClient, verifyToken } from '@clerk/backend';
 import { getFounderByClerkId, query } from '../db/client.js';
 import { bindOwnerIdentity } from '../services/founder/owner-identity.js';
 import type { Founder, FounderPreferences } from '../types/index.js';
@@ -16,6 +16,29 @@ export interface AuthEnv {
   Variables: {
     founder: Founder;
   };
+}
+
+/**
+ * CLERK'S SIGNATURE, OR NOTHING: one adapter between this middleware and the
+ * identity provider's verifier.
+ *
+ * `@clerk/backend` 3 reports a failed verification by RETURNING `{ errors }`
+ * where version 0.38 threw. Every caller here — the bearer path and, through
+ * `session-lapse.ts`, each step of the browser path — treats "it threw" as "not
+ * this person", so passing the new return through unchanged would have admitted
+ * an expired or forged token as claims with no subject. This throws on any
+ * error, and on a token whose issuer is not Clerk's (the predicate the old
+ * `issuer` option carried, which version 3 no longer accepts).
+ */
+export async function verifiedClerkClaims(
+  token: string, secretKey: string, clockSkewInMs?: number,
+): Promise<{ sub?: string; sid?: string; exp?: number; iss?: string }> {
+  const result = await verifyToken(token, { secretKey, ...(clockSkewInMs ? { clockSkewInMs } : {}) }) as
+    { data?: { sub?: string; sid?: string; exp?: number; iss?: string }; errors?: unknown[] };
+  if (result.errors) throw result.errors[0] ?? new Error('token not verified');
+  const claims = result.data;
+  if (!claims || typeof claims.iss !== 'string' || !claims.iss.includes('clerk')) throw new Error('token not issued by Clerk');
+  return claims;
 }
 
 /**
@@ -74,21 +97,18 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
   // only on Clerk's live word that the session is still his — see
   // session-lapse.ts for why a minute was sending him Home.
   const authHeader = c.req.header('Authorization');
-  const issuer = (iss: string) => iss.includes('clerk');
   let payload: { sub?: string } | null = null;
   if (authHeader?.startsWith('Bearer ')) {
     const bearerToken = authHeader.slice(7);
     payload = bearerToken
-      ? await verifyToken(bearerToken, { secretKey, issuer } satisfies VerifyTokenOptions).catch(() => null)
+      ? await verifiedClerkClaims(bearerToken, secretKey).catch(() => null)
       : null;
   } else {
     const { resolveBrowserSession, keptSessionCookie } = await import('./session-lapse.js');
     const resolved = await resolveBrowserSession(c.req.header('Cookie'), {
-      verify: (t, lapseGraceMs) => verifyToken(t, {
-        secretKey, issuer, ...(lapseGraceMs ? { clockSkewInMs: lapseGraceMs } : {}),
-      } satisfies VerifyTokenOptions),
+      verify: (t, lapseGraceMs) => verifiedClerkClaims(t, secretKey, lapseGraceMs),
       liveSession: async (sid) => {
-        const s = await ClerkBackend({ secretKey }).sessions.getSession(sid);
+        const s = await createClerkClient({ secretKey }).sessions.getSession(sid);
         return { status: s.status, userId: s.userId };
       },
       now: () => Date.now(),
@@ -126,7 +146,7 @@ export const authMiddleware = createMiddleware<AuthEnv>(async (c, next) => {
     // This handles the race condition where the user logs in before the Clerk webhook arrives
     if (result.rows.length === 0) {
       try {
-        const clerk = ClerkBackend({ secretKey });
+        const clerk = createClerkClient({ secretKey });
         const user = await clerk.users.getUser(clerkUserId);
         // THE PRIMARY ADDRESS, AND ONLY IF IT IS VERIFIED.
         //
