@@ -67,7 +67,7 @@ beforeAll(async () => {
   const { signCharter } = await import('../../src/services/institution/charter.js');
   await signCharter({ founderId: OWNER, testsTotalCents: 10_000, probesInFlight: 3,
     cognitionCentsPerDay: 300, days: 2, publicVoice: 'Apex Micro', statement: 'A short term, deliberately.' });
-});
+}, 180_000);
 
 describe('a purchase that arrives after the term has ended', () => {
   it('the charter term runs out on its own', async () => {

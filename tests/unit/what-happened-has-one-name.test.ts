@@ -35,7 +35,7 @@ beforeAll(async () => {
   await markVisit(OWNER);
   app = await ownerApp();
   me = owner(app);
-});
+}, 180_000);
 
 describe('one settled test, one word, one reason', () => {
   it('the reader says surprised, with the settlement\'s own reason and what it does and does not establish', async () => {

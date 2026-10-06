@@ -477,8 +477,9 @@ table's own answer, not a judgement call. Preserved on
 posture gate and was the only importer of twenty-six of them, and
 `every-declared-route-is-registered` booted the app in the *commercial*
 posture, so unmounting a router without deleting its file failed there. The
-crawl's table now mirrors what `index.ts` actually serves, and the route gate
-asks its question about the instance that exists.
+crawl's table then mirrored what `index.ts` actually served by hand; since
+remediation 3 (6 October 2026) it is read from `index.ts` itself, and the route
+gate asks its question about the instance that exists.
 
 **The cost, recorded rather than hidden.** Forty-eight services are now
 orphaned, because the only things that imported them were the deleted routes.

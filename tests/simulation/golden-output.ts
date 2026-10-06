@@ -1,95 +1,104 @@
 // =============================================================================
 // FOUNDRY — Golden Output Harness (the taste check)
 //
-// The go-live caveat that was never closed: "does the real generated output
-// read like a sharp operator, or like generic MBA advice?" This seeds a
-// realistic founder + 90 days of history and prints EVERY deterministic
-// founder-facing artifact — the Letter, the fleet Letter, the decision framing,
-// the calibration display — so a human can read what Foundry actually says. No
-// model calls; no live keys; no deploy needed. (The four department drafts were
-// deleted in Roadmap 2027 R10 with the departments that wrote them.)
+// Prints what the owner actually reads, on the world production has, so a
+// person can judge it: Home's one thing, what needs the owner and why, whether
+// Foundry can sell on its own, what an absence would mean, the test the owner is
+// being asked about, and the money. No model call, no network, no live key.
+//
+// REBUILT ON THE PRODUCTION WORLD (remediation 3, 6 October 2026). It seeded a
+// SaaS founder with MRR, churn, customers, autopilot policies and a Letter —
+// a company shape this private instance does not have and pages the owner no
+// longer reads — so its output could be sharp and still say nothing about the
+// product. It now reads the owner's own screens off `seedProductionShape`, as
+// the walk and the crawl do, and it FAILS (exit 1) on a page that is not 200
+// or that carries a template artifact, so it cannot quietly print an error.
 //
 // Run: npm run sim:golden
 // =============================================================================
 
+process.env.NODE_ENV = 'test';
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '0'.repeat(64);
+process.env.FOUNDRY_INSTANCE_POSTURE = 'private_owner';
+process.env.FOUNDRY_OWNER_EMAIL = 'owner@example.com';
+process.env.STRIPE_SECRET_KEY ??= 'sk_test_fake';
+process.env.STRIPE_WEBHOOK_SECRET ??= 'whsec_fake';
 
-import { runMigrations } from '../../src/db/migrate.js';
-import { query } from '../../src/db/client.js';
-import { nanoid } from 'nanoid';
+const { providerStubs } = await import('../helpers/provider-stubs.js');
+const stubs = providerStubs();
+globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+  const u = typeof url === 'string' ? url : url instanceof URL ? url.href : url.url;
+  return stubs.fetch(u, init);
+}) as typeof fetch;
 
-const rule = (t: string) => console.log(`\n${'═'.repeat(70)}\n  ${t}\n${'═'.repeat(70)}`);
-const block = (t: string) => console.log(`\n${t}\n`);
+const { seedProductionShape, addCompanies, ownerApp, OWNER } = await import('../helpers/world.js');
+const { withViewer } = await import('../../src/views/owner/viewer.js');
 
-async function seed() {
-  await runMigrations();
-  await query('PRAGMA foreign_keys=OFF', []);
-  await query("INSERT INTO founders (id, clerk_user_id, email, preferences) VALUES ('g_f','clk_g','maya@northwind.co', ?)",
-    [JSON.stringify({ fluency: 'plain' })]);
-  await query("INSERT INTO products (id, name, owner_id, status) VALUES ('g_p','Northwind','g_f','active')", []);
-  await query("INSERT INTO lifecycle_state (product_id, current_prompt, risk_state, risk_state_reason) VALUES ('g_p','prompt_3','yellow','Churn ticked up while activation stalled')", []);
+const rule = (t: string): void => console.log(`\n${'═'.repeat(70)}\n  ${t}\n${'═'.repeat(70)}`);
 
-  // 90 days of metrics: growing MRR, but churn creeping and activation soft.
-  const today = new Date();
-  for (let d = 90; d >= 0; d -= 7) {
-    const date = new Date(today.getTime() - d * 86_400_000).toISOString().slice(0, 10);
-    const wk = (90 - d) / 7;
-    await query(
-      `INSERT INTO metric_snapshots (id, product_id, snapshot_date, new_mrr_cents, signups_7d, active_users, activation_rate, day_30_retention, churn_rate, nps_score, support_volume_7d, mrr_health_ratio)
-       VALUES (?, 'g_p', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [nanoid(), date, 800000 + wk * 45000, Math.round(9 + wk), 120 + wk * 8,
-       0.34, 0.55 - wk * 0.005, 0.055 + wk * 0.002, 41, 18 + Math.round(wk), 0.4],
-    );
-  }
-
-  // A champion, an at-risk customer, and a happy-but-quiet one.
-  await query(`INSERT INTO customers (id, product_id, owner_id, name, email, health_score, churn_risk, is_champion, last_active_at, external_id) VALUES
-    ('g_c1','g_p','g_f','Priya Raman','priya@acme.io',0.94,0.08,1,?, 'cus_priya'),
-    ('g_c2','g_p','g_f','Dan Whorley','dan@lugetech.com',0.31,0.86,0,?, 'cus_dan')`,
-    [new Date(today.getTime() - 2 * 86_400_000).toISOString(),
-     new Date(today.getTime() - 24 * 86_400_000).toISOString()]);
-
-  // Product DNA, as a real company would have it.
-  await query(`INSERT INTO product_dna (id, product_id, icp_description, icp_pain, positioning_statement, primary_objection, what_we_are_not, growth_hypothesis, sections_completed, completion_pct)
-    VALUES ('g_dna','g_p','ops leads at 20-100 person B2B SaaS','drowning in manual reporting across disconnected tools','the reporting layer that assembles itself','we already have a BI tool','not another dashboard you have to configure','warm intros convert 4x cold', '[]', 60)`, []);
-
-  // Two open decisions of different stakes, one with a recommendation.
-  await query(`INSERT INTO decisions (id, product_id, category, gate, what, why_now, recommendation, status) VALUES
-    ('g_d1','g_p','strategic',3,'Sign the 40-seat Meridian contract at 30% discount','Their procurement deadline is Friday','Take it — logo value and expansion path outweigh the margin hit at this stage','pending'),
-    ('g_d2','g_p','urgent',1,'Refund the double-charged Lugetech invoice','Support flagged it this morning',NULL,'pending')`, []);
-
-  // A recorded belief and one that has since gone false (the memory kernel).
-  await query(`INSERT INTO decision_premises (id, product_id, decision_id, decision_source, premise, premise_type, metric_key, comparator, threshold, status, evidence, origin) VALUES
-    ('g_pr1','g_p','g_d1','decision','Churn stays under 5% as we move upmarket','metric','churn_rate','<',0.05,'falsified','observed churn_rate = 0.063 (premise required < 0.05)','founder'),
-    ('g_pr2','g_p','g_d1','decision','Activation holds above 30%','metric','activation_rate','>',0.30,'holding',NULL,'founder')`, []);
-
-  // Some autonomous history so trust + calibration have something to say.
-  await query("INSERT INTO autopilot_policies (id, product_id, category, mode, set_by, clean_cycles) VALUES ('g_ap','g_p','customer_success','suggest','earned',6)", []);
+/** The words of a page's main, as a reader meets them: tags gone, closed
+ *  disclosures included (a printed page has no fold), whitespace collapsed. */
+function words(html: string, selector: 'main' | 'one' = 'main'): string {
+  const scope = selector === 'one'
+    ? (/<section[^>]*id="the-one-thing"[\s\S]*?<\/section>/.exec(html)?.[0] ?? '')
+    : (/<main[\s\S]*?<\/main>/.exec(html)?.[0] ?? html);
+  return scope
+    .replace(/<script[\s\S]*?<\/script>/gi, '').replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<form[\s\S]*?<\/form>/gi, (f) => (/class="ask"/.test(f) ? '' : f))
+    .replace(/<\/(p|li|h[1-6]|dt|dd|summary|section|div)>/gi, '\n').replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&middot;/g, '·')
+    .split('\n').map((l) => l.replace(/\s+/g, ' ').trim()).filter(Boolean).join('\n');
 }
 
-async function main() {
-  await seed();
-  const { composeLetter } = await import('../../src/services/letter/composer.js');
-  const { adviceFooter } = await import('../../src/services/ux/fluency.js');
+const ARTIFACTS = [/\bundefined\b/, /\bNaN\b/, /\[object Object\]/, /Invalid Date/];
+const failures: string[] = [];
 
-  rule('THE LETTER (plain fluency) — what Maya reads over coffee');
-  const letter = await composeLetter('g_p', 'plain');
-  if (letter.needsYou) block(`⚑ The one thing that needs you:\n   ${letter.needsYou}`);
-  block(`What I handled:\n${letter.handled.map((l) => '   • ' + l).join('\n') || '   (nothing autonomous yet)'}`);
-  block(`What I learned:\n${letter.learned.map((l) => '   • ' + l).join('\n') || '   (quiet)'}`);
-  block(`How trust moved:\n${letter.trust.map((l) => '   • ' + l).join('\n') || '   (quiet)'}`);
-  block(`   — ${adviceFooter('plain')}`);
+async function main(): Promise<void> {
+  const { experimentId } = await seedProductionShape({ charter: true, searching: true, eyes: true, undecided: true });
+  const app = await ownerApp();
+  await addCompanies(app, ['Apex Micro Press', 'Northfield Candles', 'Tidewater Templates']);
+  const read = async (path: string): Promise<string> => {
+    const res = await withViewer(OWNER, async () => app.request(path, { headers: { accept: 'text/html' } }));
+    const html = await res.text();
+    if (res.status !== 200) failures.push(`${path} answered ${String(res.status)}`);
+    for (const rx of ARTIFACTS) if (rx.test(words(html))) failures.push(`${path} carries "${rx.source}"`);
+    return html;
+  };
 
-  rule('THE EXPIRED BELIEF — the memory kernel catching a decision going stale');
-  const { getExpiredBeliefs } = await import('../../src/services/memory/kernel.js');
-  const expired = await getExpiredBeliefs('g_p');
-  block(expired.map((e) => `   "${e.premise.premise}"\n   → ${e.premise.evidence}`).join('\n') || '   (none)');
+  const home = await read('/foundry');
+  rule('HOME — the one thing, as the card says it');
+  console.log(words(home, 'one') || '(no card: nothing needs the owner)');
 
-  console.log('\n' + '─'.repeat(70));
-  console.log('  Read the above as Maya would. Does it sound like a sharp chief');
-  console.log('  of staff — specific, grounded, honest — or like generic advice?');
-  console.log('─'.repeat(70) + '\n');
+  rule('NEEDS YOU — everything waiting on the owner, and why');
+  console.log(words(await read('/foundry/needs-you')));
+
+  rule('CONTROL — can Foundry sell on its own today, and what stops it');
+  const control = words(await read('/foundry/controls'));
+  console.log(control.split('\n').slice(0, 30).join('\n'));
+
+  rule('IF YOU STEPPED AWAY — the week');
+  const away = words(await read('/foundry/absence'));
+  console.log(away.split('\n').slice(0, 30).join('\n'));
+
+  rule('THE TEST THE OWNER IS BEING ASKED ABOUT');
+  console.log(words(await read(`/foundry/experiments/${experimentId}`)).split('\n').slice(0, 40).join('\n'));
+
+  rule('ECONOMICS');
+  console.log(words(await read('/foundry/money')).split('\n').slice(0, 25).join('\n'));
+
+  console.log(`\n${'─'.repeat(70)}`);
+  console.log('  Read the above as the owner would, on a phone between other things.');
+  console.log('  Is each sentence true, specific and the owner's — or generic, or about Foundry?');
+  console.log(`${'─'.repeat(70)}\n`);
+
+  if (failures.length) {
+    console.error(`golden: ${String(failures.length)} page(s) could not be read cleanly:`);
+    for (const f of failures) console.error(`  ${f}`);
+    process.exit(1);
+  }
+  process.exit(0);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });

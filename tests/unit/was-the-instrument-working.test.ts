@@ -51,7 +51,7 @@ beforeAll(async () => {
   }
   app = await ownerApp();
   me = owner(app);
-});
+}, 180_000);
 
 describe('a null result on a channel that may not have carried a reply says less', () => {
   it('the settled page says what was wrong with the instrument and what the result therefore does not establish', async () => {

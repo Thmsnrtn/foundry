@@ -35,7 +35,7 @@ const sealed = async (): Promise<string> => JSON.stringify((await query(
 beforeAll(async () => {
   await seedProductionShape({ charter: true, searching: true, eyes: true, settledBy: 'the world', earsOpen: true });
   X = (await findProof1(OWNER))!;
-});
+}, 180_000);
 
 describe('the clarification the owner authorised', () => {
   it('says the result first and says nothing about the repair', () => {

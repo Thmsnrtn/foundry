@@ -53,7 +53,7 @@ beforeAll(async () => {
       WHERE product_id = ? AND subject = 'publish' AND lifted_at IS NULL`, [String(p.id)]);
   await setBoundary({ productId: String(p.id), subject: 'publish', mode: 'never', statement: AS_WRITTEN });
   expect(await keepProof2sEntryCurrent(OWNER)).toBe('narrowed');
-});
+}, 180_000);
 
 describe('while the listing does not exist', () => {
   it('holds the page and says why, in words he can act on', async () => {

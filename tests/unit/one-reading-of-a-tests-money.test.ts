@@ -38,7 +38,7 @@ beforeAll(async () => {
   app = await ownerApp();
   me = owner(app);
   productId = String((await one('SELECT id FROM products WHERE from_experiment_id = ?', [testId])).id);
-});
+}, 180_000);
 
 describe('before anything moves', () => {
   it('the reading says authorised, and Home says set aside — not spent, not lost', async () => {

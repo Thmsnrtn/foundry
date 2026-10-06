@@ -40,7 +40,7 @@ beforeAll(async () => {
   }
   app = await ownerApp();
   me = owner(app);
-});
+}, 180_000);
 
 describe('one derivation carries both', () => {
   it('the outcome itself says what the instrument cost the claim', async () => {

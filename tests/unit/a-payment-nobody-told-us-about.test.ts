@@ -42,7 +42,7 @@ beforeAll(async () => {
   await runMorning(HANDS);
   app = await ownerApp();
   me = owner(app);
-});
+}, 180_000);
 
 describe('the provider is asked what it knows, and what it knows becomes owed', () => {
   it('finds a payment no webhook ever delivered, and opens what the buyer is owed', async () => {

@@ -48,7 +48,7 @@ beforeAll(async () => {
     `UPDATE experiment_fulfilments SET refund_requested_at = datetime('now') WHERE payment_ref = ?`, [PAID]);
   app = await ownerApp();
   me = owner(app);
-});
+}, 180_000);
 
 describe('what is owed does not pretend an authority that is gone', () => {
   it('while the act stands, the refund is Foundry\'s to keep trying', async () => {

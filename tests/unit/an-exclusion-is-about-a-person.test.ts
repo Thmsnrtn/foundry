@@ -37,7 +37,7 @@ beforeAll(async () => {
   providers = seeded.providers!;
   app = await ownerApp();
   me = owner(app);
-});
+}, 180_000);
 
 describe('the same address on two rows', () => {
   it('production\'s own data holds one business twice, at one address, under two names', async () => {

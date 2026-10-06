@@ -2785,6 +2785,24 @@ past 700 words; inline links reach 24px, not 44 — the WCAG 2.2 inline
 exception, not the design target; keyboard and screen-reader passes are axe's
 rules only, never a person with VoiceOver.
 
+### Gates that measured the wrong thing (Remediation 3, 6 October 2026)
+
+**What changed.** The crawl in the chain reads its mounts from `src/index.ts`,
+signs in as the owner the posture admits, seeds the production world, drives
+real ids, fails on 503, a 403 for the owner and a 404 on a real row, scans what
+its links return, and holds a population floor; `sim:golden` reads the owner's
+screens on the same world and fails on an error page; every world-seeding hook
+states its budget. **Evidence maturity.** E2: a planted 503 and a planted
+unnamed inline route turn the crawl red inside the gates sandbox, the email of
+the old crawl turns it red, and the tree is green with zero findings; the
+budget ratchet goes red when one budget is taken away. **Proof debt.** Six of
+24 `:param` routes are not driven with a real row (API customers and webhooks,
+a responsibility, the buyer's signed links — a made-up signed link is checked
+to be refused); the crawl drives GET only, so a POST that 500s on a real row is
+the suite's to find; the floors are today's reach, not a measured need;
+`measure-mobile` and the browser tests run where Chromium is and skip in CI
+(PENDING 40).
+
 ### Dependencies, and gates that say how long they take (Remediation 4, 6 October 2026)
 
 **What changed.** vitest 4.1 and `@clerk/backend` 3 replace vitest 1.6 and the

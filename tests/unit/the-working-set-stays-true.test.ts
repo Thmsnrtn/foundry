@@ -50,7 +50,7 @@ beforeAll(async () => {
     founderId: OWNER, opportunityId: candidateId, unknownId,
     whatWeDo: 'offering the brief to the next twenty shops', whatWeExpect: 'at least one pays', wouldDisprove: 'nobody pays',
     costCents: 2500, evidenceMode: 'real' });
-});
+}, 180_000);
 
 describe('a closed search takes its debris with it', () => {
   it('before: the candidate stands on Explore and the design is undecided', async () => {

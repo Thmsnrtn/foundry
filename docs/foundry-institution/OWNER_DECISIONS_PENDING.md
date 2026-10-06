@@ -13,9 +13,9 @@ around each item.
 ---
 
 <!-- status:begin — generated from the headings below by node scripts/check-record-matches-code.mjs --write -->
-# 20 WAITING ON THE OWNER, 3 WITH COUNSEL, 7 DECIDED IN PLACE
+# 21 WAITING ON THE OWNER, 3 WITH COUNSEL, 7 DECIDED IN PLACE
 
-- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 21, 25, 26, 27, 29, 30, 32, 33, 34, 35, 36, 37, 38, 39.
+- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 21, 25, 26, 27, 29, 30, 32, 33, 34, 35, 36, 37, 38, 39, 40.
 - **Waiting on counsel:** PENDING 9, 13, 15 (interim positions in force; see below).
 - **Decided, and kept where they were asked:** PENDING 16, 20, 22, 23, 24, 28, 31.
 - **Answered and recorded as RESOLVED:** 15.
@@ -2247,4 +2247,23 @@ empty state that says what would fill each.
 
 **Recommendation.** (a): a tab with nothing behind it is the dead end the walk
 was looking for.
+
+## PENDING 40 — A browser in the release chain: **OWNER** (2026-10-06)
+
+**What is true.** `scripts/measure-mobile.mts` — the gate made after the first
+prototype overflowed on your iPhone — and the browser tests added since (the
+one thing on the first screen, axe and the 24px floor, the twelve journeys)
+run wherever Chromium is installed and skip where it is not. The CI runner
+that gates a deploy has no Chromium, so on the path to production they are
+skipped, and the phone you hold is checked only when somebody runs them by hand.
+
+**Your choice.**
+- **(a)** Add a Chromium install to CI (about 150 MB cached, a minute or two a
+  run) and run `measure-mobile` and the browser tests there, so a deploy cannot
+  pass without them.
+- **(b)** Keep them by hand, before anything you will open on your phone, as
+  `measure-mobile`'s own header says today.
+
+**Recommendation.** (a). Every regression this remediation found on Home was
+one a browser sees and a DOM test does not.
 

@@ -46,7 +46,7 @@ beforeAll(async () => {
   }
   app = await ownerApp();
   me = owner(app);
-});
+}, 180_000);
 
 // The secret is the deployment's, not this file's: put it back so a suite that
 // runs after this one is not quietly testing a deployment that cannot hear.

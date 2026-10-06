@@ -878,6 +878,41 @@ describe('every gate refuses the defect it exists for', () => {
     expect(r.output).toContain('no longer one');
   });
 
+  // THE CRAWL (remediation 3, 6 October 2026). It counted a 503 as a pass,
+  // drove made-up ids, and kept a hand copy of the mount table; each of those
+  // is a way to stay green while looking at nothing. It is run here in the
+  // sandbox, where a planted defect cannot reach the real tree.
+  const crawl = (env: Record<string, string> = {}): { code: number; output: string } => {
+    try {
+      const output = execFileSync(resolve(ROOT, 'node_modules/.bin/tsx'), [resolve(ROOT, 'tests/simulation/crawl.ts')],
+        { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...env } });
+      return { code: 0, output };
+    } catch (err) {
+      const e = err as { status?: number; stdout?: string; stderr?: string };
+      return { code: e.status ?? 1, output: `${e.stdout ?? ''}${e.stderr ?? ''}` };
+    }
+  };
+
+  it('sim:crawl fails on an owner page that answers 503', () => {
+    const r = crawl({ CRAWL_PLANT: '/foundry/controls' });
+    expect(r.code).toBe(1);
+    expect(r.output).toContain('/foundry/controls → 503');
+  }, 120_000);
+
+  it('sim:crawl fails on a route src/index.ts declares that the crawl does not name', () => {
+    unwrite('src/index.ts', "app.get('/favicon.ico', pwa.favicon);",
+      "app.get('/favicon.ico', pwa.favicon);\napp.get('/planted-inline', (c) => c.text('x'));");
+    const r = crawl();
+    expect(r.code).toBe(1);
+    expect(r.output).toContain('GET /planted-inline');
+  }, 120_000);
+
+  it('sim:crawl passes on the tree as it stands, and says what it reached', () => {
+    const r = crawl();
+    expect(r.code, r.output.slice(-2000)).toBe(0);
+    expect(r.output).toMatch(/Population: \{"routes":\d+/);
+  }, 120_000);
+
   it('check-the-laboratory-is-the-institution passes on the tree as it stands', () => {
     const r = run('check-the-laboratory-is-the-institution.mjs');
     expect(r.code, r.output).toBe(0);

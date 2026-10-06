@@ -32,7 +32,7 @@ beforeAll(async () => {
   await markVisit(OWNER); // he is back
   app = await ownerApp();
   me = owner(app);
-});
+}, 180_000);
 
 describe('what he asks first', () => {
   it('"what happened while I was away" covers the fortnight and says the search ran', async () => {
