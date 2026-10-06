@@ -36,6 +36,8 @@ export interface ProviderReconciliation {
   theyKnow: number;
   /** Those we had never been told about, by reference. */
   weDidNot: string[];
+  /** Checkouts opened at our links and left unpaid, taken in this pass. */
+  checkoutsLeft?: number;
   /** What the owner would be told, or null when there is nothing to say. */
   sentence: string | null;
 }
@@ -130,6 +132,35 @@ export async function reconcileWithTheProvider(
     if (taken.recorded.length > 0) weDidNot.push(id);
   }
 
+  // AND THE CHECKOUTS SOMEBODY OPENED AND LEFT (Roadmap 2027 R35), at each
+  // link placed in the window. Not a missed payment, so not a finding against
+  // the path: the reach a payment link records, taken in through the same
+  // door its webhook uses, once by reference.
+  let checkoutsLeft = 0;
+  const links = (await query(
+    `SELECT DISTINCT x.exposure_ref FROM experiment_exposures x
+       JOIN venture_experiments e ON e.id = x.experiment_id
+      WHERE x.founder_id = ? AND x.provider = 'stripe' AND e.evidence_mode = 'real'
+        AND x.placed_at IS NOT NULL AND datetime(x.placed_at) >= datetime(?)`,
+    [founderId, new Date(now.getTime() - RECONCILE_DAYS * 86_400_000).toISOString()])).rows as unknown as Row[];
+  for (const l of links) {
+    let sessions: Array<Record<string, unknown>> = [];
+    try {
+      const { abandonedCheckoutsAt } = await import('./payment-link.js');
+      sessions = await abandonedCheckoutsAt(String(l.exposure_ref), since);
+    } catch (err) {
+      log.warn('payments.reconcile.could_not_ask_checkouts', { error: String(err) });
+      continue;
+    }
+    for (const session of sessions) {
+      const event = { id: `reconciled_${String(session.id)}`, type: 'checkout.session.expired',
+        created: Number(session.created ?? Math.floor(now.getTime() / 1000)), data: { object: session } };
+      const { intakeStripeSettlement } = await import('./settlement-intake.js');
+      const taken = await intakeStripeSettlement(event);
+      checkoutsLeft += taken.recorded.filter((r) => !r.duplicate).length;
+    }
+  }
+
   if (weDidNot.length > 0) {
     // THE PATH WAS NOT CARRYING WHAT IT IS FOR. Recorded on the day, through
     // the same writer the health pass uses, so the day record that a later
@@ -145,7 +176,7 @@ export async function reconcileWithTheProvider(
   }
 
   return {
-    asked: true, theyKnow: intents.length + invoices.length, weDidNot,
+    asked: true, theyKnow: intents.length + invoices.length, weDidNot, checkoutsLeft,
     sentence: weDidNot.length === 0 ? null
       : `${String(weDidNot.length)} payment${weDidNot.length === 1 ? '' : 's'} the provider knew about had not reached Foundry. ${weDidNot.length === 1 ? 'It is' : 'They are'} recorded now, and what ${weDidNot.length === 1 ? 'it' : 'they'} bought is owed.`,
   };

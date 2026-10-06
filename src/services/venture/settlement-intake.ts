@@ -92,6 +92,25 @@ export function settlementFactsFromStripeEvent(event: { id?: string; type: strin
       observedAt: at, providerRef: `${String(o.id)}:declined`, paymentRef: String(o.id), chargeRef: str(err?.charge),
       payerReference: str(o.receipt_email), paymentLinkId: str(meta!.payment_link), settlesRef: null }];
   }
+  // SOMEBODY OPENED THE CHECKOUT AND LEFT (Roadmap 2027 R35). A payment
+  // link's session that expired unpaid is the plainest reach a payment link
+  // records: somebody (or something: a link preview opens it too) got as far
+  // as the page that takes the money. Only an EXPIRED session is read, because
+  // an open one may still complete and a completed one is already a payment;
+  // counting either would count one buyer twice. A session whose intent was
+  // already declined is that same beginning, so it shares its reference and
+  // the event writer's idempotency keeps it to one row.
+  // `checkout.session.expired` arrives by webhook; the reconcile pass shapes
+  // what it reads from the provider as the same event.
+  if (event.type === 'checkout.session.expired' && o.object === 'checkout.session' && o.status === 'expired' && o.payment_status !== 'paid') {
+    const linkId = str(o.payment_link);
+    if (!isOurs(meta) && !linkId) return [];
+    const intent = str(o.payment_intent);
+    const details = o.customer_details as { email?: string | null } | null | undefined;
+    return [{ experimentId: isOurs(meta) ? meta!.experiment_id : null, kind: 'checkout_started', amountCents: Number(o.amount_total ?? 0), currency,
+      observedAt: at, providerRef: intent ? `${intent}:declined` : String(o.id), paymentRef: intent ?? String(o.id), chargeRef: null,
+      payerReference: details?.email ?? null, paymentLinkId: linkId, settlesRef: null }];
+  }
   if (event.type === 'charge.refunded' && o.object === 'charge' && (isOurs(meta) || typeof o.invoice === 'string')) {
     const refunds = (o.refunds as { data?: Array<{ id: string; amount: number }> } | undefined)?.data ?? [];
     const last = refunds[refunds.length - 1];
@@ -142,6 +161,17 @@ export async function experimentOfSubscription(subscriptionId: string): Promise<
   } catch { return null; }
 }
 
+/**
+ * THE EXPERIMENT A PAYMENT LINK WAS PLACED FOR, from the exposure that names
+ * it. A session that carries no tag of ours is still ours when it was opened
+ * at a link this institution placed; one at anybody else's link is not.
+ */
+async function experimentByLink(paymentLinkId: string | null): Promise<string | null> {
+  if (!paymentLinkId) return null;
+  const r = (await query(`SELECT experiment_id FROM experiment_exposures WHERE provider = 'stripe' AND exposure_ref = ? ORDER BY placed_at DESC LIMIT 1`, [paymentLinkId])).rows[0] as Row | undefined;
+  return r ? String(r.experiment_id) : null;
+}
+
 /** The experiment a reference belongs to, from what is already owed. */
 async function experimentByReference(refs: Array<string | null>): Promise<string | null> {
   const known = refs.filter((r): r is string => !!r);
@@ -162,7 +192,8 @@ export async function intakeStripeSettlement(event: { id?: string; type: string;
   const result: SettlementIntake = { recorded: [], refused: [] };
   for (const fact of settlementFactsFromStripeEvent(event)) {
     const experimentId = fact.experimentId ?? await experimentByReference([fact.paymentRef, fact.chargeRef])
-      ?? (fact.subscriptionRef ? await experimentOfSubscription(fact.subscriptionRef) : null);
+      ?? (fact.subscriptionRef ? await experimentOfSubscription(fact.subscriptionRef) : null)
+      ?? (fact.kind === 'checkout_started' ? await experimentByLink(fact.paymentLinkId) : null);
     if (!experimentId) { result.refused.push({ providerRef: fact.providerRef, reason: 'no purchase of ours matches this reference' }); continue; }
     const x = await exposureOf(experimentId);
     if (!x) { result.refused.push({ providerRef: fact.providerRef, reason: 'the experiment has no exposure' }); continue; }

@@ -25,6 +25,8 @@ export interface ProviderState {
    * or not a webhook for it was ever delivered — which is the whole point of
    * asking, and the only way to stage a payment nobody was told about.
    */
+  /** Checkout sessions the provider created at a link; a scenario adds them. */
+  checkoutSessions: Array<Record<string, unknown>>;
   payments: Array<{ id: string; created: number; amount: number; amount_received: number; currency: string; status: string; latest_charge: string | null; metadata: Record<string, string>; receipt_email: string | null }>;
   calls: string[];
   seq: number;
@@ -95,7 +97,7 @@ function nested(params: Record<string, string>, prefix: string): Record<string, 
 }
 
 export function providerStubs(): { state: ProviderState; fetch: (url: string | URL, init?: RequestInit) => Promise<Response> } {
-  const state: ProviderState = { sends: [], deliveryState: new Map(), refunds: [], domains: [], nextDomainStatus: 'pending', stripeDown: false, resendDown: false, products: [], prices: [], paymentLinks: [], buyers: new Map(), payments: [], calls: [], seq: 0, subscriptions: new Map(), subscriptionUpdates: [], invoices: new Map(), charges: new Map(), cf: freshCloudflare(), indexNow: [], indexNowStatus: 202 };
+  const state: ProviderState = { sends: [], deliveryState: new Map(), refunds: [], domains: [], nextDomainStatus: 'pending', stripeDown: false, resendDown: false, products: [], prices: [], paymentLinks: [], buyers: new Map(), checkoutSessions: [], payments: [], calls: [], seq: 0, subscriptions: new Map(), subscriptionUpdates: [], invoices: new Map(), charges: new Map(), cf: freshCloudflare(), indexNow: [], indexNowStatus: 202 };
   const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
   const cfOk = (result: unknown, status = 200) => json({ success: true, result, errors: [] }, status);
   const cfErr = (code: number, message: string, status = 400) => json({ success: false, result: null, errors: [{ code, message }] }, status);
@@ -306,6 +308,12 @@ export function providerStubs(): { state: ProviderState; fetch: (url: string | U
     // SUBSCRIPTIONS: the provider's list of paid weekly invoices, which in a
     // rehearsal holds none unless a scenario puts one there. Asked by the
     // payment poll alongside the intents (Roadmap 2027 R18).
+    if (u.startsWith('https://api.stripe.com/v1/checkout/sessions?') && method === 'GET') {
+      const q = new URL(u).searchParams;
+      const since = Number(q.get('created[gte]') ?? 0);
+      return json({ data: state.checkoutSessions.filter((c) => c.payment_link === q.get('payment_link')
+        && (!q.get('status') || c.status === q.get('status')) && Number(c.created ?? 0) >= since), has_more: false });
+    }
     if (u.startsWith('https://api.stripe.com/v1/invoices?') && method === 'GET') {
       return json({ data: [], has_more: false });
     }

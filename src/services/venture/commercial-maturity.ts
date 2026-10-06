@@ -49,7 +49,10 @@ export async function commercialMaturityOf(experimentId: string): Promise<Commer
        (SELECT COUNT(*) FROM business_outcome_events b JOIN experiment_exposures x ON x.id = b.exposure_id
          WHERE x.experiment_id = e.id AND x.evidence_mode = 'real' AND b.evidence_mode = 'real'
            AND b.counterparty = 'unmatched_external'
-           AND b.kind IN ('checkout_started','continuation_requested','payment')) AS committed,
+           AND b.kind IN ('checkout_started','continuation_requested','payment')
+           -- A checkout opened and left (R35) is reach, not a beginning to pay:
+           -- only an attempt the provider made an intent for is a commitment.
+           AND NOT (b.kind = 'checkout_started' AND substr(b.provider_event_ref, 1, 3) = 'cs_')) AS committed,
        (SELECT COUNT(*) FROM experiment_fulfilments f
           JOIN business_outcome_events p ON p.id = f.payment_event_id
           JOIN experiment_exposures x ON x.id = f.exposure_id
