@@ -2929,9 +2929,15 @@ name, the payment route, places in flight, unplaced tests, the owner's
 per-sale-minutes row, correspondence). Read from Fly on 5 October 2026 before
 this shipped: `STRIPE_WEBHOOK_SECRET`, the money switch and
 `CLOUDFLARE_ANALYTICS_TOKEN` are not set; the off-machine copy's secrets are.
+Since Stage 1 (6 October 2026) the verdict also reads, through `readiness`'s
+own functions, what the Workshop lacks (none, no postal address, paused),
+whether sending is ready, and what the first-proof policy says of the forge's
+offer — it said "yes" while readiness refused every forge-made test for these.
 
-**Evidence maturity.** E1: `foundry-can-say-whether-it-can-sell`. E2 once the
-owner reads the card in production.
+**Evidence maturity.** E1: `foundry-can-say-whether-it-can-sell`; E2:
+`can-it-sell-says-no-whenever-readiness-would` (each gate broken and mended
+against a real Workshop-shaped test). E2 in production once the owner reads the
+card there.
 
 **Proof debt.** The money-switch refactor into one `moneyToolsOn()` from the
 R26 spec is not done; the direct reads stay.

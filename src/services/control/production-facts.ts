@@ -16,6 +16,7 @@
 
 import { query } from '../../db/client.js';
 import { modelDoorDownSentence } from '../ai/model-door.js';
+import { SENDING_NOT_CONNECTED } from '../venture/hand.js';
 
 type Row = Record<string, unknown>;
 
@@ -47,6 +48,15 @@ export interface ProductionFacts {
   subscriptionsAllowed: boolean;
   /** Whether the model answers, and how long its credit lasts (R33). */
   modelDoor: import('../ai/model-door.js').ModelDoorFacts;
+  /**
+   * WHAT `readiness` WOULD REFUSE ANY FORGE-MADE TEST FOR, read through the
+   * same functions it uses (venture/hand.ts): what the Workshop lacks, whether
+   * sending is ready, and what the first-proof policy says of the offer the
+   * forge makes (a one-time brief, `briefFacts`), before it has an asset.
+   */
+  workshopLacks: string[];
+  sending: { status: string; detail: string };
+  placementRefused: string[];
 }
 
 export async function productionFacts(founderId: string, env: NodeJS.ProcessEnv = process.env): Promise<ProductionFacts> {
@@ -74,6 +84,11 @@ export async function productionFacts(founderId: string, env: NodeJS.ProcessEnv 
   const fla = (await originationPolicyFor(founderId)).find((p) => p.requirement === 'front_loaded_attention') ?? null;
   const { correspondenceMode } = await import('../public-workshop/correspondence.js');
   const { subscriptionsAllowed } = await import('./decisions.js');
+  const { placementRefusedFor, sendingReadiness, whatTheWorkshopLacks } = await import('../venture/hand.js');
+  const { publicWorkshopOf } = await import('../public-workshop/settings.js');
+  const { briefFacts } = await import('../venture/products/offer-composition.js');
+  const workshop = await publicWorkshopOf(founderId);
+  const sending = await sendingReadiness(founderId);
   return {
     secrets, paymentEvents,
     moneySwitchOn: env.FOUNDRY_ENABLE_MONEY_TOOLS === 'true',
@@ -83,6 +98,11 @@ export async function productionFacts(founderId: string, env: NodeJS.ProcessEnv 
     correspondence: await correspondenceMode(founderId),
     subscriptionsAllowed: (await subscriptionsAllowed(founderId)).allowed,
     modelDoor: await (await import('../ai/model-door.js')).modelDoorFacts(),
+    workshopLacks: whatTheWorkshopLacks(workshop),
+    sending: { status: sending.status, detail: sending.detail },
+    // A forge test has no asset of its own until it is decided, so the
+    // offer's own facts are what readiness reads; so does this.
+    placementRefused: await placementRefusedFor(founderId, null, briefFacts()),
   };
 }
 
@@ -101,6 +121,11 @@ export function canSellOnItsOwn(f: ProductionFacts): { yes: boolean; blockers: s
   if (!f.frontLoadedAttention || !f.frontLoadedAttention.ownersOwn || f.frontLoadedAttention.treatment === 'require' || f.frontLoadedAttention.treatment === 'refuse') {
     blockers.push('no forge-made offer may be placed until you allow offers that still take some of your minutes per sale (Your decisions)');
   }
+  // WHAT READINESS WOULD REFUSE EVERY FORGE-MADE TEST FOR, in its own words
+  // (venture/hand.ts): a "yes" here while readiness refuses would be a lie.
+  blockers.push(...f.workshopLacks);
+  if (f.sending.status !== 'ready') blockers.push(`${SENDING_NOT_CONNECTED}: ${f.sending.detail}`);
+  for (const why of f.placementRefused) blockers.push(`placing it would be refused: ${why}`);
   if (!f.charter) blockers.push('no charter is signed, so nothing is let in without you');
   else if (f.charter.daysLeft < 16) blockers.push(`the charter has ${String(f.charter.daysLeft)} days left, too few to read a new test; renew it`);
   else if (f.inFlight >= f.charter.probesInFlight) blockers.push(`all ${String(f.charter.probesInFlight)} places are taken by tests still running`);

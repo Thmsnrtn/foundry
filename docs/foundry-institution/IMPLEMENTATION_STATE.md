@@ -3268,3 +3268,19 @@ it has met a real day.
   on the attacker is asked again when other probes spend the charter (bounded
   by the give-up rule); a design whose own composition recommends against
   running is never recomposed.
+- **"Can Foundry sell on its own?" no longer says yes while readiness refuses
+  (F1.6).** `canSellOnItsOwn` omitted gates `readiness` (venture/hand.ts)
+  requires of every forge-made test. Readiness's own pieces are now named and
+  shared: `whatTheWorkshopLacks` (no Workshop, no postal address, new economic
+  activity paused), `SENDING_NOT_CONNECTED` over `sendingReadiness`, and
+  `placementRefusedFor` (the first-proof policy against an offer's facts, of
+  which `placementWouldBeRefused` is now the per-test call). `productionFacts`
+  reads all three — placement against `briefFacts()`, the offer the forge
+  makes, with no asset, as readiness reads an undecided forge test — and the
+  verdict blocks on each in readiness's words. The old unit test that expected
+  "yes" for an owner with no Workshop and no sending was rewritten to the
+  truth (those two readiness gates are exactly what remains), not deleted.
+  Mutations: dropping the Workshop, sending or placement blockers each turn
+  `can-it-sell-says-no-whenever-readiness-would` red. Proof debt: the verdict
+  reads the one-time brief's facts; a weekly brief adds readiness's
+  week-two and fee-floor gates, which are per-plan and not read here.
