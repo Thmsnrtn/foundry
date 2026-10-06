@@ -231,7 +231,22 @@ export class ModelDoorClosed extends ModelDoorError {
 export const DOOR_TRIPS_AFTER = 3;
 const DOOR_WINDOW_MS = 10 * 60_000;
 export const DOOR_COOLDOWN_MS = 10 * 60_000;
-const door = { consecutive: 0, lastFailureAt: 0, openUntil: 0, probing: false };
+const door = { consecutive: 0, lastFailureAt: 0, openUntil: 0, probing: false, probeStartedAt: 0 };
+/** How long one probe may hold the door before another call may try (two of the longest attempts). */
+const PROBE_HOLD_MS = 4 * 60_000;
+
+/**
+ * WHETHER A FAILURE IS THE DOOR'S (remediation audit, 6 October 2026). A 400
+ * for one request — a prompt too long, a malformed body — is that request's
+ * fault, and counting three of them as "the door is down" shut every caller
+ * out for ten minutes and told the owner to check the credit and the key. The
+ * door is down when it does not answer (no status: a timeout, the network, an
+ * empty completion), errs (5xx), is rate limiting (429), or refuses the key or
+ * the credit (401, 402).
+ */
+function isTheDoors(status: number | undefined): boolean {
+  return status === undefined || status >= 500 || status === 429 || status === 401 || status === 402;
+}
 
 /** What the breaker says now: closed, or open until a moment, after how many failures. */
 export function modelDoorBreaker(now = Date.now()): { open: boolean; until: Date | null; consecutiveFailures: number } {
@@ -240,17 +255,23 @@ export function modelDoorBreaker(now = Date.now()): { open: boolean; until: Date
 
 /** Test seam: a later morning, after the cooldown. Never called by the application. */
 export function forgetModelDoorFailures(): void {
-  door.consecutive = 0; door.lastFailureAt = 0; door.openUntil = 0; door.probing = false;
+  door.consecutive = 0; door.lastFailureAt = 0; door.openUntil = 0; door.probing = false; door.probeStartedAt = 0;
 }
 
 function refuseIfDoorClosed(now = Date.now()): void {
   if (door.openUntil > now) throw new ModelDoorClosed(door.consecutive, new Date(door.openUntil));
+  // ONE PROBE, NOT EVERY CALLER IN THE SAME INSTANT: while the probe is out,
+  // the door stays closed to everyone else (until it answers, fails, or has
+  // held longer than any attempt could take).
+  if (door.probing && now - door.probeStartedAt < PROBE_HOLD_MS) {
+    throw new ModelDoorClosed(door.consecutive, new Date(door.probeStartedAt + PROBE_HOLD_MS));
+  }
   // The cooldown is over: this call is the probe, and the next failure reopens.
-  if (door.openUntil !== 0) { door.probing = true; door.openUntil = 0; }
+  if (door.openUntil !== 0 || door.probing) { door.probing = true; door.probeStartedAt = now; door.openUntil = 0; }
 }
 
 function doorAnswered(): void {
-  door.consecutive = 0; door.lastFailureAt = 0; door.openUntil = 0; door.probing = false;
+  door.consecutive = 0; door.lastFailureAt = 0; door.openUntil = 0; door.probing = false; door.probeStartedAt = 0;
 }
 
 /** One failed attempt at the door. True when the breaker is now open. */
@@ -605,9 +626,9 @@ export async function callClaude(
     } catch (err) {
       clearTimeout(timeout);
       lastError = err instanceof Error ? err : new Error(String(err));
-      const tripped = doorFailed();
-
       const status = (err as unknown as Record<string, unknown>)?.status as number | undefined;
+      // The door answered this request with a refusal of it: the door is up.
+      const tripped = isTheDoors(status) ? doorFailed() : (doorAnswered(), false);
       if (status && status < 500 && status !== 429) {
         await finishReservation(reservation, { kind: 'released' });
         log.error('ai_call.failed_non_retryable', lastError, {
@@ -759,8 +780,8 @@ export async function callClaudeMultiTurn(
     } catch (err) {
       clearTimeout(timeout);
       lastError = err instanceof Error ? err : new Error(String(err));
-      const tripped = doorFailed();
       const status = (err as unknown as Record<string, unknown>)?.status as number | undefined;
+      const tripped = isTheDoors(status) ? doorFailed() : (doorAnswered(), false);
       if (status && status < 500 && status !== 429) {
         await finishReservation(reservation, { kind: 'released' });
         throw asDoorError(lastError, 'the model door refused');

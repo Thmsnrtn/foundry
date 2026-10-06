@@ -30,7 +30,7 @@ import { providerStubs } from '../../helpers/provider-stubs.js';
 import { OWNER, asText, ownerApp, routinesRanThisMorning, seedProductionShape } from '../../helpers/world.js';
 import { recordFinding, runUnderLock } from './campaign-helpers.js';
 
-type Mode = 'ok' | '500' | '401' | 'hang' | 'malformed' | '429';
+type Mode = 'ok' | '500' | '401' | 'hang' | 'malformed' | '429' | '400';
 let mode: Mode = '500';
 let hits = 0;
 let server: Server;
@@ -76,6 +76,7 @@ beforeAll(async () => {
       if (mode === 'hang') { hung.push(() => res.destroy()); return; }
       if (mode === '500') { res.writeHead(500, { 'content-type': 'application/json' }); res.end('{"error":{"message":"upstream exploded"}}'); return; }
       if (mode === '401') { res.writeHead(401, { 'content-type': 'application/json' }); res.end('{"error":{"message":"invalid key"}}'); return; }
+      if (mode === '400') { res.writeHead(400, { 'content-type': 'application/json' }); res.end('{"error":{"message":"prompt is too long"}}'); return; }
       if (mode === '429') { res.writeHead(429, { 'content-type': 'application/json' }); res.end('{"error":{"message":"rate limited"}}'); return; }
       if (mode === 'malformed') { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"choices": [{"message": {"content": "'); return; }
       res.writeHead(200, { 'content-type': 'application/json' });
@@ -193,6 +194,45 @@ describe('twenty failures in a row', () => {
       expect(hits, 'the probe is one attempt, not three').toBe(1);
       await expect(probe()).rejects.toMatchObject({ name: 'ModelDoorClosed' });
       expect(hits, 'and the failed probe closed the door again at once').toBe(1);
+    } finally { clock.mockRestore(); }
+  }, 60_000);
+});
+
+// THE BREAKER COUNTS THE DOOR'S FAILURES, NOT A REQUEST'S (remediation audit,
+// 6 October 2026). Three 400s — a prompt too long, three times — shut the door
+// to every caller for ten minutes and told the owner to check the credit; and
+// when the cooldown ended every call in the same instant went through as "the
+// probe".
+describe('what the breaker counts', () => {
+  it('three requests the door refuses as malformed do not close it: the door answered', async () => {
+    const client = await import('../../../src/services/ai/client.js');
+    const { institutionSpend } = await import('../../../src/services/ai/what-it-is-for.js');
+    client.forgetModelDoorFailures();
+    mode = '400'; hits = 0;
+    const ask = () => client.callSonnet('You are a lens.', 'a request the door refuses', 100,
+      institutionSpend('a campaign sending requests the door refuses', 'a lens', { kind: 'experiment', id: X }));
+    for (let i = 0; i < 3; i++) await expect(ask()).rejects.toMatchObject({ name: 'ModelDoorError' });
+    expect(client.modelDoorBreaker().open).toBe(false);
+    await expect(ask()).rejects.toMatchObject({ name: 'ModelDoorError' });
+    expect(hits, 'every request reached the door; none was refused unasked').toBe(4);
+  }, 60_000);
+
+  it('after the cooldown, two calls in the same instant send one probe, not two', async () => {
+    const client = await import('../../../src/services/ai/client.js');
+    const { institutionSpend } = await import('../../../src/services/ai/what-it-is-for.js');
+    client.forgetModelDoorFailures();
+    mode = '500';
+    const ask = () => client.callSonnet('You are a lens.', 'probe race', 100,
+      institutionSpend('a campaign racing two calls at a closed door', 'a lens', { kind: 'experiment', id: X }));
+    await expect(ask()).rejects.toMatchObject({ name: 'ModelDoorError' }); // three attempts: open
+    expect(client.modelDoorBreaker().open).toBe(true);
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(client.modelDoorBreaker().until!.getTime() + 1_000);
+    try {
+      mode = 'hang'; hits = 0;
+      const [a, b] = await Promise.allSettled([ask(), ask()]);
+      const names = [a, b].map((r) => (r.status === 'rejected' ? (r.reason as Error).name : 'answered')).sort();
+      expect(names).toEqual(['ModelDoorClosed', 'ModelDoorError']);
+      expect(hits, 'one probe reached the door').toBe(1);
     } finally { clock.mockRestore(); }
   }, 60_000);
 });
