@@ -7907,7 +7907,7 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
         <dt>Charter</dt><dd>${facts.charter ? `${String(facts.inFlight)} of ${String(facts.charter.probesInFlight)} in flight · ${String(facts.charter.daysLeft)} days left` : `none signed · ${String(facts.inFlight)} still running from earlier`}</dd>
         <dt>Approved, never placed</dt><dd>${facts.unplaced.length ? facts.unplaced.map((u) => u.experimentId).join(', ') : 'none'}</dd>
         <dt>Claims no source could read</dt><dd>${(facts.claimsLeft ?? []).length
-    ? html`${(facts.claimsLeft ?? []).map((cl) => html`<span class="quiet">“${cl.claim}” — left after four looks: ${cl.because}</span><br />`)}`
+    ? html`${String(facts.claimsLeftTotal ?? facts.claimsLeft?.length ?? 0)} left${(facts.claimsLeftTotal ?? 0) > (facts.claimsLeft ?? []).length ? html`, the oldest ${String((facts.claimsLeft ?? []).length)} here` : ''}:<br />${(facts.claimsLeft ?? []).map((cl) => html`<span class="quiet">“${cl.claim}” — left after four looks: ${cl.because}</span><br />`)}`
     : 'none'}</dd>
         <dt>Per-sale minutes (PENDING 32)</dt><dd>${facts.frontLoadedAttention ? `${facts.frontLoadedAttention.treatment}, set by ${facts.frontLoadedAttention.ownersOwn ? 'you' : 'the first-proof default'} on ${facts.frontLoadedAttention.setAt}` : 'no row'}</dd>
         <dt>Correspondence</dt><dd>${facts.correspondence}</dd>

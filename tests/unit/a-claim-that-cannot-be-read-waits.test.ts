@@ -127,3 +127,32 @@ describe('claims given up on do not fill the window', () => {
     expect(left.map((l) => l.claimId)).not.toContain('cl_late');
   });
 });
+
+// THE SECOND AUDIT (6 October 2026): a claim whose words leave nothing to
+// search for had no observation, no settlement and no failure, so it stayed in
+// the window for good; and Controls showed ten given-up claims with no total.
+describe('a claim with nothing to search for leaves the window too', () => {
+  it('each pass that reaches it records why, without failing the pass, and after four it is left', async () => {
+    await query(`INSERT INTO market_claims (id, founder_id, claim, evidence_mode, formed_at) VALUES ('cl_mute',?,'a b c — the !!','real','2026-06-01 00:00:00')`, [OWNER]);
+    const mute = async () => Number(((await query(`SELECT COUNT(*) AS n FROM claim_look_failures WHERE claim_id = 'cl_mute'`, [])).rows[0] as Record<string, unknown>).n);
+    for (let pass = 0; pass < CLAIM_LOOK_GIVES_UP_AFTER; pass += 1) {
+      await expect(tick(), 'no source was asked, so nothing failed').resolves.toBeUndefined();
+      await daysPass(16);
+    }
+    expect(await mute()).toBe(CLAIM_LOOK_GIVES_UP_AFTER);
+    asked.length = 0;
+    await tick();
+    expect(await mute(), 'left: not reached again').toBe(CLAIM_LOOK_GIVES_UP_AFTER);
+    const { productionFacts } = await import('../../src/services/control/production-facts.js');
+    const facts = await productionFacts(OWNER);
+    expect(facts.claimsLeftTotal, 'the twenty-one given up, cl_unreadable, and this one').toBe(23);
+    expect(facts.claimsLeft?.[0]).toMatchObject({ claimId: 'cl_mute', because: 'its words leave nothing a source could search for' });
+  });
+
+  it('the facts Controls reads say how many were left when they carry only the oldest ten', async () => {
+    const { productionFacts } = await import('../../src/services/control/production-facts.js');
+    const facts = await productionFacts(OWNER);
+    expect(facts.claimsLeft?.length).toBe(10);
+    expect(facts.claimsLeftTotal).toBe(23);
+  });
+});

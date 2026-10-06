@@ -30,7 +30,7 @@ import { providerStubs } from '../../helpers/provider-stubs.js';
 import { OWNER, asText, ownerApp, routinesRanThisMorning, seedProductionShape } from '../../helpers/world.js';
 import { recordFinding, runUnderLock } from './campaign-helpers.js';
 
-type Mode = 'ok' | '500' | '401' | 'hang' | 'malformed' | '429' | '400';
+type Mode = 'ok' | '500' | '401' | 'hang' | 'malformed' | '429' | '400' | '400-in-body';
 let mode: Mode = '500';
 let hits = 0;
 let server: Server;
@@ -77,6 +77,7 @@ beforeAll(async () => {
       if (mode === '500') { res.writeHead(500, { 'content-type': 'application/json' }); res.end('{"error":{"message":"upstream exploded"}}'); return; }
       if (mode === '401') { res.writeHead(401, { 'content-type': 'application/json' }); res.end('{"error":{"message":"invalid key"}}'); return; }
       if (mode === '400') { res.writeHead(400, { 'content-type': 'application/json' }); res.end('{"error":{"message":"prompt is too long"}}'); return; }
+      if (mode === '400-in-body') { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"error":{"message":"context length exceeded","code":400}}'); return; }
       if (mode === '429') { res.writeHead(429, { 'content-type': 'application/json' }); res.end('{"error":{"message":"rate limited"}}'); return; }
       if (mode === 'malformed') { res.writeHead(200, { 'content-type': 'application/json' }); res.end('{"choices": [{"message": {"content": "'); return; }
       res.writeHead(200, { 'content-type': 'application/json' });
@@ -359,5 +360,63 @@ describe('the door is reached for real', () => {
     expect((await reservations()).some((x) => x.status === 'settled' && Number(x.n) > 0)).toBe(true);
     const { modelDoorToday } = await import('../../../src/services/ai/spend-ledger.js');
     expect((await modelDoorToday()).settled).toBeGreaterThan(0);
+  }, 60_000);
+});
+
+describe('what the breaker counts, after the second audit', () => {
+  const lens = async (why: string) => {
+    const client = await import('../../../src/services/ai/client.js');
+    const { institutionSpend } = await import('../../../src/services/ai/what-it-is-for.js');
+    return { client, ask: () => client.callSonnet('You are a lens.', why, 100,
+      institutionSpend(`a campaign: ${why}`, 'a lens', { kind: 'experiment', id: X })) };
+  };
+
+  it('a probe refused before it reaches the door hands the door back: the next call is the probe', async () => {
+    const { client, ask } = await lens('a probe without a key');
+    client.forgetModelDoorFailures();
+    mode = '500';
+    await expect(ask()).rejects.toMatchObject({ name: 'ModelDoorError' });
+    expect(client.modelDoorBreaker().open).toBe(true);
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(client.modelDoorBreaker().until!.getTime() + 1_000);
+    const keys = { o: process.env.OPENROUTER_API_KEY, a: process.env.ANTHROPIC_API_KEY };
+    try {
+      delete process.env.OPENROUTER_API_KEY; delete process.env.ANTHROPIC_API_KEY;
+      await expect(ask(), 'refused for want of a key, not for the door').rejects.toThrow(/API_KEY/);
+      if (keys.o !== undefined) process.env.OPENROUTER_API_KEY = keys.o;
+      if (keys.a !== undefined) process.env.ANTHROPIC_API_KEY = keys.a;
+      mode = 'ok'; hits = 0;
+      await expect(ask()).resolves.toMatchObject({ content: expect.any(String) });
+      expect(hits, 'the next call reached the door').toBe(1);
+      expect(client.modelDoorBreaker().open).toBe(false);
+    } finally {
+      if (keys.o !== undefined) process.env.OPENROUTER_API_KEY = keys.o;
+      if (keys.a !== undefined) process.env.ANTHROPIC_API_KEY = keys.a;
+      clock.mockRestore();
+    }
+  }, 60_000);
+
+  it('a request refused while the breaker is open does not close it', async () => {
+    const { client, ask } = await lens('a refusal arriving late');
+    client.forgetModelDoorFailures();
+    mode = '500';
+    await expect(ask()).rejects.toMatchObject({ name: 'ModelDoorError' });
+    expect(client.modelDoorBreaker().open).toBe(true);
+    // The refusal of a call sent before the breaker opened, arriving after.
+    expect(client.doorHeard(400)).toBe(false);
+    expect(client.modelDoorBreaker().open).toBe(true);
+    // With the breaker shut, a refusal is the door answering: the count clears.
+    client.forgetModelDoorFailures();
+    client.doorHeard(500); client.doorHeard(500);
+    client.doorHeard(400);
+    expect(client.modelDoorBreaker().consecutiveFailures).toBe(0);
+  }, 60_000);
+
+  it('a 200 whose body names the request as at fault is the request\'s: not retried, not counted', async () => {
+    const { client, ask } = await lens('a prompt too long, said in the body');
+    client.forgetModelDoorFailures();
+    mode = '400-in-body'; hits = 0;
+    for (let i = 0; i < 3; i++) await expect(ask()).rejects.toMatchObject({ name: 'ModelDoorError' });
+    expect(hits, 'one request each: none retried').toBe(3);
+    expect(client.modelDoorBreaker().open).toBe(false);
   }, 60_000);
 });

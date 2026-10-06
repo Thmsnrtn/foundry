@@ -1828,6 +1828,7 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
   real_market_evidence_tick: {
     fn: async () => {
       const { waysOfLooking } = await import('../services/venture/research-sources.js');
+      const { claimMayBeLookedAt, recordClaimLookFailure, CLAIM_LOOK_GIVES_UP_AFTER } = await import('../services/venture/market-evidence.js');
       const { askWhatAlreadyExists } = await import('../services/venture/sources/index.js');
       const founders = await query(
         `SELECT DISTINCT c.founder_id FROM market_claims c
@@ -1849,8 +1850,8 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
               -- front for good, and twenty of them meant no newer claim was
               -- ever looked at while the pass reported success. Controls
               -- names what was left.
-              AND (SELECT COUNT(*) FROM claim_look_failures f WHERE f.claim_id = market_claims.id) < 4
-            ORDER BY formed_at LIMIT 200`, [founderId]);
+              AND (SELECT COUNT(*) FROM claim_look_failures f WHERE f.claim_id = market_claims.id) < ?
+            ORDER BY formed_at LIMIT 200`, [founderId, CLAIM_LOOK_GIVES_UP_AFTER]);
         // THREE LOOKS A PASS, as before — counted over claims actually looked
         // at, so a claim that is waiting does not take a readable one's turn.
         let tried = 0;
@@ -1861,13 +1862,21 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
           const words = String(c.claim).toLowerCase()
             .replace(/[^a-z0-9 ]/g, ' ').split(/\s+/)
             .filter((w) => w.length > 3 && !STOP.has(w)).slice(0, 6).join(' ');
-          if (words.length === 0) continue;
           // ONE CLAIM NO SOURCE CAN ANSWER WAITS (remediation 1.6): it is tried
           // again after 1, 2, 4 and 8 days and then left, rather than failing
           // this routine every morning. A failure THIS pass still fails it (G3).
-          const { claimMayBeLookedAt, recordClaimLookFailure } = await import('../services/venture/market-evidence.js');
           const may = await claimMayBeLookedAt(String(c.id), new Date());
           if (!may.may) continue;
+          // A CLAIM WITH NOTHING TO SEARCH FOR leaves the window the same way
+          // (second remediation audit): it had no observation, no settlement
+          // and no failure, so it stayed in the window for good and two hundred
+          // of them would starve every newer claim. It takes no source's turn
+          // and does not fail the pass — no source was asked — and Controls
+          // names it with this reason once it is left.
+          if (words.length === 0) {
+            await recordClaimLookFailure(String(c.id), 'its words leave nothing a source could search for', new Date());
+            continue;
+          }
           tried += 1;
           try {
             await askWhatAlreadyExists({

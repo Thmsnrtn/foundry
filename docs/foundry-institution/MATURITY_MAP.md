@@ -2753,6 +2753,14 @@ owner holds the instance. *Corrected after the independent audit:* the breaker
 counted a request's own 400 as the door being down and let every concurrent
 call through as the probe, and a given-up claim could fill the evidence window
 for good. Both are fixed, each with a test that is red on the first cut.
+*And after the second audit:* a probe refused before it reached the door (no
+key, a spend cap) held the door shut for four minutes, so it is now handed
+back; a request's refusal arriving while the breaker is open no longer closes
+it; a 200 whose body names the request (a prompt too long) is no longer
+retried or counted, and a 408 is; a claim whose words leave nothing to search
+for now leaves the window the same way, named on Controls; and Controls says
+how many claims were left, not only the oldest ten. Each has a test, red with
+its fix reverted.
 
 ### Dependencies, and gates that say how long they take (Remediation 4, 6 October 2026)
 
