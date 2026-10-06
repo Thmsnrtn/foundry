@@ -36,6 +36,7 @@ src/services/mission/read.ts 1
 src/services/privacy/consent.ts 2
 src/services/public-workshop/how-it-should-show.ts 1
 src/services/public-workshop/projection.ts 1
+src/services/public-workshop/settings.ts 1
 src/services/reference/world.ts 1
 src/services/senses/credentials.ts 1
 src/services/senses/read.ts 1

@@ -14,7 +14,7 @@
 // the public record and the contact path carry on, because a customer's claim
 // on the Workshop does not depend on whether the owner is paying attention.
 // =============================================================================
-import { query } from '../../db/client.js';
+import { query, realCompany } from '../../db/client.js';
 
 export interface PublicWorkshop {
   founderId: string; productId: string; publicName: string; operatorName: string; origin: string; zoneName: string;
@@ -272,11 +272,15 @@ export interface PauseRecord {
  * EVERY STOP, PAUSE AND RESUME, newest first, read from the audit log — the
  * history the pause columns cannot keep. A Stop that touched several companies
  * wrote one row per company under one `stopId`; it is one act and reads as one.
+ * Only the owner's real companies: a reference company's rows are not his history.
  */
 export async function pauseHistory(founderId: string, most = 10): Promise<PauseRecord[]> {
+  // STANDING DOES NOT APPLY: the join is an ownership check on the owner's own
+  // acts. A Stop recorded against an experimental asset is still a Stop he made,
+  // and one act reads as one through its `stopId`, whichever company carried it.
   const found = await rows(
     `SELECT a.action_type, a.created_at, a.input_context FROM audit_log a JOIN products p ON p.id = a.product_id
-      WHERE p.owner_id = ? AND a.action_type IN ('estate_stopped', 'economic_activity_paused', 'economic_activity_resumed')
+      WHERE p.owner_id = ? AND ${realCompany('p')} AND a.action_type IN ('estate_stopped', 'economic_activity_paused', 'economic_activity_resumed')
       ORDER BY a.created_at DESC, a.rowid DESC LIMIT ?`, [founderId, most * 8]);
   const out: PauseRecord[] = [];
   const seenStops = new Set<string>();
