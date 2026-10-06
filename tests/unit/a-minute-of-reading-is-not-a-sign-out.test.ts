@@ -32,14 +32,17 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 const SESSIONS: Record<string, { status: string; userId: string }> = {};
 let liveCalls = 0;
 
+// Clerk 3's shape: a failed verification is RETURNED as `{ errors }`, never
+// thrown, and a passed one is `{ data }`. A token `foreign:...` is signed by
+// somebody that is not Clerk.
 vi.mock('@clerk/backend', () => ({
   verifyToken: vi.fn(async (token: string, opts: { clockSkewInMs?: number }) => {
     const [kind, sub, sid, exp] = token.split(':');
-    if (kind !== 'tok') throw new Error('bad signature');
-    if (Number(exp) * 1000 + (opts.clockSkewInMs ?? 5000) < Date.now()) throw new Error('token-expired');
-    return { sub, sid, exp: Number(exp) };
+    if (kind !== 'tok' && kind !== 'foreign') return { errors: [new Error('bad signature')] };
+    if (Number(exp) * 1000 + (opts.clockSkewInMs ?? 5000) < Date.now()) return { errors: [new Error('token-expired')] };
+    return { data: { sub, sid, exp: Number(exp), iss: kind === 'tok' ? 'https://owner.clerk.accounts.dev' : 'https://elsewhere.example' } };
   }),
-  Clerk: () => ({
+  createClerkClient: () => ({
     sessions: {
       getSession: async (sid: string) => {
         liveCalls += 1;
@@ -165,6 +168,30 @@ describe('what a lapsed session is never honoured for', () => {
     });
     expect(res.status).toBe(401);
     expect(liveCalls).toBe(0);
+  });
+});
+
+describe('Clerk 3 reports a failed check as a value, and a value is not a sign-in', () => {
+  // `@clerk/backend` 3 RETURNS `{ errors }` where 0.38 threw. Passed through
+  // unchanged, an expired token would read as claims with no subject and every
+  // step of the lapse path would treat "it did not throw" as "verified".
+  it('an expired bearer token answered with errors is refused, not read as claims', async () => {
+    const { verifiedClerkClaims } = await import('../../src/middleware/auth.js');
+    await expect(verifiedClerkClaims(token(-120), 'sk_test_lapse')).rejects.toThrow(/token-expired/);
+  });
+  it('a token signed by somebody other than Clerk is refused on either path', async () => {
+    const foreign = `foreign:${USER}:${SID}:${String(now() + 50)}`;
+    const { verifiedClerkClaims } = await import('../../src/middleware/auth.js');
+    await expect(verifiedClerkClaims(foreign, 'sk_test_lapse')).rejects.toThrow(/not issued by Clerk/);
+    expect((await post(`__session=${foreign}`)).status).toBe(302);
+    const res = await app().request('https://foundry.test/settings/app-credential/etsy', {
+      method: 'POST', headers: { Authorization: `Bearer ${foreign}`, Accept: 'application/json' },
+    });
+    expect(res.status).toBe(401);
+  });
+  it('a freshly verified token yields its subject', async () => {
+    const { verifiedClerkClaims } = await import('../../src/middleware/auth.js');
+    expect((await verifiedClerkClaims(token(50), 'sk_test_lapse')).sub).toBe(USER);
   });
 });
 
