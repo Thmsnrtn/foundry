@@ -131,8 +131,12 @@ describe('Control says whether the door works and how long the credit lasts', ()
     const failing = await base();
     expect(failing.modelDoor.failedToday).toBe(before + 1);
     expect(canSellOnItsOwn({ ...failing, modelDoor: { ...failing.modelDoor, failedToday: 1 } }).blockers.join(' ')).toMatch(/the model door failed 1 time today and answered nothing/);
-    expect(canSellOnItsOwn({ ...f, modelDoor: { ...f.modelDoor, failedToday: 0, daysLeft: 2 } }).blockers.join(' ')).toMatch(/2 days of model credit left/);
-    expect(canSellOnItsOwn({ ...f, modelDoor: { ...f.modelDoor, failedToday: 0, daysLeft: 20 } }).blockers.join(' ')).not.toMatch(/model/);
+    expect(canSellOnItsOwn({ ...f, modelDoor: { ...f.modelDoor, failedToday: 0, daysLeft: 2, closedUntil: null } }).blockers.join(' ')).toMatch(/2 days of model credit left/);
+    expect(canSellOnItsOwn({ ...f, modelDoor: { ...f.modelDoor, failedToday: 0, daysLeft: 20, closedUntil: null } }).blockers.join(' ')).not.toMatch(/model/);
     expect(canSellOnItsOwn({ ...f, modelDoor: { ...f.modelDoor, failedToday: 0, remainingUsd: null, daysLeft: null, readOn: null } }).costs.join(' ')).toMatch(/model credit has not been read/);
+    // A DOOR THE BREAKER HAS STOPPED ASKING is a blocker too (remediation 1.4),
+    // in the one sentence Home and the absence page also read.
+    expect(canSellOnItsOwn({ ...f, modelDoor: { ...f.modelDoor, failedToday: 0, daysLeft: 20, closedUntil: '2026-10-06T12:30:00.000Z' } }).blockers.join(' '))
+      .toMatch(/the model door failed several times in a row.*stopped asking it until 12:30 UTC: check the OpenRouter credit and key/);
   });
 });

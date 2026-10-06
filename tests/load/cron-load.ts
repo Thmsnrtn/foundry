@@ -36,31 +36,23 @@ function check(ok: boolean, note: string): void {
   if (!ok) failures.push(note);
 }
 
-// Mirror of acquireJobLock's exact SQL, but parameterized by instanceId so we
-// can simulate DISTINCT worker instances in a single process (the production
-// helper hard-codes one INSTANCE_ID per process). Semantics are identical:
-// atomic INSERT-or-steal-if-expired, then confirm ownership.
+// THE REAL LOCK (remediation 1.1). Each acquisition carries its own token, so
+// distinct "workers" in this one process are distinct acquisitions of the real
+// helper; a worker remembers the token it holds, and releases only that.
+const { acquireJobLock, releaseJobLock } = await import('../../src/services/job-lock.js');
+const held = new Map<string, string>();
 async function acquireAs(instanceId: string, jobName: string, ttlSeconds = 300): Promise<boolean> {
-  try {
-    await query(
-      `INSERT INTO job_locks (job_name, locked_at, locked_by, expires_at)
-       VALUES (?, datetime('now'), ?, datetime('now', ?))
-       ON CONFLICT(job_name) DO UPDATE SET
-         locked_at = datetime('now'),
-         locked_by = excluded.locked_by,
-         expires_at = excluded.expires_at
-       WHERE job_locks.expires_at < datetime('now')`,
-      [jobName, instanceId, `+${ttlSeconds} seconds`],
-    );
-    const r = await query('SELECT locked_by FROM job_locks WHERE job_name = ?', [jobName]);
-    return (r.rows[0] as Record<string, unknown>)?.locked_by === instanceId;
-  } catch {
-    return false;
-  }
+  const token = await acquireJobLock(jobName, ttlSeconds);
+  if (token !== null) held.set(`${instanceId}\u0000${jobName}`, token);
+  return token !== null;
 }
 
 async function releaseAs(instanceId: string, jobName: string): Promise<void> {
-  await query('DELETE FROM job_locks WHERE job_name = ? AND locked_by = ?', [jobName, instanceId]);
+  const key = `${instanceId}\u0000${jobName}`;
+  const token = held.get(key);
+  if (token === undefined) return;
+  held.delete(key);
+  await releaseJobLock(jobName, token);
 }
 
 async function main(): Promise<void> {

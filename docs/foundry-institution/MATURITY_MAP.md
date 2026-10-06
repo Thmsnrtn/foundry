@@ -2730,6 +2730,56 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### The simulation campaign's correctness defects (Remediation 1, 6 October 2026)
+
+**What changed.** The job lock is per acquisition; first visits cannot collide;
+a Stop and its resume are kept and read on Activity; a failing model door is
+asked once and then refused for ten minutes, each tier waits its own time, a
+forge pass has a wall-clock budget; Home, the absence page and Controls name the
+door in one sentence; an unreadable claim backs off; an unmatched payment event
+keeps its reason; decision forms and absence evidence are escaped; the shell
+declares its icon. **Evidence maturity.** E2: all five campaign files green,
+the four pinned `it.fails` flipped to `it`, each fix mutated away and its test
+red; Home walked on two phones and a desk on days 1, 9 and 39 with no console
+error and no failed resource. **Proof debt.** The breaker lives in one process
+and is not shared across a rolling deploy's two machines; its thresholds (three
+failures, ten minutes) and the tier timeouts are reasoned, not measured against
+a real provider outage; `rejection_streaks` keeps a read-then-insert with no
+unique key (a race makes a duplicate row, not an error) and is not fixed here;
+about thirty `raw()` interpolations of non-constant text remain in
+`foundry-shell.ts`, not audited here. `stripe_webhook_events` carries no owner, so the
+unmatched reasons Controls reads are the whole account's — right only while one
+owner holds the instance. *Corrected after the independent audit:* the breaker
+counted a request's own 400 as the door being down and let every concurrent
+call through as the probe, and a given-up claim could fill the evidence window
+for good. Both are fixed, each with a test that is red on the first cut.
+*And after the second audit:* a probe refused before it reached the door (no
+key, a spend cap) held the door shut for four minutes, so it is now handed
+back; a request's refusal arriving while the breaker is open no longer closes
+it; a 200 whose body names the request (a prompt too long) is no longer
+retried or counted, and a 408 is; a claim whose words leave nothing to search
+for now leaves the window the same way, named on Controls; and Controls says
+how many claims were left, not only the oldest ten. Each has a test, red with
+its fix reverted.
+
+### Dependencies, and gates that say how long they take (Remediation 4, 6 October 2026)
+
+**What changed.** vitest 4.1 and `@clerk/backend` 3 replace vitest 1.6 and the
+Clerk SDK; `verifiedClerkClaims` reads the package's exported `verifyToken`
+(which throws a failure and returns the payload), refuses any failure in
+either shape, and keeps the issuer check the removed `issuer` option carried.
+The first cut read the inner function's `{ data }` shape and would have locked
+the owner out; the independent audit found it, and a test with no double — a
+signed RS256 token through the installed package — now holds it. Hooks get a
+minute (vitest 4 fails an overrun hook; three overran ten seconds on CI).
+**Evidence maturity.** E2: the full chain green on vitest 4, the advisory gate
+green with one written exception, the real-library test red on the first
+adapter and green on this one.
+**Proof debt.** No real Clerk session has been verified against `@clerk/backend`
+3 — the sign-in rehearsal against the live instance is the owner's; the
+moderate OpenTelemetry advisories wait on `@sentry/node` 11, a major upgrade of
+its own; braces stays accepted until a release above 3.0.3 or tsc-alias goes.
+
 ### A missing listing says why (Roadmap 2027 R34, 6 October 2026)
 
 **What changed.** A test's listing missing from a complete shop read is asked

@@ -22,7 +22,7 @@
 // =============================================================================
 
 import { Hono } from 'hono';
-import { html, raw } from 'hono/html';
+import { html } from 'hono/html';
 import { count, page } from './foundry-shell.js';
 import type { Where } from './foundry-shell.js';
 import {
@@ -59,7 +59,7 @@ function property(p: PropertyReading) {
     <p>${p.sentence}</p>
     ${p.evidence.length === 0 ? '' : html`<details>
       <summary class="quiet">What I read</summary>
-      <ul>${raw(p.evidence.map((e) => `<li>${e}</li>`).join(''))}</ul>
+      <ul>${p.evidence.map((e) => html`<li>${e}</li>`)}</ul>
     </details>`}
     ${p.wouldFixIt.length === 0 ? '' : html`<p class="quiet">What would fix it:
       ${p.wouldFixIt.join('; ')}.</p>`}
@@ -175,6 +175,20 @@ absenceRoutes.get('/foundry/absence', async (c: any) => {
   const { howLongCouldItBeGone } = await import('../../services/deployment/self-check.js');
   const gone = await howLongCouldItBeGone(founderId);
 
+  // THE DOOR, NOT THE ROUTINE (remediation 1.5). The readings below say a loop
+  // failed; when what failed is the model door, the page says so in the same
+  // sentence Controls reads — the credit and the key are what he would fix.
+  // Read here, beside the kernel's reading, because the absence test itself
+  // reaches nothing under ai/ (institutional-cognition-gate).
+  const { getFailingInstitutionLoops } = await import('../../services/institution/loop-health.js');
+  const { doorBehindFailure } = await import('../../services/ai/model-door.js');
+  let door: string | null = null;
+  for (const l of await getFailingInstitutionLoops()) {
+    if (l.stoppedRunning) continue;
+    door = await doorBehindFailure(l.lastErrorName);
+    if (door) break;
+  }
+
   const anyFailure = readings.some((r) => r.properties.some((p) => p.finding === 'DOES_NOT_HOLD'));
   const lede = anyFailure
     ? 'A week is one question and three months is another. Where the answer changes with the '
@@ -185,6 +199,7 @@ absenceRoutes.get('/foundry/absence', async (c: any) => {
   const body = html`
     <h1>If you stepped away</h1>
     <p class="lede">${lede}</p>
+    ${door ? html`<p class="state warn" role="status">Right now, ${door}.</p>` : ''}
 
     ${horizonStrip(readings)}
 

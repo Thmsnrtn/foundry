@@ -1,0 +1,17 @@
+-- =============================================================================
+-- A PAYMENT EVENT THAT MATCHED NOTHING SAYS WHY (remediation 1.6).
+--
+-- A verified Stripe event that carries Foundry's tag but finds no test of ours
+-- (a test that does not exist, a link that is not the test's exposure) was
+-- claimed as processed and dropped: the refusal lived only in a return value.
+--
+-- Decided against the constitution's "a blocked branch blocks only itself":
+-- the event stays ACKNOWLEDGED, because this endpoint receives every event on
+-- a shared account and leaving one unclaimed has Stripe retry it for days and,
+-- at length, disable the endpoint for everything else; and a payment tagged
+-- for a test is not lost by it, because the daily reconcile reads the
+-- provider's own list (`what-the-provider-knows.ts`) whatever the webhook did.
+-- What changes is that the refusal is kept on the claim and read on Controls.
+-- An event that carries nothing of ours is acknowledged with no reason at all.
+-- =============================================================================
+ALTER TABLE stripe_webhook_events ADD COLUMN unmatched_because TEXT;
