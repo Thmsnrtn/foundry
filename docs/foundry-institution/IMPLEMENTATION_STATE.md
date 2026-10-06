@@ -3243,3 +3243,28 @@ it has met a real day.
   Proof debt: a design already started can still outlast the lease (its lens
   calls are each bounded, the design as a whole is not); the tier budgets are
   judgments, not measured provider latencies.
+- **A design the forge could not seal is no longer stranded (F1.5).** A
+  design was sealed or not once, inside `deliberate`, and `forgePass` took up
+  only tests with no design or a sealed one; an unsealed design was not a
+  forge refusal, so the give-up rule never saw it, and nothing showed it to the
+  owner. Now `deliberate`'s attacker and sealing rule are two functions
+  (`attackTheDraft`, `theRuleThatSeals`) shared with `reconsiderDesign`. Every
+  unsealed forge design is written to `forge_refusals` at the designing stage
+  with its reasons and `facts` (`sealingFacts`: the charter's answer, what
+  stands in the design's way, the evidence on the candidate; migration 388).
+  Each pass takes an unsealed design up again only when those facts differ
+  from its last refusal's, or the owner asked (`forge_rerun_asks`): the
+  attacker is asked again only where it did not say run (counted against the
+  day's designs), then the same rule seals or writes one more refusal — so the
+  fourth retires it, and unchanged facts ask nothing. The design's own
+  sentences are the record and are not recomposed: a design that itself
+  recommends reframe/defer waits for the owner or the give-up rule. Every
+  waiting design reaches him as ONE needs-you item ("N designs are waiting and
+  cannot be let in", why, grouped by reason) with "Take them up again" and
+  "Retire them" (`/foundry/forge/designs-waiting/*`). Mutations: no
+  reconsideration, no refusal for an unsealed design, and ignoring the facts
+  each turn `a-design-the-forge-could-not-seal-is-taken-up-again` red. Proof
+  debt: `sealingFacts` includes the charter's money left, so a design waiting
+  on the attacker is asked again when other probes spend the charter (bounded
+  by the give-up rule); a design whose own composition recommends against
+  running is never recomposed.

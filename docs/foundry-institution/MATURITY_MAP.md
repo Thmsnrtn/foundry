@@ -2839,8 +2839,13 @@ are never re-asked, so a brief made only from them still cannot recur.
 
 **What changed.** Refusals at designing and making are recorded and backed off
 (1, 2, 4 days), and a test is retired after the fourth; one test's failure no
-longer stops the pass. **Evidence maturity.** E1:
-`the-forge-backs-off-what-it-cannot-do`. **Proof debt.** The back-off schedule
+longer stops the pass. A design the forge composed but could not seal is a
+refusal too, with the facts it was refused on; it is taken up again once when
+those facts change (a charter signed, an exchange runnable, new evidence) or
+the owner asks, and every waiting design is one needs-you item (Stage 1,
+6 October 2026). **Evidence maturity.** E1:
+`the-forge-backs-off-what-it-cannot-do`; E2:
+`a-design-the-forge-could-not-seal-is-taken-up-again`. **Proof debt.** The back-off schedule
 is a judgment, not measured against how often a second attempt succeeds; the
 forge's record of refusals is read by the pass and the retirement reason, not
 yet shown on Explore.

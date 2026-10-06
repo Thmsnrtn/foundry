@@ -456,7 +456,8 @@ export async function attacksOf(experimentId: string): Promise<Array<Attack & { 
 
 export interface Deliberation {
   experimentId: string;
-  outcome: 'already_designed' | 'designed' | 'refused';
+  /** `reconsidered`: an unsealed design taken up again because what it was refused on changed. */
+  outcome: 'already_designed' | 'designed' | 'refused' | 'reconsidered';
   /** What stopped it, when refused. */
   because: string | null;
   findings: LensFinding[];
@@ -466,6 +467,8 @@ export interface Deliberation {
   sealed: boolean;
   /** Why it was not sealed, when it was not. */
   unsealedBecause: string[];
+  /** What the seal was decided against (`sealingFacts`), when a design was judged; how a later pass knows they changed. */
+  facts?: string;
 }
 
 /** The forge's verdict on whether a probe is inside the charter, for the sealing rule. */
@@ -513,9 +516,25 @@ export async function deliberate(experimentId: string): Promise<Deliberation> {
       `INSERT OR IGNORE INTO lessons_read (design_experiment_id, lesson_experiment_id, founder_id) VALUES (?,?,?)`,
       [experimentId, l.experimentId, record.founderId]);
   }
-  let design = (await designOf(experimentId))!;
+  const attacked = await attackTheDraft(record, (await designOf(experimentId))!);
+  const { design, attacks, verdict, attackBecause } = attacked;
+  const rule = await theRuleThatSeals(record, design, verdict, attackBecause);
+  if (design.recommendation === 'kill' && verdict === 'kill') {
+    // Both the composer and its adversary say no: the test is retired with
+    // both reasons, and the candidate keeps its record on Discover.
+    await query(`UPDATE venture_experiments SET retired_at = datetime('now'), retired_because = ? WHERE id = ? AND retired_at IS NULL AND decision IS NULL`,
+      [`the forge and its adversary both recommend against it: ${design.recommendationBecause} ${attackBecause ?? ''}`.trim(), experimentId]);
+  }
+  return { experimentId, outcome: 'designed', because: null, findings, design, attacks, attackerVerdict: verdict,
+    sealed: rule.sealed, unsealedBecause: rule.unsealedBecause, facts: rule.facts };
+}
 
-  // THE ATTACKER, GIVEN ONLY THE DRAFT AND THE RECORD.
+/** THE ATTACKER, GIVEN ONLY THE DRAFT AND THE RECORD. Its attacks are rows; an accepted one is an amendment it signs. */
+async function attackTheDraft(record: TheRecord, draft: ProbeDesign): Promise<{
+  design: ProbeDesign; attacks: Attack[]; verdict: Recommendation | null; attackBecause: string | null;
+}> {
+  const experimentId = record.experiment.id;
+  let design = draft;
   const attackReply = await callOpus(ATTACK_SYSTEM, `${draftBlock(design)}\n${recordBlock(record)}`, 3000, institutionSpend(
     'attacking the draft design of a real test before it is sealed; a design nobody argued against is one the world argues against instead',
     'attacking a probe', { kind: 'experiment', id: experimentId }));
@@ -546,26 +565,45 @@ export async function deliberate(experimentId: string): Promise<Deliberation> {
     await amendDesign({ experimentId, amendedBy: ADVERSARY, because: `The adversary's accepted attacks: ${reasons.join(' ')}`, fields: amendments });
     design = (await designOf(experimentId))!;
   }
+  return { design, attacks, verdict, attackBecause };
+}
 
-  // THE RULE THAT SEALS. Neither the composer nor the attacker.
+/**
+ * WHAT A DESIGN'S SEAL IS DECIDED AGAINST, apart from the design's own
+ * sentences and the attacker's verdict: the charter's answer, what stands in
+ * the design's way (an exchange Foundry cannot run yet, a precedent), and the
+ * evidence on the candidate. One comparable string, recorded with each
+ * refusal, so a later pass can tell that what the seal was refused on has
+ * changed — a charter signed or renewed with room, an exchange newly
+ * available, new evidence — and that only then is it worth asking again.
+ */
+export async function sealingFacts(record: TheRecord): Promise<string> {
+  const charter = await insideTheCharter(record);
+  const inTheWay = await designStandsInTheWay(record.experiment.id);
+  return JSON.stringify({
+    charter: charter.because,
+    inTheWay,
+    evidence: [record.evidence.length, record.evidence[0]?.observedAt ?? null, record.retrievals.length],
+  });
+}
+
+/** THE RULE THAT SEALS. Neither the composer nor the attacker. */
+async function theRuleThatSeals(
+  record: TheRecord, design: ProbeDesign, verdict: Recommendation | null, attackBecause: string | null,
+): Promise<{ sealed: boolean; unsealedBecause: string[]; facts: string }> {
+  const experimentId = record.experiment.id;
   const unsealedBecause: string[] = [];
   if (design.recommendation !== 'run') unsealedBecause.push(`the design recommends ${design.recommendation}`);
   if (verdict !== 'run') unsealedBecause.push(verdict === null ? 'the attacker returned no verdict' : `the attacker says ${verdict}: ${attackBecause ?? ''}`.trim());
   for (const s of await designStandsInTheWay(experimentId)) unsealedBecause.push(s);
   const charter = await insideTheCharter(record);
   if (!charter.inside) unsealedBecause.push(...charter.because);
-  let sealed = false;
+  const facts = await sealingFacts(record);
   if (unsealedBecause.length === 0) {
     await sealDesign(experimentId);
-    sealed = true;
+    return { sealed: true, unsealedBecause, facts };
   }
-  if (design.recommendation === 'kill' && verdict === 'kill') {
-    // Both the composer and its adversary say no: the test is retired with
-    // both reasons, and the candidate keeps its record on Discover.
-    await query(`UPDATE venture_experiments SET retired_at = datetime('now'), retired_because = ? WHERE id = ? AND retired_at IS NULL AND decision IS NULL`,
-      [`the forge and its adversary both recommend against it: ${design.recommendationBecause} ${attackBecause ?? ''}`.trim(), experimentId]);
-  }
-  return { experimentId, outcome: 'designed', because: null, findings, design, attacks, attackerVerdict: verdict, sealed, unsealedBecause };
+  return { sealed: false, unsealedBecause, facts };
 }
 
 // ─── The daily pass ──────────────────────────────────────────────────────────
@@ -620,10 +658,10 @@ export async function forgeMayTry(experimentId: string, stage: ForgeStage, now: 
   return { may: n < FORGE_GIVES_UP_AFTER && now.getTime() >= from.getTime(), refused: n, from };
 }
 
-/** Record a refusal; at the last one, retire the undecided test with its reasons. */
-export async function recordForgeRefusal(experimentId: string, stage: ForgeStage, because: string, now: Date): Promise<void> {
-  await query(`INSERT INTO forge_refusals (id, experiment_id, stage, because, refused_at) VALUES (?,?,?,?,?)`,
-    [nanoid(), experimentId, stage, because, now.toISOString()]);
+/** Record a refusal; at the last one, retire the undecided test with its reasons. `facts`: what an unsealed design's seal was decided against. */
+export async function recordForgeRefusal(experimentId: string, stage: ForgeStage, because: string, now: Date, facts: string | null = null): Promise<void> {
+  await query(`INSERT INTO forge_refusals (id, experiment_id, stage, because, refused_at, facts) VALUES (?,?,?,?,?,?)`,
+    [nanoid(), experimentId, stage, because, now.toISOString(), facts]);
   const r = (await query(`SELECT COUNT(*) AS n, MIN(refused_at) AS first FROM forge_refusals WHERE experiment_id = ? AND stage = ?`, [experimentId, stage])).rows[0] as Row;
   const n = Number(r.n);
   if (n < FORGE_GIVES_UP_AFTER) return;
@@ -633,6 +671,132 @@ export async function recordForgeRefusal(experimentId: string, stage: ForgeStage
 }
 
 const timesWord = (n: number): string => (n === 1 ? 'once' : n === 2 ? 'twice' : `${String(n)} times`);
+
+// ─── A design that was not sealed is not stranded (Stage 1, F1.5) ───────────
+//
+// A design was sealed or not once, inside `deliberate`, and nothing looked at
+// it again: one refused because no charter stood, the charter was full, an
+// exchange was not yet runnable, or the attacker said reframe or defer, waited
+// for ever, and — not being a refusal — was never retired either. Now:
+//
+//   - every unsealed design is a forge refusal at the designing stage, with
+//     its reasons and the facts it was decided against, so the give-up rule
+//     (four refusals, then retired) sees it like any other;
+//   - a later pass takes it up again ONCE when those facts have changed (a
+//     charter signed or renewed with room, an exchange now runnable, new
+//     evidence on the candidate), or the owner asked: the attacker is asked
+//     again where it did not say run, and the same rule that seals is applied
+//     to what is true now. The design's own sentences are the record and are
+//     not recomposed; a design that itself recommends against running is not
+//     asked again, and only the owner or the give-up rule ends it;
+//   - what is still waiting reaches the owner as ONE item, with why.
+
+/** The one needs-you item's id: every waiting design is one item, not one each. */
+export const DESIGNS_WAITING = 'forge-designs-waiting';
+
+const designedButNot = (reasons: string[]): string => `designed but not sealed: ${reasons.join('; ')}`;
+
+/**
+ * TAKE UP AN UNSEALED FORGE DESIGN AGAIN, if what it was refused on has
+ * changed or the owner asked; otherwise null, and nothing is called or
+ * written. Idempotent: the refusal it writes carries the facts it was decided
+ * against, so the same facts never ask twice. `mayAskTheAttacker` false leaves
+ * a design that would need the model for a pass with room (returns null).
+ */
+export async function reconsiderDesign(experimentId: string, now: Date, opts: { mayAskTheAttacker: boolean } = { mayAskTheAttacker: true }): Promise<(Deliberation & { askedTheModel: boolean; reconsideredBecause: string }) | null> {
+  const design = await designOf(experimentId);
+  if (!design || design.sealedAt !== null || design.designedBy !== FORGE) return null;
+  const last = await one(
+    `SELECT COUNT(*) AS n, MAX(refused_at) AS at,
+            (SELECT facts FROM forge_refusals WHERE experiment_id = ? AND stage = 'deliberate' ORDER BY refused_at DESC, rowid DESC LIMIT 1) AS facts
+       FROM forge_refusals WHERE experiment_id = ? AND stage = 'deliberate'`, [experimentId, experimentId]);
+  const n = Number(last?.n ?? 0);
+  if (n >= FORGE_GIVES_UP_AFTER) return null;
+  const asked = await one(`SELECT asked_at FROM forge_rerun_asks WHERE experiment_id = ? AND asked_at > ? ORDER BY asked_at DESC LIMIT 1`,
+    [experimentId, last?.at == null ? '' : String(last.at)]);
+  const record = await theRecordOf(experimentId);
+  if (!record) return null;
+  const factsNow = await sealingFacts(record);
+  const lastFacts = last?.facts == null ? null : String(last.facts);
+  // A design with no facts on record was judged before they were kept (or
+  // before unsealed designs were refusals at all): it is taken up once.
+  const changed = lastFacts === null || lastFacts !== factsNow;
+  if (!changed && !asked) return null;
+  const reconsideredBecause = asked ? 'the owner asked for it to be taken up again'
+    : lastFacts === null ? 'it was designed before what it was refused on was kept' : 'what it was refused on has changed';
+
+  // THE ATTACKER'S STANDING VERDICT, from its rows; asked again only where it
+  // did not say run and the design itself does.
+  const prior = await one(`SELECT verdict, because FROM probe_attacks WHERE experiment_id = ? ORDER BY rowid DESC LIMIT 1`, [experimentId]);
+  let verdict = prior ? oneOf(prior.verdict, ['run', 'reframe', 'defer', 'kill'] as const) : null;
+  let attackBecause = prior?.because == null ? null : String(prior.because);
+  let current = design;
+  let attacks: Attack[] = [];
+  let askedTheModel = false;
+  if (design.recommendation === 'run' && verdict !== 'run') {
+    if (!opts.mayAskTheAttacker) return null;
+    const a = await attackTheDraft(record, design);
+    ({ design: current, attacks, verdict, attackBecause } = a);
+    askedTheModel = true;
+  }
+  const rule = await theRuleThatSeals(record, current, verdict, attackBecause);
+  if (!rule.sealed) await recordForgeRefusal(experimentId, 'deliberate', designedButNot(rule.unsealedBecause), now, rule.facts);
+  return { experimentId, outcome: 'reconsidered', because: reconsideredBecause, findings: [], design: current, attacks,
+    attackerVerdict: verdict, sealed: rule.sealed, unsealedBecause: rule.unsealedBecause, facts: rule.facts, askedTheModel, reconsideredBecause };
+}
+
+export interface WaitingDesign {
+  experimentId: string;
+  whatWeDo: string;
+  designedAt: string;
+  /** The last reason it was not sealed, or that it has not been judged since reasons were kept. */
+  because: string;
+  /** Refusals at the designing stage so far; at FORGE_GIVES_UP_AFTER it is retired. */
+  refusals: number;
+  /** When the owner last asked for it to be taken up again, if after its last refusal. */
+  rerunAskedAt: string | null;
+}
+
+/** EVERY FORGE DESIGN THAT IS NOT SEALED AND NOT ENDED: what waits, and why. */
+export async function designsWaiting(founderId: string): Promise<WaitingDesign[]> {
+  return (await rows(
+    `SELECT d.experiment_id, d.designed_at, e.what_we_do,
+            (SELECT r.because FROM forge_refusals r WHERE r.experiment_id = d.experiment_id AND r.stage = 'deliberate' ORDER BY r.refused_at DESC, r.rowid DESC LIMIT 1) AS because,
+            (SELECT MAX(r.refused_at) FROM forge_refusals r WHERE r.experiment_id = d.experiment_id AND r.stage = 'deliberate') AS refused_at,
+            (SELECT COUNT(*) FROM forge_refusals r WHERE r.experiment_id = d.experiment_id AND r.stage = 'deliberate') AS refusals,
+            (SELECT MAX(a.asked_at) FROM forge_rerun_asks a WHERE a.experiment_id = d.experiment_id) AS asked_at
+       FROM probe_designs d JOIN venture_experiments e ON e.id = d.experiment_id
+      WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.decision IS NULL AND e.retired_at IS NULL AND e.superseded_by IS NULL
+        AND d.sealed_at IS NULL AND d.designed_by = ?
+      ORDER BY d.designed_at, d.experiment_id`, [founderId, FORGE])).map((r) => ({
+    experimentId: String(r.experiment_id), whatWeDo: String(r.what_we_do), designedAt: String(r.designed_at),
+    because: r.because == null ? 'designed but not yet judged against what is true now; the next forge pass takes it up' : String(r.because).replace(/^designed but not sealed: /, ''),
+    refusals: Number(r.refusals),
+    rerunAskedAt: r.asked_at != null && (r.refused_at == null || String(r.asked_at) > String(r.refused_at)) ? String(r.asked_at) : null,
+  }));
+}
+
+/** HE ASKED: every waiting design is taken up again on the next pass, whatever its facts. Returns how many. */
+export async function askToReconsiderDesigns(founderId: string, now: Date = new Date()): Promise<number> {
+  const waiting = await designsWaiting(founderId);
+  for (const w of waiting) {
+    await query(`INSERT INTO forge_rerun_asks (id, experiment_id, asked_at) VALUES (?,?,?)`, [nanoid(), w.experimentId, now.toISOString()]);
+  }
+  return waiting.length;
+}
+
+/** HE RETIRED THEM: every waiting design's test is retired, each with its own last reason. Returns how many. */
+export async function retireWaitingDesigns(founderId: string): Promise<number> {
+  let n = 0;
+  for (const w of await designsWaiting(founderId)) {
+    const r = await query(
+      `UPDATE venture_experiments SET retired_at = datetime('now'), retired_because = ?
+        WHERE id = ? AND founder_id = ? AND retired_at IS NULL AND decision IS NULL`,
+      [`retired by the owner while its design waited unsealed: ${w.because}`, w.experimentId, founderId]);
+    n += Number(r.rowsAffected ?? 0);
+  }
+  return n;
+}
 
 /** THE MOST DESIGNS IN A DAY. Two compositions and two attacks on the frontier
  *  model is about a dollar; the charter's thinking is the hard stop beneath it. */
@@ -695,8 +859,31 @@ export async function forgePass(founderId: string, now: Date = new Date()): Prom
       const d = await deliberate(id);
       out.deliberated.push(d);
       if (d.outcome === 'refused') await recordForgeRefusal(id, 'deliberate', d.because ?? 'refused', now);
+      // AN UNSEALED DESIGN IS A REFUSAL TOO, with the facts it was refused on (F1.5).
+      else if (d.outcome === 'designed' && !d.sealed) await recordForgeRefusal(id, 'deliberate', designedButNot(d.unsealedBecause), now, d.facts ?? null);
     } catch (err) {
       // THE DOOR, NOT THE TEST: every later test would fail the same way.
+      if (err instanceof ModelDoorError) throw err;
+      out.failed.push({ experimentId: id, because: err instanceof Error ? err.message : String(err) });
+    }
+  }
+  // WHAT WAS DESIGNED AND NOT SEALED IS TAKEN UP AGAIN when what it was
+  // refused on has changed, or he asked (F1.5). Re-judging costs nothing; only
+  // asking the attacker again counts against the day's designs.
+  const unsealed = await rows(
+    `SELECT d.experiment_id FROM probe_designs d JOIN venture_experiments e ON e.id = d.experiment_id
+      WHERE e.founder_id = ? AND e.evidence_mode = 'real' AND e.decision IS NULL AND e.retired_at IS NULL
+        AND d.sealed_at IS NULL AND d.designed_by = ? ORDER BY d.designed_at, d.experiment_id`, [founderId, FORGE]);
+  for (const u of unsealed) {
+    const id = String(u.experiment_id);
+    if (out.deliberated.some((d) => d.experimentId === id)) continue;
+    if (pastDeadline(`taking up ${id} again and any after it`)) break;
+    try {
+      const r = await reconsiderDesign(id, now, { mayAskTheAttacker: attempted < MOST_DESIGNS_PER_PASS });
+      if (!r) continue;
+      if (r.askedTheModel) attempted += 1;
+      out.deliberated.push(r);
+    } catch (err) {
       if (err instanceof ModelDoorError) throw err;
       out.failed.push({ experimentId: id, because: err instanceof Error ? err.message : String(err) });
     }

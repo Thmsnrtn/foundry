@@ -1183,6 +1183,22 @@ experimentRoutes.post('/foundry/experiments/:id/authorise-contact', requireInsti
   return back(c, id, 'test', 'allowed');
 });
 
+// THE DESIGNS THE FORGE COULD NOT SEAL, answered as one (F1.5): take them up
+// again on the next pass, or retire them. Neither seals or runs anything here.
+experimentRoutes.post('/foundry/forge/designs-waiting/reconsider', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c); if (!founderId) return c.redirect('/onboarding');
+  const { askToReconsiderDesigns } = await import('../../services/venture/forge-deliberation.js');
+  await askToReconsiderDesigns(founderId);
+  return c.redirect('/foundry/experiments');
+});
+
+experimentRoutes.post('/foundry/forge/designs-waiting/retire', requireInstitutionOwner(), async (c: any) => {
+  const founderId = await founderOf(c); if (!founderId) return c.redirect('/onboarding');
+  const { retireWaitingDesigns } = await import('../../services/venture/forge-deliberation.js');
+  await retireWaitingDesigns(founderId);
+  return c.redirect('/foundry/experiments');
+});
+
 experimentRoutes.post('/foundry/experiments/:id/decline', requireInstitutionOwner(), async (c: any) => {
   const founderId = await founderOf(c); if (!founderId) return c.redirect('/onboarding');
   const id = String(c.req.param('id'));
