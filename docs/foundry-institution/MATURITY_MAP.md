@@ -2730,6 +2730,24 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### Dependencies, and gates that say how long they take (Remediation 4, 6 October 2026)
+
+**What changed.** vitest 4.1 and `@clerk/backend` 3 replace vitest 1.6 and the
+Clerk SDK; `verifiedClerkClaims` reads the package's exported `verifyToken`
+(which throws a failure and returns the payload), refuses any failure in
+either shape, and keeps the issuer check the removed `issuer` option carried.
+The first cut read the inner function's `{ data }` shape and would have locked
+the owner out; the independent audit found it, and a test with no double — a
+signed RS256 token through the installed package — now holds it. Hooks get a
+minute (vitest 4 fails an overrun hook; three overran ten seconds on CI).
+**Evidence maturity.** E2: the full chain green on vitest 4, the advisory gate
+green with one written exception, the real-library test red on the first
+adapter and green on this one.
+**Proof debt.** No real Clerk session has been verified against `@clerk/backend`
+3 — the sign-in rehearsal against the live instance is the owner's; the
+moderate OpenTelemetry advisories wait on `@sentry/node` 11, a major upgrade of
+its own; braces stays accepted until a release above 3.0.3 or tsc-alias goes.
+
 ### A missing listing says why (Roadmap 2027 R34, 6 October 2026)
 
 **What changed.** A test's listing missing from a complete shop read is asked
