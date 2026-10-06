@@ -32,8 +32,11 @@ import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest
 // migrates a scratch database; at the start of `npm run check`, beside two
 // other vitest processes, one took 14–31 s (measured 6 October 2026). Vitest 1
 // let a synchronous test finish however long it ran; vitest 4 fails it at its
-// timeout, so the file says what it may take. Twice the slowest measured.
-vi.setConfig({ testTimeout: 60_000 });
+// timeout, so the file says what it may take. The first budget, twice that,
+// was overrun the same afternoon: check-sql-columns, the first case, took 107 s
+// on a four-core machine while both suites migrated, against 20 s alone. Three
+// minutes covers the slowest seen with room; a gate that hangs still fails.
+vi.setConfig({ testTimeout: 180_000 });
 import { execFileSync } from 'child_process';
 import {
   cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync,

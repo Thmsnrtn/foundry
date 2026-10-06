@@ -7,6 +7,16 @@ export default defineConfig({
     environment: 'node',
     include: ['tests/**/*.test.ts'],
     testTimeout: 10000,
+    // A HOOK'S BUDGET, MEASURED WHERE IT RUNS SLOWEST (6 October 2026). Vitest
+    // 4 fails a hook that overruns its timeout, where vitest 1 let it finish;
+    // the default is ten seconds. On this box a `beforeAll` that migrates the
+    // template database takes two to six; on the CI runner, with two shards
+    // migrating at once on fewer cores, three of them (`ai-spend-ledger`,
+    // `a-copy-leaves-the-machine`, `a-copy-is-restored-the-day-it-is-made`)
+    // passed ten, and the check went red on PRs #8 and #9 for setup, not for a
+    // single assertion. A minute is generous for setup and still finite: a
+    // hook that hangs is still a failure, named, within the minute.
+    hookTimeout: 60_000,
     setupFiles: ['./src/test/setup.ts'],
     // SERIAL, AND NOW FOR A MEASURED REASON RATHER THAN AN INHERITED ONE.
     //

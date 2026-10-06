@@ -49,6 +49,8 @@ export interface ProductionFacts {
   modelDoor: import('../ai/model-door.js').ModelDoorFacts;
   /** Payment events in the last thirty days that carried our tag and matched no test of ours (remediation 1.6). */
   unmatchedPaymentEvents: Array<{ eventId: string; because: string; at: string }>;
+  /** Real market claims no source could read after four looks, now left (migration 389). */
+  claimsLeft?: Array<{ claimId: string; claim: string; because: string }>;
 }
 
 export async function productionFacts(founderId: string, env: NodeJS.ProcessEnv = process.env): Promise<ProductionFacts> {
@@ -85,6 +87,14 @@ export async function productionFacts(founderId: string, env: NodeJS.ProcessEnv 
     correspondence: await correspondenceMode(founderId),
     subscriptionsAllowed: (await subscriptionsAllowed(founderId)).allowed,
     modelDoor: await (await import('../ai/model-door.js')).modelDoorFacts(),
+    claimsLeft: ((await query(
+      `SELECT c.id AS claim_id, c.claim,
+              (SELECT f2.because FROM claim_look_failures f2 WHERE f2.claim_id = c.id ORDER BY f2.failed_at DESC, f2.rowid DESC LIMIT 1) AS because
+         FROM market_claims c
+        WHERE c.founder_id = ? AND c.settled_as IS NULL
+          AND (SELECT COUNT(*) FROM claim_look_failures f WHERE f.claim_id = c.id) >= 4
+        ORDER BY c.formed_at, c.rowid LIMIT 10`, [founderId])).rows as unknown as Array<Record<string, unknown>>)
+      .map((r) => ({ claimId: String(r.claim_id), claim: String(r.claim), because: String(r.because ?? '') })),
     unmatchedPaymentEvents: ((await query(
       `SELECT event_id, unmatched_because, processed_at FROM stripe_webhook_events
         WHERE unmatched_because IS NOT NULL AND datetime(processed_at) >= datetime('now', '-30 days')
