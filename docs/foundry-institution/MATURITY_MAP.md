@@ -2730,6 +2730,17 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### A missing listing says why (Roadmap 2027 R34, 6 October 2026)
+
+**What changed.** A test's listing missing from a complete shop read is asked
+for by number; its state (expired, sold out, inactive, draft, or gone) is kept
+on `venue_listing_readings.state` and readiness names the fix. **Evidence
+maturity.** E1: `a-missing-listing-says-why`. **Proof debt.** No live listing
+has gone missing yet, so Etsy's exact state words are taken from its API shape,
+not seen; Developer Mode remains invisible to an app; whether a hidden shop's
+listings drop out of Etsy's public active list was not calibrated (that read
+would need the public app-key endpoint, not added here).
+
 ### A checkout left is reach (Roadmap 2027 R35, 6 October 2026)
 
 **What changed.** Expired, unpaid checkout sessions at our payment links are

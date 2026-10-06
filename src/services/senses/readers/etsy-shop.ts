@@ -126,6 +126,13 @@ export interface ShopReading {
    */
   listingFiles: Array<{ filename: string; sizeBytes: number | null }> | null;
   /**
+   * WHY THIS TEST'S LISTING IS NOT AMONG THE ACTIVE ONES (R34): the state Etsy
+   * holds it in ('expired', 'inactive', 'sold_out', 'draft', ...), or 'gone'
+   * when Etsy has no listing by that number in this shop. Null when the
+   * listing was shown, the read was not complete, or Etsy did not answer.
+   */
+  listingState?: string | null;
+  /**
    * WHETHER SILENCE MEANS ANYTHING. False when the read was truncated or
    * anything was discarded: a path that cannot tell it was partial must never
    * let an empty list become an affirmative "nobody bought".
@@ -345,6 +352,24 @@ export async function readTheShop(input: {
       } catch { listingFiles = null; }
     }
 
+    // WHY THE LISTING IS MISSING, asked only when a complete read did not
+    // include it: the shop's listing read returns active listings, so an
+    // expired one and a deleted one looked the same. One request, read scope.
+    // Etsy answering 404, or naming another shop, is 'gone'; anything else it
+    // cannot answer leaves the reason unread rather than guessed.
+    let listingState: string | null = null;
+    const complete = rawListings.said <= rawListings.rows.length;
+    if (input.onlyListingId && complete && !listings.some((l) => l.listingId === input.onlyListingId)) {
+      try {
+        const one = await get(`${API}/listings/${encodeURIComponent(input.onlyListingId)}`, token, apiKey);
+        const st = typeof one.state === 'string' ? one.state.trim().toLowerCase() : '';
+        listingState = String(one.shop_id ?? '') !== String(shopId) ? 'gone'
+          : /^[a-z_]{1,24}$/.test(st) ? st : null;
+      } catch (err) {
+        listingState = /answered 404\b/.test(String(err)) ? 'gone' : null;
+      }
+    }
+
     // PAID RECEIPTS ONLY, AND ASKED FOR AS SUCH.
     //
     // A receipt exists before the money does on Etsy's deferred methods, and
@@ -487,7 +512,7 @@ export async function readTheShop(input: {
       listings, orders,
       saidListings: rawListings.said, saidOrders: rawOrders.said, discarded,
       listingsComplete: rawListings.said <= listings.length,
-      listingFiles,
+      listingFiles, listingState,
       // COMPLETE MEANS ALL THREE: nothing left unfetched on either endpoint,
       // and nothing fetched that this reader could not read. A discard is a
       // receipt that exists and was not understood, which is exactly the
@@ -691,7 +716,7 @@ export async function bringTheVenueUpToDate(input: {
       const { noteListingAsShown } = await import('../../venture/findability.js');
       await noteListingAsShown({ productId, provider: 'etsy', listingId,
         seen: shown !== undefined, priceCents: shown?.priceCents ?? null, currency: shown?.currency ?? null,
-        files: shown ? reading.listingFiles : null });
+        files: shown ? reading.listingFiles : null, state: shown ? null : reading.listingState ?? null });
     }
   }
 

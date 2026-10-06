@@ -409,7 +409,7 @@ export async function qualificationOf(experimentId: string): Promise<Qualificati
           ? met(NAME_SEALED_OFFER, `${venue} shows listing ${listingId} active at ${dollars(sealed.amountCents, sealed.currency.toLowerCase())}, the price the test was sealed at (read ${on})`)
           : { name: NAME_SEALED_OFFER, verdict: 'waits_for_you',
             because: !shown.seen
-              ? `listing ${listingId} is not among ${venue}'s active listings for the shop (read ${on}) — it may have expired, sold out or been deactivated; relist it, or the test measures nothing`
+              ? `listing ${listingId} is not among ${venue}'s active listings for the shop (read ${on}) — ${whyNotShown(venue, shown.state ?? null)}, or the test measures nothing`
               : `${venue} shows listing ${listingId} at ${shown.priceCents === null ? 'no readable price' : dollars(shown.priceCents, shown.currency)}, but the test was sealed at ${dollars(sealed.amountCents, sealed.currency.toLowerCase())} (read ${on}) — change the listing back, or the test measures a different offer` });
       }
 
@@ -675,6 +675,22 @@ export async function qualificationStandsInTheWay(input: {
     refusal: `the test is not ready for this: ${r.blocking.join('; ')}`,
     blocking: r.blocking,
   };
+}
+
+/**
+ * WHAT TO DO ABOUT A LISTING THE SHOP DOES NOT SHOW, from the state the venue
+ * holds it in (R34). Without a state read, the three likely causes, as before.
+ */
+export function whyNotShown(venue: string, state: string | null): string {
+  switch (state) {
+    case 'gone': return `${venue} has no listing by that number in this shop; list it again and record the new address`;
+    case 'expired': return `${venue} says it has expired; renew it`;
+    case 'sold_out': return `${venue} says it is sold out; raise its quantity`;
+    case 'inactive': return `${venue} says it was deactivated; activate it`;
+    case 'draft': return `${venue} says it is a draft that was never published; publish it`;
+    case null: return 'it may have expired, sold out or been deactivated; relist it';
+    default: return `${venue} holds it as "${state}"; make it active again`;
+  }
 }
 
 // ─── What the venue last showed, in one place ────────────────────────────────

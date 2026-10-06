@@ -330,6 +330,8 @@ export interface ListingAsShown {
   files: ListingFile[] | null;
   /** When the venue was read showing it so, `YYYY-MM-DD HH:MM:SS`, UTC. */
   observedAt: string;
+  /** Why it was not shown, as the venue holds it ('expired', 'gone', ...); null when shown or not read. */
+  state?: string | null;
 }
 
 /** Keep what the venue showed for a listing. Only a change is a new row. */
@@ -338,11 +340,14 @@ export async function noteListingAsShown(input: {
   seen: boolean; priceCents: number | null; currency: string | null;
   /** Null when the files were not read on this pass: then they are not compared, and not written. */
   files?: ListingFile[] | null;
+  /** Why a listing not shown is not shown, when the venue said; ignored when it is shown. */
+  state?: string | null;
 }): Promise<void> {
   const p = input.provider.toLowerCase();
   const price = input.seen ? input.priceCents : null;
   const currency = input.seen && input.currency ? input.currency.toLowerCase() : null;
   const files = input.seen && input.files ? JSON.stringify(input.files) : null;
+  const state = !input.seen && input.state ? input.state : null;
   // Compared with what was read through the connection there is now, so the
   // first read after a new grant is always written: readiness counts only
   // readings made since the grant (`connectionSince`).
@@ -350,11 +355,14 @@ export async function noteListingAsShown(input: {
   const last = await listingAsShown(input.productId, p, input.listingId, since);
   const lastFiles = await filesAsShown(input.productId, p, input.listingId, since);
   const filesChanged = files !== null && (lastFiles === null || JSON.stringify(lastFiles.files) !== files);
-  if (last && last.seen === input.seen && last.priceCents === price && last.currency === currency && !filesChanged) return;
+  // A reason newly read is a change; a pass that could not read the reason
+  // does not erase the one already known.
+  const stateChanged = state !== null && (last?.state ?? null) !== state;
+  if (last && last.seen === input.seen && last.priceCents === price && last.currency === currency && !filesChanged && !stateChanged) return;
   await query(
-    `INSERT INTO venue_listing_readings (id, product_id, provider, listing_id, seen, price_cents, currency, files_json)
-     VALUES (?,?,?,?,?,?,?,?)`,
-    [nanoid(), input.productId, p, input.listingId, input.seen ? 1 : 0, price, currency, files]);
+    `INSERT INTO venue_listing_readings (id, product_id, provider, listing_id, seen, price_cents, currency, files_json, state)
+     VALUES (?,?,?,?,?,?,?,?,?)`,
+    [nanoid(), input.productId, p, input.listingId, input.seen ? 1 : 0, price, currency, files, state]);
 }
 
 /**
@@ -404,7 +412,7 @@ export async function sealedFileOf(experimentId: string): Promise<{ filename: st
 export async function listingAsShown(productId: string, provider: string, listingId: string,
   since: string | null = null): Promise<ListingAsShown | null> {
   const r = (await query(
-    `SELECT seen, price_cents, currency, files_json, observed_at FROM venue_listing_readings
+    `SELECT seen, price_cents, currency, files_json, observed_at, state FROM venue_listing_readings
       WHERE product_id = ? AND provider = ? AND listing_id = ?
         AND (? IS NULL OR datetime(observed_at) >= datetime(?))
       ORDER BY datetime(observed_at) DESC, rowid DESC LIMIT 1`,
@@ -412,6 +420,6 @@ export async function listingAsShown(productId: string, provider: string, listin
   return r ? { seen: Number(r.seen) === 1, priceCents: r.price_cents == null ? null : Number(r.price_cents),
     currency: r.currency == null ? null : String(r.currency),
     files: r.files_json == null ? null : JSON.parse(String(r.files_json)) as ListingFile[],
-    observedAt: String(r.observed_at) } : null;
+    observedAt: String(r.observed_at), state: r.state == null ? null : String(r.state) } : null;
 }
 
