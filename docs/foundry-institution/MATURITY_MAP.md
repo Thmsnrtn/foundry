@@ -2730,6 +2730,25 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### An act that costs money is read as one (Roadmap 2027 R41, 6 October 2026)
+
+**What changed.** On the observe, prepare, reversible and public rungs, an act
+whose capability draws on the allowance takes the financial test: a stated
+cost, covered by the allowance or exactly approved. **Evidence maturity.** E1:
+`an-act-that-costs-money-is-read-as-one`. **Proof debt.** No listing tool is
+bound today, so this is a law ahead of its first use; the caller still states
+its own cost estimate, which the budget door, not this check, holds to the
+real charge.
+
+### The copy is read before it is kept (Roadmap 2027 R29c, 6 October 2026)
+
+**What changed.** Offer composition refuses model-written copy that makes a
+banned claim or whose charging sentence contradicts the plan's recurrence.
+**Evidence maturity.** E1: `the-copy-is-read-before-it-is-kept`. **Proof
+debt.** The banned list is a phrase match, so a paraphrased claim passes; copy
+already stored is not re-read until it is remade; the charging sentence's
+amount is not compared with the price.
+
 ### The offer text says what the plan sells (Roadmap 2027 R29b, 5 October 2026)
 
 **What changed.** Offer text is written from the plan's terms and the gate

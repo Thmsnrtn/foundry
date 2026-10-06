@@ -63,6 +63,8 @@ export interface ConsequenceVerdict {
  * observe and prepare: yes - nothing outside can tell.
  * reversible and public: the boundary door already governs these; nothing
  *   extra here, so the standing "ask me first" and "never" keep working.
+ *   Except an act that draws on the allowance (a listing fee): that takes the
+ *   financial test on whatever rung it stands.
  * financial: an allowance for the company, or an exact-act approval.
  * legal and destructive: an exact-act approval, every time. Not absorbable.
  *
@@ -113,12 +115,18 @@ export async function consequenceAllows(input: {
   }
   const { rung } = escalated;
 
-  if (rung === 'observe' || rung === 'prepare' || rung === 'reversible' || rung === 'public') {
+  // AN ACT THAT COSTS HIS MONEY IS READ AS ONE, WHATEVER ELSE IT IS (R41).
+  // Listing on a marketplace is public and also charges a listing fee and a
+  // cut of the sale; on the public rung it was waved through here with no
+  // allowance read at all. Below financial, drawing on the allowance takes the
+  // financial test; legal and destructive keep their stricter one.
+  const lower = rung === 'observe' || rung === 'prepare' || rung === 'reversible' || rung === 'public';
+  if (lower && !facts.drawsOnAllowance) {
     return { allowed: true, rung, reason: `${facts.whatItDoes}: ${facts.whatItMeans}` };
   }
 
   const { spendApprovalFor, allowanceFor } = await import('./standing-intent.js');
-  if (rung === 'financial') {
+  if (rung === 'financial' || lower) {
     // AN ACT THAT SPENDS HIS MONEY MUST SAY HOW MUCH — and only such an act.
     //
     // Without this, "is there anything left?" was the whole test, and an
