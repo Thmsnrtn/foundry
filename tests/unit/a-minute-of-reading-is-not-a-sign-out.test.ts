@@ -32,15 +32,19 @@ import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 const SESSIONS: Record<string, { status: string; userId: string }> = {};
 let liveCalls = 0;
 
-// Clerk 3's shape: a failed verification is RETURNED as `{ errors }`, never
-// thrown, and a passed one is `{ data }`. A token `foreign:...` is signed by
-// somebody that is not Clerk.
+// THE SHAPE THE PACKAGE EXPORTS, not the one its inner function returns:
+// `@clerk/backend` 3's exported `verifyToken` THROWS the first error and
+// RETURNS THE PAYLOAD (`withLegacyReturn`). The first double modelled
+// `{ data } / { errors }`, and the adapter it passed refused every real token
+// (remediation audit, 6 October 2026); `a-real-clerk-token-is-read-by-the-real-library`
+// now holds the adapter to the real package. A token `foreign:...` is signed
+// by somebody that is not Clerk.
 vi.mock('@clerk/backend', () => ({
   verifyToken: vi.fn(async (token: string, opts: { clockSkewInMs?: number }) => {
     const [kind, sub, sid, exp] = token.split(':');
-    if (kind !== 'tok' && kind !== 'foreign') return { errors: [new Error('bad signature')] };
-    if (Number(exp) * 1000 + (opts.clockSkewInMs ?? 5000) < Date.now()) return { errors: [new Error('token-expired')] };
-    return { data: { sub, sid, exp: Number(exp), iss: kind === 'tok' ? 'https://owner.clerk.accounts.dev' : 'https://elsewhere.example' } };
+    if (kind !== 'tok' && kind !== 'foreign') throw new Error('bad signature');
+    if (Number(exp) * 1000 + (opts.clockSkewInMs ?? 5000) < Date.now()) throw new Error('token-expired');
+    return { sub, sid, exp: Number(exp), iss: kind === 'tok' ? 'https://owner.clerk.accounts.dev' : 'https://elsewhere.example' };
   }),
   createClerkClient: () => ({
     sessions: {
@@ -171,11 +175,10 @@ describe('what a lapsed session is never honoured for', () => {
   });
 });
 
-describe('Clerk 3 reports a failed check as a value, and a value is not a sign-in', () => {
-  // `@clerk/backend` 3 RETURNS `{ errors }` where 0.38 threw. Passed through
-  // unchanged, an expired token would read as claims with no subject and every
-  // step of the lapse path would treat "it did not throw" as "verified".
-  it('an expired bearer token answered with errors is refused, not read as claims', async () => {
+describe('Clerk 3 is read as it is exported, and nothing else is a sign-in', () => {
+  // A refusal from Clerk is a refusal on every path, and a token signed by
+  // anyone else is refused even when it verifies.
+  it('an expired token Clerk refuses is refused, not read as claims', async () => {
     const { verifiedClerkClaims } = await import('../../src/middleware/auth.js');
     await expect(verifiedClerkClaims(token(-120), 'sk_test_lapse')).rejects.toThrow(/token-expired/);
   });
