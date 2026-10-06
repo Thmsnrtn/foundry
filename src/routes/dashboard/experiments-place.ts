@@ -668,7 +668,7 @@ experimentRoutes.get('/foundry/experiments/:id', async (c: any) => {
     ${short ? fold('short', short.headline, short.sealed ? 'sealed' : 'not yet sealed', html`<div class="know said">
       <ul class="plain">${short.lines.map((l) => html`<li>${l}</li>`)}</ul>
       <p class="quiet">${short.sealed ? 'This was written before you decided and sealed when you did, so it cannot be edited to match the result.' : 'Written before this runs. It seals when you decide.'} <a class="why" href="/foundry/experiments/${id}/decide">Before you decide</a> · <a class="why" href="/foundry/why/experiment/${id}">Show your work</a></p>
-    </div>`, v.state === 'needs_you' || v.state === 'ready') : ''}
+    </div>`, v.state === 'ready') : ''}
 
     ${after.recorded.length + after.open.length + after.resolved.length > 0 ? fold('after', 'After the test settled',
     after.open.length > 0 ? `${String(after.open.length)} not yet recorded`
@@ -830,6 +830,15 @@ experimentRoutes.get('/foundry/experiments/:id/decide', async (c: any) => {
   const { publicWorkshopOf } = await import('../../services/public-workshop/settings.js');
   const voice = (await publicWorkshopOf(founderId))?.publicName ?? 'the Workshop';
   const body = html`
+    ${/* THE TERMS OPEN, THE REASONING ONE TAP AWAY (remediation, 6 October
+         2026). This page was 2,444 words on a phone. What a yes does — the
+         case for it, who it reaches and what it spends, where it stops itself,
+         and the decision — stays open: those are the terms of the only act
+         that reaches a stranger, and a term behind a tap is not consent. Why
+         this question, why this exchange, what each discipline said, what
+         each answer would mean, the public name's costs and the readiness legs
+         are folded under their own headings; a blocked leg is still said
+         outside its fold. */ ''}
     <h1>Before you decide</h1>
     <p class="lede">${v.assetName ?? 'This test'} — ${v.stateLabel}. Everything here was written before this moment, and nothing on this page contacts anybody.</p>
     ${d === null ? html`<p class="noticed"><strong>Nothing is recorded yet.</strong> There is no deliberation behind this test, so it cannot be allowed.</p>` : html`
@@ -838,33 +847,33 @@ experimentRoutes.get('/foundry/experiments/:id/decide', async (c: any) => {
       <p class="quiet"><a class="why" href="/foundry/why/experiment/${id}">Show your work</a> — the whole record, including what it replaced.</p>
     </section>
 
-    <section class="know"><h2>What I want to learn</h2>
+    <section class="know"><details class="fold"><summary><h2>What I want to learn</h2><span class="gist">the question, and why it is worth a test</span></summary>
       <p>${d.decides}</p>
       <p class="quiet">${d.decidesBecause}</p>
-    </section>
+    </details></section>
 
-    <section class="know"><h2>Why ${d.exchange.whatItIs.toLowerCase()}</h2>
+    <section class="know"><details class="fold"><summary><h2>Why ${d.exchange.whatItIs.toLowerCase()}</h2><span class="gist">what it shows, what it confounds, what else I weighed</span></summary>
       <p>${d.exchangeBecause}</p>
       <p class="quiet">What it shows: ${d.exchange.reveals}. What it confounds: ${d.exchange.confounds}.</p>
       <details><summary>What else I weighed, and did not choose</summary>
         <ul>${d.alternatives.map((a) => html`<li><strong>${a.whatItIs}</strong> — ${a.notChosenBecause}</li>`)}</ul>
       </details>
-    </section>
+    </details></section>
 
-    ${lenses.length === 0 ? '' : html`<section class="know"><h2>What each discipline said</h2>
+    ${lenses.length === 0 ? '' : html`<section class="know"><details class="fold"><summary><h2>What each discipline said</h2><span class="gist">${String(lenses.length)} findings${attacks.length ? ', and the adversary' : ''}</span></summary>
       <p class="quiet">Written before the design was composed, each on the rows it names.</p>
       <ul class="plain">${lenses.map((f) => html`<li><strong>${LENS_WORD[f.lens] ?? f.lens}</strong> — ${f.finding} <span class="pill">${f.recommends}</span> <span class="quiet">${f.because}</span></li>`)}</ul>
       ${attacks.length === 0 ? '' : html`<details><summary>What the adversary argued (${String(attacks.length)}), and its verdict: ${attacks[0]!.verdict}</summary>
         <ul>${attacks.map((a) => html`<li>${a.claim} <span class="quiet">${a.why}</span>${a.accepted ? html` <span class="pill ok">amended</span>` : ''}</li>`)}</ul>
         <p class="quiet">${attacks[0]!.because}</p></details>`}
-    </section>`}
+    </details></section>`}
 
-    <section class="know"><h2>What each answer would mean</h2>
+    <section class="know"><details class="fold"><summary><h2>What each answer would mean</h2><span class="gist">what a yes would establish, and what it would not</span></summary>
       <p><strong>If it works</strong> — ${d.canProve}</p>
       <p><strong>What it still would not establish</strong> — ${d.cannotProve}</p>
       <p class="quiet">Readings of the same result I cannot tell apart from this test alone:</p>
       <ul>${d.interpretations.filter((i) => i.distinguishedBy === null).map((i) => html`<li>If ${i.observation.toLowerCase()}: ${i.reading}</li>`)}</ul>
-    </section>
+    </details></section>
 
     <section class="know"><h2>Who it reaches, and what it spends</h2>
       <dl class="facts">
@@ -882,16 +891,17 @@ experimentRoutes.get('/foundry/experiments/:id/decide', async (c: any) => {
       <p>${d.fulfilmentCap === null ? 'No cap on what may be owed at once.' : html`If it works, new offers stop at <strong>${String(d.fulfilmentCap)}</strong> briefs owed at once. ${d.ifItSucceeds}`}</p>
     </section>
 
-    <section class="know"><h2>What it costs ${voice}, and what people can ask of it</h2>
+    <section class="know"><details class="fold"><summary><h2>What it costs ${voice}, and what people can ask of it</h2><span class="gist">one public name, one message each, what a reader can ask</span></summary>
       <p>One public name stands behind this and every later experiment. ${d.costs.find((x) => x.dimension === 'reputation')?.grounds ?? ''}</p>
       <p><strong>Contact policy</strong> — one message per business, no follow-up, from ${v.publicPage ? 'the Workshop' : 'the connected sender'}, with a postal address and an unsubscribe in every message. A refusal said to this test is a refusal for every test.</p>
       <p><strong>What they can ask for</strong> — the page asks each reader what should happen next. "Never" removes them from the whole Workshop; "nothing further" stops the next experiment writing to them even though it is not a complaint; anything else is kept in their own words.</p>
       ${v.publicPage ? html`<p><strong>Public page</strong> — <a href="${v.publicPage.url}" rel="noopener">${v.publicPage.url}</a> (${v.publicPage.status})</p>` : ''}
-    </section>
+    </details></section>
 
-    <section class="know"><h2>Readiness, checked against the world</h2>
+    <section class="know"><details class="fold"><summary><h2>Readiness, checked against the world</h2><span class="gist">${ready.blocked > 0 ? `${String(ready.blocked)} blocked` : 'every leg read back'}</span></summary>
       <p class="quiet">A provider answering is not proof. Every line marked “seen in the world” was read back over public HTTPS just now.</p>
       <ul class="plain">${ready.legs.map((l) => html`<li><span class="pill">${badge[l.status]}</span> <strong>${l.leg}</strong> — ${l.detail}</li>`)}</ul>
+    </details>
       ${ready.blocked > 0 ? html`<p class="noticed"><strong>${String(ready.blocked)} blocked.</strong> Nobody can be written to while any of these stands, whatever you press.</p>` : ''}
     </section>
 
@@ -967,7 +977,10 @@ experimentRoutes.get('/foundry/experiments/:id/recipients', async (c: any) => {
     ${open && pending.some((r) => r.channel === 'email') ? html`<div class="pair"><form method="POST" action="/foundry/experiments/${id}/recipients/approve-remaining">
       <button class="btn yes" type="submit">Approve the rest (${String(pending.filter((r) => r.channel === 'email').length)}) &mdash; each may be written to once</button></form></div>` : ''}
     ${pending.map(row)}
-    ${decided.length ? html`<h2 class="section">Reviewed</h2>${decided.map(row)}` : ''}
+    ${/* WHAT IS STILL HIS TO REVIEW, OPEN; WHAT HE ALREADY DECIDED, FOLDED
+         (remediation, 6 October 2026: 1,062 words on a phone). Each reviewed
+         business keeps its row and its controls, one tap down. */ ''}
+    ${decided.length ? html`<details class="fold" id="reviewed"><summary><h2>Reviewed</h2><span class="gist">${String(decided.length)} decided</span></summary>${decided.map(row)}</details>` : ''}
     <p class="row"><a class="btn go" href="/foundry/experiments/${id}">Back to the test</a></p>`;
   return c.html(page('Who may be contacted', body, 'experiments', where(v, 'recipients')));
 });

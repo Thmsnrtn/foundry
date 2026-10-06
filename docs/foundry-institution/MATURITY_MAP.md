@@ -2740,14 +2740,50 @@ door in one sentence; an unreadable claim backs off; an unmatched payment event
 keeps its reason; decision forms and absence evidence are escaped; the shell
 declares its icon. **Evidence maturity.** E2: all five campaign files green,
 the four pinned `it.fails` flipped to `it`, each fix mutated away and its test
-red; Home walked on two phones and a desk on days 1, 9 and 39 with no console
-error and no failed resource. **Proof debt.** The breaker lives in one process
+red; Home walked on two phones and a desk on days 1, 9 and 39. *Corrected by
+Remediation 2:* the Home-only walk saw no failed resource, but the full walk
+that followed still logged a browser-level 404 for `/favicon.ico` on 64 pages —
+declaring the icon did not stop Chromium asking. The address is now served.
+**Proof debt.** The breaker lives in one process
 and is not shared across a rolling deploy's two machines; its thresholds (three
 failures, ten minutes) and the tier timeouts are reasoned, not measured against
 a real provider outage; `rejection_streaks` keeps a read-then-insert with no
 unique key (a race makes a duplicate row, not an error) and is not fixed here;
 about thirty `raw()` interpolations of non-constant text remain in
 `foundry-shell.ts`, not audited here.
+
+### The owner's daily screens (Remediation 2, 6 October 2026)
+
+**What changed.** On a day something needs the owner, Home draws the decision first
+and the pulse, the ways in, the glance and a standing permission beneath it; a
+card whose button only opens a page keeps "if you do nothing" open and folds
+its other terms. Every control on the walked pages reaches 24px (bare links by
+padding that moves no line of text; switches' checkboxes cover the switch);
+components carry 44. Settings' and Privacy's switches have names; the Inbox's
+selected filter keeps its own ground; Activity's list holds only terms; the
+Needs-you pill and the company cards are named by what they say. Etsy buyers
+and Trading research have an h1. The Workshop preview points at the public
+site and submits nothing. `/favicon.ico` answers. Controls' decisions, the
+absence page's thinking ledger (and a longer horizon when it adds no new
+failure), the experiment page's case,
+the reviewed recipients, the decide page's reasoning, the Letter's capability
+list and the Workshop's identity terms are folded under headings that say what
+is inside. The decision card's facts, notes and hidden fields, and the river
+view's company cards, are escaped (a company's name reached both as markup).
+**Evidence maturity.** E2 in a browser on the walk's world: the one-thing card
+and its button above the fixed bars on 390×844, 375×667 and 430×932 on day 1
+and after the charter lapses (day 39), where it sat at 888–957px; axe at
+serious and above clean on 23 owner pages on a phone and a desk; no control
+under 24px; no owner page over 700 words but one. Each fix was mutated away and
+its test went red. **Proof debt.** WebKit is not driven (Safari is the owner's
+phone); "Before you decide" is 1,517 words with its terms open (PENDING 38);
+"If you stepped away" stays over 700 (about 1,070) whenever a longer horizon
+adds a failure, because a failing property and what would fix it are never
+folded;
+Controls' health card opens when anything is wrong, by design, and then runs
+past 700 words; inline links reach 24px, not 44 — the WCAG 2.2 inline
+exception, not the design target; keyboard and screen-reader passes are axe's
+rules only, never a person with VoiceOver.
 
 ### Dependencies, and gates that say how long they take (Remediation 4, 6 October 2026)
 

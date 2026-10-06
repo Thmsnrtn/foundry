@@ -7,6 +7,11 @@
 // apple-touch icon and no other, while nothing serves `/favicon.ico`. The shell
 // now names the icon it has. This holds every icon and manifest link in the
 // shell to a file that exists, and holds that one icon is declared at all.
+//
+// DECLARING IT WAS NOT ENOUGH. The next full walk still logged a browser-level
+// 404 for `/favicon.ico` on 64 pages: Chromium asks for it whatever the page
+// names. So the address answers too, from the handler production and the
+// laboratory both mount.
 // =============================================================================
 process.env.TURSO_DATABASE_URL = 'file::memory:';
 process.env.ENCRYPTION_KEY = '7'.repeat(64);
@@ -17,7 +22,7 @@ import { describe, expect, it } from 'vitest';
 import { html } from 'hono/html';
 
 describe('the owner shell\'s head', () => {
-  it('declares an icon, so the browser does not ask for /favicon.ico', async () => {
+  it('declares an icon', async () => {
     const { page } = await import('../../src/views/owner/shell.js');
     const out = String(await page('Home', html`<p>x</p>`));
     expect(out).toMatch(/<link rel="icon" type="image\/png" href="\/static\/icon-192\.png" \/>/);
@@ -32,5 +37,20 @@ describe('the owner shell\'s head', () => {
       const file = h.startsWith('/static/') ? resolve('src/public', h.slice('/static/'.length)) : resolve('src/public', h.slice(1));
       expect(existsSync(file), h).toBe(true);
     }
+  });
+});
+
+describe('the address a browser asks for on its own', () => {
+  it('/favicon.ico answers with the icon, in the app the walk serves', async () => {
+    const { ownerApp } = await import('../helpers/world.js');
+    const res = await (await ownerApp()).request('/favicon.ico');
+    expect(res.status).toBe(200);
+    expect(res.headers.get('content-type')).toBe('image/png');
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    expect([...bytes.slice(0, 4)]).toEqual([0x89, 0x50, 0x4e, 0x47]);
+  });
+  it('and production mounts the same handler', async () => {
+    const { readFileSync } = await import('node:fs');
+    expect(readFileSync(resolve('src/index.ts'), 'utf8')).toMatch(/app\.get\('\/favicon\.ico', pwa\.favicon\)/);
   });
 });

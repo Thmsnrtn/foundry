@@ -92,8 +92,20 @@ export function staticAssetHandler(dirname: string): (c: Context) => Response | 
  * instrument and the product, not a defect of the product, and the only way
  * to keep it from happening again is for both to mount the same code.
  */
-export function pwaHandlers(baseDir: string): { manifest: (c: Context) => Response; serviceWorker: (c: Context) => Response } {
+export function pwaHandlers(baseDir: string): {
+  manifest: (c: Context) => Response; serviceWorker: (c: Context) => Response; favicon: (c: Context) => Response;
+} {
   return {
+    // `/favicon.ico` IS ASKED FOR WHATEVER THE PAGE DECLARES. Remediation 1.6
+    // named the PNG icon in the owner shell on the theory that a declared icon
+    // stops the request; the next full walk still logged a browser-level 404
+    // for it on 64 pages. So the address answers, with the icon the shell
+    // names (a PNG is a valid favicon to every browser the owner uses).
+    favicon: (c) => {
+      const bytes = readStaticAsset(baseDir, 'icon-192.png');
+      if (!bytes) return c.notFound() as Response;
+      return c.body(bytes, 200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' });
+    },
     manifest: (c) => {
       try {
         const content = readFileSync(resolve(baseDir, 'public', 'manifest.json'), 'utf-8');

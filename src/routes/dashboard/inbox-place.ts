@@ -417,6 +417,7 @@ inboxRoutes.get('/foundry/etsy-messages', async (c: any) => {
   const done = String(c.req.query('done') ?? '');
 
   const body = html`
+    <h1>Etsy buyers</h1>
     ${done === 'answered' ? html`<p class="state ok" role="status">Marked answered.</p>` : ''}
     <section class="know">
       <h2>${waiting.length === 0 ? 'Nobody is waiting' : `${String(waiting.length)} ${waiting.length === 1 ? 'buyer is' : 'buyers are'} waiting`}</h2>

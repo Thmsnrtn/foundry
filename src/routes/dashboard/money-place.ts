@@ -660,6 +660,7 @@ moneyRoutes.get('/foundry/money/research', async (c: any) => {
   const across = await crossVenueReading();
 
   const body = html`
+    <h1>Trading research</h1>
     ${done ? html`<p class="noticed" role="status">${done === 'begun' ? 'Observing. The first forecast is sealed at the next window.' : 'Stopped. What was recorded stays.'}</p>` : ''}
     ${error ? html`<p class="noticed" role="alert">${error}</p>` : ''}
     <section class="know" id="what">

@@ -218,7 +218,7 @@ const VIEWPORTS = [
 // in the page. A string is evaluated as written.
 interface Measured {
   ttfbMs: number | null; dclMs: number | null; artifacts: string[]; overflowX: number; h1Count: number; words: number; controls: number; barControls: number;
-  smallTargets: { under44: number; under24: number; first: string[] } | null;
+  smallTargets: { under44: number; under24: number; first: string[]; tiny: string[] } | null;
   oneThing: { present: boolean; top: number | null; inFirstViewport: boolean | null; primaryTop: number | null; primaryInFirstViewport: boolean | null };
   headerNeeds: number | null; headerNeedsLabel: string | null; bodyClaimsNeeds: number | null; title: string;
 }
@@ -259,17 +259,28 @@ const MEASURE_JS = String.raw`(mobile) => {
     const all = [...document.querySelectorAll('a[href],button,input:not([type=hidden]),select,textarea,summary,[role=button]')].filter(visible);
     const small = all.filter((e) => { const r = e.getBoundingClientRect(); return r.width < 44 || r.height < 44; });
     const tiny = all.filter((e) => { const r = e.getBoundingClientRect(); return r.width < 24 || r.height < 24; });
-    smallTargets = { under44: small.length, under24: tiny.length, first: small.slice(0, 3).map(sel) };
+    // THE FINDING NAMES WHAT IT COUNTS. It reported "N under 24px" and then
+    // listed three of the under-44 set, so the controls it was counting were
+    // never named and could not be fixed from the finding.
+    smallTargets = { under44: small.length, under24: tiny.length, first: small.slice(0, 3).map(sel), tiny: tiny.slice(0, 6).map((e) => sel(e) + ' ' + String(Math.round(e.getBoundingClientRect().width)) + 'x' + String(Math.round(e.getBoundingClientRect().height))) };
   }
   const one = document.querySelector('#the-one-thing');
   const H = window.innerHeight;
   const primary = (one && one.querySelector('.btn.go, .do button, .do a')) || document.querySelector('main .btn.go');
+  // THE FIXED BARS COVER THE BOTTOM OF THE SCREEN. "On the first screen"
+  // measured against the window let a button sit behind the composer and the
+  // doors and still count (SE, day 39: 607px under bars from 532px).
+  const bars = [...document.querySelectorAll('*')]
+    .filter((e) => getComputedStyle(e).position === 'fixed')
+    .map((e) => e.getBoundingClientRect())
+    .filter((r) => r.height < H / 2 && r.bottom > H * 0.6);
+  const chromeTop = bars.length ? Math.min(...bars.map((r) => r.top)) : H;
   const oneThing = {
     present: Boolean(one),
     top: one ? Math.round(one.getBoundingClientRect().top + window.scrollY) : null,
-    inFirstViewport: one ? one.getBoundingClientRect().top < H && one.getBoundingClientRect().bottom > 0 : null,
+    inFirstViewport: one ? one.getBoundingClientRect().top < chromeTop && one.getBoundingClientRect().bottom > 0 : null,
     primaryTop: primary ? Math.round(primary.getBoundingClientRect().top + window.scrollY) : null,
-    primaryInFirstViewport: primary ? primary.getBoundingClientRect().bottom <= H : null,
+    primaryInFirstViewport: primary ? primary.getBoundingClientRect().bottom <= chromeTop : null,
   };
   const needs = document.querySelector('main .brand a.needs');
   const b = needs ? needs.querySelector('b') : null;
@@ -292,7 +303,7 @@ interface Visit {
   ttfbMs: number | null; dclMs: number | null;
   artifacts: string[]; consoleErrors: string[]; failedSubresources: string[];
   overflowX: number; h1Count: number;
-  smallTargets: { under44: number; under24: number; first: string[] } | null;
+  smallTargets: { under44: number; under24: number; first: string[]; tiny: string[] } | null;
   axe: { critical: Record<string, { count: number; firstTarget: string }>; serious: Record<string, { count: number; firstTarget: string }> } | null;
   words: number; controls: number; barControls: number;
   oneThing: { present: boolean; top: number | null; inFirstViewport: boolean | null; primaryTop: number | null; primaryInFirstViewport: boolean | null };
@@ -387,7 +398,20 @@ try {
       });
       const page = await ctx.newPage();
       for (const spec of pages) {
-        const v = await visit(page, moment.day, vp, spec, truth);
+        // THE ROWS AS THEY STOOD WHEN THE PAGE WAS DRAWN, not at the start of
+        // the day. Opening a company records its situation and raises its
+        // advice (foundry-shell's company page, deliberately), so the count
+        // rose by one per company visited on day 1 and the header, honest at
+        // the moment it rendered, was compared with a number from before the
+        // walk began. Read before and after; the header is honest if it
+        // matches the rows at either edge of its own render (the three
+        // viewports walk side by side, so another's visit can land between).
+        const before = await truthNow();
+        const v = await visit(page, moment.day, vp, spec, before);
+        if (v.honest === false || (v.bodyClaimsNeeds !== null && v.bodyClaimsNeeds !== before.service)) {
+          const after = await truthNow();
+          if (v.honest === false && v.headerNeeds === after.service) { v.truth = after; v.honest = true; }
+        }
         visits.push(v);
         appendFileSync(OUT, `${JSON.stringify(v)}\n`);
         const flags = [v.status && v.status >= 400 ? `HTTP ${String(v.status)}` : '', v.artifacts.length ? 'ARTIFACT' : '', v.overflowX ? `overflow ${String(v.overflowX)}px` : '',
@@ -444,8 +468,9 @@ for (const [route, vs] of byRoute) {
   const claims = vs.filter((v) => v.bodyClaimsNeeds !== null && v.truth.service !== null && v.bodyClaimsNeeds !== v.truth.service);
   if (claims.length) add('P2', 'honesty', `${route}: the page says ${String(claims[0]!.bodyClaimsNeeds)} thing(s) need him; the queue says ${String(claims[0]!.truth.service)}`, `${where(claims)} — rows ${JSON.stringify(claims[0]!.truth.raw)}`);
   const mobile = vs.filter((v) => v.smallTargets && v.status === 200);
-  const worst = mobile.sort((a, b) => (b.smallTargets!.under44) - (a.smallTargets!.under44))[0];
-  if (worst && worst.smallTargets!.under24 > 0) add('UX', 'tap-targets', `${route}: ${String(worst.smallTargets!.under24)} control(s) under 24px on a phone (${String(worst.smallTargets!.under44)} under 44px)`, `${worst.day}/${worst.viewport} — ${worst.smallTargets!.first.join(' ; ')}`);
+  // Worst by what is reported: the under-24 count, then the under-44 count.
+  const worst = mobile.sort((a, b) => (b.smallTargets!.under24 - a.smallTargets!.under24) || (b.smallTargets!.under44 - a.smallTargets!.under44))[0];
+  if (worst && worst.smallTargets!.under24 > 0) add('UX', 'tap-targets', `${route}: ${String(worst.smallTargets!.under24)} control(s) under 24px on a phone (${String(worst.smallTargets!.under44)} under 44px)`, `${worst.day}/${worst.viewport} — under 24px: ${worst.smallTargets!.tiny.join(' ; ')}`);
   const heavy = vs.filter((v) => v.viewport === 'iphone13' && v.words > 700);
   if (heavy.length) add('UX', 'reading-burden', `${route}: ${String(Math.max(...heavy.map((v) => v.words)))} words on a phone`, `${where(heavy)} — ${String(Math.max(...heavy.map((v) => v.controls)))} controls`);
   const slow = vs.filter((v) => (v.ttfbMs ?? 0) > 1500);

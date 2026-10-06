@@ -13,9 +13,9 @@ around each item.
 ---
 
 <!-- status:begin — generated from the headings below by node scripts/check-record-matches-code.mjs --write -->
-# 18 WAITING ON THE OWNER, 3 WITH COUNSEL, 7 DECIDED IN PLACE
+# 20 WAITING ON THE OWNER, 3 WITH COUNSEL, 7 DECIDED IN PLACE
 
-- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 21, 25, 26, 27, 29, 30, 32, 33, 34, 35, 36, 37.
+- **Waiting on the owner:** PENDING 11, 12, 14, 17, 18, 19, 21, 25, 26, 27, 29, 30, 32, 33, 34, 35, 36, 37, 38, 39.
 - **Waiting on counsel:** PENDING 9, 13, 15 (interim positions in force; see below).
 - **Decided, and kept where they were asked:** PENDING 16, 20, 22, 23, 24, 28, 31.
 - **Answered and recorded as RESOLVED:** 15.
@@ -2211,4 +2211,40 @@ morning holds about 16¢. Bounded either way.
 
 **Recommendation.** (a) now, (b) when the daily credit read (R33) is extended to
 usage — the breaker has already made the cost small.
+
+## PENDING 38 — How much of "Before you decide" is open before you press Allow: **OWNER** (2026-10-06)
+
+**What is true.** The page you read before allowing a test that writes to
+strangers was 2,444 words on a phone. Remediation 2 folded the reasoning — why
+this question, why this exchange, what each discipline said, what each answer
+would mean, the public name's costs, the readiness legs (a blocked leg is still
+said outside its fold) — and left open the case for running it, who it reaches
+and what it spends, where it stops itself, and the decision. It is now about
+1,500 words, over the 700-word line; the gate names it as an exception (the
+other is the absence page, long whenever a failure is open, by doctrine).
+
+**Your choice.**
+- **(a)** Keep the terms open. Nothing you agree to is behind a tap; the page
+  stays long.
+- **(b)** Fold "who it reaches" and "where it stops" too, leaving their
+  one-line totals (how many businesses, the money ceiling, the first stop) in
+  the summaries. About 600 words; every term one tap away.
+
+**Recommendation.** (a). It is the only decision that reaches a stranger, and
+"a term behind a tap is not consent" is the same rule the Home card keeps.
+
+## PENDING 39 — The four company tabs that appear only with rows: **OWNER** (2026-10-06)
+
+**What is true.** Economics, Customers, Experiments and Evidence appear on a
+company only when it has rows for them; their addresses answer an old link by
+returning to the overview. The walk reached them through the route table, on
+companies that had no such rows, and reported "bounces". No page links to an
+absent one: the company's tabs are built from the dimensions that have rows
+(`services/founder/place.ts`).
+
+**Your choice.** (a) keep them conditional; (b) always show all four, with an
+empty state that says what would fill each.
+
+**Recommendation.** (a): a tab with nothing behind it is the dead end the walk
+was looking for.
 

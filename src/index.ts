@@ -123,6 +123,7 @@ app.get('/static/:file', staticAssetHandler(__dirname));
 const pwa = pwaHandlers(__dirname);
 app.get('/manifest.json', pwa.manifest);
 app.get('/sw.js', pwa.serviceWorker);
+app.get('/favicon.ico', pwa.favicon);
 
 // ─── Public Routes ───────────────────────────────────────────────────────────
 

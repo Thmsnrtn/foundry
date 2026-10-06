@@ -1306,7 +1306,8 @@ interface Decision {
   question: string;
   title: string;
   meaning: string[];
-  facts: Array<[string, string]>;
+  /** Text, escaped — or markup built with `html`, which carries its own escaping. */
+  facts: Array<[string, string | HtmlEscapedString | Promise<HtmlEscapedString>]>;
   primary?: { label: string; action: string; fields?: Record<string, string> };
   secondary?: { label: string; action: string; fields?: Record<string, string> };
   /**
@@ -1364,7 +1365,16 @@ interface Decision {
  */
 const decisionCard = (d: Decision): HtmlEscapedString | Promise<HtmlEscapedString> => {
   const [says, ...alsoSays] = d.meaning;
-  const more = alsoSays.length > 0 || (d.lists ?? []).length > 0;
+  // A DOOR'S FACTS ARE A PREVIEW; A DECISION'S ARE ITS TERMS. Where the card's
+  // one button opens the place the thing is decided (`open`), nothing is
+  // agreed here, and the page it opens states every term before they can. So
+  // the card keeps the consequence of doing nothing open and folds the rest:
+  // the charter card's three terms put "Review charter" under the fixed bars
+  // of a 375×667 phone. Where the card posts the answer itself, every fact
+  // stays open — that rule is below and unchanged.
+  const shownFacts = d.open ? d.facts.filter(([k]) => k === 'If you do nothing') : d.facts;
+  const foldedFacts = d.open ? d.facts.filter(([k]) => k !== 'If you do nothing') : [];
+  const more = alsoSays.length > 0 || (d.lists ?? []).length > 0 || foldedFacts.length > 0;
   return html`
   <section id="the-one-thing" class="one${d.alert ? ' alert' : ''}" aria-labelledby="d-title">
     <div class="one-in">
@@ -1382,19 +1392,23 @@ const decisionCard = (d: Decision): HtmlEscapedString | Promise<HtmlEscapedStrin
          not let a caller declare its own safety cannot let a layout hide it
          either. They are a compact list of pairs; they cost little and they
          sit above the answers, where they are read before the press. */ ''}
-    ${d.facts.length ? html`<dl class="facts">${
-  raw(d.facts.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join(''))}</dl>` : ''}
+    ${/* ESCAPED, AS `renderDecision` IS SINCE REMEDIATION 1.6. These were
+         joined with `raw()`, so a company's name, a model's reason or a
+         provider's reference reached the owner's first screen as markup. A
+         fact that is meant to be markup is built with `html` and keeps it. */ ''}
+    ${shownFacts.length ? html`<dl class="facts">${
+  shownFacts.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>` : ''}
     <div class="do">
       ${d.open ? html`<a class="btn go" href="${d.open.href}">${d.open.label}</a>` : d.primary ? html`<form method="POST" action="${d.primary.action}">
         <input type="hidden" name="return_to" value="foundry" />
-        ${raw(Object.entries(d.primary.fields ?? {}).map(([k, v]) =>
-    `<input type="hidden" name="${k}" value="${v}" />`).join(''))}
+        ${Object.entries(d.primary.fields ?? {}).map(([k, v]) =>
+    html`<input type="hidden" name="${k}" value="${v}" />`)}
         <button class="btn go" type="submit">${d.primary.label}</button>
       </form>` : ''}
       ${d.secondary ? html`<form method="POST" action="${d.secondary.action}" style="flex:0 0 auto">
         <input type="hidden" name="return_to" value="foundry" />
-        ${raw(Object.entries(d.secondary.fields ?? {}).map(([k, v]) =>
-    `<input type="hidden" name="${k}" value="${v}" />`).join(''))}
+        ${Object.entries(d.secondary.fields ?? {}).map(([k, v]) =>
+    html`<input type="hidden" name="${k}" value="${v}" />`)}
         <button class="btn" type="submit" style="width:auto">${d.secondary.label}</button>
       </form>` : ''}
     </div>
@@ -1407,10 +1421,12 @@ const decisionCard = (d: Decision): HtmlEscapedString | Promise<HtmlEscapedStrin
          opening. */ ''}
     ${more ? html`
     <details class="fold"><summary><h3>What else is true</h3><span class="gist">${
-  alsoSays.length ? `${String(alsoSays.length)} note${alsoSays.length === 1 ? '' : 's'}`
-    : 'the detail'}</span></summary>
+  alsoSays.length ? `${String(alsoSays.length)} note${alsoSays.length === 1 ? '' : 's'}${foldedFacts.length ? `, ${String(foldedFacts.length)} term${foldedFacts.length === 1 ? '' : 's'}` : ''}`
+    : foldedFacts.length ? `${String(foldedFacts.length)} term${foldedFacts.length === 1 ? '' : 's'}` : 'the detail'}</span></summary>
       ${alsoSays.length ? html`<div class="means">${
-  raw(alsoSays.map((m) => `<p>${m}</p>`).join(''))}</div>` : ''}
+  alsoSays.map((m) => html`<p>${m}</p>`)}</div>` : ''}
+      ${foldedFacts.length ? html`<dl class="facts">${
+  foldedFacts.map(([k, v]) => html`<dt>${k}</dt><dd>${v}</dd>`)}</dl>` : ''}
       ${(d.lists ?? []).map((l) => html`<div class="know">
         <h2>${l.heading}</h2>
         <ul>${l.items.map((i) => html`<li>${i}</li>`)}</ul>
@@ -1637,7 +1653,14 @@ export function theOneThing(a: Attention, extras: OneThingExtras = {}): HtmlEsca
       act: 'Responsibility',
       question: a.n === 1 ? 'One thing is waiting on you.' : `${String(a.n)} things are waiting on you.`,
       title: 'Each is listed below, with what it is and where it goes.',
-      meaning: [
+      // WHY A LIST, NOT WHAT A YES DOES. `meaning`'s first line stays open
+      // because it is a consequence; this one is an explanation of the card's
+      // shape, and the consequence of doing nothing is already a fact below.
+      // Open, it put the answer under the fixed bars on a 375×667 phone
+      // (`the-one-thing-is-on-the-first-screen-of-a-full-day`); behind "Why?"
+      // it is one tap away and commits them to nothing.
+      meaning: [],
+      why: [
         'None of these is a single yes or no I can put in front of you — a test waiting to be listed, something the Workshop needs from you — so the list is their honest shape.',
       ],
       facts: [['Waiting', String(a.n)], ['If you do nothing', 'they keep waiting; none of them expires on its own']],
@@ -1779,18 +1802,18 @@ export function theOneThing(a: Attention, extras: OneThingExtras = {}): HtmlEsca
         // THE COMPANY IS AN ADDRESS. From the queue he should be able to step
         // into the place the act belongs to and decide it there, with the
         // company's situation around it, rather than only from the card.
-        ['Company', `<a href="/foundry/companies/${a.productId}#decide">${a.companyName}</a>`],
+        ['Company', html`<a href="/foundry/companies/${a.productId}#decide">${a.companyName}</a>`],
         // WHERE IT LANDS, BEFORE WHAT IT COSTS. Read from the act's rung and
         // subject by `consequenceOfAct`, when the screen has read it; the
         // cost never stands alone, because $0 is a statement about a budget.
         ...(c && !isCannotSay(c) ? [
-          ['Where it lands', `<span class="pill ${c.effect === 'internal' ? 'ok' : 'warn'}">${effectInWords(c.effect)}</span> ${c.touches}`],
+          ['Where it lands', html`<span class="pill ${c.effect === 'internal' ? 'ok' : 'warn'}">${effectInWords(c.effect)}</span> ${c.touches}`],
           ['Afterwards', c.reversibility === 'reversible' ? 'Reversible' : c.reversibility === 'partly_reversible' ? 'Partly reversible' : 'Not reversible'],
-        ] as Array<[string, string]> : c && isCannotSay(c) ? [['Where it lands', `I cannot say — ${c.cannotSay}`]] as Array<[string, string]> : []),
+        ] as Decision['facts'] : c && isCannotSay(c) ? [['Where it lands', `I cannot say — ${c.cannotSay}`]] as Decision['facts'] : []),
         ['Cost', cost],
         ['Putting it back', a.puttingItBack ?? 'Not stated'],
         ['If you do nothing', `It lapses on ${a.expiresAt.slice(0, 10)} and I will not act`],
-        ...(c && !isCannotSay(c) && c.doesNotAuthorise.length ? [['Does not authorise', c.doesNotAuthorise.join(', ')]] as Array<[string, string]> : []),
+        ...(c && !isCannotSay(c) && c.doesNotAuthorise.length ? [['Does not authorise', c.doesNotAuthorise.join(', ')]] as Decision['facts'] : []),
       ],
       primary: {
         // THE BUTTON NAMES THE CONSEQUENCE. "Yes — go ahead" is the label that
@@ -3273,7 +3296,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
       <div class="ev-sec"><h2>How I am working</h2>
         <a href="/foundry/controls">Controls ›</a></div>
       <ul class="ev-list">
-        <li><a class="ev-item" href="/foundry/charter" aria-label="The charter">
+        <li><a class="ev-item" href="/foundry/charter">
           <span class="mark" aria-hidden="true">${mark('autonomy')}</span>
           ${/* THE CANONICAL WORD, KEPT. The first cut of this row made the
                 state the title — "Asks first" — and dropped "Autonomy"
@@ -3466,6 +3489,21 @@ foundryShellRoutes.get('/foundry', async (c) => {
       <div class="maybe">${raw(['today', 'needs', 'portfolio', 'allowed', 'capital', 'away'].filter((k) => k !== key).slice(0, 4).map((k) =>
     `<a href="/foundry?ask=${k}">${QUESTIONS[k]}</a>`).join(''))}</div>
     </section>` : '';
+  // THE ONE THING HE CAME FOR, BEFORE ANYTHING HE DID NOT.
+  // The pulse, what happened while the owner was away, the ways in, the glance and a
+  // standing permission are context. On a quiet day they ARE the page, and
+  // lead. On a day something needs the owner they are what is read AFTER it: on
+  // the world production has (a charter, a search, the eyes, an undecided
+  // test, three companies) they pushed the card to 888px on a 390×844 phone
+  // and 957px on an SE — below the first screen on every phone the walk
+  // holds (`the-one-thing-is-on-the-first-screen-of-a-full-day`). Nothing is
+  // removed; it moves beneath the decision.
+  const besideTheDecision = html`
+    ${attention === null ? '' : pulseLine}
+    ${key ? '' : await awayPanel(s.ownerId)}
+    ${key ? '' : quickTiles(needsN)}
+    ${portfolioState}
+    ${standingPermission(s)}`;
   const body = html`
     ${key ? html`<h1>Ask Foundry</h1><p class="lede">Answers from real state, not guesses.</p>${askSurface}`
     : html`<h1><span id="greet">Hello</span>${s.firstName ? `, ${s.firstName}` : ''}.</h1>`}
@@ -3488,15 +3526,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
          always, and as a sentence when the pulse is anything other than fine.
          A contradiction between "nothing needs you" and "I have not been
          awake" belongs INSIDE the card making the claim, not above it. */ ''}
-    ${attention === null ? '' : pulseLine}
-    ${key ? '' : await awayPanel(s.ownerId)}
-    ${key ? '' : quickTiles(needsN)}
-    ${portfolioState}
-    ${/* THE ONE THING HE CAME FOR, BEFORE ANYTHING HE DID NOT.
-         This was rendered last: after what changed, after ninety lines of
-         search block that can carry a whole opportunity's case. The screen said
-         "One thing needs you" and then put everything else in front of it. */ ''}
-    ${standingPermission(s)}
+    ${attention === null ? besideTheDecision : ''}
     ${/* THE COCKPIT ROW. The decision, cash movement and live activity are one
           composition: on a phone they stack in that order so the decision is
           in the first viewport, and on a desk they sit side by side with the
@@ -3509,6 +3539,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
       ${trendPanel}
       ${activityPanel}
     </div>
+    ${attention !== null ? besideTheDecision : ''}
     ${nowNext}
     ${/* WHERE EVERYTHING STANDS comes after the one thing and Now/Next: on a
          phone the decision must be on the first screen, and this row is the
@@ -4073,13 +4104,19 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
   // read on its own — which is how a screen reader reads it, and how a card
   // linked to directly arrives — was indistinguishable from one of his. The
   // whole point of these is that they are not his.
-  const line = (c: typeof portfolio.companies[number]): string =>
-    `<a class="item" href="/foundry/companies/${c.productId}"
-      aria-label="${c.name}${c.reference ? ', a company I made up' : ''}">
-      <h3>${c.name}${c.reference ? ' <span class="pill">Invented</span>' : ''}${
-  c.needsHim ? ` <span class="gap">— ${c.needsHim}</span>` : ''}</h3>
+  //
+  // NO aria-label, AND NO raw(). The label replaced everything the card says
+  // with the bare name, so a screen reader heard "Apex Micro Press" and none of
+  // what the card reads (axe: label-content-name-mismatch); the "Invented"
+  // pill says it is made up in words both hear. And the card was a string
+  // handed to `raw()`, so a company's name — the owner's typing, or a name
+  // discovery wrote — reached the page as markup.
+  const line = (c: typeof portfolio.companies[number]): HtmlEscapedString | Promise<HtmlEscapedString> =>
+    html`<a class="item" href="/foundry/companies/${c.productId}">
+      <h3>${c.name}${c.reference ? html` <span class="pill">Invented</span>` : ''}${
+  c.needsHim ? html` <span class="gap">— ${c.needsHim}</span>` : ''}</h3>
       <p>${c.headline}${c.days > 0 && c.situation !== 'steady'
-  ? ` <span class="quiet">For ${String(c.days)} ${c.days === 1 ? 'day' : 'days'}.</span>` : ''}</p>
+  ? html` <span class="quiet">For ${String(c.days)} ${c.days === 1 ? 'day' : 'days'}.</span>` : ''}</p>
       <p class="quiet">${c.canSee === 0 ? 'I cannot see anything about it.'
   : `I can see ${String(c.canSee)} ${c.canSee === 1 ? 'thing' : 'things'} about it`
     + `${c.cannotSee > 0 ? `, and ${String(c.cannotSee)} I cannot` : ''}.`}</p>
@@ -4177,8 +4214,7 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
     ${shown.length + tests.length === 0 ? html`<p class="quiet">${companies.length === 0 ? 'You have not told me about anything you own.'
       : find ? `Nothing you own is called anything like “${find}”.` : 'Nothing matches that.'}</p>` : ''}
     ${shown.length ? html`<h2 class="section">What you own</h2>` : ''}
-    ${[...shown, ...tests].map((e, i) => html`${i === shown.length && tests.length ? html`<h2 class="section">Tests, not companies</h2>` : ''}<a class="item" href="/foundry/companies/${e.id}"
-        aria-label="${e.name}${e.reference ? ', a company I made up' : ''}">
+    ${[...shown, ...tests].map((e, i) => html`${i === shown.length && tests.length ? html`<h2 class="section">Tests, not companies</h2>` : ''}<a class="item" href="/foundry/companies/${e.id}">
       <h3>${e.name}${e.reference ? html` <span class="pill">Invented</span>` : ''} ${stagePill(e.id)}</h3>
       <p>${e.headline}${e.days > 0 && e.situation !== 'steady' ? html` <span class="quiet">For ${String(e.days)} ${e.days === 1 ? 'day' : 'days'}.</span>` : ''}</p>
       <p class="where">${e.needsHim > 0 ? html`<span class="need">${String(e.needsHim)} ${e.needsHim === 1 ? 'thing needs' : 'things need'} you</span>` : ''}${
@@ -4240,12 +4276,12 @@ foundryShellRoutes.get('/foundry/companies', async (c: any) => {
          them — and the page itself never said what the list was. */ ''}
     ${portfolio.companies.length > 0
     ? html`<h2 class="section">What you own</h2>` : ''}
-    ${raw(portfolio.companies.map((c) => {
+    ${portfolio.companies.map((c) => {
     const b = burdens.get(c.productId);
-    return line(c) + (b ? `<p class="${(b.verdict === 'earning its keep' || b.verdict === 'not enough to say') && b.burden !== 'needs you often' ? 'quiet' : 'gap'}"
+    return html`${line(c)}${b ? html`<p class="${(b.verdict === 'earning its keep' || b.verdict === 'not enough to say') && b.burden !== 'needs you often' ? 'quiet' : 'gap'}"
       style="margin:-8px 0 var(--s3)">${b.sentence}${b.posture !== 'grow'
-      ? ` You have me ${POSTURE_IN_PLAIN_WORDS[b.posture as keyof typeof POSTURE_IN_PLAIN_WORDS] ?? b.posture}.` : ''}</p>` : '');
-  }).join(''))}`;
+      ? ` You have me ${POSTURE_IN_PLAIN_WORDS[b.posture as keyof typeof POSTURE_IN_PLAIN_WORDS] ?? b.posture}.` : ''}</p>` : ''}`;
+  })}`;
 
   const body = html`
     ${placeHead(frame, 'Portfolio')}
@@ -7874,8 +7910,14 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
   const DECISION_TONE: Record<string, string> = { done: 'go', open: 'wait', cannot_see: 'done' };
   const DECISION_WORD: Record<string, string> = { done: 'Done', open: 'Open', cannot_see: 'Yours to confirm' };
   const openN = decisions.filter((d) => d.state === 'open').length;
+  // THE COUNT OPEN, THE LIST ONE TAP AWAY (remediation, 6 October 2026). The
+  // fortnight's ten acts, each with what it unblocks, were 562 of Control's
+  // 1,256 words on a phone, above "what Foundry may do" — the question the
+  // page exists to answer. The section still says how many are open and that
+  // each is read from what it changes; the acts and their two buttons are
+  // inside, and a deep link to #your-decisions still lands on it.
   const decisionsHtml = html`<section class="card your-decisions" id="your-decisions" aria-labelledby="your-decisions-h">
-    <h2 id="your-decisions-h">Your decisions</h2>
+    <details class="fold"><summary><h2 id="your-decisions-h">Your decisions</h2><span class="gist">${openN === 0 ? 'all done' : `${String(openN)} still open`}</span></summary>
     <p class="quiet">${openN === 0 ? 'Everything Foundry can see is done.' : `${String(openN)} still open. Each is read from what it changes, not ticked.`}</p>
     <ul class="mandate-list">${decisions.map((d) => html`<li>
       <span class="mandate-what"><b>${d.act}</b> <span class="status ${DECISION_TONE[d.state] ?? 'done'}">${DECISION_WORD[d.state] ?? ''}</span></span>
@@ -7889,6 +7931,7 @@ foundryShellRoutes.get('/foundry/controls', async (c: any) => {
         <button class="btn${d.seen.startsWith('allowed') ? '' : ' go'}" type="submit">${d.seen.startsWith('allowed') ? 'Refuse them again' : d.state === 'done' ? 'Allow them' : 'Allow them, for every future offer'}</button>
       </form>` : ''}
     </li>`)}</ul>
+    </details>
   </section>`;
   // CAN IT SELL ON ITS OWN TODAY, AND THE PRODUCTION FACTS (R26), read from
   // this machine. Secrets by name only, never a value; the owner no longer
