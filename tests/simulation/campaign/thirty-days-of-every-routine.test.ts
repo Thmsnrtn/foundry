@@ -165,22 +165,22 @@ describe('thirty days, every routine, under the lock', () => {
 });
 
 describe('(e) the lock', () => {
-  // PINNED DEFECT F-ROUTINES-LOCK-1 (it.fails): this asserts the CORRECT
-  // behaviour and fails today. When job-lock.ts refuses a second holder in the
-  // same process, vitest reports this as an unexpected pass — change it.fails
-  // back to it then. (Corrected 2026-10-06 by the independent audit: the test
-  // holds the lock itself, so a correct lock refuses BOTH runs, not one.)
-  it.fails('while a run of a routine is in progress, no further run of it starts — in this process or any other', async () => {
+  // F-ROUTINES-LOCK-1, FIXED 2026-10-06 (was it.fails): job-lock.ts now keys
+  // ownership on a token per acquisition, so a holder in the SAME process is
+  // refused like any other. The test holds the lock itself, so a correct lock
+  // refuses BOTH runs, not one.
+  it('while a run of a routine is in progress, no further run of it starts — in this process or any other', async () => {
     // A routine that takes measurable time, so the two overlap for certain:
     // the first run is held open by a lock we take ourselves, exactly as the
     // helper takes it, then both runners are started at once.
     const { acquireJobLock, releaseJobLock } = await import('../../../src/services/job-lock.js');
     const job = 'slo_check';
-    expect(await acquireJobLock(job)).toBe(true);
+    const lease = await acquireJobLock(job);
+    expect(lease).not.toBeNull();
     const held = (await query('SELECT locked_by FROM job_locks WHERE job_name = ?', [job])).rows[0] as Record<string, unknown>;
     // While this process holds the lock, the scheduler's door in the SAME process asks for it again.
     const [a, b] = await Promise.all([runUnderLock(job), runUnderLock(job)]);
-    await releaseJobLock(job).catch(() => undefined);
+    await releaseJobLock(job, lease!).catch(() => undefined);
     const refused = [a, b].filter((o) => o.state === 'locked').length;
     if (refused === 0) {
       recordFinding({ id: 'F-ROUTINES-LOCK-1', sev: 'P1', area: 'services/job-lock',

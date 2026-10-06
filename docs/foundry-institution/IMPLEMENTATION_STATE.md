@@ -3172,3 +3172,21 @@ September. Nothing resolved there was reopened.
 - **Proofs**: `the-first-proof-must-not-be-corrupted` (18).
 - **Proof debt unchanged**: no real Etsy account has been read, no unit sold,
   and marketplace writes remain unavailable by construction.
+
+## The simulation campaign's pinned defects, fixed (Stage 1, 2026-10-06)
+
+`tests/simulation/campaign/` pinned what a simulated month of the real
+institution broke as `it.fails` tests. Each fix below flipped its test to `it`,
+and each was mutation-checked: the fix reverted, its test red, the fix restored.
+All E2 (deterministic local runtime through the production services); none of
+it has met a real day.
+
+- **A routine runs at most once at a time, in one process too
+  (F-ROUTINES-LOCK-1).** `job-lock.ts` keyed ownership on one id per process,
+  so a run re-acquired a lease its own process held and its `finally` release
+  deleted the first run's lease. Ownership is now a token per acquisition
+  (`<instance>:<nonce>`), returned by `acquireJobLock` and the only thing
+  `releaseJobLock` deletes. `runScheduledJob`, the campaign's mirror of it, the
+  contention test and `tests/load/cron-load.ts` all use the production SQL now
+  (`ACQUIRE_JOB_LOCK_SQL`) rather than a copy of it. Mutation: comparing the
+  holder by instance prefix instead of token turns the campaign's lock test red.

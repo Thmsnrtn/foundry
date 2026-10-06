@@ -36,31 +36,18 @@ function check(ok: boolean, note: string): void {
   if (!ok) failures.push(note);
 }
 
-// Mirror of acquireJobLock's exact SQL, but parameterized by instanceId so we
-// can simulate DISTINCT worker instances in a single process (the production
-// helper hard-codes one INSTANCE_ID per process). Semantics are identical:
-// atomic INSERT-or-steal-if-expired, then confirm ownership.
+const { acquireJobLock, releaseJobLock } = await import('../../src/services/job-lock.js');
+
+// The production acquire/release, with the lease token supplied explicitly so a
+// single process can play DISTINCT worker instances. Ownership is per
+// acquisition token (not per process), so this is the production semantics,
+// not a mirror of it: atomic INSERT-or-steal-if-expired, then confirm the token.
 async function acquireAs(instanceId: string, jobName: string, ttlSeconds = 300): Promise<boolean> {
-  try {
-    await query(
-      `INSERT INTO job_locks (job_name, locked_at, locked_by, expires_at)
-       VALUES (?, datetime('now'), ?, datetime('now', ?))
-       ON CONFLICT(job_name) DO UPDATE SET
-         locked_at = datetime('now'),
-         locked_by = excluded.locked_by,
-         expires_at = excluded.expires_at
-       WHERE job_locks.expires_at < datetime('now')`,
-      [jobName, instanceId, `+${ttlSeconds} seconds`],
-    );
-    const r = await query('SELECT locked_by FROM job_locks WHERE job_name = ?', [jobName]);
-    return (r.rows[0] as Record<string, unknown>)?.locked_by === instanceId;
-  } catch {
-    return false;
-  }
+  return (await acquireJobLock(jobName, ttlSeconds, instanceId)) === instanceId;
 }
 
 async function releaseAs(instanceId: string, jobName: string): Promise<void> {
-  await query('DELETE FROM job_locks WHERE job_name = ? AND locked_by = ?', [jobName, instanceId]);
+  await releaseJobLock(jobName, instanceId);
 }
 
 async function main(): Promise<void> {
@@ -81,6 +68,18 @@ async function main(): Promise<void> {
     const secondWave = await Promise.all(instances.map((id) => acquireAs(id, job)));
     check(secondWave.filter(Boolean).length <= 1,
       `double-run: a held lock was acquired by >1 instance on retry`);
+    await query('DELETE FROM job_locks', []);
+  }
+
+  // ── 1b. Same-process re-entry: a holder's second run is refused ───────────
+  {
+    const job = jobNames[0];
+    const first = await acquireJobLock(job);
+    const second = await acquireJobLock(job);
+    check(first !== null && second === null,
+      `re-entry: a second acquisition in the same process must be refused while the first holds '${job}'`);
+    if (first) await releaseJobLock(job, first);
+    console.log(`  [1b] same-process re-entry refused: ${String(first !== null && second === null)}`);
     await query('DELETE FROM job_locks', []);
   }
 

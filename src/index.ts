@@ -513,8 +513,9 @@ async function recordWhatIsScheduled(): Promise<void> {
  */
 async function runScheduledJob(name: string, fn: () => Promise<unknown>): Promise<void> {
   // Acquire distributed lock to prevent double-execution during rolling deploys
-  if (!(await acquireJobLock(name))) {
-    logger.info(`Job ${name} skipped (locked by another instance)`, { jobName: name });
+  const lease = await acquireJobLock(name);
+  if (!lease) {
+    logger.info(`Job ${name} skipped (locked by another run)`, { jobName: name });
     return;
   }
   logger.info(`Running: ${name}`, { jobName: name });
@@ -532,7 +533,7 @@ async function runScheduledJob(name: string, fn: () => Promise<unknown>): Promis
     logger.error(`Error in ${name}`, { jobName: name, error: String(err) });
     await recordJobFailure(name, err).catch(() => { /* as above */ });
   } finally {
-    await releaseJobLock(name);
+    await releaseJobLock(name, lease);
   }
 }
 
