@@ -1844,7 +1844,13 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
           `SELECT id, claim, opportunity_id FROM market_claims
             WHERE founder_id = ? AND evidence_mode = 'real' AND settled_as IS NULL
               AND NOT EXISTS (SELECT 1 FROM market_observations o WHERE o.claim_id = market_claims.id)
-            ORDER BY formed_at LIMIT 20`, [founderId]);
+              -- A CLAIM GIVEN UP ON LEAVES THE WINDOW (remediation audit): it
+              -- has no observation and is never settled, so it stayed at the
+              -- front for good, and twenty of them meant no newer claim was
+              -- ever looked at while the pass reported success. Controls
+              -- names what was left.
+              AND (SELECT COUNT(*) FROM claim_look_failures f WHERE f.claim_id = market_claims.id) < 4
+            ORDER BY formed_at LIMIT 200`, [founderId]);
         // THREE LOOKS A PASS, as before — counted over claims actually looked
         // at, so a claim that is waiting does not take a readable one's turn.
         let tried = 0;

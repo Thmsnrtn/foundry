@@ -96,3 +96,34 @@ describe('a waiting claim does not take a readable one\'s turn', () => {
     expect(asked.filter((a) => a.startsWith('cl_w') || a === 'cl_unreadable')).toEqual([]);
   });
 });
+
+// THE WINDOW (remediation audit, 6 October 2026). A claim given up on has no
+// observation and is never settled, so it stayed at the front of a window of
+// twenty for good; twenty such claims and no newer claim was ever looked at,
+// while every pass reported success. Given up now means out of the window,
+// and named on Controls.
+describe('claims given up on do not fill the window', () => {
+  it('a readable claim behind twenty-one given-up ones is still looked at', async () => {
+    await query(`DELETE FROM market_claims WHERE id LIKE 'cl_r%' OR id LIKE 'cl_w%'`, []);
+    for (let i = 0; i < 21; i += 1) {
+      const id = `cl_gone_${String(i).padStart(2, '0')}`;
+      await query(`INSERT INTO market_claims (id, founder_id, claim, evidence_mode, formed_at) VALUES (?,?,?,'real','2026-07-01 00:00:00')`, [id, OWNER, `given up claim about masons ${id}`]);
+      for (let k = 0; k < CLAIM_LOOK_GIVES_UP_AFTER; k += 1) {
+        await query(`INSERT INTO claim_look_failures (id, claim_id, because, failed_at) VALUES (?,?,'no source answered','2026-07-02T00:00:00.000Z')`, [`f_${id}_${String(k)}`, id]);
+      }
+    }
+    await query(`INSERT INTO market_claims (id, founder_id, claim, evidence_mode, formed_at) VALUES ('cl_late',?,'tilers quote jobs from photographs','real','2026-09-20 00:00:00')`, [OWNER]);
+    asked.length = 0;
+    await tick();
+    expect(asked).toContain('cl_late');
+    expect(asked.filter((a) => a.startsWith('cl_gone_'))).toEqual([]);
+  });
+
+  it('and the owner can read which were left, and why', async () => {
+    const { productionFacts } = await import('../../src/services/control/production-facts.js');
+    const left = (await productionFacts(OWNER)).claimsLeft ?? [];
+    expect(left.length).toBeGreaterThanOrEqual(10);
+    expect(left[0]!.because).toBe('no source answered');
+    expect(left.map((l) => l.claimId)).not.toContain('cl_late');
+  });
+});

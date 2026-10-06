@@ -2747,7 +2747,12 @@ failures, ten minutes) and the tier timeouts are reasoned, not measured against
 a real provider outage; `rejection_streaks` keeps a read-then-insert with no
 unique key (a race makes a duplicate row, not an error) and is not fixed here;
 about thirty `raw()` interpolations of non-constant text remain in
-`foundry-shell.ts`, not audited here.
+`foundry-shell.ts`, not audited here. `stripe_webhook_events` carries no owner, so the
+unmatched reasons Controls reads are the whole account's — right only while one
+owner holds the instance. *Corrected after the independent audit:* the breaker
+counted a request's own 400 as the door being down and let every concurrent
+call through as the probe, and a given-up claim could fill the evidence window
+for good. Both are fixed, each with a test that is red on the first cut.
 
 ### Dependencies, and gates that say how long they take (Remediation 4, 6 October 2026)
 
