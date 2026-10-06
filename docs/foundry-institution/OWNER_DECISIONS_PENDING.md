@@ -2248,22 +2248,30 @@ empty state that says what would fill each.
 **Recommendation.** (a): a tab with nothing behind it is the dead end the walk
 was looking for.
 
-## PENDING 40 — A browser in the release chain: **OWNER** (2026-10-06)
+## PENDING 40 — `measure-mobile` in the release chain: **OWNER** (2026-10-06)
 
-**What is true.** `scripts/measure-mobile.mts` — the gate made after the first
-prototype overflowed on your iPhone — and the browser tests added since (the
-one thing on the first screen, axe and the 24px floor, the twelve journeys)
-run wherever Chromium is installed and skip where it is not. The CI runner
-that gates a deploy has no Chromium, so on the path to production they are
-skipped, and the phone you hold is checked only when somebody runs them by hand.
+**What is true.** *Corrected the same day, after the remediation's independent
+audit: the first version of this entry said the CI runner has no Chromium and
+the browser tests skip there. It has one (`/usr/bin/google-chrome` on
+`ubuntu-latest`), and the CI log's shard totals show nothing skipped.* The
+browser tests in the suite — the one thing on the first screen, axe and the
+24px floor, the four doors, the twelve journeys, the phone fit — run in
+`npm run check`, which gates every deploy. One of them,
+`the-three-journeys-the-plan-names`, did not look for the runner's Chrome and
+skipped there; it now does, and `a-browser-gate-runs-where-the-release-is-decided`
+fails if any browser test cannot see the runner's browser, or if a CI runner
+has none. What is still outside the chain is `scripts/measure-mobile.mts` —
+the gate made after the first prototype overflowed on your iPhone: five
+widths, every owner route, no horizontal scroll by a single pixel. The phone-
+fit and four-doors tests cover part of it, not all of its routes and widths.
 
 **Your choice.**
-- **(a)** Add a Chromium install to CI (about 150 MB cached, a minute or two a
-  run) and run `measure-mobile` and the browser tests there, so a deploy cannot
-  pass without them.
-- **(b)** Keep them by hand, before anything you will open on your phone, as
-  `measure-mobile`'s own header says today.
+- **(a)** Run `measure-mobile` in `npm run check` (CI already has the browser;
+  it adds about a minute), so a deploy cannot pass with a page wider than your
+  phone.
+- **(b)** Keep it by hand, before anything you will open on your phone, as its
+  own header says.
 
 **Recommendation.** (a). Every regression this remediation found on Home was
-one a browser sees and a DOM test does not.
+one a browser sees and a DOM test does not, and the browser is already there.
 

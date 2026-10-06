@@ -38,7 +38,8 @@ function beforeAlls(src: string): string[] {
 
 /** The files with a world-seeding hook that states no budget. */
 export function unbudgeted(files: Array<[string, string]>): string[] {
-  return files.filter(([, src]) => !/hookTimeout/.test(src)
+  // A file-wide budget is a `hookTimeout:` in code, not the word in a comment.
+  return files.filter(([, src]) => !/^[^/\n]*\bhookTimeout\s*:/m.test(src)
     && beforeAlls(src).some((b) => SEEDS.test(b) && !/,\s*[\d_]+\s*\)$/.test(b)))
     .map(([name]) => name);
 }
@@ -59,7 +60,8 @@ describe('hooks that seed a world', () => {
     const onDefault = "beforeAll(async () => {\n  await seedProductionShape({});\n});";
     const budgeted = "beforeAll(async () => {\n  await seedProductionShape({});\n}, 180_000);";
     const fileWide = "vi.setConfig({ hookTimeout: 180_000 });\n" + onDefault;
+    const commentOnly = "// no hookTimeout here\n" + onDefault;
     const unrelated = "beforeAll(async () => {\n  await runMigrations();\n});";
-    expect(unbudgeted([['a', onDefault], ['b', budgeted], ['c', fileWide], ['d', unrelated]])).toEqual(['a']);
+    expect(unbudgeted([['a', onDefault], ['b', budgeted], ['c', fileWide], ['d', unrelated], ['e', commentOnly]])).toEqual(['a', 'e']);
   });
 });

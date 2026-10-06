@@ -219,6 +219,11 @@ const KNOWN_UNMAPPED: Record<string, string> = {
   fulfilmentId: 'a buyer\'s signed link names a fulfilment and its token together; a made-up pair is refused, which is checked below',
   responsibilityId: 'the production world holds no institutional responsibility on day one',
 };
+// AN ADDRESS WHOSE JOB IS TO SEND THE OWNER TO ONBOARDING, and why. Any other
+// redirect to sign-in or onboarding is the owner being turned away.
+const KNOWN_REDIRECTS: Record<string, string> = {
+  '/settings/add-product': 'adding a company is the onboarding flow; this address only names it',
+};
 // A 404 THAT IS THE RIGHT ANSWER on this world, and why. Named, so a new one
 // is a finding.
 const KNOWN_404: Record<string, string> = {
@@ -289,6 +294,12 @@ async function look(where: string, url: string): Promise<number> {
   // the owner's world with real ids it is a page the owner cannot open.
   if (res.status >= 500) findings.push({ kind: '5xx', where, note: `${url} → ${String(res.status)} ${lastError || (await res.clone().text().catch(() => '')).slice(0, 160)}` });
   else if (res.status === 403) findings.push({ kind: 'owner-refused', where, note: `${url} → 403 for the owner the posture admits` });
+  // A REDIRECT TO SIGN-IN OR ONBOARDING IS A REFUSAL TOO, said politely: the
+  // owner, signed in, sent away from a page of theirs (remediation audit).
+  else if (res.status >= 300 && res.status < 400 && !KNOWN_REDIRECTS[url]
+    && /^\/(auth\/login|onboarding)\b/.test(res.headers.get('location') ?? '')) {
+    findings.push({ kind: 'owner-refused', where, note: `${url} → ${String(res.status)} to ${res.headers.get('location') ?? ''} for the owner` });
+  }
   else if (res.status === 404 && !KNOWN_404[url]) findings.push({ kind: 'not-found', where, note: `${url} → 404 for a row that exists` });
   const ct = res.headers.get('content-type') ?? '';
   if (res.status === 200 && ct.includes('text/html')) {

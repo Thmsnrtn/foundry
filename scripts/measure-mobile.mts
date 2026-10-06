@@ -19,10 +19,12 @@
 //   414  iPhone 11 / XR / 8 Plus
 //   430  iPhone 14 Pro Max / 15 Pro Max
 //
-// Deliberately NOT part of `npm run check`. It needs a browser binary, and the
-// CI runner has no reason to carry one; `playwright-core` is a dependency with
-// no download of its own and this reads the Chromium the environment already
-// provides. Run it before shipping anything the owner will open on his phone:
+// Not part of `npm run check` (PENDING 40). It was kept out because it needs a
+// browser binary; the CI runner does carry one (`/usr/bin/google-chrome`), and
+// the browser tests in the suite run there, but this script is not one of
+// them. `playwright-core` is a dependency with no download of its own and this
+// reads the Chromium the environment already provides. Run it before shipping
+// anything the owner will open on their phone:
 //
 //   npx tsx scripts/measure-mobile.mts
 // =============================================================================

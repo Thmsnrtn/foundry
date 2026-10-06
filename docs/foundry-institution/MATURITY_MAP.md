@@ -2798,15 +2798,45 @@ real ids, fails on 503, a 403 for the owner and a 404 on a real row, scans what
 its links return, and holds a population floor; `sim:golden` reads the owner's
 screens on the same world and fails on an error page; every world-seeding hook
 states its budget. **Evidence maturity.** E2: a planted 503 and a planted
-unnamed inline route turn the crawl red inside the gates sandbox, the email of
-the old crawl turns it red, and the tree is green with zero findings; the
+unnamed inline route turn the crawl red inside the gates sandbox (a gate case
+each); the old crawl's email turned it red in a manual run, not a gate case;
+the tree is green with zero findings; the
 budget ratchet goes red when one budget is taken away. **Proof debt.** Six of
 24 `:param` routes are not driven with a real row (API customers and webhooks,
 a responsibility, the buyer's signed links — a made-up signed link is checked
 to be refused); the crawl drives GET only, so a POST that 500s on a real row is
 the suite's to find; the floors are today's reach, not a measured need;
-`measure-mobile` and the browser tests run where Chromium is and skip in CI
-(PENDING 40).
+`measure-mobile` is not in the chain (PENDING 40). The browser tests are: CI's
+runner has Chrome and its log shows nothing skipped (this entry first said the
+opposite, from a comment; the audit caught it), one browser test that could
+not see the runner's Chrome now can, and
+`a-browser-gate-runs-where-the-release-is-decided` holds both facts.
+
+### What the remediation could not exercise, at its true level (6 October 2026)
+
+Each of these is believed to work. None was shown to work by this program, and
+the level is the evidence, not the confidence (`PROOF_PROGRAM.md`).
+
+| Item | Level | Why not higher | What would raise it, and whose |
+|---|---|---|---|
+| **WebKit (Safari on the owner's iPhone)** | E1 | Every browser proof here ran in Chromium; WebKit is not installed in the laboratory. The 24px padding on inline links, `:has()` in the checkbox labels, `<details>` folds and the fixed bars are standard, but not seen in WebKit. | A WebKit run of `the-owner-pages-pass-axe-and-a-thumb` and `the-one-thing-is-on-the-first-screen-of-a-full-day`, or the owner opening Home on the phone after the deploy. Code (Playwright WebKit) plus owner. |
+| **A real Clerk session lapsing** | E2 | `verifiedClerkClaims` is proven against the installed `@clerk/backend` 3 with a signed RS256 token and a stubbed key set (valid, expired, wrong key, foreign issuer: `a-real-clerk-token-is-read-by-the-real-library`). No token from the live Clerk instance has been verified by version 3; the first cut of the adapter passed its own test and would have refused every real token, which is why this row stays below E3. | Signing in on the deployed build, leaving a form open for two minutes, saving. Owner, after the deploy. |
+| **Provider sandboxes (Stripe, Resend, Cloudflare, OpenRouter)** | E2 | The world's provider stubs answer; nothing here called a test-mode account. The unmatched-payment reason (390) and the model-door breaker are proven against stubs. | The Stripe test-mode script against the live webhook, and one OpenRouter failure in production read on Controls. Owner (keys), then code. |
+| **Cron cadence** | E2 | The job lock, the claim back-off and the breaker are proven with simulated time (`advanceDays`, `Date.now` spies) and in-process contention, not across real hours on two machines during a rolling deploy. | A week of `job_health` read from production after the deploy: no routine run twice, the market-evidence routine failing at most one morning in four. Code reads it; the deploy is the owner's. |
+| **Turso restore** | E2 (unchanged by this program) | Migrations 388–390 are additive and replay on the template database; no daily copy taken after them exists yet, so none has been restored. | `keep_a_copy_of_everything` restores each day's copy the day it is made (G5): its first `job_health` row after the deploy is the proof. The owner can also run `node dist/cli/index.js rehearse-restore` on the machine. Code reads it; the deploy is the owner's. |
+| **Keyboard and screen reader** | E1 | Axe's rules at serious and above are clean on 23 pages, and the outline test holds the headings. No person has used them with VoiceOver, or with a keyboard alone; focus order through a fold is unseen. | One VoiceOver pass of Home → Needs you → a decision, and one keyboard-only pass. Owner, or a person they ask. |
+| **`measure-mobile`** | E1 | The browser tests run in CI (its runner has Chrome; `a-browser-gate-runs-where-the-release-is-decided` holds it), but the five-width, every-route overflow script does not. | PENDING 40 (a). Owner decides; code wires it. |
+
+**Named by the independent audit, and left as debt rather than fixed here:**
+- The model-door breaker is per process. Two machines each count their own
+  failures, so a door failing on both opens after up to twice the calls.
+- `stripe_webhook_events` carries no tenant column. It is safe while the
+  instance has one owner (the private posture), and is named in case that
+  changes.
+- `/favicon.ico` is proven mounted in production by a source match on
+  `src/index.ts`, not by a request to the production app.
+- The one thing's place above the glance has no guard that runs without a
+  browser. The browser test holds it, and CI runs that test.
 
 ### Dependencies, and gates that say how long they take (Remediation 4, 6 October 2026)
 
