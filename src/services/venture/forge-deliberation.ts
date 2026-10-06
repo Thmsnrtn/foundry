@@ -42,6 +42,7 @@ import { callOpus, callSonnet, ModelDoorError } from '../ai/client.js';
 import { dataBlockInstruction } from '../ai/sanitize.js';
 import { shieldUntrustedContent } from '../ai/prompt-shield.js';
 import { institutionSpend } from '../ai/what-it-is-for.js';
+import { bearingAsRead } from './market-evidence.js';
 import {
   amendDesign, designOf, designStandsInTheWay, exchanges, recordDesign, sealDesign,
 } from './probe-design.js';
@@ -119,7 +120,9 @@ export async function theRecordOf(experimentId: string): Promise<TheRecord | nul
     // world said it, and that is right; what reaches a model is shielded here,
     // so text addressed to the model arrives as a redaction it can see rather
     // than as an instruction it might follow. The fence below does the rest.
-    bearing: String(r.bearing), saw: shieldUntrustedContent(String(r.saw).slice(0, 400)).sanitized, source: String(r.source),
+    // A SEARCH THAT FOUND NOTHING IS NOT SUPPORT (F1.7): it reaches the
+    // lenses as `found_nothing`, not as the `supports` it was filed as.
+    bearing: bearingAsRead(r.bearing, r.from_absence), saw: shieldUntrustedContent(String(r.saw).slice(0, 400)).sanitized, source: String(r.source),
     observedAt: String(r.observed_at).slice(0, 10), fromAbsence: Number(r.from_absence) === 1,
   }));
   const retrievals = (await rows(
@@ -214,7 +217,7 @@ function recordBlock(r: TheRecord): string {
     '<record>',
     `CANDIDATE: ${j(r.candidate)}`,
     `THE TEST AS PROPOSED (from the cheapest thing that would settle an unknown): ${j(r.experiment)}`,
-    `EVIDENCE (each with its source type, the stance that kind of source supplies, what it bore on its own claim, and an address): ${j(r.evidence)}`,
+    `EVIDENCE (each with its source type, the stance that kind of source supplies, what it bore on its own claim — "found_nothing" is a search that came back with nothing on the subject, which is not support — and an address): ${j(r.evidence)}`,
     `RETRIEVALS (the words the eyes were asked with, and what came back; a brief can be built only from these): ${j(r.retrievals)}`,
     `OPEN UNKNOWNS (each with which of the four questions it asks — demand, distribution, conversion, fulfilment — so the cheapest test is for the question actually open): ${j(r.unknowns)}`,
     `LESSONS OF SETTLED TESTS (what each could not establish): ${j(r.lessons)}`,

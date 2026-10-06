@@ -23,6 +23,21 @@ import { query } from '../../db/client.js';
 export type Bearing = 'supports' | 'contradicts';
 export type Directness = 'direct' | 'inferred';
 
+/**
+ * HOW AN OBSERVATION READS, which is not always how it was filed. A search
+ * that came back with nothing on the subject is filed `supports` against a
+ * claim like "nothing maintained exists", with `from_absence` set; it was
+ * then counted and shown as support. A keyword search that found nothing has
+ * not shown that nothing exists — it has found nothing — so it reads as
+ * `found_nothing`: never counted as support, and said as what it is (F1.7).
+ * The filed row is untouched: the reading is applied where it is read.
+ */
+export type BearingAsRead = 'supports' | 'contradicts' | 'found_nothing';
+export function bearingAsRead(bearing: unknown, fromAbsence: unknown): BearingAsRead {
+  if (String(bearing) === 'contradicts') return 'contradicts';
+  return Number(fromAbsence) === 1 ? 'found_nothing' : 'supports';
+}
+
 /** How old an observation may be before it is describing the past. */
 const STALE_DAYS = 180;
 
@@ -31,6 +46,8 @@ export interface Standing {
   claim: string;
   supports: number;
   contradicts: number;
+  /** Searches that came back with nothing on the subject: filed for the claim, never counted as support. */
+  foundNothing: number;
   /** Supporting observations that say the thing rather than imply it. */
   direct: number;
   /** How many of the supports are older than half a year. */
@@ -68,15 +85,16 @@ export async function standingOf(claimId: string): Promise<Standing | null> {
   if (!claim) return null;
 
   const rows = (await query(
-    `SELECT o.bearing, o.directness, o.source_type, t.stance,
+    `SELECT o.bearing, o.from_absence, o.directness, o.source_type, t.stance,
             CAST(julianday('now') - julianday(o.observed_at) AS INTEGER) AS age
        FROM market_observations o
        JOIN market_source_types t ON t.source_type = o.source_type
       WHERE o.claim_id = ?`, [claimId]))
     .rows as unknown as Array<Record<string, unknown>>;
 
-  const supporting = rows.filter((r) => String(r.bearing) === 'supports');
-  const against = rows.filter((r) => String(r.bearing) === 'contradicts');
+  const supporting = rows.filter((r) => bearingAsRead(r.bearing, r.from_absence) === 'supports');
+  const against = rows.filter((r) => bearingAsRead(r.bearing, r.from_absence) === 'contradicts');
+  const nothing = rows.filter((r) => bearingAsRead(r.bearing, r.from_absence) === 'found_nothing');
   const direct = supporting.filter((r) => String(r.directness) === 'direct').length;
   const stale = supporting.filter((r) => Number(r.age) > STALE_DAYS).length;
   const kinds = [...new Set(supporting.map((r) => String(r.source_type)))];
@@ -92,6 +110,10 @@ export async function standingOf(claimId: string): Promise<Standing | null> {
         + `${String(claim.settled_at ?? '').slice(0, 10)}.`;
     }
     if (rows.length === 0) return 'Nothing has been seen about this yet.';
+    if (supporting.length === 0 && against.length === 0) {
+      return `${String(nothing.length)} ${nothing.length === 1 ? 'search' : 'searches'} for this found nothing on the subject. `
+        + 'That is not support: a search that finds nothing has not shown that nothing is there.';
+    }
     if (against.length > 0) {
       return `${String(supporting.length)} `
         + `${supporting.length === 1 ? 'thing supports' : 'things support'} this and `
@@ -123,7 +145,7 @@ export async function standingOf(claimId: string): Promise<Standing | null> {
 
   return {
     claimId: String(claim.id), claim: String(claim.claim),
-    supports: supporting.length, contradicts: against.length,
+    supports: supporting.length, contradicts: against.length, foundNothing: nothing.length,
     direct, stale, kindsOfSource: kinds, howItStands,
     settled: claim.settled_as == null ? null : String(claim.settled_as) as 'held' | 'failed',
     settledBy: claim.settled_by == null ? null : String(claim.settled_by),
@@ -252,10 +274,10 @@ export async function howItWasResearched(claimId: string): Promise<HowItWasResea
     `SELECT bearing, source_type, saw, from_absence, retrieval_id
        FROM market_observations WHERE claim_id = ? ORDER BY rowid`, [claimId]))
     .rows as unknown as Array<Record<string, unknown>>;
-  const supports = obs.filter((o) => String(o.bearing) === 'supports');
+  const supports = obs.filter((o) => bearingAsRead(o.bearing, o.from_absence) === 'supports');
   const against = obs.filter((o) => String(o.bearing) === 'contradicts');
   const kinds = new Set(obs.map((o) => String(o.source_type)));
-  const restsOnAbsence = supports.some((o) => Number(o.from_absence) === 1);
+  const restsOnAbsence = obs.some((o) => bearingAsRead(o.bearing, o.from_absence) === 'found_nothing');
 
   const retrievalIds = [...new Set(obs.map((o) => o.retrieval_id).filter((r) => r != null)
     .map((r) => String(r)))];
@@ -434,6 +456,38 @@ export async function raiseUnknown(input: {
     [id, input.founderId, input.opportunityId ?? null, input.claimId ?? null,
       input.question.trim(), input.blocking ? 1 : 0, input.cheapestTest ?? null]);
   return id;
+}
+
+// ─── A claim that cannot be looked at (Stage 1, F1.7) ───────────────────────
+
+/** A claim whose look failed this many times is set aside, with an unknown saying so. */
+export const CLAIM_LOOKUP_GIVES_UP_AFTER = 3;
+const LOOKUP_DAY_MS = 86_400_000;
+
+/**
+ * WHETHER THIS CLAIM MAY BE LOOKED AT NOW. Failed n times, it waits 2^(n-1)
+ * days after the last failure; after the third it is set aside. Its failure is
+ * the claim's, not the pass's: the other claims are looked at regardless.
+ */
+export async function claimMayBeLookedAt(claimId: string, now: Date): Promise<{ may: boolean; failed: number; setAside: boolean }> {
+  const r = (await query(`SELECT COUNT(*) AS n, MAX(failed_at) AS last FROM market_claim_lookup_failures WHERE claim_id = ?`, [claimId]))
+    .rows[0] as Record<string, unknown> | undefined;
+  const n = Number(r?.n ?? 0);
+  if (n === 0 || r?.last == null) return { may: true, failed: 0, setAside: false };
+  if (n >= CLAIM_LOOKUP_GIVES_UP_AFTER) return { may: false, failed: n, setAside: true };
+  return { may: now.getTime() >= new Date(String(r.last)).getTime() + 2 ** (n - 1) * LOOKUP_DAY_MS, failed: n, setAside: false };
+}
+
+/** Record that a claim could not be looked at; at the last failure, say so on the claim as an unknown. */
+export async function recordClaimLookupFailure(input: { founderId: string; claimId: string; opportunityId: string | null; because: string; now: Date }): Promise<{ setAside: boolean }> {
+  await query(`INSERT INTO market_claim_lookup_failures (id, claim_id, because, failed_at) VALUES (?,?,?,?)`,
+    [nanoid(), input.claimId, input.because.slice(0, 500), input.now.toISOString()]);
+  const n = Number(((await query(`SELECT COUNT(*) AS n FROM market_claim_lookup_failures WHERE claim_id = ?`, [input.claimId])).rows[0] as Record<string, unknown>).n);
+  if (n !== CLAIM_LOOKUP_GIVES_UP_AFTER) return { setAside: false };
+  await raiseUnknown({ founderId: input.founderId, claimId: input.claimId, opportunityId: input.opportunityId, blocking: false,
+    question: `Whether anything already exists for this claim: the registry could not be asked about it ${String(n)} times, the last because ${input.because.slice(0, 200)}`,
+    cheapestTest: 'look by hand, or say the claim in other words so it can be searched' });
+  return { setAside: true };
 }
 
 /**

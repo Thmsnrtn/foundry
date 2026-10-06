@@ -3284,3 +3284,30 @@ it has met a real day.
   `can-it-sell-says-no-whenever-readiness-would` red. Proof debt: the verdict
   reads the one-time brief's facts; a weekly brief adds readiness's
   week-two and fee-floor gates, which are per-plan and not read here.
+- **Three smaller untruths (F1.7).** (a) Every forge-made offer said the
+  Workshop was "a small digital workshop in Massachusetts", a literal in
+  `products/registry.ts`. `makeBrief` now passes `workshopRegion(w)` — the
+  state on the Workshop's own postal address ("City, ST 01234"), or none, and
+  the sentence then names no place. (b) A search that found nothing on the
+  subject is filed `supports` with `from_absence`, and `standingOf`,
+  `howItWasResearched` and the forge's record (`theRecordOf`) counted and
+  showed it as support. They now read it through `bearingAsRead` as
+  `found_nothing`: never counted as support, said as "found nothing … that is
+  not support", and named so to the lenses; the filed row is untouched (it is
+  immutable). Two older tests that asserted such a row read as "worked out
+  rather than seen" support were rewritten to the new truth. (c)
+  `real_market_evidence_tick` failed the whole pass for one claim the registry
+  could not be asked about, and that claim was first in line again next
+  morning. Its failure is now recorded against the claim (migration 389),
+  which backs off a day, then two, and after the third is set aside with an
+  unknown on it; the pass fails (G3) only when claims failed and none could be
+  looked at. Test: `the-smaller-truths-of-stage-one`. Mutations: restoring the
+  literal turns its two offer cases red; reading every `supports` as support
+  turns the two absence cases red; restoring the old tick turns the three
+  claim-isolation cases red. Proof debt: the public site's facts
+  (`workshopFacts` in `public-workshop/projection.ts`, and the default tagline
+  and about in `settings.ts`) still say "Massachusetts" as a literal; the
+  owner's Workshop is there, so it is true today but not derived. Other
+  readers that count `bearing = 'supports'` in SQL (`institution/carrying.ts`'s
+  package prediction; the stance counts in `shelves.ts`/`seeds.ts`, which count
+  a look, not support) were not changed.

@@ -1834,9 +1834,17 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
         `SELECT DISTINCT c.founder_id FROM market_claims c
           WHERE c.evidence_mode = 'real' AND c.settled_as IS NULL
             AND NOT EXISTS (SELECT 1 FROM market_observations o WHERE o.claim_id = c.id)`, []);
+      const { CLAIM_LOOKUP_GIVES_UP_AFTER, claimMayBeLookedAt, recordClaimLookupFailure } = await import('../services/venture/market-evidence.js');
+      const now = new Date();
       let looked = 0;
-      // Every other claim is still looked at; then the pass says it failed (case 8).
+      // A CLAIM'S FAILURE IS THE CLAIM'S (F1.7). Every other claim is still
+      // looked at; the failed one is recorded against itself, waits a day,
+      // then two, and after its third failure is set aside with an unknown on
+      // it. The pass fails, as G3 requires, when a claim failed and no claim
+      // could be looked at: one unreadable claim no longer marks the loop
+      // failing every morning.
       const evidenceFailed: string[] = [];
+      const setAside: string[] = [];
       for (const row of founders.rows as unknown as Array<Record<string, unknown>>) {
         const founderId = String(row.founder_id);
         const ways = await waysOfLooking(founderId, 'real');
@@ -1845,14 +1853,19 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
           `SELECT id, claim, opportunity_id FROM market_claims
             WHERE founder_id = ? AND evidence_mode = 'real' AND settled_as IS NULL
               AND NOT EXISTS (SELECT 1 FROM market_observations o WHERE o.claim_id = market_claims.id)
-            ORDER BY formed_at LIMIT 3`, [founderId]);
+              AND (SELECT COUNT(*) FROM market_claim_lookup_failures f WHERE f.claim_id = market_claims.id) < ${String(CLAIM_LOOKUP_GIVES_UP_AFTER)}
+            ORDER BY formed_at LIMIT 20`, [founderId]);
+        let tried = 0;
         for (const c of claims.rows as unknown as Array<Record<string, unknown>>) {
+          if (tried >= 3) break;
           // The claim's own words are the search. A claim nobody could search
           // for is a claim nobody could check, which is worth knowing.
           const words = String(c.claim).toLowerCase()
             .replace(/[^a-z0-9 ]/g, ' ').split(/\s+/)
             .filter((w) => w.length > 3 && !STOP.has(w)).slice(0, 6).join(' ');
           if (words.length === 0) continue;
+          if (!(await claimMayBeLookedAt(String(c.id), now)).may) continue;
+          tried += 1;
           try {
             await askWhatAlreadyExists({
               founderId, claimId: String(c.id), query: words,
@@ -1864,18 +1877,21 @@ export const JOB_REGISTRY: Record<string, { fn: () => Promise<void>; schedule: s
             });
             looked += 1;
           } catch (err) {
-            evidenceFailed.push(`${String(c.id)}: ${err instanceof Error ? err.message : String(err)}`);
-            logger.error(
-              `real_market_evidence_tick failed for claim ${String(c.id)}: `
-              + `${err instanceof Error ? err.message : String(err)}`,
+            const because = err instanceof Error ? err.message : String(err);
+            evidenceFailed.push(`${String(c.id)}: ${because}`);
+            const r = await recordClaimLookupFailure({ founderId, claimId: String(c.id),
+              opportunityId: c.opportunity_id == null ? null : String(c.opportunity_id), because, now });
+            if (r.setAside) setAside.push(String(c.id));
+            logger.warn(
+              `real_market_evidence_tick could not look at claim ${String(c.id)}${r.setAside ? ' (set aside, with an unknown on it)' : ''}: ${because}`,
               { jobName: 'real_market_evidence_tick' });
           }
         }
       }
-      logger.info(`real_market_evidence_tick: claims looked at=${String(looked)}`,
+      logger.info(`real_market_evidence_tick: claims looked at=${String(looked)}, could not be looked at=${String(evidenceFailed.length)}, set aside=${String(setAside.length)}`,
         { jobName: 'real_market_evidence_tick' });
-      if (evidenceFailed.length > 0) {
-        throw new Error(`${String(evidenceFailed.length)} claim(s) could not be looked at: ${evidenceFailed.join('; ')}`);
+      if (evidenceFailed.length > 0 && looked === 0) {
+        throw new Error(`${String(evidenceFailed.length)} claim(s) could not be looked at, and none could: ${evidenceFailed.join('; ')}`);
       }
     },
     schedule: '15 5 * * *',

@@ -69,7 +69,7 @@ describe('deciding relevance ourselves', () => {
 });
 
 describe('a real look that finds nothing on the subject', () => {
-  it('says so, says the search is a weak instrument, and supports the claim', async () => {
+  it('says so, says the search is a weak instrument, and is filed for the claim without counting as support', async () => {
     const search = {
       total: 14920,
       objects: [
@@ -97,10 +97,14 @@ describe('a real look that finds nothing on the subject', () => {
     // substitutes.
     expect(found.matchedWords).toBe(14920);
 
-    // AND THE STANDING IS HONEST ABOUT WHAT KIND OF SUPPORT THAT IS: an absence
-    // is worked out, never seen.
+    // AND THE STANDING IS HONEST ABOUT WHAT THAT IS (F1.7): it is filed for
+    // the claim, but a search that found nothing is not support at all — it
+    // was once counted as "worked out rather than seen" support.
     const how = await standingOf(claimId);
-    expect(how?.howItStands).toContain('worked out rather than seen');
+    expect(how?.supports).toBe(0);
+    expect(how?.foundNothing).toBe(1);
+    expect(how?.howItStands).toContain('found nothing on the subject');
+    expect(how?.howItStands).toContain('not support');
     vi.restoreAllMocks();
   });
 });

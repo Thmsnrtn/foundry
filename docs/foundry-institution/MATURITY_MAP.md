@@ -1791,10 +1791,16 @@ failed. `job_health` records it, and the Brief names the loop. A pass with
 nothing wrong still resolves.
 
 **Maturity.** **`tested`** (`every-watched-loop-says-when-it-failed`, 6). Red
-first: four of the five failure cases resolved as healthy. **Proof debt:** a
-source that is down for one claim now marks the whole evidence loop failing
-for that pass. That is honest, but it may be noisy. The Brief names a loop only
-after consecutive failures, which is the existing damping.
+first: four of the five failure cases resolved as healthy. Since Stage 1
+(F1.7, 6 October 2026) a claim's failure is the claim's in
+`real_market_evidence_tick`: it is recorded against the claim
+(`market_claim_lookup_failures`, migration 389), waits a day, then two, and
+after the third is set aside with an unknown on it saying so; the pass fails
+only when claims failed and none could be looked at, so one unreadable claim no
+longer marks the evidence loop failing every morning
+(`the-smaller-truths-of-stage-one`, E2). **Proof debt:** the other two loops
+still fail the pass for any one subject; the Brief's consecutive-failure
+damping is what stands between that and noise.
 
 ### The reserve question comes back at the tenth settled sale (28 September 2026)
 

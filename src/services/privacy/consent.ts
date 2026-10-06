@@ -1386,6 +1386,7 @@ const NOT_COMPANY_DATA: Record<string, string> = {
   job_health: 'whether Foundry\'s own scheduled work is running; job names and error class names, no company in it',
   job_locks: 'scheduler leases',
   forge_refusals: 'the forge\'s record of which of its own design or making attempts were refused, and when; names a test, no person (R27)',
+  market_claim_lookup_failures: 'when a real market claim could not be looked at, and why; names a claim, no person (Stage 1)',
   forge_rerun_asks: 'the owner\'s asks that the forge take up again the designs it could not seal, and when; names a test, no person (Stage 1)',
   model_door_readings: 'the model account\'s remaining credit, read once a day; a balance and a date, no company or person in it (R33)',
   leading_indicators: 'indicator definitions per sector',

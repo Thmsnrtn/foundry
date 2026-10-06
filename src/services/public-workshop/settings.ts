@@ -165,6 +165,30 @@ export function publicPostalLines(
   return named.length > 0 && lines[0]?.toLowerCase() === named ? lines.slice(1) : lines;
 }
 
+const US_STATES: Record<string, string> = {
+  AL: 'Alabama', AK: 'Alaska', AZ: 'Arizona', AR: 'Arkansas', CA: 'California', CO: 'Colorado', CT: 'Connecticut', DE: 'Delaware',
+  DC: 'the District of Columbia', FL: 'Florida', GA: 'Georgia', HI: 'Hawaii', ID: 'Idaho', IL: 'Illinois', IN: 'Indiana', IA: 'Iowa',
+  KS: 'Kansas', KY: 'Kentucky', LA: 'Louisiana', ME: 'Maine', MD: 'Maryland', MA: 'Massachusetts', MI: 'Michigan', MN: 'Minnesota',
+  MS: 'Mississippi', MO: 'Missouri', MT: 'Montana', NE: 'Nebraska', NV: 'Nevada', NH: 'New Hampshire', NJ: 'New Jersey',
+  NM: 'New Mexico', NY: 'New York', NC: 'North Carolina', ND: 'North Dakota', OH: 'Ohio', OK: 'Oklahoma', OR: 'Oregon',
+  PA: 'Pennsylvania', RI: 'Rhode Island', SC: 'South Carolina', SD: 'South Dakota', TN: 'Tennessee', TX: 'Texas', UT: 'Utah',
+  VT: 'Vermont', VA: 'Virginia', WA: 'Washington', WV: 'West Virginia', WI: 'Wisconsin', WY: 'Wyoming',
+};
+
+/**
+ * WHERE THE WORKSHOP IS, AS ITS OWN POSTAL ADDRESS SAYS — or null when the
+ * address does not say (none recorded, or not a US "City, ST 01234" line).
+ * Never a default: an offer that names a place names the one on record, and
+ * one with nothing on record names none (F1.7; it was 'Massachusetts' in code).
+ */
+export function workshopRegion(w: { postalAddress: string | null }): string | null {
+  for (const line of postalLines(w.postalAddress).reverse()) {
+    const m = /,\s*([A-Z]{2})\s+\d{5}(?:-\d{4})?\s*$/.exec(line);
+    if (m) return US_STATES[m[1]!] ?? null;
+  }
+  return null;
+}
+
 export async function setPostalAddress(founderId: string, address: string | null): Promise<void> {
   // Trailing and leading blanks are noise; the lines between them are not.
   const a = postalLines(address).join('\n') || null;
