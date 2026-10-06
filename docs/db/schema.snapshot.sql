@@ -1635,6 +1635,11 @@ CREATE TABLE forge_refusals (
   stage TEXT NOT NULL CHECK (stage IN ('deliberate', 'make')),
   because TEXT NOT NULL,
   refused_at TEXT NOT NULL
+, facts TEXT);
+CREATE TABLE forge_rerun_asks (
+  id TEXT PRIMARY KEY,
+  experiment_id TEXT NOT NULL,
+  asked_at TEXT NOT NULL
 );
 CREATE TABLE founder_ai_profile (
   id TEXT PRIMARY KEY,
@@ -2119,6 +2124,12 @@ CREATE TABLE mandate_statements (
   said_at        TEXT NOT NULL DEFAULT (datetime('now')),
   superseded_by  TEXT,
   CHECK ((scope_kind = 'portfolio') = (scope_ref IS NULL))
+);
+CREATE TABLE market_claim_lookup_failures (
+  id TEXT PRIMARY KEY,
+  claim_id TEXT NOT NULL,
+  because TEXT NOT NULL,
+  failed_at TEXT NOT NULL
 );
 CREATE TABLE market_claims (
   id             TEXT PRIMARY KEY,
@@ -4666,6 +4677,7 @@ CREATE INDEX idx_feedback_type ON founder_feedback(feedback_type, created_at DES
 CREATE INDEX idx_fh_founder ON founder_health(founder_id);
 CREATE INDEX idx_fhs_founder_date ON founder_health_snapshots(founder_id, snapshot_date);
 CREATE INDEX idx_forge_refusals_experiment ON forge_refusals(experiment_id, stage, refused_at);
+CREATE INDEX idx_forge_rerun_asks_experiment ON forge_rerun_asks(experiment_id, asked_at);
 CREATE UNIQUE INDEX idx_founder_company_fact
   ON founder_evidence_requests(product_id,predicate) WHERE scope='company';
 CREATE UNIQUE INDEX idx_founder_evidence_request_identity
@@ -4711,6 +4723,7 @@ CREATE INDEX idx_legal_surfaces_live
 CREATE INDEX idx_lifecycle_risk ON lifecycle_state(risk_state);
 CREATE INDEX idx_lifecycle_rules_product ON lifecycle_rules(product_id, enabled);
 CREATE INDEX idx_mandate_statements_live ON mandate_statements(founder_id, superseded_by, said_at);
+CREATE INDEX idx_market_claim_lookup_failures_claim ON market_claim_lookup_failures(claim_id, failed_at);
 CREATE INDEX idx_market_observations_claim ON market_observations(claim_id, bearing);
 CREATE INDEX idx_market_retrievals_founder
   ON market_retrievals(founder_id, retrieved_at DESC);
