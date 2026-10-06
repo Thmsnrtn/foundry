@@ -136,13 +136,17 @@ describe.each<[Mode, string, string, boolean]>([
 });
 
 describe('twenty failures in a row', () => {
-  it('ambiguous reservations are bounded by the cap the ledger enforces, and the door says how many failed today', async () => {
-    mode = '500';
-    const { callSonnet } = await import('../../../src/services/ai/client.js');
+  it('the door is asked until the breaker rests it; then refused at once, typed, with nothing reserved; ambiguous reservations stay under the cap', async () => {
+    mode = '500'; hits = 0;
+    const { callSonnet, ModelDoorResting, resetModelDoorBreaker, modelDoorBreaker } = await import('../../../src/services/ai/client.js');
+    resetModelDoorBreaker();
     const { institutionSpend } = await import('../../../src/services/ai/what-it-is-for.js');
     const { thinkingCapFor } = await import('../../../src/services/institution/spending.js');
     const cap = await thinkingCapFor(OWNER);
+    const today = new Date().toISOString().slice(0, 10);
+    const ambBefore = Number((await one(`SELECT COUNT(*) AS n FROM ai_spend_reservations WHERE status = 'ambiguous' AND date = ?`, [today])).n);
     const names = new Map<string, number>();
+    let resting = 0;
     for (let i = 0; i < 20; i++) {
       try {
         await callSonnet('You are a lens.', `Read this record and reply with JSON. attempt ${String(i)}`, 200,
@@ -150,14 +154,19 @@ describe('twenty failures in a row', () => {
       } catch (e) {
         const n = e instanceof Error ? e.name : 'Error';
         names.set(n, (names.get(n) ?? 0) + 1);
+        if (e instanceof ModelDoorResting) resting += 1;
       }
     }
-    const today = new Date().toISOString().slice(0, 10);
     const spend = await one(`SELECT reserved_cents, spent_cents FROM ai_daily_spend WHERE scope = 'founder' AND scope_id = ? AND date = ?`, [OWNER, today]);
     const amb = Number((await one(`SELECT COUNT(*) AS n FROM ai_spend_reservations WHERE status = 'ambiguous' AND date = ?`, [today])).n);
-    process.stdout.write(`twenty failures: thrown ${JSON.stringify([...names])}; ambiguous today ${String(amb)}; founder reserved ${String(spend?.reserved_cents)}c spent ${String(spend?.spent_cents)}c of cap ${String(cap)}c\n`);
-    // Every attempt either reached the door and ended ambiguous, or was refused at the ceiling before reaching it.
+    process.stdout.write(`twenty failures: thrown ${JSON.stringify([...names])}; door asked ${String(hits)} times; resting refusals ${String(resting)}; ambiguous today ${String(amb)}; founder reserved ${String(spend?.reserved_cents)}c spent ${String(spend?.spent_cents)}c of cap ${String(cap)}c\n`);
+    // Every attempt either reached the door, was refused at the ceiling, or was refused by the resting breaker — all named.
     expect((names.get('ModelDoorError') ?? 0) + (names.get('SpendCeilingError') ?? 0)).toBe(20);
+    // THE BREAKER: five calls (three attempts each) reach the door; the other fifteen never do, and reserve nothing.
+    expect(hits).toBeLessThanOrEqual(5 * 3);
+    expect(resting).toBeGreaterThanOrEqual(15);
+    expect(amb - ambBefore).toBeLessThanOrEqual(5);
+    expect(modelDoorBreaker().restingUntil).not.toBeNull();
     // The ambiguous rows hold their reservation until expiry; they are counted against the cap, never above it.
     expect(Number(spend?.reserved_cents ?? 0) + Number(spend?.spent_cents ?? 0)).toBeLessThanOrEqual(cap + 1);
     const { modelDoorToday } = await import('../../../src/services/ai/spend-ledger.js');
@@ -177,10 +186,10 @@ describe('what the owner reads while nothing has answered all day', () => {
     expect(text).toContain('check the OpenRouter credit and key');
   });
 
-  // PINNED DEFECT F-DOOR-2 (it.fails): Home says "a routine failed" but never
-  // names the model door, its credit or its key — productionFacts is read only
-  // by Controls. Flip to it() when Home names the door.
-  it.fails('Home and the absence page render 200 and say the door is down in the words the code uses', async () => {
+  // F-DOOR-2, FIXED 2026-10-06 (was it.fails): Home's pulse, its health card
+  // and the absence page read modelDoorDown(), the same canonical reading
+  // Controls' "can it sell" renders.
+  it('Home and the absence page render 200 and say the door is down in the words the code uses', async () => {
     // The code's phrasing for a failed door is in services/control/production-facts.ts:
     // `the model door failed N times today and answered nothing, so nothing new can be found or designed`.
     const homeR = await app.request('/foundry');
@@ -215,34 +224,70 @@ describe('what the owner reads while nothing has answered all day', () => {
   });
 });
 
-describe('the default timeout', () => {
-  it('a hung door is waited for three times over, measured at 400 ms; at the client\'s 120 s default that is six minutes a call', async () => {
-    // Measured, not read: one direct call through the real client against a
-    // door that never answers, with AI_TIMEOUT_MS = 400 set above. The wall
-    // time is three waits plus backoff. The 120 000 ms the client falls back
-    // to when the variable is unset is the production shape of the same wait.
+describe('the timeout is sized per tier and bounded per call (F-DOOR-1)', () => {
+  it('a hung door is waited for at most the call\'s budget, and production budgets are minutes, not six of them', async () => {
+    // Measured, not read: direct calls through the real client against a door
+    // that never answers, with AI_TIMEOUT_MS = 400 set above.
     mode = 'hang'; hits = 0;
-    const { callSonnet } = await import('../../../src/services/ai/client.js');
+    const { callSonnet, MODELS, doorTimingFor, resetModelDoorBreaker } = await import('../../../src/services/ai/client.js');
     const { institutionSpend } = await import('../../../src/services/ai/what-it-is-for.js');
-    const t0 = Date.now();
-    let name = '';
-    try {
-      await callSonnet('You are a lens.', 'Read this and reply with JSON.', 100,
-        institutionSpend('a campaign timing a hung door', 'a lens', { kind: 'experiment', id: X }));
-    } catch (e) { name = e instanceof Error ? e.name : 'Error'; }
-    const ms = Date.now() - t0;
-    expect(name).toBe('ModelDoorError');
+    const call = async (): Promise<{ name: string; ms: number }> => {
+      resetModelDoorBreaker();
+      const t0 = Date.now();
+      let name = '';
+      try {
+        await callSonnet('You are a lens.', 'Read this and reply with JSON.', 100,
+          institutionSpend('a campaign timing a hung door', 'a lens', { kind: 'experiment', id: X }));
+      } catch (e) { name = e instanceof Error ? e.name : 'Error'; }
+      return { name, ms: Date.now() - t0 };
+    };
+    // Under the tier's default budget, the three attempts fit.
+    const wide = await call();
+    expect(wide.name).toBe('ModelDoorError');
     expect(hits).toBe(3);
-    expect(ms).toBeGreaterThanOrEqual(3 * 400);
-    const atDefault = Math.round((ms - 3 * 400 + 3 * 120_000) / 1000);
-    recordFinding({ id: 'F-DOOR-1', sev: 'P2', area: 'ai/client',
-      title: 'a hung model door costs the institution 6+ minutes per call with no owner-visible signal until the routine ends',
-      evidence: `measured: ${String(hits)} attempts, ${String(ms)} ms wall time with AI_TIMEOUT_MS=400; the client's fallback when the variable is unset is 120 000 ms per attempt, so the same call takes ~${String(atDefault)} s in production before ModelDoorError; the forge reads up to five lenses and composes, so one hung morning can hold forge_tick for tens of minutes, and nothing the owner opens says so until the routine's failure is recorded at the end` });
+    expect(wide.ms).toBeGreaterThanOrEqual(3 * 400);
+    // A budget shorter than one backoff: one attempt, and no waiting to give up.
+    hits = 0;
+    process.env.AI_CALL_BUDGET_MS = '600';
+    try {
+      const tight = await call();
+      expect(tight.name).toBe('ModelDoorError');
+      expect(hits).toBe(1);
+      expect(tight.ms).toBeLessThan(1_500);
+    } finally { delete process.env.AI_CALL_BUDGET_MS; }
+    // Production's shape, with neither variable set: each tier's whole call fits
+    // inside its budget, and none is the six minutes the 120 s default cost.
+    for (const m of [MODELS.HAIKU, MODELS.SONNET, MODELS.OPUS]) {
+      const t = doorTimingFor(m, {});
+      expect(t.attemptMs).toBeLessThanOrEqual(t.budgetMs);
+      expect(t.budgetMs).toBeLessThanOrEqual(180_000);
+    }
+    expect(doorTimingFor(MODELS.HAIKU, {}).budgetMs).toBeLessThan(doorTimingFor(MODELS.SONNET, {}).budgetMs);
+    expect(doorTimingFor(MODELS.SONNET, {}).budgetMs).toBeLessThan(doorTimingFor(MODELS.OPUS, {}).budgetMs);
+    resetModelDoorBreaker();
+  }, 60_000);
+
+  it('a forge pass stops at its own wall-clock deadline and leaves the rest for the next pass', async () => {
+    mode = 'ok'; hits = 0;
+    const { resetModelDoorBreaker } = await import('../../../src/services/ai/client.js');
+    resetModelDoorBreaker();
+    await anUndesignedTest();
+    process.env.FORGE_PASS_DEADLINE_MS = '1';
+    try {
+      await new Promise((r) => setTimeout(r, 5));
+      const { forgePass } = await import('../../../src/services/venture/forge-deliberation.js');
+      const pass = await forgePass(OWNER);
+      expect(pass.deliberated).toEqual([]);
+      expect(pass.stoppedAtDeadline).toMatch(/deadline; designing .* left for the next pass/);
+      expect(hits).toBe(0);
+    } finally { delete process.env.FORGE_PASS_DEADLINE_MS; }
   }, 60_000);
 });
 
 describe('the door is reached for real', () => {
   it('with the door answering, the forge deliberates: the call settles and the routine passes', async () => {
+    // After the breaker's cooldown the door is asked again; the rehearsal does not wait five minutes.
+    (await import('../../../src/services/ai/client.js')).resetModelDoorBreaker();
     const r = await forgeUnderMode('ok');
     expect(r.hits).toBeGreaterThan(0);
     expect(r.out.state).toBe('ok');

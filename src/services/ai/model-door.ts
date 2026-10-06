@@ -83,3 +83,20 @@ export async function modelDoorFacts(): Promise<ModelDoorFacts> {
     lastReadFailed: last && Number(last.ok) === 0 ? String(last.detail ?? 'the reading failed') : null,
   };
 }
+
+/**
+ * IS THE DOOR DOWN, IN ONE SENTENCE — or null when it is not. The one reading
+ * every owner surface uses: Controls' "can it sell", Home's pulse and health,
+ * and the absence page all render this, so a down door is named the same way
+ * wherever he looks and never blamed on "a routine" (F-DOOR-2). Down means it
+ * failed today and answered nothing today; one answer since is not down.
+ */
+export function modelDoorDownSentence(m: Pick<ModelDoorFacts, 'failedToday' | 'answeredToday'>): string | null {
+  if (!(m.failedToday > 0 && m.answeredToday === 0)) return null;
+  return `the model door failed ${String(m.failedToday)} time${m.failedToday === 1 ? '' : 's'} today and answered nothing, so nothing new can be found or designed: check the OpenRouter credit and key`;
+}
+
+/** The same, read from the ledger now. */
+export async function modelDoorDown(): Promise<string | null> {
+  return modelDoorDownSentence(await modelDoorFacts());
+}

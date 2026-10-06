@@ -581,6 +581,22 @@ export interface ForgePass {
   failed: Array<{ experimentId: string; because: string }>;
   /** Tests left alone this pass because they were refused recently, and when they are tried again (R27). */
   waiting: string[];
+  /** Set when the pass stopped at its wall-clock deadline, with what was left for the next pass. */
+  stoppedAtDeadline: string | null;
+}
+
+/**
+ * HOW LONG ONE FORGE PASS MAY TAKE, in wall-clock time. Each model call is
+ * bounded by its own budget (ai/client.ts); this bounds the pass, which makes
+ * several, so a slow door cannot hold the routine for an hour. Four minutes,
+ * inside the job lock's five-minute lease (job-lock.ts), so no new design
+ * starts after the lease could have lapsed; a design already started finishes
+ * under its own calls' budgets. What is not reached is left for the next pass,
+ * not refused. `FORGE_PASS_DEADLINE_MS` overrides it.
+ */
+export function forgePassDeadlineMs(env: NodeJS.ProcessEnv = process.env): number {
+  const n = parseInt(env.FORGE_PASS_DEADLINE_MS ?? '', 10);
+  return Number.isFinite(n) && n > 0 ? n : 4 * 60_000;
 }
 
 // ─── Backing off what keeps being refused (R27) ─────────────────────────────
@@ -623,7 +639,14 @@ const timesWord = (n: number): string => (n === 1 ? 'once' : n === 2 ? 'twice' :
 export const MOST_DESIGNS_PER_PASS = 2;
 
 export async function forgePass(founderId: string, now: Date = new Date()): Promise<ForgePass> {
-  const out: ForgePass = { proposed: 0, deliberated: [], allowed: [], notAllowed: [], skipped: null, failed: [], waiting: [] };
+  const out: ForgePass = { proposed: 0, deliberated: [], allowed: [], notAllowed: [], skipped: null, failed: [], waiting: [], stoppedAtDeadline: null };
+  // WALL-CLOCK, not `now`: `now` is the institution's date, which a rehearsal moves.
+  const deadline = Date.now() + forgePassDeadlineMs();
+  const pastDeadline = (left: string): boolean => {
+    if (Date.now() < deadline) return false;
+    out.stoppedAtDeadline = `the pass reached its ${String(Math.round(forgePassDeadlineMs() / 60_000))}-minute deadline; ${left} left for the next pass`;
+    return true;
+  };
   const { envelopeReading } = await import('../institution/charter.js');
   const envelope = await envelopeReading(founderId);
   // THE CHARTER'S THINKING FOR TODAY. Read from the same ledger the door writes,
@@ -662,6 +685,7 @@ export async function forgePass(founderId: string, now: Date = new Date()): Prom
   for (const e of undesigned) {
     if (attempted >= MOST_DESIGNS_PER_PASS) break;
     const id = String(e.id);
+    if (pastDeadline(`designing ${id} and any after it`)) break;
     // REFUSED RECENTLY, IT WAITS (R27): the same question asked again the
     // next morning costs another five readings and comes back the same.
     const may = await forgeMayTry(id, 'deliberate', now);
@@ -693,6 +717,7 @@ export async function forgePass(founderId: string, now: Date = new Date()): Prom
     const { shapeAndMake } = await import('./products/offer-composition.js');
     for (const s of sealed) {
       const id = String(s.experiment_id);
+      if (pastDeadline(`making and letting in ${id} and any after it`)) break;
       // THE HANDS MAKE THE THING FIRST, when nothing has been made: the offer
       // shape, the deliverable and the offer text, or the reason none could be.
       if (!(await materialOf(id, 'deliverable'))) {

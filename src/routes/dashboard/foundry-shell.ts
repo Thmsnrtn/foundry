@@ -3126,6 +3126,9 @@ foundryShellRoutes.get('/foundry', async (c) => {
   // assemble from tiles: ran or did not, and if it ran, what it decided.
   const { howFoundryIsRunning, since: sinceThen } = await import('../../services/founder/health.js');
   const pulse = await howFoundryIsRunning(s.ownerId);
+  // THE MODEL DOOR, from the one reading Controls uses (F-DOOR-2).
+  const { modelDoorDown } = await import('../../services/ai/model-door.js');
+  const doorDown = await modelDoorDown();
   const pulseCls = pulse.state === 'stopped' ? 'bad' : pulse.state === 'blocked' ? 'watch' : pulse.state === 'working' ? 'ok' : 'quiet';
   // AN INSTRUMENT, NOT PROSE. It is a reading off `job_health` and the rows,
   // drawn as one compact panel under the greeting, before the glance — the
@@ -3523,8 +3526,7 @@ foundryShellRoutes.get('/foundry', async (c) => {
     ${attention !== null && attention.kind !== 'stopped' && s.routinesFailing.length
     ? html`<p class="quiet">Separately: ${count(s.routinesFailing.length, 'routine')} of
       mine ${s.routinesFailing.length === 1 ? 'has' : 'have'} stopped, so some of what I
-      tell you elsewhere may be out of date. Nothing is lost and I am the one that has to
-      recover.</p>` : ''}
+      tell you elsewhere may be out of date. ${doorDown ? html`Underneath it, ${doorDown}.` : 'Nothing is lost and I am the one that has to recover.'}</p>` : ''}
 
     ${done === 'looking' ? html`<div class="done"><p><strong>I am looking.</strong>
       I will bring you very few, and telling you none of them are worth it is a real

@@ -2850,7 +2850,12 @@ yet shown on Explore.
 **What changed.** Model-door failures are named and reach a routine's recorded
 failure instead of a "could not read it" refusal; the credit left is read once
 a day and Control shows answered/failed calls today and days of credit left.
-**Evidence maturity.** E1: `a-failing-model-door-is-loud`. E2 at the first
+Home's pulse, its health card and the absence page render the same reading
+(`modelDoorDown`), so a down door is never blamed on "a routine"; each call is
+bounded by a per-tier budget and a breaker rests a door that fails five calls
+running (Stage 1, 6 October 2026).
+**Evidence maturity.** E1: `a-failing-model-door-is-loud`; E2:
+`the-model-door-is-down` (the real client against a local door). E2 at the first
 production reading in `model_door_readings`. **Proof debt.** Which of the
 provider's two account endpoints this key may read is not yet known from
 production (the reader tries the account's credits, then the key's own limit;

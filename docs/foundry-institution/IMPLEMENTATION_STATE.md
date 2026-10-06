@@ -3219,3 +3219,27 @@ it has met a real day.
   insert-only by convention: `audit_log` has no trigger refusing an update,
   because erasure must still be able to delete it. Mutations: suppressing the
   pause/resume rows, or the stop rows, each turn the campaign test red.
+- **A down model door is named as the door, and a hung one is bounded
+  (F-DOOR-1, F-DOOR-2).** Home's pulse and health card said "a routine failed"
+  while Controls alone said the door was down. `modelDoorDownSentence` /
+  `modelDoorDown` (`ai/model-door.ts`) is now the one reading: Controls'
+  `canSellOnItsOwn`, `howFoundryIsRunning` (Home's pulse), `healthOf` and the
+  absence page all render it, not a copy of its text. The client
+  (`ai/client.ts`) sizes each attempt per model tier (haiku 15 s, sonnet 45 s,
+  opus 90 s) and bounds the whole call — attempts and backoffs together — by a
+  per-call budget (30 / 100 / 180 s), where one 120 s timeout times three
+  attempts had cost about six minutes a call. A door-down breaker rests the
+  door after five consecutive door failures (5xx, 429, no answer, refused key
+  or credit; not a 4xx about the request) for five minutes: calls are refused
+  at once with a typed `ModelDoorResting` (a `ModelDoorError`) before anything
+  is reserved; the first call after the cooldown is the probe. The breaker is
+  per process, deliberately a cost bound and not a record. `forgePass` stops
+  starting new designs at a four-minute wall-clock deadline (inside the job
+  lease) and reports `stoppedAtDeadline`. Env overrides: `AI_TIMEOUT_MS`,
+  `AI_CALL_BUDGET_MS`, `AI_DOOR_BREAKER_FAILURES`, `AI_DOOR_COOLDOWN_MS`,
+  `FORGE_PASS_DEADLINE_MS`. Mutations: `modelDoorDown` returning null turns the
+  Home/absence test red; a breaker that never rests, removing the per-call
+  deadline, and a pass deadline that never fires each turn their test red.
+  Proof debt: a design already started can still outlast the lease (its lens
+  calls are each bounded, the design as a whole is not); the tier budgets are
+  judgments, not measured provider latencies.

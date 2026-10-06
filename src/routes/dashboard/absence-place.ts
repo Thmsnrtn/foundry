@@ -174,6 +174,10 @@ absenceRoutes.get('/foundry/absence', async (c: any) => {
   const thinking = await cognitionEconomics(30);
   const { howLongCouldItBeGone } = await import('../../services/deployment/self-check.js');
   const gone = await howLongCouldItBeGone(founderId);
+  // THE MODEL DOOR, from the one reading Controls and Home use (F-DOOR-2): a
+  // thinking loop failing because the door is down is named as the door.
+  const { modelDoorDown } = await import('../../services/ai/model-door.js');
+  const doorDown = await modelDoorDown();
 
   const anyFailure = readings.some((r) => r.properties.some((p) => p.finding === 'DOES_NOT_HOLD'));
   const lede = anyFailure
@@ -185,6 +189,9 @@ absenceRoutes.get('/foundry/absence', async (c: any) => {
   const body = html`
     <h1>If you stepped away</h1>
     <p class="lede">${lede}</p>
+
+    ${doorDown ? html`<div class="know" id="model-door"><h2>The model door is down</h2>
+      <p class="lede">Today ${doorDown}. Until it answers, an absence of any length finds and designs nothing new.</p></div>` : ''}
 
     ${horizonStrip(readings)}
 

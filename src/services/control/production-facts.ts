@@ -15,6 +15,7 @@
 // =============================================================================
 
 import { query } from '../../db/client.js';
+import { modelDoorDownSentence } from '../ai/model-door.js';
 
 type Row = Record<string, unknown>;
 
@@ -105,9 +106,8 @@ export function canSellOnItsOwn(f: ProductionFacts): { yes: boolean; blockers: s
   else if (f.inFlight >= f.charter.probesInFlight) blockers.push(`all ${String(f.charter.probesInFlight)} places are taken by tests still running`);
   // THE MODEL DOOR (R33): nothing new is found or designed without it.
   const m = f.modelDoor;
-  if (m.failedToday > 0 && m.answeredToday === 0) {
-    blockers.push(`the model door failed ${String(m.failedToday)} time${m.failedToday === 1 ? '' : 's'} today and answered nothing, so nothing new can be found or designed: check the OpenRouter credit and key`);
-  }
+  const doorDown = modelDoorDownSentence(m);
+  if (doorDown) blockers.push(doorDown);
   if (m.daysLeft !== null && m.daysLeft < 3) blockers.push(`about ${String(m.daysLeft)} days of model credit left at the last week's spend: add OpenRouter credit`);
   else if (m.daysLeft !== null && m.daysLeft < 14) costs.push(`about ${String(m.daysLeft)} days of model credit left at the last week's spend; fourteen is the margin`);
   if (m.readOn === null) costs.push(`the model credit has not been read yet${m.lastReadFailed ? `: ${m.lastReadFailed}` : '; it is read once a day'}`);

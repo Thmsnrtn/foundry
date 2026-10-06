@@ -204,6 +204,22 @@ export class ModelDoorError extends Error {
   }
 }
 
+/**
+ * THE DOOR IS RESTING: it failed enough calls in a row that it is not asked
+ * again until `until`. A typed refusal, raised before any reservation; its
+ * name stays `ModelDoorError` so routines record it as the door's failure.
+ */
+export class ModelDoorResting extends ModelDoorError {
+  readonly code = 'door_resting' as const;
+  readonly until: string;
+  readonly consecutiveFailures: number;
+  constructor(until: string, consecutiveFailures: number) {
+    super(`the model door failed ${String(consecutiveFailures)} calls in a row and is not asked again until ${until}`, null);
+    this.until = until;
+    this.consecutiveFailures = consecutiveFailures;
+  }
+}
+
 /** A 200 that carries an error, or no completion, is a failure and not an empty answer. */
 function noCompletion(data: OpenRouterResponse): ModelDoorError | null {
   const e = (data as unknown as { error?: { message?: string; code?: number } }).error;
@@ -374,9 +390,69 @@ export async function isCostCeilingReached(productId?: string): Promise<boolean>
 }
 
 // ─── Timeout + Retry ─────────────────────────────────────────────────────────
-const AI_TIMEOUT_MS = parseInt(process.env.AI_TIMEOUT_MS ?? '120000', 10);
+//
+// SIZED PER MODEL TIER, AND BOUNDED PER CALL (F-DOOR-1). One 120 s timeout for
+// every model, three attempts, meant a hung door held each call about six
+// minutes before it said so. Each tier now has a per-attempt timeout and a
+// per-call budget that bounds all its attempts and backoffs together: no
+// attempt starts, and no backoff waits, past the call's deadline.
+// `AI_TIMEOUT_MS` still overrides the per-attempt timeout for every tier, and
+// `AI_CALL_BUDGET_MS` the per-call budget.
 const MAX_RETRIES = 2;
 const RETRY_BASE_MS = 1000;
+
+type Tier = 'opus' | 'sonnet' | 'haiku';
+const TIER_TIMING: Record<Tier, { attemptMs: number; budgetMs: number }> = {
+  haiku: { attemptMs: 15_000, budgetMs: 30_000 },
+  sonnet: { attemptMs: 45_000, budgetMs: 100_000 },
+  opus: { attemptMs: 90_000, budgetMs: 180_000 },
+};
+const tierOf = (model: string): Tier => (/opus/i.test(model) ? 'opus' : /haiku/i.test(model) ? 'haiku' : 'sonnet');
+const positiveInt = (v: string | undefined): number | null => {
+  const n = v === undefined ? NaN : parseInt(v, 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+/** How long one attempt may wait, and how long the whole call may take, for this model. */
+export function doorTimingFor(model: string, env: NodeJS.ProcessEnv = process.env): { attemptMs: number; budgetMs: number } {
+  const t = TIER_TIMING[tierOf(model)];
+  return { attemptMs: positiveInt(env.AI_TIMEOUT_MS) ?? t.attemptMs, budgetMs: positiveInt(env.AI_CALL_BUDGET_MS) ?? t.budgetMs };
+}
+
+// ─── The door-down breaker ──────────────────────────────────────────────────
+//
+// A door that has failed N calls in a row is not asked again for a short
+// cooldown: every routine that thinks would otherwise spend its own budget
+// waiting on the same dead door, one after another. While it rests, a call is
+// refused at once with a typed `ModelDoorResting` (a `ModelDoorError`, so every
+// reader that names the door names this too) before anything is reserved. The
+// first call after the cooldown is a probe: an answer closes the breaker, a
+// failure rests it again. Per process, deliberately: it is a cost bound, not a
+// record; the ledger is the record.
+const breaker = { consecutiveFailures: 0, restingUntil: 0 };
+const breakerThreshold = (): number => positiveInt(process.env.AI_DOOR_BREAKER_FAILURES) ?? 5;
+const breakerCooldownMs = (): number => positiveInt(process.env.AI_DOOR_COOLDOWN_MS) ?? 5 * 60_000;
+
+/** Whether the breaker is resting the door now, and how many calls in a row have failed. */
+export function modelDoorBreaker(now: number = Date.now()): { consecutiveFailures: number; restingUntil: string | null } {
+  return { consecutiveFailures: breaker.consecutiveFailures, restingUntil: breaker.restingUntil > now ? new Date(breaker.restingUntil).toISOString() : null };
+}
+/** Tests only: forget what the door did. */
+export function resetModelDoorBreaker(): void { breaker.consecutiveFailures = 0; breaker.restingUntil = 0; }
+
+function refuseIfDoorResting(): void {
+  const now = Date.now();
+  if (breaker.restingUntil > now) {
+    throw new ModelDoorResting(new Date(breaker.restingUntil).toISOString(), breaker.consecutiveFailures);
+  }
+}
+function doorAnswered(): void { breaker.consecutiveFailures = 0; breaker.restingUntil = 0; }
+/** A failure of the DOOR (not of the request): no answer, a 5xx, a 429, or a refused key or credit. */
+function doorFailed(status: number | undefined): void {
+  if (status !== undefined && status < 500 && status !== 429 && status !== 401 && status !== 402 && status !== 403) return;
+  breaker.consecutiveFailures += 1;
+  if (breaker.consecutiveFailures >= breakerThreshold()) breaker.restingUntil = Date.now() + breakerCooldownMs();
+}
 
 function getApiKey(): string {
   // Prefer OpenRouter; fall back to direct Anthropic for backward compatibility
@@ -451,6 +527,7 @@ export async function callClaude(
   // full authorized amount.
   await refuseIfNotEntitled(productId);
   refuseIfItChangesNothing(subjectWork(config.subject));
+  refuseIfDoorResting();
   const apiKey = getApiKey();
   const baseUrl = getBaseUrl();
   const reservation = await authorizeSpend(
@@ -458,11 +535,17 @@ export async function callClaude(
     subjectPurpose(config.subject), subjectWork(config.subject),
   );
   const startedAt = Date.now();
+  const timing = doorTimingFor(config.model);
+  const deadline = startedAt + timing.budgetMs;
   let lastError: Error | null = null;
+  let attempts = 0;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
+    attempts += 1;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), Math.min(timing.attemptMs, remaining));
 
     try {
       const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -505,6 +588,7 @@ export async function callClaude(
         log.error('ai_spend.settlement_failed', error as Error, { reservationId: reservation.id });
       });
 
+      doorAnswered();
       log.info('ai_call.complete', {
         model: config.model,
         productId,
@@ -530,6 +614,7 @@ export async function callClaude(
       const status = (err as unknown as Record<string, unknown>)?.status as number | undefined;
       if (status && status < 500 && status !== 429) {
         await finishReservation(reservation, { kind: 'released' });
+        doorFailed(status);
         log.error('ai_call.failed_non_retryable', lastError, {
           model: config.model,
           productId,
@@ -541,6 +626,8 @@ export async function callClaude(
 
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_BASE_MS * Math.pow(2, attempt) * (0.5 + Math.random() * 0.5);
+        // No backoff past the call's deadline: waiting to give up is still waiting.
+        if (Date.now() + delay >= deadline) break;
         log.warn('ai_call.retry', {
           model: config.model,
           productId: config.productId,
@@ -557,11 +644,13 @@ export async function callClaude(
   log.error('ai_call.exhausted', lastError, {
     model: config.model,
     productId: config.productId,
-    attempts: MAX_RETRIES + 1,
+    attempts,
+    budgetMs: timing.budgetMs,
   });
   await finishReservation(reservation, { kind: 'ambiguous' });
-  reportError(lastError, { source: 'ai_client', productId: config.productId, meta: { attempts: MAX_RETRIES + 1 } });
-  throw asDoorError(lastError, 'AI call failed after retries');
+  doorFailed(undefined);
+  reportError(lastError, { source: 'ai_client', productId: config.productId, meta: { attempts } });
+  throw asDoorError(lastError, `AI call failed after ${String(attempts)} attempts within ${String(timing.budgetMs)} ms`);
 }
 
 /**
@@ -612,17 +701,22 @@ export async function callClaudeMultiTurn(
   productId?: string,
 ): Promise<AIResponse> {
   await refuseIfNotEntitled(productId);
+  refuseIfDoorResting();
   const apiKey = getApiKey();
   const baseUrl = getBaseUrl();
   const model = useOpus ? MODELS.OPUS : MODELS.SONNET;
   const reservation = await authorizeSpend(
     productId, model, [systemPrompt, ...messages.map((m) => `${m.role}:${m.content}`)].join('\n'), maxTokens,
   );
+  const timing = doorTimingFor(model);
+  const deadline = Date.now() + timing.budgetMs;
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) break;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+    const timeout = setTimeout(() => controller.abort(), Math.min(timing.attemptMs, remaining));
 
     try {
       const response = await fetch(`${baseUrl}/chat/completions`, {
@@ -663,6 +757,7 @@ export async function callClaudeMultiTurn(
         log.error('ai_spend.settlement_failed', error as Error, { reservationId: reservation.id });
       });
 
+      doorAnswered();
       return {
         content: textContent,
         model,
@@ -678,16 +773,19 @@ export async function callClaudeMultiTurn(
       const status = (err as unknown as Record<string, unknown>)?.status as number | undefined;
       if (status && status < 500 && status !== 429) {
         await finishReservation(reservation, { kind: 'released' });
+        doorFailed(status);
         throw asDoorError(lastError, 'the model door refused');
       }
       if (attempt < MAX_RETRIES) {
         const delay = RETRY_BASE_MS * Math.pow(2, attempt) * (0.5 + Math.random() * 0.5);
+        if (Date.now() + delay >= deadline) break;
         await new Promise((r) => setTimeout(r, delay));
       }
     }
   }
 
   await finishReservation(reservation, { kind: 'ambiguous' });
+  doorFailed(undefined);
   throw asDoorError(lastError, 'AI multi-turn call failed after retries');
 }
 
