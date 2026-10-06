@@ -22,21 +22,29 @@ export interface AuthEnv {
  * CLERK'S SIGNATURE, OR NOTHING: one adapter between this middleware and the
  * identity provider's verifier.
  *
- * `@clerk/backend` 3 reports a failed verification by RETURNING `{ errors }`
- * where version 0.38 threw. Every caller here — the bearer path and, through
- * `session-lapse.ts`, each step of the browser path — treats "it threw" as "not
- * this person", so passing the new return through unchanged would have admitted
- * an expired or forged token as claims with no subject. This throws on any
- * error, and on a token whose issuer is not Clerk's (the predicate the old
- * `issuer` option carried, which version 3 no longer accepts).
+ * WHAT `@clerk/backend` 3 ACTUALLY EXPORTS. Its inner `verifyToken` returns
+ * `{ data, errors }`; the one the package exports is wrapped by
+ * `withLegacyReturn`, which THROWS the first error and RETURNS THE PAYLOAD.
+ * The first cut of this adapter read `.data` off that payload, got nothing,
+ * and refused every valid token — the owner locked out, failing closed — and
+ * its test passed because the double modelled the inner shape, not the
+ * export (found by the remediation's independent audit, 6 October 2026).
+ * It now takes the export at its word and still refuses either shape of
+ * failure, so a future version that returns errors cannot admit a token as
+ * claims with no subject. And it refuses a token whose issuer is not Clerk's
+ * (the predicate the old `issuer` option carried, which version 3 no longer
+ * accepts).
  */
 export async function verifiedClerkClaims(
   token: string, secretKey: string, clockSkewInMs?: number,
 ): Promise<{ sub?: string; sid?: string; exp?: number; iss?: string }> {
+  type Claims = { sub?: string; sid?: string; exp?: number; iss?: string };
   const result = await verifyToken(token, { secretKey, ...(clockSkewInMs ? { clockSkewInMs } : {}) }) as
-    { data?: { sub?: string; sid?: string; exp?: number; iss?: string }; errors?: unknown[] };
-  if (result.errors) throw result.errors[0] ?? new Error('token not verified');
-  const claims = result.data;
+    unknown as Claims & { data?: Claims; errors?: unknown[] };
+  if (result && Array.isArray(result.errors) && result.errors.length) throw result.errors[0] ?? new Error('token not verified');
+  // The payload itself, or — from an unwrapped verifier — the payload under
+  // `data`. A JWT payload carries `iss`; a result wrapper does not.
+  const claims: Claims | undefined = result && typeof result.iss === 'string' ? result : result?.data;
   if (!claims || typeof claims.iss !== 'string' || !claims.iss.includes('clerk')) throw new Error('token not issued by Clerk');
   return claims;
 }
