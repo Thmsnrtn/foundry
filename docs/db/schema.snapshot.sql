@@ -4193,7 +4193,8 @@ CREATE TABLE venue_listing_readings (
   price_cents  INTEGER CHECK (price_cents IS NULL OR price_cents >= 0),
   currency     TEXT CHECK (currency IS NULL OR currency = lower(currency)),
   observed_at  TEXT NOT NULL DEFAULT (datetime('now')), files_json TEXT
-  CHECK (files_json IS NULL OR json_valid(files_json)),
+  CHECK (files_json IS NULL OR json_valid(files_json)), state TEXT
+  CHECK (state IS NULL OR (length(state) BETWEEN 1 AND 24 AND state NOT GLOB '*[^a-z_]*')),
   CHECK (seen = 1 OR (price_cents IS NULL AND currency IS NULL))
 );
 CREATE TABLE venue_orders_after_settlement (

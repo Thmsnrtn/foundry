@@ -138,6 +138,28 @@ export async function paymentsTheProviderKnowsOf(sinceUnix: number): Promise<Arr
   return out;
 }
 
+/**
+ * CHECKOUTS OPENED AT THIS LINK AND LEFT UNPAID, since a moment (Roadmap 2027
+ * R35). A read: the sessions the provider created when somebody opened the
+ * link, filtered to the ones that expired. It moves nothing.
+ */
+export async function abandonedCheckoutsAt(paymentLinkId: string, sinceUnix: number): Promise<Array<Record<string, unknown>>> {
+  const out: Array<Record<string, unknown>> = [];
+  let after: string | null = null;
+  const link = encodeURIComponent(pathSegment(paymentLinkId, 'payment_link_id'));
+  for (let pageNo = 0; pageNo < 5; pageNo += 1) {
+    const res: { data: Array<Record<string, unknown>>; has_more: boolean } = await stripeGet<{ data: Array<Record<string, unknown>>; has_more: boolean }>(
+      `/checkout/sessions?payment_link=${link}&status=expired&created[gte]=${String(sinceUnix)}&limit=100${after ? `&starting_after=${after}` : ''}`);
+    for (const session of res.data) {
+      if (String(session.status) !== 'expired' || session.payment_link !== paymentLinkId) continue;
+      out.push({ ...session, object: 'checkout.session' });
+    }
+    if (!res.has_more || res.data.length === 0) break;
+    after = String(res.data[res.data.length - 1]!.id);
+  }
+  return out;
+}
+
 /** The active link at this URL, read from Stripe; null when there is none. */
 export async function describePaymentLink(url: string): Promise<PaymentLinkFacts | null> {
   const wanted = url.trim();

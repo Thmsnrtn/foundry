@@ -2730,6 +2730,31 @@ citation nobody retrieved is refused at launch and named to the owner).
 - A delivery refused for any reason still waits on the owner rather than being
   refunded automatically; with the money switch off, a refund is theirs anyway.
 
+### A missing listing says why (Roadmap 2027 R34, 6 October 2026)
+
+**What changed.** A test's listing missing from a complete shop read is asked
+for by number; its state (expired, sold out, inactive, draft, or gone) is kept
+on `venue_listing_readings.state` and readiness names the fix. **Evidence
+maturity.** E1: `a-missing-listing-says-why`. **Proof debt.** No live listing
+has gone missing yet, so Etsy's exact state words are taken from its API shape,
+not seen; Developer Mode remains invisible to an app; whether a hidden shop's
+listings drop out of Etsy's public active list was not calibrated (that read
+would need the public app-key endpoint, not added here).
+
+### A checkout left is reach (Roadmap 2027 R35, 6 October 2026)
+
+**What changed.** Expired, unpaid checkout sessions at our payment links are
+recorded as `checkout_started` on the exposure, by webhook or by the daily
+reconcile read, so a test somebody opened no longer reads "not reached".
+**Evidence maturity.** E1: `a-checkout-left-is-reach`. E2 when production
+records its first expired session against a placed link. **Proof debt.** A
+link preview or mail scanner that opens the page creates a session too, so this
+is "the checkout was opened", not "a person considered buying"; a session
+reaches the record only once it expires (a day after it opens), so an open
+checkout still reads as nothing for up to a day; that a Payment Link's
+sessions carry its id in `payment_link`, and that the list filters by it, is
+taken from the provider's API shape and has not been seen on a live session.
+
 ### An act that costs money is read as one (Roadmap 2027 R41, 6 October 2026)
 
 **What changed.** On the observe, prepare, reversible and public rungs, an act
