@@ -237,12 +237,11 @@ describe('he resumes', () => {
     }
   }, 60_000);
 
-  // PINNED DEFECT F-PANIC-2 (it.fails), re-aimed: resumeEconomicActivity nulls
-  // economic_pause_at/_reason/_by and stopEverything writes no audit row, so
-  // once he resumes nothing anywhere says the estate was ever stopped, by whom,
-  // for how long, or what went unwritten meanwhile. Flip to it() when a pause
-  // leaves a durable trace.
-  it.fails('after he resumes, a durable record still says the estate was stopped, by whom and when', async () => {
+  // F-PANIC-2, FIXED 2026-10-06 (was it.fails): stopEverything writes an
+  // append-only `estate_stopped` row per company and the pause/resume each
+  // write their own audit_log row, so resuming clears what is in force and
+  // keeps what happened. The Workshop page reads it back.
+  it('after he resumes, a durable record still says the estate was stopped, by whom and when', async () => {
     const trace = Number((await one(
       `SELECT COUNT(*) AS n FROM audit_log WHERE reasoning LIKE '%Stop everything%' OR action_type LIKE '%pause%' OR action_type LIKE '%stop%'`, [])).n);
     if (trace === 0) {
@@ -251,5 +250,22 @@ describe('he resumes', () => {
         evidence: 'settings.ts resumeEconomicActivity sets economic_pause_at/_reason/_by = NULL; services/control/stop.ts writes no audit row; audit_log has 0 rows naming the pause after resume.' });
     }
     expect(trace).toBeGreaterThan(0);
+    // Not any row: the stop, by him, with its reason; and the resume, by him,
+    // with how long it lasted and what was left waiting.
+    const stop = await one(`SELECT reasoning, input_context FROM audit_log WHERE action_type = 'estate_stopped' ORDER BY created_at LIMIT 1`, []);
+    const stopCtx = JSON.parse(String(stop.input_context)) as Record<string, unknown>;
+    expect(stopCtx.principal).toBe(`founder:${OWNER}`);
+    expect(String(stopCtx.reason)).toMatch(/Stop everything/);
+    const resumed = await one(`SELECT input_context FROM audit_log WHERE action_type = 'economic_activity_resumed' ORDER BY created_at DESC LIMIT 1`, []);
+    const ctx = JSON.parse(String(resumed.input_context)) as Record<string, unknown>;
+    expect(ctx.principal).toBe(`founder:${OWNER}`);
+    expect(ctx.pausedBy).toBe(`founder:${OWNER}`);
+    expect(String(ctx.pauseReason)).toMatch(/Stop everything/);
+    expect(Number(ctx.durationSeconds)).toBeGreaterThanOrEqual(30 * 86_400);
+    expect(Number.isInteger(Number(ctx.waitingRecipients))).toBe(true);
+    const page = asText(await me.page('/foundry/public-workshop'));
+    expect(page).toContain('Stops and pauses on record');
+    expect(page).toMatch(/everything stopped by you/);
+    expect(page).toMatch(/resumed by you, after \d+ days/);
   });
 });

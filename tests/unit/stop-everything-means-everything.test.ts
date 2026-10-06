@@ -77,3 +77,29 @@ describe('one press', () => {
     expect(src).not.toMatch(/\bINSERT INTO|\bUPDATE\b/);
   });
 });
+
+describe('the record outlives the resume (F-PANIC-2)', () => {
+  it('one Stop is one act on record across three companies, nobody else\'s estate is touched, and Resume adds to the record rather than erasing it', async () => {
+    const { pauseHistory, resumeEconomicActivity, pauseNewEconomicActivity } = await import('../../src/services/public-workshop/settings.js');
+    const stops = (await query(`SELECT product_id, input_context FROM audit_log WHERE action_type = 'estate_stopped' ORDER BY product_id`, [])).rows as unknown as Array<Record<string, unknown>>;
+    expect(stops.map((r) => r.product_id)).toEqual(['p_s1', 'p_s2', 'p_s3']);
+    expect(new Set(stops.map((r) => (JSON.parse(String(r.input_context)) as { stopId: string }).stopId)).size).toBe(1);
+    expect(await pauseHistory(OTHER)).toEqual([]);
+
+    await resumeEconomicActivity(OWNER);
+    // A second resume with nothing paused writes nothing: the record says what happened, once.
+    await resumeEconomicActivity(OWNER);
+    const kinds = (await pauseHistory(OWNER)).map((h) => h.kind);
+    expect(kinds.filter((k) => k === 'resumed')).toHaveLength(1);
+    expect(kinds.filter((k) => k === 'stopped')).toHaveLength(1);
+    expect(kinds).toContain('paused');
+
+    // A pause from the Workshop page alone is recorded too, with its reason.
+    await pauseNewEconomicActivity({ founderId: OWNER, reason: 'away for the weekend' });
+    const latest = (await pauseHistory(OWNER))[0]!;
+    expect(latest).toMatchObject({ kind: 'paused', principal: `founder:${OWNER}`, reason: 'away for the weekend' });
+    await resumeEconomicActivity(OWNER);
+    const resumed = (await pauseHistory(OWNER))[0]!;
+    expect(resumed).toMatchObject({ kind: 'resumed', principal: `founder:${OWNER}`, reason: 'away for the weekend', waitingRecipients: 0 });
+  });
+});

@@ -13,11 +13,15 @@
 //     reaches a person while stopped;
 //   - every Mission the owner stated that is running, paused.
 //
+// It leaves an append-only record of itself (`estate_stopped` in audit_log),
+// read back by `pauseHistory` on the Workshop page, so Resume cannot erase it.
+//
 // ONLY EVER LOWERS. Nothing here grants, resumes or widens. Undoing it is per
 // item, where each thing lives, because "start everything again" is not one
 // decision.
 // =============================================================================
 
+import { nanoid } from 'nanoid';
 import { query } from '../../db/client.js';
 
 export interface Stopped {
@@ -52,6 +56,19 @@ export async function stopEverything(founderId: string, reason = 'the owner pres
     if (m.source !== 'mission' || m.concluded || m.status === 'paused' || m.status === 'draft') continue;
     await actOnMission(founderId, m.key, 'paused', reason);
     missionsPaused += 1;
+  }
+  // THE STOP IS A RECORD, NOT ONLY A STATE (F-PANIC-2). Every lowering above
+  // is undone item by item, and Resume clears the Workshop's pause columns, so
+  // without this nothing would say the estate was ever stopped. One
+  // append-only row per company it touched, in the institution's audit log,
+  // under one stop id so a reader counts one act.
+  const stopId = nanoid();
+  const principal = `founder:${founderId}`;
+  const { insertAuditLog } = await import('../../db/client.js');
+  const what = { principal, reason, stopId, companies: companies.length, routines, outreachPaused, missionsPaused };
+  for (const p of companies) {
+    await insertAuditLog({ id: nanoid(), product_id: String(p.id), action_type: 'estate_stopped', gate: 3, trigger: 'owner',
+      reasoning: `Stop everything, by ${principal}: ${reason}`, input_context: JSON.stringify(what), outcome: 'recorded' });
   }
   return { companies: companies.length, routines, outreachPaused, missionsPaused };
 }

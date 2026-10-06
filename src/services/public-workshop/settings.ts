@@ -179,13 +179,100 @@ export async function setAbout(founderId: string, about: string): Promise<void> 
 export async function pauseNewEconomicActivity(input: { founderId: string; reason: string }): Promise<void> {
   const reason = input.reason.trim();
   if (!reason) throw new WorkshopRefused('reason_required');
-  await query(
+  const by = `founder:${input.founderId}`;
+  const paused = await query(
     `UPDATE public_workshop SET economic_pause_at = datetime('now'), economic_pause_reason = ?, economic_pause_by = ?, updated_at = datetime('now')
-      WHERE founder_id = ? AND economic_pause_at IS NULL`, [reason, `founder:${input.founderId}`, input.founderId]);
+      WHERE founder_id = ? AND economic_pause_at IS NULL`, [reason, by, input.founderId]);
+  // THE PAUSE IS ALSO A RECORD (F-PANIC-2). The columns above are the pause in
+  // force, and Resume clears them; this row is what remains once it is lifted.
+  if (Number(paused.rowsAffected ?? 0) === 1) {
+    const w = await publicWorkshopOf(input.founderId);
+    if (w) {
+      await recordPauseAct(w.productId, 'economic_activity_paused', `New economic activity paused by ${by}: ${reason}`,
+        { principal: by, reason, pausedAt: w.economicPause?.at ?? null });
+    }
+  }
 }
 
+/** One append-only row in the institution's audit log (`audit_log`), at the
+ *  owner's gate. Never updated: Resume adds its own row rather than editing. */
+async function recordPauseAct(
+  productId: string, actionType: 'economic_activity_paused' | 'economic_activity_resumed',
+  reasoning: string, context: Record<string, unknown>,
+): Promise<void> {
+  const { insertAuditLog } = await import('../../db/client.js');
+  const { nanoid } = await import('nanoid');
+  await insertAuditLog({ id: nanoid(), product_id: productId, action_type: actionType, gate: 3, trigger: 'owner',
+    reasoning, input_context: JSON.stringify(context), outcome: 'recorded' });
+}
+
+/**
+ * RESUME LIFTS THE PAUSE AND KEEPS ITS RECORD. The pause columns are cleared,
+ * as they always were, because they say what is in force; alongside, an
+ * append-only row records who paused, why and when, who resumed, how long it
+ * lasted, and how many approved recipients of running tests were left waiting
+ * — so nothing about a Stop is lost the moment it ends (F-PANIC-2).
+ */
 export async function resumeEconomicActivity(founderId: string): Promise<void> {
-  await query(`UPDATE public_workshop SET economic_pause_at = NULL, economic_pause_reason = NULL, economic_pause_by = NULL, updated_at = datetime('now') WHERE founder_id = ?`, [founderId]);
+  const w = await publicWorkshopOf(founderId);
+  const pause = w?.economicPause ?? null;
+  const lifted = await query(`UPDATE public_workshop SET economic_pause_at = NULL, economic_pause_reason = NULL, economic_pause_by = NULL, updated_at = datetime('now') WHERE founder_id = ? AND economic_pause_at IS NOT NULL`, [founderId]);
+  if (!w || !pause || Number(lifted.rowsAffected ?? 0) !== 1) return;
+  const timing = (await rows(`SELECT datetime('now') AS now, CAST(strftime('%s','now') - strftime('%s', ?) AS INTEGER) AS secs`, [pause.at]))[0];
+  // WHAT THE PAUSE HELD BACK, as far as rows can say it: approved recipients
+  // of the owner's running tests that nothing has yet been sent to. A count of
+  // what was waiting, not a guess at what would have gone.
+  const waiting = Number((await rows(
+    `SELECT COUNT(*) AS n FROM experiment_recipients r JOIN venture_experiments e ON e.id = r.experiment_id
+      WHERE e.founder_id = ? AND e.decision = 'approved' AND e.ran_at IS NULL AND r.review_status = 'approved'
+        AND NOT EXISTS (SELECT 1 FROM outbound_actions o WHERE o.experiment_id = r.experiment_id AND o.recipient_id = r.id)`,
+    [founderId]))[0]?.n ?? 0);
+  const by = `founder:${founderId}`;
+  await recordPauseAct(w.productId, 'economic_activity_resumed',
+    `New economic activity resumed by ${by}; it had been paused since ${pause.at} by ${pause.by}: ${pause.reason}`,
+    { principal: by, resumedAt: String(timing?.now ?? ''), pausedAt: pause.at, pausedBy: pause.by, pauseReason: pause.reason,
+      durationSeconds: Number(timing?.secs ?? 0), waitingRecipients: waiting });
+}
+
+export interface PauseRecord {
+  kind: 'stopped' | 'paused' | 'resumed';
+  at: string;
+  principal: string;
+  reason: string | null;
+  /** Resumed only: how long it had been paused, and what was left waiting. */
+  durationSeconds: number | null;
+  waitingRecipients: number | null;
+}
+
+/**
+ * EVERY STOP, PAUSE AND RESUME, newest first, read from the audit log — the
+ * history the pause columns cannot keep. A Stop that touched several companies
+ * wrote one row per company under one `stopId`; it is one act and reads as one.
+ */
+export async function pauseHistory(founderId: string, most = 10): Promise<PauseRecord[]> {
+  const found = await rows(
+    `SELECT a.action_type, a.created_at, a.input_context FROM audit_log a JOIN products p ON p.id = a.product_id
+      WHERE p.owner_id = ? AND a.action_type IN ('estate_stopped', 'economic_activity_paused', 'economic_activity_resumed')
+      ORDER BY a.created_at DESC, a.rowid DESC LIMIT ?`, [founderId, most * 8]);
+  const out: PauseRecord[] = [];
+  const seenStops = new Set<string>();
+  for (const r of found) {
+    let ctx: Record<string, unknown> = {};
+    try { ctx = JSON.parse(String(r.input_context ?? '{}')) as Record<string, unknown>; } catch { /* a row is still a row */ }
+    const kind: PauseRecord['kind'] = r.action_type === 'estate_stopped' ? 'stopped'
+      : r.action_type === 'economic_activity_paused' ? 'paused' : 'resumed';
+    if (kind === 'stopped') {
+      const k = String(ctx.stopId ?? r.created_at);
+      if (seenStops.has(k)) continue;
+      seenStops.add(k);
+    }
+    const reason = ctx.reason ?? ctx.pauseReason ?? null;
+    out.push({ kind, at: String(r.created_at), principal: String(ctx.principal ?? ''), reason: reason == null ? null : String(reason),
+      durationSeconds: kind === 'resumed' ? Number(ctx.durationSeconds ?? 0) : null,
+      waitingRecipients: kind === 'resumed' ? Number(ctx.waitingRecipients ?? 0) : null });
+    if (out.length >= most) break;
+  }
+  return out;
 }
 
 export async function newEconomicActivityPaused(founderId: string): Promise<boolean> {

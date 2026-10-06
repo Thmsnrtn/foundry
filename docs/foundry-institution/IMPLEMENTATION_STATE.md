@@ -3204,3 +3204,18 @@ it has met a real day.
   (`max(version)+1`, serialised today by the one publishing pass). Mutations:
   dropping the conflict clause turns the campaign test and a unit race test red;
   an unconditional marker update turns the returning-visit test red.
+- **Resume no longer erases the only record of a Stop (F-PANIC-2).**
+  `stopEverything` wrote no record and `resumeEconomicActivity` nulled the
+  pause columns, so once he resumed nothing said the estate had been stopped.
+  Through the existing `audit_log` (`insertAuditLog`, owner gate 3): Stop writes
+  an `estate_stopped` row per company it lowered, under one stop id (principal,
+  reason, what it stopped); every pause writes `economic_activity_paused`; and
+  Resume — only when something was actually paused — writes
+  `economic_activity_resumed` with the principal, the pause's own who/why/when,
+  its duration, and the count of approved recipients of running tests still
+  unwritten. That count is what was waiting, not a claim about what would have
+  gone. `pauseHistory` reads them back, one Stop as one act, and the Workshop
+  page's pause section shows them ("Stops and pauses on record"). The rows are
+  insert-only by convention: `audit_log` has no trigger refusing an update,
+  because erasure must still be able to delete it. Mutations: suppressing the
+  pause/resume rows, or the stop rows, each turn the campaign test red.
